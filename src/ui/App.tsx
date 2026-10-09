@@ -1265,14 +1265,14 @@ function panelRect(i: Item, inner: HTMLElement, side: number) {
   // heights unrounded: a content half a pixel higher than its panel scrolls it
   const height = (e: HTMLElement) => e.getBoundingClientRect().height;
   const mic = (document.getElementById('ptt')?.getBoundingClientRect().top ?? innerHeight) - MIC_GAP;
-  // an idea's or a task's split grows with its taller column up to the room from the top bar down
-  // to the microphone: beyond that its columns scroll, and the panel itself does not
+  // an idea's or a task's split grows with its taller column up to the room from the top of the
+  // window down to the microphone: beyond that its columns scroll, and the panel itself does not
   const fill = content.querySelector<HTMLElement>('.split:not(.proposal-grid)');
   if (fill) {
     fill.style.minHeight = fill.style.maxHeight = '';
     if (!matchMedia(NARROW).matches) {
       const rest = height(content) - height(fill) + parseFloat(pad.paddingTop) + base;
-      const room = Math.floor(mic - PANEL_TOP - rest);
+      const room = Math.floor(mic - PANEL_TOP_OVER - rest);
       fill.style.minHeight = `${SPLIT_MIN}px`;
       fill.style.maxHeight = `${Math.max(SPLIT_MIN, room)}px`;
       // nothing to scroll to, so no scrollbar either; on a low window the panel scrolls past the microphone
@@ -1281,9 +1281,12 @@ function panelRect(i: Item, inner: HTMLElement, side: number) {
   }
   const need = height(content) + parseFloat(pad.paddingTop) + base;
   // a proposal grows with its text as far as the screen allows
-  const max = Math.min(i.state === 'proposal' || fill ? Infinity : wide ? 880 : tall ? 760 : i.source === 'manual' ? 480 : 560, innerHeight - 110);
-  // in the middle of the window; a split's panel ends above the microphone, as when it fills the room
-  const top = (H: number) => Math.max(PANEL_TOP, Math.min((innerHeight - H) / 2, fill ? mic - H : Infinity));
+  const max = Math.min(i.state === 'proposal' || fill ? Infinity : wide ? 880 : tall ? 760 : i.source === 'manual' ? 480 : 560, innerHeight - PANEL_TOP_OVER - PANEL_BOTTOM);
+  // in the middle of the window below the top bar; a split's panel ends above the microphone, as when
+  // it fills the room. A panel too tall for the room below the bar reaches over the bar, which the
+  // dim covers while a card is open, so a low window still shows much of the card
+  const bottom = fill ? mic : innerHeight - PANEL_BOTTOM;
+  const top = (H: number) => Math.max(PANEL_TOP_OVER, Math.min(Math.max(PANEL_TOP, (innerHeight - H) / 2), bottom - H));
   // the microphone sits over the bottom of a tall panel: the content gets room below it to scroll
   // up past the microphone, and the panel grows by that room where it can
   const under = (H: number) => Math.max(0, top(H) + H - mic - base);
@@ -1301,6 +1304,10 @@ const NARROW = '(max-width: 760px)';
 
 /** Where a panel starts at the top: below the bar. */
 const PANEL_TOP = 64;
+/** Where a panel too tall for the room below the bar starts instead, over the bar. */
+const PANEL_TOP_OVER = 12;
+/** Room below a panel without a split at the bottom of the window. */
+const PANEL_BOTTOM = 46;
 /** The least height of an idea's or a task's split: on a low window the panel scrolls past the microphone instead. */
 const SPLIT_MIN = 320;
 

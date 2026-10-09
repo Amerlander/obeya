@@ -2075,8 +2075,8 @@ the repository; the copy on the project is only for the archive).
   640 px wide, the conversation's widest, and otherwise sized like a split. A card with a
   conversation beside what it is about (an idea, a task an agent worked on with a result) is up to
   1600 px wide instead, the conversation a third of the width
-  (400–560 px), and as tall as its taller column, at least 320 px, up to the room from the top bar
-  down to the microphone; it stands in the middle of the canvas (left of a docked sheet), above the
+  (400–560 px), and as tall as its taller column, at least 320 px, up to the room from 12 px below
+  the window's top edge down to the microphone; it stands in the middle of the canvas (left of a docked sheet), above the
   microphone, and keeps at least a conversation's 640 px beside a sheet dragged wide. Beyond that
   room what the card is about and the conversation scroll inside their columns, the panel not at
   all. Before (2026-10-08) it always filled that room, with empty space below a short conversation
@@ -2085,7 +2085,10 @@ the repository; the copy on the project is only for the archive).
   higher than the panel. Only a window too low for a split of 320 px lets the panel reach under the
   microphone and scroll. Before it filled the room (2026-10-08) it stayed at
   1120 × 880 px with the columns 600 px high, small on a large screen. A proposal keeps growing
-  with its text.
+  with its text. A card stands below the top bar while it fits there; one that needs more room
+  reaches over the bar, which the dim covers while a card is open anyway, up to 12 px below the
+  window's top edge. Before (2026-10-09) the bar's 64 px stayed free, which cost a card on a
+  window of moderate height much of its room.
 - Opening a card takes 300 ms: a 130 ms flight brings it to the middle, then it unfolds in 170 ms;
   closing runs the same in reverse. Fast enough not to wait on, long enough to keep the context.
 - Manual cards are created by double-click, the button or `n`, and edited in the unfolded card;
