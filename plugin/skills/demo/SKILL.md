@@ -149,7 +149,8 @@ scene and by `clearHighlights()`; not inside iframes; several in one scene all s
 with its own label, and only the rest of the page is dimmed), `untilSpoken(fraction)` to time an action
 to the narration, `pdfFrom(button, name)` (PDF from a new-tab button → PNG pages),
 `showImage(png, top, caption)`, `panImage(top)`, `hideImage`, `skip(fn)` (runs a wait and cuts
-it from the video, see above), `wait`, and `d.page` for raw Playwright. Keep the recording on the app's own pages: other material (a results page, a report)
+it from the video, see above), `wait`, `evaluate(fn, arg?)` (`page.evaluate` that fails
+once the page has not answered for 20 s), and `d.page` for raw Playwright. Keep the recording on the app's own pages: other material (a results page, a report)
 goes on screen with `showImage`, since a `goto` to another origin and back broke the timeline.
 
 ## 5. Render

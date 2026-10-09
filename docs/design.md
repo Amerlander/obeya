@@ -1506,6 +1506,14 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   it only in the full render, after synthesis and the scenes before it. A failing step names the
   page's URL, the screenshot and Playwright's message on lines of their own: a worker once took
   the screenshot's path, the only path in the message, for the page's address.
+  A page that hangs fails the render too, instead of leaving it waiting: a call into the page
+  (the overlay's, `d.evaluate`) that gets no answer within 20 s fails its step, and so does a
+  screencast that sends no frame for 20 s (the clock strip repaints every frame, so a live page
+  always sends them). A demo started with `bun demo.ts` runs again under Node: Bun 1.3.12 closed a
+  child's pipe when it garbage-collected the process object, after the descriptor had gone to the
+  next child, so the recording browser lost its DevTools pipe a few seconds into the take, once
+  the login browser was collected, and Playwright under Bun never noticed (2026-10-09: every Obeya
+  demo of a worker that ran its demo with `bun` hung after its first scene).
   Waiting is cut out of the video: a demo of real agents had half a minute of a canvas where
   nothing happened. The scene wraps such a wait in `d.skip`; the page fades to white, the cut falls
   while it is white, and it fades back in with how much later it is ("31 Sekunden später"), about

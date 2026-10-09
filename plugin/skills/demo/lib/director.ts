@@ -8,7 +8,7 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { chromium, type BrowserContext, type Locator, type Page } from 'playwright-core';
+import { chromium, type Browser, type BrowserContext, type Locator, type Page } from 'playwright-core';
 import { type NarrationLanguage, readDemoSettings, withVoice } from './settings.ts';
 import { checkSetup, describeSetup, whisperKit } from './setup.ts';
 import { CLOCK, type Cut, type Frame, frameDurations, laterLabel, onPaintTime, readClock, untagged, videoTime } from './timeline.ts';
@@ -64,6 +64,10 @@ const NARRATION_OK = 0.93;
 const SILENCE_WARN = 5;
 /** A wait shorter than this stays in the video rather than being cut (`Director.skip`). */
 const MIN_CUT_SECONDS = 5;
+/** A call into the recording page that takes longer has hung: the page answers never, and the render would wait forever. */
+const PAGE_TIMEOUT_SECONDS = 20;
+/** The clock strip repaints the page every frame: a screencast without a frame this long has stopped. */
+const STALL_SECONDS = 20;
 const SAVED = readDemoSettings();
 /** The settings of this render: `DEMO_VOICE` names another provider, or a `.wav` to clone. */
 const SETTINGS = withVoice(SAVED, process.env.DEMO_VOICE);
@@ -109,6 +113,12 @@ export class Director {
     this.#paced = paced;
   }
 
+  /** `page.evaluate`, failing once the page has not answered for `PAGE_TIMEOUT_SECONDS`. */
+  evaluate<R, A = undefined>(fn: (arg: A) => R | Promise<R>, arg?: A): Promise<R> {
+    // Playwright hands an element handle to `fn` as the element; the overlay takes either untyped.
+    return answered(this.page.evaluate(fn as never, arg) as Promise<R>, 'a call into the page');
+  }
+
   async goto(url: string) {
     await this.page.goto(new URL(url, this.baseUrl).toString());
     await this.page.waitForLoadState('networkidle').catch(() => {});
@@ -140,16 +150,16 @@ export class Director {
     if (await Promise.race([done, this.wait(MIN_CUT_SECONDS * 1000).then(() => false)])) return;
     // Long enough: what was waited so far goes without a trace, the rest falls into the white.
     const fadeFrom = now();
-    await this.page.evaluate(() => window.__demo.whiteOut());
+    await this.evaluate(() => window.__demo.whiteOut());
     await this.wait(300);
     const cutFrom = now();
     await done;
     const to = now();
     this.cuts.push({ from, to: fadeFrom }, { from: cutFrom, to });
     this.#skippedInScene += fadeFrom - from + to - cutFrom;
-    await this.page.evaluate((l) => window.__demo.timeJump(l), laterLabel(to - from, LANGUAGE));
+    await this.evaluate((l) => window.__demo.timeJump(l), laterLabel(to - from, LANGUAGE));
     await this.wait(1100);
-    await this.page.evaluate(() => window.__demo.whiteIn());
+    await this.evaluate(() => window.__demo.whiteIn());
     await this.wait(450);
   }
 
@@ -157,7 +167,7 @@ export class Director {
     await target.scrollIntoViewIfNeeded();
     const box = await target.boundingBox();
     if (!box) throw new Error(`cannot point at an invisible element: ${target}`);
-    await this.page.evaluate(
+    await this.evaluate(
       ([x, y]) => window.__demo.moveTo(x, y),
       [box.x + Math.min(box.width / 2, 60), box.y + box.height / 2],
     );
@@ -166,7 +176,7 @@ export class Director {
 
   async click(target: Locator) {
     await this.pointAt(target);
-    await this.page.evaluate(() => window.__demo.ripple());
+    await this.evaluate(() => window.__demo.ripple());
     await target.click();
     await this.wait(350);
   }
@@ -194,7 +204,7 @@ export class Director {
       const x = a.x + (b.x - a.x) * e;
       const y = a.y + (b.y - a.y) * e;
       await mouse.move(x, y);
-      await this.page.evaluate(([px, py]) => window.__demo.moveTo(px, py, true), [x, y]);
+      await this.evaluate(([px, py]) => window.__demo.moveTo(px, py, true), [x, y]);
       await this.wait(ms / steps);
     }
     await mouse.up();
@@ -202,7 +212,10 @@ export class Director {
   }
 
   async scrollTo(target: Locator, block: 'start' | 'center' | 'end' = 'center') {
-    await target.evaluate((el, b) => el.scrollIntoView({ behavior: 'smooth', block: b }), block);
+    await answered(
+      target.evaluate((el, b) => el.scrollIntoView({ behavior: 'smooth', block: b }), block),
+      'a call into the page',
+    );
     await this.wait(900);
   }
 
@@ -210,28 +223,28 @@ export class Director {
   async highlight(targets: Locator | Locator[], label?: string) {
     const handles = [];
     for (const t of [targets].flat()) handles.push(await t.elementHandle());
-    await this.page.evaluate(([els, l]) => window.__demo.highlight(els, l), [handles, label] as const);
+    await this.evaluate(([els, l]) => window.__demo.highlight(els, l), [handles, label] as const);
     await this.wait(400);
   }
 
   clearHighlights() {
-    return this.page.evaluate(() => window.__demo.clearHighlights());
+    return this.evaluate(() => window.__demo.clearHighlights());
   }
 
   /** Shows an image over the page, scrolled so that `top` (0..1 of its height) is at the top. */
   async showImage(file: string, top = 0, caption?: string) {
     const src = `data:image/png;base64,${fs.readFileSync(file).toString('base64')}`;
-    await this.page.evaluate(([s, t, c]) => window.__demo.showImage(s, t, c), [src, top, caption] as const);
+    await this.evaluate(([s, t, c]) => window.__demo.showImage(s, t, c), [src, top, caption] as const);
     await this.wait(600);
   }
 
   async panImage(top: number) {
-    await this.page.evaluate((t) => window.__demo.panImage(t), top);
+    await this.evaluate((t) => window.__demo.panImage(t), top);
     await this.wait(1300);
   }
 
   hideImage() {
-    return this.page.evaluate(() => window.__demo.hideImage());
+    return this.evaluate(() => window.__demo.hideImage());
   }
 
   /**
@@ -287,6 +300,30 @@ async function center(target: Locator) {
 
 function now() {
   return Date.now() / 1000;
+}
+
+/** `call`, or an error once it has not settled for `PAGE_TIMEOUT_SECONDS`. */
+function answered<T>(call: Promise<T>, what: string, seconds = PAGE_TIMEOUT_SECONDS): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const hung = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} got no answer within ${seconds} s: the recording page hangs`)), seconds * 1000);
+  });
+  return Promise.race([call, hung]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * Bun closes a pipe of a child process when the process object is garbage collected, after the
+ * descriptor has gone to the next child: the recording browser lost its DevTools pipe a few
+ * seconds into the take (once the login browser was collected), and Playwright under Bun never
+ * noticed, so the render waited forever (Bun 1.3.12, 2026-10-09). A demo started with `bun` runs
+ * again under Node and ends with its exit code.
+ */
+function underNode() {
+  if (!process.versions.bun) return;
+  console.warn('the director runs under Node, not Bun: running this demo again with `node`');
+  const r = spawnSync('node', process.argv.slice(1), { stdio: 'inherit' });
+  if (r.error) throw new Error(`the director needs Node, which could not be started (${r.error.message}); run the demo with \`node demo.ts\``);
+  process.exit(r.status ?? 1);
 }
 
 /**
@@ -388,6 +425,7 @@ async function launch(viewport: { width: number; height: number }) {
  * module is what resolves Playwright.
  */
 export async function explore(url: string, fn: (page: Page) => Promise<void>, viewport = { width: 1440, height: 900 }) {
+  underNode();
   const browser = await launch(viewport);
   try {
     const page = await (await browser.newContext({ viewport, deviceScaleFactor: 1 })).newPage();
@@ -421,11 +459,11 @@ async function login(spec: DemoSpec, dir: string) {
  */
 async function failure(step: string, page: Page, dir: string, error: unknown) {
   const shot = path.join(dir, 'failure.png');
-  const captured = await page.screenshot({ path: shot }).then(
+  const captured = await page.screenshot({ path: shot, timeout: 10_000 }).then(
     () => true,
     () => false,
   );
-  await page.context().browser()?.close().catch(() => {});
+  await closeBrowser(page.context().browser());
   // Playwright's message names the call and the locator it waited for; its colours are noise here.
   const cause = (error instanceof Error ? error.message : String(error)).replace(/\x1b\[[0-9;]*m/g, '').trim();
   const lines = [
@@ -435,6 +473,11 @@ async function failure(step: string, page: Page, dir: string, error: unknown) {
     `  Cause: ${cause.split('\n').join('\n    ')}`,
   ];
   return new Error(lines.join('\n'), { cause: error });
+}
+
+/** Closes the browser, and gives up on one whose page hangs after a while instead of waiting with it. */
+async function closeBrowser(browser: Browser | null) {
+  if (browser) await answered(browser.close(), 'closing the browser', 10).catch(() => {});
 }
 
 function sceneName(i: number, spec: DemoSpec) {
@@ -454,7 +497,7 @@ async function openPage(spec: DemoSpec, viewport: { width: number; height: numbe
   } catch (error) {
     throw await failure('open', page, work, error);
   }
-  await page.evaluate(() => window.__demo.moveTo(window.innerWidth * 0.6, window.innerHeight * 0.55));
+  await d.evaluate(() => window.__demo.moveTo(window.innerWidth * 0.6, window.innerHeight * 0.55));
   return { browser, ctx, page, d };
 }
 
@@ -485,23 +528,36 @@ async function dryRun(spec: DemoSpec, viewport: { width: number; height: number 
 async function startScreencast(ctx: BrowserContext, page: Page, dir: string, size: { width: number; height: number }) {
   const frames: Frame[] = [];
   const cdp = await ctx.newCDPSession(page);
+  let lastFrame = now();
+  let stall: (error: Error) => void = () => {};
+  const stalled = new Promise<never>((_, reject) => (stall = reject));
+  stalled.catch(() => {});
+  const watch = setInterval(() => {
+    if (now() - lastFrame > STALL_SECONDS) stall(new Error(`the recording page sent no frame for ${STALL_SECONDS} s: it hangs`));
+  }, 1000);
+  watch.unref();
   cdp.on('Page.screencastFrame', (f) => {
+    lastFrame = now();
     const file = path.join(dir, `${String(frames.length).padStart(6, '0')}.jpg`);
     fs.writeFileSync(file, Buffer.from(f.data, 'base64'));
     frames.push({ file, t: f.metadata.timestamp ?? now(), width: f.metadata.deviceWidth, height: f.metadata.deviceHeight });
     cdp.send('Page.screencastFrameAck', { sessionId: f.sessionId }).catch(() => {});
   });
-  await cdp.send('Page.startScreencast', {
+  const start = cdp.send('Page.startScreencast', {
     format: 'jpeg',
     quality: 92,
     maxWidth: size.width,
     maxHeight: size.height,
   });
+  await answered(start, 'starting the screencast');
   return {
     /** On the time they were painted once the screencast stops (`paintTimes`). */
     frames,
+    /** Rejects once the screencast has stopped sending frames. */
+    stalled,
     stop: async () => {
-      await cdp.send('Page.stopScreencast');
+      clearInterval(watch);
+      await answered(cdp.send('Page.stopScreencast'), 'stopping the screencast');
       frames.splice(0, frames.length, ...onPaintTime(frames, paintTimes(frames, dir, size)));
     },
   };
@@ -545,6 +601,7 @@ function vttTime(s: number) {
 }
 
 export async function runDemo(spec: DemoSpec, demoDir: string) {
+  underNode();
   const override = process.env.DEMO_VOICE;
   const voiceName = override?.endsWith('.wav') ? path.basename(override, '.wav') : override;
   // The voice of the settings renders next to the script; another one gets its own subdirectory,
@@ -580,16 +637,22 @@ export async function runDemo(spec: DemoSpec, demoDir: string) {
   const marks: { title: string; start: number; speechStart: number; speechEnd: number }[] = [];
   for (const [i, scene] of spec.scenes.entries()) {
     const clip = clips[i]!;
-    await d.clearHighlights();
-    const start = d.beginScene(clip.seconds);
+    let start = 0;
     console.log(sceneName(i, spec));
     try {
-      await scene.run?.(d);
+      // A scene can wait without touching the page (`untilSpoken`, `wait`): a page that hangs then
+      // shows as a screencast without frames.
+      const played = (async () => {
+        await d.clearHighlights();
+        start = d.beginScene(clip.seconds);
+        await scene.run?.(d);
+        await d.untilSpoken(1);
+        await d.wait(GAP_SECONDS * 1000);
+      })();
+      await Promise.race([played, cast.stalled]);
     } catch (error) {
       throw await failure(sceneName(i, spec), page, work, error);
     }
-    await d.untilSpoken(1);
-    await d.wait(GAP_SECONDS * 1000);
     // In video time: what `skip` cut out is gone from the scenes after it.
     const at = videoTime(start, t0, d.cuts);
     marks.push({ title: scene.title, start: at, speechStart: at + LEAD_SECONDS, speechEnd: at + LEAD_SECONDS + clip.seconds });
@@ -597,7 +660,7 @@ export async function runDemo(spec: DemoSpec, demoDir: string) {
   const tEnd = now() + 0.8;
   await d.wait(800);
   await cast.stop();
-  await browser.close();
+  await closeBrowser(browser);
   const total = videoTime(tEnd, t0, d.cuts);
   const cut = cast.frames.find((f) => Math.round(f.width) !== viewport.width || Math.round(f.height) !== viewport.height);
   if (cut) console.warn(`screencast frames are ${Math.round(cut.width)}×${Math.round(cut.height)}, not ${viewport.width}×${viewport.height}: part of the page is missing`);
