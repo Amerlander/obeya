@@ -12,7 +12,7 @@ import { type ActDone, Detail, type Pending } from './detail';
 import type { Field } from './api';
 import { setReply } from './reply';
 import { ArchivePill } from './archive';
-import { ConfigSheet } from './config';
+import { ConfigDialog } from './config';
 import { Setup } from './setup';
 import { KoordinatorSheet } from './koordinator';
 import { QueuePill } from './queue';
@@ -218,21 +218,19 @@ function Canvas({
    * A narrow window lays the sheet over the canvas instead (styles.css).
    */
   const sideNow = () =>
-    matchMedia(NARROW).matches || !(kOnRef.current || cOnRef.current || sheetOnRef.current)
+    matchMedia(NARROW).matches || !(kOnRef.current || sheetOnRef.current)
       ? 0
       : sheetOnRef.current && readingRef.current
         ? sheetWRef.current.read
         : sheetWRef.current.sheet;
-  /** Opens the side sheet `which` or closes it; another one closes, an open project too. */
-  const toggleSheet = (which: 'k' | 'c') => {
-    const on = !{ k: kOn, c: cOn }[which];
-    setKOn(on && which === 'k');
-    setCOn(on && which === 'c');
-    if (on && focusRef.current?.type === 'project') closeProject(false);
+  /** Opens Obeya's sheet or closes it; an open project closes. */
+  const toggleKoordinator = () => {
+    setKOn(!kOn);
+    if (!kOn && focusRef.current?.type === 'project') closeProject(false);
   };
-  const toggleKoordinator = () => toggleSheet('k');
   const toggleArchive = () => setAOn(!aOnRef.current);
-  const toggleConfig = () => toggleSheet('c');
+  // the configuration is a dialog over the page: what is open behind it stays as it was
+  const toggleConfig = () => setCOn(!cOnRef.current);
   const [helpOn, setHelpOn] = useState(false);
   const [setupOn, setSetupOn] = useState(false);
   // what is wrong in the configuration as saved, marked on its button; it changes only with a save
@@ -418,7 +416,6 @@ function Canvas({
     setSheetOn(true);
     setKOn(false);
     setAOn(false);
-    setCOn(false);
     // an archived project is not on the canvas: its sheet takes the archive list's place
     if (!p.archivedAt) await flyOrJump(camFor(bounds(p), 40, sideNow(), 60), 700, quick);
   }
@@ -433,7 +430,6 @@ function Canvas({
     setSheetOn(true);
     setKOn(false);
     setAOn(false);
-    setCOn(false);
     // the project stays in view beside the wider sheet
     await flyOrJump(camFor(bounds(p), 40, sideNow(), 60), 700, quick);
   }
@@ -481,12 +477,13 @@ function Canvas({
     flushEdit().catch(console.error);
     const f = focusRef.current;
     const project = f?.type === 'project' ? f.id : f?.type === 'card' ? f.project?.id : undefined;
-    const sheet: SideSheet | undefined = kOn ? 'koordinator' : aOn ? 'archive' : cOn ? 'config' : undefined;
+    const sheet: SideSheet | undefined = kOn ? 'koordinator' : aOn ? 'archive' : undefined;
     keep(sessionStorage, snapshot.canvas.id, {
       at: Date.now(),
       ...(f?.type === 'card' ? { card: f.id } : {}),
       ...(project ? { project, reading: !!readingRef.current } : {}),
       ...(sheet ? { sheet } : {}),
+      ...(cOn ? { config: true } : {}),
       ...collect(),
     });
   };
@@ -500,7 +497,7 @@ function Canvas({
     quickSide.current = Date.now() + 2000;
     if (k.sheet === 'koordinator') setKOn(true);
     else if (k.sheet === 'archive') setAOn(true);
-    else if (k.sheet === 'config') setCOn(true);
+    if (k.config) setCOn(true);
     let gone: Item[] | undefined;
     const find = async (id?: string) => (id ? (byId(id) ?? (gone ??= await api.archived().catch(() => [])).find((i) => i.id === id)) : undefined);
     const p = await find(k.project);
@@ -758,7 +755,7 @@ function Canvas({
   }, [side]);
 
   // the grip at the open sheet's left edge widens or narrows it; reading a plan doc has its own width
-  const gripOn = kOn || cOn || sheetOn;
+  const gripOn = kOn || sheetOn;
   const gripKind = !!reading && sheetOn ? 'read' : 'sheet';
   const gripRef = useRef<{ x: number; w: number; kind: 'sheet' | 'read' } | null>(null);
   const [resizing, setResizing] = useState(false);
@@ -958,6 +955,14 @@ function Canvas({
     if (typing && (e.target as Element).closest('.sheet')) return;
     // the settings take the next key as the push-to-talk key in another app
     if (document.querySelector('.c-push-key.listening')) return;
+    // the configuration over the page takes the keys until it closes, Esc closing it
+    if (cOnRef.current) {
+      if (e.key === 'Escape' && !document.querySelector('.setup')) {
+        e.preventDefault();
+        setCOn(false);
+      }
+      return;
+    }
     // the legend over the page takes the keys until it closes
     if (helpOn) {
       if (e.key === 'Escape' || e.key === '?') setHelpOn(false);
@@ -1184,8 +1189,9 @@ function Canvas({
           </div>
         </div>
       </div>
-      <ConfigSheet
+      <ConfigDialog
         on={cOn}
+        onClose={() => setCOn(false)}
         onSetup={() => setSetupOn(true)}
         onProblems={setConfigProblems}
         onAsk={(text, canvas) => void tellAbout(null, null, () => (canvas ? api.commandOn(canvas, text) : api.command(text, null)))}
@@ -1207,7 +1213,7 @@ function Canvas({
       />
       {kOn && <div id="talk-docked">{talkButton}</div>}
       {gripOn && !kOn && (
-        <button id="sheet-close" title={t.close} onClick={() => (sheetOn ? closeProject() : (setKOn(false), setCOn(false)))}>
+        <button id="sheet-close" title={t.close} onClick={() => (sheetOn ? closeProject() : setKOn(false))}>
           ✕
         </button>
       )}

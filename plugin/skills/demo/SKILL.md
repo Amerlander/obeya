@@ -183,8 +183,8 @@ Narration is synthesised first by `lib/tts.py`, in the voice of the demo setting
 default) or Qwen3-TTS on this machine, macOS `say`, the owner's own command, or a hosted service
 (Gemini, OpenAI, ElevenLabs, Azure, an own endpoint) with its key from its environment variable or
 a key file. The settings live in `demo.json` in Obeya's home (`OBEYA_HOME`, else `~/.obeya`);
-Obeya's settings sheet edits them, installs Piper and Qwen3-TTS, and plays a sample. A voice that
-is not installed stops the render with how to install it: from the settings sheet, or
+Obeya's configuration dialog edits them, installs Piper and Qwen3-TTS, and plays a sample. A voice that
+is not installed stops the render with how to install it: from the configuration dialog, or
 `node ${CLAUDE_SKILL_DIR}/lib/voices.ts install`; so does anything else the render needs
 (`lib/setup.ts`, section 3). `DEMO_VOICE=<provider>` renders in another
 voice; `DEMO_VOICE=<path>.wav` clones that clip with Qwen3-TTS (its exact transcript beside it as

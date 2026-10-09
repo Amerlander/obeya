@@ -1,4 +1,4 @@
-// The language Obeya speaks to the owner: chosen in its settings sheet (`settings.json` under
+// The language Obeya speaks to the owner: chosen in its configuration dialog (`settings.json` under
 // Obeya's home), else the system's. The server speaks it; a demo is narrated in it unless the demo
 // settings name another. Plain Node, like the director: it runs without Obeya too.
 
@@ -19,7 +19,7 @@ const languageIn = (locale: string | null | undefined): OwnerLanguage | undefine
   return OWNER_LANGUAGES.find((l) => l === code);
 };
 
-/** The language the owner chose in the settings sheet, if they did. */
+/** The language the owner chose in the configuration dialog, if they did. */
 export function chosenLanguage(home: string): OwnerLanguage | undefined {
   try {
     const o = JSON.parse(fs.readFileSync(path.join(home, OWNER_SETTINGS_FILE), 'utf8')) as Record<string, unknown>;

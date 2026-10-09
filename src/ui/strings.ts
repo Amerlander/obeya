@@ -432,6 +432,8 @@ const de = {
     fromArgs: (file: string) =>
       `Obeya läuft gerade mit den Repositories von der Kommandozeile. Speichern legt ${file} an; Obeya startet dann daraus, auch künftig, wenn es ohne Repositories gestartet wird.`,
     koordinator: 'Obeya kennt sie auch: frag danach oder sag, was sich ändern soll.',
+    sections: { canvases: 'Leinwände', agents: 'Modelle und Effort', voice: 'Spracheingabe', demos: 'Demos', general: 'Allgemein' },
+    unsaved: 'Nicht gespeichert',
     language: {
       title: 'Sprache',
       hint: 'Die Sprache, in der Obeya mit dir spricht: die Oberfläche mit Daten und Zahlen, die Spracheingabe, was die Agenten dir schreiben, und die Demos, solange unten keine eigene Sprache gewählt ist. Gilt sofort; die Seite lädt dazu neu.',
@@ -651,7 +653,7 @@ const de = {
       missing: 'fehlt',
       needs: (found: string, need: string) => `${found}, braucht ${need}`,
       later: (size: string) => `wird bei der ersten Aufnahme geladen (etwa ${size})`,
-      off: 'aus (siehe oben)',
+      off: 'aus (Gegenhören abgeschaltet)',
       install: 'Im Terminal:',
       more: 'Mehr dazu',
       ready: 'Alles da: Agenten können Demos aufnehmen.',
@@ -1325,6 +1327,8 @@ const en: Strings = {
     fromArgs: (file: string) =>
       `Obeya is running with the repositories from the command line. Saving creates ${file}; Obeya then starts from it, also in future when it is started without repositories.`,
     koordinator: 'Obeya knows it too: ask about it or say what should change.',
+    sections: { canvases: 'Canvases', agents: 'Models and effort', voice: 'Voice input', demos: 'Demos', general: 'General' },
+    unsaved: 'Not saved',
     language: {
       title: 'Language',
       hint: 'The language Obeya speaks to you: the interface with its dates and numbers, voice input, what agents write to you, and demos unless they have a language of their own below. Applies at once; the page loads again for it.',
@@ -1543,7 +1547,7 @@ const en: Strings = {
       missing: 'missing',
       needs: (found: string, need: string) => `${found}, needs ${need}`,
       later: (size: string) => `loaded with the first recording (about ${size})`,
-      off: 'off (see above)',
+      off: 'off (listening back is switched off)',
       install: 'In the terminal:',
       more: 'More on this',
       ready: 'All there: agents can record demos.',

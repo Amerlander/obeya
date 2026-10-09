@@ -636,63 +636,144 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 .sheet .start-all .btn { padding: 7px 14px; font-size: 13px; }
 .sheet .start-all .hint { margin: 6px 0 0; font-size: 12px; }
 
-/* Obeya's configuration */
+/* Obeya's configuration: a dialog over the page, nearly as large as the window, its sections listed
+   on the left and the one chosen on the right; settings as rows of label and control, without boxes */
 .btn.small { padding: 5px 11px; font-size: 12.5px; font-weight: 500; margin-top: 8px; }
-#csheet code { font: 12px ui-monospace, Menlo, monospace; overflow-wrap: anywhere; }
-#csheet .warn { color: #b45309; }
+#config { position: fixed; inset: 0; z-index: 55; background: var(--dim); display: none; padding: 28px; }
+#config.on { display: flex; animation: fade .15s ease-out; }
+.cfg-box { flex: 1; display: grid; grid-template-columns: 230px minmax(0, 1fr); min-width: 0; background: var(--panel); border-radius: 16px;
+  box-shadow: var(--lift); overflow: hidden; }
+.cfg-nav { display: flex; flex-direction: column; padding: 22px 14px 18px; background: var(--chip); overflow-y: auto; }
+.cfg-nav > .p-kind, .cfg-nav > h2 { padding: 0 10px; }
+.cfg-nav h2 { margin: 2px 0 18px; font-size: 20px; letter-spacing: -.01em; }
+.cfg-nav ul { list-style: none; margin: 0; padding: 0; }
+.cfg-nav li button { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 0; border-radius: 8px; background: none;
+  font: inherit; font-size: 14px; color: var(--ink); text-align: left; cursor: pointer; }
+.cfg-nav li button:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.cfg-nav li button.on { background: var(--panel); font-weight: 600; box-shadow: var(--shadow); }
+.cfg-nav .n { margin-left: auto; border-radius: 10px; padding: 0 7px; font-weight: 700; font-size: 12px; color: #fff; background: var(--planned); }
+.cfg-nav .n.err { background: #dc2626; }
+.cfg-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--waiting); }
+.cfg-nav-foot { margin-top: auto; padding: 18px 10px 0; }
+.cfg-nav-foot .hint { margin: 0; line-height: 1.45; }
+.cfg-nav-foot .btn { background: var(--panel); }
+.cfg-main { position: relative; overflow-y: auto; padding: 26px 40px 0; }
+.cfg-close { position: absolute; right: 16px; top: 14px; border: 0; background: var(--chip); color: var(--ink); width: 32px; height: 32px; border-radius: 50%; cursor: pointer; z-index: 2; }
+.cfg-sec { max-width: 1180px; padding-bottom: 32px; }
+.cfg-sec[hidden] { display: none; }
+#config code { font: 12px ui-monospace, Menlo, monospace; overflow-wrap: anywhere; }
+#config .warn { color: #b45309; }
+#config .p-error { margin: 6px 0 0; font-size: 13px; }
+#config input, #config select, #config textarea { font: inherit; font-size: 13px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 7px;
+  background: var(--card); color: var(--ink); outline: none; }
+#config input:focus, #config textarea:focus, #config select:focus { border-color: var(--muted); }
+#config textarea { font: 12px ui-monospace, Menlo, monospace; resize: vertical; width: 100%; }
+#config input[type="checkbox"] { width: auto; margin: 0; padding: 0; }
+.cfg-head { margin-bottom: 14px; }
+.cfg-head h3 { margin: 0 48px 6px 0; font-size: 22px; letter-spacing: -.01em; }
+.cfg-head.sub { margin-top: 30px; padding-top: 22px; border-top: 1px solid var(--line); }
+.cfg-head h4 { margin: 0 0 4px; font-size: 15px; }
+.cfg-head .hint { max-width: 76ch; margin: 0 0 4px; font-size: 13px; line-height: 1.5; }
+.cfg-head .cfg-file { font-size: 12px; }
+.cfg-head:not(.sub) + .cfg-head.sub { margin-top: 0; padding-top: 4px; border-top: 0; }
+/* a setting: its name on the left, the control and what to know about it on the right */
+.cfg-field { display: grid; grid-template-columns: 200px minmax(0, 1fr); column-gap: 24px; align-items: baseline; padding: 7px 0; font-size: 13.5px; }
+.cfg-label { color: var(--muted); font-size: 13px; }
+.cfg-control { min-width: 0; max-width: 640px; }
+.cfg-control > .hint { margin: 5px 0 0; font-size: 12.5px; line-height: 1.45; }
+.cfg-control > select, .cfg-control > .c-path { width: 100%; max-width: 420px; }
+.cfg-control .btn.small { margin-top: 6px; }
+.cfg-inline { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cfg-inline .btn.small { margin-top: 0; }
+.cfg-inline kbd { font: 12.5px ui-monospace, Menlo, monospace; padding: 3px 8px; border-radius: 6px; background: var(--chip); border: 1px solid var(--line); }
+#config label.c-check { display: flex; gap: 8px; align-items: center; margin: 8px 0 0; font-size: 13px; }
+.cfg-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 0 56px; align-items: start; }
+.cfg-cols > .c-setup > .cfg-head.sub { margin-top: 0; padding-top: 0; border-top: 0; }
+/* the save buttons stay in view at the foot of the section */
+.cfg-actions { position: sticky; bottom: 0; z-index: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 20px;
+  padding: 14px 0 18px; background: var(--panel); border-top: 1px solid var(--line); }
+.cfg-actions .c-status { margin: 0; font-size: 12.5px; }
+.cfg-actions .cfg-json { margin: 0 0 0 auto; }
+.cfg-actions .cfg-json.on { background: var(--ink); color: var(--bg); }
+/* a canvas: its name as a heading line, its repositories as a table below it */
+.cfg-canvas { padding: 6px 0 18px; }
+.cfg-canvas + .cfg-canvas { border-top: 1px solid var(--line); padding-top: 18px; }
+.cfg-canvas-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.cfg-canvas-head h4 { margin: 0; font-size: 15px; white-space: nowrap; }
+.cfg-canvas-head input { width: 260px; }
+.cfg-canvas > .hint { margin: 0 0 8px; }
+.cfg-repos { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(150px, .8fr) minmax(0, 1.6fr) 24px; gap: 4px 12px; align-items: start; }
+.cfg-repos > .hint { font-size: 11.5px; padding-bottom: 2px; }
+.cfg-cell { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 3px 0; }
+.cfg-cell > .c-path, .cfg-cell > select { width: 100%; }
+.cfg-cell > .hint { font-size: 11.5px; }
+.cfg-repos > .c-del { padding-top: 9px; }
+.cfg-span { grid-column: 1 / -1; }
+.cfg-clones { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 12px; padding: 0 0 6px 16px; border-left: 2px solid var(--line); }
+.cfg-clones label > .hint { display: block; font-size: 11.5px; margin-bottom: 3px; }
+.cfg-clones input { width: 80px; }
+.cfg-hosts { grid-column: 1 / -1; }
+.cfg-hosts > .hint { display: block; font-size: 11.5px; margin-bottom: 3px; }
+.cfg-host-rows { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.3fr) minmax(0, 1.5fr) auto 24px; gap: 6px 10px; align-items: center; }
+.cfg-host-rows input { min-width: 0; width: 100%; }
+#config .cfg-host-clones { display: flex; align-items: center; gap: 6px; }
+.cfg-host-clones > .hint { font-size: 11.5px; }
+#config .cfg-host-clones input { width: 64px; }
+.cfg-hosts > .btn.small { margin-top: 6px; }
+.cfg-agents { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(170px, 1fr) minmax(130px, .7fr); gap: 0 14px; align-items: center; max-width: 900px; }
+.cfg-agents > .hint { font-size: 11.5px; padding-bottom: 4px; }
+.cfg-agents > select { min-width: 0; }
+.cfg-agent { display: flex; flex-direction: column; padding: 9px 0; font-size: 14px; }
+.cfg-agent > .hint { font-size: 12px; }
+@media (max-width: 900px) {
+  #config { padding: 10px; }
+  .cfg-box { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .cfg-nav { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 12px; }
+  .cfg-nav > .p-kind, .cfg-nav-foot { display: none; }
+  .cfg-nav h2 { margin: 0 8px 0 0; font-size: 17px; }
+  .cfg-nav ul { display: flex; flex-wrap: wrap; gap: 2px; padding-right: 36px; }
+  .cfg-nav li button { width: auto; padding: 6px 10px; font-size: 13px; }
+  .cfg-main { padding: 18px 18px 0; }
+  .cfg-field { grid-template-columns: 1fr; row-gap: 4px; }
+  .cfg-repos { grid-template-columns: minmax(0, 1fr) 24px; }
+  .cfg-repos > .hint { display: none; }
+  .cfg-repos > .cfg-cell:nth-of-type(n) { grid-column: 1; }
+  .cfg-repos > .c-del { grid-column: 2; grid-row: span 1; }
+  .cfg-cols { grid-template-columns: 1fr; }
+  .cfg-agents { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .cfg-agent { grid-column: 1 / -1; padding-bottom: 2px; }
+  .cfg-agents > span:first-child { display: none; }
+}
+/* shared with the setup assistant */
 .c-canvas { margin: 16px 0 6px; padding: 12px 12px 10px; border: 1px solid var(--line); border-radius: 12px; }
-.c-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.c-canvas input, .c-canvas select, .c-canvas textarea { font-size: 13px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--card); outline: none; }
+.c-canvas input:focus, .c-canvas textarea:focus { border-color: var(--muted); }
+.c-canvas .p-error { margin: 4px 0 0; font-size: 12.5px; }
 .c-id { font: 11.5px ui-monospace, Menlo, monospace; color: var(--muted); }
 .c-id.fresh { color: #b45309; }
 .c-del { margin-left: auto; border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 0 2px; }
 .c-del:hover { color: #dc2626; }
-.c-canvas label { display: block; margin: 4px 0; }
-.c-canvas label > .hint { display: block; font-size: 11px; }
-.c-canvas input, .c-canvas select, .c-canvas textarea { font-size: 13px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--card); outline: none; }
-.c-canvas input:focus, .c-canvas textarea:focus { border-color: var(--muted); }
-.c-canvas label > input, .c-canvas textarea { width: 100%; }
-.c-canvas textarea { font: 12px ui-monospace, Menlo, monospace; resize: vertical; }
-.c-repo { margin-top: 10px; padding: 8px 0 0; border-top: 1px dashed var(--line); }
 .c-row { display: flex; gap: 8px; align-items: center; margin: 4px 0; }
 .c-row .hint { font-size: 11.5px; min-width: 0; }
-label.c-row > .hint { display: inline; }
-label.c-row input { width: 64px; }
-.c-hosts { margin: 6px 0; }
-.c-hosts > .hint { display: block; font-size: 11px; }
-.c-host { display: grid; gap: 4px; margin: 4px 0 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; }
-.c-host > .c-row { margin: 0; }
-.c-host > .c-row > input:first-child { flex: 1; min-width: 0; }
-.c-host input.c-path { width: 100%; }
 .c-path { flex: 1; min-width: 0; font-family: ui-monospace, Menlo, monospace !important; font-size: 12px !important; }
-.c-canvas .p-error { margin: 4px 0 0; font-size: 12.5px; }
+.c-problem { margin: 6px 0 0; font-size: 13px; }
 .c-problem details { margin-top: 4px; }
 .c-problem summary { cursor: pointer; color: var(--muted); }
 .c-problem code { display: block; margin-top: 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .c-problem .btn { display: block; margin-top: 6px; color: var(--ink); }
 .c-actions { display: flex; gap: 8px; margin-top: 16px; }
-.c-demo .c-actions { margin-top: 10px; }
-.c-demo label.c-row > .hint { display: inline-block; min-width: 130px; }
-.c-demo > .hint:first-child { margin-top: 0; }
-.c-agents-grid { display: grid; grid-template-columns: 3fr 2fr; gap: 4px 8px; align-items: center; margin-top: 8px; }
-.c-agents-grid > .hint { margin: 0; font-size: 11px; }
-.c-agents-grid select { min-width: 0; }
-.c-agent-name { grid-column: 1 / -1; font-size: 13px; margin-top: 8px; }
-.c-agent-name > .hint { display: inline; font-size: 11px; margin-left: 4px; }
-.c-person { font-size: 12px; margin: 2px 0 6px; }
-.c-about { font-size: 12px; margin: 2px 0 6px; }
-.c-demo label.c-check { display: flex; gap: 6px; align-items: center; margin: 6px 0 2px; }
-.c-demo label.c-check > input { width: auto; margin: 0; }
-.c-demo label.c-check > .hint { display: inline; font-size: 12.5px; }
 .c-install { display: flex; gap: 10px; align-items: center; margin: 4px 0; font-size: 12.5px; }
 .c-install .hint { margin: 0; }
 .c-install .c-step { flex: none; }
 .c-install code { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .c-status { margin-top: 8px; }
-/* what demos need on this machine: one line per piece, how to install a missing one below it */
+/* what a machine needs: one line per piece, how to install a missing one below it */
 .c-setup > .hint:first-child { margin-top: 0; }
 .c-setup ul { list-style: none; padding: 0; margin: 6px 0; }
 .c-setup li { display: grid; grid-template-columns: 16px auto 1fr; column-gap: 8px; align-items: baseline; padding: 3px 0; font-size: 13px; }
 .c-setup li .hint { margin: 0; font-size: 12px; overflow-wrap: anywhere; }
+#config .c-setup li { padding: 5px 0; font-size: 13.5px; border-bottom: 1px solid var(--line); }
+#config .c-setup li:last-child { border-bottom: 0; }
 .c-mark { font-weight: 700; text-align: center; color: var(--approved); }
 .c-setup li.missing .c-mark { color: #dc2626; }
 .c-setup li.later .c-mark, .c-setup li.off .c-mark { color: var(--muted); }
@@ -700,9 +781,6 @@ label.c-row input { width: 64px; }
 .c-how { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; margin: 3px 0 4px; }
 .c-how code { padding: 2px 6px; border-radius: 5px; background: var(--card); border: 1px solid var(--line); user-select: all; }
 .c-how a { font-size: 12px; }
-.c-server { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; font-size: 13px; }
-.c-server dt { color: var(--muted); }
-.c-server dd { margin: 0; min-width: 0; }
 .c-json { font: 11.5px/1.4 ui-monospace, Menlo, monospace; background: var(--chip); border-radius: 9px; padding: 10px; overflow: auto; }
 
 /* the plan doc, read in the widened sheet */

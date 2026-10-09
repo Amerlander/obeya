@@ -1,8 +1,9 @@
-// Obeya's configuration: the canvases it serves and their repositories, edited here and saved;
-// Obeya then starts again with it. The server's own settings come from its command line and show
-// read-only.
+// Obeya's configuration, in a dialog over the page with its sections listed on the left: the
+// canvases it serves and their repositories, edited and saved together (Obeya then starts again
+// with them), and the settings saved on their own (models, voice, demos, language). The server's
+// own settings come from its command line and show read-only.
 
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
 import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigView, type DemoSettings, type DemoSettingsView, type DemoVoiceCheck, type Language, type HostConfig, type LanguageView, type NarrationLanguage, type RepoConfig, type SetupCheck, type VoiceKind, type VoiceSetupView } from '../core/types';
 import { LANGUAGES } from '../core/locale';
 import { pushKeyFromEvent, type PushKeyView } from '../core/push-key';
@@ -23,13 +24,27 @@ type Checked = Pick<ConfigView, 'resolved' | 'problems'>;
 /** Hands the Koordinator a request; to the one of `canvas` where given, else to this page's. */
 type Ask = (text: string, canvas?: string) => void;
 
-export function ConfigSheet({ on, onSetup, onAsk, onProblems }: { on: boolean; onSetup: () => void; onAsk: Ask; onProblems: (n: number) => void }) {
+/** The dialog's sections, in the order its list shows them. */
+type Section = 'canvases' | 'agents' | 'voice' | 'demos' | 'general';
+const SECTIONS: Section[] = ['canvases', 'agents', 'voice', 'demos', 'general'];
+// the section shown, per tab: a save restarts Obeya and a new language reloads the page, and the dialog comes back at it
+const SECTION_KEY = 'obeya-config-section';
+
+export function ConfigDialog({ on, onClose, onSetup, onAsk, onProblems }: { on: boolean; onClose: () => void; onSetup: () => void; onAsk: Ask; onProblems: (n: number) => void }) {
   const [view, setView] = useState<ConfigView | null>(null);
   const [draft, setDraft] = useState<CanvasConfig[]>([]);
   const [checked, setChecked] = useState<Checked | null>(null);
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
   const [json, setJson] = useState(false);
+  const [section, setSectionState] = useState<Section>(() => {
+    const s = sessionStorage.getItem(SECTION_KEY) as Section | null;
+    return s && SECTIONS.includes(s) ? s : 'canvases';
+  });
+  const setSection = (s: Section) => {
+    sessionStorage.setItem(SECTION_KEY, s);
+    setSectionState(s);
+  };
   // the id each canvas of the draft had when loaded: renaming a running canvas keeps it, and its cards
   const [origin, setOrigin] = useState<(string | null)[]>([]);
   const load = (v: ConfigView) => {
@@ -37,19 +52,21 @@ export function ConfigSheet({ on, onSetup, onAsk, onProblems }: { on: boolean; o
     setOrigin(v.resolved.map((r) => r?.id ?? null));
   };
 
-  // read afresh whenever the sheet opens: the Koordinator or the file may have changed it
+  const changed = !!view && JSON.stringify(draft) !== JSON.stringify(view.canvases);
+  const changedRef = useRef(changed);
+  changedRef.current = changed;
+  // read afresh whenever the dialog opens: the Koordinator or the file may have changed it; a draft not saved yet stays
   useEffect(() => {
     if (!on) return;
     api.config().then((v) => {
       setView(v);
-      load(v);
+      if (!changedRef.current) load(v);
       setChecked(v);
       onProblems(v.problems.length);
       setStatus(v.restarting ? t.config.saved : '');
     }, console.error);
   }, [on]);
 
-  const changed = !!view && JSON.stringify(draft) !== JSON.stringify(view.canvases);
   // the draft is checked as it is edited: paths, adapters, ids
   const seq = useRef(0);
   useEffect(() => {
@@ -59,57 +76,179 @@ export function ConfigSheet({ on, onSetup, onAsk, onProblems }: { on: boolean; o
     return () => clearTimeout(h);
   }, [draft, view]);
 
-  if (!view) {
-    return (
-      <aside id="csheet" className={on ? 'sheet on' : 'sheet'}>
-        <div className="p-kind">{t.config.kind}</div>
-        <h2>{t.config.title}</h2>
-        <p className="hint">{t.config.loading}</p>
-      </aside>
-    );
-  }
-
   const problems = checked?.problems ?? [];
-  const setCanvas = (i: number, c: CanvasConfig | null) => {
-    setDraft(c ? draft.map((x, j) => (j === i ? c : x)) : draft.filter((_, j) => j !== i));
-    if (!c) setOrigin(origin.filter((_, j) => j !== i));
-  };
-  const save = async () => {
-    setBusy(true);
-    try {
-      const { restarting } = await api.saveConfig(draft);
-      setView({ ...view, canvases: draft, restarting });
-      setStatus(restarting ? t.config.saved : t.config.savedOnly);
-    } catch (e) {
-      setStatus(e instanceof ApiError ? errorText(e.code) : t.offlineError);
-    }
-    setBusy(false);
-  };
+  const c = t.config;
+  return (
+    // a press on the dim around the dialog closes it; a press that starts inside does not
+    <div id="config" className={on ? 'on' : undefined} onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="cfg-box" role="dialog" aria-modal="true" aria-label={c.title}>
+        <nav className="cfg-nav">
+          <div className="p-kind">{c.kind}</div>
+          <h2>{c.title}</h2>
+          <ul>
+            {SECTIONS.map((s) => (
+              <li key={s}>
+                <button className={s === section ? 'on' : undefined} aria-current={s === section || undefined} onClick={() => setSection(s)}>
+                  {c.sections[s]}
+                  {s === 'canvases' && changed && <span className="cfg-dot" title={c.unsaved} />}
+                  {s === 'canvases' && problems.length > 0 && (
+                    <span className="n err" title={c.problemCount(problems.length)}>
+                      {problems.length}
+                    </span>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="cfg-nav-foot">
+            <p className="hint">{c.koordinator}</p>
+            <button className="btn small" onClick={onSetup}>
+              {t.setup.check}
+            </button>
+          </div>
+        </nav>
+        <div className="cfg-main">
+          <button className="cfg-close" title={t.close} onClick={onClose}>
+            ✕
+          </button>
+          <section className="cfg-sec" hidden={section !== 'canvases'}>
+            {!view ? (
+              <>
+                <Head title={c.sections.canvases} />
+                <p className="hint">{c.loading}</p>
+              </>
+            ) : (
+              <Canvases
+                view={view}
+                draft={draft}
+                origin={origin}
+                checked={checked}
+                changed={changed}
+                busy={busy}
+                onAsk={onAsk}
+                onDraft={(d, o) => {
+                  setDraft(d);
+                  setOrigin(o);
+                }}
+                onSave={async () => {
+                  setBusy(true);
+                  try {
+                    const { restarting } = await api.saveConfig(draft);
+                    setView({ ...view, canvases: draft, restarting });
+                    setStatus(restarting ? c.saved : c.savedOnly);
+                  } catch (e) {
+                    setStatus(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+                  }
+                  setBusy(false);
+                }}
+                onReset={() => load(view)}
+                status={status}
+                json={json}
+                onJson={() => setJson(!json)}
+              />
+            )}
+          </section>
+          <section className="cfg-sec" hidden={section !== 'agents'}>
+            <AgentsBlock on={on} />
+          </section>
+          <section className="cfg-sec" hidden={section !== 'voice'}>
+            <VoiceBlock on={on} />
+            <PushKeyBlock on={on} />
+          </section>
+          <section className="cfg-sec" hidden={section !== 'demos'}>
+            <DemoBlock on={on} />
+          </section>
+          <section className="cfg-sec" hidden={section !== 'general'}>
+            <Head title={c.sections.general} />
+            <LanguageBlock on={on} />
+            {view && <ServerBlock server={view.server} />}
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** A section's title, what it is about, and the file it is saved in; `sub` for a part of a section. */
+function Head({ title, hint, file, sub }: { title: string; hint?: ReactNode; file?: string; sub?: boolean }) {
+  return (
+    <header className={sub ? 'cfg-head sub' : 'cfg-head'}>
+      {sub ? <h4>{title}</h4> : <h3>{title}</h3>}
+      {hint && <p className="hint">{hint}</p>}
+      {file && (
+        <p className="hint cfg-file">
+          {t.config.fromFile} <code>{file}</code>
+        </p>
+      )}
+    </header>
+  );
+}
+
+/** One setting: what it is on the left, the control with what to know about it on the right. */
+function Field({ label, hint, children }: { label: ReactNode; hint?: ReactNode; children: ReactNode }) {
+  return (
+    <div className="cfg-field">
+      <div className="cfg-label">{label}</div>
+      <div className="cfg-control">
+        {children}
+        {hint && <p className="hint">{hint}</p>}
+      </div>
+    </div>
+  );
+}
+
+interface CanvasesProps {
+  view: ConfigView;
+  draft: CanvasConfig[];
+  origin: (string | null)[];
+  checked: Checked | null;
+  changed: boolean;
+  busy: boolean;
+  onAsk: Ask;
+  onDraft: (draft: CanvasConfig[], origin: (string | null)[]) => void;
+  onSave: () => void;
+  onReset: () => void;
+  status: string;
+  json: boolean;
+  onJson: () => void;
+}
+
+/** The canvases with their repositories, saved together; Obeya then starts again with them. */
+function Canvases({ view, draft, origin, checked, changed, busy, onAsk, onDraft, onSave, onReset, status, json, onJson }: CanvasesProps) {
+  const c = t.config;
+  const problems = checked?.problems ?? [];
+  const setCanvas = (i: number, x: CanvasConfig | null) =>
+    x
+      ? onDraft(
+          draft.map((y, j) => (j === i ? x : y)),
+          origin,
+        )
+      : onDraft(
+          draft.filter((_, j) => j !== i),
+          origin.filter((_, j) => j !== i),
+        );
   // a canvas with a problem has no id yet: which running canvas goes is only known once all resolve
   const resolved = checked?.resolved ?? [];
   const gone = resolved.every(Boolean) ? view.running.filter((id) => !resolved.some((r) => r?.id === id)) : [];
-
   return (
-    <aside id="csheet" className={on ? 'sheet on' : 'sheet'}>
-      <div className="p-kind">{t.config.kind}</div>
-      <h2>{t.config.title}</h2>
-      {view.source === 'file' ? (
-        <p className="hint">
-          {t.config.fromFile} <code>{view.file}</code>
-        </p>
-      ) : (
-        <p className="hint">{t.config.fromArgs(view.file)}</p>
-      )}
-      <p className="hint">{t.config.koordinator}</p>
-      <button className="btn small" onClick={onSetup}>
-        {t.setup.check}
-      </button>
-
-      {draft.map((c, i) => (
+    <>
+      <Head
+        title={c.sections.canvases}
+        hint={
+          view.source === 'file' ? (
+            <>
+              {c.fromFile} <code>{view.file}</code>
+            </>
+          ) : (
+            c.fromArgs(view.file)
+          )
+        }
+      />
+      {draft.map((x, i) => (
         <CanvasBlock
           key={i}
           n={i}
-          canvas={c}
+          canvas={x}
           resolved={checked?.resolved[i] ?? null}
           running={view.running}
           pin={origin[i] && view.running.includes(origin[i]) ? origin[i] : undefined}
@@ -117,75 +256,62 @@ export function ConfigSheet({ on, onSetup, onAsk, onProblems }: { on: boolean; o
           adapters={view.adapters}
           problems={problems.filter((p) => p.canvas === i)}
           ask={changed ? undefined : onAsk}
-          onChange={(x) => setCanvas(i, x)}
+          onChange={(y) => setCanvas(i, y)}
         />
       ))}
-      <button
-        className="btn small"
-        onClick={() => {
-          setDraft([...draft, { repos: [{ path: '' }] }]);
-          setOrigin([...origin, null]);
-        }}
-      >
-        {t.config.addCanvas}
+      <button className="btn small" onClick={() => onDraft([...draft, { repos: [{ path: '' }] }], [...origin, null])}>
+        {c.addCanvas}
       </button>
       {problems
         .filter((p) => p.canvas === undefined)
         .map((p, k) => (
           <Problem key={k} problem={p} where="" ask={changed ? undefined : onAsk} />
         ))}
-      {changed && gone.length > 0 && <p className="hint warn">{t.config.gone(gone.join(', '))}</p>}
-
-      <div className="c-actions">
-        <button className="btn primary" disabled={!changed || busy || problems.some(blocksSaving)} onClick={save}>
-          {view.server.restarts ? t.config.save : t.config.saveOnly}
+      {changed && gone.length > 0 && <p className="hint warn">{c.gone(gone.join(', '))}</p>}
+      {json && <pre className="c-json">{JSON.stringify(draft, null, 2)}</pre>}
+      <div className="cfg-actions">
+        <button className="btn primary" disabled={!changed || busy || problems.some(blocksSaving)} onClick={onSave}>
+          {view.server.restarts ? c.save : c.saveOnly}
         </button>
         {changed && (
-          <button className="btn" disabled={busy} onClick={() => load(view)}>
-            {t.config.reset}
+          <button className="btn" disabled={busy} onClick={onReset}>
+            {c.reset}
           </button>
         )}
+        {status && <span className="hint c-status">{status}</span>}
+        <button className={json ? 'btn small cfg-json on' : 'btn small cfg-json'} onClick={onJson}>
+          {c.json}
+        </button>
       </div>
-      {status && <p className="hint c-status">{status}</p>}
+    </>
+  );
+}
 
-      <LanguageBlock on={on} />
-      <AgentsBlock on={on} />
-      <VoiceBlock on={on} />
-      <PushKeyBlock on={on} />
-      <DemoBlock on={on} />
-
-      <h4 className="p-h">{t.config.server}</h4>
-      <dl className="c-server">
-        <dt>{t.config.version}</dt>
-        <dd>
-          {view.server.version}
-          {view.server.commit && <> · {t.config.checkout(view.server.commit.slice(0, 7))}</>}
-        </dd>
-        <dt>{t.config.port}</dt>
-        <dd>{view.server.port}</dd>
-        <dt>{t.config.dataDir}</dt>
-        <dd>
-          <code>{view.server.home}</code>
-        </dd>
-        <dt>{t.config.permissionMode}</dt>
-        <dd>
-          <code>{view.server.permissionMode}</code>
-        </dd>
-        <dt>{t.config.restarts}</dt>
-        <dd>{!view.server.restarts ? t.config.no : view.server.commit ? t.config.yes : t.config.noCheckout}</dd>
-      </dl>
+/** The server's own settings, from its command line: shown, not changed here. */
+function ServerBlock({ server }: { server: ConfigView['server'] }) {
+  const c = t.config;
+  return (
+    <>
+      <Head sub title={c.server} />
+      <Field label={c.version}>
+        {server.version}
+        {server.commit && <> · {c.checkout(server.commit.slice(0, 7))}</>}
+      </Field>
+      <Field label={c.port}>{server.port}</Field>
+      <Field label={c.dataDir}>
+        <code>{server.home}</code>
+      </Field>
+      <Field label={c.permissionMode}>
+        <code>{server.permissionMode}</code>
+      </Field>
+      <Field label={c.restarts}>{!server.restarts ? c.no : server.commit ? c.yes : c.noCheckout}</Field>
       {/* in the app's window (app/src/main.rs), which opens a new window in the default browser */}
       {window.obeyaApp && (
-        <button className="btn small" title={t.config.openInBrowserHint} onClick={() => window.open(location.href, '_blank')}>
-          {t.config.openInBrowser}
+        <button className="btn small" title={c.openInBrowserHint} onClick={() => window.open(location.href, '_blank')}>
+          {c.openInBrowser}
         </button>
       )}
-
-      <button className="btn small" onClick={() => setJson(!json)}>
-        {t.config.json}
-      </button>
-      {json && <pre className="c-json">{JSON.stringify(draft, null, 2)}</pre>}
-    </aside>
+    </>
   );
 }
 
@@ -235,24 +361,18 @@ function LanguageBlock({ on }: { on: boolean }) {
   };
   return (
     <>
-      <h4 className="p-h">{l.title}</h4>
-      <section className="c-canvas c-demo c-language">
-        <p className="hint">
-          {l.hint} <code>{view.file}</code>
-        </p>
-        <label className="c-row">
-          <span className="hint">{l.title}</span>
-          <select value={view.chosen ?? ''} disabled={busy} onChange={(e) => choose((e.target.value || null) as Language | null)}>
-            <option value="">{l.system(l.names[view.system])}</option>
-            {LANGUAGES.map((x) => (
-              <option key={x} value={x}>
-                {l.names[x]}
-              </option>
-            ))}
-          </select>
-        </label>
-        {status && <p className="hint c-status">{status}</p>}
-      </section>
+      <Head sub title={l.title} hint={l.hint} file={view.file} />
+      <Field label={l.title}>
+        <select aria-label={l.title} value={view.chosen ?? ''} disabled={busy} onChange={(e) => choose((e.target.value || null) as Language | null)}>
+          <option value="">{l.system(l.names[view.system])}</option>
+          {LANGUAGES.map((x) => (
+            <option key={x} value={x}>
+              {l.names[x]}
+            </option>
+          ))}
+        </select>
+      </Field>
+      {status && <p className="hint c-status">{status}</p>}
     </>
   );
 }
@@ -328,36 +448,35 @@ function PushKeyBlock({ on }: { on: boolean }) {
           ? `${p.states.error}: ${shell.detail ?? ''}`
           : p.states[shell.state];
   return (
-    <>
-      <h4 className="p-h">{p.title}</h4>
-      <section className={`c-canvas c-demo c-push-key${listening ? ' listening' : ''}`}>
-        <p className="hint">{p.hint}</p>
-        <div className="c-row">
-          <span className="hint">{p.key}</span>
-          <span>
-            <kbd>{listening ? p.press : pushKeyLabel(view.key)}</kbd>{' '}
-            <button className="btn small" disabled={listening} onClick={() => (setStatus(''), setListening(true))}>
-              {p.change}
-            </button>{' '}
-            {view.chosen && (
-              <button className="btn small" onClick={() => save(null)}>
-                {p.reset(pushKeyLabel(view.default))}
+    <div className={`c-push-key${listening ? ' listening' : ''}`}>
+      <Head sub title={p.title} hint={p.hint} />
+      <Field
+        label={p.key}
+        hint={
+          <span className={shell && shell.state !== 'on' ? 'warn' : undefined}>
+            {listening ? p.pressHint : state}{' '}
+            {!listening && shell?.state === 'permission' && shell.detail !== 'restart' && (
+              <button className="btn small" onClick={() => window.open(INPUT_MONITORING, '_blank')}>
+                {p.openSettings}
               </button>
             )}
           </span>
-        </div>
-        {listening && <p className="hint">{p.pressHint}</p>}
-        <p className={`hint${shell && shell.state !== 'on' ? ' warn' : ''}`}>
-          {state}{' '}
-          {shell?.state === 'permission' && shell.detail !== 'restart' && (
-            <button className="btn small" onClick={() => window.open(INPUT_MONITORING, '_blank')}>
-              {p.openSettings}
+        }
+      >
+        <span className="cfg-inline">
+          <kbd>{listening ? p.press : pushKeyLabel(view.key)}</kbd>
+          <button className="btn small" disabled={listening} onClick={() => (setStatus(''), setListening(true))}>
+            {p.change}
+          </button>
+          {view.chosen && (
+            <button className="btn small" onClick={() => save(null)}>
+              {p.reset(pushKeyLabel(view.default))}
             </button>
           )}
-        </p>
-        {status && <p className="hint c-status">{status}</p>}
-      </section>
-    </>
+        </span>
+      </Field>
+      {status && <p className="hint c-status">{status}</p>}
+    </div>
   );
 }
 
@@ -386,41 +505,38 @@ function AgentsBlock({ on }: { on: boolean }) {
   };
   return (
     <>
-      <h4 className="p-h">{a.title}</h4>
-      <section className="c-canvas c-demo c-agents">
-        <p className="hint">
-          {a.hint} <code>{view.file}</code>
-        </p>
-        <div className="c-agents-grid">
-          <span className="hint">{a.model}</span>
-          <span className="hint">{a.effort}</span>
-          {AGENT_ROLES.map((role) => {
-            const setting = view.agents[role];
-            return (
-              <Fragment key={role}>
-                <div className="c-agent-name">
-                  {a.roles[role].name} <span className="hint">{a.roles[role].hint}</span>
-                </div>
-                <select aria-label={`${a.roles[role].name}: ${a.model}`} value={setting.model} disabled={busy} onChange={(e) => choose(role, { model: e.target.value as AgentModel })}>
-                  {AGENT_MODELS.map((m) => (
-                    <option key={m} value={m}>
-                      {a.models[m]}
-                    </option>
-                  ))}
-                </select>
-                <select aria-label={`${a.roles[role].name}: ${a.effort}`} value={setting.effort} disabled={busy} onChange={(e) => choose(role, { effort: e.target.value as AgentEffort })}>
-                  {AGENT_EFFORTS.map((x) => (
-                    <option key={x} value={x}>
-                      {a.efforts[x]}
-                    </option>
-                  ))}
-                </select>
-              </Fragment>
-            );
-          })}
-        </div>
-        {status && <p className="hint c-status">{status}</p>}
-      </section>
+      <Head title={a.title} hint={a.hint} file={view.file} />
+      <div className="cfg-agents">
+        <span />
+        <span className="hint">{a.model}</span>
+        <span className="hint">{a.effort}</span>
+        {AGENT_ROLES.map((role) => {
+          const setting = view.agents[role];
+          return (
+            <Fragment key={role}>
+              <div className="cfg-agent">
+                {a.roles[role].name}
+                <span className="hint">{a.roles[role].hint}</span>
+              </div>
+              <select aria-label={`${a.roles[role].name}: ${a.model}`} value={setting.model} disabled={busy} onChange={(e) => choose(role, { model: e.target.value as AgentModel })}>
+                {AGENT_MODELS.map((m) => (
+                  <option key={m} value={m}>
+                    {a.models[m]}
+                  </option>
+                ))}
+              </select>
+              <select aria-label={`${a.roles[role].name}: ${a.effort}`} value={setting.effort} disabled={busy} onChange={(e) => choose(role, { effort: e.target.value as AgentEffort })}>
+                {AGENT_EFFORTS.map((x) => (
+                  <option key={x} value={x}>
+                    {a.efforts[x]}
+                  </option>
+                ))}
+              </select>
+            </Fragment>
+          );
+        })}
+      </div>
+      {status && <p className="hint c-status">{status}</p>}
     </>
   );
 }
@@ -500,105 +616,103 @@ function DemoBlock({ on }: { on: boolean }) {
     setSampling(false);
   };
   const field = (k: (typeof VOICE_FIELDS)[VoiceKind][number]) => (
-    <label key={k}>
-      <span className="hint">{d.field[k](draft.voice)}</span>
+    <Field key={k} label={d.field[k](draft.voice)}>
       <input
         className="c-path"
+        aria-label={d.field[k](draft.voice)}
         spellCheck={false}
         placeholder={d.placeholder[k](draft.voice)}
         value={draft[k] ?? ''}
         onChange={(e) => set(k, e.target.value || undefined)}
       />
-    </label>
+    </Field>
   );
   return (
     <>
-      <h4 className="p-h">{d.title}</h4>
-      <section className="c-canvas c-demo">
-        <p className="hint">
-          {d.hint} <code>{view.file}</code>
-        </p>
-        <label className="c-row">
-          <span className="hint">{d.language}</span>
-          <select value={draft.language} onChange={(e) => set('language', e.target.value as NarrationLanguage)}>
-            {(Object.keys(d.languages) as NarrationLanguage[]).map((l) => (
-              <option key={l} value={l}>
-                {d.languages[l]}
-              </option>
+      <Head title={d.title} hint={d.hint} file={view.file} />
+      <div className="cfg-cols">
+        <div>
+          <Field label={d.language}>
+            <select aria-label={d.language} value={draft.language} onChange={(e) => set('language', e.target.value as NarrationLanguage)}>
+              {(Object.keys(d.languages) as NarrationLanguage[]).map((l) => (
+                <option key={l} value={l}>
+                  {d.languages[l]}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label={d.voice} hint={d.about[draft.voice]}>
+            <select
+              aria-label={d.voice}
+              value={draft.voice}
+              // another voice starts with its own fields, and is nobody's own until ticked
+              onChange={(e) => setDraft({ language: draft.language, voice: e.target.value as VoiceKind, listenBack: draft.listenBack })}
+            >
+              {VOICE_GROUPS.map(({ group, voices }) => (
+                <optgroup key={group} label={d.groups[group]}>
+                  {voices
+                    .filter((v) => v !== 'say' || view.platform === 'darwin' || draft.voice === 'say')
+                    .map((v) => (
+                      <option key={v} value={v}>
+                        {d.voices[v]}
+                      </option>
+                    ))}
+                </optgroup>
+              ))}
+            </select>
+          </Field>
+          {VOICE_FIELDS[draft.voice].map(field)}
+          <Field label="" hint={d.person[shown.person]}>
+            {!STOCK_ONLY.includes(draft.voice) && (
+              <label className="c-check">
+                <input type="checkbox" checked={!!draft.ownVoice} onChange={(e) => set('ownVoice', e.target.checked || undefined)} />
+                {d.ownVoice}
+              </label>
+            )}
+          </Field>
+          <Field label="">
+            {job?.running ? (
+              <p className="hint c-install">
+                <span className="c-step">{d.installing}</span> <code>{job.line}</code>
+              </p>
+            ) : (
+              !shown.install.installed && (
+                <div className="c-install">
+                  <p className="hint">{d.notInstalled(shown.install.missing.join(', '), megabytes(shown.install.mb))}</p>
+                  <button className="btn small" disabled={installing} onClick={install}>
+                    {d.install(megabytes(shown.install.mb))}
+                  </button>
+                </div>
+              )
+            )}
+            {job?.error && !job.running && <p className="p-error">{d.installFailed(job.error.split('\n').at(-1) ?? '')}</p>}
+            {shown.problems.map((p) => (
+              <p key={p} className="p-error">
+                {d.problem[p]}
+              </p>
             ))}
-          </select>
-        </label>
-        <label className="c-row">
-          <span className="hint">{d.voice}</span>
-          <select
-            value={draft.voice}
-            // another voice starts with its own fields, and is nobody's own until ticked
-            onChange={(e) => setDraft({ language: draft.language, voice: e.target.value as VoiceKind, listenBack: draft.listenBack })}
-          >
-            {VOICE_GROUPS.map(({ group, voices }) => (
-              <optgroup key={group} label={d.groups[group]}>
-                {voices
-                  .filter((v) => v !== 'say' || view.platform === 'darwin' || draft.voice === 'say')
-                  .map((v) => (
-                    <option key={v} value={v}>
-                      {d.voices[v]}
-                    </option>
-                  ))}
-              </optgroup>
-            ))}
-          </select>
-        </label>
-        <p className="hint c-about">{d.about[draft.voice]}</p>
-        {VOICE_FIELDS[draft.voice].map(field)}
-        {!STOCK_ONLY.includes(draft.voice) && (
-          <label className="c-check">
-            <input type="checkbox" checked={!!draft.ownVoice} onChange={(e) => set('ownVoice', e.target.checked || undefined)} />
-            <span className="hint">{d.ownVoice}</span>
-          </label>
-        )}
-        <p className="hint c-person">{d.person[shown.person]}</p>
-        {job?.running ? (
-          <p className="hint c-install">
-            <span className="c-step">{d.installing}</span> <code>{job.line}</code>
-          </p>
-        ) : (
-          !shown.install.installed && (
-            <div className="c-install">
-              <p className="hint">{d.notInstalled(shown.install.missing.join(', '), megabytes(shown.install.mb))}</p>
-              <button className="btn small" disabled={installing} onClick={install}>
-                {d.install(megabytes(shown.install.mb))}
-              </button>
-            </div>
-          )
-        )}
-        {job?.error && !job.running && <p className="p-error">{d.installFailed(job.error.split('\n').at(-1) ?? '')}</p>}
-        {shown.problems.map((p) => (
-          <p key={p} className="p-error">
-            {d.problem[p]}
-          </p>
-        ))}
-        <div className="c-row">
-          <button className="btn small" disabled={sampling || !shown.install.installed || !!shown.problems.length} onClick={listen}>
-            {sampling ? d.sampling : d.listen}
-          </button>
-        </div>
-        <label className="c-check">
-          <input type="checkbox" checked={draft.listenBack !== false} onChange={(e) => set('listenBack', e.target.checked ? undefined : false)} />
-          <span className="hint">{d.listenBack}</span>
-        </label>
-        <div className="c-actions">
-          <button className="btn small primary" disabled={!changed || busy} onClick={save}>
-            {d.save}
-          </button>
-          {changed && (
-            <button className="btn small" disabled={busy} onClick={() => setDraft(view.settings)}>
-              {t.config.reset}
+            <button className="btn small" disabled={sampling || !shown.install.installed || !!shown.problems.length} onClick={listen}>
+              {sampling ? d.sampling : d.listen}
             </button>
-          )}
+            <label className="c-check">
+              <input type="checkbox" checked={draft.listenBack !== false} onChange={(e) => set('listenBack', e.target.checked ? undefined : false)} />
+              {d.listenBack}
+            </label>
+          </Field>
+          <div className="cfg-actions">
+            <button className="btn primary" disabled={!changed || busy} onClick={save}>
+              {d.save}
+            </button>
+            {changed && (
+              <button className="btn" disabled={busy} onClick={() => setDraft(view.settings)}>
+                {t.config.reset}
+              </button>
+            )}
+            {status && <span className="hint c-status">{status}</span>}
+          </div>
         </div>
-        {status && <p className="hint c-status">{status}</p>}
-      </section>
-      <SetupBlock draft={draft} installing={installing} />
+        <SetupBlock draft={draft} installing={installing} />
+      </div>
     </>
   );
 }
@@ -614,7 +728,10 @@ function SetupBlock({ draft, installing }: { draft: DemoSettings; installing: bo
   const s = t.config.setup;
   const recheck = () => {
     setChecking(true);
-    return api.demoSetup(draft).then(setSetup, console.error).finally(() => setChecking(false));
+    return api
+      .demoSetup(draft)
+      .then(setSetup, console.error)
+      .finally(() => setChecking(false));
   };
   useEffect(() => {
     if (!installing) recheck();
@@ -622,20 +739,17 @@ function SetupBlock({ draft, installing }: { draft: DemoSettings; installing: bo
   if (!setup) return null;
   const items = setup.items.filter((i) => i.id !== 'voice');
   return (
-    <>
-      <h4 className="p-h">{s.title}</h4>
-      <section className="c-canvas c-setup">
-        <p className="hint">{s.hint(`${PLATFORMS[setup.platform] ?? setup.platform} (${setup.arch})`)}</p>
-        <SetupList items={items} name={(i) => s.names[i.id]} state={demoState} />
-        {!items.some((i) => i.state === 'missing') && <p className="hint">{s.ready}</p>}
-        <p className="hint">
-          {s.guide} <code>docs/demo-setup.md</code>
-        </p>
-        <button className="btn small" disabled={checking} onClick={recheck}>
-          {checking ? s.checking : s.recheck}
-        </button>
-      </section>
-    </>
+    <div className="c-setup">
+      <Head sub title={s.title} hint={s.hint(`${PLATFORMS[setup.platform] ?? setup.platform} (${setup.arch})`)} />
+      <SetupList items={items} name={(i) => s.names[i.id]} state={demoState} />
+      {!items.some((i) => i.state === 'missing') && <p className="hint">{s.ready}</p>}
+      <p className="hint">
+        {s.guide} <code>docs/demo-setup.md</code>
+      </p>
+      <button className="btn small" disabled={checking} onClick={recheck}>
+        {checking ? s.checking : s.recheck}
+      </button>
+    </div>
   );
 }
 
@@ -649,7 +763,10 @@ function VoiceBlock({ on }: { on: boolean }) {
   const [checking, setChecking] = useState(false);
   const recheck = () => {
     setChecking(true);
-    return api.voiceSetup().then(setView, console.error).finally(() => setChecking(false));
+    return api
+      .voiceSetup()
+      .then(setView, console.error)
+      .finally(() => setChecking(false));
   };
   useEffect(() => {
     if (on) recheck();
@@ -673,32 +790,29 @@ function VoiceBlock({ on }: { on: boolean }) {
   };
   const blocked = view.items.some((i) => i.state === 'missing');
   return (
-    <>
-      <h4 className="p-h">{v.title}</h4>
-      <section className="c-canvas c-setup c-voice">
-        <p className="hint">{v.hint(`${PLATFORMS[view.platform] ?? view.platform} (${view.arch})`)}</p>
-        <SetupList items={view.items} name={(i) => v.names[i.id]} state={voiceState} />
-        {view.listen === 'faster' && <p className="hint">{v.faster}</p>}
-        {view.job?.running ? (
-          <p className="hint c-install">
-            <span className="c-step">{v.step[view.job.step]}</span> <code>{view.job.line}</code>
-          </p>
-        ) : view.fetch.parts.length ? (
-          <div className="c-install">
-            <button className="btn small" disabled={blocked} onClick={install}>
-              {v.install(megabytes(view.fetch.mb))}
-            </button>
-          </div>
-        ) : (
-          !view.items.some((i) => i.state === 'missing') && <p className="hint">{v.ready}</p>
-        )}
-        {view.job?.error && !view.job.running && <p className="p-error">{v.failed(view.job.error.split('\n').at(-1) ?? '')}</p>}
-        {status && <p className="hint c-status">{status}</p>}
-        <button className="btn small" disabled={checking || running} onClick={recheck}>
-          {checking ? s.checking : s.recheck}
-        </button>
-      </section>
-    </>
+    <div className="c-setup">
+      <Head title={v.title} hint={v.hint(`${PLATFORMS[view.platform] ?? view.platform} (${view.arch})`)} />
+      <SetupList items={view.items} name={(i) => v.names[i.id]} state={voiceState} />
+      {view.listen === 'faster' && <p className="hint">{v.faster}</p>}
+      {view.job?.running ? (
+        <p className="hint c-install">
+          <span className="c-step">{v.step[view.job.step]}</span> <code>{view.job.line}</code>
+        </p>
+      ) : view.fetch.parts.length ? (
+        <div className="c-install">
+          <button className="btn small" disabled={blocked} onClick={install}>
+            {v.install(megabytes(view.fetch.mb))}
+          </button>
+        </div>
+      ) : (
+        !view.items.some((i) => i.state === 'missing') && <p className="hint">{v.ready}</p>
+      )}
+      {view.job?.error && !view.job.running && <p className="p-error">{v.failed(view.job.error.split('\n').at(-1) ?? '')}</p>}
+      {status && <p className="hint c-status">{status}</p>}
+      <button className="btn small" disabled={checking || running} onClick={recheck}>
+        {checking ? s.checking : s.recheck}
+      </button>
+    </div>
   );
 }
 
@@ -723,12 +837,21 @@ function CanvasBlock({ n, canvas, resolved, running, pin, saved, adapters, probl
   // the Koordinator of the canvas with the problem, where it runs: a card for it goes there
   const askHere = ask && ((text: string) => ask(text, resolved && running.includes(resolved.id) ? resolved.id : undefined));
   const here = t.config.canvas(n + 1);
-  const setRepo = (i: number, r: RepoConfig | null) =>
-    onChange({ ...canvas, repos: r ? canvas.repos.map((x, j) => (j === i ? r : x)) : canvas.repos.filter((_, j) => j !== i) });
+  const setRepo = (i: number, r: RepoConfig | null) => onChange({ ...canvas, repos: r ? canvas.repos.map((x, j) => (j === i ? r : x)) : canvas.repos.filter((_, j) => j !== i) });
   return (
-    <section className="c-canvas">
-      <div className="c-head">
-        <b>{t.config.canvas(n + 1)}</b>
+    <div className="cfg-canvas">
+      <div className="cfg-canvas-head">
+        <h4>{here}</h4>
+        <input
+          aria-label={t.config.name}
+          value={canvas.name ?? ''}
+          placeholder={resolved && !canvas.name ? t.config.nameAuto(resolved.name) : t.config.name}
+          onChange={(e) => {
+            const { name: _, ...rest } = canvas;
+            const kept = pin && !rest.id ? { ...rest, id: pin } : rest;
+            onChange(e.target.value ? { ...kept, name: e.target.value } : kept);
+          }}
+        />
         {resolved && (
           <span className={fresh ? 'c-id fresh' : 'c-id'} title={fresh ? t.config.freshHint : undefined}>
             ?c={resolved.id} · {fresh ? t.config.fresh : t.config.runs}
@@ -738,33 +861,29 @@ function CanvasBlock({ n, canvas, resolved, running, pin, saved, adapters, probl
           ✕
         </button>
       </div>
-      <label>
-        <span className="hint">{t.config.name}</span>
-        <input
-          value={canvas.name ?? ''}
-          placeholder={resolved && !canvas.name ? t.config.nameAuto(resolved.name) : ''}
-          onChange={(e) => {
-            const { name: _, ...rest } = canvas;
-            const kept = pin && !rest.id ? { ...rest, id: pin } : rest;
-            onChange(e.target.value ? { ...kept, name: e.target.value } : kept);
-          }}
-        />
-      </label>
       {fresh && <p className="hint warn">{t.config.freshHint}</p>}
-      {canvas.repos.map((r, i) => (
-        <RepoRow
-          key={i}
-          repo={r}
-          home={i === 0}
-          resolved={resolved?.repos[i]}
-          canvasId={saved && resolved && running.includes(resolved.id) ? resolved.id : undefined}
-          adapters={adapters}
-          problems={problems.filter((p) => p.repo === i)}
-          where={`${here}, ${t.config.repoAt(r.path)}`}
-          ask={askHere}
-          onChange={(x) => setRepo(i, x)}
-        />
-      ))}
+      <div className="cfg-repos">
+        <span className="hint">{t.config.path}</span>
+        <span className="hint">{t.config.adapter}</span>
+        <span className="hint" title={t.config.shareHint}>
+          {t.config.share}
+        </span>
+        <span />
+        {canvas.repos.map((r, i) => (
+          <RepoRow
+            key={i}
+            repo={r}
+            home={i === 0}
+            resolved={resolved?.repos[i]}
+            canvasId={saved && resolved && running.includes(resolved.id) ? resolved.id : undefined}
+            adapters={adapters}
+            problems={problems.filter((p) => p.repo === i)}
+            where={`${here}, ${t.config.repoAt(r.path)}`}
+            ask={askHere}
+            onChange={(x) => setRepo(i, x)}
+          />
+        ))}
+      </div>
       {problems
         .filter((p) => p.repo === undefined)
         .map((p, k) => (
@@ -773,7 +892,7 @@ function CanvasBlock({ n, canvas, resolved, running, pin, saved, adapters, probl
       <button className="btn small" onClick={() => onChange({ ...canvas, repos: [...canvas.repos, { path: '' }] })}>
         {t.config.addRepo}
       </button>
-    </section>
+    </div>
   );
 }
 
@@ -799,31 +918,41 @@ function RepoRow({ repo, home, resolved, canvasId, adapters, problems, where, as
     else next[k] = v;
     return next;
   };
+  // one row of the canvas's table of repositories; what only some have (clones, problems) spans the row below it
   return (
-    <div className="c-repo">
-      <div className="c-row">
-        <input className="c-path" value={repo.path} placeholder={t.config.path} spellCheck={false} onChange={(e) => onChange({ ...repo, path: e.target.value })} />
-        <button className="c-del" title={t.config.removeRepo} onClick={() => onChange(null)}>
-          ✕
-        </button>
+    <>
+      <div className="cfg-cell">
+        <input className="c-path" aria-label={t.config.path} value={repo.path} placeholder={t.config.path} spellCheck={false} onChange={(e) => onChange({ ...repo, path: e.target.value })} />
+        {resolved && <span className="hint">{`${resolved.id}${home ? ` · ${t.config.home}` : ''} · ${resolved.workspaces === 'clones' ? t.config.clonesMode : t.config.worktrees}`}</span>}
       </div>
-      <div className="c-row">
-        <select value={repo.adapter ?? ''} onChange={(e) => onChange(without('adapter', e.target.value || undefined))} title={t.config.adapter}>
+      <div className="cfg-cell">
+        <select value={repo.adapter ?? ''} onChange={(e) => onChange(without('adapter', e.target.value || undefined))} aria-label={t.config.adapter}>
           <option value="">{t.config.adapterAuto(repo.adapter ? undefined : resolved?.adapter)}</option>
-          {/* a module's path from the file: kept as it is, the sheet offers only the built-in ones */}
+          {/* a module's path from the file: kept as it is, the dialog offers only the built-in ones */}
           {(repo.adapter && !adapters.includes(repo.adapter) ? [...adapters, repo.adapter] : adapters).map((a) => (
             <option key={a} value={a}>
               {a}
             </option>
           ))}
         </select>
-        <span className="hint">
-          {resolved && `${resolved.id}${home ? ` · ${t.config.home}` : ''} · ${resolved.workspaces === 'clones' ? t.config.clonesMode : t.config.worktrees}`}
-        </span>
       </div>
+      <div className="cfg-cell">
+        <input
+          className="c-path"
+          aria-label={t.config.share}
+          title={t.config.shareHint}
+          value={repo.share ?? ''}
+          placeholder={resolved?.adapterSite ? t.config.shareSite(resolved.adapterSite) : resolved?.adapterShares ? t.config.shareAdapter(resolved.adapter) : t.config.shareNone}
+          spellCheck={false}
+          onChange={(e) => onChange(without('share', e.target.value || undefined))}
+        />
+      </div>
+      <button className="c-del" title={t.config.removeRepo} onClick={() => onChange(null)}>
+        ✕
+      </button>
       {clones && (
-        <>
-          <label className="c-row">
+        <div className="cfg-span cfg-clones">
+          <label>
             <span className="hint">{t.config.clones}</span>
             <input type="number" min={0} max={20} placeholder="0" value={repo.clones ?? ''} onChange={(e) => onChange(without('clones', Number(e.target.value) || undefined))} />
           </label>
@@ -840,51 +969,49 @@ function RepoRow({ repo, home, resolved, canvasId, adapters, problems, where, as
             />
           </label>
           <Hosts hosts={repo.hosts ?? []} onChange={(hosts) => onChange(without('hosts', hosts.length ? hosts : undefined))} />
-        </>
+        </div>
       )}
-      <label title={t.config.shareHint}>
-        <span className="hint">{t.config.share}</span>
-        <input
-          className="c-path"
-          value={repo.share ?? ''}
-          placeholder={resolved?.adapterSite ? t.config.shareSite(resolved.adapterSite) : resolved?.adapterShares ? t.config.shareAdapter(resolved.adapter) : t.config.shareNone}
-          spellCheck={false}
-          onChange={(e) => onChange(without('share', e.target.value || undefined))}
-        />
-      </label>
       {problems.map((p, k) => (
-        <Problem key={k} problem={p} where={where} ask={ask} />
+        <div key={k} className="cfg-span">
+          <Problem problem={p} where={where} ask={ask} />
+        </div>
       ))}
       {/* a repository without an adapter of its own (not one whose own does not load): a card on its canvas writes one */}
-      {canvasId && resolved?.adapter === 'generic' && !repo.adapter && !problems.some((p) => p.code === 'adapterLoad') && <AdapterSetup canvas={canvasId} repo={resolved.id} />}
-    </div>
+      {canvasId && resolved?.adapter === 'generic' && !repo.adapter && !problems.some((p) => p.code === 'adapterLoad') && (
+        <div className="cfg-span">
+          <AdapterSetup canvas={canvasId} repo={resolved.id} />
+        </div>
+      )}
+    </>
   );
 }
 
-/** The machines over SSH a repository's workers also run on, one row each. */
+/** The machines over SSH a repository's workers also run on: a table, one row each. */
 function Hosts({ hosts, onChange }: { hosts: HostConfig[]; onChange: (hosts: HostConfig[]) => void }) {
   const set = (i: number, h: HostConfig | null) => onChange(h ? hosts.map((x, k) => (k === i ? h : x)) : hosts.filter((_, k) => k !== i));
   return (
-    <div className="c-hosts">
+    <div className="cfg-hosts">
       <span className="hint" title={t.config.hostsHint}>
         {t.config.hosts}
       </span>
-      {hosts.map((h, i) => (
-        <div key={i} className="c-host">
-          <div className="c-row">
-            <input value={h.name} placeholder={t.config.hostName} spellCheck={false} onChange={(e) => set(i, { ...h, name: e.target.value })} />
-            <label className="c-row">
-              <span className="hint">{t.config.hostClones}</span>
-              <input type="number" min={0} max={20} value={h.clones} onChange={(e) => set(i, { ...h, clones: Number(e.target.value) || 0 })} />
-            </label>
-            <button className="c-del" title={t.config.removeHost} onClick={() => set(i, null)}>
-              ✕
-            </button>
-          </div>
-          <input className="c-path" value={h.ssh} placeholder={t.config.hostSsh} spellCheck={false} onChange={(e) => set(i, { ...h, ssh: e.target.value })} />
-          <input className="c-path" value={h.root} placeholder={t.config.hostRoot} spellCheck={false} onChange={(e) => set(i, { ...h, root: e.target.value })} />
+      {hosts.length > 0 && (
+        <div className="cfg-host-rows">
+          {hosts.map((h, i) => (
+            <Fragment key={i}>
+              <input aria-label={t.config.hostName} value={h.name} placeholder={t.config.hostName} spellCheck={false} onChange={(e) => set(i, { ...h, name: e.target.value })} />
+              <input className="c-path" aria-label={t.config.hostSsh} value={h.ssh} placeholder={t.config.hostSsh} spellCheck={false} onChange={(e) => set(i, { ...h, ssh: e.target.value })} />
+              <input className="c-path" aria-label={t.config.hostRoot} value={h.root} placeholder={t.config.hostRoot} spellCheck={false} onChange={(e) => set(i, { ...h, root: e.target.value })} />
+              <label className="cfg-host-clones">
+                <span className="hint">{t.config.hostClones}</span>
+                <input type="number" min={0} max={20} value={h.clones} onChange={(e) => set(i, { ...h, clones: Number(e.target.value) || 0 })} />
+              </label>
+              <button className="c-del" title={t.config.removeHost} onClick={() => set(i, null)}>
+                ✕
+              </button>
+            </Fragment>
+          ))}
         </div>
-      ))}
+      )}
       <button className="btn small" onClick={() => onChange([...hosts, { name: '', ssh: '', root: '', clones: 2 }])}>
         {t.config.addHost}
       </button>

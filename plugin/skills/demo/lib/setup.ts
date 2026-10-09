@@ -1,7 +1,7 @@
 // What a demo needs on this machine, checked: Node, Playwright and a browser to record with,
 // ffmpeg (with libx264) to cut, uv for the Python parts (it brings Python itself), the voice of
 // the settings, and Whisper for listening back. Each missing piece comes with how to install it on
-// this platform. Obeya's settings sheet shows the check, and a render runs it before anything
+// this platform. Obeya's configuration dialog shows the check, and a render runs it before anything
 // else, so it stops at once with the whole list instead of minutes in.
 //
 // Run on its own (`node setup.ts`), it prints the check and exits 1 when something is missing.

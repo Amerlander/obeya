@@ -512,7 +512,7 @@ the owner's language (`src/core/locale.ts`).
   needs on this machine, in four parts: *Agenten* (needed: Claude Code, its login, git, and git's
   name and e-mail, without which an agent's commit fails), *Pull Requests* (gh and its login:
   the generic adapter lands through pull requests, so it is needed at the first approval, not
-  before), *Sprachbefehle* and *Demos* (the checks the settings sheet makes, voice-setup.ts and
+  before), *Sprachbefehle* and *Demos* (the checks the configuration dialog makes, voice-setup.ts and
   the demo skill's setup.ts, each with the size still to download; what both need shows once).
   The checkout's agents run on the Agent SDK's own Claude Code, so there it is always there; the
   compiled binary's run on the machine's, and the list says which version Obeya was checked with
@@ -534,7 +534,7 @@ the owner's language (`src/core/locale.ts`).
   directory unless another is given). Obeya writes `canvases.json` with it (its own adapter, else
   the generic one, with two clones when the adapter works in clones), restarts and the page opens
   the canvas, on which a first card says what to try (the marker `welcome` in Obeya's home, read
-  once when the canvas runs). Later the Konfiguration sheet opens the same list over the canvas
+  once when the canvas runs). Later the Konfiguration dialog opens the same list over the canvas
   ("Einrichtung prüfen"), without the first canvas. A scratch Obeya with `"setup": true` in its
   stage file starts like a first start.
 - **One file** — `bun run build` (`scripts/build.ts`) compiles the server with Bun
@@ -600,7 +600,7 @@ the owner's language (`src/core/locale.ts`).
 - **Push-to-talk anywhere** — in the app, a key held while another app is in front records a
   command (`app/src/keys.rs`, `mic.rs`, `ptt.rs`). Space cannot be that key (it would be taken from
   every other app), so by default it is the right Option key on a Mac and the right Ctrl key
-  elsewhere (right Alt is AltGr on many European layouts); the settings sheet takes another by
+  elsewhere (right Alt is AltGr on many European layouts); the configuration dialog takes another by
   pressing it ("Sprachtaste überall"): a key nobody types with held alone (a modifier, an F key,
   Pause …), or modifiers and a key such as Ctrl+Shift+Space (`src/core/push-key.ts`, saved as
   `pushKey` in `settings.json`). A key alone is only listened to, so it still reaches the app in
@@ -731,7 +731,16 @@ the owner's language (`src/core/locale.ts`).
   browser's controls once it plays; without JavaScript the controls are there from the start and
   the button stays hidden.
 - **Configuration** — the canvases with their repositories (path, adapter, clones), seen and edited
-  in the "Konfiguration" sheet: each canvas shows its id and whether it runs, each repository its id,
+  in the "Konfiguration" dialog. It covers the page but for a margin of the dim (a press there or Esc
+  closes it; what was open behind it stays as it was, and a draft not saved yet stays until the page
+  reloads) and lists its sections on the left: Leinwände, Modelle und Effort, Spracheingabe (with the
+  push-to-talk key), Demos (the narration beside what demos need on this machine) and Allgemein
+  (language, the server). One section shows at a time, the last one chosen per tab, so a save's
+  restart or a new language comes back to it; Leinwände marks a draft not saved yet and counts its
+  problems in red. Each section is a heading with what it is about and the file it is saved in, and
+  below it settings as rows of label and control, parts of a section under a rule: no boxes in boxes.
+  Each canvas is a heading line (number, name, id, whether it runs) over a table of its repositories:
+  path, adapter, share command, one row each. Each canvas shows its id and whether it runs, each repository its id,
   adapter, whether workers use clones or worktrees, and the command that shares its demos (empty:
   the adapter's site, shown as „Site: <url>“, or its command, or an export; see Sharing a demo); problems (no git repository, an unknown
   adapter, two canvases with one id, a canvas's home repository left out, a share command whose program is not there) show at the field while
@@ -755,17 +764,16 @@ the owner's language (`src/core/locale.ts`).
   Renaming a running canvas keeps its id (`id` in the file), so its cards stay. The server's own
   settings (port, data directory, the agents' permission mode) come from the command line and the
   environment (`OBEYA_PORT`, `OBEYA_HOME`) and show read-only. The Koordinator reads the configuration (`config` tool) to answer questions about it
-  and changes it on the owner's word (`configure`, the whole new list, checked like the sheet's),
-  with the usual confirmation and undo window. Below the canvases the sheet has the demo settings
-  (see Demos), saved on their own into `demo.json` in Obeya's home and read by the next render, so
-  saving them restarts nothing. Above them is the language, saved the same way into
-  `settings.json` (see Language), and the model and effort of each group of agents (see Models
-  and effort).
+  and changes it on the owner's word (`configure`, the whole new list, checked like the dialog's),
+  with the usual confirmation and undo window. The other sections are saved on their own: the
+  demo settings (see Demos) into `demo.json` in Obeya's home, read by the next render, so saving
+  them restarts nothing; the language (see Language) and the model and effort of each group of
+  agents (see Models and effort) the same way into `settings.json`.
 - **Models and effort** — every agent belongs to one of four groups, each with its model and
   effort: the Koordinator (voice commands, estimates, cuts and schedules, look-ups, project
   agents, learner, Rückschau, proposal rewrites), the workers on cards, the exploration agents of
   ideas, and small jobs (the Arbeitsrückschau's notes and proposals, the text of a shared demo's
-  page). The owner chooses both in the Konfiguration sheet: the model is Claude Code's default or
+  page). The owner chooses both in the Konfiguration dialog: the model is Claude Code's default or
   one of its aliases (Fable, Opus, Sonnet, Haiku, each the newest of its family), the effort always
   a fixed level (low to max). Preset (`AGENT_DEFAULTS`) are Claude Code's default model, Sonnet
   for small jobs, and high effort, medium for the Koordinator; the sheet marks the presets. The
@@ -776,7 +784,7 @@ the owner's language (`src/core/locale.ts`).
   afterwards; a session at work keeps what it started with, except the voice commands' session,
   which is opened anew once the Koordinator's setting changed, as it is for another language.
 - **Language** — Obeya speaks German or English to the owner. The owner chooses it in the
-  Konfiguration sheet; until then the system's applies: on a Mac the language of its interface
+  Konfiguration dialog; until then the system's applies: on a Mac the language of its interface
   (`AppleLanguages`), elsewhere `LC_ALL`, `LC_MESSAGES`, `LANG` in that order, then what the
   runtime reports; a language Obeya does not speak gives English. The choice lives in
   `settings.json` in Obeya's home (`src/server/settings.ts`; the system's language is worked out
@@ -935,7 +943,7 @@ the owner's language (`src/core/locale.ts`).
   until someone stopped it by hand.
 - **Hosts** — other machines a repository's workers run on, reached over SSH (`src/server/hosts.ts`).
   The configuration lists them per repository (`hosts`: name, SSH target, the directory there that
-  holds the clones, how many), and the Konfiguration sheet edits them under the clones; only a
+  holds the clones, how many), and the Konfiguration dialog edits them under the clones, one table row per machine; only a
   repository that works in clones and lands through its remote can have them (`hostRepo`), and a
   name stands for one machine across the configuration (`hostName`). Obeya clones the repository
   there itself in the background (an unreachable host is tried again every two minutes) and
@@ -1441,7 +1449,7 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   voice on the server spoke the confirmations, the short form of looked-up answers and a summary
   of an idea's reply (a JXA sidecar with the macOS synthesizer, `say`, or Piper); spoken replies
   distracted the owner more than they helped. Demo narration is a pipeline of its own (Demos).
-  The settings sheet's section "Spracheingabe" ("Voice") checks
+  The configuration dialog's section "Spracheingabe" ("Voice") checks
   what voice in needs on this machine (`src/server/voice-setup.ts`): Whisper (the package
   in uv's cache or the given Python, the model in the Hugging Face cache), ffmpeg and uv,
   each missing piece with how to install it here, as for demos. "Installieren" loads Whisper,
@@ -1483,7 +1491,7 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   for one render when uv cannot get Whisper or it fails to load; the clips then stay unheard and
   uncached as heard, one take each, the review table says "not heard back", and the report page's
   provenance says "nicht gegengehört" with why (otherwise "mit … gegengehört").
-  Obeya installs Piper and Qwen3-TTS on request from the settings sheet, which shows what is
+  Obeya installs Piper and Qwen3-TTS on request from the configuration dialog, which shows what is
   missing and about how large it is first: each in a Python environment of its own made by uv
   under `voices/` in Obeya's home, Piper's voice files beside it, Qwen3's models in the Hugging
   Face cache, where a model downloaded before counts as installed (`node lib/voices.ts install`
@@ -1504,7 +1512,7 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   its server (`src/server/narration.ts`), since the server runs all along and on every platform.
   The spec says which voice Obeya may hold (`host`: the reference clip or the stock speaker; the
   server builds the command itself from that, never takes one from a request), and Obeya sets
-  `OBEYA_URL` (`http://127.0.0.1:<port>`) for its workers and for the settings sheet's sample.
+  `OBEYA_URL` (`http://127.0.0.1:<port>`) for its workers and for the configuration dialog's sample.
   `tts.py` then sends each clip to `POST /api/narration/clip` (`{voice, text, out, language}`,
   JSON only, so a page elsewhere cannot send one without asking first; `out` an absolute
   `.wav`) and gets `ok` with the seconds or `error` back. The clips of all renders wait in one
@@ -1540,7 +1548,7 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   with libx264, uv (which brings Python), the voice, and Whisper (in uv's cache and the Hugging
   Face cache, else fetched by the first render, about 1.8 GB: not missing, only later). Each
   missing piece comes with how to install it on this platform (Homebrew, winget, the Linux
-  family's package manager from `/etc/os-release`, else a page). The settings sheet shows the
+  family's package manager from `/etc/os-release`, else a page). The configuration dialog shows the
   check below the demo settings ("Was Demos auf diesem Rechner brauchen", the voice left out
   since it has its own lines), again when listening back is switched, after an installation and
   on "Erneut prüfen"; the parts a voice still lacks are named in the narration language ("Piper
@@ -1834,7 +1842,7 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   the plugin's skill `adapter` (`plugin/skills/adapter/`) is how a worker writes one: read the
   repository (scripts, CI, README, compose files), ask the owner what it does not tell (login,
   test data), write the module, check it with `lib/check.ts` (it loads the checkout's module as
-  Obeya would and lists the problems: the same ones the configuration sheet reports, from one
+  Obeya would and lists the problems: the same ones the configuration dialog reports, from one
   function, `adapterRepoProblems`; until 2026-10-09 it missed those of `demo.site`), run setup and checks, and prove `demo.howToRun` by
   recording a demo with it. The compiled binary's resources carry `docs/adapter.md` where the
   skill finds it up the tree, and `check.ts` bundled like `recipe.ts`.
@@ -1976,7 +1984,7 @@ the repository; the copy on the project is only for the archive).
   widens it and shows the doc as written, rendered, kept current with the file; a workstream's
   card opens it at the workstream's item. Esc goes back to the workstreams. The server hands out
   only docs it shows as projects, by project card, never a path.
-- The sheets on the right (Obeya's, configuration, a project's, a plan doc being read)
+- The sheets on the right (Obeya's, a project's, a plan doc being read)
   are a sidebar docked to the window's right edge, from top to bottom: a straight edge with a
   divider line, no shadow, no gap (2026-10-09). The canvas is what remains to its left: the top
   bar ends at the sidebar, the microphone with its lines and the confirmations above it, the edge
@@ -1998,6 +2006,11 @@ the repository; the copy on the project is only for the archive).
   for reading a plan doc, which follows the window until dragged. The browser remembers both; the
   canvas keeps 240 px beside the sheet, and the camera keeps a project beside it; a double-click on
   the edge goes back to the default (2026-10-02).
+- The configuration is a dialog nearly as large as the window, its sections listed on the left,
+  not a sheet (2026-10-09, the owner's wish): as a sidebar it stacked eight framed blocks, each
+  with a heading above its frame and frames inside frames for canvases and repositories, in one
+  narrow column to scroll through. It is visited now and then, not worked beside, so it takes the
+  space and the canvas stays where it was.
 - The minimap sits in the bottom left corner, as in tldraw, clear of the sheets on the right.
 - A plan card gets a stored row the first time it is seen, so the owner's placement persists; its
   title, text and state always come from the doc. Each read also keeps the doc's last state on the

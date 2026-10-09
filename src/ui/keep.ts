@@ -3,7 +3,7 @@
 // reload (sessionStorage, per tab), and taken once by the page that loads.
 
 /** A sheet on the right that is not a project's, or the archive's list under its button. */
-export type SideSheet = 'koordinator' | 'archive' | 'config';
+export type SideSheet = 'koordinator' | 'archive';
 
 export interface Kept {
   at: number;
@@ -13,6 +13,8 @@ export interface Kept {
   /** The project's plan doc was read in its sheet. */
   reading?: boolean;
   sheet?: SideSheet;
+  /** The configuration's dialog was open over the page. */
+  config?: boolean;
   /** Scrolled boxes, by `place`. */
   scroll: [string, number][];
   /** Text fields with a draft in them, by `place`. */
@@ -20,8 +22,8 @@ export interface Kept {
   video?: { time: number; playing: boolean };
 }
 
-/** Where the open things are: the panel of the open card, the sheets and the archive's list. */
-export const ROOTS = ['panel', 'sheet', 'ksheet', 'amenu', 'csheet'];
+/** Where the open things are: the panel of the open card, the sheets, the archive's list and the configuration's dialog. */
+export const ROOTS = ['panel', 'sheet', 'ksheet', 'amenu', 'config'];
 
 /** How old what was kept may be to come back: a restart takes seconds, a page reloaded much later starts afresh. */
 const FRESH_MS = 5 * 60_000;

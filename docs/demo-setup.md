@@ -7,7 +7,7 @@ to install each piece.
 
 ## Check first
 
-- In Obeya: "Konfiguration", then "Was Demos auf diesem Rechner brauchen" below the demo settings.
+- In Obeya: "Konfiguration", section "Demos", then "Was Demos auf diesem Rechner brauchen" beside the demo settings.
   Each missing piece shows with the commands that install it on this platform.
 - In a terminal, in the Obeya checkout: `node plugin/skills/demo/lib/setup.ts`. It prints the same
   list and exits with 1 while something is missing.
