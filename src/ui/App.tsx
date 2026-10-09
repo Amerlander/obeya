@@ -809,6 +809,8 @@ function Canvas({
       const grab = toWorld(camRef.current, e.clientX, e.clientY);
       dragRef.current = { id: i.id, x: e.clientX, y: e.clientY, px: e.clientX, py: e.clientY, grab, start: { x: i.x, y: i.y }, limit: dragLimit(content, b), moved: false, frame: 0, last: 0 };
     } else if (e.shiftKey) {
+      // Shift + press would otherwise extend the page's text selection up to the pointer
+      e.preventDefault();
       lassoRef.current = [{ x: e.clientX, y: e.clientY }];
       setLasso(lassoRef.current);
     } else {
