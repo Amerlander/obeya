@@ -11,6 +11,7 @@ import { useQueueMove } from './queue';
 import { Inline, plain } from './markdown';
 import { Body, Msg } from './message';
 import { Composer } from './composer';
+import { useFitHeight } from './fitHeight';
 import { AttachButton, ShotStrip, Shots, useShotInput } from './shots';
 import { clock as time, errorText, stateLabel, t } from './strings';
 import { agentWorks, ownerField, parseQuestion, started, talkAlone, talkTurns, type Turn, worked as isWorked } from './talk';
@@ -1299,34 +1300,6 @@ function PlanSource({ file, onRead }: { file: string; onRead?: () => void }) {
 }
 
 // ------------------------------------------------------------------ manual cards
-
-/** Keeps a text box as tall as its text (within its CSS min- and max-height), on every change and when its width changes. */
-function useFitHeight(ref: RefObject<HTMLTextAreaElement | null>, text: string, on = true) {
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || !on) return;
-    const fit = () => {
-      el.style.height = 'auto';
-      el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
-    };
-    fit();
-    // the panel unfolds from the card's width, and a narrower box needs more lines
-    let width = el.clientWidth;
-    let frame = 0;
-    const ro = new ResizeObserver(() => {
-      if (el.clientWidth === width) return;
-      width = el.clientWidth;
-      // in the next frame: changing the height inside the callback makes it a resize loop
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(fit);
-    });
-    ro.observe(el);
-    return () => {
-      ro.disconnect();
-      cancelAnimationFrame(frame);
-    };
-  }, [text, on]);
-}
 
 function ManualTitle({ item, onEdit }: { item: Item; onEdit: (p: CardPatch) => void }) {
   // a local draft: the server echo must not overwrite what is being typed

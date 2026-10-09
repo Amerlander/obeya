@@ -2,8 +2,9 @@
 // frame with the text, the screenshot button and Send in its bottom corner, as wide as the
 // conversation above it. The text grows with what is written, up to a part of the window.
 
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { api } from './api';
+import { useFitHeight } from './fitHeight';
 import { AttachButton, ShotStrip, useShotInput } from './shots';
 import { t } from './strings';
 
@@ -34,13 +35,8 @@ export function Composer({
   const shots = useShotInput({ off: noImages });
   const images = shots.images;
   const field = useRef<HTMLTextAreaElement>(null);
-  useLayoutEffect(() => {
-    // as high as the text; the stylesheet caps it, and beyond that it scrolls
-    const el = field.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${el.scrollHeight}px`;
-  }, [text]);
+  // as high as the text; the stylesheet caps it, and beyond that it scrolls
+  useFitHeight(field, text);
   const ready = (!!text.trim() || images.length > 0 || allowEmpty) && !busy && !shots.uploading;
   const send = async () => {
     if (!ready) return;
