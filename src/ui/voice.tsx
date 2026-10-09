@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ApiError, api, holdRestart } from './api';
 import { type Recording, record } from './recorder';
 import { AttachButton, type ShotInput, ShotStrip } from './shots';
+import { replyOn, setReply } from './reply';
 import { errorText, t } from './strings';
 
 export interface Heard {
@@ -114,9 +115,12 @@ export function usePushToTalk(where: () => Where, send: (target: Where, request:
       // those still uploading wait for the next recording
       const images = shotsRef.current.images.filter((id) => !sending.current.has(id));
       for (const id of images) sending.current.add(id);
-      const h = await send(r.target, () => api.voice(audio, r.target, images));
+      // said in reply to the message the open card's field quotes, as typed words are
+      const reply = r.target && 'card' in r.target ? replyOn(r.target.card) : null;
+      const h = await send(r.target, () => api.voice(audio, r.target, images, reply?.id));
       for (const id of images) sending.current.delete(id);
       if (!h.unheard) shotsRef.current.clear(images);
+      if (!h.unheard && reply && replyOn(reply.cardId) === reply) setReply(null);
     });
   }
 

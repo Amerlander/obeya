@@ -9,7 +9,7 @@ import { repoName } from '../adapters/generic';
 import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
 import type { Language } from '../core/locale';
 import { AGENT_DEFAULTS, agentListens, type AgentRole, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, type RepoConfig, type RepoRef } from '../core/types';
-import { BadRequest, Board, type StoredIdea } from './board';
+import { BadRequest, Board, replyNote, type StoredIdea } from './board';
 import { type Command, Commander } from './commands';
 import type { Config } from './config';
 import type { Store } from './db';
@@ -374,12 +374,13 @@ export class CanvasRuntime {
    * straight to that agent, by the card's state: talk to an idea, the answer to its worker's
    * question, or else words the worker takes in (a note while it works, words on its handover, a
    * question once its work is done). The agent passes on what asks Obeya for something (`to_obeya`).
+   * `replyTo`: the message of the card's conversation the words reply to.
    */
-  tell(cardId: string, text: string, images: string[], spoken: boolean) {
+  tell(cardId: string, text: string, images: string[], spoken: boolean, replyTo?: number) {
     const card = this.board.item(cardId);
     if (!card) throw new BadRequest('unknownCard', 'unknown card');
     if (!agentListens(card)) throw new BadRequest('noAgent', 'no agent works on this card');
-    const said = { text, spoken, ...(images.length ? { images } : {}) };
+    const said = { text, spoken, ...(images.length ? { images } : {}), ...(replyTo ? { replyTo } : {}) };
     // the agent passes a request on in its words; the Koordinator reads the owner's own beside them
     this.said.set(cardId, { text, spoken });
     if (card.state === 'idea') return this.act(cardId, { action: 'discuss', ...said });
@@ -405,7 +406,7 @@ export class CanvasRuntime {
   press(cardId: string, a: CardAction) {
     const r = this.act(cardId, a);
     // the options picked on a proposal go to its reviser without the Koordinator, which would have logged them
-    if (a.action === 'revise') this.board.log(cardId, 'say', 'owner', a.text.trim());
+    if (a.action === 'revise') this.board.log(cardId, 'say', 'owner', a.text.trim(), undefined, undefined, undefined, this.board.quoted(cardId, a.replyTo)?.id);
     if (!(['message', 'answer', 'discuss'].includes(a.action) && 'text' in a && a.text?.trim())) this.koordinator.noticed();
     return r;
   }
@@ -415,6 +416,8 @@ export class CanvasRuntime {
     this.written(cardId);
     const text = 'text' in a ? (a.text ?? '') : '';
     const images = this.images.resolve('images' in a ? a.images : undefined);
+    // a reply to anything but a message of this card's conversation is the words alone
+    const replyTo = 'replyTo' in a ? this.board.quoted(cardId, a.replyTo)?.id : undefined;
     // a prototype may leave it to the idea's brief what it shows; a screenshot may speak for itself
     if ('text' in a && (typeof text !== 'string' || (!text.trim() && a.action !== 'prototype' && !images.length) || text.length > 20000))
       throw new BadRequest('emptyText', 'text must be a non-empty string');
@@ -432,9 +435,9 @@ export class CanvasRuntime {
       case 'stop':
         return this.repoOf(cardId).workers.stop(cardId);
       case 'message':
-        return this.repoOf(cardId).workers.message(cardId, text.trim(), images, !!a.spoken);
+        return this.repoOf(cardId).workers.message(cardId, text.trim(), images, !!a.spoken, replyTo);
       case 'answer':
-        return this.repoOf(cardId).workers.answer(cardId, text.trim(), images, !!a.spoken);
+        return this.repoOf(cardId).workers.answer(cardId, text.trim(), images, !!a.spoken, replyTo);
       case 'approve':
         return this.repoOf(cardId).workers.approve(cardId, { direct: !!a.direct });
       case 'accept':
@@ -445,9 +448,9 @@ export class CanvasRuntime {
         if (this.board.row(cardId).state !== 'proposal') throw new BadRequest('notProposal', 'not a proposal');
         return this.board.remove(cardId);
       case 'revise':
-        return this.revisions.revise(cardId, text.trim(), !!a.spoken);
+        return this.revisions.revise(cardId, `${replyNote(this.board.quoted(cardId, replyTo), 'koordinator')}${text.trim()}`, !!a.spoken);
       case 'discuss':
-        return this.explorers.discuss(cardId, text.trim(), !!a.spoken, images);
+        return this.explorers.discuss(cardId, text.trim(), !!a.spoken, images, replyTo);
       case 'build':
         return this.build(cardId);
       case 'unbuild':

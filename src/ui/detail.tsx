@@ -9,7 +9,8 @@ import { firstOpening } from './demoSeen';
 import { landedRef } from './parts';
 import { useQueueMove } from './queue';
 import { Inline, plain } from './markdown';
-import { Body, Msg } from './message';
+import { Body, Msg, Quote } from './message';
+import { replyOn, setReply, useReply } from './reply';
 import { Composer } from './composer';
 import { useFitHeight } from './fitHeight';
 import { AttachButton, ShotStrip, Shots, useShotInput } from './shots';
@@ -26,7 +27,7 @@ export type ActDone = { close: true; ack: string; undo?: () => unknown; pending?
 export type Pending = { card: string; title: string; answered: Promise<void> };
 
 /** Words typed into a field of the card: straight to its agent where one listens, else the Koordinator reads them like spoken ones; the panel does not wait. */
-type Tell = (text: string, images: string[] | undefined, field: Field) => void;
+type Tell = (text: string, images: string[] | undefined, field: Field, replyTo?: number) => void;
 
 interface Props {
   item: Item;
@@ -83,7 +84,7 @@ export function Detail(p: Props) {
   const act = (a: CardAction, done: ActDone) => run(() => api.act(item.id, a), done);
   // Obeya reads what is typed here when no agent listens on the card: the field says so, as the microphone does
   const listener = agentListens(item) ? undefined : t.voice.card(plain(item.title));
-  const tell = (field: Field) => async (text: string, images?: string[]) => p.onTell(text, images, field);
+  const tell = (field: Field) => async (text: string, images?: string[], replyTo?: number) => p.onTell(text, images, field, replyTo);
   const repo = p.repos.length > 1 ? (p.repos.find((r) => r.id === item.repo)?.name ?? item.repo) : '';
   // a plain task says nothing of its kind
   const kind = [
@@ -495,8 +496,8 @@ function IdeaView({ item, act, run, onDelete, onTell }: { item: Item; act: (a: C
                 placeholder: t.idea.compose,
                 listener: agentListens(item) ? undefined : t.voice.card(plain(item.title)),
                 quote: true,
-                onWords: async (words, images) => onTell(words, images, 'discuss'),
-                onPicked: (text, images) => act({ action: 'discuss', text, images }, { close: false }),
+                onWords: async (words, images, replyTo) => onTell(words, images, 'discuss', replyTo),
+                onPicked: (text, images, replyTo) => act({ action: 'discuss', text, images, ...(replyTo ? { replyTo } : {}) }, { close: false }),
               }}
             />
           )
@@ -574,8 +575,8 @@ function ProposalView({
   from?: Item;
   act: (a: CardAction, done: ActDone) => Promise<void>;
   listener?: string;
-  /** What should change in it, typed: an agent reworks the proposal by it. */
-  onRevise: (text: string) => Promise<void>;
+  /** What should change in it, typed (maybe in reply to a message of its conversation): an agent reworks the proposal by it. */
+  onRevise: (text: string, images?: string[], replyTo?: number) => Promise<void>;
   children: ReactNode;
 }) {
   const questions = item.proposal?.questions ?? [];
@@ -611,7 +612,14 @@ function ProposalView({
             field={
               revising
                 ? undefined
-                : { placeholder: t.compose.revise, listener, noImages: true, quote: true, onWords: (words) => onRevise(words), onPicked: (text) => act({ action: 'revise', text }, { close: false }) }
+                : {
+                    placeholder: t.compose.revise,
+                    listener,
+                    noImages: true,
+                    quote: true,
+                    onWords: (words, _, replyTo) => onRevise(words, undefined, replyTo),
+                    onPicked: (text, _, replyTo) => act({ action: 'revise', text, ...(replyTo ? { replyTo } : {}) }, { close: false }),
+                  }
             }
           />
         }
@@ -754,9 +762,21 @@ const opened = (events: CardEvent[], body: string) => {
  * and the state changes between them. How an agent got to a message (what it read and thought, its
  * status lines) folds away under that message; while it works, its latest step shows. The questions
  * it waits on stand at the end (`questions`). `past`: nobody works on the card any more.
- * `hideEmpty`: nothing shows until something was said.
+ * `hideEmpty`: nothing shows until something was said. `onReply`: the owner can reply to a message.
  */
-function Conversation({ item, questions, past = false, hideEmpty = false }: { item: Item; questions?: ReactNode; past?: boolean; hideEmpty?: boolean }) {
+function Conversation({
+  item,
+  questions,
+  past = false,
+  hideEmpty = false,
+  onReply,
+}: {
+  item: Item;
+  questions?: ReactNode;
+  past?: boolean;
+  hideEmpty?: boolean;
+  onReply?: (e: CardEvent) => void;
+}) {
   const events = useEvents(item.id);
   const box = useRef<HTMLDivElement>(null);
   const idea = item.state === 'idea' && !!item.idea;
@@ -769,6 +789,7 @@ function Conversation({ item, questions, past = false, hideEmpty = false }: { it
     if (el) el.scrollTop = el.scrollHeight;
   }, [events, working, asked]);
   const turns = useMemo(() => (events ? talkTurns(events, { asking, over: !working }) : null), [events, asked, working]);
+  const byId = useMemo(() => new Map(events?.map((e) => [e.id, e])), [events]);
   if (!events || !turns) return null;
   if (hideEmpty && !turns.shown.length && !turns.pending.length) return null;
   const agent = idea ? t.author.explorer : t.author.worker;
@@ -789,18 +810,17 @@ function Conversation({ item, questions, past = false, hideEmpty = false }: { it
     idea && !past && item.body.trim() && !opened(events, item.body) && <Seed item={item} by="owner" who={t.idea.seed} />
   );
   const seedAt = task ? Math.max(0, turns.shown.findIndex((x) => started(x.e))) : 0;
+  const line = (turn: Turn) => (
+    <Line key={turn.e.id} turn={turn} demoQuestion={turn === handover ? item.demo : undefined} quoted={turn.e.replyTo ? byId.get(turn.e.replyTo) : undefined} onReply={onReply} />
+  );
   return (
     <>
       <h4 className="p-h">{t.talk.heading}</h4>
       <div className="talk conv" ref={box}>
         {turns.shown.length === 0 && !working && !turns.asked && !seed && <div className="hint">{idea ? t.idea.talkEmpty : proposal ? t.reviseHint : t.talk.empty}</div>}
-        {turns.shown.slice(0, seedAt).map((turn) => (
-          <Line key={turn.e.id} turn={turn} demoQuestion={turn === handover ? item.demo : undefined} />
-        ))}
+        {turns.shown.slice(0, seedAt).map(line)}
         {seed}
-        {turns.shown.slice(seedAt).map((turn) => (
-          <Line key={turn.e.id} turn={turn} demoQuestion={turn === handover ? item.demo : undefined} />
-        ))}
+        {turns.shown.slice(seedAt).map(line)}
         {working ? (
           <Msg by={idea ? 'explorer' : proposal ? 'koordinator' : 'worker'} className="thinking" who={proposal ? t.revising : `${agent} ${idea ? t.idea.thinking : t.talk.working}`}>
             {pending.at(-1) && <div className="hint">{clipLine(pending.at(-1)!.text)}</div>}
@@ -890,21 +910,25 @@ function Scope({ files }: { files?: string[] }) {
 }
 
 /** A state change or an error between the messages, or a message. */
-function Line({ turn, demoQuestion }: { turn: Turn; demoQuestion?: Demo }) {
+function Line({ turn, ...rest }: { turn: Turn; demoQuestion?: Demo; quoted?: CardEvent; onReply?: (e: CardEvent) => void }) {
   return turn.line ? (
     <div className={`note ev-${turn.e.kind}`} title={turn.e.code ? turn.e.text : undefined}>
       {time(turn.e.at)} · {eventText(turn.e)}
     </div>
   ) : (
-    <Message turn={turn} demoQuestion={demoQuestion} />
+    <Message turn={turn} {...rest} />
   );
 }
 
 /** Who stands on the owner's side of the conversation: the owner, and whoever answers a question in their name. */
 const ownerSide = (e: CardEvent) => e.author === 'owner' || e.kind === 'answer';
 
-/** One message of the conversation; a question with its options and what came of it, a handover with its demo report's question. */
-function Message({ turn, demoQuestion }: { turn: Turn; demoQuestion?: Demo }) {
+/**
+ * One message of the conversation; a question with its options and what came of it, a handover with
+ * its demo report's question; the owner's reply with the message it replies to (`quoted`) above it.
+ * `onReply`: the owner can reply to it.
+ */
+function Message({ turn, demoQuestion, quoted, onReply }: { turn: Turn; demoQuestion?: Demo; quoted?: CardEvent; onReply?: (e: CardEvent) => void }) {
   const { e, steps } = turn;
   const q = e.kind === 'question' ? parseQuestion(e.text) : undefined;
   return (
@@ -913,7 +937,10 @@ function Message({ turn, demoQuestion }: { turn: Turn; demoQuestion?: Demo }) {
       className={[q && 'q', turn.settled && 'settled'].filter(Boolean).join(' ')}
       who={`${t.author[e.author]}${e.kind === 'question' ? ` · ${t.talk.question}` : e.kind === 'review' ? ` · ${t.talk.handover}` : ''}`}
       at={e.at}
+      ev={e.id}
+      onReply={onReply && !turn.quiet ? () => onReply(e) : undefined}
     >
+      {quoted && <Quote e={quoted} />}
       {!turn.quiet && <Body md={q ? q.text : e.text} />}
       {q && !turn.settled && q.options.length > 0 && (
         <ul className="q-opts">
@@ -1382,7 +1409,17 @@ function ManualFields({ item, repos, onEdit, grow }: { item: Item; repos: RepoRe
  * A task's conversation, from its idea's discussion on: the question its worker waits on (its own,
  * or the one in its demo report) stands at the end, and under it the card's one field (`ownerField`).
  */
-function TaskTalk({ item, listener, act, tell }: { item: Item; listener?: string; act: (a: CardAction, done: ActDone) => Promise<void>; tell: (field: Field) => (text: string, images?: string[]) => Promise<void> }) {
+function TaskTalk({
+  item,
+  listener,
+  act,
+  tell,
+}: {
+  item: Item;
+  listener?: string;
+  act: (a: CardAction, done: ActDone) => Promise<void>;
+  tell: (field: Field) => (text: string, images?: string[], replyTo?: number) => Promise<void>;
+}) {
   const field = ownerField(item);
   const key = JSON.stringify(item.question ?? null);
   const questions = useMemo(() => ((field === 'answer' || field === 'demo') && item.question ? [item.question] : []), [field, key]);
@@ -1400,7 +1437,7 @@ function TaskTalk({ item, listener, act, tell }: { item: Item; listener?: string
               placeholder: { note: askable(item) || item.followUp ? t.compose.followUp : t.compose.working, answer: t.compose.question, feedback: t.compose.review, demo: t.compose.demo, discuss: '', revise: t.compose.revise }[field],
               listener,
               onWords: tell(field),
-              onPicked: (text, images) => act({ action: 'answer', text, images }, { close: true, ack: t.answered }),
+              onPicked: (text, images, replyTo) => act({ action: 'answer', text, images, ...(replyTo ? { replyTo } : {}) }, { close: true, ack: t.answered }),
             }
           : undefined
       }
@@ -1432,23 +1469,30 @@ interface TalkField {
   noImages?: boolean;
   /** The picks name their questions also when there is one: the conversation is read later without it beside. */
   quote?: boolean;
-  /** Words alone go to the card's agent, or to the Koordinator that `listener` names. */
-  onWords: (text: string, images?: string[]) => Promise<void>;
+  /** Words alone go to the card's agent, or to the Koordinator that `listener` names; `replyTo`: the message they reply to. */
+  onWords: (text: string, images?: string[], replyTo?: number) => Promise<void>;
   /** Picked options go to the agent as they are, with the words. */
-  onPicked: (text: string, images?: string[]) => Promise<void>;
+  onPicked: (text: string, images?: string[], replyTo?: number) => Promise<void>;
 }
 
 /**
  * The right column of every card with a conversation: the conversation with the questions it waits
  * on at its end, and under it the owner's one field (none where nobody hears it). `past`: nobody
- * works on the card any more.
+ * works on the card any more. Where the field is, the owner can reply to a message of the
+ * conversation: it stands quoted above the field, and the words go out with it.
  */
 function Talk({ item, questions = [], heading = t.ask.question, picks, past, field }: { item: Item; questions?: Question[]; heading?: string; picks?: Picks; past?: boolean; field?: TalkField }) {
   const options = questions.some((q) => q.options.length > 0);
   const picked = !!picks?.picked;
+  const reply = useReply(item.id);
+  const send = async (words: string, images?: string[]) => {
+    const replyTo = reply?.id;
+    await (picked ? field!.onPicked(answerText(questions, picks!.picks, words, field!.quote), images, replyTo) : field!.onWords(words, images, replyTo));
+    if (reply && replyOn(item.id) === reply) setReply(null);
+  };
   return (
     <>
-      <Conversation item={item} past={past} questions={picks && <Questions questions={questions} heading={heading} {...picks} />} />
+      <Conversation item={item} past={past} onReply={field ? setReply : undefined} questions={picks && <Questions questions={questions} heading={heading} {...picks} />} />
       {field && (
         <Composer
           key={field.key}
@@ -1457,7 +1501,9 @@ function Talk({ item, questions = [], heading = t.ask.question, picks, past, fie
           allowEmpty={picked}
           obeya={field.listener}
           noImages={field.noImages}
-          onSend={(words, images) => (picked ? field.onPicked(answerText(questions, picks!.picks, words, field.quote), images) : field.onWords(words, images))}
+          quote={reply}
+          onUnquote={() => setReply(null)}
+          onSend={send}
         />
       )}
     </>

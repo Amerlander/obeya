@@ -411,6 +411,8 @@ export interface CardEvent {
   images?: string[];
   /** The mocks of an exploration agent's reply. */
   mocks?: Mock[];
+  /** The owner's words: the message of the conversation they reply to (its id), shown above them as a quote. */
+  replyTo?: number;
 }
 
 export interface CanvasInfo {
@@ -563,8 +565,9 @@ export type CardAction =
   | { action: 'stop' }
   /** `images`: ids of screenshots uploaded before (`POST /api/c/<canvas>/images`); with them the text may be empty. */
   /** `spoken`: the words came through speech recognition, which the agent is told. */
-  | { action: 'message'; text: string; spoken?: boolean; images?: string[] }
-  | { action: 'answer'; text: string; spoken?: boolean; images?: string[] }
+  /** `replyTo`: the message of the card's conversation the words reply to (`CardEvent.replyTo`). */
+  | { action: 'message'; text: string; spoken?: boolean; images?: string[]; replyTo?: number }
+  | { action: 'answer'; text: string; spoken?: boolean; images?: string[]; replyTo?: number }
   /** `direct`: onto the default branch at once, without a pull request, where the repository allows it (`RepoRef.direct`). */
   | { action: 'approve'; direct?: boolean }
   /** Start a queued card although it may collide. */
@@ -585,9 +588,9 @@ export type CardAction =
   | { action: 'unaccept' }
   | { action: 'dismiss' }
   /** A proposal: an agent reworks its text, reason and questions by what the owner said (`text`). */
-  | { action: 'revise'; text: string; spoken?: boolean }
+  | { action: 'revise'; text: string; spoken?: boolean; replyTo?: number }
   /** Ideas: talk to the exploration agent; `spoken` gets a short spoken summary back. */
-  | { action: 'discuss'; text: string; spoken?: boolean; images?: string[] }
+  | { action: 'discuss'; text: string; spoken?: boolean; images?: string[]; replyTo?: number }
   /**
    * Ideas: the brief becomes the card's task and the card is planned. While the agent works on a
    * reply, the idea is built once the reply is there, unless it asks questions.

@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { type AgentSetting, answering, askable, blocksSaving, type CanvasConfig, finished, type Item, type NextStep, prototypeWorkstream, type Queue } from '../core/types';
-import { BadRequest, type Board } from './board';
+import { BadRequest, type Board, replyNote } from './board';
 import type { Config } from './config';
 import type { Moment } from './db';
 import { type AgentRuntime, type AgentSession, failureReason } from './runtime';
@@ -104,6 +104,8 @@ export interface Input {
   typed?: boolean;
   field?: Field;
   forwarded?: string;
+  /** The message of the open card's conversation the words reply to. */
+  replyTo?: number;
 }
 
 export interface CommanderOptions {
@@ -201,6 +203,7 @@ export class Commander {
     const card = focus.card && this.o.board.item(focus.card) ? focus.card : undefined;
     // passed on by the card's agent: the owner's words stand in the card's conversation already
     const said = input.forwarded ? undefined : transcript;
+    const replyTo = card ? this.o.board.quoted(card, input.replyTo)?.id : undefined;
     let decision: Decision;
     try {
       decision = await this.interpret(transcript, focus, images, input);
@@ -210,7 +213,7 @@ export class Commander {
       const confirm = t.voice.couldNotRead(failureReason(e instanceof Error ? e.message : String(e), t));
       this.o.board.addTalk(transcript, confirm, card ?? null, undefined, images);
       if (card) {
-        if (said) this.o.board.log(card, 'say', 'owner', said, undefined, images);
+        if (said) this.o.board.log(card, 'say', 'owner', said, undefined, images, undefined, replyTo);
         this.o.board.log(card, 'say', 'koordinator', confirm);
       }
       return { confirm };
@@ -221,7 +224,10 @@ export class Commander {
     const commands = decision.commands.map((c): Command => {
       // a rule said with a card open has that card as its occasion
       if (c.do === 'remember') return card ? { ...c, card } : c;
-      const told = TO_AGENT.includes(c.do) && 'text' in c ? { ...c, spoken: !input.typed, ...(verbatim && c.card === card ? { text: transcript } : {}) } : c;
+      const told =
+        TO_AGENT.includes(c.do) && 'text' in c
+          ? { ...c, spoken: !input.typed, ...(verbatim && c.card === card ? { text: `${replyNote(replyTo ? this.o.board.quoted(card!, replyTo) : undefined, 'koordinator')}${transcript}` } : {}) }
+          : c;
       return images.length && TAKES_IMAGES.includes(c.do) ? { ...told, images } : told;
     });
     if (lookUp) {
@@ -229,7 +235,7 @@ export class Commander {
       const about = lookUp.about ?? card ?? (focus.project && this.o.board.item(focus.project) ? focus.project : undefined);
       const talk = this.o.board.addTalk(transcript, confirm, card ?? null, { question: lookUp.question, about: about ?? null }, images);
       if (card) {
-        if (said) this.o.board.log(card, 'say', 'owner', said, undefined, images);
+        if (said) this.o.board.log(card, 'say', 'owner', said, undefined, images, undefined, replyTo);
         this.o.board.log(card, 'say', 'koordinator', confirm);
       }
       this.o.lookUp?.(talk);
@@ -241,7 +247,7 @@ export class Commander {
     const rest = commands.filter((c) => !talking.includes(c));
     const talk = this.o.board.addTalk(transcript, confirm, card ?? null, undefined, images);
     if (card) {
-      if (said) this.o.board.log(card, 'say', 'owner', said, undefined, images);
+      if (said) this.o.board.log(card, 'say', 'owner', said, undefined, images, undefined, replyTo);
       this.o.board.log(card, 'say', 'koordinator', confirm);
     }
     for (const c of talking) await this.run(c);
@@ -804,7 +810,9 @@ export class Commander {
             input.typed
               ? `The owner typed${focused && input.field ? ` into ${FIELDS[input.field]}` : ''} (as written, no recognition errors): "${transcript}"`
               : `The owner said (speech recognition, may contain errors): "${transcript}"`,
-          ]),
+            // in reply to a message of the open card's conversation
+            focused ? replyNote(this.o.board.quoted(focused.id, input.replyTo), 'koordinator').trim() : '',
+          ].filter(Boolean)),
       ...(shots
         ? [
             `The owner attached ${shots === 1 ? 'a screenshot' : `${shots} screenshots`} (shown below). Obeya gives ${shots === 1 ? 'it' : 'them'} to every new_card, new_idea, start, note, answer, feedback and discuss action you take for this message; a title for a new card may say what ${shots === 1 ? 'it shows' : 'they show'}.`,

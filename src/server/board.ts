@@ -139,6 +139,39 @@ export class BadRequest extends Error {
   }
 }
 
+/** What the owner can reply to: the messages of a conversation. */
+const QUOTABLE: CardEvent['kind'][] = ['say', 'closing', 'question', 'answer', 'hint', 'review', 'talk'];
+
+/**
+ * What an agent reads above the owner's words that reply to a message: which one, by its start
+ * where the agent has the whole in its session (its own words, the owner's words to it), else whole
+ * (Obeya's words in the card's conversation, an idea's agent's to a card's worker; the Koordinator,
+ * which reads each command afresh, gets them all whole).
+ */
+export function replyNote(quoted: CardEvent | undefined, to: 'worker' | 'explorer' | 'koordinator'): string {
+  if (!quoted) return '';
+  const own = quoted.author === to;
+  const what = quoted.kind === 'question' ? 'question' : quoted.kind === 'review' ? 'handover' : 'message';
+  const whose = own
+    ? `your ${what}`
+    : quoted.author === 'owner'
+      ? `their own earlier ${what}`
+      : quoted.author === 'explorer' || quoted.author === 'worker'
+        ? `the ${quoted.author === 'explorer' ? "idea's agent's" : "card's worker's"} ${what}`
+        : `Obeya's ${what} in the card's conversation`;
+  const heard = own || (quoted.author === 'owner' && quoted.kind !== 'say');
+  const text = quoted.text.replace(/\s+/g, ' ').trim();
+  return `[In reply to ${whose}: „${excerpt(text, heard && to !== 'koordinator' ? 160 : 2000)}“]\n\n`;
+}
+
+/** The start of a text, cut at a word, to point at it. */
+function excerpt(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max);
+  const at = cut.lastIndexOf(' ');
+  return `${(at > max / 2 ? cut.slice(0, at) : cut).trimEnd()} …`;
+}
+
 export class Board {
   private listeners = new Set<() => void>();
   private docs: PlanDoc[] | null = null;
@@ -242,11 +275,27 @@ export class Board {
     }
   }
 
-  /** Appends a line to the card's log. */
-  log(cardId: string, kind: CardEvent['kind'], author: CardEvent['author'], text: string, code?: ErrorCode, images?: string[], mocks?: Mock[]): CardEvent {
-    const e = this.store.addEvent({ cardId, kind, author, text, ...(code ? { code } : {}), ...(images?.length ? { images } : {}), ...(mocks?.length ? { mocks } : {}) });
+  /** Appends a line to the card's log; `replyTo`: the message the owner's words reply to (`quoted`). */
+  log(cardId: string, kind: CardEvent['kind'], author: CardEvent['author'], text: string, code?: ErrorCode, images?: string[], mocks?: Mock[], replyTo?: number): CardEvent {
+    const e = this.store.addEvent({
+      cardId,
+      kind,
+      author,
+      text,
+      ...(code ? { code } : {}),
+      ...(images?.length ? { images } : {}),
+      ...(mocks?.length ? { mocks } : {}),
+      ...(replyTo ? { replyTo } : {}),
+    });
     for (const fn of this.eventListeners) fn(e);
     return e;
+  }
+
+  /** The message of the card's conversation the owner's words reply to, if `id` is one: what someone said, not a step or a state change. */
+  quoted(cardId: string, id: unknown): CardEvent | undefined {
+    if (typeof id !== 'number' || !Number.isInteger(id)) return;
+    const e = this.store.event(cardId, id);
+    return e && QUOTABLE.includes(e.kind) ? e : undefined;
   }
 
   events(cardId: string): CardEvent[] {

@@ -415,6 +415,20 @@ latest step (until 2026-10-09 only the card's state said so then); the question 
 and the card's one field under it; a question a note took back stays, without options, „Durch deinen Hinweis erledigt“.
 A card that was an idea continues the idea's conversation in the same list.
 
+The owner can reply to one message of a card's conversation, as in chat apps (2026-10-09): a button
+in the corner of each message (shown while the pointer is on it; `Msg` and `Quote` in
+`src/ui/message.tsx`) puts the message as a quote above the card's field, with × (or Escape, before
+it closes the card) to take it out; what the owner then types or says with push-to-talk goes out with
+it (`replyTo`, the message's event id, `src/ui/reply.ts`). Their message shows the quote above their
+words, in the colour of who said it, its first lines only; a click on it scrolls to the message and
+lights it up. The agent reads `[In reply to your message: „…“]` above the words (`replyNote` in
+`src/server/board.ts`): the first 160 characters or so of what it has whole in its session anyway
+(its own words, the owner's words to it), else the whole message (Obeya's words in the card's
+conversation, which the worker never got; the Koordinator, which reads the field where no agent
+listens, gets it whole too). A reply works on every card with a conversation and a field, the same
+way; the Koordinator's sheet has none yet. Only messages can be replied to, not steps or state lines;
+a `replyTo` that is not a message of the card is dropped and the words go alone.
+
 A task's conversation starts with the task: once the agent starts, the card's text and screenshots
 stand as its first message, above the line that the agent started, the way an idea's starting
 point does (`Seed` in `src/ui/detail.tsx`), so the conversation reads from the start: what was

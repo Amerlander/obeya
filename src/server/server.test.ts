@@ -326,6 +326,18 @@ describe('voice', () => {
     expect(told).toHaveLength(3);
   });
 
+  test('words typed or spoken in reply to a message of the card go to its agent with it', async () => {
+    const told: (number | undefined)[] = [];
+    canvas.tell = (_cardId, _text, _images, _spoken, replyTo) => void told.push(replyTo);
+    const c = card();
+    board.work(c.id, { state: 'working' });
+    await post(api(`/command?card=${c.id}`), JSON.stringify({ text: 'nein, so', field: 'note', replyTo: 7 }));
+    whisper = () => 'genau so';
+    await fetch(new URL(api(`/voice?card=${c.id}&replyTo=8`), server.url), { method: 'POST', body: 'AUDIO' });
+    await post(api(`/command?card=${c.id}`), JSON.stringify({ text: 'ohne', field: 'note' }));
+    expect(told).toEqual([7, 8, undefined]);
+  });
+
   test('nothing to do is just said', async () => {
     const res = fetch(new URL(api('/command'), server.url), { method: 'POST', body: JSON.stringify({ text: 'ähm' }) });
     (await briefed()).call('reply', { confirm: 'Was genau soll ich tun?' });

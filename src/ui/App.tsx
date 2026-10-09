@@ -10,6 +10,7 @@ import { besideSheet, BOTTOM, type Cam, camFor, centreOn, chase, dragLimit, edge
 import { plain } from './markdown';
 import { type ActDone, Detail, type Pending } from './detail';
 import type { Field } from './api';
+import { setReply } from './reply';
 import { ArchivePill } from './archive';
 import { ConfigSheet } from './config';
 import { Setup } from './setup';
@@ -614,17 +615,17 @@ function Canvas({
    * Words typed on a card, in its idea or in the Koordinator's sheet: on a card an agent listens on
    * they go straight to it, and its conversation shows them; else the Koordinator reads them like spoken ones.
    */
-  const tellTyped = useCallback(async (text: string, images: string[] | undefined, target: Where, field?: Field) => {
+  const tellTyped = useCallback(async (text: string, images: string[] | undefined, target: Where, field?: Field, replyTo?: number) => {
     if (listening(target))
       try {
-        await api.command(text, target, images, field);
+        await api.command(text, target, images, field, replyTo);
       } catch (e) {
         if (!(e instanceof ApiError)) console.error(e);
         showAck(e instanceof ApiError ? errorText(e.code) : t.offlineError);
       }
     else {
       const words = text.replace(/\s+/g, ' ');
-      void tellAbout(target, `„${words.length > 40 ? `${words.slice(0, 39)}…` : words}“`, () => api.command(text, target, images, field));
+      void tellAbout(target, `„${words.length > 40 ? `${words.slice(0, 39)}…` : words}“`, () => api.command(text, target, images, field, replyTo));
     }
   }, []);
   useEffect(() => {
@@ -981,6 +982,8 @@ function Canvas({
     if (e.key === 'Escape') {
       // a screenshot shown large closes first, and the queue's list; the card stays open
       if (document.querySelector('.lightbox, .queue-menu')) return;
+      // so does the quote of a message the owner was replying to
+      if (document.querySelector('.composer .quote')) return setReply(null);
       // the archive's list closes after a card unfolded from it
       if (f?.type !== 'card' && aOnRef.current) return setAOn(false);
       if (typing) (e.target as HTMLElement).blur();
@@ -1175,7 +1178,7 @@ function Canvas({
                 flush={flushEdit}
                 onDelete={deleteOpen}
                 onDone={onDone}
-                onTell={(text, images, field) => tellTyped(text, images, { card: openItem.id }, field)}
+                onTell={(text, images, field, replyTo) => tellTyped(text, images, { card: openItem.id }, field, replyTo)}
               />
             )}
           </div>

@@ -149,9 +149,9 @@ export const api = {
   planDoc: (id: string) => call<{ file: string; markdown: string }>('GET', at(`/cards/${id}/plan`)),
   /** A project's decisions and the idea it came from. */
   history: (id: string) => call<ProjectHistory>('GET', at(`/cards/${id}/history`)),
-  /** What the owner said about the card or project in view, with the screenshots shown with it. */
-  voice: async (audio: Blob, where: Where, images: string[] = []) => {
-    const q = images.map((id) => `image=${encodeURIComponent(id)}`).join('&');
+  /** What the owner said about the card or project in view, with the screenshots shown with it; `replyTo`: in reply to that message of the card's conversation. */
+  voice: async (audio: Blob, where: Where, images: string[] = [], replyTo?: number) => {
+    const q = [...images.map((id) => `image=${encodeURIComponent(id)}`), ...(replyTo ? [`replyTo=${replyTo}`] : [])].join('&');
     const res = await fetch(at(`/voice${query(where)}${q && (where ? '&' : '?')}${q}`), { method: 'POST', body: audio });
     if (!res.ok) throw new Error(`voice: ${res.status}`);
     return (await res.json()) as HeardReply;
@@ -159,8 +159,8 @@ export const api = {
   /** The owner started speaking (or typing a command): Obeya gets ready to read it. */
   warmVoice: () => fetch(at('/voice/warm'), { method: 'POST' }).catch(() => {}),
   /** The same, typed; `field`: the field of the open card it was typed into. */
-  command: (text: string, where: Where, images?: string[], field?: Field) =>
-    call<HeardReply>('POST', at(`/command${query(where)}`), { text, ...(images?.length ? { images } : {}), ...(field ? { field } : {}) }),
+  command: (text: string, where: Where, images?: string[], field?: Field, replyTo?: number) =>
+    call<HeardReply>('POST', at(`/command${query(where)}`), { text, ...(images?.length ? { images } : {}), ...(field ? { field } : {}), ...(replyTo ? { replyTo } : {}) }),
   /** A typed request to the Koordinator of another canvas, about nothing in view there. */
   commandOn: (canvas: string, text: string) => call<HeardReply>('POST', `/api/c/${encodeURIComponent(canvas)}/command`, { text }),
   undo: (token: string) => call<{ undone: boolean }>('POST', at('/command/undo'), { token }),

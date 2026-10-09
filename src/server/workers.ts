@@ -7,7 +7,7 @@ import { LANGUAGE_NAMES, LANGUAGES } from '../core/locale';
 import { MESSAGES, type Messages } from '../core/messages';
 import { basename } from 'node:path';
 import { answering, askable, type DemoKind, type DemoPage, formatQuestion, type Item, type Mock, type Question, type RestartReason } from '../core/types';
-import { BadRequest, type Board } from './board';
+import { BadRequest, type Board, replyNote } from './board';
 import { type Asked, decisionLog, toQuestion, withPick } from './advisor';
 import { checkArtifact, DEMO_SKILL, OBEYA_PLUGIN, readChapters } from './demo';
 import { artifactFiles } from './demo-page';
@@ -234,20 +234,22 @@ export class Workers {
 
   /**
    * A hint while the worker runs, words on its handover, or a question once its work is done;
-   * `images` are screenshot files the owner attached.
+   * `images` are screenshot files the owner attached; `replyTo`: the message of the card's
+   * conversation the words reply to, which the worker reads above them.
    */
-  message(cardId: string, text: string, images: string[] = [], spoken = false) {
+  message(cardId: string, text: string, images: string[] = [], spoken = false, replyTo?: number) {
     const card = this.card(cardId);
+    const words = this.words(cardId, text, images, replyTo);
     if (card.state === 'waiting' && (card.need === 'review' || card.need === 'demo')) {
       // under a demo whose report asks a question, the words answer it, whatever else they say
-      if (card.question) return this.answerDemo(card, text, images, spoken);
+      if (card.question) return this.answerDemo(card, text, images, spoken, replyTo);
       // the work still waits for approval while the worker takes the words in; a change they call for comes as a new handover
       this.takingIn(cardId);
-      this.o.board.log(cardId, 'hint', 'owner', text, undefined, images.map((f) => basename(f)));
+      this.o.board.log(cardId, 'hint', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo);
       if (text) this.o.onOwnerInput?.(card, 'feedback', text);
       this.deliver(
         cardId,
-        `The owner wrote on your handover${spoken ? ` (${SPOKEN})` : ''}. The card still waits for their approval of what you handed over; a change their words call for goes into a new handover:\n\n${text}${imageNote(images)}`,
+        `The owner wrote on your handover${spoken ? ` (${SPOKEN})` : ''}. The card still waits for their approval of what you handed over; a change their words call for goes into a new handover:\n\n${words}`,
         images,
       );
     } else if (card.state === 'waiting' && card.need === 'question') {
@@ -257,25 +259,25 @@ export class Workers {
       if (waiting) {
         // the tool call waits for the owner, so the worker reads nothing else meanwhile: the note refuses it
         this.o.board.work(cardId, { state: row.landed ? landedState(row.landed) : row.pr ? 'inPr' : 'working', need: null, detail: null });
-        this.o.board.log(cardId, 'hint', 'owner', text, undefined, images.map((f) => basename(f)));
+        this.o.board.log(cardId, 'hint', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo);
         if (text) this.o.onOwnerInput?.(card, 'note', text);
-        waiting({ allow: false, message: `Not run: the owner wrote a note instead of allowing it${spoken ? ` (${SPOKEN})` : ''}. If the note settles it, go on; if not, ask again.\n\n${text}${imageNote(images)}` });
+        waiting({ allow: false, message: `Not run: the owner wrote a note instead of allowing it${spoken ? ` (${SPOKEN})` : ''}. If the note settles it, go on; if not, ask again.\n\n${words}` });
         if (images.length) this.live.get(cardId)!.session.send('The screenshots of the owner’s note.', images);
         return;
       }
       this.o.board.work(cardId, { state: row.landed ? landedState(row.landed) : row.pr ? 'inPr' : 'working', need: null, detail: null });
-      this.o.board.log(cardId, 'hint', 'owner', text, undefined, images.map((f) => basename(f)));
+      this.o.board.log(cardId, 'hint', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo);
       if (text) this.o.onOwnerInput?.(card, 'note', text);
       this.deliver(
         cardId,
-        `A note from the owner instead of an answer${spoken ? ` (${SPOKEN})` : ''}. It withdraws your question („${card.question?.text ?? ''}“): if the note settles it, go on; if not, ask again.\n\n${text}${imageNote(images)}`,
+        `A note from the owner instead of an answer${spoken ? ` (${SPOKEN})` : ''}. It withdraws your question („${card.question?.text ?? ''}“): if the note settles it, go on; if not, ask again.\n\n${words}`,
         images,
       );
     } else if (card.state === 'working' || card.state === 'inPr' || card.finishing) {
-      this.o.board.log(cardId, 'hint', 'owner', text, undefined, images.map((f) => basename(f)));
+      this.o.board.log(cardId, 'hint', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo);
       if (text) this.o.onOwnerInput?.(card, 'note', text);
-      this.deliver(cardId, `A note from the owner${spoken ? ` (${SPOKEN})` : ''} (it does not stop you; adjust your plan if it changes anything):\n\n${text}${imageNote(images)}`, images);
-    } else if (askable(card)) this.followUp(card, text, images, spoken);
+      this.deliver(cardId, `A note from the owner${spoken ? ` (${SPOKEN})` : ''} (it does not stop you; adjust your plan if it changes anything):\n\n${words}`, images);
+    } else if (askable(card)) this.followUp(card, text, images, spoken, replyTo);
     else throw new BadRequest('noAgent', 'no agent works on this card');
   }
 
@@ -283,7 +285,7 @@ export class Workers {
    * The owner asks about a card whose work is over: its worker's session is resumed in a fresh
    * workspace on the card's branch, as after a landing, and ends again once the worker has answered.
    */
-  private followUp(card: Item, text: string, images: string[], spoken: boolean) {
+  private followUp(card: Item, text: string, images: string[], spoken: boolean, replyTo?: number) {
     const row = this.o.board.row(card.id);
     let path: string;
     try {
@@ -296,11 +298,11 @@ export class Workers {
     const commit = row.shipped ? (JSON.parse(row.shipped) as Shipped).commit : undefined;
     const landed: LandedState = { ...(card.state === 'done' ? { unchanged: true } : commit ? { commit } : {}), followUp: true };
     this.o.board.work(card.id, { workspace: path, landed: JSON.stringify(landed), status_line: null });
-    this.o.board.log(card.id, 'hint', 'owner', text, undefined, images.map((f) => basename(f)));
+    this.o.board.log(card.id, 'hint', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo);
     if (text) this.o.onOwnerInput?.(card, 'note', text);
     const message = [
       `The owner asks about this card${spoken ? ` (${SPOKEN})` : ''}. ${card.state === 'done' ? 'It was closed without a change to the repository' : `Its work is on main${commit ? ` (${commit.slice(0, 7)})` : ''}`}, and your session had ended; it goes on in a fresh workspace on the branch ${row.branch}, where main may have moved on since.`,
-      `${text}${imageNote(images)}`,
+      this.words(card.id, text, images, replyTo),
       FOLLOW_UP,
     ].join('\n\n');
     // a card that never reported a session: a new one needs the card first
@@ -308,21 +310,21 @@ export class Workers {
     else this.launch(card.id, `You worked on the card „${card.title}“:\n\n${card.body}\n\n${message}`, undefined, [...this.taskImages(card), ...images]);
   }
 
-  answer(cardId: string, text: string, images: string[] = [], spoken = false) {
+  answer(cardId: string, text: string, images: string[] = [], spoken = false, replyTo?: number) {
     const card = this.card(cardId);
-    if (card.state === 'waiting' && card.need === 'demo' && card.question) return this.answerDemo(card, text, images, spoken);
+    if (card.state === 'waiting' && card.need === 'demo' && card.question) return this.answerDemo(card, text, images, spoken, replyTo);
     if (!(card.state === 'waiting' && card.need === 'question')) throw new BadRequest('noQuestion', 'the card has no open question');
     const row = this.o.board.row(cardId);
     const detail = row.detail ? (JSON.parse(row.detail) as { question?: Question; permission?: AskedPermission }) : {};
-    if (detail.permission) return this.answerPermission(card, detail.permission, text, images, spoken);
+    if (detail.permission) return this.answerPermission(card, detail.permission, text, images, spoken, replyTo);
     const question = detail.question;
     const q = question?.text ?? this.pendingQuestion(cardId) ?? '';
     this.o.board.work(cardId, { state: row.landed ? landedState(row.landed) : row.pr ? 'inPr' : 'working', need: null, detail: null });
-    this.o.board.log(cardId, 'answer', 'owner', text, undefined, images.map((f) => basename(f)));
+    this.o.board.log(cardId, 'answer', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo);
     this.recordDecision(card, q, text || '(Screenshot)');
     if (text) this.o.onOwnerInput?.(card, 'answer', text, { question: q });
     if (card.prototypeOf) this.o.onPrototypeAnswer?.(card, q, text || '(Screenshot)');
-    this.deliver(cardId, `Answer to your question (from the owner${spoken ? `; ${SPOKEN}` : ''}):\n\n${text}${imageNote(images)}`, images);
+    this.deliver(cardId, `Answer to your question (from the owner${spoken ? `; ${SPOKEN}` : ''}):\n\n${this.words(cardId, text, images, replyTo)}`, images);
   }
 
   /**
@@ -330,16 +332,16 @@ export class Workers {
    * their words. Allowed after the session that asked was gone (a restart), it runs once the worker
    * makes it again. No decision for the log: it is about one call, not the work.
    */
-  private answerPermission(card: Item, asked: AskedPermission, text: string, images: string[], spoken: boolean) {
+  private answerPermission(card: Item, asked: AskedPermission, text: string, images: string[], spoken: boolean, replyTo?: number) {
     const row = this.o.board.row(card.id);
     const [first = '', ...rest] = text.split('\n\n');
     const is = (option: (t: Messages) => string) => LANGUAGES.some((l) => option(MESSAGES[l]).toLowerCase() === first.trim().toLowerCase());
     const allowed = is((t) => t.worker.allow);
     const words = (allowed || is((t) => t.worker.deny) ? rest.join('\n\n') : text).trim();
     this.o.board.work(card.id, { state: row.landed ? landedState(row.landed) : row.pr ? 'inPr' : 'working', need: null, detail: null });
-    this.o.board.log(card.id, 'answer', 'owner', text, undefined, images.map((f) => basename(f)));
+    this.o.board.log(card.id, 'answer', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo);
     if (words) this.o.onOwnerInput?.(card, 'answer', words, { question: card.question?.text ?? '' });
-    const said = words ? `${spoken ? ` (${SPOKEN})` : ''}:\n\n${words}${imageNote(images)}` : images.length ? `, with screenshots:${imageNote(images)}` : '.';
+    const said = words ? `${spoken ? ` (${SPOKEN})` : ''}:\n\n${this.words(card.id, words, images, replyTo)}` : images.length ? `, with screenshots:${imageNote(images)}` : '.';
     const live = this.live.get(card.id);
     if (live?.permission) {
       live.permission(allowed ? { allow: true } : { allow: false, message: `Not run: the owner did not allow it${said}` });
@@ -365,20 +367,25 @@ export class Workers {
    * approval. While the worker takes in the answer (it may rework the demo), the card is not the
    * owner's; once its turn ends without a new handover, the demo is theirs again.
    */
-  private answerDemo(card: Item, text: string, images: string[], spoken: boolean) {
+  private answerDemo(card: Item, text: string, images: string[], spoken: boolean, replyTo?: number) {
     const q = card.question!.text;
     const demo = JSON.parse(this.o.board.row(card.id).demo!) as Record<string, unknown>;
     this.o.board.work(card.id, { demo: JSON.stringify({ ...demo, answer: text || '(Screenshot)' }) });
     this.takingIn(card.id);
-    this.o.board.log(card.id, 'answer', 'owner', text, undefined, images.map((f) => basename(f)));
+    this.o.board.log(card.id, 'answer', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo);
     this.recordDecision(card, q, text || '(Screenshot)');
     if (text) this.o.onOwnerInput?.(card, 'answer', text, { question: q });
     if (card.prototypeOf) this.o.onPrototypeAnswer?.(card, q, text || '(Screenshot)');
     this.deliver(
       card.id,
-      `The owner answered the question in your demo report („${q}“)${spoken ? ` (${SPOKEN})` : ''}. The card still waits for their approval of what you handed over; a change their words call for goes into a new handover:\n\n${text}${imageNote(images)}`,
+      `The owner answered the question in your demo report („${q}“)${spoken ? ` (${SPOKEN})` : ''}. The card still waits for their approval of what you handed over; a change their words call for goes into a new handover:\n\n${this.words(card.id, text, images, replyTo)}`,
       images,
     );
+  }
+
+  /** The owner's words as the worker reads them: the message they reply to above them, the screenshots' files below. */
+  private words(cardId: string, text: string, images: string[], replyTo?: number) {
+    return `${replyNote(replyTo ? this.o.board.quoted(cardId, replyTo) : undefined, 'worker')}${text}${imageNote(images)}`;
   }
 
   /** `direct`: the work goes onto the default branch at once instead of into a pull request, where the adapter allows it. */

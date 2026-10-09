@@ -383,6 +383,33 @@ textarea.p-body:focus { border-color: var(--muted); }
 .talk .msg .who .t { color: var(--muted); font-weight: 400; margin-left: 4px; }
 .talk .msg.by-owner { align-self: flex-end; background: color-mix(in srgb, var(--working) 9%, var(--card)); }
 .talk .msg.by-owner .who { color: var(--working); }
+/* replying to one message (message.tsx): a button in its corner while the pointer is on it, and the
+   message replied to quoted above the reply and above the field it is written in, as chat apps do */
+.talk .msg { position: relative; }
+.talk .msg:has(> .msg-reply) > .who { padding-right: 24px; }
+.msg-reply { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; display: grid; place-items: center; padding: 0;
+  border: 0; border-radius: 50%; background: var(--chip); color: var(--muted); cursor: pointer; opacity: 0; transition: opacity .12s; }
+.talk .msg:hover > .msg-reply, .msg-reply:focus-visible { opacity: 1; }
+.msg-reply:hover { color: var(--ink); background: var(--line); }
+.quote { --q: var(--muted); display: flex; align-items: flex-start; min-width: 0; border-left: 3px solid var(--q); border-radius: 6px;
+  background: color-mix(in srgb, var(--q) 8%, var(--card)); }
+.quote.q-by-owner { --q: var(--working); }
+.quote.q-by-worker { --q: var(--inPr); }
+.quote.q-by-explorer { --q: var(--idea); }
+.quote:is(.q-by-koordinator, .q-by-obeya, .q-by-project) { --q: var(--proposal); }
+.quote-go { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; padding: 5px 9px 6px; border: 0; background: none;
+  text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.quote-who { font-size: 11.5px; font-weight: 600; color: var(--q); }
+.quote-text { font-size: 12.5px; line-height: 1.4; color: var(--muted); overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.quote-clear { flex: none; margin: 3px 3px 0 0; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%; background: none;
+  color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer; }
+.quote-clear:hover { color: var(--ink); background: var(--chip); }
+.talk .msg > .quote { margin: 5px 0 4px; }
+.composer .c-field .quote { flex: 1 1 100%; margin: 0 0 2px; }
+.composer .c-field .quote-text { -webkit-line-clamp: 2; }
+.talk .msg.flash { animation: msg-flash 1.6s ease-out; }
+@keyframes msg-flash { from { box-shadow: 0 0 0 3px color-mix(in srgb, var(--working) 55%, transparent), var(--shadow); } }
 /* an answer that waited for the owner, marked while the sheet stays open */
 .talk .msg.fresh { box-shadow: inset 3px 0 0 var(--waiting), var(--shadow); }
 .talk .msg.thinking .who::after { content: ""; display: inline-block; vertical-align: middle; margin-left: 8px; width: 34px; height: 3px; border-radius: 2px;
@@ -514,7 +541,7 @@ textarea.p-body:focus { border-color: var(--muted); }
 .composer textarea:focus { border-color: var(--muted); }
 /* the field under a conversation (composer.tsx): one frame, as wide as the conversation, with the text growing as it is
    written and the screenshot button and Send in its bottom corner, beside the text's scrollbar rather than over it */
-.composer .c-field { flex: 1 1 100%; display: flex; align-items: flex-end; gap: 4px; min-width: 0; padding: 4px; border: 1px solid var(--line);
+.composer .c-field { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 4px; min-width: 0; padding: 4px; border: 1px solid var(--line);
   border-radius: 10px; background: var(--card); }
 .composer .c-field:focus-within { border-color: var(--muted); }
 .composer .c-field textarea { min-height: 0; max-height: 30vh; padding: 6px 8px; border: 0; border-radius: 0; background: none; resize: none; line-height: 1.45; }

@@ -282,7 +282,19 @@ export const MIGRATIONS = [
   `ALTER TABLE cards ADD COLUMN parked TEXT;`,
   // an answer looked up for the Koordinator's sheet that the owner has not seen there yet
   `ALTER TABLE talk ADD COLUMN unread INTEGER NOT NULL DEFAULT 0;`,
+  // the message of the card's conversation the owner's words reply to
+  `ALTER TABLE events ADD COLUMN reply_to INTEGER;`,
 ];
+
+const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo';
+type EventRow = Omit<CardEvent, 'images' | 'mocks' | 'replyTo'> & { code: CardEvent['code'] | null; images: string | null; mocks: string | null; replyTo: number | null };
+const eventOf = ({ code, images, mocks, replyTo, ...e }: EventRow): CardEvent => ({
+  ...e,
+  ...(code ? { code } : {}),
+  ...(images ? { images: JSON.parse(images) as string[] } : {}),
+  ...(mocks ? { mocks: JSON.parse(mocks) as Mock[] } : {}),
+  ...(replyTo ? { replyTo } : {}),
+});
 
 export type NewRow = Pick<CardRow, 'canvas_id' | 'kind' | 'x' | 'y'> &
   Partial<Pick<CardRow, 'state' | 'title' | 'body' | 'parent_id' | 'plan_ref' | 'from_id' | 'repo' | 'idea' | 'prototype_of' | 'prototype' | 'images' | 'retro' | 'proposal' | 'group_id'>>;
@@ -510,18 +522,29 @@ export class Store {
   addEvent(e: Omit<CardEvent, 'id' | 'at'>): CardEvent {
     const at = now();
     const { id } = this.db
-      .query('INSERT INTO events (card_id, at, kind, author, text, code, images, mocks) VALUES ($cardId, $at, $kind, $author, $text, $code, $images, $mocks) RETURNING id')
-      .get({ ...e, code: e.code ?? null, images: e.images?.length ? JSON.stringify(e.images) : null, mocks: e.mocks?.length ? JSON.stringify(e.mocks) : null, at }) as { id: number };
+      .query('INSERT INTO events (card_id, at, kind, author, text, code, images, mocks, reply_to) VALUES ($cardId, $at, $kind, $author, $text, $code, $images, $mocks, $replyTo) RETURNING id')
+      .get({
+        ...e,
+        code: e.code ?? null,
+        images: e.images?.length ? JSON.stringify(e.images) : null,
+        mocks: e.mocks?.length ? JSON.stringify(e.mocks) : null,
+        replyTo: e.replyTo ?? null,
+        at,
+      }) as { id: number };
     return { ...e, id, at };
   }
 
   events(cardId: string, limit = 500): CardEvent[] {
     const rows = this.db
-      .query('SELECT id, card_id AS cardId, at, kind, author, text, code, images, mocks FROM events WHERE card_id = $c ORDER BY id DESC LIMIT $limit')
-      .all({ c: cardId, limit }) as (Omit<CardEvent, 'images' | 'mocks'> & { code: CardEvent['code'] | null; images: string | null; mocks: string | null })[];
-    return rows
-      .reverse()
-      .map(({ code, images, mocks, ...e }) => ({ ...e, ...(code ? { code } : {}), ...(images ? { images: JSON.parse(images) as string[] } : {}), ...(mocks ? { mocks: JSON.parse(mocks) as Mock[] } : {}) }));
+      .query(`SELECT ${EVENT_COLUMNS} FROM events WHERE card_id = $c ORDER BY id DESC LIMIT $limit`)
+      .all({ c: cardId, limit }) as EventRow[];
+    return rows.reverse().map(eventOf);
+  }
+
+  /** One event of the card's log. */
+  event(cardId: string, id: number): CardEvent | undefined {
+    const row = this.db.query(`SELECT ${EVENT_COLUMNS} FROM events WHERE card_id = $c AND id = $id`).get({ c: cardId, id }) as EventRow | null;
+    return row ? eventOf(row) : undefined;
   }
 
   // ---------------------------------------------------------------- workspaces

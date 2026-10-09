@@ -338,6 +338,41 @@ describe('workers', () => {
     expect(runtime.last.inbox.length).toBe(before + 1);
   });
 
+  test('a note in reply to a message points the worker at it, and the conversation keeps which one', () => {
+    const c = manual();
+    workers.start(c.id);
+    runtime.last.call('reply', { text: `Ich exportiere die Zählerstände als CSV mit Semikolon als Trenner, wie Excel es in Deutschland erwartet. ${'Mehr dazu. '.repeat(30)}` });
+    const replied = board.events(c.id).at(-1)!;
+    workers.message(c.id, 'Lieber Komma.', [], false, replied.id);
+    // the worker has the whole message in its session: the start of it says which one
+    expect(runtime.last.inbox.at(-1)).toContain('[In reply to your message: „Ich exportiere die Zählerstände als CSV mit Semikolon als Trenner, wie Excel es in Deutschland erwartet. Mehr dazu. Mehr dazu. Mehr dazu. Mehr dazu. Mehr dazu. …“]\n\nLieber Komma.');
+    expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'hint', author: 'owner', text: 'Lieber Komma.', replyTo: replied.id });
+    // Obeya's words in the conversation the worker never had: it reads them whole
+    const aside = board.log(c.id, 'say', 'koordinator', 'Die Karte „Import“ liegt auf einer anderen Leinwand.');
+    workers.message(c.id, 'Dann lass es.', [], false, aside.id);
+    expect(runtime.last.inbox.at(-1)).toContain("[In reply to Obeya's message in the card's conversation: „Die Karte „Import“ liegt auf einer anderen Leinwand.“]\n\nDann lass es.");
+    // a question answered in reply to it says so too
+    runtime.last.call('ask', { question: 'CSV oder Excel?', options: ['CSV', 'Excel'] });
+    const asked = board.events(c.id).findLast((e) => e.kind === 'question')!;
+    workers.answer(c.id, 'CSV', [], false, asked.id);
+    expect(runtime.last.inbox.at(-1)).toContain('[In reply to your question: „CSV oder Excel?');
+    expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'answer', replyTo: asked.id });
+  });
+
+  test('a reply to a step, a state line or another card is the words alone', () => {
+    const c = manual();
+    const other = manual();
+    workers.start(c.id);
+    const line = board.events(c.id).findLast((e) => e.kind === 'state')!;
+    const elsewhere = board.log(other.id, 'say', 'koordinator', 'Anderswo.');
+    for (const id of [line.id, elsewhere.id, 99999]) {
+      expect(board.quoted(c.id, id)).toBeUndefined();
+      workers.message(c.id, 'Weiter.', [], false, board.quoted(c.id, id)?.id);
+      expect(runtime.last.inbox.at(-1)).not.toContain('In reply to');
+      expect(board.events(c.id).at(-1)!.replyTo).toBeUndefined();
+    }
+  });
+
   const words = (id: string) => board.events(id).filter((e) => e.author === 'worker' && ['say', 'talk', 'closing'].includes(e.kind)).map((e) => `${e.kind}: ${e.text}`);
 
   test("after a reply on a card waiting for review, the worker's closing words are logged as such, to fold under the reply", () => {

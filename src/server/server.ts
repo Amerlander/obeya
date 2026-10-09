@@ -152,7 +152,7 @@ export function serve(
     if (text === null || (!text && !(input.typed && images.length))) return { confirm: text === null ? c.board.t.voice.notUnderstood : c.board.t.voice.nothingHeard, unheard: true };
     const card = focus.card ? c.board.item(focus.card) : undefined;
     if (card && agentListens(card)) {
-      c.tell(card.id, text, images, !input.typed);
+      c.tell(card.id, text, images, !input.typed, input.replyTo);
       // the card's conversation shows the words; the app's panel shows what was heard
       return { confirm: '', quiet: true, text } satisfies Heard & { text: string };
     }
@@ -386,9 +386,12 @@ export function serve(
       '/api/c/:canvas/voice': {
         POST: on(async (c, req) => {
           // screenshots shown with the recording (`?image=<id>`, repeated), checked before transcribing
-          const images = new URL(req.url).searchParams.getAll('image');
+          const params = new URL(req.url).searchParams;
+          const images = params.getAll('image');
           c.images.resolve(images);
-          return heard(c, await transcribe(c, req), focusOf(req), images);
+          // `?replyTo=<event>`: said in reply to that message of the open card's conversation
+          const replyTo = Number(params.get('replyTo')) || undefined;
+          return heard(c, await transcribe(c, req), focusOf(req), images, replyTo ? { replyTo } : {});
         }),
       },
       // the owner started speaking: transcription and the Koordinator get ready meanwhile
@@ -401,14 +404,15 @@ export function serve(
       '/api/c/:canvas/command': {
         POST: on(async (c, req) => {
           // `field`: typed into that field of the open card rather than into the Koordinator's sheet
-          const { text, images, field } = (await req.json()) as { text: string; images?: string[]; field?: unknown };
+          // `replyTo`: typed in reply to that message of the open card's conversation
+          const { text, images, field, replyTo } = (await req.json()) as { text: string; images?: string[]; field?: unknown; replyTo?: unknown };
           // a screenshot alone may speak for itself to the open card's agent
           const card = focusOf(req).card;
           const listens = !!card && !!c.board.item(card) && agentListens(c.board.item(card)!);
           if (typeof text !== 'string' || (!text.trim() && !(listens && images?.length))) throw new BadRequest('emptyText', 'text must be a non-empty string');
           // screenshots pasted into the typed command go to the cards it creates or concerns
           c.images.resolve(images);
-          return heard(c, text.trim(), focusOf(req), images ?? [], { typed: true, ...(isField(field) ? { field } : {}) });
+          return heard(c, text.trim(), focusOf(req), images ?? [], { typed: true, ...(isField(field) ? { field } : {}), ...(typeof replyTo === 'number' ? { replyTo } : {}) });
         }),
       },
       '/api/c/:canvas/command/undo': {

@@ -1,18 +1,21 @@
 // The field the owner writes in under a conversation, the same on a card and in Obeya's sheet: one
 // frame with the text, the screenshot button and Send (an arrow, as in chat apps) in its bottom
 // corner, as wide as the conversation above it. The text grows with what is written, up to a part
-// of the window.
+// of the window. A message replied to stands above the text as a quote.
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { CardEvent } from '../core/types';
 import { api } from './api';
 import { useFitHeight } from './fitHeight';
+import { Quote } from './message';
 import { AttachButton, ShotStrip, useShotInput } from './shots';
 import { t } from './strings';
 
 /**
  * What the owner writes to an agent or to Obeya; screenshots are pasted, dropped or picked, unless
  * `noImages`. `label` names what Send does (its tooltip); `action` puts words on the button instead
- * of the arrow, for a button that starts something rather than sends.
+ * of the arrow, for a button that starts something rather than sends. `quote`: the message the words
+ * reply to; `onUnquote` takes it out (its ×; Escape takes it out too, before it closes the card).
  */
 export function Composer({
   placeholder,
@@ -24,6 +27,8 @@ export function Composer({
   obeya,
   onText,
   className,
+  quote,
+  onUnquote,
 }: {
   placeholder: string;
   onSend: (text: string, images?: string[]) => Promise<void> | void;
@@ -36,6 +41,8 @@ export function Composer({
   /** Hears the text as it is typed. */
   onText?: (text: string) => void;
   className?: string;
+  quote?: CardEvent | null;
+  onUnquote?: () => void;
 }) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -44,6 +51,10 @@ export function Composer({
   const field = useRef<HTMLTextAreaElement>(null);
   // as high as the text; the stylesheet caps it, and beyond that it scrolls
   useFitHeight(field, text);
+  // replying to a message is writing to it: the field takes the focus
+  useEffect(() => {
+    if (quote) field.current?.focus();
+  }, [quote?.id]);
   const ready = (!!text.trim() || images.length > 0 || allowEmpty) && !busy && !shots.uploading;
   const send = async () => {
     if (!ready) return;
@@ -58,6 +69,7 @@ export function Composer({
     <div className={['composer', className, shots.dropping && 'dropping'].filter(Boolean).join(' ')} {...shots.drop}>
       <ShotStrip shots={shots} />
       <div className="c-field">
+        {quote && <Quote e={quote} onClear={onUnquote} />}
         <textarea
           ref={field}
           value={text}

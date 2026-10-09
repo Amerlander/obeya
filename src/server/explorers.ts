@@ -10,7 +10,7 @@ import { type Language, LANGUAGE_NAMES } from '../core/locale';
 import { MESSAGES } from '../core/messages';
 import { type Item, type Mock, NEXT_STEPS, type NextStep, type PlannedPrototype, type Question } from '../core/types';
 import { type Asked, decisionLog, withPick } from './advisor';
-import { BadRequest, type Board, type Message, type Unread } from './board';
+import { BadRequest, type Board, type Message, replyNote, type Unread } from './board';
 import type { AgentEvent, AgentRuntime, AgentSession, AgentTool } from './runtime';
 import { imageNote } from './images';
 import { describeTool, SPOKEN } from './workers';
@@ -54,18 +54,22 @@ export class Explorers {
 
   constructor(private o: ExplorerOptions) {}
 
-  /** The owner says something about the idea, maybe with screenshot files; a parked or dropped idea is open again. */
-  discuss(cardId: string, text: string, spoken = false, images: string[] = []) {
+  /**
+   * The owner says something about the idea, maybe with screenshot files and in reply to a message
+   * of its conversation (`replyTo`); a parked or dropped idea is open again.
+   */
+  discuss(cardId: string, text: string, spoken = false, images: string[] = [], replyTo?: number) {
     const card = this.idea(cardId);
     const idea = this.o.board.idea(cardId);
     if (idea.status !== 'open') {
       this.o.board.setIdea(cardId, { status: 'open' });
       this.o.board.log(cardId, 'state', 'owner', this.o.board.t.idea.reopened);
     }
-    this.o.board.log(cardId, 'talk', 'owner', text, undefined, images.map((f) => basename(f)));
+    this.o.board.log(cardId, 'talk', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo);
     this.o.board.setIdea(cardId, { yourTurn: false, questions: [], next: undefined });
     if (text) this.o.onOwnerInput?.(card, text);
-    this.send(card, `The owner says${spoken ? ` (${SPOKEN})` : ''}:\n\n${text}${imageNote(images)}`, images);
+    const quoted = replyTo ? this.o.board.quoted(cardId, replyTo) : undefined;
+    this.send(card, `The owner says${spoken ? ` (${SPOKEN})` : ''}:\n\n${replyNote(quoted, 'explorer')}${text}${imageNote(images)}`, images);
   }
 
   /**

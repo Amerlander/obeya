@@ -125,6 +125,18 @@ describe('an idea', () => {
     expect(later.inbox).toEqual(['The owner says:\n\nDrittens.']);
   });
 
+  test('what the owner says in reply to a message of the discussion points the agent at it', () => {
+    const i = idea();
+    canvas.act(i.id, { action: 'discuss', text: 'Erstens.' });
+    const first = explorer();
+    first.call('reply', { text: 'Zu erstens: zwei Wege, A und B.' });
+    first.emit({ type: 'idle' });
+    const said = board().events(i.id).findLast((e) => e.kind === 'talk' && e.author === 'explorer')!;
+    canvas.act(i.id, { action: 'discuss', text: 'Nimm A.', replyTo: said.id });
+    expect(explorer().inbox.at(-1)).toEndWith('The owner says:\n\n[In reply to your message: „Zu erstens: zwei Wege, A und B.“]\n\nNimm A.');
+    expect(board().events(i.id).findLast((e) => e.author === 'owner')).toMatchObject({ kind: 'talk', text: 'Nimm A.', replyTo: said.id });
+  });
+
   test('screenshots the owner adds reach the agent and stay in the conversation', () => {
     const i = idea();
     const id = canvas.images.save(new Uint8Array([1, 2, 3]), 'image/png');
