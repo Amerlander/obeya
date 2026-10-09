@@ -408,8 +408,10 @@ textarea.p-body:focus { border-color: var(--muted); }
 .talk .msg > .quote { margin: 5px 0 4px; }
 .composer .c-field .quote { flex: 1 1 100%; margin: 0 0 2px; }
 .composer .c-field .quote-text { -webkit-line-clamp: 2; }
-.talk .msg.flash { animation: msg-flash 1.6s ease-out; }
-@keyframes msg-flash { from { box-shadow: 0 0 0 3px color-mix(in srgb, var(--working) 55%, transparent), var(--shadow); } }
+.talk .msg.flash { animation: msg-flash 2.4s ease-out; }
+@keyframes msg-flash {
+  0%, 45% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--working) 60%, transparent), var(--shadow); background: color-mix(in srgb, var(--working) 14%, var(--card)); }
+}
 /* an answer that waited for the owner, marked while the sheet stays open */
 .talk .msg.fresh { box-shadow: inset 3px 0 0 var(--waiting), var(--shadow); }
 .talk .msg.thinking .who::after { content: ""; display: inline-block; vertical-align: middle; margin-left: 8px; width: 34px; height: 3px; border-radius: 2px;
