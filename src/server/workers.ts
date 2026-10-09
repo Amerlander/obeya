@@ -1287,6 +1287,9 @@ export class Workers {
             }
           }
           handOver();
+          const e = this.o.board.log(cardId, 'review', 'worker', none ? `${s}\n\n${this.o.board.t.worker.noDemo(none)}` : s);
+          // the demo report's question goes with the handover it came with, also once a later one keeps the demo
+          if (demoJson) demoJson = JSON.stringify({ ...(JSON.parse(demoJson) as object), handover: e.id });
           // approved work does not wait for the owner again: it stays with Obeya until its turn has ended
           this.o.board.work(cardId, {
             // the worker's last status line is about the work it hands over: it would show again once the card is at work
@@ -1297,7 +1300,6 @@ export class Workers {
             // an earlier demo would show on the finished card as if it were this work's
             ...(none && !approved ? { demo: null } : {}),
           });
-          this.o.board.log(cardId, 'review', 'worker', none ? `${s}\n\n${this.o.board.t.worker.noDemo(none)}` : s);
           const card = this.o.board.item(cardId);
           if (card?.prototypeOf) this.o.onPrototype?.(card, s, demoJson);
           if (approved) return 'Recorded. End your turn now; once it has ended, Obeya lands your work on main.';

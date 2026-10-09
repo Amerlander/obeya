@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { type CardEvent, formatQuestion } from '../core/types';
-import { agentWorks, ownerField, parseQuestion, split, talkAlone, talkTurns } from './talk';
+import { agentWorks, demoHandover, ownerField, parseQuestion, split, talkAlone, talkTurns } from './talk';
 
 let id = 0;
 const ev = (kind: CardEvent['kind'], author: CardEvent['author'], text: string): CardEvent => ({ id: ++id, cardId: 'c', at: '2026-10-01T10:00:00Z', kind, author, text });
@@ -238,4 +238,19 @@ test('a refused tool call stands as a line between the messages, not folded with
     { e: denied, steps: [], line: true },
     { e: reply, steps: [tried] },
   ]);
+});
+
+test("a demo report's question stays with the handover it came with when a later handover keeps the demo", () => {
+  const first = ev('review', 'worker', 'Fertig, siehe Demo.');
+  const answer = ev('answer', 'owner', 'Erst einmal parken.');
+  const reply = ev('talk', 'worker', 'Geparkt.');
+  const again = ev('review', 'worker', 'Entscheidung im Plan-Doc festgehalten.');
+  const { shown } = talkTurns([first, answer, reply, again], { over: true });
+  const demo = { chapters: [], question: 'Weiter testen oder parken?', answer: 'Erst einmal parken.' };
+  expect(demoHandover({ ...demo, handover: first.id }, shown)?.e).toBe(first);
+  // a demo from before it knew its handover: the last one before the answer
+  expect(demoHandover(demo, shown)?.e).toBe(first);
+  // a new demo with a later handover goes with that one
+  expect(demoHandover({ ...demo, handover: again.id }, shown)?.e).toBe(again);
+  expect(demoHandover({ chapters: [], question: 'Q?' }, shown)?.e).toBe(again);
 });

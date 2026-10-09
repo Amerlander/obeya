@@ -357,6 +357,8 @@ export interface Demo {
   question?: string;
   /** The owner's answer to it; the demo keeps waiting for approval. */
   answer?: string;
+  /** The handover event it came with: a later handover may keep the demo, and its question stays with the first. Absent before 2026-10-09. */
+  handover?: number;
   /** The page it is shared on, for colleagues who have never seen Obeya: written by the worker at handover, or later from its summary. */
   page?: DemoPage;
   /** An HTML artifact that is its `index.html` alone: it also goes out as one HTML file. */

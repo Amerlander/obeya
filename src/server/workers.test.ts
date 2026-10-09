@@ -932,7 +932,8 @@ describe('handing over with a demo', () => {
     const d = demoDir();
     expect(runtime.last.call('ready_for_review', { summary: 'S', demo: demo(d) })).toContain('End your turn');
     expect(state(c.id)).toBe('waiting:demo');
-    expect(board.item(c.id)!.demo).toEqual({ kind: 'video', chapters: [[0, 'Vorher'], [6, 'Nachher']], question: 'Semikolon oder Komma?' });
+    const handover = board.events(c.id).findLast((e) => e.kind === 'review')!.id;
+    expect(board.item(c.id)!.demo).toEqual({ kind: 'video', chapters: [[0, 'Vorher'], [6, 'Nachher']], question: 'Semikolon oder Komma?', handover });
     expect(board.item(c.id)!.summary).toBe('S');
     expect(board.demoFiles(c.id)).toEqual({ dir: d, kind: 'video' });
     workers.message(c.id, 'Semikolon, und bitte mit Kopfzeile.');
@@ -970,6 +971,20 @@ describe('handing over with a demo', () => {
     expect(needsYou(board.item(c.id)!)).toBe(true);
     expect(board.decisions(null).at(-1)).toMatchObject({ question: 'Semikolon oder Komma?', answer: 'Semikolon.', by: 'owner' });
     expect(() => workers.answer(c.id, 'Komma.')).toThrow(BadRequest);
+  });
+
+  test('a handover that keeps the demo leaves its answered question with the handover it came with', () => {
+    const c = manual();
+    workers.start(c.id);
+    runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir()) });
+    runtime.last.emit({ type: 'idle' });
+    const first = board.events(c.id).findLast((e) => e.kind === 'review')!.id;
+    workers.answer(c.id, 'Semikolon.');
+    runtime.last.call('ready_for_review', { summary: 'Entscheidung festgehalten.' });
+    runtime.last.emit({ type: 'idle' });
+    expect(state(c.id)).toBe('waiting:demo');
+    expect(board.item(c.id)!.question).toBeUndefined();
+    expect(board.item(c.id)!.demo).toMatchObject({ question: 'Semikolon oder Komma?', answer: 'Semikolon.', handover: first });
   });
 
   test('a worker that reworks its demo after the answer hands over anew; until then the card is at work', () => {
@@ -1093,7 +1108,7 @@ describe('handing over with a demo', () => {
     writeFileSync(join(d, 'img', 'a.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
     expect(runtime.last.call('ready_for_review', { summary: 'S', demo: html })).toContain('End your turn');
     expect(state(c.id)).toBe('waiting:demo');
-    expect(board.item(c.id)!.demo).toEqual({ kind: 'html', chapters: [] });
+    expect(board.item(c.id)!.demo).toMatchObject({ kind: 'html', chapters: [] });
     expect(board.demoFiles(c.id)).toEqual({ dir: d, kind: 'html' });
   });
 

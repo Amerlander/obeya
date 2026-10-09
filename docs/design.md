@@ -396,8 +396,9 @@ question answer it (Card lifecycle, 3).
 Every card shows its exchanges as a conversation („Gespräch“), the way an idea does (`talkTurns`
 in `src/ui/talk.ts`). Messages are what the owner says (notes, answers, feedback, spoken or typed,
 with screenshots, standing once as the agent got them), the worker's
-questions with their options and the pick, its replies, its handovers (the last one with its demo
-report's question), and what the Koordinator looked up for the owner; small lines between them are
+questions with their options and the pick, its replies, its handovers (the one a demo came with
+carries its report's question, muted once answered; a later handover that keeps the demo leaves it
+there: until 2026-10-09 the question moved to the newest handover and stood there orange, as if open), and what the Koordinator looked up for the owner; small lines between them are
 the state changes (started, pull request opened, approved, landed, stopped, errors). Everything
 else folds away under the agent's next message as „Verlauf“ (a worker's closing words after a reply
 or handover under that message, as its last step): tool calls, thoughts, status lines,

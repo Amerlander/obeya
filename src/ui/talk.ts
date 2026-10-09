@@ -1,7 +1,7 @@
 // A card's conversation, from its events.
 
 import { LANGUAGES } from '../core/locale';
-import { answering, askable, type CardEvent, finished, formatQuestion, type Item, type Question } from '../core/types';
+import { answering, askable, type CardEvent, type Demo, finished, formatQuestion, type Item, type Question } from '../core/types';
 import type { Field } from './api';
 
 /** One entry of the conversation: a message, with how the agent got to it folded under it, or a small line. */
@@ -59,6 +59,16 @@ const place = (e: CardEvent, prev: CardEvent | undefined): 'owner' | 'agent' | '
       return 'step';
   }
 };
+
+/**
+ * The handover a demo came with: a later one may keep it. A demo from before it knew its handover
+ * (2026-10-09) came with the last one before the owner answered its question, else the last one.
+ */
+export function demoHandover(demo: Demo, shown: Turn[]): Turn | undefined {
+  if (demo.handover !== undefined) return shown.find((x) => x.e.id === demo.handover);
+  const answer = demo.answer === undefined ? -1 : shown.findLastIndex((x) => x.e.kind === 'answer' && x.e.text === demo.answer);
+  return (answer < 0 ? shown : shown.slice(0, answer)).findLast((x) => x.e.kind === 'review');
+}
 
 /**
  * A card's events as its conversation: what the owner says, the agents' replies, questions and

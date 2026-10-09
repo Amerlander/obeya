@@ -420,6 +420,7 @@ textarea.p-body:focus { border-color: var(--muted); }
 .talk .msg .q-opts li.on::before { content: "✓ "; color: var(--working); }
 .talk .msg .demo-q { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line); font-size: 13.5px; }
 .talk .msg .demo-q b { color: var(--waiting); font-weight: 600; }
+.talk .msg .demo-q.answered b { color: var(--muted); }
 .question.pr { border-color: var(--inPr); background: color-mix(in srgb, var(--inPr) 7%, transparent); }
 .question.pr h4 a { color: var(--ink); text-transform: none; letter-spacing: 0; font-size: 14px; }
 .checks { list-style: none; padding: 0; margin: 6px 0 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; }

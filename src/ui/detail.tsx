@@ -14,7 +14,7 @@ import { Composer } from './composer';
 import { useFitHeight } from './fitHeight';
 import { AttachButton, ShotStrip, Shots, useShotInput } from './shots';
 import { clock as time, errorText, stateLabel, t } from './strings';
-import { agentWorks, ownerField, parseQuestion, started, talkAlone, talkTurns, type Turn, worked as isWorked } from './talk';
+import { agentWorks, demoHandover, ownerField, parseQuestion, started, talkAlone, talkTurns, type Turn, worked as isWorked } from './talk';
 
 /**
  * What the panel does after an action: fold the card and confirm (with undo, when it has one), or stay open.
@@ -777,7 +777,7 @@ function Conversation({ item, questions, past = false, hideEmpty = false }: { it
   const pending = proposal ? turns.pending.filter((s) => events.indexOf(s) > since) : turns.pending;
   // the demo report's question goes with the handover it came with
   // an open one stands at the end instead, where it is answered
-  const handover = item.demo?.question && !(item.state === 'waiting' && item.need === 'demo' && item.question) ? turns.shown.findLast((x) => x.e.kind === 'review') : undefined;
+  const handover = item.demo?.question && !(item.state === 'waiting' && item.need === 'demo' && item.question) ? demoHandover(item.demo, turns.shown) : undefined;
   // where the conversation starts: what was said to an idea, or the task an agent started on, above
   // the line that it started; a decided idea's task is its brief, and its conversation goes on
   const task = (isWorked(item) || !!item.prototypeEnd) && item.brief === undefined && (!!item.body.trim() || !!item.images?.length);
@@ -926,7 +926,7 @@ function Message({ turn, demoQuestion }: { turn: Turn; demoQuestion?: Demo }) {
       )}
       {turn.settled && <div className="hint">{t.talk.settled}</div>}
       {demoQuestion?.question && (
-        <div className="demo-q">
+        <div className={`demo-q${demoQuestion.answer === undefined ? '' : ' answered'}`}>
           <b>{t.talk.demoQuestion}</b> {demoQuestion.question}
         </div>
       )}
