@@ -1147,7 +1147,10 @@ the owner's language (`src/core/locale.ts`).
   field to write in under it (the same as a card's, `src/ui/composer.tsx`: one frame as wide as the
   conversation, the text growing with what is written up to 30 % of the window, the screenshot
   button and Send in its bottom corner beside the text's scrollbar; until 2026-10-09 Send stood
-  beside the field, and the icon lay over the scrollbar); below that come sections that open and close, each a head with its
+  beside the field, and the icon lay over the scrollbar; Send is an arrow in a dark circle, as in
+  chat apps, with what it does, „Senden“ or „Antworten“, as its tooltip, where until 2026-10-09 it
+  was a button with that word; only a button that starts something rather than sends keeps its
+  words, „Prototyp starten“); below that come sections that open and close, each a head with its
   count: the open proposals („Vorschläge (2)“, shown while there are any, open whenever a proposal
   came after the owner closed them) and the preferences (always there, closed by default). Whether a section is open is kept per canvas
   in the browser, so a reload keeps it. What runs is not listed there: the canvas shows it. Open

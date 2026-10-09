@@ -698,7 +698,7 @@ function PrototypeStart({ item, act }: { item: Item; act: (a: CardAction, done: 
       )}
       <Composer
         placeholder={variants.length ? t.idea.prototypeOwn : t.idea.prototypePlaceholder}
-        button={t.idea.prototypeGo(Math.max(n, 1))}
+        action={t.idea.prototypeGo(Math.max(n, 1))}
         allowEmpty={!variants.length || chosen.length > 0}
         noImages
         onText={(text) => setOwn(!!text.trim())}
@@ -1453,7 +1453,7 @@ function Talk({ item, questions = [], heading = t.ask.question, picks, past, fie
         <Composer
           key={field.key}
           placeholder={options ? t.ask.words : field.placeholder}
-          button={options ? t.ask.send : t.send}
+          label={options ? t.ask.send : t.send}
           allowEmpty={picked}
           obeya={field.listener}
           noImages={field.noImages}
