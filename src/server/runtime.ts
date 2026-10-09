@@ -13,7 +13,8 @@ import {
 } from '@anthropic-ai/claude-agent-sdk';
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
+import { LOST, remote, sessionFiles, type SshHost } from './hosts';
 import type { z } from 'zod';
 import { mediaType } from './images';
 import { COMPILED } from './resources';
@@ -44,6 +45,11 @@ export type AgentEvent =
    */
   | { type: 'idle'; background?: number }
   /**
+   * The session's machine is out of reach (a worker on an SSH host whose connection failed or
+   * dropped): the session has ended, and resumes by its id once the host answers again.
+   */
+  | { type: 'lost'; message: string }
+  /**
    * The turn failed. `limit` when the account's usage limit stopped it (the five-hour session
    * limit, say): it lifts again at `resetsAt` (milliseconds) when the API said when.
    */
@@ -63,6 +69,7 @@ export interface PermissionRequest {
 export type PermissionAnswer = { allow: true } | { allow: false; message: string };
 
 export interface AgentSpec {
+  /** Where the agent works; a workspace on another machine (`ssh://<host>/…`) runs it there (`hosts.ts`). */
   cwd: string;
   /** Appended to the default system prompt. */
   system: string;
@@ -146,6 +153,13 @@ export function claudeExecutable(env: Record<string, string | undefined> = proce
 export const sdkRuntime: AgentRuntime = {
   start(spec, firstMessage, images) {
     const inbox = new Inbox();
+    const there = remote(spec.cwd);
+    // a session on another machine: whether its connection was lost, rather than the session failing
+    let lost = false;
+    if (there) {
+      const dir = there.host.prepare(sessionFiles(there.host.o.home, spec.plugins ?? []));
+      inbox.carry = (text, images) => carryImages(there.host, dir, text, images);
+    }
     if (firstMessage !== undefined) inbox.push(firstMessage, images);
     const abort = new AbortController();
     const obeya = createSdkMcpServer({
@@ -158,13 +172,22 @@ export const sdkRuntime: AgentRuntime = {
       ),
     });
     const ownTools = spec.tools.map((t) => `mcp__obeya__${t.name}`);
-    const claude = claudeExecutable();
+    const claude = there ? 'claude' : claudeExecutable();
     const q = query({
       prompt: inbox,
       options: {
-        cwd: spec.cwd,
+        cwd: there ? there.path : spec.cwd,
         abortController: abort,
         ...(claude ? { pathToClaudeCodeExecutable: claude } : {}),
+        ...(there
+          ? {
+              spawnClaudeCodeProcess: there.host.session({
+                cwd: there.path,
+                files: sessionFiles(there.host.o.home, spec.plugins ?? []),
+                onExit: (code) => (lost = code === LOST && !abort.signal.aborted),
+              }),
+            }
+          : {}),
         systemPrompt: { type: 'preset', preset: 'claude_code', append: spec.system },
         mcpServers: { obeya },
         ...(spec.plugins?.length ? { plugins: spec.plugins.map((path) => ({ type: 'local' as const, path })) } : {}),
@@ -174,7 +197,8 @@ export const sdkRuntime: AgentRuntime = {
         ...(spec.resume ? { resume: spec.resume } : {}),
         ...(spec.effort ? { effort: spec.effort } : {}),
         ...(spec.model ? { model: spec.model } : {}),
-        env: { ...cleanEnv(), ...spec.env },
+        // on another machine only what the session itself needs: that machine has its own PATH and home
+        env: there ? { ...spec.env } : { ...cleanEnv(), ...spec.env },
         ...(spec.askOwner ? { canUseTool: (name: string, input: Record<string, unknown>, o: { signal: AbortSignal; decisionReason?: string }) => askOwner(spec.askOwner!, name, input, o) } : {}),
         hooks: {
           PreToolUse: [
@@ -226,8 +250,9 @@ export const sdkRuntime: AgentRuntime = {
           }
         }
       } catch (e) {
-        if (!abort.signal.aborted) spec.onEvent({ type: 'error', message: e instanceof Error ? e.message : String(e) });
+        if (!abort.signal.aborted && !lost) spec.onEvent({ type: 'error', message: e instanceof Error ? e.message : String(e) });
       }
+      if (lost && !abort.signal.aborted) spec.onEvent({ type: 'lost', message: `the connection to ${there!.host.name} was lost` });
     })();
     return {
       send: (text, images) => inbox.push(text, images),
@@ -552,22 +577,35 @@ export function cleanEnv(env: Record<string, string | undefined> = process.env):
   return Object.fromEntries(Object.entries(env).filter(([k]) => k === 'CLAUDE_CODE_OAUTH_TOKEN' || !/^(CLAUDE_CODE_|CLAUDECODE$|CLAUDE_PID$|OBEYA_SUPERVISED$|BUN_BE_BUN$)/.test(k)));
 }
 
+/**
+ * Copies the owner's screenshots to the session's machine, into `images` in Obeya's directory
+ * there, and names them by their paths there in the message; the message goes as it was if that
+ * fails (the session sees the images in it all the same).
+ */
+async function carryImages(host: SshHost, dir: Promise<string>, text: string, images: string[]): Promise<string> {
+  try {
+    const to = `${await dir}/images`;
+    await host.copyFiles(images, to);
+    return images.reduce((t, f) => t.split(f).join(`${to}/${basename(f)}`), text);
+  } catch (e) {
+    console.error(e instanceof Error ? e.message : e);
+    return text;
+  }
+}
+
 /** The session's input: an async stream of user messages that stays open until ended. */
 class Inbox implements AsyncIterable<SDKUserMessage> {
-  private queue: SDKUserMessage['message']['content'][] = [];
+  private queue: Promise<SDKUserMessage['message']['content']>[] = [];
   private wake: (() => void) | null = null;
   private ended = false;
+  /** For a session on another machine: copies the images there and returns the text with their paths there. */
+  carry?: (text: string, images: string[]) => Promise<string>;
 
   push(text: string, images: string[] = []) {
     // read now: the files may be gone by the time the session takes the message
-    this.queue.push(
-      images.length
-        ? [
-            { type: 'text', text },
-            ...images.map((f) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: mediaType(f), data: readFileSync(f).toString('base64') } })),
-          ]
-        : text,
-    );
+    const blocks = images.map((f) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: mediaType(f), data: readFileSync(f).toString('base64') } }));
+    const carried = this.carry && images.length ? this.carry(text, images) : Promise.resolve(text);
+    this.queue.push(carried.then((t) => (blocks.length ? [{ type: 'text' as const, text: t }, ...blocks] : t)));
     this.wake?.();
   }
 
@@ -578,7 +616,7 @@ class Inbox implements AsyncIterable<SDKUserMessage> {
 
   async *[Symbol.asyncIterator](): AsyncIterator<SDKUserMessage> {
     while (true) {
-      while (this.queue.length) yield { type: 'user', message: { role: 'user', content: this.queue.shift()! }, parent_tool_use_id: null };
+      while (this.queue.length) yield { type: 'user', message: { role: 'user', content: await this.queue.shift()! }, parent_tool_use_id: null };
       if (this.ended) return;
       await new Promise<void>((r) => (this.wake = r));
       this.wake = null;

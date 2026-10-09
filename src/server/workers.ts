@@ -15,6 +15,7 @@ import { imageNote } from './images';
 import type { InputContext } from './koordinator';
 import { type AgentEvent, type AgentRuntime, type AgentSession, type AgentTool, failureReason, type PermissionAnswer, type PermissionRequest } from './runtime';
 import { TO_OBEYA, toObeyaTool } from './to-obeya';
+import { hostName, remote } from './hosts';
 import { runStackCommand } from './stack';
 import { branchName, type Landed, WorkspaceError, type Workspaces } from './workspaces';
 import type { PrState, Shipped } from './board';
@@ -46,6 +47,8 @@ export interface WorkerOptions {
   backgroundGrace?: number;
   /** How long a card waits for the owner, its worker idle, before Obeya stops its workspace's app stack (`stack.stop`). */
   parkGrace?: number;
+  /** How often a session cut off from its machine asks whether that machine answers again; 30 s when left out. */
+  reconnectMs?: number;
   /** How long after a usage limit lifts the worker goes on, so that clocks a little apart do not matter. */
   limitMargin?: number;
   /** The files of the owner's screenshots, by id; unknown ones are left out. */
@@ -116,6 +119,8 @@ interface Live {
   permission?: (answer: PermissionAnswer) => void;
   /** The permission asked last, which the next one waits for: the card holds one question at a time. */
   asking?: Promise<unknown>;
+  /** The message that started the current turn, until the worker shows it has taken it: a session on another machine that is cut off before gets it again. */
+  pending?: { text: string; images: string[] };
 }
 
 /** What a tool call that needs the owner's permission was (`detail.permission`): a call allowed after its session was gone runs once it comes again. */
@@ -146,6 +151,12 @@ export const SPOKEN = 'spoken, so speech recognition may have misheard words';
 const LIMIT_LIFTED = 'The usage limit that stopped your last turn has reset. Go on where you stopped.';
 
 const END_TURN = 'Recorded. End your turn now without further work; the reply arrives as your next message.';
+
+/** How often Obeya asks whether a machine whose connection was lost answers again. */
+const RECONNECT_MS = 30_000;
+
+const hostResumed = (host: string) =>
+  `The connection to ${host}, the machine your workspace is on, dropped, and your session ended with it. Whatever you had running there may have been stopped with it: background commands, servers you started, and a command still running in your turn. Run again what you still need, and go on from there.`;
 
 const RESTARTED =
   'Obeya was restarted. Whatever you had running then was stopped with it: background commands, servers you started, and a command still running in your turn (its result shows exit code 137). Run again what you still need. If you had paused for the restart, go on from there.';
@@ -182,6 +193,8 @@ export class Workers {
   private parking = new Map<string, ReturnType<typeof setTimeout>>();
   /** Cards whose stack is being stopped: a message to their worker waits until it is. */
   private stopping = new Map<string, Promise<void>>();
+  /** Cards whose session on another machine was cut off, waiting for that machine to answer again. */
+  private reconnecting = new Map<string, ReturnType<typeof setTimeout>>();
   /** Tool calls the owner allowed after the session that asked was gone (a restart), by card: each runs once, without asking again. */
   private granted = new Map<string, Set<string>>();
 
@@ -685,6 +698,8 @@ export class Workers {
 
   shutdown() {
     for (const id of [...this.live.keys()]) this.end(id);
+    for (const timer of this.reconnecting.values()) clearTimeout(timer);
+    this.reconnecting.clear();
     for (const timer of this.parking.values()) clearTimeout(timer);
     this.parking.clear();
   }
@@ -700,6 +715,7 @@ export class Workers {
     if (project) live.project = { id: project, decision: this.o.board.decisions(project).at(-1)?.id ?? 0 };
     this.live.set(cardId, live);
     message = this.withRestart(cardId, live, message);
+    live.pending = { text: message, images };
     live.session = this.o.runtime.start(
       {
         cwd: row.workspace,
@@ -747,7 +763,9 @@ export class Workers {
       clearTimeout(live.waiting);
       live.waiting = undefined;
       live.busy = true;
-      live.session.send(this.withRestart(cardId, live, text), images);
+      const message = this.withRestart(cardId, live, text);
+      live.pending = { text: message, images };
+      live.session.send(message, images);
       return;
     }
     const row = this.o.board.row(cardId);
@@ -817,6 +835,7 @@ export class Workers {
       live.failed = undefined;
     }
     if (e.type === 'text' || e.type === 'tool' || e.type === 'error') live.acted = true;
+    if (e.type === 'text' || e.type === 'tool' || e.type === 'idle') live.pending = undefined;
     switch (e.type) {
       case 'session': {
         // a session that replaces another (none resumed, say) keeps the one before for the Arbeitsrückschau
@@ -855,6 +874,9 @@ export class Workers {
         }
         live.failed = e.message;
         this.o.board.log(cardId, 'error', 'obeya', e.message);
+        break;
+      case 'lost':
+        this.lost(cardId, live);
         break;
       case 'idle':
         this.turnEnded(cardId, live, e.background ?? 0);
@@ -1038,6 +1060,58 @@ export class Workers {
   private unpark(cardId: string) {
     clearTimeout(this.parking.get(cardId));
     this.parking.delete(cardId);
+  }
+
+  /**
+   * The connection to the machine the card's workspace is on is gone, and the session with it (as
+   * at a restart of Obeya): once that machine answers again, the session resumes by its id, with
+   * the message it had not yet taken, else told what happened if it was at work (or waited for its
+   * background work). A card that waits for the owner meanwhile needs no session until their next message.
+   */
+  private lost(cardId: string, live: Live) {
+    const there = remote(this.o.board.row(cardId).workspace);
+    if (!there) return;
+    this.live.delete(cardId);
+    clearTimeout(live.waiting);
+    const pending = live.pending;
+    // in a turn, or its ended turn waiting for background work that woke it: that work went with the session
+    const busy = live.busy;
+    const generation = this.generation.get(cardId);
+    this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.hostLost(there.host.name));
+    const again = async () => {
+      this.reconnecting.delete(cardId);
+      const current = () => this.generation.get(cardId) === generation && !this.live.has(cardId);
+      if (!current()) return;
+      if (!(await there.host.reachable())) {
+        if (current()) this.reconnecting.set(cardId, setTimeout(again, this.o.reconnectMs ?? RECONNECT_MS));
+        return;
+      }
+      const row = this.o.board.row(cardId);
+      const card = this.o.board.item(cardId);
+      if (!current() || !card || !row.workspace || !row.session_id) return;
+      const working = busy || card.state === 'working' || card.state === 'inPr' || answering(card) || !!row.landed;
+      if (!pending && !working) return;
+      this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.hostBack(there.host.name));
+      if (pending) this.launch(cardId, pending.text, row.session_id, pending.images);
+      else this.launch(cardId, hostResumed(there.host.name), row.session_id);
+    };
+    this.reconnecting.set(cardId, setTimeout(again, this.o.reconnectMs ?? RECONNECT_MS));
+  }
+
+  /**
+   * A demo directory as the server reads it: the worker's own on this machine; from a worker on
+   * another machine, its copy here (design: Hosts), taken afresh at each handover.
+   */
+  private async demoHere(cardId: string, dir: string): Promise<{ dir: string } | { wrong: string }> {
+    try {
+      const there = remote(this.o.board.row(cardId).workspace);
+      if (!there) return { dir };
+      const copy = there.host.localCopy(dir);
+      await there.host.copyFrom(dir, copy);
+      return { dir: copy };
+    } catch (e) {
+      return { wrong: e instanceof Error ? e.message : String(e) };
+    }
   }
 
   /** Stops the stack in the card's workspace, unless it holds what must stay (`stack.keep`). */
@@ -1252,58 +1326,67 @@ export class Workers {
             .describe(`the exception, for when there is nothing to show (the work turned out to be done already, say): why, in ${language}; the summary then stands alone`),
         },
         run: ({ summary, demo, no_demo }) => {
-          const s = clip(String(summary), 6000);
-          const d = demo as
-            | { kind?: DemoKind; dir: string; chapters?: string[]; question?: string; page?: DemoPage }
-            | undefined;
-          const none = typeof no_demo === 'string' && no_demo.trim() ? clip(no_demo.trim(), 1000) : undefined;
-          const row = this.o.board.row(cardId);
-          if (row.landed) return 'Not handed over: your work is on main already.';
-          if (row.pr) return 'Not handed over: the work is in its pull request, where Obeya follows it.';
-          if (d && none) return 'Not handed over: pass either a demo or no_demo, not both.';
-          // approved work that could not land comes back to be landed, not reviewed: its demo stands
-          const approved = !!row.approved_at;
-          // without a new demo, the one on the card stands, unless the worker says there is nothing to show
-          const kept = !d && !none && !!row.demo;
-          if (!d && !kept && !none && this.o.adapter.demo?.required && !approved)
-            return `Not handed over: this repository requires a demo. Record it with the demo skill (${DEMO_SKILL}), or make an HTML artifact when the result is something to look at, then call ready_for_review again with it. Only if there is nothing to show at all, pass no_demo with the reason.`;
-          let demoJson: string | undefined;
-          if (d) {
-            const kind = d.kind ?? 'video';
-            const report = d.question ? { question: d.question } : {};
-            const page = d.page && d.page.title.trim() && d.page.text.trim() ? { title: clip(d.page.title.trim(), 200), text: clip(d.page.text.trim(), 2000) } : undefined;
-            if (this.shares && !page)
-              return 'Not handed over: a demo here needs its page (title and text) for colleagues, in case the owner shares it. Call ready_for_review again with demo.page.';
-            if (kind === 'html') {
-              const wrong = checkArtifact(d.dir);
-              if (wrong) return `Not handed over: ${wrong}. Fix the artifact, then call ready_for_review again.`;
-              // an artifact that is its index.html alone also goes out as one HTML file
-              const single = artifactFiles(d.dir).length === 1;
-              demoJson = JSON.stringify({ kind, dir: d.dir, chapters: [], ...report, ...(page ? { page } : {}), ...(single ? { single } : {}) });
-            } else {
-              const chapters = readChapters(d.dir, d.chapters ?? []);
-              if (typeof chapters === 'string') return `Not handed over: ${chapters}. Fix the demo, then call ready_for_review again.`;
-              demoJson = JSON.stringify({ kind, dir: d.dir, chapters, ...report, ...(page ? { page } : {}) });
+          type Demo = { kind?: DemoKind; dir: string; chapters?: string[]; question?: string; page?: DemoPage };
+          const given = demo as Demo | undefined;
+          const handOverWork = (d: Demo | undefined): string => {
+            const s = clip(String(summary), 6000);
+            const none = typeof no_demo === 'string' && no_demo.trim() ? clip(no_demo.trim(), 1000) : undefined;
+            const row = this.o.board.row(cardId);
+            if (row.landed) return 'Not handed over: your work is on main already.';
+            if (row.pr) return 'Not handed over: the work is in its pull request, where Obeya follows it.';
+            if (d && none) return 'Not handed over: pass either a demo or no_demo, not both.';
+            // approved work that could not land comes back to be landed, not reviewed: its demo stands
+            const approved = !!row.approved_at;
+            // without a new demo, the one on the card stands, unless the worker says there is nothing to show
+            const kept = !d && !none && !!row.demo;
+            if (!d && !kept && !none && this.o.adapter.demo?.required && !approved)
+              return `Not handed over: this repository requires a demo. Record it with the demo skill (${DEMO_SKILL}), or make an HTML artifact when the result is something to look at, then call ready_for_review again with it. Only if there is nothing to show at all, pass no_demo with the reason.`;
+            let demoJson: string | undefined;
+            if (d) {
+              const kind = d.kind ?? 'video';
+              const report = d.question ? { question: d.question } : {};
+              const page = d.page && d.page.title.trim() && d.page.text.trim() ? { title: clip(d.page.title.trim(), 200), text: clip(d.page.text.trim(), 2000) } : undefined;
+              if (this.shares && !page)
+                return 'Not handed over: a demo here needs its page (title and text) for colleagues, in case the owner shares it. Call ready_for_review again with demo.page.';
+              if (kind === 'html') {
+                const wrong = checkArtifact(d.dir);
+                if (wrong) return `Not handed over: ${wrong}. Fix the artifact, then call ready_for_review again.`;
+                // an artifact that is its index.html alone also goes out as one HTML file
+                const single = artifactFiles(d.dir).length === 1;
+                demoJson = JSON.stringify({ kind, dir: d.dir, chapters: [], ...report, ...(page ? { page } : {}), ...(single ? { single } : {}) });
+              } else {
+                const chapters = readChapters(d.dir, d.chapters ?? []);
+                if (typeof chapters === 'string') return `Not handed over: ${chapters}. Fix the demo, then call ready_for_review again.`;
+                demoJson = JSON.stringify({ kind, dir: d.dir, chapters, ...report, ...(page ? { page } : {}) });
+              }
             }
-          }
-          handOver();
-          const e = this.o.board.log(cardId, 'review', 'worker', none ? `${s}\n\n${this.o.board.t.worker.noDemo(none)}` : s);
-          // the demo report's question goes with the handover it came with, also once a later one keeps the demo
-          if (demoJson) demoJson = JSON.stringify({ ...(JSON.parse(demoJson) as object), handover: e.id });
-          // approved work does not wait for the owner again: it stays with Obeya until its turn has ended
-          this.o.board.work(cardId, {
-            // the worker's last status line is about the work it hands over: it would show again once the card is at work
-            ...(approved ? { status_line: this.o.board.t.worker.landing } : { state: 'waiting', need: d || kept ? 'demo' : 'review', status_line: null }),
-            // approving work that changes nothing makes the card done, which the owner sees before approving
-            detail: JSON.stringify({ summary: s, ...(none ? { noDemo: none } : {}), ...(this.o.workspaces.hasWork(cardId) ? {} : { noChange: true }) }),
-            ...(demoJson ? { demo: demoJson } : {}),
-            // an earlier demo would show on the finished card as if it were this work's
-            ...(none && !approved ? { demo: null } : {}),
-          });
-          const card = this.o.board.item(cardId);
-          if (card?.prototypeOf) this.o.onPrototype?.(card, s, demoJson);
-          if (approved) return 'Recorded. End your turn now; once it has ended, Obeya lands your work on main.';
-          return END_TURN;
+            handOver();
+            const e = this.o.board.log(cardId, 'review', 'worker', none ? `${s}\n\n${this.o.board.t.worker.noDemo(none)}` : s);
+            // the demo report's question goes with the handover it came with, also once a later one keeps the demo
+            if (demoJson) demoJson = JSON.stringify({ ...(JSON.parse(demoJson) as object), handover: e.id });
+            // approved work does not wait for the owner again: it stays with Obeya until its turn has ended
+            this.o.board.work(cardId, {
+              // the worker's last status line is about the work it hands over: it would show again once the card is at work
+              ...(approved ? { status_line: this.o.board.t.worker.landing } : { state: 'waiting', need: d || kept ? 'demo' : 'review', status_line: null }),
+              // approving work that changes nothing makes the card done, which the owner sees before approving
+              detail: JSON.stringify({ summary: s, ...(none ? { noDemo: none } : {}), ...(this.o.workspaces.hasWork(cardId) ? {} : { noChange: true }) }),
+              ...(demoJson ? { demo: demoJson } : {}),
+              // an earlier demo would show on the finished card as if it were this work's
+              ...(none && !approved ? { demo: null } : {}),
+            });
+            const card = this.o.board.item(cardId);
+            if (card?.prototypeOf) this.o.onPrototype?.(card, s, demoJson);
+            if (approved) return 'Recorded. End your turn now; once it has ended, Obeya lands your work on main.';
+            return END_TURN;
+          };
+          // a demo made on another machine is served and shared from its copy here
+          if (given && hostName(this.o.board.row(cardId).workspace))
+            return this.demoHere(cardId, given.dir).then((here) =>
+              'wrong' in here
+                ? `Not handed over: the demo could not be copied to the owner's machine (${here.wrong}). Check the directory, then call ready_for_review again.`
+                : handOverWork({ ...given, dir: here.dir }),
+            );
+          return handOverWork(given);
         },
       },
       {

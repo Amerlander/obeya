@@ -56,6 +56,18 @@ const shape = z.array(
             workspaces: z.array(z.string()).optional(),
             clones: z.number().int().min(0).max(20).optional(),
             share: z.string().optional(),
+            hosts: z
+              .array(
+                z
+                  .object({
+                    name: z.string().regex(/^\s*[\w.-]*\s*$/, 'a host name is letters, digits, dots, dashes and underscores'),
+                    ssh: z.string(),
+                    root: z.string(),
+                    clones: z.number().int().min(0).max(20),
+                  })
+                  .strict(),
+              )
+              .optional(),
           })
           .strict(),
       ),
@@ -70,15 +82,27 @@ function tidy(canvases: z.infer<typeof shape>): CanvasConfig[] {
     ...(c.id?.trim() ? { id: c.id.trim() } : {}),
     repos: c.repos.map((r) => {
       const workspaces = (r.workspaces ?? []).map((w) => w.trim()).filter(Boolean);
+      // a host without a name or a machine is a row still being filled in
+      const hosts = (r.hosts ?? []).map((h) => ({ name: h.name.trim(), ssh: h.ssh.trim(), root: h.root.trim() || '~/obeya', clones: h.clones })).filter((h) => h.name && h.ssh);
       return {
         path: r.path.trim(),
         ...(r.adapter?.trim() ? { adapter: r.adapter.trim() } : {}),
         ...(workspaces.length ? { workspaces } : {}),
         ...(r.clones ? { clones: r.clones } : {}),
         ...(r.share?.trim() ? { share: r.share.trim() } : {}),
+        ...(hosts.length ? { hosts } : {}),
       };
     }),
   }));
+}
+
+/** The `origin` of a repository here, none when it has none (or is no repository, a problem of its own). */
+function remoteOf(path: string): string | undefined {
+  try {
+    return repoInfo(resolve(path)).remote || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Reads a configuration file; throws when it is no list of canvases. */
@@ -193,6 +217,8 @@ export class Config {
     const canvases = tidy(parsed.data);
     const problems: ConfigProblem[] = [];
     if (!canvases.length) problems.push({ code: 'noCanvas', detail: 'Obeya needs at least one canvas' });
+    // a host's name stands for one machine across the configuration: its workspaces are named by it
+    const machines = new Map<string, string>();
     const resolved = expandConfig(canvases).map((c, canvas): ResolvedCanvas | null => {
       c.repos.forEach((r, repo) =>
         (r.workspaces ?? []).forEach((w) => {
@@ -207,6 +233,13 @@ export class Config {
         const wrong = r.share && shareProblem(shareArgv(r.share, resolve(r.path)));
         if (wrong) problems.push({ code: 'shareCommand', canvas, repo, detail: wrong });
       });
+      c.repos.forEach((r, repo) =>
+        (r.hosts ?? []).forEach((h) => {
+          const other = machines.get(h.name);
+          if (other !== undefined && other !== h.ssh) problems.push({ code: 'hostName', canvas, repo, detail: `host ${h.name} connects to ${other} elsewhere, here to ${h.ssh}` });
+          machines.set(h.name, h.ssh);
+        }),
+      );
       try {
         const { id, name, adapters, broken, refs, config } = resolveCanvas(c, this.o.store);
         // what is wrong in a repository's own adapter is fixed there, not here: it keeps nothing from being saved
@@ -214,6 +247,10 @@ export class Config {
           const adapter = adapters[config.repos.indexOf(r)]!;
           const error = broken[config.repos.indexOf(r)];
           if (error) problems.push({ code: 'adapterLoad', canvas, repo, detail: error });
+          if (r.hosts?.length) {
+            const why = adapter.workspaces !== 'clones' ? 'its workers use worktrees of this checkout' : adapter.land === 'main' ? 'its work lands on the main of this checkout' : !remoteOf(r.path) ? 'it has no remote to clone from' : null;
+            if (why) problems.push({ code: 'hostRepo', canvas, repo, detail: `the repository cannot have workers on other machines: ${why}` });
+          }
           for (const detail of adapterRepoProblems(adapter, resolve(r.path), !!r.share))
             problems.push({ code: 'adapterField', canvas, repo, detail });
         });

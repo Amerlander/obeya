@@ -29,6 +29,7 @@ import { Sharing, shareArgv } from './share';
 import { siteMissing, siteName } from './site';
 import { type DueRestart, Workers } from './workers';
 import { type Landed, Workspaces } from './workspaces';
+import { claudeToken, githubToken, hostName, registerHost } from './hosts';
 
 export type { CanvasConfig, RepoConfig };
 
@@ -75,6 +76,9 @@ export interface RepoRuntime {
   workers: Workers;
   projectAgents: ProjectAgents;
 }
+
+/** How long a host that could not be reached at start (or failed to clone) waits before Obeya tries again. */
+const HOST_RETRY_MS = 2 * 60_000;
 
 export class CanvasRuntime {
   readonly board: Board;
@@ -176,6 +180,21 @@ export class CanvasRuntime {
       for (const w of rc.workspaces ?? []) workspaces.register(resolve(w), [info.remote, info.path].filter((x): x is string => !!x));
       // landing on main needs clones that see the local main; otherwise they track the remote
       if (rc.clones) workspaces.ensureClones(adapter.land === 'main' || !info.remote ? info.path : info.remote, rc.clones);
+      // clones on other machines, made in the background: a host that is off now gets them once it answers
+      if (info.remote && adapter.workspaces === 'clones' && adapter.land !== 'main') {
+        const token = githubToken(info.path, info.remote);
+        for (const h of rc.hosts ?? []) {
+          const host = registerHost({ name: h.name, ssh: h.ssh, home: deps.home, claudeToken: () => claudeToken(deps.home) });
+          const ensure = async () => {
+            const wrong = await workspaces.ensureHostClones(host, h.root, info.remote!, h.clones, token);
+            if (!wrong) return board.changed();
+            console.error(`clones on ${h.name}: ${wrong}`);
+            const retry = setTimeout(ensure, HOST_RETRY_MS);
+            this.stops.push(() => clearTimeout(retry));
+          };
+          void ensure();
+        }
+      }
       const projectAgents = new ProjectAgents(board, deps.runtime, () => read.path, preferences);
       const workers = new Workers({
         board,
@@ -207,7 +226,7 @@ export class CanvasRuntime {
       if (deps.watch) {
         this.stops.push(watchPlanDocs(read.path, adapter, () => board.docsChanged()));
         if (adapter.land === 'pr') {
-          const watcher = new PrWatcher(board, workers, deps.forge, (cardId) => board.row(cardId).workspace ?? info.path, adapter.prNoise, ref.id, () => void read.refresh());
+          const watcher = new PrWatcher(board, workers, deps.forge, (cardId) => localDir(board.row(cardId).workspace) ?? info.path, adapter.prNoise, ref.id, () => void read.refresh());
           watcher.start();
           this.prWatchers.push(watcher);
           this.stops.push(() => watcher.stop());
@@ -1019,3 +1038,6 @@ const slug = (s: string) =>
     .toLowerCase()
     .replace(/[^a-z0-9.-]+/g, '-')
     .replace(/^-|-$/g, '');
+
+/** A workspace as a directory on this machine, for a program that runs here (gh on a pull request's URL); none for one on another machine. */
+const localDir = (workspace: string | null) => (workspace && !hostName(workspace) ? workspace : null);

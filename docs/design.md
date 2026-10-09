@@ -919,6 +919,47 @@ the owner's language (`src/core/locale.ts`).
   card, and the worker hears nothing. After a restart, waiting cards are parked the same way. The
   workspace stays the card's; only its processes go. Until 2026-10-09 a waiting card's stack ran
   until someone stopped it by hand.
+- **Hosts** — other machines a repository's workers run on, reached over SSH (`src/server/hosts.ts`).
+  The configuration lists them per repository (`hosts`: name, SSH target, the directory there that
+  holds the clones, how many), and the Konfiguration sheet edits them under the clones; only a
+  repository that works in clones and lands through its remote can have them (`hostRepo`), and a
+  name stands for one machine across the configuration (`hostName`). Obeya clones the repository
+  there itself in the background (an unreachable host is tried again every two minutes) and
+  registers each clone as the workspace `ssh://<host>/<path>`; the pool lists them after the clones
+  here (paths sort `/` before `s`), so a card goes there once those here are all leased (W3 of the
+  plan doc places by busy workers instead). A workspace's name says where it is, so every git call
+  in it (`git`, `gitAsync`, `exists`), the adapter's stack commands and the worker's session run
+  there through `ssh` without the callers knowing: `ssh <target> sh -c '…'` with the installers'
+  directories on its `PATH` (the host's own `~/.zshenv` adds the rest), one shared connection
+  where the platform has `ControlMaster` (not Windows), `BatchMode` so nothing prompts, and
+  keep-alives that notice a dropped link within 45 s. Nothing secret is stored there: the
+  repository's GitHub login (what `git credential fill` gives in its checkout here, so the account
+  its own configuration picks) and the Claude login (`claude-token` in Obeya's home, from `claude
+  setup-token`) travel as the first line of stdin of each command and session, and the clones'
+  credential helper reads `GH_TOKEN` (with an empty helper before it, so macOS's keychain does not
+  keep it). The clones are marked trusted in the host's `~/.claude.json`, since nobody answers the
+  folder dialog there and the repository's own permission rules would not apply. The session is
+  the Agent SDK's `spawnClaudeCodeProcess`: Claude Code started through `ssh` in the workspace,
+  with Obeya's tools and hooks over its stdin and stdout as here (checked on the owner's second
+  MacBook, macOS x86_64, 2026-10-09). Before a host's first session in a run of Obeya, the plugin
+  and the `playwright-core` its demo skill imports go to `~/.obeya/remote` there (again only when
+  they changed), with the owner's demo settings (the voice reference as a path here, without a
+  key file), and the session gets that directory as `OBEYA_HOME`. `OBEYA_URL` is a port there
+  forwarded to Obeya here (`-R`, one per session), and a narration clip comes back in the reply
+  (`inline`, base64) instead of a file on Obeya's machine: the owner's own voice, which only this
+  Mac can run, narrates demos rendered there. Files cross at fixed points: the owner's screenshots
+  are copied to `~/.obeya/remote/images` there with the message that carries them, and the message
+  names them by their paths there; a demo named in a handover is copied here
+  (`<home>/hosts/<host>/<path>`), afresh at each handover, and served and shared from that copy;
+  the Arbeitsrückschau reads a session's transcript from there. A dropped connection (ssh's exit
+  code 255) ends the session as a restart does (`lost`): the card says so, Obeya asks every 30 s
+  whether the host answers, then resumes the session by its id with the message it had not yet
+  taken, or with word of the drop if it was at work; a card waiting for the owner needs no session
+  until their next message. The session that resumes ends the one the drop may have left running
+  there first (by the pid it wrote). gh on a pull request runs here, on its URL. What a host needs
+  installed: git, Claude Code and what the repository's own work needs (for OKE: .NET, Bun, Node,
+  uv, Docker, Chrome, ffmpeg); Homebrew no longer serves Intel Macs, so those went into the user's
+  home there by their own installers.
 - **Landing** — per adapter. `pr`: approval leaves the branch for the PR loop. `main`
   (Obeya): approval rebases the branch onto `main` and fast-forwards the Obeya checkout; the card
   is `live`. Commits that conflict one by one but not as a whole land squashed into one commit.
@@ -1701,7 +1742,9 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   withdrawal Obeya reads the live manifest (with the site's `headers`, their `${KEY}` values from
   the env file, since a site may sit behind a login), downloads the pages missing here or newer
   there (checked against size and hash; the first share of a new machine downloads the whole
-  site, with a line in the card's log every 25 pages), removes the pages withdrawn there, keeps
+  site, with a line in the card's log every 25 pages; a redirect within the site is followed,
+  since Cloudflare Pages answers `…/index.html` with a 308 to `…/` and the first share of a second
+  machine failed on it until 2026-10-09, while a redirect elsewhere is a login), removes the pages withdrawn there, keeps
   the pages the live site lacks (its own, not deployed yet or lost to a deploy in between), then
   writes its page, the overview and the manifest, and deploys. Each manifest names its
   deployment. Right before the deploy Obeya reads the manifest once more: another machine's

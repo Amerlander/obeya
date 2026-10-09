@@ -3,7 +3,7 @@
 // read-only.
 
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigView, type DemoSettings, type DemoSettingsView, type DemoVoiceCheck, type Language, type LanguageView, type NarrationLanguage, type RepoConfig, type SetupCheck, type VoiceKind, type VoiceSetupView } from '../core/types';
+import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigView, type DemoSettings, type DemoSettingsView, type DemoVoiceCheck, type Language, type HostConfig, type LanguageView, type NarrationLanguage, type RepoConfig, type SetupCheck, type VoiceKind, type VoiceSetupView } from '../core/types';
 import { LANGUAGES } from '../core/locale';
 import { pushKeyFromEvent, type PushKeyView } from '../core/push-key';
 import { api, ApiError, reload } from './api';
@@ -839,6 +839,7 @@ function RepoRow({ repo, home, resolved, canvasId, adapters, problems, where, as
               }}
             />
           </label>
+          <Hosts hosts={repo.hosts ?? []} onChange={(hosts) => onChange(without('hosts', hosts.length ? hosts : undefined))} />
         </>
       )}
       <label title={t.config.shareHint}>
@@ -860,8 +861,39 @@ function RepoRow({ repo, home, resolved, canvasId, adapters, problems, where, as
   );
 }
 
+/** The machines over SSH a repository's workers also run on, one row each. */
+function Hosts({ hosts, onChange }: { hosts: HostConfig[]; onChange: (hosts: HostConfig[]) => void }) {
+  const set = (i: number, h: HostConfig | null) => onChange(h ? hosts.map((x, k) => (k === i ? h : x)) : hosts.filter((_, k) => k !== i));
+  return (
+    <div className="c-hosts">
+      <span className="hint" title={t.config.hostsHint}>
+        {t.config.hosts}
+      </span>
+      {hosts.map((h, i) => (
+        <div key={i} className="c-host">
+          <div className="c-row">
+            <input value={h.name} placeholder={t.config.hostName} spellCheck={false} onChange={(e) => set(i, { ...h, name: e.target.value })} />
+            <label className="c-row">
+              <span className="hint">{t.config.hostClones}</span>
+              <input type="number" min={0} max={20} value={h.clones} onChange={(e) => set(i, { ...h, clones: Number(e.target.value) || 0 })} />
+            </label>
+            <button className="c-del" title={t.config.removeHost} onClick={() => set(i, null)}>
+              ✕
+            </button>
+          </div>
+          <input className="c-path" value={h.ssh} placeholder={t.config.hostSsh} spellCheck={false} onChange={(e) => set(i, { ...h, ssh: e.target.value })} />
+          <input className="c-path" value={h.root} placeholder={t.config.hostRoot} spellCheck={false} onChange={(e) => set(i, { ...h, root: e.target.value })} />
+        </div>
+      ))}
+      <button className="btn small" onClick={() => onChange([...hosts, { name: '', ssh: '', root: '', clones: 2 }])}>
+        {t.config.addHost}
+      </button>
+    </div>
+  );
+}
+
 // problems whose detail says what to fix, in the repository's adapter rather than here
-const DETAILED: ConfigProblem['code'][] = ['adapterField', 'adapterLoad', 'unknownAdapter'];
+const DETAILED: ConfigProblem['code'][] = ['adapterField', 'adapterLoad', 'unknownAdapter', 'hostName'];
 
 /**
  * A problem of the configuration: what is wrong, the technical detail folded away where it says

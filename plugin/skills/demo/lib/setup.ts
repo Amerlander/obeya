@@ -14,7 +14,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isMain, lib } from './here.ts';
 import { type DemoSettings, readDemoSettings, withVoice } from './settings.ts';
-import { hfModelPresent, installState, onMlx } from './voices.ts';
+import { hfModelPresent, installState, onMlx, voiceSpec } from './voices.ts';
 
 /** The Obeya checkout the skill lives in (or the app's resources): Playwright comes from its `node_modules`. */
 const root = () => lib('..', '..', '..', '..');
@@ -217,7 +217,11 @@ export async function checkSetup(s: DemoSettings, o: SetupOptions = {}): Promise
   items.push(uv ? { id: 'uv', state: 'ok', found: uv } : missing('uv'));
 
   const voice = installState(s, o.home);
-  items.push(voice.installed ? { id: 'voice', state: 'ok', found: s.voice } : missing('voice', { found: `${s.voice}: ${voice.missing.join(', ')}`, mb: voice.mb }));
+  // a worker on another machine than Obeya: Obeya holds a voice that stays loaded on its own machine (OBEYA_URL)
+  const spec = voiceSpec(s, o.home);
+  const held = env.OBEYA_HOLDS_VOICE === '1' && !!env.OBEYA_URL && spec.kind === 'command' && !!spec.host;
+  if (held) items.push({ id: 'voice', state: 'ok', found: `${s.voice} (held by Obeya)` });
+  else items.push(voice.installed ? { id: 'voice', state: 'ok', found: s.voice } : missing('voice', { found: `${s.voice}: ${voice.missing.join(', ')}`, mb: voice.mb }));
 
   if (s.listenBack === false) items.push({ id: 'whisper', state: 'off' });
   else {

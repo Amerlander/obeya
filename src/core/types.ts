@@ -727,6 +727,24 @@ export interface RepoConfig {
    * Without one, and without the adapter's, "Teilen" exports the demo as a file.
    */
   share?: string;
+  /**
+   * Other machines its workers run on, reached over SSH (design: Hosts), after the clones here are
+   * all leased. Only for a repository whose workers use clones and whose work goes out through its
+   * remote.
+   */
+  hosts?: HostConfig[];
+}
+
+/** A machine reached over SSH that a repository's workers run on, in clones of their own there. */
+export interface HostConfig {
+  /** What the owner calls it; workspaces there are named by it. */
+  name: string;
+  /** What `ssh` connects to: `user@machine`, or a name from `~/.ssh/config`. */
+  ssh: string;
+  /** The directory there that holds the clones (`~/…` in that machine's home). */
+  root: string;
+  /** How many clones Obeya keeps there (`<root>/1`, `<root>/2`, …). */
+  clones: number;
 }
 
 /** A canvas in Obeya's configuration. */
@@ -785,6 +803,10 @@ export type ConfigProblemCode =
   | 'shareCommand'
   /** A field of the repository's own adapter that is unknown, of the wrong type, or names a program that is not there; it does not count. */
   | 'adapterField'
+  /** A host that cannot work for the repository: its workers use worktrees, or its work does not go out through a remote. */
+  | 'hostRepo'
+  /** Two hosts of one name that connect to different machines. */
+  | 'hostName'
   /** Malformed: a bug in whoever wrote it. */
   | 'invalid';
 

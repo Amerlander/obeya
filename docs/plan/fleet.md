@@ -92,7 +92,7 @@ nearly nothing with a second machine, $190–290 a month on-demand at 36 agents.
   Parking); the worker hears that its stack was stopped. The work repository's adapter names its stop
   script. Done when a card of the work repository that hands over has no running stack a few minutes later
   and gets it back without manual steps when the owner answers.
-- [ ] **W2:** Workers on SSH hosts. Hosts in the configuration and the sheet, spawning over SSH,
+- [x] **W2:** Workers on SSH hosts. Hosts in the configuration and the sheet, spawning over SSH,
   git and file crossings over SSH, resuming after a dropped connection (see Hosts). Check first
   that Obeya's tools and hooks work through `spawnClaudeCodeProcess` over SSH. Done when a card of
   the work repository runs on the owner's second MacBook (macOS x86_64) end to end: work, checks, demo,

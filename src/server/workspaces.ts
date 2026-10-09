@@ -8,6 +8,7 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Store } from './db';
+import { HostError, onHost, remote, sh as shWord, type SshHost, TOKEN_HELPER, tokenHelperArgs } from './hosts';
 
 export class WorkspaceError extends Error {
   constructor(
@@ -45,10 +46,32 @@ function gitBinary(): string {
   return path && existsSync(path) ? path : 'git';
 }
 
+/** The host of a workspace on another machine, as `remote` finds it; a host gone from the configuration is a workspace error. */
+function remoteWorkspace(path: string) {
+  try {
+    return remote(path);
+  } catch (e) {
+    throw new WorkspaceError(e instanceof Error ? e.message : String(e));
+  }
+}
+
+/** `git` in `cwd`, which may be a workspace on another machine (`ssh://<host>/…`, see `hosts.ts`). */
 export function git(cwd: string, ...args: string[]): string {
+  const there = remoteWorkspace(cwd);
+  if (there) {
+    const r = there.host.runSync(['git', ...tokenHelperArgs(), '-C', there.path, ...args], there.path);
+    if (r.code !== 0) throw new WorkspaceError(`git ${args.join(' ')} in ${cwd}: ${(r.stderr || r.stdout).trim() || `exit code ${r.code}`}`);
+    return r.stdout.trim();
+  }
   const r = Bun.spawnSync([GIT, '-C', cwd, ...args], { stderr: 'pipe' });
   if (r.exitCode !== 0) throw new WorkspaceError(`git ${args.join(' ')} in ${cwd}: ${r.stderr.toString().trim()}`);
   return r.stdout.toString().trim();
+}
+
+/** Whether a workspace's directory exists, here or on its host (where an unreachable host counts as no). */
+export function exists(path: string): boolean {
+  const there = remoteWorkspace(path);
+  return there ? there.host.exists(there.path) : existsSync(path);
 }
 
 /**
@@ -56,6 +79,12 @@ export function git(cwd: string, ...args: string[]): string {
  * pushes, over the network seconds in which the server would answer nothing else.
  */
 export async function gitAsync(cwd: string, ...args: string[]): Promise<string> {
+  const there = remoteWorkspace(cwd);
+  if (there) {
+    const r = await there.host.run(['git', ...tokenHelperArgs(), '-C', there.path, ...args], { cwd: there.path });
+    if (r.code !== 0) throw new WorkspaceError(`git ${args.join(' ')} in ${cwd}: ${(r.stderr || r.stdout).trim() || `exit code ${r.code}`}`);
+    return r.stdout.trim();
+  }
   const p = Bun.spawn([GIT, '-C', cwd, ...args], { stdout: 'pipe', stderr: 'pipe' });
   const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
   if (code !== 0) throw new WorkspaceError(`git ${args.join(' ')} in ${cwd}: ${err.trim()}`);
@@ -175,6 +204,35 @@ export class Workspaces {
     }
   }
 
+  /**
+   * Makes sure `n` clones of `source` (the repository's remote) exist under `root` on `host` and
+   * are registered (`ssh://<host>/<root>/<i>`), each with git's login through `GH_TOKEN`. Runs in
+   * the background, so that an unreachable host does not hold up the start; a clone is leased only
+   * once it is registered. `token` is the repository's GitHub login. Settles with what went wrong, if anything.
+   */
+  async ensureHostClones(host: SshHost, root: string, source: string, n: number, token: () => string | undefined): Promise<string | null> {
+    try {
+      const dir = await host.resolveDir(root);
+      host.tokenFor(dir, token);
+      for (let i = 1; i <= n; i++) {
+        const path = `${dir}/${i}`;
+        if ((await host.run(['test', '-d', `${path}/.git`])).code !== 0) {
+          const r = await host.run(['git', ...tokenHelperArgs(), 'clone', '--quiet', source, path], { cwd: dir });
+          if (r.code !== 0) throw new HostError(`cloning ${source} on ${host.name}: ${(r.stderr || r.stdout).trim()}`);
+        }
+        // the worker's own push and gh go through the same login
+        const helper = `git config --unset-all credential.helper; ${TOKEN_HELPER.map((h) => `git config --add credential.helper ${shWord(h)}`).join(' && ')}`;
+        const c = await host.run(helper, { cwd: path });
+        if (c.code !== 0) throw new HostError(`${host.name}: ${c.stderr.trim()}`);
+        await host.trust(path);
+        this.store.addWorkspace(this.canvasId, onHost(host.name, path), this.o.repo ?? null);
+      }
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : String(e);
+    }
+  }
+
   list() {
     return this.store.workspaces(this.canvasId, this.o.repo ?? null);
   }
@@ -197,7 +255,7 @@ export class Workspaces {
    */
   leasable(): boolean {
     if (this.o.mode === 'worktrees') return true;
-    const free = this.list().filter((w) => !w.card_id && existsSync(w.path));
+    const free = this.list().filter((w) => !w.card_id && exists(w.path));
     if (!free.length) return false;
     const key = free.map((w) => w.path).join('\n');
     if (this.dirty?.key === key && Date.now() - this.dirty.at < RECHECK_MS) return false;
@@ -215,7 +273,7 @@ export class Workspaces {
   /** Whether the card's workspace holds work: uncommitted changes or commits beyond the base. */
   hasWork(cardId: string): boolean {
     const ws = this.leasedBy(cardId);
-    if (!ws || !existsSync(ws)) return false;
+    if (!ws || !exists(ws)) return false;
     try {
       if (git(ws, 'status', '--porcelain')) return true;
       const base = this.o.mode === 'worktrees' ? defaultBranch(this.o.repoPath) : `origin/${defaultBranch(ws)}`;
@@ -355,7 +413,7 @@ export class Workspaces {
       if (git(this.o.repoPath, 'branch', '--list', branch)) git(this.o.repoPath, 'branch', '--quiet', '-D', branch);
       return;
     }
-    if (existsSync(ws)) {
+    if (exists(ws)) {
       git(ws, 'reset', '--quiet', '--hard');
       git(ws, 'clean', '--quiet', '-fd');
       git(ws, 'checkout', '--quiet', '--detach', `origin/${defaultBranch(ws)}`);
@@ -391,7 +449,7 @@ export class Workspaces {
    */
   changes(cardId: string): Change[] {
     const ws = this.leasedBy(cardId);
-    if (!ws || !existsSync(ws)) return [];
+    if (!ws || !exists(ws)) return [];
     try {
       const base = this.o.mode === 'worktrees' ? defaultBranch(this.o.repoPath) : `origin/${defaultBranch(ws)}`;
       const diff = git(ws, 'diff', '-U0', '--no-color', '--no-ext-diff', git(ws, 'merge-base', 'HEAD', base));
@@ -405,7 +463,7 @@ export class Workspaces {
   private leaseClone(cardId: string, branch: string): string {
     const free = this.list().filter((w) => !w.card_id);
     if (!free.length) throw new WorkspaceError('no workspace registered or all are leased', 'noWorkspace');
-    const clean = free.find((w) => existsSync(w.path) && git(w.path, 'status', '--porcelain') === '');
+    const clean = free.find((w) => exists(w.path) && git(w.path, 'status', '--porcelain') === '');
     if (!clean) throw new WorkspaceError('every free workspace has uncommitted changes', 'dirtyWorkspaces');
     const base = defaultBranch(clean.path);
     git(clean.path, 'fetch', '--quiet', 'origin');

@@ -10,6 +10,7 @@ import type { Board } from './board';
 import type { FrictionNote } from './db';
 import { readSession } from './koordinator';
 import type { AgentRuntime, AgentTool } from './runtime';
+import { remote } from './hosts';
 import { type Excerpt, excerptOf, excerptText, findTranscript } from './transcript';
 import { type Language, LANGUAGE_NAMES } from '../core/locale';
 import { MESSAGES } from '../core/messages';
@@ -84,7 +85,16 @@ export class WorkRetro {
   /** The excerpt of the card's runs, made into 0 to 3 friction notes by a short session; none without an excerpt. */
   private async notes(card: Ended): Promise<void> {
     const find = this.o.transcript ?? ((id, cwd) => findTranscript(id, cwd));
-    const runs = card.sessions.map((s) => excerptOf(find(s, card.workspace))).filter((e): e is Excerpt => !!e);
+    // a worker on another machine left its transcripts there
+    let there: ReturnType<typeof remote> = null;
+    try {
+      there = remote(card.workspace);
+    } catch {
+      // a host no longer in the configuration: its runs are not read
+      return;
+    }
+    const files = await Promise.all(card.sessions.map((s) => (there ? there.host.transcript(s, there.path) : find(s, card.workspace))));
+    const runs = files.map(excerptOf).filter((e): e is Excerpt => !!e);
     const text = excerptText(runs);
     if (!text) return;
     const notes: FrictionNote[] = [];

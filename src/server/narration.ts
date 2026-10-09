@@ -9,7 +9,8 @@
 // line protocol of `qwen3.py`, unchanged.
 
 import type { Subprocess } from 'bun';
-import { isAbsolute } from 'node:path';
+import { tmpdir } from 'node:os';
+import { isAbsolute, join } from 'node:path';
 import type { HeldVoice } from '../../plugin/skills/demo/lib/voices.ts';
 import { OWN_GROUP } from './voice.ts';
 
@@ -19,9 +20,14 @@ export interface ClipRequest {
   /** The WAV the voice writes. */
   out: string;
   language: 'de' | 'en';
+  /**
+   * The render runs on another machine (a worker on an SSH host, design: Hosts): the WAV comes
+   * back in the reply (`wav`, base64) instead of being written to `out`, which is a path there.
+   */
+  inline?: boolean;
 }
 
-export type ClipReply = { ok: true; seconds: number } | { error: string };
+export type ClipReply = { ok: true; seconds: number; wav?: string } | { error: string };
 
 /** How long the voice stays loaded after the last clip: the next render within it skips loading the model. */
 export const NARRATION_IDLE_MS = 5 * 60_000;
@@ -180,20 +186,25 @@ export class NarrationHost {
 
 /**
  * A clip request as it comes over HTTP, checked: the voice writes a WAV where it says, so only an
- * absolute `.wav` path, and only a reference or a plain speaker name for the command line.
+ * absolute `.wav` path, and only a reference or a plain speaker name for the command line. An
+ * `inline` request gets a file of its own in the temporary directory, whose WAV goes back in the reply.
  */
 export function parseClipRequest(input: unknown): ClipRequest | string {
   if (!input || typeof input !== 'object') return 'a JSON object is expected';
-  const { voice, text, out, language } = input as Record<string, unknown>;
+  const { voice, text, language, inline } = input as Record<string, unknown>;
+  let { out } = input as Record<string, unknown>;
   if (typeof text !== 'string' || !text.trim()) return 'text is missing';
+  if (inline === true) out = join(tmpdir(), `obeya-clip-${crypto.randomUUID()}.wav`);
+  else if (inline !== undefined) return 'inline must be true when given';
   if (typeof out !== 'string' || !isAbsolute(out) || !out.toLowerCase().endsWith('.wav')) return 'out must be an absolute path to a .wav';
+  const back = inline === true ? { inline: true } : {};
   if (language !== 'de' && language !== 'en') return 'language must be de or en';
   if (!voice || typeof voice !== 'object') return 'voice is missing';
   const { reference, speaker } = voice as Record<string, unknown>;
   if (reference !== undefined) {
     if (typeof reference !== 'string' || !isAbsolute(reference) || !reference.toLowerCase().endsWith('.wav')) return 'voice.reference must be an absolute path to a .wav';
-    return { voice: { reference }, text, out, language };
+    return { voice: { reference }, text, out, language, ...back };
   }
   if (typeof speaker !== 'string' || !/^[a-z][a-z0-9_]*$/i.test(speaker)) return 'voice needs a reference or a speaker';
-  return { voice: { speaker }, text, out, language };
+  return { voice: { speaker }, text, out, language, ...back };
 }

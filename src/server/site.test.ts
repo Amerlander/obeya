@@ -42,8 +42,9 @@ if (existsSync(out + '/race')) {
 
 // the host: serves what was deployed last; `down` answers 503, `token` sends a request without it to a login;
 // `onManifest` runs before a read of the manifest is answered; `fallback` answers a missing file with the
-// root's index.html (as Cloudflare Pages does for a site without a 404.html), `garbled` the manifest with it
-const host: { down?: boolean; token?: string; onManifest?: () => void; fallback?: boolean; garbled?: boolean } = {};
+// root's index.html (as Cloudflare Pages does for a site without a 404.html), `garbled` the manifest with it;
+// `pretty`: as Cloudflare Pages, `…/index.html` redirects (308) to `…/`
+const host: { down?: boolean; token?: string; onManifest?: () => void; fallback?: boolean; garbled?: boolean; pretty?: boolean } = {};
 const server = Bun.serve({
   port: 0,
   fetch(req) {
@@ -51,6 +52,7 @@ const server = Bun.serve({
     if (host.token && req.headers.get('X-Token') !== host.token) return Response.redirect('https://login.example.dev/', 302);
     let path = decodeURIComponent(new URL(req.url).pathname);
     if (path === `/${MANIFEST}`) host.onManifest?.();
+    if (host.pretty && path.endsWith('/index.html')) return new Response(null, { status: 308, headers: { location: path.slice(0, -'index.html'.length) } });
     if (path.endsWith('/')) path += 'index.html';
     const file = join(dir, 'deployed', path);
     const root = join(dir, 'deployed', 'index.html');
@@ -100,6 +102,7 @@ afterEach(() => {
   delete host.onManifest;
   delete host.fallback;
   delete host.garbled;
+  delete host.pretty;
 });
 
 const page = (slug: string, extra: Partial<SharePage> = {}): SharePage => ({
@@ -324,6 +327,8 @@ describe('several machines publishing to one site', () => {
   };
 
   test('each pulls the pages the other published before it deploys, so neither takes the other’s offline', async () => {
+    // a site that serves a page's index.html only under its directory, as Cloudflare Pages does
+    host.pretty = true;
     await target.publish(page('a-111111'));
     const said: string[] = [];
     expect(await b.publish(page('b-222222'), (l) => said.push(l))).toMatchObject({ url: `${URL_}b-222222/` });

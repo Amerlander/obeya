@@ -1,0 +1,480 @@
+// Other machines that workers run on, reached over SSH (design: Hosts). A workspace on one is
+// named `ssh://<host>/<path there>`: git, the adapter's stack commands and the worker's Claude Code
+// run there through `ssh`, and files cross at fixed points (the plugin before a session, the owner's
+// screenshots with a message, a demo directory at a handover). Nothing secret is stored there:
+// the Claude login and the repository's GitHub token travel on stdin at each start.
+
+import { type ChildProcess, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { EventEmitter } from 'node:events';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { basename, dirname, join, relative } from 'node:path';
+import { PassThrough } from 'node:stream';
+import type { SpawnedProcess, SpawnOptions } from '@anthropic-ai/claude-agent-sdk';
+import { resource } from './resources';
+
+/** Where a workspace on another machine says which machine it is on. */
+const PREFIX = 'ssh://';
+
+/** The workspace `path` on the host `name`, as Obeya names it. */
+export const onHost = (name: string, path: string) => `${PREFIX}${name}${path.startsWith('/') ? '' : '/'}${path}`;
+
+/** The host a workspace is on and its path there; null for a workspace on this machine. */
+export function remote(path: string | null | undefined): { host: SshHost; path: string } | null {
+  if (!path?.startsWith(PREFIX)) return null;
+  const rest = path.slice(PREFIX.length);
+  const slash = rest.indexOf('/');
+  const name = slash < 0 ? rest : rest.slice(0, slash);
+  const host = hosts.get(name);
+  if (!host) throw new HostError(`no host ${name} in the configuration`);
+  return { host, path: slash < 0 ? '/' : rest.slice(slash) };
+}
+
+/** The name of the host a workspace is on, null for this machine; also for a host no longer configured. */
+export function hostName(path: string | null | undefined): string | null {
+  if (!path?.startsWith(PREFIX)) return null;
+  return path.slice(PREFIX.length).split('/')[0]!;
+}
+
+export class HostError extends Error {}
+
+/** A host's exit code for "the connection failed" (ssh's own), whatever the command there did. */
+export const LOST = 255;
+
+/** Directories that come first on the host's PATH: where the official installers put Claude Code and Bun. */
+const PATH_PREFIX = '$HOME/.local/bin:$HOME/.bun/bin';
+
+/** Obeya's directory on a host, in its home: the plugin, the demo settings, the owner's screenshots, voices. */
+export const HOST_DIR = '.obeya/remote';
+
+/** A string as one word for a POSIX shell. */
+export const sh = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+
+/** Environment for a command there, as one line of `export`s; values with line breaks are left out. */
+function exports(env: Record<string, string | undefined>): string {
+  return Object.entries(env)
+    .filter((e): e is [string, string] => typeof e[1] === 'string' && !/[\r\n]/.test(e[1]) && /^[A-Za-z_]\w*$/.test(e[0]))
+    .map(([k, v]) => `export ${k}=${sh(v)};`)
+    .join(' ');
+}
+
+export interface HostOptions {
+  name: string;
+  /** What `ssh` connects to: `user@machine`, or a name from `~/.ssh/config`. */
+  ssh: string;
+  /** Obeya's home on this machine: copies of the host's demo directories go there. */
+  home: string;
+  /** The Claude login the host's sessions run on (`claude setup-token`); without it they run on the host's own. */
+  claudeToken?: () => string | undefined;
+  /** The program that is `ssh` (tests run the commands on this machine with a stand-in). */
+  program?: string;
+}
+
+/** A machine reached over SSH. */
+export class SshHost {
+  private prepared?: Promise<string>;
+  /** Tokens by the workspace root they are for (a repository's clones there): its GitHub login. */
+  private tokens: { root: string; token: () => string | undefined }[] = [];
+
+  constructor(readonly o: HostOptions) {}
+
+  get name() {
+    return this.o.name;
+  }
+
+  /** `ssh`'s options: no prompts, a connection that fails fast and notices a drop, one connection shared where the platform can. */
+  private options(): string[] {
+    const shared = process.platform === 'win32' ? [] : ['-o', 'ControlMaster=auto', '-o', `ControlPath=/tmp/obeya-ssh-%C`, '-o', 'ControlPersist=300'];
+    return ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=3', ...shared, '-T'];
+  }
+
+  /** The workspaces under `root` (a repository's clones) use this GitHub login for git and gh. */
+  tokenFor(root: string, token: () => string | undefined) {
+    this.tokens.push({ root, token });
+  }
+
+  /** The GitHub login for a path there, by the root it is under. */
+  private token(path: string): string | undefined {
+    return this.tokens.find((t) => path === t.root || path.startsWith(`${t.root}/`))?.token();
+  }
+
+  /**
+   * The argv of `ssh` running `command` (words, or a shell line) there in `cwd`: through `sh`, with
+   * the installers' directories on its PATH; with `env`, read as the first line of stdin, so that
+   * no secret shows in a process list.
+   */
+  argv(command: string[] | string, o: { cwd?: string; env?: boolean; forward?: string } = {}): string[] {
+    const line = typeof command === 'string' ? command : `exec ${command.map(sh).join(' ')}`;
+    const script = [
+      o.env ? 'IFS= read -r obeya_env; eval "$obeya_env"; unset obeya_env;' : '',
+      `PATH="${PATH_PREFIX}:$PATH"; export PATH;`,
+      o.cwd ? `cd ${sh(o.cwd)} && { ${line}
+}` : line,
+    ]
+      .filter(Boolean)
+      .join(' ');
+    return [this.o.program ?? 'ssh', ...this.options(), ...(o.forward ? ['-R', o.forward] : []), this.o.ssh, `sh -c ${sh(script)}`];
+  }
+
+  /** The environment line for a command in `cwd`: the GitHub login of the repository it is in. */
+  private envLine(cwd: string | undefined, extra: Record<string, string | undefined> = {}): string {
+    const token = cwd ? this.token(cwd) : undefined;
+    return `${exports({ ...(token ? { GH_TOKEN: token } : {}), ...extra })}\n`;
+  }
+
+  /** Runs a program there and waits for it (git, mostly: short calls on a shared connection). */
+  runSync(argv: string[], cwd?: string): { code: number; stdout: string; stderr: string } {
+    const r = Bun.spawnSync(this.argv(argv, { cwd, env: true }), { stdin: Buffer.from(this.envLine(cwd)), stdout: 'pipe', stderr: 'pipe' });
+    return { code: r.exitCode ?? LOST, stdout: r.stdout.toString(), stderr: r.stderr.toString() };
+  }
+
+  /** Runs a program (or a shell line) there without blocking the server. */
+  async run(command: string[] | string, o: { cwd?: string; timeout?: number } = {}): Promise<{ code: number; stdout: string; stderr: string }> {
+    const p = Bun.spawn(this.argv(command, { cwd: o.cwd, env: true }), {
+      stdin: new Blob([this.envLine(o.cwd)]),
+      stdout: 'pipe',
+      stderr: 'pipe',
+      ...(o.timeout ? { timeout: o.timeout } : {}),
+    });
+    const [stdout, stderr, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
+    return { code: p.signalCode ? LOST : code, stdout, stderr };
+  }
+
+  /** Whether `path` exists there. */
+  exists(path: string): boolean {
+    return this.runSync(['test', '-e', path]).code === 0;
+  }
+
+  /** Whether the host answers now. */
+  async reachable(): Promise<boolean> {
+    return (await this.run(['true'], { timeout: 20_000 })).code === 0;
+  }
+
+  /** The absolute path of a directory there (`~/…` as the host's home has it), created if missing. */
+  async resolveDir(dir: string): Promise<string> {
+    const at = dir === '~' ? '"$HOME"' : dir.startsWith('~/') ? `"$HOME"/${sh(dir.slice(2))}` : sh(dir);
+    const r = await this.run(`mkdir -p ${at} && cd ${at} && pwd -P`);
+    if (r.code !== 0) throw new HostError(`${this.name}: ${dir}: ${(r.stderr || r.stdout).trim() || `exit code ${r.code}`}`);
+    return r.stdout.trim();
+  }
+
+  /** Copies the directory `from` here into `to` there, replacing what was there. */
+  async copyTo(from: string, to: string): Promise<void> {
+    const tar = Bun.spawn(['tar', '-C', from, '-cf', '-', '.'], { stdout: 'pipe', stderr: 'pipe' });
+    const p = Bun.spawn(this.argv(`rm -rf ${sh(to)} && mkdir -p ${sh(to)} && tar -xf - -C ${sh(to)}`), { stdin: tar.stdout, stdout: 'pipe', stderr: 'pipe' });
+    const [err, code] = await Promise.all([new Response(p.stderr).text(), p.exited, tar.exited]);
+    if (code !== 0) throw new HostError(`copying ${from} to ${this.name}:${to}: ${err.trim() || `exit code ${code}`}`);
+  }
+
+  /** Copies the directory `from` there into `to` here, replacing what was here. */
+  async copyFrom(from: string, to: string): Promise<void> {
+    rmSync(to, { recursive: true, force: true });
+    mkdirSync(to, { recursive: true });
+    const p = Bun.spawn(this.argv(['tar', '-C', from, '-cf', '-', '.']), { stdout: 'pipe', stderr: 'pipe' });
+    const tar = Bun.spawn(['tar', '-xf', '-', '-C', to], { stdin: p.stdout, stdout: 'ignore', stderr: 'pipe' });
+    const [err, code, untar] = await Promise.all([new Response(p.stderr).text(), p.exited, tar.exited]);
+    if (code !== 0 || untar !== 0) throw new HostError(`copying ${this.name}:${from}: ${err.trim() || `exit code ${code || untar}`}`);
+  }
+
+  /** Copies files from here into a directory there, keeping their names. */
+  async copyFiles(files: string[], to: string): Promise<void> {
+    const tar = Bun.spawn(['tar', '-cf', '-', ...files.flatMap((f) => ['-C', dirname(f), basename(f)])], { stdout: 'pipe', stderr: 'pipe' });
+    const p = Bun.spawn(this.argv(`mkdir -p ${sh(to)} && tar -xf - -C ${sh(to)}`), { stdin: tar.stdout, stdout: 'pipe', stderr: 'pipe' });
+    const [err, code] = await Promise.all([new Response(p.stderr).text(), p.exited, tar.exited]);
+    if (code !== 0) throw new HostError(`copying files to ${this.name}:${to}: ${err.trim() || `exit code ${code}`}`);
+  }
+
+  /**
+   * Marks a clone there as trusted by Claude Code (its folder dialog, `hasTrustDialogAccepted` in
+   * `~/.claude.json`), so that the repository's own settings (its permission rules, say) apply
+   * there as in the clones the owner trusted here. Nobody is there to answer the dialog. A file it
+   * cannot read is left alone.
+   */
+  async trust(dir: string): Promise<void> {
+    const r = await this.run('cat "$HOME/.claude.json" 2>/dev/null || true');
+    if (r.code !== 0) throw new HostError(`${this.name}: ${r.stderr.trim()}`);
+    let config: { projects?: Record<string, Record<string, unknown>> };
+    try {
+      config = r.stdout.trim() ? JSON.parse(r.stdout) : {};
+    } catch {
+      return;
+    }
+    const projects = (config.projects ??= {});
+    if (projects[dir]?.hasTrustDialogAccepted) return;
+    projects[dir] = { ...projects[dir], hasTrustDialogAccepted: true };
+    // written whole and moved into place, so a session reading it meanwhile sees the old or the new file
+    const p = Bun.spawn(this.argv('cat > "$HOME/.claude.json.obeya" && mv "$HOME/.claude.json.obeya" "$HOME/.claude.json"'), {
+      stdin: new Blob([JSON.stringify(config, null, 2)]),
+      stdout: 'ignore',
+      stderr: 'pipe',
+    });
+    const [err, code] = await Promise.all([new Response(p.stderr).text(), p.exited]);
+    if (code !== 0) throw new HostError(`${this.name}: ${err.trim()}`);
+  }
+
+  /**
+   * A session's transcript there (Claude Code's, under the directory it ran in), copied here for
+   * the Arbeitsrückschau; null when there is none or the host does not answer.
+   */
+  async transcript(sessionId: string, cwd: string): Promise<string | null> {
+    if (!/^[\w-]+$/.test(sessionId)) return null;
+    const r = await this.run(`cat "$HOME"/.claude/projects/${sh(cwd.replace(/[^a-zA-Z0-9]/g, '-'))}/${sh(`${sessionId}.jsonl`)}`);
+    if (r.code !== 0 || !r.stdout) return null;
+    const file = join(this.o.home, 'hosts', this.name, 'transcripts', `${sessionId}.jsonl`);
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, r.stdout);
+    return file;
+  }
+
+  /** A host directory's copy here, where the server serves and shares it from: under Obeya's home, by host and path. */
+  localCopy(path: string): string {
+    return join(this.o.home, 'hosts', this.name, ...path.split('/').filter(Boolean));
+  }
+
+  /**
+   * Makes the host ready for sessions, once per run of Obeya (again after it failed): Obeya's
+   * directory there with `files` in it. Returns that directory. A directory that did not change
+   * since its last copy is not copied again.
+   */
+  prepare(files: HostFiles): Promise<string> {
+    this.prepared ??= this.copyOnce(files).catch((e) => {
+      this.prepared = undefined;
+      throw e;
+    });
+    return this.prepared;
+  }
+
+  private async copyOnce(files: HostFiles): Promise<string> {
+    const dir = await this.resolveDir(`~/${HOST_DIR}`);
+    for (const [name, from] of Object.entries(files.dirs)) {
+      if (!existsSync(from)) continue;
+      const stamp = treeStamp(from);
+      const there = await this.run(['cat', `${dir}/${name}.stamp`]);
+      if (there.code === 0 && there.stdout.trim() === stamp) continue;
+      await this.copyTo(from, `${dir}/${name}`);
+      const w = await this.run(`printf %s ${sh(stamp)} > ${sh(`${dir}/${name}.stamp`)}`);
+      if (w.code !== 0) throw new HostError(`${this.name}: ${w.stderr.trim()}`);
+    }
+    for (const [name, content] of Object.entries(files.files ?? {})) {
+      const text = content();
+      const p = Bun.spawn(this.argv(text === undefined ? `rm -f ${sh(`${dir}/${name}`)}` : `cat > ${sh(`${dir}/${name}`)}`), {
+        stdin: new Blob([text ?? '']),
+        stdout: 'ignore',
+        stderr: 'pipe',
+      });
+      const [err, code] = await Promise.all([new Response(p.stderr).text(), p.exited]);
+      if (code !== 0) throw new HostError(`copying ${name} to ${this.name}: ${err.trim()}`);
+    }
+    return dir;
+  }
+
+  /**
+   * A worker's session there: the SDK's `spawnClaudeCodeProcess`, which starts Claude Code through
+   * `ssh` in `cwd` once the host has `files` (paths of those directories among its arguments
+   * become their copies there), its environment (the SDK's and the session's, Obeya's directory
+   * there as `OBEYA_HOME`, the logins) read from stdin first. A host that cannot be made ready
+   * ends the process as a lost connection would. With `OBEYA_URL` in the environment, a port
+   * there is forwarded to Obeya's here, for a demo's narration. `onExit` hears the exit code of
+   * `ssh` (`LOST`: the connection failed or dropped).
+   */
+  session(o: { cwd: string; files: HostFiles; onExit?: (code: number | null) => void }): (s: SpawnOptions) => SpawnedProcess {
+    const ready = this.prepare(o.files);
+    return (s) =>
+      deferred(ready, (dir) => {
+        const token = this.o.claudeToken?.();
+        const local = Object.entries(o.files.dirs);
+        const args = s.args.map((a) => {
+          const hit = local.find(([, from]) => a === from);
+          return hit ? `${dir}/${hit[0]}` : a;
+        });
+        const here = s.env.OBEYA_URL ? Number(new URL(s.env.OBEYA_URL).port) : 0;
+        // a port of its own per session, so that sessions ending do not take another's forward along
+        const there = here ? 30_000 + Math.floor(Math.random() * 30_000) : 0;
+        // a session cut off by a dropped connection may still run there: the one that resumes it ends it first
+        const pid = sh(`${dir}/sessions/${o.cwd.replace(/[^\w.-]+/g, '-')}.pid`);
+        const previous = `mkdir -p ${sh(`${dir}/sessions`)}; old=$(cat ${pid} 2>/dev/null); [ -n "$old" ] && ps -p "$old" -o command= 2>/dev/null | grep -q claude && kill "$old"; echo $$ > ${pid};`;
+        const argv = this.argv(`${previous} exec ${[s.command, ...args].map(sh).join(' ')}`, {
+          cwd: o.cwd,
+          env: true,
+          ...(here ? { forward: `127.0.0.1:${there}:127.0.0.1:${here}` } : {}),
+        });
+        const child = spawn(argv[0]!, argv.slice(1), { stdio: ['pipe', 'pipe', 'pipe'] });
+        // with Obeya reachable, a voice it holds loaded narrates from Obeya's machine (OBEYA_HOLDS_VOICE: no need to install it here)
+        const env = { ...s.env, OBEYA_HOME: dir, ...(here ? { OBEYA_URL: `http://127.0.0.1:${there}`, OBEYA_HOLDS_VOICE: '1' } : {}), ...(token ? { CLAUDE_CODE_OAUTH_TOKEN: token } : {}) };
+        child.stdin!.write(this.envLine(o.cwd, env));
+        // ssh's own complaints (a forward refused, the connection dropped) are no session output
+        child.stderr!.on('data', (d: Buffer) => {
+          const text = d.toString().trim();
+          if (text) console.error(`${this.name}: ${text}`);
+        });
+        child.on('exit', (code) => o.onExit?.(code));
+        return child;
+      });
+  }
+}
+
+/** What a host gets before a session, by the path it has in Obeya's directory there. */
+export interface HostFiles {
+  /** Directories here. */
+  dirs: Record<string, string>;
+  /** Files by their content; none removes one there. */
+  files?: Record<string, () => string | undefined>;
+}
+
+/** A fingerprint of a directory's files (names, sizes, times): what changes when one does. */
+function treeStamp(dir: string): string {
+  const h = createHash('sha256');
+  const walk = (d: string) => {
+    for (const e of readdirSync(d, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const p = join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.isFile()) {
+        const s = statSync(p);
+        h.update(`${relative(dir, p)}\0${s.size}\0${s.mtimeMs}\n`);
+      }
+    }
+  };
+  walk(dir);
+  return h.digest('hex').slice(0, 16);
+}
+
+/**
+ * A process for the SDK that starts once `ready` settles: its stdin is held until then, and a
+ * `ready` that fails ends it with the code of a lost connection.
+ */
+function deferred<T>(ready: Promise<T>, start: (value: T) => ChildProcess): SpawnedProcess {
+  const stdin = new PassThrough();
+  const stdout = new PassThrough();
+  const events = new EventEmitter();
+  let child: ChildProcess | undefined;
+  let exitCode: number | null = null;
+  let signalCode: NodeJS.Signals | null = null;
+  let killed = false;
+  const exit = (code: number | null, signal: NodeJS.Signals | null) => {
+    exitCode = code;
+    signalCode = signal;
+    stdout.end();
+    events.emit('exit', code, signal);
+  };
+  ready.then(
+    (value) => {
+      if (killed) return exit(null, 'SIGTERM');
+      try {
+        child = start(value);
+      } catch (e) {
+        console.error(e instanceof Error ? e.message : e);
+        return exit(LOST, null);
+      }
+      stdin.pipe(child.stdin!);
+      child.stdout!.pipe(stdout);
+      child.on('exit', exit);
+      child.on('error', (e) => events.emit('error', e));
+    },
+    (e: unknown) => {
+      console.error(e instanceof Error ? e.message : e);
+      exit(LOST, null);
+    },
+  );
+  return {
+    stdin,
+    stdout,
+    get killed() {
+      return killed;
+    },
+    get exitCode() {
+      return exitCode;
+    },
+    get signalCode() {
+      return signalCode;
+    },
+    kill(signal) {
+      killed = true;
+      return child ? child.kill(signal) : true;
+    },
+    on: (event: string, listener: (...a: any[]) => void) => void events.on(event, listener),
+    once: (event: string, listener: (...a: any[]) => void) => void events.once(event, listener),
+    off: (event: string, listener: (...a: any[]) => void) => void events.off(event, listener),
+  } as SpawnedProcess;
+}
+
+/**
+ * What a worker's session needs on a host: the plugins it loads, the `playwright-core` the demo
+ * skill imports (found from the plugin's directory there, as in Obeya's checkout), and the owner's
+ * demo settings, with the voice reference as a path here: Obeya holds that voice and reads it.
+ * The key file of a hosted voice stays here.
+ */
+export function sessionFiles(home: string, plugins: string[]): HostFiles {
+  return {
+    dirs: { ...Object.fromEntries(plugins.map((p) => [basename(p), p])), 'node_modules/playwright-core': resource('node_modules', 'playwright-core') },
+    files: {
+      'demo.json': () => {
+        const file = join(home, 'demo.json');
+        if (!existsSync(file)) return undefined;
+        try {
+          const { keyFile: _, ...settings } = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+          if (typeof settings.reference === 'string') settings.reference = settings.reference.replace(/^~(?=$|\/)/, homedir());
+          return JSON.stringify(settings, null, 2);
+        } catch {
+          return undefined;
+        }
+      },
+    },
+  };
+}
+
+/** The hosts of the configuration, by name. */
+const hosts = new Map<string, SshHost>();
+
+/** Makes a host known under its name; the configuration's hosts are registered at start. */
+export function registerHost(o: HostOptions): SshHost {
+  const known = hosts.get(o.name);
+  if (known && known.o.ssh === o.ssh && known.o.program === o.program) return known;
+  const host = new SshHost(o);
+  hosts.set(o.name, host);
+  return host;
+}
+
+/** The token a host's sessions log in to Claude with: `claude-token` in Obeya's home, or `CLAUDE_CODE_OAUTH_TOKEN`. */
+export function claudeToken(home: string): string | undefined {
+  const file = join(home, 'claude-token');
+  if (existsSync(file)) return readFileSync(file, 'utf8').trim() || undefined;
+  return process.env.CLAUDE_CODE_OAUTH_TOKEN || undefined;
+}
+
+/**
+ * git's credential helper for a host's clones: the GitHub login comes from `GH_TOKEN`, which Obeya
+ * passes with each command and session, and is stored nowhere (the empty helper before it drops the
+ * system's, macOS's keychain, which would keep it).
+ */
+export const TOKEN_HELPER = ['', '!f() { test "$1" = get && test -n "$GH_TOKEN" && echo username=x-access-token && echo "password=$GH_TOKEN"; }; f'];
+
+/** git's options that make a command there use `TOKEN_HELPER`. */
+export const tokenHelperArgs = (): string[] => TOKEN_HELPER.flatMap((h) => ['-c', `credential.helper=${h}`]);
+
+/** How long a repository's GitHub login is asked again after it was read. */
+const TOKEN_TTL = 10 * 60_000;
+
+/**
+ * The GitHub login git uses for a repository here (`git credential fill` in its checkout, so the
+ * account its own configuration picks), for its clones on a host; none for a remote not on HTTPS.
+ */
+export function githubToken(repoPath: string, remoteUrl: string | undefined, git: string = 'git'): () => string | undefined {
+  let cached: { token: string | undefined; at: number } | undefined;
+  return () => {
+    if (cached && Date.now() - cached.at < TOKEN_TTL) return cached.token;
+    let token: string | undefined;
+    const url = remoteUrl?.match(/^https:\/\/([^/]+)\//);
+    if (url) {
+      const r = Bun.spawnSync([git, '-C', repoPath, 'credential', 'fill'], {
+        stdin: Buffer.from(`protocol=https\nhost=${url[1]}\n\n`),
+        stdout: 'pipe',
+        stderr: 'pipe',
+        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      });
+      token = r.exitCode === 0 ? /^password=(.*)$/m.exec(r.stdout.toString())?.[1] : undefined;
+    }
+    cached = { token, at: Date.now() };
+    return token;
+  };
+}

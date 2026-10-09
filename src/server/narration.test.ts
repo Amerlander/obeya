@@ -112,6 +112,20 @@ describe('a clip over HTTP', () => {
     }
   });
 
+  test('inline, sends the WAV back instead of writing it where the render runs (another machine)', async () => {
+    hold();
+    const server = serve([], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, undefined, host);
+    try {
+      const { out: _, ...rest } = clip('eins');
+      const r = (await (await fetch(new URL('/api/narration/clip', server.url), { method: 'POST', body: JSON.stringify({ ...rest, inline: true }), headers: { 'content-type': 'application/json' } })).json()) as { ok: boolean; wav: string };
+      expect(r.ok).toBe(true);
+      expect(Buffer.from(r.wav, 'base64').subarray(0, 4).toString()).toBe('RIFF');
+      expect(parseClipRequest({ ...rest, inline: 'yes' })).toContain('inline');
+    } finally {
+      server.stop(true);
+    }
+  });
+
   test('refuses what the voice would not take', () => {
     const ok = clip('Hallo.');
     expect(parseClipRequest(ok)).toEqual(ok);

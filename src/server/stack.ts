@@ -1,10 +1,17 @@
 // A command of the adapter's `stack`, run in a workspace by Obeya itself (design: Parking).
 
+import { remote } from './hosts';
+
 /** A stack's stop takes seconds; one that hangs this long counts as failed. */
 const STACK_TIMEOUT = 2 * 60_000;
 
-/** Runs `command` through the platform's shell in `cwd`: whether it exited 0, and what it printed. */
+/** Runs `command` through the platform's shell in `cwd` (there, for a workspace on another machine): whether it exited 0, and what it printed. */
 export async function runStackCommand(cwd: string, command: string, timeout = STACK_TIMEOUT): Promise<{ ok: boolean; output: string }> {
+  const there = remote(cwd);
+  if (there) {
+    const r = await there.host.run(command, { cwd: there.path, timeout });
+    return { ok: r.code === 0, output: `${r.stdout}${r.stderr}`.trim() || (r.code === 0 ? '' : `exit code ${r.code}`) };
+  }
   const shell = process.platform === 'win32' ? ['cmd.exe', '/d', '/s', '/c', command] : ['sh', '-c', command];
   try {
     const p = Bun.spawn(shell, { cwd, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', timeout });

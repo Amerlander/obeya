@@ -97,6 +97,21 @@ describe("Obeya's configuration", () => {
     expect(c.check([{ repos: [{ path: web, share: ' ' }] }]).canvases).toEqual([{ repos: [{ path: web }] }]);
   });
 
+  test('hosts: tidied, only for a repository with clones whose work goes out through its remote, one machine per name', () => {
+    const c = config('file', []);
+    Bun.spawnSync(['git', '-C', web, 'remote', 'add', 'origin', 'https://github.com/acme/web.git']);
+    const host = { name: 'Box', ssh: 'me@box.local', root: '~/obeya/web', clones: 2 };
+    const check = (repos: object[]) => c.check([{ repos }]);
+    expect(check([{ path: web, hosts: [host, { name: ' ', ssh: '', root: '', clones: 1 }] }])).toMatchObject({ problems: [], canvases: [{ repos: [{ path: web, hosts: [host] }] }] });
+    expect(check([{ path: web, hosts: [{ ...host, root: ' ' }] }]).canvases[0]!.repos[0]!.hosts).toEqual([{ ...host, root: '~/obeya' }]);
+    // worktrees of this checkout, or no remote: the host could not clone it
+    expect(check([{ path: web, adapter: 'obeya', hosts: [host] }]).problems.map((p) => p.code)).toEqual(['hostRepo']);
+    expect(check([{ path: api, hosts: [host] }]).problems.map((p) => p.code)).toEqual(['hostRepo']);
+    Bun.spawnSync(['git', '-C', api, 'remote', 'add', 'origin', 'https://github.com/acme/api.git']);
+    expect(check([{ path: web, hosts: [host] }, { path: api, hosts: [{ ...host, ssh: 'other@box.local' }] }]).problems).toEqual([{ code: 'hostName', canvas: 0, repo: 1, detail: expect.stringContaining('me@box.local') }]);
+    expect(check([{ path: web, hosts: [{ ...host, name: 'a/b' }] }]).problems.map((p) => p.code)).toEqual(['invalid']);
+  });
+
   test("a misspelt field in a repository's own adapter is a problem at the repository, which keeps nothing from being saved", () => {
     const own = gitRepo(join(dir, 'shop'), {
       '.obeya/adapter/index.ts': "export default { name: 'shop', check: ['bun test'], demo: { required: false, howToRun: 'bun dev', share: ['no-such-program-anywhere'] } };\n",

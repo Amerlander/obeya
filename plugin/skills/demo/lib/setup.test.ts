@@ -68,6 +68,16 @@ describe('demo setup', () => {
     expect(by.whisper?.state).toBe(by.whisper?.mb ? 'later' : 'ok');
   });
 
+  test('a voice Obeya holds on its own machine counts as there for a worker on another one', async () => {
+    const env = { PATH: join(dir, 'none'), HOME: dir, DEMO_CHROME: join(dir, 'no-chrome') };
+    const voice = async (more: Record<string, string>, voice: 'qwen3' | 'piper' = 'qwen3') =>
+      (await checkSetup({ language: 'de', voice }, { env: { ...env, ...more }, home: dir, narrationOnly: true })).items.find((i) => i.id === 'voice');
+    expect((await voice({}))?.state).toBe('missing');
+    expect(await voice({ OBEYA_HOLDS_VOICE: '1', OBEYA_URL: 'http://127.0.0.1:41234' })).toMatchObject({ state: 'ok', found: 'qwen3 (held by Obeya)' });
+    // Piper is not held: it runs with each render
+    expect((await voice({ OBEYA_HOLDS_VOICE: '1', OBEYA_URL: 'http://127.0.0.1:41234' }, 'piper'))?.state).toBe('missing');
+  });
+
   test.skipIf(process.platform === 'win32')('takes an old Node and an ffmpeg without libx264 as missing', async () => {
     const env = fakePath({ node: 'v20.11.0', ffmpeg: 'ffmpeg version 6.1 Copyright\n V..... libopenh264', uv: 'uv 0.8.0 (abc)' });
     const check = await checkSetup({ language: 'de', voice: 'say', listenBack: false }, { env, home: dir, narrationOnly: true });

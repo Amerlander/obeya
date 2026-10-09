@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import difflib
 import hashlib
+import base64
 import json
 import os
 import re
@@ -326,7 +327,8 @@ class HeldVoice:
 
     def _ask(self, text: str, raw: Path) -> dict | None:
         """Obeya's reply, or None when Obeya cannot be reached or does not hold voices."""
-        body = json.dumps({"voice": self._host, "text": text, "out": str(raw), "language": self._language}).encode()
+        # the WAV comes back in the reply: Obeya may run on another machine than this render
+        body = json.dumps({"voice": self._host, "text": text, "inline": True, "language": self._language}).encode()
         request = urllib.request.Request(self._url, data=body, headers={"Content-Type": "application/json"})
         try:
             with self._opener.open(request, timeout=3600) as response:
@@ -347,8 +349,9 @@ class HeldVoice:
             raw.unlink(missing_ok=True)
             reply = self._ask(text, raw)
             if reply is not None:
-                if "error" in reply or not raw.exists():
-                    sys.exit(f"the voice failed: {reply.get('error') or f'it wrote no WAV at {raw}'}")
+                if "error" in reply or not reply.get("wav"):
+                    sys.exit(f"the voice failed: {reply.get('error') or 'it sent no WAV'}")
+                raw.write_bytes(base64.b64decode(reply["wav"]))
                 print(f"narration: synthesised by Obeya in {reply.get('seconds', '?')} s", file=sys.stderr, flush=True)
                 to_wav(raw, target)
                 raw.unlink(missing_ok=True)

@@ -193,8 +193,22 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
       ]),
     );
 
-  const get = (path: string, env: Record<string, string>, timeout = FETCH_TIMEOUT) =>
-    fetch(`${root}/${path}`, { headers: { ...headers(env), 'Cache-Control': 'no-cache' }, redirect: 'manual', signal: AbortSignal.timeout(timeout) });
+  /**
+   * A file of the live site. A redirect within the site is followed: Cloudflare Pages answers
+   * `…/index.html` with a 308 to `…/`, which made a page another machine shared impossible to pull
+   * (2026-10-09). A redirect elsewhere is a login, and comes back as it is.
+   */
+  const get = async (path: string, env: Record<string, string>, timeout = FETCH_TIMEOUT) => {
+    const signal = AbortSignal.timeout(timeout);
+    let url = `${root}/${path}`;
+    for (let hop = 0; ; hop++) {
+      const r = await fetch(url, { headers: { ...headers(env), 'Cache-Control': 'no-cache' }, redirect: 'manual', signal });
+      const to = r.status >= 300 && r.status < 400 ? r.headers.get('location') : null;
+      const next = to ? new URL(to, url) : null;
+      if (!next || next.origin !== new URL(url).origin || hop >= 3) return r;
+      url = next.href;
+    }
+  };
 
   /** The live site's manifest; refused when it cannot be read, since deploying blind could take other machines' pages offline. */
   const readLive = async (env: Record<string, string>): Promise<Live> => {

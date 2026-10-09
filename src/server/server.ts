@@ -257,7 +257,12 @@ export function serve(
           if (typeof request === 'string') return Response.json({ code: 'invalid', error: request }, { status: 400 });
           // the clip waits its turn behind other renders' clips, maybe behind loading the model
           srv.timeout(req, 0);
-          return Response.json(await narration.clip(request));
+          const reply = await narration.clip(request);
+          if (!request.inline || !('ok' in reply)) return Response.json(reply);
+          const file = Bun.file(request.out);
+          const wav = Buffer.from(await file.arrayBuffer()).toString('base64');
+          await file.delete();
+          return Response.json({ ...reply, wav });
         },
       },
       '/api/config/check': { POST: async (req) => (config ? handle(async () => config.check(await req.json())) : new Response('Not found', { status: 404 })) },
