@@ -192,7 +192,7 @@ button.pill:hover { box-shadow: var(--lift); }
 /* the bar's buttons are one height, whatever they hold: text, an icon, a count */
 #bar .pill, .pill.talk-pill { height: 34px; box-sizing: border-box; padding-block: 0; }
 #bar button.pill.help { width: 34px; height: 34px; }
-.talk-pill { padding: 0 12px; }
+.talk-pill, #bar .talk-pill { padding: 0 12px; }
 .talk-pill svg { display: block; flex: none; }
 .prefs { list-style: none; padding: 0; margin: 10px 0 0; }
 .prefs li { display: flex; gap: 8px; align-items: flex-start; padding: 7px 8px 7px 10px; border-radius: 9px; background: var(--chip); margin: 6px 0;
@@ -596,8 +596,12 @@ textarea.p-body:focus { border-color: var(--muted); }
 #sheet-close { position: fixed; top: 14px; right: 14px; z-index: 27; width: 30px; height: 30px; border: 0; border-radius: 50%; background: var(--chip);
   color: var(--muted); cursor: pointer; animation: fade .3s ease-out .2s backwards; }
 #sheet-close:hover { color: var(--ink); }
-/* the button for Obeya's sidebar while it is open: where it stood in the bar, now the sidebar's corner */
-#talk-docked { position: fixed; top: 13px; right: 14px; z-index: 27; }
+/* the button for Obeya's sidebar: over the room the bar keeps for it (.talk-room), and the sidebar's
+   corner while that is open; the same spot, as Obeya's sidebar is what --side is then. Beside another
+   sheet it goes left with the bar's end */
+#talk-docked { position: fixed; top: 11.5px; right: calc(var(--side, 0px) + 14px); transition: right .45s cubic-bezier(.3,.9,.3,1); z-index: 27; }
+#talk-docked.on { right: 14px; }
+.talk-room { visibility: hidden; }
 /* the grip on the open sheet's left edge: drag to widen or narrow it, double-click for the default */
 #sheet-grip { position: fixed; top: 0; bottom: 0; width: 12px; z-index: 26; cursor: ew-resize; touch-action: none;
   opacity: 0; pointer-events: none; transition: opacity .2s, right .45s cubic-bezier(.3,.9,.3,1); }
@@ -606,7 +610,7 @@ textarea.p-body:focus { border-color: var(--muted); }
   background: var(--planned); opacity: .55; transition: background .15s, opacity .15s, height .15s, margin-top .15s; }
 #sheet-grip:hover::after, .resizing #sheet-grip::after { background: var(--muted); opacity: 1; height: 64px; margin-top: -32px; }
 .resizing, .resizing * { cursor: ew-resize !important; user-select: none; }
-.resizing .sheet, .resizing #sheet-grip, .resizing #bar, .resizing #ptt, .resizing #acks, .resizing .empty { transition: none; }
+.resizing .sheet, .resizing #sheet-grip, .resizing #bar, .resizing #talk-docked, .resizing #ptt, .resizing #acks, .resizing .empty { transition: none; }
 .sheet h2 { margin: 2px 0 8px; font-size: 20px; letter-spacing: -.01em; }
 .sheet .goal { font-size: 13.5px; opacity: .9; }
 .sheet .src { font: 12px ui-monospace, Menlo, monospace; color: var(--muted); margin-top: 8px; }
@@ -881,7 +885,7 @@ button.link:hover { text-decoration: underline; }
 .ack.reading { background: var(--card); color: var(--muted); box-shadow: var(--shadow); padding: 7px 14px; font-size: 13px; }
 .ack.reading::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--working); animation: spin .8s linear infinite; }
 .c-listener { flex-basis: 100%; margin-top: -4px; font-size: 11.5px; color: var(--muted); }
-@media (max-width: 760px) { #minimap, #sheet-grip { display: none; } .sheet, .sheet.reading { width: auto; left: 14px; right: 14px; top: 64px; bottom: 158px; border-radius: 16px; border: 0; box-shadow: var(--lift); } #sheet-close { top: 72px; right: 22px; } #talk-docked { top: 74px; right: 22px; } .split { grid-template-columns: 1fr; grid-template-rows: none; max-height: none; } .split .split-talk .talk { min-height: 240px; max-height: min(520px, 60vh); } }
+@media (max-width: 760px) { #minimap, #sheet-grip { display: none; } .sheet, .sheet.reading { width: auto; left: 14px; right: 14px; top: 64px; bottom: 158px; border-radius: 16px; border: 0; box-shadow: var(--lift); } #sheet-close { top: 72px; right: 22px; } #talk-docked.on { top: 74px; right: 22px; } .split { grid-template-columns: 1fr; grid-template-rows: none; max-height: none; } .split .split-talk .talk { min-height: 240px; max-height: min(520px, 60vh); } }
 
 /* the play button on a startable card, shown while the pointer is on the card */
 .card .play { position: absolute; right: 10px; bottom: 8px; width: 26px; height: 26px; border-radius: 13px; border: 0; padding: 0 0 0 2px;

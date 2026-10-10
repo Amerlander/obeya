@@ -1023,7 +1023,9 @@ function Canvas({
   const edgeTargets = placed.filter(({ item }) => needsYou(item) && (focus?.type !== 'project' || item.parent === focus.id));
 
   // the button for the conversation with Obeya: the rightmost in the bar; while its sidebar is open it
-  // stays where it was and belongs to the sidebar, at its top corner, and closes it
+  // belongs to the sidebar, at its top corner, and closes it. It is one element that never moves to
+  // another parent, so opening and closing the sidebar only changes its colour; in the bar a hidden
+  // copy keeps its room
   const talkButton = (
     <button className={kOn ? 'pill kpill talk-pill on' : 'pill kpill talk-pill'} title={t.koordinator.buttonTitle} aria-label={t.koordinator.button} onClick={toggleKoordinator}>
       <TalkIcon />
@@ -1150,7 +1152,11 @@ function Canvas({
               <span className="n">{attentionCount}</span> <span className="lbl">{t.needsYou}</span>
             </button>
           )}
-          {!kOn && talkButton}
+          {!kOn && (
+            <div className="talk-room" aria-hidden>
+              {talkButton}
+            </div>
+          )}
         </div>
       </header>
       <Minimap
@@ -1211,7 +1217,9 @@ function Canvas({
         els={sheetEls}
         version={snapshot}
       />
-      {kOn && <div id="talk-docked">{talkButton}</div>}
+      <div id="talk-docked" className={kOn ? 'on' : undefined}>
+        {talkButton}
+      </div>
       {gripOn && !kOn && (
         <button id="sheet-close" title={t.close} onClick={() => (sheetOn ? closeProject() : setKOn(false))}>
           ✕

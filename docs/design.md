@@ -2014,7 +2014,10 @@ the repository; the copy on the project is only for the archive).
   a sheet goes back to its view beside whatever sheet is open when it closes; a project's sheet
   stays while one of its cards is open, under the dim. Obeya's button, a speech bubble with its
   counts, is the bar's rightmost; while its sidebar is open the button stays where it was and
-  becomes the sidebar's top corner, closing it again (2026-10-09, the owner's wish). The other
+  becomes the sidebar's top corner, closing it again (2026-10-09, the owner's wish). Opening and
+  closing only change its colour: it is one element fixed over the room the bar keeps for it,
+  never moved into another parent (before, closing put it back into the bar, which still ended
+  at the sidebar, so it showed up left of it and slid right with the bar). The other
   sheets have a ✕ there. Beside a wide sheet the bar's buttons drop their labels
   for icons, and on the narrowest only the sheets' buttons stay (a container query on the bar). A
   window up to 760 px wide lays the sheet over the canvas instead. Before, the sheets were
