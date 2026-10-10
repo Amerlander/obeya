@@ -703,9 +703,10 @@ the owner's language (`src/core/locale.ts`).
   demo the owner approves instead of the code); the four steps from idea to main as one card
   moving along a wall; the six principles as cards on a wall; "The big room", where the name comes
   from, with 大部屋 set vertically; the dark band "Obeya is built with Obeya."; getting started
-  with the downloads, `bun start` from the checkout, GitHub and the design doc. Inter and the
-  three characters of 大部屋 (Noto Serif JP) are served from `site/fonts/` with their OFL
-  licences, not from Google Fonts; logo and wordmark are copies from `src/ui/logo/`; the
+  with the downloads, `bun start` from the checkout, GitHub and the design doc. It has Obeya's
+  palette and type (see Visual identity): Newsreader, IBM Plex Sans Condensed and the three
+  characters of 大部屋 (Noto Serif JP) are served from `site/fonts/` with their OFL licences, not
+  from Google Fonts; logo and wordmark are copies from `src/ui/logo/`; the
   screenshots show the German interface. Paths are relative, so the site works under
   sadilek.github.io/obeya as well. `.github/workflows/pages.yml` publishes `site/` to GitHub Pages
   on every push to `main` on GitHub that touches `site/` or the workflow, and on demand from the
@@ -849,10 +850,41 @@ the owner's language (`src/core/locale.ts`).
   buttons that move it, and a row opens its card; a click beside the list or Esc closes it. The
   archive's button lists the archive under it the same way (`src/ui/archive.tsx`). Until
   then the queue was a section of the Koordinator's sheet, counted on Obeya's button, and the
-  archive's button sat on the right. The bar's buttons are all one height. The logo (`src/ui/logo.tsx`: three cards in the colours of working, waiting
-  and approved, "obeya" in Inter Bold as outlines) opens the bar, stands alone in the middle while
+  archive's button sat on the right. The bar's buttons are all one height. The logo (`src/ui/logo.tsx`: three cards in the inks of working, waiting
+  and approved, "obeya" in Newsreader SemiBold as outlines) opens the bar, stands alone in the middle while
   the page loads, above "offline" when the server is gone, and is the favicon; `bun
-  scripts/logo.tsx` writes it as the files in `src/ui/logo/`.
+  scripts/logo.tsx` writes it as the files in `src/ui/logo/`, the app's icon source with them
+  (`bunx tauri icon app/icons/source.png -o app/icons` makes the rest; keep only the files tracked).
+- **Visual identity** — index cards pinned to a wall, so that nobody takes Obeya for the stock
+  AI-generated interface (2026-10-10). Everything is in `src/ui/styles.css` (the PTT panel's
+  window repeats the tokens in `panel.css`).
+  - *The card*: off-white card stock (`--card`) on a warm board (`--bg`, dotted), corners nearly
+    square (2 px), a short hard shadow instead of a soft blur, and the state as a rule across the
+    top in its ink (4 px; 3 px on a chip; 8 px zoomed out, where the title also grows, so the state
+    reads as a band from afar). No ruled lines. The owner's turn is an orange frame and a pushpin
+    with "!" that pulses; an idea is on rose-tinted stock; a proposal is only pencilled in (a dashed
+    outline, no stock); a queued card's rule is dashed; done and live cards fade and go slightly
+    yellow. Under the pointer a card lifts a little; dragged, it tilts as if held in the hand. The
+    moving line beside "at work" is a pencil stroke drawn again and again.
+  - *Inks* (light / dark): planned `#a0978a` / `#8a8274` pencil grey; working `#1d5fe0` /
+    `#5b95ff` clear blue; waiting for the owner `#f27405` / `#ff8a1c` strong orange (frame, pin,
+    pulse, every count of what waits); approved `#3d9a1f` / `#78c448` yellow-green; in PR `#08888e`
+    / `#27b9b6` petrol; proposal `#7b4fd6` / `#a587ff` violet; idea `#dc2f5e` / `#ff6289` madder
+    red; live and done `#b4ab98` / `#5f594e`. Failures `--error`, cautions `--warn`; what is
+    written on a fill of ink (a badge, the play button) is `--on-ink`, white in light and near
+    black in dark. Dark mode is black card stock written on in white pencil: its inks are as far
+    apart as in light (blue and green never confusable, orange the loudest).
+  - *Type*: titles and headings in Newsreader (a serif with optical sizes; a plan doc read in the
+    sheet is set in it too), everything else in IBM Plex Sans Condensed. Both are under the SIL
+    Open Font License and served from `src/ui/fonts/` with their licence files (latin subsets
+    from Fontsource); Google Fonts is not loaded. Code stays in the system's monospace.
+  - *Carried through*: pills, menus, the panel, the sheets, dialogs, buttons and fields use the
+    same palette and type and the same nearly square corners (3 px, 4 px for project frames), with
+    the cards' hard shadow, but no paper texture of their own. An unfolded card keeps its rule
+    across the top. Dots, the microphone, spinners and the pin stay round. The site and the shared
+    demo pages use the same palette and type.
+  - Before, a card was a white box with 14 px rounding, a soft two-layer shadow, a 5 px state
+    stripe down its left, all set in Inter, with Tailwind's default colours for the states.
 - **Groups on the canvas** (`src/ui/groups.tsx`, `src/ui/territory.ts`) — each group shows as a
   territory behind its cards: a soft, slightly glowing outline over a faint area in the group's
   colour, with a dotted line inside along the cards. Group colours appear only there and in the
@@ -2304,6 +2336,12 @@ the repository; the copy on the project is only for the archive).
 - No business and no cloud service for now: being known comes first (2026-10-06). Considered and
   parked: hosting demos for sharing, remote access from the phone through a relay, voice as a
   service, a team canvas, and a subscription covering the costs. Hosted agents were ruled out.
+- The look is the index card (2026-10-10, see Visual identity). Two prototypes were built side by
+  side: the index card and a Swiss editorial card (a square black frame, a solid state band,
+  Schibsted Grotesk), which was sharper from a distance but closer to a known designer style. A
+  seal (a kanji stamp for the state) and a kanban ticket (ruled fields, a punched hole) were not
+  pursued. The index card's ruled lines were dropped, and its inks made clearer than its first
+  version's fountain-pen blue and bottle green, which stood too close together.
 
 ## Open questions
 

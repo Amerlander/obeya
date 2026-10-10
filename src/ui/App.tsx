@@ -310,10 +310,9 @@ function Canvas({
     panel.style.setProperty('--c', `var(--${shownState(i)})`);
     panel.className = '';
     panel.style.setProperty('--unfold', `${quick ? 0 : UNFOLD_MS}ms`);
-    Object.assign(panel.style, rect(r), { display: 'block', borderRadius: '14px' });
+    Object.assign(panel.style, rect(r), { display: 'block' });
     panel.getBoundingClientRect();
     panel.classList.add('anim');
-    panel.style.borderRadius = '18px';
     fitPanel(i);
     unfolded.current = true;
     setDim(true);
@@ -394,7 +393,7 @@ function Canvas({
     const el = fromEl(f.id, !!f.project);
     unfolded.current = false;
     panel.classList.remove('ready');
-    if (el) Object.assign(panel.style, rect(el.getBoundingClientRect()), { borderRadius: '14px' });
+    if (el) Object.assign(panel.style, rect(el.getBoundingClientRect()));
     setDim(false);
     await sleep(UNFOLD_MS);
     panel.style.display = 'none';

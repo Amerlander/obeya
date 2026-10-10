@@ -95,36 +95,36 @@ export const day = (at: Date | string, language: PageLanguage = 'de') =>
   new Date(at).toLocaleDateString(PAGE_WORDS[language].locale, { day: 'numeric', month: 'long', year: 'numeric' });
 
 export const PAGE_STYLE = `
-  :root { --bg: #f4f2ee; --card: #fff; --ink: #1d1c1a; --muted: #75716a; --line: #e6e2da; --chip: #f1eee8; --accent: #0d9488; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #151412; --card: #1f1e1b; --ink: #eeeae3; --muted: #a39e94; --line: #34312c; --chip: #2a2825; } }
+  :root { --bg: #e8e2d4; --card: #fdfbf5; --ink: #1f1b14; --muted: #776e5e; --line: #e2dccd; --chip: #f0ebdf; --accent: #08888e; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #121110; --card: #23211d; --ink: #efe9dc; --muted: #a69e8e; --line: #36322b; --chip: #2c2925; --accent: #27b9b6; } }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 Inter, ui-sans-serif, system-ui, -apple-system, sans-serif; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 "IBM Plex Sans Condensed", ui-sans-serif, system-ui, -apple-system, sans-serif; }
   main { max-width: 1080px; margin: 0 auto; padding: 32px 24px 64px; }
   a { color: var(--accent); }
   .top { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
-  h1 { font-size: 28px; line-height: 1.25; margin: 0 0 6px; }
+  h1 { font: 600 31px/1.15 Newsreader, "Iowan Old Style", Georgia, serif; margin: 0 0 6px; }
   .when { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
   .text p { margin: 0 0 10px; max-width: 72ch; }
   .grid { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 20px; margin-top: 22px; align-items: start; }
   @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
-  video { width: 100%; border-radius: 12px; background: #000; display: block; }
+  video { width: 100%; border-radius: 4px; background: #000; display: block; }
   .player { position: relative; }
   .start { all: unset; position: absolute; inset: 0 0 56px 0; cursor: pointer; display: grid; place-items: center; }
   .start[hidden] { display: none; }
   .start span { margin-top: 56px; width: 88px; height: 88px; border-radius: 50%; background: rgba(0, 0, 0, 0.6); display: grid; place-items: center; transition: transform 0.15s, background 0.15s; }
   .start:hover span { background: rgba(0, 0, 0, 0.8); transform: scale(1.06); }
   .start svg { width: 36px; height: 36px; margin-left: 6px; fill: #fff; }
-  ol { list-style: none; margin: 0; padding: 6px; background: var(--chip); border-radius: 12px; }
-  ol button { all: unset; cursor: pointer; display: flex; gap: 10px; width: 100%; padding: 7px 9px; border-radius: 8px; font-size: 14px; box-sizing: border-box; }
+  ol { list-style: none; margin: 0; padding: 6px; background: var(--chip); border-radius: 3px; }
+  ol button { all: unset; cursor: pointer; display: flex; gap: 10px; width: 100%; padding: 7px 9px; border-radius: 2px; font-size: 14px; box-sizing: border-box; }
   ol button:hover, ol button.on { background: var(--card); }
   ol .t { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 34px; }
   .pr { margin-top: 14px; font-size: 14px; }
   ul.demos { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
-  ul.demos a { display: block; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; color: var(--ink); text-decoration: none; }
+  ul.demos a { display: block; background: var(--card); border: 1px solid var(--line); border-radius: 2px; padding: 14px 18px; color: var(--ink); text-decoration: none; }
   ul.demos a:hover { border-color: var(--accent); }
-  ul.demos b { display: block; font-size: 17px; }
+  ul.demos b { display: block; font: 600 19px/1.25 Newsreader, "Iowan Old Style", Georgia, serif; }
   ul.demos span { color: var(--muted); font-size: 14px; }
-  .artifact { margin-top: 22px; background: #fff; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .artifact { margin-top: 22px; background: #fff; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
   .artifact iframe { display: block; width: 100%; height: 80vh; border: 0; }
   .links { margin-top: 10px; font-size: 14px; display: flex; gap: 18px; }
 `;

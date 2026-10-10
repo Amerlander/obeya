@@ -724,7 +724,7 @@ export function Minimap({
             y={oy + b.y * k}
             width={b.w * k}
             height={b.h * k}
-            rx={item.kind === 'project' ? 4 : 1.5}
+            rx={item.kind === 'project' ? 1.5 : 0.5}
             style={{ fill: item.kind === 'project' ? 'var(--container-line)' : `var(--${item.state})` }}
             opacity={item.kind === 'project' || needsYou(item) ? 1 : 0.55}
           />
@@ -737,7 +737,7 @@ export function Minimap({
           fill="none"
           style={{ stroke: 'var(--ink)' }}
           strokeWidth={1.2}
-          rx={3}
+          rx={1}
           opacity={0.5}
         />
       </svg>

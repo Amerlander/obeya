@@ -174,7 +174,7 @@ export function TerritoryLayer({ shapes, waves, streaks, selected }: { shapes: S
         <circle key={w.key} className="wave" cx={w.x} cy={w.y} style={{ ...hue(w.hue), animationDelay: `${w.delay}ms` }} />
       ))}
       {selected.map((b, n) => (
-        <rect key={n} className="sel" x={b.x - 7} y={b.y - 7} width={b.w + 14} height={b.h + 14} rx={16} />
+        <rect key={n} className="sel" x={b.x - 7} y={b.y - 7} width={b.w + 14} height={b.h + 14} rx={4} />
       ))}
     </svg>
   );
