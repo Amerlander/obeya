@@ -54,3 +54,23 @@ describe('plan docs as documents', () => {
     expect(blocks('Text\n- item\n## H').map((b) => b.t)).toEqual(['p', 'list', 'h']);
   });
 });
+
+describe('messages', () => {
+  test('each line its own paragraph; a table right after a line of text', () => {
+    const md = 'Final numbers:\n| | Baseline | Model |\n|---|---|---|\n| Error | 33.6 | 25.2 |\nThe gap is +4 %.\nCommit abc.';
+    expect(blocks(md, { breaks: true })).toEqual([
+      { t: 'p', text: 'Final numbers:' },
+      { t: 'table', head: ['', 'Baseline', 'Model'], rows: [['Error', '33.6', '25.2']] },
+      { t: 'p', text: 'The gap is +4 %.' },
+      { t: 'p', text: 'Commit abc.' },
+    ]);
+  });
+
+  test('a line after a list item that is not indented ends the list', () => {
+    const md = '- one\n  wrapped\n- two\nAfter.';
+    expect(blocks(md, { breaks: true })).toEqual([
+      { t: 'list', list: { ordered: false, items: [{ text: 'one wrapped', mark: '', children: [] }, { text: 'two', mark: '', children: [] }] } },
+      { t: 'p', text: 'After.' },
+    ]);
+  });
+});

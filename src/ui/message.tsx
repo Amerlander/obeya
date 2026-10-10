@@ -4,7 +4,7 @@
 
 import type { ReactNode } from 'react';
 import type { CardEvent } from '../core/types';
-import { Inline, plain } from './markdown';
+import { blocks, Inline, ListTree, plain, Table } from './markdown';
 import { clock as time, t } from './strings';
 import { parseQuestion } from './talk';
 
@@ -69,35 +69,53 @@ export function Quote({ e, onClear }: { e: CardEvent; onClear?: () => void }) {
   );
 }
 
-/** Text from a plan doc or an agent: paragraphs, and list items as a checklist. */
+/**
+ * Text from a plan doc or an agent, as markdown: each line a paragraph, lists (list items as a
+ * checklist), tables, code, quotes, and headings as bold lines.
+ */
 export function Body({ md }: { md: string }) {
-  const blocks: ({ list: { text: string; mark: string }[] } | { para: string })[] = [];
-  for (const line of md.split('\n')) {
-    const m = /^\s*[-*+]\s+(?:\[([ xX])\]\s+)?(.*)$/.exec(line);
-    if (m) {
-      const last = blocks.at(-1);
-      const li = { text: m[2]!, mark: m[1] === undefined ? '' : m[1] === ' ' ? 'open' : 'done' };
-      if (last && 'list' in last) last.list.push(li);
-      else blocks.push({ list: [li] });
-    } else if (line.trim()) blocks.push({ para: line.trim() });
-  }
   return (
     <>
-      {blocks.map((bl, i) =>
-        'para' in bl ? (
-          <p key={i} className="p-lead">
-            <Inline md={bl.para} />
-          </p>
-        ) : (
-          <ul key={i} className="p-list">
-            {bl.list.map((li, j) => (
-              <li key={j} className={li.mark}>
-                <Inline md={li.text} />
-              </li>
-            ))}
-          </ul>
-        ),
-      )}
+      {blocks(md, { breaks: true }).map((b, i) => {
+        switch (b.t) {
+          case 'p':
+            return (
+              <p key={i} className="p-lead">
+                <Inline md={b.text} />
+              </p>
+            );
+          case 'h':
+            return (
+              <p key={i} className="p-lead">
+                <b>
+                  <Inline md={b.text} />
+                </b>
+              </p>
+            );
+          case 'list':
+            return <ListTree key={i} list={b.list} className="p-list" />;
+          case 'table':
+            return (
+              <div key={i} className="p-table">
+                <Table head={b.head} rows={b.rows} />
+              </div>
+            );
+          case 'code':
+            return (
+              <pre key={i} className="p-code">
+                {b.text}
+              </pre>
+            );
+          case 'quote':
+            return (
+              <blockquote key={i} className="p-quote">
+                <Inline md={b.text} />
+              </blockquote>
+            );
+          case 'hr':
+            return <hr key={i} className="p-hr" />;
+        }
+      })}
     </>
   );
 }

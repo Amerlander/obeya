@@ -1436,9 +1436,11 @@ the owner's language (`src/core/locale.ts`).
   shows the conversation, newest last, in all the height the sheet has; an open section below
   takes from it down to 200px, and below that the sheet scrolls. Its messages look like a card's
   (`Msg` and `Body` in `src/ui/message.tsx`, shared by both): the owner's on the right, who and
-  when above, the text as paragraphs and lists, a taken-back reply struck through. Until
+  when above, the text as markdown (each line a paragraph, lists, tables, code, quotes; the same
+  parser as plan docs, `blocks` in `src/ui/markdown.tsx`), a taken-back reply struck through. Until
   2026-10-09 the sheet showed a log of its own (time and name in a column of monospace, the
-  answers' markdown as raw lines).
+  answers' markdown as raw lines); until 2026-10-10 messages knew only paragraphs and bullet
+  lists, and an agent's table showed as raw lines of `|`.
 - **Looked-up questions** — a question that needs reading ("Was würde der Agent hier machen, wenn
   ich starte?", what the plan says, how something works) the quick turn does not answer: it
   acknowledges it ("Ich schaue im Plan nach.") and passes it on. A question about a project or one

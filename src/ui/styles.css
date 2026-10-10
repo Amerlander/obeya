@@ -326,6 +326,17 @@ textarea.p-title::placeholder { color: var(--muted); font-weight: 400; font-styl
 .p-list li::before { content: "•"; position: absolute; left: 7px; color: var(--muted); }
 .p-list li.done::before { content: "✓"; left: 4px; color: var(--approved); font-weight: 700; }
 .p-list li.open::before { content: "○"; left: 3px; }
+.p-list .p-list { margin-top: 2px; font-size: inherit; }
+ol.p-list { list-style: decimal; padding-left: 24px; }
+ol.p-list > li { padding-left: 2px; }
+ol.p-list > li::before { content: none; }
+.p-table { max-width: 100%; overflow: auto; margin: 10px 0 0; }
+.p-table table { border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.p-table :is(th, td) { text-align: left; vertical-align: top; padding: 4px 12px 4px 0; border-bottom: 1px solid var(--line); }
+.p-table th { font-weight: 600; }
+.p-code { margin: 10px 0 0; padding: 8px 10px; background: var(--chip); border-radius: 2px; overflow: auto; font: 12.5px/1.5 var(--mono); }
+.p-quote { margin: 10px 0 0; padding: 1px 0 1px 12px; border-left: 3px solid var(--line); color: var(--muted); }
+.p-hr { border: 0; border-top: 1px solid var(--line); margin: 12px 0; }
 .p-src { margin-top: 22px; color: var(--muted); font-size: 12.5px; }
 .p-src code { font-size: 12px; }
 textarea.p-body { display: block; width: 100%; max-width: 76ch; min-height: 180px; margin-top: 16px; padding: 12px 14px;
@@ -424,6 +435,8 @@ textarea.p-body:focus { border-color: var(--muted); }
 .talk .msg .p-lead { overflow-wrap: anywhere; }
 .talk .msg .p-lead { margin-top: 2px; font-size: 14px; }
 .talk .msg .p-list { margin-top: 4px; font-size: 13.5px; }
+.talk .msg :is(.p-table, .p-code, .p-quote) { margin-top: 6px; }
+.talk .msg .p-table table { font-size: 13.5px; }
 .talk .msg .who { font-size: 11px; font-weight: 600; color: var(--idea); }
 .talk .msg .who .t { color: var(--muted); font-weight: 400; margin-left: 4px; }
 .talk .msg.by-owner { align-self: flex-end; background: color-mix(in srgb, var(--working) 9%, var(--card)); }
@@ -472,7 +485,7 @@ textarea.p-body:focus { border-color: var(--muted); }
 .talk .steps li { overflow-wrap: anywhere; }
 .talk .steps .step-activity { font: 11.5px/1.5 var(--mono); }
 .talk .steps .step-say, .talk .steps .step-closing { color: var(--ink); }
-.talk .steps :is(.step-say, .step-closing) :is(.p-lead, .p-list) { margin: 0; font-size: 12.5px; }
+.talk .steps :is(.step-say, .step-closing) :is(.p-lead, .p-list, .p-table table) { margin: 0; font-size: 12.5px; }
 .talk .steps .step-state { color: var(--idea); }
 .talk .note { font-size: 12px; color: var(--muted); font-style: italic; align-self: center; text-align: center; }
 .talk .note.ev-error { color: var(--error); font-style: normal; }
@@ -903,7 +916,7 @@ button.link:hover { text-decoration: underline; }
 #ksheet > * { flex: none; }
 #ksheet > .talk { flex: 1 1 0; min-height: 200px; max-height: none; max-width: none; margin: 0 0 4px; }
 /* what the owner took back stays, struck through */
-.talk .msg.undone :is(.p-lead, .p-list) { text-decoration: line-through; text-decoration-color: var(--muted); }
+.talk .msg.undone :is(.p-lead, .p-list, .p-table) { text-decoration: line-through; text-decoration-color: var(--muted); }
 .k-rest { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 4px; }
 .k-rest .reshare { margin: 8px 0; }
 .fold-head { display: flex; align-items: center; gap: 6px; width: 100%; padding: 6px 2px; border: 0; background: none; font: inherit; font-size: 13px;
