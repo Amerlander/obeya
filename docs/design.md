@@ -2329,6 +2329,16 @@ the repository; the copy on the project is only for the archive).
   dropped again: the owner found the scrolling odd. The hero video is a release asset rather than
   in git or on a video host (2026-10-07): git holds no video, and the site loads nothing from a
   third party.
+- Workers run on more than one machine, capped by busy workers rather than by workspaces
+  (2026-10-10; see Workspaces, Parking, Hosts). Measured on the owner's Mac (M4 Pro, 48 GB),
+  1–8 Oct 2026, on the canvas of their work repository: workers were in a turn for 74 of the 963
+  worker-hours they held a workspace (8 %), at most 8 at once, and busy work beyond 3 at once came
+  to 17.6 worker-hours in 5 working days. The 5–9 held clones each kept their app stack running,
+  which filled the 48 GB and a 20 GB swap; the Claude Code processes took 2.3 GB in all. So a
+  waiting card stops its stack (parking), a machine counts slots for busy workers, and a card
+  that finds none here goes to another machine over SSH (the owner's second MacBook first),
+  where it stays until its work lands, since its workspace and its session live there. Nothing
+  secret is stored on such a host; the logins travel with each command.
 - Agents run only through the user's own installation of Claude Code and its login: Obeya starts
   that installation and never uses the subscription's token itself. Tools that used the token
   against the API themselves were blocked; tools that start the official installation appear to
@@ -2349,3 +2359,13 @@ the repository; the copy on the project is only for the archive).
   in the doc as part of their change. Should the project agent keep the doc's progress instead?
 - A plan doc without a `## Workstreams` checklist is not shown (its tasks under other headings,
   say). Fix such docs, or show them as projects without cards?
+- Cloud hosts, left out for now (2026-10-10): a host type whose slots are cloud instances, one
+  per card (an EC2 `m8g.xlarge`, say, in the using repository's cloud account), launched from a
+  prepared image when the other machines are full, stopped some minutes after the card's last
+  turn (only the disk kept), started again on the owner's next message and terminated once the
+  work has landed, with a cap on concurrent instances. Image, network and IAM would be the using
+  repository's infrastructure. Estimated from the measurement under Decisions: about $25 a month with the
+  Mac alone at that load, nearly nothing with a second machine, $190–290 a month on demand at 36
+  agents. Worth it only if parking and SSH hosts leave the owner short of slots. Reaching them,
+  and the second MacBook away from home, would need more than plain SSH on the home network
+  (Tailscale, say).
