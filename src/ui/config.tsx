@@ -3,7 +3,7 @@
 // with them), and the settings saved on their own (models, voice, demos, language). The server's
 // own settings come from its command line and show read-only.
 
-import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
+import { type CSSProperties, Fragment, type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigView, type DemoSettings, type DemoSettingsView, type DemoVoiceCheck, type Language, type HostConfig, type LanguageView, type NarrationLanguage, type RepoConfig, type SetupCheck, type VoiceKind, type VoiceSetupView } from '../core/types';
 import { LANGUAGES } from '../core/locale';
 import { pushKeyFromEvent, type PushKeyView } from '../core/push-key';
@@ -196,6 +196,56 @@ function Field({ label, hint, children }: { label: ReactNode; hint?: ReactNode; 
     </div>
   );
 }
+
+/**
+ * What to know about a field, behind a small icon: the icon shows while the pointer is on the field or its
+ * label (the nearest `.cfg-has-info` around it) or the field has the focus, so the page stays calm; the text
+ * shows on the icon at once, kept inside the window.
+ */
+function Info({ text }: { text: string }) {
+  const id = useId();
+  const icon = useRef<HTMLButtonElement>(null);
+  const [at, setAt] = useState<CSSProperties | null>(null);
+  const show = () => {
+    const r = icon.current!.getBoundingClientRect();
+    const left = Math.max(8, Math.min(r.left - 12, innerWidth - TIP_WIDTH - 8));
+    // below the icon, or above it in the lower part of the window
+    setAt(r.bottom > innerHeight * 0.65 ? { left, bottom: innerHeight - r.top + 6 } : { left, top: r.bottom + 6 });
+  };
+  useEffect(() => {
+    if (!at) return;
+    const hide = () => setAt(null);
+    addEventListener('scroll', hide, true);
+    return () => removeEventListener('scroll', hide, true);
+  }, [at]);
+  return (
+    <>
+      <button
+        type="button"
+        ref={icon}
+        className={at ? 'cfg-info on' : 'cfg-info'}
+        aria-label={t.config.info}
+        aria-describedby={id}
+        onPointerEnter={show}
+        onPointerLeave={() => setAt(null)}
+        onFocus={show}
+        onBlur={() => setAt(null)}
+        onClick={(e) => (e.preventDefault(), show())}
+      >
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+          <circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
+          <circle cx="8" cy="5" r=".95" fill="currentColor" />
+          <path d="M8 7.3v4.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      </button>
+      <span id={id} className="cfg-tip" role="tooltip" hidden={!at} style={at ?? undefined}>
+        {text}
+      </span>
+    </>
+  );
+}
+
+const TIP_WIDTH = 340;
 
 interface CanvasesProps {
   view: ConfigView;
@@ -853,7 +903,7 @@ function CanvasBlock({ n, canvas, resolved, running, pin, saved, adapters, probl
           }}
         />
         {resolved && (
-          <span className={fresh ? 'c-id fresh' : 'c-id'} title={fresh ? t.config.freshHint : undefined}>
+          <span className={fresh ? 'c-id fresh' : 'c-id'}>
             ?c={resolved.id} · {fresh ? t.config.fresh : t.config.runs}
           </span>
         )}
@@ -865,8 +915,8 @@ function CanvasBlock({ n, canvas, resolved, running, pin, saved, adapters, probl
       <div className="cfg-repos">
         <span className="hint">{t.config.path}</span>
         <span className="hint">{t.config.adapter}</span>
-        <span className="hint" title={t.config.shareHint}>
-          {t.config.share}
+        <span className="hint cfg-has-info cfg-share">
+          {t.config.share} <Info text={t.config.shareHint} />
         </span>
         <span />
         {canvas.repos.map((r, i) => (
@@ -938,9 +988,8 @@ function RepoRow({ repo, home, resolved, canvasId, adapters, problems, where, as
       </div>
       <div className="cfg-cell">
         <input
-          className="c-path"
+          className="c-path c-share"
           aria-label={t.config.share}
-          title={t.config.shareHint}
           value={repo.share ?? ''}
           placeholder={resolved?.adapterSite ? t.config.shareSite(resolved.adapterSite) : resolved?.adapterShares ? t.config.shareAdapter(resolved.adapter) : t.config.shareNone}
           spellCheck={false}
@@ -956,9 +1005,11 @@ function RepoRow({ repo, home, resolved, canvasId, adapters, problems, where, as
             <span className="hint">{t.config.clones}</span>
             <input type="number" min={0} max={20} placeholder="0" value={repo.clones ?? ''} onChange={(e) => onChange(without('clones', Number(e.target.value) || undefined))} />
           </label>
-          <label title={t.config.slotsHint}>
-            <span className="hint">{t.config.slots}</span>
-            <input type="number" min={0} max={20} placeholder={t.config.slotsAll} value={repo.slots ?? ''} onChange={(e) => onChange(without('slots', slotsOf(e.target.value)))} />
+          <label className="cfg-has-info">
+            <span className="hint">
+              {t.config.slots} <Info text={t.config.slotsHint} />
+            </span>
+            <input type="number" min={0} max={20} aria-label={t.config.slots} placeholder={t.config.slotsAll} value={repo.slots ?? ''} onChange={(e) => onChange(without('slots', slotsOf(e.target.value)))} />
           </label>
           <label>
             <span className="hint">{t.config.workspaces}</span>
@@ -999,9 +1050,9 @@ function slotsOf(value: string): number | undefined {
 function Hosts({ hosts, onChange }: { hosts: HostConfig[]; onChange: (hosts: HostConfig[]) => void }) {
   const set = (i: number, h: HostConfig | null) => onChange(h ? hosts.map((x, k) => (k === i ? h : x)) : hosts.filter((_, k) => k !== i));
   return (
-    <div className="cfg-hosts">
-      <span className="hint" title={t.config.hostsHint}>
-        {t.config.hosts}
+    <div className="cfg-hosts cfg-has-info">
+      <span className="hint">
+        {t.config.hosts} <Info text={t.config.hostsHint} />
       </span>
       {hosts.length > 0 && (
         <div className="cfg-host-rows">
@@ -1014,12 +1065,15 @@ function Hosts({ hosts, onChange }: { hosts: HostConfig[]; onChange: (hosts: Hos
                 <span className="hint">{t.config.hostClones}</span>
                 <input type="number" min={0} max={20} value={h.clones} onChange={(e) => set(i, { ...h, clones: Number(e.target.value) || 0 })} />
               </label>
-              <label className="cfg-host-clones" title={t.config.slotsHint}>
-                <span className="hint">{t.config.hostSlots}</span>
+              <label className="cfg-host-clones cfg-has-info">
+                <span className="hint">
+                  {t.config.hostSlots} <Info text={t.config.slotsHint} />
+                </span>
                 <input
                   type="number"
                   min={0}
                   max={20}
+                  aria-label={t.config.hostSlots}
                   placeholder={t.config.slotsAll}
                   value={h.slots ?? ''}
                   onChange={(e) => {

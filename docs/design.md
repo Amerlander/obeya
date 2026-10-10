@@ -740,6 +740,11 @@ the owner's language (`src/core/locale.ts`).
   restart or a new language comes back to it; Leinwände marks a draft not saved yet and counts its
   problems in red. Each section is a heading with what it is about and the file it is saved in, and
   below it settings as rows of label and control, parts of a section under a rule: no boxes in boxes.
+  Its fields sit a shade darker than the sheet with a firmer edge, so its structure reads at a glance; the
+  one being typed in comes up to the sheet's colour. What to know about a field that is not written beside
+  it sits behind a small info icon at its label, shown only while the pointer is on the field or its label
+  (or the field has the focus), so the page stays calm; the text shows on the icon at once, not as a
+  browser tooltip with a wait on plain text.
   Each canvas is a heading line (number, name, id, whether it runs) over a table of its repositories:
   path, adapter, share command, one row each. Each canvas shows its id and whether it runs, each repository its id,
   adapter, whether workers use clones or worktrees, and the command that shares its demos (empty:

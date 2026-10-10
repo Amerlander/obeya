@@ -726,11 +726,16 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 #config code { font: 12px var(--mono); overflow-wrap: anywhere; }
 #config .warn { color: var(--warn); }
 #config .p-error { margin: 6px 0 0; font-size: 13px; }
-#config input, #config select, #config textarea { font: inherit; font-size: 13px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 2px;
-  background: var(--card); color: var(--ink); outline: none; }
-#config input:focus, #config textarea:focus, #config select:focus { border-color: var(--muted); }
+/* fields sunk a little into the sheet, a shade darker than it with a firmer edge, so the page's structure
+   reads at a glance; the one being typed in comes up to the sheet's own colour */
+#config input, #config select, #config textarea { font: inherit; font-size: 13px; padding: 6px 9px; border-radius: 2px;
+  border: 1px solid color-mix(in srgb, var(--ink) 16%, var(--panel)); background: color-mix(in srgb, var(--ink) 5%, var(--panel));
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); outline: none; }
+#config input:hover, #config textarea:hover, #config select:hover { border-color: color-mix(in srgb, var(--ink) 28%, var(--panel)); }
+#config input:focus, #config textarea:focus, #config select:focus { border-color: var(--muted); background: var(--panel); }
+#config input::placeholder, #config textarea::placeholder { color: color-mix(in srgb, var(--muted) 80%, var(--panel)); }
 #config textarea { font: 12px var(--mono); resize: vertical; width: 100%; }
-#config input[type="checkbox"] { width: auto; margin: 0; padding: 0; }
+#config input[type="checkbox"] { width: auto; margin: 0; padding: 0; box-shadow: none; }
 .cfg-head { margin-bottom: 14px; }
 .cfg-head h3 { margin: 0 48px 6px 0; font-size: 26px; line-height: 1.15; }
 .cfg-head.sub { margin-top: 30px; padding-top: 22px; border-top: 1px solid var(--line); }
@@ -757,6 +762,19 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 .cfg-actions .c-status { margin: 0; font-size: 12.5px; }
 .cfg-actions .cfg-json { margin: 0 0 0 auto; }
 .cfg-actions .cfg-json.on { background: var(--ink); color: var(--bg); }
+/* what to know about a field: an icon beside its label, shown only while the pointer is on the field or the
+   label (the nearest .cfg-has-info) or the field has the focus; the share command's label heads a column, so
+   any of its fields shows it */
+.cfg-info { display: inline-flex; vertical-align: -3px; margin-left: 2px; padding: 0 1px; border: 0; background: none; color: var(--muted);
+  cursor: help; line-height: 0; opacity: 0; transition: opacity .12s; }
+.cfg-has-info:hover .cfg-info, .cfg-has-info:focus-within .cfg-info,
+  .cfg-repos:has(.c-share:hover, .c-share:focus) > .cfg-share .cfg-info { opacity: 1; }
+.cfg-has-info:is(:hover, :focus-within) .cfg-has-info:not(:hover, :focus-within) .cfg-info { opacity: 0; }
+.cfg-info:hover, .cfg-info.on, #config .cfg-info:focus-visible { opacity: 1; color: var(--ink); }
+.cfg-info:focus-visible { outline: 1px solid var(--muted); outline-offset: 1px; border-radius: 50%; }
+.cfg-tip { position: fixed; z-index: 60; width: 340px; padding: 10px 14px; border-radius: 3px; background: var(--card); color: var(--ink);
+  box-shadow: var(--lift); font-size: 13px; font-weight: 400; line-height: 1.45; white-space: normal; pointer-events: none; }
+.cfg-tip[hidden] { display: none; }
 /* a canvas: its name as a heading line, its repositories as a table below it */
 .cfg-canvas { padding: 6px 0 18px; }
 .cfg-canvas + .cfg-canvas { border-top: 1px solid var(--line); padding-top: 18px; }
