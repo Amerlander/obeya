@@ -917,7 +917,10 @@ the owner's language (`src/core/locale.ts`).
   preference learned or changed while one runs reaches it once, at its next tool call, without a
   message or a new turn. A workstream's worker hears its project's new decisions the same way
   (those on its own card it heard as answers). A worker's session also has `canUseTool`: a call
-  the settings want confirmed becomes the question its card waits on (see Communication).
+  the settings want confirmed becomes the question its card waits on (see Communication). Its own
+  Obeya tools run without asking through a `PreToolUse` hook that allows them; as bare
+  `allowedTools` (until 2026-10-10) they had the SDK print a `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED`
+  warning with a stack trace into Obeya's log at every worker start.
 - **Workspaces** — per adapter. A pool of full clones leased by a card while it is worked on
   (for a repository whose tools break inside a worktree, or that runs its own app stack per clone),
   or a worktree per card (Obeya itself: any number in parallel), kept across stop and restart

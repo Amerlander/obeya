@@ -193,7 +193,8 @@ export const sdkRuntime: AgentRuntime = {
         ...(spec.plugins?.length ? { plugins: spec.plugins.map((path) => ({ type: 'local' as const, path })) } : {}),
         ...(spec.readOnly
           ? { tools: READ_ONLY_TOOLS, allowedTools: [...READ_ONLY_TOOLS, ...ownTools], permissionMode: 'dontAsk' as const }
-          : { allowedTools: ownTools, permissionMode: spec.permissionMode ?? 'auto' }),
+          : // a worker's own tools are allowed by the hook below: as allowedTools they would have the SDK warn that they pass by canUseTool
+            { ...(spec.askOwner ? {} : { allowedTools: ownTools }), permissionMode: spec.permissionMode ?? 'auto' }),
         ...(spec.resume ? { resume: spec.resume } : {}),
         ...(spec.effort ? { effort: spec.effort } : {}),
         ...(spec.model ? { model: spec.model } : {}),
@@ -202,6 +203,7 @@ export const sdkRuntime: AgentRuntime = {
         ...(spec.askOwner ? { canUseTool: (name: string, input: Record<string, unknown>, o: { signal: AbortSignal; decisionReason?: string }) => askOwner(spec.askOwner!, name, input, o) } : {}),
         hooks: {
           PreToolUse: [
+            { matcher: 'mcp__obeya__.*', hooks: [async () => ownToolAllowed] },
             {
               matcher: 'Bash',
               hooks: [
@@ -352,6 +354,9 @@ export function refuseForegroundWait(input: HookInput): HookJSONOutput {
     },
   };
 }
+
+/** Obeya's own tools run without asking anyone. */
+const ownToolAllowed: HookJSONOutput = { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow' } };
 
 function withContext(event: 'PostToolUse' | 'PostToolUseFailure', text: string | undefined): HookJSONOutput {
   return text ? { hookSpecificOutput: { hookEventName: event, additionalContext: text } } : {};
