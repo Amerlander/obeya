@@ -97,7 +97,7 @@ nearly nothing with a second machine, $190–290 a month on-demand at 36 agents.
   that Obeya's tools and hooks work through `spawnClaudeCodeProcess` over SSH. Done when a card of
   the work repository runs on the owner's second MacBook (macOS x86_64) end to end: work, checks, demo,
   handover, landing.
-- [ ] **W3:** Slots and placement. Hosts capped by busy workers instead of clones, a new card on
+- [x] **W3:** Slots and placement. Hosts capped by busy workers instead of clones, a new card on
   the first host with a free slot, the host per workspace in the Workspaces pill. Done when the
   fourth busy card goes to the second MacBook by itself while the Mac's three slots are busy.
 - [ ] **W4:** Cloud hosts, optional. Instances that start per card (see Cloud hosts), with the

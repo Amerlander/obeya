@@ -340,7 +340,8 @@ export type Queue = (
   | { workspace: WorkspaceShortage }
 ) & { since?: string };
 
-export type WorkspaceShortage = 'none' | 'dirty';
+/** Why a card waits to start: no clone free (`none`), the free ones dirty, or every machine with a clean free one busy to its slots (`slots`). */
+export type WorkspaceShortage = 'none' | 'dirty' | 'slots';
 
 /**
  * How a demo shows the work: a narrated `video` of something that happens, or an `html` artifact
@@ -439,11 +440,25 @@ export interface RepoRef {
   direct?: boolean;
 }
 
-/** A repository's pool of clones: how many there are, and the cards that hold one now. */
+/** A repository's pool of clones, by the machine they are on, in the order new cards go there. */
 export interface ClonePool {
   repo: string;
+  hosts: PoolHost[];
+}
+
+/** A machine's part of a pool: its clones and the cards that hold them, and how many of their workers may be busy at once. */
+export interface PoolHost {
+  /** The host's name in the configuration; for the machine Obeya runs on, its own name. */
+  name: string;
+  /** The machine Obeya runs on. */
+  here?: boolean;
+  /** How many of its workers may be in a turn at once; a new card goes elsewhere or waits once they are. */
+  slots: number;
+  /** Its clones: how many, and the cards that hold one now. */
   total: number;
   cards: string[];
+  /** The cards whose worker is in a turn there now. */
+  busy: string[];
 }
 
 export interface CanvasSnapshot {
@@ -647,6 +662,8 @@ export type ErrorCode =
   | 'planCard'
   | 'noWorkspace'
   | 'dirtyWorkspaces'
+  /** Every machine with a clean free clone has as many workers busy as it has slots. */
+  | 'noSlot'
   | 'workspace'
   | 'emptyText'
   | 'unknownPreference'
@@ -724,6 +741,8 @@ export interface RepoConfig {
   workspaces?: string[];
   /** Clones to create under Obeya's home (adapters that use clones). */
   clones?: number;
+  /** How many of its workers may be busy at once on this machine (adapters that use clones); as many as it has clones when left out. */
+  slots?: number;
   /**
    * The command that shares a demo on a page outside Obeya (`publish`, `withdraw <slug>`;
    * `SharePage` in `src/server/share.ts`), as a command line: it takes the place of the adapter's.
@@ -731,8 +750,8 @@ export interface RepoConfig {
    */
   share?: string;
   /**
-   * Other machines its workers run on, reached over SSH (design: Hosts), after the clones here are
-   * all leased. Only for a repository whose workers use clones and whose work goes out through its
+   * Other machines its workers run on, reached over SSH (design: Hosts), in the order a new card
+   * looks for a free slot after this one. Only for a repository whose workers use clones and whose work goes out through its
    * remote.
    */
   hosts?: HostConfig[];
@@ -748,6 +767,8 @@ export interface HostConfig {
   root: string;
   /** How many clones Obeya keeps there (`<root>/1`, `<root>/2`, …). */
   clones: number;
+  /** How many of the repository's workers may be busy there at once; as many as it has clones when left out. */
+  slots?: number;
 }
 
 /** A canvas in Obeya's configuration. */

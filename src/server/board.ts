@@ -800,14 +800,20 @@ export class Board {
     return this.cache;
   }
 
-  /** Leases change only along with a card (start, stop, landing, a discarded prototype), so the cache holds. */
+  /** The repositories' clone pools by machine, as those who run them say (`showPools`). */
+  private pools?: () => ClonePool[];
+
+  /**
+   * Who says what the clone pools are. Leases change only along with a card (start, stop,
+   * landing, a discarded prototype) and a worker's turn starts and ends with `changed`, so the cache holds.
+   */
+  showPools(pools: () => ClonePool[]) {
+    this.pools = pools;
+    this.changed();
+  }
+
   private clonePools(): ClonePool[] {
-    return this.canvas.repos
-      .filter((r) => r.clones)
-      .map((r) => {
-        const ws = this.store.workspaces(this.canvas.id, r.id === this.home ? null : r.id);
-        return { repo: r.id, total: ws.length, cards: ws.flatMap((w) => (w.card_id ? [w.card_id] : [])) };
-      });
+    return this.pools?.() ?? [];
   }
 
   /** The outdated pages, archived cards' included, and the run sharing them again. */

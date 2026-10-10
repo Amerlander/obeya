@@ -14,7 +14,7 @@ import { hostName, onHost, registerHost, remote, sessionFiles, type SshHost } fr
 import { runStackCommand } from './stack';
 import { FakeRuntime, fakeSsh, gitRepo, identify, until } from './testing';
 import { Workers } from './workers';
-import { git, gitAsync, Workspaces } from './workspaces';
+import { git, gitAsync, HERE, Workspaces } from './workspaces';
 
 let dir: string;
 let ssh: string;
@@ -190,6 +190,44 @@ describe('clones on a host', () => {
     spaces.discard(b, 'obeya/b');
     expect(git(local, 'branch', '--list', 'obeya/b')).toBe('');
     // many git calls, each through the stand-in for ssh
+  }, 30_000);
+
+  test('take a new card on the first machine with a free slot, here first', async () => {
+    let workers!: Workers;
+    spaces = new Workspaces(store, 'c', {
+      mode: 'clones',
+      repoPath: join(dir, 'main'),
+      dir: join(dir, 'ws'),
+      machines: [{ host: null, slots: 1 }, { host: name, slots: 1 }],
+      busy: (h) => workers.busyOn(h),
+    });
+    spaces.ensureClones(origin, 2);
+    expect(await spaces.ensureHostClones(host, join(dir, 'far'), origin, 2, () => undefined)).toBeNull();
+    const runtime = new FakeRuntime();
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, workspaces: 'clones', land: 'pr' } });
+    const [a, b, c] = ['A', 'B', 'C'].map((title) => board.create({ title, x: 0, y: 0 }).id) as [string, string, string];
+    workers.start(a);
+    expect(board.row(a).workspace).toBe(join(dir, 'ws', '1'));
+    // the slot here is taken by A at work, though a clone here is free
+    workers.start(b);
+    expect(board.row(b).workspace).toBe(onHost(name, join(dir, 'far', '1')));
+    expect(() => workers.start(c)).toThrow(expect.objectContaining({ code: 'noSlot' }));
+    expect(spaces.leasable()).toBe(false);
+    expect(spaces.pool(workers.inTurn())).toEqual([
+      { name: HERE, here: true, slots: 1, total: 2, cards: [a], busy: [a] },
+      { name, slots: 1, total: 2, cards: [b], busy: [b] },
+    ]);
+    // A asks the owner and holds its clone, but no slot
+    const sa = runtime.sessions.find((s) => s.spec.cwd === board.row(a).workspace)!;
+    await sa.call('ask', { question: 'Welche Farbe?' });
+    sa.emit({ type: 'idle' });
+    expect(spaces.leasable()).toBe(true);
+    workers.start(c);
+    expect(board.row(c).workspace).toBe(join(dir, 'ws', '2'));
+    // the owner's question to a card whose work is over does not wait for a slot
+    const d = board.create({ title: 'D', x: 0, y: 0 }).id;
+    expect(spaces.lease(d, 'obeya/d', { overSlots: true })).toBe(onHost(name, join(dir, 'far', '2')));
+    workers.shutdown();
   }, 30_000);
 
   test('wait for a host that cannot be reached, and say why', async () => {

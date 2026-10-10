@@ -378,13 +378,18 @@ describe('Koordinator', () => {
 describe('Koordinator waits for a free workspace', () => {
   let clones: string[];
 
-  /** A pool of `n` clones instead of worktrees: cards wait when all are leased. */
-  function pool(n: number) {
+  /** A pool of `n` clones instead of worktrees: cards wait when all are leased, or with `slots` when that many workers are busy. */
+  function pool(n: number, slots?: number) {
     const main = join(dir, 'main');
     const store = new Store(':memory:');
     board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: main, branch: 'main' }] }, () => docs);
     const adapter = { ...generic, land: 'main' as const, workspaces: 'clones' as const };
-    workspaces = new Workspaces(store, 'c', { mode: 'clones', repoPath: main, dir: join(dir, 'clones') });
+    workspaces = new Workspaces(store, 'c', {
+      mode: 'clones',
+      repoPath: main,
+      dir: join(dir, 'clones'),
+      ...(slots !== undefined ? { machines: [{ host: null, slots }], busy: () => workers.busyOn(null) } : {}),
+    });
     workspaces.ensureClones(main, n);
     clones = workspaces.list().map((w) => w.path);
     workers = new Workers({ board, runtime, workspaces, adapter });
@@ -409,6 +414,28 @@ describe('Koordinator waits for a free workspace', () => {
     expect(board.row(b.id).workspace).toBe(clones[0]!);
     expect(item(b.id).queue).toBeUndefined();
     expect(board.events(b.id).some((e) => e.text.includes('Ein Workspace ist frei'))).toBe(true);
+  });
+
+  test('a card waits for a slot while the busy workers fill them, and starts once a turn ends', async () => {
+    pool(3, 1);
+    const a = card('A');
+    k.request(a.id);
+    await scope(['src/a.ts']);
+    const b = card('B');
+    k.request(b.id);
+    await scope(['src/b.ts']);
+    expect(item(b.id)).toMatchObject({ state: 'planned', queue: { workspace: 'slots' } });
+    expect(board.events(b.id).at(-1)!.text).toContain('Kein Slot frei');
+    expect(workspaces.pool(workers.inTurn())).toEqual([expect.objectContaining({ here: true, slots: 1, total: 3, cards: [a.id], busy: [a.id] })]);
+
+    // A asks the owner: its clone stays its own, its slot is free
+    await workerOf(a.id).call('ask', { question: 'Welche Farbe?' });
+    workerOf(a.id).emit({ type: 'idle' });
+    await settle();
+    expect(item(b.id).state).toBe('working');
+    expect(board.row(b.id).workspace).not.toBe(board.row(a.id).workspace);
+    expect(board.events(b.id).some((e) => e.text.includes('wieder einen Slot frei'))).toBe(true);
+    expect(workspaces.pool(workers.inTurn())[0]).toMatchObject({ cards: [a.id, b.id], busy: [b.id] });
   });
 
   test('the card waiting longest gets the workspace; a card behind a waiting one waits too', async () => {

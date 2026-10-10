@@ -927,10 +927,27 @@ the owner's language (`src/core/locale.ts`).
   until the card's work has landed. Clones come from the repository's `clones` or
   `workspaces` in the configuration, or on the command line from `--workspace <path>` or
   `--clones <n>`.
-  For each repository that uses clones, the top bar shows the pool ("Workspaces", a dot per clone,
-  filled while a card holds it, and "2 frei" or "alle belegt"); over it, the cards that hold one and
-  how many wait for one. The snapshot carries the pools (`workspaces`): leases change only with a
-  card, so they ride on its updates. Worktrees are never short, so a canvas of only those shows none.
+  A repository's workers in clones are capped by slots, not by clones: a slot is room for one
+  busy worker (in a turn, or waiting for its background work), and a machine has a number of
+  them (`slots` for this one, per host for the others; as many as it has clones when left out).
+  A new card takes a clean free clone on the first machine, this one first and then the hosts in
+  the configuration's order, whose busy workers leave it a slot; with none, it waits in the queue
+  for a slot (`workspace: 'slots'`, "Wartet auf freien Slot") and starts once a turn ends
+  somewhere. A card holds its clone until its work lands, but a slot only while its worker is at
+  work: waiting for the owner it holds none. A message to a waiting card is never held back for a
+  slot, so a machine may go over its slots for a while when the owner answers several cards in a
+  row; the owner's question to a finished card takes a clone on a busy machine when no machine has
+  a slot. Slots count per repository: two repositories on one machine each have their own.
+  Until 2026-10-10 the clones were the only cap, and a card went to another machine only once
+  every clone here was leased.
+  For each repository that uses clones, the top bar shows the pool ("Workspaces"): per machine,
+  named once there is more than one, a dot per clone, solid while its card's worker is at work and
+  pale while the card holds it otherwise, and how many new cards could start now ("2 frei" or
+  "alle belegt"); over it, each machine's slots at work and clones taken, the cards that hold one
+  (those at work first), and how many cards wait for a workspace or a slot. The snapshot carries
+  the pools (`workspaces`, by machine): leases change only with a card, and a worker's turn
+  starting or ending changes the board, so they ride on its updates. Worktrees are never short, so
+  a canvas of only those shows none.
 - **Parking** — a card that waits for the owner (handed over, asked, its pull request open), its
   worker without a turn or background work, has the app stack in its workspace stopped after a
   grace of five minutes (`OBEYA_PARK_GRACE` in seconds for a demo or a live check; a quick reply
@@ -946,13 +963,13 @@ the owner's language (`src/core/locale.ts`).
   until someone stopped it by hand.
 - **Hosts** — other machines a repository's workers run on, reached over SSH (`src/server/hosts.ts`).
   The configuration lists them per repository (`hosts`: name, SSH target, the directory there that
-  holds the clones, how many), and the Konfiguration dialog edits them under the clones, one table row per machine; only a
+  holds the clones, how many, how many slots), and the Konfiguration dialog edits them under the
+  clones, one table row per machine, as the Koordinator's `configure` does by voice; only a
   repository that works in clones and lands through its remote can have them (`hostRepo`), and a
   name stands for one machine across the configuration (`hostName`). Obeya clones the repository
   there itself in the background (an unreachable host is tried again every two minutes) and
-  registers each clone as the workspace `ssh://<host>/<path>`; the pool lists them after the clones
-  here (paths sort `/` before `s`), so a card goes there once those here are all leased (W3 of the
-  plan doc places by busy workers instead). A workspace's name says where it is, so every git call
+  registers each clone as the workspace `ssh://<host>/<path>`; a new card goes there when the
+  machines before it have no slot (see Workspaces). A workspace's name says where it is, so every git call
   in it (`git`, `gitAsync`, `exists`), the adapter's stack commands and the worker's session run
   there through `ssh` without the callers knowing: `ssh <target> sh -c '…'` with the installers'
   directories on its `PATH` (the host's own `~/.zshenv` adds the rest), one shared connection
@@ -982,8 +999,8 @@ the owner's language (`src/core/locale.ts`).
   taken, or with word of the drop if it was at work; a card waiting for the owner needs no session
   until their next message. The session that resumes ends the one the drop may have left running
   there first (by the pid it wrote). gh on a pull request runs here, on its URL. What a host needs
-  installed: git, Claude Code and what the repository's own work needs (for OKE: .NET, Bun, Node,
-  uv, Docker, Chrome, ffmpeg); Homebrew no longer serves Intel Macs, so those went into the user's
+  installed: git, Claude Code and what the repository's own work needs (for the owner's work
+  repository: .NET, Bun, Node, uv, Docker, Chrome, ffmpeg); Homebrew no longer serves Intel Macs, so those went into the user's
   home there by their own installers.
 - **Landing** — per adapter. `pr`: approval leaves the branch for the PR loop. `main`
   (Obeya): approval rebases the branch onto `main` and fast-forwards the Obeya checkout; the card

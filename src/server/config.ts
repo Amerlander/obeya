@@ -55,6 +55,7 @@ const shape = z.array(
             adapter: z.string().optional(),
             workspaces: z.array(z.string()).optional(),
             clones: z.number().int().min(0).max(20).optional(),
+            slots: z.number().int().min(0).max(20).optional(),
             share: z.string().optional(),
             hosts: z
               .array(
@@ -64,6 +65,7 @@ const shape = z.array(
                     ssh: z.string(),
                     root: z.string(),
                     clones: z.number().int().min(0).max(20),
+                    slots: z.number().int().min(0).max(20).optional(),
                   })
                   .strict(),
               )
@@ -83,12 +85,13 @@ function tidy(canvases: z.infer<typeof shape>): CanvasConfig[] {
     repos: c.repos.map((r) => {
       const workspaces = (r.workspaces ?? []).map((w) => w.trim()).filter(Boolean);
       // a host without a name or a machine is a row still being filled in
-      const hosts = (r.hosts ?? []).map((h) => ({ name: h.name.trim(), ssh: h.ssh.trim(), root: h.root.trim() || '~/obeya', clones: h.clones })).filter((h) => h.name && h.ssh);
+      const hosts = (r.hosts ?? []).map((h) => ({ name: h.name.trim(), ssh: h.ssh.trim(), root: h.root.trim() || '~/obeya', clones: h.clones, ...(h.slots !== undefined ? { slots: h.slots } : {}) })).filter((h) => h.name && h.ssh);
       return {
         path: r.path.trim(),
         ...(r.adapter?.trim() ? { adapter: r.adapter.trim() } : {}),
         ...(workspaces.length ? { workspaces } : {}),
         ...(r.clones ? { clones: r.clones } : {}),
+        ...(r.slots !== undefined ? { slots: r.slots } : {}),
         ...(r.share?.trim() ? { share: r.share.trim() } : {}),
         ...(hosts.length ? { hosts } : {}),
       };

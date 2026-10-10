@@ -21,7 +21,8 @@
 // The stage file (JSON; every field but `cards` optional):
 //   {
 //     "port": 4480, "dir": "/tmp/obeya-scratch-4480", "adapter": "obeya", "clones": 2,
-//     "share": "share.ts", "poolCheckout": true,
+//     "share": "share.ts", "poolCheckout": true, "slots": 3,
+//     "hosts": [{ "name": "Workhorse", "ssh": "me@workhorse.local", "clones": 2, "slots": 2 }],
 //     "files": { "src/cli.ts": "…" },
 //     "plans": { "docs/plan/werkzeug.md": "# Werkzeug\n\n## Workstreams\n\n- [ ] **W1:** Konfiguration.\n" },
 //     "cards": [
@@ -63,7 +64,11 @@
 // `files`, say); `poolCheckout` makes the repository's checkout a workspace of the pool too
 // (`workspaces` in the configuration), as a pool of clones often has it, with a bare origin in
 // <dir>; with either, the server
-// starts from a configuration file in <dir>. Preferences are active unless `state` says otherwise; `card` and `replaces` name keys;
+// starts from a configuration file in <dir>. `slots` caps the workers busy at once on this machine
+// (an idle worker counts as busy). `hosts` are other machines over SSH (as in the configuration;
+// `root` defaults to <dir>/far there): the repository gets a bare origin in <dir>, copied to each
+// host at the same path, so that Obeya clones it there as it would a remote; staging afresh
+// removes <dir> there first. Preferences are active unless `state` says otherwise; `card` and `replaces` name keys;
 // `target` is the repository whose CLAUDE.md a rule is for (the canvas id names the home one).
 // What a learned rule's occasion is (card, quote, review), `replaces` and `target` need code that has them.
 // Groups are created through the API with their cards (keys; a workstream stands for its project),
@@ -119,6 +124,10 @@ interface Stage {
   share?: string;
   /** The repository's checkout is a workspace of the pool too. */
   poolCheckout?: boolean;
+  /** Workers busy at once on this machine. */
+  slots?: number;
+  /** Other machines over SSH, as in the configuration. */
+  hosts?: { name: string; ssh: string; root?: string; clones: number; slots?: number }[];
   files?: Record<string, string>;
   plans?: Record<string, string>;
   cards: StageCard[];
@@ -170,11 +179,17 @@ run('git', ['init', '-q', '-b', 'main'], repo);
 run('git', ['add', '-A'], repo);
 run('git', ['-c', 'user.name=Scratch', '-c', 'user.email=scratch@example.com', 'commit', '-qm', 'init'], repo);
 // a workspace of the pool is a clone of the repository's origin, the checkout included
-if (stage.poolCheckout) {
+if (stage.poolCheckout || stage.hosts?.length) {
   run('git', ['clone', '-q', '--bare', repo, join(dir, 'scratch.git')], dir);
   run('git', ['remote', 'add', 'origin', join(dir, 'scratch.git')], repo);
   run('git', ['fetch', '-q', 'origin'], repo);
   run('git', ['branch', '-q', '-u', 'origin/main'], repo);
+}
+// the origin at the same path on each host, which clones it from there
+for (const h of stage.hosts ?? []) {
+  const ssh = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', h.ssh];
+  run('ssh', [...ssh, `rm -rf '${dir}' && mkdir -p '${dir}'`], dir);
+  run('scp', ['-q', '-r', '-o', 'BatchMode=yes', join(dir, 'scratch.git'), `${h.ssh}:${dir}/`], dir);
 }
 
 // the code it runs
@@ -203,7 +218,7 @@ const supervised = args.includes('--restarts');
 const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'OBEYA_SUPERVISED')), OBEYA_HOME: home };
 // a share command and a pool's workspaces live in the configuration, which the command line cannot give
 const configFile = join(dir, 'canvases.json');
-const configured = !!stage.share || !!stage.poolCheckout;
+const configured = !!stage.share || !!stage.poolCheckout || stage.slots !== undefined || !!stage.hosts?.length;
 if (configured)
   writeFileSync(
     configFile,
@@ -216,7 +231,9 @@ if (configured)
               ...(stage.adapter === '' ? {} : { adapter: stage.adapter ?? 'obeya' }),
               ...(stage.clones ? { clones: stage.clones } : {}),
               ...(stage.poolCheckout ? { workspaces: [repo] } : {}),
+              ...(stage.slots !== undefined ? { slots: stage.slots } : {}),
               ...(stage.share ? { share: stage.share } : {}),
+              ...(stage.hosts?.length ? { hosts: stage.hosts.map((h) => ({ ...h, root: h.root ?? `${dir}/far` })) } : {}),
             },
           ],
         },

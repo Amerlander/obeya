@@ -158,14 +158,17 @@ button.pill:hover { box-shadow: var(--lift); }
 .pill.workspaces .pool { display: flex; align-items: center; gap: 6px; }
 .pill.workspaces .slots { display: flex; gap: 3px; }
 .pill.workspaces .slots i { width: 8px; height: 8px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--planned); }
+.pill.workspaces .host { display: flex; align-items: center; gap: 5px; }
+.pill.workspaces .slots i.held { background: color-mix(in srgb, var(--working) 35%, transparent); box-shadow: none; }
 .pill.workspaces .slots i.on { background: var(--working); box-shadow: none; }
 .pill.workspaces.full b { color: var(--waiting); }
-.pill.workspaces .tip { display: none; position: absolute; top: calc(100% + 8px); right: 0; width: 300px; padding: 10px 14px; border-radius: 12px;
+.pill.workspaces .tip { display: none; position: absolute; top: calc(100% + 8px); right: 0; width: 340px; padding: 10px 14px; border-radius: 12px;
   background: var(--panel); color: var(--ink); box-shadow: var(--lift); white-space: normal; font-size: 13px; font-weight: 400; line-height: 1.45;
   text-align: left; pointer-events: none; z-index: 30; }
 .pill.workspaces .tip p { margin: 0 0 6px; }
 .pill.workspaces .tip ul { margin: 0 0 6px; padding-left: 18px; }
-.pill.workspaces .tip > :last-child, .pill.workspaces .tip > div:last-child > :last-child { margin-bottom: 0; }
+.pill.workspaces .tip > :last-child, .pill.workspaces .tip > div:last-child > :last-child,
+  .pill.workspaces .tip > div:last-child > div:last-child > :last-child { margin-bottom: 0; }
 .pill.workspaces:hover .tip { display: block; }
 #bar > svg { flex: none; margin-right: 4px; }
 #bar .right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
@@ -709,12 +712,12 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 .cfg-cell > .hint { font-size: 11.5px; }
 .cfg-repos > .c-del { padding-top: 9px; }
 .cfg-span { grid-column: 1 / -1; }
-.cfg-clones { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 12px; padding: 0 0 6px 16px; border-left: 2px solid var(--line); }
+.cfg-clones { display: grid; grid-template-columns: 140px 100px minmax(0, 1fr); gap: 12px; padding: 0 0 6px 16px; border-left: 2px solid var(--line); }
 .cfg-clones label > .hint { display: block; font-size: 11.5px; margin-bottom: 3px; }
 .cfg-clones input { width: 80px; }
 .cfg-hosts { grid-column: 1 / -1; }
 .cfg-hosts > .hint { display: block; font-size: 11.5px; margin-bottom: 3px; }
-.cfg-host-rows { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.3fr) minmax(0, 1.5fr) auto 24px; gap: 6px 10px; align-items: center; }
+.cfg-host-rows { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.3fr) minmax(0, 1.5fr) auto auto 24px; gap: 6px 10px; align-items: center; }
 .cfg-host-rows input { min-width: 0; width: 100%; }
 #config .cfg-host-clones { display: flex; align-items: center; gap: 6px; }
 .cfg-host-clones > .hint { font-size: 11.5px; }

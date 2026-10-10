@@ -170,20 +170,25 @@ export class CanvasRuntime {
       const read = reads[i]!;
       const isHome = ref.id === home;
       const share = sharesOf(rc, info, adapter);
+      const remoteHosts = info.remote && adapter.workspaces === 'clones' && adapter.land !== 'main' ? (rc.hosts ?? []) : [];
+      // the workers set up below say how many are busy where
+      let workers!: Workers;
       const workspaces = new Workspaces(deps.store, id, {
         mode: adapter.workspaces,
         repoPath: info.path,
         dir: isHome ? join(deps.home, 'workspaces', id) : join(deps.home, 'workspaces', id, ref.id),
         repo: isHome ? null : ref.id,
+        machines: [{ host: null, ...(rc.slots !== undefined ? { slots: rc.slots } : {}) }, ...remoteHosts.map((h) => ({ host: h.name, ...(h.slots !== undefined ? { slots: h.slots } : {}) }))],
+        busy: (host) => workers.busyOn(host),
       });
       // a clone registered for this repository must be one of it
       for (const w of rc.workspaces ?? []) workspaces.register(resolve(w), [info.remote, info.path].filter((x): x is string => !!x));
       // landing on main needs clones that see the local main; otherwise they track the remote
       if (rc.clones) workspaces.ensureClones(adapter.land === 'main' || !info.remote ? info.path : info.remote, rc.clones);
       // clones on other machines, made in the background: a host that is off now gets them once it answers
-      if (info.remote && adapter.workspaces === 'clones' && adapter.land !== 'main') {
-        const token = githubToken(info.path, info.remote);
-        for (const h of rc.hosts ?? []) {
+      if (remoteHosts.length) {
+        const token = githubToken(info.path, info.remote!);
+        for (const h of remoteHosts) {
           const host = registerHost({ name: h.name, ssh: h.ssh, home: deps.home, claudeToken: () => claudeToken(deps.home) });
           const ensure = async () => {
             const wrong = await workspaces.ensureHostClones(host, h.root, info.remote!, h.clones, token);
@@ -196,7 +201,7 @@ export class CanvasRuntime {
         }
       }
       const projectAgents = new ProjectAgents(board, deps.runtime, () => read.path, preferences);
-      const workers = new Workers({
+      workers = new Workers({
         board,
         runtime: deps.workerRuntime ?? deps.runtime,
         workspaces,
@@ -233,6 +238,9 @@ export class CanvasRuntime {
         }
       }
     });
+    board.showPools(() =>
+      this.repos.filter((r) => r.workspaces.mode === 'clones').map((r) => ({ repo: r.ref.id, hosts: r.workspaces.pool(r.workers.inTurn()) })),
+    );
     for (const r of this.repos) r.workers.resumeAll();
     koordinator = this.koordinator = new Koordinator({
       board,

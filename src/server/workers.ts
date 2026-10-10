@@ -82,6 +82,8 @@ interface LandedState {
 
 interface Live {
   session: AgentSession;
+  /** The machine its workspace is on (null: the one Obeya runs on), where it holds a slot while in a turn. */
+  host: string | null;
   /** Whether the worker called `ask` or `ready_for_review` in the current turn. */
   handedOver: boolean;
   /** Whether the worker answered the owner with `reply` in the current turn. */
@@ -289,7 +291,8 @@ export class Workers {
     const row = this.o.board.row(card.id);
     let path: string;
     try {
-      path = this.o.workspaces.lease(card.id, row.branch!);
+      // the owner's question does not wait for a slot
+      path = this.o.workspaces.lease(card.id, row.branch!, { overSlots: true });
     } catch (e) {
       if (e instanceof WorkspaceError) throw new BadRequest(e.code, e.message);
       throw e;
@@ -683,6 +686,16 @@ export class Workers {
     return this.busyCards().length > 0;
   }
 
+  /** The cards whose worker is in a turn, each holding a slot on its machine. */
+  inTurn(): string[] {
+    return [...this.live].filter(([, l]) => l.busy).map(([id]) => id);
+  }
+
+  /** How many of these workers are in a turn on a machine (null: the one Obeya runs on). */
+  busyOn(host: string | null): number {
+    return [...this.live.values()].filter((l) => l.busy && l.host === host).length;
+  }
+
   /** The cards whose worker is busy, as `busy` means it, and those whose work is landing: a restart would cut off git midway. */
   busyCards(): string[] {
     return [...new Set([...[...this.live].filter(([, l]) => l.busy).map(([id]) => id), ...this.landing])];
@@ -717,10 +730,11 @@ export class Workers {
     const row = this.o.board.row(cardId);
     if (!row.workspace) throw new Error(`card ${cardId} has no workspace to work in`);
     const preferences = this.o.preferences?.() ?? '';
-    const live: Live = { session: undefined!, handedOver: false, acted: false, nudged: false, lastText: '', busy: true, stalled: false, preferences };
+    const live: Live = { session: undefined!, host: hostName(row.workspace), handedOver: false, acted: false, nudged: false, lastText: '', busy: true, stalled: false, preferences };
     const project = this.o.board.item(cardId)?.parent;
     if (project) live.project = { id: project, decision: this.o.board.decisions(project).at(-1)?.id ?? 0 };
     this.live.set(cardId, live);
+    this.o.board.changed();
     message = this.withRestart(cardId, live, message);
     live.pending = { text: message, images };
     live.session = this.o.runtime.start(
@@ -769,7 +783,7 @@ export class Workers {
       // the turn this starts reports the background work that is still running
       clearTimeout(live.waiting);
       live.waiting = undefined;
-      live.busy = true;
+      this.setBusy(live, true);
       const message = this.withRestart(cardId, live, text);
       live.pending = { text: message, images };
       live.session.send(message, images);
@@ -828,12 +842,24 @@ export class Workers {
     this.live.delete(cardId);
     clearTimeout(live?.waiting);
     live?.session.close();
+    // its slot is free again
+    if (live?.busy) this.o.board.changed();
+  }
+
+  /**
+   * Whether the worker is in a turn. It holds a slot on its machine meanwhile: the board hears of
+   * each change, so the Workspaces pill shows it and a card waiting for a slot starts once one frees.
+   */
+  private setBusy(live: Live, busy: boolean) {
+    if (live.busy === busy) return;
+    live.busy = busy;
+    if ([...this.live.values()].includes(live)) this.o.board.changed();
   }
 
   private onEvent(cardId: string, live: Live, e: AgentEvent) {
     if (this.live.get(cardId) !== live) return;
     // a turn may also start without a message from Obeya (a finished background command)
-    live.busy = e.type !== 'idle';
+    this.setBusy(live, e.type !== 'idle');
     clearTimeout(live.waiting);
     live.waiting = undefined;
     if (e.type === 'text' || e.type === 'tool') {
@@ -964,7 +990,7 @@ export class Workers {
     }
     if (!live.nudged) {
       live.nudged = true;
-      live.busy = true;
+      this.setBusy(live, true);
       live.session.send(
         card.state === 'inPr'
           ? 'Your turn ended, and Obeya has no pull request for this card yet (pr_opened), nor did you close it as needing none (close_unchanged).'
@@ -991,7 +1017,7 @@ export class Workers {
     }
     if (!live.nudged) {
       live.nudged = true;
-      live.busy = true;
+      this.setBusy(live, true);
       live.session.send(`Your last turn broke off with an error (${clip(live.failed!, 300)}). Your work is on main; go on with what remained after the landing.`);
       return;
     }
@@ -1024,10 +1050,10 @@ export class Workers {
 
   /** Waits for a sign of life from the worker; without one for a long while, its turn counts as ended. */
   private waitForWorker(cardId: string, live: Live) {
-    live.busy = true;
+    this.setBusy(live, true);
     live.waiting = setTimeout(() => {
       live.waiting = undefined;
-      live.busy = false;
+      this.setBusy(live, false);
       if (this.live.get(cardId) !== live) return;
       this.turnEnded(cardId, live, 0, true);
       this.parkLater(cardId);
@@ -1152,7 +1178,7 @@ export class Workers {
    * same limit); a message from the owner reaches it at once and finds out whether the limit still holds.
    */
   private waitForLimit(cardId: string, live: Live, at: number) {
-    live.busy = false;
+    this.setBusy(live, false);
     if (live.statusBefore === undefined) {
       // after a restart the line may still be the one this shows
       const line = this.o.board.row(cardId).status_line;
@@ -1448,11 +1474,11 @@ export class Workers {
     const q: Question = { text: t.worker.permission(permissionWhat(request.name, request.input, t), request.reason && clip(request.reason, 600)), options: [t.worker.allow, t.worker.deny] };
     this.o.board.log(cardId, 'question', 'worker', formatQuestion(q, this.o.board.language()));
     this.o.board.work(cardId, { state: 'waiting', need: 'question', detail: JSON.stringify({ question: q, permission: asked }) });
-    live.busy = false;
+    this.setBusy(live, false);
     return new Promise((resolve) => {
       live.permission = (answer) => {
         live.permission = undefined;
-        live.busy = true;
+        this.setBusy(live, true);
         resolve(answer);
       };
       // the session ended (stopped, Obeya restarting): the question stays on the card for the next one

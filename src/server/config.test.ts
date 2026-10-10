@@ -104,6 +104,9 @@ describe("Obeya's configuration", () => {
     const check = (repos: object[]) => c.check([{ repos }]);
     expect(check([{ path: web, hosts: [host, { name: ' ', ssh: '', root: '', clones: 1 }] }])).toMatchObject({ problems: [], canvases: [{ repos: [{ path: web, hosts: [host] }] }] });
     expect(check([{ path: web, hosts: [{ ...host, root: ' ' }] }]).canvases[0]!.repos[0]!.hosts).toEqual([{ ...host, root: '~/obeya' }]);
+    // slots here and there, 0 included (no new cards there); left out, as many as there are clones
+    expect(check([{ path: web, slots: 0, hosts: [{ ...host, slots: 1 }] }]).canvases[0]!.repos[0]).toMatchObject({ slots: 0, hosts: [{ ...host, slots: 1 }] });
+    expect(check([{ path: web, hosts: [host] }]).canvases[0]!.repos[0]).not.toHaveProperty('slots');
     // worktrees of this checkout, or no remote: the host could not clone it
     expect(check([{ path: web, adapter: 'obeya', hosts: [host] }]).problems.map((p) => p.code)).toEqual(['hostRepo']);
     expect(check([{ path: api, hosts: [host] }]).problems.map((p) => p.code)).toEqual(['hostRepo']);

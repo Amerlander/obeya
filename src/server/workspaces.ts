@@ -1,19 +1,22 @@
 // Where a card's worker works, and how approved work lands.
 //
 // `clones`: a pool of full clones per canvas, leased one card at a time (for repositories with tools
-// that break in worktrees, or one app stack per clone). `worktrees`: one worktree of the Obeya checkout per card,
+// that break in worktrees, or one app stack per clone), here and on other machines; a new card
+// takes a clone on the first machine whose busy workers leave it a slot (design: Hosts). `worktrees`: one worktree of the Obeya checkout per card,
 // created on start, as many in parallel as there are cards; kept across stop and restart until
 // the card's work has landed.
 
 import { existsSync, mkdirSync } from 'node:fs';
+import { hostname } from 'node:os';
 import { join } from 'node:path';
+import type { PoolHost, WorkspaceShortage } from '../core/types';
 import type { Store } from './db';
-import { HostError, onHost, remote, sh as shWord, type SshHost, TOKEN_HELPER, tokenHelperArgs } from './hosts';
+import { HostError, hostName, onHost, remote, sh as shWord, type SshHost, TOKEN_HELPER, tokenHelperArgs } from './hosts';
 
 export class WorkspaceError extends Error {
   constructor(
     message: string,
-    readonly code: 'noWorkspace' | 'dirtyWorkspaces' | 'workspace' = 'workspace',
+    readonly code: 'noWorkspace' | 'dirtyWorkspaces' | 'noSlot' | 'workspace' = 'workspace',
   ) {
     super(message);
   }
@@ -164,10 +167,24 @@ export interface WorkspaceOptions {
   dir: string;
   /** The repository on the canvas these workspaces belong to; null is its home repository. */
   repo?: string | null;
+  /**
+   * The machines its clones are on, in the order a new card looks for room (`host` null: this one),
+   * each with how many of the repository's workers may be busy there at once (none: as many as
+   * there are clones). Without it, this machine alone.
+   */
+  machines?: { host: string | null; slots?: number }[];
+  /** How many of the repository's workers are in a turn on a machine now (null: this one). */
+  busy?: (host: string | null) => number;
 }
 
+/** The name of the machine Obeya runs on, as the Workspaces pill shows it. */
+export const HERE = hostname().split('.')[0] || 'localhost';
+
+const SHORT_CODE = { none: 'noWorkspace', dirty: 'dirtyWorkspaces', slots: 'noSlot' } as const;
+const SHORT_TEXT = { none: 'no workspace registered or all are leased', dirty: 'every free workspace has uncommitted changes', slots: 'every machine with a free workspace has as many busy workers as it has slots' };
+
 export class Workspaces {
-  /** The free clones `leasable` last found all dirty, and when. */
+  /** What `leasable` last looked at (the free clones on machines with room) when it found them all dirty, and when. */
   private dirty?: { key: string; at: number };
 
   constructor(
@@ -241,33 +258,103 @@ export class Workspaces {
     return this.list().find((w) => w.card_id === cardId)?.path ?? null;
   }
 
-  /** Gives the card a workspace on `branch` and returns its path. */
-  lease(cardId: string, branch: string): string {
+  /**
+   * Gives the card a workspace on `branch` and returns its path. A clone comes from the first
+   * machine with a free slot; `overSlots` takes one on a busy machine when none has a slot (an
+   * owner's question to a finished card, which should not wait).
+   */
+  lease(cardId: string, branch: string, o: { overSlots?: boolean } = {}): string {
     const own = this.leasedBy(cardId);
     if (own) return own;
-    return this.o.mode === 'worktrees' ? this.leaseWorktree(cardId, branch) : this.leaseClone(cardId, branch);
+    return this.o.mode === 'worktrees' ? this.leaseWorktree(cardId, branch) : this.leaseClone(cardId, branch, !!o.overSlots);
   }
 
   /**
    * Whether `lease` would find a workspace for a new card now. A worktree can always be made; a
-   * clone must be free and clean. Free clones that were dirty at the last look within RECHECK_MS
-   * are not asked again, since cards waiting for one ask on every change of the board.
+   * clone must be free and clean, on a machine with a free slot. Free clones that were dirty at the
+   * last look within RECHECK_MS are not asked again, since cards waiting for one ask on every change
+   * of the board.
    */
   leasable(): boolean {
     if (this.o.mode === 'worktrees') return true;
-    const free = this.list().filter((w) => !w.card_id && exists(w.path));
-    if (!free.length) return false;
-    const key = free.map((w) => w.path).join('\n');
+    const free = this.list().filter((w) => !w.card_id);
+    const key = [...free.map((w) => w.path), ...this.machines().filter((m) => this.room(m))].join('\n');
     if (this.dirty?.key === key && Date.now() - this.dirty.at < RECHECK_MS) return false;
-    const clean = free.some((w) => {
-      try {
-        return git(w.path, 'status', '--porcelain') === '';
-      } catch {
-        return false;
+    const found = this.place(false);
+    this.dirty = 'short' in found && found.short === 'dirty' ? { key, at: Date.now() } : undefined;
+    return 'path' in found;
+  }
+
+  /** The machines in the order a new card looks for room; a machine whose clones are registered but no longer configured comes last. */
+  private machines(): (string | null)[] {
+    const order = (this.o.machines ?? [{ host: null }]).map((m) => m.host);
+    for (const w of this.list()) {
+      const h = hostName(w.path);
+      if (!order.includes(h)) order.push(h);
+    }
+    return order;
+  }
+
+  /** How many of the repository's workers may be busy on a machine at once; Infinity when its clones are the only cap. */
+  private slots(host: string | null): number {
+    const m = this.o.machines?.find((x) => x.host === host);
+    if (!m) return this.o.machines ? 0 : Infinity;
+    return m.slots ?? Infinity;
+  }
+
+  /** Whether a machine has a slot for one more busy worker. */
+  private room(host: string | null): boolean {
+    return (this.o.busy?.(host) ?? 0) < this.slots(host);
+  }
+
+  /**
+   * The clean free clone a new card takes: on the first machine with a slot, else with `overSlots`
+   * on the first busy one; or why there is none.
+   */
+  private place(overSlots: boolean): { path: string } | { short: WorkspaceShortage } {
+    const free = this.list().filter((w) => !w.card_id);
+    if (!free.length) return { short: 'none' };
+    const machines = this.machines();
+    const roomy = machines.filter((m) => this.room(m));
+    let full = false;
+    let dirty = false;
+    for (const host of overSlots ? [...roomy, ...machines.filter((m) => !roomy.includes(m))] : machines) {
+      const here = free.filter((w) => hostName(w.path) === host);
+      if (!here.length) continue;
+      if (!overSlots && !roomy.includes(host)) {
+        full = true;
+        continue;
       }
+      const clean = here.find((w) => {
+        try {
+          return exists(w.path) && git(w.path, 'status', '--porcelain') === '';
+        } catch {
+          return false;
+        }
+      });
+      if (clean) return { path: clean.path };
+      // an unreachable machine's clones count as missing, not as dirty
+      if (here.some((w) => exists(w.path))) dirty = true;
+    }
+    return { short: full ? 'slots' : dirty ? 'dirty' : 'none' };
+  }
+
+  /** The pool by machine for the Workspaces pill, `busy` the cards whose worker is in a turn. */
+  pool(busy: string[]): PoolHost[] {
+    const all = this.list();
+    return this.machines().map((host) => {
+      const ws = all.filter((w) => hostName(w.path) === host);
+      const cards = ws.flatMap((w) => (w.card_id ? [w.card_id] : []));
+      const slots = this.slots(host);
+      return {
+        name: host ?? HERE,
+        ...(host === null ? { here: true } : {}),
+        slots: Number.isFinite(slots) ? slots : ws.length,
+        total: ws.length,
+        cards,
+        busy: cards.filter((c) => busy.includes(c)),
+      };
     });
-    this.dirty = clean ? undefined : { key, at: Date.now() };
-    return clean;
   }
 
   /** Whether the card's workspace holds work: uncommitted changes or commits beyond the base. */
@@ -460,18 +547,17 @@ export class Workspaces {
     }
   }
 
-  private leaseClone(cardId: string, branch: string): string {
-    const free = this.list().filter((w) => !w.card_id);
-    if (!free.length) throw new WorkspaceError('no workspace registered or all are leased', 'noWorkspace');
-    const clean = free.find((w) => exists(w.path) && git(w.path, 'status', '--porcelain') === '');
-    if (!clean) throw new WorkspaceError('every free workspace has uncommitted changes', 'dirtyWorkspaces');
-    const base = defaultBranch(clean.path);
-    git(clean.path, 'fetch', '--quiet', 'origin');
+  private leaseClone(cardId: string, branch: string, overSlots: boolean): string {
+    const found = this.place(overSlots);
+    if ('short' in found) throw new WorkspaceError(SHORT_TEXT[found.short], SHORT_CODE[found.short]);
+    const { path } = found;
+    const base = defaultBranch(path);
+    git(path, 'fetch', '--quiet', 'origin');
     // a branch that already exists holds work: check it out, never reset it
-    if (git(clean.path, 'branch', '--list', branch)) git(clean.path, 'checkout', '--quiet', branch);
-    else git(clean.path, 'checkout', '--quiet', '-b', branch, `origin/${base}`);
-    this.store.setLease(clean.path, cardId);
-    return clean.path;
+    if (git(path, 'branch', '--list', branch)) git(path, 'checkout', '--quiet', branch);
+    else git(path, 'checkout', '--quiet', '-b', branch, `origin/${base}`);
+    this.store.setLease(path, cardId);
+    return path;
   }
 
   private leaseWorktree(cardId: string, branch: string): string {

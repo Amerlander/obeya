@@ -956,6 +956,10 @@ function RepoRow({ repo, home, resolved, canvasId, adapters, problems, where, as
             <span className="hint">{t.config.clones}</span>
             <input type="number" min={0} max={20} placeholder="0" value={repo.clones ?? ''} onChange={(e) => onChange(without('clones', Number(e.target.value) || undefined))} />
           </label>
+          <label title={t.config.slotsHint}>
+            <span className="hint">{t.config.slots}</span>
+            <input type="number" min={0} max={20} placeholder={t.config.slotsAll} value={repo.slots ?? ''} onChange={(e) => onChange(without('slots', slotsOf(e.target.value)))} />
+          </label>
           <label>
             <span className="hint">{t.config.workspaces}</span>
             <textarea
@@ -986,6 +990,11 @@ function RepoRow({ repo, home, resolved, canvasId, adapters, problems, where, as
   );
 }
 
+/** A slot count as typed: empty is none set (as many as there are clones), 0 takes no new cards. */
+function slotsOf(value: string): number | undefined {
+  return value.trim() === '' || !Number.isFinite(Number(value)) ? undefined : Math.max(0, Math.round(Number(value)));
+}
+
 /** The machines over SSH a repository's workers also run on: a table, one row each. */
 function Hosts({ hosts, onChange }: { hosts: HostConfig[]; onChange: (hosts: HostConfig[]) => void }) {
   const set = (i: number, h: HostConfig | null) => onChange(h ? hosts.map((x, k) => (k === i ? h : x)) : hosts.filter((_, k) => k !== i));
@@ -1004,6 +1013,21 @@ function Hosts({ hosts, onChange }: { hosts: HostConfig[]; onChange: (hosts: Hos
               <label className="cfg-host-clones">
                 <span className="hint">{t.config.hostClones}</span>
                 <input type="number" min={0} max={20} value={h.clones} onChange={(e) => set(i, { ...h, clones: Number(e.target.value) || 0 })} />
+              </label>
+              <label className="cfg-host-clones" title={t.config.slotsHint}>
+                <span className="hint">{t.config.hostSlots}</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={20}
+                  placeholder={t.config.slotsAll}
+                  value={h.slots ?? ''}
+                  onChange={(e) => {
+                    const { slots: _, ...rest } = h;
+                    const slots = slotsOf(e.target.value);
+                    set(i, slots === undefined ? rest : { ...rest, slots });
+                  }}
+                />
               </label>
               <button className="c-del" title={t.config.removeHost} onClick={() => set(i, null)}>
                 ✕

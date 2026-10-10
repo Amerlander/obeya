@@ -640,7 +640,7 @@ export class Koordinator {
       const shortage = e instanceof BadRequest ? SHORTAGE[e.code] : undefined;
       if (!shortage) return this.o.board.log(cardId, 'error', 'obeya', e instanceof Error ? e.message : String(e), e instanceof BadRequest ? e.code : undefined);
       this.setQueue(cardId, { workspace: shortage }, since);
-      this.o.board.log(cardId, 'state', 'obeya', shortage === 'none' ? this.o.board.t.koordinator.noWorkspace : this.o.board.t.koordinator.dirtyWorkspaces);
+      this.o.board.log(cardId, 'state', 'obeya', { none: this.o.board.t.koordinator.noWorkspace, dirty: this.o.board.t.koordinator.dirtyWorkspaces, slots: this.o.board.t.koordinator.noSlot }[shortage]);
     }
   }
 
@@ -676,7 +676,7 @@ export class Koordinator {
           full.add(w.repo);
           continue;
         }
-        this.startNow(w.id, this.o.board.t.koordinator.workspaceFree);
+        this.startNow(w.id, w.queue!.workspace === 'slots' ? this.o.board.t.koordinator.slotFree : this.o.board.t.koordinator.workspaceFree);
         if (this.o.board.item(w.id)?.queue) full.add(w.repo);
         continue;
       }
@@ -1067,7 +1067,7 @@ export function readSession(
 
 /** A card the Koordinator holds back or is judging, before it starts. */
 /** The refusals of a start for want of a workspace, and what the card then waits for. */
-const SHORTAGE: Record<string, WorkspaceShortage> = { noWorkspace: 'none', dirtyWorkspaces: 'dirty' };
+const SHORTAGE: Record<string, WorkspaceShortage> = { noWorkspace: 'none', dirtyWorkspaces: 'dirty', noSlot: 'slots' };
 
 /** A changed file with the places changed in it: "src/a.ts (lines 12-20 in function f; 40)", or "(new)". */
 const describe = (c: Change) =>

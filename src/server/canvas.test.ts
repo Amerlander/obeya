@@ -6,7 +6,7 @@ import { boundsOf } from '../core/layout';
 import { CanvasRuntime, startCanvases } from './canvas';
 import { Store } from './db';
 import { FakeRuntime, noForge, gitRepo } from './testing';
-import { git } from './workspaces';
+import { git, HERE } from './workspaces';
 
 let dir: string;
 let runtime: FakeRuntime;
@@ -83,19 +83,20 @@ describe('a canvas with several repositories', () => {
     expect(() => canvas.board.create({ title: 'X', x: 0, y: 0, repo: 'nope' })).toThrow();
   });
 
-  test('the snapshot counts each repository\'s clones and the cards that hold one', () => {
+  test("the snapshot counts each repository's clones by machine, the cards that hold one and those at work", () => {
+    const here = (cards: string[], busy: string[]) => ({ hosts: [{ name: HERE, here: true, slots: 1, total: 1, cards, busy }] });
     expect(canvas.board.snapshot().workspaces).toEqual([
-      { repo: 'web', total: 1, cards: [] },
-      { repo: 'api', total: 1, cards: [] },
+      { repo: 'web', ...here([], []) },
+      { repo: 'api', ...here([], []) },
     ]);
     const other = canvas.board.create({ title: 'Andere', x: 0, y: 0, repo: 'api' });
     canvas.repoOf(other.id).workers.start(other.id);
     expect(canvas.board.snapshot().workspaces).toEqual([
-      { repo: 'web', total: 1, cards: [] },
-      { repo: 'api', total: 1, cards: [other.id] },
+      { repo: 'web', ...here([], []) },
+      { repo: 'api', ...here([other.id], [other.id]) },
     ]);
     canvas.repoOf(other.id).workers.stop(other.id);
-    expect(canvas.board.snapshot().workspaces![1]).toEqual({ repo: 'api', total: 1, cards: [] });
+    expect(canvas.board.snapshot().workspaces![1]).toEqual({ repo: 'api', ...here([], []) });
   });
 
   test('cards of different repositories never wait for each other', async () => {

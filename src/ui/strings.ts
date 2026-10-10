@@ -207,11 +207,13 @@ const de = {
     checkingLong: 'Obeya prüft, ob die Aufgabe mit laufender Arbeit wahrscheinlich in Merge-Konflikte gerät.',
     behind: (titles: string[]) => `Wartet auf ${titles.map((x) => `„${x}“`).join(', ')}.`,
     workspace: 'Wartet auf Workspace',
+    slot: 'Wartet auf freien Slot',
     /** On the card: why it waits for a workspace. */
-    workspaceWhy: { none: 'Alle Workspaces sind belegt.', dirty: 'Die freien Workspaces haben nicht committete Änderungen.' },
+    workspaceWhy: { none: 'Alle Workspaces sind belegt.', dirty: 'Die freien Workspaces haben nicht committete Änderungen.', slots: 'Alle Slots sind belegt.' },
     workspaceLong: {
       none: 'Kein Workspace frei: Alle sind belegt oder es ist keiner eingerichtet. Die Aufgabe startet von selbst, sobald einer frei wird.',
       dirty: 'Kein Workspace frei: Jeder freie hat noch nicht committete Änderungen. Die Aufgabe startet von selbst, sobald einer sauber ist.',
+      slots: 'Kein Slot frei: Auf jedem Rechner mit freiem Workspace arbeiten so viele Agenten, wie er Slots hat. Die Aufgabe startet von selbst, sobald einer fertig ist.',
     },
     force: 'Trotzdem starten',
     dequeue: 'Aus der Warteschlange nehmen',
@@ -251,6 +253,7 @@ const de = {
     planCard: 'Das kommt aus dem Plan-Dokument; geändert wird es dort.',
     noWorkspace: 'Kein Workspace frei: Alle sind belegt oder es ist keiner eingerichtet.',
     dirtyWorkspaces: 'Kein Workspace frei: Jeder freie hat noch nicht committete Änderungen.',
+    noSlot: 'Kein Slot frei: Auf jedem Rechner mit freiem Workspace arbeiten so viele Agenten, wie er Slots hat.',
     workspace: 'Der Workspace für den Agenten ließ sich nicht vorbereiten (git-Fehler).',
     emptyText: 'Bitte zuerst einen Text eingeben.',
     unknownPreference: 'Diese Präferenz gibt es nicht mehr.',
@@ -478,12 +481,16 @@ const de = {
     clonesMode: 'Agenten arbeiten in Klonen',
     clones: 'Klone anlegen',
     workspaces: 'Vorhandene Klone, einer pro Zeile',
-    hosts: 'Weitere Rechner (über SSH), wenn die Klone hier alle belegt sind',
+    slots: 'Slots hier',
+    slotsAll: 'alle',
+    slotsHint: 'Wie viele Agenten auf dem Rechner zugleich arbeiten dürfen. Eine neue Aufgabe geht auf den ersten Rechner mit freiem Slot; leer: so viele wie Klone.',
+    hosts: 'Weitere Rechner (über SSH), wenn hier alle Slots belegt sind',
     hostsHint: 'Obeya legt die Klone dort selbst an und startet die Agenten dort über ssh. Die Anmeldung bei Claude (claude-token in Obeyas Verzeichnis) und bei GitHub gehen bei jedem Start mit und bleiben dort nicht liegen.',
     hostName: 'Name',
     hostSsh: 'ssh-Ziel, z. B. ich@rechner.local',
     hostRoot: 'Verzeichnis dort, z. B. ~/obeya/repo',
     hostClones: 'Klone',
+    hostSlots: 'Slots',
     addHost: '+ Rechner',
     removeHost: 'Rechner entfernen',
     share: 'Befehl zum Teilen von Demos',
@@ -781,10 +788,12 @@ const de = {
   workspaces: {
     label: 'Workspaces',
     free: (n: number, total: number) => (total === 0 ? 'keine eingerichtet' : n <= 0 ? 'alle belegt' : `${n} frei`),
-    taken: (n: number, total: number, repo: string | null) =>
-      `${repo ? `${repo}: ` : ''}${n} von ${total} ${total === 1 ? 'Clone' : 'Clones'} belegt${n ? ', von:' : '.'}`,
-    offCanvas: 'einer Karte, die nicht auf der Leinwand liegt',
+    host: (name: string, busy: number, slots: number, taken: number, total: number) =>
+      `${name}: ${busy} von ${slots} ${slots === 1 ? 'Slot' : 'Slots'} in Arbeit, ${taken} von ${total} ${total === 1 ? 'Klon' : 'Klonen'} belegt${taken ? ':' : '.'}`,
+    offCanvas: 'eine Karte, die nicht auf der Leinwand liegt',
+    atWork: 'arbeitet',
     waiting: (n: number) => (n === 1 ? '1 Karte wartet auf einen freien Workspace.' : `${n} Karten warten auf einen freien Workspace.`),
+    waitingSlot: (n: number) => (n === 1 ? '1 Karte wartet auf einen freien Slot.' : `${n} Karten warten auf einen freien Slot.`),
   },
   archive: {
     button: 'Archiv',
@@ -1113,10 +1122,12 @@ const en: Strings = {
     checkingLong: 'Obeya checks whether the task is likely to run into merge conflicts with work in progress.',
     behind: (titles: string[]) => `Waits for ${titles.map((x) => `“${x}”`).join(', ')}.`,
     workspace: 'Waiting for a workspace',
-    workspaceWhy: { none: 'All workspaces are taken.', dirty: 'The free workspaces have uncommitted changes.' },
+    slot: 'Waiting for a free slot',
+    workspaceWhy: { none: 'All workspaces are taken.', dirty: 'The free workspaces have uncommitted changes.', slots: 'All slots are taken.' },
     workspaceLong: {
       none: 'No workspace free: all are taken or none is set up. The task starts by itself as soon as one is free.',
       dirty: 'No workspace free: every free one has uncommitted changes. The task starts by itself as soon as one is clean.',
+      slots: 'No slot free: every machine with a free workspace has as many agents at work as it has slots. The task starts by itself as soon as one is done.',
     },
     force: 'Start anyway',
     dequeue: 'Take out of the queue',
@@ -1153,6 +1164,7 @@ const en: Strings = {
     planCard: 'This comes from the plan doc; it is changed there.',
     noWorkspace: 'No workspace free: all are taken or none is set up.',
     dirtyWorkspaces: 'No workspace free: every free one has uncommitted changes.',
+    noSlot: 'No slot free: every machine with a free workspace has as many agents at work as it has slots.',
     workspace: 'The workspace for the agent could not be prepared (git error).',
     emptyText: 'Please enter some text first.',
     unknownPreference: 'This preference no longer exists.',
@@ -1372,12 +1384,16 @@ const en: Strings = {
     clonesMode: 'Agents work in clones',
     clones: 'Create clones',
     workspaces: 'Existing clones, one per line',
-    hosts: 'Other machines (over SSH), once the clones here are all taken',
+    slots: 'Slots here',
+    slotsAll: 'all',
+    slotsHint: 'How many agents may work on the machine at once. A new task goes to the first machine with a free slot; empty: as many as there are clones.',
+    hosts: 'Other machines (over SSH), once all slots here are taken',
     hostsHint: 'Obeya creates the clones there itself and starts the agents there through ssh. The Claude login (claude-token in Obeya’s directory) and the GitHub login go along with each start and are not left there.',
     hostName: 'Name',
     hostSsh: 'ssh target, e.g. me@machine.local',
     hostRoot: 'Directory there, e.g. ~/obeya/repo',
     hostClones: 'Clones',
+    hostSlots: 'Slots',
     addHost: '+ Machine',
     removeHost: 'Remove machine',
     share: 'Command to share demos',
@@ -1674,10 +1690,12 @@ const en: Strings = {
   workspaces: {
     label: 'Workspaces',
     free: (n: number, total: number) => (total === 0 ? 'none set up' : n <= 0 ? 'all taken' : `${n} free`),
-    taken: (n: number, total: number, repo: string | null) =>
-      `${repo ? `${repo}: ` : ''}${n} of ${total} ${total === 1 ? 'clone' : 'clones'} taken${n ? ', by:' : '.'}`,
+    host: (name: string, busy: number, slots: number, taken: number, total: number) =>
+      `${name}: ${busy} of ${slots} ${slots === 1 ? 'slot' : 'slots'} at work, ${taken} of ${total} ${total === 1 ? 'clone' : 'clones'} taken${taken ? ':' : '.'}`,
     offCanvas: 'a card that is not on the canvas',
+    atWork: 'at work',
     waiting: (n: number) => (n === 1 ? '1 card is waiting for a free workspace.' : `${n} cards are waiting for a free workspace.`),
+    waitingSlot: (n: number) => (n === 1 ? '1 card is waiting for a free slot.' : `${n} cards are waiting for a free slot.`),
   },
   archive: {
     button: 'Archive',
@@ -1862,7 +1880,9 @@ export const stateLabel = (i: { state: CardState; need?: Need; pr?: unknown; que
       : 'cutting' in i.queue
         ? t.queue.cutting
         : 'workspace' in i.queue
-          ? t.queue.workspace
+          ? i.queue.workspace === 'slots'
+            ? t.queue.slot
+            : t.queue.workspace
           : t.queue.waiting
     : i.state === 'waiting' && i.need
       ? i.answering

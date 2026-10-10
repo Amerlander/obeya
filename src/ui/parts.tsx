@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useRef, useState } from 'react';
 import { type Bounds, shapeOf } from '../core/layout';
-import { answering, type AppUpdate, type CanvasInfo, type ClonePool, finished, type Item, needsYou, type PendingRestart, type ProjectHistory } from '../core/types';
+import { answering, type AppUpdate, type CanvasInfo, type ClonePool, finished, type Item, needsYou, type PendingRestart, type PoolHost, type ProjectHistory } from '../core/types';
 import { api } from './api';
 import type { Cam } from './camera';
 import type { Shape } from './groups';
@@ -289,41 +289,75 @@ export function UpdatePill({ update }: { update: AppUpdate }) {
   );
 }
 
-/** How many clones each repository's pool has taken and whether one is free; over it, the cards that hold them. */
+/**
+ * Each repository's pool by machine: a dot per clone (solid while its card's worker is at work,
+ * pale while the card holds it otherwise), and how many new cards could start now; over it, each
+ * machine's slots and the cards that hold its clones.
+ */
 export function WorkspacesPill({ pools, canvas, items }: { pools: ClonePool[]; canvas: CanvasInfo; items: Item[] }) {
   const several = pools.length > 1;
   const name = (repo: string) => canvas.repos.find((r) => r.id === repo)?.name ?? repo;
-  const waiting = items.filter((i) => i.queue && 'workspace' in i.queue).length;
-  const full = pools.every((p) => p.cards.length >= p.total);
+  const forWorkspace = items.filter((i) => i.queue && 'workspace' in i.queue && i.queue.workspace !== 'slots').length;
+  const forSlot = items.filter((i) => i.queue && 'workspace' in i.queue && i.queue.workspace === 'slots').length;
+  // a new card takes a free clone on a machine whose busy workers leave it a slot
+  const room = (h: PoolHost) => Math.max(0, Math.min(h.slots - h.busy.length, h.total - h.cards.length));
+  const free = (p: ClonePool) => p.hosts.reduce((n, h) => n + room(h), 0);
+  const total = (p: ClonePool) => p.hosts.reduce((n, h) => n + h.total, 0);
+  const full = pools.every((p) => free(p) === 0);
   return (
     <div className={full ? 'pill workspaces full' : 'pill workspaces'} id="workspaces">
       <span className="lbl">{t.workspaces.label}</span>
-      {pools.map((p) => (
-        <span key={p.repo} className="pool">
-          {several && <span className="hint">{name(p.repo)}</span>}
-          <span className="slots" aria-hidden>
-            {Array.from({ length: p.total }, (_, i) => (
-              <i key={i} className={i < p.cards.length ? 'on' : undefined} />
+      {pools.map((p) => {
+        const named = p.hosts.filter((h) => h.total > 0 || !h.here);
+        return (
+          <span key={p.repo} className="pool">
+            {several && <span className="hint">{name(p.repo)}</span>}
+            {named.map((h) => (
+              <span key={h.name} className="host">
+                {named.length > 1 && <span className="hint">{h.name}</span>}
+                <span className="slots" aria-hidden>
+                  {Array.from({ length: h.total }, (_, i) => (
+                    <i key={i} className={i < h.busy.length ? 'on' : i < h.cards.length ? 'held' : undefined} />
+                  ))}
+                </span>
+              </span>
             ))}
+            <b>{t.workspaces.free(free(p), total(p))}</b>
           </span>
-          <b>{t.workspaces.free(p.total - p.cards.length, p.total)}</b>
-        </span>
-      ))}
+        );
+      })}
       <div className="tip" role="tooltip">
         {pools.map((p) => (
           <div key={p.repo}>
-            <p>{t.workspaces.taken(p.cards.length, p.total, several ? name(p.repo) : null)}</p>
-            {p.cards.length > 0 && (
-              <ul>
-                {p.cards.map((id) => {
-                  const item = items.find((i) => i.id === id);
-                  return <li key={id}>{item ? plain(item.title) : <span className="hint">{t.workspaces.offCanvas}</span>}</li>;
-                })}
-              </ul>
+            {several && (
+              <p>
+                <b>{name(p.repo)}</b>
+              </p>
             )}
+            {p.hosts
+              .filter((h) => h.total > 0 || !h.here)
+              .map((h) => (
+                <div key={h.name}>
+                  <p>{t.workspaces.host(h.name, h.busy.length, h.slots, h.cards.length, h.total)}</p>
+                  {h.cards.length > 0 && (
+                    <ul>
+                      {[...h.busy, ...h.cards.filter((c) => !h.busy.includes(c))].map((id) => {
+                        const item = items.find((i) => i.id === id);
+                        return (
+                          <li key={id}>
+                            {item ? plain(item.title) : <span className="hint">{t.workspaces.offCanvas}</span>}
+                            {h.busy.includes(id) && <span className="hint"> · {t.workspaces.atWork}</span>}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              ))}
           </div>
         ))}
-        {waiting > 0 && <p>{t.workspaces.waiting(waiting)}</p>}
+        {forWorkspace > 0 && <p>{t.workspaces.waiting(forWorkspace)}</p>}
+        {forSlot > 0 && <p>{t.workspaces.waitingSlot(forSlot)}</p>}
       </div>
     </div>
   );

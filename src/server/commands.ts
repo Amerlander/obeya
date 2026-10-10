@@ -428,7 +428,7 @@ export class Commander {
               {
                 name: 'config',
                 description: [
-                  "Read Obeya's configuration: the canvases this Obeya serves (canvases), each with its repositories (path; adapter, else picked by the repository's origin; clones: clones to create, workspaces: existing clones to use, both only for adapters whose workers use clones; share: the command line that shares video demos on a page outside Obeya, in place of the adapter's (resolved marks adapterShares where the adapter has a command, adapterSite with the URL where it names a site Obeya deploys); without either, \"Teilen\" exports a demo as a ZIP or one HTML file), what they amount to (resolved: canvas id, as in ?c=<id>, name, repository ids, adapter and whether workers use clones or worktrees), problems, which canvases run now (running), where it is saved (file; source: whether the running canvases come from that file or from the command line), and the server's settings from its command line (port, data directory, the agents' permission mode, whether it restarts by itself).",
+                  "Read Obeya's configuration: the canvases this Obeya serves (canvases), each with its repositories (path; adapter, else picked by the repository's origin; clones: clones to create, workspaces: existing clones to use, slots: how many of its workers may be busy at once on this machine (as many as there are clones when left out), hosts: other machines over SSH its workers run on (name, ssh target, root directory there, clones, slots), a new card going to the first machine with a free slot, this one first; all only for adapters whose workers use clones; share: the command line that shares video demos on a page outside Obeya, in place of the adapter's (resolved marks adapterShares where the adapter has a command, adapterSite with the URL where it names a site Obeya deploys); without either, \"Teilen\" exports a demo as a ZIP or one HTML file), what they amount to (resolved: canvas id, as in ?c=<id>, name, repository ids, adapter and whether workers use clones or worktrees), problems, which canvases run now (running), where it is saved (file; source: whether the running canvases come from that file or from the command line), and the server's settings from its command line (port, data directory, the agents' permission mode, whether it restarts by itself).",
                   'Call it for any question about the configuration, and before configure.',
                 ].join('\n'),
                 schema: {},
@@ -447,7 +447,15 @@ export class Commander {
                       name: z.string().optional(),
                       id: z.string().optional(),
                       repos: z.array(
-                        z.object({ path: z.string(), adapter: z.string().optional(), workspaces: z.array(z.string()).optional(), clones: z.number().int().optional(), share: z.string().optional() }),
+                        z.object({
+                          path: z.string(),
+                          adapter: z.string().optional(),
+                          workspaces: z.array(z.string()).optional(),
+                          clones: z.number().int().optional(),
+                          slots: z.number().int().optional(),
+                          share: z.string().optional(),
+                          hosts: z.array(z.object({ name: z.string(), ssh: z.string(), root: z.string(), clones: z.number().int(), slots: z.number().int().optional() })).optional(),
+                        }),
                       ),
                     }),
                   ),
@@ -859,6 +867,7 @@ const STEP: Partial<Record<Moment['kind'], string>> = {
 function queued(q: Queue, items: Item[]): string {
   if ('checking' in q) return 'queued: Obeya checks it for merge conflicts';
   if ('cutting' in q) return 'queued: Obeya splits it';
+  if ('workspace' in q && q.workspace === 'slots') return 'waits for a free slot (every machine with a free workspace has as many workers busy as it has slots); starts by itself once one is done';
   if ('workspace' in q) return `waits for a free workspace (${q.workspace === 'dirty' ? 'every free one has uncommitted changes' : 'all are leased'}); starts by itself once one is free`;
   const titles = q.behind.map((id) => `"${items.find((i) => i.id === id)?.title ?? id}"`).join(', ');
   return `queued behind ${titles}`;
