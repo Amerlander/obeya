@@ -403,7 +403,11 @@ export class Workers {
     if (card.prototypeOf) return this.endPrototype(cardId, 'discarded');
     // work that changed nothing (a demo, an analysis) has nothing to land and no pull request to open
     if (!this.o.workspaces.hasWork(cardId)) return this.close(cardId, 'owner');
-    if (this.o.adapter.land === 'main' || direct) return this.land(cardId, 'owner');
+    if (this.o.adapter.land === 'main' || direct) {
+      // the click ends the owner's turn: while the work lands, the card no longer needs them
+      this.o.board.work(cardId, { approved_at: new Date().toISOString() });
+      return this.land(cardId, 'owner');
+    }
     // the worker opens the PR the way the repository does it, then Obeya watches it
     const pr: PrState = { url: null, seen: [], reported: [] };
     // the line the worker reported before handing over is about work that is done
@@ -435,6 +439,10 @@ export class Workers {
     this.landing.add(cardId);
     try {
       await this.landNow(cardId, by);
+    } catch (e) {
+      // a landing that broke off gives the card back to the owner, who approves again
+      if (this.o.board.row(cardId).state === 'waiting') this.o.board.work(cardId, { approved_at: null });
+      throw e;
     } finally {
       this.landing.delete(cardId);
     }
@@ -659,6 +667,8 @@ export class Workers {
         else this.answerTaken(i.id);
         continue;
       }
+      // a landing the restart cut off: the card waits for the owner's approval again
+      if (i.landing) this.o.board.work(i.id, { approved_at: null });
       if (this.waitsForOwner(i.id)) {
         this.parkLater(i.id);
         continue;

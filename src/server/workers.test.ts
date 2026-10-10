@@ -755,6 +755,18 @@ describe('workers', () => {
     expect(runtime.last.inbox[0]).toContain('Zählerstände exportieren');
   });
 
+  test('after a restart that cut off a landing, the card waits for the owner to approve again', () => {
+    const c = manual();
+    workers.start(c.id);
+    runtime.last.call('ready_for_review', { summary: 'S' });
+    board.work(c.id, { approved_at: new Date().toISOString() });
+    expect(needsYou(board.item(c.id)!)).toBe(false);
+    workers.shutdown();
+    workers.resumeAll();
+    expect(state(c.id)).toBe('waiting:review');
+    expect(needsYou(board.item(c.id)!)).toBe(true);
+  });
+
   test('a proposal lands below its source card', () => {
     const c = manual();
     workers.start(c.id);
@@ -1277,8 +1289,13 @@ describe('approving directly onto main where work goes out as a pull request', (
     commitIn(clone, 'x.ts', 'X');
     session.call('ready_for_review', { summary: 'S' });
     session.emit({ type: 'idle' });
-    await workers.approve(c.id, { direct: true });
+    const approved = workers.approve(c.id, { direct: true });
+    // the click ends the owner's turn: the card no longer needs them while the push runs
+    expect(board.item(c.id)).toMatchObject({ state: 'waiting', landing: true });
+    expect(needsYou(board.item(c.id)!)).toBe(false);
+    await approved;
     expect(state(c.id)).toBe('live');
+    expect(board.item(c.id)!.landing).toBeUndefined();
     expect(board.item(c.id)!.pr).toBeUndefined();
     expect(git(origin, 'log', '--format=%s', 'main').split('\n')).toEqual(['X', 'init']);
     expect(git(main, 'log', '--format=%s', '-1')).toBe('init');
@@ -1337,11 +1354,15 @@ describe('approving directly onto main where work goes out as a pull request', (
     commitIn(clone, 'x.ts', 'X');
     session.call('ready_for_review', { summary: 'S' });
     writeFileSync(join(origin, 'hooks/pre-receive'), '#!/bin/sh\necho "protected branch" >&2\nexit 1\n', { mode: 0o755 });
-    const err = await workers.approve(c.id, { direct: true }).catch((e) => e);
+    const approved = workers.approve(c.id, { direct: true }).catch((e) => e);
+    expect(needsYou(board.item(c.id)!)).toBe(false);
+    const err = await approved;
     expect(err).toMatchObject({ code: 'landPush' });
     expect(err.message).toContain('protected branch');
     expect(state(c.id)).toBe('waiting:review');
     expect(board.row(c.id).approved_at).toBeNull();
+    // the card is the owner's again
+    expect(needsYou(board.item(c.id)!)).toBe(true);
     // approved the usual way, it goes out as a pull request
     await workers.approve(c.id);
     expect(state(c.id)).toBe('inPr');

@@ -80,11 +80,11 @@ export const agentListens = (i: Pick<Item, 'state' | 'branch' | 'prototypeOf' | 
 
 /**
  * A card needs the owner: it waits (but not while its worker takes in what the owner wrote on its
- * handover), is a proposal, has a pull request that only waits for the
+ * handover, nor once they approved it and its work lands), is a proposal, has a pull request that only waits for the
  * owner's merge, or is an open idea whose agent has replied and is done.
  */
 export const needsYou = (i: Item) =>
-  (i.state === 'waiting' && !answering(i)) || (i.state === 'proposal' && !i.proposal?.revising) || (i.state === 'inPr' && !!i.pr?.ready) || (!!i.idea && i.idea.status === 'open' && i.idea.yourTurn && !i.idea.thinking);
+  (i.state === 'waiting' && !answering(i) && !i.landing) || (i.state === 'proposal' && !i.proposal?.revising) || (i.state === 'inPr' && !!i.pr?.ready) || (!!i.idea && i.idea.status === 'open' && i.idea.yourTurn && !i.idea.thinking);
 
 /** Answers in the Koordinator's sheet the owner has not seen yet. */
 export const unreadAnswers = (talk: Talk[]) => talk.filter((x) => x.unread).length;
@@ -126,6 +126,8 @@ export interface Item {
    * until its turn ends, the card is at work and not the owner's, and still waits for approval.
    */
   answering?: true;
+  /** The owner approved the work and Obeya lands it on main (seconds of git): still `waiting`, but no longer the owner's. */
+  landing?: true;
   /** Why the worker handed over without a demo, in the rare case there was nothing to show (`need` is `review`). */
   noDemo?: string;
   /** The demo, when `need` is `demo`; its files are served under `/api/cards/:id/demo/`. */

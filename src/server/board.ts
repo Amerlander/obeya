@@ -1385,6 +1385,8 @@ function work(r: CardRow): Partial<Item> {
     ...(demo?.question && !demo.answer && r.need === 'demo' ? { question: { text: demo.question, options: [] } } : {}),
     ...(detail.summary && (r.need === 'review' || r.need === 'demo') ? { summary: detail.summary } : {}),
     ...(answering ? { answering: true } : {}),
+    // approved work is held for its next handover while the card is at work; on a waiting card it is landing
+    ...(r.approved_at && r.state === 'waiting' ? { landing: true } : {}),
     ...(detail.noDemo && r.need === 'review' ? { noDemo: detail.noDemo } : {}),
     ...(demo ? { demo } : {}),
     ...(share ? { share } : {}),

@@ -925,7 +925,11 @@ function Canvas({
   }, [setCam]);
 
   // ---------------------------------------------------------------- keys
-  const attention = items.filter(needsYou);
+  // an approved card stops needing the owner with the click, before the snapshot says it lands
+  const underwayRef = useRef(underway);
+  underwayRef.current = underway;
+  const yours = (i: Item) => needsYou(i) && !underwayRef.current[i.id];
+  const attention = items.filter(yours);
   // answers in Obeya's sheet the owner has not seen: Obeya waits for them like a card
   const unread = kOn ? 0 : unreadAnswers(snapshot.talk);
   const attentionCount = attention.length + (unread ? 1 : 0);
@@ -935,14 +939,19 @@ function Canvas({
     const { ids } = await api.archiveDone();
     if (ids.length) showAck(t.archive.archivedMany(ids.length), () => Promise.all(ids.map((id) => api.unarchive(id))));
   }
-  const attnIdx = useRef(-1);
+  const attnLast = useRef<string | null>(null);
   /** The next card that needs the owner, in turn, and Obeya's sheet among them while an answer waits there. */
   function nextAttention() {
     const koordinator = !kOnRef.current && unreadAnswers(snapshotRef.current.talk) > 0;
-    const list: (Item | 'k')[] = [...itemsRef.current.filter(needsYou), ...(koordinator ? ['k' as const] : [])];
+    const all = itemsRef.current;
+    const list: (Item | 'k')[] = [...all.filter(yours), ...(koordinator ? ['k' as const] : [])];
     if (!list.length || focusRef.current?.type === 'card') return;
-    attnIdx.current = (attnIdx.current + 1) % list.length;
-    const next = list[attnIdx.current]!;
+    // the one after the card Tab opened last, by its place on the canvas: that card may need the owner no longer
+    const key = (x: Item | 'k') => (x === 'k' ? 'k' : x.id);
+    const at = (id: string | null) => (id === 'k' ? all.length : all.findIndex((i) => i.id === id));
+    const last = at(attnLast.current);
+    const next = list.find((x) => at(key(x)) > last) ?? list[0]!;
+    attnLast.current = key(next);
     if (next === 'k') toggleKoordinator();
     else open(next);
   }
@@ -1019,7 +1028,7 @@ function Canvas({
   const sheetKids = !sheetProject ? [] : sheetProject.archivedAt ? archived.filter((i) => i.parent === sheetProject.id) : (kidsOf.get(sheetProject.id) ?? []);
   const deps = useMemo(() => (hoverId && !panning && !dragId ? depsOf(hoverId, items) : undefined), [hoverId, panning, dragId, items]);
   const depOf = (id: string) => (!deps ? undefined : id === hoverId ? 'self' : deps.before.has(id) ? 'before' : deps.after.has(id) ? 'after' : undefined);
-  const edgeTargets = placed.filter(({ item }) => needsYou(item) && (focus?.type !== 'project' || item.parent === focus.id));
+  const edgeTargets = placed.filter(({ item }) => yours(item) && (focus?.type !== 'project' || item.parent === focus.id));
 
   // the button for the conversation with Obeya: the rightmost in the bar; while its sidebar is open it
   // belongs to the sidebar, at its top corner, and closes it. It is one element that never moves to
@@ -1085,7 +1094,7 @@ function Canvas({
                 onStart={startCard}
                 onArchive={archiveCard}
                 dep={depOf(item.id)}
-                underway={underway[item.id]}
+                underway={underway[item.id] ?? (item.landing ? t.approving : undefined)}
                 onHover={setHoverId}
               />
             ),

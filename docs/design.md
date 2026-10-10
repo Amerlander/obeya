@@ -1056,7 +1056,13 @@ the owner's language (`src/core/locale.ts`).
   run one after the other, so two approvals at once do not race on its main; a card whose work is
   landing refuses another approval (`notReady`), and a restart of Obeya waits for it like for a
   worker in the middle of a turn. The approval's answer still waits for the
-  landing, and its refusals (`landPush`, say) come back as before.
+  landing, and its refusals (`landPush`, say) come back as before. The click ends the owner's
+  turn at once: Obeya records the approval (`approved_at`) before it lands, and the card, still
+  `waiting`, is `landing` (“wird freigegeben …” in the approved colour), no longer counted in
+  "brauchen dich" nor reached by Tab. Before 2026-10-10 it went on needing the owner for the
+  seconds of the push, so Tab right after approving came back to it. A refusal, or a restart that
+  cut the landing off, gives the card back to the owner. Tab goes on from the card it opened last
+  by its place on the canvas, so the card that dropped out does not make it skip the next one.
 - **PR loop** — on approval (unless "Direkt auf main", see Landing) the worker hears that its work goes out as a pull request, opened the
   way the repository does it (its own skills and conventions, a description for readers who have
   not seen Obeya), and reports it with the tool `pr_opened(url)`. From then on it may push its
