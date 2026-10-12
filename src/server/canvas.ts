@@ -201,7 +201,7 @@ export class CanvasRuntime {
           void ensure();
         }
       }
-      const projectAgents = new ProjectAgents(board, deps.runtime, () => read.path, preferences);
+      const projectAgents = new ProjectAgents(board, deps.runtime, () => read.path, preferences, deps.permissionMode);
       workers = new Workers({
         board,
         runtime: deps.workerRuntime ?? deps.runtime,
@@ -272,6 +272,7 @@ export class CanvasRuntime {
       pathFor: (card) => (card ? this.repoOf(card) : this.repos[0]!).read.path,
       startBrief: (card) => this.repoOf(card).workers.startBrief(card),
       projectAgent: (project) => this.repoOf(project).projectAgents,
+      ...(deps.permissionMode ? { permissionMode: deps.permissionMode } : {}),
       onAnswer: (question, answer) => this.commander.tell(`The answer you looked up for the owner's question „${question}“ came in and was shown to them: ${answer}`),
     });
     this.commander = new Commander({

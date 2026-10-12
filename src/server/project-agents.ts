@@ -1,6 +1,7 @@
-// Project agents: one long-lived, read-only session per project that answers the owner's questions
-// about it from the plan doc, the decision log and the repository.
+// Project agents: one long-lived session per project that answers the owner's questions about it
+// from the plan doc, the decision log and the repository, with a worker's tools to check what it says.
 
+import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import type { Item } from '../core/types';
 import { decisionLog, INFORM_RULES, inform, type OwnerAnswer } from './advisor';
 import type { Board } from './board';
@@ -16,6 +17,8 @@ export class ProjectAgents {
     /** The repository's Lesestand, which the plan docs are read from (read-tree.ts). */
     private repoPath: () => string,
     private preferences: () => string = () => '',
+    /** The workers' permission mode, which the project agent runs in too. */
+    private permissionMode?: PermissionMode,
   ) {}
 
   /** Answers a question the owner asked about the project or one of its workstreams, in the project's session. */
@@ -27,6 +30,7 @@ export class ProjectAgents {
         resume: this.board.row(project.id).session_id ?? undefined,
         onSession: (id) => this.board.work(project.id, { session_id: id }),
         ...(onTool ? { onTool } : {}),
+        ...(this.permissionMode ? { permissionMode: this.permissionMode } : {}),
         system: `You are the project agent of the project "${project.title}", directed through Obeya. Its plan doc is ${project.plan?.file ?? '(none)'} in this repository; you know it and the history of its workstreams.\n\n${INFORM_RULES}`,
         message: [message, `Decisions taken in this project so far:\n${decisionLog(this.board.decisions(project.id))}`, this.preferences()].filter(Boolean).join('\n\n'),
         language: this.board.language(),

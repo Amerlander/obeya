@@ -840,9 +840,9 @@ the owner's language (`src/core/locale.ts`).
   on the pill; the server pushes every canvas's count to all of them when one changes.
 - **Lesestand** (`src/server/read-tree.ts`) — every repository of a canvas has a directory on its
   default branch that its plan docs are read from (the canvas, „Plandokument lesen“, the last state
-  kept on a project) and that the agents that only read work in: project agents, ideas'
-  exploration agents, the Koordinator (and its look-ups, learner and Rückschau), the Arbeitsrückschau
-  and the voice commands' session. Where work lands on the local main (`land: 'main'`, Obeya), it
+  kept on a project) and that the agents that answer or judge rather than work on a card run in:
+  project agents, ideas' exploration agents, the Koordinator (and its look-ups, learner and
+  Rückschau), the Arbeitsrückschau and the voice commands' session. Where work lands on the local main (`land: 'main'`, Obeya), it
   is the configured checkout itself, which is always on `main`, uncommitted plan docs included.
   Otherwise the configured checkout is often one of the pool's clones and on the branch of the card
   that leased it last, so the Lesestand is a detached worktree of it under Obeya's home
@@ -962,9 +962,12 @@ the owner's language (`src/core/locale.ts`).
   `BUN_BE_BUN`), but with `CLAUDE_CODE_OAUTH_TOKEN`, the login of a machine without a keychain.
   A worker is one SDK session per card with streaming input, the repo's own settings and
   CLAUDE.md, and permission mode `auto` (`--permission-mode`); after a restart it resumes by
-  session id. A project agent is one read-only session per project (Read, Grep, Glob on the
-  repository's Lesestand), resumed for each question, answering the owner's questions about the
-  project and its workstreams one at a time. The SDK sits behind a
+  session id. A project agent is one session per project on the repository's Lesestand, resumed
+  for each question, answering the owner's questions about the project and its workstreams one at
+  a time. It and the Koordinator's look-ups have a worker's tools in the workers' permission mode
+  (see Looked-up questions); the other agents that only judge or answer from the text (the quick
+  reading of commands, estimates, the learner, idea agents and the like) are read-only: Read, Grep
+  and Glob, mode `dontAsk`. The SDK sits behind a
   small runtime interface, so the orchestration is tested against a fake. Two SDK hooks ride on
   every session: before a Bash call, the refusal of long foreground sleeps; after every tool call,
   what changed since the session's instructions were built (`AgentSpec.contextUpdate`) goes to the
@@ -1217,7 +1220,8 @@ the owner's language (`src/core/locale.ts`).
   owner asked for it; it turns a restart that waits into a stop. The next start resumes the
   workers it stopped like a restart does.
 - **Koordinator** — read-only SDK turns on the Lesestand of the card's repository (the home
-  repository's without a card), one decision at a time. Before a
+  repository's without a card), one decision at a time (its look-ups excepted, see Looked-up
+  questions). Before a
   card starts it estimates the files the card will change and judges whether running it next to
   the cards in progress likely ends in merge conflicts. Cards queued before it count too: a card
   likely to conflict with one of them waits behind it rather than overtaking it, and once that one
@@ -1474,7 +1478,14 @@ the owner's language (`src/core/locale.ts`).
   ich starte?", what the plan says, how something works) the quick turn does not answer: it
   acknowledges it ("Ich schaue im Plan nach.") and passes it on. A question about a project or one
   of its workstreams goes to the project agent, in the project's session; any other to a thorough
-  read-only Koordinator turn on the card's repository. A question about the work of
+  Koordinator turn on the card's repository. Both have the tools a worker has, in the workers'
+  permission mode (`auto` unless `--permission-mode` says otherwise): the shell, gh, the web, files
+  outside the repository. So they check what the text alone does not say (which render in a
+  directory is newest, whether a script ran, what a GitHub release holds, a CI run) instead of
+  answering that they cannot see it; until 2026-10-12 they were read-only (Read, Grep, Glob) and
+  did. A call the settings want confirmed is refused, as there is no card to ask the owner on. The
+  quick reading of a command stays read-only, so it answers in seconds; what needs checking it
+  passes to the look-up. A question about the work of
   an agent on a card (also one waiting for review: „Ist sichergestellt, dass …?“) is not looked up
   but goes to that agent, as a note or as feedback: its work is on its branch, not in the Lesestand
   the look-up reads, and the card shows the agent at work while it answers. `look_up` on such a

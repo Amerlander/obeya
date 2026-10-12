@@ -1,9 +1,11 @@
 // Questions the Koordinator looks up: what it cannot answer in its quick reading of a command (what
-// an agent would do on a card, what the plan says) goes to an agent that takes the time to read.
+// an agent would do on a card, what the plan says, what a release holds) goes to an agent with a
+// worker's tools that takes the time to read and check.
 // A workstream's question goes to its project agent, any other to a thorough Koordinator turn. The
 // answer comes later: in full in the log of the card that was open (else in the Koordinator's
 // sheet), and summed up aloud.
 
+import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import type { Item } from '../core/types';
 import { INFORM_RULES, inform, type OwnerAnswer } from './advisor';
 import type { Board } from './board';
@@ -20,6 +22,8 @@ export interface AnswerOptions {
   /** The project agent of a project answers what is asked about it and its workstreams. */
   projectAgent: (project: Item) => { inform: (project: Item, message: string, onTool?: (name: string, input: Record<string, unknown>) => void) => Promise<OwnerAnswer> };
   preferences?: () => string;
+  /** The workers' permission mode, which the answering Koordinator turn runs in too. */
+  permissionMode?: PermissionMode;
   /** The answer is in: the Koordinator hears it with the owner's next command. */
   onAnswer?: (question: string, answer: string) => void;
 }
@@ -58,6 +62,7 @@ export class Answers {
             message: [message, this.o.preferences?.() ?? ''].filter(Boolean).join('\n\n'),
             onTool,
             language: this.o.board.language(),
+            ...(this.o.permissionMode ? { permissionMode: this.o.permissionMode } : {}),
           });
     asked
       .then((a) => this.deliver(talkId, by, t.question!, a, reading))

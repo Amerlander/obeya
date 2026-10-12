@@ -1,6 +1,7 @@
 // What the agents that answer the owner's questions (the Koordinator, a project agent) share, and
 // how an agent's question to the owner is put together.
 
+import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { type Language, LANGUAGE_NAMES } from '../core/locale';
 import type { Question } from '../core/types';
@@ -22,9 +23,14 @@ export interface Briefing {
   onTool?: (name: string, input: Record<string, unknown>) => void;
   /** The owner's language, which the answer is in. */
   language: Language;
+  /** The workers' permission mode: the answering agent has their tools and runs as they do. */
+  permissionMode?: PermissionMode;
 }
 
-/** A read-only turn that answers the owner's question; a turn that ends without the tool answers with its last words. */
+/**
+ * A turn that answers the owner's question, with a worker's tools (the shell, the web) so it can
+ * check what it says; a turn that ends without the tool answers with its last words.
+ */
 export function inform(b: Briefing): Promise<OwnerAnswer> {
   return new Promise((resolve, reject) => {
     let answer: OwnerAnswer | null = null;
@@ -38,8 +44,8 @@ export function inform(b: Briefing): Promise<OwnerAnswer> {
     const session = b.runtime.start(
       {
         cwd: b.cwd,
-        readOnly: true,
         role: 'koordinator',
+        ...(b.permissionMode ? { permissionMode: b.permissionMode } : {}),
         ...(b.resume ? { resume: b.resume } : {}),
         system: b.system,
         tools: [
@@ -72,11 +78,11 @@ export function inform(b: Briefing): Promise<OwnerAnswer> {
 
 /** How to answer a question of the owner's, the same for every agent that answers one. */
 export const INFORM_RULES = `
-The owner asked a question about the canvas, spoken or typed. Obeya's quick reading of every command could not answer it from the cards alone and passed it to you; the owner heard that the answer comes in a moment. Take the time to look it up: the repository's docs and plan docs, CLAUDE.md, the code, and what the message gives you.
+The owner asked a question about the canvas, spoken or typed. Obeya's quick reading of every command could not answer it from the cards alone and passed it to you; the owner heard that the answer comes in a moment. Take the time to look it up: the repository's docs and plan docs, CLAUDE.md, the code, and what the message gives you. You have the tools a worker has: what the answer depends on beyond the text (the git history, files on this machine and their dates, a release, pull request or CI run on GitHub with gh, a page on the web), check rather than guess.
 - "What would the agent do on this card?": the message holds the task the card's worker gets at its start. Derive from it, the plan doc and the repository's instructions the concrete steps the worker would take, in order, and what it would ask the owner. Say what it would change, and where the plan leaves it open.
 - Answer what was asked, concretely and grounded in what you read; name the source (plan doc section, file). Say where you are guessing. Never answer that you cannot know: say what the sources say.
 - The owner does not read code: no code blocks, file paths only where they help.
-Read what you need, then call answer_owner exactly once and end your turn. You cannot change files.
+Read and check what you need, then call answer_owner exactly once and end your turn.
 `.trim();
 
 /**
