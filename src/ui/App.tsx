@@ -1183,7 +1183,8 @@ function Canvas({
             <GroupNames shapes={territories.shapes} />
           </div>
         </div>
-        {!items.length && <div className="empty">{t.empty}</div>}
+        {/* on an empty canvas the camera centres the note on the plan directory: the hint goes above it */}
+        {!items.length && <div className={planDirs ? 'empty above-note' : 'empty'}>{t.empty}</div>}
         {!ring && <Lasso pts={lasso} />}
         {ring && (
           <Ring
