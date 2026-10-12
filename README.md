@@ -15,8 +15,9 @@ visibly on the walls. More on [obeya.si](https://obeya.si).
 
 [![The demo video: an idea said into the microphone, built by an agent that records its own demo, approved and landed on main](docs/images/video.jpg)](https://obeya.si/#film)
 
-Two minutes of a real run: an idea said into the microphone, an agent building it and recording its
-demo, the approval landing it on `main` ([watch on obeya.si](https://obeya.si/#film), with captions).
+The video shows Obeya at work in two minutes: an idea is said into the microphone, an agent builds
+it and records its demo, and the approval lands it on `main` ([watch on obeya.si](https://obeya.si/#film),
+with captions).
 
 Each card gets its own agent (Claude Code) in its own clone or worktree of your repository, on
 this machine or on another one reached over SSH. The agent asks on the card when it needs a
