@@ -7,7 +7,7 @@ import { type Language, languageOf } from '../core/locale';
 import { type AgentEffort, type AgentModel, type AgentRole, type CardState, type ConfigProblemCode, type DemoSettingsProblem, type ErrorCode, EXPORT_HTML_MAX, type NarrationLanguage, type VoiceKind, type Idea, type Need, type NextStep, type Queue, type OwnerHold, type RestartReason, type SetupId, type VoiceSetupId, type MachineSectionId, type NeededId, type PrId } from '../core/types';
 
 const de = {
-  kind: { task: 'Aufgabe', project: 'Projekt', workstream: 'Workstream', idea: 'Idee', prototype: 'Prototyp', becomesProject: 'Idee → Projekt' },
+  kind: { task: 'Aufgabe', project: 'Projekt', workstream: 'Workstream', idea: 'Idee', prototype: 'Prototyp', becomesProject: 'Idee → Projekt', taskBecomesProject: 'Aufgabe → Projekt' },
   state: {
     idea: 'Idee',
     proposal: 'Vorschlag eines Agenten',
@@ -120,6 +120,7 @@ const de = {
   waitingThere: (n: number) => (n === 1 ? '1 Aufgabe braucht dich dort' : `${n} Aufgaben brauchen dich dort`),
   waitingElsewhere: (n: number) => (n === 1 ? '1 Aufgabe auf einer anderen Leinwand braucht dich' : `${n} Aufgaben auf anderen Leinwänden brauchen dich`),
   start: 'Agent starten',
+  startHint: 'Ein Agent beginnt auf eigenem Branch und zeigt am Ende eine Demo.',
   landedPart: {
     short: 'Teil gelandet',
     long: 'Ein Teil ist schon gelandet, das Plan-Doc hält den Workstream aber offen. Ein neuer Lauf macht den Rest.',
@@ -231,8 +232,6 @@ const de = {
     count: (n: number) => (n === 0 ? 'Keine Aufgabe in der Warteschlange' : n === 1 ? 'Eine Aufgabe in der Warteschlange' : `${n} Aufgaben in der Warteschlange`),
     empty: 'Keine Aufgabe wartet. Eine Aufgabe, die mit laufender Arbeit in Konflikt käme oder keinen freien Workspace findet, reiht sich hier ein.',
     checking: 'Obeya prüft',
-    cutting: 'Obeya teilt auf',
-    cuttingLong: 'Obeya schneidet die Aufgabe in Pakete, die parallel laufen können. Sie ersetzen die Aufgabe.',
     waiting: 'In der Warteschlange',
     checkingLong: 'Obeya prüft, ob die Aufgabe mit laufender Arbeit wahrscheinlich in Merge-Konflikte gerät.',
     behind: (titles: string[]) => `Wartet auf ${titles.map((x) => `„${x}“`).join(', ')}.`,
@@ -273,7 +272,7 @@ const de = {
     queued: 'Die Aufgabe liegt schon bei Obeya.',
     notQueued: 'Die Aufgabe wartet nicht in der Warteschlange.',
     notMovable: 'Die Aufgabe kann in der Warteschlange nicht weiter.',
-    notSplittable: 'Aufteilen lässt sich nur eine eigene, geplante Aufgabe, die nicht bei Obeya liegt.',
+    notPlannable: 'Als Projekt planen lässt sich nur eine Idee oder eine eigene, geplante Aufgabe, an der noch niemand gearbeitet hat.',
     noAgent: 'An dieser Aufgabe arbeitet gerade kein Agent.',
     noQuestion: 'Hier ist keine Frage mehr offen.',
     notReady: 'Das ist nicht bereit zur Abnahme.',
@@ -882,7 +881,6 @@ const de = {
     projectGone: (d: Date) => `Das Plan-Dokument ist weg (${de.archive.when(d)}). So stand es zuletzt; kommt die Datei zurück, kehrt das Projekt an seinen Platz zurück.`,
     workstreams: (n: number) => (n === 1 ? '1 Workstream' : `${n} Workstreams`),
   },
-  split: 'Aufteilen',
   idea: {
     status: { open: 'Idee', parked: 'Idee · geparkt', dropped: 'Idee · verworfen' } satisfies Record<Idea['status'], string>,
     yourTurn: 'Idee · du bist dran',
@@ -923,7 +921,9 @@ const de = {
     prototypeKept: 'Ein Prototyp landet nie selbst. Überzeugt einer, wird die Idee auf seinem Branch gebaut.',
     prototypeNoDemo: 'Noch keine Demo.',
     reopen: 'Wer weiterredet, nimmt die Idee wieder auf.',
-    makeIdea: 'Erst besprechen',
+    makeIdea: 'Als Idee besprechen',
+    makeIdeaHint: 'Die Aufgabe wird zur Idee: Ein Agent liest Code und Pläne mit, fragt nach und zeigt Varianten, bevor etwas gebaut wird.',
+    planDocHint: 'Ein Agent schreibt aus der Aufgabe ein Plan-Doc mit Workstreams. Sobald es gelandet ist, steht hier das Projekt.',
     /** What the idea's agent would do next in the owner's place, above the decisions; the button it means is marked. */
     next: 'Nächster Schritt, wenn der Agent entscheiden müsste',
     nextStep: {
@@ -986,7 +986,7 @@ const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDat
 type Strings = typeof de;
 
 const en: Strings = {
-  kind: { task: 'Task', project: 'Project', workstream: 'Workstream', idea: 'Idea', prototype: 'Prototype', becomesProject: 'Idea → Project' },
+  kind: { task: 'Task', project: 'Project', workstream: 'Workstream', idea: 'Idea', prototype: 'Prototype', becomesProject: 'Idea → Project', taskBecomesProject: 'Task → Project' },
   state: {
     idea: 'Idea',
     proposal: 'Proposed by an agent',
@@ -1097,6 +1097,7 @@ const en: Strings = {
   waitingThere: (n: number) => (n === 1 ? '1 task needs you there' : `${n} tasks need you there`),
   waitingElsewhere: (n: number) => (n === 1 ? '1 task on another canvas needs you' : `${n} tasks on other canvases need you`),
   start: 'Start agent',
+  startHint: 'An agent starts on a branch of its own and shows a demo at the end.',
   landedPart: {
     short: 'Part landed',
     long: 'A part has landed already, but the plan doc keeps the workstream open. A new run does the rest.',
@@ -1202,8 +1203,6 @@ const en: Strings = {
     count: (n: number) => (n === 0 ? 'No task in the queue' : n === 1 ? 'One task in the queue' : `${n} tasks in the queue`),
     empty: 'No task waits. A task that would conflict with work in progress, or finds no free workspace, lines up here.',
     checking: 'Obeya checking',
-    cutting: 'Obeya splitting',
-    cuttingLong: 'Obeya cuts the task into packages that can run in parallel. They replace the task.',
     waiting: 'In the queue',
     checkingLong: 'Obeya checks whether the task is likely to run into merge conflicts with work in progress.',
     behind: (titles: string[]) => `Waits for ${titles.map((x) => `“${x}”`).join(', ')}.`,
@@ -1240,7 +1239,7 @@ const en: Strings = {
     queued: 'The task is already with Obeya.',
     notQueued: 'The task is not waiting in the queue.',
     notMovable: 'The task cannot move further in the queue.',
-    notSplittable: 'Only your own planned task can be split, and only while it is not with Obeya.',
+    notPlannable: 'Only an idea, or a planned task of your own nobody has worked on yet, can be planned as a project.',
     noAgent: 'No agent is working on this task right now.',
     noQuestion: 'No question is open here any more.',
     notReady: 'This is not ready for review.',
@@ -1831,7 +1830,6 @@ const en: Strings = {
     projectGone: (d: Date) => `The plan doc is gone (${en.archive.when(d)}). This is how it last stood; if the file comes back, the project returns to its place.`,
     workstreams: (n: number) => (n === 1 ? '1 workstream' : `${n} workstreams`),
   },
-  split: 'Split',
   idea: {
     status: { open: 'Idea', parked: 'Idea · parked', dropped: 'Idea · dropped' },
     yourTurn: 'Idea · your turn',
@@ -1868,7 +1866,9 @@ const en: Strings = {
     prototypeKept: 'A prototype never lands by itself. If one convinces, the idea is built on its branch.',
     prototypeNoDemo: 'No demo yet.',
     reopen: 'Talking on takes the idea up again.',
-    makeIdea: 'Discuss first',
+    makeIdea: 'Discuss as an idea',
+    makeIdeaHint: 'The task becomes an idea: an agent reads the code and plans, asks questions and shows variants before anything is built.',
+    planDocHint: 'An agent writes a plan doc with workstreams from the task. Once it has landed, the project stands here.',
     next: 'Next step, if the agent had to decide',
     nextStep: {
       answer: (n: number) => (n > 1 ? 'Answer the questions first' : 'Answer the question first'),
@@ -1987,13 +1987,11 @@ export const stateLabel = (i: { state: CardState; need?: Need; pr?: unknown; que
     : i.queue
     ? 'checking' in i.queue
       ? t.queue.checking
-      : 'cutting' in i.queue
-        ? t.queue.cutting
-        : 'workspace' in i.queue
-          ? i.queue.workspace === 'slots'
-            ? t.queue.slot
-            : t.queue.workspace
-          : t.queue.waiting
+      : 'workspace' in i.queue
+        ? i.queue.workspace === 'slots'
+          ? t.queue.slot
+          : t.queue.workspace
+        : t.queue.waiting
     : i.state === 'waiting' && i.need
       ? i.answering
         ? t.answering
@@ -2005,4 +2003,7 @@ export const stateLabel = (i: { state: CardState; need?: Need; pr?: unknown; que
         : t.state[i.state];
 
 /** The owner's text for a refused request or a logged error code; the generic one for anything unknown. */
+/** An idea or a task decided as a project, until the project takes its place; a card that was an idea has the brief it was decided on. */
+export const becomesLabel = (i: { brief?: string }) => (i.brief !== undefined ? t.kind.becomesProject : t.kind.taskBecomesProject);
+
 export const errorText = (code: string | undefined) => (code && Object.hasOwn(t.error, code) ? t.error[code as ErrorCode] : t.error.invalid);

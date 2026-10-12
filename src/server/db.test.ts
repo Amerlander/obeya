@@ -21,3 +21,29 @@ test('a database a newer Obeya wrote is left alone, not opened', () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('an idea decided as a project keeps the mark, and a card still being cut is planned again', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'obeya-db-'));
+  try {
+    const path = join(dir, 'obeya.db');
+    const s = new Store(path);
+    s.ensureCanvas('c', 'C');
+    const [idea, cut] = s.insert([
+      { canvas_id: 'c', kind: 'task', state: 'planned', idea: JSON.stringify({ status: 'open', brief: 'B', project: true }), x: 0, y: 0 },
+      { canvas_id: 'c', kind: 'task', state: 'planned', x: 0, y: 1 },
+    ]);
+    s.update(cut!.id, { queue: JSON.stringify({ cutting: true }) });
+    s.db.close();
+    // the store as it stood before the migration
+    const before = new Database(path);
+    before.run('ALTER TABLE cards DROP COLUMN becomes_project');
+    before.run(`PRAGMA user_version = ${MIGRATIONS.length - 1}`);
+    before.close();
+    const after = new Store(path);
+    expect(after.card(idea!.id)).toMatchObject({ becomes_project: 1, idea: JSON.stringify({ status: 'open', brief: 'B' }) });
+    expect(after.card(cut!.id)).toMatchObject({ becomes_project: 0, queue: null });
+    after.db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

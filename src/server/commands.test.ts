@@ -318,7 +318,28 @@ describe('the Koordinator remembers', () => {
     expect(executed).toEqual([{ do: 'answer', card: a.id, text: 'ja', spoken: true }]);
   });
 
-  test("an idea's suggested next step, with its agent's own answers, is in its line: „mach, was du vorschlägst“ takes it", async () => {
+  test('„plane das als Projekt“ on a planned task of the owner’s plans its doc; on one with work, it is refused', async () => {
+    const a = board.create({ title: 'Mandanten', x: 0, y: 0 });
+    const k = commander();
+    const heard = k.hear('plane das als Projekt', { card: a.id });
+    await settle();
+    const s = runtime.last;
+    expect(s.spec.tools.find((t) => t.name === 'act')!.description).toContain('plan_doc also on a planned task');
+    expect(await s.call('act', { actions: [{ do: 'plan_doc', card: 'K1' }], confirm: 'Plan-Doc für „Mandanten“.' })).toContain('Done');
+    s.emit({ type: 'idle' });
+    k.arm((await heard).token!);
+    await new Promise((r) => setTimeout(r, 40));
+    expect(executed).toEqual([{ do: 'planDoc', card: a.id }]);
+
+    board.work(a.id, { branch: 'obeya/mandanten' });
+    const again = k.hear('plane das als Projekt', { card: a.id });
+    await settle();
+    expect(await runtime.last.call('act', { actions: [{ do: 'plan_doc', card: 'K1' }], confirm: '…' })).toContain('only an idea, or a planned task of the owner');
+    runtime.last.emit({ type: 'idle' });
+    await again;
+  });
+
+    test("an idea's suggested next step, with its agent's own answers, is in its line: „mach, was du vorschlägst“ takes it", async () => {
     const a = board.create({ idea: true, title: 'Export', x: 0, y: 0 });
     board.setIdea(a.id, {
       yourTurn: true,

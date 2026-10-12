@@ -354,6 +354,8 @@ textarea.p-body:focus { border-color: var(--muted); }
 .seg button { border: 0; background: transparent; border-radius: 2px; padding: 4px 12px; font-size: 13px; cursor: pointer; color: var(--muted); }
 .seg button.on { background: var(--card); color: var(--ink); box-shadow: var(--shadow); }
 .actions { display: flex; gap: 10px; margin-top: 18px; align-items: center; }
+/* deleting stands apart from what moves the card on */
+.actions > .btn.danger { margin-left: auto; }
 .btn { border: 0; border-radius: 3px; padding: 9px 16px; font-weight: 600; cursor: pointer; background: var(--chip); }
 .btn.primary { background: var(--ink); color: var(--bg); }
 .btn.danger { color: var(--error); }

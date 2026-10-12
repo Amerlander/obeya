@@ -39,6 +39,13 @@ export function openPerGroup(items: Item[]): Map<string, number> {
 export const buildableOn = (i: Item) => i.state === 'planned' && !i.branch && !i.queue;
 
 /**
+ * A task of the owner's that can still be planned as a project, as an idea can: planned, nobody has
+ * worked on it, the Koordinator does not hold it, and it is no prototype nor decided as a project already.
+ */
+export const plannableAsProject = (i: Item) =>
+  i.source === 'manual' && i.kind === 'task' && buildableOn(i) && !i.prototypeOf && !i.becomesProject;
+
+/**
  * The workstream of a project, among `items`, that its idea's prototypes are built for: the one
  * nobody has started that mentions prototypes, as the plan doc's worker writes it. None when no
  * such workstream, or several, leave it to the owner.
@@ -195,7 +202,7 @@ export interface Item {
   brief?: string;
   /** A card that was an idea and has been decided: the mocks of its brief. */
   mocks?: Mock[];
-  /** A card that was an idea, decided as a project: its worker writes the plan doc, and the project takes its place. */
+  /** An idea or a task of the owner's, decided as a project: its worker writes the plan doc, and the project takes its place. */
   becomesProject?: boolean;
   /** The group the card belongs to (a `Group` id); a workstream's is its project's. */
   group?: string;
@@ -344,7 +351,6 @@ export const START_ALL_HOLD_MS = 8000;
  */
 export type Queue = (
   | { checking: true; together?: string }
-  | { cutting: true }
   | { behind: string[]; reason: string }
   | { workspace: WorkspaceShortage }
 ) & { since?: string };
@@ -626,8 +632,6 @@ export type CardAction =
   | { action: 'dequeue' }
   /** A waiting card one place earlier or later in the queue, past a card it has no wait with. */
   | { action: 'reorder'; earlier: boolean }
-  /** Let the Koordinator cut the card into packages that can run in parallel. */
-  | { action: 'split' }
   /**
    * A proposal becomes the owner's card and starts (a proposed idea: its discussion opens); with
    * `start: false` it is only planned. `picks`: the options the owner chose for each of its questions.
@@ -648,7 +652,7 @@ export type CardAction =
   | { action: 'build' }
   /** Ideas: building after the reply is taken back. */
   | { action: 'unbuild' }
-  /** Ideas: a planned card whose worker writes a plan doc from the brief. */
+  /** Ideas, and planned tasks of the owner's nobody has worked on: a planned card whose worker writes a plan doc from the brief or the task. */
   | { action: 'planDoc' }
   | { action: 'park' }
   | { action: 'drop' }
@@ -686,7 +690,7 @@ export type ErrorCode =
   | 'notQueued'
   /** Moving a card in the queue: it is first or last already, or the card it would pass has a wait with it or is being judged. */
   | 'notMovable'
-  | 'notSplittable'
+  | 'notPlannable'
   | 'noAgent'
   | 'noQuestion'
   | 'notReady'

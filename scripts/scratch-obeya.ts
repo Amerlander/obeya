@@ -104,7 +104,7 @@ interface StageCard {
   noDemo?: string;
   question?: { text: string; options?: string[]; multiple?: boolean };
   demo?: Record<string, unknown>;
-  queue?: { behind?: string[]; reason?: string; since?: string; checking?: true; cutting?: true };
+  queue?: { behind?: string[]; reason?: string; since?: string; checking?: true };
   scope?: string[];
   branch?: string;
   workspace?: boolean;

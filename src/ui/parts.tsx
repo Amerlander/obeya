@@ -7,7 +7,7 @@ import { api } from './api';
 import type { Cam } from './camera';
 import type { Shape } from './groups';
 import { Doc, Inline, plain } from './markdown';
-import { clock, shortDay, stateLabel, t } from './strings';
+import { becomesLabel, clock, shortDay, stateLabel, t } from './strings';
 
 /** The first line of a card's text that says something (not a bare "Ziel" label, as briefs start). */
 const firstLine = (md: string) =>
@@ -49,7 +49,7 @@ const sameBounds = (a: Bounds, b: Bounds) => a.x === b.x && a.y === b.y && a.w =
 export const CardView = memo(
   function CardView({ item, b, lifted, dragging, pop, prototyped, showRepo, els, onStart, onArchive, dep, onHover, underway }: CardProps) {
     const shape = shapeOf(item);
-    // a card the Koordinator is checking or cutting has nothing to start yet
+    // a card the Koordinator is checking has nothing to start yet
     const startable = item.state === 'planned' && (!item.queue || 'behind' in item.queue);
     // as "Archivieren" in the unfolded card: a finished card of the owner's whose agent is done, or
     // a dropped idea without a prototype on the canvas
@@ -58,7 +58,7 @@ export const CardView = memo(
       ((finished(item.state) && item.source === 'manual' && !item.finishing) || (item.idea?.status === 'dropped' && !prototyped));
     const kind =
       item.label ??
-      (item.parent ? t.kind.workstream : item.idea || item.proposal?.idea ? t.kind.idea : item.becomesProject ? t.kind.becomesProject : item.prototypeOf ? t.kind.prototype : item.kind === 'project' ? t.kind.project : '');
+      (item.parent ? t.kind.workstream : item.idea || item.proposal?.idea ? t.kind.idea : item.becomesProject ? becomesLabel(item) : item.prototypeOf ? t.kind.prototype : item.kind === 'project' ? t.kind.project : '');
     // a plain task says nothing of its kind: that it is one shows
     const label = [item.state === 'proposal' && t.proposalMark, showRepo && item.repo, kind].filter(Boolean).join(' · ');
     // a card whose agent finishes after the landing, or opens its PR, shows its line like one at work: the usage limit it waits on, its reports

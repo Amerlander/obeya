@@ -13,12 +13,6 @@ import type { Workers } from './workers';
 import { type Change, RECHECK_MS, type Workspaces } from './workspaces';
 import { LANGUAGE_NAMES } from '../core/locale';
 
-interface Package {
-  title: string;
-  body: string;
-  files: string[];
-}
-type Cut = { packages: Package[]; reason: string } | { keep: string };
 /** A workstream as the Koordinator scheduled it, in its turn's order. */
 interface Planned {
   card: string;
@@ -56,7 +50,7 @@ export interface RepoHands {
   workers: Workers;
   workspaces: Workspaces;
   adapter: RepoAdapter;
-  /** Where the Koordinator reads (scopes, cutting, questions): the repository's Lesestand. */
+  /** Where the Koordinator reads (scopes, questions): the repository's Lesestand. */
   path: string;
 }
 
@@ -105,7 +99,6 @@ export class Koordinator {
       if (i.state !== 'planned' || !i.queue) continue;
       if ('checking' in i.queue && i.queue.together) together.add(i.queue.together);
       else if ('checking' in i.queue) this.serial(() => this.decide(i.id));
-      else if ('cutting' in i.queue) this.serial(() => this.cut(i.id));
     }
     for (const p of together) this.serial(() => this.decideAll(p));
     this.scheduleDrain();
@@ -146,85 +139,6 @@ export class Koordinator {
       .snapshot()
       .items.filter((i) => i.parent === projectId && i.state === 'planned' && i.queue && 'checking' in i.queue && i.queue.together === projectId)
       .sort((a, b) => (a.queue!.since ?? '').localeCompare(b.queue!.since ?? ''));
-  }
-
-  /** The owner wants the card cut into packages that can run in parallel. */
-  split(cardId: string) {
-    const card = this.card(cardId);
-    if (card.source !== 'manual' || card.state !== 'planned' || card.queue) throw new BadRequest('notSplittable', 'only a planned card of your own can be split');
-    this.setQueue(cardId, { cutting: true });
-    this.serial(() => this.cut(cardId));
-  }
-
-  private async cut(cardId: string) {
-    const card = this.o.board.item(cardId);
-    if (!card || !card.queue || !('cutting' in card.queue)) return;
-    let result: Cut;
-    try {
-      result = await this.plan(card);
-    } catch (e) {
-      this.setQueue(cardId, null);
-      this.o.board.log(cardId, 'error', 'obeya', this.o.board.t.koordinator.splitFailed(e instanceof Error ? e.message : String(e)));
-      return;
-    }
-    if (!('packages' in result) || result.packages.length < 2) {
-      this.setQueue(cardId, null);
-      this.o.board.log(cardId, 'state', 'koordinator', this.o.board.t.koordinator.notSplit('keep' in result ? result.keep : this.o.board.t.koordinator.onePackage));
-      return;
-    }
-    const made = this.o.board.replace(cardId, result.packages);
-    for (const m of made) this.o.board.log(m.id, 'state', 'koordinator', this.o.board.t.koordinator.splitFrom(card.title, result.reason));
-  }
-
-  private plan(card: Item): Promise<Cut> {
-    return new Promise((resolve, reject) => {
-      let done = false;
-      const finish = (r: Cut) => {
-        if (done) return 'Already reported.';
-        done = true;
-        resolve(r);
-        return 'Recorded. End your turn now.';
-      };
-      const session = this.o.runtime.start(
-        {
-          cwd: this.o.repoFor(card).path,
-          readOnly: true,
-          role: 'koordinator',
-          system: CUT_SYSTEM(this.language),
-          tools: [
-            {
-              name: 'packages',
-              description: `Replace the card by these packages (2 to 6). Titles and bodies in ${this.language}; files as in scope estimates.`,
-              schema: {
-                packages: z.array(z.object({ title: z.string(), body: z.string(), files: z.array(z.string()) })).min(2).max(6),
-                reason: z.string(),
-              },
-              run: (a) => finish({ packages: a.packages as Package[], reason: String(a.reason) }),
-            },
-            {
-              name: 'keep',
-              description: `Leave the card whole, with a one-sentence reason in ${this.language}.`,
-              schema: { reason: z.string() },
-              run: (a) => finish({ keep: String(a.reason) }),
-            },
-          ],
-          onEvent: (e) => {
-            if (e.type === 'error' && !done) {
-              done = true;
-              session.close();
-              reject(new Error(e.message));
-            } else if (e.type === 'idle') {
-              session.close();
-              if (!done) {
-                done = true;
-                reject(new Error('keine Antwort'));
-              }
-            }
-          },
-        },
-        `The card: "${card.title}".\n\n${card.body || '(no description)'}${this.o.preferences ? `\n\n${this.o.preferences()}` : ''}`,
-      );
-    });
   }
 
   /** Start a queued card anyway. */
@@ -1019,15 +933,6 @@ const INPUTS: Record<OwnerInput, string> = {
   talk: 'question or remark to you',
   card: 'text of a card they wrote, the task for an agent',
 };
-
-const CUT_SYSTEM = (language: string) => `
-You are the Koordinator of Obeya, a canvas on which the owner directs coding agents; the owner knows you simply as Obeya. Several workers run at the same time, each on one card in its own workspace; cards whose changes would conflict on merge (the same code in the same files) have to wait for each other. The owner asks you to cut a card into work packages that can run in parallel.
-
-Read what you need in the repository (you cannot change files). Then either call packages or keep:
-- packages: 2 to 6 cards that together do exactly what the card asks, each shippable and testable on its own, touching different files wherever possible. Each body says what to do and how to verify it, so a worker needs no other context. files: the repository-relative paths each will change ("dir/" for a directory). reason: one sentence in ${language} on how you cut.
-- keep: when the card is small, or its parts cannot run apart without stepping on each other.
-Do not add scope the card does not ask for.
-`.trim();
 
 /**
  * A read-only session that reads `brief` and answers through its tools: it ends with its turn, or

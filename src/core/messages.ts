@@ -125,13 +125,16 @@ const de = {
     onPrototype: (prototype: string) => `Auf Prototyp „${prototype}“.`,
     workstreamOnLog: (prototype: string) => `Auf dem Prototyp „${prototype}“ bauen: Sein Branch ist jetzt der dieses Workstreams.`,
     howOn: (idea: string) => `Idee „${idea}“: wie weiter?`,
+    howOnTask: (task: string) => `Aufgabe „${task}“: wie weiter?`,
     planDocAnswer: 'Als Projekt: erst ein Plan-Doc mit Workstreams.',
     planDocLog: 'Als Projekt: Ein Agent schreibt das Plan-Doc; ist es gelandet, tritt das Projekt an die Stelle der Idee.',
+    planDocTaskLog: 'Als Projekt: Ein Agent schreibt das Plan-Doc; ist es gelandet, tritt das Projekt an die Stelle der Aufgabe.',
     dropped: 'Verworfen.',
     parked: 'Geparkt.',
-    planDocTask: (dir: string) =>
-      `Schreibe aus dem Stand dieser Idee ein Plan-Doc in \`${dir}/\`, nach den Konventionen des Repositorys (vorhandene Plan-Docs als Vorbild). Es braucht ein \`## Ziel\` (oder \`## Goal\`) und eine Checkliste unter \`## Workstreams\` (\`- [ ] **W1:** Titel. Details\`), in Pakete geschnitten, die einzeln landen können; dann zeigt Obeya es als Projekt, das an die Stelle dieser Idee tritt. Baue nichts davon; nur das Plan-Doc (und ein Verweis darauf, wo das Repository Plan-Docs verlinkt).`,
+    planDocTask: (dir: string, task = false) =>
+      `Schreibe aus ${task ? 'dieser Aufgabe' : 'dem Stand dieser Idee'} ein Plan-Doc in \`${dir}/\`, nach den Konventionen des Repositorys (vorhandene Plan-Docs als Vorbild). Es braucht ein \`## Ziel\` (oder \`## Goal\`) und eine Checkliste unter \`## Workstreams\` (\`- [ ] **W1:** Titel. Details\`), in Pakete geschnitten, die einzeln landen können; dann zeigt Obeya es als Projekt, das an die Stelle dieser ${task ? 'Aufgabe' : 'Idee'} tritt. Baue nichts davon; nur das Plan-Doc (und ein Verweis darauf, wo das Repository Plan-Docs verlinkt).`,
     planDocIdea: (title: string) => `Idee: „${title}“`,
+    planDocCard: (title: string) => `Aufgabe: „${title}“`,
     planDocPrototypes: (n: number) =>
       `Zu dieser Idee gibt es schon ${n > 1 ? `${n} Prototypen` : 'einen Prototyp'}. Sie bleiben auf der Leinwand stehen; steht das Projekt, wählt der Owner einen von ihnen („Diesen Prototyp bauen“), und der Workstream, der darauf aufbaut, wird auf seinem Branch gebaut. Plane sie also nicht noch einmal als Workstreams, sondern nimm, was sie gezeigt haben, ins Plan-Doc auf. Nur der Workstream, der auf dem gewählten Prototyp aufbaut, erwähnt Prototypen: an ihm erkennt Obeya, welcher Workstream auf dem Branch des Prototyps gebaut wird.`,
     planDocHandedOver: (title: string, summary: string) => `„${title}“, so übergeben:\n\n${summary}`,
@@ -148,6 +151,7 @@ const de = {
     plansNoPrototypes: 'Plant keine Prototypen mehr',
     decision: (question: string, answer: string) => `Entscheidung: ${question} → ${answer}`,
     becameProject: 'Das Projekt steht jetzt an der Stelle der Idee; die Idee liegt im Archiv.',
+    taskBecameProject: 'Das Projekt steht jetzt an der Stelle der Aufgabe; die Aufgabe liegt im Archiv.',
     /** A workstream whose part landed while its plan doc keeps it open. */
     partLanded: 'Teil gelandet, im Plan-Doc weiter offen.',
     /** How the brief and the prototype button are called on the card, for the idea's agent. */
@@ -163,10 +167,6 @@ const de = {
   },
   koordinator: {
     allStarted: (names: string) => `Alle Workstreams gestartet: ${names}. Obeya legt die Reihenfolge fest.`,
-    splitFailed: (why: string) => `Obeya konnte die Aufgabe nicht aufteilen (${why}).`,
-    notSplit: (why: string) => `Nicht aufgeteilt: ${why}`,
-    onePackage: 'ein Paket genügt.',
-    splitFrom: (title: string, reason: string) => `Aus „${title}“ aufgeteilt. ${reason}`,
     startedDespite: 'Trotz Überschneidung gestartet.',
     startTakenBack: (names: string) => `Start zurückgenommen: ${names}.`,
     dequeued: 'Aus der Warteschlange genommen.',
@@ -386,13 +386,16 @@ const en: Messages = {
     onPrototype: (prototype: string) => `On the prototype “${prototype}”.`,
     workstreamOnLog: (prototype: string) => `Build on the prototype “${prototype}”: its branch is now this workstream’s.`,
     howOn: (idea: string) => `Idea “${idea}”: how to go on?`,
+    howOnTask: (task: string) => `Task “${task}”: how to go on?`,
     planDocAnswer: 'As a project: a plan doc with workstreams first.',
     planDocLog: 'As a project: an agent writes the plan doc; once it has landed, the project takes the idea’s place.',
+    planDocTaskLog: 'As a project: an agent writes the plan doc; once it has landed, the project takes the task’s place.',
     dropped: 'Dropped.',
     parked: 'Parked.',
-    planDocTask: (dir: string) =>
-      `Write a plan doc in \`${dir}/\` from where this idea stands, following the repository’s conventions (existing plan docs as the model). It needs a \`## Goal\` (or \`## Ziel\`) and a checklist under \`## Workstreams\` (\`- [ ] **W1:** Title. Details\`), cut into packages that can land one by one; then Obeya shows it as a project that takes the place of this idea. Build none of it; only the plan doc (and a link to it where the repository links plan docs).`,
+    planDocTask: (dir: string, task = false) =>
+      `Write a plan doc in \`${dir}/\` from ${task ? 'this task' : 'where this idea stands'}, following the repository’s conventions (existing plan docs as the model). It needs a \`## Goal\` (or \`## Ziel\`) and a checklist under \`## Workstreams\` (\`- [ ] **W1:** Title. Details\`), cut into packages that can land one by one; then Obeya shows it as a project that takes the place of this ${task ? 'task' : 'idea'}. Build none of it; only the plan doc (and a link to it where the repository links plan docs).`,
     planDocIdea: (title: string) => `Idea: “${title}”`,
+    planDocCard: (title: string) => `Task: “${title}”`,
     planDocPrototypes: (n: number) =>
       `This idea already has ${n > 1 ? `${n} prototypes` : 'a prototype'}. They stay on the canvas; once the project stands, the owner picks one of them (“Build this prototype”), and the workstream that builds on it is built on its branch. So do not plan them again as workstreams; take what they showed into the plan doc. Only the workstream that builds on the chosen prototype mentions prototypes: that is how Obeya knows which workstream is built on the prototype’s branch.`,
     planDocHandedOver: (title: string, summary: string) => `“${title}”, handed over like this:\n\n${summary}`,
@@ -409,6 +412,7 @@ const en: Messages = {
     plansNoPrototypes: 'Plans no prototypes any more',
     decision: (question: string, answer: string) => `Decision: ${question} → ${answer}`,
     becameProject: 'The project now stands in the idea’s place; the idea is in the archive.',
+    taskBecameProject: 'The project now stands in the task’s place; the task is in the archive.',
     partLanded: 'Part landed; the plan doc keeps it open.',
     briefName: 'Where the idea stands',
     prototypeButton: 'Have a prototype built',
@@ -422,10 +426,6 @@ const en: Messages = {
   },
   koordinator: {
     allStarted: (names: string) => `All workstreams started: ${names}. Obeya decides their order.`,
-    splitFailed: (why: string) => `Obeya could not split the task (${why}).`,
-    notSplit: (why: string) => `Not split: ${why}`,
-    onePackage: 'one package is enough.',
-    splitFrom: (title: string, reason: string) => `Split from “${title}”. ${reason}`,
     startedDespite: 'Started despite the overlap.',
     startTakenBack: (names: string) => `Start taken back: ${names}.`,
     dequeued: 'Taken out of the queue.',

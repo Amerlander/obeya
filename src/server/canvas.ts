@@ -9,7 +9,7 @@ import { repoName } from '../adapters/generic';
 import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
 import type { Language } from '../core/locale';
-import { AGENT_DEFAULTS, agentListens, type AgentRole, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, type RepoConfig, type RepoRef, type SpotInput } from '../core/types';
+import { AGENT_DEFAULTS, agentListens, type AgentRole, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, plannableAsProject, type RepoConfig, type RepoRef, type SpotInput } from '../core/types';
 import { BadRequest, Board, replyNote, type StoredIdea } from './board';
 import { type Command, Commander } from './commands';
 import type { Config } from './config';
@@ -460,8 +460,6 @@ export class CanvasRuntime {
         return this.koordinator.dequeue(cardId);
       case 'reorder':
         return this.koordinator.reorder(cardId, !!a.earlier);
-      case 'split':
-        return this.koordinator.split(cardId);
       case 'stop':
         return this.repoOf(cardId).workers.stop(cardId);
       case 'message':
@@ -675,6 +673,8 @@ export class CanvasRuntime {
    * they showed, and the owner builds a workstream on one of them once the project stands.
    */
   private planDoc(cardId: string) {
+    const task = this.board.item(cardId);
+    if (task && task.state !== 'idea') return this.planTaskDoc(task);
     const card = this.settledIdea(cardId);
     const idea = this.board.idea(cardId);
     const dir = this.repoOf(card).adapter.planDocs.dir;
@@ -683,7 +683,7 @@ export class CanvasRuntime {
     this.explorers.close(cardId);
     this.board.work(cardId, {
       state: 'planned',
-      idea: JSON.stringify({ ...idea, project: true } satisfies StoredIdea),
+      becomes_project: 1,
       body: [
         t.planDocTask(dir),
         t.planDocIdea(card.title),
@@ -704,6 +704,21 @@ export class CanvasRuntime {
     this.board.decide({ project_id: null, card_id: cardId, question: t.howOn(card.title), answer: t.planDocAnswer, by: 'owner' });
     this.board.log(cardId, 'state', 'owner', t.planDocLog);
     this.koordinator.request(cardId);
+  }
+
+  /**
+   * A planned task of the owner's that nobody has worked on becomes a project the same way: its
+   * worker writes the plan doc from the task, with its screenshots, on the task's card.
+   */
+  private planTaskDoc(card: Item) {
+    if (!plannableAsProject(card))
+      throw new BadRequest('notPlannable', 'only an idea, or a planned task of your own nobody has worked on yet, can be planned as a project');
+    const t = this.board.t.idea;
+    const dir = this.repoOf(card).adapter.planDocs.dir;
+    this.board.work(card.id, { becomes_project: 1, body: [t.planDocTask(dir, true), t.planDocCard(card.title), card.body.trim()].filter(Boolean).join('\n\n') });
+    this.board.decide({ project_id: null, card_id: card.id, question: t.howOnTask(card.title), answer: t.planDocAnswer, by: 'owner' });
+    this.board.log(card.id, 'state', 'owner', t.planDocTaskLog);
+    this.koordinator.request(card.id);
   }
 
   /** Parked or dropped, the idea stays on the canvas with its brief; what its agent has not answered yet waits for the conversation to go on. */
@@ -861,7 +876,6 @@ export class CanvasRuntime {
       case 'accept':
       case 'dismiss':
       case 'dequeue':
-      case 'split':
       case 'stop':
         return this.act(c.card, { action: c.do });
       case 'configure':

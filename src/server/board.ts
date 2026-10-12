@@ -369,31 +369,6 @@ export class Board {
     return this.store.shared(this.canvas.id);
   }
 
-  /** Cards that replace `id`, side by side where it was; they start planned, with their scope. */
-  replace(id: string, cards: { title: string; body: string; files: string[] }[]): Item[] {
-    const row = this.own(id);
-    if (row.plan_ref) throw new BadRequest('planCard', 'plan cards are changed in the plan doc');
-    const rows = this.store.insert(
-      cards.map((c, n) => ({
-        canvas_id: this.canvas.id,
-        kind: 'task',
-        state: 'planned' as const,
-        title: c.title.slice(0, 200),
-        body: c.body.slice(0, 20000),
-        x: row.x + (n % 3) * 330,
-        y: row.y + Math.floor(n / 3) * 170,
-        repo: row.repo,
-        group_id: row.group_id,
-        // every package may need the screenshots of the task it came from
-        images: row.images,
-      })),
-    );
-    rows.forEach((r, n) => this.store.update(r.id, { scope: JSON.stringify({ files: cards[n]!.files, reason: '' }) }));
-    this.store.update(id, { deleted_at: new Date().toISOString(), queue: null });
-    this.changed();
-    return rows.map((r) => this.snapshot().items.find((i) => i.id === r.id)!);
-  }
-
   /** Where a card nobody placed goes: a column right of everything, below what is already there. */
   freeSpot(): { x: number; y: number } {
     const items = this.snapshot().items;
@@ -801,27 +776,27 @@ export class Board {
     return this.item(id) ?? this.archived().find((i) => i.id === id);
   }
 
-  /** What a project's sheet shows besides the doc: its decisions and those of the idea it came from. */
+  /** What a project's sheet shows besides the doc: its decisions and those of the idea or task it came from. */
   projectHistory(id: string): ProjectHistory {
     const row = this.own(id);
     if (row.kind !== 'project') throw new BadRequest('invalid', 'not a project');
     const own = this.store.decisions(this.canvas.id, id, 500);
     const origin = row.from_id ? this.store.card(row.from_id) : null;
-    const fromIdea = origin && !origin.deleted_at ? this.store.cardDecisions(this.canvas.id, origin.id) : [];
-    const decisions = [...fromIdea, ...own].sort((a, b) => a.at.localeCompare(b.at) || a.id - b.id).map(toDecision);
+    const fromOrigin = origin && !origin.deleted_at ? this.store.cardDecisions(this.canvas.id, origin.id) : [];
+    const decisions = [...fromOrigin, ...own].sort((a, b) => a.at.localeCompare(b.at) || a.id - b.id).map(toDecision);
     return { decisions, origin: origin && !origin.deleted_at ? (this.card(origin.id) ?? null) : null };
   }
 
-  /** The plan docs (plan references) that a card's landed work added; its idea becomes their origin. */
+  /** The plan docs (plan references) that a card's landed work added; the card becomes their origin. */
   planDocsLanded(cardId: string, refs: string[]) {
     const row = this.own(cardId);
-    // only a card that was an idea is a project's origin
-    if (!row.idea || !refs.length) return;
+    // only a card that was an idea, or a task the owner planned as a project, is a project's origin
+    if ((!row.idea && !row.becomes_project) || !refs.length) return;
     this.store.update(cardId, { plan_docs: JSON.stringify(refs) });
     this.changed();
   }
 
-  /** A card's landed work is done, its worker gone: an idea whose plan doc is a project now gives way to it. */
+  /** A card's landed work is done, its worker gone: a card whose plan doc is a project now gives way to it. */
   workDone(cardId: string) {
     // a workstream its doc keeps open is planned again (reopen) once its worker is done
     if (this.own(cardId).plan_ref) this.docs = null;
@@ -1265,8 +1240,8 @@ export class Board {
   }
 
   /**
-   * A project whose doc an idea's landed work added remembers that idea and takes its place, while
-   * the idea is on the canvas. Returns whether any did.
+   * A project whose doc the landed work of an idea (or a task planned as a project) added remembers
+   * that card and takes its place, while the card is on the canvas. Returns whether any did.
    */
   private linkOrigins(docs: PlanDoc[]): boolean {
     const origin = new Map<string, string>();
@@ -1308,7 +1283,7 @@ export class Board {
   }
 
   /**
-   * An idea whose plan doc is a project goes to the archive once its worker is done: the project
+   * An idea or task whose plan doc is a project goes to the archive once its worker is done: the project
    * stands where it was and links it. Asked when the project is linked and when the worker is done,
    * once each; put back on the canvas, the idea stays. Returns whether it went.
    */
@@ -1317,7 +1292,7 @@ export class Board {
     if (!r || r.deleted_at || r.archived_at || r.state !== 'live' || (r.landed && r.workspace)) return false;
     if (!this.store.projects(this.canvas.id).some((p) => p.from_id === ideaId && !p.archived_at)) return false;
     this.store.update(ideaId, { archived_at: new Date().toISOString() });
-    this.log(ideaId, 'state', 'obeya', this.t.idea.becameProject);
+    this.log(ideaId, 'state', 'obeya', r.idea ? this.t.idea.becameProject : this.t.idea.taskBecameProject);
     return true;
   }
 }
@@ -1354,6 +1329,7 @@ export function toItems(rows: CardRow[], docs: PlanDoc[], home: string): Item[] 
         repo: r.repo ?? home,
         ...work(r),
         ...(r.state === 'idea' ? { idea: ideaOf(r) } : r.idea ? decided(r) : {}),
+        ...(r.becomes_project ? { becomesProject: true } : {}),
         ...(r.prototype_of ? { prototypeOf: r.prototype_of, ...prototypeOf(r) } : {}),
         ...(r.built_on ? { builtOn: r.built_on } : {}),
         ...(r.images ? { images: JSON.parse(r.images) as string[] } : {}),
@@ -1518,8 +1494,6 @@ export interface StoredIdea {
   variants?: PlannedPrototype[];
   /** The brief's mocks, as the agent last set them. */
   mocks?: Mock[];
-  /** Decided as a project: its worker writes the plan doc, and the project takes the card's place. */
-  project?: boolean;
   /** Messages a turn ended before answering (the idea parked or dropped, an error, a restart); they go to the agent first next time. */
   unread?: Unread;
 }
@@ -1537,10 +1511,10 @@ export interface Unread {
 
 const toDecision = (d: DecisionRow): Decision => ({ id: d.id, cardId: d.card_id, question: d.question, answer: d.answer, by: d.by, at: d.at });
 
-/** A card that was an idea, as decided: the brief with its mocks, and whether it becomes a project. */
-function decided(r: CardRow): Pick<Item, 'brief' | 'mocks' | 'becomesProject'> {
+/** A card that was an idea, as decided: the brief with its mocks. */
+function decided(r: CardRow): Pick<Item, 'brief' | 'mocks'> {
   const i = JSON.parse(r.idea!) as StoredIdea;
-  return { brief: i.brief, ...(i.mocks?.length ? { mocks: i.mocks } : {}), ...(i.project ? { becomesProject: true } : {}) };
+  return { brief: i.brief, ...(i.mocks?.length ? { mocks: i.mocks } : {}) };
 }
 
 function ideaOf(r: CardRow): Idea {

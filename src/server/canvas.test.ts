@@ -338,7 +338,7 @@ test('what the owner writes in a card, or says to the Koordinator without one, r
   // a follow-up with a finding in it: at once when the owner acts on it, with the text it had before
   const b = canvas.board.create({ title: 'Datum', body: 'Befund: Datum fehlt.', from: a.id });
   canvas.patch(b.id, { body: 'Befund: Datum fehlt.\n\nImmer ISO-Datum.' });
-  canvas.act(b.id, { action: 'split' });
+  canvas.act(b.id, { action: 'planDoc' });
   await settle();
   expect(learners()).toHaveLength(2);
   expect(learners()[1]!.inbox[0]).toContain("Before the owner wrote in it, the card's text read:\nBefund: Datum fehlt.");

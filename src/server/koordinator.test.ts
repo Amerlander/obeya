@@ -128,14 +128,6 @@ describe('Koordinator', () => {
     expect(item(b.id).state).toBe('working');
   });
 
-  test('an interrupted cut is taken up again after a restart', async () => {
-    const a = card('A');
-    board.work(a.id, { queue: JSON.stringify({ cutting: true }) });
-    k.resume();
-    await settle();
-    expect(runtime.sessions.some((s) => s.spec.tools.some((t) => t.name === 'packages'))).toBe(true);
-  });
-
   test('a waiting card is judged again against what started while it waited', async () => {
     const a = card('A');
     k.request(a.id);
@@ -641,46 +633,6 @@ describe('Koordinator starts all workstreams of a project', () => {
       ['K3', [], [], ''],
     ]);
     expect(() => k.dequeue(p.id)).toThrow(expect.objectContaining({ code: 'notQueued' }));
-  });
-});
-
-describe('Koordinator cuts a card', () => {
-  const cutSession = () => runtime.sessions.filter((s) => s.spec.tools.some((t) => t.name === 'packages')).at(-1)!;
-
-  test('into packages that replace it, each with its scope', async () => {
-    const a = board.create({ title: 'Export', body: 'CSV und PDF', x: 100, y: 50 });
-    k.split(a.id);
-    expect(item(a.id).queue).toMatchObject({ cutting: true });
-    await settle();
-    expect(cutSession().inbox[0]).toContain('CSV und PDF');
-    cutSession().call('packages', {
-      packages: [
-        { title: 'CSV-Export', body: 'CSV.', files: ['src/csv.ts'] },
-        { title: 'PDF-Export', body: 'PDF.', files: ['src/pdf.ts'] },
-      ],
-      reason: 'Getrennte Dateien.',
-    });
-    cutSession().emit({ type: 'idle' });
-    await settle();
-    expect(board.item(a.id)).toBeUndefined();
-    const made = board.snapshot().items.filter((i) => i.title.endsWith('-Export'));
-    expect(made.map((m) => [m.title, m.state, m.scope])).toEqual([
-      ['CSV-Export', 'planned', ['src/csv.ts']],
-      ['PDF-Export', 'planned', ['src/pdf.ts']],
-    ]);
-    expect(made[0]).toMatchObject({ x: 100, y: 50 });
-    expect(board.events(made[0]!.id)[0]!.text).toContain('Aus „Export“ aufgeteilt');
-  });
-
-  test('or keeps it whole, saying why', async () => {
-    const a = card('Klein');
-    k.split(a.id);
-    await settle();
-    cutSession().call('keep', { reason: 'Zu klein.' });
-    cutSession().emit({ type: 'idle' });
-    await settle();
-    expect(item(a.id).queue).toBeUndefined();
-    expect(board.events(a.id).at(-1)!.text).toBe('Nicht aufgeteilt: Zu klein.');
   });
 });
 

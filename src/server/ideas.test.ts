@@ -391,6 +391,30 @@ describe('an idea', () => {
     expect(worker.inbox[0]).toContain('**Ziel:** Vermieterportal.');
   });
 
+  test('a planned task of the owner’s becomes a project the same way, on its own card', async () => {
+    const c = board().create({ title: 'Mandanten', body: 'Jeder Kunde bekommt eigene Daten.', x: 0, y: 0 });
+    board().work(c.id, { images: JSON.stringify(['shot.png']) });
+    canvas.act(c.id, { action: 'planDoc' });
+    const t = item(c.id);
+    expect(t).toMatchObject({ state: 'planned', title: 'Mandanten', becomesProject: true, queue: { checking: true }, images: ['shot.png'] });
+    expect(t.brief).toBeUndefined();
+    expect(t.body).toContain('Schreibe aus dieser Aufgabe ein Plan-Doc in `docs/plan/`');
+    expect(t.body).toContain('an die Stelle dieser Aufgabe tritt');
+    expect(t.body).toContain('Aufgabe: „Mandanten“\n\nJeder Kunde bekommt eigene Daten.');
+    expect(board().decisionsOn(c.id).map((d) => [d.question, d.answer])).toEqual([['Aufgabe „Mandanten“: wie weiter?', 'Als Projekt: erst ein Plan-Doc mit Workstreams.']]);
+    expect(board().events(c.id).at(-1)!.text).toBe('Als Projekt: Ein Agent schreibt das Plan-Doc; ist es gelandet, tritt das Projekt an die Stelle der Aufgabe.');
+    await settle();
+    expect(item(c.id).state).toBe('working');
+    const worker = runtime.sessions.find((s) => s.spec.tools.some((t) => t.name === 'ready_for_review'))!;
+    expect(worker.inbox[0]).toContain('Jeder Kunde bekommt eigene Daten.');
+    expect(worker.inbox[0]).toContain('## Workstreams');
+    // once decided, and on a task someone has worked on, it is refused
+    expect(() => canvas.act(c.id, { action: 'planDoc' })).toThrow(expect.objectContaining({ code: 'notPlannable' }));
+    const worked = board().create({ title: 'Schon begonnen', x: 0, y: 0 });
+    board().work(worked.id, { branch: 'obeya/x' });
+    expect(() => canvas.act(worked.id, { action: 'planDoc' })).toThrow(expect.objectContaining({ code: 'notPlannable' }));
+  });
+
   test('parked or dropped it keeps its brief; talking to it opens it again', () => {
     const i = idea();
     board().setIdea(i.id, { brief: 'Stand.' });

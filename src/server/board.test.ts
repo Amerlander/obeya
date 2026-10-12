@@ -217,12 +217,26 @@ describe('the archive of projects', () => {
     expect(board.item(idea.id)).toBeDefined();
   });
 
-  test('only a card that was an idea becomes the origin of a project', () => {
+  test('only a card that was an idea, or a task planned as a project, becomes the origin of a project', () => {
     const plain = board.create({ title: 'Kein Idee', x: 0, y: 0 });
     board.planDocsLanded(plain.id, ['docs/plan/b.md']);
     docs = [docA, docB];
     board.docsChanged();
     expect(board.snapshot().items.find((i) => i.title === 'B')!.origin).toBeUndefined();
+  });
+
+  test('a task planned as a project gives way to it as an idea does', () => {
+    const task = board.create({ title: 'Aufgabe B', x: 900, y: 40 });
+    board.work(task.id, { becomes_project: 1 });
+    expect(board.item(task.id)).toMatchObject({ becomesProject: true });
+    expect(board.item(task.id)!.brief).toBeUndefined();
+    board.work(task.id, { state: 'live' });
+    board.planDocsLanded(task.id, ['docs/plan/b.md']);
+    docs = [docA, docB];
+    board.docsChanged();
+    expect(board.snapshot().items.find((i) => i.title === 'B')).toMatchObject({ origin: task.id, x: 900, y: 40 });
+    expect(board.item(task.id)).toBeUndefined();
+    expect(board.events(task.id).at(-1)!.text).toBe('Das Projekt steht jetzt an der Stelle der Aufgabe; die Aufgabe liegt im Archiv.');
   });
 });
 
@@ -402,18 +416,14 @@ describe('groups', () => {
     expect(groupOf(p!.id)).toBeUndefined();
   });
 
-  test('proposals, follow-ups, packages and prototypes come into the group of the card they come from', () => {
+  test('proposals, follow-ups and prototypes come into the group of the card they come from', () => {
     const a = board.create({ title: 'A', x: 0, y: 0 });
     const idea = board.create({ idea: true, title: 'Idee', x: 800, y: 0 });
     const g = board.createGroup('Familie', [a.id, idea.id]);
     const proposal = board.propose(a.id, { title: 'Vorschlag', task: 't', reason: 'r' });
     const followUp = board.create({ title: 'Folge', from: a.id });
     const prototype = board.addPrototype(idea.id, 'Prototyp', 'b');
-    const packages = board.replace(followUp.id, [
-      { title: 'P1', body: '', files: [] },
-      { title: 'P2', body: '', files: [] },
-    ]);
-    expect([proposal, prototype, ...packages].map((i) => groupOf(i.id))).toEqual([g.id, g.id, g.id, g.id]);
+    expect([proposal, followUp, prototype].map((i) => groupOf(i.id))).toEqual([g.id, g.id, g.id]);
     // from a workstream: its project's group
     const w = board.snapshot().items.find((i) => i.label === 'W2')!;
     const h = board.createGroup('Projekt', [w.id]);

@@ -49,8 +49,8 @@ visibly on the walls and decisions are made in front of the wall.
   oder Projekt schließen“).
 - **Groups** — besides by place, the owner sorts the canvas by group: a group has a name and a
   colour, and a card belongs to none or one. A project belongs to one as a whole, with its
-  workstreams. A proposal, a follow-up, a package cut from a card and a prototype come into the group
-  of the card they come from, a project written from an idea into the idea's; after that the group
+  workstreams. A proposal, a follow-up and a prototype come into the group
+  of the card they come from, a project written from an idea or a task into that card's; after that the group
   is the card's own. Moving a card never changes its group: a card in another group's territory
   stands there as an island. A group exists while a card belongs to it, on the canvas or in the
   archive; the last card leaving it ends it, and so does deleting it, which takes all its cards out.
@@ -67,8 +67,7 @@ visibly on the walls and decisions are made in front of the wall.
     the owner and keeps its brief.
   - *Chief of Staff* (in the code and these docs: *Koordinator*), one per canvas: takes voice
     input on the open canvas, creates and assigns cards, runs the workspace pool, and keeps the
-    preference memory. It also schedules the work: it cuts work packages so they can run in
-    parallel, detects cards whose changes are likely to conflict on merge, and does not run those
+    preference memory. It also schedules the work: it detects cards whose changes are likely to conflict on merge, and does not run those
     at the same time but queues them. The UI calls it simply *Obeya* in both languages
     (2026-10-09): the owner has one counterpart, not a product plus a component in it. Its
     replies, its sheet, the line under the microphone and its log lines on cards say Obeya; the
@@ -91,10 +90,22 @@ visibly on the walls and decisions are made in front of the wall.
 
 An idea is thought through on its card before anything is planned; no worker runs.
 
-1. "Ich will über Export für Vermieter nachdenken" (voice or typed), or "Erst besprechen" on a
-   planned card of the owner's, makes a card in state `idea`, and its exploration agent opens the
+1. "Ich will über Export für Vermieter nachdenken" (voice or typed), or "Als Idee besprechen" on a
+   planned card of the owner's that nobody has worked on, makes a card in state `idea`, and its exploration agent opens the
    discussion right away: with what the owner said, or with what the card says, which stays at the
    top of the conversation as its starting point ("Ausgangspunkt").
+   Such a planned task offers its ways on in one row: "Agent starten", "Als Idee besprechen" and
+   "Als Projekt planen", each with a tooltip saying what follows the click, and "Löschen" set apart
+   at the right end, as in every button row with it. "Als Projekt planen" does on the task what it
+   does on an idea (point 5): a worker writes a plan doc from the task's title, text and screenshots
+   on the task's card („Aufgabe → Projekt“), the decision log says so, and once the doc has landed the
+   project takes the task's place, the task going to the archive (by voice: `plan_doc`, „plane das
+   als Projekt“). The mark that a card becomes a project is a column of its own (`becomes_project`),
+   no longer part of the idea's JSON. Until 2026-10-12 the row read "Agent starten · Aufteilen ·
+   Erst besprechen · Löschen", which said little about what follows, and "Aufteilen" had the
+   Koordinator cut the card into 2–6 packages that replaced it. Aufteilen went: it was a second way
+   to break work up beside the plan doc, and "Alle starten" on a project already plans which
+   workstreams run in parallel. A card that was being cut when Obeya stopped is planned again.
 2. The unfolded idea is a conversation with its exploration agent: a session on the repository's
    Lesestand (code, plan docs, the decision log, the preferences) resumed for every message, days
    later too. It has a worker's tools in the workers' permission mode, so what the discussion
@@ -359,7 +370,7 @@ An idea is thought through on its card before anything is planned; no worker run
    as a project („Idee → Projekt“) lands and its diff adds a doc in the plan directory, the project from that doc
    remembers the idea, whose card keeps its brief and conversation, and the idea's decisions join
    the project's. The project takes the idea's place, and the idea, once its worker is done, goes to
-   the archive.
+   the archive. A task planned as a project („Aufgabe → Projekt“) is linked the same way.
 
 ## Communication
 
@@ -532,7 +543,7 @@ thumbnail, and the card stays open. Until 2026-10-12 the thumbnails in the field
 A card's task takes screenshots the same way: in its description field, while the card is planned.
 They show under the task, and its worker gets them with the task when it starts (an idea's
 exploration agent, when a planned card becomes an idea; building an idea adds the screenshots the
-owner showed in its discussion; a cut card's packages inherit them). A command typed in the
+owner showed in its discussion). A command typed in the
 Koordinator's sheet may carry screenshots too: the Koordinator sees them, and they go with every
 action of the command that creates or concerns a card (new card or idea, start, note, answer,
 feedback, talk to an idea); said with a start, they join the card's task. A spoken command carries
@@ -862,7 +873,7 @@ the owner's language (`src/core/locale.ts`).
   them restarts nothing; the language (see Language) and the model and effort of each group of
   agents (see Models and effort) the same way into `settings.json`.
 - **Models and effort** — every agent belongs to one of four groups, each with its model and
-  effort: the Koordinator (voice commands, estimates, cuts and schedules, look-ups, project
+  effort: the Koordinator (voice commands, estimates and schedules, look-ups, project
   agents, learner, Rückschau, proposal rewrites), the workers on cards, the exploration agents of
   ideas, and small jobs (the Arbeitsrückschau's notes and proposals, the text of a shared demo's
   page). The owner chooses both in the Konfiguration dialog: the model is Claude Code's default or
@@ -903,7 +914,7 @@ the owner's language (`src/core/locale.ts`).
   references and workspace directory are the ones a single-repository canvas always had, so
   canvases keep their data. The others' plan docs are referenced as `<repo>:<path>`; the owner's
   cards carry their repository, chosen in the panel before work begins (home by default), and a
-  proposal or a cut package inherits it. The UI opens `?c=<canvas>`, the pill after the logo switches,
+  proposal inherits it. The UI opens `?c=<canvas>`, the pill after the logo switches,
   and on a canvas with several repositories every card names its own. Cards on other canvases that
   need the owner show as a count at their entry in the switcher and, while it is closed, as the sum
   on the pill; the server pushes every canvas's count to all of them when one changes.
@@ -1345,8 +1356,7 @@ the owner's language (`src/core/locale.ts`).
   likely conflict with; the rest start at once. A workstream may wait only for what comes before it
   in that order, so none wait for each other, and the order is the queue's from then on. The
   project's sheet names what each waiting workstream waits for. When the turn fails, each is judged
-  on its own as if started alone; after a restart the joint turn runs again. Paths the adapter marks as soft (docs) do not count. "Aufteilen" cuts a planned card
-  into 2–6 packages with disjoint files, or keeps it and says why. After whatever the owner says it decides whether a lasting preference
+  on its own as if started alone; after a restart the joint turn runs again. Paths the adapter marks as soft (docs) do not count. After whatever the owner says it decides whether a lasting preference
   was stated and proposes it as a rule (the card's log says „Schlägt vor: …“), for the preference
   memory or, when it is about a repository, for that repository's CLAUDE.md (for each repository
   of the canvas when it holds in all of them; one proposal each); "Merk dir: …" by
@@ -1538,7 +1548,7 @@ the owner's language (`src/core/locale.ts`).
   A Koordinator turn reads
   the transcript as speech that may be misheard (typed words as written) and either acts or replies. Acting takes one or
   more actions from one sentence, up to 20 (new card, new idea, start, taking a card out of the queue, note, answer, feedback,
-  approve, accept, dismiss, revise, cut, stop, remember, Arbeitsrückschau, putting cards into a group or out of it, renaming a group, changing the configuration (`configure`, see Configuration); on ideas: discuss, build, plan doc, prototype,
+  approve, accept, dismiss, revise, stop, remember, Arbeitsrückschau, putting cards into a group or out of it, renaming a group, changing the configuration (`configure`, see Configuration); on ideas: discuss, build, plan doc (on a planned task of the owner's nobody has worked on too), prototype,
   park, drop; on prototypes: build on it, discard),
   checked against the cards' states in the turn, so an action that does not fit (a note to a card no agent
   works on) goes back to the Koordinator, which may reply instead. A new card, a follow-up too,
@@ -2075,7 +2085,7 @@ source, a follow-up's card), estimated scope, queue,
 when archived, the pull request (link, checks, the comments, failed checks and conflict already
 passed on), an idea's status, brief and open questions with its agent's picks and suggested next step, a prototype's idea, how it ended and its worker's proposal to build on it, the prototype an idea is built on, landed work whose worker still
 finishes; an approval held until the work can land; what landed work shipped with; a waiting
-card's stopped app stack; a worker's proposal waiting for the owner (why, its open questions); a project's plan doc as last read and the idea it came from; the plan docs an idea's landed
+card's stopped app stack; a worker's proposal waiting for the owner (why, its open questions); a project's plan doc as last read and the idea or task it came from; that a card becomes a project, and the plan docs its landed
 work added; the shared demo page: slug, link, the demo directory it shows, what the page shows (title,
 text, chapters, kind) and the pull request it links, the version of the share command it was
 published with and whether that is behind, and whether it is publishing or

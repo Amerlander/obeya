@@ -82,6 +82,8 @@ export interface CardRow {
   parked: string | null;
   /** JSON: the owner's comments on places in the demo video Obeya holds back while they watch (event ids, `Item.held`). */
   held: string | null;
+  /** 1 once the owner decided the card (an idea or a task of theirs) becomes a project: its worker writes the plan doc, and the project takes its place. */
+  becomes_project: number;
 }
 
 export interface GroupRow {
@@ -296,6 +298,10 @@ export const MIGRATIONS = [
      due TEXT NOT NULL,
      body TEXT NOT NULL
    );`,
+  // a task can become a project too, so the mark leaves the idea's JSON; splitting a card is gone, and one being cut is planned again
+  `ALTER TABLE cards ADD COLUMN becomes_project INTEGER NOT NULL DEFAULT 0;
+   UPDATE cards SET becomes_project = 1, idea = json_remove(idea, '$.project') WHERE json_extract(idea, '$.project');
+   UPDATE cards SET queue = NULL WHERE json_extract(queue, '$.cutting') IS NOT NULL;`,
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot';
@@ -348,6 +354,7 @@ export type RowUpdate = Partial<
     | 'shipped'
     | 'parked'
     | 'held'
+    | 'becomes_project'
   >
 >;
 

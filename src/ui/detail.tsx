@@ -1,7 +1,7 @@
 // The unfolded card: what it is, what its worker does, and what the owner decides.
 
 import { Fragment, type ReactNode, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { agentListens, askable, buildableOn, type CardAction, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, EXPORT_HTML_MAX, finished, type Item, type Mock, type NextStep, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, type Spot } from '../core/types';
+import { agentListens, askable, buildableOn, type CardAction, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, EXPORT_HTML_MAX, finished, type Item, type Mock, type NextStep, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, type Spot } from '../core/types';
 import { mockPage } from '../core/frame';
 import { answerText, toggle } from './answer';
 import { ApiError, api, at, type Field, holdRestart, onCardEvent, onCardEventGone } from './api';
@@ -18,7 +18,7 @@ import { useFitHeight } from './fitHeight';
 import { type Box, onto, ZOOM_EASE, ZOOM_MS, zoomBox } from './zoomBox';
 import { AttachButton, imageUrl, ShotStrip, Shots, useShotInput } from './shots';
 import { dismissPlace, type Place, seekTo, usePlace, videoOf, watch } from './spot';
-import { clock as time, errorText, stateLabel, t } from './strings';
+import { becomesLabel, clock as time, errorText, stateLabel, t } from './strings';
 import { agentWorks, demoHandover, koordinatorReads, ownerField, parseQuestion, started, talkAlone, talkTurns, type Turn, worked as isWorked } from './talk';
 
 /**
@@ -98,7 +98,7 @@ export function Detail(p: Props) {
       : item.state === 'idea' || item.proposal?.idea
         ? t.kind.idea
         : item.becomesProject
-          ? t.kind.becomesProject
+          ? becomesLabel(item)
           : item.prototypeOf
             ? t.kind.prototype
             : item.kind === 'project'
@@ -277,8 +277,8 @@ export function Detail(p: Props) {
 
       {item.state === 'planned' && item.queue && (
         <div className="question queue">
-          {'checking' in item.queue || 'cutting' in item.queue ? (
-            <div className="q-text">{'checking' in item.queue ? t.queue.checkingLong : t.queue.cuttingLong}</div>
+          {'checking' in item.queue ? (
+            <div className="q-text">{t.queue.checkingLong}</div>
           ) : 'workspace' in item.queue ? (
             <>
               <div className="q-text">{t.queue.workspaceLong[item.queue.workspace]}</div>
@@ -341,26 +341,30 @@ export function Detail(p: Props) {
           {parent?.plan && <PlanSource file={parent.plan.file} onRead={parent.archivedAt ? undefined : () => p.onReadPlan(parent, item.label)} />}
           {!item.queue && (
             <div className="actions">
-              <button className="btn primary" onClick={() => act({ action: 'start' }, { close: false })}>
+              <button className="btn primary" title={t.startHint} onClick={() => act({ action: 'start' }, { close: false })}>
                 {t.start}
               </button>
               {prototypeActions}
               {item.source === 'manual' && !item.prototypeOf && (
                 <>
-                  <button className="btn" onClick={() => act({ action: 'split' }, { close: false })}>
-                    {t.split}
-                  </button>
-                  {!item.branch && (
-                    <button
-                      className="btn"
-                      onClick={async () => {
-                        await p.flush();
-                        p.onEdit({ state: 'idea' });
-                        await p.flush();
-                      }}
-                    >
-                      {t.idea.makeIdea}
-                    </button>
+                  {/* a task with a branch has work already, one decided as a project goes its way: neither is discussed or planned anew */}
+                  {plannableAsProject(item) && (
+                    <>
+                      <button
+                        className="btn"
+                        title={t.idea.makeIdeaHint}
+                        onClick={async () => {
+                          await p.flush();
+                          p.onEdit({ state: 'idea' });
+                          await p.flush();
+                        }}
+                      >
+                        {t.idea.makeIdea}
+                      </button>
+                      <button className="btn" title={t.idea.planDocHint} onClick={() => act({ action: 'planDoc' }, { close: true, ack: t.idea.planned })}>
+                        {t.idea.planDoc}
+                      </button>
+                    </>
                   )}
                   <button className="btn danger" onClick={p.onDelete}>
                     {t.delete}
