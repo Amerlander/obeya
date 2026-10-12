@@ -509,8 +509,11 @@ next handover.
 
 What the owner writes on a card (a note, feedback, an answer, talk to an idea) may carry
 screenshots: pasted (⌘V), dropped or picked in the text field, scaled down in the browser to at
-most 2000 px, and uploaded at once. They show as thumbnails in the card's log or conversation,
-large on a click, and reach the agent as images in the message, with their file paths.
+most 2000 px, and uploaded at once. They show as thumbnails in the field and in the card's log or
+conversation, and reach the agent as images in the message, with their file paths. A click on a
+thumbnail grows the screenshot out of it to as large as the window allows, over the greyed page,
+like the demo video's zoom (`Lightbox` in `src/ui/shots.tsx`); Esc or a click puts it back into its
+thumbnail, and the card stays open. Until 2026-10-12 the thumbnails in the field did not open.
 
 A card's task takes screenshots the same way: in its description field, while the card is planned.
 They show under the task, and its worker gets them with the task when it starts (an idea's

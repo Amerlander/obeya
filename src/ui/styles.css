@@ -650,7 +650,8 @@ textarea.p-body:focus { border-color: var(--muted); }
 .c-shot { position: relative; height: 64px; min-width: 64px; border-radius: 2px; border: 1px solid var(--line); background: var(--chip);
   display: inline-flex; align-items: center; justify-content: center; font-size: 12px; color: var(--muted); }
 .c-shot img { height: 100%; max-width: 160px; object-fit: cover; border-radius: 2px; display: block; }
-.c-shot button { position: absolute; top: -7px; right: -7px; width: 20px; height: 20px; border-radius: 3px; border: 1px solid var(--line);
+.c-shot .open { all: unset; height: 100%; cursor: zoom-in; }
+.c-shot .remove { position: absolute; top: -7px; right: -7px; width: 20px; height: 20px; border-radius: 3px; border: 1px solid var(--line);
   background: var(--card); color: var(--ink); font-size: 13px; line-height: 1; cursor: pointer; padding: 0; }
 .c-shot.loading { padding: 0 10px; }
 .c-error { flex-basis: 100%; margin: 0; }
@@ -665,9 +666,12 @@ textarea.p-body:focus { border-color: var(--muted); }
 .fold.folded { max-height: calc(8lh + 2px); overflow: hidden; }
 .fold.cut { mask-image: linear-gradient(to bottom, #000 75%, transparent); }
 .fold-more { font-size: 12.5px; margin-top: 2px; }
+/* a screenshot shown large (shots.tsx Lightbox): the page greys while it grows out of its thumbnail, and clears as it goes back */
 .lightbox { position: fixed; inset: 0; z-index: 1000; background: rgba(15, 12, 8, .78); display: flex; align-items: center; justify-content: center;
-  padding: 4vh 4vw; cursor: zoom-out; animation: fade .15s ease-out; }
-.lightbox img { max-width: 100%; max-height: 100%; border-radius: 2px; box-shadow: var(--lift); background: #fff; }
+  padding: 4vh 4vw; cursor: zoom-out; animation: dim .38s ease-out; transition: background-color .38s; }
+.lightbox.closing { background-color: transparent; }
+.lightbox img { max-width: 100%; max-height: 100%; border-radius: 2px; box-shadow: var(--lift); background: #fff; transform-origin: 0 0; }
+@keyframes dim { from { background-color: transparent; } }
 @keyframes fade { from { opacity: 0; } }
 /* a card's change beside its branch, and its whole diff over the page: one sheet as tall as the screen, one scrollbar */
 .d-add { color: var(--approved); font-variant-numeric: tabular-nums; }

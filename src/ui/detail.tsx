@@ -15,7 +15,7 @@ import { cardDraft } from './draft';
 import { replyOn, setReply, useReply } from './reply';
 import { Composer } from './composer';
 import { useFitHeight } from './fitHeight';
-import { type Box, onto, zoomBox } from './zoomBox';
+import { type Box, onto, ZOOM_EASE, ZOOM_MS, zoomBox } from './zoomBox';
 import { AttachButton, imageUrl, ShotStrip, Shots, useShotInput } from './shots';
 import { dismissPlace, type Place, seekTo, usePlace, videoOf, watch } from './spot';
 import { clock as time, errorText, stateLabel, t } from './strings';
@@ -1249,10 +1249,8 @@ function useWatching(cardId: string, video: RefObject<HTMLVideoElement | null>, 
   return { ended: () => on && release() };
 }
 
-const ZOOM_MS = 380;
 /** Set once the owner zoomed with Z: the magnifier stops showing the key beside it. */
 const ZOOM_KEY_KNOWN = 'obeya-zoom-key-known';
-const ZOOM_EASE = 'cubic-bezier(.3,.9,.3,1)';
 
 /**
  * The demo video shown large over the greyed page, short of full screen: the same video element

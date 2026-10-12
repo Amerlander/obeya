@@ -1,11 +1,12 @@
 // Screenshots in what the owner writes: pasted, dropped or picked, scaled down so the agent can
-// read them, uploaded at once; shown as thumbnails that open large over the page.
+// read them, uploaded at once; shown as thumbnails that grow large over the page on a click.
 
-import { type ClipboardEvent, type DragEvent, useEffect, useId, useRef, useState } from 'react';
+import { type ClipboardEvent, type DragEvent, type MouseEvent, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiError, api, at } from './api';
 import { draftOf, dropDraft, updateDraft, useDraft } from './draft';
 import { errorText, t } from './strings';
+import { behindThumb, type Box, onto, ZOOM_EASE, ZOOM_MS } from './zoomBox';
 
 const TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 /** The longest side the model looks at in detail; larger screenshots only cost upload and context. */
@@ -111,15 +112,18 @@ export function useShotInput({ draft, initial = [], onChange, off = false }: { d
 }
 export type ShotInput = ReturnType<typeof useShotInput>;
 
-/** The screenshots in a text field, each to remove, and those still uploading. */
+/** The screenshots in a text field, each to enlarge or remove, and those still uploading. */
 export function ShotStrip({ shots }: { shots: ShotInput }) {
+  const enlarge = useEnlarge();
   if (!shots.images.length && !shots.uploading) return null;
   return (
     <div className="c-shots">
       {shots.images.map((id) => (
         <span key={id} className="c-shot">
-          <img src={imageUrl(id)} alt={t.shots.alt} />
-          <button title={t.shots.remove} onClick={() => shots.remove(id)}>
+          <button className="open" title={t.shots.enlarge} onClick={(e) => enlarge.open(id, e)}>
+            <img src={imageUrl(id)} alt={t.shots.alt} />
+          </button>
+          <button className="remove" title={t.shots.remove} onClick={() => shots.remove(id)}>
             ×
           </button>
         </span>
@@ -129,6 +133,7 @@ export function ShotStrip({ shots }: { shots: ShotInput }) {
           {t.shots.uploading}
         </span>
       ))}
+      {enlarge.view}
     </div>
   );
 }
@@ -162,32 +167,98 @@ export function AttachButton({ shots, title = t.shots.attach }: { shots: ShotInp
 
 /** Thumbnails of screenshots; a click shows one large, Esc or a click closes it. */
 export function Shots({ ids }: { ids?: string[] }) {
-  const [open, setOpen] = useState<string | null>(null);
+  const enlarge = useEnlarge();
   if (!ids?.length) return null;
   return (
     <span className="shots">
       {ids.map((id) => (
-        <button key={id} className="shot" title={t.shots.enlarge} onClick={() => setOpen(id)}>
+        <button key={id} className="shot" title={t.shots.enlarge} onClick={(e) => enlarge.open(id, e)}>
           <img src={imageUrl(id)} alt={t.shots.alt} loading="lazy" />
         </button>
       ))}
-      {open && <Lightbox src={imageUrl(open)} onClose={() => setOpen(null)} />}
+      {enlarge.view}
     </span>
   );
 }
 
-/** One image over the whole page; outside the panel, which the camera transforms. */
-export function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
+/** One screenshot of a row of thumbnails shown large: `open` from the click on its thumbnail, `view` to render. */
+function useEnlarge() {
+  const [open, setOpen] = useState<{ id: string; thumb: HTMLImageElement } | null>(null);
+  return {
+    open: (id: string, e: MouseEvent<HTMLElement>) => {
+      const thumb = e.currentTarget.querySelector('img');
+      if (thumb) setOpen({ id, thumb });
+    },
+    view: open && <Lightbox src={imageUrl(open.id)} thumb={open.thumb} onClose={() => setOpen(null)} />,
+  };
+}
+
+
+/**
+ * One image over the whole page, outside the panel, which the camera transforms. Like the demo
+ * video's zoom (detail.tsx useZoom) it grows out of its thumbnail and goes back into it, wherever
+ * that stands by then; Esc or a click closes it.
+ */
+function Lightbox({ src, thumb, onClose }: { src: string; thumb: HTMLImageElement; onClose: () => void }) {
+  const img = useRef<HTMLImageElement>(null);
+  const [closing, setClosing] = useState(false);
+  /** The transform and crop that put the large image onto its thumbnail, or none while the thumbnail is out of sight. */
+  const onThumb = () => {
+    const el = img.current!;
+    const r = thumb.getBoundingClientRect();
+    if (!thumb.isConnected || !r.width || !el.naturalWidth) return null;
+    const { box, inset } = behindThumb({ left: r.left, top: r.top, width: r.width, height: r.height }, el.naturalWidth / el.naturalHeight);
+    // where it stands large, untransformed (the lightbox covers the window from its corner)
+    const large: Box = { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight };
+    return { transform: onto(box, large), clipPath: `inset(${inset.y * 100}% ${inset.x * 100}%)` };
+  };
+  const close = () => {
+    if (closing) return;
+    setClosing(true);
+    const to = onThumb();
+    if (!to) return onClose();
+    // from where it is, also when still growing
+    const el = img.current!;
+    const { transform, clipPath } = getComputedStyle(el);
+    el.getAnimations().forEach((a) => a.cancel());
+    el.animate([{ transform, clipPath }, to], { duration: ZOOM_MS, easing: ZOOM_EASE, fill: 'forwards' }).onfinish = onClose;
+  };
+  const closeRef = useRef(close);
+  closeRef.current = close;
+  // grows out of its thumbnail, which stays hidden while it is out
+  useLayoutEffect(() => {
+    const el = img.current!;
+    const grow = () => {
+      const from = onThumb();
+      if (from) el.animate([from, { transform: 'none', clipPath: 'inset(0)' }], { duration: ZOOM_MS, easing: ZOOM_EASE });
+    };
+    if (el.complete) grow();
+    else el.addEventListener('load', grow, { once: true });
+    thumb.style.visibility = 'hidden';
+    return () => {
+      el.removeEventListener('load', grow);
+      thumb.style.visibility = '';
+    };
+  }, []);
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') closeRef.current();
     };
     addEventListener('keydown', h);
     return () => removeEventListener('keydown', h);
-  }, [onClose]);
+  }, []);
   return createPortal(
-    <div className="lightbox" title={t.shots.close} onClick={onClose}>
-      <img src={src} alt={t.shots.alt} />
+    // a click here is not one on the card or field the thumbnail sits in
+    <div
+      className={closing ? 'lightbox closing' : 'lightbox'}
+      title={t.shots.close}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        close();
+      }}
+    >
+      <img ref={img} src={src} alt={t.shots.alt} />
     </div>,
     document.body,
   );
