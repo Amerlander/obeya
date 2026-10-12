@@ -21,7 +21,6 @@
   <a href="#" class="brand"><img src="img/wordmark.svg" alt="Obeya" width="99" height="28"></a>
   <nav>
     <a href="#how">How it works</a>
-    <a href="#wall">Principles</a>
     <a href="#start">Get started</a>
     <a class="gh" href="https://github.com/sadilek/obeya">GitHub</a>
   </nav>
@@ -31,7 +30,7 @@
   <section class="hero">
     <p class="eyebrow">Open source · runs on your machine</p>
     <h1>Direct AI coding agents like an engineering director directs a team.</h1>
-    <p class="lede">Every task is a card on a canvas. Agents work in the background, each in its own clone.
+    <p class="lede">Every task is a card on a canvas. Agents work in the background, each in its own clone or worktree.
       You make the decisions, by voice, from a narrated demo video instead of reading code.</p>
     <div class="cta">
       <a class="btn primary" href="#start">Get started</a>
@@ -118,7 +117,7 @@
         <span class="tag amber">Voice</span>
         <h2>Push to talk, not terminals.</h2>
         <p>Hold the space bar and say what you want: a new task, an answer to an agent's question, feedback on a demo.
-          Obeya routes it to the card you are looking at and answers with a short confirmation and an undo.
+          Obeya routes it to the card you are looking at.
           No tabs of terminals to babysit.</p>
       </div>
       <img class="shot" src="img/voice.png" width="990" height="610" loading="lazy" alt="An agent's question, answered by holding push-to-talk">
@@ -128,8 +127,8 @@
       <div class="text">
         <span class="tag green">Demos</span>
         <h2>Approve the demo, not the code.</h2>
-        <p>Every change comes back as a narrated screen recording with chapters and a short report.
-          Watch it, approve it or say what to change. Obeya lands the work on main.</p>
+        <p>Every change comes back with a short report and something to look at: a narrated screen recording with chapters,
+          or a page when the result is a layout or variants side by side. Approve it or say what to change. Obeya lands the work on main.</p>
       </div>
       <img class="shot" src="img/demo.png" width="1122" height="783" loading="lazy" alt="A card unfolded with its demo video, chapters and the approve button">
     </article>
@@ -137,84 +136,58 @@
 
   <section class="how" id="how">
     <div class="head">
-      <h2>From idea to main in four steps</h2>
-      <p>The same card, moving along the wall.</p>
+      <h2>From idea to main</h2>
+      <p>One card's way along the wall. A clear task goes straight to work; the detours are there when you need them.</p>
     </div>
-    <ol class="steps">
-      <li>
-        <div class="card s-planned"><div class="kind">1 · Idea</div><div class="ttl">Export invoices as CSV</div><div class="state"><i></i>Planned</div></div>
-        <p>You say what you want. A card appears on the wall.</p>
-      </li>
-      <li>
-        <div class="card s-working"><div class="kind">2 · Agent works</div><div class="ttl">Export invoices as CSV</div><div class="state"><i></i>Working</div></div>
-        <p>A worker takes the card into its own clone and builds it. You don't watch.</p>
-      </li>
-      <li>
-        <div class="card s-waiting ring"><div class="kind">3 · Demo</div><div class="ttl">Export invoices as CSV</div><div class="state"><i></i>Demo ready</div></div>
-        <p>It comes back with a narrated demo and a short report, or with a question.</p>
-      </li>
-      <li>
-        <div class="card s-approved"><div class="kind">4 · Approve</div><div class="ttl">Export invoices as CSV</div><div class="state"><i></i>Merged</div></div>
-        <p>You approve. Obeya lands the branch on main or carries the pull request to the merge.</p>
-      </li>
-    </ol>
-  </section>
-
-  <section class="wall-section" id="wall">
-    <div class="head">
-      <h2>What hangs on the wall</h2>
-      <p>Six principles every feature of Obeya answers to.</p>
+    <div class="flow">
+      <div class="mark f-opt">If it isn't clear yet</div>
+      <div class="station f-idea">
+        <div class="card s-idea"><div class="kind">Idea</div><div class="ttl">Invoices for the accountant</div><div class="state"><i></i>Talking it through</div></div>
+      </div>
+      <p class="f-c1">Start with an idea and talk it through with an agent: variants, trade-offs, what it would cost. It keeps a brief of what you decided.</p>
+      <div class="station f-proto">
+        <div class="stack">
+          <div class="card s-waiting"><div class="kind">Prototype</div><div class="ttl">A download button</div><div class="state"><i></i>Demo ready</div></div>
+          <div class="card s-planned behind"><div class="kind">Prototype</div><div class="ttl">A monthly e-mail</div><div class="state"><i></i>Discarded</div></div>
+        </div>
+      </div>
+      <p class="f-c2">When talking is not enough, throwaway prototypes show the variants side by side. You build on the one that works.</p>
+      <div class="mark f-start">A clear task starts here</div>
+      <div class="station f-work">
+        <div class="card s-working"><div class="kind">Task</div><div class="ttl">Export invoices as CSV</div><div class="state"><i></i>Working</div></div>
+      </div>
+      <p class="f-c3">A worker takes the card into its own clone or worktree and builds it. You don't watch.</p>
+      <div class="station f-demo">
+        <div class="card s-waiting ring"><div class="kind">Task</div><div class="ttl">Export invoices as CSV</div><div class="state"><i></i>Demo ready</div></div>
+      </div>
+      <div class="loop f-loop"><span>Changes? Another round</span></div>
+      <p class="f-c4">It comes back with a demo and a short report, or with a question. Say what to change, and it goes another round.</p>
+      <div class="station f-done">
+        <div class="card s-approved"><div class="kind">Task</div><div class="ttl">Export invoices as CSV</div><div class="state"><i></i>Merged</div></div>
+      </div>
+      <div class="f-branch">
+        <p>You approve. Obeya lands the branch on main or carries a pull request to the merge.
+          What turned up on the way becomes a follow-up card.</p>
+        <div class="card s-planned"><div class="kind">Follow-up</div><div class="ttl">Import invoices from CSV</div><div class="state"><i></i>Proposed</div></div>
+      </div>
     </div>
-    <ul class="pinboard">
-      <li class="card s-working tilt-a">
-        <div class="kind">Principle 1</div>
-        <h3>One surface</h3>
-        <p>Everything starts on the canvas. Detail unfolds in place and folds back. Nothing opens a new window, and the view never jumps.</p>
-      </li>
-      <li class="card s-waiting tilt-b">
-        <div class="kind">Principle 2</div>
-        <h3>Space is memory</h3>
-        <p>A card stays where you put it, at a size you can read. A small screen shows part of the canvas, never shrunken cards.</p>
-      </li>
-      <li class="card s-approved tilt-c">
-        <div class="kind">Principle 3</div>
-        <h3>Decisions, not supervision</h3>
-        <p>You are pulled in only for a decision: a demo to approve, a question only you can answer, a proposal. Everything else runs.</p>
-      </li>
-      <li class="card s-waiting tilt-c">
-        <div class="kind">Principle 4</div>
-        <h3>Every change gets a demo</h3>
-        <p>Half a minute for a fix, a few minutes for a feature, never padded. You approve what you saw, not a diff.</p>
-      </li>
-      <li class="card s-approved tilt-a">
-        <div class="kind">Principle 5</div>
-        <h3>Voice first, mouse welcome</h3>
-        <p>Hold a key and speak, anywhere. A short confirmation answers, written and spoken, with undo. Buttons stay for the obvious.</p>
-      </li>
-      <li class="card s-working tilt-b">
-        <div class="kind">Principle 6</div>
-        <h3>Your repository, your rules</h3>
-        <p>What is specific to a project lives in an adapter inside that repository. The core stays general.</p>
-      </li>
-    </ul>
   </section>
 
   <section class="room">
     <div class="room-mark" lang="ja" aria-hidden="true">大部屋</div>
     <div>
       <h2>The big room</h2>
-      <p class="big">At Toyota, the <em>obeya</em> was the big room where a project lived on the walls. Every plan, every problem,
-        every status hung where anyone could see it, and decisions were made standing in front of the wall.
-        Nobody had to ask how things stood. You looked.</p>
-      <p>AI agents can now do the work of a team. What they lack is the room. Terminals scroll away, chats forget,
-        and you end up watching agents instead of directing them. Obeya gives the agents a wall to work on
-        and gives you a place to stand in front of it.</p>
+      <p class="big"><em>Obeya</em> is Japanese for the big room where a project lives on the walls.
+        Nobody has to ask how things stand. You look.</p>
+      <p>One agent in one chat works well. Scale your work beyond a few, and you lose yourself in parallel chats
+        that know nothing of each other: which one is waiting for you, which one is stuck, which one is touching what another built.
+        Obeya puts every agent's work on one wall instead, and you stand in front of it.</p>
     </div>
   </section>
 
   <section class="proof">
     <p class="big">Obeya is built with Obeya.</p>
-    <p>Its own tasks hang on its own wall, and every change to it arrived as a demo first. This page was a card there too.</p>
+    <p>This page was a card there too.</p>
   </section>
 
   <section class="start" id="start">
@@ -243,7 +216,6 @@ bun install && bun start</code></pre>
         <p class="small">The wall opens on <code>http://127.0.0.1:4417</code>. The app and the source share their data in <code>~/.obeya</code>.</p>
         <div class="cta">
           <a class="btn primary" href="https://github.com/sadilek/obeya">Source on GitHub</a>
-          <a class="btn" href="https://github.com/sadilek/obeya/blob/main/docs/design.md">Read the design</a>
         </div>
       </div>
     </div>

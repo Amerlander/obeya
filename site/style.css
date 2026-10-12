@@ -7,10 +7,9 @@
 
 :root {
   /* the canvas's palette: card stock on a warm board, the states as inks */
-  --paper: #eee8dc; --ink: #1f1b14; --muted: #6b6253; --line: #ddd5c4; --card: #fdfbf5; --dot: #d3cab6;
+  --paper: #eee8dc; --ink: #1f1b14; --muted: #6b6253; --line: #ddd5c4; --card: #fdfbf5;
   --blue: #1d5fe0; --amber: #f27405; --green: #3d9a1f; --pink: #dc2f5e; --grey: #a0978a;
   --shadow: 0 1px 0 rgba(95,75,35,.20), 1px 2px 0 rgba(95,75,35,.10), 0 4px 8px -4px rgba(60,45,20,.18);
-  --lift: 0 1px 0 rgba(95,75,35,.18), 3px 6px 0 rgba(95,75,35,.12), 0 16px 26px -10px rgba(60,45,20,.35);
   --serif: Newsreader, "Iowan Old Style", Georgia, serif;
   --wide: 1120px;
 }
@@ -82,35 +81,55 @@ section { max-width: var(--wide); margin: 0 auto; padding: 0 24px; }
 .s-idea { --c: var(--pink); } .s-working { --c: var(--blue); } .s-waiting { --c: var(--amber); }
 .s-approved { --c: var(--green); } .s-planned { --c: var(--grey); }
 .card { position: relative; background: var(--card); border-radius: 2px; box-shadow: var(--shadow); padding: 18px 18px 18px 18px;
-  background-image: linear-gradient(var(--c), var(--c)); background-size: 100% 4px; background-repeat: no-repeat; list-style: none; }
+  background-image: linear-gradient(var(--c), var(--c)); background-size: 100% 4px; background-repeat: no-repeat; }
 .s-idea.card { background-color: color-mix(in srgb, var(--pink) 9%, var(--card)); }
 .kind { font-size: 12px; font-weight: 600; letter-spacing: .01em; color: var(--muted); }
-.card h3 { font-size: 21px; margin-top: 6px; }
 .card .ttl { font-family: var(--serif); font-weight: 600; font-size: 18px; line-height: 1.2; margin-top: 3px; }
 .card .state { display: flex; margin-top: 10px; font-size: 12.5px; }
 .card.ring { box-shadow: 0 0 0 2px var(--amber), var(--shadow); }
-.card p { margin: 8px 0 0; font-size: 15.5px; color: #4d4537; line-height: 1.45; }
 .state { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: var(--c); }
 .state i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
 .s-working .state i { animation: pulse 1.6s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .3; } }
-.pinboard { background-color: var(--paper); background-image: radial-gradient(var(--dot) 1.2px, transparent 1.2px); background-size: 22px 22px; }
 
-/* ---------- how it works: the same card along the wall ---------- */
+/* ---------- how it works: a card's way along the wall, with its detours ---------- */
 .how { margin-top: 144px; }
-.steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 28px; }
-.steps li { position: relative; }
-.steps li:not(:last-child)::after { content: "→"; position: absolute; right: -22px; top: 30px; color: var(--muted); font-size: 18px; }
-.steps > li > p { font-size: 16px; color: #4d4537; margin: 14px 0 0; line-height: 1.5; }
-
-/* ---------- the wall of principles ---------- */
-.wall-section { margin-top: 144px; }
-.pinboard { list-style: none; margin: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 34px 30px; padding: 44px 40px;
-  border-radius: 4px; border: 1.5px solid rgba(120,105,75,.22); }
-.pinboard .card { padding: 20px 20px 20px 20px; background-size: 100% 5px; transition: transform .25s, box-shadow .25s; }
-.pinboard .card h3 { font-size: 23px; }
-.pinboard .card:hover { transform: translateY(-3px) rotate(0deg); box-shadow: var(--lift); }
-.tilt-a { transform: rotate(-.6deg); } .tilt-b { transform: rotate(.5deg) translateY(10px); } .tilt-c { transform: rotate(-.2deg) translateY(-4px); }
+.flow { display: grid; grid-template-columns: repeat(5, 1fr); column-gap: 28px; align-items: start;
+  grid-template-areas:
+    "opt   opt   start  .     .     "
+    "idea  proto work   demo  done  "
+    "c1    c2    loop   loop  branch"
+    "c1    c2    c3     c4    branch"
+    "c1    c2    .      .     branch";
+  grid-template-rows: auto auto auto auto 1fr; }
+.f-opt { grid-area: opt; } .f-start { grid-area: start; } .f-idea { grid-area: idea; } .f-proto { grid-area: proto; }
+.f-work { grid-area: work; } .f-demo { grid-area: demo; } .f-done { grid-area: done; } .f-loop { grid-area: loop; }
+.f-branch { grid-area: branch; } .f-c1 { grid-area: c1; } .f-c2 { grid-area: c2; } .f-c3 { grid-area: c3; }
+.f-c4 { grid-area: c4; }
+.flow p { font-size: 16px; color: #4d4537; margin: 18px 0 0; line-height: 1.5; }
+.flow > .f-c1, .flow > .f-c2 { margin-top: 26px; }
+.station { position: relative; }
+.f-idea::after, .f-proto::after, .f-work::after, .f-demo::after { content: "→"; position: absolute; right: -22px; top: 30px; color: var(--muted); font-size: 18px; }
+/* the labels over the wall: a bracket over the detours, an arrow down where a clear task begins */
+.mark { font-size: 13px; font-weight: 600; color: var(--muted); padding-bottom: 8px; margin-bottom: 14px; }
+.f-opt { position: relative; text-align: center; border-bottom: 1.5px dashed var(--grey); }
+.f-opt::before, .f-opt::after { content: ""; position: absolute; bottom: -8px; width: 1.5px; height: 8px; background: var(--grey); }
+.f-opt::before { left: 0; } .f-opt::after { right: 0; }
+.f-start::after { content: " ↓"; }
+/* two prototypes, one in front of the other */
+.stack { position: relative; }
+.stack .card { position: relative; z-index: 1; }
+.stack .behind { position: absolute; inset: 0; z-index: 0; transform: translate(6px, 11px) rotate(1.4deg); opacity: .85; }
+/* the round from the demo back to the worker */
+.loop { position: relative; height: 58px; margin: 0 calc(25% - 7px); border: 1.5px dashed var(--amber); border-top: 0;
+  border-radius: 0 0 16px 16px; display: grid; place-items: end center; }
+.loop::before { content: ""; position: absolute; left: -7px; top: -2px; border: 6px solid transparent; border-bottom: 8px solid var(--amber); border-top: 0; }
+.loop span { transform: translateY(55%); background: var(--paper); padding: 0 10px; font-size: 13px; font-weight: 600; color: var(--amber); white-space: nowrap; }
+/* a follow-up hangs off the merged card, a dashed line down past the text */
+.f-branch { position: relative; padding-left: 18px; }
+.f-branch p { margin-top: 26px; }
+.f-branch::before { content: ""; position: absolute; left: 4px; top: 0; bottom: 64px; width: 14px; border: 1.5px dashed var(--grey); border-right: 0; border-top: 0; }
+.f-branch .card { margin-top: 18px; transform: rotate(-.8deg); }
 
 /* ---------- the big room ---------- */
 .room { margin-top: 112px; display: grid; grid-template-columns: .8fr 1.2fr; gap: 56px; align-items: start;
@@ -151,9 +170,18 @@ footer { max-width: var(--wide); margin: 0 auto; padding: 28px 24px 48px; displa
 footer span { margin-right: auto; }
 
 @media (max-width: 900px) {
-  .steps { grid-template-columns: 1fr 1fr; gap: 28px 40px; }
-  .steps li:nth-child(2)::after { content: none; }
-  .pinboard { grid-template-columns: 1fr 1fr; padding: 32px 24px; }
+  .flow { grid-template-columns: 1fr; grid-template-areas: none; }
+  .flow > * { grid-area: auto; max-width: 340px; }
+  .flow p { margin: 10px 0 26px; font-size: 15px; }
+  .flow > .f-c1, .flow > .f-c2 { margin-top: 18px; }
+  .station::after { content: none; }
+  .f-opt { text-align: left; }
+  .f-start { margin-top: 18px; }
+  .loop { margin: 10px 0 0; height: auto; border: 0; display: block; }
+  .loop::before { content: none; }
+  .loop span { transform: none; padding: 0; }
+  .loop span::before { content: "↺ "; }
+  .f-branch p { margin-top: 10px; }
 }
 @media (max-width: 760px) {
   body { font-size: 16px; }
@@ -168,13 +196,7 @@ footer span { margin-right: auto; }
   .pillars { margin-top: 80px; gap: 72px; }
   .pillar { grid-template-columns: 1fr; gap: 24px; }
   .pillar.flip .text { order: 0; }
-  .how, .wall-section, .room { margin-top: 96px; }
-  .steps { grid-template-columns: 1fr; gap: 26px; }
-  .steps li { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: center; }
-  .steps > li > p { margin: 0; font-size: 14.5px; }
-  .steps li:not(:last-child)::after, .steps li:nth-child(2)::after { content: "↓"; right: auto; left: 22%; top: auto; bottom: -24px; }
-  .pinboard { grid-template-columns: 1fr; gap: 18px; padding: 20px 16px; border-radius: 4px; }
-  .tilt-b { transform: rotate(.5deg); } .tilt-c { transform: rotate(-.2deg); }
+  .how, .room { margin-top: 96px; }
   .room { grid-template-columns: 1fr; gap: 8px; padding-top: 48px; padding-bottom: 64px; }
   .room-mark { writing-mode: horizontal-tb; justify-self: start; font-size: 72px; margin-bottom: 16px; }
   .proof { padding: 56px 20px; }
@@ -187,5 +209,4 @@ footer span { margin-right: auto; }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .s-working .state i { animation: none; }
-  .pinboard .card { transition: none; }
 }

@@ -768,10 +768,13 @@ the owner's language (`src/core/locale.ts`).
   chapter list, so it opens
   straight from the file too. From
   the top: one sentence and the hero video; three pillars with screenshots (the canvas, voice, the
-  demo the owner approves instead of the code); the four steps from idea to main as one card
-  moving along a wall; the six principles as cards on a wall; "The big room", where the name comes
-  from, with 大部屋 set vertically; the dark band "Obeya is built with Obeya."; getting started
-  with the downloads, `bun start` from the checkout, GitHub and the design doc. It has Obeya's
+  demo the owner approves instead of the code); "From idea to main", a card's way along a wall as
+  cards in their states: the detours of an idea and its prototypes, a task's work, its demo with
+  the round back for changes, the merge and a follow-up hanging off it (one column below 900 px);
+  "The big room", what the name means, with 大部屋 set vertically, and the one wall as the way out
+  of many parallel chats (no Toyota, which the README left out on purpose too); the dark band "Obeya is built
+  with Obeya."; getting started with the downloads, `bun start` from the checkout and GitHub (not
+  the design doc, which is written for the agents working on Obeya). It has Obeya's
   palette and type (see Visual identity): Newsreader, IBM Plex Sans Condensed and the three
   characters of 大部屋 (Noto Serif JP) are served from `site/fonts/` with their OFL licences, not
   from Google Fonts; logo and wordmark are copies from `src/ui/logo/`; the
