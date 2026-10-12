@@ -399,9 +399,10 @@ textarea.p-body:focus { border-color: var(--muted); }
 .demo-view .zoom:hover .zoom-hint, .demo-view .zoom:focus-visible .zoom-hint { opacity: 1; }
 .demo-view .zoom-hint kbd { font: inherit; font-weight: 600; margin-left: 3px; padding: 0 6px; border-radius: 2px; background: rgba(255, 255, 255, .2); border: 1px solid rgba(255, 255, 255, .35); }
 .demo-view .zoom svg { width: 20px; height: 20px; fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; }
-/* beside the magnifier, always shown: it pauses the video and puts the cursor into the card's field */
+/* beside the magnifier and like it shown while the mouse is over the video: it pauses the video and puts the cursor into the card's field */
 .demo-view .comment-here { position: absolute; top: 10px; right: 56px; z-index: 1; height: 38px; padding: 0 14px; border: 0; border-radius: 19px;
-  background: rgba(0, 0, 0, .55); color: #fff; font: inherit; font-size: 13.5px; cursor: pointer; transition: background .15s; }
+  background: rgba(0, 0, 0, .55); color: #fff; font: inherit; font-size: 13.5px; cursor: pointer; opacity: 0; transition: opacity .15s, background .15s; }
+.demo-view .screen:hover .comment-here, .demo-view .comment-here:focus-visible { opacity: 1; }
 .demo-view .comment-here:hover { background: rgba(0, 0, 0, .8); }
 .demo-view .start { all: unset; position: absolute; inset: 0 0 56px 0; cursor: pointer; display: grid; place-items: center; }
 .demo-view .start span { margin-top: 56px; width: 80px; height: 80px; border-radius: 50%; background: rgba(0, 0, 0, 0.6); display: grid; place-items: center; transition: transform 0.15s, background 0.15s; }
