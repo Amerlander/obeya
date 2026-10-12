@@ -263,6 +263,7 @@ export class CanvasRuntime {
       imageFiles,
       onReplied: (cardId, replied) => this.replied(cardId, replied),
       toObeya: (cardId, request) => this.forward(cardId, request),
+      ...(deps.permissionMode ? { permissionMode: deps.permissionMode } : {}),
     });
     this.explorers.resumeAll();
     this.answers = new Answers({

@@ -63,8 +63,8 @@ visibly on the walls and decisions are made in front of the wall.
   - *Worker*, one per card while it is worked on: implementation, local reviews, demo.
   - *Project agent*, one per project, long-lived: knows the plan doc and the history of every
     workstream.
-  - *Exploration agent*, one per idea, long-lived and read-only: discusses the idea with the owner
-    and keeps its brief.
+  - *Exploration agent*, one per idea, long-lived, with a worker's tools: discusses the idea with
+    the owner and keeps its brief.
   - *Chief of Staff* (in the code and these docs: *Koordinator*), one per canvas: takes voice
     input on the open canvas, creates and assigns cards, runs the workspace pool, and keeps the
     preference memory. It also schedules the work: it cuts work packages so they can run in
@@ -95,8 +95,12 @@ An idea is thought through on its card before anything is planned; no worker run
    planned card of the owner's, makes a card in state `idea`, and its exploration agent opens the
    discussion right away: with what the owner said, or with what the card says, which stays at the
    top of the conversation as its starting point ("Ausgangspunkt").
-2. The unfolded idea is a conversation with its exploration agent: a read-only session (code, plan
-   docs, the decision log, the preferences) resumed for every message, days later too. It asks
+2. The unfolded idea is a conversation with its exploration agent: a session on the repository's
+   Lesestand (code, plan docs, the decision log, the preferences) resumed for every message, days
+   later too. It has a worker's tools in the workers' permission mode, so what the discussion
+   depends on beyond the text (the git history, file dates, a release or CI run with gh, the web) it
+   checks instead of guessing; until 2026-10-12 it was read-only (Read, Grep, Glob). What it does
+   itself starts no work. It asks
    back, shows variants with their trade-offs and says what they would cost. Its questions come
    with answer options, shown under its reply as radio buttons, or checkboxes when several fit
    together; the owner picks, may add their own words, and both go out as one message that names
@@ -964,10 +968,10 @@ the owner's language (`src/core/locale.ts`).
   CLAUDE.md, and permission mode `auto` (`--permission-mode`); after a restart it resumes by
   session id. A project agent is one session per project on the repository's Lesestand, resumed
   for each question, answering the owner's questions about the project and its workstreams one at
-  a time. It and the Koordinator's look-ups have a worker's tools in the workers' permission mode
-  (see Looked-up questions); the other agents that only judge or answer from the text (the quick
-  reading of commands, estimates, the learner, idea agents and the like) are read-only: Read, Grep
-  and Glob, mode `dontAsk`. The SDK sits behind a
+  a time. It, ideas' exploration agents and the Koordinator's look-ups have a worker's tools in the
+  workers' permission mode (see Looked-up questions); the other agents that only judge or answer
+  from the text (the quick reading of commands, estimates, the learner and the like) are
+  read-only: Read, Grep and Glob, mode `dontAsk`. The SDK sits behind a
   small runtime interface, so the orchestration is tested against a fake. Two SDK hooks ride on
   every session: before a Bash call, the refusal of long foreground sleeps; after every tool call,
   what changed since the session's instructions were built (`AgentSpec.contextUpdate`) goes to the
@@ -2320,8 +2324,8 @@ the repository; the copy on the project is only for the archive).
   with the owner's words and screenshots, and its exploration agent opens the discussion, when no
   agent on the open card takes it (2026-10-09): a wrong guess costs one card, taken back with
   „Rückgängig“. Questions of fact and look-ups stay in the conversation. A big idea becomes a
-  project through a worker writing its plan doc, not through the exploration agent, which stays
-  read-only. That worker runs on the idea's own card and starts with the decision, and the
+  project through a worker writing its plan doc, not through the exploration agent, which discusses
+  and does not build. That worker runs on the idea's own card and starts with the decision, and the
   project replaces the idea on the canvas (2026-10-02): a
   separate planned "Plan-Doc" card in between had to be started by hand and left the idea standing
   next to its project.
@@ -2341,8 +2345,8 @@ the repository; the copy on the project is only for the archive).
   already exists and waits for workers, and building canvases at runtime would keep half-old state.
   Saving the configuration of a command-line start switches Obeya to the file, so what was edited is
   what runs.
-- Screenshots reach agents as images in the message, not as files for them to read: an exploration
-  agent may only read its checkout, and the agent sees the image without a step of its own.
+- Screenshots reach agents as images in the message, not as files for them to read: the agent sees
+  the image without a step of its own.
 - Obeya spawns git, a few thousand times in a test run: on macOS it calls the binary `xcrun --find
   git` names, not the `/usr/bin/git` shim, which looks it up again on every call (10 ms a call
   instead of 4). Test repositories are copies of a template committed once per set of files
@@ -2356,8 +2360,8 @@ the repository; the copy on the project is only for the archive).
   one, since most were not for them to act on. What the owner needs to know goes into the
   summary, kept to a few paragraphs; a problem worth a card is a proposal.
 - An idea's agent shows how a variant looks as a mock in a field of its own beside the brief and
-  the reply, not as HTML in their Markdown (2026-10-05): the agent stays read-only and writes no
-  artifact files, the Markdown renderer stays without HTML, and the owner sees simple options
+  the reply, not as HTML in their Markdown (2026-10-05): the agent writes no artifact files, the
+  Markdown renderer stays without HTML, and the owner sees simple options
   without having a prototype built.
 - A demo's scratch Obeya is staged by a script from a stage file rather than by hand (2026-10-01):
   in the 14 card runs before, the demo took longer than the change itself, and every worker wrote

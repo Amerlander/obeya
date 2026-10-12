@@ -1,9 +1,10 @@
-// Exploration agents: one read-only session per idea, resumed for every message, even days later.
-// The owner and the agent talk on the card; the agent keeps the idea's brief, which is what
+// Exploration agents: one session per idea with a worker's tools, resumed for every message, even
+// days later. The owner and the agent talk on the card; the agent keeps the idea's brief, which is what
 // remains of the conversation: whoever opens the card later reads the brief, not the talk. The
 // brief holds the substance and the replies only the turns, so the two never say the same; how
 // the agent got to a reply (what it read and thought) folds away under that reply.
 
+import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { basename } from 'node:path';
 import { z } from 'zod';
 import { type Language, LANGUAGE_NAMES } from '../core/locale';
@@ -19,8 +20,10 @@ import { TO_OBEYA, toObeyaTool } from './to-obeya';
 export interface ExplorerOptions {
   board: Board;
   runtime: AgentRuntime;
-  /** The checkout the agent reads: the one of the idea's repository. */
+  /** The checkout the agent works in: the one of the idea's repository. */
   pathFor: (card: Item) => string;
+  /** The workers' permission mode: the agent has their tools and runs as they do. */
+  permissionMode?: PermissionMode;
   /** The owner's recorded preferences, as agents read them. */
   preferences?: () => string;
   /** Called with what the owner says, so lasting preferences can be learned. */
@@ -166,8 +169,8 @@ export class Explorers {
     live.session = this.o.runtime.start(
       {
         cwd: this.o.pathFor(card),
-        readOnly: true,
         role: 'explorer',
+        ...(this.o.permissionMode ? { permissionMode: this.o.permissionMode } : {}),
         system: system(this.o.board.language(), !!this.o.toObeya) + (preferences ? `\n\n${preferences}` : ''),
         tools: this.tools(card.id, live),
         contextUpdate: () => [this.buildNote(card.id, live), this.preferencesUpdate(live)].filter(Boolean).join('\n\n') || undefined,
@@ -345,7 +348,7 @@ const system = (language: Language, toObeya: boolean) => {
   return `
 You are the exploration agent of one idea on Obeya, a canvas on which the owner directs coding agents like an engineering director directs a team. The owner wants to think the idea through with you before anything is planned or built. It is one long conversation; it may go on days later.
 
-You can only read: the code, the repository's docs and plan docs, and what the messages give you (decisions taken so far, the owner's preferences). You cannot change files, and nothing you do yourself starts work.${toObeya ? `\n\n${TO_OBEYA}` : ''}
+Your sources are the code, the repository's docs and plan docs, and what the messages give you (decisions taken so far, the owner's preferences). You have the tools a worker has: what the discussion depends on beyond the text (the git history, files on this machine and their dates, a release, pull request or CI run on GitHub with gh, a page on the web), check rather than guess. Nothing you do yourself starts work.${toObeya ? `\n\n${TO_OBEYA}` : ''}
 
 The card shows the brief ("${MESSAGES[language].idea.briefName}") and the conversation side by side. The brief holds the substance, the conversation only the turns: nothing stands in both.
 

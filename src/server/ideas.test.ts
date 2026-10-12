@@ -14,7 +14,7 @@ let runtime: FakeRuntime;
 let canvas: CanvasRuntime;
 
 const open = (clones = 1) =>
-  new CanvasRuntime({ repos: [{ path: main, clones }] }, { store, home: dir, runtime, forge: noForge, commandDelayMs: 10 });
+  new CanvasRuntime({ repos: [{ path: main, clones }] }, { store, home: dir, runtime, forge: noForge, commandDelayMs: 10, permissionMode: 'acceptEdits' });
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'obeya-ideas-'));
@@ -59,11 +59,15 @@ describe('an idea', () => {
     expect(() => canvas.act(i.id, { action: 'start' })).toThrow('only a planned card can be started');
   });
 
-  test('is discussed with a read-only agent that keeps the brief and records decisions', () => {
+  test('is discussed with an agent that has a worker’s tools, keeps the brief and records decisions', () => {
     const i = idea();
     canvas.act(i.id, { action: 'discuss', text: 'Lass uns das durchdenken.' });
     const s = explorer();
-    expect(s.spec).toMatchObject({ readOnly: true, cwd: canvas.repos[0]!.read.path });
+    // it checks what the text does not say (git, gh, the web) in the workers' permission mode
+    expect(s.spec).toMatchObject({ permissionMode: 'acceptEdits', cwd: canvas.repos[0]!.read.path });
+    expect(s.spec.readOnly).toBeUndefined();
+    expect(s.spec.system).toContain('You have the tools a worker has');
+    expect(s.spec.system).toContain('Nothing you do yourself starts work.');
     expect(canvas.repos[0]!.read.path).not.toBe(main);
     expect(s.spec.resume).toBeUndefined();
     expect(s.inbox[0]).toContain('The idea: “Export für Vermieter”.');
@@ -404,7 +408,7 @@ describe('an idea', () => {
     canvas.patch(c.id, { state: 'idea' });
     expect(item(c.id).idea).toMatchObject({ status: 'open', brief: '', thinking: true, yourTurn: false, questions: [] });
     const s = explorer();
-    expect(s.spec.readOnly).toBe(true);
+    expect(s.spec.readOnly).toBeUndefined();
     expect(s.inbox[0]).toContain('“Klon lädt sein Modell neu”');
     expect(s.inbox[0]).toContain('Für jeden Clip.');
     expect(s.inbox[0]).toContain('chose to discuss it first');
