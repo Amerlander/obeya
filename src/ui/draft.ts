@@ -1,9 +1,9 @@
-// What the owner is about to say or write, one draft per field: the text, the screenshots and (in
-// `reply.ts`) the message it replies to. The field of the open card and the one in Obeya's sidebar
+// What the owner is about to say or write, one draft per field: the text, the screenshots, the
+// options picked for the questions above it and (in `reply.ts`) the message it replies to. The field of the open card and the one in Obeya's sidebar
 // keep theirs here rather than in the field itself, so the microphone sends what stands in the field
 // and dictates into it, and a draft outlives closing the card. Without a field to speak to, the
 // screenshots for the next recording lie beside the microphone, in a draft of their own (`MIC`).
-// These drafts are written down per tab and canvas (`keepDrafts`), so they outlive a page load too:
+// These drafts (text, screenshots, picks) are written down per tab and canvas (`keepDrafts`), so they outlive a page load too:
 // switching to another canvas and back, or a restart.
 
 import { useEffect, useSyncExternalStore } from 'react';
@@ -18,7 +18,23 @@ export interface Draft {
   dictation: '' | 'listening' | 'writing';
   /** What the field says about the last dictation: nothing was heard, say. */
   note: string;
+  /** The options picked for each of the questions above the field, and which questions they are (`questionsKey`). */
+  picks?: Picks;
 }
+
+export interface Picks {
+  of: string;
+  picks: string[][];
+}
+
+/** Which questions picks belong to: they count only while the same questions stand. */
+export const questionsKey = (questions: unknown[]) => JSON.stringify(questions);
+
+type Kept = Pick<Draft, 'text' | 'images' | 'picks'>;
+const keptOf = ({ text, images, picks }: Draft): Kept | null => {
+  const picked = picks?.picks.some((p) => p.length) ? picks : undefined;
+  return text.trim() || images.length || picked ? { text, images, ...(picked ? { picks: picked } : {}) } : null;
+};
 
 const EMPTY: Draft = { text: '', images: [], uploading: 0, error: '', dictation: '', note: '' };
 
@@ -52,23 +68,26 @@ const storeKey = (canvas: string) => `obeya-drafts-${canvas}`;
 let kept: { store: Store; canvas: string } | null = null;
 
 /**
- * Takes back the canvas's drafts that `store` kept and writes them down there from now on, text and
- * screenshots, whenever they change. Once per page; later calls change nothing.
+ * Takes back the canvas's drafts that `store` kept and writes them down there from now on, text,
+ * screenshots and picks, whenever they change. Once per page; later calls change nothing.
  */
 export function keepDrafts(store: Store, canvas: string) {
   if (kept) return;
   kept = { store, canvas };
   try {
-    const saved = JSON.parse(store.getItem(storeKey(canvas)) ?? '{}') as Record<string, Pick<Draft, 'text' | 'images'>>;
-    for (const [key, { text, images }] of Object.entries(saved)) if (!drafts.has(key)) drafts.set(key, { ...EMPTY, text, images });
+    const saved = JSON.parse(store.getItem(storeKey(canvas)) ?? '{}') as Record<string, Kept>;
+    for (const [key, { text, images, picks }] of Object.entries(saved)) if (!drafts.has(key)) drafts.set(key, { ...EMPTY, text, images, ...(picks ? { picks } : {}) });
   } catch {}
   listeners.add(writeDown);
 }
 
 function writeDown() {
   if (!kept) return;
-  const out: Record<string, Pick<Draft, 'text' | 'images'>> = {};
-  for (const [key, { text, images }] of drafts) if (lasting(key) && (text.trim() || images.length)) out[key] = { text, images };
+  const out: Record<string, Kept> = {};
+  for (const [key, d] of drafts) {
+    const k = lasting(key) && keptOf(d);
+    if (k) out[key] = k;
+  }
   try {
     if (Object.keys(out).length) kept.store.setItem(storeKey(kept.canvas), JSON.stringify(out));
     else kept.store.removeItem(storeKey(kept.canvas));

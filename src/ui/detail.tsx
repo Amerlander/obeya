@@ -11,7 +11,7 @@ import { landedRef } from './parts';
 import { useQueueMove } from './queue';
 import { Inline, plain } from './markdown';
 import { Body, Msg, Quote, Reading } from './message';
-import { cardDraft } from './draft';
+import { cardDraft, questionsKey, updateDraft, useDraft } from './draft';
 import { replyOn, setReply, useReply } from './reply';
 import { Composer } from './composer';
 import { useFitHeight } from './fitHeight';
@@ -454,7 +454,7 @@ export function Detail(p: Props) {
 function IdeaView({ item, act, run, onDelete, onTell }: { item: Item; act: (a: CardAction, done: ActDone) => Promise<void>; run: Run; onDelete: () => void; onTell: Tell }) {
   const idea = item.idea!;
   const [prototyping, setPrototyping] = useState(false);
-  const answer = usePicks(idea.questions);
+  const answer = usePicks(item.id, idea.questions);
   // what the agent would do in the owner's place is the marked click; without a suggestion, building is
   const next = idea.status === 'open' && !idea.thinking ? idea.next : undefined;
   const btn = (step: NextStep['step']) => (next ? (next.step === step ? 'btn primary suggested' : 'btn') : step === 'build' ? 'btn primary' : 'btn');
@@ -585,7 +585,7 @@ function ProposalView({
 }) {
   const questions = item.proposal?.questions ?? [];
   const revising = item.proposal?.revising;
-  const answer = usePicks(questions);
+  const answer = usePicks(item.id, questions);
   const idea = !!item.proposal?.idea;
   const armed = !!item.proposal?.acceptAfterRevision;
   // while it is reworked, the click waits for the new text in view; else the panel closes on the accepted card
@@ -1636,7 +1636,7 @@ function TaskTalk({
   const field = ownerField(item);
   const key = JSON.stringify(item.question ?? null);
   const questions = useMemo(() => ((field === 'answer' || field === 'demo') && item.question ? [item.question] : []), [field, key]);
-  const picks = usePicks(questions);
+  const picks = usePicks(item.id, questions);
   return (
     <Talk
       item={item}
@@ -1704,6 +1704,7 @@ function Talk({ item, questions = [], heading = t.ask.question, picks, past, fie
   const send = async (words: string, images?: string[]) => {
     const replyTo = reply?.id;
     await (picked ? field!.onPicked(answerText(questions, picks!.picks, words, field!.quote), images, replyTo) : field!.onWords(words, images, replyTo));
+    picks?.clear();
     if (reply && replyOn(item.id) === reply) setReply(null);
   };
   return (
@@ -1770,17 +1771,22 @@ function SpotLink({ cardId, spot }: { cardId: string; spot: Spot }) {
 
 type Picks = ReturnType<typeof usePicks>;
 
-/** The options the owner picked for each question; they start over when the questions change. */
-function usePicks(questions: Question[]) {
-  const key = JSON.stringify(questions);
-  const [state, setState] = useState({ key, picks: [] as string[][] });
-  const picks = state.key === key ? state.picks : [];
+/**
+ * The options the owner picked for each question; they start over when the questions change. They
+ * stand in the card's draft beside its words, so they outlive closing the card and a page load.
+ */
+function usePicks(cardId: string, questions: Question[]) {
+  const draft = cardDraft(cardId);
+  const key = questionsKey(questions);
+  const saved = useDraft(draft).picks;
+  const picks = saved?.of === key ? saved.picks : [];
   const choose = (i: number, o: string) =>
-    setState((cur) => {
-      const was = cur.key === key ? cur.picks : [];
-      return { key, picks: questions.map((q, j) => (j === i ? toggle(q, was[j] ?? [], o) : (was[j] ?? []))) };
+    updateDraft(draft, (d) => {
+      const was = d.picks?.of === key ? d.picks.picks : [];
+      return { picks: { of: key, picks: questions.map((q, j) => (j === i ? toggle(q, was[j] ?? [], o) : (was[j] ?? []))) } };
     });
-  return { picks, choose, picked: picks.some((x) => x.length > 0) };
+  const clear = () => updateDraft(draft, { picks: undefined });
+  return { picks, choose, clear, picked: picks.some((x) => x.length > 0) };
 }
 
 /** An agent's questions, each with its options as radio buttons, or checkboxes when several may be chosen. */

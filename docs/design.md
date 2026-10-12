@@ -1453,12 +1453,14 @@ the owner's language (`src/core/locale.ts`).
   abschicken mit Enter“; while Whisper writes, „Wird aufgeschrieben …“; nothing heard leaves the
   field as it was and says so under it. Otherwise the line under the microphone names who hears it
   and what goes with it („→ Agent · Aufgabe: … mit Text und 1 Screenshot“). Each field keeps its
-  draft (text, screenshots; the quote in `src/ui/reply.ts`) in one store per field
-  (`src/ui/draft.ts`) rather than in the field, so the microphone reads and writes it, and a draft
-  outlives closing the card. The drafts of the cards, the sidebar and the microphone are also written
+  draft (text, screenshots, the options picked for the questions above it; the quote in
+  `src/ui/reply.ts`) in one store per field (`src/ui/draft.ts`) rather than in the field, so the
+  microphone reads and writes it, and a draft outlives closing the card. Picks count only while the
+  same questions stand. The drafts of the cards, the sidebar and the microphone are also written
   down per tab and canvas (`sessionStorage`) as they change, so they outlive a page load: switching
   to another canvas and back (a page load of its own) or a restart. Until 2026-10-12 they lived in
-  the page alone, and a canvas switch lost them. `POST /voice?listen` only transcribes and returns the words; a form
+  the page alone, and a canvas switch lost them; the picks lived in the card's view until then, and
+  a restart lost them while the words came back. `POST /voice?listen` only transcribes and returns the words; a form
   with `audio` and `text` puts the field's words before the spoken ones. The app's push-to-talk key
   in another app always sends at once: no field has the cursor there. Until 2026-10-12 spoken words
   always went out at once, without what was typed in the field. A Whisper sidecar keeps the model
