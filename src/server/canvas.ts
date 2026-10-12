@@ -287,6 +287,7 @@ export class CanvasRuntime {
       agentSetting: () => agents('koordinator'),
       ...(deps.commandDelayMs !== undefined ? { delayMs: deps.commandDelayMs } : {}),
     });
+    board.interruptTalk();
     this.answers.resume();
     this.revisions = new Revisions({ board, runtime: deps.runtime, preferences, pathFor: (card) => this.repoOf(card).read.path, onRevised: (cardId, revised) => this.revised(cardId, revised) });
     this.revisions.resume();

@@ -372,12 +372,12 @@ export class Koordinator {
         .map((u) => ({ at: u.at, text: `"${u.title ?? ''}": the owner in the idea's discussion: ${clip(u.text, 300)}` })),
       ...b
         .talk(REVIEW_HISTORY)
-        .filter((t) => t.at > since)
+        .filter((t) => t.at > since && t.reply !== undefined)
         .map((t) => {
           const open = title(t.cardId);
           return {
             at: t.at,
-            text: `the owner to you${open ? ` (with "${open}" open)` : ''}: ${clip(t.said, 300)} → ${clip(t.reply, 200)}${t.undone ? ' (the owner took it back)' : ''}`,
+            text: `the owner to you${open ? ` (with "${open}" open)` : ''}: ${clip(t.said, 300)} → ${clip(t.reply!, 200)}${t.undone ? ' (the owner took it back)' : ''}`,
           };
         }),
       ...b.removed(since).map((r) => ({

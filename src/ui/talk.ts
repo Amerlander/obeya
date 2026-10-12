@@ -209,6 +209,16 @@ export const agentWorks = (i: Pick<Item, 'state' | 'need' | 'idea' | 'proposal' 
       ? !!i.proposal?.revising
       : i.state === 'working' || answering(i) || (!!i.finishing && finished(i.state));
 
+/**
+ * Whether the Koordinator still reads what the owner said on the card: their words stand in the log
+ * at once, its confirmation follows them. (Options picked on a proposal go to its reviser, which
+ * notes when it is done.)
+ */
+export const koordinatorReads = (events: CardEvent[]) => {
+  const last = events.at(-1);
+  return last?.kind === 'say' && last.author === 'owner';
+};
+
 /** A task an agent has worked on: what came of it stands beside its conversation. */
 export const worked = (i: Pick<Item, 'state' | 'branch'>) => ['working', 'waiting', 'approved', 'inPr', 'live', 'done'].includes(i.state) && !!i.branch;
 

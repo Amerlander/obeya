@@ -569,11 +569,27 @@ export class Board {
 
   // ---------------------------------------------------------------- the Koordinator's memory
 
-  /** Records an exchange with the Koordinator; returns its id. */
+  /** Records an exchange with the Koordinator, without its reply (`''`) while it reads the words; returns its id. */
   addTalk(said: string, reply: string, cardId: string | null = null, lookUp?: { question: string; about: string | null }, images: string[] = []): number {
     const id = this.store.addTalk(this.canvas.id, said, reply, cardId, lookUp, images);
     this.changed();
     return id;
+  }
+
+  /** The Koordinator's reply to words it has read, and the question it looks up for them. */
+  replyTalk(id: number, reply: string, lookUp?: { question: string; about: string | null }) {
+    this.store.replyTalk(id, reply, lookUp);
+    this.changed();
+  }
+
+  /**
+   * After a restart: words the Koordinator was reading when Obeya stopped are not read any more;
+   * they get a reply that says so, in the sheet or on the card that was open.
+   */
+  interruptTalk() {
+    const lost = this.store.interruptTalk(this.canvas.id, this.t.voice.interrupted);
+    for (const x of lost) if (x.cardId && this.item(x.cardId)) this.log(x.cardId, 'say', 'koordinator', this.t.voice.interrupted);
+    if (lost.length) this.changed();
   }
 
   undoTalk(id: number) {

@@ -10,13 +10,13 @@ import { Branch } from './diff';
 import { landedRef } from './parts';
 import { useQueueMove } from './queue';
 import { Inline, plain } from './markdown';
-import { Body, Msg, Quote } from './message';
+import { Body, Msg, Quote, Reading } from './message';
 import { replyOn, setReply, useReply } from './reply';
 import { Composer } from './composer';
 import { useFitHeight } from './fitHeight';
 import { AttachButton, ShotStrip, Shots, useShotInput } from './shots';
 import { clock as time, errorText, stateLabel, t } from './strings';
-import { agentWorks, demoHandover, ownerField, parseQuestion, started, talkAlone, talkTurns, type Turn, worked as isWorked } from './talk';
+import { agentWorks, demoHandover, koordinatorReads, ownerField, parseQuestion, started, talkAlone, talkTurns, type Turn, worked as isWorked } from './talk';
 
 /**
  * What the panel does after an action: fold the card and confirm (with undo, when it has one), or stay open.
@@ -840,6 +840,7 @@ function Conversation({
             </div>
           )
         )}
+        {!working && !past && koordinatorReads(events) && <Reading />}
         {!working && questions}
       </div>
     </>

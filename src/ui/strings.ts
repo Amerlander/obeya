@@ -168,6 +168,8 @@ const de = {
     heading: 'Gespräch',
     empty: 'Noch nichts passiert.',
     working: 'arbeitet …',
+    /** After „Obeya“, under the owner's words while the Koordinator reads them. */
+    reading: 'liest …',
     steps: (n: number) => `Verlauf: ${n} ${n === 1 ? 'Schritt' : 'Schritte'}`,
     question: 'Frage',
     handover: 'Übergabe',
@@ -332,7 +334,7 @@ const de = {
     failed: 'Das hat nicht geklappt; bitte noch einmal.',
     typePlaceholder: 'Obeya schreiben, z. B. „Neue Aufgabe: …“',
     tooLate: 'Zu spät: das ist schon passiert.',
-    /** A command while the Koordinator reads it: the card it was said to, or the words typed. */
+    /** A spoken command while the Koordinator reads it: the card it was said to. */
     reading: (what: string) => `${what} · wird verstanden …`,
     /** A recording for the open card's agent while Whisper writes it down. */
     transcribing: (what: string) => `${what} · wird aufgeschrieben …`,
@@ -1105,6 +1107,7 @@ const en: Strings = {
     heading: 'Conversation',
     empty: 'Nothing has happened yet.',
     working: 'working …',
+    reading: 'is reading …',
     steps: (n: number) => `History: ${n} ${n === 1 ? 'step' : 'steps'}`,
     question: 'Question',
     handover: 'Handover',

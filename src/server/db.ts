@@ -704,6 +704,20 @@ export class Store {
     ).id;
   }
 
+  /** The Koordinator's reply to words it has read, and the question it looks up for them. */
+  replyTalk(id: number, reply: string, lookUp?: { question: string; about: string | null }) {
+    this.db
+      .query('UPDATE talk SET reply = $reply, question = $question, about = $about WHERE id = $id')
+      .run({ id, reply, question: lookUp?.question ?? null, about: lookUp?.about ?? null });
+  }
+
+  /** Words the Koordinator was reading when Obeya stopped: they get `reply`; returns them. */
+  interruptTalk(canvasId: string, reply: string): Talk[] {
+    const rows = this.db.query("SELECT * FROM talk WHERE canvas_id = $c AND reply = '' ORDER BY id").all({ c: canvasId }) as TalkRow[];
+    this.db.query("UPDATE talk SET reply = $reply WHERE canvas_id = $c AND reply = ''").run({ c: canvasId, reply });
+    return rows.map(toTalk);
+  }
+
   undoTalk(id: number) {
     this.db.query('UPDATE talk SET undone = 1 WHERE id = $id').run({ id });
   }
@@ -881,7 +895,8 @@ const toTalk = (r: TalkRow): Talk => ({
   id: r.id,
   at: r.at,
   said: r.said,
-  reply: r.reply,
+  // empty while the Koordinator reads the words
+  ...(r.reply ? { reply: r.reply } : {}),
   ...(r.card_id ? { cardId: r.card_id } : {}),
   ...(r.undone ? { undone: true } : {}),
   ...(r.question ? { question: r.question } : {}),

@@ -1,8 +1,8 @@
 // Push-to-talk: hold Space or the microphone, speak, let go. The recording goes to Obeya: with an
 // agent on the open card straight to that agent, else to the Koordinator, which answers with a
 // confirmation to show. Screenshots picked or pasted beside the microphone go with the next
-// recording. The microphone is free again at once: each command, spoken or typed to the
-// Koordinator, has its own line above it while it is read, which becomes its confirmation.
+// recording. The microphone is free again at once: each spoken command has its own line above it
+// while it is read, which becomes its confirmation; a typed one gets its line with the confirmation.
 
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, api, holdRestart } from './api';
@@ -136,8 +136,8 @@ export function usePushToTalk(where: () => Where, send: (target: Where, request:
 /** A command on its way: while it is transcribed or the Koordinator reads it, then its confirmation. */
 export interface Told {
   id: number;
-  /** What the line says meanwhile: the card in view, or the words typed, and what happens to them. */
-  pending: string;
+  /** What the line says meanwhile: the card in view, and what happens to the words; null for typed words, which the conversation shows at once. */
+  pending: string | null;
   /** The card it was said to, named in the confirmation when another card is open by then. */
   card?: { id: string; title: string };
   heard?: Heard;
@@ -172,7 +172,7 @@ export function useTold(onHeard: (h: Heard) => void) {
     setTimeout(() => update(id, () => null), Math.max(SHOWN_MS, (h.undoMs ?? 0) + 1500));
   }
 
-  async function tell(pending: string, card: Told['card'], request: () => Promise<Heard>): Promise<Heard> {
+  async function tell(pending: string | null, card: Told['card'], request: () => Promise<Heard>): Promise<Heard> {
     const id = ++next.current;
     setTold((ts) => [...ts, { id, pending, ...(card ? { card } : {}) }]);
     let h: Heard;
@@ -215,7 +215,7 @@ export function useTold(onHeard: (h: Heard) => void) {
 export function ToldList({ told, open, onUndo }: { told: Told[]; open?: string; onUndo: (x: Told) => void }) {
   return (
     <>
-      {told.map((x) => (
+      {told.map((x) => (x.heard || x.pending) && (
         <div key={x.id} className={`ack told ${x.heard ? 'heard' : 'reading'}`}>
           <span>
             {x.heard ? (

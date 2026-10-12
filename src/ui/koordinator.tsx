@@ -6,7 +6,7 @@ import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
 import type { Item, Preference, RepoRef, Reshare, Talk } from '../core/types';
 import { api, ApiError } from './api';
 import { plain } from './markdown';
-import { Body, Msg } from './message';
+import { Body, Msg, Reading } from './message';
 import { errorText, t } from './strings';
 import { Composer } from './composer';
 import { Shots } from './shots';
@@ -15,7 +15,7 @@ interface Props {
   on: boolean;
   /** The canvas, whose sections stay open or closed as the owner left them. */
   canvas: string;
-  /** A command typed in the sheet: read like a spoken one, with its line above the microphone. */
+  /** A command typed in the sheet: read like a spoken one; the conversation shows it at once. */
   onTell: (text: string, images?: string[]) => void;
   items: Item[];
   preferences: Preference[];
@@ -179,10 +179,14 @@ function Conversation({ talk, fresh }: { talk: Talk[]; fresh: number[] }) {
             <Body md={x.said} />
             <Shots ids={x.images} />
           </Msg>
-          <Msg by="koordinator" className={x.undone ? 'undone' : undefined} who={t.author.koordinator} at={x.at}>
-            <Body md={x.reply} />
-            {x.undone && <div className="hint">{t.koordinator.undone}</div>}
-          </Msg>
+          {x.reply === undefined ? (
+            <Reading />
+          ) : (
+            <Msg by="koordinator" className={x.undone ? 'undone' : undefined} who={t.author.koordinator} at={x.at}>
+              <Body md={x.reply} />
+              {x.undone && <div className="hint">{t.koordinator.undone}</div>}
+            </Msg>
+          )}
           {/* a question it looked up: the answer follows the acknowledgement */}
           {x.question && x.answer === undefined && (
             <Msg by="koordinator" className="thinking" who={t.author.koordinator}>

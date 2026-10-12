@@ -204,6 +204,13 @@ export class Commander {
     // passed on by the card's agent: the owner's words stand in the card's conversation already
     const said = input.forwarded ? undefined : transcript;
     const replyTo = card ? this.o.board.quoted(card, input.replyTo)?.id : undefined;
+    // the owner's words stand in the conversation at once, the Koordinator's reply follows once it has read them
+    const talk = this.o.board.addTalk(transcript, '', card ?? null, undefined, images);
+    if (card && said) this.o.board.log(card, 'say', 'owner', said, undefined, images, undefined, replyTo);
+    const reply = (confirm: string, lookUp?: { question: string; about: string | null }) => {
+      this.o.board.replyTalk(talk, confirm, lookUp);
+      if (card) this.o.board.log(card, 'say', 'koordinator', confirm);
+    };
     let decision: Decision;
     try {
       decision = await this.interpret(transcript, focus, images, input);
@@ -211,11 +218,7 @@ export class Commander {
       // the Koordinator's session failed (not logged in, say): the owner hears why, not that they went unheard
       const t = this.o.board.t;
       const confirm = t.voice.couldNotRead(failureReason(e instanceof Error ? e.message : String(e), t));
-      this.o.board.addTalk(transcript, confirm, card ?? null, undefined, images);
-      if (card) {
-        if (said) this.o.board.log(card, 'say', 'owner', said, undefined, images, undefined, replyTo);
-        this.o.board.log(card, 'say', 'koordinator', confirm);
-      }
+      reply(confirm);
       return { confirm };
     }
     const { confirm, lookUp } = decision;
@@ -233,11 +236,7 @@ export class Commander {
     if (lookUp) {
       // nothing to take back: the answer follows once it is looked up
       const about = lookUp.about ?? card ?? (focus.project && this.o.board.item(focus.project) ? focus.project : undefined);
-      const talk = this.o.board.addTalk(transcript, confirm, card ?? null, { question: lookUp.question, about: about ?? null }, images);
-      if (card) {
-        if (said) this.o.board.log(card, 'say', 'owner', said, undefined, images, undefined, replyTo);
-        this.o.board.log(card, 'say', 'koordinator', confirm);
-      }
+      reply(confirm, { question: lookUp.question, about: about ?? null });
       this.o.lookUp?.(talk);
       if (said) this.o.onOwnerInput?.(card, 'talk', said, confirm);
       return { confirm };
@@ -245,11 +244,7 @@ export class Commander {
     // talking about an idea changes nothing that would need taking back: it goes on at once
     const talking = commands.filter((c) => c.do === 'discuss');
     const rest = commands.filter((c) => !talking.includes(c));
-    const talk = this.o.board.addTalk(transcript, confirm, card ?? null, undefined, images);
-    if (card) {
-      if (said) this.o.board.log(card, 'say', 'owner', said, undefined, images, undefined, replyTo);
-      this.o.board.log(card, 'say', 'koordinator', confirm);
-    }
+    reply(confirm);
     for (const c of talking) await this.run(c);
     if (!commands.length && said) this.o.onOwnerInput?.(card, 'talk', said, confirm);
     if (!rest.length) return { confirm };
@@ -772,7 +767,8 @@ export class Commander {
     const first = s.read === 0;
     let history: string[];
     if (first) {
-      const talk = this.o.board.talk(REMEMBERED_EXCHANGES);
+      // without the words being read now
+      const talk = this.o.board.talk(REMEMBERED_EXCHANGES).filter((t) => t.reply !== undefined);
       const full = new Set(talk.filter((t) => t.answer !== undefined).slice(-FULL_ANSWERS));
       const steps = this.o.board.timeline(new Date(Date.now() - HISTORY_DAYS * 86_400_000).toISOString(), HISTORY_STEPS);
       history = [

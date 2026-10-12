@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { type CardEvent, formatQuestion } from '../core/types';
-import { agentWorks, demoHandover, ownerField, parseQuestion, split, talkAlone, talkTurns } from './talk';
+import { agentWorks, demoHandover, koordinatorReads, ownerField, parseQuestion, split, talkAlone, talkTurns } from './talk';
 
 let id = 0;
 const ev = (kind: CardEvent['kind'], author: CardEvent['author'], text: string): CardEvent => ({ id: ++id, cardId: 'c', at: '2026-10-01T10:00:00Z', kind, author, text });
@@ -253,4 +253,12 @@ test("a demo report's question stays with the handover it came with when a later
   // a new demo with a later handover goes with that one
   expect(demoHandover({ ...demo, handover: again.id }, shown)?.e).toBe(again);
   expect(demoHandover({ chapters: [], question: 'Q?' }, shown)?.e).toBe(again);
+});
+
+test("the Koordinator reads the owner's words on a card until its confirmation follows them; a revised proposal's picked options are not read", () => {
+  const said = ev('say', 'owner', 'starte ihn');
+  expect(koordinatorReads([said])).toBe(true);
+  expect(koordinatorReads([said, ev('say', 'koordinator', '„Export“ startet.')])).toBe(false);
+  expect(koordinatorReads([said, ev('state', 'koordinator', 'Überarbeitet.')])).toBe(false);
+  expect(koordinatorReads([ev('hint', 'owner', 'Und die Tests?')])).toBe(false);
 });

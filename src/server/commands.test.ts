@@ -377,6 +377,41 @@ describe('the Koordinator remembers', () => {
     expect(brief).toContain('(with "Export" open) the owner: "halt ihn an" → you: "„Export“ wird angehalten." (the owner took it back)');
   });
 
+  test("the owner's words stand in the conversation at once; the reply follows once the Koordinator has read them", async () => {
+    const a = board.create({ title: 'Export', x: 0, y: 0 });
+    const k = commander();
+    const heard = k.hear('hallo nochmal', {});
+    const onCard = k.hear('starte ihn', { card: a.id });
+    await settle();
+    // both wait: the first is being read, the second waits for its turn
+    expect(board.snapshot().talk.map((t) => [t.said, t.reply])).toEqual([['hallo nochmal', undefined]]);
+    expect(board.events(a.id).map((e) => [e.kind, e.author, e.text])).toEqual([['say', 'owner', 'starte ihn']]);
+    // the words being read are not part of what the Koordinator remembers
+    expect(runtime.last.inbox.at(-1)).toContain('You have not talked with the owner before.');
+    runtime.last.call('reply', { confirm: 'Hallo!' });
+    runtime.last.emit({ type: 'idle' });
+    await heard;
+    expect(board.snapshot().talk.map((t) => [t.said, t.reply])).toEqual([['hallo nochmal', 'Hallo!']]);
+    await settle();
+    runtime.last.call('act', { actions: [{ do: 'start', card: 'K1' }], confirm: '„Export“ startet.' });
+    runtime.last.emit({ type: 'idle' });
+    await onCard;
+    expect(board.events(a.id).map((e) => [e.kind, e.author, e.text])).toEqual([
+      ['say', 'owner', 'starte ihn'],
+      ['say', 'koordinator', '„Export“ startet.'],
+    ]);
+  });
+
+  test('words being read when Obeya stopped get a reply that says so, in the sheet and on the card', () => {
+    const a = board.create({ title: 'Export', x: 0, y: 0 });
+    board.addTalk('hallo', '');
+    board.addTalk('starte ihn', '', a.id);
+    board.log(a.id, 'say', 'owner', 'starte ihn');
+    board.interruptTalk();
+    expect(board.snapshot().talk.map((t) => t.reply)).toEqual(['Obeya startete neu, bevor ich das gelesen hatte. Bitte noch einmal.']);
+    expect(board.events(a.id).at(-1)).toMatchObject({ kind: 'say', author: 'koordinator', text: 'Obeya startete neu, bevor ich das gelesen hatte. Bitte noch einmal.' });
+  });
+
   test('a new session, after a restart, starts from the stored conversation and the canvas history', async () => {
     const a = board.create({ title: 'Export', x: 0, y: 0 });
     await say(commander(), 'starte Export', 'act', { actions: [{ do: 'start', card: 'K1' }], confirm: '„Export“ startet.' });

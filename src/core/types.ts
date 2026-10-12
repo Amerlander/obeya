@@ -507,7 +507,8 @@ export interface Talk {
   at: string;
   /** What the owner said or typed. */
   said: string;
-  reply: string;
+  /** Absent while the Koordinator reads the words. */
+  reply?: string;
   /** The card that was open. */
   cardId?: string;
   /** The owner took the actions back. */

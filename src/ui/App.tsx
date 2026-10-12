@@ -606,19 +606,24 @@ function Canvas({
     const i = target && 'card' in target ? itemsRef.current.find((x) => x.id === target.card) : undefined;
     return i && agentListens(i) ? i : undefined;
   };
+  /** The card a command for `target` is about, named in its confirmation when another card is open by then. */
+  const toldCard = (target: Where) => {
+    const i = target && 'card' in target ? itemsRef.current.find((x) => x.id === target.card) : undefined;
+    return i ? { id: i.id, title: plain(i.title) } : undefined;
+  };
   /**
-   * Hands a command for `target` on, with its line above the microphone: while Whisper writes it
-   * down for the open card's agent, or while the Koordinator reads it.
+   * Hands a spoken command for `target` on, with its line above the microphone: while Whisper writes
+   * it down for the open card's agent, or while the Koordinator reads it.
    */
-  const tellAbout = (target: Where, label: string | null, request: () => Promise<Heard>) => {
+  const tellAbout = (target: Where, request: () => Promise<Heard>) => {
     const i = target ? itemsRef.current.find((x) => x.id === ('card' in target ? target.card : target.project)) : undefined;
-    const title = plain(i?.title ?? '');
-    const what = label ?? (i ? `„${title}“` : t.voice.koordinator);
-    return told.tell(listening(target) ? t.voice.transcribing(what) : t.voice.reading(what), target && 'card' in target && i ? { id: i.id, title } : undefined, request);
+    const what = i ? `„${plain(i.title)}“` : t.voice.koordinator;
+    return told.tell(listening(target) ? t.voice.transcribing(what) : t.voice.reading(what), toldCard(target), request);
   };
   /**
    * Words typed on a card, in its idea or in the Koordinator's sheet: on a card an agent listens on
-   * they go straight to it, and its conversation shows them; else the Koordinator reads them like spoken ones.
+   * they go straight to it, else the Koordinator reads them like spoken ones. The conversation shows
+   * them at once either way; above the mic only the Koordinator's confirmation shows, with „Rückgängig“.
    */
   const tellTyped = useCallback(async (text: string, images: string[] | undefined, target: Where, field?: Field, replyTo?: number) => {
     if (listening(target))
@@ -628,10 +633,7 @@ function Canvas({
         if (!(e instanceof ApiError)) console.error(e);
         showAck(e instanceof ApiError ? errorText(e.code) : t.offlineError);
       }
-    else {
-      const words = text.replace(/\s+/g, ' ');
-      void tellAbout(target, `„${words.length > 40 ? `${words.slice(0, 39)}…` : words}“`, () => api.command(text, target, images, field, replyTo));
-    }
+    else void told.tell(null, toldCard(target), () => api.command(text, target, images, field, replyTo));
   }, []);
   useEffect(() => {
     const w = newCardWatch.current;
@@ -659,7 +661,7 @@ function Canvas({
   );
   // screenshots for the next recording: picked beside the mic, dropped on it, or pasted (⌘V) anywhere but in a text field
   const voiceShots = useShotInput();
-  const ptt = usePushToTalk(where, (target, request) => tellAbout(target, null, request), (h) => showAck(h.confirm), voiceShots);
+  const ptt = usePushToTalk(where, tellAbout, (h) => showAck(h.confirm), voiceShots);
   const pttRef = useRef(ptt);
   pttRef.current = ptt;
   const voiceShotsRef = useRef(voiceShots);
@@ -1218,7 +1220,7 @@ function Canvas({
         onSetup={() => setSetupOn(true)}
         onTalk={talkFromConfig}
         onProblems={setConfigProblems}
-        onAsk={(text, canvas) => void tellAbout(null, null, () => (canvas ? api.commandOn(canvas, text) : api.command(text, null)))}
+        onAsk={(text, canvas) => void told.tell(t.voice.reading(t.voice.koordinator), undefined, () => (canvas ? api.commandOn(canvas, text) : api.command(text, null)))}
       />
       {setupOn && <Setup onClose={() => setSetupOn(false)} />}
       <KoordinatorSheet on={kOn} canvas={snapshot.canvas.id} items={items} preferences={snapshot.preferences} repos={snapshot.canvas.repos} talk={snapshot.talk} reshare={snapshot.reshare} onOpen={open} onTell={(text, images) => tellTyped(text, images, null)} />

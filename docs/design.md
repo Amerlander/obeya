@@ -1463,9 +1463,13 @@ the owner's language (`src/core/locale.ts`).
   wait, and that with no card open a question for an opinion becomes an idea and one of fact stays
   a reply. The Koordinator learns whether the words were typed,
   and in which field (a proposal's). Clicks on answer options go straight to the agent, as do
-  typed and spoken words. What the owner said to the Koordinator and its confirmation go into
-  the conversation of the card that was open (the confirmation folded away), and
-  "Zurückgenommen." when taken back; with no card open, the sheet
+  typed and spoken words. What the owner said to the Koordinator goes into the conversation of
+  the card that was open, or with none open into the sheet, at once (spoken words once Whisper
+  has written them down), with „Obeya liest …“ under it until its confirmation follows (on a card
+  folded away), and "Zurückgenommen." when taken back. Until 2026-10-12 the words appeared only
+  together with the confirmation, so typed words waited seconds as „„…“ · wird verstanden …“
+  above the mic, which looked like speech recognition. Words the Koordinator was reading when
+  Obeya stopped get a reply that says so (`Board.interruptTalk`). With no card open, the sheet
   shows the conversation, newest last, in all the height the sheet has; an open section below
   takes from it down to 200px, and below that the sheet scrolls. Its messages look like a card's
   (`Msg` and `Body` in `src/ui/message.tsx`, shared by both): the owner's on the right, who and
@@ -1505,10 +1509,13 @@ the owner's language (`src/core/locale.ts`).
   heard only the first 1500 characters, and asked back when the owner said yes to a card offered
   further on. A question still open at a restart is looked up again.
 - **Commands on their way** — after letting go of Space the microphone is free at once, and the
-  owner may navigate or speak again: the target is fixed when the key goes down. Each recording,
-  and each command typed to the Koordinator while it reads it, has its own small line above the
+  owner may navigate or speak again: the target is fixed when the key goes down. Each recording
+  has its own small line above the
   microphone („„Export“ · wird verstanden …“, for a card's agent „… · wird aufgeschrieben …“), which becomes its confirmation with „Rückgängig“,
-  or disappears when the words went to the open card's agent. Several stack, oldest first, and the server reads them
+  or disappears when the words went to the open card's agent. A command typed to the Koordinator
+  gets no such line while it is read (its conversation shows the words and „Obeya liest …“), only
+  its confirmation with „Rückgängig“; a request typed in the configuration dialog, whose
+  conversation is out of view, keeps the line. Several stack, oldest first, and the server reads them
   one after the other. A confirmation that arrives while another card is open starts with the card
   it is about; so does one for a request an agent passed on, and an answer looked up.
 - **Voice latency** — pressing Space (or focusing a field the Koordinator reads) gets everything ready while

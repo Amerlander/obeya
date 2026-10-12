@@ -32,6 +32,9 @@ export function Msg({ by, who, at, className, ev, onReply, children }: { by: str
   );
 }
 
+/** Under the owner's words while the Koordinator reads them, in the sheet and on a card alike. */
+export const Reading = () => <Msg by="koordinator" className="thinking" who={`${t.author.koordinator} ${t.talk.reading}`} />;
+
 /** Who said a message, as a quote of it names them: the owner also for an answer given in their name. */
 const quotedBy = (e: CardEvent) => (e.author === 'owner' || e.kind === 'answer' ? 'owner' : e.author);
 
