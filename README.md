@@ -36,8 +36,8 @@ show as projects with a card per workstream.
 
 ![An Obeya canvas: a project with its workstreams, one at work and one with a demo waiting; a question and a task queued behind it; a task at work, a live one and an idea](docs/images/canvas.png)
 
-**Status:** early, and in daily use: Obeya is built with Obeya. It speaks English and German
-(the system's language, or the one chosen in its settings). How it works and why is in
+**Status:** early, but in daily use. Obeya is built with Obeya, and it's used to build commercial
+software. It speaks English and German. How it works and why is in
 [`docs/design.md`](docs/design.md).
 
 ## Download
