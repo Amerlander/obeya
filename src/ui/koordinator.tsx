@@ -35,7 +35,6 @@ export function KoordinatorSheet({ on, canvas, items, preferences, repos, talk, 
   const proposalsOpen = !folds.proposalsClosed || proposals.some((p) => !folds.proposalsClosed!.includes(p.id));
   return (
     <aside id="ksheet" className={on ? 'sheet on' : 'sheet'}>
-      <div className="p-kind">{t.koordinator.kind}</div>
       <h2>{t.koordinator.title}</h2>
       <Conversation talk={talk} fresh={fresh} />
       <TellKoordinator onTell={onTell} />

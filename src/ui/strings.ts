@@ -405,8 +405,7 @@ const de = {
     button: 'Obeya',
     /** The top-right button is an icon; this is its tooltip. */
     buttonTitle: 'Obeya (C)',
-    kind: 'Obeya',
-    title: 'Planung und Präferenzen',
+    title: 'Obeya',
     proposalsHead: (n: number) => `Vorschläge (${n})`,
     proposalsHint:
       'Obeya hat sie aus deinen Worten gelernt. Sie gelten erst, wenn du sie übernimmst. Regeln für eine CLAUDE.md sammelt die Aufgabe „CLAUDE.md ergänzen“; sie startet, sobald kein Vorschlag mehr offen ist.',
@@ -1329,8 +1328,7 @@ const en: Strings = {
   koordinator: {
     button: 'Obeya',
     buttonTitle: 'Obeya (C)',
-    kind: 'Obeya',
-    title: 'Planning and preferences',
+    title: 'Obeya',
     proposalsHead: (n: number) => `Proposals (${n})`,
     proposalsHint:
       'Obeya learned them from your words. They apply only once you accept them. Rules for a CLAUDE.md are collected by the task “Add to CLAUDE.md”; it starts as soon as no proposal is open.',

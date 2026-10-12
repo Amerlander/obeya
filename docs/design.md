@@ -2085,7 +2085,9 @@ the repository; the copy on the project is only for the archive).
   only docs it shows as projects, by project card, never a path.
 - The sheets on the right (Obeya's, a project's, a plan doc being read)
   are a sidebar docked to the window's right edge, from top to bottom: a straight edge with a
-  divider line, no shadow, no gap (2026-10-09). The canvas is what remains to its left: the top
+  divider line, no shadow, no gap (2026-10-09). A sheet's heading keeps clear of the button in its
+  top corner. Obeya's is headed only "Obeya", as its button is named (until 2026-10-12 a line
+  "Obeya" over "Planung und Präferenzen", which ran under the button). The canvas is what remains to its left: the top
   bar ends at the sidebar, the microphone with its lines and the confirmations above it, the edge
   indicators, the minimap's frame and an unfolding card all keep to that rest. Opening a sheet
   moves the view left by half the sheet's width, so the middle of the view stays its middle;
