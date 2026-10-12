@@ -8,7 +8,7 @@
 :root {
   /* the canvas's palette: card stock on a warm board, the states as inks */
   --paper: #eee8dc; --ink: #1f1b14; --muted: #6b6253; --line: #ddd5c4; --card: #fdfbf5;
-  --blue: #1d5fe0; --amber: #f27405; --green: #3d9a1f; --pink: #dc2f5e; --grey: #a0978a; --purple: #7b4fd6;
+  --blue: #1d5fe0; --amber: #f27405; --green: #3d9a1f; --pink: #dc2f5e; --grey: #a0978a;
   --shadow: 0 1px 0 rgba(95,75,35,.20), 1px 2px 0 rgba(95,75,35,.10), 0 4px 8px -4px rgba(60,45,20,.18);
   --serif: Newsreader, "Iowan Old Style", Georgia, serif;
   --wide: 1120px;
@@ -79,7 +79,7 @@ section { max-width: var(--wide); margin: 0 auto; padding: 0 24px; }
 
 /* ---------- cards, as on Obeya's canvas: index cards with the state as a rule across the top ---------- */
 .s-idea { --c: var(--pink); } .s-working { --c: var(--blue); } .s-waiting { --c: var(--amber); }
-.s-approved { --c: var(--green); } .s-planned { --c: var(--grey); } .s-proposal { --c: var(--purple); }
+.s-approved { --c: var(--green); } .s-planned { --c: var(--grey); }
 .card { position: relative; background: var(--card); border-radius: 2px; box-shadow: var(--shadow); padding: 15px 16px 40px; min-height: 128px;
   background-image: linear-gradient(var(--c), var(--c)); background-size: 100% 4px; background-repeat: no-repeat; }
 .s-idea.card { background-color: color-mix(in srgb, var(--pink) 9%, var(--card)); }
@@ -88,14 +88,12 @@ section { max-width: var(--wide); margin: 0 auto; padding: 0 24px; }
 .card .meta { margin-top: 4px; font-size: 13.5px; line-height: 1.38; color: var(--muted); }
 .card .state { position: absolute; left: 16px; bottom: 12px; display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--c); }
 /* the owner's turn: a frame in the stamp-pad colour and a pin */
-.card.s-waiting, .card.turn { box-shadow: 0 0 0 2px var(--amber), var(--shadow); }
+.card.s-waiting { box-shadow: 0 0 0 2px var(--amber), var(--shadow); }
 .badge { position: absolute; top: -10px; right: -8px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
   background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.45), transparent 45%), var(--amber); color: #fff;
   font: 700 13px/1 var(--serif); box-shadow: 0 0 0 2px var(--paper), 1px 2px 0 2px rgba(0,0,0,.18); }
-/* a proposal is a card only pencilled in: no stock yet, a dashed outline */
-.card.s-proposal { background: transparent; box-shadow: none; border: 1.5px dashed var(--purple); }
-/* an agent at work: a pencil stroke being drawn */
-.s-working .state::after { content: ""; width: 36px; height: 2px;
+/* an agent at work or thinking: a pencil stroke being drawn */
+.s-working .state::after, .thinking .state::after { content: ""; width: 36px; height: 2px;
   background: linear-gradient(90deg, var(--c) 0 50%, transparent 50%) 0 0 / 200% 100% no-repeat, color-mix(in srgb, var(--c) 22%, transparent);
   animation: draw 1.6s cubic-bezier(.5,0,.3,1) infinite; }
 @keyframes draw { 0% { background-position: 100% 0; } 55% { background-position: 0 0; } 100% { background-position: -100% 0; } }
@@ -220,5 +218,5 @@ footer span { margin-right: auto; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .s-working .state::after { animation: none; }
+  .s-working .state::after, .thinking .state::after { animation: none; }
 }
