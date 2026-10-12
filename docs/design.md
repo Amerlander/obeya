@@ -1546,7 +1546,11 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   laptop CPU, model loading included, and Whisper heard the test clips back word for word,
   measured 2026-10-02), Qwen3-TTS (1.7B, a stock speaker from the CustomVoice model or a clone of
   a clip with its transcript beside it from the Base model; MLX through mlx-audio on Apple
-  Silicon, PyTorch through qwen-tts elsewhere, `lib/qwen3.py`), macOS `say` (offered on a Mac
+  Silicon, PyTorch through qwen-tts elsewhere, `lib/qwen3.py`; a clone continues its clip, so a
+  German clip carries German accent and rhythm into English narration, and the settings hold one
+  clip for both languages: an English clip, or the clip without its transcript (the voice's timbre
+  only, less like the owner), sounds right, heard 2026-10-07; no open successor model then,
+  Qwen-Audio-3.1-TTS of 2026-09 is hosted only), macOS `say` (offered on a Mac
   only), and the owner's own command (through the shell; it writes the WAV to `$DEMO_WAV`). Hosted
   ones are HTTP requests from templates in `tts.py`: Gemini, OpenAI (or another base URL with the
   same API), ElevenLabs, Azure, or the owner's own endpoint (POST `{"text", "language"}` as JSON,
