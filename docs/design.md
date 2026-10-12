@@ -771,10 +771,10 @@ the owner's language (`src/core/locale.ts`).
   demo the owner approves instead of the code, the order in which cards run: parallel where they
   can, one after the other where they must); "From idea to main", a card's way along a wall as
   cards in their states, drawn as the canvas draws them: the detours of an idea and its prototypes,
-  a task's work, its demo with the round back for changes, the merge and a follow-up hanging off
-  it (one column below 900 px). Only the demo carries the pin of a card waiting for the owner: the
-  other cards show states that need nothing of them (an idea the agent is thinking about, a
-  prototype being built, a planned follow-up), so that the way reads as task, demo, done;
+  a task's work, its demo with the round back for changes, the merge and an agent's proposal
+  hanging off it, dashed with ✦ (one column below 900 px). Only the demo carries the "!" pin of a
+  card waiting for the owner: idea and prototype show states that need nothing of them (the agent
+  thinking, a prototype being built), so that the way reads as task, demo, done;
   "The big room", what the name means, with 大部屋 set vertically, and the one wall as the way out
   of many parallel chats (no Toyota, which the README left out on purpose too); the dark band "Obeya is built
   with Obeya."; getting started with the downloads, `bun start` from the checkout and GitHub (not
