@@ -1131,7 +1131,18 @@ function DemoView({
                   </span>
                 </button>
               )}
-              <button className="zoom" title={zoom.box ? t.demo.unzoom : t.demo.zoom} aria-label={zoom.box ? t.demo.unzoom : t.demo.zoom} onClick={zoom.toggle}>
+              <button
+                className="zoom"
+                title={zoom.keyKnown ? (zoom.box ? t.demo.unzoom : t.demo.zoom) : undefined}
+                aria-label={zoom.box ? t.demo.unzoom : t.demo.zoom}
+                onClick={zoom.toggle}
+              >
+                {/* the key beside the magnifier until the owner first zoomed with it */}
+                {!zoom.keyKnown && (
+                  <span className="zoom-hint">
+                    {zoom.box ? t.demo.unzoomHint : t.demo.zoomHint} <kbd>Z</kbd>
+                  </span>
+                )}
                 <svg viewBox="0 0 24 24">
                   <circle cx="10.5" cy="10.5" r="6.5" />
                   <path d={zoom.box ? 'M7.5 10.5h6M15.5 15.5L21 21' : 'M7.5 10.5h6M10.5 7.5v6M15.5 15.5L21 21'} />
@@ -1169,19 +1180,29 @@ function DemoView({
 }
 
 const ZOOM_MS = 380;
+/** Set once the owner zoomed with Z: the magnifier stops showing the key beside it. */
+const ZOOM_KEY_KNOWN = 'obeya-zoom-key-known';
 const ZOOM_EASE = 'cubic-bezier(.3,.9,.3,1)';
 
 /**
  * The demo video shown large over the greyed page, short of full screen: the same video element
  * (it keeps playing) grows out of its place in the card and goes back into it. Z or the button on
  * the video toggles it, Esc or a click beside it ends it. With several demos on a card, Z takes the
- * zoomed one, else the one playing, else the first.
+ * zoomed one, else the one playing, else the first. Hovering the magnifier shows the key until
+ * the owner first used it.
  */
 function useZoom(video: RefObject<HTMLVideoElement | null>) {
   const player = useRef<HTMLDivElement>(null);
   const screen = useRef<HTMLDivElement>(null);
   const backdrop = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState<{ from: Box; to: Box; closing?: boolean } | null>(null);
+  const [keyKnown, setKeyKnown] = useState(() => {
+    try {
+      return localStorage.getItem(ZOOM_KEY_KNOWN) === '1';
+    } catch {
+      return false;
+    }
+  });
   const boxRef = useRef(box);
   boxRef.current = box;
   const toggle = () => {
@@ -1228,6 +1249,10 @@ function useZoom(video: RefObject<HTMLVideoElement | null>) {
       if (mine !== video.current) return;
       e.preventDefault();
       toggleRef.current();
+      setKeyKnown(true);
+      try {
+        localStorage.setItem(ZOOM_KEY_KNOWN, '1');
+      } catch {}
     };
     addEventListener('keydown', key);
     return () => removeEventListener('keydown', key);
@@ -1249,7 +1274,7 @@ function useZoom(video: RefObject<HTMLVideoElement | null>) {
       els.forEach((el) => el?.removeEventListener('wheel', still));
     };
   }, [zoomed]);
-  return { player, screen, backdrop, box, toggle };
+  return { player, screen, backdrop, box, toggle, keyKnown };
 }
 
 /** A card's pull request: its checks, whether it is ready, and its review. */

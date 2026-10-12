@@ -257,7 +257,8 @@ An idea is thought through on its card before anything is planned; no worker run
    magnifier on the video zooms it out of the card to as large as the window allows above the
    microphone, over the greyed page (`useZoom` in `src/ui/detail.tsx`): the same video element,
    so it keeps playing, growing out of its place and back; Z again, Esc or a click beside it ends
-   it, and the card stays open. Full screen was too much on a large monitor and hid where the
+   it, and the card stays open. Hovering the magnifier shows the key beside it until the owner
+   first zoomed with Z (per browser). Full screen was too much on a large monitor and hid where the
    owner was; before (2026-10-12) the owner zoomed in with the operating system. The worker's
    summary is its handover in the card's conversation below, not repeated under the demo: the
    whole report, what changed for the user and what the owner needs to know, in a few short

@@ -393,6 +393,11 @@ textarea.p-body:focus { border-color: var(--muted); }
   background: rgba(0, 0, 0, .55); cursor: pointer; display: grid; place-items: center; opacity: 0; transition: opacity .15s, background .15s; }
 .demo-view .screen:hover .zoom, .demo-view .zoom:focus-visible { opacity: 1; }
 .demo-view .zoom:hover { background: rgba(0, 0, 0, .8); }
+/* the key, shown beside the magnifier while it is hovered, until the owner first zoomed with it */
+.demo-view .zoom-hint { position: absolute; right: calc(100% + 8px); top: 50%; transform: translateY(-50%); white-space: nowrap;
+  padding: 5px 9px; border-radius: 3px; background: rgba(0, 0, 0, .75); color: #fff; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .15s; }
+.demo-view .zoom:hover .zoom-hint, .demo-view .zoom:focus-visible .zoom-hint { opacity: 1; }
+.demo-view .zoom-hint kbd { font: inherit; font-weight: 600; margin-left: 3px; padding: 0 6px; border-radius: 2px; background: rgba(255, 255, 255, .2); border: 1px solid rgba(255, 255, 255, .35); }
 .demo-view .zoom svg { width: 20px; height: 20px; fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; }
 .demo-view .start { all: unset; position: absolute; inset: 0 0 56px 0; cursor: pointer; display: grid; place-items: center; }
 .demo-view .start span { margin-top: 56px; width: 80px; height: 80px; border-radius: 50%; background: rgba(0, 0, 0, 0.6); display: grid; place-items: center; transition: transform 0.15s, background 0.15s; }

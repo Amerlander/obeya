@@ -373,6 +373,8 @@ const de = {
     play: 'Abspielen',
     zoom: 'Größer zeigen (Z)',
     unzoom: 'Wieder kleiner (Z, Esc)',
+    zoomHint: 'Größer mit',
+    unzoomHint: 'Kleiner mit',
   },
   share: {
     share: 'Teilen',
@@ -1301,6 +1303,8 @@ const en: Strings = {
     play: 'Play',
     zoom: 'Show larger (Z)',
     unzoom: 'Back to normal size (Z, Esc)',
+    zoomHint: 'Larger with',
+    unzoomHint: 'Smaller with',
   },
   share: {
     share: 'Share',
