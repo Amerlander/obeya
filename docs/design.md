@@ -267,9 +267,10 @@ An idea is thought through on its card before anything is planned; no worker run
    paused stays where it is, as it does after words dictated into the field. Typing in the field
    pauses it too; above the field stands the place like a quote (its frame, „1:23 · chapter“, × to
    take it out), the placeholder says „Etwas zu 1:23 schreiben oder Leertaste halten“, and Enter
-   sends and plays on. „💬 Hier kommentieren“ on the video beside the magnifier pauses it and puts
-   the cursor into the field; both show only while the mouse is over the video, so they do not
-   cover the picture (before 2026-10-12 the comment button stood there always); the controls (`?`) have a section for the video. At the start or the
+   sends and plays on. „Hier kommentieren“ (its speech bubble drawn like the magnifier) on the
+   video beside the magnifier pauses it and puts the cursor into the field; both show only while
+   the mouse is over the video, so they do not cover the picture (before 2026-10-12 the comment
+   button stood there always); the controls (`?`) have a section for the video. At the start or the
    end, the words are about the work as a whole and go out as before. The browser draws the frame
    from the video (same origin) and uploads it as a screenshot; the server adds the chapter and the
    sentence of the narration at that time (`placeIn` in `src/server/demo.ts`, by its share of the

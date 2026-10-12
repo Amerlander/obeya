@@ -1158,7 +1158,10 @@ function DemoView({
                     document.querySelector<HTMLTextAreaElement>('#panel .split-talk .composer textarea')?.focus();
                   }}
                 >
-                  💬 {t.demo.comment}
+                  <svg viewBox="0 0 24 24">
+                    <path d="M4 5.5h16v10.5H10l-4.5 3.5V16H4z" />
+                  </svg>
+                  {t.demo.comment}
                 </button>
               )}
               <button
