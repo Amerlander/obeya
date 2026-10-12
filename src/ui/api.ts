@@ -222,9 +222,19 @@ export function onCardEventGone(fn: (cardId: string, id: number) => void): () =>
 // What Obeya tells the owner without a command of theirs to answer (an answer looked up, what a
 // request an agent passed on came to): it shows above the microphone, with "Rückgängig" while actions wait.
 const noticeListeners = new Set<(n: Notice) => void>();
+/** Notices that came before anything showed them: those a page gets as it opens, before the canvas is drawn. */
+let heldNotices: { n: Notice; at: number }[] = [];
 export function onNotice(fn: (n: Notice) => void): () => void {
   noticeListeners.add(fn);
+  const held = heldNotices;
+  heldNotices = [];
+  // the undo window went on meanwhile
+  for (const { n, at } of held) fn(n.undoMs ? { ...n, undoMs: Math.max(0, n.undoMs - (Date.now() - at)) } : n);
   return () => noticeListeners.delete(fn);
+}
+function notice(n: Notice) {
+  if (!noticeListeners.size) heldNotices.push({ n, at: Date.now() });
+  for (const fn of noticeListeners) fn(n);
 }
 
 // What the owner does in this page that a restart would cut off, by who holds it (the demo video,
@@ -304,7 +314,7 @@ export function useCanvas(): { snapshot: CanvasSnapshot | null; online: boolean;
         else if (msg.type === 'waiting') setWaiting(msg.waiting);
         else if (msg.type === 'event') for (const fn of eventListeners) fn(msg.event);
         else if (msg.type === 'eventGone') for (const fn of goneListeners) fn(msg.cardId, msg.id);
-        else if (msg.type === 'notice') for (const fn of noticeListeners) fn(msg);
+        else if (msg.type === 'notice') notice(msg);
       };
       ws.onclose = () => {
         if (closed) return;
