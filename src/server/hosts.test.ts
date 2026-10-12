@@ -2,7 +2,7 @@
 // on this machine (`fakeSsh`): git and files over the connection, a session's process, clones
 // there, and a session that resumes once a dropped connection is back.
 
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, setSystemTime, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,7 +10,7 @@ import type { SpawnOptions } from '@anthropic-ai/claude-agent-sdk';
 import { generic } from '../adapters/generic';
 import { Board } from './board';
 import { Store } from './db';
-import { hostName, onHost, registerHost, remote, sessionFiles, type SshHost } from './hosts';
+import { hostName, onHost, RECHECK_DOWN_MS, registerHost, remote, sessionFiles, type SshHost } from './hosts';
 import { runStackCommand } from './stack';
 import { FakeRuntime, fakeSsh, gitRepo, identify, until } from './testing';
 import { Workers } from './workers';
@@ -229,6 +229,34 @@ describe('clones on a host', () => {
     expect(spaces.lease(d, 'obeya/d', { overSlots: true })).toBe(onHost(name, join(dir, 'far', '2')));
     workers.shutdown();
   }, 30_000);
+
+  test('of a host that stops answering hold the server once, not at each look for a free clone', async () => {
+    expect(await spaces.ensureHostClones(host, join(dir, 'far'), origin, 2, () => undefined)).toBeNull();
+    let back = 0;
+    const stop = host.onBack(() => back++);
+    const tries = () => (existsSync(join(dir, 'net', 'tries')) ? readFileSync(join(dir, 'net', 'tries'), 'utf8').split('\n').length - 1 : 0);
+    writeFileSync(join(dir, 'net', 'down'), '');
+    const before = tries();
+    // the first look finds the host gone; ssh took seconds for that (a name it cannot resolve)
+    expect(spaces.leasable()).toBe(false);
+    expect(tries()).toBe(before + 1);
+    expect(host.unreachable).toBe(true);
+    // the next looks, at every change of the board, do not ask it again
+    for (let i = 0; i < 5; i++) expect(spaces.leasable()).toBe(false);
+    expect(tries()).toBe(before + 1);
+    // a while later a look has it asked again, in the background
+    rmSync(join(dir, 'net', 'down'));
+    setSystemTime(new Date(Date.now() + RECHECK_DOWN_MS));
+    try {
+      expect(spaces.leasable()).toBe(false);
+    } finally {
+      setSystemTime();
+    }
+    await until(() => !host.unreachable);
+    expect(back).toBe(1);
+    expect(spaces.leasable()).toBe(true);
+    stop();
+  });
 
   test('wait for a host that cannot be reached, and say why', async () => {
     writeFileSync(join(dir, 'net', 'down'), '');

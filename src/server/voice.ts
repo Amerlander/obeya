@@ -128,8 +128,19 @@ class Sidecar {
     });
   }
 
+  /**
+   * Its stdin ends, and with it the sidecar, which finishes a recording it is on; one still there
+   * after 30 s is killed. Killed at once, Python leaves the semaphore of its model download's progress
+   * bar behind, and its resource tracker warns about it on the terminal.
+   */
   stop() {
-    this.proc?.kill();
+    const proc = this.proc;
+    if (!proc || proc.exitCode !== null) return;
+    try {
+      proc.stdin.end();
+    } catch {}
+    const kill = setTimeout(() => proc.kill(), 30_000);
+    void proc.exited.then(() => clearTimeout(kill));
   }
 }
 

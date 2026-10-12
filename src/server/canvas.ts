@@ -191,6 +191,8 @@ export class CanvasRuntime {
         const token = githubToken(info.path, info.remote!);
         for (const h of remoteHosts) {
           const host = registerHost({ name: h.name, ssh: h.ssh, home: deps.home, claudeToken: () => claudeToken(deps.home) });
+          // cards that wait for a clone look again once the host answers after it did not
+          this.stops.push(host.onBack(() => board.changed()));
           const ensure = async () => {
             const wrong = await workspaces.ensureHostClones(host, h.root, info.remote!, h.clones, token);
             if (!wrong) return board.changed();

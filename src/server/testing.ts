@@ -118,7 +118,8 @@ export const until = async (done: () => unknown, ms = 3000) => {
 /**
  * A stand-in for `ssh` that runs the command on this machine, as a host's login shell would; the
  * host counts as unreachable (exit 255, as ssh's own) while `<dir>/down` exists. Its home is
- * `<dir>/home`. Each command it ran is appended to `<dir>/log`, with the target first.
+ * `<dir>/home`. Each command it ran is appended to `<dir>/log`, with the target first; each
+ * connection it tried, reachable or not, adds a line to `<dir>/tries`.
  */
 export function fakeSsh(dir: string): string {
   mkdirSync(dir, { recursive: true });
@@ -130,6 +131,7 @@ while [ $# -gt 1 ]; do
   case "$1" in -o|-R) shift 2 ;; -T|-n) shift ;; *) break ;; esac
 done
 target="$1"; shift
+echo x >> ${JSON.stringify(join(dir, 'tries'))}
 [ -e ${JSON.stringify(join(dir, 'down'))} ] && { echo "ssh: connect to host $target: Connection refused" >&2; exit 255; }
 printf '%s %s\\n' "$target" "$*" >> ${JSON.stringify(join(dir, 'log'))}
 HOME=${JSON.stringify(join(dir, 'home'))}; export HOME; mkdir -p "$HOME"

@@ -1084,7 +1084,15 @@ the owner's language (`src/core/locale.ts`).
   there through `ssh` without the callers knowing: `ssh <target> sh -c '…'` with the installers'
   directories on its `PATH` (the host's own `~/.zshenv` adds the rest), one shared connection
   where the platform has `ControlMaster` (not Windows), `BatchMode` so nothing prompts, and
-  keep-alives that notice a dropped link within 45 s. Nothing secret is stored there: the
+  keep-alives that notice a dropped link within 45 s. The calls the server waits for (`git`,
+  `exists`: looking for a clean free clone, a card's changes) block it, and ssh gives up on a host
+  that does not answer only after seconds (5 s for a `.local` name it cannot resolve): once a
+  connection to a host has failed, these fail at once instead, the host counting as unreachable,
+  and a call 30 s later or after has it asked again in the background; when it answers, the board
+  counts as changed, so cards waiting for a clone look again. The calls that do not block go out as
+  ever, and their answers say whether the host is back. Until 2026-10-12 each look for a free
+  clone asked an unreachable host twice per clone there, with five clones there almost a minute in
+  which Obeya answered nothing, at every change of the board while a card waited. Nothing secret is stored there: the
   repository's GitHub login (what `git credential fill` gives in its checkout here, so the account
   its own configuration picks) and the Claude login (`claude-token` in Obeya's home, from `claude
   setup-token`) travel as the first line of stdin of each command and session, and the clones'
@@ -1267,7 +1275,10 @@ the owner's language (`src/core/locale.ts`).
   terminal's Ctrl-C reaches supervisor and server, and the supervisor passes it on: signals within
   a second count as one press). The sidecars (transcription, speech, narration voice) run in a
   process group of their own, so the terminal's Ctrl-C does not reach them: they keep working while
-  Obeya waits, and Obeya ends them once it stops (on Windows, where a detached process would open
+  Obeya waits, and Obeya ends them once it stops by ending their stdin, which they finish as a
+  normal end (killed instead, Python left the semaphore of the model download's progress bar
+  behind and its resource tracker warned about it on the terminal, until 2026-10-12; one still
+  there after 30 s is killed) (on Windows, where a detached process would open
   a console window for every program it starts, the Python sidecars ignore Ctrl-C instead). A stop does not wait for the owner's video or dictation, since the
   owner asked for it; it turns a restart that waits into a stop. The next start resumes the
   workers it stopped like a restart does.

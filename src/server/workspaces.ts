@@ -339,16 +339,14 @@ export class Workspaces {
         full = true;
         continue;
       }
-      const clean = here.find((w) => {
+      for (const w of here) {
         try {
-          return exists(w.path) && git(w.path, 'status', '--porcelain') === '';
-        } catch {
-          return false;
-        }
-      });
-      if (clean) return { path: clean.path };
-      // an unreachable machine's clones count as missing, not as dirty
-      if (here.some((w) => exists(w.path))) dirty = true;
+          // an unreachable machine's clones count as missing, not as dirty
+          if (!exists(w.path)) continue;
+          dirty = true;
+          if (git(w.path, 'status', '--porcelain') === '') return { path: w.path };
+        } catch {}
+      }
     }
     return { short: full ? 'slots' : dirty ? 'dirty' : 'none' };
   }

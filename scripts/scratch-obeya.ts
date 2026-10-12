@@ -68,7 +68,9 @@
 // (an idle worker counts as busy). `hosts` are other machines over SSH (as in the configuration;
 // `root` defaults to <dir>/far there): the repository gets a bare origin in <dir>, copied to each
 // host at the same path, so that Obeya clones it there as it would a remote; staging afresh
-// removes <dir> there first. Preferences are active unless `state` says otherwise; `card` and `replaces` name keys;
+// removes <dir> there first. A host with `"gone": true` held its clones once and does not answer
+// now (an `ssh` target nobody resolves, say): nothing goes there, and its clones are registered as if
+// Obeya had made them. Preferences are active unless `state` says otherwise; `card` and `replaces` name keys;
 // `target` is the repository whose CLAUDE.md a rule is for (the canvas id names the home one).
 // What a learned rule's occasion is (card, quote, review), `replaces` and `target` need code that has them.
 // Groups are created through the API with their cards (keys; a workstream stands for its project),
@@ -127,7 +129,7 @@ interface Stage {
   /** Workers busy at once on this machine. */
   slots?: number;
   /** Other machines over SSH, as in the configuration. */
-  hosts?: { name: string; ssh: string; root?: string; clones: number; slots?: number }[];
+  hosts?: { name: string; ssh: string; root?: string; clones: number; slots?: number; gone?: boolean }[];
   files?: Record<string, string>;
   plans?: Record<string, string>;
   cards: StageCard[];
@@ -165,6 +167,8 @@ stop(dir);
 if (await answers(`${base}/api/canvases`)) fail(`port ${port} is taken by another process (lsof -i :${port})`);
 rmSync(dir, { recursive: true, force: true });
 const home = join(dir, 'home');
+/** Where a host keeps the repository's clones. */
+const rootOn = (h: { root?: string }) => h.root ?? `${dir}/far`;
 const repo = join(dir, 'repo');
 mkdirSync(home, { recursive: true });
 
@@ -187,6 +191,7 @@ if (stage.poolCheckout || stage.hosts?.length) {
 }
 // the origin at the same path on each host, which clones it from there
 for (const h of stage.hosts ?? []) {
+  if (h.gone) continue;
   const ssh = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', h.ssh];
   run('ssh', [...ssh, `rm -rf '${dir}' && mkdir -p '${dir}'`], dir);
   run('scp', ['-q', '-r', '-o', 'BatchMode=yes', join(dir, 'scratch.git'), `${h.ssh}:${dir}/`], dir);
@@ -233,7 +238,7 @@ if (configured)
               ...(stage.poolCheckout ? { workspaces: [repo] } : {}),
               ...(stage.slots !== undefined ? { slots: stage.slots } : {}),
               ...(stage.share ? { share: stage.share } : {}),
-              ...(stage.hosts?.length ? { hosts: stage.hosts.map((h) => ({ ...h, root: h.root ?? `${dir}/far` })) } : {}),
+              ...(stage.hosts?.length ? { hosts: stage.hosts.map(({ gone: _, ...h }) => ({ ...h, root: rootOn(h) })) } : {}),
             },
           ],
         },
@@ -320,6 +325,9 @@ for (const [i, c] of stage.cards.entries()) {
 
 const db = new Database(join(home, 'obeya.db'), { strict: true });
 db.run('PRAGMA busy_timeout = 10000');
+for (const h of stage.hosts ?? [])
+  for (let n = 1; h.gone && n <= h.clones; n++)
+    db.query('INSERT INTO workspaces (path, canvas_id, repo) VALUES ($path, $c, NULL) ON CONFLICT(path) DO NOTHING').run({ path: `ssh://${h.name}${rootOn(h)}/${n}`, c: canvas });
 const columns = new Set((db.query('PRAGMA table_info(cards)').all() as { name: string }[]).map((c) => c.name));
 for (const [i, c] of stage.cards.entries()) {
   const id = idOf(c, i);

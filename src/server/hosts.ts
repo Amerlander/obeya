@@ -42,6 +42,12 @@ export class HostError extends Error {}
 /** A host's exit code for "the connection failed" (ssh's own), whatever the command there did. */
 export const LOST = 255;
 
+/**
+ * How long a host whose connection failed counts as unreachable for the commands the server waits
+ * for, before one of them has it asked again in the background.
+ */
+export const RECHECK_DOWN_MS = 30_000;
+
 /** Directories that come first on the host's PATH: where the official installers put Claude Code and Bun. */
 const PATH_PREFIX = '$HOME/.local/bin:$HOME/.bun/bin';
 
@@ -76,6 +82,10 @@ export class SshHost {
   private prepared?: Promise<string>;
   /** Tokens by the workspace root they are for (a repository's clones there): its GitHub login. */
   private tokens: { root: string; token: () => string | undefined }[] = [];
+  /** When the connection last failed, while the host has not answered since; whether it is being asked again. */
+  private down?: { at: number; asking?: boolean };
+  /** Who hears that the host answers again after it did not. */
+  private back: (() => void)[] = [];
 
   constructor(readonly o: HostOptions) {}
 
@@ -123,10 +133,48 @@ export class SshHost {
     return `${exports({ ...(token ? { GH_TOKEN: token } : {}), ...extra })}\n`;
   }
 
-  /** Runs a program there and waits for it (git, mostly: short calls on a shared connection). */
+  /** Whether the host's connection failed and it has not answered since. */
+  get unreachable(): boolean {
+    return !!this.down;
+  }
+
+  /** `f` runs each time the host answers again after its connection failed; returns what stops that. */
+  onBack(f: () => void): () => void {
+    this.back.push(f);
+    return () => (this.back = this.back.filter((g) => g !== f));
+  }
+
+  /** What a command's exit code says about the connection: `LOST` that it failed, anything else that the host answered. */
+  private heard(code: number) {
+    if (code === LOST) {
+      if (this.down) this.down.at = Date.now();
+      else this.down = { at: Date.now() };
+      return;
+    }
+    if (!this.down) return;
+    this.down = undefined;
+    for (const f of this.back) f();
+  }
+
+  /**
+   * Runs a program there and waits for it (git, mostly: short calls on a shared connection). The
+   * server answers nothing else meanwhile, and ssh gives up on a host that does not answer only
+   * after seconds (a name it cannot resolve, a connection timeout): while the host's connection has
+   * failed, it fails at once instead, and from time to time the host is asked again in the background.
+   */
   runSync(argv: string[], cwd?: string): { code: number; stdout: string; stderr: string } {
+    if (this.down) {
+      if (!this.down.asking && Date.now() - this.down.at >= RECHECK_DOWN_MS) {
+        const down = this.down;
+        down.asking = true;
+        void this.reachable().finally(() => (down.asking = false));
+      }
+      return { code: LOST, stdout: '', stderr: `${this.name} does not answer` };
+    }
     const r = Bun.spawnSync(this.argv(argv, { cwd, env: true }), { stdin: Buffer.from(this.envLine(cwd)), stdout: 'pipe', stderr: 'pipe' });
-    return { code: r.exitCode ?? LOST, stdout: r.stdout.toString(), stderr: r.stderr.toString() };
+    const code = r.exitCode ?? LOST;
+    this.heard(code);
+    return { code, stdout: r.stdout.toString(), stderr: r.stderr.toString() };
   }
 
   /** Runs a program (or a shell line) there without blocking the server. */
@@ -137,8 +185,10 @@ export class SshHost {
       stderr: 'pipe',
       ...(o.timeout ? { timeout: o.timeout } : {}),
     });
-    const [stdout, stderr, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
-    return { code: p.signalCode ? LOST : code, stdout, stderr };
+    const [stdout, stderr, exited] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
+    const code = p.signalCode ? LOST : exited;
+    this.heard(code);
+    return { code, stdout, stderr };
   }
 
   /** Whether `path` exists there. */
