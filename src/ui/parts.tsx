@@ -225,7 +225,7 @@ export function RestartPill({ restart, items }: { restart: PendingRestart; items
   return (
     <div className="pill restart" id="restart">
       <span className="spin">↻</span>
-      <span>{t.restart.pill(n, owner, restart.reason)}</span>
+      <span className="say">{t.restart.pill(n, owner, restart.reason)}</span>
       {/* the deadline does not cut the owner off */}
       {!owner.length && <span className="hint">{t.restart.until(until)}</span>}
       <button onClick={now}>

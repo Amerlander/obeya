@@ -217,19 +217,19 @@ button.pill:hover { box-shadow: var(--lift); }
 #bar.titlebar { padding-left: 92px; }
 .kpill .n { background: var(--planned); color: var(--on-ink); border-radius: 3px; padding: 0 7px; font-weight: 700; font-size: 12px; }
 .kpill.on { background: var(--ink); color: var(--bg); }
-/* beside a wide sheet the bar is narrow: its buttons drop their labels for icons, and on the narrowest the left side goes */
-#bar { container: bar / inline-size; }
+/* the bar's buttons always fit (src/ui/barFit.ts): narrower than its contents, the bar gives up in steps the
+   wordmark for the sign and the branch, then the labels for icons a few at a time, then the pool and the help,
+   then all but the sheets' buttons and the restart's text */
 #bar > *, #bar .right > * { flex: none; }
 .bar-sign, .bar-icon { display: none; }
-@container bar (max-width: 1000px) {
-  #bar > svg, #bar .lbl, .pill.restart .hint { display: none; }
-  .bar-sign { display: block; line-height: 0; }
-  .bar-icon { display: block; }
-  #bar .kpill, #bar .new-card { padding: 7px 10px; }
-}
-@container bar (max-width: 560px) {
-  #bar .canvas-pill, #bar .new-card, #bar .help, #bar #workspaces { display: none; }
-}
+#bar[data-fit~="1"] > svg, #bar[data-fit~="1"] .canvas-pill .lbl, #bar[data-fit~="1"] .pill.restart .hint { display: none; }
+#bar[data-fit~="1"] .bar-sign { display: block; line-height: 0; }
+#bar[data-fit~="2"] :is(#workspaces, .config) .lbl, #bar[data-fit~="3"] :is(.archive, .new-card) .lbl,
+  #bar[data-fit~="4"] :is(.queue, #attention) .lbl { display: none; }
+#bar[data-fit~="2"] .config .bar-icon, #bar[data-fit~="3"] .archive .bar-icon, #bar[data-fit~="4"] .queue .bar-icon { display: block; }
+#bar[data-fit~="2"] .config, #bar[data-fit~="3"] :is(.archive .kpill, .new-card), #bar[data-fit~="4"] .queue .kpill { padding-inline: 10px; }
+#bar[data-fit~="5"] #workspaces, #bar[data-fit~="5"] .help { display: none; }
+#bar[data-fit~="6"] .canvas-pill, #bar[data-fit~="6"] .new-card, #bar[data-fit~="6"] .pill.restart .say { display: none; }
 /* the bar's buttons are one height, whatever they hold: text, an icon, a count */
 #bar .pill, .pill.talk-pill { height: 34px; box-sizing: border-box; padding-block: 0; }
 #bar button.pill.help { width: 34px; height: 34px; }

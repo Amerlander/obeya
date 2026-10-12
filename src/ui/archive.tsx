@@ -43,7 +43,7 @@ export function ArchivePill({ on, onToggle, onClose, held, archived, done, onOpe
     else days.push({ day, items: [i] });
   }
   return (
-    <div className="menu-pill" ref={box}>
+    <div className="menu-pill archive" ref={box}>
       <button className={on ? 'pill kpill on' : 'pill kpill'} title={t.archive.title} aria-expanded={on} onClick={onToggle}>
         {icon}
         <span className="lbl">{t.archive.button}</span>

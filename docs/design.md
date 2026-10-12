@@ -2097,8 +2097,14 @@ the repository; the copy on the project is only for the archive).
   closing only change its colour: it is one element fixed over the room the bar keeps for it,
   never moved into another parent (before, closing put it back into the bar, which still ended
   at the sidebar, so it showed up left of it and slid right with the bar). The other
-  sheets have a ✕ there. Beside a wide sheet the bar's buttons drop their labels
-  for icons, and on the narrowest only the sheets' buttons stay (a container query on the bar). A
+  sheets have a ✕ there. The bar's buttons always fit into it
+  (`src/ui/barFit.ts`): narrower than its contents, beside a wide sheet or in a narrow window, it
+  gives up in steps the wordmark for the sign and the branch, then the labels for icons a few at a
+  time, then the pool and `?`, then all but the sheets' buttons. Which step is measured (the bar's
+  right end within its padding) whenever its width or contents change, because the same width
+  holds a short branch or a long one and one machine's clones or three. Until 2026-10-12 two
+  container queries on the bar's width chose the step, and a long branch, a large pool or a
+  restart's notice pushed the buttons past the bar's end under Obeya's button and the sheet. A
   window up to 760 px wide lays the sheet over the canvas instead. Before, the sheets were
   rounded panels with a shadow floating 14 px from the window's edge over a full-window canvas:
   cards were cut off at their edge, and the microphone and its lines stayed in the window's
