@@ -120,11 +120,11 @@ export function serve(
     const q = new URL(req.url).searchParams;
     return { ...(q.get('card') ? { card: q.get('card')! } : {}), ...(q.get('project') ? { project: q.get('project')! } : {}) };
   };
-  const transcribe = async (c: CanvasRuntime, req: Request) => {
+  const transcribe = async (c: CanvasRuntime, audio: Blob) => {
     const dir = mkdtempSync(join(tmpdir(), 'obeya-voice-'));
     const file = join(dir, 'speech.webm');
     try {
-      await Bun.write(file, await req.arrayBuffer());
+      await Bun.write(file, audio);
       const first = await transcriber.transcribe(file, c.commander.vocabulary());
       const text = first.text.trim();
       if (silence(text)) return console.log(`whisper on ${c.id}: ${text}`), '';
@@ -384,7 +384,8 @@ export function serve(
           }
         },
       },
-      // what the owner said (audio), for the open card's agent or the Koordinator
+      // what the owner said (audio), for the open card's agent or the Koordinator; the body is the
+      // recording, or a form with it (`audio`) and the words typed in the field before it (`text`)
       '/api/c/:canvas/voice': {
         POST: on(async (c, req) => {
           // screenshots shown with the recording (`?image=<id>`, repeated), checked before transcribing
@@ -393,7 +394,19 @@ export function serve(
           c.images.resolve(images);
           // `?replyTo=<event>`: said in reply to that message of the open card's conversation
           const replyTo = Number(params.get('replyTo')) || undefined;
-          return heard(c, await transcribe(c, req), focusOf(req), images, replyTo ? { replyTo } : {});
+          const form = req.headers.get('content-type')?.startsWith('multipart/form-data') ? await req.formData() : null;
+          const audio = form ? form.get('audio') : await req.blob();
+          if (!(audio instanceof Blob)) throw new BadRequest('invalid', 'audio expected');
+          const typed = form?.get('text');
+          const text = await transcribe(c, audio);
+          // `?listen`: dictated into a field, the words go back to it and nowhere else
+          if (params.has('listen')) {
+            console.log(`dictated on ${c.id}: ${text === null ? '(not understood)' : text || '(nothing)'}`);
+            return text ? { confirm: '', quiet: true, text } : { confirm: text === null ? c.board.t.voice.notUnderstood : c.board.t.voice.nothingHeard, unheard: true };
+          }
+          // what stood in the field goes first; nothing heard sends nothing, the field keeps it
+          const words = text && typeof typed === 'string' && typed.trim() ? `${typed.trim()}${/\n/.test(typed.trim()) ? '\n\n' : ' '}${text}` : text;
+          return heard(c, words, focusOf(req), images, replyTo ? { replyTo } : {});
         }),
       },
       // the owner started speaking: transcription and the Koordinator get ready meanwhile

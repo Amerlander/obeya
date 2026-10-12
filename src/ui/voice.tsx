@@ -1,15 +1,22 @@
-// Push-to-talk: hold Space or the microphone, speak, let go. The recording goes to Obeya: with an
-// agent on the open card straight to that agent, else to the Koordinator, which answers with a
-// confirmation to show. Screenshots picked or pasted beside the microphone go with the next
-// recording. The microphone is free again at once: each spoken command has its own line above it
-// while it is read, which becomes its confirmation; a typed one gets its line with the confirmation.
+// Push-to-talk: hold Space or the microphone, speak, let go. With the cursor in a text field the
+// words are written into it, for the owner to add to and send. Otherwise the recording goes to
+// Obeya with what stands in the field of the card or sidebar in view (its words first, its
+// screenshots, the message it quotes): with an agent on the open card straight to that agent, else
+// to the Koordinator, which answers with a confirmation to show. Where no field is in view,
+// screenshots picked or pasted beside the microphone go with the next recording. The microphone is
+// free again at once: each spoken command has its own line above it while it is read, which becomes
+// its confirmation; a typed one gets its line with the confirmation.
 
-import { useEffect, useRef, useState } from 'react';
+import { createContext, useEffect, useRef, useState } from 'react';
 import { ApiError, api, holdRestart } from './api';
+import { beginDictation, dictate, draftOf, focusedDraft, MIC_DRAFT, takesImages, updateDraft, useDraft, useFieldOn, useFocusedDraft } from './draft';
 import { type Recording, record } from './recorder';
-import { AttachButton, type ShotInput, ShotStrip } from './shots';
-import { replyOn, setReply } from './reply';
+import { AttachButton, ShotStrip, useShotInput } from './shots';
+import { replyOn, setReply, useReply } from './reply';
 import { errorText, t } from './strings';
+
+/** Starts a recording, for a text field's microphone and Space held in it; null where nobody listens. */
+export const HoldToTalk = createContext<(() => void) | null>(null);
 
 export interface Heard {
   confirm: string;
@@ -31,21 +38,21 @@ const QUIET_DBFS = -60;
 /** How long the level may stay flat at the start of a recording before the owner is told. */
 const FLAT_MS = 1500;
 
+/** How long a note under a field about its dictation stays. */
+const NOTE_MS = 6000;
+
 /**
- * Recording and sending, with the screenshots beside the microphone; `level` drives the ring while
- * listening, `flat` says the microphone delivers nothing. `send` hands a recording on and settles
- * with what Obeya made of it; the next one may start meanwhile.
+ * Recording and sending; `level` drives the ring while listening, `flat` says the microphone delivers
+ * nothing. A recording begun with the cursor in a text field is dictated into it. Any other one
+ * `send` hands on with the draft `field` names for its target, and settles with what Obeya made of
+ * it; the next one may start meanwhile.
  */
-export function usePushToTalk(where: () => Where, send: (target: Where, request: () => Promise<Heard>) => Promise<Heard>, onHeard: (h: Heard) => void, shots: ShotInput) {
-  const shotsRef = useRef(shots);
-  shotsRef.current = shots;
-  /** Screenshots sent with a recording still being read: the next recording does not take them again. */
-  const sending = useRef(new Set<string>());
+export function usePushToTalk(where: () => Where, field: (target: Where) => string, send: (target: Where, request: () => Promise<Heard>) => Promise<Heard>, onHeard: (h: Heard) => void) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [level, setLevel] = useState(0);
   const [flat, setFlat] = useState(false);
   const mic = useRef<Promise<{ stream: MediaStream; ctx: AudioContext; analyser: AnalyserNode }> | null>(null);
-  const rec = useRef<{ recording: Recording; t0: number; target: Where } | null>(null);
+  const rec = useRef<{ recording: Recording; t0: number; target: Where; into: string | null } | null>(null);
   const held = useRef<number | null>(null);
   const frame = useRef(0);
 
@@ -54,6 +61,8 @@ export function usePushToTalk(where: () => Where, send: (target: Where, request:
     const pressed = performance.now();
     held.current = pressed;
     const target = where();
+    // the cursor in a field: the words go into it
+    const into = focusedDraft();
     api.warmVoice();
     let m;
     try {
@@ -78,8 +87,9 @@ export function usePushToTalk(where: () => Where, send: (target: Where, request:
       return;
     }
     void m.ctx.resume();
-    const r = { recording: record(m.stream, m.ctx), t0: performance.now(), target };
+    const r = { recording: record(m.stream, m.ctx), t0: performance.now(), target, into };
     rec.current = r;
+    if (into) beginDictation(into);
     setPhase('listening');
     const buf = new Float32Array(m.analyser.fftSize);
     let loudest = 0;
@@ -110,18 +120,43 @@ export function usePushToTalk(where: () => Where, send: (target: Where, request:
     const length = performance.now() - r.t0;
     setPhase('idle');
     void r.recording.stop().then(async (audio) => {
+      if (r.into) return void into(r.into, r.target, length < 350 ? null : audio);
       // a tap is not a command
       if (length < 350) return;
-      // those still uploading wait for the next recording
-      const images = shotsRef.current.images.filter((id) => !sending.current.has(id));
-      for (const id of images) sending.current.add(id);
+      // what stands in the field goes out with the words and leaves it; nothing heard, it comes back
+      const key = field(r.target);
+      const { text, images } = draftOf(key);
+      updateDraft(key, (d) => ({ text: '', images: d.images.filter((id) => !images.includes(id)) }));
       // said in reply to the message the open card's field quotes, as typed words are
       const reply = r.target && 'card' in r.target ? replyOn(r.target.card) : null;
-      const h = await send(r.target, () => api.voice(audio, r.target, images, reply?.id));
-      for (const id of images) sending.current.delete(id);
-      if (!h.unheard) shotsRef.current.clear(images);
-      if (!h.unheard && reply && replyOn(reply.cardId) === reply) setReply(null);
+      if (reply) setReply(null);
+      let failed = false;
+      const h = await send(r.target, () =>
+        api.voice(audio, r.target, { images, replyTo: reply?.id, text }).catch((e) => {
+          failed = true;
+          throw e;
+        }),
+      );
+      if (!h.unheard && !failed) return;
+      updateDraft(key, (d) => ({ text: [text, d.text].filter((x) => x.trim()).join(' '), images: [...images, ...d.images.filter((id) => !images.includes(id))] }));
+      if (reply && !(r.target && 'card' in r.target && replyOn(r.target.card))) setReply(reply);
     });
+  }
+
+  /** A dictation: what was heard goes into the field at its cursor; nothing heard leaves the field as it was, and says so. */
+  async function into(key: string, target: Where, audio: Blob | null) {
+    if (!audio) return updateDraft(key, { dictation: '' });
+    updateDraft(key, { dictation: 'writing' });
+    let h: Heard & { text?: string };
+    try {
+      h = await api.voice(audio, target, { listen: true });
+    } catch (e) {
+      h = { confirm: e instanceof ApiError ? errorText(e.code) : t.voice.failed, unheard: true };
+    }
+    if (!h.unheard && h.text) dictate(key, h.text);
+    const note = h.unheard ? h.confirm : '';
+    updateDraft(key, { dictation: '', note });
+    if (note) setTimeout(() => draftOf(key).note === note && updateDraft(key, { note: '' }), NOTE_MS);
   }
 
   useEffect(() => () => void mic.current?.then((m) => m.stream.getTracks().forEach((tr) => tr.stop())), []);
@@ -234,7 +269,22 @@ export function ToldList({ told, open, onUndo }: { told: Told[]; open?: string; 
   );
 }
 
-export function PushToTalk({ phase, level, flat, target, shots, onDown }: { phase: Phase; level: number; flat: boolean; target: string; shots: ShotInput; onDown: () => void }) {
+/**
+ * The microphone at the bottom, and under it where what is said goes: into the field with the
+ * cursor, or to `target` with what stands in its field (`field`, the draft of the card or sidebar in
+ * view, while that has its field on the page). Without such a field, screenshots for the next
+ * recording are picked beside the microphone; dropped on it or pasted (App), they go to the field
+ * when there is one.
+ */
+export function PushToTalk({ phase, level, flat, target, field, card, onDown }: { phase: Phase; level: number; flat: boolean; target: string; field: string | null; card?: string; onDown: () => void }) {
+  const on = useFieldOn(field);
+  const key = on ? field! : MIC_DRAFT;
+  const shots = useShotInput({ draft: key, off: !takesImages(key) });
+  const { text } = useDraft(key);
+  const quote = useReply(card ?? '');
+  const into = useFocusedDraft();
+  const n = shots.images.length;
+  const parts = [...(on && text.trim() ? [t.voice.withText] : []), ...(n ? [t.voice.withShots(n)] : []), ...(on && quote ? [t.voice.withQuote] : [])];
   return (
     <div id="ptt" className={`${phase}${shots.dropping ? ' dropping' : ''}`} {...shots.drop}>
       <div className="ptt-row">
@@ -243,31 +293,45 @@ export function PushToTalk({ phase, level, flat, target, shots, onDown }: { phas
           title={t.voice.hold}
           style={{ ['--lvl' as string]: 1 + level * 0.45 }}
           onPointerDown={(e) => {
+            // the cursor stays where it is: in a field, what is said is written into it
             e.preventDefault();
             onDown();
           }}
         >
           <span className="ring" />
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <rect x="9" y="3" width="6" height="11" rx="3" />
-            <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
-          </svg>
+          <MicIcon />
         </button>
-        <div className="ptt-shots">
-          <AttachButton shots={shots} title={t.voice.attach} />
-          <ShotStrip shots={shots} />
-        </div>
+        {key === MIC_DRAFT && (
+          <div className="ptt-shots">
+            <AttachButton shots={shots} title={t.voice.attach} />
+            <ShotStrip shots={shots} />
+          </div>
+        )}
       </div>
-      {shots.error && <div className="ptt-error">{shots.error}</div>}
+      {shots.error && key === MIC_DRAFT && <div className="ptt-error">{shots.error}</div>}
       {flat ? (
         <div id="target" className="flat">
           {t.voice.flat}
         </div>
+      ) : into ? (
+        <div id="target" className="into">
+          → <b>{t.voice.intoField}</b> · {t.voice.sendWithEnter}
+        </div>
       ) : (
         <div id="target">
           → <b>{target}</b>
+          {parts.length > 0 && <span className="with"> {t.voice.with(parts)}</span>}
         </div>
       )}
     </div>
+  );
+}
+
+export function MicIcon({ size }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+    </svg>
   );
 }

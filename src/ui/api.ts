@@ -62,7 +62,7 @@ export const at = (path: string) => `/api/c/${encodeURIComponent(canvasId)}${pat
 type Where = { card: string } | { project: string } | null;
 /** The field on a card words were typed into, which tells the Koordinator what they were meant as. */
 export type Field = 'note' | 'answer' | 'feedback' | 'demo' | 'discuss' | 'revise';
-type HeardReply = { confirm: string; token?: string; undoMs?: number; quiet?: boolean; unheard?: boolean };
+type HeardReply = { confirm: string; token?: string; undoMs?: number; quiet?: boolean; unheard?: boolean; text?: string };
 
 export const api = {
   canvases: () => call<CanvasInfo[]>('GET', '/api/canvases'),
@@ -152,10 +152,20 @@ export const api = {
   planDoc: (id: string) => call<{ file: string; markdown: string }>('GET', at(`/cards/${id}/plan`)),
   /** A project's decisions and the idea it came from. */
   history: (id: string) => call<ProjectHistory>('GET', at(`/cards/${id}/history`)),
-  /** What the owner said about the card or project in view, with the screenshots shown with it; `replyTo`: in reply to that message of the card's conversation. */
-  voice: async (audio: Blob, where: Where, images: string[] = [], replyTo?: number) => {
-    const q = [...images.map((id) => `image=${encodeURIComponent(id)}`), ...(replyTo ? [`replyTo=${replyTo}`] : [])].join('&');
-    const res = await fetch(at(`/voice${query(where)}${q && (where ? '&' : '?')}${q}`), { method: 'POST', body: audio });
+  /**
+   * What the owner said about the card or project in view, with the screenshots shown with it;
+   * `replyTo`: in reply to that message of the card's conversation; `text`: typed in the field
+   * before it, which goes first; `listen`: dictated into a field, the words only come back.
+   */
+  voice: async (audio: Blob, where: Where, { images = [], replyTo, text, listen }: { images?: string[]; replyTo?: number; text?: string; listen?: boolean } = {}) => {
+    const q = [...images.map((id) => `image=${encodeURIComponent(id)}`), ...(replyTo ? [`replyTo=${replyTo}`] : []), ...(listen ? ['listen'] : [])].join('&');
+    let body: Blob | FormData = audio;
+    if (text?.trim()) {
+      body = new FormData();
+      body.set('audio', audio);
+      body.set('text', text);
+    }
+    const res = await fetch(at(`/voice${query(where)}${q && (where ? '&' : '?')}${q}`), { method: 'POST', body });
     if (!res.ok) throw new Error(`voice: ${res.status}`);
     return (await res.json()) as HeardReply;
   },

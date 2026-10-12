@@ -21,8 +21,9 @@ import { depsOf } from './deps';
 import { collect, keep, type Kept, restore, type SideSheet, takeKept } from './keep';
 import { Sign, Wordmark } from './logo';
 import { Help, HelpButton } from './help';
-import { imageFiles, useShotInput } from './shots';
-import { type Heard, PushToTalk, ToldList, usePushToTalk, useTold, type Where } from './voice';
+import { attachTo, imageFiles } from './shots';
+import { cardDraft, fieldOn, MIC_DRAFT, OBEYA_DRAFT, takesImages } from './draft';
+import { type Heard, HoldToTalk, PushToTalk, ToldList, usePushToTalk, useTold, type Where } from './voice';
 import { CanvasPill, CardView, DepLinks, Edges, Links, Minimap, ProjectView, RestartPill, Sheet, UpdatePill, WorkspacesPill } from './parts';
 import { clampWidth, loadWidths, saveWidths, SHEET_W, type SheetWidths, widthsIn } from './sheetWidth';
 import { errorText, t } from './strings';
@@ -659,23 +660,30 @@ function Canvas({
       }),
     [],
   );
-  // screenshots for the next recording: picked beside the mic, dropped on it, or pasted (⌘V) anywhere but in a text field
-  const voiceShots = useShotInput();
-  const ptt = usePushToTalk(where, tellAbout, (h) => showAck(h.confirm), voiceShots);
+  /** The draft of the field that speaks to `target`, whether or not it is on the page: the open card's, or Obeya's sidebar's. */
+  const draftFor = (target: Where) => (target && 'card' in target ? cardDraft(target.card) : !target && kOnRef.current ? OBEYA_DRAFT : null);
+  /** The draft a recording for `target` goes out with: its field's, or without one on the page the screenshots beside the mic. */
+  const fieldFor = (target: Where) => {
+    const key = draftFor(target);
+    return key && fieldOn(key) ? key : MIC_DRAFT;
+  };
+  const ptt = usePushToTalk(where, fieldFor, tellAbout, (h) => showAck(h.confirm));
   const pttRef = useRef(ptt);
   pttRef.current = ptt;
-  const voiceShotsRef = useRef(voiceShots);
-  voiceShotsRef.current = voiceShots;
+  // a text field's microphone, and Space held in it
+  const holdToTalk = useCallback(() => pttRef.current.start(), []);
   useEffect(() => {
     const up = (e: KeyboardEvent) => e.code === 'Space' && pttRef.current.stop();
     const release = () => pttRef.current.stop();
+    // a screenshot pasted (⌘V) anywhere but in a text field goes to the field in view, or beside the mic
     const paste = (e: ClipboardEvent) => {
       const el = e.target;
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el instanceof HTMLElement && el.isContentEditable)) return;
       const files = imageFiles(e.clipboardData?.files);
-      if (!files.length) return;
+      const key = fieldFor(where());
+      if (!files.length || !takesImages(key)) return;
       e.preventDefault();
-      voiceShotsRef.current.attach(files);
+      void attachTo(key, files);
     };
     addEventListener('keyup', up, true);
     addEventListener('pointerup', release);
@@ -1062,218 +1070,228 @@ function Canvas({
   );
 
   return (
-    <div
-      className={[cam.s < FAR && 'z-far', resizing && 'resizing'].filter(Boolean).join(' ') || undefined}
-      style={
-        {
-          '--sheet-w': `${sheetW.sheet}px`,
-          '--read-w': `${sheetW.read}px`,
-          '--side': `${side}px`,
-        } as React.CSSProperties
-      }
-    >
+    <HoldToTalk.Provider value={holdToTalk}>
       <div
-        id="viewport"
-        ref={viewportRef}
-        className={panning ? 'panning' : undefined}
-        style={{ backgroundSize: `${22 * cam.s}px ${22 * cam.s}px`, backgroundPosition: `${cam.x}px ${cam.y}px` }}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-        onDoubleClick={onDoubleClick}
-        onContextMenu={onContextMenu}
+        className={[cam.s < FAR && 'z-far', resizing && 'resizing'].filter(Boolean).join(' ') || undefined}
+        style={
+          {
+            '--sheet-w': `${sheetW.sheet}px`,
+            '--read-w': `${sheetW.read}px`,
+            '--side': `${side}px`,
+          } as React.CSSProperties
+        }
       >
-        <div id="world" style={{ transform: `translate(${cam.x}px,${cam.y}px) scale(${cam.s})` }}>
-          <TerritoryLayer {...territories} selected={ring ? placed.filter((p) => ring.ids.includes(p.item.id)).map((p) => p.b) : []} />
-          <Links placed={placed} />
-          {deps && <DepLinks placed={placed} edges={deps.edges} />}
-          {placed.map(({ item, b }) =>
-            item.kind === 'project' ? (
-              <ProjectView key={item.id} item={item} b={b} kids={kidsOf.get(item.id) ?? []} onStartAll={startAll} />
-            ) : (
-              <CardView
-                key={item.id}
-                item={item}
-                b={b}
-                lifted={item.id === openId}
-                dragging={item.id === dragId}
-                pop={item.id === popId}
-                prototyped={prototyped.has(item.id)}
-                showRepo={snapshot.canvas.repos.length > 1}
-                els={els}
-                onStart={startCard}
-                onArchive={archiveCard}
-                dep={depOf(item.id)}
-                underway={underway[item.id] ?? (item.landing ? t.approving : undefined)}
-                onHover={setHoverId}
-              />
-            ),
-          )}
-          <GroupNames shapes={territories.shapes} />
-        </div>
-      </div>
-      {!items.length && <div className="empty">{t.empty}</div>}
-      {!ring && <Lasso pts={lasso} />}
-      {ring && (
-        <Ring
-          at={ring.at}
-          count={ring.ids.length}
-          groups={snapshot.groups}
-          open={openPerGroup(snapshot.items)}
-          onPick={(group) => assignGroup({ group })}
-          onCreate={(name) => assignGroup({ name })}
-          onDelete={deleteGroup}
-          onClose={() => (setRing(null), setLasso([]))}
-        />
-      )}
-      {(!focus || focus.type === 'project') && <Edges cam={cam} targets={edgeTargets} rightReserve={side} onOpen={open} />}
-      {/* in the app on a Mac the bar is the window's title bar: it moves the window (app/src/main.rs) */}
-      <header id="bar" ref={barRef} {...(window.obeyaApp?.platform === 'macos' ? { className: 'titlebar', 'data-tauri-drag-region': '' } : {})}>
-        <Wordmark height={22} />
-        <span className="bar-sign">
-          <Sign size={24} />
-        </span>
-        <CanvasPill canvas={snapshot.canvas} canvases={canvases} waiting={waiting} />
-        <ArchivePill
-          on={aOn}
-          onToggle={toggleArchive}
-          onClose={() => setAOn(false)}
-          held={focus?.type === 'card'}
-          archived={archived}
-          done={doneCount}
-          onOpen={open}
-          onArchiveDone={() => archiveDone().catch(console.error)}
-          els={archiveEls}
-          icon={<BarIcon d="M3 4h18v4H3zM5 8v12h14V8M10 12h4" />}
-        />
-        <QueuePill items={items} onOpen={open} />
-        <button className="pill new-card" title={t.newCard} onClick={() => focusRef.current?.type !== 'card' && createAtCentre()}>
-          + <span className="lbl">{t.newCard}</span>
-        </button>
-        <HelpButton on={helpOn} onClick={() => setHelpOn(!helpOn)} />
-        <div className="right">
-          {!online && <div className="pill offline">{t.offline}</div>}
-          {online && restart && <RestartPill restart={restart} items={items} />}
-          {online && update && restart?.reason !== 'update' && <UpdatePill update={update} />}
-          {snapshot.workspaces && <WorkspacesPill pools={snapshot.workspaces} canvas={snapshot.canvas} items={items} />}
-          <button className={cOn ? 'pill kpill config on' : 'pill kpill config'} title={t.config.button} onClick={toggleConfig}>
-            <BarIcon d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
-            <span className="lbl">{t.config.button}</span>
-            {configProblems > 0 && (
-              <span className="n err" title={t.config.problemCount(configProblems)}>
-                {configProblems}
-              </span>
+        <div
+          id="viewport"
+          ref={viewportRef}
+          className={panning ? 'panning' : undefined}
+          style={{ backgroundSize: `${22 * cam.s}px ${22 * cam.s}px`, backgroundPosition: `${cam.x}px ${cam.y}px` }}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          onDoubleClick={onDoubleClick}
+          onContextMenu={onContextMenu}
+        >
+          <div id="world" style={{ transform: `translate(${cam.x}px,${cam.y}px) scale(${cam.s})` }}>
+            <TerritoryLayer {...territories} selected={ring ? placed.filter((p) => ring.ids.includes(p.item.id)).map((p) => p.b) : []} />
+            <Links placed={placed} />
+            {deps && <DepLinks placed={placed} edges={deps.edges} />}
+            {placed.map(({ item, b }) =>
+              item.kind === 'project' ? (
+                <ProjectView key={item.id} item={item} b={b} kids={kidsOf.get(item.id) ?? []} onStartAll={startAll} />
+              ) : (
+                <CardView
+                  key={item.id}
+                  item={item}
+                  b={b}
+                  lifted={item.id === openId}
+                  dragging={item.id === dragId}
+                  pop={item.id === popId}
+                  prototyped={prototyped.has(item.id)}
+                  showRepo={snapshot.canvas.repos.length > 1}
+                  els={els}
+                  onStart={startCard}
+                  onArchive={archiveCard}
+                  dep={depOf(item.id)}
+                  underway={underway[item.id] ?? (item.landing ? t.approving : undefined)}
+                  onHover={setHoverId}
+                />
+              ),
             )}
-          </button>
-          {attentionCount > 0 && (
-            <button className="pill" id="attention" onClick={nextAttention}>
-              <span className="n">{attentionCount}</span> <span className="lbl">{t.needsYou}</span>
-            </button>
-          )}
-          {!kOn && (
-            <div className="talk-room" aria-hidden>
-              {talkButton}
-            </div>
-          )}
+            <GroupNames shapes={territories.shapes} />
+          </div>
         </div>
-      </header>
-      <Minimap
-        cam={cam}
-        viewW={innerWidth - side}
-        all={all}
-        placed={placed}
-        territories={territories.shapes}
-        onJump={(wx, wy) => !focusRef.current && fly(viewOn(wx, wy), 500)}
-        onFollow={(wx, wy) => !focusRef.current && chase(camRef.current, viewOn(wx, wy), setCam)}
-      />
-      <div id="dim" className={dim ? 'on' : undefined} onClick={() => closeCard()} />
-      {helpOn && <Help onClose={() => setHelpOn(false)} />}
-      <div id="panel" ref={panelRef}>
-        <button className="close" title={t.close} onClick={() => closeCard()}>
-          ✕
-        </button>
-        <div className="inner" ref={innerRef}>
-          <div className="content">
-            {openItem && (
-              <Detail
-                key={openItem.id}
-                item={openItem}
-                all={items}
-                repos={snapshot.canvas.repos}
-                parent={openItem.parent ? (items.find((p) => p.id === openItem.parent) ?? archived.find((p) => p.id === openItem.parent)) : undefined}
-                from={openItem.from ? (items.find((p) => p.id === openItem.from) ?? archived.find((p) => p.id === openItem.from)) : undefined}
-                onReadPlan={(project, mark) => readPlan(project, { mark })}
-                onEdit={onEdit}
-                flush={flushEdit}
-                onDelete={deleteOpen}
-                onDone={onDone}
-                onTell={(text, images, field, replyTo) => tellTyped(text, images, { card: openItem.id }, field, replyTo)}
-              />
+        {!items.length && <div className="empty">{t.empty}</div>}
+        {!ring && <Lasso pts={lasso} />}
+        {ring && (
+          <Ring
+            at={ring.at}
+            count={ring.ids.length}
+            groups={snapshot.groups}
+            open={openPerGroup(snapshot.items)}
+            onPick={(group) => assignGroup({ group })}
+            onCreate={(name) => assignGroup({ name })}
+            onDelete={deleteGroup}
+            onClose={() => (setRing(null), setLasso([]))}
+          />
+        )}
+        {(!focus || focus.type === 'project') && <Edges cam={cam} targets={edgeTargets} rightReserve={side} onOpen={open} />}
+        {/* in the app on a Mac the bar is the window's title bar: it moves the window (app/src/main.rs) */}
+        <header id="bar" ref={barRef} {...(window.obeyaApp?.platform === 'macos' ? { className: 'titlebar', 'data-tauri-drag-region': '' } : {})}>
+          <Wordmark height={22} />
+          <span className="bar-sign">
+            <Sign size={24} />
+          </span>
+          <CanvasPill canvas={snapshot.canvas} canvases={canvases} waiting={waiting} />
+          <ArchivePill
+            on={aOn}
+            onToggle={toggleArchive}
+            onClose={() => setAOn(false)}
+            held={focus?.type === 'card'}
+            archived={archived}
+            done={doneCount}
+            onOpen={open}
+            onArchiveDone={() => archiveDone().catch(console.error)}
+            els={archiveEls}
+            icon={<BarIcon d="M3 4h18v4H3zM5 8v12h14V8M10 12h4" />}
+          />
+          <QueuePill items={items} onOpen={open} />
+          <button className="pill new-card" title={t.newCard} onClick={() => focusRef.current?.type !== 'card' && createAtCentre()}>
+            + <span className="lbl">{t.newCard}</span>
+          </button>
+          <HelpButton on={helpOn} onClick={() => setHelpOn(!helpOn)} />
+          <div className="right">
+            {!online && <div className="pill offline">{t.offline}</div>}
+            {online && restart && <RestartPill restart={restart} items={items} />}
+            {online && update && restart?.reason !== 'update' && <UpdatePill update={update} />}
+            {snapshot.workspaces && <WorkspacesPill pools={snapshot.workspaces} canvas={snapshot.canvas} items={items} />}
+            <button className={cOn ? 'pill kpill config on' : 'pill kpill config'} title={t.config.button} onClick={toggleConfig}>
+              <BarIcon d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+              <span className="lbl">{t.config.button}</span>
+              {configProblems > 0 && (
+                <span className="n err" title={t.config.problemCount(configProblems)}>
+                  {configProblems}
+                </span>
+              )}
+            </button>
+            {attentionCount > 0 && (
+              <button className="pill" id="attention" onClick={nextAttention}>
+                <span className="n">{attentionCount}</span> <span className="lbl">{t.needsYou}</span>
+              </button>
+            )}
+            {!kOn && (
+              <div className="talk-room" aria-hidden>
+                {talkButton}
+              </div>
+            )}
+          </div>
+        </header>
+        <Minimap
+          cam={cam}
+          viewW={innerWidth - side}
+          all={all}
+          placed={placed}
+          territories={territories.shapes}
+          onJump={(wx, wy) => !focusRef.current && fly(viewOn(wx, wy), 500)}
+          onFollow={(wx, wy) => !focusRef.current && chase(camRef.current, viewOn(wx, wy), setCam)}
+        />
+        <div id="dim" className={dim ? 'on' : undefined} onClick={() => closeCard()} />
+        {helpOn && <Help onClose={() => setHelpOn(false)} />}
+        <div id="panel" ref={panelRef}>
+          <button className="close" title={t.close} onClick={() => closeCard()}>
+            ✕
+          </button>
+          <div className="inner" ref={innerRef}>
+            <div className="content">
+              {openItem && (
+                <Detail
+                  key={openItem.id}
+                  item={openItem}
+                  all={items}
+                  repos={snapshot.canvas.repos}
+                  parent={openItem.parent ? (items.find((p) => p.id === openItem.parent) ?? archived.find((p) => p.id === openItem.parent)) : undefined}
+                  from={openItem.from ? (items.find((p) => p.id === openItem.from) ?? archived.find((p) => p.id === openItem.from)) : undefined}
+                  onReadPlan={(project, mark) => readPlan(project, { mark })}
+                  onEdit={onEdit}
+                  flush={flushEdit}
+                  onDelete={deleteOpen}
+                  onDone={onDone}
+                  onTell={(text, images, field, replyTo) => tellTyped(text, images, { card: openItem.id }, field, replyTo)}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+        <ConfigDialog
+          on={cOn}
+          onClose={() => setCOn(false)}
+          onSetup={() => setSetupOn(true)}
+          onTalk={talkFromConfig}
+          onProblems={setConfigProblems}
+          onAsk={(text, canvas) => void told.tell(t.voice.reading(t.voice.koordinator), undefined, () => (canvas ? api.commandOn(canvas, text) : api.command(text, null)))}
+        />
+        {setupOn && <Setup onClose={() => setSetupOn(false)} />}
+        <KoordinatorSheet on={kOn} canvas={snapshot.canvas.id} items={items} preferences={snapshot.preferences} repos={snapshot.canvas.repos} talk={snapshot.talk} reshare={snapshot.reshare} onOpen={open} onTell={(text, images) => tellTyped(text, images, null)} />
+        <PushToTalk
+          phase={ptt.phase}
+          level={ptt.level}
+          flat={ptt.flat}
+          target={target}
+          field={draftFor(focus?.type === 'card' ? { card: focus.id } : focus?.type === 'project' ? { project: focus.id } : null)}
+          card={focus?.type === 'card' ? focus.id : undefined}
+          onDown={ptt.start}
+        />
+        <Sheet
+          project={sheetProject}
+          kids={sheetKids}
+          all={items}
+          on={sheetOn}
+          reading={reading}
+          onOpen={open}
+          onRead={(r) => sheetProject && readPlan(sheetProject, r)}
+          onStartAll={startAll}
+          els={sheetEls}
+          version={snapshot}
+        />
+        <div id="talk-docked" className={kOn ? 'on' : undefined}>
+          {talkButton}
+        </div>
+        {gripOn && !kOn && (
+          <button id="sheet-close" title={t.close} onClick={() => (sheetOn ? closeProject() : setKOn(false))}>
+            ✕
+          </button>
+        )}
+        <div
+          id="sheet-grip"
+          className={gripOn ? 'on' : undefined}
+          style={{ right: sheetW[gripKind] - 6 }}
+          title={t.sheetGrip}
+          onPointerDown={onGripDown}
+          onPointerMove={onGripMove}
+          onPointerUp={onGripUp}
+          onPointerCancel={onGripUp}
+          onDoubleClick={() => setWidths((ws) => ({ ...ws, [gripKind]: gripKind === 'sheet' ? SHEET_W : null }))}
+        />
+        {/* commands on their way and confirmations, stacked above the microphone */}
+        <div id="acks">
+          <ToldList told={told.told} open={focus?.type === 'card' ? focus.id : undefined} onUndo={told.undo} />
+          <div id="ack" className={`ack${ackOn ? ' on' : ''}${ack?.wait ? ' wait' : ''}`}>
+            <span>{ack?.text}</span>
+            {ack?.undo && (
+              <button
+                onClick={() => {
+                  ack.undo?.();
+                  setAckOn(false);
+                }}
+              >
+                {t.undo}
+              </button>
             )}
           </div>
         </div>
       </div>
-      <ConfigDialog
-        on={cOn}
-        onClose={() => setCOn(false)}
-        onSetup={() => setSetupOn(true)}
-        onTalk={talkFromConfig}
-        onProblems={setConfigProblems}
-        onAsk={(text, canvas) => void told.tell(t.voice.reading(t.voice.koordinator), undefined, () => (canvas ? api.commandOn(canvas, text) : api.command(text, null)))}
-      />
-      {setupOn && <Setup onClose={() => setSetupOn(false)} />}
-      <KoordinatorSheet on={kOn} canvas={snapshot.canvas.id} items={items} preferences={snapshot.preferences} repos={snapshot.canvas.repos} talk={snapshot.talk} reshare={snapshot.reshare} onOpen={open} onTell={(text, images) => tellTyped(text, images, null)} />
-      <PushToTalk phase={ptt.phase} level={ptt.level} flat={ptt.flat} target={target} shots={voiceShots} onDown={ptt.start} />
-      <Sheet
-        project={sheetProject}
-        kids={sheetKids}
-        all={items}
-        on={sheetOn}
-        reading={reading}
-        onOpen={open}
-        onRead={(r) => sheetProject && readPlan(sheetProject, r)}
-        onStartAll={startAll}
-        els={sheetEls}
-        version={snapshot}
-      />
-      <div id="talk-docked" className={kOn ? 'on' : undefined}>
-        {talkButton}
-      </div>
-      {gripOn && !kOn && (
-        <button id="sheet-close" title={t.close} onClick={() => (sheetOn ? closeProject() : setKOn(false))}>
-          ✕
-        </button>
-      )}
-      <div
-        id="sheet-grip"
-        className={gripOn ? 'on' : undefined}
-        style={{ right: sheetW[gripKind] - 6 }}
-        title={t.sheetGrip}
-        onPointerDown={onGripDown}
-        onPointerMove={onGripMove}
-        onPointerUp={onGripUp}
-        onPointerCancel={onGripUp}
-        onDoubleClick={() => setWidths((ws) => ({ ...ws, [gripKind]: gripKind === 'sheet' ? SHEET_W : null }))}
-      />
-      {/* commands on their way and confirmations, stacked above the microphone */}
-      <div id="acks">
-        <ToldList told={told.told} open={focus?.type === 'card' ? focus.id : undefined} onUndo={told.undo} />
-        <div id="ack" className={`ack${ackOn ? ' on' : ''}${ack?.wait ? ' wait' : ''}`}>
-          <span>{ack?.text}</span>
-          {ack?.undo && (
-            <button
-              onClick={() => {
-                ack.undo?.();
-                setAckOn(false);
-              }}
-            >
-              {t.undo}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+    </HoldToTalk.Provider>
   );
 }
 

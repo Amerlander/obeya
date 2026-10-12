@@ -11,6 +11,7 @@ import { landedRef } from './parts';
 import { useQueueMove } from './queue';
 import { Inline, plain } from './markdown';
 import { Body, Msg, Quote, Reading } from './message';
+import { cardDraft } from './draft';
 import { replyOn, setReply, useReply } from './reply';
 import { Composer } from './composer';
 import { useFitHeight } from './fitHeight';
@@ -1622,6 +1623,7 @@ function Talk({ item, questions = [], heading = t.ask.question, picks, past, fie
       {field && (
         <Composer
           key={field.key}
+          draft={cardDraft(item.id)}
           placeholder={options ? t.ask.words : field.placeholder}
           label={options ? t.ask.send : t.send}
           allowEmpty={picked}

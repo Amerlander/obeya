@@ -492,9 +492,14 @@ owner showed in its discussion; a cut card's packages inherit them). A command t
 Koordinator's sheet may carry screenshots too: the Koordinator sees them, and they go with every
 action of the command that creates or concerns a card (new card or idea, start, note, answer,
 feedback, talk to an idea); said with a start, they join the card's task. A spoken command carries
-screenshots the same way: picked with the small button to the right of the microphone, dropped on
-it, or pasted (⌘V) anywhere outside a text field, they show beside the microphone and go with the
-next recording, to the Koordinator or to the open card's agent; one in which nothing was heard or understood leaves them there.
+screenshots the same way: those in the field of the open card, or of Obeya's sidebar when no card is
+open, go with the next recording (Voice in: one draft per field). Dropped on the microphone or pasted
+(⌘V) anywhere outside a text field, they land in that field. Only where no field is spoken to (the
+canvas with no card open and the sidebar closed) the microphone keeps screenshots of its own: picked
+with the small button to its right, dropped on it or pasted, they show beside it. A recording in
+which nothing was heard or understood leaves them where they were. Until 2026-10-12 the microphone
+always had that store of its own, also beside an open card's field: a screenshot pasted into the
+field and then spoken about went out without it.
 
 A worker's question goes straight to the owner, with the worker's own pick: no other agent
 answers it on the owner's behalf (Decisions, 2026-10-07). The worker asks only what it should not
@@ -1305,7 +1310,7 @@ the owner's language (`src/core/locale.ts`).
   sheet (button or `C`) gives the conversation with the Koordinator the height it has, with the
   field to write in under it (the same as a card's, `src/ui/composer.tsx`: one frame as wide as the
   conversation, the text growing with what is written up to 30 % of the window, the screenshot
-  button and Send in its bottom corner beside the text's scrollbar; until 2026-10-09 Send stood
+  button, the microphone that dictates into it (Voice in) and Send in its bottom corner beside the text's scrollbar; until 2026-10-09 Send stood
   beside the field, and the icon lay over the scrollbar; Send is an arrow in a dark circle, as in
   chat apps, with what it does, „Senden“ or „Antworten“, as its tooltip, where until 2026-10-09 it
   was a button with that word; only a button that starts something rather than sends keeps its
@@ -1370,7 +1375,30 @@ the owner's language (`src/core/locale.ts`).
     notes since the last one, the count starts again, and the owner hears what came of it.
 - **Voice in** — push-to-talk (hold Space or the mic button; in the app also a key held in another
   app, see Push-to-talk anywhere); the browser records and posts the audio with the focus (open
-  card, project in view). A Whisper sidecar keeps the model
+  card, project in view). Where the cursor is decides what becomes of the words. With the cursor in
+  a text field under a conversation (a card's, Obeya's sidebar's) they are dictated into it, at the
+  cursor, and nothing is sent: the owner adds to them, pastes a screenshot, and sends with Enter.
+  Otherwise they go out at once with what stands in the field of the card in view (or of the
+  sidebar with no card open): its words before the spoken ones, its screenshots, the message it
+  quotes; the field empties as they go, and gets them back when nothing was heard. The focus decides
+  rather than whether a field is in view, because on a card one almost always is, also when the
+  owner just wants to say something at once; a click into the field or beside it switches. Always
+  dictating into the field would have made every spoken message two steps. A dictation starts three
+  ways: the microphone in the field beside its screenshot button, the microphone at the bottom
+  (pressing it keeps the cursor where it is), or Space held in the field. Space pressed in the field
+  is held back: let go within 250 ms, or another key pressed meanwhile (fast typing overlaps keys),
+  and it is typed as a keystroke (⌘Z takes it back); held longer, the recording starts, and let go
+  before a recording would count (600 ms in all) it is typed after all. While the owner speaks into
+  a field it is framed in blue, and the line under it and under the microphone says „→ ins Feld ·
+  abschicken mit Enter“; while Whisper writes, „Wird aufgeschrieben …“; nothing heard leaves the
+  field as it was and says so under it. Otherwise the line under the microphone names who hears it
+  and what goes with it („→ Agent · Aufgabe: … mit Text und 1 Screenshot“). Each field keeps its
+  draft (text, screenshots; the quote in `src/ui/reply.ts`) in one store per field
+  (`src/ui/draft.ts`) rather than in the field, so the microphone reads and writes it, and a draft
+  outlives closing the card. `POST /voice?listen` only transcribes and returns the words; a form
+  with `audio` and `text` puts the field's words before the spoken ones. The app's push-to-talk key
+  in another app always sends at once: no field has the cursor there. Until 2026-10-12 spoken words
+  always went out at once, without what was typed in the field. A Whisper sidecar keeps the model
   loaded and transcribes with the canvas's titles as vocabulary, in the language it hears spoken in
   the first 30 seconds of the ones Obeya speaks (German or English), not the interface's: the owner
   may run the interface in English and speak German, and Whisper told to expect English then

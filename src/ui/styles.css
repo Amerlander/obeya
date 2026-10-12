@@ -627,6 +627,11 @@ textarea.p-body:focus { border-color: var(--muted); }
 .composer.dropping .c-field { border-color: var(--working); border-style: dashed; background: color-mix(in srgb, var(--working) 6%, var(--card)); }
 .c-attach { position: absolute; right: 6px; bottom: 6px; border: 0; background: none; color: var(--muted); padding: 4px; border-radius: 2px; cursor: pointer; line-height: 0; }
 .c-attach:hover { color: var(--ink); background: var(--chip); }
+/* the field's microphone: held, what is said is written into the field, which is framed in the working blue meanwhile */
+.c-mic { border: 0; background: none; color: var(--muted); padding: 4px; border-radius: 50%; cursor: pointer; line-height: 0; touch-action: none; }
+.c-mic:hover { color: var(--ink); background: var(--chip); }
+.c-mic.on, .c-mic.on:hover { color: var(--on-ink); background: var(--working); }
+.composer.dictating .c-field, .composer.dictating .c-field:focus-within { border-color: var(--working); box-shadow: 0 0 0 1px var(--working); }
 .c-shots { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px; }
 .c-shot { position: relative; height: 64px; min-width: 64px; border-radius: 2px; border: 1px solid var(--line); background: var(--chip);
   display: inline-flex; align-items: center; justify-content: center; font-size: 12px; color: var(--muted); }
@@ -965,6 +970,8 @@ button.link:hover { text-decoration: underline; }
 #target { font-size: 12px; color: var(--muted); background: var(--card); box-shadow: var(--shadow); border-radius: 3px; padding: 4px 12px; white-space: nowrap; max-width: calc((100vw - var(--side, 0px)) * .6); overflow: hidden; text-overflow: ellipsis; }
 #target b { color: var(--ink); font-weight: 600; }
 #target.flat { color: var(--on-ink); background: var(--error); font-weight: 600; }
+#target.into, #target.into b { color: var(--working); }
+#target .with { color: var(--warn); }
 /* screenshots for the next recording: a small button and thumbnails to the right of the mic, which stays centred */
 .ptt-row { position: relative; }
 .ptt-shots { position: absolute; left: calc(100% + 12px); top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 10px; }
@@ -1008,6 +1015,8 @@ button.link:hover { text-decoration: underline; }
 .ack.reading { background: var(--card); color: var(--muted); box-shadow: var(--shadow); padding: 7px 14px; font-size: 13px; }
 .ack.reading::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--working); animation: spin .8s linear infinite; }
 .c-listener { flex-basis: 100%; margin-top: -4px; font-size: 11.5px; color: var(--muted); }
+.c-listener.c-dictation, .c-listener.c-dictation b { color: var(--working); }
+.c-listener.c-note { color: var(--warn); }
 @media (max-width: 760px) { #minimap, #sheet-grip { display: none; } .sheet, .sheet.reading { width: auto; left: 14px; right: 14px; top: 64px; bottom: 158px; border-radius: 3px; border: 0; box-shadow: var(--lift); } #sheet-close { top: 72px; right: 22px; } #talk-docked.on { top: 74px; right: 22px; } .split { grid-template-columns: 1fr; grid-template-rows: none; max-height: none; } .split .split-talk .talk { min-height: 240px; max-height: min(520px, 60vh); } }
 
 /* the play button on a startable card, shown while the pointer is on the card */

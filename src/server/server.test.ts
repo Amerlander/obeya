@@ -338,6 +338,32 @@ describe('voice', () => {
     expect(told).toEqual([7, 8, undefined]);
   });
 
+  test('words dictated into a field come back without going anywhere; spoken at once, the field’s words go first', async () => {
+    const told: string[] = [];
+    canvas.tell = (_cardId, text) => void told.push(text);
+    const c = card();
+    board.work(c.id, { state: 'working' });
+    whisper = () => 'und hier fehlt der zweite Knopf';
+    const voice = (q: string, body: BodyInit) => fetch(new URL(api(`/voice?card=${c.id}${q}`), server.url), { method: 'POST', body }).then((r) => r.json());
+    expect(await voice('&listen', 'AUDIO')).toEqual({ confirm: '', quiet: true, text: 'und hier fehlt der zweite Knopf' });
+    expect(told).toEqual([]);
+    const form = (text: string) => {
+      const f = new FormData();
+      f.set('audio', new Blob(['AUDIO']));
+      f.set('text', text);
+      return f;
+    };
+    expect(await voice('', form(' Siehe Log: '))).toMatchObject({ quiet: true, text: 'Siehe Log: und hier fehlt der zweite Knopf' });
+    await voice('', form('Zwei Dinge.\n- erstens'));
+    expect(told).toEqual(['Siehe Log: und hier fehlt der zweite Knopf', 'Zwei Dinge.\n- erstens\n\nund hier fehlt der zweite Knopf']);
+    expect(heardAudio).toEqual(['AUDIO', 'AUDIO', 'AUDIO']);
+    // nothing heard: nothing goes out, and the field keeps its words
+    whisper = () => '';
+    expect(await voice('&listen', 'AUDIO')).toMatchObject({ unheard: true, confirm: 'Ich habe nichts gehört.' });
+    expect(await voice('', form('Siehe Log:'))).toMatchObject({ unheard: true });
+    expect(told).toHaveLength(2);
+  });
+
   test('nothing to do is just said', async () => {
     const res = fetch(new URL(api('/command'), server.url), { method: 'POST', body: JSON.stringify({ text: 'ähm' }) });
     (await briefed()).call('reply', { confirm: 'Was genau soll ich tun?' });

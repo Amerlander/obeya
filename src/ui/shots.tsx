@@ -1,9 +1,10 @@
 // Screenshots in what the owner writes: pasted, dropped or picked, scaled down so the agent can
 // read them, uploaded at once; shown as thumbnails that open large over the page.
 
-import { type ClipboardEvent, type DragEvent, useEffect, useRef, useState } from 'react';
+import { type ClipboardEvent, type DragEvent, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiError, api, at } from './api';
+import { draftOf, dropDraft, updateDraft, useDraft } from './draft';
 import { errorText, t } from './strings';
 
 const TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
@@ -34,42 +35,44 @@ export async function prepareImage(file: Blob): Promise<Blob> {
 
 export const imageUrl = (id: string) => at(`/images/${encodeURIComponent(id)}`);
 
+/** Screenshots for a draft, uploaded one after the other; `added` hears each one that arrived. */
+export async function attachTo(key: string, files: File[], added?: () => void) {
+  if (!files.length) return;
+  updateDraft(key, (d) => ({ error: '', uploading: d.uploading + files.length }));
+  for (const f of files) {
+    try {
+      const id = await api.uploadImage(await prepareImage(f));
+      updateDraft(key, (d) => ({ images: [...d.images, id] }));
+      added?.();
+    } catch (e) {
+      updateDraft(key, { error: e instanceof ApiError ? errorText(e.code) : t.offlineError });
+    } finally {
+      updateDraft(key, (d) => ({ uploading: d.uploading - 1 }));
+    }
+  }
+}
+
 /**
- * Screenshots going into a text field: pasted, dropped or picked, uploaded at once. `onChange`
- * hears every change the owner makes, so a card can keep them as they are added.
+ * Screenshots going into a text field: pasted, dropped or picked, uploaded at once. They belong to
+ * the field's `draft` (`draft.ts`), or without one to this field alone. `onChange` hears every
+ * change the owner makes, so a card can keep them as they are added.
  */
-export function useShotInput({ initial = [], onChange, off = false }: { initial?: string[]; onChange?: (ids: string[]) => void; off?: boolean } = {}) {
-  const [images, setImages] = useState<string[]>(initial);
-  const [uploading, setUploading] = useState(0);
+export function useShotInput({ draft, initial = [], onChange, off = false }: { draft?: string; initial?: string[]; onChange?: (ids: string[]) => void; off?: boolean } = {}) {
+  const own = useId();
+  const key = draft ?? `shots:${own}`;
+  // a field of its own starts with its screenshots, and they go with it
+  useState(() => !draft && initial.length && updateDraft(key, { images: initial }));
+  useEffect(() => (draft ? undefined : () => dropDraft(key)), [key]);
+  const { images, uploading, error } = useDraft(key);
   const [dropping, setDropping] = useState(false);
-  const [error, setError] = useState('');
   const picker = useRef<HTMLInputElement>(null);
   const change = useRef(onChange);
   change.current = onChange;
-  // only the owner's changes are passed on, not the initial screenshots
-  const touched = useRef(false);
-  useEffect(() => {
-    if (touched.current) change.current?.(images);
-  }, [images]);
   const update = (fn: (cur: string[]) => string[]) => {
-    touched.current = true;
-    setImages(fn);
+    updateDraft(key, (d) => ({ images: fn(d.images) }));
+    change.current?.(draftOf(key).images);
   };
-  const attach = async (files: File[]) => {
-    if (off || !files.length) return;
-    setError('');
-    setUploading((n) => n + files.length);
-    for (const f of files) {
-      try {
-        const id = await api.uploadImage(await prepareImage(f));
-        update((cur) => [...cur, id]);
-      } catch (e) {
-        setError(e instanceof ApiError ? errorText(e.code) : t.offlineError);
-      } finally {
-        setUploading((n) => n - 1);
-      }
-    }
-  };
+  const attach = (files: File[]) => (off ? Promise.resolve() : attachTo(key, files, () => change.current?.(draftOf(key).images)));
   return {
     off,
     images,
@@ -80,7 +83,7 @@ export function useShotInput({ initial = [], onChange, off = false }: { initial?
     attach,
     remove: (id: string) => update((cur) => cur.filter((x) => x !== id)),
     /** After sending: the field is empty again, or without those sent while more were added. */
-    clear: (sent?: string[]) => setImages((cur) => (sent ? cur.filter((id) => !sent.includes(id)) : [])),
+    clear: (sent?: string[]) => updateDraft(key, (d) => ({ images: sent ? d.images.filter((id) => !sent.includes(id)) : [] })),
     /** For the element screenshots may be dropped on. */
     drop: {
       onDragOver: (e: DragEvent) => {

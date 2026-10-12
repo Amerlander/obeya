@@ -65,7 +65,7 @@ const de = {
         rows: [
           { keys: [['C']], text: 'Obeya ein und aus' },
           { keys: [['A']], text: 'Archiv ein und aus' },
-          { keys: [['Leertaste halten']], text: 'Sprechen' },
+          { keys: [['Leertaste halten']], text: 'Sprechen; mit dem Cursor in einem Feld ins Feld diktieren' },
           { keys: [['?']], text: 'Diese Übersicht' },
         ],
       },
@@ -344,6 +344,18 @@ const de = {
     /** A confirmation about a card other than the open one starts with it. */
     about: (title: string) => `„${title}“: `,
     attach: 'Screenshot für die nächste Sprachnachricht – oder mit ⌘V einfügen oder auf das Mikrofon ziehen',
+    /** The microphone in a text field: what is said is written into it. */
+    dictate: 'Halten zum Diktieren ins Feld (oder Leertaste im Feld halten)',
+    /** Under the microphone and the field while the cursor is in it: what is said goes into the field. */
+    intoField: 'ins Feld',
+    sendWithEnter: 'abschicken mit Enter',
+    /** Under the field while Whisper writes down what was dictated into it. */
+    writing: 'Wird aufgeschrieben …',
+    /** Under the microphone: what goes with what is said, from the field in view. */
+    with: (parts: string[]) => `mit ${parts.length > 1 ? `${parts.slice(0, -1).join(', ')} und ${parts.at(-1)}` : parts[0]}`,
+    withText: 'Text',
+    withShots: (n: number) => (n === 1 ? '1 Screenshot' : `${n} Screenshots`),
+    withQuote: 'Zitat',
   },
   pr: {
     title: (n: number) => `Pull Request #${n}`,
@@ -1012,7 +1024,7 @@ const en: Strings = {
         rows: [
           { keys: [['C']], text: 'Obeya on and off' },
           { keys: [['A']], text: 'Archive on and off' },
-          { keys: [['Hold space']], text: 'Speak' },
+          { keys: [['Hold space']], text: 'Speak; with the cursor in a field, dictate into it' },
           { keys: [['?']], text: 'This overview' },
         ],
       },
@@ -1274,6 +1286,14 @@ const en: Strings = {
     toAgent: 'Sent to the agent.',
     about: (title: string) => `“${title}”: `,
     attach: 'Screenshot for the next voice message – or paste it with ⌘V or drop it on the microphone',
+    dictate: 'Hold to dictate into the field (or hold Space in the field)',
+    intoField: 'into the field',
+    sendWithEnter: 'send with Enter',
+    writing: 'Writing it down …',
+    with: (parts: string[]) => `with ${parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0]}`,
+    withText: 'text',
+    withShots: (n: number) => (n === 1 ? '1 screenshot' : `${n} screenshots`),
+    withQuote: 'quote',
   },
   pr: {
     title: (n: number) => `Pull request #${n}`,

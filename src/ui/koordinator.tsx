@@ -9,6 +9,7 @@ import { plain } from './markdown';
 import { Body, Msg, Reading } from './message';
 import { errorText, t } from './strings';
 import { Composer } from './composer';
+import { OBEYA_DRAFT } from './draft';
 import { Shots } from './shots';
 
 interface Props {
@@ -206,7 +207,7 @@ function Conversation({ talk, fresh }: { talk: Talk[]; fresh: number[] }) {
 
 /** A command in writing, for when speaking is not possible; its screenshots go to the cards it creates or concerns. */
 function TellKoordinator({ onTell }: { onTell: (text: string, images?: string[]) => void }) {
-  return <Composer className="tell" placeholder={t.voice.typePlaceholder} obeya onSend={onTell} />;
+  return <Composer className="tell" draft={OBEYA_DRAFT} placeholder={t.voice.typePlaceholder} obeya onSend={onTell} />;
 }
 
 /**
