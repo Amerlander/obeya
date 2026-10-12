@@ -1243,7 +1243,7 @@ function useZoom(video: RefObject<HTMLVideoElement | null>) {
       if (e.key !== 'z' && e.key !== 'Z') return;
       if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
       if (e.target instanceof Element && e.target.closest('input, textarea, select, [contenteditable]')) return;
-      if (document.querySelector('#help, #config.on, .lightbox')) return;
+      if (document.querySelector('#help, #config.on, .lightbox, .diff-view')) return;
       const videos = [...document.querySelectorAll<HTMLVideoElement>('#panel .demo-view video')];
       const mine = document.querySelector<HTMLVideoElement>('.screen.zoomed video') ?? videos.find((v) => !v.paused) ?? videos[0];
       if (mine !== video.current) return;
