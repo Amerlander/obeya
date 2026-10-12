@@ -45,6 +45,11 @@ export type AgentEvent =
    */
   | { type: 'idle'; background?: number }
   /**
+   * The number of the agent's background tasks still running changed, in a turn or between turns:
+   * a deploy watcher that ends, say, which then wakes the session.
+   */
+  | { type: 'background'; running: number }
+  /**
    * The session's machine is out of reach (a worker on an SSH host whose connection failed or
    * dropped): the session has ended, and resumes by its id once the host answers again.
    */
@@ -231,7 +236,11 @@ export const sdkRuntime: AgentRuntime = {
       try {
         for await (const m of q) {
           if (m.type === 'system' && m.subtype === 'init') spec.onEvent({ type: 'session', id: m.session_id });
-          else if (m.type === 'system' && m.subtype === 'background_tasks_changed') background = backgroundWork(m.tasks);
+          else if (m.type === 'system' && m.subtype === 'background_tasks_changed') {
+            const running = backgroundWork(m.tasks);
+            if (running !== background) spec.onEvent({ type: 'background', running });
+            background = running;
+          }
           else if (m.type === 'rate_limit_event') limits = m.rate_limit_info;
           else if (m.type === 'system' && m.subtype === 'permission_denied') {
             if (!m.agent_id) spec.onEvent({ type: 'denied', name: m.tool_name, input: inputs.get(m.tool_use_id) ?? {}, by: deniedBy(m.decision_reason_type), ...(m.decision_reason?.trim() ? { reason: m.decision_reason.trim() } : {}) });

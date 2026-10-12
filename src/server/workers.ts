@@ -44,8 +44,10 @@ export interface WorkerOptions {
   onPrototype?: (prototype: Item, summary: string, demo: string | undefined) => void;
   /** A question on a prototype was answered: the idea's agent hears both, so its brief holds them. */
   onPrototypeAnswer?: (prototype: Item, question: string, answer: string) => void;
-  /** How long a turn that ended while the worker's background work runs waits for it to wake the worker. */
+  /** How long an ended turn waits for a sign of the worker once none of its background work runs (any more). */
   backgroundGrace?: number;
+  /** How long an ended turn waits at most while the worker's background work still runs. */
+  backgroundLimit?: number;
   /** How long a card waits for the owner, its worker idle, before Obeya stops its workspace's app stack (`stack.stop`). */
   parkGrace?: number;
   /** How long the owner's comments on places in the demo video wait at most for them to finish watching. */
@@ -124,6 +126,8 @@ interface Live {
   busy: boolean;
   /** Set while an ended turn waits for the worker's background work to wake it, or for a usage limit to lift. */
   waiting?: ReturnType<typeof setTimeout>;
+  /** How many of the worker's background tasks run, as the session last said. */
+  background: number;
   /** When the usage limit that stopped the worker lifts (or, not knowing, when to try again); gone once it works. */
   limited?: number;
   /** The card's status line from before the worker waited for the limit, back once it works again. */
@@ -158,8 +162,13 @@ export interface DueRestart {
   deadline: number;
 }
 
-/** A render or a test suite finishes well within this; a turn that waits longer counts as ended. */
+/** Background work that ended wakes the worker within this; a turn that waits longer without a sign counts as ended. */
 const BACKGROUND_GRACE = 10 * 60_000;
+/**
+ * Background work ends by its own limit well within this (a command run in the background after two
+ * hours at most, a watcher after half an hour): it is only for a session that never says the work ended.
+ */
+const BACKGROUND_LIMIT = 3 * 60 * 60_000;
 /** The owner may pause the demo video for a while; a browser gone away leaves no other sign. */
 const HOLD_GRACE = 10 * 60_000;
 /** Closing the card with „Freigeben“ also ends the watching: the approval takes the comments then. */
@@ -928,7 +937,7 @@ export class Workers {
     const row = this.o.board.row(cardId);
     if (!row.workspace) throw new Error(`card ${cardId} has no workspace to work in`);
     const preferences = this.o.preferences?.() ?? '';
-    const live: Live = { session: undefined!, host: hostName(row.workspace), handedOver: false, acted: false, nudged: false, lastText: '', busy: true, stalled: false, preferences };
+    const live: Live = { session: undefined!, host: hostName(row.workspace), handedOver: false, acted: false, nudged: false, lastText: '', busy: true, background: 0, stalled: false, preferences };
     const project = this.o.board.item(cardId)?.parent;
     if (project) live.project = { id: project, decision: this.o.board.decisions(project).at(-1)?.id ?? 0 };
     this.live.set(cardId, live);
@@ -1056,6 +1065,7 @@ export class Workers {
 
   private onEvent(cardId: string, live: Live, e: AgentEvent) {
     if (this.live.get(cardId) !== live) return;
+    if (e.type === 'background') return this.backgroundChanged(cardId, live, e.running);
     // a turn may also start without a message from Obeya (a finished background command)
     this.setBusy(live, e.type !== 'idle');
     clearTimeout(live.waiting);
@@ -1110,7 +1120,8 @@ export class Workers {
         this.lost(cardId, live);
         break;
       case 'idle':
-        this.turnEnded(cardId, live, e.background ?? 0);
+        live.background = e.background ?? 0;
+        this.turnEnded(cardId, live, live.background);
         this.parkLater(cardId);
         break;
     }
@@ -1246,16 +1257,28 @@ export class Workers {
     }
   }
 
-  /** Waits for a sign of life from the worker; without one for a long while, its turn counts as ended. */
+  /**
+   * Waits for a sign of life from the worker; without one for a long while, its turn counts as ended.
+   * While its background work runs (a watcher waiting for a deploy, say) that may take long: the
+   * wait is the work's own, which wakes the worker when it ends.
+   */
   private waitForWorker(cardId: string, live: Live) {
     this.setBusy(live, true);
+    clearTimeout(live.waiting);
     live.waiting = setTimeout(() => {
       live.waiting = undefined;
       this.setBusy(live, false);
       if (this.live.get(cardId) !== live) return;
       this.turnEnded(cardId, live, 0, true);
       this.parkLater(cardId);
-    }, this.o.backgroundGrace ?? BACKGROUND_GRACE);
+    }, live.background > 0 ? (this.o.backgroundLimit ?? BACKGROUND_LIMIT) : (this.o.backgroundGrace ?? BACKGROUND_GRACE));
+  }
+
+  /** The worker's background work started or ended: an ended turn waiting for it waits as long as it runs. */
+  private backgroundChanged(cardId: string, live: Live, running: number) {
+    live.background = running;
+    // busy between turns: waiting for the worker, not for a usage limit to lift
+    if (live.waiting && live.busy) this.waitForWorker(cardId, live);
   }
 
   // ---------------------------------------------------------------- parking

@@ -389,8 +389,15 @@ the worker is not busy, so a restart need not wait for it (the resumed session r
 again and waits anew), and a note from the owner reaches it at once. Once it works again its
 status line from before is back. A turn that ends while the worker's own
 background work runs (a demo render, a test suite, a watcher it started) is no such turn: the work
-wakes the worker when it finishes or fires, so Obeya waits, and only after ten minutes without a
-sign of life does it nudge. So does a turn in which the worker said and did nothing: a session
+wakes the worker when it finishes or fires, so Obeya waits, also after the landing, where an ended
+turn would otherwise finish the card and take the work's workspace with it. The session reports
+each change in how much background work runs, and Obeya waits as long as some does, bounded only
+by the work's own limits (a command in the background stops after two hours at most, a watcher
+after half an hour; Obeya gives up after three hours for a session that never says the work ended). A
+deploy that takes twenty minutes is waited for; until 2026-10-12 a turn counted as ended ten
+minutes after its end whatever still ran, and a worker watching a deploy after the landing lost
+its watcher and its promise to go on. Only ten minutes after the work ended without a sign of
+life from the worker does Obeya nudge. So does a turn in which the worker said and did nothing: a session
 resumed after a restart first ends a turn of its own over what the previous one left (a
 background command the restart stopped), and counting that would use up the nudge before the
 worker's own turn, whose status line would then reach the owner as a question. A

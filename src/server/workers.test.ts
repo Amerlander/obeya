@@ -528,7 +528,7 @@ describe('workers', () => {
   });
 
   test('a turn in which the worker did nothing does not use up its nudge', async () => {
-    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, backgroundGrace: 5 });
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, backgroundGrace: 5, backgroundLimit: 5 });
     const c = manual();
     workers.start(c.id);
     const before = runtime.last.inbox.length;
@@ -574,23 +574,39 @@ describe('workers', () => {
     expect(state(c.id)).toBe('waiting:review');
   });
 
-  test('background work that never wakes the worker counts as an ended turn after a while', async () => {
+  test('background work that ends without waking the worker counts as an ended turn after a while', async () => {
     workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, backgroundGrace: 5 });
     const c = manual();
     workers.start(c.id);
     runtime.last.emit({ type: 'text', text: 'Ich warte auf den Server.' });
     runtime.last.emit({ type: 'idle', background: 1 });
     await Bun.sleep(20);
+    // as long as the work runs, the worker waits for it
+    expect(runtime.last.inbox.at(-1)).not.toContain('ready_for_review');
+    expect(workers.busy()).toBe(true);
+    runtime.last.emit({ type: 'background', running: 0 });
+    await Bun.sleep(20);
     expect(runtime.last.inbox.at(-1)).toContain('ready_for_review');
     runtime.last.emit({ type: 'idle', background: 1 });
+    runtime.last.emit({ type: 'background', running: 0 });
     await Bun.sleep(20);
     expect(state(c.id)).toBe('waiting:question');
     expect(workers.busy()).toBe(false);
     expect(board.item(c.id)!.question!.text).toBe('Ich warte auf den Server.');
   });
 
+  test('background work the session never reports as ended counts as an ended turn after a long while', async () => {
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, backgroundGrace: 1000, backgroundLimit: 5 });
+    const c = manual();
+    workers.start(c.id);
+    runtime.last.emit({ type: 'text', text: 'Ich warte auf den Server.' });
+    runtime.last.emit({ type: 'idle', background: 1 });
+    await Bun.sleep(20);
+    expect(runtime.last.inbox.at(-1)).toContain('ready_for_review');
+  });
+
   test('a worker that asks while its background work runs counts as busy until the work wakes it', async () => {
-    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, backgroundGrace: 5 });
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, backgroundGrace: 5, backgroundLimit: 5 });
     const c = manual();
     workers.start(c.id);
     runtime.last.call('ask', { question: 'Soll das Video Ton haben?' });
@@ -2035,6 +2051,34 @@ describe('a worktree per card', () => {
     expect(resumed.inbox[0]).toContain('If you had paused for the restart, go on from there.');
     resumed.emit({ type: 'idle' });
     expect(resumed.closed).toBe(true);
+    expect(board.row(c.id).workspace).toBeNull();
+  });
+
+  test('after the landing, a worker waiting for a deploy in the background keeps its workspace until the watcher wakes it', async () => {
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'worktrees' }, backgroundGrace: 5 });
+    const c = manual();
+    workers.start(c.id);
+    const wc = board.row(c.id).workspace!;
+    commitIn(wc, 'c.ts', 'C');
+    const s = runtime.last;
+    s.call('ready_for_review', { summary: 'S' });
+    s.emit({ type: 'idle' });
+    await workers.approve(c.id);
+    s.emit({ type: 'tool', name: 'Bash', input: { command: 'until deployed; do sleep 30; done', run_in_background: true } });
+    s.emit({ type: 'background', running: 1 });
+    s.emit({ type: 'text', text: 'Ich warte auf den Prod-Deploy und bereite danach das Senden vor.' });
+    s.emit({ type: 'idle', background: 1 });
+    // the deploy takes longer than a sign of life would: the watcher still runs
+    await Bun.sleep(40);
+    expect(s.closed).toBe(false);
+    expect(workers.busy()).toBe(true);
+    expect(board.item(c.id)!.finishing).toBe(true);
+    expect(board.row(c.id).workspace).toBe(wc);
+    // the deploy is done: the watcher ends and wakes the worker, which does what remained
+    s.emit({ type: 'background', running: 0 });
+    s.emit({ type: 'tool', name: 'Bash', input: { command: 'bun scripts/send.ts' } });
+    s.emit({ type: 'idle', background: 0 });
+    expect(s.closed).toBe(true);
     expect(board.row(c.id).workspace).toBeNull();
   });
 
