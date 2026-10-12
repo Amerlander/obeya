@@ -497,7 +497,7 @@ const de = {
     unsaved: 'Nicht gespeichert',
     language: {
       title: 'Sprache',
-      hint: 'Die Sprache, in der Obeya mit dir spricht: die Oberfläche mit Daten und Zahlen, die Spracheingabe, was die Agenten dir schreiben, und die Demos, solange unten keine eigene Sprache gewählt ist. Gilt sofort; die Seite lädt dazu neu.',
+      hint: 'Die Sprache, in der Obeya mit dir spricht: die Oberfläche mit Daten und Zahlen, die Spracheingabe, was die Agenten dir schreiben, und die Demos, solange unter „Demos“ keine eigene Sprache der Erzählung gewählt ist. Gilt sofort; die Seite lädt dazu neu.',
       system: (name: string) => `Wie das System (${name})`,
       /** Each language in its own words, as a stranger looks for it. */
       names: { de: 'Deutsch', en: 'English' } satisfies Record<Language, string>,
@@ -1452,7 +1452,7 @@ const en: Strings = {
     unsaved: 'Not saved',
     language: {
       title: 'Language',
-      hint: 'The language Obeya speaks to you: the interface with its dates and numbers, voice input, what agents write to you, and demos unless they have a language of their own below. Applies at once; the page loads again for it.',
+      hint: 'The language Obeya speaks to you: the interface with its dates and numbers, voice input, what agents write to you, and demos unless they have a narration language of their own under Demos. Applies at once; the page loads again for it.',
       system: (name: string) => `As the system (${name})`,
       names: { de: 'Deutsch', en: 'English' },
     },
