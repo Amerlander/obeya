@@ -20,6 +20,7 @@
 //
 // The stage file (JSON; every field but `cards` optional):
 //   {
+//     "name": "Shop", "canvases": ["Website"],
 //     "port": 4480, "dir": "/tmp/obeya-scratch-4480", "adapter": "obeya", "clones": 2,
 //     "share": "share.ts", "poolCheckout": true, "slots": 3,
 //     "hosts": [{ "name": "Workhorse", "ssh": "me@workhorse.local", "clones": 2, "slots": 2 }],
@@ -70,7 +71,8 @@
 // host at the same path, so that Obeya clones it there as it would a remote; staging afresh
 // removes <dir> there first. A host with `"gone": true` held its clones once and does not answer
 // now (an `ssh` target nobody resolves, say): nothing goes there, and its clones are registered as if
-// Obeya had made them. Preferences are active unless `state` says otherwise; `card` and `replaces` name keys;
+// Obeya had made them. `name` names the canvas the cards go on; `canvases` adds further ones by
+// name, each over a repository of its own (<dir>/repo-2, …) and without cards. Preferences are active unless `state` says otherwise; `card` and `replaces` name keys;
 // `target` is the repository whose CLAUDE.md a rule is for (the canvas id names the home one).
 // What a learned rule's occasion is (card, quote, review), `replaces` and `target` need code that has them.
 // Groups are created through the API with their cards (keys; a workstream stands for its project),
@@ -117,6 +119,10 @@ interface StageCard {
 interface Stage {
   /** No canvas: Obeya's first start, with the setup assistant. */
   setup?: boolean;
+  /** Names the canvas the cards go on. */
+  name?: string;
+  /** Further canvases by name, each over a repository of its own, without cards: to switch between canvases. */
+  canvases?: string[];
   port?: number;
   dir?: string;
   adapter?: string;
@@ -189,6 +195,16 @@ if (stage.poolCheckout || stage.hosts?.length) {
   run('git', ['fetch', '-q', 'origin'], repo);
   run('git', ['branch', '-q', '-u', 'origin/main'], repo);
 }
+// the repositories of the further canvases
+const further = (stage.canvases ?? []).map((name, i) => {
+  const path = join(dir, `repo-${i + 2}`);
+  mkdirSync(path, { recursive: true });
+  writeFileSync(join(path, 'README.md'), `# ${name}\n`);
+  run('git', ['init', '-q', '-b', 'main'], path);
+  run('git', ['add', '-A'], path);
+  run('git', ['-c', 'user.name=Scratch', '-c', 'user.email=scratch@example.com', 'commit', '-qm', 'init'], path);
+  return { name, repos: [{ path, ...(stage.adapter === '' ? {} : { adapter: stage.adapter ?? 'obeya' }) }] };
+});
 // the origin at the same path on each host, which clones it from there
 for (const h of stage.hosts ?? []) {
   if (h.gone) continue;
@@ -223,13 +239,14 @@ const supervised = args.includes('--restarts');
 const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'OBEYA_SUPERVISED')), OBEYA_HOME: home };
 // a share command and a pool's workspaces live in the configuration, which the command line cannot give
 const configFile = join(dir, 'canvases.json');
-const configured = !!stage.share || !!stage.poolCheckout || stage.slots !== undefined || !!stage.hosts?.length;
+const configured = !!stage.share || !!stage.poolCheckout || stage.slots !== undefined || !!stage.hosts?.length || !!stage.name || further.length > 0;
 if (configured)
   writeFileSync(
     configFile,
     JSON.stringify(
       [
         {
+          ...(stage.name ? { name: stage.name } : {}),
           repos: [
             {
               path: repo,
@@ -242,6 +259,7 @@ if (configured)
             },
           ],
         },
+        ...further,
       ],
       null,
       2,
