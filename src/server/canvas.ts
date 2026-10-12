@@ -426,7 +426,7 @@ export class CanvasRuntime {
     // the options picked on a proposal go to its reviser without the Koordinator, which would have logged them
     if (a.action === 'revise') this.board.log(cardId, 'say', 'owner', a.text.trim(), undefined, undefined, undefined, this.board.quoted(cardId, a.replyTo)?.id);
     // the end of watching a demo is no click of the owner's
-    if (a.action !== 'release' && !(['message', 'answer', 'discuss'].includes(a.action) && 'text' in a && a.text?.trim())) this.koordinator.noticed();
+    if (a.action !== 'release' && a.action !== 'unsay' && !(['message', 'answer', 'discuss'].includes(a.action) && 'text' in a && a.text?.trim())) this.koordinator.noticed();
     return r;
   }
 
@@ -464,7 +464,9 @@ export class CanvasRuntime {
       case 'message':
         return this.repoOf(cardId).workers.message(cardId, text.trim(), images, !!a.spoken, replyTo, this.spot(a.spot));
       case 'release':
-        return this.repoOf(cardId).workers.released(cardId);
+        return this.repoOf(cardId).workers.released(cardId, !!a.now);
+      case 'unsay':
+        return this.repoOf(cardId).workers.unsay(cardId, a.id);
       case 'answer':
         return this.repoOf(cardId).workers.answer(cardId, text.trim(), images, !!a.spoken, replyTo);
       case 'approve':

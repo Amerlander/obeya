@@ -75,6 +75,7 @@ export function serve(
       for (const set of sockets.values()) for (const ws of set) ws.send(text);
     });
     c.board.onEvent((event) => send({ type: 'event', event }));
+    c.board.onEventGone((cardId, id) => send({ type: 'eventGone', cardId, id }));
     c.board.onNotice((n) => send({ type: 'notice', ...n }));
   }
 

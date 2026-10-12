@@ -549,6 +549,11 @@ export class Store {
     return rows.reverse().map(eventOf);
   }
 
+  /** Takes an event out of the card's log. */
+  deleteEvent(cardId: string, id: number) {
+    this.db.query('DELETE FROM events WHERE card_id = $c AND id = $id').run({ c: cardId, id });
+  }
+
   /** One event of the card's log. */
   event(cardId: string, id: number): CardEvent | undefined {
     const row = this.db.query(`SELECT ${EVENT_COLUMNS} FROM events WHERE card_id = $c AND id = $id`).get({ c: cardId, id }) as EventRow | null;

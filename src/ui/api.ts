@@ -212,6 +212,13 @@ export function onCardEvent(fn: (e: CardEvent) => void): () => void {
   return () => eventListeners.delete(fn);
 }
 
+// A line taken out of a card's log (a comment deleted before it went to the worker).
+const goneListeners = new Set<(cardId: string, id: number) => void>();
+export function onCardEventGone(fn: (cardId: string, id: number) => void): () => void {
+  goneListeners.add(fn);
+  return () => goneListeners.delete(fn);
+}
+
 // What Obeya tells the owner without a command of theirs to answer (an answer looked up, what a
 // request an agent passed on came to): it shows above the microphone, with "Rückgängig" while actions wait.
 const noticeListeners = new Set<(n: Notice) => void>();
@@ -296,6 +303,7 @@ export function useCanvas(): { snapshot: CanvasSnapshot | null; online: boolean;
         else if (msg.type === 'update') setUpdate(msg.update);
         else if (msg.type === 'waiting') setWaiting(msg.waiting);
         else if (msg.type === 'event') for (const fn of eventListeners) fn(msg.event);
+        else if (msg.type === 'eventGone') for (const fn of goneListeners) fn(msg.cardId, msg.id);
         else if (msg.type === 'notice') for (const fn of noticeListeners) fn(msg);
       };
       ws.onclose = () => {

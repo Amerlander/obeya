@@ -4,7 +4,7 @@ import { Fragment, type ReactNode, type RefObject, useEffect, useLayoutEffect, u
 import { agentListens, askable, buildableOn, type CardAction, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, EXPORT_HTML_MAX, finished, type Item, type Mock, type NextStep, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, type Spot } from '../core/types';
 import { mockPage } from '../core/frame';
 import { answerText, toggle } from './answer';
-import { ApiError, api, at, type Field, holdRestart, onCardEvent } from './api';
+import { ApiError, api, at, type Field, holdRestart, onCardEvent, onCardEventGone } from './api';
 import { firstOpening } from './demoSeen';
 import { Branch } from './diff';
 import { landedRef } from './parts';
@@ -814,12 +814,26 @@ function Conversation({
     idea && !past && item.body.trim() && !opened(events, item.body) && <Seed item={item} by="owner" who={t.idea.seed} />
   );
   const seedAt = task ? Math.max(0, turns.shown.findIndex((x) => started(x.e))) : 0;
-  // under the last of the comments on places in the demo video Obeya holds back while the owner watches
-  const lastHeld = item.held?.at(-1);
+  // the comments on places in the demo video Obeya holds back while the owner watches: each can be
+  // deleted, and under the last the owner can send them without watching to the end
+  const held = item.held ?? [];
   const line = (turn: Turn) => (
     <Fragment key={turn.e.id}>
-      <Line turn={turn} demoQuestion={turn === handover ? item.demo : undefined} quoted={turn.e.replyTo ? byId.get(turn.e.replyTo) : undefined} onReply={onReply} />
-      {turn.e.id === lastHeld && <div className="held-note">{t.demo.held(item.held!.length)}</div>}
+      <Line
+        turn={turn}
+        demoQuestion={turn === handover ? item.demo : undefined}
+        quoted={turn.e.replyTo ? byId.get(turn.e.replyTo) : undefined}
+        onReply={onReply}
+        onDelete={held.includes(turn.e.id) ? () => void api.act(item.id, { action: 'unsay', id: turn.e.id }).catch(() => {}) : undefined}
+      />
+      {turn.e.id === held.at(-1) && (
+        <div className="held-note">
+          {t.demo.held(held.length)}
+          <button className="held-send" title={t.demo.sendNowHint} onClick={() => void api.act(item.id, { action: 'release', now: true }).catch(() => {})}>
+            {t.demo.sendNow}
+          </button>
+        </div>
+      )}
     </Fragment>
   );
   return (
@@ -920,7 +934,7 @@ function Scope({ files }: { files?: string[] }) {
 }
 
 /** A state change or an error between the messages, or a message. */
-function Line({ turn, ...rest }: { turn: Turn; demoQuestion?: Demo; quoted?: CardEvent; onReply?: (e: CardEvent) => void }) {
+function Line({ turn, ...rest }: { turn: Turn; demoQuestion?: Demo; quoted?: CardEvent; onReply?: (e: CardEvent) => void; onDelete?: () => void }) {
   return turn.line ? (
     <div className={`note ev-${turn.e.kind}`} title={turn.e.code ? turn.e.text : undefined}>
       {time(turn.e.at)} · {eventText(turn.e)}
@@ -936,19 +950,21 @@ const ownerSide = (e: CardEvent) => e.author === 'owner' || e.kind === 'answer';
 /**
  * One message of the conversation; a question with its options and what came of it, a handover with
  * its demo report's question; the owner's reply with the message it replies to (`quoted`) above it.
- * `onReply`: the owner can reply to it.
+ * `onReply`: the owner can reply to it; `onDelete`: the owner can delete it (a comment not yet sent).
  */
-function Message({ turn, demoQuestion, quoted, onReply }: { turn: Turn; demoQuestion?: Demo; quoted?: CardEvent; onReply?: (e: CardEvent) => void }) {
+function Message({ turn, demoQuestion, quoted, onReply, onDelete }: { turn: Turn; demoQuestion?: Demo; quoted?: CardEvent; onReply?: (e: CardEvent) => void; onDelete?: () => void }) {
   const { e, steps } = turn;
   const q = e.kind === 'question' ? parseQuestion(e.text) : undefined;
   return (
     <Msg
       by={ownerSide(e) ? 'owner' : e.author}
-      className={[q && 'q', turn.settled && 'settled'].filter(Boolean).join(' ')}
+      className={[q && 'q', turn.settled && 'settled', onDelete && 'held'].filter(Boolean).join(' ')}
       who={`${t.author[e.author]}${e.kind === 'question' ? ` · ${t.talk.question}` : e.kind === 'review' ? ` · ${t.talk.handover}` : ''}`}
       at={e.at}
       ev={e.id}
       onReply={onReply && !turn.quiet ? () => onReply(e) : undefined}
+      onDelete={onDelete}
+      deleteLabel={t.demo.unsay}
     >
       {quoted && <Quote e={quoted} />}
       {e.spot && <SpotLink cardId={e.cardId} spot={e.spot} />}
@@ -1815,22 +1831,29 @@ function useEvents(cardId: string): CardEvent[] | null {
   useEffect(() => {
     let alive = true;
     let loaded = false;
-    // lines pushed while the history loads are merged in afterwards
+    // lines pushed while the history loads are merged in afterwards, without those taken out meanwhile
     const early: CardEvent[] = [];
+    const gone = new Set<number>();
     const off = onCardEvent((e) => {
       if (e.cardId !== cardId) return;
       if (!loaded) early.push(e);
       else setEvents((cur) => (cur && !cur.some((x) => x.id === e.id) ? [...cur, e] : cur));
     });
+    const offGone = onCardEventGone((c, id) => {
+      if (c !== cardId) return;
+      if (!loaded) gone.add(id);
+      else setEvents((cur) => cur && cur.filter((x) => x.id !== id));
+    });
     api.events(cardId).then((list) => {
       if (!alive) return;
       loaded = true;
       const seen = new Set(list.map((e) => e.id));
-      setEvents([...list, ...early.filter((e) => !seen.has(e.id))]);
+      setEvents([...list, ...early.filter((e) => !seen.has(e.id))].filter((e) => !gone.has(e.id)));
     });
     return () => {
       alive = false;
       off();
+      offGone();
     };
   }, [cardId]);
   return events;

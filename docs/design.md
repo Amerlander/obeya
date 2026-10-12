@@ -277,13 +277,18 @@ An idea is thought through on its card before anything is planned; no worker run
    scene's caption) and keeps the place on the event (`CardEvent.spot`). The conversation shows the
    words with the frame and „▶ 1:23 · chapter“, a click plays the video from there. On a card
    waiting for approval, such comments do not go to the worker one by one: the conversation shows
-   each at once, with „N Kommentare gehen an den Agenten, sobald du fertig geschaut hast“ under the
-   last, and Obeya holds them back (`held` on the card) until the owner has finished watching: the
+   each at once, with „N Kommentare gehen an den Agenten, sobald du fertig geschaut hast“ and
+   „Jetzt senden“ under the last, and Obeya holds them back (`held` on the card) until the owner has
+   finished watching: the owner sends them („Jetzt senden“, for an owner who watched the video
+   already and went back to one place, so need not sit through the rest), the
    video ends, the card closes, the video stands for three minutes, the owner writes or says
    something without a place (it goes in the same message, after them), or approves (the worker
    hears them with the approval, to propose as a card what still matters). Ten minutes after the
    last one without such a sign (a browser gone away, a restart) they go anyway. The release waits
-   1.5 s, so an approval clicked as the card folds takes them. The worker gets them in one message,
+   1.5 s, so an approval clicked as the card folds takes them; „Jetzt senden“ does not wait. Until
+   they go, each stands dashed with a bin in its corner: deleting one takes it out of the log
+   (`eventGone` to the pages), and the worker never hears it; once sent, it can no longer go.
+   Before (2026-10-12), a comment once said stayed, and only the end of the video sent them early. The worker gets them in one message,
    each as `[Demo video at 1:23, chapter „…“, narration: „…“]` above the words, with its frame as an
    image, and reworks the demo once instead of for each comment; a comment is no answer to the demo
    report's question. On a card at work or finished, a comment with a place goes at once, with its

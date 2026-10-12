@@ -471,6 +471,12 @@ textarea.p-body:focus { border-color: var(--muted); }
   border: 0; border-radius: 3px; background: var(--chip); color: var(--muted); cursor: pointer; opacity: 0; transition: opacity .12s; }
 .talk .msg:hover > .msg-reply, .msg-reply:focus-visible { opacity: 1; }
 .msg-reply:hover { color: var(--ink); background: var(--line); }
+.msg-delete { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; display: grid; place-items: center; padding: 0;
+  border: 0; border-radius: 3px; background: transparent; color: var(--muted); cursor: pointer; }
+.msg-delete:hover { color: var(--error); background: var(--line); }
+.talk .msg:has(> .msg-delete) > .who { padding-right: 24px; }
+.talk .msg:has(> .msg-delete):has(> .msg-reply) > .who { padding-right: 52px; }
+.msg:has(> .msg-delete) > .msg-reply { right: 32px; }
 .quote { --q: var(--muted); display: flex; align-items: flex-start; min-width: 0; border-left: 3px solid var(--q); border-radius: 2px;
   background: color-mix(in srgb, var(--q) 8%, var(--card)); }
 .quote.q-by-owner { --q: var(--working); }
@@ -497,7 +503,13 @@ textarea.p-body:focus { border-color: var(--muted); }
   font-size: 13px; color: var(--working); cursor: pointer; text-align: left; }
 .talk .msg > .spot img { width: 64px; border-radius: 2px; display: block; }
 .talk .msg > .spot:hover span { text-decoration: underline; }
-.talk .held-note { align-self: flex-end; margin: -2px 2px 4px; font-size: 12px; color: var(--muted); text-align: right; }
+.talk .held-note { align-self: flex-end; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 4px 10px;
+  margin: -2px 2px 4px; font-size: 12px; color: var(--muted); text-align: right; }
+.held-send { padding: 3px 10px; border: 1px solid color-mix(in srgb, var(--working) 45%, transparent); border-radius: 3px; background: var(--card);
+  color: var(--working); font: inherit; font-weight: 600; cursor: pointer; }
+.held-send:hover { background: color-mix(in srgb, var(--working) 12%, var(--card)); }
+/* a comment held back for the agent: not sent yet, so it can still be deleted (the bin always shows) */
+.talk .msg.held { outline: 1px dashed color-mix(in srgb, var(--working) 40%, transparent); outline-offset: -1px; }
 .talk .msg.flash { animation: msg-flash 2.4s ease-out; }
 @keyframes msg-flash {
   0%, 45% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--working) 60%, transparent), var(--shadow); background: color-mix(in srgb, var(--working) 14%, var(--card)); }

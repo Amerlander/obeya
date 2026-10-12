@@ -611,8 +611,13 @@ export type CardAction =
   /** `spot`: the place in the card's demo video the words are about. */
   | { action: 'message'; text: string; spoken?: boolean; images?: string[]; replyTo?: number; spot?: SpotInput }
   | { action: 'answer'; text: string; spoken?: boolean; images?: string[]; replyTo?: number }
-  /** The owner has finished watching the demo video: the comments on places in it that Obeya held back go to the worker. */
-  | { action: 'release' }
+  /**
+   * The owner has finished watching the demo video: the comments on places in it that Obeya held back
+   * go to the worker. `now`: they sent them themselves ("Jetzt senden"), so they go without a moment's wait.
+   */
+  | { action: 'release'; now?: boolean }
+  /** Deletes a comment on a place in the demo video that Obeya still holds back (`Item.held`). */
+  | { action: 'unsay'; id: number }
   /** `direct`: onto the default branch at once, without a pull request, where the repository allows it (`RepoRef.direct`). */
   | { action: 'approve'; direct?: boolean }
   /** Start a queued card although it may collide. */
@@ -685,6 +690,8 @@ export type ErrorCode =
   | 'noAgent'
   | 'noQuestion'
   | 'notReady'
+  /** Deleting a comment on the demo video: it is no longer held back, the worker has it. */
+  | 'notHeld'
   /** Approving directly onto main: the card's repository lands approved work only through a pull request. */
   | 'noDirect'
   | 'notProposal'
@@ -1100,6 +1107,8 @@ export type ClientMessage =
 export type ServerMessage =
   | { type: 'snapshot'; snapshot: CanvasSnapshot }
   | { type: 'event'; event: CardEvent }
+  /** A line taken out of the card's log: a comment the owner deleted before it went to the worker. */
+  | { type: 'eventGone'; cardId: string; id: number }
   /** First on every connection: which server process this is, so a page from an earlier one reloads. */
   | { type: 'hello'; server: string }
   /** On connect and whenever it changes: the restart Obeya waits with, if any. */

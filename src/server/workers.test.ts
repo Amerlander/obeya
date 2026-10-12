@@ -1270,6 +1270,39 @@ describe('comments on places in the demo video', () => {
     expect(runtime.last.inbox).toHaveLength(n + 1);
   });
 
+  test('sent by the owner, they go at once; one deleted before leaves the conversation and never reaches the worker', () => {
+    const c = waiting();
+    const n = runtime.last.inbox.length;
+    const gone: number[] = [];
+    board.onEventGone((_, id) => gone.push(id));
+    workers.message(c.id, 'Das stimmt nicht.', [], false, undefined, { at: 2 });
+    workers.message(c.id, 'Hier fehlt die Kopfzeile.', [], false, undefined, { at: 7 });
+    const [first, second] = board.events(c.id).filter((e) => e.author === 'owner');
+    workers.unsay(c.id, first!.id);
+    expect(gone).toEqual([first!.id]);
+    expect(board.events(c.id).some((e) => e.id === first!.id)).toBe(false);
+    expect(board.item(c.id)!.held).toEqual([second!.id]);
+    // what went already, or was never held, cannot be deleted
+    expect(() => workers.unsay(c.id, first!.id)).toThrow(BadRequest);
+    workers.released(c.id, true);
+    expect(runtime.last.inbox).toHaveLength(n + 1);
+    expect(runtime.last.inbox.at(-1)).toContain('A comment on places in your demo video:\n\n[Demo video at 0:07, chapter „Export“, narration: „Jetzt der Export.“]\nHier fehlt die Kopfzeile.');
+    expect(runtime.last.inbox.at(-1)).not.toContain('Das stimmt nicht.');
+    expect(board.item(c.id)!.held).toBeUndefined();
+    expect(() => workers.unsay(c.id, second!.id)).toThrow(BadRequest);
+  });
+
+  test('all deleted, nothing goes, also once the wait is over', async () => {
+    const c = waiting();
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: generic, holdGrace: 10 });
+    const n = runtime.last.inbox.length;
+    workers.message(c.id, 'Doch nicht.', [], false, undefined, { at: 1 });
+    workers.unsay(c.id, board.events(c.id).at(-1)!.id);
+    expect(board.item(c.id)!.held).toBeUndefined();
+    await Bun.sleep(30);
+    expect(runtime.last.inbox).toHaveLength(n);
+  });
+
   test('words without a place take the comments along in one message; a comment does not answer the demo report’s question', () => {
     const c = waiting('Semikolon oder Komma?');
     const n = runtime.last.inbox.length;

@@ -184,6 +184,7 @@ export class Board {
   private docs: PlanDoc[] | null = null;
   private cache: CanvasSnapshot | null = null;
   private eventListeners = new Set<(e: CardEvent) => void>();
+  private goneListeners = new Set<(cardId: string, id: number) => void>();
   private noticeListeners = new Set<(n: Notice) => void>();
 
   constructor(
@@ -220,6 +221,12 @@ export class Board {
   onEvent(fn: (e: CardEvent) => void): () => void {
     this.eventListeners.add(fn);
     return () => this.eventListeners.delete(fn);
+  }
+
+  /** A line taken out of a card's log (`unlog`). */
+  onEventGone(fn: (cardId: string, id: number) => void): () => void {
+    this.goneListeners.add(fn);
+    return () => this.goneListeners.delete(fn);
   }
 
   /** Whoever shows the canvas (the server, to its pages) shows what Obeya tells the owner above the microphone. */
@@ -300,6 +307,12 @@ export class Board {
     });
     for (const fn of this.eventListeners) fn(e);
     return e;
+  }
+
+  /** Takes a line out of the card's log: a comment the owner deleted before anyone read it. */
+  unlog(cardId: string, id: number) {
+    this.store.deleteEvent(cardId, id);
+    for (const fn of this.goneListeners) fn(cardId, id);
   }
 
   /** The message of the card's conversation the owner's words reply to, if `id` is one: what someone said, not a step or a state change. */

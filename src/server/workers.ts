@@ -486,9 +486,26 @@ export class Workers {
    * while): the comments held back go to the worker, after a moment in which an approval clicked
    * with the closing takes them instead.
    */
-  released(cardId: string) {
+  released(cardId: string, now = false) {
     this.card(cardId);
-    if (this.held(cardId).length) this.releaseLater(cardId, this.o.releaseDelay ?? RELEASE_DELAY);
+    if (!this.held(cardId).length) return;
+    // sent by the owner ("Jetzt senden"): no approval is on its way to take them instead
+    if (now) this.release(cardId);
+    else this.releaseLater(cardId, this.o.releaseDelay ?? RELEASE_DELAY);
+  }
+
+  /** Deletes a comment on a place in the demo video that is still held back: it leaves the conversation, and the worker never hears it. */
+  unsay(cardId: string, id: number) {
+    this.card(cardId);
+    const held = this.held(cardId);
+    if (!held.some((h) => h.id === id)) throw new BadRequest('notHeld', 'the comment is not held back: the worker has it already');
+    const rest = held.filter((h) => h.id !== id);
+    this.o.board.work(cardId, { held: rest.length ? JSON.stringify(rest) : null });
+    if (!rest.length) {
+      clearTimeout(this.holding.get(cardId));
+      this.holding.delete(cardId);
+    }
+    this.o.board.unlog(cardId, id);
   }
 
   /** The comments held back go to the worker as one message, the card still waiting for approval. */

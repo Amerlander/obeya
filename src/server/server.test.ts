@@ -113,6 +113,22 @@ describe('archive', () => {
   });
 });
 
+describe('the log', () => {
+  test('a line taken out of it leaves every page', async () => {
+    const c = card();
+    const messages: ServerMessage[] = [];
+    const ws = new WebSocket(new URL(api('/ws'), server.url.href.replace('http', 'ws')));
+    ws.onmessage = (e) => messages.push(JSON.parse(e.data));
+    await until(() => ws.readyState === WebSocket.OPEN && messages.some((m) => m.type === 'snapshot'));
+    const e = board.log(c.id, 'hint', 'owner', 'Doch nicht.');
+    board.unlog(c.id, e.id);
+    await until(() => messages.some((m) => m.type === 'eventGone'));
+    expect(messages.find((m) => m.type === 'eventGone')).toEqual({ type: 'eventGone', cardId: c.id, id: e.id });
+    expect(board.events(c.id).some((x) => x.id === e.id)).toBe(false);
+    ws.close();
+  });
+});
+
 describe('groups', () => {
   test('are created with cards, renamed and assigned, and every page hears of it', async () => {
     const [a, b] = [card(), card()];

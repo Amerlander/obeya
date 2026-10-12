@@ -11,9 +11,30 @@ import { parseQuestion } from './talk';
 /**
  * A message's frame: `by` places and colours it (the owner's on the right), `who` heads it with its
  * time; `className` adds what kind it is (a question, the agent at work, the starting point).
- * `ev`: the log entry it shows, which a quote of it leads to; `onReply`: the owner can reply to it.
+ * `ev`: the log entry it shows, which a quote of it leads to; `onReply`: the owner can reply to it;
+ * `onDelete`: the owner can delete it, with `deleteLabel` as the button's title.
  */
-export function Msg({ by, who, at, className, ev, onReply, children }: { by: string; who: ReactNode; at?: string; className?: string; ev?: number; onReply?: () => void; children?: ReactNode }) {
+export function Msg({
+  by,
+  who,
+  at,
+  className,
+  ev,
+  onReply,
+  onDelete,
+  deleteLabel,
+  children,
+}: {
+  by: string;
+  who: ReactNode;
+  at?: string;
+  className?: string;
+  ev?: number;
+  onReply?: () => void;
+  onDelete?: () => void;
+  deleteLabel?: string;
+  children?: ReactNode;
+}) {
   return (
     <div className={['msg', `by-${by}`, className].filter(Boolean).join(' ')} data-ev={ev}>
       <div className="who">
@@ -24,6 +45,13 @@ export function Msg({ by, who, at, className, ev, onReply, children }: { by: str
         <button className="msg-reply" title={t.talk.reply} aria-label={t.talk.reply} onMouseDown={(e) => e.preventDefault()} onClick={onReply}>
           <svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true">
             <path d="M8 5 3 10l5 5M3.5 10H11a6 6 0 0 1 6 6v.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      )}
+      {onDelete && (
+        <button className="msg-delete" title={deleteLabel} aria-label={deleteLabel} onMouseDown={(e) => e.preventDefault()} onClick={onDelete}>
+          <svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true">
+            <path d="M4 6h12M8 6V4h4v2M5.5 6l.8 10h7.4l.8-10M8.5 9v4.5M11.5 9v4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
       )}
