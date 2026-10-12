@@ -553,13 +553,17 @@ function iterations(header: string[]): number {
 
 /**
  * Workers of a scratch Obeya for a demo (`--idle-workers`): a started card is in progress, but no
- * agent works on it, so it stays as staged and costs nothing.
+ * agent works on it, so it stays as staged and costs nothing. What a worker is told goes into the
+ * server's log, for a demo to show what reaches the agent.
  */
 export const idleRuntime: AgentRuntime = {
-  start() {
+  start(spec, firstMessage, images) {
     let end!: () => void;
     const done = new Promise<void>((r) => (end = r));
-    return { send: () => {}, close: () => end(), done };
+    const heard = (text: string, images: string[] = []) =>
+      console.log(`idle worker in ${spec.cwd} is told${images.length ? ` (with ${images.length} image${images.length === 1 ? '' : 's'})` : ''}:\n${text}\n---`);
+    if (firstMessage) heard(firstMessage, images);
+    return { send: heard, close: () => end(), done };
   },
 };
 
