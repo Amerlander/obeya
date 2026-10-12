@@ -6,6 +6,8 @@
 // into the archive with it, and comes back to its place when the doc returns. A workstream that
 // leaves its doc stays stored but is not shown.
 
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { boundsOf, CARD_SIZE, freeSpotNear, GAP, PROJECT_HEAD, placeProjects, placeWorkstreams, projectSize, sizeOf, unionBounds } from '../core/layout';
 import type { Language } from '../core/locale';
 import { MESSAGES, type Messages } from '../core/messages';
@@ -116,12 +118,15 @@ const RESHARE_SETTING = 'reshare';
 
 /**
  * A page at rest the share command now writes differently, whose demo is still at hand: the one on
- * the card, or the one it showed, kept with the share.
+ * the card, or the one it showed, kept with the share, and its files still on disk (demos are
+ * deleted to free space; a page whose files are gone stays as it is, with nothing to offer).
  */
 export function reshareable(r: CardRow): boolean {
   const s = r.share ? (JSON.parse(r.share) as StoredShare) : null;
-  if (!s?.url || !s.outdated || s.state) return false;
-  return !!s.shown || (!!r.demo && (JSON.parse(r.demo) as { dir: string }).dir === s.dir);
+  if (!s?.url || !s.outdated || s.state || !s.dir) return false;
+  const demo = r.demo ? (JSON.parse(r.demo) as { dir: string; kind?: DemoKind }) : null;
+  const kind = s.shown ? s.shown.kind : demo?.dir === s.dir ? demo.kind : null;
+  return kind !== null && existsSync(join(s.dir, kind === 'html' ? 'index.html' : 'demo.mp4'));
 }
 
 /** A request the server refuses: a stable code for the UI's text, and an English detail. */
@@ -1450,7 +1455,7 @@ function shareOf(r: CardRow): Item['share'] {
     state: s.refresh ? 'shared' : (s.state ?? 'shared'),
     ...(s.url ? { url: s.url } : {}),
     ...(stale ? { stale: true } : {}),
-    ...(s.url && s.outdated && !stale && !s.state ? { outdated: true } : {}),
+    ...(!stale && reshareable(r) ? { outdated: true } : {}),
   };
 }
 

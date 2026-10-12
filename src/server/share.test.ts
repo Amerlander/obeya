@@ -99,6 +99,7 @@ function card(title = 'Zählerstände exportieren', demo: Record<string, unknown
   const c = board.create({ title, x: 0, y: 0 });
   const d = join(dir, `demo-${c.id}`);
   mkdirSync(d);
+  if (demo.kind !== 'html') writeFileSync(join(d, 'demo.mp4'), 'video');
   if (demo.kind !== 'html' && language) writeFileSync(join(d, 'index.html'), `<!doctype html>\n<html lang="${language}">\n<head><title>Bericht</title></head></html>`);
   board.work(c.id, {
     state: 'live',
@@ -302,6 +303,7 @@ describe('a page published with an earlier version of the command', () => {
     version('v1 html:h1');
     const v = card();
     const h = card('Auswertung', { kind: 'html', chapters: [] });
+    writeFileSync(join(dir, `demo-${h.id}`, 'index.html'), '<!doctype html>');
     sharing.share(v.id);
     sharing.share(h.id);
     await until(() => share(v.id)?.state === 'shared' && share(h.id)?.state === 'shared');
@@ -434,6 +436,21 @@ describe('sharing many outdated pages again at once', () => {
     expect(share(a!.id)).toMatchObject({ state: 'shared', outdated: true });
     expect(log(a!.id).at(-1)).toStartWith('Nicht erneut geteilt: Der Befehl zum Teilen ist gescheitert (Exit-Code 2).');
     expect(reshare()!.outdated).toBe(2);
+  });
+
+  test('a page whose demo files were deleted is neither counted nor offered, and drops out of a run', async () => {
+    const [a, b, c] = await outdated(3, 2, 1);
+    rmSync(join(dir, `demo-${a!.id}`), { recursive: true });
+    expect(reshare()).toEqual({ outdated: 2 });
+    expect(share(a!.id)).toEqual({ state: 'shared', url: expect.stringContaining('demos.example') });
+    const before = calls().length;
+    sharing.reshareMany(null);
+    rmSync(join(dir, `demo-${b!.id}`, 'demo.mp4'));
+    await until(() => reshare()?.run?.left === 0);
+    expect(reshare()).toEqual({ outdated: 0, run: { total: 1, done: 1, failed: [], left: 0 } });
+    expect(calls().slice(before).map((x) => x.input.dir)).toEqual([join(dir, `demo-${c!.id}`)]);
+    sharing.dismissResharing();
+    expect(reshare()).toBeUndefined();
   });
 
   test('one run at a time; stopped before a page went out, all stay as they were', async () => {
@@ -719,7 +736,9 @@ describe('exporting a demo, where the repository has no share target', () => {
   test('no demo, no export', async () => {
     // an artifact without its page, a video demo whose file is gone
     await expect(sharing.export(card('Logo', { kind: 'html' }).id, 'zip')).rejects.toMatchObject({ code: 'noShare' });
-    await expect(sharing.export(card('Weg').id, 'zip')).rejects.toMatchObject({ code: 'noShare' });
+    const gone = card('Weg');
+    rmSync(join(dir, `demo-${gone.id}`, 'demo.mp4'));
+    await expect(sharing.export(gone.id, 'zip')).rejects.toMatchObject({ code: 'noShare' });
   });
 });
 

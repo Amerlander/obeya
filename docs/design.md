@@ -1841,7 +1841,8 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   up to date on its own card: the first share command wrote every page afresh with each call until
   2026-10-05, which updated all of them unseen and would take long with hundreds of pages. A
   command may print a hash of a sample page as its code writes it: only a change that shows on the
-  pages counts. Many at once go from the Koordinator's sheet: while pages are outdated, a purple
+  pages counts. A page whose demo files are gone (demos get deleted to free space) is neither
+  offered nor counted: there is nothing to make it from again, and it stays out as it is. Many at once go from the Koordinator's sheet: while pages are outdated, a purple
   entry says how many („N geteilte Demos sind veraltet“, archived cards' included) and shares
   again the newest 20 of them (or 10, 50, 100, all), newest by the demo's video file. They go out
   one after the other through the same queue as every share, each published as it shows (what
