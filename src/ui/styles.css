@@ -394,11 +394,15 @@ textarea.p-body:focus { border-color: var(--muted); }
 .demo-view .screen:hover .zoom, .demo-view .zoom:focus-visible { opacity: 1; }
 .demo-view .zoom:hover { background: rgba(0, 0, 0, .8); }
 /* the key, shown beside the magnifier while it is hovered, until the owner first zoomed with it */
-.demo-view .zoom-hint { position: absolute; right: calc(100% + 8px); top: 50%; transform: translateY(-50%); white-space: nowrap;
+.demo-view .zoom-hint { position: absolute; right: 0; top: calc(100% + 6px); white-space: nowrap;
   padding: 5px 9px; border-radius: 3px; background: rgba(0, 0, 0, .75); color: #fff; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .15s; }
 .demo-view .zoom:hover .zoom-hint, .demo-view .zoom:focus-visible .zoom-hint { opacity: 1; }
 .demo-view .zoom-hint kbd { font: inherit; font-weight: 600; margin-left: 3px; padding: 0 6px; border-radius: 2px; background: rgba(255, 255, 255, .2); border: 1px solid rgba(255, 255, 255, .35); }
 .demo-view .zoom svg { width: 20px; height: 20px; fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; }
+/* beside the magnifier, always shown: it pauses the video and puts the cursor into the card's field */
+.demo-view .comment-here { position: absolute; top: 10px; right: 56px; z-index: 1; height: 38px; padding: 0 14px; border: 0; border-radius: 19px;
+  background: rgba(0, 0, 0, .55); color: #fff; font: inherit; font-size: 13.5px; cursor: pointer; transition: background .15s; }
+.demo-view .comment-here:hover { background: rgba(0, 0, 0, .8); }
 .demo-view .start { all: unset; position: absolute; inset: 0 0 56px 0; cursor: pointer; display: grid; place-items: center; }
 .demo-view .start span { margin-top: 56px; width: 80px; height: 80px; border-radius: 50%; background: rgba(0, 0, 0, 0.6); display: grid; place-items: center; transition: transform 0.15s, background 0.15s; }
 .demo-view .start:hover span { background: rgba(0, 0, 0, 0.8); transform: scale(1.06); }
@@ -481,6 +485,16 @@ textarea.p-body:focus { border-color: var(--muted); }
 .talk .msg > .quote { margin: 5px 0 4px; }
 .composer .c-field .quote { flex: 1 1 100%; margin: 0 0 2px; }
 .composer .c-field .quote-text { -webkit-line-clamp: 2; }
+/* the place in the demo video the words are about (detail.tsx PlaceChip, SpotLink) */
+.quote.place { --q: var(--working); align-items: center; gap: 8px; padding: 4px 0 4px 6px; }
+.place-frame { flex: none; width: 48px; border-radius: 2px; background: #222; display: block; }
+.place-text { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); }
+.place-text b { color: var(--ink); }
+.talk .msg > .spot { display: flex; align-items: center; gap: 8px; margin: 5px 0 4px; padding: 0; border: 0; background: none; font: inherit;
+  font-size: 13px; color: var(--working); cursor: pointer; text-align: left; }
+.talk .msg > .spot img { width: 64px; border-radius: 2px; display: block; }
+.talk .msg > .spot:hover span { text-decoration: underline; }
+.talk .held-note { align-self: flex-end; margin: -2px 2px 4px; font-size: 12px; color: var(--muted); text-align: right; }
 .talk .msg.flash { animation: msg-flash 2.4s ease-out; }
 @keyframes msg-flash {
   0%, 45% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--working) 60%, transparent), var(--shadow); background: color-mix(in srgb, var(--working) 14%, var(--card)); }

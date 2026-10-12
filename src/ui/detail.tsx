@@ -1,7 +1,7 @@
 // The unfolded card: what it is, what its worker does, and what the owner decides.
 
-import { type ReactNode, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { agentListens, askable, buildableOn, type CardAction, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, EXPORT_HTML_MAX, finished, type Item, type Mock, type NextStep, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef } from '../core/types';
+import { Fragment, type ReactNode, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { agentListens, askable, buildableOn, type CardAction, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, EXPORT_HTML_MAX, finished, type Item, type Mock, type NextStep, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, type Spot } from '../core/types';
 import { mockPage } from '../core/frame';
 import { answerText, toggle } from './answer';
 import { ApiError, api, at, type Field, holdRestart, onCardEvent } from './api';
@@ -16,7 +16,8 @@ import { replyOn, setReply, useReply } from './reply';
 import { Composer } from './composer';
 import { useFitHeight } from './fitHeight';
 import { type Box, onto, zoomBox } from './zoomBox';
-import { AttachButton, ShotStrip, Shots, useShotInput } from './shots';
+import { AttachButton, imageUrl, ShotStrip, Shots, useShotInput } from './shots';
+import { dismissPlace, type Place, seekTo, usePlace, videoOf, watch } from './spot';
 import { clock as time, errorText, stateLabel, t } from './strings';
 import { agentWorks, demoHandover, koordinatorReads, ownerField, parseQuestion, started, talkAlone, talkTurns, type Turn, worked as isWorked } from './talk';
 
@@ -383,7 +384,7 @@ export function Detail(p: Props) {
               <>
                 {/* the last handover's demo stays while the agent works on the card again; a new handover replaces it */}
                 {item.demo && (
-                  <DemoView item={item} all={all} run={run} summary="" demo={item.demo} autoplay={demoWaits}>
+                  <DemoView item={item} all={all} run={run} summary="" demo={item.demo} autoplay={demoWaits} comments={agentListens(item)}>
                     {!demoWaits && <p className="hint">{item.state === 'working' || item.state === 'waiting' ? t.demo.again : t.demo.kept}</p>}
                     {shareBox}
                   </DemoView>
@@ -813,8 +814,13 @@ function Conversation({
     idea && !past && item.body.trim() && !opened(events, item.body) && <Seed item={item} by="owner" who={t.idea.seed} />
   );
   const seedAt = task ? Math.max(0, turns.shown.findIndex((x) => started(x.e))) : 0;
+  // under the last of the comments on places in the demo video Obeya holds back while the owner watches
+  const lastHeld = item.held?.at(-1);
   const line = (turn: Turn) => (
-    <Line key={turn.e.id} turn={turn} demoQuestion={turn === handover ? item.demo : undefined} quoted={turn.e.replyTo ? byId.get(turn.e.replyTo) : undefined} onReply={onReply} />
+    <Fragment key={turn.e.id}>
+      <Line turn={turn} demoQuestion={turn === handover ? item.demo : undefined} quoted={turn.e.replyTo ? byId.get(turn.e.replyTo) : undefined} onReply={onReply} />
+      {turn.e.id === lastHeld && <div className="held-note">{t.demo.held(item.held!.length)}</div>}
+    </Fragment>
   );
   return (
     <>
@@ -945,6 +951,7 @@ function Message({ turn, demoQuestion, quoted, onReply }: { turn: Turn; demoQues
       onReply={onReply && !turn.quiet ? () => onReply(e) : undefined}
     >
       {quoted && <Quote e={quoted} />}
+      {e.spot && <SpotLink cardId={e.cardId} spot={e.spot} />}
       {!turn.quiet && <Body md={q ? q.text : e.text} />}
       {q && !turn.settled && q.options.length > 0 && (
         <ul className="q-opts">
@@ -1045,7 +1052,10 @@ const clipLine = (s: string) => {
 
 type Run = (fn: () => Promise<void>, done: ActDone) => Promise<void>;
 
-/** The narrated demo with its chapters and the report beside it; with `run`, each finding can become a card. */
+/**
+ * The narrated demo with its chapters and the report beside it; with `run`, each finding can become a
+ * card. `comments`: the card's agent hears the owner, whose words may be about a place in the video.
+ */
 function DemoView({
   item,
   all = [],
@@ -1054,6 +1064,7 @@ function DemoView({
   demo,
   children,
   autoplay = true,
+  comments = false,
 }: {
   item: Item;
   all?: Item[];
@@ -1062,6 +1073,7 @@ function DemoView({
   demo: Demo;
   children: ReactNode;
   autoplay?: boolean;
+  comments?: boolean;
 }) {
   const cardId = item.id;
   const video = useRef<HTMLVideoElement>(null);
@@ -1080,6 +1092,7 @@ function DemoView({
   }, []);
   useEffect(() => () => holdRestart('video', null), []);
   const zoom = useZoom(video);
+  const watching = useWatching(cardId, video, comments && demo.kind !== 'html' ? demo.chapters : null);
   const current = demo.chapters.reduce((cur, [at], i) => (at <= now + 0.05 ? i : cur), 0);
   return (
     <>
@@ -1118,7 +1131,10 @@ function DemoView({
                   holdRestart('video', 'video');
                 }}
                 onPause={() => holdRestart('video', null)}
-                onEnded={() => holdRestart('video', null)}
+                onEnded={() => {
+                  holdRestart('video', null);
+                  watching.ended();
+                }}
               >
                 <track kind="captions" src={src('captions.vtt')} srcLang="de" label="Deutsch" />
               </video>
@@ -1130,6 +1146,19 @@ function DemoView({
                       <path d="M6 4l15 8-15 8z" />
                     </svg>
                   </span>
+                </button>
+              )}
+              {comments && started && (
+                <button
+                  className="comment-here"
+                  title={t.demo.commentHint}
+                  onClick={() => {
+                    video.current?.pause();
+                    if (zoom.box) zoom.toggle();
+                    document.querySelector<HTMLTextAreaElement>('#panel .split-talk .composer textarea')?.focus();
+                  }}
+                >
+                  💬 {t.demo.comment}
                 </button>
               )}
               <button
@@ -1178,6 +1207,46 @@ function DemoView({
       <Body md={summary} />
     </>
   );
+}
+
+/** A video standing this long has been watched to its end, as far as the comments on it are concerned. */
+const STOOD_MS = 3 * 60_000;
+
+/**
+ * The card's demo video as the one its words may be about (`chapters` null: they are not): typing in
+ * the card's field pauses it, and the owner's comments on places in it, which Obeya holds back while
+ * they watch, go to the agent once they have finished: the video ended, stood for a few minutes, or
+ * the card closed. Words without a place, and an approval, take them too (on the server).
+ */
+function useWatching(cardId: string, video: RefObject<HTMLVideoElement | null>, chapters: [number, string][] | null) {
+  const on = !!chapters;
+  const release = () => void api.act(cardId, { action: 'release' }).catch(() => {});
+  useEffect(() => {
+    const v = video.current;
+    if (!on || !v) return;
+    const unwatch = watch(cardId, v, chapters);
+    const typed = (e: Event) => {
+      if (!v.paused && e.target instanceof HTMLTextAreaElement && e.target.closest('#panel .split-talk .composer')) v.pause();
+    };
+    let stood: ReturnType<typeof setTimeout> | undefined;
+    const paused = () => {
+      clearTimeout(stood);
+      stood = setTimeout(release, STOOD_MS);
+    };
+    const played = () => clearTimeout(stood);
+    v.addEventListener('pause', paused);
+    v.addEventListener('play', played);
+    addEventListener('input', typed, true);
+    return () => {
+      unwatch();
+      clearTimeout(stood);
+      v.removeEventListener('pause', paused);
+      v.removeEventListener('play', played);
+      removeEventListener('input', typed, true);
+      release();
+    };
+  }, [on]);
+  return { ended: () => on && release() };
 }
 
 const ZOOM_MS = 380;
@@ -1612,6 +1681,9 @@ function Talk({ item, questions = [], heading = t.ask.question, picks, past, fie
   const options = questions.some((q) => q.options.length > 0);
   const picked = !!picks?.picked;
   const reply = useReply(item.id);
+  // the demo video stands at a place: the words are about it, where the card's agent hears them
+  const place = usePlace(item.id);
+  const at = field && !field.listener && !options ? place : null;
   const send = async (words: string, images?: string[]) => {
     const replyTo = reply?.id;
     await (picked ? field!.onPicked(answerText(questions, picks!.picks, words, field!.quote), images, replyTo) : field!.onWords(words, images, replyTo));
@@ -1624,17 +1696,58 @@ function Talk({ item, questions = [], heading = t.ask.question, picks, past, fie
         <Composer
           key={field.key}
           draft={cardDraft(item.id)}
-          placeholder={options ? t.ask.words : field.placeholder}
+          placeholder={options ? t.ask.words : at ? t.demo.commentAt(mmss(at.at)) : field.placeholder}
           label={options ? t.ask.send : t.send}
           allowEmpty={picked}
           obeya={field.listener}
           noImages={field.noImages}
           quote={reply}
           onUnquote={() => setReply(null)}
+          chip={at && <PlaceChip cardId={item.id} place={at} />}
           onSend={send}
         />
       )}
     </>
+  );
+}
+
+/** The place in the demo video the words in the field are about: its frame, time and chapter, with × to take it out. */
+function PlaceChip({ cardId, place }: { cardId: string; place: Place }) {
+  const frame = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const v = videoOf(cardId);
+    const c = frame.current;
+    if (!v?.videoWidth || !c) return;
+    c.width = 64;
+    c.height = Math.round((64 * v.videoHeight) / v.videoWidth);
+    try {
+      c.getContext('2d')!.drawImage(v, 0, 0, c.width, c.height);
+    } catch {}
+  }, [place.at]);
+  return (
+    <div className="quote place" title={t.demo.place}>
+      <canvas ref={frame} className="place-frame" />
+      <span className="place-text">
+        <b>{mmss(place.at)}</b>
+        {place.chapter && ` · ${place.chapter}`}
+      </span>
+      <button className="quote-clear" title={t.demo.unplace} aria-label={t.demo.unplace} onMouseDown={(m) => m.preventDefault()} onClick={dismissPlace}>
+        ×
+      </button>
+    </div>
+  );
+}
+
+/** Above the owner's words in the conversation: the place in the demo video they are about; a click plays the video from there. */
+function SpotLink({ cardId, spot }: { cardId: string; spot: Spot }) {
+  return (
+    <button className="spot" title={t.demo.toPlace} onClick={() => seekTo(cardId, spot.at)}>
+      {spot.still && <img src={imageUrl(spot.still)} alt="" loading="lazy" />}
+      <span>
+        ▶ {mmss(spot.at)}
+        {spot.chapter && ` · ${spot.chapter}`}
+      </span>
+    </button>
   );
 }
 

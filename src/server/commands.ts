@@ -2,7 +2,7 @@
 // confirms them in one sentence, and runs them after a short delay unless the owner takes them back.
 
 import { z } from 'zod';
-import { type AgentSetting, answering, askable, blocksSaving, type CanvasConfig, finished, type Item, type NextStep, prototypeWorkstream, type Queue } from '../core/types';
+import { type AgentSetting, answering, askable, blocksSaving, type CanvasConfig, finished, type Item, type NextStep, prototypeWorkstream, type Queue, type SpotInput } from '../core/types';
 import { BadRequest, type Board, replyNote } from './board';
 import type { Config } from './config';
 import type { Moment } from './db';
@@ -106,6 +106,8 @@ export interface Input {
   forwarded?: string;
   /** The message of the open card's conversation the words reply to. */
   replyTo?: number;
+  /** The place in the open card's demo video the words are about; only its agent hears of it. */
+  spot?: SpotInput;
 }
 
 export interface CommanderOptions {

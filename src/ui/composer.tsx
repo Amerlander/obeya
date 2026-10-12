@@ -4,7 +4,7 @@
 // to a part of the window. A message replied to stands above the text as a quote. With the cursor in
 // the field, speaking dictates into it: hold its microphone, the one at the bottom, or Space.
 
-import { useContext, useEffect, useId, useRef, useState } from 'react';
+import { type ReactNode, useContext, useEffect, useId, useRef, useState } from 'react';
 import type { CardEvent } from '../core/types';
 import { api } from './api';
 import { dropDraft, typeInto, updateDraft, useDraft, useDraftField } from './draft';
@@ -42,6 +42,7 @@ export function Composer({
   quote,
   onUnquote,
   draft,
+  chip,
 }: {
   draft?: string;
   placeholder: string;
@@ -57,6 +58,8 @@ export function Composer({
   className?: string;
   quote?: CardEvent | null;
   onUnquote?: () => void;
+  /** What else the words go out with, above them beside the quote (a place in the demo video). */
+  chip?: ReactNode;
 }) {
   const own = useId();
   const key = draft ?? `field:${own}`;
@@ -102,6 +105,7 @@ export function Composer({
       <ShotStrip shots={shots} />
       <div className="c-field">
         {quote && <Quote e={quote} onClear={onUnquote} />}
+        {chip}
         <textarea
           ref={field}
           value={text}

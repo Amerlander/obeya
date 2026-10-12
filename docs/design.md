@@ -259,7 +259,34 @@ An idea is thought through on its card before anything is planned; no worker run
    so it keeps playing, growing out of its place and back; Z again, Esc or a click beside it ends
    it, and the card stays open. Hovering the magnifier shows the key beside it until the owner
    first zoomed with Z (per browser). Full screen was too much on a large monitor and hid where the
-   owner was; before (2026-10-12) the owner zoomed in with the operating system. The worker's
+   owner was; before (2026-10-12) the owner zoomed in with the operating system. Space tapped
+   plays and pauses the video, so a demo that waits is started with it. What the owner types or
+   says while the video stands somewhere in the middle is about that place (`src/ui/spot.ts`): Space
+   (or the microphone) held while it plays pauses it, so Whisper does not hear the narration, and
+   the recording goes out with the place; letting go plays it on, while a video the owner had
+   paused stays where it is, as it does after words dictated into the field. Typing in the field
+   pauses it too; above the field stands the place like a quote (its frame, „1:23 · chapter“, × to
+   take it out), the placeholder says „Etwas zu 1:23 schreiben oder Leertaste halten“, and Enter
+   sends and plays on. „💬 Hier kommentieren“ on the video beside the magnifier pauses it and puts
+   the cursor into the field; the controls (`?`) have a section for the video. At the start or the
+   end, the words are about the work as a whole and go out as before. The browser draws the frame
+   from the video (same origin) and uploads it as a screenshot; the server adds the chapter and the
+   sentence of the narration at that time (`placeIn` in `src/server/demo.ts`, by its share of the
+   scene's caption) and keeps the place on the event (`CardEvent.spot`). The conversation shows the
+   words with the frame and „▶ 1:23 · chapter“, a click plays the video from there. On a card
+   waiting for approval, such comments do not go to the worker one by one: the conversation shows
+   each at once, with „N Kommentare gehen an den Agenten, sobald du fertig geschaut hast“ under the
+   last, and Obeya holds them back (`held` on the card) until the owner has finished watching: the
+   video ends, the card closes, the video stands for three minutes, the owner writes or says
+   something without a place (it goes in the same message, after them), or approves (the worker
+   hears them with the approval, to propose as a card what still matters). Ten minutes after the
+   last one without such a sign (a browser gone away, a restart) they go anyway. The release waits
+   1.5 s, so an approval clicked as the card folds takes them. The worker gets them in one message,
+   each as `[Demo video at 1:23, chapter „…“, narration: „…“]` above the words, with its frame as an
+   image, and reworks the demo once instead of for each comment; a comment is no answer to the demo
+   report's question. On a card at work or finished, a comment with a place goes at once, with its
+   place and frame. Before (2026-10-12), nothing tied the owner's words to a place in the video:
+   they named the time themselves or took a screenshot, and the video ran on while they spoke. The worker's
    summary is its handover in the card's conversation below, not repeated under the demo: the
    whole report, what changed for the user and what the owner needs to know, in a few short
    paragraphs at most. A problem the worker noticed beyond the task is a proposal

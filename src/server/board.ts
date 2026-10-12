@@ -32,6 +32,7 @@ import {
   type PlannedPrototype,
   type Question,
   type Reshare,
+  type Spot,
   STATES,
   finished,
   type Notice,
@@ -281,8 +282,11 @@ export class Board {
     }
   }
 
-  /** Appends a line to the card's log; `replyTo`: the message the owner's words reply to (`quoted`). */
-  log(cardId: string, kind: CardEvent['kind'], author: CardEvent['author'], text: string, code?: ErrorCode, images?: string[], mocks?: Mock[], replyTo?: number): CardEvent {
+  /**
+   * Appends a line to the card's log; `replyTo`: the message the owner's words reply to (`quoted`),
+   * `spot`: the place in the demo video they are about.
+   */
+  log(cardId: string, kind: CardEvent['kind'], author: CardEvent['author'], text: string, code?: ErrorCode, images?: string[], mocks?: Mock[], replyTo?: number, spot?: Spot): CardEvent {
     const e = this.store.addEvent({
       cardId,
       kind,
@@ -292,6 +296,7 @@ export class Board {
       ...(images?.length ? { images } : {}),
       ...(mocks?.length ? { mocks } : {}),
       ...(replyTo ? { replyTo } : {}),
+      ...(spot ? { spot } : {}),
     });
     for (const fn of this.eventListeners) fn(e);
     return e;
@@ -1407,6 +1412,7 @@ function work(r: CardRow): Partial<Item> {
     ...(demo?.question && !demo.answer && r.need === 'demo' ? { question: { text: demo.question, options: [] } } : {}),
     ...(detail.summary && (r.need === 'review' || r.need === 'demo') ? { summary: detail.summary } : {}),
     ...(answering ? { answering: true } : {}),
+    ...(r.held ? { held: (JSON.parse(r.held) as { id: number }[]).map((h) => h.id) } : {}),
     // approved work is held for its next handover while the card is at work; on a waiting card it is landing
     ...(r.approved_at && r.state === 'waiting' ? { landing: true } : {}),
     ...(detail.noDemo && r.need === 'review' ? { noDemo: detail.noDemo } : {}),

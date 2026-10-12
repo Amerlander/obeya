@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CardDiff } from '../core/diff';
 import type { PushKeyView } from '../core/push-key';
-import type { AgentRole, AgentSetting, AgentsView, CanvasConfig, CanvasInfo, CanvasSnapshot, ClientMessage, ConfigView, CardAction, DemoSettings, Group, DemoSettingsView, DemoVoiceCheck, FirstCanvas, MachineItem, MachineSectionId, MachineView, SetupCheck, VoiceSetupView, CardEvent, CardPatch, Item, Language, LanguageView, NewCard, Notice, OwnerHold, PendingRestart, ProjectHistory, ServerMessage, AppUpdate } from '../core/types';
+import type { AgentRole, AgentSetting, AgentsView, CanvasConfig, CanvasInfo, CanvasSnapshot, ClientMessage, ConfigView, CardAction, DemoSettings, Group, DemoSettingsView, DemoVoiceCheck, FirstCanvas, MachineItem, MachineSectionId, MachineView, SetupCheck, VoiceSetupView, CardEvent, CardPatch, Item, Language, LanguageView, NewCard, Notice, OwnerHold, PendingRestart, ProjectHistory, ServerMessage, SpotInput, AppUpdate } from '../core/types';
 
 /** A request the server refused; `code` picks the owner's text, the message is the server's detail. */
 export class ApiError extends Error {
@@ -155,10 +155,20 @@ export const api = {
   /**
    * What the owner said about the card or project in view, with the screenshots shown with it;
    * `replyTo`: in reply to that message of the card's conversation; `text`: typed in the field
-   * before it, which goes first; `listen`: dictated into a field, the words only come back.
+   * before it, which goes first; `listen`: dictated into a field, the words only come back; `spot`:
+   * about that place in the card's demo video.
    */
-  voice: async (audio: Blob, where: Where, { images = [], replyTo, text, listen }: { images?: string[]; replyTo?: number; text?: string; listen?: boolean } = {}) => {
-    const q = [...images.map((id) => `image=${encodeURIComponent(id)}`), ...(replyTo ? [`replyTo=${replyTo}`] : []), ...(listen ? ['listen'] : [])].join('&');
+  voice: async (
+    audio: Blob,
+    where: Where,
+    { images = [], replyTo, text, listen, spot }: { images?: string[]; replyTo?: number; text?: string; listen?: boolean; spot?: SpotInput } = {},
+  ) => {
+    const q = [
+      ...images.map((id) => `image=${encodeURIComponent(id)}`),
+      ...(replyTo ? [`replyTo=${replyTo}`] : []),
+      ...(listen ? ['listen'] : []),
+      ...(spot ? [`at=${spot.at}`, ...(spot.still ? [`still=${encodeURIComponent(spot.still)}`] : [])] : []),
+    ].join('&');
     let body: Blob | FormData = audio;
     if (text?.trim()) {
       body = new FormData();
@@ -172,8 +182,8 @@ export const api = {
   /** The owner started speaking (or typing a command): Obeya gets ready to read it. */
   warmVoice: () => fetch(at('/voice/warm'), { method: 'POST' }).catch(() => {}),
   /** The same, typed; `field`: the field of the open card it was typed into. */
-  command: (text: string, where: Where, images?: string[], field?: Field, replyTo?: number) =>
-    call<HeardReply>('POST', at(`/command${query(where)}`), { text, ...(images?.length ? { images } : {}), ...(field ? { field } : {}), ...(replyTo ? { replyTo } : {}) }),
+  command: (text: string, where: Where, images?: string[], field?: Field, replyTo?: number, spot?: SpotInput) =>
+    call<HeardReply>('POST', at(`/command${query(where)}`), { text, ...(images?.length ? { images } : {}), ...(field ? { field } : {}), ...(replyTo ? { replyTo } : {}), ...(spot ? { spot } : {}) }),
   /** A typed request to the Koordinator of another canvas, about nothing in view there. */
   commandOn: (canvas: string, text: string) => call<HeardReply>('POST', `/api/c/${encodeURIComponent(canvas)}/command`, { text }),
   undo: (token: string) => call<{ undone: boolean }>('POST', at('/command/undo'), { token }),

@@ -42,6 +42,41 @@ export function readChapters(dir: string, titles: string[]): [number, string][] 
   return titles.map((t, i) => [Math.max(0, Math.round((starts[i]! - NARRATION_LEAD) * 100) / 100), t]);
 }
 
+/** The cues of a demo's captions: one per scene, its narration. */
+function cues(dir: string): { start: number; end: number; text: string }[] {
+  let vtt: string;
+  try {
+    vtt = readFileSync(join(dir, 'captions.vtt'), 'utf8');
+  } catch {
+    return [];
+  }
+  const time = (h: string, m: string, s: string, ms: string) => Number(h) * 3600 + Number(m) * 60 + Number(s) + Number(ms) / 1000;
+  return [...vtt.matchAll(/^(\d+):(\d{2}):(\d{2})\.(\d{3}) --> (\d+):(\d{2}):(\d{2})\.(\d{3})[^\n]*\n([\s\S]*?)(?:\n\s*\n|$)/gm)].map((c) => ({
+    start: time(c[1]!, c[2]!, c[3]!, c[4]!),
+    end: time(c[5]!, c[6]!, c[7]!, c[8]!),
+    text: c[9]!.replace(/\s+/g, ' ').trim(),
+  }));
+}
+
+/**
+ * The chapter at a place in a demo video and what its narration says around there: the sentence of
+ * the scene's cue that the place falls on, by its share of the cue's time (the voice speaks evenly
+ * enough for that); between cues, the last one's last sentence.
+ */
+export function placeIn(dir: string, chapters: [number, string][], at: number): { chapter?: string; narration?: string } {
+  const chapter = chapters.reduce<string | undefined>((cur, [start, title]) => (start <= at + 0.05 ? title : cur), chapters[0]?.[1]);
+  const cue = cues(dir).findLast((c) => c.start <= at + 0.05);
+  let narration: string | undefined;
+  if (cue) {
+    const sentences = cue.text.match(/[^.!?…]+(?:[.!?…]+[»«“”"']?|$)/g)?.map((x) => x.trim()).filter(Boolean) ?? [cue.text];
+    const share = at >= cue.end ? 1 : (at - cue.start) / Math.max(0.1, cue.end - cue.start);
+    const offset = Math.min(cue.text.length - 1, Math.max(0, share * cue.text.length));
+    let passed = 0;
+    narration = sentences.find((x) => (passed += x.length + 1) > offset) ?? sentences.at(-1);
+  }
+  return { ...(chapter ? { chapter } : {}), ...(narration ? { narration } : {}) };
+}
+
 /** Serves one demo file: a video's with byte ranges so the player can seek, any file of an HTML artifact's directory. */
 export function serveDemoFile(demo: { dir: string; kind: DemoKind }, name: string, req: Request): Response {
   if (demo.kind === 'html') return serveArtifactFile(demo.dir, name);

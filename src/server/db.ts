@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { CardEvent, CardKind, CardState, Mock, Need, Preference, PreferenceState, Talk } from '../core/types';
+import type { CardEvent, CardKind, CardState, Mock, Need, Preference, PreferenceState, Spot, Talk } from '../core/types';
 
 export interface CardRow {
   id: string;
@@ -80,6 +80,8 @@ export interface CardRow {
   shipped: string | null;
   /** When Obeya stopped the app stack in the card's workspace while the card waited (Parking); gone once its worker heard so. */
   parked: string | null;
+  /** JSON: the owner's comments on places in the demo video Obeya holds back while they watch (event ids, `Item.held`). */
+  held: string | null;
 }
 
 export interface GroupRow {
@@ -284,16 +286,20 @@ export const MIGRATIONS = [
   `ALTER TABLE talk ADD COLUMN unread INTEGER NOT NULL DEFAULT 0;`,
   // the message of the card's conversation the owner's words reply to
   `ALTER TABLE events ADD COLUMN reply_to INTEGER;`,
+  // the place in the demo video the owner's words are about, and those Obeya holds back while they watch
+  `ALTER TABLE events ADD COLUMN spot TEXT;
+   ALTER TABLE cards ADD COLUMN held TEXT;`,
 ];
 
-const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo';
-type EventRow = Omit<CardEvent, 'images' | 'mocks' | 'replyTo'> & { code: CardEvent['code'] | null; images: string | null; mocks: string | null; replyTo: number | null };
-const eventOf = ({ code, images, mocks, replyTo, ...e }: EventRow): CardEvent => ({
+const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot';
+type EventRow = Omit<CardEvent, 'images' | 'mocks' | 'replyTo' | 'spot'> & { code: CardEvent['code'] | null; images: string | null; mocks: string | null; replyTo: number | null; spot: string | null };
+const eventOf = ({ code, images, mocks, replyTo, spot, ...e }: EventRow): CardEvent => ({
   ...e,
   ...(code ? { code } : {}),
   ...(images ? { images: JSON.parse(images) as string[] } : {}),
   ...(mocks ? { mocks: JSON.parse(mocks) as Mock[] } : {}),
   ...(replyTo ? { replyTo } : {}),
+  ...(spot ? { spot: JSON.parse(spot) as Spot } : {}),
 });
 
 export type NewRow = Pick<CardRow, 'canvas_id' | 'kind' | 'x' | 'y'> &
@@ -334,6 +340,7 @@ export type RowUpdate = Partial<
     | 'group_id'
     | 'shipped'
     | 'parked'
+    | 'held'
   >
 >;
 
@@ -522,13 +529,14 @@ export class Store {
   addEvent(e: Omit<CardEvent, 'id' | 'at'>): CardEvent {
     const at = now();
     const { id } = this.db
-      .query('INSERT INTO events (card_id, at, kind, author, text, code, images, mocks, reply_to) VALUES ($cardId, $at, $kind, $author, $text, $code, $images, $mocks, $replyTo) RETURNING id')
+      .query('INSERT INTO events (card_id, at, kind, author, text, code, images, mocks, reply_to, spot) VALUES ($cardId, $at, $kind, $author, $text, $code, $images, $mocks, $replyTo, $spot) RETURNING id')
       .get({
         ...e,
         code: e.code ?? null,
         images: e.images?.length ? JSON.stringify(e.images) : null,
         mocks: e.mocks?.length ? JSON.stringify(e.mocks) : null,
         replyTo: e.replyTo ?? null,
+        spot: e.spot ? JSON.stringify(e.spot) : null,
         at,
       }) as { id: number };
     return { ...e, id, at };

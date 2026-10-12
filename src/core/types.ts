@@ -126,6 +126,11 @@ export interface Item {
    * until its turn ends, the card is at work and not the owner's, and still waits for approval.
    */
   answering?: true;
+  /**
+   * The owner's comments on places in the demo video (their event ids) that Obeya holds back while
+   * they watch, to give them to the worker in one message once they are done (`Spot`).
+   */
+  held?: number[];
   /** The owner approved the work and Obeya lands it on main (seconds of git): still `waiting`, but no longer the owner's. */
   landing?: true;
   /** Why the worker handed over without a demo, in the rare case there was nothing to show (`need` is `review`). */
@@ -418,7 +423,24 @@ export interface CardEvent {
   mocks?: Mock[];
   /** The owner's words: the message of the conversation they reply to (its id), shown above them as a quote. */
   replyTo?: number;
+  /** The owner's words: the place in the card's demo video they are about. */
+  spot?: Spot;
 }
+
+/** A place in a card's demo video the owner's words are about, as the worker reads it with them. */
+export interface Spot {
+  /** Seconds into the video. */
+  at: number;
+  /** The chapter playing there. */
+  chapter?: string;
+  /** What the narration says around there. */
+  narration?: string;
+  /** The frame there, taken in the browser (an image id like a screenshot's). */
+  still?: string;
+}
+
+/** A place in the demo video as the browser sends it with the owner's words: Obeya adds chapter and narration. */
+export type SpotInput = Pick<Spot, 'at' | 'still'>;
 
 export interface CanvasInfo {
   id: string;
@@ -586,8 +608,11 @@ export type CardAction =
   /** `images`: ids of screenshots uploaded before (`POST /api/c/<canvas>/images`); with them the text may be empty. */
   /** `spoken`: the words came through speech recognition, which the agent is told. */
   /** `replyTo`: the message of the card's conversation the words reply to (`CardEvent.replyTo`). */
-  | { action: 'message'; text: string; spoken?: boolean; images?: string[]; replyTo?: number }
+  /** `spot`: the place in the card's demo video the words are about. */
+  | { action: 'message'; text: string; spoken?: boolean; images?: string[]; replyTo?: number; spot?: SpotInput }
   | { action: 'answer'; text: string; spoken?: boolean; images?: string[]; replyTo?: number }
+  /** The owner has finished watching the demo video: the comments on places in it that Obeya held back go to the worker. */
+  | { action: 'release' }
   /** `direct`: onto the default branch at once, without a pull request, where the repository allows it (`RepoRef.direct`). */
   | { action: 'approve'; direct?: boolean }
   /** Start a queued card although it may collide. */

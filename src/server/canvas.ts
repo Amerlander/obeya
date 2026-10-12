@@ -9,7 +9,7 @@ import { repoName } from '../adapters/generic';
 import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
 import type { Language } from '../core/locale';
-import { AGENT_DEFAULTS, agentListens, type AgentRole, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, type RepoConfig, type RepoRef } from '../core/types';
+import { AGENT_DEFAULTS, agentListens, type AgentRole, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, type RepoConfig, type RepoRef, type SpotInput } from '../core/types';
 import { BadRequest, Board, replyNote, type StoredIdea } from './board';
 import { type Command, Commander } from './commands';
 import type { Config } from './config';
@@ -391,9 +391,10 @@ export class CanvasRuntime {
    * straight to that agent, by the card's state: talk to an idea, the answer to its worker's
    * question, or else words the worker takes in (a note while it works, words on its handover, a
    * question once its work is done). The agent passes on what asks Obeya for something (`to_obeya`).
-   * `replyTo`: the message of the card's conversation the words reply to.
+   * `replyTo`: the message of the card's conversation the words reply to; `spot`: the place in the
+   * card's demo video they are about.
    */
-  tell(cardId: string, text: string, images: string[], spoken: boolean, replyTo?: number) {
+  tell(cardId: string, text: string, images: string[], spoken: boolean, replyTo?: number, spot?: SpotInput) {
     const card = this.board.item(cardId);
     if (!card) throw new BadRequest('unknownCard', 'unknown card');
     if (!agentListens(card)) throw new BadRequest('noAgent', 'no agent works on this card');
@@ -402,7 +403,7 @@ export class CanvasRuntime {
     this.said.set(cardId, { text, spoken });
     if (card.state === 'idea') return this.act(cardId, { action: 'discuss', ...said });
     if (card.state === 'waiting' && card.need === 'question') return this.act(cardId, { action: 'answer', ...said });
-    return this.act(cardId, { action: 'message', ...said });
+    return this.act(cardId, { action: 'message', ...said, ...(spot ? { spot } : {}) });
   }
 
   /**
@@ -424,8 +425,17 @@ export class CanvasRuntime {
     const r = this.act(cardId, a);
     // the options picked on a proposal go to its reviser without the Koordinator, which would have logged them
     if (a.action === 'revise') this.board.log(cardId, 'say', 'owner', a.text.trim(), undefined, undefined, undefined, this.board.quoted(cardId, a.replyTo)?.id);
-    if (!(['message', 'answer', 'discuss'].includes(a.action) && 'text' in a && a.text?.trim())) this.koordinator.noticed();
+    // the end of watching a demo is no click of the owner's
+    if (a.action !== 'release' && !(['message', 'answer', 'discuss'].includes(a.action) && 'text' in a && a.text?.trim())) this.koordinator.noticed();
     return r;
+  }
+
+  /** A place in the demo video as the browser sent it: a frame Obeya does not have is left out. */
+  private spot(spot: unknown): SpotInput | undefined {
+    if (!spot || typeof spot !== 'object') return;
+    const { at, still } = spot as Record<string, unknown>;
+    if (typeof at !== 'number' || !Number.isFinite(at) || at < 0) throw new BadRequest('invalid', 'spot.at must be a time in the video, in seconds');
+    return { at, ...(typeof still === 'string' && this.images.path(still) ? { still } : {}) };
   }
 
   /** An owner action from the card's panel, or from a spoken command. */
@@ -452,7 +462,9 @@ export class CanvasRuntime {
       case 'stop':
         return this.repoOf(cardId).workers.stop(cardId);
       case 'message':
-        return this.repoOf(cardId).workers.message(cardId, text.trim(), images, !!a.spoken, replyTo);
+        return this.repoOf(cardId).workers.message(cardId, text.trim(), images, !!a.spoken, replyTo, this.spot(a.spot));
+      case 'release':
+        return this.repoOf(cardId).workers.released(cardId);
       case 'answer':
         return this.repoOf(cardId).workers.answer(cardId, text.trim(), images, !!a.spoken, replyTo);
       case 'approve':

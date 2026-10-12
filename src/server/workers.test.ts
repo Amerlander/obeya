@@ -1217,6 +1217,110 @@ describe('handing over with a demo', () => {
   });
 });
 
+describe('comments on places in the demo video', () => {
+  let images: Images;
+  /** A card waiting with a demo of two scenes, the second narrated in two sentences. */
+  const waiting = (question?: string) => {
+    images = new Images(join(dir, 'images'));
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: generic, imageFiles: (ids = []) => ids.flatMap((i) => images.path(i) ?? []), releaseDelay: 5, holdGrace: 60_000 });
+    const d = join(dir, 'demo');
+    mkdirSync(d, { recursive: true });
+    writeFileSync(join(d, 'demo.mp4'), 'x');
+    writeFileSync(join(d, 'captions.vtt'), 'WEBVTT\n\n00:00:00.350 --> 00:00:05.000\nDie Liste.\n\n00:00:06.350 --> 00:00:16.350\nJetzt der Export. Die Datei hat eine Kopfzeile.\n');
+    const c = manual();
+    workers.start(c.id);
+    runtime.last.call('ready_for_review', { summary: 'S', demo: { dir: d, chapters: ['Liste', 'Export'], ...(question ? { question } : {}) } });
+    runtime.last.emit({ type: 'idle' });
+    return c;
+  };
+  const still = () => images.save(new Uint8Array([1, 2, 3]), 'image/jpeg');
+
+  test('stand in the conversation at once, and reach the worker together once the owner has finished watching', async () => {
+    const c = waiting();
+    const n = runtime.last.inbox.length;
+    const frame = still();
+    workers.message(c.id, 'Hier fehlt die Kopfzeile.', [], false, undefined, { at: 7.24, still: frame });
+    workers.message(c.id, 'Zu schnell.', [], true, undefined, { at: 14 });
+    const said = board.events(c.id).filter((e) => e.author === 'owner');
+    expect(said.map((e) => e.spot)).toEqual([
+      { at: 7.2, chapter: 'Export', narration: 'Jetzt der Export.', still: frame },
+      { at: 14, chapter: 'Export', narration: 'Die Datei hat eine Kopfzeile.' },
+    ]);
+    // the worker hears nothing yet, and the card is still the owner's
+    expect(runtime.last.inbox).toHaveLength(n);
+    expect(board.item(c.id)!.held).toEqual(said.map((e) => e.id));
+    expect(needsYou(board.item(c.id)!)).toBe(true);
+    workers.released(c.id);
+    await until(() => runtime.last.inbox.length > n);
+    expect(runtime.last.inbox).toHaveLength(n + 1);
+    expect(runtime.last.inbox.at(-1)).toBe(
+      [
+        'The owner watched your demo video and commented on places in it. The card still waits for their approval of what you handed over; a change their words call for goes into a new handover:',
+        '2 comments on places in your demo video (their frames and screenshots are shown below, in this order):',
+        `[Demo video at 0:07, chapter „Export“, narration: „Jetzt der Export.“]\nHier fehlt die Kopfzeile.\n(frame: ${images.path(frame)})`,
+        '[Demo video at 0:14, chapter „Export“, narration: „Die Datei hat eine Kopfzeile.“] (spoken, so speech recognition may have misheard words)\nZu schnell.',
+      ].join('\n\n'),
+    );
+    expect(runtime.last.images.at(-1)).toEqual([images.path(frame)!]);
+    expect(board.item(c.id)!.held).toBeUndefined();
+    expect(board.item(c.id)!.answering).toBe(true);
+    // released again, nothing more goes
+    workers.released(c.id);
+    await Bun.sleep(20);
+    expect(runtime.last.inbox).toHaveLength(n + 1);
+  });
+
+  test('words without a place take the comments along in one message; a comment does not answer the demo report’s question', () => {
+    const c = waiting('Semikolon oder Komma?');
+    const n = runtime.last.inbox.length;
+    workers.message(c.id, 'Hier ruckelt es.', [], false, undefined, { at: 2 });
+    expect(board.item(c.id)!.question).toEqual({ text: 'Semikolon oder Komma?', options: [] });
+    expect(runtime.last.inbox).toHaveLength(n);
+    workers.message(c.id, 'Semikolon.');
+    expect(runtime.last.inbox).toHaveLength(n + 1);
+    expect(runtime.last.inbox.at(-1)).toContain('A comment on places in your demo video:\n\n[Demo video at 0:02, chapter „Liste“, narration: „Die Liste.“]\nHier ruckelt es.\n\nThen they answered:\n\nSemikolon.');
+    expect(board.item(c.id)!.demo!.answer).toBe('Semikolon.');
+    expect(board.item(c.id)!.held).toBeUndefined();
+  });
+
+  test('go without a sign from the owner once the last one has waited long enough, also after a restart', async () => {
+    const c = waiting();
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: generic, holdGrace: 10 });
+    const n = runtime.last.inbox.length;
+    workers.message(c.id, 'Hier.', [], false, undefined, { at: 1 });
+    workers.shutdown();
+    expect(runtime.last.inbox).toHaveLength(n);
+    workers.resumeAll();
+    await until(() => !board.item(c.id)!.held);
+    expect(runtime.sessions.flatMap((s) => s.inbox).at(-1)).toContain('Hier.');
+  });
+
+  test('an approval takes them, also one clicked as the card closes', async () => {
+    const c = waiting();
+    workers.message(c.id, 'Etwas kleiner.', [], false, undefined, { at: 1 });
+    // the card folds with the click: its video stops being watched while the approval is on its way
+    workers.released(c.id);
+    await workers.approve(c.id);
+    await Bun.sleep(20);
+    const told = runtime.sessions.flatMap((s) => s.inbox);
+    expect(told.filter((m) => m.includes('Etwas kleiner.'))).toHaveLength(1);
+    expect(told.at(-1)).toContain('The owner approved your work.');
+    expect(told.at(-1)).toContain('Before approving, the owner watched your demo video. A comment on places in your demo video:\n\n[Demo video at 0:01, chapter „Liste“, narration: „Die Liste.“]\nEtwas kleiner.\n\nThey approved the work as it is all the same');
+  });
+
+  test('while the worker works, one goes to it at once, with its place and frame', () => {
+    const c = waiting();
+    // at work again, after a note say
+    board.work(c.id, { state: 'working', need: null });
+    const frame = still();
+    workers.message(c.id, 'Und hier.', [], false, undefined, { at: 6.5, still: frame });
+    expect(runtime.last.inbox.at(-1)).toContain(`[Demo video at 0:06, chapter „Export“, narration: „Jetzt der Export.“]\nUnd hier.\n\nThe frame at that place in the video is shown below (file: ${images.path(frame)}).`);
+    expect(runtime.last.images.at(-1)).toEqual([images.path(frame)!]);
+    expect(board.events(c.id).at(-1)).toMatchObject({ text: 'Und hier.', spot: { at: 6.5, still: frame } });
+    expect(board.item(c.id)!.held).toBeUndefined();
+  });
+});
+
 describe('landing through a pull request', () => {
   beforeEach(() => {
     rmSync(dir, { recursive: true, force: true });

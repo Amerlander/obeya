@@ -13,6 +13,7 @@ import { beginDictation, dictate, draftOf, focusedDraft, MIC_DRAFT, takesImages,
 import { type Recording, record } from './recorder';
 import { AttachButton, ShotStrip, useShotInput } from './shots';
 import { replyOn, setReply, useReply } from './reply';
+import { sent, take, type Taken } from './spot';
 import { errorText, t } from './strings';
 
 /** Starts a recording, for a text field's microphone and Space held in it; null where nobody listens. */
@@ -52,7 +53,7 @@ export function usePushToTalk(where: () => Where, field: (target: Where) => stri
   const [level, setLevel] = useState(0);
   const [flat, setFlat] = useState(false);
   const mic = useRef<Promise<{ stream: MediaStream; ctx: AudioContext; analyser: AnalyserNode }> | null>(null);
-  const rec = useRef<{ recording: Recording; t0: number; target: Where; into: string | null } | null>(null);
+  const rec = useRef<{ recording: Recording; t0: number; target: Where; into: string | null; spot: Taken | null } | null>(null);
   const held = useRef<number | null>(null);
   const frame = useRef(0);
 
@@ -63,6 +64,8 @@ export function usePushToTalk(where: () => Where, field: (target: Where) => stri
     const target = where();
     // the cursor in a field: the words go into it
     const into = focusedDraft();
+    // the video stands where the owner started speaking: what they say is about that place
+    const spot = !into && target && 'card' in target ? take(target.card) : null;
     api.warmVoice();
     let m;
     try {
@@ -87,7 +90,7 @@ export function usePushToTalk(where: () => Where, field: (target: Where) => stri
       return;
     }
     void m.ctx.resume();
-    const r = { recording: record(m.stream, m.ctx), t0: performance.now(), target, into };
+    const r = { recording: record(m.stream, m.ctx), t0: performance.now(), target, into, spot };
     rec.current = r;
     if (into) beginDictation(into);
     setPhase('listening');
@@ -131,8 +134,8 @@ export function usePushToTalk(where: () => Where, field: (target: Where) => stri
       const reply = r.target && 'card' in r.target ? replyOn(r.target.card) : null;
       if (reply) setReply(null);
       let failed = false;
-      const h = await send(r.target, () =>
-        api.voice(audio, r.target, { images, replyTo: reply?.id, text }).catch((e) => {
+      const h = await send(r.target, async () =>
+        api.voice(audio, r.target, { images, replyTo: reply?.id, text, spot: await sent(r.spot) }).catch((e) => {
           failed = true;
           throw e;
         }),

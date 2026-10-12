@@ -7,10 +7,10 @@ import type { CardDiff } from '../core/diff';
 import { LANGUAGE_NAMES, LANGUAGES } from '../core/locale';
 import { MESSAGES, type Messages } from '../core/messages';
 import { basename } from 'node:path';
-import { answering, askable, type DemoKind, type DemoPage, formatQuestion, type Item, type Mock, type Question, type RestartReason } from '../core/types';
+import { answering, askable, type DemoKind, type DemoPage, formatQuestion, type Item, type Mock, type Question, type RestartReason, type Spot, type SpotInput } from '../core/types';
 import { BadRequest, type Board, replyNote } from './board';
 import { type Asked, decisionLog, toQuestion, withPick } from './advisor';
-import { checkArtifact, DEMO_SKILL, OBEYA_PLUGIN, readChapters } from './demo';
+import { checkArtifact, DEMO_SKILL, OBEYA_PLUGIN, placeIn, readChapters } from './demo';
 import { artifactFiles } from './demo-page';
 import { imageNote } from './images';
 import type { InputContext } from './koordinator';
@@ -48,6 +48,10 @@ export interface WorkerOptions {
   backgroundGrace?: number;
   /** How long a card waits for the owner, its worker idle, before Obeya stops its workspace's app stack (`stack.stop`). */
   parkGrace?: number;
+  /** How long the owner's comments on places in the demo video wait at most for them to finish watching. */
+  holdGrace?: number;
+  /** How long comments the owner finished watching with wait for an approval clicked at the same time, which takes them. */
+  releaseDelay?: number;
   /** How often a session cut off from its machine asks whether that machine answers again; 30 s when left out. */
   reconnectMs?: number;
   /** How long after a usage limit lifts the worker goes on, so that clocks a little apart do not matter. */
@@ -67,6 +71,22 @@ export interface WorkerOptions {
   /** Passes on to the Koordinator what the owner's words to a card's worker ask of Obeya (`to_obeya`); without it the worker has no such tool. */
   toObeya?: (cardId: string, request: string) => Promise<string>;
 }
+
+/** The owner's comments on places in the demo video that go with their approval. */
+type Comments = { text: string; images: string[] };
+
+/** A comment on a place in the demo video held back while the owner watches (`CardRow.held`). */
+interface HeldComment {
+  id: number;
+  spoken?: true;
+}
+
+/** Where in the demo video the owner's words are, as the worker reads it above them. */
+export const spotNote = (spot: Spot) => {
+  const m = Math.floor(spot.at / 60);
+  const time = `${m}:${String(Math.floor(spot.at % 60)).padStart(2, '0')}`;
+  return `[Demo video at ${time}${spot.chapter ? `, chapter „${spot.chapter}“` : ''}${spot.narration ? `, narration: „${spot.narration}“` : ''}]`;
+};
 
 /** What is stored while landed work's worker finishes (`CardRow.landed`). */
 interface LandedState {
@@ -140,6 +160,10 @@ export interface DueRestart {
 
 /** A render or a test suite finishes well within this; a turn that waits longer counts as ended. */
 const BACKGROUND_GRACE = 10 * 60_000;
+/** The owner may pause the demo video for a while; a browser gone away leaves no other sign. */
+const HOLD_GRACE = 10 * 60_000;
+/** Closing the card with „Freigeben“ also ends the watching: the approval takes the comments then. */
+const RELEASE_DELAY = 1500;
 /** A quick reply from the owner should not pay for starting the stack again. */
 const PARK_GRACE = 5 * 60_000;
 /** A usage limit that does not say when it lifts is tried again after this. */
@@ -200,6 +224,8 @@ export class Workers {
   private reconnecting = new Map<string, ReturnType<typeof setTimeout>>();
   /** Tool calls the owner allowed after the session that asked was gone (a restart), by card: each runs once, without asking again. */
   private granted = new Map<string, Set<string>>();
+  /** Cards with comments on places in the demo video held back: when they go to the worker without the owner's sign. */
+  private holding = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(private o: WorkerOptions) {}
 
@@ -238,22 +264,32 @@ export class Workers {
   /**
    * A hint while the worker runs, words on its handover, or a question once its work is done;
    * `images` are screenshot files the owner attached; `replyTo`: the message of the card's
-   * conversation the words reply to, which the worker reads above them.
+   * conversation the words reply to, which the worker reads above them; `spot`: the place in the
+   * demo video they are about. Such words on a handover are held back while the owner watches (`hold`).
    */
-  message(cardId: string, text: string, images: string[] = [], spoken = false, replyTo?: number) {
+  message(cardId: string, text: string, images: string[] = [], spoken = false, replyTo?: number, spot?: SpotInput) {
     const card = this.card(cardId);
-    const words = this.words(cardId, text, images, replyTo);
-    if (card.state === 'waiting' && (card.need === 'review' || card.need === 'demo')) {
+    const place = spot ? this.place(cardId, spot) : undefined;
+    const handover = card.state === 'waiting' && (card.need === 'review' || card.need === 'demo');
+    if (place && handover) return this.hold(card, text, images, spoken, replyTo, place);
+    const words = this.words(cardId, text, images, replyTo, place);
+    const shots = images.map((f) => basename(f));
+    const log = () => this.o.board.log(cardId, 'hint', 'owner', text, undefined, shots, undefined, replyTo, place);
+    // the worker sees the frame the words are about
+    images = [...this.stills(place), ...images];
+    if (handover) {
       // under a demo whose report asks a question, the words answer it, whatever else they say
       if (card.question) return this.answerDemo(card, text, images, spoken, replyTo);
       // the work still waits for approval while the worker takes the words in; a change they call for comes as a new handover
       this.takingIn(cardId);
-      this.o.board.log(cardId, 'hint', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo);
+      log();
       if (text) this.o.onOwnerInput?.(card, 'feedback', text);
+      // words without a place end the watching: the comments held back come first
+      const held = this.takeHeld(cardId);
       this.deliver(
         cardId,
-        `The owner wrote on your handover${spoken ? ` (${SPOKEN})` : ''}. The card still waits for their approval of what you handed over; a change their words call for goes into a new handover:\n\n${words}`,
-        images,
+        `The owner wrote on your handover${spoken ? ` (${SPOKEN})` : ''}. The card still waits for their approval of what you handed over; a change their words call for goes into a new handover:\n\n${held ? `${held.text}\n\nThen they wrote:\n\n` : ''}${words}`,
+        [...(held?.images ?? []), ...images],
       );
     } else if (card.state === 'waiting' && card.need === 'question') {
       // a note instead of an answer takes the question back: it may have settled it, else the worker asks anew
@@ -262,14 +298,14 @@ export class Workers {
       if (waiting) {
         // the tool call waits for the owner, so the worker reads nothing else meanwhile: the note refuses it
         this.o.board.work(cardId, { state: row.landed ? landedState(row.landed) : row.pr ? 'inPr' : 'working', need: null, detail: null });
-        this.o.board.log(cardId, 'hint', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo);
+        log();
         if (text) this.o.onOwnerInput?.(card, 'note', text);
         waiting({ allow: false, message: `Not run: the owner wrote a note instead of allowing it${spoken ? ` (${SPOKEN})` : ''}. If the note settles it, go on; if not, ask again.\n\n${words}` });
         if (images.length) this.live.get(cardId)!.session.send('The screenshots of the owner’s note.', images);
         return;
       }
       this.o.board.work(cardId, { state: row.landed ? landedState(row.landed) : row.pr ? 'inPr' : 'working', need: null, detail: null });
-      this.o.board.log(cardId, 'hint', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo);
+      log();
       if (text) this.o.onOwnerInput?.(card, 'note', text);
       this.deliver(
         cardId,
@@ -277,10 +313,10 @@ export class Workers {
         images,
       );
     } else if (card.state === 'working' || card.state === 'inPr' || card.finishing) {
-      this.o.board.log(cardId, 'hint', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo);
+      log();
       if (text) this.o.onOwnerInput?.(card, 'note', text);
       this.deliver(cardId, `A note from the owner${spoken ? ` (${SPOKEN})` : ''} (it does not stop you; adjust your plan if it changes anything):\n\n${words}`, images);
-    } else if (askable(card)) this.followUp(card, text, images, spoken, replyTo);
+    } else if (askable(card)) this.followUp(card, text, images, spoken, replyTo, place);
     else throw new BadRequest('noAgent', 'no agent works on this card');
   }
 
@@ -288,7 +324,7 @@ export class Workers {
    * The owner asks about a card whose work is over: its worker's session is resumed in a fresh
    * workspace on the card's branch, as after a landing, and ends again once the worker has answered.
    */
-  private followUp(card: Item, text: string, images: string[], spoken: boolean, replyTo?: number) {
+  private followUp(card: Item, text: string, images: string[], spoken: boolean, replyTo?: number, place?: Spot) {
     const row = this.o.board.row(card.id);
     let path: string;
     try {
@@ -302,11 +338,12 @@ export class Workers {
     const commit = row.shipped ? (JSON.parse(row.shipped) as Shipped).commit : undefined;
     const landed: LandedState = { ...(card.state === 'done' ? { unchanged: true } : commit ? { commit } : {}), followUp: true };
     this.o.board.work(card.id, { workspace: path, landed: JSON.stringify(landed), status_line: null });
-    this.o.board.log(card.id, 'hint', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo);
+    const stills = this.stills(place);
+    this.o.board.log(card.id, 'hint', 'owner', text, undefined, images.slice(stills.length).map((f) => basename(f)), undefined, replyTo, place);
     if (text) this.o.onOwnerInput?.(card, 'note', text);
     const message = [
       `The owner asks about this card${spoken ? ` (${SPOKEN})` : ''}. ${card.state === 'done' ? 'It was closed without a change to the repository' : `Its work is on main${commit ? ` (${commit.slice(0, 7)})` : ''}`}, and your session had ended; it goes on in a fresh workspace on the branch ${row.branch}, where main may have moved on since.`,
-      this.words(card.id, text, images, replyTo),
+      this.words(card.id, text, images.slice(stills.length), replyTo, place),
       FOLLOW_UP,
     ].join('\n\n');
     // a card that never reported a session: a new one needs the card first
@@ -373,6 +410,7 @@ export class Workers {
    */
   private answerDemo(card: Item, text: string, images: string[], spoken: boolean, replyTo?: number) {
     const q = card.question!.text;
+    const held = this.takeHeld(card.id);
     const demo = JSON.parse(this.o.board.row(card.id).demo!) as Record<string, unknown>;
     this.o.board.work(card.id, { demo: JSON.stringify({ ...demo, answer: text || '(Screenshot)' }) });
     this.takingIn(card.id);
@@ -382,14 +420,117 @@ export class Workers {
     if (card.prototypeOf) this.o.onPrototypeAnswer?.(card, q, text || '(Screenshot)');
     this.deliver(
       card.id,
-      `The owner answered the question in your demo report („${q}“)${spoken ? ` (${SPOKEN})` : ''}. The card still waits for their approval of what you handed over; a change their words call for goes into a new handover:\n\n${this.words(card.id, text, images, replyTo)}`,
-      images,
+      `The owner answered the question in your demo report („${q}“)${spoken ? ` (${SPOKEN})` : ''}. The card still waits for their approval of what you handed over; a change their words call for goes into a new handover:\n\n${held ? `${held.text}\n\nThen they answered:\n\n` : ''}${this.words(card.id, text, images, replyTo)}`,
+      [...(held?.images ?? []), ...images],
     );
   }
 
-  /** The owner's words as the worker reads them: the message they reply to above them, the screenshots' files below. */
-  private words(cardId: string, text: string, images: string[], replyTo?: number) {
-    return `${replyNote(replyTo ? this.o.board.quoted(cardId, replyTo) : undefined, 'worker')}${text}${imageNote(images)}`;
+  /**
+   * The owner's words as the worker reads them: the place in the demo video and the message they
+   * reply to above them, the frame's and the screenshots' files below.
+   */
+  private words(cardId: string, text: string, images: string[], replyTo?: number, place?: Spot) {
+    const still = this.stills(place);
+    return `${place ? `${spotNote(place)}\n` : ''}${replyNote(replyTo ? this.o.board.quoted(cardId, replyTo) : undefined, 'worker')}${text}${still.length ? `\n\nThe frame at that place in the video is shown below (file: ${still[0]}).` : ''}${imageNote(images)}`;
+  }
+
+  /** A place in the card's demo video, with the chapter there and what the narration says. */
+  private place(cardId: string, spot: SpotInput): Spot {
+    const at = Math.max(0, Math.round(spot.at * 10) / 10);
+    const demo = this.o.board.row(cardId).demo;
+    const d = demo ? (JSON.parse(demo) as { dir: string; kind?: DemoKind; chapters?: [number, string][] }) : undefined;
+    return { at, ...(d && d.kind !== 'html' ? placeIn(d.dir, d.chapters ?? [], at) : {}), ...(spot.still ? { still: spot.still } : {}) };
+  }
+
+  /** The file of the frame at a place in the video, if it has one. */
+  private stills(place: Spot | undefined): string[] {
+    return place?.still ? (this.o.imageFiles?.([place.still]) ?? []) : [];
+  }
+
+  /**
+   * Words on a place in the demo video, while the card waits for the owner's approval: they stand in
+   * the conversation at once, but reach the worker together once the owner has finished watching
+   * (`release`, words without a place, an approval), so that it reworks the demo once rather than
+   * for each comment. Ten minutes after the last one without a sign, they go anyway.
+   */
+  private hold(card: Item, text: string, images: string[], spoken: boolean, replyTo: number | undefined, place: Spot) {
+    const e = this.o.board.log(card.id, 'hint', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo, place);
+    if (text) this.o.onOwnerInput?.(card, 'feedback', text);
+    this.o.board.work(card.id, { held: JSON.stringify([...this.held(card.id), { id: e.id, ...(spoken ? { spoken: true } : {}) }]) });
+    this.releaseLater(card.id, this.o.holdGrace ?? HOLD_GRACE);
+  }
+
+  private held(cardId: string): HeldComment[] {
+    const held = this.o.board.row(cardId).held;
+    return held ? (JSON.parse(held) as HeldComment[]) : [];
+  }
+
+  private releaseLater(cardId: string, ms: number) {
+    clearTimeout(this.holding.get(cardId));
+    this.holding.set(
+      cardId,
+      setTimeout(() => {
+        this.holding.delete(cardId);
+        // no request to answer with the error: it goes into the card's log
+        try {
+          this.release(cardId);
+        } catch (e) {
+          if (this.o.board.item(cardId)) this.o.board.log(cardId, 'error', 'obeya', e instanceof Error ? e.message : String(e));
+        }
+      }, ms),
+    );
+  }
+
+  /**
+   * The owner has finished watching the demo video (it ended, the card closed, it stood still for a
+   * while): the comments held back go to the worker, after a moment in which an approval clicked
+   * with the closing takes them instead.
+   */
+  released(cardId: string) {
+    this.card(cardId);
+    if (this.held(cardId).length) this.releaseLater(cardId, this.o.releaseDelay ?? RELEASE_DELAY);
+  }
+
+  /** The comments held back go to the worker as one message, the card still waiting for approval. */
+  private release(cardId: string) {
+    const card = this.o.board.item(cardId);
+    if (!card || !(card.state === 'waiting' && (card.need === 'review' || card.need === 'demo'))) return void this.takeHeld(cardId);
+    const held = this.takeHeld(cardId);
+    if (!held) return;
+    this.takingIn(cardId);
+    this.deliver(
+      cardId,
+      `The owner watched your demo video and commented on places in it. The card still waits for their approval of what you handed over; a change their words call for goes into a new handover:\n\n${held.text}`,
+      held.images,
+    );
+  }
+
+  /** The comments held back as the worker reads them, each with its place, and their frames and screenshots; none are held afterwards. */
+  private takeHeld(cardId: string): { text: string; images: string[] } | null {
+    clearTimeout(this.holding.get(cardId));
+    this.holding.delete(cardId);
+    const held = this.held(cardId);
+    if (!held.length) return null;
+    this.o.board.work(cardId, { held: null });
+    const events = new Map(this.o.board.events(cardId).map((e) => [e.id, e]));
+    const images: string[] = [];
+    const comments = held.flatMap(({ id, spoken }) => {
+      const e = events.get(id);
+      if (!e) return [];
+      const still = this.stills(e.spot);
+      const shots = this.o.imageFiles?.(e.images) ?? [];
+      images.push(...still, ...shots);
+      const files = [...still.map((f) => `frame: ${f}`), ...shots.map((f) => `screenshot: ${f}`)];
+      return [
+        `${e.spot ? spotNote(e.spot) : ''}${spoken ? ` (${SPOKEN})` : ''}\n${replyNote(e.replyTo ? this.o.board.quoted(cardId, e.replyTo) : undefined, 'worker')}${e.text}${files.length ? `\n(${files.join('; ')})` : ''}`,
+      ];
+    });
+    if (!comments.length) return null;
+    const many = comments.length > 1;
+    return {
+      text: `${many ? `${comments.length} comments` : 'A comment'} on places in your demo video${images.length ? ` (${many ? 'their frames and screenshots are' : 'its frame is'} shown below, in this order)` : ''}:\n\n${comments.join('\n\n')}`,
+      images,
+    };
   }
 
   /** `direct`: the work goes onto the default branch at once instead of into a pull request, where the adapter allows it. */
@@ -400,14 +541,17 @@ export class Workers {
     if (direct && this.o.adapter.land === 'pr' && !this.o.adapter.direct)
       throw new BadRequest('noDirect', 'this repository lands approved work only through a pull request; its adapter does not allow pushing it directly');
     if (direct && card.prototypeOf) throw new BadRequest('noDirect', 'a prototype never lands');
+    // comments on places in the demo video the owner made before approving go with the approval
+    const held = this.takeHeld(cardId);
+    const comments = held ? { text: `${held.text}\n\nThey approved the work as it is all the same: what still matters of these comments, propose as a card of its own (propose_card).`, images: held.images } : undefined;
     // a prototype never lands: approving it is having seen enough
     if (card.prototypeOf) return this.endPrototype(cardId, 'discarded');
     // work that changed nothing (a demo, an analysis) has nothing to land and no pull request to open
-    if (!this.o.workspaces.hasWork(cardId)) return this.close(cardId, 'owner');
+    if (!this.o.workspaces.hasWork(cardId)) return this.close(cardId, 'owner', comments);
     if (this.o.adapter.land === 'main' || direct) {
       // the click ends the owner's turn: while the work lands, the card no longer needs them
       this.o.board.work(cardId, { approved_at: new Date().toISOString() });
-      return this.land(cardId, 'owner');
+      return this.land(cardId, 'owner', comments);
     }
     // the worker opens the PR the way the repository does it, then Obeya watches it
     const pr: PrState = { url: null, seen: [], reported: [] };
@@ -422,9 +566,11 @@ export class Workers {
         'The owner approved your work. In this repository it goes out as a pull request, opened the way the repository does it (its own skills and conventions): from now on you may push this branch. Whoever reads the pull request has not seen Obeya, the card or the plan doc. Do not merge it: Obeya merges it once its checks have passed and its review is through.',
         shared ? `Your demo video is shared with the team on a page of its own: ${shared}. Link it in the pull request's description.` : '',
         'Once you report its URL with pr_opened, Obeya watches it and passes you review comments, failed checks and conflicts; you handle them the way the repository does (its skill for review comments, if it has one). A comment that questions a decision, or a conflict that needs a product call, is the owner’s (ask).',
+        comments ? `Before approving, the owner watched your demo video. ${comments.text}` : '',
       ]
         .filter(Boolean)
         .join('\n\n'),
+      comments?.images,
     );
   }
 
@@ -435,11 +581,11 @@ export class Workers {
    * handover lands without the owner approving again, the same way. What blocks the Obeya checkout,
    * or a push turned away, stays with the owner and needs a new approval.
    */
-  private async land(cardId: string, by: 'owner' | 'obeya') {
+  private async land(cardId: string, by: 'owner' | 'obeya', comments?: Comments) {
     if (this.landing.has(cardId)) return;
     this.landing.add(cardId);
     try {
-      await this.landNow(cardId, by);
+      await this.landNow(cardId, by, comments);
     } catch (e) {
       // a landing that broke off gives the card back to the owner, who approves again
       if (this.o.board.row(cardId).state === 'waiting') this.o.board.work(cardId, { approved_at: null });
@@ -449,7 +595,7 @@ export class Workers {
     }
   }
 
-  private async landNow(cardId: string, by: 'owner' | 'obeya') {
+  private async landNow(cardId: string, by: 'owner' | 'obeya', comments?: Comments) {
     const row = this.o.board.row(cardId);
     // only a direct approval is held where work goes out as a pull request
     const direct = this.o.adapter.land === 'pr';
@@ -468,7 +614,9 @@ export class Workers {
         [
           `The owner approved your work, but it could not land on main: ${result.detail}`,
           'The approval holds for what it takes to land the work: once you hand over again, Obeya lands it without asking the owner again, with the demo already on the card. A change to what the owner approved is theirs to decide.',
+          ...(comments ? [`Before approving, the owner watched your demo video. ${comments.text}`] : []),
         ].join('\n\n'),
+        comments?.images,
       );
       return;
     }
@@ -497,10 +645,12 @@ export class Workers {
         restarts
           ? 'Obeya runs from that checkout and starts again with your change as soon as no worker is in the middle of a turn, which stops whatever you run then. If something that remains needs Obeya to run your change, call after_restart and end your turn: Obeya tells you once it runs it.'
           : '',
+        comments ? `Before approving, the owner watched your demo video. ${comments.text}` : '',
         AFTER_LANDING,
       ]
         .filter(Boolean)
         .join('\n\n'),
+      comments?.images,
     );
   }
 
@@ -508,23 +658,27 @@ export class Workers {
    * Approved work that changed nothing in the repository: nothing lands, and the card is `done`.
    * Its worker hears so and may finish what remains, as after a landing.
    */
-  private close(cardId: string, by: 'owner' | 'worker') {
+  private close(cardId: string, by: 'owner' | 'worker', comments?: Comments) {
     this.bump(cardId);
     this.o.board.work(cardId, { state: 'done', need: null, detail: null, status_line: null, approved_at: null, pr: null, landed: JSON.stringify({ unchanged: true } satisfies LandedState) });
     this.o.board.log(cardId, 'state', by, by === 'owner' ? this.o.board.t.worker.approvedUnchanged : this.o.board.t.worker.doneUnchanged);
     // the worker that closed it is told by the tool's result, and its turn's end finishes it
     if (by === 'owner')
-      this.afterLanding(cardId, `The owner approved your work. It changed nothing in the repository, so nothing lands and there is no pull request: the card is done.\n\n${AFTER_LANDING}`);
+      this.afterLanding(
+        cardId,
+        `The owner approved your work. It changed nothing in the repository, so nothing lands and there is no pull request: the card is done.${comments ? `\n\nBefore approving, the owner watched your demo video. ${comments.text}` : ''}\n\n${AFTER_LANDING}`,
+        comments?.images,
+      );
   }
 
   /**
    * Landed work's worker hears about it and may finish what remains (a migration, say) in its
    * workspace, which stays until then. Without a session to tell, the workspace goes at once.
    */
-  private afterLanding(cardId: string, message: string) {
+  private afterLanding(cardId: string, message: string, images: string[] = []) {
     const row = this.o.board.row(cardId);
     if (!row.workspace || (!this.live.has(cardId) && !row.session_id)) return this.finish(cardId);
-    this.deliver(cardId, message);
+    this.deliver(cardId, message, images);
   }
 
   /** Landed work's worker is done: its session ends and its workspace is freed. */
@@ -656,6 +810,8 @@ export class Workers {
       return;
     }
     if (card.state !== 'working' && card.state !== 'waiting') throw new BadRequest('noAgent', 'no agent works on this card');
+    // comments held back for the worker stay in the conversation
+    this.takeHeld(cardId);
     this.end(cardId);
     this.bump(cardId);
     // work on the branch keeps its workspace, so starting again goes on from there
@@ -669,6 +825,8 @@ export class Workers {
   resumeAll() {
     for (const i of this.o.board.snapshot().items) {
       if (this.o.repo && i.repo !== this.o.repo) continue;
+      // the page reloaded: the owner may watch on, or have gone
+      if (i.held?.length) this.releaseLater(i.id, this.o.holdGrace ?? HOLD_GRACE);
       const row = this.o.board.row(i.id);
       if (row.landed && row.workspace) {
         this.resumeLanded(i, row.landed, row.session_id);

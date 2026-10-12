@@ -56,8 +56,15 @@ const de = {
           { keys: [['Doppelklick']], text: 'Neue Aufgabe an dieser Stelle' },
           { keys: [['N']], text: 'Neue Aufgabe in der Mitte' },
           { keys: [['Tab']], text: 'Zur nächsten Karte, die dich braucht, oder zu Obeyas Antwort' },
-          { keys: [['Z']], text: 'Demo-Video größer zeigen und wieder kleiner' },
           { keys: [['Esc']], text: 'Karte oder Projekt schließen' },
+        ],
+      },
+      {
+        title: 'Demo-Video',
+        rows: [
+          { keys: [['Leertaste tippen']], text: 'Abspielen und anhalten' },
+          { keys: [['Leertaste halten']], text: 'Kommentar zu dieser Stelle; am Anfang oder Ende zur Arbeit als Ganzes' },
+          { keys: [['Z']], text: 'Größer zeigen und wieder kleiner' },
         ],
       },
       {
@@ -387,6 +394,14 @@ const de = {
     unzoom: 'Wieder kleiner (Z, Esc)',
     zoomHint: 'Größer mit',
     unzoomHint: 'Kleiner mit',
+    comment: 'Hier kommentieren',
+    commentHint: 'Hält das Video an: was du schreibst oder bei gehaltener Leertaste sagst, gehört zu dieser Stelle',
+    /** The field's placeholder while the video stands at a place. */
+    commentAt: (time: string) => `Etwas zu ${time} schreiben oder Leertaste halten`,
+    place: 'Dein Kommentar gehört zu dieser Stelle im Video',
+    unplace: 'Nicht zu dieser Stelle',
+    toPlace: 'Im Video an diese Stelle springen',
+    held: (n: number) => `${n === 1 ? '1 Kommentar geht' : `${n} Kommentare gehen`} an den Agenten, sobald du fertig geschaut hast`,
   },
   share: {
     share: 'Teilen',
@@ -1015,8 +1030,15 @@ const en: Strings = {
           { keys: [['Double-click']], text: 'New task right there' },
           { keys: [['N']], text: 'New task in the middle' },
           { keys: [['Tab']], text: 'Next card that needs you, or Obeya’s answer' },
-          { keys: [['Z']], text: 'Show the demo video larger and back' },
           { keys: [['Esc']], text: 'Close the card or project' },
+        ],
+      },
+      {
+        title: 'Demo video',
+        rows: [
+          { keys: [['Tap space']], text: 'Play and pause' },
+          { keys: [['Hold space']], text: 'Comment on this moment; at the start or end, on the work as a whole' },
+          { keys: [['Z']], text: 'Show it larger and back' },
         ],
       },
       {
@@ -1325,6 +1347,13 @@ const en: Strings = {
     unzoom: 'Back to normal size (Z, Esc)',
     zoomHint: 'Larger with',
     unzoomHint: 'Smaller with',
+    comment: 'Comment here',
+    commentHint: 'Pauses the video: what you type, or say holding space, is about this moment',
+    commentAt: (time: string) => `Write about ${time} or hold space`,
+    place: 'Your comment is about this moment in the video',
+    unplace: 'Not about this moment',
+    toPlace: 'Jump to this moment in the video',
+    held: (n: number) => `${n === 1 ? '1 comment goes' : `${n} comments go`} to the agent once you have finished watching`,
   },
   share: {
     share: 'Share',

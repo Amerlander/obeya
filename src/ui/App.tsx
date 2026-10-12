@@ -22,8 +22,9 @@ import { collect, keep, type Kept, restore, type SideSheet, takeKept } from './k
 import { Sign, Wordmark } from './logo';
 import { Help, HelpButton } from './help';
 import { attachTo, imageFiles } from './shots';
-import { cardDraft, fieldOn, MIC_DRAFT, OBEYA_DRAFT, takesImages } from './draft';
+import { cardDraft, fieldOn, focusedDraft, MIC_DRAFT, OBEYA_DRAFT, takesImages } from './draft';
 import { type Heard, HoldToTalk, PushToTalk, ToldList, usePushToTalk, useTold, type Where } from './voice';
+import { sent, take, videoOf } from './spot';
 import { CanvasPill, CardView, DepLinks, Edges, Links, Minimap, ProjectView, RestartPill, Sheet, UpdatePill, WorkspacesPill } from './parts';
 import { clampWidth, loadWidths, saveWidths, SHEET_W, type SheetWidths, widthsIn } from './sheetWidth';
 import { errorText, t } from './strings';
@@ -68,6 +69,8 @@ type Pos = { x: number; y: number };
 // opening a card takes FLY_MS + UNFOLD_MS (300 ms) and closing the same: fast, yet still a visible move
 const FLY_MS = 130;
 const UNFOLD_MS = 170;
+/** Space let go sooner is a tap, which plays or pauses the demo video; push-to-talk takes no shorter recording either. */
+const TAP_MS = 350;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** What `get` returns once it returns something, within `ms`. */
 async function soon<T>(get: () => T | undefined, ms = 3000): Promise<T | undefined> {
@@ -629,7 +632,10 @@ function Canvas({
   const tellTyped = useCallback(async (text: string, images: string[] | undefined, target: Where, field?: Field, replyTo?: number) => {
     if (listening(target))
       try {
-        await api.command(text, target, images, field, replyTo);
+        // typed while the card's demo video stands at a place: about that place, and the video plays on
+        const taken = target && 'card' in target ? take(target.card) : null;
+        if (taken) videoOf((target as { card: string }).card)?.play().catch(() => {});
+        await api.command(text, target, images, field, replyTo, await sent(taken));
       } catch (e) {
         if (!(e instanceof ApiError)) console.error(e);
         showAck(e instanceof ApiError ? errorText(e.code) : t.offlineError);
@@ -671,10 +677,36 @@ function Canvas({
   const pttRef = useRef(ptt);
   pttRef.current = ptt;
   // a text field's microphone, and Space held in it
-  const holdToTalk = useCallback(() => pttRef.current.start(), []);
+  /** The open card's demo video while the owner holds Space or the microphone: whether it played, and since when. */
+  const pressing = useRef<{ video: HTMLVideoElement | null; playing: boolean; at: number; space: boolean; dictating: boolean } | null>(null);
+  /** Space or the microphone held: the demo video pauses, so its narration stays out of the recording. */
+  const press = (space: boolean) => {
+    const f = focusRef.current;
+    const video = f?.type === 'card' ? (videoOf(f.id) ?? panelRef.current?.querySelector('video') ?? null) : null;
+    pressing.current = { video, playing: !!video && !video.paused, at: performance.now(), space, dictating: !!focusedDraft() };
+    video?.pause();
+    pttRef.current.start();
+  };
+  /**
+   * Let go: a tap on Space plays or pauses the video; after speaking, a video that played plays on,
+   * unless the words went into a field, where the owner goes on writing about the place it stands at.
+   */
+  const letGo = () => {
+    const p = pressing.current;
+    pressing.current = null;
+    pttRef.current.stop();
+    if (!p?.video) return;
+    const tap = p.space && performance.now() - p.at < TAP_MS;
+    if (tap ? !p.playing : p.playing && !p.dictating) p.video.play().catch(() => {});
+  };
+  const letGoRef = useRef(letGo);
+  letGoRef.current = letGo;
+  const pressRef = useRef(press);
+  pressRef.current = press;
+  const holdToTalk = useCallback(() => pressRef.current(false), []);
   useEffect(() => {
-    const up = (e: KeyboardEvent) => e.code === 'Space' && pttRef.current.stop();
-    const release = () => pttRef.current.stop();
+    const up = (e: KeyboardEvent) => e.code === 'Space' && letGoRef.current();
+    const release = () => letGoRef.current();
     // a screenshot pasted (⌘V) anywhere but in a text field goes to the field in view, or beside the mic
     const paste = (e: ClipboardEvent) => {
       const el = e.target;
@@ -1002,20 +1034,17 @@ function Canvas({
       setHelpOn(true);
       return;
     }
-    // hold Space anywhere but in a text field to speak; the demo pauses while the owner talks
+    // hold Space anywhere but in a text field to speak; the demo pauses while the owner talks, and a tap plays or pauses it
     if (e.code === 'Space' && !typing) {
       e.preventDefault();
-      if (!e.repeat) {
-        panelRef.current?.querySelector('video')?.pause();
-        pttRef.current.start();
-      }
+      if (!e.repeat) press(true);
       return;
     }
     if (e.key === 'Escape') {
       // a screenshot or demo shown large closes first, a card's diff and the queue's list; the card stays open
       if (document.querySelector('.lightbox, .demo-zoom, .queue-menu, .diff-view')) return;
       // so does the quote of a message the owner was replying to
-      if (document.querySelector('.composer .quote')) return setReply(null);
+      if (document.querySelector('.composer .quote:not(.place)')) return setReply(null);
       // the archive's list closes after a card unfolded from it
       if (f?.type !== 'card' && aOnRef.current) return setAOn(false);
       if (typing) (e.target as HTMLElement).blur();
@@ -1240,7 +1269,7 @@ function Canvas({
           target={target}
           field={draftFor(focus?.type === 'card' ? { card: focus.id } : focus?.type === 'project' ? { project: focus.id } : null)}
           card={focus?.type === 'card' ? focus.id : undefined}
-          onDown={ptt.start}
+          onDown={() => press(false)}
         />
         <Sheet
           project={sheetProject}
