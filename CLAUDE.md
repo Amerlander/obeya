@@ -43,7 +43,9 @@ shows them as projects); when one is done, what lasts moves into `docs/design.md
   `.voice/elevenlabs.key` of the main checkout (`/Users/sadilek/dev/obeya`, gitignored); render with
   an `OBEYA_HOME` whose `demo.json` names both (`voice: elevenlabs`, `voiceName`, `keyFile`), as
   `scripts/hero-video/render.ts` sets up for the hero video (its README says how to change and
-  re-render it). Credits are limited: only for public videos, never as Obeya's own demo voice.
+  re-render it). Credits are limited: only for public videos, never as Obeya's own demo voice. Beside
+  the key lies an English Qwen3-TTS reference cut from that voice (`.voice/qwen-reference-en.wav`
+  and `.txt`); `scripts/hero-video/qwen.py` renders the hero narration with it to compare.
 - A recurring step that needs a longer CLI call (an upload, say) goes into a script in the repo,
   not into the docs as a command to copy.
 - Commit directly to `main`; this repo uses no feature branches or pull requests. An Obeya worker
