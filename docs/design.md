@@ -697,7 +697,8 @@ the owner's language (`src/core/locale.ts`).
   first, and has it find, download and install the second and start again. It passed on macOS
   arm64 and on GitHub's Windows x64 and Ubuntu x64 runners (2026-10-09).
 - **Site** (`site/`) — the page on obeya.si, in English whatever the interface speaks: plain HTML
-  and CSS, no framework and no build, and JavaScript only for the video's play button, so it opens
+  and CSS, no framework and no build, and JavaScript only for the video's play button and its
+  chapter list, so it opens
   straight from the file too. From
   the top: one sentence and the hero video; three pillars with screenshots (the canvas, voice, the
   demo the owner approves instead of the code); the four steps from idea to main as one card
@@ -721,16 +722,22 @@ the owner's language (`src/core/locale.ts`).
   demo, the approval landing it on main; about two minutes, narrated in English in the owner's
   ElevenLabs voice clone (see CLAUDE.md). The directory holds the narration, the scenes, the stage
   and the render; its README says how to change, re-render and publish it. The video is not in
-  git: it and its captions are the assets `hero.mp4` and `hero.vtt` of the GitHub release
+  git: it, its captions and its chapters are the assets `hero.mp4`, `hero.vtt` and
+  `hero.chapters.vtt` of the GitHub release
   `site-media` (a pre-release, so that it never becomes the latest release, whose installers the
   README and the site link), which the Pages workflow fetches into `site/media/` before it publishes, so
   obeya.si serves them itself (no third party, no tracking). `publish.ts` replaces them and runs
-  the workflow again. On the page it is a `<video>` with English captions and a poster
+  the workflow again; the chapters come from the render (the demo pipeline writes the scenes as
+  `chapters.vtt` beside the captions), so they always match the video that is out. On the page it is a `<video>` with English captions and a poster
   (`site/img/hero-poster.jpg`, the first frame without a play button, in git), loading nothing
   before a click (`preload="none"`); opened from the file, the site shows the poster alone. A few
   lines of script put a big play button (a real `<button>`) over the poster and show the
   browser's controls once it plays; without JavaScript the controls are there from the start and
-  the button stays hidden.
+  the button stays hidden. Under the video its scenes are listed as on a card's demo (time and
+  title, four to a row, two on a phone): the list is built from the video's chapters track, a click
+  plays from that scene, and the scene that plays is lifted as a card. The mark follows the time,
+  not the track's active cues, which Chrome leaves stale after a seek. Without JavaScript or
+  without the chapters file there is no list.
 - **Configuration** — the canvases with their repositories (path, adapter, clones), seen and edited
   in the "Konfiguration" dialog. It covers the page but for a margin of the dim (a press there or Esc
   closes it; what was open behind it stays as it was, and a draft not saved yet stays until the page

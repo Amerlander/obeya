@@ -21,6 +21,7 @@ node scripts/hero-video/render.ts               # the whole video, with a real a
 ```
 
 The output goes to `~/demos/obeya-hero/` (`HERO_OUT` names another): `demo.mp4`, `captions.vtt`,
+`chapters.vtt` (the scenes, which the site lists under the video),
 `review/` with a still from the middle and the end of each scene, and `index.html`. Clips are
 cached by voice and text, so a re-render after a visual change costs no credits. The scratch
 Obeya runs on port 4730; `bun scripts/scratch-obeya.ts --stop 4730` ends it, which the render
@@ -52,7 +53,7 @@ The video is not in git. It is an asset of the GitHub release `site-media`, whic
 workflow fetches into `site/media/` before it publishes. One call puts a render out:
 
 ```sh
-node scripts/hero-video/publish.ts            # uploads demo.mp4 and captions.vtt as hero.mp4 and hero.vtt, then runs the Pages workflow
+node scripts/hero-video/publish.ts            # uploads demo.mp4, captions.vtt and chapters.vtt as hero.mp4, hero.vtt and hero.chapters.vtt, then runs the Pages workflow
 node scripts/hero-video/publish.ts --poster   # also takes the poster again from the new video
 ```
 

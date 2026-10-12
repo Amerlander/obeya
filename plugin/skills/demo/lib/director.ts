@@ -694,6 +694,10 @@ export async function runDemo(spec: DemoSpec, demoDir: string) {
   const vtt = ['WEBVTT', ''];
   marks.forEach((m, i) => vtt.push(`${vttTime(m.speechStart)} --> ${vttTime(m.speechEnd)}`, untagged(spec.scenes[i]!.say), ''));
   fs.writeFileSync(path.join(outDir, 'captions.vtt'), vtt.join('\n'));
+  // The scenes as chapters, for a player outside Obeya (the hero video on obeya.si reads them).
+  const chapters = ['WEBVTT', ''];
+  marks.forEach((m, i) => chapters.push(`${vttTime(m.start)} --> ${vttTime(i + 1 < marks.length ? marks[i + 1]!.start : total)}`, m.title, ''));
+  fs.writeFileSync(path.join(outDir, 'chapters.vtt'), chapters.join('\n'));
 
   // One still per scene, taken just before it ends: what the agent checks against the narration.
   const reviewDir = path.join(outDir, 'review');

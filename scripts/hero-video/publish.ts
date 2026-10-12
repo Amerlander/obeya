@@ -1,5 +1,6 @@
-// Publishes a rendered hero video to obeya.si: uploads `demo.mp4` and `captions.vtt` from the
-// render's directory as `hero.mp4` and `hero.vtt` of the release `site-media` (creating the
+// Publishes a rendered hero video to obeya.si: uploads `demo.mp4`, `captions.vtt` and
+// `chapters.vtt` from the render's directory as `hero.mp4`, `hero.vtt` and `hero.chapters.vtt` of
+// the release `site-media` (creating the
 // release the first time, replacing the assets after that), then runs the Pages workflow, which
 // fetches them into site/media/. It acts as the GitHub account `sadilek` through GH_TOKEN, without
 // switching the account gh has active. With `--poster` it first takes the poster
@@ -20,7 +21,8 @@ const poster = process.argv.includes('--poster');
 
 const video = path.join(OUT, 'demo.mp4');
 const captions = path.join(OUT, 'captions.vtt');
-for (const f of [video, captions]) {
+const chapters = path.join(OUT, 'chapters.vtt');
+for (const f of [video, captions, chapters]) {
   if (!fs.existsSync(f)) fail(`missing ${f}: render first (scripts/hero-video/README.md)`);
 }
 
@@ -49,15 +51,16 @@ if (poster) {
 // gh names an asset after its file, so the files go up under their site names from a temp directory
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'hero-publish-'));
 try {
-  const files = [path.join(tmp, 'hero.mp4'), path.join(tmp, 'hero.vtt')] as const;
+  const files = [path.join(tmp, 'hero.mp4'), path.join(tmp, 'hero.vtt'), path.join(tmp, 'hero.chapters.vtt')] as const;
   fs.copyFileSync(video, files[0], fs.constants.COPYFILE_FICLONE);
   fs.copyFileSync(captions, files[1], fs.constants.COPYFILE_FICLONE);
+  fs.copyFileSync(chapters, files[2], fs.constants.COPYFILE_FICLONE);
   const exists = spawnSync('gh', ['release', 'view', RELEASE, '--repo', REPO], { env, stdio: 'ignore' }).status === 0;
   if (exists) {
-    console.log(`Replacing hero.mp4 and hero.vtt in the release ${RELEASE}`);
+    console.log(`Replacing hero.mp4, hero.vtt and hero.chapters.vtt in the release ${RELEASE}`);
     run('gh', ['release', 'upload', RELEASE, ...files, '--clobber', '--repo', REPO], env);
   } else {
-    console.log(`Creating the release ${RELEASE} with hero.mp4 and hero.vtt`);
+    console.log(`Creating the release ${RELEASE} with hero.mp4, hero.vtt and hero.chapters.vtt`);
     run('gh', ['release', 'create', RELEASE, ...files, '--repo', REPO, '--title', 'Site media',
       '--notes', 'Video for obeya.si, fetched by the Pages workflow.', '--prerelease', '--latest=false'], env);
   }

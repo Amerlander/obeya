@@ -54,6 +54,15 @@ section { max-width: var(--wide); margin: 0 auto; padding: 0 24px; }
 .player .play:hover svg { transform: scale(1.06); }
 .player .play:focus-visible { outline: none; }
 .player .play:focus-visible svg { outline: 3px solid var(--blue); outline-offset: 4px; }
+/* the video's scenes, the way a card lists its demo's chapters: the one that plays lifts as a card */
+.chapters { list-style: none; margin: 14px 0 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.chapters[hidden] { display: none; }
+.chapters button { all: unset; box-sizing: border-box; cursor: pointer; display: flex; gap: 10px; width: 100%; padding: 8px 12px;
+  border-radius: 2px; font-size: 15px; line-height: 1.3; }
+.chapters button:hover { background: color-mix(in srgb, var(--card) 60%, transparent); }
+.chapters button.on { background: var(--card); box-shadow: var(--shadow); }
+.chapters button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.chapters .t { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 32px; }
 .film-note { text-align: center; font-size: 14px; color: var(--muted); margin: 16px 0 0; }
 
 /* ---------- pillars ---------- */
@@ -154,6 +163,8 @@ footer span { margin-right: auto; }
   .cta { justify-content: flex-start; }
   .film { margin-top: 40px; padding: 0 12px; }
   .player { border-radius: 3px; }
+  .chapters { grid-template-columns: 1fr 1fr; gap: 2px; }
+  .chapters button { padding: 7px 8px; font-size: 14px; }
   .pillars { margin-top: 80px; gap: 72px; }
   .pillar { grid-template-columns: 1fr; gap: 24px; }
   .pillar.flip .text { order: 0; }

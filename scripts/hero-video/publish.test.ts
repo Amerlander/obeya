@@ -11,6 +11,7 @@ const out = path.join(dir, 'out');
 fs.mkdirSync(out);
 fs.writeFileSync(path.join(out, 'demo.mp4'), 'video');
 fs.writeFileSync(path.join(out, 'captions.vtt'), 'WEBVTT');
+fs.writeFileSync(path.join(out, 'chapters.vtt'), 'WEBVTT chapters');
 const bin = path.join(dir, 'bin');
 fs.mkdirSync(bin);
 const log = path.join(dir, 'gh.log');
@@ -36,16 +37,17 @@ test.skipIf(process.platform === 'win32')('replaces the assets of the release, t
   expect(publish(false)).toEqual([
     '[] auth token --user sadilek',
     '[token-of-sadilek] release view site-media --repo sadilek/obeya',
-    '[token-of-sadilek] release upload site-media hero.mp4 hero.vtt --clobber --repo sadilek/obeya',
+    '[token-of-sadilek] release upload site-media hero.mp4 hero.vtt hero.chapters.vtt --clobber --repo sadilek/obeya',
     'hero.mp4: video',
     'hero.vtt: WEBVTT',
+    'hero.chapters.vtt: WEBVTT chapters',
     '[token-of-sadilek] workflow run pages.yml --repo sadilek/obeya',
   ]);
 });
 
 test.skipIf(process.platform === 'win32')('creates the release when it is missing', () => {
   const calls = publish(true);
-  expect(calls[2]).toStartWith('[token-of-sadilek] release create site-media hero.mp4 hero.vtt --repo sadilek/obeya --title Site media');
+  expect(calls[2]).toStartWith('[token-of-sadilek] release create site-media hero.mp4 hero.vtt hero.chapters.vtt --repo sadilek/obeya --title Site media');
   // a pre-release, so that it never becomes the latest release, whose installers the README links
   expect(calls[2]).toEndWith('--prerelease --latest=false');
   expect(calls.at(-1)).toBe('[token-of-sadilek] workflow run pages.yml --repo sadilek/obeya');
