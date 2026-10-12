@@ -38,7 +38,7 @@ export type Block =
   | { t: 'h'; level: number; text: string }
   | { t: 'p'; text: string }
   | { t: 'code'; text: string }
-  | { t: 'quote'; text: string }
+  | { t: 'quote'; blocks: Block[] }
   | { t: 'hr' }
   | { t: 'table'; head: string[]; rows: string[][] }
   | { t: 'list'; list: List };
@@ -51,7 +51,8 @@ const HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
 const RULE = /^\s*([-*_])(\s*\1){2,}\s*$/;
 
 /**
- * Splits a markdown document into blocks: headings, paragraphs, lists, tables, quotes, code.
+ * Splits a markdown document into blocks: headings, paragraphs, lists, tables, quotes, code. A quote
+ * holds blocks of its own.
  * `breaks`: every line break ends a paragraph, and a line that is not indented ends a list, as in a
  * chat message; a document joins wrapped lines.
  */
@@ -78,9 +79,16 @@ export function blocks(md: string, { breaks = false } = {}): Block[] {
       out.push({ t: 'hr' });
       i++;
     } else if (/^\s*>/.test(line)) {
+      // a document's quote runs on through lazily continued lines of a paragraph
       const quote: string[] = [];
-      for (; i < lines.length && /^\s*>/.test(lines[i]!); i++) quote.push(lines[i]!.replace(/^\s*>\s?/, ''));
-      out.push({ t: 'quote', text: quote.join(' ').trim() });
+      for (; i < lines.length; i++) {
+        const l = lines[i]!;
+        const prev = quote.at(-1);
+        if (/^\s*>/.test(l)) quote.push(l.replace(/^\s*>\s?/, ''));
+        else if (!breaks && prev?.trim() && !startsBlock(prev) && !startsBlock(l)) quote.push(l);
+        else break;
+      }
+      out.push({ t: 'quote', blocks: blocks(quote.join('\n'), { breaks }) });
     } else if (/^\s*\|/.test(line)) {
       const rows: string[][] = [];
       for (; i < lines.length && /^\s*\|/.test(lines[i]!); i++) rows.push(cells(lines[i]!));
@@ -207,48 +215,42 @@ export function Table({ head, rows }: { head: string[]; rows: string[][] }) {
 /** A markdown document, as plan docs are written. `mark` highlights the item that starts with it (`W3`). */
 export function Doc({ md, mark, markRef }: { md: string; mark?: string; markRef?: (el: HTMLElement | null) => void }) {
   const marked = mark ? new RegExp(`^\\*\\*${mark.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`) : null;
-  return (
-    <div className="doc">
-      {blocks(md).map((b, i) => {
-        switch (b.t) {
-          case 'h': {
-            const H = `h${Math.min(b.level + 1, 6)}` as 'h2';
-            return (
-              <H key={i}>
-                <Inline md={b.text} />
-              </H>
-            );
-          }
-          case 'p':
-            return (
-              <p key={i}>
-                <Inline md={b.text} />
-              </p>
-            );
-          case 'code':
-            return <pre key={i}>{b.text}</pre>;
-          case 'quote':
-            return (
-              <blockquote key={i}>
-                <Inline md={b.text} />
-              </blockquote>
-            );
-          case 'hr':
-            return <hr key={i} />;
-          case 'table':
-            return (
-              <div key={i} className="table">
-                <Table head={b.head} rows={b.rows} />
-              </div>
-            );
-          case 'list':
-            return (
-              <div key={i}>
-                <ListTree list={b.list} mark={marked ? (text) => marked.test(text) : undefined} markRef={markRef} />
-              </div>
-            );
+  const nodes = (bs: Block[]): ReactNode[] =>
+    bs.map((b, i) => {
+      switch (b.t) {
+        case 'h': {
+          const H = `h${Math.min(b.level + 1, 6)}` as 'h2';
+          return (
+            <H key={i}>
+              <Inline md={b.text} />
+            </H>
+          );
         }
-      })}
-    </div>
-  );
+        case 'p':
+          return (
+            <p key={i}>
+              <Inline md={b.text} />
+            </p>
+          );
+        case 'code':
+          return <pre key={i}>{b.text}</pre>;
+        case 'quote':
+          return <blockquote key={i}>{nodes(b.blocks)}</blockquote>;
+        case 'hr':
+          return <hr key={i} />;
+        case 'table':
+          return (
+            <div key={i} className="table">
+              <Table head={b.head} rows={b.rows} />
+            </div>
+          );
+        case 'list':
+          return (
+            <div key={i}>
+              <ListTree list={b.list} mark={marked ? (text) => marked.test(text) : undefined} markRef={markRef} />
+            </div>
+          );
+      }
+    });
+  return <div className="doc">{nodes(blocks(md))}</div>;
 }

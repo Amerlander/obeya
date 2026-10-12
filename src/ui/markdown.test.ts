@@ -8,7 +8,7 @@ describe('plan docs as documents', () => {
       { t: 'h', level: 1, text: 'Title' },
       { t: 'h', level: 2, text: 'Goal' },
       { t: 'p', text: 'One line wrapped.' },
-      { t: 'quote', text: 'A quote on two lines.' },
+      { t: 'quote', blocks: [{ t: 'p', text: 'A quote on two lines.' }] },
       { t: 'hr' },
       { t: 'code', text: 'const a = 1;\n\nconst b = 2;' },
       { t: 'p', text: 'After.' },
@@ -50,6 +50,23 @@ describe('plan docs as documents', () => {
     expect(blocks('| A | B |\n|---|:-:|\n| 1 | `x \\| y` |\n')).toEqual([{ t: 'table', head: ['A', 'B'], rows: [['1', '`x | y`']] }]);
   });
 
+  test('a quote keeps its paragraphs, lists, code and nested quotes, and runs on through a lazy line', () => {
+    const md = ['> First paragraph,', 'lazily wrapped.', '>', '> Second paragraph.', '> - one', '> - two', '>', '> ```', '> code', '> ```', '> > nested', '', 'After.'].join('\n');
+    expect(blocks(md)).toEqual([
+      {
+        t: 'quote',
+        blocks: [
+          { t: 'p', text: 'First paragraph, lazily wrapped.' },
+          { t: 'p', text: 'Second paragraph.' },
+          { t: 'list', list: { ordered: false, items: [{ text: 'one', mark: '', children: [] }, { text: 'two', mark: '', children: [] }] } },
+          { t: 'code', text: 'code' },
+          { t: 'quote', blocks: [{ t: 'p', text: 'nested' }] },
+        ],
+      },
+      { t: 'p', text: 'After.' },
+    ]);
+  });
+
   test('a paragraph ends where a list or heading starts', () => {
     expect(blocks('Text\n- item\n## H').map((b) => b.t)).toEqual(['p', 'list', 'h']);
   });
@@ -63,6 +80,13 @@ describe('messages', () => {
       { t: 'table', head: ['', 'Baseline', 'Model'], rows: [['Error', '33.6', '25.2']] },
       { t: 'p', text: 'The gap is +4 %.' },
       { t: 'p', text: 'Commit abc.' },
+    ]);
+  });
+
+  test('a quote keeps its lines, and a line without > ends it', () => {
+    expect(blocks('> Line one\n> Line two\nAfter.', { breaks: true })).toEqual([
+      { t: 'quote', blocks: [{ t: 'p', text: 'Line one' }, { t: 'p', text: 'Line two' }] },
+      { t: 'p', text: 'After.' },
     ]);
   });
 

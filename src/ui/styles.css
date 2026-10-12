@@ -349,6 +349,7 @@ ol.p-list > li::before { content: none; }
 .p-table th { font-weight: 600; }
 .p-code { margin: 10px 0 0; padding: 8px 10px; background: var(--chip); border-radius: 2px; overflow: auto; font: 12.5px/1.5 var(--mono); }
 .p-quote { margin: 10px 0 0; padding: 1px 0 1px 12px; border-left: 3px solid var(--line); color: var(--muted); }
+.p-quote > :first-child { margin-top: 0; }
 .p-hr { border: 0; border-top: 1px solid var(--line); margin: 12px 0; }
 .p-src { margin-top: 22px; color: var(--muted); font-size: 12.5px; }
 .p-src code { font-size: 12px; }
@@ -988,6 +989,8 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 .doc li.mark.open::before, .doc li.mark.done::before { left: 7px; top: 6px; }
 .doc pre { background: var(--chip); border-radius: 2px; padding: 10px 12px; overflow: auto; font: 12.5px/1.5 var(--mono); }
 .doc blockquote { margin: 10px 0; padding: 2px 0 2px 14px; border-left: 3px solid var(--line); color: var(--muted); }
+.doc blockquote > :first-child { margin-top: 0; }
+.doc blockquote > :last-child { margin-bottom: 0; }
 .doc hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
 .doc .table { overflow: auto; margin: 10px 0; }
 .doc table { border-collapse: collapse; font-size: 14.5px; }

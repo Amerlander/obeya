@@ -4,7 +4,7 @@
 
 import type { ReactNode } from 'react';
 import type { CardEvent } from '../core/types';
-import { blocks, Inline, ListTree, plain, Table } from './markdown';
+import { type Block, blocks, Inline, ListTree, plain, Table } from './markdown';
 import { clock as time, t } from './strings';
 import { parseQuestion } from './talk';
 
@@ -105,48 +105,46 @@ export function Quote({ e, onClear }: { e: CardEvent; onClear?: () => void }) {
  * checklist), tables, code, quotes, and headings as bold lines.
  */
 export function Body({ md }: { md: string }) {
-  return (
-    <>
-      {blocks(md, { breaks: true }).map((b, i) => {
-        switch (b.t) {
-          case 'p':
-            return (
-              <p key={i} className="p-lead">
+  const nodes = (bs: Block[]): ReactNode[] =>
+    bs.map((b, i) => {
+      switch (b.t) {
+        case 'p':
+          return (
+            <p key={i} className="p-lead">
+              <Inline md={b.text} />
+            </p>
+          );
+        case 'h':
+          return (
+            <p key={i} className="p-lead">
+              <b>
                 <Inline md={b.text} />
-              </p>
-            );
-          case 'h':
-            return (
-              <p key={i} className="p-lead">
-                <b>
-                  <Inline md={b.text} />
-                </b>
-              </p>
-            );
-          case 'list':
-            return <ListTree key={i} list={b.list} className="p-list" />;
-          case 'table':
-            return (
-              <div key={i} className="p-table">
-                <Table head={b.head} rows={b.rows} />
-              </div>
-            );
-          case 'code':
-            return (
-              <pre key={i} className="p-code">
-                {b.text}
-              </pre>
-            );
-          case 'quote':
-            return (
-              <blockquote key={i} className="p-quote">
-                <Inline md={b.text} />
-              </blockquote>
-            );
-          case 'hr':
-            return <hr key={i} className="p-hr" />;
-        }
-      })}
-    </>
-  );
+              </b>
+            </p>
+          );
+        case 'list':
+          return <ListTree key={i} list={b.list} className="p-list" />;
+        case 'table':
+          return (
+            <div key={i} className="p-table">
+              <Table head={b.head} rows={b.rows} />
+            </div>
+          );
+        case 'code':
+          return (
+            <pre key={i} className="p-code">
+              {b.text}
+            </pre>
+          );
+        case 'quote':
+          return (
+            <blockquote key={i} className="p-quote">
+              {nodes(b.blocks)}
+            </blockquote>
+          );
+        case 'hr':
+          return <hr key={i} className="p-hr" />;
+      }
+    });
+  return <>{nodes(blocks(md, { breaks: true }))}</>;
 }
