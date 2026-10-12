@@ -216,36 +216,38 @@ export function Setup({ first, onClose }: { first?: boolean; onClose?: () => voi
             </button>
           )}
         </header>
-        <p className="hint setup-intro">{first ? s.introFirst : s.intro}</p>
-        {!view ? (
-          <p className="hint">{checking ? t.config.setup.checking : status}</p>
-        ) : (
-          <>
-            <p className="hint">{s.platform(`${PLATFORMS[view.platform] ?? view.platform} (${view.arch})`)}</p>
-            {view.sections.map((section) => (
-              <section key={section.id} className={`c-canvas c-setup setup-${section.id}`}>
-                <div className="setup-sh">
-                  <b>{s.sections[section.id].title}</b>
-                  <span className={section.id === 'needed' ? 'setup-tag needed' : 'setup-tag'}>{section.id === 'needed' ? s.needed : s.optional}</span>
-                  {section.mb > 0 && <span className="hint">{s.size(megabytes(section.mb))}</span>}
-                  <span className={ready(section) ? 'setup-ok on' : 'setup-ok'}>
-                    {!ready(section) ? s.open(section.items.filter((i) => i.state === 'missing').length) : section.items.some((i) => i.state === 'later') ? s.readyLater : s.ready}
-                  </span>
-                </div>
-                <p className="hint">{s.sections[section.id].hint}</p>
-                <SetupList items={section.items} name={name(section)} state={state(section)} action={action(section)} />
-                {section.id === 'needed' && claude?.state === 'ok' && claude.found && !claude.found.startsWith(view.checkedClaude) && (
-                  <p className="hint">{s.checkedWith(view.checkedClaude)}</p>
-                )}
-              </section>
-            ))}
-            {status && <p className="hint c-status">{status}</p>}
-            <button className="btn small" disabled={checking || running} onClick={recheck}>
-              {checking ? t.config.setup.checking : t.config.setup.recheck}
-            </button>
-            {first && <FirstCanvas view={view} ready={ready(needed)} onView={setView} />}
-          </>
-        )}
+        <div className="setup-body">
+          <p className="hint setup-intro">{first ? s.introFirst : s.intro}</p>
+          {!view ? (
+            <p className="hint">{checking ? t.config.setup.checking : status}</p>
+          ) : (
+            <>
+              <p className="hint">{s.platform(`${PLATFORMS[view.platform] ?? view.platform} (${view.arch})`)}</p>
+              {view.sections.map((section) => (
+                <section key={section.id} className={`c-canvas c-setup setup-${section.id}`}>
+                  <div className="setup-sh">
+                    <b>{s.sections[section.id].title}</b>
+                    <span className={section.id === 'needed' ? 'setup-tag needed' : 'setup-tag'}>{section.id === 'needed' ? s.needed : s.optional}</span>
+                    {section.mb > 0 && <span className="hint">{s.size(megabytes(section.mb))}</span>}
+                    <span className={ready(section) ? 'setup-ok on' : 'setup-ok'}>
+                      {!ready(section) ? s.open(section.items.filter((i) => i.state === 'missing').length) : section.items.some((i) => i.state === 'later') ? s.readyLater : s.ready}
+                    </span>
+                  </div>
+                  <p className="hint">{s.sections[section.id].hint}</p>
+                  <SetupList items={section.items} name={name(section)} state={state(section)} action={action(section)} />
+                  {section.id === 'needed' && claude?.state === 'ok' && claude.found && !claude.found.startsWith(view.checkedClaude) && (
+                    <p className="hint">{s.checkedWith(view.checkedClaude)}</p>
+                  )}
+                </section>
+              ))}
+              {status && <p className="hint c-status">{status}</p>}
+              <button className="btn small" disabled={checking || running} onClick={recheck}>
+                {checking ? t.config.setup.checking : t.config.setup.recheck}
+              </button>
+              {first && <FirstCanvas view={view} ready={ready(needed)} onView={setView} />}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
