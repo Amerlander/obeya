@@ -66,6 +66,12 @@ export interface PrState {
 export interface Shipped {
   /** The commit on the default branch that holds the work; none on cards that landed before it was kept. */
   commit?: string;
+  /**
+   * Where the work's diff starts, so `base..commit` is what it changed: the default branch before it
+   * landed, or a merge commit's first parent (`<commit>^`). None where that is not known (a merge
+   * GitHub did not name, cards that landed before it was kept).
+   */
+  base?: string;
   /** Merged as a pull request: that one. */
   pr?: { url: string; number: number };
   /** The merge commit is not known: the Lesestand's commit after the next fetch stands in for it. */
@@ -1392,6 +1398,8 @@ function work(r: CardRow): Partial<Item> {
     ...(share ? { share } : {}),
     ...(r.from_id ? { from: r.from_id } : {}),
     ...(r.branch ? { branch: r.branch } : {}),
+    // a workspace on another machine as ssh and scp write it
+    ...(r.workspace ? { workspace: r.workspace.replace(/^ssh:\/\/([^/]+)/, '$1:') } : {}),
     ...(r.landed && r.workspace ? { finishing: true, ...((JSON.parse(r.landed) as { followUp?: boolean }).followUp ? { followUp: true } : {}) } : {}),
     ...(detail.noChange && (r.need === 'review' || r.need === 'demo') ? { noChange: true } : {}),
   };

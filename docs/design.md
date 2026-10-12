@@ -448,7 +448,15 @@ on the left (an idea's brief, a proposal's text, a task's demo with its chapters
 pull request, what landed, a decided idea's brief), the conversation on the right with the
 questions it waits on at its end and the owner's one field with one Send under it, and the
 decisions (build, accept, approve, stop, archive) in a row below both. A task's branch (and its
-plan doc) stands under its title. A task that has nothing for the left yet (the agent at work, a
+plan doc) stands under its title, with the size of its change beside it („+120 −30 in 5 Dateien“,
+`Branch` in `src/ui/diff.tsx`): before landing, the branch in its workspace against the default
+branch, committed or not, new files included; once landed, what the landing put on the default
+branch (`Shipped.base..commit`: the default branch before a landing on main, a merge commit's
+first parent; cards that landed before 2026-10-12, or whose merge commit GitHub did not name, have
+none). A click shows the whole diff over the page, file by file, with large files folded; while
+the card has a workspace, „Pfad kopieren“ copies its directory (`host:/dir` on another machine).
+The owner rarely reads the code, so it stays a quiet line, read when the card opens and again as
+the work moves on (`GET …/cards/:id/diff`, `?full` for the diff itself, cut off past 2 MB). A task that has nothing for the left yet (the agent at work, a
 question before the first demo) is its conversation alone, the card only as wide as it
 (`talkAlone` in `src/ui/talk.ts`), and widens to the split once there is a result. Before (2026-10-07) a task stacked demo, buttons,
 feedback field and conversation in one column, and a demo with a question had a field and a Send

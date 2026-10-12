@@ -696,6 +696,46 @@ describe('workers', () => {
     expect(board.row(d.id).workspace).toBe(clone);
   });
 
+  test('the diff: the branch so far, committed or not, with new files; once landed, what the landing put on main', async () => {
+    const c = manual();
+    expect(await workers.diff(c.id, false)).toBeNull();
+    workers.start(c.id);
+    expect(await workers.diff(c.id, false)).toEqual({ source: 'branch', files: [] });
+    const clone = board.row(c.id).workspace!;
+    writeFileSync(join(clone, 'export.ts'), 'export {}\n');
+    git(clone, 'add', '.');
+    git(clone, 'commit', '--quiet', '-m', 'Export');
+    writeFileSync(join(clone, 'README.md'), 'hello\nworld\n');
+    writeFileSync(join(clone, 'notes über.txt'), 'eins\nzwei\n');
+    // main moving on is not the card's change
+    writeFileSync(join(main, 'other.ts'), 'x\n');
+    git(main, 'add', '.');
+    git(main, 'commit', '--quiet', '-m', 'Other');
+    git(clone, 'fetch', '--quiet', 'origin');
+    expect((await workers.diff(c.id, false))!.files).toEqual([
+      { file: 'README.md', status: 'modified', added: 1, removed: 0 },
+      { file: 'export.ts', status: 'added', added: 1, removed: 0 },
+      { file: 'notes über.txt', status: 'added', added: 2, removed: 0 },
+    ]);
+    const full = (await workers.diff(c.id, true))!;
+    expect(full.patch).toContain('+world');
+    expect(full.patch).toContain('+zwei');
+
+    git(clone, 'add', '.');
+    git(clone, 'commit', '--quiet', '-m', 'More');
+    runtime.last.call('ready_for_review', { summary: 'Export gebaut.' });
+    runtime.last.emit({ type: 'idle' });
+    await workers.approve(c.id);
+    expect(state(c.id)).toBe('live');
+    // while the worker finishes and after: what landed, without what main had before
+    const landed = (await workers.diff(c.id, false))!;
+    expect(landed.source).toBe('landed');
+    expect(landed.files.map((f) => f.file)).toEqual(['README.md', 'export.ts', 'notes über.txt']);
+    runtime.last.emit({ type: 'idle' });
+    expect(board.row(c.id).workspace).toBeNull();
+    expect((await workers.diff(c.id, false))!.files).toHaveLength(3);
+  });
+
   test('approval with uncommitted work sends the worker back', async () => {
     const c = manual();
     workers.start(c.id);

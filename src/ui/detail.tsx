@@ -6,6 +6,7 @@ import { mockPage } from '../core/frame';
 import { answerText, toggle } from './answer';
 import { ApiError, api, at, type Field, holdRestart, onCardEvent } from './api';
 import { firstOpening } from './demoSeen';
+import { Branch } from './diff';
 import { landedRef } from './parts';
 import { useQueueMove } from './queue';
 import { Inline, plain } from './markdown';
@@ -226,7 +227,7 @@ export function Detail(p: Props) {
   const archivable = finished(item.state) && item.source === 'manual' && !item.finishing;
   const where = (
     <p className="p-src">
-      {t.branch} <code>{item.branch}</code>
+      <Branch item={item} />
       {parent?.plan && (
         <>
           {' · '}

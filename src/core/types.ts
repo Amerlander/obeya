@@ -145,6 +145,8 @@ export interface Item {
   /** The repository the card belongs to (an id from the canvas's `repos`). */
   repo: string;
   branch?: string;
+  /** Where the branch is checked out, while the card has a workspace: a directory, `host:/dir` on another machine. */
+  workspace?: string;
   /** Files the Koordinator expects the card to change. */
   scope?: string[];
   /** A planned card the Koordinator is deciding on, or that waits for cards in progress. */

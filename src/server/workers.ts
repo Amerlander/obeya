@@ -3,6 +3,7 @@
 
 import { z } from 'zod';
 import type { RepoAdapter } from '../adapters/types';
+import type { CardDiff } from '../core/diff';
 import { LANGUAGE_NAMES, LANGUAGES } from '../core/locale';
 import { MESSAGES, type Messages } from '../core/messages';
 import { basename } from 'node:path';
@@ -481,7 +482,7 @@ export class Workers {
       status_line: null,
       approved_at: null,
       landed: JSON.stringify({ commit: result.to, ...(restarts ? { restarts } : {}) } satisfies LandedState),
-      shipped: JSON.stringify({ commit: result.to } satisfies Shipped),
+      shipped: JSON.stringify({ commit: result.to, base: result.from } satisfies Shipped),
     });
     const t = this.o.board.t.worker;
     if (direct) this.o.board.log(cardId, 'state', by, by === 'owner' ? t.approvedDirect : t.landedDirect);
@@ -597,6 +598,18 @@ export class Workers {
   }
 
   /**
+   * What the card's work changes: once it landed, what the landing put on the default branch;
+   * before, its branch in its workspace so far. Null when neither is there to read.
+   */
+  diff(cardId: string, full: boolean): Promise<CardDiff | null> {
+    const row = this.o.board.row(cardId);
+    const shipped = row.shipped ? (JSON.parse(row.shipped) as Shipped) : null;
+    // landed work's workspace, while its worker finishes, has nothing left against the default branch
+    if (row.state === 'live' && shipped?.commit && shipped.base) return this.o.workspaces.landedDiff(shipped.base, shipped.commit, full);
+    return this.o.workspaces.diff(cardId, full);
+  }
+
+  /**
    * The card's pull request was merged, with `commit` the merge put on the base branch where GitHub
    * said: the work is live, the workspace free.
    */
@@ -605,7 +618,7 @@ export class Workers {
     this.o.board.planDocsLanded(cardId, this.planDocsAdded(cardId));
     const pr = this.o.board.row(cardId).pr;
     const { url, number } = pr ? (JSON.parse(pr) as PrState) : { url: null, number: undefined };
-    const shipped: Shipped = { ...(commit ? { commit } : { fetch: true }), ...(url && number ? { pr: { url, number } } : {}) };
+    const shipped: Shipped = { ...(commit ? { commit, base: `${commit}^` } : { fetch: true }), ...(url && number ? { pr: { url, number } } : {}) };
     this.o.board.work(cardId, {
       state: 'live',
       need: null,

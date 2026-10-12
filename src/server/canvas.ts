@@ -7,6 +7,7 @@ import { adapterProblems, adapterTreeAt, builtInAdapter, pickAdapter, repoAdapte
 import { Answers } from './answers';
 import { repoName } from '../adapters/generic';
 import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
+import type { CardDiff } from '../core/diff';
 import type { Language } from '../core/locale';
 import { AGENT_DEFAULTS, agentListens, type AgentRole, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, type RepoConfig, type RepoRef } from '../core/types';
 import { BadRequest, Board, replyNote, type StoredIdea } from './board';
@@ -310,6 +311,11 @@ export class CanvasRuntime {
     const item = typeof card === 'string' ? this.board.item(card) : card;
     if (!item) throw new BadRequest('unknownCard', 'unknown card');
     return this.repos.find((r) => r.ref.id === item.repo) ?? this.repos[0]!;
+  }
+
+  /** What the card's work changes (`Workers.diff`). */
+  diff(cardId: string, full: boolean): Promise<CardDiff | null> {
+    return this.repoOf(cardId).workers.diff(cardId, full);
   }
 
   /** The owner edits a card; what they write in it is offered for learning once they have written it. */

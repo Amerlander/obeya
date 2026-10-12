@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { CardDiff } from '../core/diff';
 import type { PushKeyView } from '../core/push-key';
 import type { AgentRole, AgentSetting, AgentsView, CanvasConfig, CanvasInfo, CanvasSnapshot, ClientMessage, ConfigView, CardAction, DemoSettings, Group, DemoSettingsView, DemoVoiceCheck, FirstCanvas, MachineItem, MachineSectionId, MachineView, SetupCheck, VoiceSetupView, CardEvent, CardPatch, Item, Language, LanguageView, NewCard, Notice, OwnerHold, PendingRestart, ProjectHistory, ServerMessage, AppUpdate } from '../core/types';
 
@@ -145,6 +146,8 @@ export const api = {
     return body.id;
   },
   events: (id: string) => call<CardEvent[]>('GET', at(`/cards/${id}/events`)),
+  /** What the card's work changes (null: nothing to read, no workspace and not landed); `full`: with the diff itself. */
+  diff: async (id: string, full = false) => (await call<CardDiff | undefined>('GET', at(`/cards/${id}/diff${full ? '?full' : ''}`))) ?? null,
   /** A project's plan doc as written. */
   planDoc: (id: string) => call<{ file: string; markdown: string }>('GET', at(`/cards/${id}/plan`)),
   /** A project's decisions and the idea it came from. */

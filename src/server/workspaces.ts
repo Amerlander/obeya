@@ -9,6 +9,7 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
+import { type CardDiff, cardDiff } from '../core/diff';
 import type { PoolHost, WorkspaceShortage } from '../core/types';
 import type { Store } from './db';
 import { HostError, hostName, onHost, remote, sh as shWord, type SshHost, TOKEN_HELPER, tokenHelperArgs } from './hosts';
@@ -82,16 +83,29 @@ export function exists(path: string): boolean {
  * pushes, over the network seconds in which the server would answer nothing else.
  */
 export async function gitAsync(cwd: string, ...args: string[]): Promise<string> {
+  const r = await gitRun(cwd, args);
+  if (r.code !== 0) throw new WorkspaceError(`git ${args.join(' ')} in ${cwd}: ${(r.stderr || r.stdout).trim() || `exit code ${r.code}`}`);
+  return r.stdout.trim();
+}
+
+/** `git` in `cwd` without blocking, with its exit code: for commands whose exit code is an answer (`diff --no-index`). */
+async function gitRun(cwd: string, args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
   const there = remoteWorkspace(cwd);
-  if (there) {
-    const r = await there.host.run(['git', ...tokenHelperArgs(), '-C', there.path, ...args], { cwd: there.path });
-    if (r.code !== 0) throw new WorkspaceError(`git ${args.join(' ')} in ${cwd}: ${(r.stderr || r.stdout).trim() || `exit code ${r.code}`}`);
-    return r.stdout.trim();
-  }
+  if (there) return there.host.run(['git', ...tokenHelperArgs(), '-C', there.path, ...args], { cwd: there.path });
   const p = Bun.spawn([GIT, '-C', cwd, ...args], { stdout: 'pipe', stderr: 'pipe' });
-  const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
-  if (code !== 0) throw new WorkspaceError(`git ${args.join(' ')} in ${cwd}: ${err.trim()}`);
-  return out.trim();
+  const [stdout, stderr, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
+  return { code, stdout, stderr };
+}
+
+/** `git diff` as Obeya shows it to the owner: plain, with renames found and file names unquoted. */
+const DIFF = ['-c', 'core.quotePath=false', 'diff', '--no-color', '--no-ext-diff', '-M'];
+
+/** How many new files not yet added a branch's diff shows; a worker's stray build output should not flood it. */
+const NEW_FILES_SHOWN = 200;
+
+/** The whole diff from `base` to `to` (a commit; the working tree when left out), as `git diff` has it. */
+export function gitDiff(cwd: string, base: string, to?: string): Promise<string> {
+  return gitAsync(cwd, ...DIFF, base, ...(to ? [to] : []));
 }
 
 /** The landing under way per Obeya checkout: landings of one repository run one after the other. */
@@ -544,6 +558,39 @@ export class Workspaces {
       return [...parseChanges(diff), ...untracked.split('\n').filter(Boolean).map((file) => ({ file, regions: [] }))];
     } catch {
       return [];
+    }
+  }
+
+  /**
+   * The card's change in its workspace: its branch against the default branch, committed or not,
+   * with new files not yet added; null without a workspace (or one git cannot read).
+   */
+  async diff(cardId: string, full: boolean): Promise<CardDiff | null> {
+    const ws = this.leasedBy(cardId);
+    if (!ws || !exists(ws)) return null;
+    try {
+      const main = this.o.mode === 'worktrees' ? defaultBranch(this.o.repoPath) : `origin/${defaultBranch(ws)}`;
+      const base = await gitAsync(ws, 'merge-base', 'HEAD', main);
+      const tracked = await gitDiff(ws, base);
+      const untracked = (await gitAsync(ws, 'ls-files', '-z', '--others', '--exclude-standard')).split('\0').filter(Boolean);
+      const added: string[] = [];
+      // a new file against nothing; git answers 1 when there is a difference
+      for (const file of untracked.slice(0, NEW_FILES_SHOWN)) {
+        const r = await gitRun(ws, [...DIFF, '--no-index', '--', '/dev/null', file]);
+        if (r.code === 1) added.push(r.stdout.trim());
+      }
+      return cardDiff('branch', [tracked, ...added].filter(Boolean).join('\n'), full);
+    } catch {
+      return null;
+    }
+  }
+
+  /** What landed work changed on the default branch, from `base` to `commit`; null where the checkout does not hold them. */
+  async landedDiff(base: string, commit: string, full: boolean): Promise<CardDiff | null> {
+    try {
+      return cardDiff('landed', await gitDiff(this.o.repoPath, base, commit), full);
+    } catch {
+      return null;
     }
   }
 

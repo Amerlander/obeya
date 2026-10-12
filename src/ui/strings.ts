@@ -2,6 +2,7 @@
 // effect, set once before the first render (`setLanguage`); choosing another language loads the
 // page again. Dates and numbers follow the language, in the browser's own variant of it.
 
+import type { DiffFile } from '../core/diff';
 import { type Language, languageOf } from '../core/locale';
 import { type AgentEffort, type AgentModel, type AgentRole, type CardState, type ConfigProblemCode, type DemoSettingsProblem, type ErrorCode, EXPORT_HTML_MAX, type NarrationLanguage, type VoiceKind, type Idea, type Need, type NextStep, type Queue, type OwnerHold, type RestartReason, type SetupId, type VoiceSetupId, type MachineSectionId, type NeededId, type PrId } from '../core/types';
 
@@ -184,6 +185,25 @@ const de = {
   lastFailure: (at: string) => `Zuletzt gescheitert (${at})`,
   author: { worker: 'Agent', owner: 'Du', project: 'Projekt-Agent', koordinator: 'Obeya', obeya: 'Obeya', explorer: 'Explorations-Agent' },
   branch: 'Branch',
+  // the size of a card's change beside its branch, the whole diff on a click, and where the branch is checked out
+  diff: {
+    size: (files: number) => (files === 1 ? 'in 1 Datei' : `in ${files} Dateien`),
+    show: 'Ganzes Diff ansehen',
+    none: 'noch keine Änderung',
+    title: (title: string) => `Änderungen von „${title}“`,
+    landed: 'wie gelandet',
+    loading: 'Diff wird geladen …',
+    failed: 'Das Diff ließ sich nicht lesen.',
+    binary: 'Binärdatei',
+    status: { added: 'neu', deleted: 'gelöscht', renamed: 'umbenannt', modified: '' } satisfies Record<DiffFile['status'], string>,
+    renamedFrom: (from: string) => `vorher ${from}`,
+    big: (lines: number) => `${lines} Zeilen, eingeklappt`,
+    unfold: 'Aufklappen',
+    truncated: 'Das Diff ist hier abgeschnitten, weil es zu groß ist; die übrigen Dateien stehen oben in der Liste.',
+    close: 'Schließen (Esc)',
+    copyPath: 'Pfad kopieren',
+    copied: 'Pfad kopiert',
+  },
   started: (title: string) => `Agent arbeitet an „${title}“.`,
   answered: 'Antwort ist beim Agenten.',
   approved: 'Freigegeben.',
@@ -1101,6 +1121,24 @@ const en: Strings = {
   lastFailure: (at: string) => `Last failed (${at})`,
   author: { worker: 'Agent', owner: 'You', project: 'Project agent', koordinator: 'Obeya', obeya: 'Obeya', explorer: 'Exploration agent' },
   branch: 'Branch',
+  diff: {
+    size: (files: number) => (files === 1 ? 'in 1 file' : `in ${files} files`),
+    show: 'See the whole diff',
+    none: 'no change yet',
+    title: (title: string) => `Changes of “${title}”`,
+    landed: 'as landed',
+    loading: 'Loading the diff …',
+    failed: 'The diff could not be read.',
+    binary: 'Binary file',
+    status: { added: 'new', deleted: 'deleted', renamed: 'renamed', modified: '' },
+    renamedFrom: (from: string) => `was ${from}`,
+    big: (lines: number) => `${lines} lines, folded`,
+    unfold: 'Unfold',
+    truncated: 'The diff is cut off here because it is too large; the remaining files are in the list at the top.',
+    close: 'Close (Esc)',
+    copyPath: 'Copy path',
+    copied: 'Path copied',
+  },
   started: (title: string) => `An agent is working on “${title}”.`,
   answered: 'The agent has the answer.',
   approved: 'Approved.',

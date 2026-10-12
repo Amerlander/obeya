@@ -999,8 +999,8 @@ function Canvas({
       return;
     }
     if (e.key === 'Escape') {
-      // a screenshot shown large closes first, and the queue's list; the card stays open
-      if (document.querySelector('.lightbox, .queue-menu')) return;
+      // a screenshot shown large closes first, a card's diff and the queue's list; the card stays open
+      if (document.querySelector('.lightbox, .queue-menu, .diff-view')) return;
       // so does the quote of a message the owner was replying to
       if (document.querySelector('.composer .quote')) return setReply(null);
       // the archive's list closes after a card unfolded from it

@@ -635,6 +635,36 @@ textarea.p-body:focus { border-color: var(--muted); }
   padding: 4vh 4vw; cursor: zoom-out; animation: fade .15s ease-out; }
 .lightbox img { max-width: 100%; max-height: 100%; border-radius: 2px; box-shadow: var(--lift); background: #fff; }
 @keyframes fade { from { opacity: 0; } }
+/* a card's change beside its branch, and its whole diff over the page: one sheet as tall as the screen, one scrollbar */
+.d-add { color: var(--approved); font-variant-numeric: tabular-nums; }
+.d-del { color: var(--error); font-variant-numeric: tabular-nums; }
+.diff-size { font-size: inherit; }
+.diff-view { position: fixed; inset: 0; z-index: 1000; background: var(--dim); display: flex; justify-content: center;
+  padding: 3vh 3vw; animation: fade .15s ease-out; }
+.d-sheet { display: flex; flex-direction: column; width: min(100%, 1500px); background: var(--panel); border-radius: 3px; box-shadow: var(--lift); min-height: 0; }
+.d-head { display: flex; align-items: baseline; gap: 14px; padding: 16px 22px 12px; border-bottom: 1px solid var(--line); }
+.d-head h2 { margin: 0; font-size: 21px; }
+.d-head .hint { flex: 1; }
+.d-close { border: 0; background: none; font-size: 24px; line-height: 1; cursor: pointer; color: var(--muted); padding: 0 4px; }
+.d-close:hover { color: var(--ink); }
+.d-body { overflow: auto; padding: 8px 22px 28px; min-height: 0; }
+.d-files { border-collapse: collapse; font-size: 13px; margin: 6px 0 10px; }
+.d-files td { padding: 1px 14px 1px 0; vertical-align: baseline; }
+.d-files .link { font: 12.5px var(--mono); text-align: left; }
+.d-file { margin-top: 18px; }
+.d-file h3 { position: sticky; top: -8px; z-index: 1; display: flex; gap: 12px; align-items: baseline; margin: 0; padding: 7px 10px;
+  background: var(--chip); border: 1px solid var(--line); border-radius: 2px 2px 0 0; font: 500 13px var(--cond); }
+.d-name { font: 12.5px var(--mono); }
+.d-file > .hint { margin: 6px 10px; }
+.d-lines { margin: 0; border: 1px solid var(--line); border-top: 0; font: 12px/1.5 var(--mono); }
+.d-lines > div { display: flex; }
+.d-no { flex: 0 0 4.5ch; padding: 0 6px; text-align: right; color: var(--muted); user-select: none; opacity: .75; }
+.d-text { flex: 1; white-space: pre-wrap; overflow-wrap: anywhere; padding-right: 10px; }
+.d-lines > .d-add { background: color-mix(in srgb, var(--approved) 14%, transparent); color: inherit; }
+.d-lines > .d-del { background: color-mix(in srgb, var(--error) 12%, transparent); color: inherit; }
+.d-lines > .d-hunk { color: var(--muted); background: color-mix(in srgb, var(--working) 7%, transparent); }
+.d-lines > .d-note { color: var(--muted); font-style: italic; }
+.d-cut { margin-top: 18px; }
 .btn:disabled { opacity: .45; cursor: default; filter: none; }
 /* above projects (z-index 0), below cards (2): a line from a workstream stays visible over its project */
 #links { position: absolute; left: 0; top: 0; z-index: 1; overflow: visible; pointer-events: none; }
