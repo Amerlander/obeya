@@ -22,7 +22,7 @@ import { collect, keep, type Kept, restore, type SideSheet, takeKept } from './k
 import { Sign, Wordmark } from './logo';
 import { Help, HelpButton } from './help';
 import { attachTo, imageFiles } from './shots';
-import { cardDraft, fieldOn, focusedDraft, MIC_DRAFT, OBEYA_DRAFT, takesImages } from './draft';
+import { cardDraft, fieldOn, focusedDraft, keepDrafts, MIC_DRAFT, OBEYA_DRAFT, takesImages } from './draft';
 import { type Heard, HoldToTalk, PushToTalk, ToldList, usePushToTalk, useTold, type Where } from './voice';
 import { sent, take, videoOf } from './spot';
 import { CanvasPill, CardView, DepLinks, Edges, Links, Minimap, ProjectView, RestartPill, Sheet, UpdatePill, WorkspacesPill } from './parts';
@@ -43,6 +43,7 @@ export function App() {
   // the first start: no canvas yet, so the setup assistant fills the page and creates one
   if (!current) return <Setup first />;
   setCanvas(current.id);
+  keepDrafts(sessionStorage, current.id);
   return <Live canvases={canvases} />;
 }
 

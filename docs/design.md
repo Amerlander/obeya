@@ -1443,7 +1443,10 @@ the owner's language (`src/core/locale.ts`).
   and what goes with it („→ Agent · Aufgabe: … mit Text und 1 Screenshot“). Each field keeps its
   draft (text, screenshots; the quote in `src/ui/reply.ts`) in one store per field
   (`src/ui/draft.ts`) rather than in the field, so the microphone reads and writes it, and a draft
-  outlives closing the card. `POST /voice?listen` only transcribes and returns the words; a form
+  outlives closing the card. The drafts of the cards, the sidebar and the microphone are also written
+  down per tab and canvas (`sessionStorage`) as they change, so they outlive a page load: switching
+  to another canvas and back (a page load of its own) or a restart. Until 2026-10-12 they lived in
+  the page alone, and a canvas switch lost them. `POST /voice?listen` only transcribes and returns the words; a form
   with `audio` and `text` puts the field's words before the spoken ones. The app's push-to-talk key
   in another app always sends at once: no field has the cursor there. Until 2026-10-12 spoken words
   always went out at once, without what was typed in the field. A Whisper sidecar keeps the model

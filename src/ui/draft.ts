@@ -3,6 +3,8 @@
 // keep theirs here rather than in the field itself, so the microphone sends what stands in the field
 // and dictates into it, and a draft outlives closing the card. Without a field to speak to, the
 // screenshots for the next recording lie beside the microphone, in a draft of their own (`MIC`).
+// These drafts are written down per tab and canvas (`keepDrafts`), so they outlive a page load too:
+// switching to another canvas and back, or a restart.
 
 import { useEffect, useSyncExternalStore } from 'react';
 
@@ -42,6 +44,36 @@ const subscribe = (fn: () => void) => {
   listeners.add(fn);
   return () => void listeners.delete(fn);
 };
+
+type Store = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+/** The drafts that last beyond their field: the cards', the sidebar's and the microphone's, not those of a field of its own. */
+const lasting = (key: string) => key.startsWith('card:') || key === OBEYA_DRAFT || key === MIC_DRAFT;
+const storeKey = (canvas: string) => `obeya-drafts-${canvas}`;
+let kept: { store: Store; canvas: string } | null = null;
+
+/**
+ * Takes back the canvas's drafts that `store` kept and writes them down there from now on, text and
+ * screenshots, whenever they change. Once per page; later calls change nothing.
+ */
+export function keepDrafts(store: Store, canvas: string) {
+  if (kept) return;
+  kept = { store, canvas };
+  try {
+    const saved = JSON.parse(store.getItem(storeKey(canvas)) ?? '{}') as Record<string, Pick<Draft, 'text' | 'images'>>;
+    for (const [key, { text, images }] of Object.entries(saved)) if (!drafts.has(key)) drafts.set(key, { ...EMPTY, text, images });
+  } catch {}
+  listeners.add(writeDown);
+}
+
+function writeDown() {
+  if (!kept) return;
+  const out: Record<string, Pick<Draft, 'text' | 'images'>> = {};
+  for (const [key, { text, images }] of drafts) if (lasting(key) && (text.trim() || images.length)) out[key] = { text, images };
+  try {
+    if (Object.keys(out).length) kept.store.setItem(storeKey(kept.canvas), JSON.stringify(out));
+    else kept.store.removeItem(storeKey(kept.canvas));
+  } catch {}
+}
 
 export const draftOf = (key: string): Draft => drafts.get(key) ?? EMPTY;
 
