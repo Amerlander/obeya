@@ -30,7 +30,7 @@ const SECTIONS: Section[] = ['canvases', 'agents', 'voice', 'demos', 'general'];
 // the section shown, per tab: a save restarts Obeya and a new language reloads the page, and the dialog comes back at it
 const SECTION_KEY = 'obeya-config-section';
 
-export function ConfigDialog({ on, onClose, onSetup, onAsk, onProblems }: { on: boolean; onClose: () => void; onSetup: () => void; onAsk: Ask; onProblems: (n: number) => void }) {
+export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }: { on: boolean; onClose: () => void; onSetup: () => void; onAsk: Ask; onTalk: () => void; onProblems: (n: number) => void }) {
   const [view, setView] = useState<ConfigView | null>(null);
   const [draft, setDraft] = useState<CanvasConfig[]>([]);
   const [checked, setChecked] = useState<Checked | null>(null);
@@ -85,6 +85,12 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onProblems }: { on: 
         <nav className="cfg-nav">
           <div className="p-kind">{c.kind}</div>
           <h2>{c.title}</h2>
+          <div className="cfg-ask">
+            <p className="hint">{c.koordinator}</p>
+            <button className="btn small" onClick={onTalk}>
+              {c.askObeya}
+            </button>
+          </div>
           <ul>
             {SECTIONS.map((s) => (
               <li key={s}>
@@ -101,7 +107,6 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onProblems }: { on: 
             ))}
           </ul>
           <div className="cfg-nav-foot">
-            <p className="hint">{c.koordinator}</p>
             <button className="btn small" onClick={onSetup}>
               {t.setup.check}
             </button>

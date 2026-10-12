@@ -434,7 +434,8 @@ const de = {
     fromFile: 'Gespeichert in',
     fromArgs: (file: string) =>
       `Obeya läuft gerade mit den Repositories von der Kommandozeile. Speichern legt ${file} an; Obeya startet dann daraus, auch künftig, wenn es ohne Repositories gestartet wird.`,
-    koordinator: 'Obeya kennt sie auch: frag danach oder sag, was sich ändern soll.',
+    koordinator: 'Du kannst Obeya auch nach der Konfiguration fragen oder ihm sagen, was sich ändern soll.',
+    askObeya: 'Obeya fragen',
     sections: { canvases: 'Leinwände', agents: 'Modelle und Effort', voice: 'Spracheingabe', demos: 'Demos', general: 'Allgemein' },
     unsaved: 'Nicht gespeichert',
     language: {
@@ -1339,7 +1340,8 @@ const en: Strings = {
     fromFile: 'Saved in',
     fromArgs: (file: string) =>
       `Obeya is running with the repositories from the command line. Saving creates ${file}; Obeya then starts from it, also in future when it is started without repositories.`,
-    koordinator: 'Obeya knows it too: ask about it or say what should change.',
+    koordinator: 'You can also ask Obeya about the configuration or tell it what should change.',
+    askObeya: 'Ask Obeya',
     sections: { canvases: 'Canvases', agents: 'Models and effort', voice: 'Voice input', demos: 'Demos', general: 'General' },
     unsaved: 'Not saved',
     language: {

@@ -771,7 +771,9 @@ the owner's language (`src/core/locale.ts`).
   settings (port, data directory, the agents' permission mode) come from the command line and the
   environment (`OBEYA_PORT`, `OBEYA_HOME`) and show read-only. The Koordinator reads the configuration (`config` tool) to answer questions about it
   and changes it on the owner's word (`configure`, the whole new list, checked like the dialog's),
-  with the usual confirmation and undo window. The other sections are saved on their own: the
+  with the usual confirmation and undo window. The dialog says so under its title, with "Obeya fragen", which
+  closes it and opens Obeya's conversation ready to type into (Space for voice does not reach Obeya
+  while the dialog is open). The other sections are saved on their own: the
   demo settings (see Demos) into `demo.json` in Obeya's home, read by the next render, so saving
   them restarts nothing; the language (see Language) and the model and effort of each group of
   agents (see Models and effort) the same way into `settings.json`.

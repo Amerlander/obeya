@@ -231,6 +231,12 @@ function Canvas({
   const toggleArchive = () => setAOn(!aOnRef.current);
   // the configuration is a dialog over the page: what is open behind it stays as it was
   const toggleConfig = () => setCOn(!cOnRef.current);
+  // asking Obeya about the configuration: its conversation in place of the dialog, ready to type into
+  const talkFromConfig = () => {
+    setCOn(false);
+    if (!kOn) toggleKoordinator();
+    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('#ksheet .tell textarea')?.focus({ preventScroll: true }));
+  };
   const [helpOn, setHelpOn] = useState(false);
   const [setupOn, setSetupOn] = useState(false);
   // what is wrong in the configuration as saved, marked on its button; it changes only with a save
@@ -1207,6 +1213,7 @@ function Canvas({
         on={cOn}
         onClose={() => setCOn(false)}
         onSetup={() => setSetupOn(true)}
+        onTalk={talkFromConfig}
         onProblems={setConfigProblems}
         onAsk={(text, canvas) => void tellAbout(null, null, () => (canvas ? api.commandOn(canvas, text) : api.command(text, null)))}
       />
