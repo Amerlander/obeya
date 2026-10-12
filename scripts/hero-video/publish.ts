@@ -4,8 +4,8 @@
 // release the first time, replacing the assets after that), then runs the Pages workflow, which
 // fetches them into site/media/. It acts as the GitHub account `sadilek` through GH_TOKEN, without
 // switching the account gh has active. With `--poster` it first takes the poster
-// (`site/img/hero-poster.jpg`) again from the new video; that file is in git and goes out with
-// the next push of main.
+// (`site/img/hero-poster.jpg`) and the README's picture of the video (`docs/images/video.jpg`)
+// again from the new video; they are in git and go out with the next push of main.
 //
 //   node scripts/hero-video/publish.ts [--poster]
 import { spawnSync } from 'node:child_process';
@@ -42,10 +42,11 @@ const token = spawnSync('gh', ['auth', 'token', '--user', ACCOUNT], { encoding: 
 if (token.status !== 0 || !token.stdout.trim()) fail(`no gh login for ${ACCOUNT}: gh auth login, then try again\n${token.stderr}`);
 const env = { ...process.env, GH_TOKEN: token.stdout.trim() };
 
-const posterFile = path.join(import.meta.dirname, '..', '..', 'site', 'img', 'hero-poster.jpg');
+const root = path.join(import.meta.dirname, '..', '..');
 if (poster) {
-  console.log('Taking the poster from the new video');
-  run('uv', ['run', '--with', 'pillow', 'python', path.join(import.meta.dirname, 'poster.py'), video, posterFile]);
+  console.log('Taking the poster and the README\'s picture from the new video');
+  run('uv', ['run', '--with', 'pillow', 'python', path.join(import.meta.dirname, 'poster.py'), video,
+    path.join(root, 'site', 'img', 'hero-poster.jpg'), path.join(root, 'docs', 'images', 'video.jpg')]);
 }
 
 // gh names an asset after its file, so the files go up under their site names from a temp directory
@@ -71,4 +72,4 @@ try {
 console.log('Running the Pages workflow');
 run('gh', ['workflow', 'run', 'pages.yml', '--repo', REPO], env);
 console.log(`Published: https://github.com/${REPO}/actions/workflows/pages.yml shows the run.`);
-if (poster) console.log('The poster changed: commit site/img/hero-poster.jpg and push main, which publishes it.');
+if (poster) console.log('The poster changed: commit site/img/hero-poster.jpg and docs/images/video.jpg and push main, which publishes them.');

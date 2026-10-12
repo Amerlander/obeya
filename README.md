@@ -13,15 +13,27 @@ finished work, without reading code or cycling through terminals.
 *Obeya* is Japanese for "big room": in lean management, the room where every project hangs
 visibly on the walls. More on [obeya.si](https://obeya.si).
 
-![An Obeya canvas: a project with its workstreams, tasks an agent works on, a question and a demo waiting for the owner, an idea](docs/images/canvas.png)
+[![The demo video: an idea said into the microphone, built by an agent that records its own demo, approved and landed on main](docs/images/video.jpg)](https://obeya.si/#film)
 
-Each card gets its own agent (Claude Code) in its own clone or worktree of your repository. The
-agent asks on the card when it needs a decision and hands over with a narrated demo video of the
-change; you approve it or say what to change, and approved work lands on `main` or goes out as a
-pull request that Obeya carries to the merge. You talk to Obeya itself, spoken or typed: it
-takes your instructions, queues cards whose changes would collide, cuts large ones into parallel
-packages and learns your preferences. Larger work is planned in plan docs in the repository, which
+Two minutes of a real run: an idea said into the microphone, an agent building it and recording its
+demo, the approval landing it on `main` ([watch on obeya.si](https://obeya.si/#film), with captions).
+
+Each card gets its own agent (Claude Code) in its own clone or worktree of your repository, on
+this machine or on another one reached over SSH. The agent asks on the card when it needs a
+decision and hands over with a narrated demo video of the change. You approve it or say what to
+change, also about one moment of the video: what you type or say while it stands there goes to the
+agent with that frame and the narration's sentence. Approved work lands on `main` or goes out as a
+pull request that Obeya carries to the merge; beside the branch the card shows how large the change
+is, and a click shows the diff.
+
+You talk to Obeya itself, spoken or typed: it takes your
+instructions, queues cards whose changes would collide, cuts large ones into parallel packages and
+learns your preferences. An idea is thought through on its card with an agent of its own, which
+keeps a brief of variants and open questions and can have throwaway prototypes built; deciding
+builds it or plans it as a project. Larger work is planned in plan docs in the repository, which
 show as projects with a card per workstream.
+
+![An Obeya canvas: a project with its workstreams, one at work and one with a demo waiting; a question and a task queued behind it; a task at work, a live one and an idea](docs/images/canvas.png)
 
 **Status:** early, and in daily use: Obeya is built with Obeya. It speaks English and German
 (the system's language, or the one chosen in its settings). How it works and why is in
@@ -47,7 +59,8 @@ one).
 
 On the canvas, double-click to write a task, then start its agent ("Start agent"). The card
 shows what the agent is doing; when it waits for you ("need you" in the top bar), open it to
-answer a question or watch the demo and approve it ("Approve").
+answer a question or watch the demo and approve it ("Approve"). Hold Space to say what to do
+instead of typing; `?` in the top bar lists every key.
 
 ## From source
 
@@ -107,6 +120,16 @@ uv, a voice) is in [`docs/demo-setup.md`](docs/demo-setup.md), checked in the ap
 WebKitGTK's development files; the first build takes a few minutes). The app adds push-to-talk from anywhere: hold the right Option key on a Mac,
 the right Ctrl key elsewhere, while another app is in front (another key in the settings). On a
 Mac this needs the "Input Monitoring" permission, which macOS asks for.
+
+### Workers on other machines
+
+A repository's workers can also run on other machines, reached over SSH: "Configuration" lists them
+per repository (the SSH target, the directory for the clones, how many clones and how many agents at
+once). Obeya clones the repository there itself, and a new card goes there once this machine has no
+free slot. The other machine needs git, Claude Code and what the repository's own work needs; the
+logins go along with each start (Claude's from `claude setup-token`, saved as `claude-token` in
+Obeya's home) and are not left there. Demos recorded there come back to this machine and are
+narrated by its voice. How it works is under "Hosts" in [`docs/design.md`](docs/design.md).
 
 ### Setting up a repository
 

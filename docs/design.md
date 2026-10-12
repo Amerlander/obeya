@@ -796,7 +796,8 @@ the owner's language (`src/core/locale.ts`).
   obeya.si serves them itself (no third party, no tracking). `publish.ts` replaces them and runs
   the workflow again; the chapters come from the render (the demo pipeline writes the scenes as
   `chapters.vtt` beside the captions), so they always match the video that is out. On the page it is a `<video>` with English captions and a poster
-  (`site/img/hero-poster.jpg`, the first frame without a play button, in git), loading nothing
+  (`site/img/hero-poster.jpg`, the first frame without a play button, in git; `poster.py` makes the
+  README's picture of the video beside it), loading nothing
   before a click (`preload="none"`); opened from the file, the site shows the poster alone. A few
   lines of script put a big play button (a real `<button>`) over the poster and show the
   browser's controls once it plays; without JavaScript the controls are there from the start and
@@ -2476,8 +2477,13 @@ the repository; the copy on the project is only for the archive).
   would.
 - Obeya is open source under the MIT licence, copyright Daniel Sadilek (`LICENSE`, the README,
   `package.json`), in a public repository on GitHub (2026-10-06). Code, tests and docs name no
-  other work projects. The README is written for strangers: the idea, a screenshot of a scratch
-  canvas (`docs/images/canvas.png`), the status, requirements, a quick start, a link to obeya.si;
+  other work projects. The README is written for strangers: the idea, the hero video, a screenshot
+  of a scratch canvas (`docs/images/canvas.png`), the status, requirements, a quick start, a link
+  to obeya.si. GitHub plays a video in a README only when it was uploaded through its web page (a
+  `user-attachments` link, which no API makes and every re-render would have to replace); a link to
+  the release asset shows as a download. So the README shows the video's first frame with the
+  site's play button drawn on it (`docs/images/video.jpg`, made with the poster), linked to the
+  video on obeya.si (`#film`), which is always the current one (2026-10-12);
   `CONTRIBUTING.md` says how Obeya is built with Obeya (design doc, plan docs, cards, demos) and
   what a pull request from outside brings.
 - Obeya is made known through a static English site on obeya.si that starts with the film
