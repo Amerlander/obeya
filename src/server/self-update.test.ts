@@ -167,6 +167,22 @@ test('a restart waits while the owner watches a video or dictates, past its pati
   expect(gone).toBe(1);
 });
 
+test("a restart waits for what the server holds for the owner (a command in its undo window), with no page open", async () => {
+  let gone = 0;
+  let held: ('voice' | 'video')[] = ['voice'];
+  const r = new Restarter({ busy: () => [], go: () => gone++, held: () => held, intervalMs: 10 });
+  r.hold('page', ['voice']);
+  r.request('code');
+  // the page that said it reloads and lets go
+  r.hold('page');
+  await wait(40);
+  expect(gone).toBe(0);
+  expect(r.due()).toMatchObject({ owner: ['voice'] });
+  held = [];
+  await wait(40);
+  expect(gone).toBe(1);
+});
+
 test('a restart with no worker busy waits for the owner alone', async () => {
   let gone = 0;
   const r = new Restarter({ busy: () => [], go: () => gone++, intervalMs: 10 });

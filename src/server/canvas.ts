@@ -291,6 +291,7 @@ export class CanvasRuntime {
       ...(deps.commandDelayMs !== undefined ? { delayMs: deps.commandDelayMs } : {}),
     });
     board.interruptTalk();
+    this.commander.resume();
     this.answers.resume();
     this.revisions = new Revisions({ board, runtime: deps.runtime, preferences, pathFor: (card) => this.repoOf(card).read.path, onRevised: (cardId, revised) => this.revised(cardId, revised) });
     this.revisions.resume();

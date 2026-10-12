@@ -289,6 +289,13 @@ export const MIGRATIONS = [
   // the place in the demo video the owner's words are about, and those Obeya holds back while they watch
   `ALTER TABLE events ADD COLUMN spot TEXT;
    ALTER TABLE cards ADD COLUMN held TEXT;`,
+  // a command the owner has the confirmation of, while it waits for "Rückgängig": it outlives a restart
+  `CREATE TABLE commands (
+     token TEXT PRIMARY KEY,
+     canvas_id TEXT NOT NULL REFERENCES canvases(id),
+     due TEXT NOT NULL,
+     body TEXT NOT NULL
+   );`,
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot';
@@ -733,6 +740,20 @@ export class Store {
 
   undoTalk(id: number) {
     this.db.query('UPDATE talk SET undone = 1 WHERE id = $id').run({ id });
+  }
+
+  /** A command that waits for "Rückgängig" until `due`; `body` is what runs then, as JSON. */
+  holdCommand(canvasId: string, token: string, due: string, body: string) {
+    this.db.query('INSERT OR REPLACE INTO commands (token, canvas_id, due, body) VALUES ($token, $c, $due, $body)').run({ token, c: canvasId, due, body });
+  }
+
+  dropCommand(token: string) {
+    this.db.query('DELETE FROM commands WHERE token = $token').run({ token });
+  }
+
+  /** The commands still waiting, oldest first: after a restart, those the stopped server held. */
+  heldCommands(canvasId: string): { token: string; due: string; body: string }[] {
+    return this.db.query('SELECT token, due, body FROM commands WHERE canvas_id = $c ORDER BY due').all({ c: canvasId }) as { token: string; due: string; body: string }[];
   }
 
   /** The answer to a looked-up question; one for the sheet (no card was open) waits there unread. */

@@ -620,6 +620,19 @@ export class Board {
     this.changed();
   }
 
+  /** A command waiting for "Rückgängig" until `due`, kept across a restart (`Commander`). */
+  holdCommand(token: string, due: number, body: unknown) {
+    this.store.holdCommand(this.canvas.id, token, new Date(due).toISOString(), JSON.stringify(body));
+  }
+
+  dropCommand(token: string) {
+    this.store.dropCommand(token);
+  }
+
+  heldCommands(): { token: string; due: number; body: unknown }[] {
+    return this.store.heldCommands(this.canvas.id).map((r) => ({ token: r.token, due: Date.parse(r.due), body: JSON.parse(r.body) as unknown }));
+  }
+
   talk(limit?: number) {
     return this.store.talk(this.canvas.id, limit);
   }

@@ -57,6 +57,8 @@ export interface RestarterOptions {
   busy: () => Busy[];
   /** Stops the server so that it starts again, or for good when the reason is `stop`, or for the app to be updated. */
   go: (reason: RestartReason) => void;
+  /** What the owner did that the server itself finishes first, whether or not a page is open: commands in their undo window. */
+  held?: () => OwnerHold[];
   patienceMs?: number;
   intervalMs?: number;
 }
@@ -128,9 +130,10 @@ export class Restarter {
     this.stopWaiting = whenIdle(
       () => {
         const now = this.o.busy();
-        if (key(now) !== key(waiting) && this.current) {
+        const owner = this.owner();
+        if ((key(now) !== key(waiting) || owner.join() !== this.current?.owner.join()) && this.current) {
           waiting = now;
-          this.current = { ...this.current, waiting };
+          this.current = { ...this.current, waiting, owner };
           this.emit();
         }
         return now.length > 0;
@@ -151,7 +154,7 @@ export class Restarter {
 
   private owner(): OwnerHold[] {
     if (this.stopping) return [];
-    const all = new Set([...this.holds.values()].flat());
+    const all = new Set([...this.holds.values(), this.o.held?.() ?? []].flat());
     return (['video', 'voice'] as const).filter((h) => all.has(h));
   }
 

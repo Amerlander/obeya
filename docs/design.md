@@ -1264,9 +1264,13 @@ the owner's language (`src/core/locale.ts`).
   by ending their turn (no nudge, no question to the owner; the card's log says it paused). A
   resumed worker hears that what ran was stopped (exit code 137) and goes on. A worker that waits for the restart to finish its landed work is not
   in a turn and does not hold it up. The restart also waits while the owner watches a demo video or
-  dictates in an open page (from the press until the command's undo window is over), past the
+  dictates in an open page (from the press until Obeya has read the words), past the
   15 minutes too: the page tells the server over its WebSocket whenever that starts or stops, and a
-  page that closes lets go. While a restart waits, the bar shows it ("Neustart wartet auf
+  page that closes lets go. A command in its undo window holds the restart off on the server's
+  own count, whether or not the page that said it is still open, and until it has run. Until
+  2026-10-12 the page held it: a page that reloaded in the window (the language changed in the
+  settings) let go, the restart went ahead, and the confirmed command was lost with the server's
+  memory. While a restart waits, the bar shows it ("Neustart wartet auf
   N Agenten", "… auf dein Video", "… auf dein Diktat"; until when at most, while only agents hold
   it); hovering names why and the cards it waits for, and "Jetzt neu starten" (`POST /api/restart`)
   has it go ahead at once, its hover text saying what that cuts off. The page that reloads keeps
@@ -1548,7 +1552,9 @@ the owner's language (`src/core/locale.ts`).
   and follows them itself too.
   With a card open, the Koordinator gets its worker's whole summary, so "lege eine Folgeaufgabe
   für den ambient-Ton an" makes a follow-up of that card with what the summary says about it. One confirmation covers all actions; they run in order a few
-  seconds after it reached the owner, so "Rückgängig" takes back anything, even an approval. Only
+  seconds after it reached the owner, so "Rückgängig" takes back anything, even an approval. A page
+  that opens in that window (a reload) shows the confirmation with „Rückgängig“ again for the rest
+  of it. Only
   talking to an idea goes on at once: it changes nothing. With a proposal open, what the owner says about it is,
   in doubt, a revision (`revise`, with their words and the undo window); accepting in the same
   breath is refused, since the owner should see what they take. A note, an answer or feedback the
@@ -2384,6 +2390,11 @@ the repository; the copy on the project is only for the archive).
   only adds to what the agent knows, the card's conversation shows it, and pressing Send or
   letting go of Space is the deliberate act. Feedback no longer takes the approval away, so it
   needs no undo either (Card lifecycle, 3).
+- A confirmed command outlives the server that confirmed it (2026-10-12): it waits for undo in
+  the database (`commands`), and a restart waits for it. A stop or "Jetzt neu starten" in the
+  window leaves it to the next start, which runs it once the window is over, at once when it is
+  over already: the owner has the confirmation and expects the card. A command that has begun to
+  run is out of the database, so a restart in the middle runs nothing twice.
 - A card shows a conversation instead of its log (2026-10-05): the owner reads what was said and
   decided, not every tool call, which stays a click away under each message. Rejected: the
   conversation beside the log (every message twice). A worker answers notes with a tool of its

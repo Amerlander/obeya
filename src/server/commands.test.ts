@@ -125,6 +125,59 @@ describe('the Koordinator remembers', () => {
     ]);
   });
 
+  test('a command in its undo window outlives a restart: the next server runs it once the window is over', async () => {
+    const k = new Commander({ board, runtime, cwd: '/r', execute: () => {}, delayMs: 2000 });
+    const { heard } = await say(k, 'Spracheinstellung: „unten“ stimmt nicht mehr', 'act', {
+      actions: [{ do: 'new_card', title: 'Hinweis „unten“ korrigieren', body: 'Die Demo-Einstellungen stehen links.' }],
+      confirm: 'Neue Aufgabe „Hinweis „unten“ korrigieren“, der Agent fängt an.',
+    });
+    expect(k.holding()).toBe(false);
+    k.arm(heard.token!);
+    // a restart waits for it, and a page that opens offers "Rückgängig" again for what is left of the window
+    expect(k.holding()).toBe(true);
+    expect(k.undoable()).toEqual([{ text: heard.confirm, token: heard.token!, undoMs: expect.any(Number) }]);
+    expect(k.undoable()[0]!.undoMs).toBeGreaterThan(1000);
+    // Obeya stops before the window is over; the next server finds the command on the same database
+    const later = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => []);
+    const ran: Command[] = [];
+    const next = new Commander({ board: later, runtime, cwd: '/r', execute: (c) => void ran.push(c), delayMs: 20 });
+    store.db.query("UPDATE commands SET due = '2000-01-01T00:00:00.000Z'").run();
+    next.resume();
+    expect(next.holding()).toBe(true);
+    await settle();
+    expect(ran).toEqual([{ do: 'newCard', title: 'Hinweis „unten“ korrigieren', body: 'Die Demo-Einstellungen stehen links.', start: true }]);
+    expect(next.holding()).toBe(false);
+    expect(later.heldCommands()).toEqual([]);
+    // it runs once: a third start finds nothing
+    const third = new Commander({ board: later, runtime, cwd: '/r', execute: (c) => void ran.push(c), delayMs: 20 });
+    third.resume();
+    await settle();
+    expect(ran).toHaveLength(1);
+  });
+
+  test('a command taken back is gone for the next server too, and one that runs cannot be taken back', async () => {
+    const k = commander();
+    const { heard } = await say(k, 'neue Aufgabe Archiv', 'act', { actions: [{ do: 'new_card', title: 'Archiv', body: 'Archiv.' }], confirm: 'Neue Aufgabe „Archiv“.' });
+    k.arm(heard.token!);
+    expect(board.heldCommands()).toHaveLength(1);
+    expect(k.undo(heard.token!)).toBe(true);
+    expect(board.heldCommands()).toEqual([]);
+    expect(k.holding()).toBe(false);
+
+    let release = () => {};
+    const slow = new Commander({ board, runtime, cwd: '/r', execute: () => new Promise<void>((r) => (release = r)), delayMs: 5 });
+    const again = await say(slow, 'neue Aufgabe Export', 'act', { actions: [{ do: 'new_card', title: 'Export', body: 'Export.' }], confirm: 'Neue Aufgabe „Export“.' });
+    slow.arm(again.heard.token!);
+    await new Promise((r) => setTimeout(r, 20));
+    // running: too late to take back, and a restart still waits for it
+    expect(slow.undo(again.heard.token!)).toBe(false);
+    expect(slow.holding()).toBe(true);
+    expect(slow.undoable()).toEqual([]);
+    release();
+    await settle();
+    expect(slow.holding()).toBe(false);
+  });
+
   test('a new task starts at once, like "Agent starten", unless the owner says it should wait', async () => {
     const k = commander();
     const { heard, session } = await say(k, 'Tipjar soll die Rechnung aufteilen', 'act', {

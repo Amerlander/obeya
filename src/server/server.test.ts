@@ -267,6 +267,17 @@ describe('voice', () => {
     expect(executed).toEqual([]);
   });
 
+  test('a page that opens while a command waits for undo (a reload) offers "Rückgängig" again', async () => {
+    const c = card();
+    canvas.commander.undoable = () => [{ text: '„A“ startet.', token: 'tok', undoMs: 3000, cardId: c.id }];
+    const messages: ServerMessage[] = [];
+    const ws = new WebSocket(new URL(api('/ws'), server.url.href.replace('http', 'ws')));
+    ws.onmessage = (e) => messages.push(JSON.parse(e.data));
+    await until(() => messages.some((m) => m.type === 'notice'));
+    expect(messages.find((m) => m.type === 'notice')).toEqual({ type: 'notice', text: '„A“ startet.', token: 'tok', undoMs: 3000, cardId: c.id });
+    ws.close();
+  });
+
   test('pressing Space starts the Koordinator ahead; commands then only send it the brief', async () => {
     const c = card();
     expect((await post(api('/voice/warm'), '')).status).toBe(204);

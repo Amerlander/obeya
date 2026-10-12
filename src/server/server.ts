@@ -485,6 +485,8 @@ export function serve(
         ws.send(JSON.stringify({ type: 'restart', restart: pending(c.id) } satisfies ServerMessage));
         ws.send(JSON.stringify({ type: 'update', update: updates.current() } satisfies ServerMessage));
         ws.send(waitingMessage());
+        // a page that reloads within a command's undo window offers "Rückgängig" again
+        for (const n of c.commander.undoable()) ws.send(JSON.stringify({ type: 'notice', ...n } satisfies ServerMessage));
       },
       close: (ws) => {
         sockets.get(ws.data.canvas)?.delete(ws);

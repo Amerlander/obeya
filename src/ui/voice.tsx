@@ -193,6 +193,8 @@ const SHOWN_MS = 7000;
  */
 export function useTold(onHeard: (h: Heard) => void) {
   const [told, setTold] = useState<Told[]>([]);
+  const toldRef = useRef(told);
+  toldRef.current = told;
   const next = useRef(0);
   const update = (id: number, fn: (x: Told) => Told | null) => setTold((ts) => ts.flatMap((x) => (x.id === id ? (fn(x) ?? []) : [x])));
 
@@ -200,13 +202,7 @@ export function useTold(onHeard: (h: Heard) => void) {
     if (h.quiet) return update(id, () => null);
     const undo = !!(h.token && h.undoMs);
     update(id, (x) => ({ ...x, heard: h, undo }));
-    if (undo) {
-      // a restart within the undo window would lose the command
-      const by = `undo-${h.token}`;
-      holdRestart(by, 'voice');
-      setTimeout(() => holdRestart(by, null), h.undoMs! + 1000);
-      setTimeout(() => update(id, (x) => ({ ...x, undo: false })), Math.max(0, h.undoMs! - 400));
-    }
+    if (undo) setTimeout(() => update(id, (x) => ({ ...x, undo: false })), Math.max(0, h.undoMs! - 400));
     setTimeout(() => update(id, () => null), Math.max(SHOWN_MS, (h.undoMs ?? 0) + 1500));
   }
 
@@ -225,6 +221,8 @@ export function useTold(onHeard: (h: Heard) => void) {
   }
 
   function show(card: Told['card'], h: Heard) {
+    // the server offers a command's undo again when the connection comes back: one line for it
+    if (h.token && toldRef.current.some((x) => x.heard?.token === h.token)) return;
     const id = ++next.current;
     setTold((ts) => [...ts, { id, pending: '', ...(card ? { card } : {}) }]);
     settle(id, h);

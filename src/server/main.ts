@@ -163,6 +163,8 @@ let exitCode = RESTART;
 const busy = () => canvases.flatMap((c) => c.busy().map((card) => ({ canvas: c.id, card })));
 const restarter = new Restarter({
   busy,
+  // a command in its undo window holds a restart off even when the page that said it reloads
+  held: () => (canvases.some((c) => c.commander.holding()) ? ['voice'] : []),
   go: (reason) => {
     server?.stop(true);
     if (reason === 'stop') return shutdown(0);

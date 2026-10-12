@@ -2,7 +2,7 @@
 // confirms them in one sentence, and runs them after a short delay unless the owner takes them back.
 
 import { z } from 'zod';
-import { type AgentSetting, answering, askable, blocksSaving, type CanvasConfig, finished, type Item, type NextStep, prototypeWorkstream, type Queue, type SpotInput } from '../core/types';
+import { type AgentSetting, answering, askable, blocksSaving, type CanvasConfig, finished, type Item, type NextStep, type Notice, prototypeWorkstream, type Queue, type SpotInput } from '../core/types';
 import { BadRequest, type Board, replyNote } from './board';
 import type { Config } from './config';
 import type { Moment } from './db';
@@ -181,13 +181,28 @@ const HISTORY_STEPS = 60;
 /** What happened between two commands, at most. */
 const NEWS_STEPS = 40;
 
+/**
+ * Commands understood from the owner's words, as they wait for "Rückgängig". `said`: the owner's
+ * words, to learn from once they run, unless they reach the learner another way.
+ */
+interface Waiting {
+  commands: Command[];
+  said?: string;
+  talk: number;
+  confirm: string;
+  card?: string;
+}
+
+/** A command whose undo window ends sooner than this is not offered for undo again. */
+const UNDO_SHOWN_MS = 1000;
+
 export class Commander {
   /**
-   * Commands between being understood and running; the timer is set once the owner has the
-   * confirmation. `said`: the owner's words, to learn from once they run, unless they reach the
-   * learner another way.
+   * Commands between being understood and having run; the timer is set once the owner has the
+   * confirmation, and from then on they are kept in the database too, so a restart in the undo
+   * window does not lose them.
    */
-  private waiting = new Map<string, { commands: Command[]; said?: string; talk: number; confirm: string; card?: string; timer?: ReturnType<typeof setTimeout> }>();
+  private waiting = new Map<string, Waiting & { due?: number; timer?: ReturnType<typeof setTimeout>; running?: boolean }>();
   private session: Session | null = null;
   /** Commands are read one after the other, each once the previous turn has ended. */
   private turns: Promise<unknown> = Promise.resolve();
@@ -270,16 +285,53 @@ export class Commander {
     return this.o.delayMs ?? 5000;
   }
 
+  /** Starts the undo window: the owner has the confirmation now. */
   arm(token: string) {
     const w = this.waiting.get(token);
     if (!w || w.timer) return;
+    const due = Date.now() + this.delayMs;
+    const { commands, said, talk, confirm, card } = w;
+    this.o.board.holdCommand(token, due, { commands, ...(said ? { said } : {}), talk, confirm, ...(card ? { card } : {}) } satisfies Waiting);
+    this.schedule(token, w, due);
+  }
+
+  /**
+   * After a restart: the commands the stopped server held in their undo window run once it is
+   * over, at once when it is over already. The owner had their confirmation.
+   */
+  resume() {
+    for (const { token, due, body } of this.o.board.heldCommands()) {
+      const w = body as Waiting;
+      this.waiting.set(token, w);
+      this.schedule(token, w, due);
+    }
+  }
+
+  private schedule(token: string, w: Waiting & { due?: number; timer?: ReturnType<typeof setTimeout>; running?: boolean }, due: number) {
+    w.due = due;
     w.timer = setTimeout(async () => {
-      this.waiting.delete(token);
+      w.running = true;
+      // a restart while they run cuts them off rather than running them twice
+      this.o.board.dropCommand(token);
       // what the owner takes back is not learned from either
       if (w.said) this.o.onOwnerInput?.(w.card, 'command', w.said, w.confirm);
       // in the order the owner said them; one that fails does not hold up the others
       for (const command of w.commands) await this.run(command);
-    }, this.delayMs);
+      this.waiting.delete(token);
+    }, Math.max(0, due - Date.now()));
+  }
+
+  /** Whether commands the owner has the confirmation of wait for "Rückgängig" or run: a restart waits for them. */
+  holding(): boolean {
+    return [...this.waiting.values()].some((w) => w.timer);
+  }
+
+  /** The commands that still wait for "Rückgängig", for a page that opens (a reload) to offer it again. */
+  undoable(): Notice[] {
+    const now = Date.now();
+    return [...this.waiting.entries()]
+      .filter(([, w]) => w.due && !w.running && w.due - now > UNDO_SHOWN_MS)
+      .map(([token, w]) => ({ text: w.confirm, token, undoMs: w.due! - now, ...(w.card ? { cardId: w.card } : {}) }));
   }
 
   /** Runs one command; what it throws is logged on its card. */
@@ -296,9 +348,10 @@ export class Commander {
   /** Takes a waiting command back; false when it already ran. */
   undo(token: string): boolean {
     const w = this.waiting.get(token);
-    if (!w) return false;
+    if (!w || w.running) return false;
     clearTimeout(w.timer);
     this.waiting.delete(token);
+    this.o.board.dropCommand(token);
     this.o.board.undoTalk(w.talk);
     if (w.card && this.o.board.item(w.card)) this.o.board.log(w.card, 'state', 'owner', this.o.board.t.voice.undone);
     this.news.push(`The owner took back what you confirmed with „${w.confirm}“; it did not happen.`);
