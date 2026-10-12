@@ -40,7 +40,7 @@ const plans = readPlanDocs(repo.path, adapter);
 const why: Record<NotAProject, string> = { noWorkstreams: 'no `## Workstreams` section', noChecklist: 'no checklist under `## Workstreams`' };
 const name = (file: string) => file.slice(file.lastIndexOf('/') + 1);
 const planLines = !existsSync(join(repo.path, adapter.planDocs.dir))
-  ? [`plan docs: ${adapter.planDocs.dir}/ does not exist yet; the first plan doc ("Als Projekt planen" on an idea) creates it`]
+  ? [`plan docs: ${adapter.planDocs.dir}/ does not exist yet; the first plan doc ("Als Projekt planen" on an idea or task card) creates it`]
   : [
       `plan docs in ${adapter.planDocs.dir}/: ${plans.docs.length} ${plans.docs.length === 1 ? 'is a project' : 'are projects'}${plans.docs.length ? ` (${plans.docs.map((d) => `${name(d.file)}${allTicked(d) ? ', done: archived' : ''}`).join('; ')})` : ''}, ${plans.others.length} ${plans.others.length === 1 ? 'is not' : 'are not'}`,
       ...plans.others.map((o) => `- ${name(o.file)}: ${why[o.reason]}`),

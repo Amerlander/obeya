@@ -2206,7 +2206,7 @@ the repository; the copy on the project is only for the archive).
   it keeps under another heading into it; the change lands like any other and the doc becomes a
   project. While the card runs, the doc's row shows "Wird aufbereitet" and opens it. A repository
   with no plan doc that never had a project gets a dashed note in the same place: where Obeya looks
-  and that "Als Projekt planen" on an idea writes the first doc there, with "Ordner ändern", which
+  and that "Als Projekt planen" on an idea or task card writes the first doc there, with "Ordner ändern", which
   opens the configuration at the repositories (the directory is the adapter's `planDocs`). Before,
   such a doc was skipped silently and a missing directory said nothing, so a repository with plans
   of its own showed an empty canvas without saying why. Deferred: a more lenient parser (`Tasks`,
