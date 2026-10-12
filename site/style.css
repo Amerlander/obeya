@@ -8,7 +8,7 @@
 :root {
   /* the canvas's palette: card stock on a warm board, the states as inks */
   --paper: #eee8dc; --ink: #1f1b14; --muted: #6b6253; --line: #ddd5c4; --card: #fdfbf5;
-  --blue: #1d5fe0; --amber: #f27405; --green: #3d9a1f; --pink: #dc2f5e; --grey: #a0978a;
+  --blue: #1d5fe0; --amber: #f27405; --green: #3d9a1f; --pink: #dc2f5e; --grey: #a0978a; --purple: #7b4fd6;
   --shadow: 0 1px 0 rgba(95,75,35,.20), 1px 2px 0 rgba(95,75,35,.10), 0 4px 8px -4px rgba(60,45,20,.18);
   --serif: Newsreader, "Iowan Old Style", Georgia, serif;
   --wide: 1120px;
@@ -72,25 +72,33 @@ section { max-width: var(--wide); margin: 0 auto; padding: 0 24px; }
 .pillar p { color: var(--muted); margin: 0; }
 .shot { border-radius: 3px; border: 1px solid var(--line); box-shadow: 0 18px 40px -24px rgba(28,27,25,.4); }
 .tag { display: inline-block; font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 2px; border-top: 3px solid; background: var(--card); box-shadow: var(--shadow); }
-.tag.blue { border-color: var(--blue); } .tag.amber { border-color: var(--amber); } .tag.green { border-color: var(--green); }
+.tag.blue { border-color: var(--blue); } .tag.amber { border-color: var(--amber); } .tag.green { border-color: var(--green); } .tag.grey { border-color: var(--grey); }
 .legend { list-style: none; padding: 0; margin: 20px 0 0; display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 14px; font-weight: 500; }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 1px; margin-right: 8px; vertical-align: -1px; }
 .dot.blue { background: var(--blue); } .dot.amber { background: var(--amber); } .dot.green { background: var(--green); }
 
 /* ---------- cards, as on Obeya's canvas: index cards with the state as a rule across the top ---------- */
 .s-idea { --c: var(--pink); } .s-working { --c: var(--blue); } .s-waiting { --c: var(--amber); }
-.s-approved { --c: var(--green); } .s-planned { --c: var(--grey); }
-.card { position: relative; background: var(--card); border-radius: 2px; box-shadow: var(--shadow); padding: 18px 18px 18px 18px;
+.s-approved { --c: var(--green); } .s-planned { --c: var(--grey); } .s-proposal { --c: var(--purple); }
+.card { position: relative; background: var(--card); border-radius: 2px; box-shadow: var(--shadow); padding: 15px 16px 40px; min-height: 128px;
   background-image: linear-gradient(var(--c), var(--c)); background-size: 100% 4px; background-repeat: no-repeat; }
 .s-idea.card { background-color: color-mix(in srgb, var(--pink) 9%, var(--card)); }
-.kind { font-size: 12px; font-weight: 600; letter-spacing: .01em; color: var(--muted); }
-.card .ttl { font-family: var(--serif); font-weight: 600; font-size: 18px; line-height: 1.2; margin-top: 3px; }
-.card .state { display: flex; margin-top: 10px; font-size: 12.5px; }
-.card.ring { box-shadow: 0 0 0 2px var(--amber), var(--shadow); }
-.state { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: var(--c); }
-.state i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
-.s-working .state i { animation: pulse 1.6s ease-in-out infinite; }
-@keyframes pulse { 50% { opacity: .3; } }
+.kind { font-size: 12px; font-weight: 500; letter-spacing: .01em; color: var(--muted); }
+.card .ttl { font-family: var(--serif); font-weight: 600; font-size: 18px; line-height: 1.16; margin-top: 1px; }
+.card .meta { margin-top: 4px; font-size: 13.5px; line-height: 1.38; color: var(--muted); }
+.card .state { position: absolute; left: 16px; bottom: 12px; display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--c); }
+/* the owner's turn: a frame in the stamp-pad colour and a pin */
+.card.s-waiting, .card.turn { box-shadow: 0 0 0 2px var(--amber), var(--shadow); }
+.badge { position: absolute; top: -10px; right: -8px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+  background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.45), transparent 45%), var(--amber); color: #fff;
+  font: 700 13px/1 var(--serif); box-shadow: 0 0 0 2px var(--paper), 1px 2px 0 2px rgba(0,0,0,.18); }
+/* a proposal is a card only pencilled in: no stock yet, a dashed outline */
+.card.s-proposal { background: transparent; box-shadow: none; border: 1.5px dashed var(--purple); }
+/* an agent at work: a pencil stroke being drawn */
+.s-working .state::after { content: ""; width: 36px; height: 2px;
+  background: linear-gradient(90deg, var(--c) 0 50%, transparent 50%) 0 0 / 200% 100% no-repeat, color-mix(in srgb, var(--c) 22%, transparent);
+  animation: draw 1.6s cubic-bezier(.5,0,.3,1) infinite; }
+@keyframes draw { 0% { background-position: 100% 0; } 55% { background-position: 0 0; } 100% { background-position: -100% 0; } }
 
 /* ---------- how it works: a card's way along the wall, with its detours ---------- */
 .how { margin-top: 144px; }
@@ -108,8 +116,11 @@ section { max-width: var(--wide); margin: 0 auto; padding: 0 24px; }
 .f-c4 { grid-area: c4; }
 .flow p { font-size: 16px; color: #4d4537; margin: 18px 0 0; line-height: 1.5; }
 .flow > .f-c1, .flow > .f-c2 { margin-top: 26px; }
-.station { position: relative; }
-.f-idea::after, .f-proto::after, .f-work::after, .f-demo::after { content: "→"; position: absolute; right: -22px; top: 30px; color: var(--muted); font-size: 18px; }
+/* the cards of a row as tall as the tallest, so that the arrows and the round line up */
+.station { position: relative; align-self: stretch; display: flex; flex-direction: column; }
+.station > .card, .stack { flex: 1; }
+.stack > .card:first-child { height: 100%; }
+.f-idea::after, .f-proto::after, .f-work::after, .f-demo::after { content: "→"; position: absolute; right: -22px; top: 52px; color: var(--muted); font-size: 18px; }
 /* the labels over the wall: a bracket over the detours, an arrow down where a clear task begins */
 .mark { font-size: 13px; font-weight: 600; color: var(--muted); padding-bottom: 8px; margin-bottom: 14px; }
 .f-opt { position: relative; text-align: center; border-bottom: 1.5px dashed var(--grey); }
@@ -119,7 +130,7 @@ section { max-width: var(--wide); margin: 0 auto; padding: 0 24px; }
 /* two prototypes, one in front of the other */
 .stack { position: relative; }
 .stack .card { position: relative; z-index: 1; }
-.stack .behind { position: absolute; inset: 0; z-index: 0; transform: translate(6px, 11px) rotate(1.4deg); opacity: .85; }
+.stack .behind { position: absolute; inset: 0; z-index: 0; transform: translate(6px, 11px) rotate(1.4deg); }
 /* the round from the demo back to the worker */
 .loop { position: relative; height: 58px; margin: 0 calc(25% - 7px); border: 1.5px dashed var(--amber); border-top: 0;
   border-radius: 0 0 16px 16px; display: grid; place-items: end center; }
@@ -129,10 +140,10 @@ section { max-width: var(--wide); margin: 0 auto; padding: 0 24px; }
 .f-branch { position: relative; padding-left: 18px; }
 .f-branch p { margin-top: 26px; }
 .f-branch::before { content: ""; position: absolute; left: 4px; top: 0; bottom: 64px; width: 14px; border: 1.5px dashed var(--grey); border-right: 0; border-top: 0; }
-.f-branch .card { margin-top: 18px; transform: rotate(-.8deg); }
+.f-branch .card { margin-top: 22px; }
 
 /* ---------- the big room ---------- */
-.room { margin-top: 112px; display: grid; grid-template-columns: .8fr 1.2fr; gap: 56px; align-items: start;
+.room { margin-top: 112px; display: grid; grid-template-columns: .8fr 1.2fr; gap: 56px; align-items: center;
   border-top: 1px solid var(--line); padding-top: 72px; padding-bottom: 96px; }
 .room-mark { font-size: clamp(80px, 13vw, 170px); line-height: .95; font-weight: 700; color: var(--ink); opacity: .9;
   writing-mode: vertical-rl; justify-self: center; letter-spacing: .05em;
@@ -175,6 +186,7 @@ footer span { margin-right: auto; }
   .flow p { margin: 10px 0 26px; font-size: 15px; }
   .flow > .f-c1, .flow > .f-c2 { margin-top: 18px; }
   .station::after { content: none; }
+  .station > .card, .stack { flex: none; }
   .f-opt { text-align: left; }
   .f-start { margin-top: 18px; }
   .loop { margin: 10px 0 0; height: auto; border: 0; display: block; }
@@ -208,5 +220,5 @@ footer span { margin-right: auto; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .s-working .state i { animation: none; }
+  .s-working .state::after { animation: none; }
 }

@@ -767,18 +767,22 @@ the owner's language (`src/core/locale.ts`).
   and CSS, no framework and no build, and JavaScript only for the video's play button and its
   chapter list, so it opens
   straight from the file too. From
-  the top: one sentence and the hero video; three pillars with screenshots (the canvas, voice, the
-  demo the owner approves instead of the code); "From idea to main", a card's way along a wall as
-  cards in their states: the detours of an idea and its prototypes, a task's work, its demo with
-  the round back for changes, the merge and a follow-up hanging off it (one column below 900 px);
+  the top: one sentence and the hero video; four pillars with screenshots (the canvas, voice, the
+  demo the owner approves instead of the code, the order in which cards run: parallel where they
+  can, one after the other where they must); "From idea to main", a card's way along a wall as
+  cards in their states, drawn as the canvas draws them (the owner's turn framed with its pin, a
+  proposal dashed with ✦): the detours of an idea and its prototypes, a task's work, its demo with
+  the round back for changes, the merge and an agent's proposal hanging off it (one column below 900 px);
   "The big room", what the name means, with 大部屋 set vertically, and the one wall as the way out
   of many parallel chats (no Toyota, which the README left out on purpose too); the dark band "Obeya is built
   with Obeya."; getting started with the downloads, `bun start` from the checkout and GitHub (not
   the design doc, which is written for the agents working on Obeya). It has Obeya's
   palette and type (see Visual identity): Newsreader, IBM Plex Sans Condensed and the three
   characters of 大部屋 (Noto Serif JP) are served from `site/fonts/` with their OFL licences, not
-  from Google Fonts; logo and wordmark are copies from `src/ui/logo/`; the
-  screenshots show the German interface. Paths are relative, so the site works under
+  from Google Fonts; logo and wordmark are copies from `src/ui/logo/`. The screenshots show the
+  English interface on the Tipjar app of the hero video, the demo one a demo of a Tipjar change (so
+  that the picture is of a demo, not of Obeya); `bun scripts/site-shots.ts` takes them all again
+  from a scratch Obeya. Paths are relative, so the site works under
   sadilek.github.io/obeya as well. `.github/workflows/pages.yml` publishes `site/` to GitHub Pages
   on every push to `main` on GitHub that touches `site/` or the workflow, and on demand from the
   Actions tab; Pages serves a branch only from `/` or `/docs`, hence the workflow. The domain
