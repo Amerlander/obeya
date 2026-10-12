@@ -1549,7 +1549,8 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   Silicon, PyTorch through qwen-tts elsewhere, `lib/qwen3.py`; a clone continues its clip, so a
   German clip carries German accent and rhythm into English narration, and the settings hold one
   clip for both languages: an English clip, or the clip without its transcript (the voice's timbre
-  only, less like the owner), sounds right, heard 2026-10-07; no open successor model then,
+  only, less like the owner) should fix that, not yet judged by ear (2026-10-12); no open successor
+  model as of 2026-10-07,
   Qwen-Audio-3.1-TTS of 2026-09 is hosted only), macOS `say` (offered on a Mac
   only), and the owner's own command (through the shell; it writes the WAV to `$DEMO_WAV`). Hosted
   ones are HTTP requests from templates in `tts.py`: Gemini, OpenAI (or another base URL with the
