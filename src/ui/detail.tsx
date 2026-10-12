@@ -14,6 +14,7 @@ import { Body, Msg, Quote, Reading } from './message';
 import { replyOn, setReply, useReply } from './reply';
 import { Composer } from './composer';
 import { useFitHeight } from './fitHeight';
+import { type Box, onto, zoomBox } from './zoomBox';
 import { AttachButton, ShotStrip, Shots, useShotInput } from './shots';
 import { clock as time, errorText, stateLabel, t } from './strings';
 import { agentWorks, demoHandover, koordinatorReads, ownerField, parseQuestion, started, talkAlone, talkTurns, type Turn, worked as isWorked } from './talk';
@@ -1077,6 +1078,7 @@ function DemoView({
     return () => clearTimeout(h);
   }, []);
   useEffect(() => () => holdRestart('video', null), []);
+  const zoom = useZoom(video);
   const current = demo.chapters.reduce((cur, [at], i) => (at <= now + 0.05 ? i : cur), 0);
   return (
     <>
@@ -1095,34 +1097,47 @@ function DemoView({
             scrolling={artifactHeight !== undefined && artifactHeight < ARTIFACT_CAP ? 'no' : undefined}
           />
         ) : (
-          <div className="player">
-            <video
-              ref={video}
-              controls
-              preload="metadata"
-              poster={src('poster.jpg')}
-              src={src('demo.mp4')}
-              onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)}
-              // a restart waits while the owner watches
-              onPlay={() => {
-                setStarted(true);
-                holdRestart('video', 'video');
-              }}
-              onPause={() => holdRestart('video', null)}
-              onEnded={() => holdRestart('video', null)}
+          <div className="player" ref={zoom.player} style={zoom.box ? { height: zoom.box.from.height } : undefined}>
+            {zoom.box && <div className={zoom.box.closing ? 'demo-zoom closing' : 'demo-zoom'} ref={zoom.backdrop} title={t.demo.unzoom} onClick={zoom.toggle} />}
+            <div
+              className={zoom.box ? 'screen zoomed' : 'screen'}
+              ref={zoom.screen}
+              style={zoom.box ? { left: zoom.box.to.left, top: zoom.box.to.top, width: zoom.box.to.width, height: zoom.box.to.height } : undefined}
             >
-              <track kind="captions" src={src('captions.vtt')} srcLang="de" label="Deutsch" />
-            </video>
-            {!started && (
-              // a click anywhere on the video but its controls starts it, like on a shared page
-              <button className="start" aria-label={t.demo.play} onClick={() => video.current?.play().catch(() => {})}>
-                <span>
-                  <svg viewBox="0 0 24 24">
-                    <path d="M6 4l15 8-15 8z" />
-                  </svg>
-                </span>
+              <video
+                ref={video}
+                controls
+                preload="metadata"
+                poster={src('poster.jpg')}
+                src={src('demo.mp4')}
+                onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)}
+                // a restart waits while the owner watches
+                onPlay={() => {
+                  setStarted(true);
+                  holdRestart('video', 'video');
+                }}
+                onPause={() => holdRestart('video', null)}
+                onEnded={() => holdRestart('video', null)}
+              >
+                <track kind="captions" src={src('captions.vtt')} srcLang="de" label="Deutsch" />
+              </video>
+              {!started && (
+                // a click anywhere on the video but its controls starts it, like on a shared page
+                <button className="start" aria-label={t.demo.play} onClick={() => video.current?.play().catch(() => {})}>
+                  <span>
+                    <svg viewBox="0 0 24 24">
+                      <path d="M6 4l15 8-15 8z" />
+                    </svg>
+                  </span>
+                </button>
+              )}
+              <button className="zoom" title={zoom.box ? t.demo.unzoom : t.demo.zoom} aria-label={zoom.box ? t.demo.unzoom : t.demo.zoom} onClick={zoom.toggle}>
+                <svg viewBox="0 0 24 24">
+                  <circle cx="10.5" cy="10.5" r="6.5" />
+                  <path d={zoom.box ? 'M7.5 10.5h6M15.5 15.5L21 21' : 'M7.5 10.5h6M10.5 7.5v6M15.5 15.5L21 21'} />
+                </svg>
               </button>
-            )}
+            </div>
           </div>
         )}
         {demo.chapters.length > 0 && (
@@ -1151,6 +1166,90 @@ function DemoView({
       <Body md={summary} />
     </>
   );
+}
+
+const ZOOM_MS = 380;
+const ZOOM_EASE = 'cubic-bezier(.3,.9,.3,1)';
+
+/**
+ * The demo video shown large over the greyed page, short of full screen: the same video element
+ * (it keeps playing) grows out of its place in the card and goes back into it. Z or the button on
+ * the video toggles it, Esc or a click beside it ends it. With several demos on a card, Z takes the
+ * zoomed one, else the one playing, else the first.
+ */
+function useZoom(video: RefObject<HTMLVideoElement | null>) {
+  const player = useRef<HTMLDivElement>(null);
+  const screen = useRef<HTMLDivElement>(null);
+  const backdrop = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState<{ from: Box; to: Box; closing?: boolean } | null>(null);
+  const boxRef = useRef(box);
+  boxRef.current = box;
+  const toggle = () => {
+    const cur = boxRef.current;
+    const el = screen.current;
+    if (!el || cur?.closing) return;
+    if (!cur) {
+      const from = el.getBoundingClientRect();
+      const v = video.current;
+      const aspect = v?.videoWidth ? v.videoWidth / v.videoHeight : from.width / from.height;
+      setBox({ from: { left: from.left, top: from.top, width: from.width, height: from.height }, to: zoomBox(aspect, innerWidth, innerHeight) });
+      return;
+    }
+    // back into its place in the card, wherever that is by now
+    const r = player.current!.getBoundingClientRect();
+    const back = { left: r.left, top: r.top, width: r.width, height: cur.from.height * (r.width / cur.from.width) };
+    setBox({ ...cur, closing: true });
+    el.animate([{ transform: 'none' }, { transform: onto(back, cur.to) }], { duration: ZOOM_MS, easing: ZOOM_EASE, fill: 'forwards' }).onfinish = () => {
+      setBox(null);
+      el.getAnimations().forEach((a) => a.cancel());
+    };
+  };
+  const toggleRef = useRef(toggle);
+  toggleRef.current = toggle;
+  // grows out of where it stood
+  const zoomed = !!box;
+  useLayoutEffect(() => {
+    const cur = boxRef.current;
+    if (!cur || !screen.current) return;
+    screen.current.animate([{ transform: onto(cur.from, cur.to) }, { transform: 'none' }], { duration: ZOOM_MS, easing: ZOOM_EASE });
+  }, [zoomed]);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (boxRef.current) toggleRef.current();
+        return;
+      }
+      if (e.key !== 'z' && e.key !== 'Z') return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+      if (e.target instanceof Element && e.target.closest('input, textarea, select, [contenteditable]')) return;
+      if (document.querySelector('#help, #config.on, .lightbox')) return;
+      const videos = [...document.querySelectorAll<HTMLVideoElement>('#panel .demo-view video')];
+      const mine = document.querySelector<HTMLVideoElement>('.screen.zoomed video') ?? videos.find((v) => !v.paused) ?? videos[0];
+      if (mine !== video.current) return;
+      e.preventDefault();
+      toggleRef.current();
+    };
+    addEventListener('keydown', key);
+    return () => removeEventListener('keydown', key);
+  }, []);
+  // a resized window resizes the zoomed video; a wheel over it does not scroll the card behind
+  useEffect(() => {
+    if (!zoomed) return;
+    const resize = () => {
+      const v = video.current;
+      const cur = boxRef.current;
+      if (cur && !cur.closing && v?.videoWidth) setBox({ ...cur, to: zoomBox(v.videoWidth / v.videoHeight, innerWidth, innerHeight) });
+    };
+    const still = (e: WheelEvent) => e.preventDefault();
+    const els = [screen.current, backdrop.current];
+    addEventListener('resize', resize);
+    els.forEach((el) => el?.addEventListener('wheel', still, { passive: false }));
+    return () => {
+      removeEventListener('resize', resize);
+      els.forEach((el) => el?.removeEventListener('wheel', still));
+    };
+  }, [zoomed]);
+  return { player, screen, backdrop, box, toggle };
 }
 
 /** A card's pull request: its checks, whether it is ready, and its review. */

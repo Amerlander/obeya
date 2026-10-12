@@ -253,7 +253,12 @@ An idea is thought through on its card before anything is planned; no worker run
    `working` and took the approval away until the next handover, so it waited for "Rückgängig"
    like a command. The demo plays on its own the first time the card is opened
    (per browser; a new render counts as new), later it waits to be played, with a big play button
-   over it like a shared page's (also when the browser blocks the first play). The worker's
+   over it like a shared page's (also when the browser blocks the first play). Z or the
+   magnifier on the video zooms it out of the card to as large as the window allows above the
+   microphone, over the greyed page (`useZoom` in `src/ui/detail.tsx`): the same video element,
+   so it keeps playing, growing out of its place and back; Z again, Esc or a click beside it ends
+   it, and the card stays open. Full screen was too much on a large monitor and hid where the
+   owner was; before (2026-10-12) the owner zoomed in with the operating system. The worker's
    summary is its handover in the card's conversation below, not repeated under the demo: the
    whole report, what changed for the user and what the owner needs to know, in a few short
    paragraphs at most. A problem the worker noticed beyond the task is a proposal

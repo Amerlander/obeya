@@ -383,7 +383,17 @@ textarea.p-body:focus { border-color: var(--muted); }
 .question { margin: 18px 0 0; padding: 14px 18px; border-radius: 3px; border: 1.5px solid var(--waiting); max-width: 80ch;
   background: color-mix(in srgb, var(--waiting) 9%, transparent); font-size: 15px; }
 .demo-view video { width: 100%; border-radius: 3px; background: #000; display: block; }
-.demo-view .player { position: relative; }
+.demo-view .player, .demo-view .screen { position: relative; }
+/* zoomed (detail.tsx useZoom): fixed over the greyed window, above the panel's ✕; the player keeps its height in the card */
+.demo-view .screen.zoomed { position: fixed; z-index: 4; transform-origin: 0 0; }
+.demo-view .screen.zoomed video { height: 100%; box-shadow: var(--lift); }
+.demo-zoom { position: fixed; inset: 0; z-index: 3; background: rgba(15, 12, 8, .78); cursor: zoom-out; animation: fade .38s ease-out; transition: opacity .38s; }
+.demo-zoom.closing { opacity: 0; }
+.demo-view .zoom { position: absolute; top: 10px; right: 10px; z-index: 1; width: 38px; height: 38px; border: 0; border-radius: 50%;
+  background: rgba(0, 0, 0, .55); cursor: pointer; display: grid; place-items: center; opacity: 0; transition: opacity .15s, background .15s; }
+.demo-view .screen:hover .zoom, .demo-view .zoom:focus-visible { opacity: 1; }
+.demo-view .zoom:hover { background: rgba(0, 0, 0, .8); }
+.demo-view .zoom svg { width: 20px; height: 20px; fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; }
 .demo-view .start { all: unset; position: absolute; inset: 0 0 56px 0; cursor: pointer; display: grid; place-items: center; }
 .demo-view .start span { margin-top: 56px; width: 80px; height: 80px; border-radius: 50%; background: rgba(0, 0, 0, 0.6); display: grid; place-items: center; transition: transform 0.15s, background 0.15s; }
 .demo-view .start:hover span { background: rgba(0, 0, 0, 0.8); transform: scale(1.06); }

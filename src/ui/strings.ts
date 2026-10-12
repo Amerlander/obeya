@@ -56,6 +56,7 @@ const de = {
           { keys: [['Doppelklick']], text: 'Neue Aufgabe an dieser Stelle' },
           { keys: [['N']], text: 'Neue Aufgabe in der Mitte' },
           { keys: [['Tab']], text: 'Zur nächsten Karte, die dich braucht, oder zu Obeyas Antwort' },
+          { keys: [['Z']], text: 'Demo-Video größer zeigen und wieder kleiner' },
           { keys: [['Esc']], text: 'Karte oder Projekt schließen' },
         ],
       },
@@ -370,6 +371,8 @@ const de = {
   demo: { question: 'Offene Frage', yourAnswer: 'Deine Antwort', kept: 'Die Demo bleibt hier abrufbar.', again: 'Die Demo der letzten Übergabe. Der Agent arbeitet wieder an der Aufgabe.',
     artifact: 'HTML-Artefakt des Agenten',
     play: 'Abspielen',
+    zoom: 'Größer zeigen (Z)',
+    unzoom: 'Wieder kleiner (Z, Esc)',
   },
   share: {
     share: 'Teilen',
@@ -998,6 +1001,7 @@ const en: Strings = {
           { keys: [['Double-click']], text: 'New task right there' },
           { keys: [['N']], text: 'New task in the middle' },
           { keys: [['Tab']], text: 'Next card that needs you, or Obeya’s answer' },
+          { keys: [['Z']], text: 'Show the demo video larger and back' },
           { keys: [['Esc']], text: 'Close the card or project' },
         ],
       },
@@ -1295,6 +1299,8 @@ const en: Strings = {
   demo: { question: 'Open question', yourAnswer: 'Your answer', kept: 'The demo stays available here.', again: 'The demo of the last handover. The agent is working on the task again.',
     artifact: 'The agent’s HTML artifact',
     play: 'Play',
+    zoom: 'Show larger (Z)',
+    unzoom: 'Back to normal size (Z, Esc)',
   },
   share: {
     share: 'Share',
