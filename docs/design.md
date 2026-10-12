@@ -781,8 +781,9 @@ the owner's language (`src/core/locale.ts`).
   ideas, and small jobs (the Arbeitsrückschau's notes and proposals, the text of a shared demo's
   page). The owner chooses both in the Konfiguration dialog: the model is Claude Code's default or
   one of its aliases (Fable, Opus, Sonnet, Haiku, each the newest of its family), the effort always
-  a fixed level (low to max). Preset (`AGENT_DEFAULTS`) are Claude Code's default model, Sonnet
-  for small jobs, and high effort, medium for the Koordinator; the sheet marks the presets. The
+  a fixed level (low to max). Preset (`AGENT_DEFAULTS`) is Opus for every group, with high effort
+  for workers and exploration agents, medium for the Koordinator and small jobs; the sheet marks
+  the presets. The
   choices live in `settings.json` under `agents`, only where they differ from the presets
   (`src/server/settings.ts`); every session names its group (`AgentSpec.role`), and
   `withAgentSetting` (`runtime.ts`), which wraps the canvas's runtimes, asks for the group's

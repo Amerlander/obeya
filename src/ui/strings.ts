@@ -446,7 +446,7 @@ const de = {
     },
     agents: {
       title: 'Modelle und Effort',
-      hint: 'Welches Modell jede Gruppe von Agenten nimmt und wie viel es nachdenkt (Effort). Voreingestellt sind das Standardmodell von Claude Code, für kleine Aufgaben Sonnet, und hoher Effort, für Obeya selbst mittlerer. Gilt sofort für jeden Agenten, der danach startet; einer, der gerade arbeitet, bleibt bei dem, womit er begann.',
+      hint: 'Welches Modell jede Gruppe von Agenten nimmt und wie viel es nachdenkt (Effort). Voreingestellt ist überall Opus, mit hohem Effort für Agenten an Aufgaben und Explorations-Agenten, sonst mittlerem. Gilt sofort für jeden Agenten, der danach startet; einer, der gerade arbeitet, bleibt bei dem, womit er begann.',
       model: 'Modell',
       effort: 'Effort',
       roles: {
@@ -1350,7 +1350,7 @@ const en: Strings = {
     },
     agents: {
       title: 'Models and effort',
-      hint: 'Which model each group of agents uses and how much it thinks (effort). Preset are Claude Code’s default model, Sonnet for small jobs, and high effort, medium for Obeya itself. Applies at once to every agent that starts afterwards; one at work keeps what it started with.',
+      hint: 'Which model each group of agents uses and how much it thinks (effort). Preset is Opus throughout, with high effort for agents on tasks and exploration agents, medium for the rest. Applies at once to every agent that starts afterwards; one at work keeps what it started with.',
       model: 'Model',
       effort: 'Effort',
       roles: {

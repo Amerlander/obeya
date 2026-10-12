@@ -931,12 +931,12 @@ export interface AgentSetting {
   model: AgentModel;
   effort: AgentEffort;
 }
-/** What applies until the owner chooses otherwise: small jobs on Sonnet, the Koordinator at medium effort. */
+/** What applies until the owner chooses otherwise: Opus throughout, high effort for workers and exploration agents. */
 export const AGENT_DEFAULTS: Record<AgentRole, AgentSetting> = {
-  koordinator: { model: 'default', effort: 'medium' },
-  worker: { model: 'default', effort: 'high' },
-  explorer: { model: 'default', effort: 'high' },
-  chores: { model: 'sonnet', effort: 'high' },
+  koordinator: { model: 'opus', effort: 'medium' },
+  worker: { model: 'opus', effort: 'high' },
+  explorer: { model: 'opus', effort: 'high' },
+  chores: { model: 'opus', effort: 'medium' },
 };
 
 /** The model and effort of each group of agents, as they apply (`settings.json` over `AGENT_DEFAULTS`). */
