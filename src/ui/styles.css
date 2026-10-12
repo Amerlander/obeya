@@ -639,6 +639,7 @@ textarea.p-body:focus { border-color: var(--muted); }
 .d-add { color: var(--approved); font-variant-numeric: tabular-nums; }
 .d-del { color: var(--error); font-variant-numeric: tabular-nums; }
 .diff-size { font-size: inherit; }
+.link.copied { color: var(--approved); font-weight: 600; }
 .diff-view { position: fixed; inset: 0; z-index: 1000; background: var(--dim); display: flex; justify-content: center;
   padding: 3vh 3vw; animation: fade .15s ease-out; }
 .d-sheet { display: flex; flex-direction: column; width: min(100%, 1500px); background: var(--panel); border-radius: 3px; box-shadow: var(--lift); min-height: 0; }

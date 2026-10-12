@@ -57,10 +57,10 @@ function CopyPath({ path }: { path: string }) {
   const copy = () =>
     navigator.clipboard.writeText(path).then(() => {
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      setTimeout(() => setCopied(false), 3000);
     }, console.error);
   return (
-    <button className="link" title={path} onClick={copy}>
+    <button className={copied ? 'link copied' : 'link'} title={path} onClick={copy}>
       {copied ? t.diff.copied : t.diff.copyPath}
     </button>
   );
