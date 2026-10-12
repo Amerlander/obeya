@@ -27,7 +27,7 @@ beforeEach(() => {
   gitRepo(main);
   const store = new Store(':memory:');
   docs = [];
-  board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: main, branch: 'main' }] }, () => docs);
+  board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: main, branch: 'main' }] }, () => ({ docs, dirs: [] }));
   const adapter = { ...generic, land: 'main' as const, workspaces: 'worktrees' as const, softPaths: ['docs/'] };
   workspaces = new Workspaces(store, 'c', { mode: 'worktrees', repoPath: main, dir: join(dir, 'ws') });
   runtime = new FakeRuntime();
@@ -374,7 +374,7 @@ describe('Koordinator waits for a free workspace', () => {
   function pool(n: number, slots?: number) {
     const main = join(dir, 'main');
     const store = new Store(':memory:');
-    board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: main, branch: 'main' }] }, () => docs);
+    board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: main, branch: 'main' }] }, () => ({ docs, dirs: [] }));
     const adapter = { ...generic, land: 'main' as const, workspaces: 'clones' as const };
     workspaces = new Workspaces(store, 'c', {
       mode: 'clones',

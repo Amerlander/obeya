@@ -24,6 +24,7 @@ import { ReadTree } from './read-tree';
 import { Revisions } from './revisions';
 import { ProjectAgents } from './project-agents';
 import { readPlanDocs, repoInfo, watchPlanDocs } from './repo';
+import { boundsOf, GAP, unionBounds } from '../core/layout';
 import { type AgentRuntime, withAgentSetting } from './runtime';
 import { changesCode } from './self-update';
 import { Sharing, shareArgv } from './share';
@@ -143,10 +144,13 @@ export class CanvasRuntime {
     this.board = new Board(
       deps.store,
       { id, name, repos: refs },
-      () =>
-        reads.flatMap((read, i) =>
-          readPlanDocs(read.path, adapters[i]!).map((d) => (refs[i]!.id === home ? d : { ...d, file: `${refs[i]!.id}:${d.file}` })),
-        ),
+      () => {
+        const read = reads.map((r, i) => readPlanDocs(r.path, adapters[i]!));
+        return {
+          docs: read.flatMap(({ docs }, i) => docs.map((d) => (refs[i]!.id === home ? d : { ...d, file: `${refs[i]!.id}:${d.file}` }))),
+          dirs: read.map(({ others }, i) => ({ repo: refs[i]!.id, dir: adapters[i]!.planDocs.dir, others })),
+        };
+      },
       images,
       (repo, commit) => !!reads[refs.findIndex((r) => r.id === repo)]?.holds(commit),
       deps.language,
@@ -536,6 +540,24 @@ export class CanvasRuntime {
     if (open) return open;
     const at = items.length ? { x: Math.max(...items.map((i) => i.x)) + 560, y: Math.min(...items.map((i) => i.y)) } : { x: 0, y: 0 };
     return this.board.create({ title: title(r.ref.name), body, repo, ...at });
+  }
+
+  /**
+   * A doc in the plan directory that is not a project: a card whose worker adds the workstream
+   * checklist, started at once; once its change lands, the doc is a project. It goes right of
+   * everything on the canvas, at the top, clear of the note on the plan directory at the left.
+   */
+  preparePlanDoc(repo: string, file: string): Item {
+    const dir = this.board.snapshot().planDirs?.find((d) => d.repo === repo);
+    const doc = dir?.others.find((o) => o.file === file);
+    if (!doc) throw new BadRequest('invalid', 'not a doc in the plan directory that is not a project');
+    if (doc.preparing) return this.board.card(doc.preparing)!;
+    const { title, body } = this.board.t.preparePlanDoc;
+    const items = this.board.snapshot().items;
+    const box = unionBounds(items.filter((i) => !i.parent).map((i) => boundsOf(i, items)));
+    const card = this.board.create({ title: title(file), body: body(file), repo, ...(box ? { x: box.x + box.w + 2 * GAP, y: box.y } : { x: 0, y: 0 }) });
+    this.koordinator.request(card.id);
+    return this.board.card(card.id)!;
   }
 
   // ---------------------------------------------------------------- proposals

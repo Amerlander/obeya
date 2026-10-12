@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { cutTitle, parsePlanDoc } from './plan-doc';
+import { allTicked, cutTitle, notAProject, parsePlanDoc } from './plan-doc';
 
 const doc = `# \`image-cache\`
 
@@ -68,6 +68,19 @@ describe('parsePlanDoc', () => {
     const d = parsePlanDoc('b.md', '# Kadenz\n\n## Ziel\n\nRegeln statt Fallarbeit.\n\n## Workstreams\n\n- [x] **W9:** Prüflauf. Täglich um 05:00.\n')!;
     expect(d.goal).toBe('Regeln statt Fallarbeit.');
     expect(d.workstreams[0]).toMatchObject({ title: 'Prüflauf', body: 'Täglich um 05:00.', done: true });
+  });
+});
+
+describe('notAProject', () => {
+  test('says why a doc is not a project, and nothing for one that is', () => {
+    expect(notAProject(doc)).toBeNull();
+    expect(notAProject('# Rollout\n\n## Tasks\n\n- [ ] Ship it\n')).toBe('noWorkstreams');
+    expect(notAProject('# Auth\n\n## Workstreams\n\n1. Tokens\n2. Sessions\n')).toBe('noChecklist');
+  });
+
+  test('a doc whose every workstream is ticked is done', () => {
+    expect(allTicked(parsePlanDoc('a.md', doc)!)).toBe(false);
+    expect(allTicked(parsePlanDoc('a.md', '# A\n\n## Workstreams\n\n- [x] **W1:** One.\n- [X] **W2:** Two.\n')!)).toBe(true);
   });
 });
 

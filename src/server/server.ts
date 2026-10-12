@@ -271,6 +271,13 @@ export function serve(
       '/api/c/:canvas/cards': { POST: on(async (c, req) => c.board.create((await req.json()) as NewCard)) },
       // from "Konfiguration", for a repository on the generic adapter: the card that writes its own
       '/api/c/:canvas/adapter-setup': { POST: on(async (c, req) => c.adapterSetupCard(String(((await req.json()) as { repo?: unknown }).repo))) },
+      // from the note on a plan directory: the card that prepares one of its docs as a project, started
+      '/api/c/:canvas/prepare-plan-doc': {
+        POST: on(async (c, req) => {
+          const { repo, file } = ((await req.json()) ?? {}) as { repo?: unknown; file?: unknown };
+          return c.preparePlanDoc(String(repo), String(file));
+        }),
+      },
       '/api/c/:canvas/cards/:id': {
         PATCH: on(async (c, req) => c.patch(req.params.id!, (await req.json()) as CardPatch)),
         DELETE: on((c, req) => click(c, c.remove(req.params.id!))),

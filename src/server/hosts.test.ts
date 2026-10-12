@@ -157,7 +157,7 @@ describe('clones on a host', () => {
     origin = join(dir, 'origin.git');
     git(dir, 'clone', '--quiet', '--bare', join(dir, 'main'), origin);
     store = new Store(':memory:');
-    board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: join(dir, 'main'), branch: 'main' }] }, () => []);
+    board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: join(dir, 'main'), branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
     spaces = new Workspaces(store, 'c', { mode: 'clones', repoPath: join(dir, 'main'), dir: join(dir, 'ws') });
   });
 
@@ -271,7 +271,7 @@ describe('a worker on a host', () => {
     const origin = join(dir, 'origin.git');
     git(dir, 'clone', '--quiet', '--bare', join(dir, 'main'), origin);
     const store = new Store(':memory:');
-    const board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: join(dir, 'main'), branch: 'main' }] }, () => []);
+    const board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: join(dir, 'main'), branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
     const spaces = new Workspaces(store, 'c', { mode: 'clones', repoPath: join(dir, 'main'), dir: join(dir, 'ws') });
     expect(await spaces.ensureHostClones(host, join(dir, 'far'), origin, 1, () => undefined)).toBeNull();
     const runtime = new FakeRuntime();

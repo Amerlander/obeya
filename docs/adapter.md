@@ -79,8 +79,16 @@ A canvas named in the configuration keeps that name and id; these only fill in w
 ### `planDocs` — `{ dir, exclude }`
 
 Where plan docs live (relative to the repository root), and file names in that directory that are
-none (a template). Each Markdown file there becomes a project on the canvas. Generic:
-`{ dir: 'docs/plan', exclude: ['TEMPLATE.md'] }`.
+none (a template). Obeya reads the `*.md` directly in that directory (not below it) from the
+default branch. One with a checklist under `## Workstreams` (or `## Arbeitspakete`) is a project:
+each top-level item is a workstream (`- [ ] **W1:** Title. Details`), a ticked one has landed,
+and once every one is ticked the project goes into the archive. Its goal is the first paragraph
+under `## Goal` (or `## Ziel`). Any other file there shows on the canvas in a note, with the
+reason it is not a project and "Als Projekt aufbereiten", which has an agent add the checklist; a
+file that is meant to stay as it is (a template, an index) goes into `exclude`. Generic:
+`{ dir: 'docs/plan', exclude: ['TEMPLATE.md'] }`. The skill's check script
+(`plugin/skills/adapter/lib/check.ts`) lists which docs in the directory are projects and why the
+others are not.
 
 ### `setup` — a command
 

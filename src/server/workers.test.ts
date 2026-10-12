@@ -46,7 +46,7 @@ function setup(adapter: RepoAdapter, withOrigin = false) {
   // the checkout is the Lesestand: work lands on its main
   const holds = (_repo: string, commit: string) => Bun.spawnSync([GIT, '-C', main, 'merge-base', '--is-ancestor', commit, 'HEAD'], { stderr: 'ignore' }).exitCode === 0;
   language = 'de';
-  board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: main, branch: 'main' }] }, () => docs, undefined, holds, () => language);
+  board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: main, branch: 'main' }] }, () => ({ docs, dirs: [] }), undefined, holds, () => language);
   const workspaces = new Workspaces(store, 'c', { mode: adapter.workspaces, repoPath: main, dir: join(dir, 'ws') });
   spaces = workspaces;
   if (adapter.workspaces === 'clones') {
@@ -1930,7 +1930,7 @@ describe('a worktree per card', () => {
 
     // Obeya starts again: the worker resumes its session in the worktree it had
     workers.shutdown();
-    const after = restarting(new Board(store, board.canvas, () => [doc]));
+    const after = restarting(new Board(store, board.canvas, () => ({ docs: [doc], dirs: [] })));
     after.resumeAll();
     const resumed = runtime.last;
     expect(resumed).not.toBe(s);
@@ -2042,7 +2042,7 @@ describe('a worktree per card', () => {
     expect(board.events(c.id).at(-1)).toMatchObject({ author: 'obeya', kind: 'state' });
 
     workers.shutdown();
-    const after = new Workers({ board: new Board(store, board.canvas, () => [doc]), runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'worktrees' } });
+    const after = new Workers({ board: new Board(store, board.canvas, () => ({ docs: [doc], dirs: [] })), runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'worktrees' } });
     after.resumeAll();
     const resumed = runtime.last;
     expect(resumed).not.toBe(s);
@@ -2101,7 +2101,7 @@ describe('a worktree per card', () => {
     expect(s.closed).toBe(false);
     expect(board.item(c.id)!.finishing).toBe(true);
     workers.shutdown();
-    const after = new Workers({ board: new Board(store, board.canvas, () => [doc]), runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'worktrees' } });
+    const after = new Workers({ board: new Board(store, board.canvas, () => ({ docs: [doc], dirs: [] })), runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'worktrees' } });
     after.resumeAll();
     expect(runtime.last).not.toBe(s);
     expect(runtime.last.spec.resume).toBe('sess-1');
@@ -2192,12 +2192,24 @@ describe('a workstream whose plan doc keeps it open after its work landed', () =
   test('landed and ticked off in the doc: live', async () => {
     const w = handOver();
     // the worker ticked it off on its branch
-    docs = [{ ...doc, workstreams: [{ ...ws('W1'), done: true }] }];
+    docs = [{ ...doc, workstreams: [{ ...ws('W1'), done: true }, ws('W2')] }];
     await workers.approve(w.id);
     runtime.last.emit({ type: 'idle' });
     expect(board.row(w.id).landed).toBeNull();
     board.docsChanged();
     expect(state(w.id)).toBe('live');
+  });
+
+  test('the last workstream ticked off: the project stays while its worker finishes, then goes into the archive', async () => {
+    const w = handOver();
+    const project = board.snapshot().items.find((i) => i.kind === 'project')!;
+    docs = [{ ...doc, workstreams: [{ ...ws('W1'), done: true }] }];
+    await workers.approve(w.id);
+    board.docsChanged();
+    expect(state(w.id)).toBe('live');
+    runtime.last.emit({ type: 'idle' });
+    expect(board.item(project.id)).toBeUndefined();
+    expect(board.archived().map((i) => i.id)).toEqual([project.id, w.id]);
   });
 
   test('landed on main, the box still empty: once its worker is done, the card is planned again and starts for the rest', async () => {

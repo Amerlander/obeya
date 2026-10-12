@@ -26,7 +26,7 @@ async function say(k: Commander, text: string, tool: string, args: Record<string
 
 beforeEach(() => {
   store = new Store(':memory:');
-  board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => []);
+  board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
   runtime = new FakeRuntime();
   executed = [];
 });
@@ -34,7 +34,7 @@ beforeEach(() => {
 describe("the owner's language", () => {
   test('the Koordinator confirms in the language Obeya speaks, in a new session once it changed', async () => {
     let language: 'de' | 'en' = 'en';
-    board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => [], undefined, undefined, () => language);
+    board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => ({ docs: [], dirs: [] }), undefined, undefined, () => language);
     const a = board.create({ title: 'Export', x: 0, y: 0 });
     const k = commander();
     const first = await say(k, 'start the export', 'act', { actions: [{ do: 'start', card: 'K1' }], confirm: 'Starting “Export”.' });
@@ -138,7 +138,7 @@ describe('the Koordinator remembers', () => {
     expect(k.undoable()).toEqual([{ text: heard.confirm, token: heard.token!, undoMs: expect.any(Number) }]);
     expect(k.undoable()[0]!.undoMs).toBeGreaterThan(1000);
     // Obeya stops before the window is over; the next server finds the command on the same database
-    const later = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => []);
+    const later = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
     const ran: Command[] = [];
     const next = new Commander({ board: later, runtime, cwd: '/r', execute: (c) => void ran.push(c), delayMs: 20 });
     store.db.query("UPDATE commands SET due = '2000-01-01T00:00:00.000Z'").run();
@@ -215,7 +215,7 @@ describe('the Koordinator remembers', () => {
           { id: 'self', name: 'Self', path: '/s', branch: 'main' },
         ],
       },
-      () => [],
+      () => ({ docs: [], dirs: [] }),
     );
     const a = board.create({ title: 'Export', x: 0, y: 0, repo: 'shop' });
     const b = board.create({ title: 'Login', x: 0, y: 0, repo: 'app' });
@@ -410,10 +410,13 @@ describe('the Koordinator remembers', () => {
 
   test('starting a project hands its planned workstreams to the Koordinator together', async () => {
     const ws = (key: string, done = false) => ({ key, label: key, title: `Titel ${key}`, body: '', done, inReview: false });
-    board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => [
-      { file: 'docs/plan/p.md', title: 'Export', goal: 'Ziel', workstreams: [ws('W1', true), ws('W2'), ws('W3')], markdown: '' },
-      { file: 'docs/plan/q.md', title: 'Fertig', goal: 'Ziel', workstreams: [ws('W1', true)], markdown: '' },
-    ]);
+    board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => ({
+      docs: [
+        { file: 'docs/plan/p.md', title: 'Export', goal: 'Ziel', workstreams: [ws('W1', true), ws('W2'), ws('W3')], markdown: '' },
+        { file: 'docs/plan/q.md', title: 'Fertig', goal: 'Ziel', workstreams: [ws('W1', true)], markdown: '' },
+      ],
+      dirs: [],
+    }));
     const [project] = board.snapshot().items;
     const k = commander();
     const heard = k.hear('starte alle Workstreams', { project: project!.id });
@@ -821,7 +824,7 @@ describe("the Koordinator and Obeya's configuration", () => {
 
 describe('Arbeitsrückschau on request', () => {
   test('runs for the repository the owner names, else the first; an unknown one is refused', async () => {
-    board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }, { id: 'app', name: 'App', path: '/o', branch: 'main' }] }, () => []);
+    board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }, { id: 'app', name: 'App', path: '/o', branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
     const k = commander();
     const heard = k.hear('Mach eine Arbeitsrückschau für App', {});
     await settle();

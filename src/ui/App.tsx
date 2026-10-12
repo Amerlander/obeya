@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { type Bounds, boundsOf, CARD_SIZE, PROJECT_HEAD, PROJECT_PAD, unionBounds } from '../core/layout';
-import { agentListens, answering, type CanvasInfo, type CanvasSnapshot, type CardPatch, finished, type Group, type Item, needsYou, openPerGroup, type PendingRestart, START_ALL_HOLD_MS, type AppUpdate, unreadAnswers } from '../core/types';
+import { agentListens, answering, type CanvasInfo, type CanvasSnapshot, type CardPatch, finished, type Group, type Item, needsYou, openPerGroup, type PendingRestart, type PlanDir, START_ALL_HOLD_MS, type AppUpdate, unreadAnswers } from '../core/types';
 import { api, ApiError, beforeReload, onNotice, reportFocus, setCanvas, useCanvas } from './api';
 import { GroupNames, growFrom, inside, Lasso, Ring, TerritoryLayer, useTerritories } from './groups';
 import { besideSheet, BOTTOM, type Cam, camFor, centreOn, chase, dragLimit, edgeScroll, FAR, flying, flyTo, keepInView, MAX_ZOOM, MIN_ZOOM, overviewCam, stopFlight, TOP, toWorld } from './camera';
@@ -13,7 +13,7 @@ import type { Field } from './api';
 import { setReply } from './reply';
 import { ArchivePill } from './archive';
 import { useBarFit } from './barFit';
-import { ConfigDialog } from './config';
+import { ConfigDialog, showCanvasesSection } from './config';
 import { Setup } from './setup';
 import { KoordinatorSheet } from './koordinator';
 import { QueuePill } from './queue';
@@ -21,6 +21,7 @@ import { depsOf } from './deps';
 import { collect, keep, type Kept, restore, type SideSheet, takeKept } from './keep';
 import { Sign, Wordmark } from './logo';
 import { Help, HelpButton } from './help';
+import { PlanDirNote, planDirBoxes } from './planDirs';
 import { attachTo, imageFiles } from './shots';
 import { cardDraft, fieldOn, focusedDraft, keepDrafts, MIC_DRAFT, OBEYA_DRAFT, takesImages } from './draft';
 import { type Heard, HoldToTalk, PushToTalk, ToldList, usePushToTalk, useTold, type Where } from './voice';
@@ -143,9 +144,11 @@ function Canvas({
   }, [items]);
   // ideas with a prototype on the canvas, which stay out of the archive until it ends
   const prototyped = useMemo(() => new Set(items.flatMap((i) => (i.prototypeOf ? [i.prototypeOf] : []))), [items]);
-  const all: Bounds = useMemo(() => unionBounds(placed.map((p) => p.b)) ?? { x: 0, y: 0, w: 1000, h: 600 }, [placed]);
-  // what the view keeps in sight: the cards, and a project only while it holds none
-  const content = useMemo(() => placed.filter(({ item }) => !kidsOf.has(item.id)).map((p) => p.b), [placed, kidsOf]);
+  const planDirs = snapshot.planDirs;
+  const notes = useMemo(() => (planDirs ? planDirBoxes(planDirs, placed) : []), [planDirs, placed]);
+  const all: Bounds = useMemo(() => unionBounds([...placed.map((p) => p.b), ...notes]) ?? { x: 0, y: 0, w: 1000, h: 600 }, [placed, notes]);
+  // what the view keeps in sight: the cards, a project only while it holds none, and the notes on plan directories
+  const content = useMemo(() => [...placed.filter(({ item }) => !kidsOf.has(item.id)).map((p) => p.b), ...notes], [placed, kidsOf, notes]);
   const contentRef = useRef(content);
   contentRef.current = content;
   const byId = (id: string) => itemsRef.current.find((i) => i.id === id);
@@ -587,6 +590,17 @@ function Canvas({
         },
         START_ALL_HOLD_MS,
       );
+    } catch (e) {
+      if (!(e instanceof ApiError)) console.error(e);
+      showAck(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+    }
+  }, []);
+
+  /** "Als Projekt aufbereiten" on the note on a plan directory: a card whose agent prepares the doc, started at once. */
+  const preparePlanDoc = useCallback(async (dir: PlanDir, file: string) => {
+    try {
+      const card = await api.preparePlanDoc(snapshot.canvas.id, dir.repo, file);
+      showAck(t.planDir.started(plain(card.title)));
     } catch (e) {
       if (!(e instanceof ApiError)) console.error(e);
       showAck(e instanceof ApiError ? errorText(e.code) : t.offlineError);
@@ -1149,6 +1163,23 @@ function Canvas({
                 />
               ),
             )}
+            {planDirs?.map((d, n) => (
+              <PlanDirNote
+                key={d.repo}
+                dir={d}
+                b={notes[n]!}
+                {...(snapshot.canvas.repos.length > 1 ? { repo: snapshot.canvas.repos.find((r) => r.id === d.repo)?.name ?? d.repo } : {})}
+                onPrepare={preparePlanDoc}
+                onOpen={(id) => {
+                  const i = byId(id);
+                  if (i) open(i).catch(console.error);
+                }}
+                onChange={() => {
+                  showCanvasesSection();
+                  setCOn(true);
+                }}
+              />
+            ))}
             <GroupNames shapes={territories.shapes} />
           </div>
         </div>

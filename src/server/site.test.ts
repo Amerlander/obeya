@@ -480,7 +480,7 @@ describe('sharing to a site', () => {
   let sharing: Sharing;
 
   beforeEach(() => {
-    board = new Board(new Store(':memory:'), { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: repo, branch: 'main' }] }, () => []);
+    board = new Board(new Store(':memory:'), { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: repo, branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
     sharing = new Sharing({
       board,
       runtime: new FakeRuntime(),

@@ -30,6 +30,9 @@ const SECTIONS: Section[] = ['canvases', 'agents', 'voice', 'demos', 'general'];
 // the section shown, per tab: a save restarts Obeya and a new language reloads the page, and the dialog comes back at it
 const SECTION_KEY = 'obeya-config-section';
 
+/** Opens the dialog at the canvases and their repositories next time, as from the note on a plan directory. */
+export const showCanvasesSection = () => sessionStorage.setItem(SECTION_KEY, 'canvases');
+
 export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }: { on: boolean; onClose: () => void; onSetup: () => void; onAsk: Ask; onTalk: () => void; onProblems: (n: number) => void }) {
   const [view, setView] = useState<ConfigView | null>(null);
   const [draft, setDraft] = useState<CanvasConfig[]>([]);
@@ -58,6 +61,8 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }
   // read afresh whenever the dialog opens: the Koordinator or the file may have changed it; a draft not saved yet stays
   useEffect(() => {
     if (!on) return;
+    const s = sessionStorage.getItem(SECTION_KEY) as Section | null;
+    if (s && SECTIONS.includes(s)) setSectionState(s);
     api.config().then((v) => {
       setView(v);
       if (!changedRef.current) load(v);

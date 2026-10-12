@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { boundsOf, sizeOf } from '../core/layout';
 import type { PlanDoc } from '../core/plan-doc';
-import { BadRequest, Board } from './board';
+import { BadRequest, Board, type PlanRead } from './board';
 import { Store } from './db';
 
 const ws = (key: string, done = false) => ({ key, label: key, title: `Title ${key}`, body: `Body ${key}`, done, inReview: false });
@@ -10,12 +10,14 @@ const docB: PlanDoc = { file: 'docs/plan/b.md', title: 'B', goal: 'Goal B', work
 
 let store: Store;
 let docs: PlanDoc[];
+let dirs: PlanRead['dirs'];
 let board: Board;
 
 beforeEach(() => {
   store = new Store(':memory:');
   docs = [docA];
-  board = new Board(store, { id: 'shop', name: 'Shop', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => docs);
+  dirs = [];
+  board = new Board(store, { id: 'shop', name: 'Shop', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => ({ docs, dirs }));
 });
 
 describe('plan docs', () => {
@@ -87,6 +89,49 @@ describe('plan docs', () => {
     expect(board.archived()).toEqual([]);
   });
 
+  test('every workstream ticked off ends the project; an open one added later brings it back to its place', () => {
+    const p = board.snapshot().items[0]!;
+    board.patch(p.id, { x: -500, y: 42 });
+    const ticked = { ...docA, workstreams: docA.workstreams.map((w) => ({ ...w, done: true })) };
+    docs = [ticked];
+    board.docsChanged();
+    expect(board.snapshot().items).toEqual([]);
+    expect(board.archived().map((i) => [i.title, i.state])).toEqual([
+      ['A', 'planned'],
+      ['Title W1', 'live'],
+      ['Title W2', 'live'],
+      ['Title W3', 'live'],
+    ]);
+    docs = [{ ...ticked, workstreams: [...ticked.workstreams, ws('W4')] }];
+    board.docsChanged();
+    expect(board.snapshot().items.map((i) => i.label ?? i.title)).toEqual(['A', 'W1', 'W2', 'W3', 'W4']);
+    expect(board.snapshot().items[0]).toMatchObject({ id: p.id, x: -500, y: 42 });
+    expect(board.archived()).toEqual([]);
+  });
+
+  test('a workstream still at work keeps its project on the canvas once every box is ticked', () => {
+    const w2 = board.snapshot().items.find((i) => i.label === 'W2')!;
+    board.work(w2.id, { state: 'working' });
+    docs = [{ ...docA, workstreams: docA.workstreams.map((w) => ({ ...w, done: true })) }];
+    board.docsChanged();
+    expect(board.item(w2.id)!.state).toBe('working');
+    // its worker done, the project ends without reading the doc again
+    board.work(w2.id, { state: 'live' });
+    expect(board.snapshot().items).toEqual([]);
+    expect(board.archived()[0]!.title).toBe('A');
+  });
+
+  test('a doc whose work was done before Obeya first read it goes straight into the archive', () => {
+    docs = [docA, { ...docB, workstreams: [ws('W1', true)] }];
+    board.docsChanged();
+    expect(board.snapshot().items.filter((i) => i.kind === 'project').map((i) => i.title)).toEqual(['A']);
+    expect(board.archived().map((i) => i.title)).toEqual(['B', 'Title W1']);
+    // and stays there, read again
+    board.docsChanged();
+    expect(board.archived().map((i) => i.title)).toEqual(['B', 'Title W1']);
+    expect(store.projects('shop')).toHaveLength(2);
+  });
+
   test('work in progress wins over a ticked-off workstream until it has landed', () => {
     const w2 = board.snapshot().items.find((i) => i.label === 'W2')!;
     board.work(w2.id, { state: 'inPr' });
@@ -119,6 +164,33 @@ describe('plan docs', () => {
     expect(() => board.patch(w1!.id, { title: 'x' })).toThrow(BadRequest);
     expect(() => board.patch(p!.id, { state: 'working' })).toThrow(BadRequest);
     expect(() => board.remove(w1!.id)).toThrow(BadRequest);
+  });
+});
+
+describe('the note on the plan directory', () => {
+  test('lists the docs that are not projects, with the reason and the card preparing one', () => {
+    dirs = [{ repo: 'home', dir: 'docs/plan', others: [{ file: 'docs/plan/rollout.md', reason: 'noWorkstreams' }, { file: 'docs/plan/rfc.md', reason: 'noChecklist' }] }];
+    board.docsChanged();
+    expect(board.snapshot().planDirs).toEqual([{ repo: 'home', dir: 'docs/plan', empty: false, others: dirs[0]!.others }]);
+    const card = board.create({ title: 'rollout.md als Projekt aufbereiten', x: 0, y: 0 });
+    expect(board.snapshot().planDirs![0]!.others[0]).toEqual({ file: 'docs/plan/rollout.md', reason: 'noWorkstreams', preparing: card.id });
+    // finished, it prepares nothing any more: the doc is a project once its change has landed
+    board.work(card.id, { state: 'done' });
+    expect(board.snapshot().planDirs![0]!.others[0]!.preparing).toBeUndefined();
+  });
+
+  test('says where plan docs go until the repository has its first project, and not when every doc is one', () => {
+    docs = [];
+    dirs = [{ repo: 'home', dir: 'docs/plan', others: [] }];
+    board.docsChanged();
+    expect(board.snapshot().planDirs).toEqual([{ repo: 'home', dir: 'docs/plan', empty: true, others: [] }]);
+    docs = [docA];
+    board.docsChanged();
+    expect(board.snapshot().planDirs).toBeUndefined();
+    // its doc gone, the project is in the archive: the repository has had one
+    docs = [];
+    board.docsChanged();
+    expect(board.snapshot().planDirs).toBeUndefined();
   });
 });
 
@@ -285,7 +357,7 @@ describe('manual cards', () => {
     const old = board.create({ title: ' ', x: 0, y: 0 });
     const kept = board.create({ title: 'Echt', x: 0, y: 0 });
     store.db.query("UPDATE cards SET created_at = '2020-01-01T00:00:00.000Z' WHERE id IN ($a, $b)").run({ a: old.id, b: kept.id });
-    const again = new Board(store, { id: 'shop', name: 'Shop', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => docs);
+    const again = new Board(store, { id: 'shop', name: 'Shop', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => ({ docs, dirs: [] }));
     const ids = again.snapshot().items.map((i) => i.id);
     expect(ids).toContain(fresh.id);
     expect(ids).toContain(kept.id);
@@ -294,7 +366,7 @@ describe('manual cards', () => {
 
   test('cards are persisted per canvas', () => {
     board.create({ title: 'mine', x: 0, y: 0 });
-    const other = new Board(store, { id: 'other', name: 'Other', repos: [{ id: 'home', name: 'Home', path: '/o', branch: 'main' }] }, () => []);
+    const other = new Board(store, { id: 'other', name: 'Other', repos: [{ id: 'home', name: 'Home', path: '/o', branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
     expect(other.snapshot().items).toEqual([]);
   });
 });
@@ -499,7 +571,7 @@ describe('groups', () => {
   test('groups are kept per canvas', () => {
     const a = board.create({ title: 'A', x: 0, y: 0 });
     const g = board.createGroup('Hier', [a.id]);
-    const other = new Board(store, { id: 'other', name: 'Other', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => []);
+    const other = new Board(store, { id: 'other', name: 'Other', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
     const b = other.create({ title: 'B', x: 0, y: 0 });
     expect(other.snapshot().groups).toEqual([]);
     expect(() => other.group([b.id], g.id)).toThrow(BadRequest);

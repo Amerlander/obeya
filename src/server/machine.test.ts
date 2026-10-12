@@ -154,7 +154,7 @@ describe('the first canvas', () => {
   });
 
   test('the canvas the assistant created gets one first card that says what to try', () => {
-    const board = new Board(store, { id: 'shop', name: 'Shop', repos: [{ id: 'shop', name: 'Shop', path: '/r', branch: 'main' }] }, () => []);
+    const board = new Board(store, { id: 'shop', name: 'Shop', repos: [{ id: 'shop', name: 'Shop', path: '/r', branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
     const canvas = { id: 'shop', board } as unknown as CanvasRuntime;
     writeFileSync(join(home, WELCOME_FILE), 'shop');
     welcome(home, [canvas]);

@@ -3,9 +3,32 @@ import { mkdirSync, mkdtempSync, rmdirSync, rmSync, unlinkSync, watch, writeFile
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { generic } from '../adapters/generic';
-import { watchPlanDocs } from './repo';
+import { readPlanDocs, watchPlanDocs } from './repo';
 
 const DOC = '# P\n\n## Workstreams\n\n- [ ] **W1:** One.\n';
+
+describe('readPlanDocs', () => {
+  test('reads the docs that are projects, and the others with their reason; the excluded ones not at all', () => {
+    const repo = mkdtempSync(join(tmpdir(), 'obeya-read-'));
+    try {
+      expect(readPlanDocs(repo, generic)).toEqual({ docs: [], others: [] });
+      mkdirSync(join(repo, 'docs/plan'), { recursive: true });
+      writeFileSync(join(repo, 'docs/plan/p.md'), DOC);
+      writeFileSync(join(repo, 'docs/plan/rollout.md'), '# Rollout\n\n## Phases\n\n- [ ] One\n');
+      writeFileSync(join(repo, 'docs/plan/rfc.md'), '# RFC\n\n## Workstreams\n\nTo be cut.\n');
+      writeFileSync(join(repo, 'docs/plan/TEMPLATE.md'), '# Template\n');
+      writeFileSync(join(repo, 'docs/plan/notes.txt'), 'not markdown');
+      const { docs, others } = readPlanDocs(repo, generic);
+      expect(docs.map((d) => d.file)).toEqual(['docs/plan/p.md']);
+      expect(others).toEqual([
+        { file: 'docs/plan/rfc.md', reason: 'noChecklist' },
+        { file: 'docs/plan/rollout.md', reason: 'noWorkstreams' },
+      ]);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+});
 
 describe('watchPlanDocs', () => {
   const cleanup: (() => void)[] = [];

@@ -112,6 +112,7 @@ export const api = {
   create: (c: NewCard) => call<Item>('POST', at('/cards'), c),
   /** The card that writes a repository's own adapter, on the canvas it belongs to (not necessarily the shown one). */
   adapterSetup: (canvas: string, repo: string) => call<Item>('POST', `/api/c/${encodeURIComponent(canvas)}/adapter-setup`, { repo }),
+  preparePlanDoc: (canvas: string, repo: string, file: string) => call<Item>('POST', `/api/c/${encodeURIComponent(canvas)}/prepare-plan-doc`, { repo, file }),
   /** Downloads a card's demo as a ZIP of its page with the files, or as one HTML file. */
   exportDemo: (id: string, as: 'zip' | 'html') => download(at(`/cards/${id}/export?as=${as}`), `demo.${as}`),
   /** The size of a card's demo video in bytes; null when unknown. */

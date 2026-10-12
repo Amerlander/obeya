@@ -67,7 +67,7 @@ const CASES: [string, string, string | null, boolean, Command['do'][]][] = [
 
 /** What the Koordinator makes of one sentence, or of a request passed on with it: the actions as they run. */
 async function hear(state: string, text: string, request: string | null, typed: boolean) {
-  const board = new Board(new Store(':memory:'), { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => []);
+  const board = new Board(new Store(':memory:'), { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
   const login = board.create({ title: 'Login', x: 0, y: 0 });
   if (state === 'queued') board.work(login.id, { state: 'working' });
   const card = board.create({ title: 'Export als CSV', x: 0, y: 0 });
@@ -107,7 +107,7 @@ const NEW_TASKS: [string, 'de' | 'en', boolean][] = [
 
 /** The new card one sentence makes on a canvas like the one in the hero video: whether it starts. */
 async function newTask(text: string, language: 'de' | 'en') {
-  const board = new Board(new Store(':memory:'), { id: 'c', name: 'Tipjar', repos: [{ id: 'tipjar', name: 'Tipjar', path: '/r', branch: 'main' }] }, () => [], undefined, undefined, () => language);
+  const board = new Board(new Store(':memory:'), { id: 'c', name: 'Tipjar', repos: [{ id: 'tipjar', name: 'Tipjar', path: '/r', branch: 'main' }] }, () => ({ docs: [], dirs: [] }), undefined, undefined, () => language);
   board.work(board.create({ title: 'Dark mode', x: 0, y: 0 }).id, { state: 'live' });
   board.work(board.create({ title: 'Run the tests on every push', x: 0, y: 0 }).id, { state: 'working' });
   board.create({ title: 'Round the total up', x: 0, y: 0 });
@@ -144,7 +144,7 @@ const NO_CARD: [string, boolean, Command['do'][]][] = [
 
 /** What the Koordinator makes of one sentence with no card open. */
 async function noCard(text: string, typed: boolean) {
-  const board = new Board(new Store(':memory:'), { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => []);
+  const board = new Board(new Store(':memory:'), { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
   board.work(board.create({ title: 'Export als CSV', x: 0, y: 0 }).id, { state: 'live' });
   board.work(board.create({ title: 'Login', x: 0, y: 0 }).id, { state: 'working' });
   board.create({ title: 'Zählerstände nachtragen', x: 0, y: 0 });

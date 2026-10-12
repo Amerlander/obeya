@@ -1,6 +1,6 @@
 ---
 name: adapter
-description: Write a repository's Obeya adapter (`.obeya/adapter/index.ts`) — how its app starts, which checks run, how work lands, how a demo is recorded — from what the repository shows, prove the demo recipe by recording a demo with it, and ask the owner what the repository does not tell. Use when a task asks to set up Obeya for a repository, to write or fix its adapter, or names this skill.
+description: Write a repository's Obeya adapter (`.obeya/adapter/index.ts`) — how its app starts, which checks run, how work lands, how a demo is recorded, where its plan docs are — from what the repository shows, prove the demo recipe by recording a demo with it, and ask the owner what the repository does not tell. Use when a task asks to set up Obeya for a repository, to write or fix its adapter, or names this skill.
 ---
 
 # Writing a repository's adapter
@@ -29,13 +29,23 @@ Find out, from the files rather than by guessing:
 - **Logging in and test data**: seed scripts, fixtures, test users in the docs or the seed.
 - **Landing**: the `origin` remote (GitHub: `land: 'pr'`; no remote: `land: 'main'`), whether the
   default branch is protected, which bots comment on pull requests (`prNoise`).
-- **Plan docs**: a directory of plans or design docs, if the project keeps one.
+- **Plan docs**: where the project keeps its plans, if it does: `docs/plan/`, other directories
+  under `docs/`, `rfcs/`, `adr/`, `PLAN*.md`, a `TODO.md`. Obeya shows each `*.md` directly in one
+  directory (`planDocs.dir`) as a project when it has a checklist under `## Workstreams` (or
+  `## Arbeitspakete`): each top-level item is a workstream (`- [ ] **W1:** Title. Details`), a
+  ticked one has landed, and once all are ticked the project goes into the archive. Its goal is the
+  first paragraph under `## Goal` (or `## Ziel`). A doc in that directory without such a checklist
+  shows on the canvas as one that is not a project, with "Als Projekt aufbereiten", which has an
+  agent add the checklist in the doc's own style. Design notes and ADRs that plan nothing belong
+  elsewhere, or in `planDocs.exclude`.
 
 ## 2. Ask what the repository does not tell
 
 Some things only the owner knows: the login for a demo when no seed makes one, which test data
 shows the app well, whether every handover needs a demo, whether approved work may go straight
-onto the default branch, where demos are shared with colleagues (a static site: `demo.site`). Collect them and ask in one question
+onto the default branch, where demos are shared with colleagues (a static site: `demo.site`), and
+where plan docs go: the directory of plans you found (its docs then converted with "Als Projekt
+aufbereiten" on the canvas), or a new `docs/plan/`. Collect them and ask in one question
 (the `ask` tool under Obeya), with the options you found, while you go on with the rest. A secret
 (a real password, an API key) goes into `howToRun` only as where to find it (a file outside git,
 an environment variable), never itself.
@@ -60,7 +70,8 @@ bun ${CLAUDE_SKILL_DIR}/lib/check.ts
 ```
 
 run in the repository. It loads the adapter from the checkout the way Obeya will, prints what
-Obeya makes of it and every problem (an unknown field, a wrong type, a share program that is not
+Obeya makes of it (also which docs in the plan directory are projects and which are not, and why)
+and every problem (an unknown field, a wrong type, a share program that is not
 there), and exits with 1 while there is one. Go on once it says "No problems."
 
 ## 4. Prove it

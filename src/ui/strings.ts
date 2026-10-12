@@ -4,6 +4,7 @@
 
 import type { DiffFile } from '../core/diff';
 import { type Language, languageOf } from '../core/locale';
+import type { NotAProject } from '../core/plan-doc';
 import { type AgentEffort, type AgentModel, type AgentRole, type CardState, type ConfigProblemCode, type DemoSettingsProblem, type ErrorCode, EXPORT_HTML_MAX, type NarrationLanguage, type VoiceKind, type Idea, type Need, type NextStep, type Queue, type OwnerHold, type RestartReason, type SetupId, type VoiceSetupId, type MachineSectionId, type NeededId, type PrId } from '../core/types';
 
 const de = {
@@ -102,6 +103,18 @@ const de = {
     startTakenBack: 'Start zurückgenommen; die Workstreams sind wieder geplant.',
     startAllHint: 'Obeya plant sie gemeinsam: Was unabhängig ist, startet sofort; was auf einen anderen aufbaut oder mit ihm kollidiert, wartet auf ihn.',
     startedAll: (n: number) => (n === 1 ? 'Workstream bei Obeya.' : `${n} Workstreams bei Obeya; Obeya legt die Reihenfolge fest.`),
+  },
+  /** The note on a plan directory beside the projects. */
+  planDir: {
+    notProjects: (dir: string, n: number) => `${dir} · ${n === 1 ? '1 Doc ist kein Projekt' : `${n} Docs sind keine Projekte`}`,
+    reason: { noWorkstreams: 'Kein Abschnitt „##\u00a0Workstreams“', noChecklist: 'Keine Checkliste unter „##\u00a0Workstreams“' } satisfies Record<NotAProject, string>,
+    prepare: 'Als Projekt aufbereiten',
+    prepareHint: 'Ein Agent ergänzt die Workstream-Checkliste im Stil des Docs. Ist seine Änderung gelandet, steht das Doc hier als Projekt.',
+    preparing: 'Wird aufbereitet',
+    started: (card: string) => `„${card}“ gestartet.`,
+    empty: (dir: string) => `Noch keine Plan-Docs in ${dir}/. „Als Projekt planen“ an einer Idee schreibt das erste dorthin.`,
+    change: 'Ordner ändern',
+    changeHint: 'Wo die Plan-Docs liegen, legt der Adapter des Repositorys fest (planDocs). In der Konfiguration richtet ein Agent ihn ein.',
   },
   archivedProject: 'Projekt · Archiv',
   fromIdea: 'Entstanden aus der Idee',
@@ -1080,6 +1093,18 @@ const en: Strings = {
     startAllHint: 'Obeya plans them together: what is independent starts at once; what builds on another or collides with it waits for it.',
     startedAll: (n: number) => (n === 1 ? 'Workstream handed to Obeya.' : `${n} workstreams handed to Obeya; it decides their order.`),
   },
+  planDir: {
+    notProjects: (dir: string, n: number) => `${dir} · ${n === 1 ? '1 doc is not a project' : `${n} docs are not projects`}`,
+    reason: { noWorkstreams: 'No “##\u00a0Workstreams” section', noChecklist: 'No checklist under “##\u00a0Workstreams”' },
+    prepare: 'Prepare as a project',
+    prepareHint: 'An agent adds the workstream checklist in the doc’s own style. Once its change has landed, the doc stands here as a project.',
+    preparing: 'Being prepared',
+    started: (card: string) => `“${card}” started.`,
+    empty: (dir: string) => `No plan docs in ${dir}/ yet. “Plan as a project” on an idea writes the first one there.`,
+    change: 'Change directory',
+    changeHint: 'The repository’s adapter says where plan docs are (planDocs). In the configuration an agent sets it up.',
+  },
+
   archivedProject: 'Project · Archive',
   fromIdea: 'Came from the idea',
   decisions: 'Decisions',

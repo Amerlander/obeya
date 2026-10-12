@@ -63,6 +63,18 @@ h1, h2, .cfg-head h3, .p-title, .project > .head .ttl, .timeline .a-ttl { font-f
 #world { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
 
 .item { position: absolute; }
+/* the note on a plan directory, above the projects: quiet beside the cards */
+.plan-dir { position: absolute; transform: translateY(-100%); box-sizing: border-box; padding: 12px 14px; border-radius: 4px; font-size: 13px; line-height: 1.4;
+  background: var(--container); border: 1.5px solid var(--container-line); color: var(--ink); cursor: default; }
+.plan-dir.empty-dir { border-style: dashed; color: var(--muted); }
+.plan-dir p { margin: 0; }
+.plan-dir .pd-head { font-weight: 600; }
+.plan-dir .pd-why { display: block; color: var(--muted); font-size: 12px; }
+.plan-dir > .pd-why { margin: 2px 0 4px; }
+.plan-dir .pd-doc { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 30px; }
+.plan-dir .pd-file { flex: 1; min-width: 0; padding: 3px 0; }
+.plan-dir .pd-name { display: block; font-family: var(--mono); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plan-dir .btn.small { margin-top: 0; padding: 3px 9px; flex: none; }
 .project { border-radius: 4px; background: var(--container); border: 1.5px solid var(--container-line);
   backdrop-filter: blur(2px); }
 .project > .head { position: absolute; left: 0; right: 0; top: 0; height: 58px; padding: 16px 22px;

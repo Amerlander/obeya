@@ -362,10 +362,13 @@ An idea is thought through on its card before anything is planned; no worker run
    list stays under the dim while that card is open, so the card folds back into it; a click
    beside it or Esc closes it. Until 2026-10-09 the archive was a sheet on the right. An
    ended prototype cannot: it shows, read-only, how it ended, its demo and conversation.
-7. A project ends when its plan doc goes (done, deleted): it moves into the
-   archive with its workstreams, which are not listed on their own. Opened from the archive, its sheet shows, read-only,
+7. A project ends when every workstream in its plan doc is ticked on the default branch, or when
+   the doc goes (deleted): it moves into the
+   archive with its workstreams, which are not listed on their own. A workstream card still at
+   work then (in progress, or its worker finishing after the landing) keeps the project on the
+   canvas until it is done. Opened from the archive, its sheet shows, read-only,
    the goal and the workstreams as the doc last stood; each workstream unfolds with its conversation and demo.
-   When the same file comes back, the project returns to its place. Every project's sheet, live or
+   When the same file comes back, or an open workstream is added to it, the project returns to its place. Every project's sheet, live or
    archived, lists its decisions and links the idea its plan doc was written from: when an idea decided
    as a project („Idee → Projekt“) lands and its diff adds a doc in the plan directory, the project from that doc
    remembers the idea, whose card keeps its brief and conversation, and the idea's decisions join
@@ -859,7 +862,11 @@ the owner's language (`src/core/locale.ts`).
   again for either. A repository that runs on the generic adapter (none named, none of its
   own) offers "Adapter einrichten lassen" while its canvas runs as saved: it puts the card "Obeya
   für <repo> einrichten" at the top right of that canvas (or finds the one still open) and opens
-  it there; its worker writes the adapter with the `obeya:adapter` skill. Saving writes the file and restarts Obeya once no worker is
+  it there; its worker writes the adapter with the `obeya:adapter` skill, which settles where
+  plan docs go too: it looks for plans the repository already keeps (`docs/`, `rfcs/`, `adr/`,
+  `PLAN*.md`, a `TODO.md`), asks the owner in its one question whether that directory becomes
+  the plan directory (its docs then prepared on the canvas) or a new `docs/plan/`, and its check
+  script lists which docs there are projects and why the others are not. Saving writes the file and restarts Obeya once no worker is
   in the middle of a turn (as for new code), a tenth of a second after the answer went out; the page reloads. Started with repositories on the
   command line, Obeya shows those, and saving makes the file the configuration it restarts with.
   Renaming a running canvas keeps its id (`id` in the file), so its cards stay. The server's own
@@ -2191,6 +2198,23 @@ the repository; the copy on the project is only for the archive).
   `## Workstreams` section has a checklist; each top-level item is a workstream (`**W3:** Title.
   Details`). Checked means `live`, `(in review)` after the label means `in PR`, anything else
   `planned`. The goal is the first paragraph under `## Goal` / `## Ziel`.
+- The other `*.md` in the plan directory are not hidden (2026-10-12): one quiet note above the
+  projects (`src/ui/planDirs.tsx`, top left, kept in view by the camera like the cards) names the
+  directory and lists each with its reason (no `## Workstreams` section, or one without a
+  checklist) and "Als Projekt aufbereiten". That starts a card, right of everything on the canvas,
+  whose worker adds the checklist (and `## Goal` if missing) in the doc's own style, turning tasks
+  it keeps under another heading into it; the change lands like any other and the doc becomes a
+  project. While the card runs, the doc's row shows "Wird aufbereitet" and opens it. A repository
+  with no plan doc that never had a project gets a dashed note in the same place: where Obeya looks
+  and that "Als Projekt planen" on an idea writes the first doc there, with "Ordner ändern", which
+  opens the configuration at the repositories (the directory is the adapter's `planDocs`). Before,
+  such a doc was skipped silently and a missing directory said nothing, so a repository with plans
+  of its own showed an empty canvas without saying why. Deferred: a more lenient parser (`Tasks`,
+  `Milestones`, `Phases` as synonyms), which would turn checklists in design notes into projects
+  while a doc off the format is now converted in one click; and an adapter that reads its own
+  format (`planDocs.read`, several directories), until a repository needs its docs to stay in a
+  format of their own. Rejected: an agent mapping any doc into workstreams kept in Obeya's
+  database, against "plan docs are read, never written", with no box for workers to tick.
 - A workstream card's state: work in progress (`working`, `waiting`, `inPr`, `approved`) wins over
   the doc, so a workstream ticked off on its branch still waits for its merge; then a ticked-off
   workstream is `live`; otherwise the stored state counts (`done`, `planned`), and without one the
@@ -2256,6 +2280,14 @@ the repository; the copy on the project is only for the archive).
 - A plan card gets a stored row the first time it is seen, so the owner's placement persists; its
   title, text and state always come from the doc. Each read also keeps the doc's last state on the
   project (title, goal, workstreams with key, label, title, text and state).
+- A plan doc with every workstream ticked ends its project as one that disappears does
+  (2026-10-12, the owner's decision): a repository that keeps its finished plans would otherwise
+  keep their projects on the canvas forever. The docs as last read decide which projects stand
+  (`openDocs` in `src/server/board.ts`), checked again whenever a card changes, since a worker
+  finishing after the landing holds its project. A doc already done when Obeya first reads it gets
+  its rows, placed after the new projects, and goes straight into the archive; an unticked
+  workstream added later brings the project back to its place. In Obeya's own repository docs
+  still go once done, usually shortly after their project has gone into the archive.
 - A plan doc that disappears ends its project: the project goes into the archive with that last
   state, and returns with its placement when the same file comes back (2026-10-01). Ending is
   automatic rather than an explicit "abschließen", which can later sit on top. Obeya watches the
@@ -2553,8 +2585,6 @@ the repository; the copy on the project is only for the archive).
 
 - Plan-doc sync: Obeya reads plan docs and never writes them; workers tick off their workstream
   in the doc as part of their change. Should the project agent keep the doc's progress instead?
-- A plan doc without a `## Workstreams` checklist is not shown (its tasks under other headings,
-  say). Fix such docs, or show them as projects without cards?
 - Cloud hosts, left out for now (2026-10-10): a host type whose slots are cloud instances, one
   per card (an EC2 `m8g.xlarge`, say, in the using repository's cloud account), launched from a
   prepared image when the other machines are full, stopped some minutes after the card's last

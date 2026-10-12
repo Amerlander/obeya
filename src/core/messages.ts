@@ -267,7 +267,13 @@ const de = {
   },
   adapterSetup: {
     title: (repo: string) => `Obeya für ${repo} einrichten`,
-    body: 'Schreib den Adapter dieses Repositorys (`.obeya/adapter/index.ts`) mit dem Skill `obeya:adapter`: wie Obeya die App startet, welche Prüfungen laufen, wie Arbeit landet und wie eine Demo aufgenommen wird. Was du im Repository nicht herausfindest (Login, Testdaten), frag mich.',
+    body: 'Schreib den Adapter dieses Repositorys (`.obeya/adapter/index.ts`) mit dem Skill `obeya:adapter`: wie Obeya die App startet, welche Prüfungen laufen, wie Arbeit landet, wie eine Demo aufgenommen wird und wo die Plan-Docs liegen, die Obeya als Projekte zeigt. Was du im Repository nicht herausfindest (Login, Testdaten), frag mich.',
+  },
+  /** The card that turns a doc in the plan directory that is not a project into one. */
+  preparePlanDoc: {
+    title: (file: string) => `${file.slice(file.lastIndexOf('/') + 1)} als Projekt aufbereiten`,
+    body: (file: string) =>
+      `Bereite \`${file}\` so auf, dass Obeya es als Projekt zeigt. Obeya liest ein Plan-Doc als Projekt, wenn unter \`## Workstreams\` (oder \`## Arbeitspakete\`) eine Checkliste steht: Jeder Punkt der obersten Ebene ist ein Workstream (\`- [ ] **W1:** Titel. Details\`), ein Paket, das einzeln landen kann, und ein abgehakter ist gelandet. Das Ziel des Projekts ist der erste Absatz unter \`## Goal\` (oder \`## Ziel\`).\n\nErgänze die Checkliste, und das Ziel, wenn es fehlt, im Stil des Docs aus dem, was es plant. Führt es seine Aufgaben schon unter einer anderen Überschrift (Tasks, Meilensteine, Phasen), wird daraus die Checkliste, statt sie zu verdoppeln. Hake ab, was schon erledigt ist; ist alles erledigt, sag es mir, denn ein Projekt mit lauter abgehakten Workstreams geht gleich ins Archiv. Der übrige Text bleibt, und gebaut wird nichts davon.`,
   },
 };
 
@@ -522,7 +528,12 @@ const en: Messages = {
   },
   adapterSetup: {
     title: (repo: string) => `Set up Obeya for ${repo}`,
-    body: "Write this repository's adapter (`.obeya/adapter/index.ts`) with the skill `obeya:adapter`: how Obeya starts the app, which checks run, how work lands and how a demo is recorded. Ask me what you cannot find out in the repository (login, test data).",
+    body: "Write this repository's adapter (`.obeya/adapter/index.ts`) with the skill `obeya:adapter`: how Obeya starts the app, which checks run, how work lands, how a demo is recorded and where the plan docs are that Obeya shows as projects. Ask me what you cannot find out in the repository (login, test data).",
+  },
+  preparePlanDoc: {
+    title: (file: string) => `Prepare ${file.slice(file.lastIndexOf('/') + 1)} as a project`,
+    body: (file: string) =>
+      `Prepare \`${file}\` so that Obeya shows it as a project. Obeya reads a plan doc as a project when a checklist stands under \`## Workstreams\` (or \`## Arbeitspakete\`): each top-level item is a workstream (\`- [ ] **W1:** Title. Details\`), a package that can land on its own, and a ticked one has landed. The project's goal is the first paragraph under \`## Goal\` (or \`## Ziel\`).\n\nAdd the checklist, and the goal if it is missing, in the doc's own style, from what it plans. If the doc already keeps its tasks under another heading (Tasks, Milestones, Phases), that becomes the checklist instead of a copy of it. Tick what is already done; if everything is, tell me, since a project whose workstreams are all ticked goes straight to the archive. The rest of the text stays, and nothing of it is built.`,
   },
 };
 

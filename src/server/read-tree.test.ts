@@ -97,11 +97,11 @@ describe('the Lesestand', () => {
     const ws = (label: string) => c.board.snapshot().items.find((i) => i.label === label)!;
     expect([ws('W1').state, ws('W2').state]).toEqual(['planned', 'planned']);
     c.board.work(ws('W1').id, { state: 'inPr', pr: JSON.stringify({ url: 'https://example.com/pr/1' }) });
-    push({ 'docs/plan/export.md': doc('Export', 'W1 W2') });
+    push({ 'docs/plan/export.md': doc('Export', 'W1') });
     c.repos[0]!.workers.merged(ws('W1').id);
     // the merge started the refresh; a second call waits for the same one
     await c.repos[0]!.read.refresh();
-    expect([ws('W1').state, ws('W2').state]).toEqual(['live', 'live']);
+    expect([ws('W1').state, ws('W2').state]).toEqual(['live', 'planned']);
   });
 
   test('is the checkout itself where work lands on the local main, uncommitted docs included', () => {

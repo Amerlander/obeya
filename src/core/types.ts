@@ -4,6 +4,7 @@ import type { DemoSettings, VoiceKind } from '../../plugin/skills/demo/lib/setti
 import type { SetupId, SetupItem } from '../../plugin/skills/demo/lib/setup.ts';
 import type { Language } from './locale';
 import { MESSAGES } from './messages';
+import type { NotAProject } from './plan-doc';
 
 export type { DemoSettings, NarrationLanguage, VoiceKind } from '../../plugin/skills/demo/lib/settings.ts';
 export type { Language } from './locale';
@@ -505,6 +506,21 @@ export interface CanvasSnapshot {
   workspaces?: ClonePool[];
   /** Shared pages the share commands now write differently, and sharing many of them again; none when there is neither. */
   reshare?: Reshare;
+  /** The plan directories the canvas has a note about (`PlanDir`); none when it has none. */
+  planDirs?: PlanDir[];
+}
+
+/**
+ * A repository's plan directory, shown as a note beside the projects: the docs in it that are not
+ * projects, with the reason and the card preparing each as one (`preparing`), or, while the
+ * repository has no plan doc and never had a project (`empty`), where the first one goes.
+ */
+export interface PlanDir {
+  repo: string;
+  /** As the adapter names it, `docs/plan`. */
+  dir: string;
+  empty: boolean;
+  others: { file: string; reason: NotAProject; preparing?: string }[];
 }
 
 /**

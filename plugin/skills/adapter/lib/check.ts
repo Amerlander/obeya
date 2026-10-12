@@ -2,13 +2,15 @@
 // (`.obeya/adapter/index.ts`, committed or not), the way Obeya will load it once it is on the
 // default branch: it loads, every field is known and of the right type, the share command's or the
 // site's deploy program is there (the problems the configuration sheet reports). Prints what Obeya
-// makes of it; exits with 1 when something is wrong.
+// makes of it, the docs in its plan directory among it: which are projects and which are not, and
+// why; exits with 1 when something is wrong.
 // Run with Bun (`bun check.ts [<module>]`), since it loads the adapter as Obeya does.
 
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { loadAdapter, REPO_ADAPTER_DIR } from '../../../../src/adapters/index.ts';
-import { repoInfo } from '../../../../src/server/repo.ts';
+import { allTicked, type NotAProject } from '../../../../src/core/plan-doc.ts';
+import { readPlanDocs, repoInfo } from '../../../../src/server/repo.ts';
 import { adapterRepoProblems } from '../../../../src/server/share.ts';
 
 const repo = repoInfo(process.cwd());
@@ -34,6 +36,15 @@ try {
   problems.push(canvas);
 }
 const site = adapter.demo?.site;
+const plans = readPlanDocs(repo.path, adapter);
+const why: Record<NotAProject, string> = { noWorkstreams: 'no `## Workstreams` section', noChecklist: 'no checklist under `## Workstreams`' };
+const name = (file: string) => file.slice(file.lastIndexOf('/') + 1);
+const planLines = !existsSync(join(repo.path, adapter.planDocs.dir))
+  ? [`plan docs: ${adapter.planDocs.dir}/ does not exist yet; the first plan doc ("Als Projekt planen" on an idea) creates it`]
+  : [
+      `plan docs in ${adapter.planDocs.dir}/: ${plans.docs.length} ${plans.docs.length === 1 ? 'is a project' : 'are projects'}${plans.docs.length ? ` (${plans.docs.map((d) => `${name(d.file)}${allTicked(d) ? ', done: archived' : ''}`).join('; ')})` : ''}, ${plans.others.length} ${plans.others.length === 1 ? 'is not' : 'are not'}`,
+      ...plans.others.map((o) => `- ${name(o.file)}: ${why[o.reason]}`),
+    ];
 const show = (v: unknown) => (v === undefined ? '(none)' : JSON.stringify(v));
 console.log(
   [
@@ -43,6 +54,7 @@ console.log(
     `checks: ${show(adapter.checks)}`,
     `land: ${adapter.land}${adapter.direct ? ' (direct allowed)' : ''}, workspaces: ${adapter.workspaces}`,
     `planDocs: ${show(adapter.planDocs)}, softPaths: ${show(adapter.softPaths)}`,
+    ...planLines,
     `demo: ${adapter.demo ? `required ${adapter.demo.required}; share ${show(adapter.demo.share)}${site ? `; site ${site.title} at ${site.url}, deploy ${show(site.deploy)}` : ''}\nhowToRun: ${adapter.demo.howToRun}` : '(none: a written summary is enough)'}`,
     ...(adapter.prNoise ? [`prNoise: ${show(adapter.prNoise)}`] : []),
     ...(adapter.stack ? [`stack: ${show(adapter.stack)}`] : []),

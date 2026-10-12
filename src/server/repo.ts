@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync, watch } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import type { RepoAdapter, RepoInfo } from '../adapters/types';
-import { type PlanDoc, parsePlanDoc } from '../core/plan-doc';
+import { notAProject, type OtherDoc, type PlanDoc, parsePlanDoc } from '../core/plan-doc';
 import { GIT } from './workspaces';
 
 export function repoInfo(path: string): RepoInfo {
@@ -13,17 +13,30 @@ export function repoInfo(path: string): RepoInfo {
   return { path, remote: git('remote', 'get-url', 'origin'), branch: git('branch', '--show-current') || 'HEAD' };
 }
 
-/** The plan docs in the working tree that describe a project. */
-export function readPlanDocs(repoPath: string, adapter: RepoAdapter): PlanDoc[] {
+/**
+ * The docs in the plan directory of the working tree: those that describe a project, and the others
+ * with the reason they are not one (none without the directory).
+ */
+export function readPlanDocs(repoPath: string, adapter: RepoAdapter): { docs: PlanDoc[]; others: OtherDoc[] } {
   const dir = join(repoPath, adapter.planDocs.dir);
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir)
+  const docs: PlanDoc[] = [];
+  const others: OtherDoc[] = [];
+  if (!existsSync(dir)) return { docs, others };
+  for (const f of readdirSync(dir)
     .filter((f) => f.endsWith('.md') && !adapter.planDocs.exclude.includes(f))
-    .sort()
-    .flatMap((f) => {
-      const doc = parsePlanDoc(`${adapter.planDocs.dir}/${f}`, readFileSync(join(dir, f), 'utf8'));
-      return doc ? [doc] : [];
-    });
+    .sort()) {
+    const file = `${adapter.planDocs.dir}/${f}`;
+    let markdown: string;
+    try {
+      markdown = readFileSync(join(dir, f), 'utf8');
+    } catch {
+      continue; // a directory named *.md, or gone since
+    }
+    const doc = parsePlanDoc(file, markdown);
+    if (doc) docs.push(doc);
+    else others.push({ file, reason: notAProject(markdown)! });
+  }
+  return { docs, others };
 }
 
 /**

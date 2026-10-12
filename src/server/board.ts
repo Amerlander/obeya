@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { boundsOf, CARD_SIZE, freeSpotNear, GAP, PROJECT_HEAD, placeProjects, placeWorkstreams, projectSize, sizeOf, unionBounds } from '../core/layout';
 import type { Language } from '../core/locale';
 import { MESSAGES, type Messages } from '../core/messages';
-import type { PlanDoc } from '../core/plan-doc';
+import { allTicked, type OtherDoc, type PlanDoc } from '../core/plan-doc';
 import {
   type CanvasInfo,
   type CanvasSnapshot,
@@ -33,6 +33,7 @@ import {
   type NextStep,
   type PlannedPrototype,
   type Question,
+  type PlanDir,
   type Reshare,
   type Spot,
   STATES,
@@ -184,9 +185,21 @@ function excerpt(text: string, max: number): string {
   return `${(at > max / 2 ? cut.slice(0, at) : cut).trimEnd()} …`;
 }
 
+/**
+ * What the canvas's plan directories hold: the docs that are projects (a bare path for the home
+ * repository, `<repo>:<path>` for another) and, per repository, the others with their reason.
+ */
+export interface PlanRead {
+  docs: PlanDoc[];
+  dirs: { repo: string; dir: string; others: OtherDoc[] }[];
+}
+
 export class Board {
   private listeners = new Set<() => void>();
   private docs: PlanDoc[] | null = null;
+  private dirs: PlanRead['dirs'] = [];
+  /** The docs whose projects were on the canvas at the last snapshot, to see one end or come back. */
+  private open: string | null = null;
   private cache: CanvasSnapshot | null = null;
   private eventListeners = new Set<(e: CardEvent) => void>();
   private goneListeners = new Set<(cardId: string, id: number) => void>();
@@ -195,7 +208,7 @@ export class Board {
   constructor(
     private store: Store,
     readonly canvas: CanvasInfo,
-    private readDocs: () => PlanDoc[],
+    private readDocs: () => PlanRead,
     /** The owner's screenshots, which a card's images must be among. */
     private images?: Pick<Images, 'resolve'>,
     /** Whether the Lesestand of the repository holds the commit; without it, every commit counts as held. */
@@ -347,7 +360,7 @@ export class Board {
   /** The plan doc of a project, as written, for the owner to read. */
   planDoc(id: string): { file: string; markdown: string } {
     const ref = this.own(id).plan_ref;
-    const doc = ref && !ref.includes('#') ? (this.docs ??= this.readDocs()).find((d) => d.file === ref) : undefined;
+    const doc = ref && !ref.includes('#') ? (this.docs ??= this.read()).find((d) => d.file === ref) : undefined;
     if (!doc) throw new BadRequest('invalid', 'not a project with a plan doc');
     return { file: doc.file, markdown: doc.markdown };
   }
@@ -806,21 +819,26 @@ export class Board {
   /** The canvas as the UI sees it; built once per change (every write here ends in `changed`). */
   snapshot(): CanvasSnapshot {
     if (this.cache) return this.cache;
-    if (!this.docs) {
-      this.docs = this.readDocs();
-      this.keepDocs(this.docs);
-      this.reopen(this.docs);
+    const read = !this.docs;
+    if (!this.docs) this.docs = this.read();
+    const all = this.docs;
+    const docs = this.openDocs(all);
+    const open = docs.map((d) => d.file).join('\n');
+    if (read || open !== this.open) {
+      this.open = open;
+      this.keepDocs(all, docs);
+      if (read) this.reopen(all);
     }
-    const docs = this.docs;
     let items = toItems(this.store.cards(this.canvas.id), docs, this.home);
-    if (this.placeNew(docs, items)) {
+    if (this.placeNew(docs, items, all)) {
       // projects seen for the first time keep their doc too
-      this.keepDocs(docs);
+      this.keepDocs(all, docs);
       items = toItems(this.store.cards(this.canvas.id), docs, this.home);
     }
     items = this.withPrototypes(items);
     const reshare = this.reshare();
     const pools = this.clonePools();
+    const planDirs = this.planDirs(all);
     this.cache = {
       canvas: this.canvas,
       items,
@@ -829,8 +847,55 @@ export class Board {
       talk: this.store.talk(this.canvas.id, SHEET_TALK, true),
       ...(pools.length ? { workspaces: pools } : {}),
       ...(reshare ? { reshare } : {}),
+      ...(planDirs.length ? { planDirs } : {}),
     };
     return this.cache;
+  }
+
+  private read(): PlanDoc[] {
+    const { docs, dirs } = this.readDocs();
+    this.dirs = dirs;
+    return docs;
+  }
+
+  /**
+   * The docs whose projects stand on the canvas: those with a workstream still open, and those
+   * whose every workstream is ticked while one of their cards is still at work (in progress, or its
+   * worker finishing after the landing). The others' projects have ended.
+   */
+  private openDocs(all: PlanDoc[]): PlanDoc[] {
+    const busy = new Set(
+      this.store
+        .cards(this.canvas.id)
+        .filter((r) => r.plan_ref?.includes('#') && ((r.state && ACTIVE.includes(r.state)) || (r.landed && r.workspace)))
+        .map((r) => r.plan_ref!.slice(0, r.plan_ref!.indexOf('#'))),
+    );
+    return all.filter((d) => !allTicked(d) || busy.has(d.file));
+  }
+
+  /**
+   * The notes on the plan directories: one for each that holds docs which are not projects, and
+   * one for a repository with no plan doc that never had a project, saying where the first goes.
+   */
+  private planDirs(docs: PlanDoc[]): PlanDir[] {
+    const projects = this.store.projects(this.canvas.id);
+    const preparing = this.store.cards(this.canvas.id).filter((r) => !r.plan_ref && r.title && !finished(r.state ?? 'planned'));
+    return this.dirs.flatMap(({ repo, dir, others }) => {
+      const empty = !others.length && !docs.some((d) => repoOfRef(d.file, this.home) === repo) && !projects.some((p) => repoOfRef(p.plan_ref!, this.home) === repo);
+      if (!empty && !others.length) return [];
+      return [
+        {
+          repo,
+          dir,
+          empty,
+          others: others.map((o) => {
+            const titles = Object.values(MESSAGES).map((m) => m.preparePlanDoc.title(o.file));
+            const card = preparing.find((r) => (r.repo ?? this.home) === repo && titles.includes(r.title!));
+            return { ...o, ...(card ? { preparing: card.id } : {}) };
+          }),
+        },
+      ];
+    });
   }
 
   /** The repositories' clone pools by machine, as those who run them say (`showPools`). */
@@ -1181,26 +1246,30 @@ export class Board {
   }
 
   /**
-   * Keeps each doc's last state on its project. A project whose doc is gone goes into the archive
-   * (rows from before Obeya kept the state have nothing to show there, and stay hidden); one whose
-   * doc is back returns to the canvas.
+   * Keeps each doc's last state on its project. A project whose doc is gone, or whose work is done
+   * (not among the `open` docs), goes into the archive (rows from before Obeya kept the state have
+   * nothing to show there, and stay hidden); one whose doc is back, or open again, returns to the canvas.
    */
-  private keepDocs(docs: PlanDoc[]) {
-    const byFile = new Map(docs.map((d) => [d.file, d]));
+  private keepDocs(all: PlanDoc[], open: PlanDoc[]) {
+    const byFile = new Map(all.map((d) => [d.file, d]));
+    const shown = new Set(open.map((d) => d.file));
     const at = new Date().toISOString();
     this.store.db.transaction(() => {
       for (const r of this.store.projects(this.canvas.id)) {
         const doc = byFile.get(r.plan_ref!);
-        if (doc) {
-          const plan = JSON.stringify(doc);
-          if (r.plan !== plan || r.archived_at) this.store.update(r.id, { plan, archived_at: null });
-        } else if (r.plan && !r.archived_at) this.store.update(r.id, { archived_at: at });
+        const plan = doc ? JSON.stringify(doc) : r.plan;
+        const archived_at = doc && shown.has(doc.file) ? null : plan ? (r.archived_at ?? at) : r.archived_at;
+        if (r.plan !== plan || r.archived_at !== archived_at) this.store.update(r.id, { plan, archived_at });
       }
     })();
   }
 
-  /** Stores a row for every project and workstream seen for the first time. Returns whether any were added. */
-  private placeNew(docs: PlanDoc[], items: Item[]): boolean {
+  /**
+   * Stores a row for every project and workstream seen for the first time. A doc whose work was
+   * done before Obeya first saw it (among `all`, not `docs`) gets its rows too, placed after the
+   * others, and goes straight to the archive (`keepDocs`). Returns whether any were added.
+   */
+  private placeNew(docs: PlanDoc[], items: Item[], all: PlanDoc[]): boolean {
     const rows = this.store.cards(this.canvas.id);
     const byRef = new Map(rows.filter((r) => r.plan_ref).map((r) => [r.plan_ref!, r]));
     const add: NewRow[] = [];
@@ -1220,7 +1289,9 @@ export class Board {
     if (add.length) this.store.insert(add);
     const linked = this.linkOrigins(docs);
 
-    const fresh = docs.filter((d) => !byRef.has(d.file));
+    const known = new Set(this.store.projects(this.canvas.id).map((r) => r.plan_ref!));
+    const done = all.filter((d) => !docs.includes(d) && !known.has(d.file));
+    const fresh = [...docs.filter((d) => !byRef.has(d.file)), ...done];
     if (!fresh.length) return add.length > 0 || linked;
     const layouts = fresh.map((d) => {
       const pos = placeWorkstreams(d.workstreams);

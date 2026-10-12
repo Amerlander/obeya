@@ -53,7 +53,7 @@ if (args[0] === 'publish') console.log('https://demos.example/' + input.slug + '
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'obeya-share-'));
   writeFileSync(join(dir, 'fake-share.ts'), FAKE);
-  board = new Board(new Store(':memory:'), { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: dir, branch: 'main' }] }, () => []);
+  board = new Board(new Store(':memory:'), { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: dir, branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
   runtime = new FakeRuntime();
   bodies = new Map();
   edits = [];

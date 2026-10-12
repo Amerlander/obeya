@@ -426,3 +426,46 @@ describe("the owner's words on a card with an agent", () => {
     expect(canvas.commander.undo((notices[0] as { token: string }).token)).toBe(true);
   });
 });
+
+describe('plan docs that are not projects, and projects whose work is done', () => {
+  /** A doc lands on the default branch of the `api` repository, and Obeya reads it from there. */
+  const land = async (file: string, text: string) => {
+    const api = join(dir, 'api');
+    writeFileSync(join(api, file), text);
+    git(api, 'add', '.');
+    git(api, 'commit', '--quiet', '-m', `Plan ${file}`);
+    await canvas.repos[1]!.read.refresh();
+  };
+  const project = (title: string) => canvas.board.snapshot().items.find((i) => i.kind === 'project' && i.title === title);
+
+  test('an off-format doc is listed with its reason, prepared by a started card, and a project once its checklist lands', async () => {
+    await land('docs/plan/rollout.md', '# Rollout\n\n## Phasen\n\n- [ ] Wien\n');
+    expect(canvas.board.snapshot().planDirs).toEqual([{ repo: 'api', dir: 'docs/plan', empty: false, others: [{ file: 'docs/plan/rollout.md', reason: 'noWorkstreams' }] }]);
+    expect(() => canvas.preparePlanDoc('api', 'docs/plan/plan.md')).toThrow('not a project');
+    const card = canvas.preparePlanDoc('api', 'docs/plan/rollout.md');
+    expect(card).toMatchObject({ title: 'rollout.md als Projekt aufbereiten', repo: 'api' });
+    expect(card.body).toContain('`docs/plan/rollout.md`');
+    // started at once, and asked for again it is the same card
+    expect(canvas.board.item(card.id)!.queue).toBeDefined();
+    expect(canvas.preparePlanDoc('api', 'docs/plan/rollout.md').id).toBe(card.id);
+    expect(canvas.board.snapshot().planDirs![0]!.others[0]!.preparing).toBe(card.id);
+    // what the card would not overlap
+    const items = canvas.board.snapshot().items;
+    const right = Math.max(...items.filter((i) => !i.parent && i.id !== card.id).map((i) => { const b = boundsOf(i, items); return b.x + b.w; }));
+    expect(canvas.board.item(card.id)!.x).toBeGreaterThan(right);
+
+    await land('docs/plan/rollout.md', '# Rollout\n\n## Ziel\n\nÖsterreich.\n\n## Workstreams\n\n- [ ] **W1:** Wien.\n');
+    expect(project('Rollout')).toMatchObject({ repo: 'api', plan: { file: 'api:docs/plan/rollout.md', goal: 'Österreich.' } });
+    expect(canvas.board.snapshot().planDirs).toBeUndefined();
+  });
+
+  test('a project goes into the archive once every workstream is ticked on the default branch, and comes back with an open one', async () => {
+    const before = project('API')!;
+    await land('docs/plan/plan.md', '# API\n\n## Goal\n\nG.\n\n## Workstreams\n\n- [x] **W1:** Erster Schritt.\n');
+    expect(project('API')).toBeUndefined();
+    expect(canvas.board.archived().map((i) => i.title)).toEqual(['API', 'Erster Schritt']);
+    await land('docs/plan/plan.md', '# API\n\n## Goal\n\nG.\n\n## Workstreams\n\n- [x] **W1:** Erster Schritt.\n- [ ] **W2:** Zweiter.\n');
+    expect(project('API')).toMatchObject({ id: before.id, x: before.x, y: before.y });
+    expect(canvas.board.archived()).toEqual([]);
+  });
+});

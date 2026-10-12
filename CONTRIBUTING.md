@@ -15,8 +15,8 @@ keep it current in the same change.
 Work larger than one change is planned in a plan doc under [`docs/plan/`](docs/plan/): the goal,
 where things stand, the design, and the workstreams as a checklist (`- [ ] **W1:** …`). Obeya
 shows each plan doc as a project with a card per workstream; the change that finishes a workstream
-ticks it off in the doc. When the project is done, what lasts moves into the design doc and the
-plan doc goes.
+ticks it off in the doc, and once all are ticked the project goes into the archive. When the
+project is done, what lasts moves into the design doc and the plan doc goes.
 
 ## Cards
 

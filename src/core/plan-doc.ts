@@ -2,7 +2,8 @@
 //
 // The shape follows the common template: a `# Title`, a `## Goal` section and a `## Workstreams`
 // checklist whose top-level items are the workstreams (`- [x] **W3:** Title. Details …`).
-// A doc without a workstream checklist is not a project (design notes, templates).
+// A doc without a workstream checklist is not a project (design notes, templates); `notAProject`
+// says why, for the owner to see.
 
 export interface PlanDoc {
   file: string;
@@ -29,6 +30,25 @@ const GOAL_HEADING = /^(goals?|ziele?)\b/i;
 const WORKSTREAMS_HEADING = /^(workstreams?|arbeitspakete)\b/i;
 const ITEM = /^- \[([ xX])\]\s+(.*)$/;
 const LABEL = /^(W\d+[a-z]?(?:\.\d+)?|W[A-Z]{1,3})\b\s*(?:\(([^)]*)\))?\s*[:—–-]?\s*(.*)$/;
+
+/** Why a doc in the plan directory is not a project: no `## Workstreams` section, or one without a checklist. */
+export type NotAProject = 'noWorkstreams' | 'noChecklist';
+
+/** A doc in the plan directory that is not a project, with the reason. */
+export interface OtherDoc {
+  file: string;
+  reason: NotAProject;
+}
+
+/** Why the doc is not a project; null when it is one. */
+export function notAProject(markdown: string): NotAProject | null {
+  const wsSection = splitSections(markdown.replace(/\r\n/g, '\n').split('\n')).find((s) => WORKSTREAMS_HEADING.test(s.heading));
+  if (!wsSection) return 'noWorkstreams';
+  return parseWorkstreams(wsSection.lines).length ? null : 'noChecklist';
+}
+
+/** Every workstream is ticked: the project's work is done, and it ends. */
+export const allTicked = (doc: PlanDoc): boolean => doc.workstreams.every((w) => w.done);
 
 export function parsePlanDoc(file: string, markdown: string): PlanDoc | null {
   const lines = markdown.replace(/\r\n/g, '\n').split('\n');
