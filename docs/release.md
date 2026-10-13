@@ -13,7 +13,9 @@ released, and the site's screenshots are taken again with it. When the owner say
 Release", the project skill `.claude/skills/release/SKILL.md` goes through these steps in this
 order, on an Obeya card or in a terminal; it adds when to ask the owner and what to look at.
 The scripts that talk to GitHub act as the account `sadilek` themselves (with its gh login,
-without switching the account gh has active).
+without switching the account gh has active); other gh calls go through `bun scripts/gh.ts <gh
+args…>`, which does the same on sadilek/obeya, since the machine's active account may lack the
+admin rights a workflow run or a rerun needs.
 
 1. Where things stand: `bun scripts/release-status.ts` prints the last version tag, the commits
    since then that change what runs (the release's notes will be their subjects), the version to
@@ -47,8 +49,9 @@ without switching the account gh has active).
    notarises the Mac apps (Apple answers within a minute or so) and makes a draft release with the
    installers, the updates and their signatures, `SHA256SUMS`, `latest.json` and notes from the
    commits since the tag before. A run takes about ten minutes.
-7. The run and the draft: the run of the build workflow for the tag (`gh run list --repo
-   sadilek/obeya --workflow build.yml --branch v<version>`, then `gh run watch <id>`), then
+7. The run and the draft: the run of the build workflow for the tag (`bun scripts/gh.ts run list
+   --workflow build.yml --branch v<version>`, then `bun scripts/gh.ts run watch <id>`; a job that
+   failed on something flaky runs again with `bun scripts/gh.ts run rerun <id> --failed`), then
    `bun scripts/release-status.ts draft v<version>`, which checks that the draft holds every
    installer, update and signature, and a `latest.json` of the version that names every platform,
    and prints the notes. A run that fails on the Macs with HTTP 403 needs the owner to accept
@@ -136,8 +139,8 @@ now and then, and a release fails the same way until it is accepted again.
 
 ### Trying it before a release
 
-Actions → Build → Run workflow, with "Sign and notarise the macOS app" ticked (or `gh workflow run
-build.yml --repo sadilek/obeya --ref main -f sign=true`): the Macs build as on a tag (without a
+Actions → Build → Run workflow, with "Sign and notarise the macOS app" ticked (or `bun scripts/gh.ts workflow run
+build.yml --ref main -f sign=true`): the Macs build as on a tag (without a
 release), and the step "The compiled server and the app around it" ends
 with Gatekeeper's verdict, `source=Notarized Developer ID`. On a Mac, `bun run build:app` does the same with the certificate in the keychain:
 

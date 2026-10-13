@@ -58,7 +58,8 @@ it runs your change.
 `package.json` has the version. Push `main` first, then the tag.
 
 **Step 7, the build.** Watch the run in the background and end the turn. When it fails, read the
-failed steps (`gh run view <id> --repo sadilek/obeya --log-failed`). An HTTP 403 from Apple
+failed steps (`bun scripts/gh.ts run view <id> --log-failed`); a job that failed on something
+flaky runs again with `bun scripts/gh.ts run rerun <id> --failed`. An HTTP 403 from Apple
 needs the owner's acceptance of Apple's agreement: `ask`. A fault in the code goes to
 `propose_card`; the release waits for it. Once the draft check passes, read the notes as a user
 of the app will: a line that makes no sense to them is worth mentioning in step 9.

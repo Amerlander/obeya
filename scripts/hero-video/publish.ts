@@ -3,7 +3,7 @@
 // the release `site-media` (creating the
 // release the first time, replacing the assets after that), then runs the Pages workflow, which
 // fetches them into site/media/. It acts as the GitHub account `sadilek` through GH_TOKEN, without
-// switching the account gh has active. With `--poster` it first takes the poster
+// switching the account gh has active (scripts/gh.ts). With `--poster` it first takes the poster
 // (`site/img/hero-poster.jpg`) and the README's picture of the video (`docs/images/video.jpg`)
 // again from the new video; they are in git and go out with the next push of main. `--poster-only`
 // takes them and uploads nothing: a release commits them before its video goes out
@@ -14,9 +14,8 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { ghEnv, REPO } from '../gh.ts';
 
-const REPO = 'sadilek/obeya';
-const ACCOUNT = 'sadilek';
 const RELEASE = 'site-media';
 const OUT = process.env.HERO_OUT ?? path.join(os.homedir(), 'demos', 'obeya-hero');
 const posterOnly = process.argv.includes('--poster-only');
@@ -50,11 +49,12 @@ if (posterOnly) {
   process.exit(0);
 }
 
-// without GH_TOKEN, which gh would hand back instead of the account's own token
-const { GH_TOKEN: _, GITHUB_TOKEN: __, ...plain } = process.env;
-const token = spawnSync('gh', ['auth', 'token', '--user', ACCOUNT], { encoding: 'utf8', env: plain });
-if (token.status !== 0 || !token.stdout.trim()) fail(`no gh login for ${ACCOUNT}: gh auth login, then try again\n${token.stderr}`);
-const env = { ...process.env, GH_TOKEN: token.stdout.trim() };
+let env: NodeJS.ProcessEnv;
+try {
+  env = ghEnv();
+} catch (e) {
+  fail((e as Error).message);
+}
 
 // gh names an asset after its file, so the files go up under their site names from a temp directory
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'hero-publish-'));

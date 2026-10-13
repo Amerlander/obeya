@@ -11,16 +11,16 @@
 //       signature, SHA256SUMS, and a latest.json of the tag's version that names every platform.
 //
 // It reads `main` and asks GitHub as the account `sadilek` (with the token of its gh login, without
-// switching the account gh has active), as scripts/hero-video/publish.ts does. It changes nothing,
+// switching the account gh has active), through scripts/gh.ts. It changes nothing,
 // and exits with 1 when something stands in the way.
 
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { ACCOUNT, ghEnv, REPO } from './gh';
 import { RELEASE, RUNS, type Latest } from './release';
 
-export const REPO = 'sadilek/obeya';
-const ACCOUNT = 'sadilek';
+export { REPO };
 const MAIN = 'main';
 /** What the build workflow signs with (docs/release.md); APPLE_NOTARY_ISSUER only with a team key. */
 export const SECRETS = ['APPLE_CERTIFICATE', 'APPLE_CERTIFICATE_PASSWORD', 'APPLE_NOTARY_KEY', 'APPLE_NOTARY_KEY_ID', 'TAURI_SIGNING_PRIVATE_KEY'];
@@ -192,12 +192,15 @@ export function draft(tag: string, gh: Gh): { problems: string[]; notes: string;
   return { problems, notes: release.body ?? '', latest };
 }
 
-/** gh as the account `sadilek`, without switching the account gh has active. */
-function ghAs(account: string): Gh {
-  // without GH_TOKEN, which gh would hand back instead of the account's own token
-  const { GH_TOKEN: _, GITHUB_TOKEN: __, ...plain } = process.env;
-  const token = spawnSync('gh', ['auth', 'token', '--user', account], { encoding: 'utf8', env: plain }).stdout?.trim();
-  const env = token ? { ...plain, GH_TOKEN: token } : plain;
+/** gh as the account `sadilek`, without switching the account gh has active (scripts/gh.ts). */
+function ghAsSadilek(): Gh {
+  let env: NodeJS.ProcessEnv;
+  try {
+    env = ghEnv();
+  } catch (e) {
+    console.error((e as Error).message);
+    process.exit(1);
+  }
   return (args) => {
     const r = spawnSync('gh', args, { encoding: 'utf8', env, maxBuffer: 64 << 20 });
     return r.status === 0 ? r.stdout.trim() : null;
@@ -206,7 +209,7 @@ function ghAs(account: string): Gh {
 
 if (import.meta.main) {
   const [command, tag] = process.argv.slice(2);
-  const gh = ghAs(ACCOUNT);
+  const gh = ghAsSadilek();
   if (command === 'draft' && tag) {
     const d = draft(tag, gh);
     if (d.latest) console.log(`latest.json: ${d.latest.version}, ${Object.keys(d.latest.platforms).join(', ') || 'no platform'}`);
