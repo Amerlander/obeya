@@ -26,7 +26,7 @@ import { attachTo, imageFiles } from './shots';
 import { cardDraft, fieldOn, focusedDraft, keepDrafts, MIC_DRAFT, OBEYA_DRAFT, takesImages } from './draft';
 import { type Heard, HoldToTalk, PushToTalk, ToldList, usePushToTalk, useTold, type Where } from './voice';
 import { sent, take, videoOf } from './spot';
-import { CanvasPill, CardView, DepLinks, Edges, Links, Minimap, ProjectView, RestartPill, Sheet, UpdatePill, WorkspacesPill } from './parts';
+import { CanvasPill, CardView, DepLinks, Edges, Links, Minimap, OldBunPill, ProjectView, RestartPill, Sheet, UpdatePill, WorkspacesPill } from './parts';
 import { clampWidth, loadWidths, saveWidths, SHEET_W, type SheetWidths, widthsIn } from './sheetWidth';
 import { errorText, t } from './strings';
 import { split, talkAlone } from './talk';
@@ -59,9 +59,9 @@ function Splash({ offline }: { offline: boolean }) {
 }
 
 function Live({ canvases }: { canvases: CanvasInfo[] }) {
-  const { snapshot, online, restart, update, waiting } = useCanvas();
+  const { snapshot, online, restart, update, waiting, oldBun } = useCanvas();
   if (!snapshot) return <Splash offline={!online} />;
-  return <Canvas snapshot={snapshot} online={online} restart={restart} update={update} canvases={canvases} waiting={waiting} />;
+  return <Canvas snapshot={snapshot} online={online} restart={restart} update={update} canvases={canvases} waiting={waiting} oldBun={oldBun} />;
 }
 
 /** What is open, and the view to go back to: `prevCam` laid out beside a sheet `prevSide` wide. */
@@ -94,6 +94,7 @@ function Canvas({
   update,
   canvases,
   waiting,
+  oldBun,
 }: {
   snapshot: CanvasSnapshot;
   online: boolean;
@@ -101,6 +102,8 @@ function Canvas({
   update: AppUpdate | null;
   canvases: CanvasInfo[];
   waiting: Record<string, number>;
+  /** The Bun the server runs on, when it is too old for it (design.md, Builds). */
+  oldBun: string | null;
 }) {
   // ---------------------------------------------------------------- items
   // Local positions win over the snapshot until the server echoes them back.
@@ -1225,6 +1228,7 @@ function Canvas({
           <HelpButton on={helpOn} onClick={() => setHelpOn(!helpOn)} />
           <div className="right">
             {!online && <div className="pill offline">{t.offline}</div>}
+            {oldBun && <OldBunPill version={oldBun} />}
             {online && restart && <RestartPill restart={restart} items={items} />}
             {online && update && restart?.reason !== 'update' && <UpdatePill update={update} />}
             {snapshot.workspaces && <WorkspacesPill pools={snapshot.workspaces} canvas={snapshot.canvas} items={items} />}

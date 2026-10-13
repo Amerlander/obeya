@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmdirSync, rmSync, unlinkSync, watch, writeFile
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { generic } from '../adapters/generic';
-import { readPlanDocs, watchPlanDocs } from './repo';
+import { oldLinuxBun, readPlanDocs, watchPlanDocs } from './repo';
 
 const DOC = '# P\n\n## Workstreams\n\n- [ ] **W1:** One.\n';
 
@@ -27,6 +27,17 @@ describe('readPlanDocs', () => {
     } finally {
       rmSync(repo, { recursive: true, force: true });
     }
+  });
+});
+
+describe('oldLinuxBun', () => {
+  test('is Bun before 1.3.14 on Linux, and nothing elsewhere', () => {
+    expect(oldLinuxBun('linux', '1.3.12')).toBe(true);
+    expect(oldLinuxBun('linux', '1.3.14-canary.1')).toBe(true);
+    expect(oldLinuxBun('linux', '1.3.14')).toBe(false);
+    expect(oldLinuxBun('linux', '1.4.0')).toBe(false);
+    expect(oldLinuxBun('darwin', '1.3.12')).toBe(false);
+    expect(oldLinuxBun('win32', '1.3.12')).toBe(false);
   });
 });
 

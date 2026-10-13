@@ -1139,8 +1139,11 @@ export type ServerMessage =
   | { type: 'event'; event: CardEvent }
   /** A line taken out of the card's log: a comment the owner deleted before it went to the worker. */
   | { type: 'eventGone'; cardId: string; id: number }
-  /** First on every connection: which server process this is, so a page from an earlier one reloads. */
-  | { type: 'hello'; server: string }
+  /**
+   * First on every connection: which server process this is, so a page from an earlier one
+   * reloads; and the version of Bun it runs on when that is too old (`oldLinuxBun`), for the bar.
+   */
+  | { type: 'hello'; server: string; oldBun?: string }
   /** On connect and whenever it changes: the restart Obeya waits with, if any. */
   | { type: 'restart'; restart: PendingRestart | null }
   /** On connect and whenever it changes: the newer version of the app there is to install, if any. */

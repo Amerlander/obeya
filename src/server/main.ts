@@ -46,6 +46,7 @@ import { ShellReports } from './push-key';
 import { headOf, installDependencies, ownCheckout, RESTART, RESTART_FROM_FILE, RESTART_PATIENCE_MS, Restarter, UPDATE, watchOwnCode } from './self-update';
 import { AppUpdates } from './app-update';
 import { COMPILED, resource, SELF, VERSION } from './resources';
+import { oldLinuxBun } from './repo';
 import { serve } from './server';
 import { voiceBackends, WhisperSidecar } from './voice';
 import { VoiceSetup } from './voice-setup';
@@ -284,3 +285,8 @@ for (const c of canvases) {
       `    ${r.ref.id}: ${r.info.path} (${r.adapter.name} adapter; ${r.adapter.workspaces === 'worktrees' ? 'a worktree per card' : `clones: ${r.workspaces.list().map((w) => w.path).join(', ') || 'none (--workspace or --clones)'}`})`,
     );
 }
+// once the deadlock struck, the canvas does not load and cannot show its warning: the log says it too
+if (oldLinuxBun())
+  console.warn(
+    `Obeya: warning: Bun ${Bun.version} is too old; Obeya needs Bun 1.3.14 or later. On Linux this Bun can deadlock a thread of its work pool when a file watch closes, and then the canvas stops loading. Upgrade it with \`bun upgrade\` and start Obeya again.`,
+  );

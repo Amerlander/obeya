@@ -284,14 +284,16 @@ export function reload() {
 
 /**
  * The live canvas: the server pushes a snapshot on connect and after every change, the restart that
- * waits, the newer version of the app there is, and how many cards on each canvas need the owner.
+ * waits, the newer version of the app there is, how many cards on each canvas need the owner, and
+ * the Bun it runs on when that is too old.
  */
-export function useCanvas(): { snapshot: CanvasSnapshot | null; online: boolean; restart: PendingRestart | null; update: AppUpdate | null; waiting: Record<string, number> } {
+export function useCanvas(): { snapshot: CanvasSnapshot | null; online: boolean; restart: PendingRestart | null; update: AppUpdate | null; waiting: Record<string, number>; oldBun: string | null } {
   const [snapshot, setSnapshot] = useState<CanvasSnapshot | null>(null);
   const [online, setOnline] = useState(true);
   const [restart, setRestart] = useState<PendingRestart | null>(null);
   const [update, setUpdate] = useState<AppUpdate | null>(null);
   const [waiting, setWaiting] = useState<Record<string, number>>({});
+  const [oldBun, setOldBun] = useState<string | null>(null);
   useEffect(() => {
     let ws: WebSocket;
     let retry: ReturnType<typeof setTimeout>;
@@ -312,6 +314,7 @@ export function useCanvas(): { snapshot: CanvasSnapshot | null; online: boolean;
         if (msg.type === 'hello') {
           if (server && server !== msg.server) reload();
           server = msg.server;
+          setOldBun(msg.oldBun ?? null);
         } else if (msg.type === 'snapshot') setSnapshot(msg.snapshot);
         else if (msg.type === 'restart') setRestart(msg.restart);
         else if (msg.type === 'update') setUpdate(msg.update);
@@ -345,5 +348,5 @@ export function useCanvas(): { snapshot: CanvasSnapshot | null; online: boolean;
       ws.close();
     };
   }, []);
-  return { snapshot, online, restart, update, waiting };
+  return { snapshot, online, restart, update, waiting, oldBun };
 }

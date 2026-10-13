@@ -183,6 +183,8 @@ button.pill:hover { box-shadow: var(--lift); }
 .pill.offline { background: var(--waiting); color: var(--on-ink); }
 .pill.restart { position: relative; padding: 4px 4px 4px 14px; cursor: default; }
 .pill.restart.going { padding: 7px 14px; cursor: default; }
+.pill.restart.old-bun { padding: 7px 14px; box-shadow: var(--shadow), inset 3px 0 0 var(--waiting); }
+.pill.restart.old-bun .warn { color: var(--waiting); font-weight: 700; }
 .pill.restart .spin { display: inline-block; color: var(--working); font-weight: 700; animation: spin 2.4s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .pill.restart button { border: 0; border-radius: 3px; padding: 4px 11px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;

@@ -290,6 +290,28 @@ export function UpdatePill({ update }: { update: AppUpdate }) {
 }
 
 /**
+ * The Bun the server runs on is too old (on Linux, before 1.3.14): it can deadlock, and then the
+ * canvas stops loading. It stays in the bar for as long as the server runs on it; what to do, on hover.
+ */
+export function OldBunPill({ version }: { version: string }) {
+  return (
+    <div className="pill restart old-bun" id="old-bun">
+      <span className="warn">⚠</span>
+      <span className="say">{t.oldBun.pill(version)}</span>
+      <div className="tip why" role="tooltip">
+        <p>
+          <b>{t.oldBun.title}</b>
+        </p>
+        <p>{t.oldBun.why(version)}</p>
+        <p>
+          <Inline md={t.oldBun.how} />
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Each repository's pool by machine: a dot per clone (solid while its card's worker is at work,
  * pale while the card holds it otherwise), and how many new cards could start now; over it, each
  * machine's slots and the cards that hold its clones.

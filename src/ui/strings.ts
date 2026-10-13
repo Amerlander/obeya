@@ -854,6 +854,12 @@ const de = {
     goingStop: 'Obeya wird beendet …',
     goingUpdate: 'Obeya wird aktualisiert …',
   },
+  oldBun: {
+    pill: (version: string) => `Bun ${version} ist zu alt`,
+    title: 'Obeya braucht Bun 1.3.14 oder neuer.',
+    why: (version: string) => `Bun ${version} kann unter Linux einen seiner Threads blockieren, wenn eine Dateiüberwachung endet. Danach lädt der Canvas nicht mehr.`,
+    how: 'Aktualisiere Bun mit `bun upgrade` und starte Obeya neu.',
+  },
   update: {
     pill: (version: string) => `Update ${version}`,
     install: 'Installieren',
@@ -1824,6 +1830,12 @@ const en: Strings = {
     going: 'Obeya is restarting …',
     goingStop: 'Obeya is shutting down …',
     goingUpdate: 'Obeya is updating …',
+  },
+  oldBun: {
+    pill: (version: string) => `Bun ${version} is too old`,
+    title: 'Obeya needs Bun 1.3.14 or later.',
+    why: (version: string) => `On Linux, Bun ${version} can deadlock one of its threads when a file watch ends. After that the canvas stops loading.`,
+    how: 'Upgrade Bun with `bun upgrade` and start Obeya again.',
   },
   update: {
     pill: (version: string) => `Update ${version}`,

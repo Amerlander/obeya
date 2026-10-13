@@ -20,6 +20,7 @@ import type { MachineSetup } from './machine';
 import type { VoiceSetup } from './voice-setup';
 import { ShellReports } from './push-key';
 import { AppUpdates } from './app-update';
+import { oldLinuxBun } from './repo';
 
 type Req = Request & { params: Record<string, string> };
 
@@ -492,7 +493,7 @@ export function serve(
         const c = byId.get(ws.data.canvas);
         if (!c) return ws.close();
         sockets.get(c.id)!.add(ws);
-        ws.send(JSON.stringify({ type: 'hello', server: started } satisfies ServerMessage));
+        ws.send(JSON.stringify({ type: 'hello', server: started, ...(oldLinuxBun() ? { oldBun: Bun.version } : {}) } satisfies ServerMessage));
         ws.send(JSON.stringify({ type: 'snapshot', snapshot: c.board.snapshot() } satisfies ServerMessage));
         ws.send(JSON.stringify({ type: 'restart', restart: pending(c.id) } satisfies ServerMessage));
         ws.send(JSON.stringify({ type: 'update', update: updates.current() } satisfies ServerMessage));

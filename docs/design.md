@@ -723,7 +723,11 @@ the owner's language (`src/core/locale.ts`).
   1.3.12 on Linux, an `fs.watch` closed while Bun still listed its directory deadlocked a thread
   of Bun's work pool, and every later bundle of a page (the canvas, the panel), which waits for
   that whole pool, hung for good (found 2026-10-13 from the panel's test, which hung on GitHub's
-  runner after the plan-doc watch tests). It runs on a push to `main` that changes code
+  runner after the plan-doc watch tests). `bun start` from a checkout runs on whatever Bun the
+  machine has: on Linux with a Bun before 1.3.14 Obeya still starts, but warns at startup in the
+  log (which stays readable once the deadlock keeps the canvas from loading) and, for as long as it
+  runs on that Bun, with a pill in the bar („Bun 1.3.12 ist zu alt“, on hover what may happen and
+  `bun upgrade`), which the server's `hello` brings to the page (`oldLinuxBun` in `repo.ts`). The build runs on a push to `main` that changes code
   (docs, design, the site, Markdown files and the Pages workflow left out, as in `INERT` of the
   self-update, except that a change to the build workflow itself builds), the installers kept a week as the run's
   artifacts, and on a tag `v<version>`, which must be `package.json`'s: then a draft GitHub
