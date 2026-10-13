@@ -1,5 +1,30 @@
 import { describe, expect, test } from 'bun:test';
-import { blocks } from './markdown';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { blocks, Inline, plain } from './markdown';
+
+const html = (md: string) => renderToStaticMarkup(createElement(Inline, { md }));
+
+describe('inline markdown', () => {
+  test('emphasis with single asterisks, beside bold and underscores', () => {
+    expect(html('Das ist *wichtig*.')).toBe('Das ist <em>wichtig</em>.');
+    expect(html('*a* and **b** and _c_')).toBe('<em>a</em> and <b>b</b> and <em>c</em>');
+    expect(html('*not **this** one*')).toBe('<em>not <b>this</b> one</em>');
+    expect(html('**bold with *em* inside**')).toBe('<b>bold with <em>em</em> inside</b>');
+    expect(html('***both***')).toBe('<b><em>both</em></b>');
+    expect(html('(*quoted*), *two words*!')).toBe('(<em>quoted</em>), <em>two words</em>!');
+  });
+
+  test('asterisks that are not emphasis stay as they are', () => {
+    for (const md of ['5 * 3 = 15', '5 * 3 * 2', 'a*b*c', '* item', '*.ts and *.tsx', '**unclosed', 'a footnote*', '`*code*`'])
+      expect(html(md)).not.toContain('<em>');
+    expect(html('5 * 3 * 2')).toBe('5 * 3 * 2');
+  });
+
+  test('plain text drops the markers, nested ones too', () => {
+    expect(plain('*wichtig* and **bold *em***, `*code*`')).toBe('wichtig and bold em, *code*');
+  });
+});
 
 describe('plan docs as documents', () => {
   test('headings, paragraphs joined across lines, rules, quotes and code', () => {
