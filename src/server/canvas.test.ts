@@ -9,8 +9,14 @@ import { FakeRuntime, noForge, gitRepo } from './testing';
 import { git, HERE } from './workspaces';
 
 let dir: string;
+const dirs: string[] = [];
 let runtime: FakeRuntime;
 let canvas: CanvasRuntime;
+
+/** A fresh `dir`; tests that need an empty one take another, and all of them go after the test. */
+function fresh() {
+  dirs.push((dir = mkdtempSync(join(tmpdir(), 'obeya-canvas-'))));
+}
 
 /** A repository with one plan doc (same path in both). */
 function repo(name: string, title: string) {
@@ -18,7 +24,7 @@ function repo(name: string, title: string) {
 }
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'obeya-canvas-'));
+  fresh();
   const web = repo('web', 'Web');
   const api = repo('api', 'API');
   runtime = new FakeRuntime();
@@ -29,7 +35,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   canvas.shutdown();
-  rmSync(dir, { recursive: true, force: true });
+  for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
 const settle = () => new Promise((r) => setTimeout(r, 5));
@@ -221,7 +227,7 @@ describe('a canvas with several repositories', () => {
 });
 
 test('the home repository stays home when the configuration lists the repositories in another order', () => {
-  dir = mkdtempSync(join(tmpdir(), 'obeya-canvas-'));
+  fresh();
   const store = new Store(':memory:');
   const web = repo('web', 'Web');
   const api = repo('api', 'API');
@@ -272,7 +278,7 @@ test("a repository whose own adapter does not load runs on the generic one, unde
 });
 
 test("the cards' workers run on their own runtime when one is given (a scratch Obeya's idle workers)", async () => {
-  dir = mkdtempSync(join(tmpdir(), 'obeya-canvas-'));
+  fresh();
   const web = repo('web', 'Web');
   const workers = new FakeRuntime();
   canvas.shutdown();
@@ -286,7 +292,7 @@ test("the cards' workers run on their own runtime when one is given (a scratch O
 });
 
 test('a clone registered for a repository must be one of it', () => {
-  dir = mkdtempSync(join(tmpdir(), 'obeya-canvas-'));
+  fresh();
   const web = repo('web', 'Web');
   const api = repo('api', 'API');
   git(dir, 'clone', '--quiet', api, join(dir, 'api-clone'));
@@ -297,14 +303,14 @@ test('a clone registered for a repository must be one of it', () => {
 });
 
 test('canvas ids read well', () => {
-  dir = mkdtempSync(join(tmpdir(), 'obeya-canvas-'));
+  fresh();
   const c = new CanvasRuntime({ name: 'Grüße & Maße', repos: [{ path: repo('g', 'G') }] }, { store: new Store(':memory:'), home: dir, runtime: new FakeRuntime(), forge: noForge });
   expect(c.id).toBe('grusse-masse');
   canvas = c;
 });
 
 test('a single repository keeps its canvas id and bare plan references', () => {
-  dir = mkdtempSync(join(tmpdir(), 'obeya-canvas-'));
+  fresh();
   const only = repo('solo', 'Solo');
   const c = new CanvasRuntime({ repos: [{ path: only }] }, { store: new Store(':memory:'), home: dir, runtime: new FakeRuntime(), forge: noForge });
   expect(c.board.canvas.id).toBe('solo');
@@ -313,7 +319,7 @@ test('a single repository keeps its canvas id and bare plan references', () => {
 });
 
 test('what the owner writes in a card, or says to the Koordinator without one, reaches the learner', async () => {
-  dir = mkdtempSync(join(tmpdir(), 'obeya-canvas-'));
+  fresh();
   const web = repo('web', 'Web');
   canvas.shutdown();
   canvas = new CanvasRuntime({ repos: [{ path: web }] }, { store: new Store(':memory:'), home: dir, runtime, forge: noForge, writingPauseMs: 30 });

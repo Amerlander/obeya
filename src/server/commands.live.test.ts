@@ -5,7 +5,7 @@
 // Claude login and takes about a minute): `OBEYA_LIVE=1 bun test src/server/commands.live.test.ts`.
 
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Board } from './board';
@@ -20,6 +20,11 @@ const machine = process.env.OBEYA_MACHINE_CLAUDE_CONFIG_DIR;
 const setConfig = (dir: string | undefined) => (dir === undefined ? delete process.env.CLAUDE_CONFIG_DIR : (process.env.CLAUDE_CONFIG_DIR = dir));
 beforeAll(() => void (process.env.OBEYA_LIVE && setConfig(machine)));
 afterAll(() => void setConfig(scratch));
+
+// each Koordinator works in a directory of its own, removed once all have run
+const cwds: string[] = [];
+const cwd = () => cwds[cwds.push(mkdtempSync(join(tmpdir(), 'obeya-live-'))) - 1]!;
+afterAll(() => cwds.forEach((d) => rmSync(d, { recursive: true, force: true })));
 
 const DEMO = JSON.stringify({ dir: '/d', chapters: [], question: 'Alte Projekte nachtragen?' });
 const STATES: Record<string, Record<string, string>> = {
@@ -76,7 +81,7 @@ async function hear(state: string, text: string, request: string | null, typed: 
   // what the session said: a command not understood shows why (not logged in, an API error)
   const said: string[] = [];
   const runtime: AgentRuntime = { start: (spec, ...rest) => sdkRuntime.start({ ...spec, onEvent: (e) => (e.type === 'text' && said.push(e.text), spec.onEvent(e)) }, ...rest) };
-  const k = new Commander({ board, runtime, cwd: mkdtempSync(join(tmpdir(), 'obeya-live-')), execute: (c) => void executed.push(c), delayMs: 1 });
+  const k = new Commander({ board, runtime, cwd: cwd(), execute: (c) => void executed.push(c), delayMs: 1 });
   const heard = request ? await k.forward(card.id, request, { text, spoken: !typed }) : await k.hear(text, { card: card.id }, [], typed ? { typed: true } : {});
   if (heard.token) k.arm(heard.token);
   await new Promise((r) => setTimeout(r, 20));
@@ -113,7 +118,7 @@ async function newTask(text: string, language: 'de' | 'en') {
   board.create({ title: 'Round the total up', x: 0, y: 0 });
   const executed: Command[] = [];
   const runtime = withAgentSetting(sdkRuntime, () => AGENT_DEFAULTS.koordinator);
-  const k = new Commander({ board, runtime, cwd: mkdtempSync(join(tmpdir(), 'obeya-live-')), execute: (c) => void executed.push(c), delayMs: 1 });
+  const k = new Commander({ board, runtime, cwd: cwd(), execute: (c) => void executed.push(c), delayMs: 1 });
   const heard = await k.hear(text, {});
   if (heard.token) k.arm(heard.token);
   await new Promise((r) => setTimeout(r, 20));
@@ -150,7 +155,7 @@ async function noCard(text: string, typed: boolean) {
   board.create({ title: 'Zählerstände nachtragen', x: 0, y: 0 });
   const executed: Command[] = [];
   const runtime = withAgentSetting(sdkRuntime, () => AGENT_DEFAULTS.koordinator);
-  const k = new Commander({ board, runtime, cwd: mkdtempSync(join(tmpdir(), 'obeya-live-')), execute: (c) => void executed.push(c), delayMs: 1 });
+  const k = new Commander({ board, runtime, cwd: cwd(), execute: (c) => void executed.push(c), delayMs: 1 });
   const heard = await k.hear(text, {}, [], typed ? { typed: true } : {});
   if (heard.token) k.arm(heard.token);
   await new Promise((r) => setTimeout(r, 20));

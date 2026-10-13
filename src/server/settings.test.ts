@@ -1,5 +1,5 @@
-import { expect, test } from 'bun:test';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { afterEach, expect, test } from 'bun:test';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { languageOf } from '../core/locale';
@@ -7,6 +7,10 @@ import { AGENT_DEFAULTS, type AgentSetting } from '../core/types';
 import { withAgentSetting } from './runtime';
 import { agentSetting, agentsView, pushKeyChoice, saveAgents, saveLanguage, savePushKey, SETTINGS_FILE, systemLanguage } from './settings';
 import { FakeRuntime } from './testing';
+
+const homes: string[] = [];
+const scratchHome = () => homes[homes.push(mkdtempSync(join(tmpdir(), 'obeya-settings-'))) - 1]!;
+afterEach(() => homes.splice(0).forEach((h) => rmSync(h, { recursive: true, force: true })));
 
 test('a locale names a language Obeya speaks, or none', () => {
   expect(languageOf('de_DE.UTF-8')).toBe('de');
@@ -31,7 +35,7 @@ test('the system language: the Mac interface first, else the locale variables in
 });
 
 test("the model and effort per group of agents: preset, chosen one group at a time beside the language, the file keeping only what differs", () => {
-  const home = mkdtempSync(join(tmpdir(), 'obeya-settings-'));
+  const home = scratchHome();
   expect(agentsView(home).agents).toEqual({
     koordinator: { model: 'opus', effort: 'medium' },
     worker: { model: 'opus', effort: 'high' },
@@ -76,7 +80,7 @@ test("an agent of a group starts with the group's model and effort, asked at eve
 });
 
 test('the push-to-talk key in another app: the default until chosen, beside the other settings, which stay', () => {
-  const home = mkdtempSync(join(tmpdir(), 'obeya-settings-'));
+  const home = scratchHome();
   expect(pushKeyChoice(home, 'darwin')).toEqual({ key: 'AltRight', chosen: null, default: 'AltRight' });
   saveLanguage(home, { language: 'en' });
   expect(savePushKey(home, { key: 'Shift+Control+Space' }, 'darwin')).toEqual({ key: 'Control+Shift+Space', chosen: 'Control+Shift+Space', default: 'AltRight' });
