@@ -792,11 +792,12 @@ describe("the app's push-to-talk key in another app", () => {
     expect((await fetch(new URL('/api/push-to-talk', server.url), { method: 'PUT', body: JSON.stringify({ key: 'F13' }) })).status).toBe(404);
   });
 
-  // Bun bundles the page on its first request. On GitHub's Linux runner the request hangs (not
-  // only in this test's 30 s) after the earlier test files; skipped there until the cause is found.
-  test.skipIf(process.platform === 'linux')('the panel is served beside the canvas', async () => {
+  // Bun bundles the page on its first request, on its work pool. Before 1.3.14, closing an
+  // fs.watch on Linux while Bun still listed the directory deadlocked a thread of that pool, and
+  // the bundle then waited for it forever: this request hung after the plan-doc watch tests.
+  test('the panel is served beside the canvas', async () => {
     const res = await fetch(new URL('/panel', server.url));
     expect(res.status).toBe(200);
     expect(await res.text()).toContain('lines');
-  }, 30_000);
+  });
 });

@@ -719,7 +719,11 @@ the owner's language (`src/core/locale.ts`).
   its own (macOS arm64 and x64, Windows x64, Linux x64 and arm64, the AppImage on Ubuntu 22.04
   for its glibc), with `scripts/build-app.ts`, and checks the compiled server there with
   `scripts/check-binary.ts`; `bun run typecheck` and `bun test` run beside it on Linux (with uv
-  and ffmpeg, which the demo voice's tests use). It runs on a push to `main` that changes code
+  and ffmpeg, which the demo voice's tests use). Builds and tests use Bun 1.3.14 or later: in
+  1.3.12 on Linux, an `fs.watch` closed while Bun still listed its directory deadlocked a thread
+  of Bun's work pool, and every later bundle of a page (the canvas, the panel), which waits for
+  that whole pool, hung for good (found 2026-10-13 from the panel's test, which hung on GitHub's
+  runner after the plan-doc watch tests). It runs on a push to `main` that changes code
   (docs, design, the site, Markdown files and the Pages workflow left out, as in `INERT` of the
   self-update, except that a change to the build workflow itself builds), the installers kept a week as the run's
   artifacts, and on a tag `v<version>`, which must be `package.json`'s: then a draft GitHub
