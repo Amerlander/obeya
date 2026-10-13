@@ -127,13 +127,16 @@ h1, h2, .cfg-head h3, .p-title, .project > .head .ttl, .timeline .a-ttl { font-f
 .card.idea-dropped .ttl { text-decoration: line-through; text-decoration-color: var(--idea); text-decoration-thickness: 1.5px; }
 /* the moving line: a pencil stroke being drawn, again and again */
 .card.s-idea.thinking .state::after, .card.s-proposal.thinking .state::after, .card.underway .state::after,
-.card.s-working .state::after, .card.s-waiting.answering .state::after { content: ""; width: 36px; height: 2px;
+.card.s-working .state::after, .card.s-waiting.answering .state::after, .card.finishing .state::after { content: ""; width: 36px; height: 2px;
   background: linear-gradient(90deg, var(--c) 0 50%, transparent 50%) 0 0 / 200% 100% no-repeat,
     color-mix(in srgb, var(--c) 22%, transparent);
   animation: draw 1.6s cubic-bezier(.5,0,.3,1) infinite; }
 @keyframes draw { 0% { background-position: 100% 0; } 55% { background-position: 0 0; } 100% { background-position: -100% 0; } }
 /* done: the card has gone a little yellow and been pushed back */
 .card.s-live, .card.s-done { opacity: .74; background-color: color-mix(in srgb, var(--live) 14%, var(--card)); }
+/* its agent still at work after the landing: the yellowed stock, but awake, its state line in the working colour */
+.card.finishing { opacity: 1; }
+.card.finishing .state, .p-state.finishing { --c: var(--working); }
 .card .landed-part { color: var(--approved); border: 1px solid color-mix(in srgb, var(--approved) 45%, transparent); border-radius: 2px; padding: 0 5px; font-weight: 500; }
 .card.s-live .ttl, .card.s-done .ttl { font-weight: 500; }
 /* a proposal is a card only pencilled in: no stock yet, a dashed outline */

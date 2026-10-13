@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useRef, useState } from 'react';
 import { type Bounds, shapeOf } from '../core/layout';
-import { answering, type AppUpdate, type CanvasInfo, type ClonePool, finished, type Item, needsYou, type PendingRestart, type PoolHost, type ProjectHistory } from '../core/types';
+import { answering, type AppUpdate, type CanvasInfo, type ClonePool, finished, finishingUp, type Item, needsYou, type PendingRestart, type PoolHost, type ProjectHistory } from '../core/types';
 import { api } from './api';
 import type { Cam } from './camera';
 import type { Shape } from './groups';
@@ -85,6 +85,7 @@ export const CardView = memo(
       item.idea && needsYou(item) && 'your-turn',
       underway && 'underway',
       answering(item) && 'answering',
+      finishingUp(item) && 'finishing',
       item.queue && 'queued', dep && `dep-${dep}`, lifted && 'lifted', dragging && 'dragging', pop && 'pop'].filter(Boolean).join(' ');
     return (
       <div

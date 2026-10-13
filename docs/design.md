@@ -1001,7 +1001,8 @@ the owner's language (`src/core/locale.ts`).
     reads as a band from afar). No ruled lines. The owner's turn is an orange frame and a pushpin
     with "!" that pulses; an idea is on rose-tinted stock; a proposal is only pencilled in (a dashed
     outline, no stock); a queued card's rule is dashed; done and live cards fade and go slightly
-    yellow. Under the pointer a card lifts a little; dragged, it tilts as if held in the hand. The
+    yellow (not while their agent still works after the landing: then only their state line is in
+    the working ink, with the moving line). Under the pointer a card lifts a little; dragged, it tilts as if held in the hand. The
     moving line beside "at work" is a pencil stroke drawn again and again.
   - *Inks* (light / dark): planned `#a0978a` / `#8a8274` pencil grey; working `#1d5fe0` /
     `#5b95ff` clear blue; waiting for the owner `#f27405` / `#ff8a1c` strong orange (frame, pin,
@@ -1281,7 +1282,7 @@ the owner's language (`src/core/locale.ts`).
   reads their state, checks and comments.
 - **After landing** — the worker is told its work is on main (or that its PR was merged) and may
   finish what remains, in its workspace, which stays at what landed until then (the card is `live`,
-  "Agent erledigt den Rest"; notes reach it, "Anhalten" ends it). Ending a turn with nothing to wait
+  "Live · Agent arbeitet"; notes reach it, "Anhalten" ends it). Ending a turn with nothing to wait
   for ends its session and removes worktree and branch (a clone is free again). A turn that ends
   while a message from Obeya is still to come is not that turn: work approved while its worker
   ends a reply (the owner said yes to its question and approved at once) lands while the reply's
@@ -1310,7 +1311,17 @@ the owner's language (`src/core/locale.ts`).
   waits for the limit as while the worker works (status line, not busy, told to go on after the
   reset), then the worker finishes what remained. Before, it too ended the card. On the canvas, a
   card finishing shows its status line as one at work does; before (until 2026-10), only the
-  detail view showed it.
+  detail view showed it. It looks awake: the live stock and the "Live" label, but not faded, its
+  state line in the working ink with the moving line ("Live · Agent arbeitet", also in the detail
+  view; "Erledigt · Agent arbeitet" for a `done` card, "Live · Agent antwortet" for a follow-up), and
+  a workstream stays at the size of a task instead of shrinking to a chip, which hides state and
+  status line; once its agent is done, it fades as live. Before (until 2026-10-13), it faded at the
+  landing like a finished card, its state line in the pale live ink ("Agent erledigt den Rest",
+  which suggested a small remainder, where a release still has tag, build and uploads to do), and
+  a workstream became a chip. Rejected: the stock and rule of a card at work with an "on main"
+  stamp (it sorted the card with those at work), and several landings per card (a second change
+  would have no demo and no approval of its own; a code fix during a release goes through a card of
+  its own).
   A follow-up on a finished card whose worker has ended goes the same way: what the owner says on
   the card (typed in its field, or spoken with it open: straight to that agent, as on a card at
   work) resumes the worker's session in a fresh workspace on the card's branch, where main may have
@@ -2371,7 +2382,7 @@ the repository; the copy on the project is only for the archive).
   branch; see Repo adapter), not in Obeya's, which is open source: until 2026-10-05 adapters lived
   here and were picked by the `origin` URL; only Obeya's own (`src/adapters/obeya.ts`) still is.
   The generic one covers any repo with `docs/plan/`.
-- A card has one fixed size; a delivered workstream shrinks to a chip, a project wraps its
+- A card has one fixed size; a delivered workstream shrinks to a chip once its agent is done, a project wraps its
   children, and a workstream cannot be dragged out of its project. New projects are placed in a
   grid below the existing ones. A proposal or follow-up goes below the card it came from, or, when
   something is in the way there (for a workstream: its own project), to the nearest spot clear of

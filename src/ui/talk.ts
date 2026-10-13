@@ -1,7 +1,7 @@
 // A card's conversation, from its events.
 
 import { LANGUAGES } from '../core/locale';
-import { answering, askable, type CardEvent, type Demo, finished, formatQuestion, type Item, type Question } from '../core/types';
+import { answering, askable, type CardEvent, type Demo, finishingUp, formatQuestion, type Item, type Question } from '../core/types';
 import type { Field } from './api';
 
 /** One entry of the conversation: a message, with how the agent got to it folded under it, or a small line. */
@@ -207,7 +207,7 @@ export const agentWorks = (i: Pick<Item, 'state' | 'need' | 'idea' | 'proposal' 
     ? !!i.idea.thinking
     : i.state === 'proposal'
       ? !!i.proposal?.revising
-      : i.state === 'working' || answering(i) || (!!i.finishing && finished(i.state));
+      : i.state === 'working' || answering(i) || finishingUp(i);
 
 /**
  * Whether the Koordinator still reads what the owner said on the card: their words stand in the log
@@ -230,7 +230,7 @@ type Laid = Pick<Item, 'state' | 'branch' | 'prototypeEnd' | 'demo' | 'pr' | 'la
  * what remains after the landing, a decided idea's brief.
  */
 export const result = (i: Laid) =>
-  !!i.demo || i.state === 'inPr' || (!!i.pr && i.state === 'waiting') || !!i.landedPart || (!!i.finishing && finished(i.state)) || (i.brief !== undefined && (!!i.brief.trim() || !!i.prototypes?.length));
+  !!i.demo || i.state === 'inPr' || (!!i.pr && i.state === 'waiting') || !!i.landedPart || finishingUp(i) || (i.brief !== undefined && (!!i.brief.trim() || !!i.prototypes?.length));
 
 /** A card laid out with its conversation beside what it is about (`Split` in detail.tsx): an idea, a proposal, a task an agent worked on once there is a result. */
 export const split = (i: Laid) => i.state === 'idea' || i.state === 'proposal' || ((!!i.prototypeEnd || worked(i)) && result(i));

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { type Bounds, freeSpotNear, GAP } from './layout';
+import { type Bounds, freeSpotNear, GAP, shapeOf } from './layout';
 
 const clear = (a: Bounds, b: Bounds) => a.x + a.w + GAP <= b.x || b.x + b.w + GAP <= a.x || a.y + a.h + GAP <= b.y || b.y + b.h + GAP <= a.y;
 
@@ -24,5 +24,25 @@ describe('freeSpotNear', () => {
     ];
     const at = freeSpotNear({ x: 500, y: 400 }, [300, 136], taken);
     for (const b of taken) expect(clear({ ...at, w: 300, h: 136 }, b)).toBe(true);
+  });
+});
+
+describe('shapeOf', () => {
+  const ws = { kind: 'task' as const, parent: 'p' };
+
+  test('a delivered workstream shrinks to a chip', () => {
+    expect(shapeOf({ ...ws, state: 'live' })).toBe('chip');
+    expect(shapeOf({ ...ws, state: 'done' })).toBe('chip');
+  });
+
+  test('a workstream whose agent still works after the landing stays at the size of a task', () => {
+    expect(shapeOf({ ...ws, state: 'live', finishing: true })).toBe('task');
+    expect(shapeOf({ ...ws, state: 'done', finishing: true })).toBe('task');
+    // once its agent is done, it shrinks
+    expect(shapeOf({ ...ws, state: 'live', finishing: false })).toBe('chip');
+  });
+
+  test('a card on its own stays a task', () => {
+    expect(shapeOf({ kind: 'task', state: 'live' })).toBe('task');
   });
 });

@@ -17,6 +17,8 @@ export type CardState = (typeof STATES)[number];
 
 /** A card whose work is over: `live` once it landed, `done` when it needed no change to the code (a demo, an analysis). */
 export const finished = (s: CardState) => s === 'live' || s === 'done';
+/** A finished card whose agent still works: after the landing, or answering a follow-up question. */
+export const finishingUp = (i: Pick<Item, 'state' | 'finishing'>) => !!i.finishing && finished(i.state);
 
 /**
  * A finished card an agent worked on, on the canvas, with no agent on it now: what the owner asks

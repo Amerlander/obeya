@@ -1,6 +1,6 @@
 // Card sizes and default placement. Cards keep a fixed, readable size; a project wraps its children.
 
-import { finished, type Item } from './types';
+import { finished, finishingUp, type Item } from './types';
 
 export type Shape = 'task' | 'chip' | 'project';
 
@@ -18,14 +18,17 @@ const TASKS_PER_ROW = 3;
 export const GAP = 20;
 const PROJECT_GAP = 60;
 
-/** A delivered workstream shrinks to a chip; every other card shows at the size of a task. */
-export function shapeOf(i: Pick<Item, 'kind' | 'state' | 'parent'>): Shape {
+/**
+ * A delivered workstream shrinks to a chip once its agent is done; every other card shows at the
+ * size of a task, so its state and status line show.
+ */
+export function shapeOf(i: Pick<Item, 'kind' | 'state' | 'parent' | 'finishing'>): Shape {
   if (i.kind === 'project') return 'project';
-  if (i.parent && finished(i.state)) return 'chip';
+  if (i.parent && finished(i.state) && !finishingUp(i)) return 'chip';
   return i.kind;
 }
 
-export function projectSize(children: Pick<Item, 'kind' | 'state' | 'parent' | 'x' | 'y'>[]): [number, number] {
+export function projectSize(children: Pick<Item, 'kind' | 'state' | 'parent' | 'finishing' | 'x' | 'y'>[]): [number, number] {
   let w = PROJECT_MIN[0];
   let h = PROJECT_MIN[1];
   for (const c of children) {

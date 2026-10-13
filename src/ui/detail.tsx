@@ -1,7 +1,7 @@
 // The unfolded card: what it is, what its worker does, and what the owner decides.
 
 import { Fragment, type ReactNode, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { agentListens, askable, buildableOn, type CardAction, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, EXPORT_HTML_MAX, finished, type Item, type Mock, type NextStep, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, type Spot } from '../core/types';
+import { agentListens, askable, buildableOn, type CardAction, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, EXPORT_HTML_MAX, finished, finishingUp, type Item, type Mock, type NextStep, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, type Spot } from '../core/types';
 import { mockPage } from '../core/frame';
 import { answerText, toggle } from './answer';
 import { ApiError, api, at, type Field, holdRestart, onCardEvent, onCardEventGone } from './api';
@@ -263,7 +263,7 @@ export function Detail(p: Props) {
     <>
       {kind && <div className="p-kind">{kind}</div>}
       {editable ? <ManualTitle item={item} onEdit={p.onEdit} /> : <div className="p-title">{item.title ? <Inline md={item.title} /> : t.titlePlaceholder}</div>}
-      <div className="p-state">
+      <div className={finishingUp(item) ? 'p-state finishing' : 'p-state'}>
         ● {stateLabel(item)}
         {item.statusLine && (item.state === 'working' || item.state === 'inPr' || item.finishing) && <span className="p-status"> · {item.statusLine}</span>}
         {item.archivedAt && <span className="p-status"> · {t.archive.when(new Date(item.archivedAt))}</span>}
@@ -464,7 +464,7 @@ function IdeaView({ item, act, run, onDelete, onTell }: { item: Item; act: (a: C
   const btn = (step: NextStep['step']) => (next ? (next.step === step ? 'btn primary suggested' : 'btn') : step === 'build' ? 'btn primary' : 'btn');
   return (
     <>
-      <div className="p-state">
+      <div className={finishingUp(item) ? 'p-state finishing' : 'p-state'}>
         ● {stateLabel(item)}
         {idea.thinking && <span className="p-status"> · {t.author.explorer} {t.idea.thinking}</span>}
         {item.archivedAt && <span className="p-status"> · {t.archive.when(new Date(item.archivedAt))}</span>}
