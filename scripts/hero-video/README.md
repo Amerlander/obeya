@@ -12,6 +12,9 @@ demo, the approval landing it on main. About two minutes, in English, in the own
 - `render.ts`: renders in the owner's ElevenLabs voice (`eleven_v4`, which reads the audio tags in
   square brackets), with the key from `.voice/elevenlabs.key` of the main checkout (gitignored).
 
+Every release renders it again and puts it out with the release (`docs/release.md` § "A release",
+which the project skill `.claude/skills/release/` goes through).
+
 ## Render
 
 ```sh
@@ -55,6 +58,7 @@ workflow fetches into `site/media/` before it publishes. One call puts a render 
 ```sh
 node scripts/hero-video/publish.ts            # uploads demo.mp4, captions.vtt and chapters.vtt as hero.mp4, hero.vtt and hero.chapters.vtt, then runs the Pages workflow
 node scripts/hero-video/publish.ts --poster   # also takes the poster and the README's picture again from the new video
+node scripts/hero-video/publish.ts --poster-only  # only takes the poster and the README's picture; uploads nothing (a release, before its approval)
 ```
 
 It reads the render from `~/demos/obeya-hero/` (or `HERO_OUT`), creates the release the first

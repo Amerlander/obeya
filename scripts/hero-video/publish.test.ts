@@ -23,14 +23,18 @@ case "$1 $2" in
   "release view") exit $FAKE_RELEASE_MISSING;;
 esac
 `, { mode: 0o755 });
+// uv runs poster.py, which takes the poster from the video
+fs.writeFileSync(path.join(bin, 'uv'), `#!/bin/sh
+echo "uv $*" >> "${log}"
+`, { mode: 0o755 });
 
-function publish(releaseMissing: boolean) {
+function publish(releaseMissing: boolean, ...args: string[]) {
   fs.rmSync(log, { force: true });
-  const r = Bun.spawnSync(['node', path.join(import.meta.dirname, 'publish.ts')], {
+  const r = Bun.spawnSync(['node', path.join(import.meta.dirname, 'publish.ts'), ...args], {
     env: { ...process.env, GH_TOKEN: 'from-the-shell', PATH: `${bin}${path.delimiter}${process.env.PATH}`, HERO_OUT: out, FAKE_RELEASE_MISSING: releaseMissing ? '1' : '0' },
   });
   expect(r.exitCode).toBe(0);
-  return fs.readFileSync(log, 'utf8').replaceAll(/\/\S*\/hero\./g, 'hero.').trim().split('\n');
+  return fs.readFileSync(log, 'utf8').replaceAll(/\/\S*\/hero\./g, 'hero.').replaceAll(/\/\S*\/(?=[\w-]+\.(py|mp4|jpg))/g, '').trim().split('\n');
 }
 
 test.skipIf(process.platform === 'win32')('replaces the assets of the release, then runs the Pages workflow, as sadilek', () => {
@@ -51,4 +55,8 @@ test.skipIf(process.platform === 'win32')('creates the release when it is missin
   // a pre-release, so that it never becomes the latest release, whose installers the README links
   expect(calls[2]).toEndWith('--prerelease --latest=false');
   expect(calls.at(-1)).toBe('[token-of-sadilek] workflow run pages.yml --repo sadilek/obeya');
+});
+
+test.skipIf(process.platform === 'win32')('--poster-only takes the poster and the README\'s picture, and uploads nothing', () => {
+  expect(publish(false, '--poster-only')).toEqual(['uv run --with pillow python poster.py demo.mp4 hero-poster.jpg video.jpg']);
 });

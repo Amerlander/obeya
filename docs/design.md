@@ -750,6 +750,16 @@ the owner's language (`src/core/locale.ts`).
   Windows and Linux are not signed: the release notes say how to check a download against
   `SHA256SUMS`, and the site and the README what SmartScreen shows. The maintainer's steps
   (agreement, certificate, API key, the updater's key, a release) are in `docs/release.md`.
+  "Mach ein Release" is the project skill `.claude/skills/release/`, which every Claude session in
+  this repository has, on a card or in a terminal: it goes through the steps of `docs/release.md`
+  § "A release" in their order and holds only what to judge and where the owner comes in.
+  `scripts/release-status.ts` prints what that is decided from (the last version tag and the
+  commits since, the version to propose, how far GitHub's main is behind, the latest release and
+  `site-media`, the site's video against the last UI commit, the build's secrets) and, with
+  `draft <tag>`, whether the build's draft holds everything. Every release renders the hero video
+  again and takes the site's screenshots again from that render; the card's demo is the new video,
+  so the owner watches it and approves the release in one step. After the landing the worker pushes
+  `main`, tags, watches the build, checks the draft and uploads the video; the owner publishes.
   Notarised on the owner's Mac and on GitHub's runners for both Macs (2026-10-09): Apple
   accepted Bun's binary with the JIT entitlements; Apple answered within 35–40 s.
 - **App updates** — the app updates itself from GitHub Releases through Tauri's updater
@@ -2504,6 +2514,13 @@ the repository; the copy on the project is only for the archive).
 - Workers are told what happened, not what to do next: they are full agents and judge the next
   step themselves (re-rendering a demo, say). Protocol stays where Obeya depends on it: hand over
   with `ready_for_review`, ask with `ask`, report the PR with `pr_opened`.
+- A release is a project skill with a status script, not a script alone and not left to each
+  session (2026-10-13): the steps were spread over three documents, and v0.1.0 ran into three
+  problems nobody had written down (GitHub's main 35 commits behind, `site-media` the latest
+  release, the tag pushed by hand). Checking the narration against the UI, looking at the stills
+  and judging the draft need an agent; what it decides from is the script's. Every release
+  renders the video again, stale or not: almost every release changes the UI. Publishing stays the
+  owner's click, since it reaches every installed app.
 - Landed work's worker keeps its workspace and session until it is done, instead of ending with
   the approval: what a change needs after it is on main (a migration against the running Obeya)
   is done by the agent that knows the change. A landing costs one short worker turn for it.

@@ -8,18 +8,61 @@ packages are not signed, and the release lists the SHA-256 of every file in `SHA
 
 ## A release
 
-1. Set the version in `package.json` (the app, its settings and the release take it from there),
-   commit it on `main`.
-2. Tag the commit `v<version>` and push the tag. The tag must be the version of `package.json`,
+Every release takes the site along: the hero video is rendered again from the Obeya being
+released, and the site's screenshots are taken again with it. When the owner says "Mach ein
+Release", the project skill `.claude/skills/release/SKILL.md` goes through these steps in this
+order, on an Obeya card or in a terminal; it adds when to ask the owner and what to look at.
+The scripts that talk to GitHub act as the account `sadilek` themselves (with its gh login,
+without switching the account gh has active).
+
+1. Where things stand: `bun scripts/release-status.ts` prints the last version tag, the commits
+   since then that change what runs (the release's notes will be their subjects), the version to
+   propose (the next minor one while the version is 0.x), how far GitHub's `main` is behind, the
+   latest release and whether `site-media` is still a pre-release, when the site's video went up
+   next to the last commit to `src/ui`, and whether the build's secrets are there. It ends with what
+   stands in the way and exits with 1 then. Two of its checks come from v0.1.0, where GitHub's
+   `main` was 35 commits behind and `site-media` was the latest release.
+2. The narration (`scripts/hero-video/narration.ts`), read against the UI being released: a
+   sentence that no longer holds is reworded before the render. Every changed sentence costs
+   ElevenLabs credits; the others come from the clip cache in the render's `.work/`, so the render
+   goes to its default directory `~/demos/obeya-hero/`, not a new one.
+3. The video, rendered whole from the release's code, with a real agent, about ten minutes
+   (`scripts/hero-video/README.md`), and its stills checked for the three failures the README
+   names. Then from the same render, in the release's checkout:
+   - the site's screenshots, `bun scripts/site-shots.ts --demo <dir>` with the Tipjar demo the
+     render's agent left (the newest `~/demos/tipjar-split-the-bill*`), into `site/img/`;
+   - the poster and the README's picture of the video, `node scripts/hero-video/publish.ts --poster-only`
+     (it uploads nothing);
+   - a copy of `demo.mp4`, `captions.vtt`, `chapters.vtt` and `review/` in `~/demos/obeya-v<version>/`,
+     so that what goes out in step 8 is the video that was looked at, even if the hero video is
+     rendered again meanwhile.
+4. The version in `package.json` (the app, its settings and the release take it from there),
+   committed with the poster, the README's picture and the screenshots. Landing it restarts a
+   running Obeya (`package.json` counts as code).
+5. `git push origin main`. The tag's commit has to be on GitHub, and the README and the site
+   come from `main`.
+6. `git tag v<version> <commit>` on the commit with the version, and `git push origin v<version>`:
+   `git push` alone pushes no tag (v0.1.0's was pushed by hand later). The tag must be the version of `package.json`,
    else the run makes no release (its first check fails at once). The build workflow builds every platform, checks them, signs and
    notarises the Mac apps (Apple answers within a minute or so) and makes a draft release with the
    installers, the updates and their signatures, `SHA256SUMS`, `latest.json` and notes from the
-   commits since the tag before.
-3. Read the draft and publish it as the latest release ("Set as the latest release" stays
-   ticked). The README's and the site's download links go to the latest release; installed apps
+   commits since the tag before. A run takes about ten minutes.
+7. The run and the draft: the run of the build workflow for the tag (`gh run list --repo
+   sadilek/obeya --workflow build.yml --branch v<version>`, then `gh run watch <id>`), then
+   `bun scripts/release-status.ts draft v<version>`, which checks that the draft holds every
+   installer, update and signature, and a `latest.json` of the version that names every platform,
+   and prints the notes. A run that fails on the Macs with HTTP 403 needs the owner to accept
+   Apple's agreement (Signing the Mac apps).
+8. The video: `HERO_OUT=~/demos/obeya-v<version> node scripts/hero-video/publish.ts` uploads it with
+   its captions and chapters and runs the Pages workflow, which publishes the poster and the
+   screenshots pushed in step 5 along with it.
+9. The owner reads the draft and publishes it as the latest release ("Set as the latest release"
+   stays ticked). Publishing reaches every installed app, so that click is the owner's. The README's
+   and the site's download links go to the latest release; installed apps
    find it at their next start or within six hours, and offer it in their bar. The notes in
    `latest.json` (what the bar shows on hover) are the generated ones, whatever the release's text
-   says after an edit.
+   says after an edit. Afterwards `bun scripts/release-status.ts` names the new version as the
+   latest release.
 
 The release `site-media` holds the site's video (`scripts/hero-video/`), not a version: it is a
 pre-release, so it never becomes the latest release, and its tag does not count as the tag before.

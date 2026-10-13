@@ -95,6 +95,9 @@ const git = (cwd: string, ...args: string[]) => {
   return r.exitCode === 0 ? r.stdout.toString().trim() : null;
 };
 
+/** The paths of the commits that change what runs, as `git log -- <these>` takes them: not docs or the site (as INERT in src/server/self-update.ts). */
+export const RUNS = ['.', ':!docs', ':!design', ':!site', ':!.github', ':!*.md'];
+
 /**
  * The release's notes: one line per commit since the version tag before `tag` that changes what
  * runs. Other tags (`site-media`, which holds the site's video) do not count; the first release
@@ -103,8 +106,7 @@ const git = (cwd: string, ...args: string[]) => {
 export function notes(cwd: string, tag: string): string {
   const before = git(cwd, 'describe', '--tags', '--abbrev=0', '--match', 'v[0-9]*', `${tag}^`);
   if (!before) return '- The first release.\n';
-  // as INERT in src/server/self-update.ts: docs, the site and the workflows change nothing that runs
-  const subjects = git(cwd, 'log', '--no-merges', '--format=%s', `${before}..${tag}`, '--', '.', ':!docs', ':!design', ':!site', ':!.github', ':!*.md') ?? '';
+  const subjects = git(cwd, 'log', '--no-merges', '--format=%s', `${before}..${tag}`, '--', ...RUNS) ?? '';
   const lines = subjects.split('\n').filter(Boolean);
   return lines.length ? lines.map((l) => `- ${l}`).join('\n') + '\n' : '- Small fixes.\n';
 }
