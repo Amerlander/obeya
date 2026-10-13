@@ -792,9 +792,10 @@ describe("the app's push-to-talk key in another app", () => {
     expect((await fetch(new URL('/api/push-to-talk', server.url), { method: 'PUT', body: JSON.stringify({ key: 'F13' }) })).status).toBe(404);
   });
 
+  // Bun bundles the page on its first request: on a busy CI runner that took over 5 s
   test('the panel is served beside the canvas', async () => {
     const res = await fetch(new URL('/panel', server.url));
     expect(res.status).toBe(200);
     expect(await res.text()).toContain('lines');
-  });
+  }, 30_000);
 });
