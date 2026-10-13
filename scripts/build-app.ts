@@ -70,6 +70,20 @@ function run(cmd: string[], cwd = ROOT, env: Record<string, string> = {}) {
   if (r.exitCode !== 0) fail(`${cmd[0]} failed (exit ${r.exitCode})`);
 }
 
+/** `run`, tried again after a pause when it fails: stapler fetches the ticket from Apple's CloudKit,
+ * which now and then drops the connection for a quarter of an hour (NSURLErrorDomain -1005, the
+ * Intel Mac runner twice for v0.2.0, 2026-10-13), and stapling or validating again is harmless. */
+function persist(cmd: string[], pauses = [30, 60, 120, 240, 300]) {
+  for (const pause of pauses) {
+    console.log(`$ ${cmd.join(' ')}`);
+    const r = Bun.spawnSync(cmd, { cwd: ROOT, stdout: 'inherit', stderr: 'inherit' });
+    if (r.exitCode === 0) return;
+    console.warn(`build-app: ${cmd[0]} failed (exit ${r.exitCode}), again in ${pause} s`);
+    Bun.sleepSync(pause * 1000);
+  }
+  run(cmd);
+}
+
 /** What `cmd` prints, failing with what it said when it fails. */
 function output(cmd: string[], cwd = ROOT): string {
   const r = Bun.spawnSync(cmd, { cwd, stdout: 'pipe', stderr: 'pipe' });
@@ -160,8 +174,8 @@ function notarise() {
     // the DMG's ticket covers the app inside it, so the app beside it (there when the updater's
     // archive is made of it; Tauri removes it after a DMG alone) staples from it too
     for (const file of [...(dmg ? [submitted] : []), ...(existsSync(app) ? [app] : [])]) {
-      run(['xcrun', 'stapler', 'staple', file]);
-      run(['xcrun', 'stapler', 'validate', file]);
+      persist(['xcrun', 'stapler', 'staple', file]);
+      persist(['xcrun', 'stapler', 'validate', file]);
     }
     // what Gatekeeper says on the user's Mac, of the DMG and of the app in it: "source=Notarized Developer ID"
     const assess = (...check: string[]) => {

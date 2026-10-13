@@ -747,7 +747,9 @@ the owner's language (`src/core/locale.ts`).
   the keychain's, named by `APPLE_SIGNING_IDENTITY`), then submits the DMG to Apple's notary
   service with an App Store Connect API key (`APPLE_NOTARY_KEY`, `APPLE_NOTARY_KEY_ID`, and
   `APPLE_NOTARY_ISSUER` for a team key), staples the ticket to the DMG and to the app beside it
-  (the updater's archive packs that one) and fails unless Gatekeeper calls both "Notarized
+  (the updater's archive packs that one; stapler fetches the ticket from Apple's CloudKit, which
+  now and then drops the connection for minutes, so each staple and validation is tried six times
+  over about thirteen minutes) and fails unless Gatekeeper calls both "Notarized
   Developer ID". One submission covers the app and the server inside the DMG; Tauri's own
   notarisation is not used, since it notarises the app but not the DMG and takes no individual
   key. A tag without the Apple secrets fails rather than releasing an app macOS would not open.
