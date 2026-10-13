@@ -82,14 +82,6 @@ async function speak(d: Director) {
   await d.page.keyboard.up('Space');
 }
 
-/** Pans the canvas by (dx, dy) screen pixels in small steps, as a trackpad would. */
-async function pan(d: Director, dx: number, dy: number, steps = 30) {
-  for (let i = 0; i < steps; i++) {
-    await d.page.mouse.wheel(-dx / steps, -dy / steps);
-    await d.wait(16);
-  }
-}
-
 const scenes: Scene[] = [
   {
     title: 'One canvas',
@@ -141,10 +133,11 @@ const scenes: Scene[] = [
         await d.click(split(d).getByRole('button', { name: 'Start agent' }));
       }
       await d.untilSpoken(1);
-      await d.skip(() => split(d).getByText(/Agent at work/i).first().waitFor({ timeout: 90_000 }));
       await d.clearHighlights();
-      // until the agent has a few steps behind it to show
+      // until the agent works and has a few steps behind it to show: one cut, two in a row jumped
+      // twice with a glimpse between them
       await d.skip(async () => {
+        await split(d).getByText(/Agent at work/i).first().waitFor({ timeout: 90_000 });
         await statusLine();
         await d.wait(1000);
       });
@@ -189,9 +182,7 @@ const scenes: Scene[] = [
     title: 'Proposals and ideas',
     say: narration.proposals,
     run: async (d) => {
-      // the camera stands on the new card at the right; the proposal is off to the left
-      await d.page.mouse.move(900, 450);
-      await pan(d, 580, -60);
+      // the camera stands on the new card; the proposal hangs off Dark mode above it, the idea is to its left
       await d.page.mouse.move(1380, 600);
       await d.highlight(card(d, 'Remember the last tip'), 'proposal');
       await d.untilSpoken(0.36);
@@ -208,10 +199,6 @@ const scenes: Scene[] = [
     title: 'The big room',
     say: narration.room,
     run: async (d) => {
-      // back to the task the video built, at the right edge after the pan
-      await d.page.mouse.move(900, 450);
-      await pan(d, -260, 0);
-      await d.page.mouse.move(1380, 600);
       await d.highlight(split(d), 'on main');
       await d.untilSpoken(0.25);
       await d.clearHighlights();

@@ -29,8 +29,17 @@ export function writeStage(file: string) {
     cards: [
       { key: 'P', project: 'docs/plan/tipjar-2.md', x: 60, y: 120 },
       { key: 'D', title: 'Dark mode', body: 'Tipjar follows the system’s dark mode.', state: 'live', x: 960, y: 100, createdAgo: '1d' },
+      // hangs off Dark mode with a dashed line, where Obeya puts a proposal: right below the card it came from
+      {
+        key: 'Q',
+        title: 'Remember the last tip',
+        body: 'Tipjar opens with the tip percentage chosen last time.',
+        state: 'proposal',
+        from: 'D',
+        row: { proposal: { reason: 'Noticed while working on Dark mode: most people pick the same tip every time.', questions: [] } },
+      },
       // working without an agent: no workspace, so a scratch Obeya with real workers leaves it be
-      { key: 'C', title: 'Run the tests on every push', body: 'A GitHub Actions workflow runs bun test on every push and pull request.', state: 'working', statusLine: 'Writing the workflow', scope: ['.github/workflows/test.yml'], x: 960, y: 300 },
+      { key: 'C', title: 'Run the tests on every push', body: 'A GitHub Actions workflow runs bun test on every push and pull request.', state: 'working', statusLine: 'Writing the workflow', scope: ['.github/workflows/test.yml'], x: -40, y: 520 },
       { key: 'I', title: 'App icon', body: 'An icon for the home screen.', state: 'waiting', need: 'question', question: { text: 'Which of the three drafts should become the icon?', options: ['The jar', 'The coin', 'The receipt'] }, scope: ['icon.svg'], x: 280, y: 560 },
       {
         key: 'T',
@@ -51,15 +60,6 @@ export function writeStage(file: string) {
             mocks: [],
           },
         },
-      },
-      {
-        key: 'Q',
-        title: 'Remember the last tip',
-        body: 'Tipjar opens with the tip percentage chosen last time.',
-        state: 'proposal',
-        x: -40,
-        y: 520,
-        row: { proposal: { reason: 'Noticed while working on Dark mode: most people pick the same tip every time.', questions: [] } },
       },
     ],
     groups: [{ name: 'Tipjar 2.0', cards: ['P'] }],
