@@ -7,12 +7,16 @@
 import { FALLBACK_LANGUAGE, languageOf } from '../core/locale';
 import { api } from './api';
 import { setLanguage, t } from './strings';
+import { loadTheme } from './theme';
 import type { Heard } from './voice';
 
-const language = await api.language().then(
-  (l) => l.language,
-  () => languageOf(navigator.language) ?? FALLBACK_LANGUAGE,
-);
+const [language] = await Promise.all([
+  api.language().then(
+    (l) => l.language,
+    () => languageOf(navigator.language) ?? FALLBACK_LANGUAGE,
+  ),
+  loadTheme(),
+]);
 setLanguage(language);
 
 /** How long a confirmation stays, unless its undo window is longer (as above the microphone). */
@@ -68,6 +72,8 @@ const span = (className: string, text: string) => Object.assign(document.createE
 const panel = {
   /** The owner holds the key: the line shows who listens (as the page said; none without a page). */
   listen(target: string | null) {
+    // the panel stays open for as long as the app runs: the look chosen since applies from the next command
+    void loadTheme();
     const what = document.createElement('span');
     what.className = 'what';
     what.append(span('', t.voice.listening), span('target', `→ ${target ?? t.voice.koordinator}`), span('flat', ''));

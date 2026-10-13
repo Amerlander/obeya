@@ -205,6 +205,11 @@ export function serve(
         GET: () => (config ? Response.json(config.language()) : new Response('Not found', { status: 404 })),
         PUT: async (req) => (config ? handle(async () => config.saveLanguage(await req.json())) : new Response('Not found', { status: 404 })),
       },
+      // light or dark: chosen in the settings, else as the system
+      '/api/theme': {
+        GET: () => (config ? Response.json(config.theme()) : new Response('Not found', { status: 404 })),
+        PUT: async (req) => (config ? handle(async () => config.saveTheme(await req.json())) : new Response('Not found', { status: 404 })),
+      },
       // the model and effort of each group of agents, read whenever one starts
       '/api/agents': {
         GET: () => (config ? Response.json(config.agents()) : new Response('Not found', { status: 404 })),

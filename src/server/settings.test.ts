@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { languageOf } from '../core/locale';
 import { AGENT_DEFAULTS, type AgentSetting } from '../core/types';
 import { withAgentSetting } from './runtime';
-import { agentSetting, agentsView, pushKeyChoice, saveAgents, saveLanguage, savePushKey, SETTINGS_FILE, systemLanguage } from './settings';
+import { agentSetting, agentsView, pushKeyChoice, saveAgents, saveLanguage, savePushKey, saveTheme, SETTINGS_FILE, systemLanguage, themeView } from './settings';
 import { FakeRuntime } from './testing';
 
 const homes: string[] = [];
@@ -94,4 +94,20 @@ test('the push-to-talk key in another app: the default until chosen, beside the 
   // a key the file holds that cannot be one is left out
   writeFileSync(join(home, SETTINGS_FILE), JSON.stringify({ pushKey: 'KeyA' }));
   expect(pushKeyChoice(home, 'linux').key).toBe('ControlRight');
+});
+
+test('light or dark: as the system until chosen, beside the other settings, and back to the system with null', () => {
+  const home = scratchHome();
+  expect(themeView(home).chosen).toBeNull();
+  saveLanguage(home, { language: 'en' });
+  expect(saveTheme(home, { theme: 'dark' }).chosen).toBe('dark');
+  expect(JSON.parse(readFileSync(join(home, SETTINGS_FILE), 'utf8'))).toEqual({ language: 'en', theme: 'dark' });
+  saveLanguage(home, { language: 'de' });
+  expect(themeView(home).chosen).toBe('dark');
+  expect(saveTheme(home, { theme: null }).chosen).toBeNull();
+  expect(JSON.parse(readFileSync(join(home, SETTINGS_FILE), 'utf8'))).toEqual({ language: 'de' });
+  for (const bad of [{ theme: 'sepia' }, {}, null]) expect(() => saveTheme(home, bad)).toThrow();
+  // an unknown look in the file follows the system
+  writeFileSync(join(home, SETTINGS_FILE), JSON.stringify({ theme: 'sepia' }));
+  expect(themeView(home).chosen).toBeNull();
 });

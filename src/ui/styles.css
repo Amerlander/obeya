@@ -27,6 +27,8 @@
   --container: rgba(255,252,242,.45); --container-line: rgba(120,105,75,.22);
   --dim: rgba(40,32,18,.34); --panel: #fdfbf5; --chip: #f0ebdf;
   --s: 1;
+  /* native controls, and the pages in a frame (prefers-color-scheme), take the look chosen */
+  color-scheme: light;
 }
 /* dark: black card stock written on in white pencil, on a darker board; the inks as bright and as far apart as in light */
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
@@ -37,6 +39,7 @@
   --waiting-rgb: 255,138,28; --on-ink: #16140f; --error: #ff7a63; --warn: #f0a85a;
   --container: rgba(255,250,235,.035); --container-line: rgba(255,250,235,.10);
   --dim: rgba(0,0,0,.55); --panel: #1f1d1a; --chip: #2c2925;
+  color-scheme: dark;
 } }
 :root[data-theme="dark"] {
   --bg: #121110; --dot: #26231f; --card: #23211d; --ink: #efe9dc; --muted: #a69e8e; --line: #36322b;
@@ -46,6 +49,7 @@
   --waiting-rgb: 255,138,28; --on-ink: #16140f; --error: #ff7a63; --warn: #f0a85a;
   --container: rgba(255,250,235,.035); --container-line: rgba(255,250,235,.10);
   --dim: rgba(0,0,0,.55); --panel: #1f1d1a; --chip: #2c2925;
+  color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink);
@@ -852,6 +856,7 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 .cfg-control { min-width: 0; max-width: 640px; }
 .cfg-control > .hint { margin: 5px 0 0; font-size: 12.5px; line-height: 1.45; }
 .cfg-control > select, .cfg-control > .c-path { width: 100%; max-width: 420px; }
+.cfg-control > .seg { margin-top: 0; }
 .cfg-control .btn.small { margin-top: 6px; }
 .cfg-inline { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .cfg-inline .btn.small { margin-top: 0; }

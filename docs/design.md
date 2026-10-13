@@ -834,7 +834,7 @@ the owner's language (`src/core/locale.ts`).
   closes it; what was open behind it stays as it was, and a draft not saved yet stays until the page
   reloads) and lists its sections on the left: Leinwände, Modelle und Effort, Spracheingabe (with the
   push-to-talk key), Demos (the narration beside what demos need on this machine) and Allgemein
-  (language, the server). One section shows at a time, the last one chosen per tab, so a save's
+  (language, light or dark, the server). One section shows at a time, the last one chosen per tab, so a save's
   restart or a new language comes back to it; Leinwände marks a draft not saved yet and counts its
   problems in red. Each section is a heading with what it is about and the file it is saved in, and
   below it settings as rows of label and control, parts of a section under a rule: no boxes in boxes.
@@ -877,8 +877,8 @@ the owner's language (`src/core/locale.ts`).
   closes it and opens Obeya's conversation ready to type into (Space for voice does not reach Obeya
   while the dialog is open). The other sections are saved on their own: the
   demo settings (see Demos) into `demo.json` in Obeya's home, read by the next render, so saving
-  them restarts nothing; the language (see Language) and the model and effort of each group of
-  agents (see Models and effort) the same way into `settings.json`.
+  them restarts nothing; the language (see Language), light or dark (see Visual identity) and the
+  model and effort of each group of agents (see Models and effort) the same way into `settings.json`.
 - **Models and effort** — every agent belongs to one of four groups, each with its model and
   effort: the Koordinator (voice commands, estimates and schedules, look-ups, project
   agents, learner, Rückschau, proposal rewrites), the workers on cards, the exploration agents of
@@ -984,6 +984,14 @@ the owner's language (`src/core/locale.ts`).
     written on a fill of ink (a badge, the play button) is `--on-ink`, white in light and near
     black in dark. Dark mode is black card stock written on in white pencil: its inks are as far
     apart as in light (blue and green never confusable, orange the loudest).
+  - *Light or dark*: as the system, until the owner chooses Hell or Dunkel under Allgemein in the
+    Konfiguration dialog (three buttons side by side, the choice `theme` in `settings.json`, `/api/theme`).
+    The page asks for it before its first render, as for the language, and sets `data-theme` on its
+    root, which the stylesheets (`styles.css`, `panel.css`) read beside `prefers-color-scheme`; a
+    choice applies at once, without loading again (`src/ui/theme.ts`). The PTT panel asks again each
+    time the key is held, as it stays open while the app runs. `color-scheme` follows the look, so
+    native controls and the pages in a frame (a worker's HTML artifact, a mock) take it too. The
+    site and the shared demo pages keep the system's.
   - *Type*: titles and headings in Newsreader (a serif with optical sizes; a plan doc read in the
     sheet is set in it too), everything else in IBM Plex Sans Condensed. Both are under the SIL
     Open Font License and served from `src/ui/fonts/` with their licence files (latin subsets

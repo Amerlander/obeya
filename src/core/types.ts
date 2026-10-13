@@ -973,6 +973,16 @@ export interface LanguageView {
   language: Language;
 }
 
+/** The look Obeya's pages take (`src/server/settings.ts`): light or dark as chosen in the settings, else as the system's. */
+export const THEMES = ['light', 'dark'] as const;
+export type Theme = (typeof THEMES)[number];
+export interface ThemeView {
+  /** The file it is saved in, under Obeya's home. */
+  file: string;
+  /** What the owner chose; `null` follows the system. */
+  chosen: Theme | null;
+}
+
 /** The agents Obeya runs, grouped as the owner sets their model and effort (`src/server/settings.ts`). */
 export const AGENT_ROLES = ['koordinator', 'worker', 'explorer', 'chores'] as const;
 export type AgentRole = (typeof AGENT_ROLES)[number];

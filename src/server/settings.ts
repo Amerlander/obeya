@@ -1,15 +1,16 @@
 // Obeya's own settings, in `settings.json` under its home beside `canvases.json` and `demo.json`:
-// the language Obeya speaks to the owner, the model and effort of each group of agents, and the
-// key that records a command from anywhere on the machine (heard by the app's shell). The
-// owner chooses them in the settings sheet; until then the system's language applies, and the
-// agents run as `AGENT_DEFAULTS` says. Saving restarts nothing: the page loads again in the new
-// language, and the server reads the file whenever it needs the language or starts an agent.
+// the language Obeya speaks to the owner, light or dark, the model and effort of each group of
+// agents, and the key that records a command from anywhere on the machine (heard by the app's
+// shell). The owner chooses them in the settings sheet; until then the system's language and look
+// apply, and the agents run as `AGENT_DEFAULTS` says. Saving restarts nothing: the page loads again
+// in the new language, takes the new look at once, and the server reads the file whenever it needs
+// the language or starts an agent.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { OWNER_SETTINGS_FILE, systemLanguage } from '../../plugin/skills/demo/lib/language.ts';
 import { type Language, LANGUAGES } from '../core/locale';
-import { AGENT_DEFAULTS, AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentRole, type AgentSetting, type AgentsView, type LanguageView } from '../core/types';
+import { AGENT_DEFAULTS, AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentRole, type AgentSetting, type AgentsView, type LanguageView, type Theme, THEMES, type ThemeView } from '../core/types';
 import { defaultPushKey, parsePushKey } from '../core/push-key';
 import { BadRequest } from './board';
 
@@ -19,6 +20,8 @@ export const SETTINGS_FILE = OWNER_SETTINGS_FILE;
 
 interface Settings {
   language?: Language;
+  /** Light or dark; absent follows the system. */
+  theme?: Theme;
   /** Only what differs from `AGENT_DEFAULTS`, so a changed default reaches what the owner left. */
   agents?: Partial<Record<AgentRole, Partial<AgentSetting>>>;
   /** The push-to-talk key anywhere on the machine, when not the default. */
@@ -29,8 +32,9 @@ function read(home: string): Settings {
   try {
     const o = JSON.parse(readFileSync(join(home, SETTINGS_FILE), 'utf8')) as Record<string, unknown>;
     const language = LANGUAGES.find((l) => l === o.language);
+    const theme = THEMES.find((x) => x === o.theme);
     const pushKey = parsePushKey(o.pushKey) ?? undefined;
-    return { ...o, ...(language ? { language } : { language: undefined }), agents: agentsOf(o.agents), pushKey };
+    return { ...o, ...(language ? { language } : { language: undefined }), theme, agents: agentsOf(o.agents), pushKey };
   } catch {
     return {};
   }
@@ -52,6 +56,18 @@ export function saveLanguage(home: string, input: unknown): LanguageView {
   write(home, language ? { ...rest, language: language as Language } : rest);
   console.log(`Obeya: language ${language ?? 'of the system'} saved to ${join(home, SETTINGS_FILE)}`);
   return languageView(home);
+}
+
+export const themeView = (home: string): ThemeView => ({ file: join(home, SETTINGS_FILE), chosen: read(home).theme ?? null });
+
+/** Saves light or dark; `null` follows the system again. Other settings in the file stay. */
+export function saveTheme(home: string, input: unknown): ThemeView {
+  const theme = (input as { theme?: unknown } | null)?.theme;
+  if (theme !== null && !THEMES.some((x) => x === theme)) throw new BadRequest('invalid', `theme must be one of ${THEMES.join(', ')} or null`);
+  const { theme: _, ...rest } = existsSync(join(home, SETTINGS_FILE)) ? read(home) : {};
+  write(home, theme ? { ...rest, theme: theme as Theme } : rest);
+  console.log(`Obeya: ${theme ?? 'the system\'s'} look saved to ${join(home, SETTINGS_FILE)}`);
+  return themeView(home);
 }
 
 function write(home: string, settings: Settings) {

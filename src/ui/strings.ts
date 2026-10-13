@@ -5,7 +5,7 @@
 import type { DiffFile } from '../core/diff';
 import { type Language, languageOf } from '../core/locale';
 import type { NotAProject } from '../core/plan-doc';
-import { type AgentEffort, type AgentModel, type AgentRole, type CardState, type ConfigProblemCode, type DemoSettingsProblem, type ErrorCode, EXPORT_HTML_MAX, type NarrationLanguage, type VoiceKind, type Idea, type Need, type NextStep, type Queue, type OwnerHold, type RestartReason, type SetupId, type VoiceSetupId, type MachineSectionId, type NeededId, type PrId } from '../core/types';
+import { type AgentEffort, type AgentModel, type AgentRole, type CardState, type ConfigProblemCode, type DemoSettingsProblem, type ErrorCode, EXPORT_HTML_MAX, type NarrationLanguage, type Theme, type VoiceKind, type Idea, type Need, type NextStep, type Queue, type OwnerHold, type RestartReason, type SetupId, type VoiceSetupId, type MachineSectionId, type NeededId, type PrId } from '../core/types';
 
 const de = {
   kind: { task: 'Aufgabe', project: 'Projekt', workstream: 'Workstream', idea: 'Idee', prototype: 'Prototyp', becomesProject: 'Idee → Projekt', taskBecomesProject: 'Aufgabe → Projekt' },
@@ -513,6 +513,12 @@ const de = {
       system: (name: string) => `Wie das System (${name})`,
       /** Each language in its own words, as a stranger looks for it. */
       names: { de: 'Deutsch', en: 'English' } satisfies Record<Language, string>,
+    },
+    theme: {
+      title: 'Hell oder dunkel',
+      hint: 'Wie Obeya aussieht: helle Karten auf hellem Grund, oder dunkle auf dunklem. „Wie das System“ folgt der Einstellung des Rechners. Gilt sofort.',
+      system: 'Wie das System',
+      names: { light: 'Hell', dark: 'Dunkel' } satisfies Record<Theme, string>,
     },
     agents: {
       title: 'Modelle und Effort',
@@ -1479,6 +1485,12 @@ const en: Strings = {
       hint: 'The language Obeya speaks to you: the interface with its dates and numbers, voice input, what agents write to you, and demos unless they have a narration language of their own under Demos. Applies at once; the page loads again for it.',
       system: (name: string) => `As the system (${name})`,
       names: { de: 'Deutsch', en: 'English' },
+    },
+    theme: {
+      title: 'Light or dark',
+      hint: 'How Obeya looks: light cards on a light board, or dark ones on a dark board. “As the system” follows the computer’s setting. Applies at once.',
+      system: 'As the system',
+      names: { light: 'Light', dark: 'Dark' },
     },
     agents: {
       title: 'Models and effort',

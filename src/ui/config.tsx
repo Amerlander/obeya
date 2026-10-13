@@ -4,13 +4,14 @@
 // own settings come from its command line and show read-only.
 
 import { type CSSProperties, Fragment, type ReactNode, useEffect, useId, useRef, useState } from 'react';
-import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigView, type DemoSettings, type DemoSettingsView, type DemoVoiceCheck, type Language, type HostConfig, type LanguageView, type NarrationLanguage, type RepoConfig, type SetupCheck, type VoiceKind, type VoiceSetupView } from '../core/types';
+import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigView, type DemoSettings, type DemoSettingsView, type DemoVoiceCheck, type Language, type HostConfig, type LanguageView, type NarrationLanguage, type RepoConfig, type SetupCheck, type Theme, THEMES, type ThemeView, type VoiceKind, type VoiceSetupView } from '../core/types';
 import { LANGUAGES } from '../core/locale';
 import { pushKeyFromEvent, type PushKeyView } from '../core/push-key';
 import { api, ApiError, reload } from './api';
 import { keep } from './keep';
 import { demoState, megabytes, PLATFORMS, SetupList, voiceState } from './setup';
 import { errorText, pushKeyLabel, t } from './strings';
+import { applyTheme } from './theme';
 
 declare global {
   interface Window {
@@ -171,6 +172,7 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }
           <section className="cfg-sec" hidden={section !== 'general'}>
             <Head title={c.sections.general} />
             <LanguageBlock on={on} />
+            <ThemeBlock on={on} />
             {view && <ServerBlock server={view.server} />}
           </section>
         </div>
@@ -431,6 +433,45 @@ function LanguageBlock({ on }: { on: boolean }) {
             </option>
           ))}
         </select>
+      </Field>
+      {status && <p className="hint c-status">{status}</p>}
+    </>
+  );
+}
+
+/** Light or dark, or as the system: saved on its own, and the page takes it at once. */
+function ThemeBlock({ on }: { on: boolean }) {
+  const [view, setView] = useState<ThemeView | null>(null);
+  const [status, setStatus] = useState('');
+  useEffect(() => {
+    if (on) api.theme().then(setView, console.error);
+  }, [on]);
+  if (!view) return null;
+  const l = t.config.theme;
+  const choose = async (theme: Theme | null) => {
+    const before = view;
+    setView({ ...view, chosen: theme });
+    applyTheme(theme);
+    setStatus('');
+    try {
+      setView(await api.saveTheme(theme));
+    } catch (e) {
+      setView(before);
+      applyTheme(before.chosen);
+      setStatus(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+    }
+  };
+  return (
+    <>
+      <Head sub title={l.title} hint={l.hint} file={view.file} />
+      <Field label={l.title}>
+        <div className="seg" role="radiogroup" aria-label={l.title}>
+          {[null, ...THEMES].map((x) => (
+            <button key={x ?? 'system'} type="button" role="radio" aria-checked={view.chosen === x} className={view.chosen === x ? 'on' : undefined} onClick={() => choose(x)}>
+              {x ? l.names[x] : l.system}
+            </button>
+          ))}
+        </div>
       </Field>
       {status && <p className="hint c-status">{status}</p>}
     </>

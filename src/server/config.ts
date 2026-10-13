@@ -7,7 +7,7 @@ import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
 import { adapterNames } from '../adapters';
-import { type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigView, type DemoSettingsProblem, type DemoSettingsView, type DemoVoiceCheck, type LanguageView, type ResolvedCanvas, type VoiceInstallJob } from '../core/types';
+import { type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigView, type DemoSettingsProblem, type DemoSettingsView, type DemoVoiceCheck, type LanguageView, type ResolvedCanvas, type ThemeView, type VoiceInstallJob } from '../core/types';
 import {
   DEMO_SETTINGS_FILE,
   type DemoSettings,
@@ -27,7 +27,7 @@ import { ConfigError, resolveCanvas } from './canvas';
 import type { Store } from './db';
 import { repoInfo } from './repo';
 import { VERSION } from './resources';
-import { agentsView, languageView, pushKeyChoice, saveAgents, saveLanguage, savePushKey } from './settings';
+import { agentsView, languageView, pushKeyChoice, saveAgents, saveLanguage, savePushKey, saveTheme, themeView } from './settings';
 import { adapterRepoProblems, shareArgv, shareProblem } from './share';
 
 export const CONFIG_FILE = 'canvases.json';
@@ -304,6 +304,15 @@ export class Config {
 
   saveLanguage(input: unknown): LanguageView {
     return saveLanguage(this.o.server.home, input);
+  }
+
+  /** Light or dark, in `settings.json` too; the page takes it at once. */
+  theme(): ThemeView {
+    return themeView(this.o.server.home);
+  }
+
+  saveTheme(input: unknown): ThemeView {
+    return saveTheme(this.o.server.home, input);
   }
 
   /** The model and effort of each group of agents, in `settings.json` too; read whenever an agent starts. */
