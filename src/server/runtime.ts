@@ -11,6 +11,7 @@ import {
   type SDKUserMessage,
   tool,
 } from '@anthropic-ai/claude-agent-sdk';
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -42,8 +43,10 @@ export type AgentEvent =
   /**
    * The turn ended; the session waits for the next message. `background` counts the agent's
    * background tasks still running: when one ends, the session wakes itself for a new turn.
+   * `more`: a message sent during the turn came too late for it and starts a turn of its own,
+   * which follows without another message.
    */
-  | { type: 'idle'; background?: number }
+  | { type: 'idle'; background?: number; more?: boolean }
   /**
    * The number of the agent's background tasks still running changed, in a turn or between turns:
    * a deploy watcher that ends, say, which then wakes the session.
@@ -257,7 +260,7 @@ export const sdkRuntime: AgentRuntime = {
             const limit = failed ? usageLimit(failed, limited, limits) : undefined;
             limited = false;
             if (failed) spec.onEvent({ type: 'error', message: failed, ...(limit ? { limit } : {}) });
-            spec.onEvent({ type: 'idle', background });
+            spec.onEvent({ type: 'idle', background, ...(inbox.taken(m) ? {} : { more: true }) });
           }
         }
       } catch (e) {
@@ -612,8 +615,10 @@ async function carryImages(host: SshHost, dir: Promise<string>, text: string, im
 }
 
 /** The session's input: an async stream of user messages that stays open until ended. */
-class Inbox implements AsyncIterable<SDKUserMessage> {
-  private queue: Promise<SDKUserMessage['message']['content']>[] = [];
+export class Inbox implements AsyncIterable<SDKUserMessage> {
+  private queue: { uuid: string; content: Promise<SDKUserMessage['message']['content']> }[] = [];
+  /** The messages sent that no turn has taken yet, by their uuid. */
+  private untaken = new Set<string>();
   private wake: (() => void) | null = null;
   private ended = false;
   /** For a session on another machine: copies the images there and returns the text with their paths there. */
@@ -623,8 +628,22 @@ class Inbox implements AsyncIterable<SDKUserMessage> {
     // read now: the files may be gone by the time the session takes the message
     const blocks = images.map((f) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: mediaType(f), data: readFileSync(f).toString('base64') } }));
     const carried = this.carry && images.length ? this.carry(text, images) : Promise.resolve(text);
-    this.queue.push(carried.then((t) => (blocks.length ? [{ type: 'text' as const, text: t }, ...blocks] : t)));
+    const uuid = randomUUID();
+    this.untaken.add(uuid);
+    this.queue.push({ uuid, content: carried.then((t) => (blocks.length ? [{ type: 'text' as const, text: t }, ...blocks] : t)) });
     this.wake?.();
+  }
+
+  /**
+   * Whether every message sent has been taken by the turn that `result` ends or one before it. A
+   * message sent while the turn ends comes too late for it and starts a turn of its own; one taken
+   * in the middle of a turn is listed with the turn's result. A CLI that lists none is taken at its word.
+   */
+  taken(result: { user_message_uuid?: string; user_message_uuids?: string[] }): boolean {
+    const took = result.user_message_uuids ?? (result.user_message_uuid ? [result.user_message_uuid] : undefined);
+    if (!took) this.untaken.clear();
+    for (const uuid of took ?? []) this.untaken.delete(uuid);
+    return this.untaken.size === 0;
   }
 
   end() {
@@ -634,7 +653,11 @@ class Inbox implements AsyncIterable<SDKUserMessage> {
 
   async *[Symbol.asyncIterator](): AsyncIterator<SDKUserMessage> {
     while (true) {
-      while (this.queue.length) yield { type: 'user', message: { role: 'user', content: await this.queue.shift()! }, parent_tool_use_id: null };
+      while (this.queue.length) {
+        const { uuid, content } = this.queue.shift()!;
+        // the CLI names the messages a turn took by their uuid (`taken`); the SDK's type leaves the field out
+        yield { type: 'user', message: { role: 'user', content: await content }, parent_tool_use_id: null, uuid } as SDKUserMessage;
+      }
       if (this.ended) return;
       await new Promise<void>((r) => (this.wake = r));
       this.wake = null;

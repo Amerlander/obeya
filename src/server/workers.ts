@@ -1076,7 +1076,7 @@ export class Workers {
       live.failed = undefined;
     }
     if (e.type === 'text' || e.type === 'tool' || e.type === 'error') live.acted = true;
-    if (e.type === 'text' || e.type === 'tool' || e.type === 'idle') live.pending = undefined;
+    if (e.type === 'text' || e.type === 'tool' || (e.type === 'idle' && !e.more)) live.pending = undefined;
     switch (e.type) {
       case 'session': {
         // a session that replaces another (none resumed, say) keeps the one before for the Arbeitsrückschau
@@ -1121,7 +1121,7 @@ export class Workers {
         break;
       case 'idle':
         live.background = e.background ?? 0;
-        this.turnEnded(cardId, live, live.background);
+        this.turnEnded(cardId, live, live.background, false, e.more);
         this.parkLater(cardId);
         break;
     }
@@ -1142,9 +1142,11 @@ export class Workers {
    * A turn that ends without handing over gets one nudge; after that the owner is asked. A turn
    * that ends while the worker's background work runs (a demo render, say) waits for that work
    * to wake the worker instead, unless nothing happens for a long while; so does a turn in which
-   * the worker did nothing, as it never ended a turn of its own there.
+   * the worker did nothing, as it never ended a turn of its own there. A turn that ends with a
+   * message from Obeya still to come (`more`) is not the worker's last: the turn that message starts
+   * is, so the landing of its work, told while the worker ended its reply, is not lost with the session.
    */
-  private turnEnded(cardId: string, live: Live, background: number, waited = false) {
+  private turnEnded(cardId: string, live: Live, background: number, waited = false, more = false) {
     const handedOver = live.handedOver;
     const acted = live.acted || waited;
     const closing = live.held;
@@ -1162,6 +1164,7 @@ export class Workers {
       this.waitForWorker(cardId, live);
       if (!handedOver) return;
     }
+    if (more && !handedOver) return this.waitForWorker(cardId, live);
     if (answering(card)) {
       // a resumed session may first end a turn of its own before it takes in the owner's words
       if (!acted && !handedOver) return this.waitForWorker(cardId, live);

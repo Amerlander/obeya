@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import type { HookInput, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { askOwner, BOUNDED_WAITS, backgroundWork, deniedBy, claudeExecutable, cleanEnv, FOREGROUND_SLEEP_LIMIT, failureReason, foregroundSleep, refuseForegroundWait, resultFailure, usageLimit } from './runtime';
+import { askOwner, BOUNDED_WAITS, Inbox, backgroundWork, deniedBy, claudeExecutable, cleanEnv, FOREGROUND_SLEEP_LIMIT, failureReason, foregroundSleep, refuseForegroundWait, resultFailure, usageLimit } from './runtime';
 import { MESSAGES } from '../core/messages';
 
 test('background work counts renders, test runs and watchers, not housekeeping', () => {
@@ -139,4 +139,24 @@ test("a call that needs permission goes to the owner with Claude Code's reason; 
   const q = await askOwner(ask, 'AskUserQuestion', {}, { signal });
   expect(q.behavior === 'deny' && q.message).toContain('mcp__obeya__ask');
   expect(asked).toHaveLength(1);
+});
+
+test('a message sent while a turn ends is still to come; one the turn took mid-way is not', async () => {
+  const inbox = new Inbox();
+  const sent = inbox[Symbol.asyncIterator]();
+  const uuid = async () => ((await sent.next()).value as { uuid: string }).uuid;
+  inbox.push('Reply.');
+  const reply = await uuid();
+  inbox.push('Your work is on main now.');
+  const landed = await uuid();
+  // the reply's turn ended before the landing came: a turn of its own follows
+  expect(inbox.taken({ user_message_uuids: [reply] })).toBe(false);
+  expect(inbox.taken({ user_message_uuids: [landed] })).toBe(true);
+  // taken in the middle of the turn, it is listed with the turn's result
+  inbox.push('Go on.');
+  inbox.push('A note.');
+  expect(inbox.taken({ user_message_uuids: [await uuid(), await uuid()] })).toBe(true);
+  // a CLI that lists nothing is taken at its word
+  inbox.push('More.');
+  expect(inbox.taken({})).toBe(true);
 });

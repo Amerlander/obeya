@@ -1265,7 +1265,16 @@ the owner's language (`src/core/locale.ts`).
 - **After landing** — the worker is told its work is on main (or that its PR was merged) and may
   finish what remains, in its workspace, which stays at what landed until then (the card is `live`,
   "Agent erledigt den Rest"; notes reach it, "Anhalten" ends it). Ending a turn with nothing to wait
-  for ends its session and removes worktree and branch (a clone is free again). When the landing
+  for ends its session and removes worktree and branch (a clone is free again). A turn that ends
+  while a message from Obeya is still to come is not that turn: work approved while its worker
+  ends a reply (the owner said yes to its question and approved at once) lands while the reply's
+  turn finishes, and the notice of the landing, too late for that turn, starts one of its own. The
+  runtime gives each message it sends a uuid and checks it against those the turn's result names as
+  taken (the CLI also lists those it took in the middle of a turn); the session, workspace and
+  busy state stay until the turn that took the last one ends. Before (until 2026-10-13), the reply's
+  turn counted as the one after the landing and ended the session, and the worker never heard that
+  its work was on main: what it had promised for after the landing (publishing the hero video)
+  stayed undone. When the landing
   changed Obeya's own running code, or the repository's own adapter (also when Obeya pushed the
   work straight onto the remote's main: the adapter it pushed differs from the one Obeya runs), the
   worker is told Obeya restarts with it; what needs the new code waits through `after_restart`: the

@@ -1959,6 +1959,31 @@ describe('a worktree per card', () => {
     expect(git(main, 'branch', '--list', branch)).toBe('');
   });
 
+  test('work approved while its worker ends a reply lands, and the worker still hears so and finishes what remains', async () => {
+    const c = manual();
+    workers.start(c.id);
+    const wc = board.row(c.id).workspace!;
+    commitIn(wc, 'c.ts', 'C');
+    const s = runtime.last;
+    s.call('ready_for_review', { summary: 'S' });
+    s.emit({ type: 'idle' });
+    // the owner says yes to publishing after the landing, and approves while the worker still answers
+    workers.message(c.id, 'ja');
+    s.call('reply', { text: 'I will publish once it is on main.' });
+    await workers.approve(c.id);
+    expect(s.inbox.at(-1)).toContain('is on main now');
+    // the notice came too late for the reply's turn: the session takes it in a turn of its own
+    s.emit({ type: 'text', text: 'Nothing is published yet.' });
+    s.emit({ type: 'idle', more: true });
+    expect(s.closed).toBe(false);
+    expect(board.row(c.id).workspace).toBe(wc);
+    expect(board.item(c.id)!.finishing).toBe(true);
+    s.emit({ type: 'tool', name: 'Bash', input: { command: 'node scripts/publish.ts' } });
+    s.emit({ type: 'idle' });
+    expect(s.closed).toBe(true);
+    expect(board.row(c.id).workspace).toBeNull();
+  });
+
   test('stopping a worker that finishes after the landing frees its worktree; the card stays live', async () => {
     const c = manual();
     workers.start(c.id);
