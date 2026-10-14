@@ -2606,7 +2606,10 @@ the repository; the copy on the project is only for the archive).
   dropped into an event for a directory above, and Bun passes on only events under the watched
   path. So on macOS the plan directory is also polled every 2 s (names, mtimes, sizes of its docs)
   and compared with its state at the last read, as a safety net behind the watches, which stay the
-  primary way (2026-10-09). Reading old content
+  primary way (2026-10-09). The watch tests check the watches alone: there a plain recursive watch
+  on the test repository, in the same stream, and a marker written after each change tell a change
+  the system lost (most of them with fseventsd at full CPU, 2026-10-14; Bun, Node and fswatch
+  alike) from one the watches missed, and a lost one is put back and made again. Reading old content
   from the git history instead was rejected as fragile (PRs and clones, renames); it served
   only once, to backfill Obeya's own projects from before
   (`scripts/backfill-archived-projects.ts`, run 2026-10-01 for M2, M3, M4, M6 and M7). Known edges: a renamed doc makes a new

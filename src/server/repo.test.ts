@@ -43,11 +43,14 @@ describe('oldLinuxBun', () => {
 
 describe('watchPlanDocs', () => {
   /**
-   * How far behind fseventsd may fall. A busy one delivers events seconds late, a swamped one a
-   * minute late (both measured here on 2026-10-12); the running Obeya has its safety-net poll for
-   * that, these tests check the watches alone.
+   * How long a step may go on. A saturated fseventsd loses most events: on this Mac (2026-10-14,
+   * fseventsd at full CPU) Bun, Node and fswatch alike saw only one to four of ten writes to a fresh
+   * directory, seconds late. The running Obeya has its safety-net poll for that; these tests check
+   * the watches alone, so a step whose change the system lost is made again.
    */
-  const swamped = 120_000;
+  const budget = 120_000;
+  /** A file the tests write at the repository's top, to learn that the events before it have come. */
+  const marker = 'marker';
   const cleanup: (() => void)[] = [];
   afterEach(() => cleanup.splice(0).forEach((f) => f()));
 
@@ -64,98 +67,126 @@ describe('watchPlanDocs', () => {
       calls++;
       fired();
     }, options);
-    // a plain watch on the whole repository tells a late event from one the watches missed
+    // a plain watch on the whole repository, in the same FSEvents stream as the watches, tells
+    // whether a change reached the process at all
     let delivered = (_path: string) => {};
     const control = watch(repo, { recursive: true }, (_, file) => delivered(String(file).replaceAll('\\', '/')));
     cleanup.push(stop, () => control.close(), () => rmSync(repo, { recursive: true, force: true }));
+
     /**
-     * Whether the watches fire for a change of `path` (in the repository) made from now on: as soon
-     * as they do, and no later than a moment after the plain watch has seen it.
+     * What becomes of the change `make` makes to `path` (in the repository): the watches fire for
+     * it, or the plain watch sees it and the watches do not within a moment ('missed'), or neither
+     * sees it ('lost'). Events come in order, nearly always: the change counts as lost once a marker
+     * written after it has come and a second more has passed without it.
      */
-    const next = (path: string) =>
-      new Promise<boolean>((resolve) => {
+    const attempt = (path: string, make: () => void) =>
+      new Promise<'fired' | 'missed' | 'lost'>((resolve) => {
         let missed: ReturnType<typeof setTimeout> | undefined;
-        const done = (fires: boolean) => {
-          clearTimeout(late);
+        let lost: ReturnType<typeof setTimeout> | undefined;
+        const done = (outcome: 'fired' | 'missed' | 'lost') => {
+          clearInterval(marking);
           clearTimeout(missed);
+          clearTimeout(lost);
           fired = () => {};
           delivered = () => {};
-          resolve(fires);
+          resolve(outcome);
         };
-        const late = setTimeout(() => done(false), swamped);
-        fired = () => done(true);
+        fired = () => done('fired');
         delivered = (file) => {
-          if (file === path) missed ??= setTimeout(() => done(false), 2000);
+          if (file === path) {
+            clearTimeout(lost);
+            missed ??= setTimeout(() => done('missed'), 2000);
+          } else if (file === marker && !missed) lost ??= setTimeout(() => done('lost'), 1000);
         };
+        make();
+        const marking = setInterval(() => writeFileSync(join(repo, marker), String(Date.now())), 100);
       });
-    return { repo, next, calls: () => calls };
+
+    /**
+     * Whether the watches fire for the change `make` makes to `path` (in the repository). While the
+     * system loses it, `reset` puts back what it changed, and it is made again once the watches are
+     * live. A lost event that comes after all is one of the same kind and lets a later try pass.
+     */
+    async function sees(path: string, make: () => void, reset = () => {}) {
+      for (const end = Date.now() + budget; Date.now() < end; ) {
+        const outcome = await attempt(path, make);
+        if (outcome !== 'lost') return outcome === 'fired';
+        reset();
+        await live();
+      }
+      throw new Error(`the system lost every change of ${path} for ${budget / 1000} s`);
+    }
+    return { repo, sees, calls: () => calls };
   }
 
   /**
-   * Waits until the watches opened so far are live. On macOS a new watch takes a moment (more on a
-   * busy machine), and Bun has one FSEvents stream for all watches of the process, started afresh
-   * for each new one: they are live once a watch opened after them sees a change. A change made
-   * before that is lost for good. On Linux a watch is live at once.
+   * Waits until the watches opened so far are live, and what they have seen is reported. On macOS a
+   * new watch takes a moment (more on a busy machine), and Bun has one FSEvents stream for all
+   * watches of the process, started afresh for each new one: they are live once a watch opened
+   * after them sees a change. A change made before that is lost for good. On Linux a watch is live
+   * at once.
    */
   async function live() {
     const dir = mkdtempSync(join(tmpdir(), 'obeya-probe-'));
     let seen = false;
     const probe = watch(dir, () => (seen = true));
     cleanup.push(() => probe.close(), () => rmSync(dir, { recursive: true, force: true }));
-    for (const end = Date.now() + swamped; !seen; await Bun.sleep(50)) {
-      if (Date.now() > end) throw new Error(`a new watch saw nothing for ${swamped / 1000} s`);
+    for (const end = Date.now() + budget; !seen; await Bun.sleep(50)) {
+      if (Date.now() > end) throw new Error(`a new watch saw nothing for ${budget / 1000} s`);
       writeFileSync(join(dir, 'probe'), String(Date.now()));
     }
+    await Bun.sleep(300); // past the watches' debounce
   }
 
   test('sees a doc change', async () => {
-    const { repo, next } = watched(['docs/plan/a.md']);
+    const { repo, sees } = watched(['docs/plan/a.md']);
     await live();
-    const seen = next('docs/plan/a.md');
-    writeFileSync(join(repo, 'docs/plan/a.md'), `${DOC}- [ ] **W2:** Two.\n`);
-    expect(await seen).toBe(true);
-  }, 6 * swamped);
+    expect(await sees('docs/plan/a.md', () => writeFileSync(join(repo, 'docs/plan/a.md'), `${DOC}- [ ] **W2:** Two.\n`))).toBe(true);
+  }, 2 * budget);
 
   test('sees the last doc go with its directory, as git removes it, and a first one come back', async () => {
-    const { repo, next } = watched(['docs/design.md', 'docs/plan/a.md']);
+    const { repo, sees } = watched(['docs/design.md', 'docs/plan/a.md']);
+    const plan = join(repo, 'docs/plan');
+    const gone = () => {
+      unlinkSync(join(plan, 'a.md'));
+      rmdirSync(plan);
+    };
+    const back = () => {
+      mkdirSync(plan);
+      writeFileSync(join(plan, 'b.md'), DOC);
+    };
     await live();
-    const gone = next('docs/plan');
-    unlinkSync(join(repo, 'docs/plan/a.md'));
-    rmdirSync(join(repo, 'docs/plan'));
-    expect(await gone).toBe(true);
+    expect(await sees('docs/plan', gone, () => {
+      mkdirSync(plan);
+      writeFileSync(join(plan, 'a.md'), DOC);
+    })).toBe(true);
 
     // right after the watches were re-armed
-    const back = next('docs/plan');
-    mkdirSync(join(repo, 'docs/plan'));
-    writeFileSync(join(repo, 'docs/plan/b.md'), DOC);
-    expect(await back).toBe(true);
+    expect(await sees('docs/plan', back, () => rmSync(plan, { recursive: true }))).toBe(true);
 
     // the plan directory is watched again once it is back
     await live();
-    const changed = next('docs/plan/b.md');
-    writeFileSync(join(repo, 'docs/plan/b.md'), `${DOC}- [ ] **W2:** Two.\n`);
-    expect(await changed).toBe(true);
-  }, 6 * swamped);
+    expect(await sees('docs/plan/b.md', () => writeFileSync(join(plan, 'b.md'), `${DOC}- [ ] **W2:** Two.\n`))).toBe(true);
+  }, 4 * budget);
 
   test('sees a first doc in a repository without a plan directory', async () => {
-    const { repo, next } = watched(['README.md']);
+    const { repo, sees } = watched(['README.md']);
     await live();
-    const seen = next('docs');
-    mkdirSync(join(repo, 'docs/plan'), { recursive: true });
-    writeFileSync(join(repo, 'docs/plan/a.md'), DOC);
-    expect(await seen).toBe(true);
-  }, 6 * swamped);
+    const first = () => {
+      mkdirSync(join(repo, 'docs/plan'), { recursive: true });
+      writeFileSync(join(repo, 'docs/plan/a.md'), DOC);
+    };
+    expect(await sees('docs', first, () => rmSync(join(repo, 'docs'), { recursive: true }))).toBe(true);
+  }, 2 * budget);
 
   test('the safety-net poll alone sees docs change, come and go, and stays quiet otherwise', async () => {
-    const { repo, next, calls } = watched(['README.md'], { watches: false, poll: 50 });
-    const first = next('docs/plan/a.md');
-    mkdirSync(join(repo, 'docs/plan'), { recursive: true });
-    writeFileSync(join(repo, 'docs/plan/a.md'), DOC);
-    expect(await first).toBe(true);
+    const { repo, sees, calls } = watched(['README.md'], { watches: false, poll: 50 });
+    expect(await sees('docs/plan/a.md', () => {
+      mkdirSync(join(repo, 'docs/plan'), { recursive: true });
+      writeFileSync(join(repo, 'docs/plan/a.md'), DOC);
+    })).toBe(true);
 
-    const changed = next('docs/plan/a.md');
-    writeFileSync(join(repo, 'docs/plan/a.md'), `${DOC}- [ ] **W2:** Two.\n`);
-    expect(await changed).toBe(true);
+    expect(await sees('docs/plan/a.md', () => writeFileSync(join(repo, 'docs/plan/a.md'), `${DOC}- [ ] **W2:** Two.\n`))).toBe(true);
 
     // what it has reported once, it does not report again; nor anything that is not a plan doc
     const before = calls();
@@ -163,10 +194,8 @@ describe('watchPlanDocs', () => {
     await Bun.sleep(400);
     expect(calls()).toBe(before);
 
-    const gone = next('docs/plan');
-    rmSync(join(repo, 'docs/plan'), { recursive: true });
-    expect(await gone).toBe(true);
-  }, 6 * swamped);
+    expect(await sees('docs/plan', () => rmSync(join(repo, 'docs/plan'), { recursive: true }))).toBe(true);
+  }, 4 * budget);
 });
 
 describe('a remote on GitHub', () => {
