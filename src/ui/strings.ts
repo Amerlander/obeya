@@ -601,6 +601,8 @@ const de = {
     slots: 'Slots hier',
     slotsAll: 'alle',
     slotsHint: 'Wie viele Agenten auf dem Rechner zugleich arbeiten dürfen. Eine neue Aufgabe geht auf den ersten Rechner mit freiem Slot; leer: so viele wie Klone.',
+    slotsAny: 'beliebig',
+    slotsWorktreesHint: 'Wie viele Agenten des Repositorys zugleich arbeiten dürfen. Sind alle Slots belegt, wartet eine neue Aufgabe, bis ein Agent fertig ist oder auf dich wartet; leer: beliebig viele.',
     hosts: 'Weitere Rechner (über SSH), wenn hier alle Slots belegt sind',
     hostsHint: 'Obeya legt die Klone dort selbst an und startet die Agenten dort über ssh. Die Anmeldung bei Claude (claude-token in Obeyas Verzeichnis) und bei GitHub gehen bei jedem Start mit und bleiben dort nicht liegen.',
     hostName: 'Name',
@@ -941,6 +943,7 @@ const de = {
     free: (n: number, total: number) => (total === 0 ? 'keine eingerichtet' : n <= 0 ? 'alle belegt' : `${n} frei`),
     host: (name: string, busy: number, slots: number, taken: number, total: number) =>
       `${name}: ${busy} von ${slots} ${slots === 1 ? 'Slot' : 'Slots'} in Arbeit, ${taken} von ${total} ${total === 1 ? 'Klon' : 'Klonen'} belegt${taken ? ':' : '.'}`,
+    worktreeSlots: (name: string, busy: number, slots: number) => `${name}: ${busy} von ${slots} ${slots === 1 ? 'Slot' : 'Slots'} in Arbeit${busy ? ':' : '.'}`,
     offCanvas: 'eine Karte, die nicht auf der Leinwand liegt',
     atWork: 'arbeitet',
     waiting: (n: number) => (n === 1 ? '1 Karte wartet auf einen freien Workspace.' : `${n} Karten warten auf einen freien Workspace.`),
@@ -1645,6 +1648,8 @@ const en: Strings = {
     slots: 'Slots here',
     slotsAll: 'all',
     slotsHint: 'How many agents may work on the machine at once. A new task goes to the first machine with a free slot; empty: as many as there are clones.',
+    slotsAny: 'any',
+    slotsWorktreesHint: 'How many of the repository’s agents may work at once. With all slots taken, a new task waits until an agent is done or waits for you; empty: any number.',
     hosts: 'Other machines (over SSH), once all slots here are taken',
     hostsHint: 'Obeya creates the clones there itself and starts the agents there through ssh. The Claude login (claude-token in Obeya’s directory) and the GitHub login go along with each start and are not left there.',
     hostName: 'Name',
@@ -1984,6 +1989,7 @@ const en: Strings = {
     free: (n: number, total: number) => (total === 0 ? 'none set up' : n <= 0 ? 'all taken' : `${n} free`),
     host: (name: string, busy: number, slots: number, taken: number, total: number) =>
       `${name}: ${busy} of ${slots} ${slots === 1 ? 'slot' : 'slots'} at work, ${taken} of ${total} ${total === 1 ? 'clone' : 'clones'} taken${taken ? ':' : '.'}`,
+    worktreeSlots: (name: string, busy: number, slots: number) => `${name}: ${busy} of ${slots} ${slots === 1 ? 'slot' : 'slots'} at work${busy ? ':' : '.'}`,
     offCanvas: 'a card that is not on the canvas',
     atWork: 'at work',
     waiting: (n: number) => (n === 1 ? '1 card is waiting for a free workspace.' : `${n} cards are waiting for a free workspace.`),

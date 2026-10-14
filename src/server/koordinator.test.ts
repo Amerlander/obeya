@@ -11,7 +11,7 @@ import { Koordinator, overlaps } from './koordinator';
 import { move, queueOrder } from '../core/queue';
 import { FakeRuntime, type FakeSession, gitRepo } from './testing';
 import { Workers } from './workers';
-import { git, parseChanges, Workspaces } from './workspaces';
+import { git, HERE, parseChanges, Workspaces } from './workspaces';
 
 let dir: string;
 let board: Board;
@@ -428,6 +428,44 @@ describe('Koordinator waits for a free workspace', () => {
     expect(board.row(b.id).workspace).not.toBe(board.row(a.id).workspace);
     expect(board.events(b.id).some((e) => e.text.includes('wieder einen Slot frei'))).toBe(true);
     expect(workspaces.pool(workers.inTurn())[0]).toMatchObject({ cards: [a.id, b.id], busy: [b.id] });
+  });
+
+  test('in worktrees, a card waits for a slot only once the repository has slots', async () => {
+    const main = join(dir, 'main');
+    const store = new Store(':memory:');
+    board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: main, branch: 'main' }] }, () => ({ docs, dirs: [] }));
+    workspaces = new Workspaces(store, 'c', { mode: 'worktrees', repoPath: main, dir: join(dir, 'ws'), machines: [{ host: null, slots: 1 }], busy: () => workers.busyOn(null) });
+    const adapter = { ...generic, land: 'main' as const, workspaces: 'worktrees' as const };
+    workers = new Workers({ board, runtime, workspaces, adapter });
+    k = new Koordinator({ board, runtime, home: () => main, repoFor: () => ({ workers, workspaces, adapter, path: main }), holdMs: 0 });
+    expect(workspaces.pooled).toBe(true);
+    const a = card('A');
+    k.request(a.id);
+    await scope(['src/a.ts']);
+    const b = card('B');
+    k.request(b.id);
+    await scope(['src/b.ts']);
+    expect(item(b.id)).toMatchObject({ state: 'planned', queue: { workspace: 'slots' } });
+    expect(board.events(b.id).at(-1)!.text).toContain('Kein Slot frei');
+    expect(workspaces.pool(workers.inTurn())).toEqual([{ name: HERE, here: true, worktrees: true, slots: 1, total: 1, cards: [a.id], busy: [a.id] }]);
+
+    // A asks the owner: its worktree stays its own, its slot is free
+    await workerOf(a.id).call('ask', { question: 'Welche Farbe?' });
+    workerOf(a.id).emit({ type: 'idle' });
+    await settle();
+    expect(item(b.id).state).toBe('working');
+    expect(board.events(b.id).some((e) => e.text.includes('wieder einen Slot frei'))).toBe(true);
+    expect(workspaces.pool(workers.inTurn())[0]).toMatchObject({ cards: [b.id], busy: [b.id] });
+  });
+
+  test('in worktrees without slots, any number of cards work at once', async () => {
+    expect(workspaces.pooled).toBe(false);
+    const cards = ['A', 'B', 'C'].map((t) => card(t));
+    for (const [i, c] of cards.entries()) {
+      k.request(c.id);
+      await scope([`src/${i}.ts`]);
+    }
+    expect(cards.map((c) => item(c.id).state)).toEqual(['working', 'working', 'working']);
   });
 
   test('the card waiting longest gets the workspace; a card behind a waiting one waits too', async () => {

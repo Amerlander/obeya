@@ -316,8 +316,8 @@ export function OldBunPill({ version }: { version: string }) {
 
 /**
  * Each repository's pool by machine: a dot per clone (solid while its card's worker is at work,
- * pale while the card holds it otherwise), and how many new cards could start now; over it, each
- * machine's slots and the cards that hold its clones.
+ * pale while the card holds it otherwise), or per slot of a repository in worktrees, and how many
+ * new cards could start now; over it, each machine's slots and the cards that hold its clones.
  */
 export function WorkspacesPill({ pools, canvas, items }: { pools: ClonePool[]; canvas: CanvasInfo; items: Item[] }) {
   const several = pools.length > 1;
@@ -363,7 +363,7 @@ export function WorkspacesPill({ pools, canvas, items }: { pools: ClonePool[]; c
               .filter((h) => h.total > 0 || !h.here)
               .map((h) => (
                 <div key={h.name}>
-                  <p>{t.workspaces.host(h.name, h.busy.length, h.slots, h.cards.length, h.total)}</p>
+                  <p>{h.worktrees ? t.workspaces.worktreeSlots(h.name, h.busy.length, h.slots) : t.workspaces.host(h.name, h.busy.length, h.slots, h.cards.length, h.total)}</p>
                   {h.cards.length > 0 && (
                     <ul>
                       {[...h.busy, ...h.cards.filter((c) => !h.busy.includes(c))].map((id) => {

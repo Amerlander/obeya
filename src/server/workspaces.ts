@@ -3,8 +3,8 @@
 // `clones`: a pool of full clones per canvas, leased one card at a time (for repositories with tools
 // that break in worktrees, or one app stack per clone), here and on other machines; a new card
 // takes a clone on the first machine whose busy workers leave it a slot (design: Hosts). `worktrees`: one worktree of the Obeya checkout per card,
-// created on start, as many in parallel as there are cards; kept across stop and restart until
-// the card's work has landed.
+// created on start, as many in parallel as there are cards unless the repository has slots; kept
+// across stop and restart until the card's work has landed.
 
 import { existsSync, mkdirSync } from 'node:fs';
 import { hostname } from 'node:os';
@@ -274,23 +274,30 @@ export class Workspaces {
 
   /**
    * Gives the card a workspace on `branch` and returns its path. A clone comes from the first
-   * machine with a free slot; `overSlots` takes one on a busy machine when none has a slot (an
-   * owner's question to a finished card, which should not wait).
+   * machine with a free slot, a worktree only while this machine has one; `overSlots` takes one on
+   * a busy machine when none has a slot (an owner's question to a finished card, which should not wait).
    */
   lease(cardId: string, branch: string, o: { overSlots?: boolean } = {}): string {
     const own = this.leasedBy(cardId);
     if (own) return own;
-    return this.o.mode === 'worktrees' ? this.leaseWorktree(cardId, branch) : this.leaseClone(cardId, branch, !!o.overSlots);
+    if (this.o.mode === 'clones') return this.leaseClone(cardId, branch, !!o.overSlots);
+    if (!o.overSlots && !this.room(null)) throw new WorkspaceError(SHORT_TEXT.slots, SHORT_CODE.slots);
+    return this.leaseWorktree(cardId, branch);
+  }
+
+  /** Whether its pool is worth showing: clones, or worktrees capped by slots. */
+  get pooled(): boolean {
+    return this.o.mode === 'clones' || Number.isFinite(this.slots(null));
   }
 
   /**
-   * Whether `lease` would find a workspace for a new card now. A worktree can always be made; a
-   * clone must be free and clean, on a machine with a free slot. Free clones that were dirty at the
-   * last look within RECHECK_MS are not asked again, since cards waiting for one ask on every change
-   * of the board.
+   * Whether `lease` would find a workspace for a new card now. A worktree can always be made, while
+   * there is a slot for its worker; a clone must be free and clean, on a machine with a free slot.
+   * Free clones that were dirty at the last look within RECHECK_MS are not asked again, since cards
+   * waiting for one ask on every change of the board.
    */
   leasable(): boolean {
-    if (this.o.mode === 'worktrees') return true;
+    if (this.o.mode === 'worktrees') return this.room(null);
     const free = this.list().filter((w) => !w.card_id);
     const key = [...free.map((w) => w.path), ...this.machines().filter((m) => this.room(m))].join('\n');
     if (this.dirty?.key === key && Date.now() - this.dirty.at < RECHECK_MS) return false;
@@ -351,9 +358,17 @@ export class Workspaces {
     return { short: full ? 'slots' : dirty ? 'dirty' : 'none' };
   }
 
-  /** The pool by machine for the Workspaces pill, `busy` the cards whose worker is in a turn. */
+  /**
+   * The pool by machine for the Workspaces pill, `busy` the cards whose worker is in a turn. Worktrees
+   * are never short, so their pool is this machine's slots, each taken while a worker is at work.
+   */
   pool(busy: string[]): PoolHost[] {
     const all = this.list();
+    if (this.o.mode === 'worktrees') {
+      const slots = this.slots(null);
+      const cards = all.flatMap((w) => (w.card_id && busy.includes(w.card_id) ? [w.card_id] : []));
+      return [{ name: HERE, here: true, worktrees: true, slots, total: slots, cards, busy: cards }];
+    }
     return this.machines().map((host) => {
       const ws = all.filter((w) => hostName(w.path) === host);
       const cards = ws.flatMap((w) => (w.card_id ? [w.card_id] : []));

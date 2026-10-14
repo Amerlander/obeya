@@ -1126,6 +1126,16 @@ function RepoRow({ repo, home, resolved, canvasId, adapters, problems, focus, wh
           <Hosts hosts={repo.hosts ?? []} onChange={(hosts) => onChange(without('hosts', hosts.length ? hosts : undefined))} />
         </div>
       )}
+      {!clones && resolved && (
+        <div className="cfg-span cfg-clones">
+          <label className="cfg-has-info">
+            <span className="hint">
+              {t.config.slots} <Info text={t.config.slotsWorktreesHint} />
+            </span>
+            <input type="number" min={0} max={20} aria-label={t.config.slots} placeholder={t.config.slotsAny} value={repo.slots ?? ''} onChange={(e) => onChange(without('slots', slotsOf(e.target.value)))} />
+          </label>
+        </div>
+      )}
       {problems.map((p, k) => (
         <div key={k} className="cfg-span">
           <Problem problem={p} where={where} ask={ask} />
@@ -1142,7 +1152,7 @@ function RepoRow({ repo, home, resolved, canvasId, adapters, problems, focus, wh
   );
 }
 
-/** A slot count as typed: empty is none set (as many as there are clones), 0 takes no new cards. */
+/** A slot count as typed: empty is none set (as many as there are clones, any number in worktrees), 0 takes no new cards. */
 function slotsOf(value: string): number | undefined {
   return value.trim() === '' || !Number.isFinite(Number(value)) ? undefined : Math.max(0, Math.round(Number(value)));
 }

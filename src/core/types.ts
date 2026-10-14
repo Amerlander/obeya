@@ -509,7 +509,7 @@ export interface RepoRef {
   direct?: boolean;
 }
 
-/** A repository's pool of clones, by the machine they are on, in the order new cards go there. */
+/** A repository's pool of clones, by the machine they are on, in the order new cards go there; or its slots for workers in worktrees. */
 export interface ClonePool {
   repo: string;
   hosts: PoolHost[];
@@ -521,6 +521,8 @@ export interface PoolHost {
   name: string;
   /** The machine Obeya runs on. */
   here?: boolean;
+  /** Its workers work in worktrees: `total` is its slots, and `cards` those of the workers at work. */
+  worktrees?: boolean;
   /** How many of its workers may be in a turn at once; a new card goes elsewhere or waits once they are. */
   slots: number;
   /** Its clones: how many, and the cards that hold one now. */
@@ -855,7 +857,7 @@ export interface RepoConfig {
   workspaces?: string[];
   /** Clones to create under Obeya's home (adapters that use clones). */
   clones?: number;
-  /** How many of its workers may be busy at once on this machine (adapters that use clones); as many as it has clones when left out. */
+  /** How many of its workers may be busy at once on this machine; left out, as many as it has clones, or any number in worktrees. */
   slots?: number;
   /**
    * The command that shares a demo on a page outside Obeya (`publish`, `withdraw <slug>`;

@@ -1150,8 +1150,8 @@ the owner's language (`src/core/locale.ts`).
   warning with a stack trace into Obeya's log at every worker start.
 - **Workspaces** — per adapter, worktrees unless it says clones. A pool of full clones leased by a card while it is worked on
   (for a repository whose tools break inside a worktree, or that runs its own app stack per clone),
-  or a worktree per card (Obeya itself: any number in parallel), kept across stop and restart
-  until the card's work has landed. Clones come from the repository's `clones` or
+  or a worktree per card (Obeya itself: any number in parallel unless the repository has `slots`),
+  kept across stop and restart until the card's work has landed. Clones come from the repository's `clones` or
   `workspaces` in the configuration, or on the command line from `--workspace <path>` or
   `--clones <n>`; a repository whose configuration names clones (these, or `hosts`) works in
   clones whatever its adapter says. Until 2026-10-14 the generic adapter, and so every new canvas
@@ -1170,14 +1170,18 @@ the owner's language (`src/core/locale.ts`).
   a slot. Slots count per repository: two repositories on one machine each have their own.
   Until 2026-10-10 the clones were the only cap, and a card went to another machine only once
   every clone here was leased.
+  A repository in worktrees can have slots too (`slots`, in the Konfiguration dialog under its
+  row): a new card makes its worktree only while fewer of its workers are busy, else it waits for
+  a slot the same way; left out, any number work at once. Until 2026-10-14 nothing capped them.
   For each repository that uses clones, the top bar shows the pool ("Workspaces"): per machine,
   named once there is more than one, a dot per clone, solid while its card's worker is at work and
   pale while the card holds it otherwise, and how many new cards could start now ("2 frei" or
   "alle belegt"); over it, each machine's slots at work and clones taken, the cards that hold one
   (those at work first), and how many cards wait for a workspace or a slot. The snapshot carries
   the pools (`workspaces`, by machine): leases change only with a card, and a worker's turn
-  starting or ending changes the board, so they ride on its updates. Worktrees are never short, so
-  a canvas of only those shows none.
+  starting or ending changes the board, so they ride on its updates. Worktrees are never short:
+  a repository in worktrees shows a dot per slot, solid while a worker is at work, and none
+  without slots, so a canvas of only those without slots shows no pill.
 - **Parking** — a card that waits for the owner (handed over, asked, its pull request open), its
   worker without a turn or background work, has the app stack in its workspace stopped after a
   grace of five minutes (`OBEYA_PARK_GRACE` in seconds for a demo or a live check; a quick reply

@@ -252,7 +252,7 @@ export class CanvasRuntime {
       }
     });
     board.showPools(() =>
-      this.repos.filter((r) => r.workspaces.mode === 'clones').map((r) => ({ repo: r.ref.id, hosts: r.workspaces.pool(r.workers.inTurn()) })),
+      this.repos.filter((r) => r.workspaces.pooled).map((r) => ({ repo: r.ref.id, hosts: r.workspaces.pool(r.workers.inTurn()) })),
     );
     for (const r of this.repos) r.workers.resumeAll();
     koordinator = this.koordinator = new Koordinator({
