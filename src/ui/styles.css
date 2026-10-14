@@ -979,7 +979,7 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 .cfg-share-settings .hint.warn { color: var(--warn); }
 .cfg-share-confirm { max-width: 640px; }
 .cfg-share-confirm .c-json { margin: 6px 0 8px; white-space: pre-wrap; }
-.cfg-share-confirm .cfg-actions { margin: 0; }
+.cfg-share-actions { display: flex; gap: 8px; }
 .cfg-plan { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; max-width: 640px; }
 .cfg-hosts { grid-column: 1 / -1; }
 .cfg-hosts > .hint { display: block; font-size: 11.5px; margin-bottom: 3px; }

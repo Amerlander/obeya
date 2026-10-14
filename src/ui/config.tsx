@@ -181,7 +181,10 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }
                   setBusy(true);
                   try {
                     const { restarting, applied } = await api.saveConfig(draft);
-                    setView({ ...view, canvases: draft, restarting });
+                    // settings applied at once change what the repositories amount to (where „Für alle“ goes, say): read it again
+                    const fresh = applied ? await api.config() : null;
+                    setView({ ...(fresh ?? view), canvases: draft, restarting });
+                    if (fresh) setChecked(fresh);
                     setStatus(restarting ? c.saved : applied ? c.savedApplied : c.savedOnly);
                   } catch (e) {
                     setStatus(e instanceof ApiError ? errorText(e.code) : t.offlineError);
@@ -1223,6 +1226,7 @@ function RepoSettingsBlock({
   };
   const keys: SettingKey[] = ['branch', 'land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'demoRequired', 'howToRun'];
   const setHere = keys.filter((k) => own(k) !== undefined).length;
+  const fromRepo = keys.filter((k) => own(k) === undefined && base[k].source === 'repository').length;
   const lines = (k: SettingKey) => value<string[]>(k).join('\n');
   const row = (k: SettingKey, label: string, control: ReactNode, hint?: string) => {
     const here = own(k) !== undefined;
@@ -1253,7 +1257,7 @@ function RepoSettingsBlock({
         <span className="cfg-caret" aria-hidden="true" />
         {c.open}
         <span className="hint">
-          {[value<string>('branch'), c.lands[land], ...(setHere ? [c.setHere(setHere)] : [])].join(' · ')}
+          {[value<string>('branch'), c.lands[land], ...(setHere ? [c.setHere(setHere)] : []), ...(fromRepo ? [c.fromRepo(fromRepo)] : [])].join(' · ')}
         </span>
       </button>
       {open && (
@@ -1403,7 +1407,7 @@ function ShareSettings({ repo, values, branch, shareTo, onReload }: { repo: Repo
               {'\n'}
               {JSON.stringify(sharedPreview(repo, values), null, 2)}
             </pre>
-            <div className="cfg-actions">
+            <div className="cfg-share-actions">
               <button type="button" className="btn primary small" disabled={busy} onClick={go}>
                 {shareTo === 'main' ? c.commit : c.openPr}
               </button>
