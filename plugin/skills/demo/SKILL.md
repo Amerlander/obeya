@@ -128,6 +128,9 @@ is presented without "I" or "we".
   30–60 s (for a fix: the broken behaviour, then the fixed one), a larger one 1½–3 min,
   a multi-commit project one demo per shipped workstream.
 - Open with the situation and what was missing; end with a one-sentence recap.
+- Every visual cue (a highlight, a marker, a card appearing) shows at the moment the narration
+  talks about it, not earlier or later (`untilSpoken`); whatever appears on screen gets mentioned
+  in the narration.
 - Behaviour that varies between runs (timings, a model's output, a bug that shows only
   sometimes) is measured before the narration is written, and narrated so it holds in any take
   ("several seconds", "mostly"), not with the value of one run. Other agents load the same
@@ -213,7 +216,8 @@ the locator it waited for.
   A scene flagged with seconds "without narration" shows a stretch where nothing is said: if it
   only waits, wrap the wait in `d.skip`; otherwise let the narration say what happens there.
 - `review/NN-mid.jpg` and `review/NN.jpg`: a still from the middle and from the end of each
-  scene. Look at all of them: is the thing being talked about on screen, ringed, legible? Pull
+  scene. Look at all of them: is the thing being talked about on screen, ringed, legible, and
+  does nothing show that the narration leaves out? Pull
   further frames only for fast transitions (`ffmpeg -ss <t> -i demo.mp4 -frames:v 1 x.png`).
 - A warning that the screencast frames are smaller than the viewport means part of the page is
   missing from the video.
