@@ -4,15 +4,18 @@
 // and dictates into it, and a draft outlives closing the card. Without a field to speak to, the
 // screenshots for the next recording lie beside the microphone, in a draft of their own (`MIC`).
 // These drafts (text, screenshots, picks) are written down per tab and canvas (`keepDrafts`), so they outlive a page load too:
-// switching to another canvas and back, or a restart.
+// switching to another canvas and back, or a restart. So are the marks on screenshots (`Markup`).
 
 import { useEffect, useSyncExternalStore } from 'react';
+import type { Mark } from './marks';
 
 export interface Draft {
   text: string;
   images: string[];
   /** Screenshots still uploading. */
   uploading: number;
+  /** The screenshots whose marked version is still uploading, to take their place. */
+  marking: string[];
   error: string;
   /** A recording dictated into the field: while the owner speaks, then while Whisper writes it down. */
   dictation: '' | 'listening' | 'writing';
@@ -36,7 +39,7 @@ const keptOf = ({ text, images, picks }: Draft): Kept | null => {
   return text.trim() || images.length || picked ? { text, images, ...(picked ? { picks: picked } : {}) } : null;
 };
 
-const EMPTY: Draft = { text: '', images: [], uploading: 0, error: '', dictation: '', note: '' };
+const EMPTY: Draft = { text: '', images: [], uploading: 0, error: '', dictation: '', note: '', marking: [] };
 
 /** The draft of a card's field. */
 export const cardDraft = (id: string) => `card:${id}`;
@@ -65,11 +68,41 @@ type Store = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 /** The drafts that last beyond their field: the cards', the sidebar's and the microphone's, not those of a field of its own. */
 const lasting = (key: string) => key.startsWith('card:') || key === OBEYA_DRAFT || key === MIC_DRAFT;
 const storeKey = (canvas: string) => `obeya-drafts-${canvas}`;
+const markupsKey = (canvas: string) => `obeya-markups-${canvas}`;
 let kept: { store: Store; canvas: string } | null = null;
 
 /**
+ * A screenshot the owner marked in a field: the original and the marks on it, by the id of the
+ * marked image that the field holds in its place. Reopened, the original shows with its marks
+ * still apart, to undo them; the agent gets the marked image.
+ */
+export interface Markup {
+  original: string;
+  marks: Mark[];
+}
+/** The latest markups, any field's (a planned card's task too): the newest last. */
+const markups = new Map<string, Markup>();
+/** How many markups are kept: the newest, more than the fields open at a time hold. */
+const KEPT_MARKUPS = 100;
+
+export const markupOf = (id: string): Markup | undefined => markups.get(id);
+
+/** Keeps the marks of the marked image `id`, or forgets them (`null`). */
+export function setMarkup(id: string, markup: Markup | null) {
+  markups.delete(id);
+  if (markup) markups.set(id, markup);
+  for (const old of markups.keys()) if (markups.size > KEPT_MARKUPS) markups.delete(old);
+  if (!kept) return;
+  try {
+    if (markups.size) kept.store.setItem(markupsKey(kept.canvas), JSON.stringify(Object.fromEntries(markups)));
+    else kept.store.removeItem(markupsKey(kept.canvas));
+  } catch {}
+}
+
+/**
  * Takes back the canvas's drafts that `store` kept and writes them down there from now on, text,
- * screenshots and picks, whenever they change. Once per page; later calls change nothing.
+ * screenshots and picks, whenever they change, and the marks on the screenshots. Once per page;
+ * later calls change nothing.
  */
 export function keepDrafts(store: Store, canvas: string) {
   if (kept) return;
@@ -77,6 +110,10 @@ export function keepDrafts(store: Store, canvas: string) {
   try {
     const saved = JSON.parse(store.getItem(storeKey(canvas)) ?? '{}') as Record<string, Kept>;
     for (const [key, { text, images, picks }] of Object.entries(saved)) if (!drafts.has(key)) drafts.set(key, { ...EMPTY, text, images, ...(picks ? { picks } : {}) });
+  } catch {}
+  try {
+    const saved = JSON.parse(store.getItem(markupsKey(canvas)) ?? '{}') as Record<string, Markup>;
+    for (const [id, m] of Object.entries(saved)) if (!markups.has(id)) markups.set(id, m);
   } catch {}
   listeners.add(writeDown);
 }

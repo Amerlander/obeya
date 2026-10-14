@@ -740,6 +740,8 @@ textarea.p-body:focus { border-color: var(--muted); }
 .c-shot .remove { position: absolute; top: -7px; right: -7px; width: 20px; height: 20px; border-radius: 3px; border: 1px solid var(--line);
   background: var(--card); color: var(--ink); font-size: 13px; line-height: 1; cursor: pointer; padding: 0; }
 .c-shot.loading { padding: 0 10px; }
+/* the marked version is being drawn and uploaded, to take its place */
+.c-shot.marking img { opacity: .5; }
 .c-error { flex-basis: 100%; margin: 0; }
 .shots { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .shot { border: 1px solid var(--line); border-radius: 2px; padding: 0; background: var(--card); cursor: zoom-in; line-height: 0; }
@@ -757,6 +759,16 @@ textarea.p-body:focus { border-color: var(--muted); }
   padding: 4vh 4vw; cursor: zoom-out; animation: dim .38s ease-out; transition: background-color .38s; }
 .lightbox.closing { background-color: transparent; }
 .lightbox img { max-width: 100%; max-height: 100%; border-radius: 2px; box-shadow: var(--lift); background: #fff; transform-origin: 0 0; }
+/* a screenshot of a field, to mark: the marks over the image move with it, the bar with Undo and Done under it */
+.lightbox.marking { flex-direction: column; gap: 14px; }
+.lightbox.marking img { max-height: calc(100% - 58px); }
+.lb-marks { position: absolute; transform-origin: 0 0; cursor: crosshair; touch-action: none; user-select: none; overflow: visible; }
+.lb-bar { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 14px; border-radius: 4px; background: var(--card); box-shadow: var(--lift);
+  cursor: default; animation: fade .38s ease-out; transition: opacity .2s; }
+.lb-bar .btn { padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px; }
+.lb-bar .btn:disabled { opacity: .45; cursor: default; }
+.lb-hint { font-size: 13px; color: var(--muted); margin-right: 6px; }
+.lightbox.closing .lb-bar { opacity: 0; }
 @keyframes dim { from { background-color: transparent; } }
 @keyframes fade { from { opacity: 0; } }
 /* a card's change beside its branch, and its whole diff over the page: one sheet as tall as the screen, one scrollbar */

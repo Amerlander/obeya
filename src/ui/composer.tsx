@@ -91,7 +91,7 @@ export function Composer({
     space.current = null;
     if (field.current) typeInto(field.current, ' ');
   };
-  const ready = (!!text.trim() || images.length > 0 || allowEmpty) && !busy && !shots.uploading;
+  const ready = (!!text.trim() || images.length > 0 || allowEmpty) && !busy && !shots.uploading && !shots.marking.length;
   const send = async () => {
     if (!ready) return;
     setBusy(true);

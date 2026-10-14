@@ -1,10 +1,12 @@
 // Screenshots in what the owner writes: pasted, dropped or picked, scaled down so the agent can
-// read them, uploaded at once; shown as thumbnails that grow large over the page on a click.
+// read them, uploaded at once; shown as thumbnails that grow large over the page on a click, where
+// those not sent yet take marks (marks.ts).
 
-import { type ClipboardEvent, type DragEvent, type MouseEvent, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { type ClipboardEvent, type DragEvent, type MouseEvent, type PointerEvent, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiError, api, at } from './api';
-import { draftOf, dropDraft, updateDraft, useDraft } from './draft';
+import { draftOf, dropDraft, markupOf, setMarkup, updateDraft, useDraft } from './draft';
+import { CLICK_PX, drawMarks, EDGE, type Mark, markOf, markSize, type Point, pinNumbers, RED } from './marks';
 import { errorText, t } from './strings';
 import { behindThumb, type Box, onto, ZOOM_EASE, ZOOM_MS } from './zoomBox';
 
@@ -36,6 +38,18 @@ export async function prepareImage(file: Blob): Promise<Blob> {
 
 export const imageUrl = (id: string) => at(`/images/${encodeURIComponent(id)}`);
 
+/** The screenshot at `src` with the marks drawn into it, as the agent gets it. */
+async function markedImage(src: string, marks: Mark[]): Promise<Blob> {
+  const res = await fetch(src);
+  if (!res.ok) throw new Error(`image: ${res.status}`);
+  const bmp = await createImageBitmap(await res.blob());
+  const canvas = new OffscreenCanvas(bmp.width, bmp.height);
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(bmp, 0, 0);
+  drawMarks(ctx, marks, bmp.width, bmp.height);
+  return prepareImage(await canvas.convertToBlob({ type: 'image/png' }));
+}
+
 /** Screenshots for a draft, uploaded one after the other; `added` hears each one that arrived. */
 export async function attachTo(key: string, files: File[], added?: () => void) {
   if (!files.length) return;
@@ -64,7 +78,7 @@ export function useShotInput({ draft, initial = [], onChange, off = false }: { d
   // a field of its own starts with its screenshots, and they go with it
   useState(() => !draft && initial.length && updateDraft(key, { images: initial }));
   useEffect(() => (draft ? undefined : () => dropDraft(key)), [key]);
-  const { images, uploading, error } = useDraft(key);
+  const { images, uploading, marking, error } = useDraft(key);
   const [dropping, setDropping] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
   const change = useRef(onChange);
@@ -74,15 +88,44 @@ export function useShotInput({ draft, initial = [], onChange, off = false }: { d
     change.current?.(draftOf(key).images);
   };
   const attach = (files: File[]) => (off ? Promise.resolve() : attachTo(key, files, () => change.current?.(draftOf(key).images)));
+  const failed = (e: unknown) => updateDraft(key, { error: e instanceof ApiError ? errorText(e.code) : t.offlineError });
   return {
     off,
     images,
     uploading,
+    marking,
     dropping,
     error,
     picker,
     attach,
-    remove: (id: string) => update((cur) => cur.filter((x) => x !== id)),
+    remove: (id: string) => {
+      setMarkup(id, null);
+      update((cur) => cur.filter((x) => x !== id));
+    },
+    /**
+     * The marks the owner left on screenshot `id` (a marked one, or still the original): drawn into
+     * the original, the new image takes its place in the field; without marks the original does.
+     */
+    mark: async (id: string, marks: Mark[]) => {
+      const was = markupOf(id);
+      const original = was?.original ?? id;
+      if (JSON.stringify(marks) === JSON.stringify(was?.marks ?? [])) return;
+      const into = (next: string) => {
+        setMarkup(id, null);
+        update((cur) => cur.map((x) => (x === id ? next : x)));
+      };
+      if (!marks.length) return into(original);
+      updateDraft(key, (d) => ({ error: '', marking: [...d.marking, id] }));
+      try {
+        const next = await api.uploadImage(await markedImage(imageUrl(original), marks));
+        setMarkup(next, { original, marks });
+        into(next);
+      } catch (e) {
+        failed(e);
+      } finally {
+        updateDraft(key, (d) => ({ marking: d.marking.filter((x) => x !== id) }));
+      }
+    },
     /** After sending: the field is empty again, or without those sent while more were added. */
     clear: (sent?: string[]) => updateDraft(key, (d) => ({ images: sent ? d.images.filter((id) => !sent.includes(id)) : [] })),
     /** For the element screenshots may be dropped on. */
@@ -112,15 +155,15 @@ export function useShotInput({ draft, initial = [], onChange, off = false }: { d
 }
 export type ShotInput = ReturnType<typeof useShotInput>;
 
-/** The screenshots in a text field, each to enlarge or remove, and those still uploading. */
+/** The screenshots in a text field, each to enlarge and mark or to remove, and those still uploading. */
 export function ShotStrip({ shots }: { shots: ShotInput }) {
-  const enlarge = useEnlarge();
+  const enlarge = useEnlarge(shots);
   if (!shots.images.length && !shots.uploading) return null;
   return (
     <div className="c-shots">
       {shots.images.map((id) => (
-        <span key={id} className="c-shot">
-          <button className="open" title={t.shots.enlarge} onClick={(e) => enlarge.open(id, e)}>
+        <span key={id} className={shots.marking.includes(id) ? 'c-shot marking' : 'c-shot'}>
+          <button className="open" title={t.shots.markUp} onClick={(e) => enlarge.open(id, e)}>
             <img src={imageUrl(id)} alt={t.shots.alt} />
           </button>
           <button className="remove" title={t.shots.remove} onClick={() => shots.remove(id)}>
@@ -181,27 +224,105 @@ export function Shots({ ids }: { ids?: string[] }) {
   );
 }
 
-/** One screenshot of a row of thumbnails shown large: `open` from the click on its thumbnail, `view` to render. */
-function useEnlarge() {
+/**
+ * One screenshot of a row of thumbnails shown large: `open` from the click on its thumbnail, `view`
+ * to render. Those of a field (`shots`) open to be marked: the original with its marks.
+ */
+function useEnlarge(shots?: ShotInput) {
   const [open, setOpen] = useState<{ id: string; thumb: HTMLImageElement } | null>(null);
+  const markup = open && shots ? markupOf(open.id) : undefined;
   return {
     open: (id: string, e: MouseEvent<HTMLElement>) => {
       const thumb = e.currentTarget.querySelector('img');
       if (thumb) setOpen({ id, thumb });
     },
-    view: open && <Lightbox src={imageUrl(open.id)} thumb={open.thumb} onClose={() => setOpen(null)} />,
+    view: open && (
+      <Lightbox
+        src={imageUrl(markup?.original ?? open.id)}
+        thumb={open.thumb}
+        marking={shots && { marks: markup?.marks ?? [], done: (marks) => void shots.mark(open.id, marks) }}
+        onClose={() => setOpen(null)}
+      />
+    ),
   };
+}
+
+/** Set once the owner put a mark on a screenshot: the hint on how goes. */
+const MARKS_KNOWN = 'obeya-marks-known';
+
+/** The marks over the image, in its pixels (`w`×`h`), and the frame being drawn (`drawing`). */
+function MarkLayer({ marks, w, h, drawing }: { marks: Mark[]; w: number; h: number; drawing?: Mark | null }) {
+  const s = markSize(w, h);
+  const numbers = pinNumbers(marks);
+  return (
+    <>
+      {[...marks, ...(drawing ? [drawing] : [])].map((m, i) =>
+        m.kind === 'frame' ? (
+          <g key={i} fill="none" strokeLinejoin="round">
+            <rect x={m.x} y={m.y} width={m.w} height={m.h} rx={s.corner} stroke={EDGE} strokeWidth={s.line + 2 * s.edge} />
+            <rect x={m.x} y={m.y} width={m.w} height={m.h} rx={s.corner} stroke={RED} strokeWidth={s.line} />
+          </g>
+        ) : (
+          <g key={i}>
+            <circle cx={m.x} cy={m.y} r={s.radius} fill={RED} stroke={EDGE} strokeWidth={s.edge * 2} />
+            <text x={m.x} y={m.y + s.font * 0.05} fill={EDGE} fontSize={s.font} fontWeight={700} fontFamily="system-ui, sans-serif" textAnchor="middle" dominantBaseline="central">
+              {numbers[i]}
+            </text>
+          </g>
+        ),
+      )}
+    </>
+  );
 }
 
 
 /**
  * One image over the whole page, outside the panel, which the camera transforms. Like the demo
  * video's zoom (detail.tsx useZoom) it grows out of its thumbnail and goes back into it, wherever
- * that stands by then; Esc or a click closes it.
+ * that stands by then; Esc or a click closes it. With `marking` a drag on the image frames a
+ * region and a click sets a numbered pin; Undo (⌘Z) takes back the last mark, and Done, Esc or a
+ * click beside the image closes it with the marks.
  */
-function Lightbox({ src, thumb, onClose }: { src: string; thumb: HTMLImageElement; onClose: () => void }) {
+function Lightbox({ src, thumb, marking, onClose }: { src: string; thumb: HTMLImageElement; marking?: { marks: Mark[]; done: (marks: Mark[]) => void }; onClose: () => void }) {
   const img = useRef<HTMLImageElement>(null);
+  /** The marks, laid over the image: its size and place, kept in step with it. */
+  const layer = useRef<SVGSVGElement>(null);
   const [closing, setClosing] = useState(false);
+  const [marks, setMarks] = useState(marking?.marks ?? []);
+  const marksRef = useRef(marks);
+  marksRef.current = marks;
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  const [drag, setDrag] = useState<{ a: Point; b: Point; from: Point; moved: number } | null>(null);
+  const [known, setKnown] = useState(() => {
+    try {
+      return localStorage.getItem(MARKS_KNOWN) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const add = (m: Mark) => {
+    setMarks((cur) => [...cur, m]);
+    if (known) return;
+    setKnown(true);
+    try {
+      localStorage.setItem(MARKS_KNOWN, '1');
+    } catch {}
+  };
+  const undo = () => setMarks((cur) => cur.slice(0, -1));
+  /** Where the pointer is on the image, in its pixels. */
+  const onImage = (e: PointerEvent): Point => {
+    const r = layer.current!.getBoundingClientRect();
+    const k = size!.w / r.width;
+    return { x: Math.max(0, Math.min(size!.w, (e.clientX - r.left) * k)), y: Math.max(0, Math.min(size!.h, (e.clientY - r.top) * k)) };
+  };
+  const place = () => {
+    const el = img.current;
+    const l = layer.current;
+    if (!el || !l) return;
+    Object.assign(l.style, { left: `${el.offsetLeft}px`, top: `${el.offsetTop}px`, width: `${el.offsetWidth}px`, height: `${el.offsetHeight}px` });
+  };
+  /** The image and the marks over it, which move as one. */
+  const moving = () => [img.current, layer.current].filter((x): x is HTMLImageElement | SVGSVGElement => !!x);
   /** The transform and crop that put the large image onto its thumbnail, or none while the thumbnail is out of sight. */
   const onThumb = () => {
     const el = img.current!;
@@ -215,13 +336,17 @@ function Lightbox({ src, thumb, onClose }: { src: string; thumb: HTMLImageElemen
   const close = () => {
     if (closing) return;
     setClosing(true);
+    setDrag(null);
+    marking?.done(marksRef.current);
     const to = onThumb();
     if (!to) return onClose();
     // from where it is, also when still growing
-    const el = img.current!;
-    const { transform, clipPath } = getComputedStyle(el);
-    el.getAnimations().forEach((a) => a.cancel());
-    el.animate([{ transform, clipPath }, to], { duration: ZOOM_MS, easing: ZOOM_EASE, fill: 'forwards' }).onfinish = onClose;
+    const { transform, clipPath } = getComputedStyle(img.current!);
+    for (const el of moving()) {
+      el.getAnimations().forEach((a) => a.cancel());
+      const back = el.animate([{ transform, clipPath }, to], { duration: ZOOM_MS, easing: ZOOM_EASE, fill: 'forwards' });
+      if (el === img.current) back.onfinish = onClose;
+    }
   };
   const closeRef = useRef(close);
   closeRef.current = close;
@@ -229,29 +354,42 @@ function Lightbox({ src, thumb, onClose }: { src: string; thumb: HTMLImageElemen
   useLayoutEffect(() => {
     const el = img.current!;
     const grow = () => {
+      setSize({ w: el.naturalWidth, h: el.naturalHeight });
+      place();
       const from = onThumb();
-      if (from) el.animate([from, { transform: 'none', clipPath: 'inset(0)' }], { duration: ZOOM_MS, easing: ZOOM_EASE });
+      if (from) for (const x of moving()) x.animate([from, { transform: 'none', clipPath: 'inset(0)' }], { duration: ZOOM_MS, easing: ZOOM_EASE });
     };
+    // a resized window resizes the image, and the marks with it
+    const resized = new ResizeObserver(place);
+    resized.observe(el);
     if (el.complete) grow();
     else el.addEventListener('load', grow, { once: true });
     thumb.style.visibility = 'hidden';
     return () => {
       el.removeEventListener('load', grow);
+      resized.disconnect();
       thumb.style.visibility = '';
     };
   }, []);
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.key === 'Escape') closeRef.current();
+      // the undo of the marks, not of the text field behind
+      if (marking && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        e.stopPropagation();
+        undo();
+      }
     };
-    addEventListener('keydown', h);
-    return () => removeEventListener('keydown', h);
+    addEventListener('keydown', h, true);
+    return () => removeEventListener('keydown', h, true);
   }, []);
+  const drawing = drag && drag.moved >= CLICK_PX ? markOf(drag.a, drag.b, drag.moved) : null;
   return createPortal(
     // a click here is not one on the card or field the thumbnail sits in
     <div
-      className={closing ? 'lightbox closing' : 'lightbox'}
-      title={t.shots.close}
+      className={['lightbox', marking && 'marking', closing && 'closing'].filter(Boolean).join(' ')}
+      title={marking ? undefined : t.shots.close}
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => {
         e.stopPropagation();
@@ -259,6 +397,48 @@ function Lightbox({ src, thumb, onClose }: { src: string; thumb: HTMLImageElemen
       }}
     >
       <img ref={img} src={src} alt={t.shots.alt} />
+      {marking && (
+        <>
+          <svg
+            ref={layer}
+            className="lb-marks"
+            viewBox={size ? `0 0 ${size.w} ${size.h}` : undefined}
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => {
+              if (e.button !== 0 || !size || closing) return;
+              e.currentTarget.setPointerCapture(e.pointerId);
+              const a = onImage(e);
+              setDrag({ a, b: a, from: { x: e.clientX, y: e.clientY }, moved: 0 });
+            }}
+            onPointerMove={(e) => {
+              if (!drag) return;
+              const moved = Math.max(drag.moved, Math.hypot(e.clientX - drag.from.x, e.clientY - drag.from.y));
+              setDrag({ ...drag, b: onImage(e), moved });
+            }}
+            onPointerUp={(e) => {
+              if (!drag) return;
+              setDrag(null);
+              add(markOf(drag.a, onImage(e), drag.moved));
+            }}
+            onPointerCancel={() => setDrag(null)}
+          >
+            {size && <MarkLayer marks={marks} w={size.w} h={size.h} drawing={drawing} />}
+          </svg>
+          <div className="lb-bar" onClick={(e) => e.stopPropagation()}>
+            {!known && <span className="lb-hint">{t.shots.markHint}</span>}
+            <button className="btn" title={t.shots.undoTitle} disabled={!marks.length} onClick={undo}>
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                <path d="M5.5 3 2.5 6l3 3" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M3 6h6.5a4 4 0 0 1 0 8H7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+              {t.shots.undo}
+            </button>
+            <button className="btn primary" onClick={close}>
+              {t.shots.done}
+            </button>
+          </div>
+        </>
+      )}
     </div>,
     document.body,
   );

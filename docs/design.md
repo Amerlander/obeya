@@ -583,6 +583,26 @@ thumbnail grows the screenshot out of it to as large as the window allows, over 
 like the demo video's zoom (`Lightbox` in `src/ui/shots.tsx`); Esc or a click puts it back into its
 thumbnail, and the card stays open. Until 2026-10-12 the thumbnails in the field did not open.
 
+A screenshot still in a field (any `ShotStrip`: a card's field, the sidebar's, the microphone's, a
+planned card's task) opens ready to be marked, to point the agent at a spot: a drag on it frames a
+region in signal red with a thin white edge (so it reads on light and dark screenshots), a click
+(a drag shorter than 5 px) sets a red pin with a white number, 1, 2, 3 … in the order set, for the
+text to refer to. No tool to pick: the gesture decides (owner, 2026-10-14; a free pen came out rough
+with mouse or trackpad, and a switch between pen, frame and number was one more choice each time).
+Line and pin take the same share of the image at any size (`src/ui/marks.ts`). A bar under the
+image has Undo (also ⌘Z / Ctrl+Z), which takes back the last mark, again and again down to the
+unmarked screenshot (an undone pin's number goes to the next one; there is no "clear all"), and
+Done; a hint in it says how to mark until the owner has marked once. A click on the image marks
+instead of closing; Esc, Done or a click beside the image closes it. On closing, the browser draws
+the marks into the original (through the same size limits as a pasted screenshot), uploads the
+result, and that takes the original's place in the field: the agent gets only the marked image, and
+the field waits to send until it is uploaded. The marks stay apart as shapes in image pixels beside
+the original (`Markup` in `src/ui/draft.ts`, by the id of the marked image, kept per tab and canvas
+like the drafts, the newest 100), so reopened, even after a reload, the original shows with its
+marks and Undo goes on working; with every mark undone the field holds the original again. A sent
+screenshot stays as it was sent: in the log its enlarged view only shows it. The server and the
+agents see nothing of this; a marked screenshot is one more uploaded image.
+
 A card's task takes screenshots the same way: in its description field, while the card is planned.
 They show under the task, and its worker gets them with the task when it starts (an idea's
 exploration agent, when a planned card becomes an idea; building an idea adds the screenshots the
