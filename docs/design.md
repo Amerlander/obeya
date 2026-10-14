@@ -628,7 +628,7 @@ the owner's language (`src/core/locale.ts`).
   without git gets the offer to set it up there instead (see Setting up git in a folder), whose
   confirmation also creates the canvas. Obeya
   writes `canvases.json` with it (its own adapter, else
-  the generic one, with two clones when the adapter works in clones), restarts and the page opens
+  the generic one, which works in worktrees; two clones when the adapter works in clones), restarts and the page opens
   the canvas, on which a first card says what to try (the marker `welcome` in Obeya's home, read
   once when the canvas runs). Later the Konfiguration dialog opens the same list over the canvas
   ("Einrichtung prüfen"), without the first canvas. A scratch Obeya with `"setup": true` in its
@@ -1148,12 +1148,15 @@ the owner's language (`src/core/locale.ts`).
   Obeya tools run without asking through a `PreToolUse` hook that allows them; as bare
   `allowedTools` (until 2026-10-10) they had the SDK print a `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED`
   warning with a stack trace into Obeya's log at every worker start.
-- **Workspaces** — per adapter. A pool of full clones leased by a card while it is worked on
+- **Workspaces** — per adapter, worktrees unless it says clones. A pool of full clones leased by a card while it is worked on
   (for a repository whose tools break inside a worktree, or that runs its own app stack per clone),
   or a worktree per card (Obeya itself: any number in parallel), kept across stop and restart
   until the card's work has landed. Clones come from the repository's `clones` or
   `workspaces` in the configuration, or on the command line from `--workspace <path>` or
-  `--clones <n>`.
+  `--clones <n>`; a repository whose configuration names clones (these, or `hosts`) works in
+  clones whatever its adapter says. Until 2026-10-14 the generic adapter, and so every new canvas
+  of a repository without its own adapter, used clones; a canvas set up then has `clones` in its
+  configuration and keeps them.
   A repository's workers in clones are capped by slots, not by clones: a slot is room for one
   busy worker (in a turn, or waiting for its background work), and a machine has a number of
   them (`slots` for this one, per host for the others; as many as it has clones when left out).

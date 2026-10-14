@@ -62,6 +62,18 @@ const problems = new WeakMap<RepoAdapter, string[]>();
 export const adapterProblems = (a: RepoAdapter): string[] => problems.get(a) ?? [];
 
 /**
+ * The adapter with its workers in clones: for a repository whose configuration names clones
+ * (`clones`, `workspaces` or `hosts`), whatever the adapter says.
+ */
+export function inClones(a: RepoAdapter): RepoAdapter {
+  if (a.workspaces === 'clones') return a;
+  const b: RepoAdapter = { ...a, workspaces: 'clones' };
+  const p = problems.get(a);
+  if (p) problems.set(b, p);
+  return b;
+}
+
+/**
  * Loads the adapter module of `repo`: its default export is the adapter, or a function that makes
  * it from Obeya's helpers (`kit.ts`). What it leaves out, or gets wrong (`adapterProblems`), comes
  * from detection (`land`) and the generic adapter.

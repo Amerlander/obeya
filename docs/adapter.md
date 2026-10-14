@@ -127,7 +127,8 @@ Where workers work. `clones`: a pool of full clones per canvas, leased by one ca
 number comes from "Konfiguration" (clones to create, or existing ones to use). Use it when every
 workspace runs its own app stack (ports, a database, Docker) or the tools break in a git worktree.
 `worktrees`: a git worktree of the configured checkout per card, as many in parallel as there are
-cards. Generic: `clones`.
+cards. Generic: `worktrees`. A repository whose configuration names clones (clones to create,
+existing ones, or other machines) works in clones whatever the adapter says.
 
 ### `prNoise` — account names
 

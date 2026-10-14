@@ -55,11 +55,20 @@ describe("Obeya's configuration", () => {
         id: 'produkt',
         name: 'Produkt',
         repos: [
-          { id: 'web', adapter: 'generic', workspaces: 'clones' },
+          { id: 'web', adapter: 'generic', workspaces: 'worktrees' },
           { id: 'api', adapter: 'obeya', workspaces: 'worktrees' },
         ],
       },
     ]);
+  });
+
+  test('a repository whose configuration names clones works in clones, whatever its adapter says', () => {
+    const c = config('file', []);
+    const mode = (r: object) => c.check([{ repos: [{ path: web, ...r }] }]).resolved[0]!.repos[0]!.workspaces;
+    expect(mode({})).toBe('worktrees');
+    expect(mode({ clones: 2 })).toBe('clones');
+    expect(mode({ workspaces: [api] })).toBe('clones');
+    expect(mode({ adapter: 'obeya', clones: 1 })).toBe('clones');
   });
 
   test('finds what keeps a configuration from working, by canvas and repository', () => {
@@ -107,7 +116,7 @@ describe("Obeya's configuration", () => {
     // slots here and there, 0 included (no new cards there); left out, as many as there are clones
     expect(check([{ path: web, slots: 0, hosts: [{ ...host, slots: 1 }] }]).canvases[0]!.repos[0]).toMatchObject({ slots: 0, hosts: [{ ...host, slots: 1 }] });
     expect(check([{ path: web, hosts: [host] }]).canvases[0]!.repos[0]).not.toHaveProperty('slots');
-    // worktrees of this checkout, or no remote: the host could not clone it
+    // landing on the main of this checkout, or no remote: the host could not clone it
     expect(check([{ path: web, adapter: 'obeya', hosts: [host] }]).problems.map((p) => p.code)).toEqual(['hostRepo']);
     expect(check([{ path: api, hosts: [host] }]).problems.map((p) => p.code)).toEqual(['hostRepo']);
     Bun.spawnSync(['git', '-C', api, 'remote', 'add', 'origin', 'https://github.com/acme/api.git']);

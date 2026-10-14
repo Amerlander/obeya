@@ -151,14 +151,21 @@ describe('what Obeya needs on this machine', () => {
 });
 
 describe('the first canvas', () => {
-  test('a repository folder becomes a canvas with clones for its adapter, and Obeya starts again', async () => {
+  test('a repository folder becomes a canvas whose workers use worktrees, and Obeya starts again', async () => {
     const repo = gitRepo(join(dir, 'shop'));
     git(repo, 'branch', '-m', 'master');
     const out = await setup().canvas({ path: repo });
     expect(out).toEqual({ canvas: 'shop', branch: 'master', restarting: true });
     expect(restarts).toBe(1);
-    expect(JSON.parse(readFileSync(join(home, 'canvases.json'), 'utf8'))).toEqual([{ repos: [{ path: repo, clones: CLONES }] }]);
+    expect(JSON.parse(readFileSync(join(home, 'canvases.json'), 'utf8'))).toEqual([{ repos: [{ path: repo }] }]);
     expect(readFileSync(join(home, WELCOME_FILE), 'utf8')).toBe('shop');
+  });
+
+  test('a repository whose own adapter works in clones gets clones', async () => {
+    const adapter = `export default { name: 'shop', workspaces: 'clones' };\n`;
+    const repo = gitRepo(join(dir, 'shop'), { 'README.md': 'hi\n', '.obeya/adapter/index.ts': adapter });
+    await setup().canvas({ path: repo });
+    expect(JSON.parse(readFileSync(join(home, 'canvases.json'), 'utf8'))).toEqual([{ repos: [{ path: repo, clones: CLONES }] }]);
   });
 
   test('says of a folder before it is saved whether it holds a repository, and its main branch', () => {

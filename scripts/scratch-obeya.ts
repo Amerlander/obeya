@@ -132,7 +132,7 @@ interface Stage {
   adapter?: string;
   /** The branch the repositories are on (default `main`). */
   mainBranch?: string;
-  /** Clones for an adapter that works in clones (generic): real workers need one each. */
+  /** Clones for the workers, who then work in clones whatever the adapter says: real workers need one each. */
   clones?: number;
   /** The repository's share command, as in the configuration. */
   share?: string;

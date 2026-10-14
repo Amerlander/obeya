@@ -25,7 +25,7 @@ describe('pickAdapter', () => {
     expect(a.land).toBe('main');
     // what it leaves out comes from the generic adapter
     expect(a.planDocs.dir).toBe('docs/plan');
-    expect(a.workspaces).toBe('clones');
+    expect(a.workspaces).toBe('worktrees');
   });
 
   test('reads it from the default branch, whatever the checkout is on', () => {

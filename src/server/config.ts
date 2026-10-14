@@ -252,7 +252,7 @@ export class Config {
           const error = broken[config.repos.indexOf(r)];
           if (error) problems.push({ code: 'adapterLoad', canvas, repo, detail: error });
           if (r.hosts?.length) {
-            const why = adapter.workspaces !== 'clones' ? 'its workers use worktrees of this checkout' : adapter.land === 'main' ? 'its work lands on the main of this checkout' : !remoteOf(r.path) ? 'it has no remote to clone from' : null;
+            const why = adapter.land === 'main' ? 'its work lands on the main of this checkout' : !remoteOf(r.path) ? 'it has no remote to clone from' : null;
             if (why) problems.push({ code: 'hostRepo', canvas, repo, detail: `the repository cannot have workers on other machines: ${why}` });
           }
           for (const detail of adapterRepoProblems(adapter, resolve(r.path), !!r.share))

@@ -101,7 +101,7 @@ bun test && bun run typecheck
 
 Options: `--port <n>` (or `OBEYA_PORT`), `--adapter <name or module>` to override the
 repository's own adapter (see below) or the built-in one that matches it, `--workspace <path>`
-(repeatable) or `--clones <n>` for adapters whose workers use clones, `--permission-mode <mode>`
+(repeatable) or `--clones <n>` to have workers use clones instead of a worktree per card, `--permission-mode <mode>`
 for workers (default `auto`). Data and worktrees live in `~/.obeya/` (`OBEYA_HOME` to move it),
 the same for the app and a checkout, so canvases, settings, voices and models carry over between
 them. One Obeya runs per home: starting the app while a checkout's Obeya runs opens a window on

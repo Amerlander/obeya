@@ -3,7 +3,7 @@
 
 import { existsSync, mkdirSync, realpathSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
-import { adapterProblems, adapterTreeAt, builtInAdapter, pickAdapter, repoAdapterTree } from '../adapters';
+import { adapterProblems, adapterTreeAt, builtInAdapter, inClones, pickAdapter, repoAdapterTree } from '../adapters';
 import { Answers, answersDir, answerTag, openWithSystem } from './answers';
 import { repoName } from '../adapters/generic';
 import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
@@ -1077,6 +1077,8 @@ export function resolveCanvas(config: CanvasConfig, store: Store) {
       return builtInAdapter(infos[i]!);
     }
   });
+  // clones the configuration names are where the workers work, also where the adapter says worktrees
+  adapters = adapters.map((a, i) => (namesClones(config.repos[i]!) ? inClones(a) : a));
   let refs = uniqueRefs(infos, adapters);
   // the canvas the repository's own adapter named stays the one while that adapter does not load,
   // with its address, name and cards
@@ -1104,6 +1106,9 @@ export function resolveCanvas(config: CanvasConfig, store: Store) {
   };
   return { config, id, name, infos, adapters, adapterTrees, broken, refs, stored, keep };
 }
+
+/** Whether a repository's configuration names clones for its workers (to create, existing ones, on other machines). */
+const namesClones = (r: RepoConfig) => !!r.clones || !!r.workspaces?.length || !!r.hosts?.length;
 
 /** Repository ids unique on the canvas: the repository's name, with a number when two share one. */
 function uniqueRefs(infos: RepoInfo[], adapters: RepoAdapter[]): RepoRef[] {

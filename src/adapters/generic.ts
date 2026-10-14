@@ -15,6 +15,6 @@ export const generic: RepoAdapter = {
   canvasName: repoName,
   planDocs: { dir: 'docs/plan', exclude: ['TEMPLATE.md'] },
   land: 'pr',
-  workspaces: 'clones',
+  workspaces: 'worktrees',
   softPaths: ['docs/plan/'],
 };
