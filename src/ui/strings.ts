@@ -67,6 +67,7 @@ const de = {
         rows: [
           { keys: [['Leertaste tippen']], text: 'Abspielen und anhalten' },
           { keys: [['Leertaste halten']], text: 'Kommentar zu dieser Stelle; am Anfang oder Ende zur Arbeit als Ganzes' },
+          { keys: [['←'], ['→']], text: '5 Sekunden zurück und vor' },
           { keys: [['Z']], text: 'Größer zeigen und wieder kleiner' },
         ],
       },
@@ -411,6 +412,7 @@ const de = {
     unzoom: 'Wieder kleiner (Z, Esc)',
     zoomHint: 'Größer mit',
     unzoomHint: 'Kleiner mit',
+    seekHint: '5 Sekunden springen mit',
     comment: 'Hier kommentieren',
     commentHint: 'Hält das Video an: was du schreibst oder bei gehaltener Leertaste sagst, gehört zu dieser Stelle',
     /** The field's placeholder while the video stands at a place. */
@@ -1100,6 +1102,7 @@ const en: Strings = {
         rows: [
           { keys: [['Tap space']], text: 'Play and pause' },
           { keys: [['Hold space']], text: 'Comment on this moment; at the start or end, on the work as a whole' },
+          { keys: [['←'], ['→']], text: 'Back and forward 5 seconds' },
           { keys: [['Z']], text: 'Show it larger and back' },
         ],
       },
@@ -1423,6 +1426,7 @@ const en: Strings = {
     unzoom: 'Back to normal size (Z, Esc)',
     zoomHint: 'Larger with',
     unzoomHint: 'Smaller with',
+    seekHint: 'Jump 5 seconds with',
     comment: 'Comment here',
     commentHint: 'Pauses the video: what you type, or say holding space, is about this moment',
     commentAt: (time: string) => `Write about ${time} or hold space`,

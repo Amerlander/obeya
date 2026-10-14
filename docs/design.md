@@ -271,7 +271,12 @@ An idea is thought through on its card before anything is planned; no worker run
    it, and the card stays open. Hovering the magnifier shows the key beside it until the owner
    first zoomed with Z (per browser). Full screen was too much on a large monitor and hid where the
    owner was; before (2026-10-12) the owner zoomed in with the operating system. Space tapped
-   plays and pauses the video, so a demo that waits is started with it. What the owner types or
+   plays and pauses the video, so a demo that waits is started with it; ← and → jump 5 seconds back
+   and forward (`useSeekKeys`). The browser's controls keep every key to themselves once clicked, so
+   the video hands the focus back to the page at once; before (2026-10-14) a click on the progress
+   bar took Space away (no pause, no recording) and the arrows worked only after that click. A click
+   on the controls shows the arrow keys over them for a moment, until the owner first jumped with
+   them (per browser). What the owner types or
    says while the video stands somewhere in the middle is about that place (`src/ui/spot.ts`): Space
    (or the microphone) held while it plays pauses it, so Whisper does not hear the narration, and
    the recording goes out with the place; letting go plays it on, while a video the owner had

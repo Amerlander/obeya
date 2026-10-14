@@ -1112,6 +1112,7 @@ function DemoView({
   }, []);
   useEffect(() => () => holdRestart('video', null), []);
   const zoom = useZoom(video);
+  const seek = useSeekKeys(video);
   const watching = useWatching(cardId, video, comments && demo.kind !== 'html' ? demo.chapters : null);
   const current = demo.chapters.reduce((cur, [at], i) => (at <= now + 0.05 ? i : cur), 0);
   return (
@@ -1145,6 +1146,7 @@ function DemoView({
                 poster={src('poster.jpg')}
                 src={src('demo.mp4')}
                 onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)}
+                onFocus={(e) => seek.focused(e.currentTarget)}
                 // a restart waits while the owner watches
                 onPlay={() => {
                   setStarted(true);
@@ -1158,6 +1160,11 @@ function DemoView({
               >
                 <track kind="captions" src={src('captions.vtt')} srcLang="de" label="Deutsch" />
               </video>
+              {seek.hint && (
+                <span className="seek-hint">
+                  {t.demo.seekHint} <kbd>←</kbd> <kbd>→</kbd>
+                </span>
+              )}
               {!started && (
                 // a click anywhere on the video but its controls starts it, like on a shared page
                 <button className="start" aria-label={t.demo.play} onClick={() => video.current?.play().catch(() => {})}>
@@ -1272,6 +1279,72 @@ function useWatching(cardId: string, video: RefObject<HTMLVideoElement | null>, 
   return { ended: () => on && release() };
 }
 
+/** A key with no modifier, pressed outside a text field and with nothing over the card: one for the demo video. */
+function forTheVideo(e: KeyboardEvent) {
+  if (e.metaKey || e.ctrlKey || e.altKey) return false;
+  if (e.target instanceof Element && e.target.closest('input, textarea, select, [contenteditable]')) return false;
+  return !document.querySelector('#help, #config.on, .lightbox, .diff-view');
+}
+
+/** The demo video the keys are for, with several on a card: the zoomed one, else the one playing, else the first. */
+function keyedVideo() {
+  const videos = [...document.querySelectorAll<HTMLVideoElement>('#panel .demo-view video')];
+  return document.querySelector<HTMLVideoElement>('.screen.zoomed video') ?? videos.find((v) => !v.paused) ?? videos[0];
+}
+
+/** How far ← and → jump in the demo video, in seconds. */
+const SEEK_S = 5;
+/** Set once the owner jumped with the arrow keys: a click on the video's controls stops showing them. */
+const SEEK_KEYS_KNOWN = 'obeya-seek-keys-known';
+
+/**
+ * ← and → jump back and forward in the demo video, without a click on its progress bar first. The
+ * browser's controls keep every key to themselves once clicked (Space too, which then neither paused
+ * the video nor started a recording), so the video hands the focus back to the page at once; then
+ * the keys reach Obeya's own handlers. A click on the controls shows the keys over the video for a
+ * moment, until the owner first jumped with them.
+ */
+function useSeekKeys(video: RefObject<HTMLVideoElement | null>) {
+  const [hint, setHint] = useState(false);
+  const known = useRef<boolean>(null);
+  if (known.current === null) {
+    try {
+      known.current = localStorage.getItem(SEEK_KEYS_KNOWN) === '1';
+    } catch {
+      known.current = false;
+    }
+  }
+  const hide = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      const v = video.current;
+      if (!v || !forTheVideo(e) || keyedVideo() !== v) return;
+      e.preventDefault();
+      const to = v.currentTime + (e.key === 'ArrowLeft' ? -SEEK_S : SEEK_S);
+      v.currentTime = Math.max(0, Number.isFinite(v.duration) ? Math.min(v.duration, to) : to);
+      setHint(false);
+      known.current = true;
+      try {
+        localStorage.setItem(SEEK_KEYS_KNOWN, '1');
+      } catch {}
+    };
+    addEventListener('keydown', key);
+    return () => {
+      removeEventListener('keydown', key);
+      clearTimeout(hide.current);
+    };
+  }, []);
+  const focused = (v: HTMLVideoElement) => {
+    v.blur();
+    if (known.current) return;
+    setHint(true);
+    clearTimeout(hide.current);
+    hide.current = setTimeout(() => setHint(false), 4000);
+  };
+  return { hint, focused };
+}
+
 /** Set once the owner zoomed with Z: the magnifier stops showing the key beside it. */
 const ZOOM_KEY_KNOWN = 'obeya-zoom-key-known';
 
@@ -1332,12 +1405,7 @@ function useZoom(video: RefObject<HTMLVideoElement | null>) {
         return;
       }
       if (e.key !== 'z' && e.key !== 'Z') return;
-      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
-      if (e.target instanceof Element && e.target.closest('input, textarea, select, [contenteditable]')) return;
-      if (document.querySelector('#help, #config.on, .lightbox, .diff-view')) return;
-      const videos = [...document.querySelectorAll<HTMLVideoElement>('#panel .demo-view video')];
-      const mine = document.querySelector<HTMLVideoElement>('.screen.zoomed video') ?? videos.find((v) => !v.paused) ?? videos[0];
-      if (mine !== video.current) return;
+      if (e.repeat || !forTheVideo(e) || keyedVideo() !== video.current) return;
       e.preventDefault();
       toggleRef.current();
       setKeyKnown(true);
