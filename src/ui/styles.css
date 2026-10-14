@@ -848,7 +848,14 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
   border: 1px solid color-mix(in srgb, var(--ink) 16%, var(--panel)); background: color-mix(in srgb, var(--ink) 5%, var(--panel));
   box-shadow: inset 0 1px 2px color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); outline: none; }
 #config input:hover, #config textarea:hover, #config select:hover { border-color: color-mix(in srgb, var(--ink) 28%, var(--panel)); }
-#config input:focus, #config textarea:focus, #config select:focus { border-color: var(--muted); background: var(--panel); }
+#config input:focus, #config textarea:focus, #config select:focus { border-color: var(--muted); background-color: var(--panel); }
+/* a select's own arrow, drawn as two strokes in the muted ink, as far in from the right edge as the text is
+   from the left; the browser's arrow sat almost on the edge and cannot be moved */
+#config select { appearance: none; -webkit-appearance: none; padding-right: 30px;
+  --arrow: color-mix(in srgb, var(--ink) 70%, transparent);
+  background-image: linear-gradient(45deg, transparent 50%, var(--arrow) 50%, var(--arrow) calc(50% + 1.3px), transparent calc(50% + 1.3px)),
+    linear-gradient(-45deg, transparent 50%, var(--arrow) 50%, var(--arrow) calc(50% + 1.3px), transparent calc(50% + 1.3px));
+  background-size: 6px 6px; background-repeat: no-repeat; background-position: calc(100% - 18px) 55%, calc(100% - 12px) 55%; }
 #config input::placeholder, #config textarea::placeholder { color: color-mix(in srgb, var(--muted) 80%, var(--panel)); }
 #config textarea { font: 12px var(--mono); resize: vertical; width: 100%; }
 #config input[type="checkbox"] { width: auto; margin: 0; padding: 0; box-shadow: none; }
