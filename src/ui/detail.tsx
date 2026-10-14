@@ -407,9 +407,24 @@ export function Detail(p: Props) {
               <>
                 {/* the last handover's demo stays while the agent works on the card again; a new handover replaces it */}
                 {item.demo && (
-                  <DemoView item={item} all={all} run={run} summary="" demo={item.demo} autoplay={demoWaits} comments={agentListens(item)}>
-                    {!demoWaits && <p className="hint">{item.state === 'working' || item.state === 'waiting' ? t.demo.again : t.demo.kept}</p>}
-                    {shareBox}
+                  <DemoView
+                    item={item}
+                    all={all}
+                    run={run}
+                    summary=""
+                    demo={item.demo}
+                    autoplay={demoWaits}
+                    comments={agentListens(item)}
+                    top={
+                      (!demoWaits || shareBox) && (
+                        <div className="demo-top">
+                          {!demoWaits && <p className="hint">{item.state === 'working' || item.state === 'waiting' ? t.demo.again : t.demo.kept}</p>}
+                          {shareBox}
+                        </div>
+                      )
+                    }
+                  >
+                    {null}
                   </DemoView>
                 )}
                 {item.pr && (item.state === 'inPr' || item.state === 'waiting') && <PrBox pr={item.pr} />}
@@ -1150,6 +1165,7 @@ function DemoView({
   summary,
   demo,
   children,
+  top,
   autoplay = true,
   comments = false,
 }: {
@@ -1159,6 +1175,8 @@ function DemoView({
   summary: string;
   demo: Demo;
   children: ReactNode;
+  /** above the video or artifact, where it is seen on opening however long the chapters or the artifact: sharing */
+  top?: ReactNode;
   autoplay?: boolean;
   comments?: boolean;
 }) {
@@ -1185,6 +1203,7 @@ function DemoView({
   return (
     <>
       <div className="demo-view">
+        {top}
         {demo.kind === 'html' ? (
           // the worker's page: scripts run, but in an origin of its own, away from Obeya's API. Once
           // the frame has the page's height it does not scroll: a page whose images grow with its
@@ -1545,16 +1564,17 @@ function ShareBox({ item, act }: { item: Item; act: (a: CardAction, done: ActDon
   const [copied, setCopied] = useState(false);
   const s = item.share;
   const go = (action: 'share' | 'unshare') => act({ action }, { close: false });
+  const busy = s?.state === 'publishing' || s?.state === 'withdrawing';
   return (
-    <div className="share">
+    // the button and what is under way stay on the right, where the button was; the link takes the line
+    <div className={s && !busy ? 'share wide' : 'share'}>
       {!s ? (
-        <button className="btn" title={item.demo?.kind === 'html' ? t.share.shareHintHtml : t.share.shareHint} onClick={() => go('share')}>
+        <button className="btn share-go" title={item.demo?.kind === 'html' ? t.share.shareHintHtml : t.share.shareHint} onClick={() => go('share')}>
+          <ShareIcon />
           {t.share.share}
         </button>
-      ) : s.state === 'publishing' || s.state === 'withdrawing' ? (
-        <div className="share-row">
-          <span className="share-busy">{s.state === 'publishing' ? t.share.publishing : t.share.withdrawing}</span>
-        </div>
+      ) : busy ? (
+        <span className="share-busy">{s.state === 'publishing' ? t.share.publishing : t.share.withdrawing}</span>
       ) : (
         <>
           <div className="share-row">
@@ -1573,27 +1593,38 @@ function ShareBox({ item, act }: { item: Item; act: (a: CardAction, done: ActDon
             >
               {copied ? t.share.copied : t.share.copy}
             </button>
-          </div>
-          {s.stale && <p className="hint">{t.share.stale}</p>}
-          {s.outdated && <p className="hint">{t.share.outdated}</p>}
-          <div className="share-row">
-            {s.stale && (
-              <button className="btn" title={t.share.againHint} onClick={() => go('share')}>
-                {t.share.again}
-              </button>
-            )}
-            {s.outdated && (
-              <button className="btn" title={t.share.reshareHint} onClick={() => go('share')}>
-                {t.share.reshare}
-              </button>
-            )}
             <button className="btn" title={t.share.stopHint} onClick={() => go('unshare')}>
               {t.share.stop}
             </button>
           </div>
+          {s.stale && (
+            <div className="share-row">
+              <p className="hint">{t.share.stale}</p>
+              <button className="btn" title={t.share.againHint} onClick={() => go('share')}>
+                {t.share.again}
+              </button>
+            </div>
+          )}
+          {s.outdated && (
+            <div className="share-row">
+              <p className="hint">{t.share.outdated}</p>
+              <button className="btn" title={t.share.reshareHint} onClick={() => go('share')}>
+                {t.share.reshare}
+              </button>
+            </div>
+          )}
         </>
       )}
     </div>
+  );
+}
+
+/** Sharing's mark on its button: a box with an arrow going out of it. */
+function ShareIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 3v12M7.5 7.5L12 3l4.5 4.5M5 11v9h14v-9" />
+    </svg>
   );
 }
 
@@ -1618,9 +1649,10 @@ function ExportBox({ item, run, needs }: { item: Item; run: Run; needs?: { site:
     void run(() => api.exportDemo(item.id, as), { close: false }).finally(() => setBusy(null));
   };
   return (
-    <div className="share">
+    <div className={open ? 'share wide' : 'share'}>
       {!open ? (
-        <button className="btn" title={t.share.exportHint} onClick={() => setOpen(true)}>
+        <button className="btn share-go" title={t.share.exportHint} onClick={() => setOpen(true)}>
+          <ShareIcon />
           {t.share.share}
         </button>
       ) : (

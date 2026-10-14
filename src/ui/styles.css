@@ -451,13 +451,21 @@ textarea.p-body:focus { border-color: var(--muted); }
 .chapters button { all: unset; cursor: pointer; display: flex; gap: 10px; width: 100%; padding: 6px 8px; border-radius: 2px; font-size: 13px; box-sizing: border-box; }
 .chapters button:hover, .chapters button.on { background: var(--card); }
 .chapters .t { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 32px; }
-.share { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
-.share > .btn, .share-row .btn { flex: 1; }
-.share-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+/* the demo's own line above it: the hint where it is an earlier one, sharing on the right */
+.demo-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 16px; margin-bottom: 10px; }
+.demo-top > .hint { flex: 1 1 260px; margin: 0; }
+.share { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; font-size: 13px; }
+.share.wide { flex: 1 1 100%; align-items: stretch; }
+.share .btn { padding: 7px 14px; }
+.share-go { display: inline-flex; align-items: center; gap: 7px; }
+.share-go svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.share-row { display: flex; gap: 8px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+.share-row > .hint { flex: 1 1 240px; }
 .share-label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--approved); font-weight: 600; }
-.share-link { flex: 1 1 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
-.share-busy { color: var(--muted); flex: 1 1 100%; }
+.share-link { flex: 1 1 200px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.share-busy { color: var(--muted); }
 .share .hint { margin: 0; }
+.share:not(.wide) > .hint { text-align: right; }
 /* an idea's or a task's split is as tall as its taller column, up to the room down to the microphone
    (panelRect in App.tsx sets that as its max-height); beyond it, the columns scroll */
 .split { display: grid; grid-template-columns: minmax(0, 1fr) clamp(400px, 36%, 560px); grid-template-rows: minmax(0, 1fr);

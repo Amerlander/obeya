@@ -2090,8 +2090,13 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   with the buttons on top and the summary and the reason as the handover in its conversation, and a demo from an earlier handover leaves the card, since it
   showed other work. Artifacts stay in `~/demos/`, never in git; a pull request links a demo
   only once it is shared (below).
-- **Sharing a demo** — every demo, video or HTML artifact, has "Teilen" beside it, on waiting cards
-  and on cards long done (archived ones too); prototypes are not shared. HTML artifacts are shared
+- **Sharing a demo** — every demo, video or HTML artifact, has "Teilen" above it, on waiting cards
+  and on cards long done (archived ones too); prototypes are not shared. The button sits at the
+  right end of the demo's own line, a compact button with a share icon, beside the hint where the
+  demo is an earlier one; once shared, the line holds the link, "Link kopieren" and "Nicht mehr
+  teilen". Until 2026-10-14 sharing came under the chapters and a dividing line, a button as wide
+  as the column: with many chapters, or under a tall artifact, it was out of sight on opening, and
+  it sat right on top of what followed. HTML artifacts are shared
   since 2026-10-05: an analysis with charts is background for a pull request as much as a video.
   Their page has the same title and text above the artifact, which sits in a sandboxed frame (its
   scripts reach neither the page nor the site); the copy of its `index.html` beside the page tells
