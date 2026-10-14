@@ -5,7 +5,9 @@ import { join } from 'node:path';
 import { repoInfo } from '../server/repo';
 import { gitRepo } from '../server/testing';
 import { git } from '../server/workspaces';
-import { adapterProblems, pickAdapter } from '.';
+import type { RepoSettings } from '../core/types';
+import { adapterProblems, pickAdapter, withSettings } from '.';
+import { generic } from './generic';
 
 let dir: string;
 beforeEach(() => {
@@ -135,5 +137,25 @@ describe('pickAdapter', () => {
     // one without mistakes has none, a built-in one neither
     expect(adapterProblems(pickAdapter(repoInfo(gitRepo(join(dir, 'ok'), { '.obeya/adapter/index.ts': OWN('ok') }))))).toEqual([]);
     expect(adapterProblems(pickAdapter(repoInfo(repo), 'generic'))).toEqual([]);
+  });
+});
+
+describe('withSettings', () => {
+  test("reads this machine's settings whenever a field is asked for; clones or worktrees once", () => {
+    let s: RepoSettings | undefined = { land: 'main', workspaces: 'clones' };
+    const a = withSettings({ ...generic, checks: ['bun test'] }, () => s);
+    expect([a.land, a.checks, a.workspaces]).toEqual(['main', ['bun test'], 'clones']);
+    s = { checks: [], workspaces: 'worktrees' };
+    expect([a.land, a.checks, a.workspaces]).toEqual(['pr', [], 'clones']);
+    // a demo needs a way to run the app: one set here makes it, beside the adapter's own fields
+    expect(a.demo).toBeUndefined();
+    s = { demo: { required: true } };
+    expect(a.demo).toBeUndefined();
+    s = { demo: { howToRun: 'bun dev' } };
+    expect(a.demo).toEqual({ required: false, howToRun: 'bun dev' });
+    const b = withSettings({ ...generic, demo: { required: true, howToRun: 'bun dev', share: ['x'] } }, () => ({ demo: { required: false } }));
+    expect(b.demo).toEqual({ required: false, howToRun: 'bun dev', share: ['x'] });
+    // the configuration's clones go before the setting
+    expect(withSettings(generic, () => ({ workspaces: 'worktrees' }), true).workspaces).toBe('clones');
   });
 });

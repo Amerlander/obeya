@@ -8,7 +8,7 @@
 
 import { existsSync, mkdirSync } from 'node:fs';
 import { hostname } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { type CardDiff, cardDiff } from '../core/diff';
 import type { PoolHost, WorkspaceShortage } from '../core/types';
 import type { Store } from './db';
@@ -390,7 +390,7 @@ export class Workspaces {
     if (!ws || !exists(ws)) return false;
     try {
       if (git(ws, 'status', '--porcelain')) return true;
-      const base = this.o.mode === 'worktrees' ? defaultBranch(this.o.repoPath) : `origin/${defaultBranch(ws)}`;
+      const base = this.o.mode === 'worktrees' ? this.main(ws) : `origin/${this.main(ws)}`;
       return git(ws, 'rev-list', '--count', `${base}..HEAD`) !== '0';
     } catch {
       return true;
@@ -408,7 +408,7 @@ export class Workspaces {
     const ws = this.leasedBy(cardId);
     if (!ws) return [];
     try {
-      const base = defaultBranch(this.o.mode === 'worktrees' ? this.o.repoPath : ws);
+      const base = this.main(ws);
       const upstream = this.o.mode === 'worktrees' ? base : `origin/${base}`;
       return git(ws, 'diff', '--name-only', '--diff-filter=A', `${upstream}...HEAD`, '--', dir).split('\n').filter(Boolean);
     } catch {
@@ -432,7 +432,7 @@ export class Workspaces {
     if (!ws) return { code: 'land', worker: false, detail: 'the card has no workspace' };
     try {
       if (await gitAsync(ws, 'status', '--porcelain')) return { code: 'landDirty', worker: true, detail: 'uncommitted changes in the workspace' };
-      const base = defaultBranch(this.o.mode === 'worktrees' ? this.o.repoPath : ws);
+      const base = this.main(ws);
       const upstream = this.o.mode === 'worktrees' ? base : `origin/${base}`;
       if (this.o.mode === 'clones') await gitAsync(ws, 'fetch', '--quiet', 'origin');
       const conflict = await rebaseOnto(ws, upstream, base);
@@ -474,7 +474,7 @@ export class Workspaces {
       let from: string;
       try {
         if (await gitAsync(ws, 'status', '--porcelain')) return { code: 'landDirty', worker: true, detail: 'uncommitted changes in the workspace' };
-        base = defaultBranch(ws);
+        base = this.main(ws);
         const upstream = `origin/${base}`;
         await gitAsync(ws, 'fetch', '--quiet', 'origin');
         const conflict = await rebaseOnto(ws, upstream, base);
@@ -529,7 +529,7 @@ export class Workspaces {
     if (exists(ws)) {
       git(ws, 'reset', '--quiet', '--hard');
       git(ws, 'clean', '--quiet', '-fd');
-      git(ws, 'checkout', '--quiet', '--detach', `origin/${defaultBranch(ws)}`);
+      git(ws, 'checkout', '--quiet', '--detach', `origin/${this.main(ws)}`);
       if (git(ws, 'branch', '--list', branch)) git(ws, 'branch', '--quiet', '-D', branch);
     }
     this.release(cardId);
@@ -564,7 +564,7 @@ export class Workspaces {
     const ws = this.leasedBy(cardId);
     if (!ws || !exists(ws)) return [];
     try {
-      const base = this.o.mode === 'worktrees' ? defaultBranch(this.o.repoPath) : `origin/${defaultBranch(ws)}`;
+      const base = this.o.mode === 'worktrees' ? this.main(ws) : `origin/${this.main(ws)}`;
       const diff = git(ws, 'diff', '-U0', '--no-color', '--no-ext-diff', git(ws, 'merge-base', 'HEAD', base));
       const untracked = git(ws, 'ls-files', '--others', '--exclude-standard');
       return [...parseChanges(diff), ...untracked.split('\n').filter(Boolean).map((file) => ({ file, regions: [] }))];
@@ -581,7 +581,7 @@ export class Workspaces {
     const ws = this.leasedBy(cardId);
     if (!ws || !exists(ws)) return null;
     try {
-      const main = this.o.mode === 'worktrees' ? defaultBranch(this.o.repoPath) : `origin/${defaultBranch(ws)}`;
+      const main = this.o.mode === 'worktrees' ? this.main(ws) : `origin/${this.main(ws)}`;
       const base = await gitAsync(ws, 'merge-base', 'HEAD', main);
       const tracked = await gitDiff(ws, base);
       const untracked = (await gitAsync(ws, 'ls-files', '-z', '--others', '--exclude-standard')).split('\0').filter(Boolean);
@@ -606,11 +606,20 @@ export class Workspaces {
     }
   }
 
+  /**
+   * The main branch as a workspace sees it: the repository's for a worktree; for a clone the one the
+   * owner set for the repository, else the one its `origin` has.
+   */
+  private main(ws: string): string {
+    if (this.o.mode === 'worktrees') return defaultBranch(this.o.repoPath);
+    return branchSettings.get(resolve(this.o.repoPath))?.()?.trim() || defaultBranch(ws);
+  }
+
   private leaseClone(cardId: string, branch: string, overSlots: boolean): string {
     const found = this.place(overSlots);
     if ('short' in found) throw new WorkspaceError(SHORT_TEXT[found.short], SHORT_CODE[found.short]);
     const { path } = found;
-    const base = defaultBranch(path);
+    const base = this.main(path);
     git(path, 'fetch', '--quiet', 'origin');
     // a branch that already exists holds work: check it out, never reset it
     if (git(path, 'branch', '--list', branch)) git(path, 'checkout', '--quiet', branch);
@@ -669,13 +678,33 @@ export function parseChanges(diff: string): Change[] {
 }
 
 /**
- * The repository's main branch, where cards start from and work lands: `origin`'s HEAD where the
+ * The main branches the owner set for repositories on this machine (`RepoSettings.branch`), by
+ * the repository's path, each read when it is asked for: a running canvas registers its own.
+ */
+const branchSettings = new Map<string, () => string | undefined>();
+
+/** Registers where the main branch the owner set for the repository at `repoPath` is read; returns what takes it back. */
+export function useBranchSetting(repoPath: string, branch: () => string | undefined): () => void {
+  const key = resolve(repoPath);
+  branchSettings.set(key, branch);
+  return () => {
+    if (branchSettings.get(key) === branch) branchSettings.delete(key);
+  };
+}
+
+/** The repository's main branch: the one the owner set for it on this machine, else the one detected (`detectedBranch`). */
+export function defaultBranch(path: string): string {
+  return branchSettings.get(resolve(path))?.()?.trim() || detectedBranch(path);
+}
+
+/**
+ * The repository's main branch as git tells it, where cards start from and work lands: `origin`'s HEAD where the
  * checkout knows one. Else its only branch that is not a card's; else the one of them named as
  * git's `init.defaultBranch`, `main` or `master`, so that a branch the owner checks out for a
  * while does not take its place; else the branch the checkout is on, unless that is a card's;
  * else `init.defaultBranch`, else `main`.
  */
-export function defaultBranch(path: string): string {
+export function detectedBranch(path: string): string {
   const read = (...args: string[]) => {
     try {
       return git(path, ...args);

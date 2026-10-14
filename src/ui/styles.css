@@ -957,6 +957,22 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 /* opened from a card waiting for a free clone: the clone settings it means light up */
 .cfg-clones.flash { animation: cfg-flash 2.4s ease-out; }
 @keyframes cfg-flash { 0%, 45% { border-left-color: var(--working); background: color-mix(in srgb, var(--working) 12%, transparent); } }
+/* a repository's settings for this machine, folded under its row */
+.cfg-settings { padding: 0 0 6px 16px; border-left: 2px solid var(--line); }
+.cfg-settings-toggle { display: inline-flex; align-items: baseline; gap: 8px; padding: 3px 0; border: 0; background: none; color: var(--ink); font-size: 13px; cursor: pointer; }
+.cfg-settings-toggle > .hint { font-size: 12px; }
+.cfg-settings-toggle:hover > .hint { color: var(--ink); }
+.cfg-caret { display: inline-block; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg) translate(-1px, -1px); transition: transform .12s; }
+.cfg-settings-toggle.on .cfg-caret { transform: rotate(45deg) translate(-2px, -1px); }
+.cfg-settings-body { padding: 4px 0 8px; }
+.cfg-settings-body > .hint { max-width: 76ch; margin: 2px 0 6px; font-size: 12.5px; line-height: 1.45; }
+.cfg-setting .cfg-label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+.cfg-source { font-size: 11.5px; color: color-mix(in srgb, var(--muted) 80%, var(--panel)); }
+.cfg-source.here { color: var(--working); }
+.cfg-reset { padding: 0; border: 0; background: none; color: var(--muted); font-size: 11.5px; text-decoration: underline; cursor: pointer; }
+.cfg-reset:hover { color: var(--ink); }
+.cfg-setting textarea { max-width: 640px; }
+.cfg-plan { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; max-width: 640px; }
 .cfg-hosts { grid-column: 1 / -1; }
 .cfg-hosts > .hint { display: block; font-size: 11.5px; margin-bottom: 3px; }
 .cfg-host-rows { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.3fr) minmax(0, 1.5fr) auto auto 24px; gap: 6px 10px; align-items: center; }

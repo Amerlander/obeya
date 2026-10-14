@@ -937,7 +937,10 @@ the owner's language (`src/core/locale.ts`).
   script lists which docs there are projects and why the others are not. Saving writes the file and restarts Obeya once no worker is
   in the middle of a turn (as for new code), a tenth of a second after the answer went out; the page reloads. Started with repositories on the
   command line, Obeya shows those, and saving makes the file the configuration it restarts with.
-  Renaming a running canvas keeps its id (`id` in the file), so its cards stay. The server's own
+  Renaming a running canvas keeps its id (`id` in the file), so its cards stay. Each repository
+  folds its settings under „Einstellungen“ below its row (see Repository settings), with the main
+  branch and how work lands in the folded line; saving the canvases when only these changed
+  ("Speichern", not "Speichern und neu starten") restarts nothing and says they apply at once. The server's own
   settings (port, data directory, the agents' permission mode) come from the command line and the
   environment (`OBEYA_PORT`, `OBEYA_HOME`) and show read-only. The Koordinator reads the configuration (`config` tool) to answer questions about it
   and changes it on the owner's word (`configure`, the whole new list, checked like the dialog's),
@@ -995,7 +998,9 @@ the owner's language (`src/core/locale.ts`).
   on the pill; the server pushes every canvas's count to all of them when one changes.
 - **Main branch** (`defaultBranch` in `src/server/workspaces.ts`) — where cards start from, work
   lands and plan docs and the adapter are read from; one function for all of them, the canvas's
-  label and the first setup. It is `origin`'s HEAD where the checkout knows one. Else (a repository
+  label and the first setup. It is the one the owner set for the repository on this machine
+  (`branch` in its settings, see Repository settings), read whenever it is asked for; a clone's comes from the
+  same setting. Without one it is detected (`detectedBranch`): `origin`'s HEAD where the checkout knows one. Else (a repository
   only on this machine, or a remote added without `origin/HEAD`) it is the repository's only branch
   that is not a card's (`obeya/…`); else the one of them named as git's `init.defaultBranch`,
   `main` or `master`; else the branch the checkout is on, unless that is a card's; else
@@ -1250,7 +1255,8 @@ the owner's language (`src/core/locale.ts`).
   installed: git, Claude Code and what the repository's own work needs (for the owner's work
   repository: .NET, Bun, Node, uv, Docker, Chrome, ffmpeg); Homebrew no longer serves Intel Macs, so those went into the user's
   home there by their own installers.
-- **Landing** — per adapter. `pr`: approval leaves the branch for the PR loop. `main`
+- **Landing** — per adapter, or as the owner set it for this machine (see Repository settings), read
+  at each approval. `pr`: approval leaves the branch for the PR loop. `main`
   (Obeya): approval rebases the branch onto `main` and fast-forwards the Obeya checkout; the card
   is `live`. An adapter that does not say (the generic one, or a repository's own without `land`)
   gets it by detection (`detectedLand` in `src/adapters/index.ts`): `pr` where `origin` is on
@@ -2281,6 +2287,31 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   dropped: only refusing a deploy while the live manifest lists pages missing here, which left the
   owner nothing to do but copy files by hand, and a shared storage directory (a synced folder or a
   bucket) as the site's source, which pushes the problem onto every user's setup.
+- **Repository settings** (`settings` of a repository's entry in `canvases.json`, `RepoSettings`) —
+  the adapter's fields that are values (`land`, `direct`, `checks`, `setup`, `planDocs`,
+  `softPaths`, `workspaces`, `prNoise`, the demo's `required` and `howToRun`) and the main branch,
+  set for this machine in the configuration dialog without TypeScript. They go before the
+  adapter's code, which goes before detection (main branch, landing) and the generic adapter; the
+  dialog shows each value that applies with where it comes from („auf diesem Rechner“, „aus dem
+  Adapter <name>“, „Klone eingetragen“, „erkannt“, „Standard“), and „Zurücksetzen“ at one set
+  here takes it back to that source (`RepoValues`, worked out with the configuration's check). Changing a
+  value sets it here; an empty list or command is a value of its own (no checks), an empty main
+  branch or plan directory none. A main branch the repository has neither locally nor on `origin`
+  is a problem (`noBranch`) that keeps the configuration from being saved. Read where they are used:
+  the adapter a canvas runs on has the settings in front of its own fields as getters
+  (`withSettings` in `src/adapters/index.ts`) that read the repository's entry from the file as it
+  is now (`Config.repoSettings`, the file read again once its time or size changed), and
+  `defaultBranch` asks the running canvas for the main branch it set (`useBranchSetting`).
+  Saving restarts nothing where the configuration differs from the one Obeya started with only in
+  repositories' settings (`needsRestart`): the canvases then follow what they set up by them
+  (`settingsChanged`): the Lesestand moves to the checkout or a worktree when work now lands
+  elsewhere, the plan directory is watched afresh, a repository whose work now goes out as pull
+  requests gets its watcher (one that has one keeps it for the pull requests still open), and the
+  page shows the main branch and how work lands. `workspaces` is the exception: clones or
+  worktrees are set up when a canvas starts, so changing it restarts Obeya, as the dialog says at
+  the field; where the configuration names clones it shows that instead. The Koordinator's
+  `configure` keeps and changes them like the rest of the entry. Until 2026-10-14 these values
+  could only be set in `.obeya/adapter/index.ts`, and saving the dialog always restarted Obeya.
 - **Repo adapter** — how to start and refresh the stack, where the frontend URL comes from, the
   recipe for running the app in a demo (login, test data, migrations: `demo.howToRun`), where plan
   docs live, which checks run and how approved work lands, the site or the command that shares demos (the

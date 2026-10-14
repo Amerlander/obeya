@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CardDiff } from '../core/diff';
 import type { PushKeyView } from '../core/push-key';
-import type { AgentRole, AgentSetting, CloudPreset, AgentsView, CanvasConfig, CanvasInfo, CanvasSnapshot, ClientMessage, ConfigView, CardAction, DemoSettings, Group, DemoSettingsView, DemoVoiceCheck, FirstCanvas, GitSetupPreview, MachineItem, MachineSectionId, MachineView, SetupCheck, SetupFolder, VoiceSetupView, CardEvent, CardPatch, Item, Language, LanguageView, NewCard, Notice, OwnerHold, PendingRestart, ProjectHistory, ServerMessage, SpotInput, AppUpdate, Theme, ThemeView } from '../core/types';
+import type { AgentRole, AgentSetting, CloudPreset, AgentsView, CanvasConfig, CanvasInfo, CanvasSnapshot, ClientMessage, ConfigSaved, ConfigView, CardAction, DemoSettings, Group, DemoSettingsView, DemoVoiceCheck, FirstCanvas, GitSetupPreview, MachineItem, MachineSectionId, MachineView, SetupCheck, SetupFolder, VoiceSetupView, CardEvent, CardPatch, Item, Language, LanguageView, NewCard, Notice, OwnerHold, PendingRestart, ProjectHistory, ServerMessage, SpotInput, AppUpdate, Theme, ThemeView } from '../core/types';
 
 /** A request the server refused; `code` picks the owner's text, the message is the server's detail. */
 export class ApiError extends Error {
@@ -73,7 +73,7 @@ export const api = {
   config: () => call<ConfigView>('GET', '/api/config'),
   checkConfig: (canvases: CanvasConfig[]) => call<Pick<ConfigView, 'canvases' | 'resolved' | 'problems'>>('POST', '/api/config/check', canvases),
   /** Saves it; Obeya then starts again with it where something restarts it. */
-  saveConfig: (canvases: CanvasConfig[]) => call<{ restarting: boolean }>('PUT', '/api/config', canvases),
+  saveConfig: (canvases: CanvasConfig[]) => call<ConfigSaved>('PUT', '/api/config', canvases),
   /** The language Obeya speaks to the owner: chosen, or the system's. */
   language: () => call<LanguageView>('GET', '/api/language'),
   /** The push-to-talk key in another app, and the app's shell that hears it. */

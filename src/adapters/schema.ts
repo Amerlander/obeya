@@ -52,6 +52,22 @@ export const adapterShape = z
   })
   .strict();
 
+/** What a repository's settings for this machine may hold (`RepoSettings`): the adapter's fields that are values, and its main branch. */
+export const settingsShape = z
+  .object({
+    branch: z.string().optional(),
+    land: z.enum(['main', 'pr']).optional(),
+    direct: z.boolean().optional(),
+    checks: strings.optional(),
+    setup: z.string().optional(),
+    planDocs: planDocs.optional(),
+    softPaths: strings.optional(),
+    workspaces: z.enum(['clones', 'worktrees']).optional(),
+    prNoise: strings.optional(),
+    demo: z.object({ required: z.boolean().optional(), howToRun: z.string().optional() }).strict().optional(),
+  })
+  .strict();
+
 // the fields each object knows, for a guess at what a misspelt one meant
 const KNOWN: Record<string, string[]> = {
   '': Object.keys(adapterShape.shape),

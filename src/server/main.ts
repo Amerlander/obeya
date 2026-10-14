@@ -205,6 +205,9 @@ const config = new Config({
   running: () => canvases.map((c) => c.id),
   server: { port: Number(values.port), home, permissionMode: values['permission-mode'], commit: commitOf() },
   narrationUrl: url,
+  onSettings: () => {
+    for (const c of canvases) c.settingsChanged();
+  },
   ...(process.env.OBEYA_SUPERVISED
     ? {
         restart: () => {
@@ -230,6 +233,7 @@ canvases = startCanvases(configs, {
   ...(process.env.OBEYA_PARK_GRACE ? { parkGrace: Number(process.env.OBEYA_PARK_GRACE) * 1000 } : {}),
   language: () => ownerLanguage(home),
   agents: (role) => agentSetting(home, role),
+  settings: (path) => config.repoSettings(path),
   // after the landing is recorded: a restart with no worker to wait for stops this server at once
   adapterChanged: (path) =>
     process.env.OBEYA_SUPERVISED

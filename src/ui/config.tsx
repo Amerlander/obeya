@@ -4,7 +4,7 @@
 // own settings come from its command line and show read-only.
 
 import { type CSSProperties, Fragment, type ReactNode, useEffect, useId, useRef, useState } from 'react';
-import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigView, type DemoSettings, type DemoSettingsView, type DemoVoiceCheck, type Language, type HostConfig, type LanguageView, type NarrationLanguage, type RepoConfig, type SetupCheck, type Theme, THEMES, type ThemeView, type VoiceKind, type VoiceSetupView } from '../core/types';
+import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigView, type DemoSettings, type DemoSettingsView, type DemoVoiceCheck, type Language, type HostConfig, type LanguageView, type NarrationLanguage, needsRestart, type RepoConfig, type RepoSettings, type RepoValues, type SettingValue, type SetupCheck, type Theme, THEMES, type ThemeView, type VoiceKind, type VoiceSetupView } from '../core/types';
 import { LANGUAGES } from '../core/locale';
 import { pushKeyFromEvent, type PushKeyView } from '../core/push-key';
 import { api, ApiError, reload } from './api';
@@ -168,9 +168,9 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }
                 onSave={async () => {
                   setBusy(true);
                   try {
-                    const { restarting } = await api.saveConfig(draft);
+                    const { restarting, applied } = await api.saveConfig(draft);
                     setView({ ...view, canvases: draft, restarting });
-                    setStatus(restarting ? c.saved : c.savedOnly);
+                    setStatus(restarting ? c.saved : applied ? c.savedApplied : c.savedOnly);
                   } catch (e) {
                     setStatus(e instanceof ApiError ? errorText(e.code) : t.offlineError);
                   }
@@ -361,7 +361,8 @@ function Canvases({ view, draft, origin, checked, changed, busy, focus, onAsk, o
       {json && <pre className="c-json">{JSON.stringify(draft, null, 2)}</pre>}
       <div className="cfg-actions">
         <button className="btn primary" disabled={!changed || busy || problems.some(blocksSaving)} onClick={onSave}>
-          {view.server.restarts ? c.save : c.saveOnly}
+          {/* repositories' settings alone apply at once */}
+          {view.server.restarts && (view.source === 'args' || view.restarting || needsRestart(view.canvases, draft)) ? c.save : c.saveOnly}
         </button>
         {changed && (
           <button className="btn" disabled={busy} onClick={onReset}>
@@ -1033,7 +1034,7 @@ function CanvasBlock({ n, canvas, resolved, running, pin, saved, adapters, probl
 interface RepoProps {
   repo: RepoConfig;
   home: boolean;
-  resolved?: { id: string; adapter: string; workspaces: 'clones' | 'worktrees'; adapterShares?: boolean; adapterSite?: string };
+  resolved?: { id: string; adapter: string; workspaces: 'clones' | 'worktrees'; adapterShares?: boolean; adapterSite?: string; values: RepoValues };
   /** The running canvas the repository is on, as saved; where a card for it can go. */
   canvasId?: string;
   adapters: string[];
@@ -1137,6 +1138,7 @@ function RepoRow({ repo, home, resolved, canvasId, adapters, problems, focus, wh
           </label>
         </div>
       )}
+      {resolved && <RepoSettingsBlock repo={repo} values={resolved.values} adapter={resolved.adapter} onChange={(settings) => onChange(without('settings', settings))} />}
       {problems.map((p, k) => (
         <div key={k} className="cfg-span">
           <Problem problem={p} where={where} ask={ask} />
@@ -1150,6 +1152,135 @@ function RepoRow({ repo, home, resolved, canvasId, adapters, problems, focus, wh
         </div>
       )}
     </>
+  );
+}
+
+/** The settings of a repository a value can say, set on this machine (`RepoSettings`). */
+type SettingKey = Exclude<keyof RepoSettings, 'demo'> | 'demoRequired' | 'howToRun';
+
+/**
+ * A repository's settings for this machine, folded under „Einstellungen“ below its row: each shows
+ * the value that applies and where it comes from; changing one sets it on this machine, „Zurücksetzen“
+ * takes it back to its source. Saved with the configuration; they apply at once.
+ */
+function RepoSettingsBlock({ repo, values, adapter, onChange }: { repo: RepoConfig; values: RepoValues; adapter: string; onChange: (s: RepoSettings | undefined) => void }) {
+  const [open, setOpen] = useState(false);
+  const c = t.config.settings;
+  const s = repo.settings ?? {};
+  const base: Record<SettingKey, SettingValue<unknown>> = { ...values, demoRequired: values.demo.required, howToRun: values.demo.howToRun };
+  const own = (k: SettingKey): unknown => (k === 'demoRequired' ? s.demo?.required : k === 'howToRun' ? s.demo?.howToRun : s[k]);
+  const value = <T,>(k: SettingKey) => (own(k) ?? base[k].value) as T;
+  const set = (k: SettingKey, v: unknown) => {
+    const next: RepoSettings = { ...s };
+    if (k === 'demoRequired' || k === 'howToRun') {
+      const demo = { ...next.demo, [k === 'demoRequired' ? 'required' : 'howToRun']: v };
+      if (v === undefined) delete demo[k === 'demoRequired' ? 'required' : 'howToRun'];
+      if (Object.keys(demo).length) next.demo = demo;
+      else delete next.demo;
+    } else if (v === undefined) delete next[k];
+    else (next as Record<string, unknown>)[k] = v;
+    onChange(Object.keys(next).length ? next : undefined);
+  };
+  const keys: SettingKey[] = ['branch', 'land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'demoRequired', 'howToRun'];
+  const setHere = keys.filter((k) => own(k) !== undefined).length;
+  const lines = (k: SettingKey) => value<string[]>(k).join('\n');
+  const row = (k: SettingKey, label: string, control: ReactNode, hint?: string) => {
+    const here = own(k) !== undefined;
+    const from = base[k].source;
+    return (
+      <div className="cfg-field cfg-setting" key={k}>
+        <div className="cfg-label">
+          {label}
+          <span className={here ? 'cfg-source here' : 'cfg-source'}>{here ? c.source.machine : from === 'adapter' ? c.source.adapter(adapter) : c.source[from]}</span>
+          {here && (
+            <button type="button" className="cfg-reset" title={c.resetHint} onClick={() => set(k, undefined)}>
+              {c.reset}
+            </button>
+          )}
+        </div>
+        <div className="cfg-control">
+          {control}
+          {hint && <p className="hint">{hint}</p>}
+        </div>
+      </div>
+    );
+  };
+  const land = value<'main' | 'pr'>('land');
+  const planDocs = value<{ dir: string; exclude: string[] }>('planDocs');
+  return (
+    <div className="cfg-span cfg-settings">
+      <button type="button" className={open ? 'cfg-settings-toggle on' : 'cfg-settings-toggle'} aria-expanded={open} onClick={() => setOpen(!open)}>
+        <span className="cfg-caret" aria-hidden="true" />
+        {c.open}
+        <span className="hint">
+          {[value<string>('branch'), c.lands[land], ...(setHere ? [c.setHere(setHere)] : [])].join(' · ')}
+        </span>
+      </button>
+      {open && (
+        <div className="cfg-settings-body">
+          <p className="hint">{c.hint}</p>
+          {row('branch', c.branch, <input className="c-path" aria-label={c.branch} spellCheck={false} value={value<string>('branch')} onChange={(e) => set('branch', e.target.value)} />, c.branchHint)}
+          {row(
+            'land',
+            c.land,
+            <div className="seg" role="radiogroup" aria-label={c.land}>
+              {(['main', 'pr'] as const).map((x) => (
+                <button key={x} type="button" role="radio" aria-checked={land === x} className={land === x ? 'on' : undefined} onClick={() => set('land', x)}>
+                  {c.lands[x]}
+                </button>
+              ))}
+            </div>,
+            c.landHint,
+          )}
+          {land === 'pr' &&
+            row(
+              'direct',
+              c.direct,
+              <label className="c-check">
+                <input type="checkbox" checked={value<boolean>('direct')} onChange={(e) => set('direct', e.target.checked)} />
+                {c.directLabel}
+              </label>,
+            )}
+          {row('checks', c.checks, <textarea rows={Math.max(2, value<string[]>('checks').length + 1)} spellCheck={false} aria-label={c.checks} value={lines('checks')} onChange={(e) => set('checks', e.target.value.split('\n'))} />, c.checksHint)}
+          {row('setup', c.setup, <input className="c-path" aria-label={c.setup} spellCheck={false} value={value<string>('setup')} onChange={(e) => set('setup', e.target.value)} />, c.setupHint)}
+          {row(
+            'planDocs',
+            c.planDocs,
+            <div className="cfg-plan">
+              <input className="c-path" aria-label={c.planDir} placeholder={c.planDir} spellCheck={false} value={planDocs.dir} onChange={(e) => set('planDocs', { ...planDocs, dir: e.target.value })} />
+              <input className="c-path" aria-label={c.planExclude} placeholder={c.planExclude} spellCheck={false} value={planDocs.exclude.join(', ')} onChange={(e) => set('planDocs', { ...planDocs, exclude: e.target.value.split(/,\s*/) })} />
+            </div>,
+          )}
+          {row('softPaths', c.softPaths, <textarea rows={Math.max(2, value<string[]>('softPaths').length + 1)} spellCheck={false} aria-label={c.softPaths} value={lines('softPaths')} onChange={(e) => set('softPaths', e.target.value.split('\n'))} />, c.softPathsHint)}
+          {row(
+            'workspaces',
+            c.workspaces,
+            base.workspaces.source === 'clones' ? (
+              <span>{c.workspacesClones}</span>
+            ) : (
+              <div className="seg" role="radiogroup" aria-label={c.workspaces}>
+                {(['worktrees', 'clones'] as const).map((x) => (
+                  <button key={x} type="button" role="radio" aria-checked={value('workspaces') === x} className={value('workspaces') === x ? 'on' : undefined} onClick={() => set('workspaces', x)}>
+                    {c.workIn[x]}
+                  </button>
+                ))}
+              </div>
+            ),
+            base.workspaces.source === 'clones' ? undefined : c.workspacesHint,
+          )}
+          {land === 'pr' && row('prNoise', c.prNoise, <textarea rows={2} spellCheck={false} aria-label={c.prNoise} value={lines('prNoise')} onChange={(e) => set('prNoise', e.target.value.split('\n'))} />, c.prNoiseHint)}
+          {row(
+            'demoRequired',
+            c.demoRequired,
+            <label className="c-check">
+              <input type="checkbox" checked={value<boolean>('demoRequired')} onChange={(e) => set('demoRequired', e.target.checked)} />
+              {c.demoRequiredLabel}
+            </label>,
+          )}
+          {row('howToRun', c.howToRun, <textarea rows={Math.max(3, Math.ceil(value<string>('howToRun').length / 90) + 1)} aria-label={c.howToRun} value={value<string>('howToRun')} onChange={(e) => set('howToRun', e.target.value)} />, c.howToRunHint)}
+        </div>
+      )}
+    </div>
   );
 }
 

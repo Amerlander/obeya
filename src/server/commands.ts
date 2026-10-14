@@ -2,6 +2,7 @@
 // confirms them in one sentence, and runs them after a short delay unless the owner takes them back.
 
 import { z } from 'zod';
+import { settingsShape } from '../adapters/schema';
 import { type AgentSetting, answering, askable, blocksSaving, type CanvasConfig, finished, type Item, type NextStep, type Notice, plannableAsProject, prototypeWorkstream, type Queue, type SpotInput } from '../core/types';
 import { answerTag, fromAnswerTag } from './answers';
 import { BadRequest, type Board, replyNote } from './board';
@@ -481,7 +482,7 @@ export class Commander {
               {
                 name: 'config',
                 description: [
-                  "Read Obeya's configuration: the canvases this Obeya serves (canvases), each with its repositories (path; adapter, else picked by the repository's origin; clones: clones to create, workspaces: existing clones to use, slots: how many of its workers may be busy at once on this machine (as many as there are clones when left out, any number for adapters whose workers use worktrees), hosts: other machines over SSH its workers run on (name, ssh target, root directory there, clones, slots), a new card going to the first machine with a free slot, this one first; all but slots only for adapters whose workers use clones; share: the command line that shares video demos on a page outside Obeya, in place of the adapter's (resolved marks adapterShares where the adapter has a command, adapterSite with the URL where it names a site Obeya deploys); without either, \"Teilen\" exports a demo as a ZIP or one HTML file), what they amount to (resolved: canvas id, as in ?c=<id>, name, repository ids, adapter and whether workers use clones or worktrees), problems, which canvases run now (running), where it is saved (file; source: whether the running canvases come from that file or from the command line), and the server's settings from its command line (port, data directory, the agents' permission mode, whether it restarts by itself).",
+                  "Read Obeya's configuration: the canvases this Obeya serves (canvases), each with its repositories (path; adapter, else picked by the repository's origin; clones: clones to create, workspaces: existing clones to use, slots: how many of its workers may be busy at once on this machine (as many as there are clones when left out, any number for adapters whose workers use worktrees), hosts: other machines over SSH its workers run on (name, ssh target, root directory there, clones, slots), a new card going to the first machine with a free slot, this one first; all but slots only for adapters whose workers use clones; share: the command line that shares video demos on a page outside Obeya, in place of the adapter's (resolved marks adapterShares where the adapter has a command, adapterSite with the URL where it names a site Obeya deploys); without either, \"Teilen\" exports a demo as a ZIP or one HTML file; settings: the values the owner set for this machine in front of the adapter's: main branch (branch), how approved work lands (land: main or pr; direct), checks, setup, planDocs, softPaths, workspaces, prNoise, demo's required and howToRun), what they amount to (resolved: canvas id, as in ?c=<id>, name, repository ids, adapter, whether workers use clones or worktrees, and values: each setting as it stands without this machine's, with its source), problems, which canvases run now (running), where it is saved (file; source: whether the running canvases come from that file or from the command line), and the server's settings from its command line (port, data directory, the agents' permission mode, whether it restarts by itself).",
                   'Call it for any question about the configuration, and before configure.',
                 ].join('\n'),
                 schema: {},
@@ -490,9 +491,9 @@ export class Commander {
               {
                 name: 'configure',
                 description: [
-                  "Change Obeya's configuration on the owner's word: canvases is the whole new list as config shows it (keep what the owner did not ask to change). It is saved after the undo window, and Obeya then starts again with it once no agent is in the middle of a turn; the page reloads.",
+                  "Change Obeya's configuration on the owner's word: canvases is the whole new list as config shows it (keep what the owner did not ask to change). It is saved after the undo window, and Obeya then starts again with it once no agent is in the middle of a turn; the page reloads. Where only repositories' settings change (but workspaces), they apply at once, without a restart.",
                   "A canvas's id follows its name (without one, the first repository's adapter names it), unless id is set: to rename a canvas, set id to its current id (from resolved), or it becomes a new, empty canvas and its cards stay under the old id, unseen. The first repository a canvas was served with stays its home and must stay listed. Server settings (port, permission mode) are not part of it; they come from the command line.",
-                  `confirm: one short ${LANGUAGE_NAMES[language]} sentence saying what changes and that Obeya then starts again, e.g. ${say.configure}`,
+                  `confirm: one short ${LANGUAGE_NAMES[language]} sentence saying what changes and, unless only repositories' settings change, that Obeya then starts again, e.g. ${say.configure}`,
                 ].join('\n'),
                 schema: {
                   canvases: z.array(
@@ -508,6 +509,7 @@ export class Commander {
                           slots: z.number().int().optional(),
                           share: z.string().optional(),
                           hosts: z.array(z.object({ name: z.string(), ssh: z.string(), root: z.string(), clones: z.number().int(), slots: z.number().int().optional() })).optional(),
+                          settings: settingsShape.optional(),
                         }),
                       ),
                     }),

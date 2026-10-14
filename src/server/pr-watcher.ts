@@ -21,13 +21,17 @@ export class PrWatcher {
     private forge: Forge,
     /** Where `gh` runs for a card (its workspace, else the Obeya checkout). */
     private cwd: (cardId: string) => string,
-    /** Accounts whose comments are not review feedback. */
-    private noise: string[] = [],
+    /** Accounts whose comments are not review feedback; a function where they may change while the watcher runs. */
+    private noiseOf: string[] | (() => string[]) = [],
     /** On a canvas with several repositories: the one whose pull requests this watches. */
     private repo?: string,
     /** Called at the end of every round (the Lesestand fetches then). */
     private onRound?: () => void,
   ) {}
+
+  private get noise(): string[] {
+    return typeof this.noiseOf === 'function' ? this.noiseOf() : this.noiseOf;
+  }
 
   start(everyMs = 120_000) {
     this.timer = setInterval(() => this.poll(), everyMs);

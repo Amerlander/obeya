@@ -1,13 +1,16 @@
 // Obeya's configuration: the canvases it serves, saved in `canvases.json` under its home. The owner
 // reads and edits it in its sheet, the Koordinator on their word; a saved change takes effect when
-// Obeya starts again, which it does by itself once no agent is in the middle of a turn.
+// Obeya starts again, which it does by itself once no agent is in the middle of a turn. The
+// repositories' settings (`RepoSettings`) are the exception: read where they are used, they apply
+// at once, and saving them alone restarts nothing.
 
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
 import { adapterNames } from '../adapters';
-import { type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigView, type DemoSettingsProblem, type DemoSettingsView, type DemoVoiceCheck, type LanguageView, type ResolvedCanvas, type ThemeView, type VoiceInstallJob } from '../core/types';
+import { settingsShape } from '../adapters/schema';
+import { type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigSaved, type ConfigView, needsRestart, type RepoSettings, type DemoSettingsProblem, type DemoSettingsView, type DemoVoiceCheck, type LanguageView, type ResolvedCanvas, type ThemeView, type VoiceInstallJob } from '../core/types';
 import {
   DEMO_SETTINGS_FILE,
   type DemoSettings,
@@ -27,6 +30,7 @@ import { ConfigError, resolveCanvas } from './canvas';
 import type { Store } from './db';
 import { freshPath } from './path';
 import { repoInfo } from './repo';
+import { GIT } from './workspaces';
 import { VERSION } from './resources';
 import { agentsView, languageView, pushKeyChoice, saveAgents, saveLanguage, savePushKey, saveTheme, themeView } from './settings';
 import { adapterRepoProblems, shareArgv, shareProblem } from './share';
@@ -42,6 +46,31 @@ export function expandConfig(canvases: CanvasConfig[]): CanvasConfig[] {
     ...c,
     repos: c.repos.map((r) => ({ ...r, path: expand(r.path), ...(r.workspaces ? { workspaces: r.workspaces.map(expand) } : {}) })),
   }));
+}
+
+/**
+ * A repository's settings as they are saved: lists without empty lines, no main branch or plan
+ * directory that is empty; none at all where nothing is set. An empty list or command is a value
+ * of its own (no checks, no setup), unlike one left out.
+ */
+function tidySettings(s: z.infer<typeof settingsShape> | undefined): RepoSettings | undefined {
+  if (!s) return undefined;
+  const list = (l?: string[]) => l?.map((x) => x.trim()).filter(Boolean);
+  const dir = s.planDocs?.dir.trim().replace(/\/+$/, '');
+  const demo = s.demo && { ...(s.demo.required !== undefined ? { required: s.demo.required } : {}), ...(s.demo.howToRun !== undefined ? { howToRun: s.demo.howToRun.trim() } : {}) };
+  const out: RepoSettings = {
+    ...(s.branch?.trim() ? { branch: s.branch.trim() } : {}),
+    ...(s.land ? { land: s.land } : {}),
+    ...(s.direct !== undefined ? { direct: s.direct } : {}),
+    ...(s.checks ? { checks: list(s.checks)! } : {}),
+    ...(s.setup !== undefined ? { setup: s.setup.trim() } : {}),
+    ...(dir ? { planDocs: { dir, exclude: list(s.planDocs!.exclude)! } } : {}),
+    ...(s.softPaths ? { softPaths: list(s.softPaths)! } : {}),
+    ...(s.workspaces ? { workspaces: s.workspaces } : {}),
+    ...(s.prNoise ? { prNoise: list(s.prNoise)! } : {}),
+    ...(demo && Object.keys(demo).length ? { demo } : {}),
+  };
+  return Object.keys(out).length ? out : undefined;
 }
 
 const shape = z.array(
@@ -71,6 +100,7 @@ const shape = z.array(
                   .strict(),
               )
               .optional(),
+            settings: settingsShape.optional(),
           })
           .strict(),
       ),
@@ -87,6 +117,7 @@ function tidy(canvases: z.infer<typeof shape>): CanvasConfig[] {
       const workspaces = (r.workspaces ?? []).map((w) => w.trim()).filter(Boolean);
       // a host without a name or a machine is a row still being filled in
       const hosts = (r.hosts ?? []).map((h) => ({ name: h.name.trim(), ssh: h.ssh.trim(), root: h.root.trim() || '~/obeya', clones: h.clones, ...(h.slots !== undefined ? { slots: h.slots } : {}) })).filter((h) => h.name && h.ssh);
+      const settings = tidySettings(r.settings);
       return {
         path: r.path.trim(),
         ...(r.adapter?.trim() ? { adapter: r.adapter.trim() } : {}),
@@ -95,6 +126,7 @@ function tidy(canvases: z.infer<typeof shape>): CanvasConfig[] {
         ...(r.slots !== undefined ? { slots: r.slots } : {}),
         ...(r.share?.trim() ? { share: r.share.trim() } : {}),
         ...(hosts.length ? { hosts } : {}),
+        ...(settings ? { settings } : {}),
       };
     }),
   }));
@@ -132,6 +164,13 @@ export interface ConfigOptions {
   ttsLock?: string;
   /** Starts Obeya again with the saved configuration; absent where nothing restarts it (--dev). */
   restart?: () => void;
+  /** Only repositories' settings were saved: the running canvases take them over without a restart. */
+  onSettings?: () => void;
+}
+
+/** Whether the repository has the branch, locally or as `origin`'s. */
+function hasBranch(path: string, branch: string): boolean {
+  return ['refs/heads/', 'refs/remotes/origin/'].some((ref) => Bun.spawnSync([GIT, '-C', path, 'rev-parse', '--verify', '--quiet', `${ref}${branch}^{commit}`], { stdout: 'ignore', stderr: 'ignore' }).exitCode === 0);
 }
 
 const demoShape = z
@@ -186,6 +225,8 @@ export interface Checked {
 
 export class Config {
   private restarting = false;
+  /** The file as last read, by its time and size: repositories' settings are read from it whenever they are used. */
+  private read?: { stamp: string; canvases: CanvasConfig[] };
 
   constructor(private o: ConfigOptions) {}
 
@@ -193,10 +234,21 @@ export class Config {
   current(): CanvasConfig[] {
     if (this.o.source === 'file' && existsSync(this.o.file)) {
       try {
-        return readConfigFile(this.o.file);
+        const { mtimeMs, size } = statSync(this.o.file);
+        const stamp = `${mtimeMs}:${size}`;
+        if (this.read?.stamp === stamp) return this.read.canvases;
+        const canvases = readConfigFile(this.o.file);
+        this.read = { stamp, canvases };
+        return canvases;
       } catch {}
     }
     return this.o.started;
+  }
+
+  /** The settings the owner set for the repository at `path` (absolute) on this machine, as saved now; none where they set none. */
+  repoSettings(path: string): RepoSettings | undefined {
+    for (const c of this.current()) for (const r of c.repos) if (resolve(expand(r.path)) === path) return r.settings;
+    return undefined;
   }
 
   view(): ConfigView {
@@ -237,6 +289,10 @@ export class Config {
         const wrong = r.share && shareProblem(shareArgv(r.share, resolve(r.path)));
         if (wrong) problems.push({ code: 'shareCommand', canvas, repo, detail: wrong });
       });
+      c.repos.forEach((r, repo) => {
+        const branch = r.settings?.branch;
+        if (branch && existsSync(r.path) && !hasBranch(resolve(r.path), branch)) problems.push({ code: 'noBranch', canvas, repo, detail: `${r.path} has no branch ${branch}, neither here nor on origin` });
+      });
       c.repos.forEach((r, repo) =>
         (r.hosts ?? []).forEach((h) => {
           const other = machines.get(h.name);
@@ -245,7 +301,8 @@ export class Config {
         }),
       );
       try {
-        const { id, name, adapters, broken, refs, config } = resolveCanvas(c, this.o.store);
+        const { id, name, adapters, values, broken, refs, config } = resolveCanvas(c, this.o.store);
+        const without = values();
         // what is wrong in a repository's own adapter is fixed there, not here: it keeps nothing from being saved
         c.repos.forEach((r, repo) => {
           const adapter = adapters[config.repos.indexOf(r)]!;
@@ -269,6 +326,7 @@ export class Config {
               id: refs[i]!.id,
               adapter: adapters[i]!.name,
               workspaces: adapters[i]!.workspaces,
+              values: without[i]!,
               ...(demo?.site ? { adapterSite: demo.site.url } : demo?.share ? { adapterShares: true } : {}),
             };
           }),
@@ -394,13 +452,22 @@ export class Config {
     }
   }
 
-  /** Saves a configuration that works, and starts Obeya again with it where something restarts it. */
-  save(input: unknown): { restarting: boolean } {
+  /**
+   * Saves a configuration that works, and starts Obeya again with it where something restarts it;
+   * where it differs from the one Obeya runs with only in repositories' settings, these apply at once.
+   */
+  save(input: unknown): ConfigSaved {
     const { canvases, problems: all } = this.check(input);
     const problems = all.filter(blocksSaving);
     if (problems.length) throw new BadRequest('config', problems.map((p) => p.detail).join('; '));
     mkdirSync(dirname(this.o.file), { recursive: true });
     writeFileSync(this.o.file, `${JSON.stringify(canvases, null, 2)}\n`);
+    this.read = undefined;
+    if (this.o.source === 'file' && !this.restarting && !needsRestart(this.o.started, canvases)) {
+      console.log(`Obeya: repositories' settings saved to ${this.o.file}; they apply at once`);
+      this.o.onSettings?.();
+      return { restarting: false, applied: true };
+    }
     console.log(`Obeya: configuration saved to ${this.o.file}`);
     if (this.o.restart && !this.restarting) {
       this.restarting = true;

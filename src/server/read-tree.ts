@@ -71,6 +71,19 @@ export class ReadTree {
     this.stopped = true;
   }
 
+  /**
+   * Moves the Lesestand where it now belongs, once work lands elsewhere: the checkout (`null`), or
+   * the worktree at `dir`, made or brought up to date. Tells `onChange` where it moved.
+   */
+  retarget(dir: string | null) {
+    if (dir === this.o.dir || this.stopped) return;
+    const was = this.path;
+    this.o.dir = dir;
+    if (dir) this.sync();
+    else this.path = this.o.repoPath;
+    if (this.path !== was) this.o.onChange();
+  }
+
   /** The commit the Lesestand is on. */
   head(): string {
     return gitIn(this.path)('rev-parse', 'HEAD') ?? '';

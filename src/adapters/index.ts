@@ -3,7 +3,8 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { defaultBranchCommit } from '../server/read-tree';
 import { onGitHub } from '../server/repo';
 import { COMPILED, resource } from '../server/resources';
-import { GIT } from '../server/workspaces';
+import type { RepoSettings, RepoValues, SettingSource } from '../core/types';
+import { detectedBranch, GIT } from '../server/workspaces';
 import { generic } from './generic';
 import * as kit from './kit';
 import { obeya } from './obeya';
@@ -58,6 +59,10 @@ const detected = (a: RepoAdapter, repo: RepoInfo): RepoAdapter => (a === generic
 // what was wrong with a loaded adapter's fields (`schema.ts`), by the adapter made of it
 const problems = new WeakMap<RepoAdapter, string[]>();
 
+// the fields an adapter's code gives itself, by the adapter made of it; a built-in one's are its own
+const given = new WeakMap<RepoAdapter, Partial<RepoAdapter>>();
+given.set(obeya, obeya);
+
 /** What is wrong with an adapter's fields, one line each; none for a built-in one. */
 export const adapterProblems = (a: RepoAdapter): string[] => problems.get(a) ?? [];
 
@@ -70,7 +75,63 @@ export function inClones(a: RepoAdapter): RepoAdapter {
   const b: RepoAdapter = { ...a, workspaces: 'clones' };
   const p = problems.get(a);
   if (p) problems.set(b, p);
+  const g = given.get(a);
+  if (g) given.set(b, g);
   return b;
+}
+
+/** The fields this machine's settings may set, as the adapter names them. */
+const LIVE = ['land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'prNoise', 'demo'] as const;
+
+/**
+ * The adapter with the settings the owner set for this machine (`RepoSettings`) in front of its
+ * own values, each read from `settings` whenever it is asked for, so that a saved change applies
+ * without a restart. `workspaces` is read once: clones or worktrees are set up when the canvas
+ * starts. Clones the configuration names (`clones`) go before the setting.
+ */
+export function withSettings(a: RepoAdapter, settings: () => RepoSettings | undefined, clones = false): RepoAdapter {
+  const set = settings()?.workspaces;
+  const b: RepoAdapter = { ...a, workspaces: clones ? 'clones' : (set ?? a.workspaces) };
+  for (const field of LIVE)
+    Object.defineProperty(b, field, {
+      enumerable: true,
+      get: () => {
+        const s = settings();
+        if (field !== 'demo') return s?.[field] ?? a[field];
+        if (!s?.demo || (!a.demo && !s.demo.howToRun?.trim())) return a.demo;
+        return { required: false, howToRun: '', ...a.demo, ...s.demo };
+      },
+    });
+  const p = problems.get(a);
+  if (p) problems.set(b, p);
+  const g = given.get(a);
+  if (g) given.set(b, g);
+  return b;
+}
+
+/**
+ * The repository's settings as they stand without this machine's, with where each comes from: the
+ * adapter's code (a field it gives that differs from the generic adapter's; `land` whenever it
+ * gives one), the clones the configuration names, detection, the generic adapter.
+ */
+export function repoValues(a: RepoAdapter, repo: RepoInfo, clones = false): RepoValues {
+  const own = given.get(a) ?? {};
+  const from = (field: keyof RepoAdapter): SettingSource =>
+    field in own && (field === 'land' || JSON.stringify(own[field]) !== JSON.stringify(generic[field])) ? 'adapter' : field === 'land' ? 'detected' : 'default';
+  const value = <T>(v: T, field: keyof RepoAdapter) => ({ value: v, source: from(field) });
+  const demo = own.demo ? 'adapter' : 'default';
+  return {
+    branch: { value: detectedBranch(repo.path), source: 'detected' },
+    land: value(a.land, 'land'),
+    direct: value(!!a.direct, 'direct'),
+    checks: value(a.checks ?? [], 'checks'),
+    setup: value(a.setup ?? '', 'setup'),
+    planDocs: value(a.planDocs, 'planDocs'),
+    softPaths: value(a.softPaths, 'softPaths'),
+    workspaces: clones ? { value: 'clones', source: 'clones' } : value(a.workspaces, 'workspaces'),
+    prNoise: value(a.prNoise ?? [], 'prNoise'),
+    demo: { required: { value: !!a.demo?.required, source: demo }, howToRun: { value: a.demo?.howToRun ?? '', source: demo } },
+  };
 }
 
 /**
@@ -91,6 +152,7 @@ export function loadAdapter(file: string, repo: RepoInfo): RepoAdapter {
   const checked = checkAdapter(made as Record<string, unknown>);
   const adapter = { ...detected(generic, repo), ...checked.adapter } as RepoAdapter;
   if (checked.problems.length) problems.set(adapter, checked.problems);
+  given.set(adapter, checked.adapter);
   return adapter;
 }
 

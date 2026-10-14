@@ -873,6 +873,66 @@ export interface RepoConfig {
    * remote.
    */
   hosts?: HostConfig[];
+  /** The values of its adapter the owner set for this machine in the configuration dialog; each goes before the adapter's. */
+  settings?: RepoSettings;
+}
+
+/**
+ * The values of a repository's adapter (`RepoAdapter`) and its main branch, as the owner sets them
+ * in the configuration dialog for this machine (design: Settings as data). Read where they are used:
+ * saving them restarts nothing, but for `workspaces`, which takes effect when Obeya starts again.
+ */
+export interface RepoSettings {
+  /** Its main branch, where cards start from and work lands; detected where left out (`defaultBranch`). */
+  branch?: string;
+  land?: 'main' | 'pr';
+  direct?: boolean;
+  checks?: string[];
+  setup?: string;
+  planDocs?: { dir: string; exclude: string[] };
+  softPaths?: string[];
+  workspaces?: 'clones' | 'worktrees';
+  prNoise?: string[];
+  demo?: { required?: boolean; howToRun?: string };
+}
+
+/**
+ * Where a repository's setting comes from where this machine sets none, highest first: the
+ * adapter's code, the clones the configuration names (`workspaces` only), detection (main branch,
+ * landing), the generic adapter.
+ */
+export type SettingSource = 'adapter' | 'clones' | 'detected' | 'default';
+
+/** A setting's value without this machine's, and where it comes from. */
+export interface SettingValue<T> {
+  value: T;
+  source: SettingSource;
+}
+
+/** A repository's settings as they stand without this machine's: what the dialog shows where the owner set nothing. */
+export interface RepoValues {
+  branch: SettingValue<string>;
+  land: SettingValue<'main' | 'pr'>;
+  direct: SettingValue<boolean>;
+  checks: SettingValue<string[]>;
+  setup: SettingValue<string>;
+  planDocs: SettingValue<{ dir: string; exclude: string[] }>;
+  softPaths: SettingValue<string[]>;
+  workspaces: SettingValue<'clones' | 'worktrees'>;
+  prNoise: SettingValue<string[]>;
+  demo: { required: SettingValue<boolean>; howToRun: SettingValue<string> };
+}
+
+/** The configuration without what takes effect at once: whether saving `after` over `before` needs Obeya to start again. */
+export function needsRestart(before: CanvasConfig[], after: CanvasConfig[]): boolean {
+  const structure = (canvases: CanvasConfig[]) =>
+    JSON.stringify(
+      canvases.map((c) => ({
+        ...c,
+        repos: c.repos.map(({ settings, ...r }) => ({ ...r, workIn: settings?.workspaces })),
+      })),
+    );
+  return structure(before) !== structure(after);
 }
 
 /** A machine reached over SSH that a repository's workers run on, in clones of their own there. */
@@ -910,6 +970,8 @@ export interface ResolvedCanvas {
     adapterShares?: boolean;
     /** The URL of the site the adapter names (`demo.site`), which goes before its command. */
     adapterSite?: string;
+    /** Its settings without this machine's, with where each comes from. */
+    values: RepoValues;
   }[];
 }
 
@@ -949,6 +1011,8 @@ export type ConfigProblemCode =
   | 'hostRepo'
   /** Two hosts of one name that connect to different machines. */
   | 'hostName'
+  /** A main branch set for this machine that the repository does not have. */
+  | 'noBranch'
   /** Malformed: a bug in whoever wrote it. */
   | 'invalid';
 
@@ -974,6 +1038,13 @@ export interface ConfigView {
   server: { port: number; home: string; permissionMode: string; restarts: boolean; version: string; commit: string | null };
   /** Saved, and Obeya starts again with it once no agent is in the middle of a turn. */
   restarting: boolean;
+}
+
+/** What saving the configuration did: Obeya starts again with it, or (repositories' settings alone) it applies at once. */
+export interface ConfigSaved {
+  restarting: boolean;
+  /** Only repositories' settings changed: the running canvases use them from now on. */
+  applied?: boolean;
 }
 
 /** What keeps the demo settings from working (a voice to install is not one: `DemoVoiceCheck.install`). */

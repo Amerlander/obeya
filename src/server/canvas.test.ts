@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { boundsOf } from '../core/layout';
+import type { RepoSettings } from '../core/types';
 import { CanvasRuntime, startCanvases } from './canvas';
 import { Store } from './db';
 import { FakeRuntime, gitRepo, identify, noForge, prAdapter } from './testing';
@@ -323,6 +324,58 @@ describe('where the adapter does not say how work lands', () => {
     canvas = new CanvasRuntime({ repos: [{ path: shop }] }, { store: new Store(':memory:'), home: dir, runtime, forge: noForge });
     expect(canvas.repos[0]!.adapter).toMatchObject({ name: 'generic', land: 'pr' });
     expect(canvas.board.snapshot().canvas.repos[0]!.pullRequests).toBe(true);
+  });
+});
+
+describe("a repository's settings for this machine", () => {
+  test('apply without a restart: landing switched from pull requests to main lands the next approval on main', async () => {
+    fresh();
+    const shop = gitRepo(join(dir, 'shop'));
+    git(shop, 'remote', 'add', 'origin', 'git@github.com:acme/shop.git');
+    let settings: RepoSettings | undefined;
+    const workers = new FakeRuntime();
+    canvas.shutdown();
+    canvas = new CanvasRuntime({ repos: [{ path: shop }] }, { store: new Store(':memory:'), home: dir, runtime, workerRuntime: workers, forge: noForge, settings: () => settings });
+    expect(canvas.board.snapshot().canvas.repos[0]!.pullRequests).toBe(true);
+    const card = canvas.board.create({ title: 'Readme', x: 0, y: 0 });
+    canvas.repos[0]!.workers.start(card.id);
+    const ws = canvas.board.row(card.id).workspace!;
+    // a worktree's config is the checkout's
+    identify(shop);
+    writeFileSync(join(ws, 'README.md'), 'Shop\n');
+    git(ws, 'commit', '--quiet', '-am', 'Readme');
+    workers.last.call('ready_for_review', { summary: 'Readme' });
+    workers.last.emit({ type: 'idle' });
+
+    settings = { land: 'main' };
+    canvas.settingsChanged();
+    expect(canvas.board.snapshot().canvas.repos[0]!.pullRequests).toBeUndefined();
+    // the Lesestand is the checkout now, which the landing moves
+    expect(canvas.repos[0]!.read.path).toBe(shop);
+    await canvas.repos[0]!.workers.approve(card.id);
+    expect(item(card.id).state).toBe('live');
+    expect(git(shop, 'log', '-1', '--format=%s', 'main').trim()).toBe('Readme');
+  });
+
+  test('the main branch set takes the place of the one detected: cards start from it', () => {
+    fresh();
+    const shop = gitRepo(join(dir, 'shop'));
+    identify(shop);
+    git(shop, 'checkout', '--quiet', '-b', 'release');
+    writeFileSync(join(shop, 'RELEASE.md'), 'r\n');
+    git(shop, 'add', '.');
+    git(shop, 'commit', '--quiet', '-m', 'Release');
+    git(shop, 'checkout', '--quiet', 'main');
+    let settings: RepoSettings | undefined = { branch: 'release' };
+    canvas.shutdown();
+    canvas = new CanvasRuntime({ repos: [{ path: shop }] }, { store: new Store(':memory:'), home: dir, runtime, forge: noForge, settings: () => settings });
+    expect(canvas.board.snapshot().canvas.repos[0]!.branch).toBe('release');
+    const card = canvas.board.create({ title: 'A', x: 0, y: 0 });
+    canvas.repos[0]!.workers.start(card.id);
+    expect(git(canvas.board.row(card.id).workspace!, 'log', '-1', '--format=%s').trim()).toBe('Release');
+    settings = undefined;
+    canvas.settingsChanged();
+    expect(canvas.board.snapshot().canvas.repos[0]!.branch).toBe('main');
   });
 });
 

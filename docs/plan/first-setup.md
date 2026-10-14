@@ -16,13 +16,15 @@ without a restart.
 - *A folder without git.* The first canvas and "+ Repository" offer to set git up there, with a
   preview of the first commit (W2).
 - *Main branch.* Detected by one function, `defaultBranch()` (`src/server/workspaces.ts`; W3), and
-  shown in the first setup. It cannot be set anywhere yet (W5).
+  shown in the first setup; set for this machine under a repository's „Einstellungen“ in the
+  configuration dialog (W5).
 - *Landing.* Detected from the remote where the adapter does not say (W4): `pr` on GitHub, else
-  `main`. It cannot be set anywhere but in the adapter yet (W5).
-- *Settings as code.* `land`, `direct`, `checks`, `setup`, `planDocs`, `softPaths`, `workspaces`,
-  `prNoise` and the demo's `howToRun` and `required` can only be set in `.obeya/adapter/index.ts`:
-  TypeScript, loaded from the default branch, whose change restarts Obeya (`adapterChanged` in
-  `src/server/main.ts`). Saving the configuration dialog (`canvases.json`) restarts Obeya too.
+  `main`; set for this machine in the dialog too (W5).
+- *Settings for this machine.* Every value field of the adapter has a form in the dialog, stored in
+  the repository's entry in `canvases.json` (`settings`), read where it is used and shown with its
+  source; saving them alone restarts nothing, but for `workspaces` (W5; design: Repository
+  settings). There is no `.obeya/settings.json` yet: what a fresh clone brings is the adapter's
+  code (W6).
 
 ## Design
 
@@ -54,7 +56,9 @@ demo's `howToRun` and `required`.
 
 - A change in the dialog applies to this machine at once. It is stored in the repository's entry
   in `canvases.json` and read where it is used, with no restart. Saving these values restarts
-  nothing; other configuration changes (adding a canvas, say) restart as they do today.
+  nothing; other configuration changes (adding a canvas, say) restart as they do today. The one
+  exception is `workspaces`: clones or worktrees are set up when a canvas starts, so changing it
+  restarts Obeya, and the dialog says so at the field.
 - "Für alle ins Repository übernehmen" beside the form writes the values to `.obeya/settings.json`
   (like `.vscode/settings.json`), which a fresh clone brings with it. It is read from the default
   branch like the adapter, and a new version of it takes effect without a restart. Where work lands
@@ -84,7 +88,7 @@ demo's `howToRun` and `required`.
 - [x] **W4:** Landing follows the remote. See Main branch and landing by detection. Done when
   approving a card in a repository without a remote lands it on the main branch, and a repository
   with a GitHub remote still goes through pull requests.
-- [ ] **W5:** Repository settings in the dialog, for this machine. See Settings as data: the form,
+- [x] **W5:** Repository settings in the dialog, for this machine. See Settings as data: the form,
   the values in `canvases.json` read on use, no restart for saving them, the source of each value
   shown. Main branch and landing become changeable here. Done when switching a repository's landing
   from `pr` to `main` in the dialog applies to the next approval without a restart.

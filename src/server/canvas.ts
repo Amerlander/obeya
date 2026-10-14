@@ -3,13 +3,13 @@
 
 import { existsSync, mkdirSync, realpathSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
-import { adapterProblems, adapterTreeAt, builtInAdapter, inClones, pickAdapter, repoAdapterTree } from '../adapters';
+import { adapterProblems, adapterTreeAt, builtInAdapter, inClones, pickAdapter, repoAdapterTree, repoValues, withSettings } from '../adapters';
 import { Answers, answersDir, answerTag, openWithSystem } from './answers';
 import { repoName } from '../adapters/generic';
 import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
 import type { Language } from '../core/locale';
-import { AGENT_DEFAULTS, agentListens, type AgentRole, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, plannableAsProject, type RepoConfig, type RepoRef, type SpotInput } from '../core/types';
+import { AGENT_DEFAULTS, agentListens, type AgentRole, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, plannableAsProject, type RepoConfig, type RepoRef, type RepoSettings, type SpotInput } from '../core/types';
 import { BadRequest, Board, replyNote, type StoredIdea } from './board';
 import { type Command, Commander } from './commands';
 import type { Config } from './config';
@@ -30,7 +30,7 @@ import { changesCode } from './self-update';
 import { Sharing, shareArgv } from './share';
 import { siteMissing, siteName } from './site';
 import { type DueRestart, Workers } from './workers';
-import { type Landed, Workspaces } from './workspaces';
+import { defaultBranch, type Landed, useBranchSetting, Workspaces } from './workspaces';
 import { claudeToken, githubToken, hostName, registerHost } from './hosts';
 
 export type { CanvasConfig, RepoConfig };
@@ -64,6 +64,11 @@ export interface CanvasDeps {
   agents?: (role: AgentRole) => AgentSetting;
   /** A repository's own adapter (`.obeya/adapter/`) changed on its default branch: Obeya starts again for it, where something restarts it. */
   adapterChanged?: (repoPath: string) => void;
+  /**
+   * The settings the owner set for a repository on this machine, by its path, read whenever one is
+   * used (`Config.repoSettings`); those the canvas started with when left out.
+   */
+  settings?: (repoPath: string) => RepoSettings | undefined;
 }
 
 export interface RepoRuntime {
@@ -98,6 +103,8 @@ export class CanvasRuntime {
   readonly repos: RepoRuntime[] = [];
   private stops: (() => void)[] = [];
   private prWatchers: PrWatcher[] = [];
+  /** By repository: what watches its plan docs, and its pull requests once its work went out as one. */
+  private watching: { docs?: () => void; prs?: PrWatcher }[] = [];
   /** What the owner last said or typed to each card's agent, for the Koordinator to read beside a request the agent passes on. */
   private said = new Map<string, { text: string; spoken: boolean }>();
   /** Cards the owner is writing in, with their text before; a pause in typing hands it to the learner. */
@@ -107,7 +114,10 @@ export class CanvasRuntime {
     const agents = deps.agents ?? ((role: AgentRole) => AGENT_DEFAULTS[role]);
     deps = { ...deps, runtime: withAgentSetting(deps.runtime, agents), ...(deps.workerRuntime ? { workerRuntime: withAgentSetting(deps.workerRuntime, agents) } : {}) };
     this.deps = deps;
-    const resolved = resolveCanvas(config, deps.store);
+    const settingsOf = (r: RepoConfig) => (deps.settings ? () => deps.settings!(resolve(r.path)) : () => r.settings);
+    // the main branch the owner set counts from the start: the repository's id, its adapter and its Lesestand go by it
+    for (const r of config.repos) this.stops.push(useBranchSetting(r.path, () => settingsOf(r)()?.branch));
+    const resolved = resolveCanvas(config, deps.store, settingsOf);
     const { id, name, infos, adapters, adapterTrees, broken, refs, stored } = resolved;
     config = resolved.config;
     adapters.forEach((a, i) => {
@@ -241,15 +251,7 @@ export class CanvasRuntime {
         ...(deps.parkGrace !== undefined ? { parkGrace: deps.parkGrace } : {}),
       });
       this.repos.push({ ref, info, adapter, share, read, workspaces, workers, projectAgents });
-      if (deps.watch) {
-        this.stops.push(watchPlanDocs(read.path, adapter, () => board.docsChanged()));
-        if (adapter.land === 'pr') {
-          const watcher = new PrWatcher(board, workers, deps.forge, (cardId) => localDir(board.row(cardId).workspace) ?? info.path, adapter.prNoise, ref.id, () => void read.refresh());
-          watcher.start();
-          this.prWatchers.push(watcher);
-          this.stops.push(() => watcher.stop());
-        }
-      }
+      this.watch(this.repos.length - 1);
     });
     board.showPools(() =>
       this.repos.filter((r) => r.workspaces.pooled).map((r) => ({ repo: r.ref.id, hosts: r.workspaces.pool(r.workers.inTurn()) })),
@@ -324,6 +326,43 @@ export class CanvasRuntime {
 
   get id() {
     return this.board.canvas.id;
+  }
+
+  /**
+   * Watches the plan docs of the repository at `index` in its Lesestand, afresh where they were
+   * watched (the directory or the Lesestand moved), and its pull requests once its work goes out as
+   * one; a watcher of pull requests stays, for those still open.
+   */
+  private watch(index: number) {
+    if (!this.deps.watch) return;
+    const { adapter, read, workers, info, ref } = this.repos[index]!;
+    const w = (this.watching[index] ??= {});
+    w.docs?.();
+    w.docs = watchPlanDocs(read.path, adapter, () => this.board.docsChanged());
+    if (adapter.land === 'pr' && !w.prs) {
+      const board = this.board;
+      w.prs = new PrWatcher(board, workers, this.deps.forge, (cardId) => localDir(board.row(cardId).workspace) ?? info.path, () => adapter.prNoise ?? [], ref.id, () => void read.refresh());
+      w.prs.start();
+      this.prWatchers.push(w.prs);
+    }
+  }
+
+  /**
+   * The owner saved settings of the repositories (`RepoSettings`) without a restart: the adapters
+   * read them where they are used; what the canvas set up by them follows here (the Lesestand
+   * where work now lands elsewhere, the watched plan directory, the pull requests, what the page
+   * shows of each repository).
+   */
+  settingsChanged() {
+    this.repos.forEach((r, i) => {
+      r.info.branch = defaultBranch(r.info.path);
+      for (const k of ['clones', 'pullRequests', 'direct'] as const) delete r.ref[k];
+      Object.assign(r.ref, settled(r.info, r.adapter));
+      // where work lands on the local main, the checkout is the Lesestand; otherwise a worktree on the default branch
+      r.read.retarget(r.adapter.land === 'main' ? null : join(this.deps.home, 'read', this.id, r.ref.id));
+      this.watch(i);
+    });
+    this.board.docsChanged();
   }
 
   /** The repository a card belongs to. */
@@ -1001,6 +1040,10 @@ export class CanvasRuntime {
   shutdown() {
     for (const [, w] of this.writing) clearTimeout(w.timer);
     for (const stop of this.stops) stop();
+    for (const w of this.watching) {
+      w.docs?.();
+      w.prs?.stop();
+    }
     for (const r of this.repos) r.workers.shutdown();
     this.koordinator.shutdown();
     this.explorers.shutdown();
@@ -1049,11 +1092,13 @@ export class ConfigError extends Error {
 
 /**
  * What a canvas's configuration amounts to, without touching anything: its repositories (home
- * first), their adapters and ids (`broken`: why a repository's own adapter does not load, where
- * it runs on the built-in one instead), and the canvas's id and name; `keep` notes which canvas
- * the repository's own adapter named, once the canvas is in the store. Throws a ConfigError.
+ * first), their adapters with the settings of this machine in front (`settings`: where a
+ * repository's are read; its entry's when left out) and ids (`broken`: why a repository's own
+ * adapter does not load, where it runs on the built-in one instead), their settings without this
+ * machine's (`values`), and the canvas's id and name; `keep` notes which canvas the repository's
+ * own adapter named, once the canvas is in the store. Throws a ConfigError.
  */
-export function resolveCanvas(config: CanvasConfig, store: Store) {
+export function resolveCanvas(config: CanvasConfig, store: Store, settings: (r: RepoConfig) => () => RepoSettings | undefined = (r) => () => r.settings) {
   if (!config.repos.length) throw new ConfigError('noRepo', 'a canvas needs at least one repository');
   let infos = config.repos.map((r, i) => {
     try {
@@ -1078,7 +1123,8 @@ export function resolveCanvas(config: CanvasConfig, store: Store) {
     }
   });
   // clones the configuration names are where the workers work, also where the adapter says worktrees
-  adapters = adapters.map((a, i) => (namesClones(config.repos[i]!) ? inClones(a) : a));
+  let bases = adapters.map((a, i) => (namesClones(config.repos[i]!) ? inClones(a) : a));
+  adapters = bases.map((a, i) => withSettings(a, settings(config.repos[i]!), namesClones(config.repos[i]!)));
   let refs = uniqueRefs(infos, adapters);
   // the canvas the repository's own adapter named stays the one while that adapter does not load,
   // with its address, name and cards
@@ -1096,6 +1142,7 @@ export function resolveCanvas(config: CanvasConfig, store: Store) {
     config = { ...config, repos: order.map((i) => config.repos[i]!) };
     infos = order.map((i) => infos[i]!);
     adapters = order.map((i) => adapters[i]!);
+    bases = order.map((i) => bases[i]!);
     adapterTrees = order.map((i) => adapterTrees[i]);
     broken = order.map((i) => broken[i]);
     refs = uniqueRefs(infos, adapters);
@@ -1104,7 +1151,8 @@ export function resolveCanvas(config: CanvasConfig, store: Store) {
   const keep = () => {
     if (ownPath && !kept) store.setSetting(id, OWN_ADAPTER_OF, ownPath);
   };
-  return { config, id, name, infos, adapters, adapterTrees, broken, refs, stored, keep };
+  const values = () => bases.map((a, i) => repoValues(a, infos[i]!, namesClones(config.repos[i]!)));
+  return { config, id, name, infos, adapters, values, adapterTrees, broken, refs, stored, keep };
 }
 
 /** Whether a repository's configuration names clones for its workers (to create, existing ones, on other machines). */
@@ -1121,11 +1169,18 @@ function uniqueRefs(infos: RepoInfo[], adapters: RepoAdapter[]): RepoRef[] {
       id: n === 1 ? base : `${base}${n}`,
       name: i === 0 ? adapters[0]!.canvasName(info) : repoName(info),
       path: info.path,
-      branch: info.branch,
-      ...(adapters[i]!.workspaces === 'clones' ? { clones: true } : {}),
-      ...(adapters[i]!.land === 'pr' ? { pullRequests: true, ...(adapters[i]!.direct ? { direct: true } : {}) } : {}),
+      ...settled(info, adapters[i]!),
     };
   });
+}
+
+/** What a repository's ref says of its settings, which may change while the canvas runs: its main branch, its workspaces, how work lands. */
+function settled(info: RepoInfo, adapter: RepoAdapter): Pick<RepoRef, 'branch' | 'clones' | 'pullRequests' | 'direct'> {
+  return {
+    branch: info.branch,
+    ...(adapter.workspaces === 'clones' ? { clones: true } : {}),
+    ...(adapter.land === 'pr' ? { pullRequests: true, ...(adapter.direct ? { direct: true } : {}) } : {}),
+  };
 }
 
 /** Where a repository shares demos, without its checkout. */

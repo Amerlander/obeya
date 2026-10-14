@@ -16,6 +16,7 @@ let web: string;
 let api: string;
 let file: string;
 let restarts: number;
+let applied: number;
 
 function repo(name: string) {
   return gitRepo(join(dir, name));
@@ -32,6 +33,7 @@ const config = (source: 'file' | 'args', started: CanvasConfig[], running: strin
     // not the machine's lock: a demo another agent renders meanwhile would hold up the sample
     ttsLock: join(dir, 'tts.lock'),
     restart: () => void restarts++,
+    onSettings: () => void applied++,
   });
 
 beforeEach(() => {
@@ -41,6 +43,7 @@ beforeEach(() => {
   api = repo('api');
   file = join(dir, 'home', 'canvases.json');
   restarts = 0;
+  applied = 0;
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -50,7 +53,7 @@ describe("Obeya's configuration", () => {
     const v = c.view();
     expect(v).toMatchObject({ file, source: 'args', running: ['produkt'], problems: [], restarting: false, server: { port: 4417, restarts: true } });
     expect(v.adapters).toContain('obeya');
-    expect(v.resolved).toEqual([
+    expect(v.resolved).toMatchObject([
       {
         id: 'produkt',
         name: 'Produkt',
@@ -188,6 +191,42 @@ describe("Obeya's configuration", () => {
     // saved again before the restart: the file has the latest, and the restart is already on its way
     c.save([{ repos: [{ path: api }] }]);
     expect(restarts).toBe(1);
+  });
+
+  test("repositories' settings: tidied, applied at once without a restart; clones or worktrees restart", () => {
+    mkdirSync(join(dir, 'home'));
+    writeFileSync(file, JSON.stringify([{ repos: [{ path: web }] }]));
+    const c = config('file', [{ repos: [{ path: web }] }]);
+    expect(c.save([{ repos: [{ path: web, settings: { land: 'main', checks: ['bun test', ' '], branch: ' ', setup: '', planDocs: { dir: '', exclude: [] } } }] }])).toEqual({ restarting: false, applied: true });
+    expect(readConfigFile(file)).toEqual([{ repos: [{ path: web, settings: { land: 'main', checks: ['bun test'], setup: '' } }] }]);
+    expect(c.repoSettings(web)).toEqual({ land: 'main', checks: ['bun test'], setup: '' });
+    expect(c.repoSettings(api)).toBeUndefined();
+    expect([applied, restarts]).toEqual([1, 0]);
+    // set back to what comes from elsewhere: nothing set
+    c.save([{ repos: [{ path: web, settings: {} }] }]);
+    expect(readConfigFile(file)).toEqual([{ repos: [{ path: web }] }]);
+    expect(c.repoSettings(web)).toBeUndefined();
+    expect(c.save([{ repos: [{ path: web, settings: { workspaces: 'clones' } }] }])).toEqual({ restarting: true });
+    expect([applied, restarts]).toEqual([2, 1]);
+  });
+
+  test("shows each repository's settings without this machine's, with where each comes from", () => {
+    const c = config('file', []);
+    const values = (r: object) => c.check([{ repos: [{ path: web, ...r }] }]).resolved[0]!.repos[0]!.values;
+    expect(values({})).toMatchObject({
+      branch: { value: 'main', source: 'detected' },
+      land: { value: 'main', source: 'detected' },
+      checks: { value: [], source: 'default' },
+      planDocs: { value: { dir: 'docs/plan' }, source: 'default' },
+      workspaces: { value: 'worktrees', source: 'default' },
+      demo: { required: { value: false, source: 'default' } },
+    });
+    // this machine's own come on top, in the draft: the values beside them stay what they would be without
+    expect(values({ adapter: 'obeya', settings: { land: 'pr' } })).toMatchObject({ land: { value: 'main', source: 'adapter' }, checks: { source: 'adapter' }, planDocs: { source: 'default' }, demo: { required: { value: true, source: 'adapter' } } });
+    expect(values({ clones: 1 }).workspaces).toEqual({ value: 'clones', source: 'clones' });
+    const problems = (branch: string) => c.check([{ repos: [{ path: web, settings: { branch } }] }]).problems.map((p) => p.code);
+    expect(problems('main')).toEqual([]);
+    expect(problems('nope')).toEqual(['noBranch']);
   });
 
   test('shows the file when Obeya runs from it, the command line until something is saved', () => {
