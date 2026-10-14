@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Locator, type Page } from 'playwright-core';
 import { type NarrationLanguage, readDemoSettings, withVoice } from './settings.ts';
-import { checkSetup, describeSetup, whisperKit } from './setup.ts';
+import { checkSetup, describeSetup, type ListenBackend, listenKit } from './setup.ts';
 import { CLOCK, type Cut, type Frame, frameDurations, laterLabel, onPaintTime, readClock, untagged, videoTime } from './timeline.ts';
 import { TTS_LOCK, voiceSpec } from './voices.ts';
 
@@ -58,7 +58,7 @@ const LEAD_SECONDS = 0.35;
 const GAP_SECONDS = 0.6;
 /** Below this word-level match, the spoken clip likely dropped or invented something. */
 const TTS_MATCH_WARN = 0.85;
-/** Below this, the sentence is worth rephrasing: the voice or Whisper stumbled over it. */
+/** Below this, the sentence is worth rephrasing: the voice or the speech recognition stumbled over it. */
 const NARRATION_OK = 0.93;
 /** A scene this much longer than its narration and gap has a stretch worth cutting (`Director.skip`). */
 const SILENCE_WARN = 5;
@@ -85,7 +85,7 @@ interface Clip {
 
 interface Narration {
   clips: Clip[];
-  /** Why some clips went unheard: Whisper off in the settings, or not loadable. */
+  /** Why some clips went unheard: listening back off in the settings, or the recognition not loadable. */
   unchecked: string | null;
   /** How the clips were heard back, for the report. */
   heardWith: string;
@@ -357,15 +357,15 @@ function run(cmd: string, args: string[], opts: { cwd?: string } = {}) {
 }
 
 /**
- * Whisper for listening back, in a throwaway environment uv makes: mlx-whisper on Apple Silicon,
- * faster-whisper elsewhere (CUDA when there is a GPU, else the CPU). Off in the settings, or when
- * uv cannot get it (offline, no wheel for this machine), the clips go unheard and the report says so.
+ * The speech recognition for listening back (Parakeet, as for Obeya's voice commands), in a
+ * throwaway environment uv makes. Off in the settings, or when uv cannot get it (offline, no wheel
+ * for this machine), the clips go unheard and the report says so.
  */
-function whisper(): { backend: 'mlx' | 'faster' | 'off'; uvArgs: string[]; unchecked?: string } {
+function listener(): { backend: ListenBackend | 'off'; name?: string; uvArgs: string[]; unchecked?: string } {
   if (SETTINGS.listenBack === false) return { backend: 'off', uvArgs: [] };
-  const { backend, uvArgs, module: probe } = whisperKit();
+  const { backend, name, uvArgs, module: probe } = listenKit();
   const r = spawnSync('uv', ['run', '--quiet', '--no-project', ...uvArgs, 'python', '-c', `import ${probe}`], { encoding: 'utf8' });
-  if (r.status === 0) return { backend, uvArgs };
+  if (r.status === 0) return { backend, name, uvArgs };
   const why = (r.error?.message ?? r.stderr ?? '').trim().split('\n').at(-1);
   return { backend: 'off', uvArgs: [], unchecked: `${probe.replace('_', '-')} could not be loaded: ${why}` };
 }
@@ -377,9 +377,9 @@ function synthesize(scenes: Scene[], dir: string): Narration {
   const spec = voiceSpec(SETTINGS);
   const specFile = path.join(dir, 'voice.json');
   fs.writeFileSync(specFile, JSON.stringify(spec));
-  const ear = whisper();
+  const ear = listener();
   if (ear.unchecked) console.warn(`narration: not listening back, ${ear.unchecked}`);
-  console.log(`narration: ${jobs.length} clips, voice ${SETTINGS.voice}, language ${LANGUAGE}, listening back ${ear.backend === 'off' ? 'off' : `with ${ear.backend === 'mlx' ? 'mlx-whisper' : 'faster-whisper'}`}`);
+  console.log(`narration: ${jobs.length} clips, voice ${SETTINGS.voice}, language ${LANGUAGE}, listening back ${ear.backend === 'off' ? 'off' : `with ${ear.name}`}`);
   // A voice that loads a large model takes the machine's turn (TTS_LOCK); a hosted or light one
   // does not, so rate-limit waits never hold up a clone.
   const lock = spec.kind === 'command' && spec.heavy ? ['--lock', TTS_LOCK] : [];
@@ -388,11 +388,10 @@ function synthesize(scenes: Scene[], dir: string): Narration {
   const r = spawnSync('uv', args, { stdio: ['ignore', 'inherit', 'inherit'] });
   if (r.status !== 0) throw new Error(`tts.py failed (${r.error?.message ?? r.status}); its output is above`);
   const out = JSON.parse(fs.readFileSync(path.join(dir, 'tts.json'), 'utf8')) as Pick<Narration, 'clips' | 'unchecked'>;
-  // tts.py only knows it got `--listen off`; why (settings, or Whisper not loadable) is known here.
+  // tts.py only knows it got `--listen off`; why (settings, or the recognition not loadable) is known here.
   const unheard = out.clips.some((c) => c.heard === null);
   const unchecked = unheard ? (ear.unchecked ?? out.unchecked ?? 'not heard back') : null;
-  const heardWith = ear.backend === 'mlx' ? 'mlx-whisper' : 'faster-whisper';
-  return { clips: out.clips, unchecked, heardWith, turnedOff: SETTINGS.listenBack === false };
+  return { clips: out.clips, unchecked, heardWith: ear.name ?? '', turnedOff: SETTINGS.listenBack === false };
 }
 
 /**

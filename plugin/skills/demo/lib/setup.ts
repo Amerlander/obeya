@@ -1,6 +1,6 @@
 // What a demo needs on this machine, checked: Node, Playwright and a browser to record with,
 // ffmpeg (with libx264) to cut, uv for the Python parts (it brings Python itself), the voice of
-// the settings, and Whisper for listening back. Each missing piece comes with how to install it on
+// the settings, and the speech recognition for listening back. Each missing piece comes with how to install it on
 // this platform. Obeya's configuration dialog shows the check, and a render runs it before anything
 // else, so it stops at once with the whole list instead of minutes in.
 //
@@ -14,7 +14,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isMain, lib } from './here.ts';
 import { type DemoSettings, readDemoSettings, withVoice } from './settings.ts';
-import { hfModelPresent, installState, onMlx, voiceSpec } from './voices.ts';
+import { hfModelPresent, installState, voiceSpec } from './voices.ts';
 
 /** The Obeya checkout the skill lives in (or the app's resources): Playwright comes from its `node_modules`. */
 const root = () => lib('..', '..', '..', '..');
@@ -22,13 +22,13 @@ const root = () => lib('..', '..', '..', '..');
 /** Node runs the director's TypeScript without flags from here on. */
 export const NODE_MIN = [22, 18] as const;
 
-export type SetupId = 'node' | 'playwright' | 'browser' | 'ffmpeg' | 'uv' | 'voice' | 'whisper';
+export type SetupId = 'node' | 'playwright' | 'browser' | 'ffmpeg' | 'uv' | 'voice' | 'recognition';
 
 export interface SetupItem {
   id: SetupId;
   /**
    * `ok`: there. `missing`: a render stops without it. `later`: the first render fetches it
-   * (Whisper), which takes a while. `off`: not used (listening back turned off).
+   * (the speech recognition), which takes a while. `off`: not used (listening back turned off).
    */
   state: 'ok' | 'missing' | 'later' | 'off';
   /** What was found: a version, a path, the voice's missing parts. */
@@ -100,21 +100,30 @@ export function installHint(id: SetupId, platform: string, arch: string, family:
       };
     case 'voice':
       return { commands: [`node "${lib('voices.ts')}" install`] };
-    case 'whisper':
+    case 'recognition':
       return undefined;
   }
 }
 
 /**
- * Whisper for listening back, as the render brings it with uv: mlx-whisper on Apple Silicon,
- * faster-whisper elsewhere (CTranslate2 has wheels for released Pythons only, so 3.12). The
- * models are those `tts.py` loads (`STT_MODELS`). Obeya's own Whisper for voice commands
- * (`voice/whisper_sidecar.py`) runs the same kit.
+ * How Obeya hears speech: Parakeet (NVIDIA's Parakeet TDT 0.6B v3, int8, through onnx-asr and ONNX
+ * Runtime on the CPU), on every platform; or Whisper (mlx-whisper on Apple Silicon, faster-whisper
+ * elsewhere).
  */
-export function whisperKit(backend: 'mlx' | 'faster' = onMlx() ? 'mlx' : 'faster') {
+export type ListenBackend = 'parakeet' | 'mlx' | 'faster';
+
+/**
+ * Speech recognition as uv brings it, for Obeya's voice commands (`voice/transcribe_sidecar.py`)
+ * and the demos' listening back (`tts.py`): Parakeet by default, Whisper where asked for
+ * (CTranslate2 and ONNX Runtime have wheels for released Pythons only, so 3.12). `model`: its
+ * Hugging Face repository; `mb`: about what the package and the model download.
+ */
+export function listenKit(backend: ListenBackend = 'parakeet') {
+  if (backend === 'parakeet')
+    return { backend, uvArgs: ['--python', '3.12', '--with', 'onnx-asr[cpu,hub]'], module: 'onnx_asr', name: 'Parakeet', model: 'istupakov/parakeet-tdt-0.6b-v3-onnx', mb: { package: 70, model: 640 } };
   return backend === 'mlx'
-    ? { backend: 'mlx' as const, uvArgs: ['--with', 'mlx-whisper'], module: 'mlx_whisper', model: 'mlx-community/whisper-large-v3-turbo' }
-    : { backend: 'faster' as const, uvArgs: ['--python', '3.12', '--with', 'faster-whisper'], module: 'faster_whisper', model: 'mobiuslabsgmbh/faster-whisper-large-v3-turbo' };
+    ? { backend, uvArgs: ['--with', 'mlx-whisper'], module: 'mlx_whisper', name: 'mlx-whisper', model: 'mlx-community/whisper-large-v3-turbo', mb: { package: 150, model: 1600 } }
+    : { backend, uvArgs: ['--python', '3.12', '--with', 'faster-whisper'], module: 'faster_whisper', name: 'faster-whisper', model: 'mobiuslabsgmbh/faster-whisper-large-v3-turbo', mb: { package: 250, model: 1600 } };
 }
 
 /** Runs a program; `null` when it is not there or fails. */
@@ -182,8 +191,8 @@ export async function checkSetup(s: DemoSettings, o: SetupOptions = {}): Promise
   const hint = (id: SetupId) => installHint(id, platform, arch, family);
   const missing = (id: SetupId, rest: Partial<SetupItem> = {}): SetupItem => ({ id, state: 'missing', install: hint(id), ...rest });
 
-  const whisper = whisperKit();
-  const [nodeOut, ffmpegOut, encoders, uvOut, whisperOut] = await Promise.all([
+  const ear = listenKit();
+  const [nodeOut, ffmpegOut, encoders, uvOut, earOut] = await Promise.all([
     output('node', ['--version'], env),
     output('ffmpeg', ['-hide_banner', '-version'], env),
     output('ffmpeg', ['-hide_banner', '-encoders'], env),
@@ -191,7 +200,7 @@ export async function checkSetup(s: DemoSettings, o: SetupOptions = {}): Promise
     // offline: only what uv has in its cache counts as there
     s.listenBack === false
       ? Promise.resolve(null)
-      : output('uv', ['run', '--offline', '--quiet', '--no-project', ...whisper.uvArgs, 'python', '-c', `import importlib.util,sys; sys.exit(not importlib.util.find_spec(${JSON.stringify(whisper.module)}))`], env),
+      : output('uv', ['run', '--offline', '--quiet', '--no-project', ...ear.uvArgs, 'python', '-c', `import importlib.util,sys; sys.exit(not importlib.util.find_spec(${JSON.stringify(ear.module)}))`], env),
   ]);
   const items: SetupItem[] = [];
 
@@ -223,11 +232,11 @@ export async function checkSetup(s: DemoSettings, o: SetupOptions = {}): Promise
   if (held) items.push({ id: 'voice', state: 'ok', found: `${s.voice} (held by Obeya)` });
   else items.push(voice.installed ? { id: 'voice', state: 'ok', found: s.voice } : missing('voice', { found: `${s.voice}: ${voice.missing.join(', ')}`, mb: voice.mb }));
 
-  if (s.listenBack === false) items.push({ id: 'whisper', state: 'off' });
+  if (s.listenBack === false) items.push({ id: 'recognition', state: 'off' });
   else {
     // the package from uv (with its dependencies), the model from Hugging Face
-    const mb = (whisperOut === null ? (whisper.backend === 'mlx' ? 150 : 250) : 0) + (hfModelPresent(whisper.model) ? 0 : 1600);
-    items.push({ id: 'whisper', state: mb ? 'later' : 'ok', found: whisper.module.replace('_', '-'), ...(mb ? { mb } : {}) });
+    const mb = (earOut === null ? ear.mb.package : 0) + (hfModelPresent(ear.model) ? 0 : ear.mb.model);
+    items.push({ id: 'recognition', state: mb ? 'later' : 'ok', found: ear.name, ...(mb ? { mb } : {}) });
   }
   return { platform, arch, items };
 }
@@ -247,7 +256,7 @@ export function describeSetup(check: SetupCheck): string {
   };
   const lines = [`Demo setup on ${platformName(check.platform)} (${check.arch}):`];
   for (const i of check.items) {
-    lines.push(`  ${mark[i.state]} ${i.id.padEnd(10)} ${what(i)}`.trimEnd());
+    lines.push(`  ${mark[i.state]} ${i.id.padEnd(12)} ${what(i)}`.trimEnd());
     if (i.state !== 'missing' || !i.install) continue;
     for (const c of i.install.commands) lines.push(`      ${c}`);
     if (i.install.url) lines.push(`      see ${i.install.url}`);

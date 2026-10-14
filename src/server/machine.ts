@@ -3,7 +3,7 @@
 // settings. Claude Code with a login and git are needed; gh with a login is for pull requests;
 // voice and demos are the checks the settings sheet makes (voice-setup.ts, the demo skill's
 // setup.ts). What installs without admin rights Obeya installs at a click (Claude Code and uv with
-// their official installers, Whisper through the voice's installation, a demo's voice);
+// their official installers, the speech recognition through the voice's installation, a demo's voice);
 // system software comes with the command for this platform, which Obeya runs at a click where it
 // needs no password (Homebrew, winget); a login opens a terminal. Then the first canvas: a
 // repository's folder, or a clone of one.
@@ -319,14 +319,14 @@ export class MachineSetup {
     const keyLine = this.o.shells?.item(pushKeyChoice(this.o.home).key);
     const keyItem = keyLine ? [keyLine] : [];
     const voiceItems = (voice?.items ?? []).map((i): MachineItem => {
-      if (i.id === 'whisper' && i.state === 'later') return i.waits ? i : { ...i, act: 'install' };
-      if (i.state === 'missing' && i.id !== 'whisper') return ownUv(missing(i));
+      if (i.id === 'recognition' && i.state === 'later') return i.waits ? i : { ...i, act: 'install' };
+      if (i.state === 'missing' && i.id !== 'recognition') return ownUv(missing(i));
       return i;
     });
     const demoItems = demo.items
       .map((i): MachineItem => (i.id === 'voice' && i.state === 'missing' ? { ...i, act: 'install' } : i.state === 'missing' ? ownUv(missing(i)) : i))
-      // what the voice needs too shows once, unless demos need more of it (ffmpeg with libx264)
-      .filter((i) => !voiceItems.some((v) => v.id === i.id && v.state === i.state && i.id !== 'whisper'));
+      // what the voice needs too shows once (the same recognition for listening back included), unless demos need more of it (ffmpeg with libx264)
+      .filter((i) => !voiceItems.some((v) => v.id === i.id && v.state === i.state && v.found === (i.id === 'recognition' ? i.found : v.found)));
     const mb = (items: MachineItem[]) => items.reduce((n, i) => n + (i.state === 'missing' || i.state === 'later' ? (i.mb ?? 0) : 0), 0);
     const sections: MachineSection[] = [
       { id: 'needed', items: needed, mb: 0 },
@@ -353,7 +353,7 @@ export class MachineSetup {
     const job: MachineJob = (this.job = { kind: 'install', section, id, running: true, line: '' });
     const log = (line: string) => (job.line = line.slice(0, 300));
     let work: Promise<void>;
-    if (section === 'voice' && id === 'whisper') {
+    if (section === 'voice' && id === 'recognition') {
       const voice = this.o.voice!;
       work = voice.install().then(() => voice.finished());
     } else if (section === 'demos' && id === 'voice') work = installVoice(readDemoSettings(this.o.home), log, this.o.home);

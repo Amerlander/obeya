@@ -1241,6 +1241,14 @@ button.link:hover { text-decoration: underline; }
 .c-act .btn.small { margin-top: 0; }
 .c-act .p-error { margin: 0; font-size: 12.5px; }
 .c-act .c-install { margin: 0; min-width: 0; }
+.c-voice { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; width: 100%; }
+.c-voice .warn, .c-setup li .c-voice .hint.warn { color: var(--warn); }
+.c-cloud { display: flex; flex-direction: column; gap: 5px; width: 100%; max-width: 460px; box-sizing: border-box; padding: 8px 10px; border-radius: 6px; background: var(--chip); font-size: 12.5px; }
+.c-cloud .c-row { display: flex; gap: 6px; }
+.c-cloud input, .c-cloud select { font-size: 12.5px; padding: 4px 6px; box-sizing: border-box; }
+.c-cloud > input, .c-cloud .c-row input { flex: 1; min-width: 0; width: 100%; }
+.c-cloud-go { justify-content: space-between; align-items: center; }
+.c-setup li.slow .c-mark, .c-setup li.slow > .hint { color: var(--warn); }
 .c-cmd { display: inline-flex; align-items: baseline; gap: 4px; max-width: 100%; }
 .c-cmd code { min-width: 0; overflow-wrap: anywhere; }
 .c-copy { border: 0; background: transparent; color: var(--muted); font-size: 11.5px; cursor: pointer; padding: 0 2px; text-decoration: underline dotted; }

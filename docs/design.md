@@ -117,7 +117,7 @@ An idea is thought through on its card before anything is planned; no worker run
    together; the owner picks, may add their own words, and both go out as one message that names
    each question. The owner types in the
    panel or holds Space with the idea open; both go straight to the agent, as on every card an
-   agent listens on (Voice in), spoken words as soon as Whisper has written them down (picked
+   agent listens on (Voice in), spoken words as soon as the speech recognition has written them down (picked
    options too, with the words beside them). The agent passes on with `to_obeya` what asks Obeya
    for something (build it, plan it, a prototype, park, drop, anything about another card). The
    reply stands in the panel. What the agent read and thought on the way to a reply
@@ -278,7 +278,7 @@ An idea is thought through on its card before anything is planned; no worker run
    on the controls shows the arrow keys over them for a moment, until the owner first jumped with
    them (per browser). What the owner types or
    says while the video stands somewhere in the middle is about that place (`src/ui/spot.ts`): Space
-   (or the microphone) held while it plays pauses it, so Whisper does not hear the narration, and
+   (or the microphone) held while it plays pauses it, so the speech recognition does not hear the narration, and
    the recording goes out with the place; letting go plays it on, while a video the owner had
    paused stays where it is, as it does after words dictated into the field. Typing in the field
    pauses it too; above the field stands the place like a quote (its frame, „1:23 · chapter“, × to
@@ -603,12 +603,13 @@ the owner's language (`src/core/locale.ts`).
   work in a repository on GitHub lands through pull requests, so it is needed at its first
   approval, not before), *Sprachbefehle* and *Demos* (the checks the configuration dialog makes, voice-setup.ts and
   the demo skill's setup.ts, each with the size still to download; what both need shows once;
-  uv stands above Whisper, whose "Installieren" waits until uv is there and says so).
+  uv stands above the speech recognition, whose "Installieren" waits until uv is there and says so;
+  the recognition's line also says how fast it is here and offers a cloud service, see Voice in).
   The checkout's agents run on the Agent SDK's own Claude Code, so there it is always there; the
   compiled binary's run on the machine's, and the list says which version Obeya was checked with
   (the SDK's) when the machine's differs. Logins are read from `claude auth status` and `gh auth
   status`. "Installieren" installs what needs no admin rights: Claude Code and uv with their
-  official installers (`curl … | sh`, PowerShell's `irm … | iex` on Windows), Whisper
+  official installers (`curl … | sh`, PowerShell's `irm … | iex` on Windows), the speech recognition
   through the voice's installation, a demo's voice; system software (git, gh, ffmpeg, Node, a
   browser) comes with the command for this platform and a copy button, and is installed at a click
   where that needs no password (Homebrew where it is there, winget). A login opens a terminal with
@@ -733,7 +734,7 @@ the owner's language (`src/core/locale.ts`).
   nothing in focus. A floating panel at the bottom of the screen the pointer is on (`/panel`, served
   by the server, so its strings are the UI's) never takes the keyboard: it shows that Obeya listens
   and to whom (with the level, and „Das Mikrofon liefert keinen Ton.“), then the command being read,
-  then what Whisper heard (`text` in `/voice`'s answer) with the confirmation and „Rückgängig“ for
+  then what the recognition heard (`text` in `/voice`'s answer) with the confirmation and „Rückgängig“ for
   the undo window, or, said to the open card's agent, „An den Agenten gegangen.“; it fits its window to its lines through the
   app's one command (`panel_fit`, allowed to that page in `app/capabilities/panel.json`) and hides
   it when none are left. Every two seconds the shell tells the server what it hears
@@ -1603,7 +1604,7 @@ the owner's language (`src/core/locale.ts`).
   and it is typed as a keystroke (⌘Z takes it back); held longer, the recording starts, and let go
   before a recording would count (600 ms in all) it is typed after all. While the owner speaks into
   a field it is framed in blue, and the line under it and under the microphone says „→ ins Feld ·
-  abschicken mit Enter“; while Whisper writes, „Wird aufgeschrieben …“; nothing heard leaves the
+  abschicken mit Enter“; while the recognition writes, „Wird aufgeschrieben …“; nothing heard leaves the
   field as it was and says so under it. Otherwise the line under the microphone names who hears it
   and what goes with it („→ Agent · Aufgabe: … mit Text und 1 Screenshot“). Each field keeps its
   draft (text, screenshots, the options picked for the questions above it; the quote in
@@ -1616,33 +1617,60 @@ the owner's language (`src/core/locale.ts`).
   a restart lost them while the words came back. `POST /voice?listen` only transcribes and returns the words; a form
   with `audio` and `text` puts the field's words before the spoken ones. The app's push-to-talk key
   in another app always sends at once: no field has the cursor there. Until 2026-10-12 spoken words
-  always went out at once, without what was typed in the field. A Whisper sidecar keeps the model
-  loaded and transcribes with the canvas's titles as vocabulary, in the language it hears spoken in
-  the first 30 seconds of the ones Obeya speaks (German or English), not the interface's: the owner
-  may run the interface in English and speak German, and Whisper told to expect English then
-  translated into broken English, unsure of its words, so long dictations (more windows that can
-  fail) ended in „not understood“ (6–8 Oct 2026). With MLX hearing the language is one more encoder
-  pass, about 0.4 s on an M-series Mac. With faster-whisper it was one too, on a CPU as long as a
-  short command's whole transcription (4.2 s on that Mac's CPU); there the first 30-second window is
-  encoded once, its encoder output tells German from English and is handed to the decode of that
-  window (`generate_segments` takes it, `transcribe` passes none), so a short command costs one
-  encoder pass and as much CPU time as before (measured 2026-10-08; faster-whisper's own
-  `multilingual` would pick from all languages and may hear a short German command as Dutch). It runs mlx-whisper on Apple
-  Silicon, faster-whisper elsewhere (CUDA when there is a GPU, falling back to the CPU when its
-  libraries are missing; int8 on the CPU), large-v3-turbo on both, the recording decoded by ffmpeg
-  (`OBEYA_WHISPER_PYTHON`, a Python with the package, else `uv` with the same kit the demos listen
-  back with; `OBEYA_WHISPER_BACKEND` chooses the other backend). On a CPU large-v3-turbo in int8
-  takes about 4 s for a spoken command on GitHub's 4-core Ubuntu runner and 12 s on its 4-core
-  Windows Server runner (float32 took twice as long; `small` 1–2.5 s, but on Windows it heard
-  „rechnen“ for „Rechnungen“), so it stays turbo for what it hears, and `OBEYA_WHISPER_MODEL` picks
-  a smaller model where that is too slow (measured 2026-10-06). Checked on macOS, Ubuntu on ARM in
-  Docker, and GitHub's Ubuntu x64 and Windows Server 2025 runners: the settings check, installing
-  from it, and a command spoken by Piper heard word for word through `POST /voice`
-  (`src/server/voice.live.test.ts` with `OBEYA_LIVE_VOICE=<home>`). A recording without audible speech gives
+  always went out at once, without what was typed in the field. A sidecar on this machine keeps the
+  speech recognition's model loaded (`voice/transcribe_sidecar.py`, `src/server/voice.ts`): Parakeet
+  TDT 0.6B v3 by default, on every platform, the Mac included (NVIDIA's model as int8 ONNX through
+  `onnx-asr` and ONNX Runtime on the CPU, fetched through uv without PyTorch or MLX; about 640 MB of
+  model, 4 threads at most). Measured on an M4 Pro with 8 s of the owner's German speech
+  (2026-10-14; all three wrote the same text): faster-whisper large-v3-turbo int8 on 4 CPU threads
+  4.4 s, mlx-whisper on the Mac's GPU 0.93 s (0.40 s of it telling the language), Parakeet on 4 CPU
+  threads 0.23 s (0.71 s with 12, so the threads are capped). Whisper on a CPU had been the reason a
+  small fanless Windows box took about a minute for a short sentence: the language pass, the
+  transcription and often a second pass without the card titles. Parakeet hears 25 European
+  languages by itself, so there is no language pass; it takes no prompt, so the card titles no
+  longer steer what it writes (the Koordinator still reads with them in mind); and it neither loops
+  nor writes subtitle phrases on silence, so the second pass stays with Whisper. A recording longer
+  than a minute is heard in parts of at most 60 s, each cut at the quietest moment of its last 20 s:
+  Parakeet attends to the whole recording at once and its memory grows with it (1.8 GB of process
+  for 57 s). Without the card titles it writes some compounds and verb forms differently (Piper's
+  „Starte die Karte Export“ became „Startet die Karteexport“), which the Koordinator reads through.
+  Whisper stays as the backend `OBEYA_WHISPER_BACKEND` picks (`mlx`, `faster`, or `whisper` for
+  this platform's), unchanged: it transcribes with the canvas's titles as vocabulary, in the
+  language it hears spoken in the first 30 seconds of the ones Obeya speaks (German or English),
+  not the interface's: the owner may run the interface in English and speak German, and Whisper
+  told to expect English then translated into broken English, unsure of its words, so long
+  dictations (more windows that can fail) ended in „not understood“ (6–8 Oct 2026). With MLX
+  hearing the language is one more encoder pass, about 0.4 s on an M-series Mac. With
+  faster-whisper it was one too, on a CPU as long as a short command's whole transcription (4.2 s
+  on that Mac's CPU); there the first 30-second window is encoded once, its encoder output tells
+  German from English and is handed to the decode of that window (`generate_segments` takes it,
+  `transcribe` passes none), so a short command costs one encoder pass and as much CPU time as
+  before (measured 2026-10-08; faster-whisper's own `multilingual` would pick from all languages
+  and may hear a short German command as Dutch). mlx-whisper on Apple Silicon, faster-whisper
+  elsewhere (CUDA when there is a GPU, falling back to the CPU when its libraries are missing; int8
+  on the CPU), large-v3-turbo on both. Every backend gets the recording decoded by ffmpeg, and its
+  Python from `OBEYA_WHISPER_PYTHON` (a Python with the package), else from `uv` with the same kit
+  the demos listen back with (`listenKit` in the demo skill's `lib/setup.ts`). On a CPU
+  large-v3-turbo in int8 takes about 4 s for a spoken command on GitHub's 4-core Ubuntu runner and
+  12 s on its 4-core Windows Server runner (float32 took twice as long; `small` 1–2.5 s, but on
+  Windows it heard „rechnen“ for „Rechnungen“; measured 2026-10-06), and `OBEYA_WHISPER_MODEL`
+  picks another Whisper model. A smaller Whisper was dropped for Parakeet (it misheard German
+  words), Moonshine (English only) and the browser's own recognition (not in the app's webview on
+  Windows, and it sends the audio to Google without saying so) too (2026-10-14). Checked on macOS,
+  Ubuntu on ARM in Docker, and GitHub's Ubuntu x64 and Windows Server 2025 runners with Whisper
+  (2026-10-06), on macOS with Parakeet (2026-10-14): the settings check, installing from it, and a
+  command spoken by Piper heard word for word through `POST /voice`
+  (`src/server/voice.live.test.ts` with `OBEYA_LIVE_VOICE=<home>`). Where the machine's own
+  recognition is too slow even so, the recordings go to a cloud service instead (see the
+  configuration dialog's „Spracheingabe“ below): Obeya then sends each one to it as it came from
+  the browser, with the card titles as a prompt where the service takes one, and a request it
+  fails, refuses or does not answer within 30 s says so under the mic („Groq hat die Aufnahme nicht
+  erkannt (401: Invalid API Key).“), the words staying in the field, instead of hanging. A
+  recording without audible speech gives
   „Ich habe nichts gehört.“, one Whisper cannot make sense of „Das habe ich nicht verstanden.“; the
   Koordinator gets neither to guess from. How Whisper fails on such recordings (the titles talk it
   into loops, guesses or its words for silence) and how they are told apart is in
-  `voice/whisper_sidecar.py` and `src/server/voice.ts`. The log has each recording's length and
+  `voice/transcribe_sidecar.py` and `src/server/voice.ts`. The log has each recording's length and
   level next to the transcript. While the owner holds the key, a level that stays flat for 1.5 s
   shows „Das Mikrofon liefert keinen Ton.“ under the mic. The first press after a page load opens
   the microphone (about 0.2–0.3 s); let go before it is open, nothing is recorded (rather than a
@@ -1657,13 +1685,13 @@ the owner's language (`src/core/locale.ts`).
   for the label and the route). On a card an agent listens on (its worker at work, waiting, in a
   pull request or finishing after the landing, the one a question resumes on a finished card, a
   prototype's worker, an idea's exploration agent) what the owner types or says goes straight to
-  that agent (`CanvasRuntime.tell`), typed words at once, spoken ones as soon as Whisper has
-  written them down, with the screenshots shown with them: by the card's state, talk to an idea,
+  that agent (`CanvasRuntime.tell`), typed words at once, spoken ones as soon as the speech
+  recognition has written them down, with the screenshots shown with them: by the card's state, talk to an idea,
   the answer to the worker's question, or else words the worker takes in (a note while it works,
   words on its handover, a question after its work; Card lifecycle, 3 and 5). Spoken words carry
   the remark that speech recognition may have misheard them. They stand in the card's
   conversation under „Du“ at once; nothing waits for "Rückgängig", and there is no line above the
-  mic for typed words (a recording shows „„Export“ · wird aufgeschrieben …“ while Whisper works).
+  mic for typed words (a recording shows „„Export“ · wird aufgeschrieben …“ while the recognition works).
   Words that ask Obeya for something rather than the agent (approve, stop, start, a follow-up or
   new card, "Merk dir", grouping cards, an action on another card, a question about the canvas or
   another card) the agent passes on with `to_obeya(request)`, one tool built once for workers,
@@ -1722,7 +1750,7 @@ the owner's language (`src/core/locale.ts`).
   a reply. The Koordinator learns whether the words were typed,
   and in which field (a proposal's). Clicks on answer options go straight to the agent, as do
   typed and spoken words. What the owner said to the Koordinator goes into the conversation of
-  the card that was open, or with none open into the sheet, at once (spoken words once Whisper
+  the card that was open, or with none open into the sheet, at once (spoken words once the recognition
   has written them down), with „Obeya liest …“ under it until its confirmation follows (on a card
   folded away), and "Zurückgenommen." when taken back. Until 2026-10-12 the words appeared only
   together with the confirmation, so typed words waited seconds as „„…“ · wird verstanden …“
@@ -1822,9 +1850,9 @@ the owner's language (`src/core/locale.ts`).
   one after the other. A confirmation that arrives while another card is open starts with the card
   it is about; so does one for a request an agent passed on, and an answer looked up.
 - **Voice latency** — pressing Space (or focusing a field the Koordinator reads) gets everything ready while
-  the owner speaks: the Whisper sidecar starts and loads its model, and
+  the owner speaks: the recognition's sidecar starts and loads its model (not with a cloud service), and
   the Koordinator's session starts up if it is not running (one that fails is replaced once, for
-  the same command). On a card with an agent the words reach it as soon as Whisper has written
+  the same command). On a card with an agent the words reach it as soon as the recognition has written
   them down (typed ones at once). Elsewhere the written confirmation comes back as
   soon as the Koordinator has decided, and the undo window starts with it. Measured on a small
   scratch canvas, letting go to the written confirmation
@@ -1854,19 +1882,40 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   of an idea's reply (a JXA sidecar with the macOS synthesizer, `say`, or Piper); spoken replies
   distracted the owner more than they helped. Demo narration is a pipeline of its own (Demos).
   The configuration dialog's section "Spracheingabe" ("Voice") checks
-  what voice in needs on this machine (`src/server/voice-setup.ts`): Whisper (the package
-  in uv's cache or the given Python, the model in the Hugging Face cache), ffmpeg and uv,
-  each missing piece with how to install it here, as for demos. "Installieren" loads Whisper,
-  which fetches it the first time (about 1.8 GB: the model and its package), so the first command
-  does not wait for the download. The server lets a request run 120 s idle instead of Bun's 10 s:
-  a command answers once it is transcribed and read, which on a busy CPU took longer.
+  what voice in needs on this machine (`src/server/voice-setup.ts`): the speech recognition (the
+  package in uv's cache or the given Python, the model in the Hugging Face cache), ffmpeg and uv,
+  each missing piece with how to install it here, as for demos. "Installieren" loads the
+  recognition, which fetches it the first time (about 710 MB for Parakeet: the model and its
+  package; Whisper about 1.8 GB), so the first command does not wait for the download, and then
+  measures it: it transcribes a short German sentence Obeya ships with (`voice/check-de.ogg`,
+  4.1 s, spoken by Piper as in the live voice test) and times it, loaded and warm (twice, the
+  faster one counting: the first recording after loading takes longer). Its line then
+  says „Parakeet · 0,3 s für einen kurzen Satz“, or, over one second per second of speech, „zu
+  langsam“ with the time, and opens the cloud offer below it; „Erneut messen“ measures again. The
+  measurement is kept in `voice.json` in Obeya's home for the backend it was made with. The setup
+  assistant's „Sprachbefehle“ shows the same line, built once (`RecognitionDetail` in
+  `src/ui/setup.tsx`). With Parakeet it should seldom be slow; it is the safety net. The cloud
+  offer („Über einen Cloud-Dienst erkennen“, a link under the line until it is needed) is one
+  client for the OpenAI-style `/audio/transcriptions` endpoint (`src/server/voice-cloud.ts`) with
+  three presets: Groq (whisper-large-v3-turbo, offered first: free with an e-mail sign-up and no
+  card, 2,000 requests and 8 h of audio a day, then $0.04 an hour; it takes the card titles as a
+  prompt), Mistral (Voxtral Mini Transcribe, $0.003/min, hosted in the EU; no prompt), and any
+  OpenAI-compatible endpoint (OpenAI itself with gpt-4o-mini-transcribe at $0.003/min, or a server
+  of one's own, with its address and model). Each says that the recordings leave the machine and
+  links to where its key is had; "Testen" sends the check's sentence and, once the service wrote it
+  down, uses it from the next recording on, with the time it took. Base URL, model and key are kept
+  per machine in `voice.json` (readable by the owner alone), never in a repository; the page only
+  learns that there is a key. With a service in use nothing of the above is needed on the machine,
+  and the line names it, with „Wieder auf diesem Rechner erkennen“. The server lets a request run
+  120 s idle instead of Bun's 10 s: a command answers once it is transcribed and read, which on a
+  busy CPU took longer.
 - **Demos** — the demo skill's pipeline (scripted walkthrough, narrated video, report) is part of
   the repository: `plugin/` is a Claude Code plugin named `obeya` whose skill `demo`
   (`plugin/skills/demo/`) holds the instructions (`SKILL.md`, paths through `${CLAUDE_SKILL_DIR}`),
   the director (`lib/director.ts`, Playwright on the local Chrome, else Edge, else Playwright's
   own Chromium, as on Linux on ARM where there is no Chrome; cut with ffmpeg, run with plain
   `node`; on macOS, Linux and Windows, checked 2026-10-05), the overlay (`lib/overlay.js`) and the narration (`lib/tts.py`, synthesis and listening
-  back with Whisper), with Playwright among Obeya's dependencies. Obeya loads the plugin into every
+  back), with Playwright among Obeya's dependencies. Obeya loads the plugin into every
   worker session (the Agent SDK's `plugins` option, a local plugin), so the worker has the skill
   as `obeya:demo`, which its brief names, and `obeya:adapter` (see Repo adapter); until 2026-10-08
   only workers of a repository with demos got it, so a repository without an adapter had no way
@@ -1874,7 +1923,7 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   Obeya: as the plugin, or as a user skill that points to `plugin/skills/demo` (the owner's
   `~/.claude/skills/demo` is a link to it in the Obeya checkout). The demo settings
   (`lib/settings.ts`; `demo.json` in Obeya's home, `OBEYA_HOME` else `~/.obeya`) give the
-  narration language (German or English: narration, captions, Whisper, the report page's words;
+  narration language (German or English: narration, captions, the report page's words;
   without one, the language Obeya speaks to the owner)
   and the voice, a provider: text in, WAV out (`lib/voices.ts` turns the settings into what
   `lib/tts.py` runs). Local ones run once per clip as a command with the text on stdin: Piper, the
@@ -1892,11 +1941,14 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   same API), ElevenLabs, Azure, or the owner's own endpoint (POST `{"text", "language"}` as JSON,
   audio back), each with its key from its environment variable or a key file. Whatever comes back
   becomes a mono 16-bit WAV through ffmpeg (a voice command gets its text as UTF-8, with
-  `PYTHONUTF8`: on Windows Piper read it in the code page otherwise); Whisper listens back in a throwaway uv environment:
-  mlx-whisper on Apple Silicon, faster-whisper elsewhere (CUDA with a GPU, else int8 on the CPU;
-  the clip decoded by ffmpeg, since its own PyAV decoder broke with newer PyAV). Listening back is
-  optional: off in the settings ("Erzählung mit Whisper gegenhören", `listenBack: false`), or off
-  for one render when uv cannot get Whisper or it fails to load; the clips then stay unheard and
+  `PYTHONUTF8`: on Windows Piper read it in the code page otherwise); Parakeet listens back in a
+  throwaway uv environment, the same kit as Obeya's voice commands (`--listen parakeet`; Whisper
+  still with `--listen mlx|faster`; the clip decoded by ffmpeg). Until 2026-10-14 Whisper listened
+  back, which on a CPU without a GPU took seconds per clip: of 1,034 clips heard back by then none
+  matched below 0.90 and 7 below 0.95, and none of the 3 logged retakes came out better, so a slow
+  check was not worth it, a fast one still is. Listening back is
+  optional: off in the settings ("Erzählung gegenhören", `listenBack: false`), or off
+  for one render when uv cannot get the recognition or it fails to load; the clips then stay unheard and
   uncached as heard, one take each, the review table says "not heard back", and the report page's
   provenance says "nicht gegengehört" with why (otherwise "mit … gegengehört").
   Obeya installs Piper and Qwen3-TTS on request from the configuration dialog, which shows what is
@@ -1940,8 +1992,9 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   voice it runs itself takes it at once. A voice Obeya holds takes it only to load Whisper, and
   `tts.py` synthesises the first take of every clip before it hears any: parallel renders
   synthesise turn by turn through Obeya, then listen back one after the other, with one voice
-  model and one Whisper in memory; retakes go through Obeya while the lock is held. Without
-  listening back such a render takes no lock at all. The owner's clone is Obeya's Qwen3 voice
+  model and one Whisper in memory; retakes go through Obeya while the lock is held. Parakeet
+  (about 1 GB) listens back without the lock, so with it, as without listening back, such a render
+  takes no lock at all. The owner's clone is Obeya's Qwen3 voice
   with the reference clip of the owner's voice project (Stimmzwilling,
   `data/voice/derived/reference4_A.wav` with its transcript), so Obeya holds it across renders;
   it never leaves the machine. Voices are not labelled as generated, a clone included: the whole demo is generated,
@@ -1953,8 +2006,9 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   carry over: `gemini` keeps its key file, `clone` becomes the owner's own command, still to be
   written. What a render needs on the machine is checked by `lib/setup.ts`: Node 22.18 or newer
   (TypeScript without flags), Playwright and a browser (found where Playwright looks), ffmpeg
-  with libx264, uv (which brings Python), the voice, and Whisper (in uv's cache and the Hugging
-  Face cache, else fetched by the first render, about 1.8 GB: not missing, only later). Each
+  with libx264, uv (which brings Python), the voice, and the speech recognition (in uv's cache and the Hugging
+  Face cache, else fetched by the first render, about 710 MB: not missing, only later; the setup
+  assistant shows it once, under voice, when it is the same as for voice commands). Each
   missing piece comes with how to install it on this platform (Homebrew, winget, the Linux
   family's package manager from `/etc/os-release`, else a page). The configuration dialog shows the
   check below the demo settings ("Was Demos auf diesem Rechner brauchen", the voice left out
@@ -2310,8 +2364,13 @@ the repository; the copy on the project is only for the archive).
   into an MIT app and keep its version until the next release of Obeya. The two may drift apart
   in their protocol; it held with every version tried, and the setup assistant names the version
   Obeya was checked with.
+- Voice in hears with Parakeet everywhere, the Mac included, and the demos listen back with it
+  (2026-10-14): on a CPU it is about 19× faster than Whisper, and 4× faster than Whisper on the
+  Mac's GPU, and the owner found its recognition good enough in daily use elsewhere. Whisper stays
+  as an optional backend. Where the machine is too slow even for Parakeet, a cloud service: Groq
+  first (free), Mistral (EU), or any OpenAI-compatible endpoint.
 - Voice and demos fetch their Python sidecars through uv on first use, in the app as in the
-  checkout (2026-10-06): bundling Python with Whisper would add hundreds of MB per platform for
+  checkout (2026-10-06): bundling Python with the speech recognition would add hundreds of MB per platform for
   everyone, differ by GPU (MLX, CUDA, CPU) and need every native library signed and notarised,
   and the models, the large part, are downloaded on first use anyway.
 - Signing (2026-10-06): the Mac app signed with a Developer ID and notarised from the first

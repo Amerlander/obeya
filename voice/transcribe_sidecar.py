@@ -1,27 +1,31 @@
-"""Whisper transcription for Obeya, one process that keeps the model loaded: mlx-whisper on Apple
-Silicon, faster-whisper elsewhere (`--backend faster`: CUDA when there is a GPU, else int8 on the
-CPU; a GPU without the CUDA libraries falls back to the CPU).
+"""Speech recognition for Obeya, one process that keeps the model loaded. By default Parakeet TDT
+0.6B v3 (`--backend parakeet`: NVIDIA's model as int8 ONNX, through onnx-asr and ONNX Runtime on the
+CPU, on every platform); Whisper where `OBEYA_WHISPER_BACKEND` asks for it: mlx-whisper on Apple
+Silicon (`--backend mlx`), faster-whisper elsewhere (`--backend faster`: CUDA when there is a GPU,
+else int8 on the CPU; a GPU without the CUDA libraries falls back to the CPU).
 
 Reads JSON lines on stdin: {"id": ..., "path": "<audio file>", "prompt": "<vocabulary>", "languages": ["de", "en"]}
-(the languages the owner may speak; German when left out). Whisper hears which of them is spoken in
+(the languages the owner may speak; German when left out). Parakeet hears 25 European languages by
+itself and takes no prompt: both are for Whisper. Whisper hears which of the languages is spoken in
 the first 30 seconds and transcribes in that one: told a language the owner did not speak, it
 translates into it, badly and unsure of its words (German speech, told English: „That is quite a bit
 of a bit of a doubt“), and the longer the recording, the likelier one of its parts fails the test below.
 faster-whisper decodes the first window from the encoder pass that heard the language (see Faster.languages).
 Writes JSON lines on stdout: {"id": ..., "text": "...", "doubtful": bool} or {"id": ..., "error": "..."}.
 Ends with its stdin, after the recording it is on; when Obeya is gone by then, quietly.
-Audio is decoded by ffmpeg (for both backends: faster-whisper's own decoder, PyAV, broke with
-newer PyAV releases), so any format the browser records (webm/opus, wav) works. The model is
+Audio is decoded by ffmpeg (for every backend: faster-whisper's own decoder, PyAV, broke with
+newer PyAV releases), so any format the browser records (webm/opus, mp4, wav) works. The model is
 loaded at start, before "ready". Each recording's length and level go to stderr (the server's log), so
 a transcript that went wrong can be told from a recording without audible speech. A recording whose
-peak stays below QUIET_DBFS, or that holds no audio at all, gives an empty text without Whisper.
+peak stays below QUIET_DBFS, or that holds no audio at all, gives an empty text without recognition.
 
 On a recording without speech, Whisper's no-speech probability stays at 0 with the card titles as
 prompt, so it tells nothing; with speech in it, even quiet, noisy or short, Whisper transcribes
 correctly and sure of its words. Whisper decodes once, at temperature 0. By default it decodes again at five higher temperatures when
 a decode looks failed (a loop, or too unsure of its words); on a recording without speech each of
 them looped as well, which took 3 to 6 seconds. "doubtful" is that same test, so the server can try
-once more without the card titles instead.
+once more without the card titles instead. Parakeet neither loops nor makes up subtitle phrases on
+silence, and gives no such score: its words are never doubtful.
 """
 
 import argparse
@@ -35,7 +39,14 @@ import sys
 import numpy as np
 
 SAMPLE_RATE = 16000
-MODELS = {"mlx": "mlx-community/whisper-large-v3-turbo", "faster": "large-v3-turbo"}
+MODELS = {"parakeet": "nemo-parakeet-tdt-0.6b-v3", "mlx": "mlx-community/whisper-large-v3-turbo", "faster": "large-v3-turbo"}
+# Parakeet's threads: on an M4 Pro's CPU an 8 s command took 0.15 s with 2, 0.09 s with 4 and 0.14 s
+# with 8 (0.71 s with 12; measured 2026-10-14), so more than 4 only cost
+THREADS = 4
+# Parakeet attends to the whole recording at once, its memory growing with the length (1.8 GB of
+# process for a minute): a longer dictation is heard in parts of at most this long, each cut in the
+# quietest moment of its last CUT_WITHIN seconds, between words
+LONGEST, CUT_WITHIN = 60.0, 20.0
 # below this peak a working microphone delivers nothing, not even room noise (about -40 to -55 dBFS on
 # the AT2020USB+), while speech peaks far above it: the recording is not transcribed, it has nothing to hear.
 # Not higher: the recordings Whisper failed on in five days of log (presses of a second or two with room
@@ -44,6 +55,34 @@ MODELS = {"mlx": "mlx-community/whisper-large-v3-turbo", "faster": "large-v3-tur
 QUIET_DBFS = -60
 # Whisper's own thresholds for a failed decode (its defaults for compression_ratio_threshold and logprob_threshold)
 LOOPING, UNSURE = 2.4, -1.0
+
+
+class Parakeet:
+    def __init__(self, model: str):
+        import onnx_asr
+        import onnxruntime
+
+        options = onnxruntime.SessionOptions()
+        options.intra_op_num_threads = min(THREADS, os.cpu_count() or THREADS)
+        options.inter_op_num_threads = 1
+        self._model = onnx_asr.load_model(model, quantization="int8", sess_options=options, providers=["CPUExecutionProvider"])
+        print(f"voice: Parakeet {model} on the CPU, {options.intra_op_num_threads} threads", file=sys.stderr, flush=True)
+
+    def transcribe(self, audio: np.ndarray, prompt: str | None, language: str = "de") -> list[dict]:
+        return [{"text": self._model.recognize(part, sample_rate=SAMPLE_RATE)} for part in parts(audio)]
+
+
+def parts(audio: np.ndarray) -> list[np.ndarray]:
+    """The recording in parts of at most LONGEST seconds, each cut where it is quietest near its end."""
+    longest, within, frame = int(LONGEST * SAMPLE_RATE), int(CUT_WITHIN * SAMPLE_RATE), SAMPLE_RATE // 10
+    out = []
+    while len(audio) > longest:
+        tail = audio[longest - within : longest]
+        frames = tail[: len(tail) // frame * frame].reshape(-1, frame)
+        cut = longest - within + int(np.argmin((frames**2).mean(axis=1))) * frame + frame // 2
+        out.append(audio[:cut])
+        audio = audio[cut:]
+    return [*out, audio]
 
 
 class Mlx:
@@ -138,12 +177,12 @@ def main() -> None:
     # Ctrl-C in Obeya's terminal is for Obeya, which ends the sidecar itself once it stops
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     args = argparse.ArgumentParser()
-    args.add_argument("--backend", choices=list(MODELS), default="mlx")
+    args.add_argument("--backend", choices=list(MODELS), default="parakeet")
     backend = args.parse_args().backend
-    model = os.environ.get("OBEYA_WHISPER_MODEL", MODELS[backend])
-    whisper = Mlx(model) if backend == "mlx" else Faster(model)
+    model = os.environ.get("OBEYA_WHISPER_MODEL", MODELS[backend]) if backend != "parakeet" else MODELS[backend]
+    ear = Parakeet(model) if backend == "parakeet" else Mlx(model) if backend == "mlx" else Faster(model)
     # load the model and warm it up on a second of silence, so the first recording is as quick as the rest
-    whisper.transcribe(np.zeros(SAMPLE_RATE, dtype=np.float32), None)
+    ear.transcribe(np.zeros(SAMPLE_RATE, dtype=np.float32), None)
     print(json.dumps({"ready": True}), flush=True)
     for line in sys.stdin:
         if not line.strip():
@@ -153,15 +192,19 @@ def main() -> None:
             audio = load_audio(job["path"])
             peak = np.abs(audio).max(initial=0)
             quiet = peak < 10 ** (QUIET_DBFS / 20)
-            level = f"whisper: {len(audio) / SAMPLE_RATE:.1f} s, peak {dbfs(peak)}, rms {dbfs(np.sqrt(np.mean(audio ** 2)) if len(audio) else 0)}"
+            level = f"voice: {len(audio) / SAMPLE_RATE:.1f} s, peak {dbfs(peak)}, rms {dbfs(np.sqrt(np.mean(audio ** 2)) if len(audio) else 0)}"
             if quiet:
                 print(f"{level}; too quiet to transcribe", file=sys.stderr, flush=True)
                 print(json.dumps({"id": job["id"], "text": "", "doubtful": False}), flush=True)
                 continue
-            languages = job.get("languages") or ["de"]
-            language, sure = spoken(whisper, audio, languages)
-            print(f"{level}, {language}{f' ({sure:.0%})' if len(languages) > 1 else ''}", file=sys.stderr, flush=True)
-            segments = whisper.transcribe(audio, job.get("prompt") or None, language)
+            if isinstance(ear, Parakeet):
+                print(level, file=sys.stderr, flush=True)
+                segments = ear.transcribe(audio, None)
+            else:
+                languages = job.get("languages") or ["de"]
+                language, sure = spoken(ear, audio, languages)
+                print(f"{level}, {language}{f' ({sure:.0%})' if len(languages) > 1 else ''}", file=sys.stderr, flush=True)
+                segments = ear.transcribe(audio, job.get("prompt") or None, language)
             text = " ".join(s["text"].strip() for s in segments)
             print(json.dumps({"id": job["id"], "text": text.strip(), "doubtful": any(map(doubtful, segments))}), flush=True)
         except BrokenPipeError:
@@ -208,6 +251,6 @@ if __name__ == "__main__":
     try:
         main()
     except BrokenPipeError:
-        # Obeya went away before it read the answer (stopped or restarted while Whisper wrote): nobody
+        # Obeya went away before it read the answer (stopped or restarted while the sidecar wrote): nobody
         # is left to tell, and Python's flush of stdout at exit would fail on the closed pipe once more
         os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())

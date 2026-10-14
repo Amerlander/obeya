@@ -9,7 +9,7 @@ import { LANGUAGES } from '../core/locale';
 import { pushKeyFromEvent, type PushKeyView } from '../core/push-key';
 import { api, ApiError, reload } from './api';
 import { keep } from './keep';
-import { demoState, GitSetup, megabytes, PLATFORMS, SetupList, useFolderWithoutGit, voiceState } from './setup';
+import { demoState, GitSetup, megabytes, PLATFORMS, RecognitionDetail, SetupList, useFolderWithoutGit, voiceState } from './setup';
 import { errorText, pushKeyLabel, t } from './strings';
 import { applyTheme } from './theme';
 
@@ -883,8 +883,9 @@ function SetupBlock({ draft, installing }: { draft: DemoSettings; installing: bo
 }
 
 /**
- * What the owner's voice input needs on this machine, with one button that loads Whisper
- * (fetching it the first time). Follows an installation until it ends.
+ * What the owner's voice input needs on this machine, with one button that loads the speech
+ * recognition (fetching it the first time) and measures it, and a cloud service instead. Follows
+ * an installation until it ends.
  */
 function VoiceBlock({ on }: { on: boolean }) {
   const [view, setView] = useState<VoiceSetupView | null>(null);
@@ -921,7 +922,7 @@ function VoiceBlock({ on }: { on: boolean }) {
   return (
     <div className="c-setup">
       <Head title={v.title} hint={v.hint(`${PLATFORMS[view.platform] ?? view.platform} (${view.arch})`)} />
-      <SetupList items={view.items} name={(i) => v.names[i.id]} state={voiceState} />
+      <SetupList items={view.items} name={(i) => v.names[i.id]} state={voiceState} action={(i) => i.id === 'recognition' && <RecognitionDetail item={i} busy={running} changed={recheck} />} />
       {view.listen === 'faster' && <p className="hint">{v.faster}</p>}
       {view.job?.running ? (
         <p className="hint c-install">

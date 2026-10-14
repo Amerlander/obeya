@@ -68,7 +68,7 @@ costs more than a restart of one service.
 ## 3. Explore before scripting
 
 First check that this machine can record: `node ${CLAUDE_SKILL_DIR}/lib/setup.ts` lists Node,
-Playwright and a browser, ffmpeg, uv (it brings Python), the voice of the settings and Whisper,
+Playwright and a browser, ffmpeg, uv (it brings Python), the voice of the settings and the speech recognition,
 and under each missing piece how to install it on this platform (`docs/demo-setup.md` in the
 Obeya repository says more). A render runs the same check and stops at once with that list. A
 voice that is not installed you may install yourself (`node ${CLAUDE_SKILL_DIR}/lib/voices.ts
@@ -192,12 +192,12 @@ is not installed stops the render with how to install it: from the configuration
 (`lib/setup.ts`, section 3). `DEMO_VOICE=<provider>` renders in another
 voice; `DEMO_VOICE=<path>.wav` clones that clip with Qwen3-TTS (its exact transcript beside it as
 `.txt`). Clips are cached by voice and text, so re-runs after a
-visual fix skip synthesis. Each clip is transcribed back with Whisper (mlx-whisper on Apple
-Silicon, faster-whisper elsewhere) and synthesised again (up to three takes) when it does not
-match. Listening back can be off in the settings ("Erzählung mit Whisper gegenhören"), and a
-Whisper that cannot be loaded turns it off for that render; then the review table says "not heard
+visual fix skip synthesis. Each clip is transcribed back with Parakeet (on the CPU, as Obeya hears
+voice commands) and synthesised again (up to three takes) when it does not
+match. Listening back can be off in the settings ("Erzählung gegenhören"), and a
+recognition that cannot be loaded turns it off for that render; then the review table says "not heard
 back" and the report page "nicht gegengehört": name that in the report's `findings`. A voice that
-loads a large model (Qwen3-TTS, the owner's command) takes 7–12 GB with Whisper, so only one such
+loads a large model (Qwen3-TTS, the owner's command) takes 5–10 GB, so only one such
 demo loads it at a time (lock `~/.cache/demo-skill/tts.lock`); the others log "waiting for it"
 and wait, which is expected, not a hang. Under Obeya (`OBEYA_URL` set), Obeya holds Qwen3-TTS
 loaded for all demos and for about 5 minutes after the last clip: the narration then logs

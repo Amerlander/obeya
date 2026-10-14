@@ -125,22 +125,25 @@ describe('what Obeya needs on this machine', () => {
     expect(section(await machine.view(), 'needed').items.find((i) => i.id === 'git')).toEqual({ id: 'git', state: 'ok', found: '2.51.0.windows.1' });
   });
 
-  test('lists uv above Whisper, whose installation waits for it', async () => {
-    const voice = new VoiceSetup({ home, backends: { listen: 'faster' }, prepare: async () => {}, env: { PATH: bin } });
+  test('lists uv above the speech recognition, whose installation waits for it', async () => {
+    const local = { prepare: async () => {}, transcribe: async () => ({ text: '', doubtful: false }) };
+    const voice = new VoiceSetup({ home, backends: { listen: 'parakeet' }, local, env: { PATH: bin } });
     const machine = new MachineSetup({ home, config: config(), voice, env: { PATH: bin }, platform: 'linux', arch: 'x64', compiled: true, restarts: true });
     const items = section(await machine.view(), 'voice').items;
-    expect(items.map((i) => i.id)).toEqual(['uv', 'whisper', 'ffmpeg']);
+    expect(items.map((i) => i.id)).toEqual(['uv', 'recognition', 'ffmpeg']);
     expect(items[0]).toMatchObject({ state: 'missing', act: 'install' });
-    expect(items[1]).toMatchObject({ state: 'later', waits: 'uv' });
+    expect(items[1]).toMatchObject({ state: 'later', waits: 'uv', found: 'Parakeet' });
     expect(items[1]!.act).toBeUndefined();
-    await expect(machine.install({ section: 'voice', id: 'whisper' })).rejects.toThrow('does not install whisper');
+    await expect(machine.install({ section: 'voice', id: 'recognition' })).rejects.toThrow('does not install recognition');
     await expect(voice.install()).rejects.toThrow('uv');
-    // with uv there, Whisper installs at a click
+    // with uv there, the recognition installs at a click
     fake('uv', 'case "$1" in --version) echo "uv 0.9.2";; *) exit 1;; esac');
-    const whisper = section(await machine.view(), 'voice').items.find((i) => i.id === 'whisper')!;
-    expect(whisper).toMatchObject({ state: 'later', act: 'install' });
-    expect(whisper.waits).toBeUndefined();
-  });
+    const recognition = section(await machine.view(), 'voice').items.find((i) => i.id === 'recognition')!;
+    expect(recognition).toMatchObject({ state: 'later', act: 'install' });
+    expect(recognition.waits).toBeUndefined();
+    // listening back to demos needs the same: it shows once, under voice
+    expect(section(await machine.view(), 'demos').items.find((i) => i.id === 'recognition')).toBeUndefined();
+  }, 30_000);
 
   test("sets git's name and e-mail as the owner gives them", async () => {
     const log = join(dir, 'git.log');

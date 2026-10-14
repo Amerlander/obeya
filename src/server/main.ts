@@ -49,7 +49,7 @@ import { AppUpdates } from './app-update';
 import { COMPILED, resource, SELF, VERSION } from './resources';
 import { oldLinuxBun } from './repo';
 import { serve } from './server';
-import { voiceBackends, WhisperSidecar } from './voice';
+import { LocalTranscriber, VoiceIn, voiceBackends } from './voice';
 import { VoiceSetup } from './voice-setup';
 import { useLib } from '../../plugin/skills/demo/lib/here.ts';
 import { qwen3Serve } from '../../plugin/skills/demo/lib/voices.ts';
@@ -241,8 +241,8 @@ if (new Set(ids).size !== ids.length) {
   process.exit(2);
 }
 const backends = voiceBackends();
-const transcriber = new WhisperSidecar(backends.listen);
-const voiceSetup = new VoiceSetup({ home, backends, prepare: () => transcriber.prepare() });
+const transcriber = new VoiceIn(home, new LocalTranscriber(backends.listen));
+const voiceSetup = new VoiceSetup({ home, backends, local: transcriber.local });
 const shells = new ShellReports();
 const updates = new AppUpdates();
 const machine = new MachineSetup({ home, config, voice: voiceSetup, restarts: !!process.env.OBEYA_SUPERVISED, shells });

@@ -1,22 +1,31 @@
-// Voice in: the Whisper sidecar transcribes (mlx-whisper on Apple Silicon, faster-whisper elsewhere).
-// Obeya does not speak; its confirmations and answers are written.
+// Voice in: a sidecar on this machine transcribes (Parakeet by default, Whisper where asked for),
+// or a cloud service where the owner chose one (voice-cloud.ts). Obeya does not speak; its
+// confirmations and answers are written.
 
 import type { Subprocess } from 'bun';
 import { join } from 'node:path';
-import { whisperKit } from '../../plugin/skills/demo/lib/setup.ts';
+import { type ListenBackend, listenKit } from '../../plugin/skills/demo/lib/setup.ts';
 import { LANGUAGES } from '../core/locale';
 import { resource } from './resources';
+import { cloudInUse, transcribeInCloud } from './voice-cloud';
 
-/** `doubtful`: Whisper itself counts the decode as failed (a loop, or too unsure of its words). */
+export type { ListenBackend };
+
+/**
+ * `doubtful`: Whisper itself counts the decode as failed (a loop, or too unsure of its words).
+ * `unprompted`: the card titles did not go in as vocabulary (Parakeet takes none), so hearing it
+ * once more without them would change nothing.
+ */
 export interface Transcript {
   text: string;
   doubtful: boolean;
+  unprompted?: true;
 }
 
 export interface Transcriber {
   /**
-   * In the language Whisper hears spoken, of the ones Obeya speaks: the owner may speak another
-   * than the interface's, and Whisper told to expect that one translated into it.
+   * In the language spoken, of the ones Obeya speaks: the owner may speak another than the
+   * interface's, and Whisper told to expect that one translated into it.
    */
   transcribe(audioPath: string, vocabulary: string): Promise<Transcript>;
   /** Gets ready for the next recording (the owner started speaking). */
@@ -43,15 +52,15 @@ export const silence = (text: string) =>
 
 const VOICE = resource('voice');
 
-export type ListenBackend = 'mlx' | 'faster';
-
 /**
- * How Obeya hears on this machine: MLX on Apple Silicon, faster-whisper elsewhere.
- * `OBEYA_WHISPER_BACKEND` (mlx, faster) chooses otherwise.
+ * How Obeya hears on this machine: Parakeet, everywhere. `OBEYA_WHISPER_BACKEND` chooses Whisper
+ * instead: `mlx`, `faster`, or `whisper` for this platform's (MLX on Apple Silicon, faster-whisper
+ * elsewhere).
  */
 export function voiceBackends(env: Record<string, string | undefined> = process.env, platform: string = process.platform, arch: string = process.arch) {
+  const asked = env.OBEYA_WHISPER_BACKEND;
   const listen: ListenBackend =
-    env.OBEYA_WHISPER_BACKEND === 'mlx' || env.OBEYA_WHISPER_BACKEND === 'faster' ? env.OBEYA_WHISPER_BACKEND : platform === 'darwin' && arch === 'arm64' ? 'mlx' : 'faster';
+    asked === 'mlx' || asked === 'faster' ? asked : asked === 'whisper' ? (platform === 'darwin' && arch === 'arm64' ? 'mlx' : 'faster') : 'parakeet';
   return { listen };
 }
 
@@ -146,17 +155,17 @@ class Sidecar {
 
 /**
  * The sidecar keeps the model loaded between recordings. Its Python comes from
- * `OBEYA_WHISPER_PYTHON` (one with `mlx_whisper` or `faster_whisper`), else from `uv` with the
- * backend's package (the same kit the demos listen back with).
+ * `OBEYA_WHISPER_PYTHON` (one with the backend's package: `onnx_asr`, `mlx_whisper` or
+ * `faster_whisper`), else from `uv` with the backend's package (the same kit the demos listen back with).
  */
-export class WhisperSidecar implements Transcriber {
+export class LocalTranscriber implements Transcriber {
   private sidecar: Sidecar;
 
   constructor(readonly backend: ListenBackend = voiceBackends().listen) {
     this.sidecar = new Sidecar('transcription', () => {
-      const script = [join(VOICE, 'whisper_sidecar.py'), '--backend', backend];
+      const script = [join(VOICE, 'transcribe_sidecar.py'), '--backend', backend];
       const python = process.env.OBEYA_WHISPER_PYTHON;
-      return python ? [python, ...script] : ['uv', 'run', '--quiet', '--no-project', ...whisperKit(backend).uvArgs, 'python', ...script];
+      return python ? [python, ...script] : ['uv', 'run', '--quiet', '--no-project', ...listenKit(backend).uvArgs, 'python', ...script];
     });
   }
 
@@ -172,10 +181,35 @@ export class WhisperSidecar implements Transcriber {
 
   async transcribe(audioPath: string, vocabulary: string): Promise<Transcript> {
     const { text, doubtful } = await this.sidecar.request({ path: audioPath, prompt: vocabulary, languages: LANGUAGES });
-    return { text: typeof text === 'string' ? text : '', doubtful: doubtful === true };
+    return { text: typeof text === 'string' ? text : '', doubtful: doubtful === true, ...(this.backend === 'parakeet' || !vocabulary ? { unprompted: true as const } : {}) };
   }
 
   stop() {
     this.sidecar.stop();
+  }
+}
+
+/**
+ * Voice in as the owner set it up: through the cloud service of `voice.json` when they chose one,
+ * else on this machine. Read with every recording, so a change in the settings applies to the next.
+ */
+export class VoiceIn implements Transcriber {
+  constructor(
+    private home: string,
+    readonly local: LocalTranscriber,
+    private fetcher: typeof fetch = fetch,
+  ) {}
+
+  transcribe(audioPath: string, vocabulary: string): Promise<Transcript> {
+    const cloud = cloudInUse(this.home);
+    return cloud ? transcribeInCloud(cloud, audioPath, vocabulary, this.fetcher) : this.local.transcribe(audioPath, vocabulary);
+  }
+
+  warm() {
+    if (!cloudInUse(this.home)) this.local.warm();
+  }
+
+  stop() {
+    this.local.stop();
   }
 }

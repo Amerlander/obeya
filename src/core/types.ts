@@ -1,14 +1,14 @@
 // Shapes shared by the server and the UI.
 
 import type { DemoSettings, VoiceKind } from '../../plugin/skills/demo/lib/settings.ts';
-import type { SetupId, SetupItem } from '../../plugin/skills/demo/lib/setup.ts';
+import type { ListenBackend, SetupId, SetupItem } from '../../plugin/skills/demo/lib/setup.ts';
 import type { Language } from './locale';
 import { MESSAGES } from './messages';
 import type { NotAProject } from './plan-doc';
 
 export type { DemoSettings, NarrationLanguage, VoiceKind } from '../../plugin/skills/demo/lib/settings.ts';
 export type { Language } from './locale';
-export type { SetupCheck, SetupId, SetupItem } from '../../plugin/skills/demo/lib/setup.ts';
+export type { ListenBackend, SetupCheck, SetupId, SetupItem } from '../../plugin/skills/demo/lib/setup.ts';
 
 /**
  * `question`: a thread of looked-up answers the owner moved onto a card of its own, with the agent
@@ -774,6 +774,8 @@ export type ErrorCode =
   | 'noSlot'
   | 'workspace'
   | 'emptyText'
+  /** The cloud service for voice in failed or refused the check's sentence (the detail says what it said). */
+  | 'voiceCloud'
   | 'unknownPreference'
   /** An uploaded screenshot is no image the agents read, or too large. */
   | 'imageType'
@@ -1069,24 +1071,68 @@ export interface AgentsView {
   agents: Record<AgentRole, AgentSetting>;
 }
 
+/**
+ * The cloud services Obeya's voice in can send recordings to instead, all with the OpenAI-style
+ * `/audio/transcriptions` endpoint (`src/server/voice-cloud.ts`). `prompt`: it takes the card
+ * titles as vocabulary. `openai` stands for any compatible endpoint: base URL and model can be changed.
+ */
+export const CLOUD_VOICES = {
+  groq: { name: 'Groq', baseUrl: 'https://api.groq.com/openai/v1', model: 'whisper-large-v3-turbo', keys: 'https://console.groq.com/keys', prompt: true },
+  mistral: { name: 'Mistral', baseUrl: 'https://api.mistral.ai/v1', model: 'voxtral-mini-latest', keys: 'https://console.mistral.ai/api-keys', prompt: false },
+  openai: { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini-transcribe', keys: 'https://platform.openai.com/api-keys', prompt: true },
+} as const;
+export type CloudPreset = keyof typeof CLOUD_VOICES;
+export const CLOUD_PRESETS = Object.keys(CLOUD_VOICES) as CloudPreset[];
+
+/** A cloud service as the owner set it up (its key stays on the server; the page only learns there is one). */
+export interface CloudVoiceView {
+  preset: CloudPreset;
+  baseUrl: string;
+  model: string;
+  key: boolean;
+  /** Recordings go to it rather than to the recognition on this machine. */
+  used: boolean;
+  /** How long it took for the check's sentence, and what it heard, when it was last tested. */
+  tested?: { seconds: number; heard: string };
+}
+
+/**
+ * How long the recognition on this machine took for the short sentence Obeya ships with
+ * (`voice/check-de.ogg`), loaded and warm. `slow`: longer than the sentence itself.
+ */
+export interface VoiceSpeed {
+  backend: ListenBackend;
+  seconds: number;
+  /** The sentence's length in seconds. */
+  clip: number;
+  heard: string;
+  slow: boolean;
+}
+
 /** What Obeya's own voice in needs on this machine (`src/server/voice-setup.ts`). */
-export type VoiceSetupId = 'whisper' | 'ffmpeg' | 'uv';
+export type VoiceSetupId = 'recognition' | 'ffmpeg' | 'uv';
 export type VoiceSetupItem = Omit<SetupItem, 'id'> & {
   id: VoiceSetupId;
-  /** Whisper, which uv fetches: "Installieren" waits until uv is there. */
+  /** The recognition, which uv fetches: "Installieren" waits until uv is there. */
   waits?: 'uv';
-};
+} & VoiceRecognitionParts;
+
+/** What the recognition's line carries besides its state: how fast it is here, and the cloud service. */
+export interface VoiceRecognitionParts {
+  /** Measured on this machine; `measuring` while it is. */
+  speed?: VoiceSpeed | 'measuring';
+  cloud?: CloudVoiceView;
+}
 
 export interface VoiceSetupView {
   platform: string;
   arch: string;
-  /** Whisper on MLX (Apple Silicon) or faster-whisper. */
-  listen: 'mlx' | 'faster';
+  listen: ListenBackend;
   items: VoiceSetupItem[];
-  /** What "Installieren" fetches and about how much: Whisper and its model. */
-  fetch: { parts: 'whisper'[]; mb: number };
-  /** The installation running or last run. */
-  job?: { running: boolean; step: 'whisper'; line: string; error?: string };
+  /** What "Installieren" fetches and about how much: the recognition and its model. */
+  fetch: { parts: 'recognition'[]; mb: number };
+  /** The installation or measurement running or last run. */
+  job?: { running: boolean; step: 'fetch' | 'measure'; line: string; error?: string };
 }
 
 /** The setup assistant's list (`src/server/machine.ts`): what Obeya needs on this machine, by what it is for. */
@@ -1105,9 +1151,9 @@ export type MachineItem = Omit<SetupItem, 'id'> & {
    * terminal that logs in. `identity`: the owner gives git's name and e-mail, which Obeya sets.
    */
   act?: 'install' | 'login' | 'identity';
-  /** What has to be installed first (uv, which brings Whisper). */
+  /** What has to be installed first (uv, which brings the speech recognition). */
   waits?: 'uv';
-};
+} & VoiceRecognitionParts;
 
 export interface MachineSection {
   id: MachineSectionId;

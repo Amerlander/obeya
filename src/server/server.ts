@@ -16,6 +16,7 @@ import { serveAnswerFile, serveDemoFile } from './demo';
 import { type NarrationHost, parseClipRequest } from './narration';
 import type { Restarter } from './self-update';
 import { looping, silence, type Transcriber } from './voice';
+import { CloudError } from './voice-cloud';
 import type { MachineSetup } from './machine';
 import type { VoiceSetup } from './voice-setup';
 import { ShellReports } from './push-key';
@@ -142,13 +143,15 @@ export function serve(
   };
   const transcribe = async (c: CanvasRuntime, audio: Blob) => {
     const dir = mkdtempSync(join(tmpdir(), 'obeya-voice-'));
-    const file = join(dir, 'speech.webm');
+    // by what the browser recorded: a cloud service tells the format by the file's name
+    const file = join(dir, `speech.${/mp4|m4a|aac/.test(audio.type) ? 'mp4' : /wav/.test(audio.type) ? 'wav' : /ogg/.test(audio.type) ? 'ogg' : 'webm'}`);
     try {
       await Bun.write(file, audio);
       const first = await transcriber.transcribe(file, c.commander.vocabulary());
       const text = first.text.trim();
-      if (silence(text)) return console.log(`whisper on ${c.id}: ${text}`), '';
+      if (silence(text)) return console.log(`voice on ${c.id}: ${text}`), '';
       if (!looping(text) && !first.doubtful) return text;
+      if (first.unprompted) return console.log(`voice ${looping(text) ? 'looped' : 'was unsure'} on ${c.id}: ${text.slice(0, 80)}`), null;
       // the card titles talk Whisper into loops or guesses on a recording without speech: once more without them
       console.log(`whisper ${looping(text) ? 'looped' : 'was unsure'} on ${c.id}: ${text.slice(0, 80)}; once more without the card titles`);
       const again = await transcriber.transcribe(file, '');
@@ -237,6 +240,12 @@ export function serve(
       // what Obeya's own voice in needs here, and installing it
       '/api/voice-setup': { GET: () => (setup ? handle(() => setup.view()) : new Response('Not found', { status: 404 })) },
       '/api/voice-setup/install': { POST: () => (setup ? handle(() => setup.install()) : new Response('Not found', { status: 404 })) },
+      '/api/voice-setup/measure': { POST: () => (setup ? handle(() => setup.measure()) : new Response('Not found', { status: 404 })) },
+      // a cloud service for voice in: tested and used (PUT), or back to this machine (DELETE)
+      '/api/voice-setup/cloud': {
+        PUT: async (req) => (setup ? handle(async () => setup.useCloud(await req.json())) : new Response('Not found', { status: 404 })),
+        DELETE: () => (setup ? handle(() => setup.useLocal()) : new Response('Not found', { status: 404 })),
+      },
       // the setup assistant: what Obeya needs on this machine, installed, logged in; then the first canvas
       '/api/setup': { GET: () => (machine ? handle(() => machine.view()) : new Response('Not found', { status: 404 })) },
       '/api/setup/install': { POST: async (req) => (machine ? handle(async () => machine.install(await req.json())) : new Response('Not found', { status: 404 })) },
@@ -456,7 +465,15 @@ export function serve(
           const audio = form ? form.get('audio') : await req.blob();
           if (!(audio instanceof Blob)) throw new BadRequest('invalid', 'audio expected');
           const typed = form?.get('text');
-          const text = await transcribe(c, audio);
+          let text: string | null;
+          try {
+            text = await transcribe(c, audio);
+          } catch (e) {
+            // the cloud service failed or refused: the owner reads why under the mic, and the words stay in the field
+            if (!(e instanceof CloudError)) throw e;
+            console.error(`voice on ${c.id}: ${e.service} failed: ${e.message}`);
+            return { confirm: c.board.t.voice.cloudFailed(e.service, e.message), unheard: true };
+          }
           // `?listen`: dictated into a field, the words go back to it and nowhere else
           if (params.has('listen')) {
             console.log(`dictated on ${c.id}: ${text === null ? '(not understood)' : text || '(nothing)'}`);

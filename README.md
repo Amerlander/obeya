@@ -75,9 +75,10 @@ moves to new code.
   lands through pull requests.
 - For demos: Node.js 22.18 or newer, a Chromium browser, ffmpeg and uv. Obeya's settings
   show what is missing and how to install it; see [`docs/demo-setup.md`](docs/demo-setup.md).
-- For voice: ffmpeg and uv. Whisper hears what you say (MLX on Apple Silicon, faster-whisper
-  elsewhere, on an NVIDIA GPU with CUDA or on the CPU). Obeya's settings ("Voice") show what is
-  missing and install the rest. Everything else works without it.
+- For voice: ffmpeg and uv. Parakeet hears what you say, on the CPU of any machine (a fraction
+  of a second per command). Obeya's settings ("Voice") show what is missing, install the rest and
+  measure how fast it is; where it is too slow, they offer a cloud service instead (Groq for free,
+  Mistral, or any OpenAI-compatible endpoint). Everything else works without it.
 
 ```bash
 git clone https://github.com/sadilek/obeya.git
@@ -111,9 +112,9 @@ says to update. Workers run on the Claude Code login of the machine.
 The canvases and their repositories can be seen and changed in the app ("Configuration") or by
 telling Obeya; saving writes `canvases.json` and restarts Obeya with it.
 
-Voice runs Whisper in a sidecar through `uv run` (mlx-whisper on Apple Silicon, faster-whisper
-elsewhere), or in a Python of your own with that package (`OBEYA_WHISPER_PYTHON=/path/to/python`).
-`OBEYA_WHISPER_BACKEND=faster` chooses faster-whisper on a Mac too. Demos are recorded by the skill in
+Voice runs Parakeet (`onnx-asr`) in a sidecar through `uv run`, or in a Python of your own with that
+package (`OBEYA_WHISPER_PYTHON=/path/to/python`). `OBEYA_WHISPER_BACKEND` chooses Whisper instead:
+`mlx`, `faster`, or `whisper` for this platform's. Demos are recorded by the skill in
 `plugin/`, which Obeya gives its workers; what a machine needs for them (Node, a browser, ffmpeg,
 uv, a voice) is in [`docs/demo-setup.md`](docs/demo-setup.md), checked in the app's settings.
 

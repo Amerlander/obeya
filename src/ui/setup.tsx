@@ -5,7 +5,7 @@
 // later the settings open it over the canvas.
 
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
-import { type GitSetupPreview, LARGE_FILE, type Language, type MachineItem, type MachineSection, type MachineView, type SetupItem, type VoiceSetupItem } from '../core/types';
+import { CLOUD_PRESETS, CLOUD_VOICES, type CloudPreset, type GitSetupPreview, LARGE_FILE, type Language, type MachineItem, type MachineSection, type MachineView, type SetupItem, type VoiceSetupItem } from '../core/types';
 import { LANGUAGES } from '../core/locale';
 import { api, ApiError, reload } from './api';
 import { Sign } from './logo';
@@ -49,10 +49,12 @@ export function SetupList<I extends SetupItem | VoiceSetupItem | MachineItem>({
     <ul>
       {items.map((i) => {
         const act = action?.(i);
+        // the speech recognition, there but too slow on this machine
+        const slow = 'speed' in i && typeof i.speed === 'object' && i.speed.slow && !i.cloud?.used;
         return (
-          <li key={i.id} className={i.state}>
+          <li key={i.id} className={slow ? `${i.state} slow` : i.state}>
             <span className="c-mark" aria-hidden>
-              {{ ok: '✓', missing: '✗', later: '…', off: '–' }[i.state]}
+              {slow ? '!' : { ok: '✓', missing: '✗', later: '…', off: '–' }[i.state]}
             </span>
             <span className="c-name">{name(i)}</span>
             <span className="hint" title={i.found}>
@@ -87,7 +89,120 @@ export function voiceState(i: VoiceSetupItem | MachineItem) {
   if (i.id === 'globalKey') return i.state === 'ok' ? t.config.pushKey.on(pushKeyLabel(i.found ?? '')) : (t.config.pushKey.states[i.found ?? ''] ?? t.config.pushKey.states.error!);
   if (i.state === 'later') return (i.waits ? v.waits : v.later)(megabytes(i.mb ?? 0));
   if (i.state === 'missing') return i.found && i.need ? s.needs(i.found, i.need) : s.missing;
+  if (i.id === 'recognition') {
+    if (i.cloud?.used) return v.cloud.found(i.found ?? '');
+    if (i.speed === 'measuring') return `${i.found} · ${v.measuring}`;
+    if (i.speed) return i.speed.slow ? v.slow : v.fast(i.found ?? '', v.seconds(i.speed.seconds));
+  }
   return (i.found && v.found[i.found]) ?? i.found ?? s.there;
+}
+
+/**
+ * Under the speech recognition's line, in the setup assistant and the configuration dialog alike:
+ * how long it took here for a short sentence, measured again at a click, and a cloud service
+ * instead (open at once when it was too slow), tested with the same sentence before it is used.
+ * `changed`: the view to check again, which this follows while a measurement runs.
+ */
+export function RecognitionDetail({ item, busy, changed }: { item: VoiceSetupItem | MachineItem; busy?: boolean; changed: () => unknown }) {
+  const v = t.config.voice;
+  const c = v.cloud;
+  const { speed, cloud } = item;
+  const [open, setOpen] = useState(false);
+  const [preset, setPreset] = useState<CloudPreset>(cloud?.preset ?? 'groq');
+  const [baseUrl, setBaseUrl] = useState(cloud?.preset === 'openai' ? cloud.baseUrl : '');
+  const [model, setModel] = useState(cloud?.preset === 'openai' ? cloud.model : '');
+  const [key, setKey] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [status, setStatus] = useState('');
+  const measuring = speed === 'measuring';
+  useEffect(() => {
+    if (!measuring) return;
+    // one check at a time: the setup assistant's takes a while
+    let timer: ReturnType<typeof setTimeout>;
+    let done = false;
+    const tick = async () => {
+      await changed();
+      if (!done) timer = setTimeout(tick, 1500);
+    };
+    timer = setTimeout(tick, 1500);
+    return () => {
+      done = true;
+      clearTimeout(timer);
+    };
+  }, [measuring]);
+  const failed = (e: unknown) => setStatus(e instanceof ApiError ? `${errorText(e.code)}${e.code === 'voiceCloud' || e.code === 'invalid' ? ` ${e.message}` : ''}` : t.offlineError);
+  const act = async (call: () => Promise<unknown>) => {
+    setStatus('');
+    try {
+      await call();
+      changed();
+    } catch (e) {
+      failed(e);
+    }
+  };
+  const test = async () => {
+    setTesting(true);
+    await act(() => api.useCloudVoice({ preset, ...(preset === 'openai' ? { baseUrl, model } : {}), ...(key.trim() ? { key: key.trim() } : {}) }));
+    setKey('');
+    setTesting(false);
+  };
+  if (cloud?.used)
+    return (
+      <div className="c-voice">
+        <span className="hint">{c.used(item.found ?? '', v.seconds(cloud.tested?.seconds ?? 0))}</span>
+        <button className="link" onClick={() => act(api.useLocalVoice)}>
+          {c.back}
+        </button>
+        {status && <span className="p-error">{status}</span>}
+      </div>
+    );
+  const slow = typeof speed === 'object' && speed.slow ? speed : null;
+  const kept = cloud?.key && cloud.preset === preset;
+  return (
+    <div className="c-voice">
+      {slow && <span className="hint warn">{v.slowDetail(v.seconds(slow.seconds))}</span>}
+      {item.state === 'ok' && !measuring && (
+        <button className="link" disabled={busy} onClick={() => act(api.measureVoice)}>
+          {speed ? v.remeasure : v.measure}
+        </button>
+      )}
+      {slow || open || cloud ? (
+        <div className="c-cloud">
+          <b>{c.offer}</b>
+          <span className="c-row">
+            <select aria-label={c.service} value={preset} onChange={(e) => setPreset(e.target.value as CloudPreset)}>
+              {CLOUD_PRESETS.map((p) => (
+                <option key={p} value={p}>
+                  {c.names[p]}
+                </option>
+              ))}
+            </select>
+          </span>
+          <span className="hint">{c.about[preset]}</span>
+          {preset === 'openai' && (
+            <span className="c-row">
+              <input aria-label={c.baseUrl} spellCheck={false} placeholder={CLOUD_VOICES.openai.baseUrl} value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
+              <input aria-label={c.model} spellCheck={false} placeholder={CLOUD_VOICES.openai.model} value={model} onChange={(e) => setModel(e.target.value)} />
+            </span>
+          )}
+          <input type="password" autoComplete="off" spellCheck={false} placeholder={kept ? c.keyKept : c.key} value={key} onChange={(e) => setKey(e.target.value)} />
+          <span className="c-row c-cloud-go">
+            <a href={CLOUD_VOICES[preset].keys} target="_blank" rel="noreferrer">
+              {c.getKey}
+            </a>
+            <button className="btn small" disabled={testing || (!key.trim() && !kept)} onClick={test}>
+              {testing ? c.testing : c.test}
+            </button>
+          </span>
+        </div>
+      ) : (
+        <button className="link" onClick={() => setOpen(true)}>
+          {c.open}
+        </button>
+      )}
+      {status && <span className="p-error">{status}</span>}
+    </div>
+  );
 }
 
 /** What the demo check's lines say, here and in the settings sheet. */
@@ -169,7 +284,8 @@ export function Setup({ first, onClose }: { first?: boolean; onClose?: () => voi
       if (job.error) return <span className="p-error">{s.failed(job.error.split('\n').at(-1) ?? '')}</span>;
     }
     if (i.act === 'identity') return <Identity onSaved={setView} onError={failed} />;
-    if (!i.act) return null;
+    const detail = section.id === 'voice' && i.id === 'recognition' && <RecognitionDetail item={i} busy={running} changed={recheck} />;
+    if (!i.act) return detail || null;
     if (i.act === 'login')
       return (
         <>
@@ -180,9 +296,12 @@ export function Setup({ first, onClose }: { first?: boolean; onClose?: () => voi
         </>
       );
     return (
-      <button className="btn small" disabled={running} onClick={() => act(section, i)}>
-        {i.mb ? s.installSized(megabytes(i.mb)) : s.install}
-      </button>
+      <>
+        <button className="btn small" disabled={running} onClick={() => act(section, i)}>
+          {i.mb ? s.installSized(megabytes(i.mb)) : s.install}
+        </button>
+        {detail}
+      </>
     );
   };
   const name = (section: MachineSection) => (i: MachineItem) =>

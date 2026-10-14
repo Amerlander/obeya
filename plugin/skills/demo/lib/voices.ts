@@ -111,7 +111,7 @@ export function hfModelPresent(repo: string) {
   if (!fs.existsSync(snapshots)) return false;
   return fs.readdirSync(snapshots).some((snap) => {
     const files = fs.readdirSync(path.join(snapshots, snap));
-    return files.includes('config.json') && files.some((f) => f.endsWith('.safetensors') || f === 'model.bin');
+    return files.includes('config.json') && files.some((f) => f.endsWith('.safetensors') || f.endsWith('.onnx') || f === 'model.bin');
   });
 }
 
@@ -296,7 +296,7 @@ export function sample(s: DemoSettings, out: string, home = obeyaHome(), obeyaUr
  * halt. `tts.py --lock` holds it (flock, on Windows a byte-range lock) from the moment it loads a
  * model itself: at once for a voice it runs, but for a voice Obeya holds only once Whisper is to
  * listen back, so parallel renders synthesise turn by turn through Obeya and listen one after the
- * other. The system drops the lock when its holder dies, so no stale lock survives a crash.
+ * other (Parakeet, which listens back by default, is small enough to take no lock). The system drops the lock when its holder dies, so no stale lock survives a crash.
  */
 export const TTS_LOCK = path.join(os.homedir(), '.cache', 'demo-skill', 'tts.lock');
 

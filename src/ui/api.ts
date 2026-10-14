@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CardDiff } from '../core/diff';
 import type { PushKeyView } from '../core/push-key';
-import type { AgentRole, AgentSetting, AgentsView, CanvasConfig, CanvasInfo, CanvasSnapshot, ClientMessage, ConfigView, CardAction, DemoSettings, Group, DemoSettingsView, DemoVoiceCheck, FirstCanvas, GitSetupPreview, MachineItem, MachineSectionId, MachineView, SetupCheck, SetupFolder, VoiceSetupView, CardEvent, CardPatch, Item, Language, LanguageView, NewCard, Notice, OwnerHold, PendingRestart, ProjectHistory, ServerMessage, SpotInput, AppUpdate, Theme, ThemeView } from '../core/types';
+import type { AgentRole, AgentSetting, CloudPreset, AgentsView, CanvasConfig, CanvasInfo, CanvasSnapshot, ClientMessage, ConfigView, CardAction, DemoSettings, Group, DemoSettingsView, DemoVoiceCheck, FirstCanvas, GitSetupPreview, MachineItem, MachineSectionId, MachineView, SetupCheck, SetupFolder, VoiceSetupView, CardEvent, CardPatch, Item, Language, LanguageView, NewCard, Notice, OwnerHold, PendingRestart, ProjectHistory, ServerMessage, SpotInput, AppUpdate, Theme, ThemeView } from '../core/types';
 
 /** A request the server refused; `code` picks the owner's text, the message is the server's detail. */
 export class ApiError extends Error {
@@ -103,6 +103,10 @@ export const api = {
   setupCanvas: (input: { path: string } | { clone: string; into: string }) => call<FirstCanvas | MachineView>('POST', '/api/setup/canvas', input),
   voiceSetup: () => call<VoiceSetupView>('GET', '/api/voice-setup'),
   installVoice: () => call<VoiceSetupView>('POST', '/api/voice-setup/install'),
+  measureVoice: () => call<VoiceSetupView>('POST', '/api/voice-setup/measure'),
+  /** Tests a cloud service with the check's sentence and hears through it from then on; a key left out keeps the saved one. */
+  useCloudVoice: (service: { preset: CloudPreset; baseUrl?: string; model?: string; key?: string }) => call<VoiceSetupView>('PUT', '/api/voice-setup/cloud', service),
+  useLocalVoice: () => call<VoiceSetupView>('DELETE', '/api/voice-setup/cloud'),
   demoSettings: () => call<DemoSettingsView>('GET', '/api/demo-settings'),
   saveDemoSettings: (settings: DemoSettings) => call<DemoSettingsView>('PUT', '/api/demo-settings', settings),
   checkDemoVoice: (settings: DemoSettings) => call<DemoVoiceCheck>('POST', '/api/demo-settings/check', settings),

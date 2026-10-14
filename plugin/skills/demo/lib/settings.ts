@@ -46,8 +46,8 @@ export interface DemoSettings {
   /** A service's API key, in a file; the service's environment variable takes precedence. */
   keyFile?: string;
   /**
-   * `false`: the clips are not heard back with Whisper, so they go unchecked (and the report says
-   * so). For a machine where Whisper is too slow or too large. Absent means on.
+   * `false`: the clips are not heard back by the speech recognition, so they go unchecked (and the
+   * report says so). Absent means on.
    */
   listenBack?: false;
 }
@@ -135,7 +135,7 @@ export function describeDemoSettings(saved: DemoSettings, override: string | und
       ? `person: first — the voice is the owner's own, so the narration speaks as the owner ("I added …")`
       : `person: third — the voice is not the owner's, so the narration presents the work without "I" or "we" ("The card now shows …")`,
     `voice: ${s.voice}${s.voiceName ? ` (${s.voiceName})` : ''}${s.reference ? ` (clone of ${s.reference})` : ''}`,
-    `listening back: ${s.listenBack === false ? 'off — the clips go unchecked; say so in the report\'s findings' : 'on, with Whisper'}`,
+    `listening back: ${s.listenBack === false ? 'off — the clips go unchecked; say so in the report\'s findings' : 'on, with Parakeet'}`,
     `from: ${path.join(obeyaHome(), DEMO_SETTINGS_FILE)}${override ? ' (voice from DEMO_VOICE)' : ''}`,
   ].join('\n');
 }

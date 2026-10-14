@@ -17,17 +17,18 @@ The voice comes as a spec from `voices.ts`, one of two kinds:
   endpoint (`http`: POST `{"text", "language"}` as JSON, audio back). The key comes from the
   service's environment variable, else from the key file in the spec.
 
-Whatever comes back is made a mono 16-bit WAV with ffmpeg. Listening back takes Whisper, which
-the render brings into a throwaway environment: mlx-whisper on Apple Silicon, faster-whisper
-elsewhere (`--listen mlx|faster`), or none (`--listen off`, the clips go unchecked):
+Whatever comes back is made a mono 16-bit WAV with ffmpeg. Listening back takes a speech
+recognition the render brings into a throwaway environment: Parakeet (`--listen parakeet`, the
+default, as Obeya hears voice commands: int8 ONNX on the CPU, a fraction of a second per clip),
+Whisper (`--listen mlx|faster`), or none (`--listen off`, the clips go unchecked):
 
-    uv run --no-project --with mlx-whisper python tts.py --listen mlx [--lock <file>] \
+    uv run --no-project --python 3.12 --with "onnx-asr[cpu,hub]" python tts.py [--lock <file>] \
         <spec.json> <language> <jobs.json> <out_dir>
 
 `jobs.json` is `[{"id": ..., "text": ...}]`. Each text becomes `<out_dir>/<hash>.wav`, cached by
 voice + text, so re-rendering a demo after a visual fix costs no synthesis. Every clip is
-transcribed back with Whisper: a voice occasionally swallows or invents a word, and the narration
-is the one part of a demo nobody re-reads. When Whisper is off or fails to load, the clips are
+transcribed back: a voice occasionally swallows or invents a word, and the narration is the one
+part of a demo nobody re-reads. When listening back is off or fails to load, the clips are
 kept unheard and `unchecked` says why. Results land in `<out_dir>/tts.json`:
 `{"clips": [{"id", "file", "seconds", "heard", "match"}], "unchecked": null | reason}`.
 
@@ -36,6 +37,7 @@ the end, for voices that load one: one such render at a time on the machine, the
 voice it runs itself takes the lock at once; a voice Obeya holds takes it only when Whisper is to
 load, after the first take of every clip: parallel renders then synthesise turn by turn through
 Obeya and listen back one after the other, with one voice model and one Whisper in memory.
+Parakeet is small enough (about 1 GB) to listen back without the lock.
 
     python tts.py [--lock <file>] --sample <spec.json> <language> <text> <out.wav>
 
@@ -61,15 +63,15 @@ from collections import deque
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-#: A take whose transcript matches at least this well is kept without trying another. Whisper
-#: itself splits compounds ("Leuchtturm" → "Leucht Turm"), so a perfect clip rarely scores 1.0.
+#: A take whose transcript matches at least this well is kept without trying another. The
+#: recognition itself splits compounds ("Leuchtturm" → "Leucht Turm"), so a perfect clip rarely scores 1.0.
 GOOD_MATCH = 0.95
 MAX_TAKES = 3
 
 LANGUAGE_NAMES = {"de": "German", "en": "English"}
 LOCALES = {"de": "de-DE", "en": "en-US"}
-#: Whisper's model per backend; `DEMO_STT_MODEL` names another.
-STT_MODELS = {"mlx": "mlx-community/whisper-large-v3-turbo", "faster": "large-v3-turbo"}
+#: The recognition's model per backend; `DEMO_STT_MODEL` names another Whisper.
+STT_MODELS = {"parakeet": "nemo-parakeet-tdt-0.6b-v3", "mlx": "mlx-community/whisper-large-v3-turbo", "faster": "large-v3-turbo"}
 
 #: How the hosted voices should sound: a product lead walking a colleague through a finished feature.
 STYLE = (
@@ -179,7 +181,7 @@ def untagged(text: str) -> str:
 def spoken_letters(text: str, language: str = "de") -> str:
     """The letters a listener hears, for comparing a script with its transcript.
 
-    Whisper writes numbers as digits ("15.200") where the script spells them out, and splits
+    The recognition writes numbers as digits ("15.200") where the script spells them out, and splits
     compounds ("oder Berg"); neither is a defect of the clip. So digits become words, and spaces
     and punctuation are dropped before comparing. "and" inside English numbers is said by some
     and not by others, so it is dropped as well. Audio tags are not said.
@@ -472,7 +474,7 @@ def make_voice(spec: dict, language: str):
 
 
 class Ear:
-    """Whisper, hearing each clip back. Off, or failing to load, it hears nothing and says why."""
+    """The speech recognition, hearing each clip back. Off, or failing to load, it hears nothing and says why."""
 
     def __init__(self, backend: str, language: str) -> None:
         self._backend = backend
@@ -483,19 +485,32 @@ class Ear:
         if backend == "off":
             self.unchecked = "listening back is off in the demo settings"
         elif backend not in STT_MODELS:
-            sys.exit(f"unknown Whisper backend {backend!r}; known: {', '.join(STT_MODELS)}, off")
-        self._name = os.environ.get("DEMO_STT_MODEL") or STT_MODELS.get(backend, "")
+            sys.exit(f"unknown listening backend {backend!r}; known: {', '.join(STT_MODELS)}, off")
+        self._name = (backend != "parakeet" and os.environ.get("DEMO_STT_MODEL")) or STT_MODELS.get(backend, "")
 
     def hear(self, wav: Path) -> str | None:
         if self.unchecked:
             return None
-        hold_lock()
         try:
+            if self._backend == "parakeet":
+                return self._parakeet(wav)
+            hold_lock()
             return self._mlx(wav) if self._backend == "mlx" else self._faster(wav)
         except Exception as failed:  # not installed, the model not downloadable, out of memory
-            self.unchecked = f"Whisper failed: {type(failed).__name__}: {failed}"[:400]
+            self.unchecked = f"{'Parakeet' if self._backend == 'parakeet' else 'Whisper'} failed: {type(failed).__name__}: {failed}"[:400]
             print(f"narration: not listening back, {self.unchecked}", file=sys.stderr)
             return None
+
+    def _parakeet(self, wav: Path) -> str:
+        if self._model is None:
+            import onnx_asr
+            import onnxruntime
+
+            # as Obeya's voice sidecar: more than 4 threads only cost
+            options = onnxruntime.SessionOptions()
+            options.intra_op_num_threads = min(4, os.cpu_count() or 4)
+            self._model = onnx_asr.load_model(self._name, quantization="int8", sess_options=options, providers=["CPUExecutionProvider"])
+        return str(self._model.recognize(self._samples(wav), sample_rate=16000)).strip()
 
     def _mlx(self, wav: Path) -> str:
         import mlx_whisper
@@ -506,7 +521,7 @@ class Ear:
     @staticmethod
     def _samples(wav: Path):
         """The clip as 16 kHz mono floats, decoded by ffmpeg: faster-whisper's own decoder (PyAV)
-        broke with newer PyAV releases (`metadata_errors`)."""
+        broke with newer PyAV releases (`metadata_errors`), and onnx-asr reads WAV files only."""
         import numpy
 
         pcm = subprocess.run(
@@ -603,7 +618,7 @@ def narrate(voice, language: str, jobs: list[dict], out: Path, ear: Ear) -> None
     def key_of(job: dict) -> str:
         return hashlib.sha1(f"{voice_tag}\n{job['text']}".encode()).hexdigest()[:16]
 
-    # The first take of every clip comes before any is heard: Whisper loads (and a voice Obeya
+    # The first take of every clip comes before any is heard: the recognition loads (and a voice Obeya
     # holds takes the machine's lock) only once all of them are synthesised.
     first_takes: set[str] = set()
     for job in jobs:
@@ -675,7 +690,7 @@ def main() -> None:
     args = sys.argv[1:]
     global _lock_file
     _lock_file = take_option(args, "--lock")
-    listen = take_option(args, "--listen") or "mlx"
+    listen = take_option(args, "--listen") or "parakeet"
     if args[0] == "--sample":
         spec_file, language, text, target = args[1:5]
         voice = make_voice(json.loads(Path(spec_file).read_text(encoding="utf-8")), language)
