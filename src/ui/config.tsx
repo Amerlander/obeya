@@ -1061,7 +1061,7 @@ function CanvasBlock({ n, canvas, resolved, running, pin, saved, adapters, probl
 interface RepoProps {
   repo: RepoConfig;
   home: boolean;
-  resolved?: { id: string; adapter: string; workspaces: 'clones' | 'worktrees'; adapterShares?: boolean; adapterSite?: string; values: RepoValues; shareTo: 'main' | 'pr' };
+  resolved?: { id: string; adapter: string; workspaces: 'clones' | 'worktrees'; adapterShares?: boolean; adapterSite?: string; values: RepoValues; shareTo: 'main' | 'pr'; shareDirect?: boolean };
   /** The running canvas the repository is on, as saved; where a card for it can go. */
   canvasId?: string;
   adapters: string[];
@@ -1167,7 +1167,7 @@ function RepoRow({ repo, home, resolved, canvasId, adapters, problems, focus, wh
           </label>
         </div>
       )}
-      {resolved && <RepoSettingsBlock repo={repo} values={resolved.values} adapter={resolved.adapter} shareTo={resolved.shareTo} {...(onReload ? { onReload } : {})} onChange={(settings) => onChange(without('settings', settings))} />}
+      {resolved && <RepoSettingsBlock repo={repo} values={resolved.values} adapter={resolved.adapter} shareTo={resolved.shareTo} shareDirect={!!resolved.shareDirect} {...(onReload ? { onReload } : {})} onChange={(settings) => onChange(without('settings', settings))} />}
       {problems.map((p, k) => (
         <div key={k} className="cfg-span">
           <Problem problem={p} where={where} ask={ask} />
@@ -1197,6 +1197,7 @@ function RepoSettingsBlock({
   values,
   adapter,
   shareTo,
+  shareDirect,
   onReload,
   onChange,
 }: {
@@ -1204,6 +1205,7 @@ function RepoSettingsBlock({
   values: RepoValues;
   adapter: string;
   shareTo: 'main' | 'pr';
+  shareDirect: boolean;
   onReload?: () => Promise<void>;
   onChange: (s: RepoSettings | undefined) => void;
 }) {
@@ -1322,7 +1324,7 @@ function RepoSettingsBlock({
             </label>,
           )}
           {row('howToRun', c.howToRun, <textarea rows={Math.max(3, Math.ceil(value<string>('howToRun').length / 90) + 1)} aria-label={c.howToRun} value={value<string>('howToRun')} onChange={(e) => set('howToRun', e.target.value)} />, c.howToRunHint)}
-          <ShareSettings repo={repo} values={values} branch={value<string>('branch')} shareTo={shareTo} {...(onReload ? { onReload } : {})} />
+          <ShareSettings repo={repo} values={values} branch={value<string>('branch')} shareTo={shareTo} shareDirect={shareDirect} {...(onReload ? { onReload } : {})} />
         </div>
       )}
     </div>
@@ -1355,7 +1357,7 @@ function sharedPreview(repo: RepoConfig, values: RepoValues): Record<string, unk
  * It first shows the file as it would be and where it goes (a commit on the main branch, or a pull
  * request), then does it at the owner's word. Only for the configuration as saved.
  */
-function ShareSettings({ repo, values, branch, shareTo, onReload }: { repo: RepoConfig; values: RepoValues; branch: string; shareTo: 'main' | 'pr'; onReload?: () => Promise<void> }) {
+function ShareSettings({ repo, values, branch, shareTo, shareDirect, onReload }: { repo: RepoConfig; values: RepoValues; branch: string; shareTo: 'main' | 'pr'; shareDirect: boolean; onReload?: () => Promise<void> }) {
   const c = t.config.settings.share;
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1363,11 +1365,11 @@ function ShareSettings({ repo, values, branch, shareTo, onReload }: { repo: Repo
   const [error, setError] = useState('');
   const { branch: _, ...mine } = repo.settings ?? {};
   const count = Object.keys(mine).length + (mine.demo ? Object.keys(mine.demo).length - 1 : 0);
-  const go = async () => {
+  const go = async (direct = false) => {
     setBusy(true);
     setError('');
     try {
-      const r = await api.shareSettings(repo.path);
+      const r = await api.shareSettings(repo.path, direct);
       setDone(r);
       setConfirming(false);
       if ('committed' in r) await onReload?.();
@@ -1396,21 +1398,26 @@ function ShareSettings({ repo, values, branch, shareTo, onReload }: { repo: Repo
             <button type="button" className="btn small" disabled={!onReload} onClick={() => setConfirming(true)}>
               {c.button(count)}
             </button>
-            <p className="hint">{onReload ? c.hint : c.saveFirst}</p>
+            <p className="hint">{onReload ? `${c.hint}${repo.settings?.branch ? ` ${c.hintBranch}` : ''}` : c.saveFirst}</p>
           </>
         )}
         {confirming && (
           <div className="cfg-share-confirm">
-            <p className="hint">{shareTo === 'main' ? c.toMain(branch) : c.toPr(branch)}</p>
+            <p className="hint">{shareTo === 'main' ? c.toMain(branch) : shareDirect ? c.toPrOrDirect(branch) : c.toPr(branch)}</p>
             <pre className="c-json">
               <span className="hint">.obeya/settings.json</span>
               {'\n'}
               {JSON.stringify(sharedPreview(repo, values), null, 2)}
             </pre>
             <div className="cfg-share-actions">
-              <button type="button" className="btn primary small" disabled={busy} onClick={go}>
+              <button type="button" className="btn primary small" disabled={busy} onClick={() => go()}>
                 {shareTo === 'main' ? c.commit : c.openPr}
               </button>
+              {shareTo === 'pr' && shareDirect && (
+                <button type="button" className="btn small" disabled={busy} onClick={() => go(true)}>
+                  {c.pushDirect(branch)}
+                </button>
+              )}
               <button type="button" className="btn small" disabled={busy} onClick={() => setConfirming(false)}>
                 {c.cancel}
               </button>

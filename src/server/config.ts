@@ -31,7 +31,7 @@ import type { Store } from './db';
 import { freshPath } from './path';
 import { repoInfo } from './repo';
 import type { Forge } from './forge';
-import { commitShared, proposeShared } from './shared-settings';
+import { commitShared, proposeShared, pushShared } from './shared-settings';
 import { GIT } from './workspaces';
 import { VERSION } from './resources';
 import { agentsView, languageView, pushKeyChoice, saveAgents, saveLanguage, savePushKey, saveTheme, themeView } from './settings';
@@ -293,11 +293,12 @@ export class Config {
    * „Für alle ins Repository übernehmen“: the settings saved for the repository at `path` (as the
    * configuration names it) on this machine, but its main branch, go into its
    * `.obeya/settings.json`: committed on the main branch where work lands there (they then come
-   * from the repository, here too), else as a pull request (once it is merged).
+   * from the repository, here too), else as a pull request (once it is merged), or with `direct`,
+   * where work may also go straight to main, pushed onto `origin`'s main branch.
    */
   shareSettings(input: unknown): SettingsShared {
-    const parsed = z.object({ path: z.string() }).safeParse(input);
-    if (!parsed.success) throw new BadRequest('invalid', 'expected { path }');
+    const parsed = z.object({ path: z.string(), direct: z.boolean().optional() }).safeParse(input);
+    if (!parsed.success) throw new BadRequest('invalid', 'expected { path, direct? }');
     const canvases = this.current();
     const at = canvases.flatMap((c, canvas) => c.repos.map((r, repo) => ({ r, canvas, repo }))).find(({ r }) => r.path === parsed.data.path);
     if (!at) throw new BadRequest('noSettings', `no repository ${parsed.data.path} in the configuration`);
@@ -306,6 +307,14 @@ export class Config {
     const repoPath = resolve(expand(at.r.path));
     const resolved = this.check(canvases).resolved[at.canvas];
     const to = resolved?.repos[at.repo]?.shareTo ?? 'main';
+    if (to === 'pr' && parsed.data.direct) {
+      if (!resolved?.repos[at.repo]?.shareDirect) throw new BadRequest('noDirect', `${repoPath}: work goes to main only through pull requests`);
+      const { after, ...done } = pushShared(repoPath, mine);
+      console.log(`Obeya: settings of ${repoPath} for everyone, pushed onto origin's ${'branch' in done ? done.branch : ''}`);
+      this.takenOver(repoPath, undefined, after);
+      this.o.onSettings?.();
+      return done;
+    }
     if (to === 'pr') {
       if (!this.o.forge) throw new BadRequest('settingsShare', 'no forge to open a pull request with');
       const done = proposeShared(repoPath, mine, this.o.forge);
@@ -404,6 +413,7 @@ export class Config {
               workspaces: adapters[i]!.workspaces,
               values: without[i]!,
               shareTo: adapters[i]!.land === 'main' ? 'main' : 'pr',
+              ...(adapters[i]!.land === 'pr' && adapters[i]!.direct ? { shareDirect: true } : {}),
               ...(demo?.site ? { adapterSite: demo.site.url } : demo?.share ? { adapterShares: true } : {}),
             };
           }),

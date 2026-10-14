@@ -1,7 +1,8 @@
 // „Für alle ins Repository übernehmen“: a repository's settings for this machine go into its
 // `.obeya/settings.json`, which a fresh clone brings with it. Where work lands on the main branch
-// they are committed there; where it goes through pull requests, the commit goes out as one.
-// Neither touches what the checkout has beside the file, nor a card's workspace.
+// they are committed there; where it goes through pull requests, the commit goes out as one, or,
+// where work may go straight to main as well, is pushed there. None of them touches what the
+// checkout has beside the file, nor a card's workspace.
 
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -93,16 +94,33 @@ export function commitShared(repoPath: string, mine: SharedSettings): SettingsSh
   return { committed: commit, branch, ...(before ? { before } : {}), after };
 }
 
+/** A commit with `mine` in `.obeya/settings.json` on top of `origin`'s main branch, as just fetched. */
+function onOrigin(repoPath: string, mine: SharedSettings) {
+  const branch = defaultBranch(repoPath);
+  must(repoPath, ['fetch', '--quiet', '--no-write-fetch-head', 'origin', `+refs/heads/${branch}:refs/remotes/origin/${branch}`]);
+  const parent = must(repoPath, ['rev-parse', '--verify', `refs/remotes/origin/${branch}^{commit}`]);
+  const { text, after } = sharedText(repoPath, parent, mine);
+  return { branch, text, after, commit: commitBeside(repoPath, parent, text, `Obeya settings for everyone: ${fieldsOf(mine)}`) };
+}
+
+/**
+ * Pushes `mine` in `.obeya/settings.json` straight onto `origin`'s main branch, for a repository
+ * whose work goes out as pull requests but may go straight to main (`direct`): a commit on top of
+ * it, pushed without force, so a protected branch, or one that moved meanwhile, refuses it.
+ */
+export function pushShared(repoPath: string, mine: SharedSettings): SettingsShared & { after: SharedSettings } {
+  const { branch, commit, after } = onOrigin(repoPath, mine);
+  must(repoPath, ['push', '--quiet', 'origin', `${commit}:refs/heads/${branch}`]);
+  must(repoPath, ['update-ref', `refs/remotes/origin/${branch}`, commit]);
+  return { committed: commit, branch, after };
+}
+
 /**
  * Puts `mine` into the repository's `.obeya/settings.json` as a pull request against `origin`'s
  * main branch: a commit on top of it, pushed to a branch of its own, and the pull request opened.
  */
 export function proposeShared(repoPath: string, mine: SharedSettings, forge: Forge, now = new Date()): SettingsShared {
-  const branch = defaultBranch(repoPath);
-  must(repoPath, ['fetch', '--quiet', '--no-write-fetch-head', 'origin', `+refs/heads/${branch}:refs/remotes/origin/${branch}`]);
-  const parent = must(repoPath, ['rev-parse', '--verify', `refs/remotes/origin/${branch}^{commit}`]);
-  const { text } = sharedText(repoPath, parent, mine);
-  const commit = commitBeside(repoPath, parent, text, `Obeya settings for everyone: ${fieldsOf(mine)}`);
+  const { branch, text, commit } = onOrigin(repoPath, mine);
   const head = `obeya-settings-${now.toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-')}`;
   must(repoPath, ['push', '--quiet', 'origin', `${commit}:refs/heads/${head}`]);
   try {

@@ -248,7 +248,9 @@ it there (beside the checkout, which keeps everything else as it is; a change of
 file is refused), and the values then come from the repository on this machine too. Where work
 goes out as pull requests, Obeya pushes the commit to a branch of its own (`obeya-settings-…`) and
 opens a pull request against the main branch; this machine keeps its values until the pull
-request is merged, then they come from the repository. What the file holds beside them stays.
+request is merged, then they come from the repository. Where work may also go straight to main
+(`direct`), it offers to push the commit straight onto `origin`'s main branch instead (never
+forced; a protected branch refuses it). What the file holds beside them stays.
 
 A field that is unknown or of the wrong type does not count, the rest does, as in the module (see
 Mistakes): each shows as a problem at the repository in "Konfiguration", starting with

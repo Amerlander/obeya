@@ -75,7 +75,7 @@ export const api = {
   /** Saves it; Obeya then starts again with it where something restarts it. */
   saveConfig: (canvases: CanvasConfig[]) => call<ConfigSaved>('PUT', '/api/config', canvases),
   /** „Für alle ins Repository übernehmen“: the repository's settings for this machine into its `.obeya/settings.json`. */
-  shareSettings: (path: string) => call<SettingsShared>('POST', '/api/config/share-settings', { path }),
+  shareSettings: (path: string, direct = false) => call<SettingsShared>('POST', '/api/config/share-settings', { path, direct }),
   /** The language Obeya speaks to the owner: chosen, or the system's. */
   language: () => call<LanguageView>('GET', '/api/language'),
   /** The push-to-talk key in another app, and the app's shell that hears it. */

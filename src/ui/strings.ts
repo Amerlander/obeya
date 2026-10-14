@@ -660,11 +660,15 @@ const de = {
       share: {
         label: 'Für alle',
         button: (n: number) => (n === 1 ? 'Für alle ins Repository übernehmen (ein Wert) …' : `Für alle ins Repository übernehmen (${n} Werte) …`),
-        hint: 'Schreibt die Werte dieses Rechners (ohne den Hauptbranch) nach .obeya/settings.json im Repository. Wer es klont, bekommt sie mit; hier kommen sie dann aus dem Repository.',
+        hint: 'Schreibt die Werte, die auf diesem Rechner gesetzt sind, nach .obeya/settings.json im Repository. Wer es klont, bekommt sie mit; hier kommen sie dann aus dem Repository.',
+        hintBranch: 'Der Hauptbranch, den du hier gesetzt hast, bleibt auf diesem Rechner: Von ihm liest Obeya die Datei, deshalb steht er nicht darin.',
         saveFirst: 'Erst speichern: übernommen wird, was gespeichert ist.',
         none: 'Auf diesem Rechner ist nichts gesetzt, was ins Repository könnte.',
         toMain: (branch: string) => `Obeya committet die Datei auf ${branch}, ohne den Checkout sonst anzufassen:`,
         toPr: (branch: string) => `Obeya öffnet dafür einen Pull Request gegen ${branch}; bis er gemergt ist, gelten die Werte weiter nur auf diesem Rechner:`,
+        toPrOrDirect: (branch: string) =>
+          `Obeya öffnet dafür einen Pull Request gegen ${branch} (bis er gemergt ist, gelten die Werte weiter nur auf diesem Rechner), oder schiebt den Commit direkt auf ${branch} auf origin, da das Repository das erlaubt:`,
+        pushDirect: (branch: string) => `Direkt auf ${branch} committen`,
         commit: 'Committen',
         openPr: 'Pull Request öffnen',
         cancel: 'Abbrechen',
@@ -1792,11 +1796,15 @@ const en: Strings = {
       share: {
         label: 'For everyone',
         button: (n: number) => (n === 1 ? 'Take over into the repository for everyone (one value) …' : `Take over into the repository for everyone (${n} values) …`),
-        hint: 'Writes this machine’s values (but the main branch) to .obeya/settings.json in the repository. Whoever clones it gets them; here they then come from the repository.',
+        hint: 'Writes the values set on this machine to .obeya/settings.json in the repository. Whoever clones it gets them; here they then come from the repository.',
+        hintBranch: 'The main branch you set here stays on this machine: Obeya reads the file from it, so it is not in it.',
         saveFirst: 'Save first: what is saved is taken over.',
         none: 'Nothing is set on this machine that could go into the repository.',
         toMain: (branch: string) => `Obeya commits the file on ${branch}, leaving the rest of the checkout as it is:`,
         toPr: (branch: string) => `Obeya opens a pull request against ${branch} for it; until it is merged, the values still apply only on this machine:`,
+        toPrOrDirect: (branch: string) =>
+          `Obeya opens a pull request against ${branch} for it (until it is merged, the values still apply only on this machine), or pushes the commit straight onto ${branch} on origin, since the repository allows that:`,
+        pushDirect: (branch: string) => `Commit straight to ${branch}`,
         commit: 'Commit',
         openPr: 'Open pull request',
         cancel: 'Cancel',

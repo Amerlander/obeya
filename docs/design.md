@@ -2349,7 +2349,9 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   checkout on that branch gets the file as committed, and one with changes of its own to the file
   refuses the takeover (`settingsDirty`). Where it goes through pull requests, the same commit on
   top of `origin`'s main branch is pushed to a branch of its own (`obeya-settings-<time>`) and
-  `Forge.open` opens the pull request, whose link the dialog shows. Once the file holds this
+  `Forge.open` opens the pull request, whose link the dialog shows; where work may also go
+  straight to main (`direct`), the dialog offers beside it to push that commit onto `origin`'s main
+  branch (`pushShared`, never forced, so a protected branch refuses it). Once the file holds this
   machine's values (the commit at once; a pull request when the merge reaches the Lesestand),
   those values go from this machine's settings (`Config.takenOver`: a value the file now holds
   and did not hold before), so the dialog says they come from the repository. The adapter skill

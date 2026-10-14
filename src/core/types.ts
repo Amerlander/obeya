@@ -1026,6 +1026,8 @@ export interface ResolvedCanvas {
      * branch where work lands there, else a pull request.
      */
     shareTo: 'main' | 'pr';
+    /** Where it goes out as a pull request, it may also be pushed straight onto `origin`'s main branch (`direct`). */
+    shareDirect?: boolean;
   }[];
 }
 
@@ -1098,7 +1100,7 @@ export interface ConfigView {
 
 /** What „Für alle ins Repository übernehmen“ did with a repository's settings for this machine. */
 export type SettingsShared =
-  /** Committed `.obeya/settings.json` on the main branch: the settings now come from the repository. */
+  /** Committed `.obeya/settings.json` on the main branch (pushed onto `origin`'s, where it went there directly): the settings now come from the repository. */
   | { committed: string; branch: string }
   /** Opened a pull request with it: once it is merged, the settings come from the repository. */
   | { pr: string };

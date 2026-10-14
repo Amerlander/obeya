@@ -297,6 +297,30 @@ describe("Obeya's configuration", () => {
     expect(applied).toBe(0);
   });
 
+  test("„Für alle ins Repository übernehmen“ straight onto origin's main, where work may go there beside pull requests", () => {
+    mkdirSync(join(dir, 'home'));
+    const origin = join(dir, 'origin.git');
+    git(dir, 'clone', '--quiet', '--bare', web, origin);
+    git(web, 'remote', 'add', 'origin', origin);
+    git(web, 'fetch', '--quiet', 'origin');
+    const without = { land: 'pr' as const, checks: ['bun test'] };
+    writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings: without }] }]));
+    const c = config('file', [{ repos: [{ path: web, settings: without }] }]);
+    expect(c.view().resolved[0]!.repos[0]!.shareDirect).toBeUndefined();
+    expect(() => c.shareSettings({ path: web, direct: true })).toThrow(expect.objectContaining({ code: 'noDirect' }));
+
+    const settings = { ...without, direct: true };
+    writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings }] }]));
+    expect(c.view().resolved[0]!.repos[0]!.shareDirect).toBe(true);
+    const done = c.shareSettings({ path: web, direct: true });
+    expect(done).toEqual({ committed: git(origin, 'rev-parse', 'main').trim(), branch: 'main' });
+    expect(JSON.parse(git(origin, 'show', 'main:.obeya/settings.json'))).toEqual(settings);
+    expect(readConfigFile(file)).toEqual([{ repos: [{ path: web }] }]);
+    // read from origin's main, which has more than the local one
+    expect(c.view().resolved[0]!.repos[0]!.values.checks).toEqual({ value: ['bun test'], source: 'repository' });
+    expect(applied).toBe(1);
+  });
+
   test("a value the file held already stays this machine's when someone else changes the file", () => {
     mkdirSync(join(dir, 'home'));
     writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings: { checks: ['a'], setup: 'x' } }] }]));
