@@ -1,7 +1,8 @@
 // A card's demo: the directory the `demo` skill rendered into, or an HTML artifact the worker
 // made instead, read and served by Obeya.
 
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { basename, join, resolve, sep } from 'node:path';
 import { withHeightReport } from '../core/frame';
 import type { DemoKind } from '../core/types';
@@ -14,6 +15,36 @@ import { resource } from './resources';
  */
 export const OBEYA_PLUGIN = resource('plugin');
 export const DEMO_SKILL = 'obeya:demo';
+
+/** The demo skill's instructions, for a session that does not know the skill to read. */
+export const DEMO_SKILL_FILE = join(OBEYA_PLUGIN, 'skills', 'demo', 'SKILL.md');
+
+/** What is wrong with the plugin workers load, for the log at start; null when nothing is. */
+export function checkPlugin(dir = OBEYA_PLUGIN): string | null {
+  for (const f of [join('.claude-plugin', 'plugin.json'), join('skills', 'demo', 'SKILL.md')])
+    if (!existsSync(join(dir, f))) return `${join(dir, f)} is missing: workers' sessions have no demo skill`;
+  return null;
+}
+
+const realpath = (path: string) => {
+  try {
+    return realpathSync(path);
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * The name of the demo skill in a worker's session on this machine. Claude Code lists a skill file
+ * once: a user skill that links to the plugin's (`~/.claude/skills/demo` pointing to
+ * `plugin/skills/demo`, as a session without Obeya reaches the skill) is listed under its own name
+ * instead, and the session knows no `obeya:demo`.
+ */
+export function demoSkillName(skills = join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude'), 'skills'), file = DEMO_SKILL_FILE): string {
+  const own = realpath(file);
+  if (!own || !existsSync(skills)) return DEMO_SKILL;
+  return readdirSync(skills).find((name) => realpath(join(skills, name, 'SKILL.md')) === own) ?? DEMO_SKILL;
+}
 
 /** The files of a video demo the UI loads; nothing else in the directory is served. */
 export const DEMO_FILES = ['demo.mp4', 'poster.jpg', 'captions.vtt'] as const;

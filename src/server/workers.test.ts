@@ -8,7 +8,7 @@ import type { PlanDoc } from '../core/plan-doc';
 import { needsYou } from '../core/types';
 import { BadRequest, Board } from './board';
 import { Store } from './db';
-import { DEMO_SKILL, OBEYA_PLUGIN } from './demo';
+import { DEMO_SKILL_FILE, demoSkillName, OBEYA_PLUGIN } from './demo';
 import { Images } from './images';
 import { FakeRuntime, gitRepo, identify, until } from './testing';
 import { Restarter } from './self-update';
@@ -1025,8 +1025,9 @@ describe('handing over with a demo', () => {
     expect(runtime.last.spec.plugins).toEqual([OBEYA_PLUGIN]);
     // a demo's narration finds Obeya, which holds the voice across renders
     expect(runtime.last.spec.env).toEqual({ OBEYA_URL: 'http://127.0.0.1:4417' });
-    expect(existsSync(join(OBEYA_PLUGIN, 'skills', 'demo', 'SKILL.md'))).toBe(true);
-    expect(runtime.last.inbox[0]).toContain(`recorded with the demo skill (\`${DEMO_SKILL}\`)`);
+    expect(existsSync(DEMO_SKILL_FILE)).toBe(true);
+    // a session that does not know the skill reads its file
+    expect(runtime.last.inbox[0]).toContain(`recorded with the demo skill (\`${demoSkillName()}\`; if your session does not know it, read its file ${DEMO_SKILL_FILE} and follow that)`);
   });
 
   test('the card waits with the demo; its files are found; words under it answer its question and leave the demo', () => {
@@ -1195,7 +1196,7 @@ describe('handing over with a demo', () => {
     const d = manual();
     workers.start(d.id);
     expect(runtime.last.inbox[0]).toContain('How to run the app for the demo: bun start');
-    expect(runtime.last.call('ready_for_review', { summary: 'S' })).toContain('requires a demo');
+    expect(runtime.last.call('ready_for_review', { summary: 'S' })).toContain(`requires a demo. Record it with the demo skill (\`${demoSkillName()}\`; if your session does not know it, read its file ${DEMO_SKILL_FILE} and follow that)`);
     expect(state(d.id)).toBe('working');
   });
 

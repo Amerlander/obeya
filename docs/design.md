@@ -1923,7 +1923,14 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   only workers of a repository with demos got it, so a repository without an adapter had no way
   to the skill that writes one. The skill also runs without
   Obeya: as the plugin, or as a user skill that points to `plugin/skills/demo` (the owner's
-  `~/.claude/skills/demo` is a link to it in the Obeya checkout). The demo settings
+  `~/.claude/skills/demo` is a link to it in the Obeya checkout). Claude Code lists a skill file
+  once: when the plugin Obeya loads is the very directory such a user skill links to (Obeya run
+  from that checkout), the session has the skill as `demo` and knows no `obeya:demo`
+  (Claude Code 2.1.299, 2026-10-14). The brief and the demand for a demo at ready_for_review
+  therefore name the skill as the session lists it (`demoSkillName`: the user skill whose
+  `SKILL.md` resolves to the plugin's, else `obeya:demo`) and give the path of its `SKILL.md`
+  to read for a session that does not know it (on a host, the plugin's copy there). At start,
+  Obeya logs a warning when the plugin's manifest or the demo skill is missing. The demo settings
   (`lib/settings.ts`; `demo.json` in Obeya's home, `OBEYA_HOME` else `~/.obeya`) give the
   narration language (German or English: narration, captions, the report page's words;
   without one, the language Obeya speaks to the owner)

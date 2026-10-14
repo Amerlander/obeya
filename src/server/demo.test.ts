@@ -1,8 +1,8 @@
 import { afterAll, describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { readChapters, serveDemoFile } from './demo';
+import { checkPlugin, DEMO_SKILL, DEMO_SKILL_FILE, demoSkillName, OBEYA_PLUGIN, readChapters, serveDemoFile } from './demo';
 
 const dir = mkdtempSync(join(tmpdir(), 'obeya-demo-'));
 writeFileSync(join(dir, 'demo.mp4'), '0123456789');
@@ -60,5 +60,23 @@ describe('serveDemoFile for an HTML artifact', () => {
     expect(get('../demo.mp4').status).toBe(404);
     expect(get('img').status).toBe(404);
     expect(get('nope.html').status).toBe(404);
+  });
+});
+
+describe('the plugin workers load', () => {
+  test('has its manifest and the demo skill; a missing one is named', () => {
+    expect(DEMO_SKILL_FILE).toBe(join(OBEYA_PLUGIN, 'skills', 'demo', 'SKILL.md'));
+    expect(checkPlugin()).toBeNull();
+    expect(checkPlugin(join(dir, 'no-plugin'))).toBe(`${join(dir, 'no-plugin', '.claude-plugin', 'plugin.json')} is missing: workers' sessions have no demo skill`);
+  });
+
+  test('the demo skill is obeya:demo, unless a user skill links to its file and takes its place', () => {
+    const skills = join(dir, 'skills');
+    expect(demoSkillName(skills)).toBe(DEMO_SKILL);
+    mkdirSync(join(skills, 'other'), { recursive: true });
+    writeFileSync(join(skills, 'other', 'SKILL.md'), '---\nname: other\n---\n');
+    expect(demoSkillName(skills)).toBe(DEMO_SKILL);
+    symlinkSync(join(OBEYA_PLUGIN, 'skills', 'demo'), join(skills, 'demo'));
+    expect(demoSkillName(skills)).toBe('demo');
   });
 });

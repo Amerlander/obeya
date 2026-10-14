@@ -36,6 +36,7 @@ import { parseArgs } from 'node:util';
 import type { RestartReason } from '../core/types';
 import { type CanvasConfig, type CanvasRuntime, startCanvases } from './canvas';
 import { Config, CONFIG_FILE, expand, expandConfig, readConfigFile } from './config';
+import { checkPlugin } from './demo';
 import { NewerDatabase, Store } from './db';
 import { ghForge } from './forge';
 import { NarrationHost } from './narration';
@@ -286,6 +287,8 @@ for (const c of canvases) {
       `    ${r.ref.id}: ${r.info.path} (${r.adapter.name} adapter; ${r.adapter.workspaces === 'worktrees' ? 'a worktree per card' : `clones: ${r.workspaces.list().map((w) => w.path).join(', ') || 'none (--workspace or --clones)'}`})`,
     );
 }
+const plugin = checkPlugin();
+if (plugin) console.warn(`Obeya: warning: ${plugin}`);
 // once the deadlock struck, the canvas does not load and cannot show its warning: the log says it too
 if (oldLinuxBun())
   console.warn(
