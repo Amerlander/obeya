@@ -6,6 +6,7 @@ import { settingsShape } from '../adapters/schema';
 import { type AgentSetting, answering, askable, blocksSaving, type CanvasConfig, finished, type Item, type NextStep, type Notice, pausable, plannableAsProject, prototypeWorkstream, type Queue, type SpotInput } from '../core/types';
 import { answerTag, fromAnswerTag } from './answers';
 import { BadRequest, type Board, replyNote } from './board';
+import type { Place } from '../core/layout';
 import type { Config } from './config';
 import type { Moment } from './db';
 import { type AgentRuntime, type AgentSession, failureReason } from './runtime';
@@ -13,9 +14,9 @@ import { type Language, LANGUAGE_NAMES } from '../core/locale';
 import { MESSAGES } from '../core/messages';
 
 export type Command = (
-  /** `from`: the card it follows up on. */
-  | { do: 'newCard'; title: string; body: string; start: boolean; repo?: string; from?: string }
-  | { do: 'newIdea'; title: string; body: string; repo?: string }
+  /** `from`: the card it follows up on; `place`: where the owner was on the canvas, for one without. */
+  | { do: 'newCard'; title: string; body: string; start: boolean; repo?: string; from?: string; place?: Place }
+  | { do: 'newIdea'; title: string; body: string; repo?: string; place?: Place }
   /** `force` starts a card that waits behind others now, despite the likely merge conflict. */
   /** `direct`: onto the default branch without a pull request, where the card's repository allows it. */
   | { do: 'approve'; card: string; direct?: boolean }
@@ -84,6 +85,8 @@ export interface Heard {
 export interface Focus {
   card?: string;
   project?: string;
+  /** Where on the canvas the owner was: a new card goes there. */
+  place?: Place;
 }
 
 /** The field on the open card a typed command came from. */
@@ -246,6 +249,8 @@ export class Commander {
     const commands = decision.commands.map((c): Command => {
       // a rule said with a card open has that card as its occasion
       if (c.do === 'remember') return card ? { ...c, card } : c;
+      // a new card lands where the owner was on the canvas; a follow-up goes beside the card it follows
+      if (focus.place && ((c.do === 'newCard' && !c.from) || c.do === 'newIdea')) c = { ...c, place: focus.place };
       const told =
         TO_AGENT.includes(c.do) && 'text' in c
           ? { ...c, spoken: !input.typed, ...(verbatim && c.card === card ? { text: `${replyNote(replyTo ? this.o.board.quoted(card!, replyTo) : undefined, 'koordinator')}${transcript}` } : {}) }

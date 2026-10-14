@@ -1760,7 +1760,15 @@ the owner's language (`src/core/locale.ts`).
   need be), unless the owner says it should wait („nur notieren“, „für später“, „noch nicht
   starten“): then it stays planned. Left to its own judgement, the Koordinator kept about one in
   five plainly asked-for tasks planned („Tipjar should split the bill …“), so the `start` field of
-  `new_card` says this outright, and left out it counts as starting. Asking for an opinion or a
+  `new_card` says this outright, and left out it counts as starting. A new card or idea (not a
+  follow-up, which goes below the card it follows) lands in view: centred on where the pointer was
+  on the canvas when the owner stopped speaking (or sent the typed words), else in the middle of
+  the view, moved to the nearest free spot wholly in view (`freeSpotNear` with the view); with a
+  card or project open, in the view closing it goes back to. The page sends that place with the
+  command (`?place=`) and reports its view with its focus, which places what comes without one
+  (the app's key in another app, a request an agent passes on). The camera flies to the new card
+  only when it landed out of view. Until 2026-10-14 every such card went into a column right of
+  everything and the camera flew there. Asking for an opinion or a
   way forward, with no agent on the open card to take it, is a new idea with the owner's words
   (see the decisions). Start on a card queued behind
   others starts it now despite the likely conflict, like "Trotzdem starten"; it sees which cards a queued

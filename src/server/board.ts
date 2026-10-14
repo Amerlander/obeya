@@ -8,7 +8,7 @@
 
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { boundsOf, CARD_SIZE, freeSpotNear, GAP, PROJECT_HEAD, placeProjects, placeWorkstreams, projectSize, sizeOf, unionBounds } from '../core/layout';
+import { boundsOf, CARD_SIZE, freeSpotNear, GAP, type Place, PROJECT_HEAD, placeProjects, placeWorkstreams, projectSize, sizeOf, unionBounds } from '../core/layout';
 import type { Language } from '../core/locale';
 import { MESSAGES, type Messages } from '../core/messages';
 import { allTicked, type OtherDoc, type PlanDoc } from '../core/plan-doc';
@@ -404,9 +404,23 @@ export class Board {
     return this.store.shared(this.canvas.id);
   }
 
-  /** Where a card nobody placed goes: a column right of everything, below what is already there. */
-  freeSpot(): { x: number; y: number } {
+  /**
+   * Where a card nobody placed goes: with `place` (where the owner pointed, or the middle of what
+   * they have in view), the free spot nearest the card centred on it, in view if there is room there; else a column
+   * right of everything, below what is already there.
+   */
+  freeSpot(place?: Place): { x: number; y: number } {
     const items = this.snapshot().items;
+    if (place) {
+      const [w, h] = CARD_SIZE.task;
+      const at = freeSpotNear(
+        { x: place.x - w / 2, y: place.y - h / 2 },
+        CARD_SIZE.task,
+        items.filter((i) => !i.parent).map((i) => boundsOf(i, items)),
+        place.view,
+      );
+      return { x: Math.round(at.x), y: Math.round(at.y) };
+    }
     const top = items.filter((i) => !i.parent);
     const all = unionBounds(top.map((i) => boundsOf(i, items)));
     if (!all) return { x: 0, y: 0 };

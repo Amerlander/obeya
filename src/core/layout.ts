@@ -94,22 +94,52 @@ export function placeWorkstreams(ws: { done: boolean }[], startY = PROJECT_HEAD)
 /**
  * The spot nearest `want` where a card of `size` keeps GAP clear of everything in `taken`. Besides
  * `want` itself, the candidates are the positions flush beside the edges of what is taken; right of
- * everything there is always room.
+ * everything there is always room. With `within` (the part of the canvas the owner has in view),
+ * `want` moves inside it first and a free spot wholly inside it wins over a nearer one partly out.
  */
-export function freeSpotNear(want: { x: number; y: number }, size: readonly [number, number], taken: Bounds[]): { x: number; y: number } {
+export function freeSpotNear(want: { x: number; y: number }, size: readonly [number, number], taken: Bounds[], within?: Bounds): { x: number; y: number } {
   const [w, h] = size;
   const free = (x: number, y: number) =>
     taken.every((b) => x + w + GAP <= b.x || b.x + b.w + GAP <= x || y + h + GAP <= b.y || b.y + b.h + GAP <= y);
-  const xs = [want.x, ...taken.flatMap((b) => [b.x + b.w + GAP, b.x - w - GAP])];
-  const ys = [want.y, ...taken.flatMap((b) => [b.y + b.h + GAP, b.y - h - GAP])];
+  const view = within && within.w >= w + 2 * GAP && within.h >= h + 2 * GAP ? within : undefined;
+  const inside = (x: number, y: number) => !view || (x >= view.x && y >= view.y && x + w <= view.x + view.w && y + h <= view.y + view.h);
+  if (view) {
+    want = {
+      x: Math.min(Math.max(want.x, view.x + GAP), view.x + view.w - w - GAP),
+      y: Math.min(Math.max(want.y, view.y + GAP), view.y + view.h - h - GAP),
+    };
+  }
+  const xs = [want.x, ...taken.flatMap((b) => [b.x + b.w + GAP, b.x - w - GAP]), ...(view ? [view.x + GAP, view.x + view.w - w - GAP] : [])];
+  const ys = [want.y, ...taken.flatMap((b) => [b.y + b.h + GAP, b.y - h - GAP]), ...(view ? [view.y + GAP, view.y + view.h - h - GAP] : [])];
   let best = want;
   let bestD = Infinity;
+  let bestIn = false;
   for (const x of xs)
     for (const y of ys) {
+      if (!free(x, y)) continue;
       const d = (x - want.x) ** 2 + (y - want.y) ** 2;
-      if (d < bestD && free(x, y)) [best, bestD] = [{ x, y }, d];
+      const isIn = inside(x, y);
+      if ((isIn && !bestIn) || (isIn === bestIn && d < bestD)) [best, bestD, bestIn] = [{ x, y }, d, isIn];
     }
   return best;
+}
+
+/** Where a new card should go: centred as near this point as there is room, inside `view` (the canvas the owner has in view) if there is room there. */
+export interface Place {
+  x: number;
+  y: number;
+  view?: Bounds;
+}
+
+/** A place as a request carries it (`?place=`): `x,y`, then the view's `x,y,w,h`. */
+export const placeParam = (p: Place) => [p.x, p.y, ...(p.view ? [p.view.x, p.view.y, p.view.w, p.view.h] : [])].map(Math.round).join(',');
+
+/** The place in a request's `?place=`; anything else is none. */
+export function parsePlace(s: string | null | undefined): Place | undefined {
+  const n = s?.split(',').map(Number) ?? [];
+  if ((n.length !== 2 && n.length !== 6) || !n.every(Number.isFinite)) return undefined;
+  const [x, y, vx, vy, vw, vh] = n as [number, number, number?, number?, number?, number?];
+  return { x, y, ...(vw !== undefined && vw > 0 && vh! > 0 ? { view: { x: vx!, y: vy!, w: vw, h: vh! } } : {}) };
 }
 
 /** Places new projects in a roughly square grid of columns below everything already on the canvas. */

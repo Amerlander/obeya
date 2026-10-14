@@ -25,6 +25,26 @@ describe('freeSpotNear', () => {
     const at = freeSpotNear({ x: 500, y: 400 }, [300, 136], taken);
     for (const b of taken) expect(clear({ ...at, w: 300, h: 136 }, b)).toBe(true);
   });
+
+  test('inside the view: a wanted spot at its edge moves in', () => {
+    const view = { x: 0, y: 0, w: 1200, h: 800 };
+    expect(freeSpotNear({ x: 1100, y: 750 }, [300, 136], [], view)).toEqual({ x: 1200 - 300 - GAP, y: 800 - 136 - GAP });
+  });
+
+  test('inside the view: a free spot in view wins over a nearer one partly out of it', () => {
+    const view = { x: 0, y: 0, w: 1200, h: 800 };
+    // a column filling the view's right side: right of it is nearer, but out of view
+    const taken = [{ x: 700, y: 0, w: 400, h: 800 }];
+    const at = freeSpotNear({ x: 800, y: 300 }, [300, 136], taken, view);
+    expect(at).toEqual({ x: 700 - 300 - GAP, y: 300 });
+  });
+
+  test('a view with no room left: the nearest free spot, out of view', () => {
+    const view = { x: 0, y: 0, w: 1200, h: 800 };
+    const taken = [{ x: -100, y: -100, w: 1400, h: 1000 }];
+    const at = freeSpotNear({ x: 500, y: 400 }, [300, 136], taken, view);
+    expect(clear({ ...at, w: 300, h: 136 }, taken[0]!)).toBe(true);
+  });
 });
 
 describe('shapeOf', () => {

@@ -1420,9 +1420,10 @@ export type ClientMessage =
   /**
    * What the owner has in view (sent on every change and when the page gets the focus back): a
    * command from the app's push-to-talk key in another app goes there. `target` and `title` as the
-   * microphone shows them.
+   * microphone shows them; `place`: the middle of the canvas in view and its bounds (`placeParam`),
+   * where a new card goes that a command without a place of its own makes.
    */
-  | { type: 'focus'; card?: string; project?: string; target: string; title?: string };
+  | { type: 'focus'; card?: string; project?: string; target: string; title?: string; place?: string };
 
 /** Server → UI over the WebSocket. */
 export type ServerMessage =

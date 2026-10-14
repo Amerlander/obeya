@@ -10,6 +10,7 @@ import panel from '../ui/panel.html';
 import { BadRequest } from './board';
 import type { CanvasRuntime } from './canvas';
 import { defaultPushKey, type PageFocus, type PushKeyView } from '../core/push-key';
+import { parsePlace } from '../core/layout';
 import { type Focus, type Heard, type Input, isField } from './commands';
 import type { Config } from './config';
 import { serveAnswerFile, serveDemoFile } from './demo';
@@ -137,9 +138,11 @@ export function serve(
       }
     };
 
-  const focusOf = (req: Request): Focus => {
+  /** The card or project in view, and where on the canvas the owner was: as the page says, else what it last had in view. */
+  const focusOf = (req: Request, c?: CanvasRuntime): Focus => {
     const q = new URL(req.url).searchParams;
-    return { ...(q.get('card') ? { card: q.get('card')! } : {}), ...(q.get('project') ? { project: q.get('project')! } : {}) };
+    const place = parsePlace(q.get('place')) ?? c?.inView;
+    return { ...(q.get('card') ? { card: q.get('card')! } : {}), ...(q.get('project') ? { project: q.get('project')! } : {}), ...(place ? { place } : {}) };
   };
   const transcribe = async (c: CanvasRuntime, audio: Blob) => {
     const dir = mkdtempSync(join(tmpdir(), 'obeya-voice-'));
@@ -486,7 +489,7 @@ export function serve(
           // `?at=<seconds>&still=<image>`: said about that place in the open card's demo video
           const at = params.get('at');
           const spot = at !== null && at !== '' ? { at: Number(at), ...(params.get('still') ? { still: params.get('still')! } : {}) } : undefined;
-          return heard(c, words, focusOf(req), images, { ...(replyTo ? { replyTo } : {}), ...(spot ? { spot } : {}) });
+          return heard(c, words, focusOf(req, c), images, { ...(replyTo ? { replyTo } : {}), ...(spot ? { spot } : {}) });
         })),
       },
       // the owner started speaking: transcription and the Koordinator get ready meanwhile
@@ -508,7 +511,7 @@ export function serve(
           if (typeof text !== 'string' || (!text.trim() && !(listens && images?.length))) throw new BadRequest('emptyText', 'text must be a non-empty string');
           // screenshots pasted into the typed command go to the cards it creates or concerns
           c.images.resolve(images);
-          return heard(c, text.trim(), focusOf(req), images ?? [], { typed: true, ...(isField(field) ? { field } : {}), ...(typeof replyTo === 'number' ? { replyTo } : {}), ...(spot ? { spot } : {}) });
+          return heard(c, text.trim(), focusOf(req, c), images ?? [], { typed: true, ...(isField(field) ? { field } : {}), ...(typeof replyTo === 'number' ? { replyTo } : {}), ...(spot ? { spot } : {}) });
         }),
       },
       '/api/c/:canvas/command/undo': {
@@ -579,6 +582,9 @@ export function serve(
             const text = (x: unknown) => (typeof x === 'string' && x ? x : undefined);
             const f = { card: text(msg.card), project: text(msg.project), target: text(msg.target), title: text(msg.title) };
             focused.set(ws.data.page, { canvas: ws.data.canvas, ...Object.fromEntries(Object.entries(f).filter(([, v]) => v)), at: Date.now() });
+            const seen = parsePlace(typeof msg.place === 'string' ? msg.place : undefined);
+            const c = byId.get(ws.data.canvas);
+            if (seen && c) c.inView = seen;
           }
         } catch {}
       },

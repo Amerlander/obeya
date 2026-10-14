@@ -24,7 +24,7 @@ import { ReadTree } from './read-tree';
 import { Revisions } from './revisions';
 import { ProjectAgents } from './project-agents';
 import { readPlanDocs, repoInfo, watchPlanDocs } from './repo';
-import { boundsOf, GAP, unionBounds } from '../core/layout';
+import { boundsOf, GAP, type Place, unionBounds } from '../core/layout';
 import { type AgentRuntime, withAgentSetting } from './runtime';
 import { changesCode } from './self-update';
 import { Sharing, shareArgv } from './share';
@@ -118,6 +118,12 @@ export class CanvasRuntime {
   private said = new Map<string, { text: string; spoken: boolean }>();
   /** Cards the owner is writing in, with their text before; a pause in typing hands it to the learner. */
   private writing = new Map<string, { before: string; timer: ReturnType<typeof setTimeout> }>();
+  /**
+   * The part of the canvas the owner last had in view in a page (its middle and its bounds): a new
+   * card that comes without a place of its own (said with the app's key in another app, passed on
+   * by an agent) goes there.
+   */
+  inView: Place | undefined;
 
   constructor(config: CanvasConfig, private deps: CanvasDeps) {
     const agents = deps.agents ?? ((role: AgentRole) => AGENT_DEFAULTS[role]);
@@ -1000,7 +1006,7 @@ export class CanvasRuntime {
   run(c: Command) {
     switch (c.do) {
       case 'newCard': {
-        const at = c.from ? { from: c.from } : this.board.freeSpot();
+        const at = c.from ? { from: c.from } : this.board.freeSpot(c.place ?? this.inView);
         const card = this.board.create({
           title: c.title,
           body: c.body,
@@ -1013,7 +1019,7 @@ export class CanvasRuntime {
         return;
       }
       case 'newIdea': {
-        const card = this.board.create({ idea: true, title: c.title, body: c.body, ...(c.repo ? { repo: c.repo } : {}), ...this.board.freeSpot() });
+        const card = this.board.create({ idea: true, title: c.title, body: c.body, ...(c.repo ? { repo: c.repo } : {}), ...this.board.freeSpot(c.place ?? this.inView) });
         this.board.log(card.id, 'state', 'owner', this.board.t.voice.created);
         // the agent opens the discussion with what the owner said
         this.explorers.discuss(card.id, c.body.trim() || c.title, true, this.images.resolve(c.images));

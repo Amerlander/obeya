@@ -1,6 +1,6 @@
 // Camera math, from the mock: a world transform (translate, then scale) and animated flights.
 
-import type { Bounds } from '../core/layout';
+import type { Bounds, Place } from '../core/layout';
 
 export interface Cam {
   x: number;
@@ -85,6 +85,22 @@ export function edgeScroll(cam: Cam, pointer: { x: number; y: number }, from: { 
     y: axis(cam.y, pointer.y, from.y, view.top, view.bottom, limit.y, limit.y + limit.h),
   };
 }
+
+/**
+ * Where a new card made by a command goes: the canvas point under `pointer` when it is over `view`
+ * (the part of the screen the canvas shows in), else the middle of the view; with the canvas in view.
+ */
+export function placeIn(cam: Cam, view: View, pointer: { x: number; y: number } | null): Place {
+  const a = toWorld(cam, view.left, view.top);
+  const b = toWorld(cam, view.right, view.bottom);
+  const on = pointer && pointer.x >= view.left && pointer.x <= view.right && pointer.y >= view.top && pointer.y <= view.bottom;
+  const at = on ? toWorld(cam, pointer.x, pointer.y) : { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  return { ...at, view: { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y } };
+}
+
+/** Whether `b` lies wholly in `view` under `cam`. */
+export const shows = (cam: Cam, view: View, b: Bounds) =>
+  b.x * cam.s + cam.x >= view.left && b.y * cam.s + cam.y >= view.top && (b.x + b.w) * cam.s + cam.x <= view.right && (b.y + b.h) * cam.s + cam.y <= view.bottom;
 
 /** Screen pixels of content the view keeps when panned or zoomed (all of a smaller card). */
 export const KEEP = 120;

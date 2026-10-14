@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { type Bounds, boundsOf, CARD_SIZE, PROJECT_HEAD, PROJECT_PAD, unionBounds } from '../core/layout';
+import { type Bounds, boundsOf, CARD_SIZE, type Place, PROJECT_HEAD, PROJECT_PAD, unionBounds } from '../core/layout';
 import { agentListens, answering, type CanvasInfo, type CanvasSnapshot, type CardPatch, finished, type Group, type Item, needsYou, openPerGroup, type PendingRestart, type PlanDir, START_ALL_HOLD_MS, type AppUpdate, unreadAnswers } from '../core/types';
 import { api, ApiError, beforeReload, onNotice, reportFocus, setCanvas, useCanvas } from './api';
 import { GroupNames, growFrom, inside, Lasso, Ring, TerritoryLayer, useTerritories } from './groups';
-import { besideSheet, BOTTOM, type Cam, camFor, centreOn, chase, dragLimit, edgeScroll, FAR, flying, flyTo, keepInView, MAX_ZOOM, MIN_ZOOM, overviewCam, stopFlight, TOP, toWorld } from './camera';
+import { besideSheet, BOTTOM, type Cam, camFor, centreOn, chase, dragLimit, edgeScroll, FAR, flying, flyTo, keepInView, MAX_ZOOM, MIN_ZOOM, overviewCam, placeIn, shows, stopFlight, TOP, toWorld } from './camera';
 import { plain } from './markdown';
 import { type ActDone, Detail, type Pending } from './detail';
 import { Cards } from './message';
@@ -632,7 +632,29 @@ function Canvas({
     const f = focusRef.current;
     return f?.type === 'card' ? { card: f.id } : f?.type === 'project' ? { project: f.id } : null;
   };
-  // a command that makes a card: when it appears, the camera goes there
+  // where the pointer is on the page, null once it left the window
+  const pointerAt = useRef<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    const move = (e: PointerEvent) => void (pointerAt.current = { x: e.clientX, y: e.clientY });
+    const out = (e: MouseEvent) => void (e.relatedTarget || (pointerAt.current = null));
+    addEventListener('pointermove', move, true);
+    document.addEventListener('mouseout', out);
+    return () => {
+      removeEventListener('pointermove', move, true);
+      document.removeEventListener('mouseout', out);
+    };
+  }, []);
+  /** The canvas on the screen: beside the sheets, below the top bar and above the microphone. */
+  const viewNow = () => ({ left: 0, top: TOP, right: innerWidth - sideNow(), bottom: innerHeight - BOTTOM });
+  /**
+   * Where a card a command makes goes: under the pointer on the canvas, else in the middle of the
+   * view (`pointer` false: always there); with a card or project open, in the view it goes back to.
+   */
+  const placeNow = (pointer = true): Place => {
+    const f = focusRef.current;
+    return placeIn(f ? back(f) : camRef.current, viewNow(), f || !pointer ? null : pointerAt.current);
+  };
+  // a command that makes a card: when it appears out of view, the camera goes there
   const newCardWatch = useRef<{ known: Set<string>; until: number } | null>(null);
   function onHeard(h: Heard) {
     // said to the open card's agent: the card shows it
@@ -675,7 +697,10 @@ function Canvas({
         if (!(e instanceof ApiError)) console.error(e);
         showAck(e instanceof ApiError ? errorText(e.code) : t.offlineError);
       }
-    else void told.tell(null, toldCard(target), () => api.command(text, target, images, field, replyTo));
+    else {
+      const place = placeNow();
+      void told.tell(null, toldCard(target), () => api.command(text, target, images, field, replyTo, undefined, place));
+    }
   }, []);
   useEffect(() => {
     const w = newCardWatch.current;
@@ -689,7 +714,7 @@ function Canvas({
     if (made.state === 'idea') {
       setKOn(false);
       open(made);
-    } else fly(centreOnPoint(boundsOf(made, itemsRef.current), Math.max(camRef.current.s, 0.8), sideNow()), 700);
+    } else if (!shows(camRef.current, viewNow(), boundsOf(made, itemsRef.current))) fly(centreOnPoint(boundsOf(made, itemsRef.current), Math.max(camRef.current.s, 0.8), sideNow()), 700);
   }, [snapshot]);
   // what Obeya tells the owner without a command to answer: an answer looked up, what a request a
   // card's agent passed on came to (with "Rückgängig" while its actions wait)
@@ -708,7 +733,7 @@ function Canvas({
     const key = draftFor(target);
     return key && fieldOn(key) ? key : MIC_DRAFT;
   };
-  const ptt = usePushToTalk(where, fieldFor, tellAbout, (h) => showAck(h.confirm));
+  const ptt = usePushToTalk(where, fieldFor, tellAbout, (h) => showAck(h.confirm), placeNow);
   const pttRef = useRef(ptt);
   pttRef.current = ptt;
   // a text field's microphone, and Space held in it
@@ -771,7 +796,11 @@ function Canvas({
         : t.voice.koordinator;
   // the app's push-to-talk key in another app speaks to what is in view here
   const focusTitle = focusItem && plain(focusItem.title);
-  useEffect(() => reportFocus(where(), target, focusTitle), [focus?.type, focus?.id, target, focusTitle]);
+  // and a card it makes goes into what is in view, reported once the view rests
+  useEffect(() => {
+    const h = setTimeout(() => reportFocus(where(), target, focusTitle, placeNow(false)), 300);
+    return () => clearTimeout(h);
+  }, [focus?.type, focus?.id, target, focusTitle, cam, tick, kOn, sheetOn, sheetW.sheet]);
 
   // ---------------------------------------------------------------- pointer: pan, drag, click
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -1319,7 +1348,7 @@ function Canvas({
           onSetup={() => setSetupOn(true)}
           onTalk={talkFromConfig}
           onProblems={setConfigProblems}
-          onAsk={(text, canvas) => void told.tell(t.voice.reading(t.voice.koordinator), undefined, () => (canvas ? api.commandOn(canvas, text) : api.command(text, null)))}
+          onAsk={(text, canvas) => void told.tell(t.voice.reading(t.voice.koordinator), undefined, () => (canvas ? api.commandOn(canvas, text) : api.command(text, null, undefined, undefined, undefined, undefined, placeNow())))}
         />
         {setupOn && <Setup onClose={() => setSetupOn(false)} />}
         <KoordinatorSheet on={kOn} canvas={snapshot.canvas.id} items={items} preferences={snapshot.preferences} repos={snapshot.canvas.repos} talk={snapshot.talk} reshare={snapshot.reshare} onOpen={(i) => void openFresh(i)} onTell={(text, images) => tellTyped(text, images, null)} />

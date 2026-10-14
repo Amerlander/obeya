@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { besideSheet, type Cam, CHASE_MS, chaseStep, DROP_ROOM, dragLimit, EDGE_ZONE, edgeScroll, KEEP, keepInView } from './camera';
+import { besideSheet, type Cam, CHASE_MS, chaseStep, DROP_ROOM, dragLimit, EDGE_ZONE, edgeScroll, KEEP, keepInView, placeIn, shows } from './camera';
 
 const view = { left: 0, top: 70, right: 1000, bottom: 800 };
 const cam: Cam = { x: 0, y: 0, s: 1 };
@@ -121,4 +121,19 @@ test('a sheet docked on the right moves the view by half its width, so the middl
   expect(besideSheet(besideSheet(c, 0, 380), 380, 0)).toEqual(c);
   expect(besideSheet(c, 380, 500)).toEqual({ x: 40, y: 50, s: 1.5 });
   expect(besideSheet(c, 380, 380)).toBe(c);
+});
+
+test('a new card goes under the pointer over the canvas, else to the middle of the view', () => {
+  const zoomed: Cam = { x: -100, y: 30, s: 2 };
+  const shown = { x: 50, y: 20, w: 500, h: 365 };
+  expect(placeIn(zoomed, view, { x: 300, y: 430 })).toEqual({ x: 200, y: 200, view: shown });
+  // off the page, or over the top bar: the middle of what is in view
+  expect(placeIn(zoomed, view, null)).toEqual({ x: 300, y: 202.5, view: shown });
+  expect(placeIn(zoomed, view, { x: 300, y: 20 })).toEqual({ x: 300, y: 202.5, view: shown });
+});
+
+test('a card shows when it lies wholly in the view', () => {
+  expect(shows(cam, view, { x: 100, y: 100, w: 300, h: 136 })).toBe(true);
+  expect(shows(cam, view, { x: 800, y: 100, w: 300, h: 136 })).toBe(false);
+  expect(shows(cam, view, { x: 100, y: 0, w: 300, h: 136 })).toBe(false);
 });

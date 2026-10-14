@@ -8,6 +8,7 @@
 // its confirmation; a typed one gets its line with the confirmation.
 
 import { createContext, useEffect, useRef, useState } from 'react';
+import type { Place } from '../core/layout';
 import { ApiError, api, holdRestart } from './api';
 import { beginDictation, dictate, draftOf, focusedDraft, MIC_DRAFT, takesImages, updateDraft, useDraft, useFieldOn, useFocusedDraft } from './draft';
 import { type Recording, record } from './recorder';
@@ -54,7 +55,13 @@ const NOTE_MS = 6000;
  * `send` hands on with the draft `field` names for its target, and settles with what Obeya made of
  * it; the next one may start meanwhile.
  */
-export function usePushToTalk(where: () => Where, field: (target: Where) => string, send: (target: Where, request: () => Promise<Heard>) => Promise<Heard>, onHeard: (h: Heard) => void) {
+export function usePushToTalk(
+  where: () => Where,
+  field: (target: Where) => string,
+  send: (target: Where, request: () => Promise<Heard>) => Promise<Heard>,
+  onHeard: (h: Heard) => void,
+  place: () => Place,
+) {
   const [phase, setPhase] = useState<Phase>('idle');
   /** The microphone shows it listens: `shownAfter` into the recording. */
   const [shown, setShown] = useState(false);
@@ -138,6 +145,8 @@ export function usePushToTalk(where: () => Where, field: (target: Where) => stri
     setLevel(0);
     setFlat(false);
     const length = performance.now() - r.t0;
+    // a card the command makes goes where the owner was when they stopped speaking, not once it is read
+    const at = r.into ? undefined : place();
     setPhase('idle');
     setWriting((n) => n + 1);
     void r.recording.stop().then(async (audio) => {
@@ -153,7 +162,7 @@ export function usePushToTalk(where: () => Where, field: (target: Where) => stri
       if (reply) setReply(null);
       let failed = false;
       const h = await send(r.target, async () =>
-        api.voice(audio, r.target, { images, replyTo: reply?.id, text, spot: await sent(r.spot) }).catch((e) => {
+        api.voice(audio, r.target, { images, replyTo: reply?.id, text, spot: await sent(r.spot), place: at }).catch((e) => {
           failed = true;
           throw e;
         }),

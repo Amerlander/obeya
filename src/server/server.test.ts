@@ -205,6 +205,20 @@ describe('voice', () => {
     expect(executed).toEqual([{ do: 'newCard', title: 'Export', body: 'CSV', start: true }]);
   });
 
+  test('a card a recording makes carries where the owner was on the canvas; a follow-up does not', async () => {
+    const res = fetch(new URL(`${api('/voice')}?place=400,300,0,0,1200,800`, server.url), { method: 'POST', body: 'AUDIO' });
+    const s = await briefed();
+    s.call('act', { actions: [{ do: 'new_card', title: 'Export', body: 'CSV', start: false }, { do: 'new_idea', title: 'Mieter', body: '' }], confirm: 'Zwei neue Karten.' });
+    s.emit({ type: 'idle' });
+    await res;
+    await until(() => executed.length === 2);
+    const place = { x: 400, y: 300, view: { x: 0, y: 0, w: 1200, h: 800 } };
+    expect(executed).toEqual([
+      { do: 'newCard', title: 'Export', body: 'CSV', start: false, place },
+      { do: 'newIdea', title: 'Mieter', body: '', place },
+    ]);
+  });
+
   test('a recording Whisper loops on is transcribed once more without the card titles', async () => {
     board.create({ title: 'Export für Vermieter', x: 0, y: 0 });
     const prompts: string[] = [];

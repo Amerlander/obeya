@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CardDiff } from '../core/diff';
 import type { PushKeyView } from '../core/push-key';
+import { type Place, placeParam } from '../core/layout';
 import type { AgentRole, AgentSetting, CloudPreset, AgentsView, CanvasConfig, CanvasInfo, CanvasSnapshot, ClientMessage, ConfigSaved, ConfigView, CardAction, DemoSettings, Group, DemoSettingsView, DemoVoiceCheck, FirstCanvas, GitSetupPreview, MachineItem, MachineSectionId, MachineView, SetupCheck, SetupFolder, VoiceSetupView, CardEvent, CardPatch, Item, Language, LanguageView, NewCard, Notice, OwnerHold, PendingRestart, ProjectHistory, ServerMessage, SettingsShared, SpotInput, AppUpdate, Theme, ThemeView } from '../core/types';
 
 /** A request the server refused; `code` picks the owner's text, the message is the server's detail. */
@@ -176,15 +177,16 @@ export const api = {
    * What the owner said about the card or project in view, with the screenshots shown with it;
    * `replyTo`: in reply to that message of the card's conversation; `text`: typed in the field
    * before it, which goes first; `listen`: dictated into a field, the words only come back; `spot`:
-   * about that place in the card's demo video.
+   * about that place in the card's demo video; `place`: where on the canvas the owner was, for a card it makes.
    */
   voice: async (
     audio: Blob,
     where: Where,
-    { images = [], replyTo, text, listen, spot }: { images?: string[]; replyTo?: number; text?: string; listen?: boolean; spot?: SpotInput } = {},
+    { images = [], replyTo, text, listen, spot, place }: { images?: string[]; replyTo?: number; text?: string; listen?: boolean; spot?: SpotInput; place?: Place } = {},
   ) => {
     const q = [
       ...images.map((id) => `image=${encodeURIComponent(id)}`),
+      ...(place ? [`place=${placeParam(place)}`] : []),
       ...(replyTo ? [`replyTo=${replyTo}`] : []),
       ...(listen ? ['listen'] : []),
       ...(spot ? [`at=${spot.at}`, ...(spot.still ? [`still=${encodeURIComponent(spot.still)}`] : [])] : []),
@@ -202,8 +204,8 @@ export const api = {
   /** The owner started speaking (or typing a command): Obeya gets ready to read it. */
   warmVoice: () => fetch(at('/voice/warm'), { method: 'POST' }).catch(() => {}),
   /** The same, typed; `field`: the field of the open card it was typed into. */
-  command: (text: string, where: Where, images?: string[], field?: Field, replyTo?: number, spot?: SpotInput) =>
-    call<HeardReply>('POST', at(`/command${query(where)}`), { text, ...(images?.length ? { images } : {}), ...(field ? { field } : {}), ...(replyTo ? { replyTo } : {}), ...(spot ? { spot } : {}) }),
+  command: (text: string, where: Where, images?: string[], field?: Field, replyTo?: number, spot?: SpotInput, place?: Place) =>
+    call<HeardReply>('POST', at(`/command${query(where)}${place ? `${where ? '&' : '?'}place=${placeParam(place)}` : ''}`), { text, ...(images?.length ? { images } : {}), ...(field ? { field } : {}), ...(replyTo ? { replyTo } : {}), ...(spot ? { spot } : {}) }),
   /** A typed request to the Koordinator of another canvas, about nothing in view there. */
   commandOn: (canvas: string, text: string) => call<HeardReply>('POST', `/api/c/${encodeURIComponent(canvas)}/command`, { text }),
   undo: (token: string) => call<{ undone: boolean }>('POST', at('/command/undo'), { token }),
@@ -280,8 +282,8 @@ let focusMessage: Extract<ClientMessage, { type: 'focus' }> | null = null;
 const sendFocus = () => {
   if (focusMessage && socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(focusMessage));
 };
-export function reportFocus(where: Where, target: string, title?: string) {
-  focusMessage = { type: 'focus', ...(where ?? {}), target, ...(title ? { title } : {}) };
+export function reportFocus(where: Where, target: string, title: string | undefined, place: Place) {
+  focusMessage = { type: 'focus', ...(where ?? {}), target, ...(title ? { title } : {}), place: placeParam(place) };
   sendFocus();
 }
 

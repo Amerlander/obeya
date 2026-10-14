@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { boundsOf } from '../core/layout';
+import { boundsOf, CARD_SIZE } from '../core/layout';
 import type { RepoSettings } from '../core/types';
 import { CanvasRuntime, startCanvases } from './canvas';
 import { Store } from './db';
@@ -519,6 +519,28 @@ test('clicks in a card count towards the Rückschau, and words the learner reads
   // a click that does not go through does not count
   expect(() => canvas.press(a.id, { action: 'dismiss' })).toThrow();
   expect(count()).toBe('2');
+});
+
+describe('where a spoken new card lands', () => {
+  test('in view, at the place the owner was; without one, in what a page last had in view', async () => {
+    canvas.board.create({ title: 'Far', x: 5000, y: 3000 });
+    // clear of the canvas's projects, which stand at the origin
+    const view = { x: 2000, y: 1000, w: 1200, h: 800 };
+    const [w, h] = CARD_SIZE.task;
+    const titled = (title: string) => canvas.board.snapshot().items.find((i) => i.title === title)!;
+    await canvas.run({ do: 'newCard', title: 'Here', body: '', start: false, place: { x: 2400, y: 1300, view } });
+    const here = titled('Here');
+    expect([here.x, here.y]).toEqual([2400 - w / 2, 1300 - h / 2]);
+    // under the pointer is taken now: the next goes beside it, still in view
+    await canvas.run({ do: 'newCard', title: 'Next', body: '', start: false, place: { x: 2400, y: 1300, view } });
+    const next = titled('Next');
+    expect(next.x >= 2000 && next.y >= 1000 && next.x + w <= 3200 && next.y + h <= 1800).toBe(true);
+    expect(Math.abs(next.x - here.x) >= w || Math.abs(next.y - here.y) >= h).toBe(true);
+    canvas.inView = { x: -1400, y: 600, view: { x: -2000, y: 200, w: 1200, h: 800 } };
+    await canvas.run({ do: 'newIdea', title: 'There', body: '' });
+    const there = titled('There');
+    expect([there.x, there.y]).toEqual([-1400 - w / 2, 600 - h / 2]);
+  });
 });
 
 describe('groups by voice', () => {
