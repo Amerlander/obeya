@@ -2,7 +2,7 @@
 // made instead, read and served by Obeya.
 
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { join, resolve, sep } from 'node:path';
+import { basename, join, resolve, sep } from 'node:path';
 import { withHeightReport } from '../core/frame';
 import type { DemoKind } from '../core/types';
 import { resource } from './resources';
@@ -119,5 +119,20 @@ function serveArtifactFile(dir: string, name: string): Response {
   const file = Bun.file(path);
   const headers = { 'content-type': file.type, 'content-security-policy': 'sandbox allow-scripts', 'cache-control': 'no-cache' };
   if (path === join(root, ARTIFACT_PAGE)) return new Response(withHeightReport(readFileSync(path, 'utf8')), { headers });
+  return new Response(file, { headers });
+}
+
+/**
+ * A file a looked-up answer comes with, never one outside its thread's output directory. A page runs
+ * sandboxed as an HTML artifact does, and tells its frame its height; `download`: as a file to save.
+ */
+export function serveAnswerFile(dir: string, name: string, download: boolean): Response {
+  const root = resolve(dir);
+  const path = resolve(root, name);
+  if (!path.startsWith(root + sep) || !existsSync(path) || !statSync(path).isFile()) return new Response('Not found', { status: 404 });
+  const file = Bun.file(path);
+  const headers: Record<string, string> = { 'content-type': file.type, 'content-security-policy': 'sandbox allow-scripts', 'cache-control': 'no-cache' };
+  if (download) return new Response(file, { headers: { ...headers, 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(basename(path))}` } });
+  if (/\.html?$/i.test(path)) return new Response(withHeightReport(readFileSync(path, 'utf8')), { headers });
   return new Response(file, { headers });
 }

@@ -10,7 +10,11 @@ export type { DemoSettings, NarrationLanguage, VoiceKind } from '../../plugin/sk
 export type { Language } from './locale';
 export type { SetupCheck, SetupId, SetupItem } from '../../plugin/skills/demo/lib/setup.ts';
 
-export type CardKind = 'task' | 'project';
+/**
+ * `question`: a thread of looked-up answers the owner moved onto a card of its own, with the agent
+ * that looked them up; it holds answers, no work, so its state is `done` until the owner archives it.
+ */
+export type CardKind = 'task' | 'project' | 'question';
 
 export const STATES = ['idea', 'proposal', 'planned', 'working', 'waiting', 'approved', 'inPr', 'live', 'done'] as const;
 export type CardState = (typeof STATES)[number];
@@ -85,8 +89,8 @@ export const answering = (i: Pick<Item, 'state' | 'need' | 'answering'>) => i.st
  * finished card) or an idea's exploration agent. The words then go straight to it; on any other
  * card they go to the Koordinator.
  */
-export const agentListens = (i: Pick<Item, 'state' | 'branch' | 'prototypeOf' | 'archivedAt' | 'finishing'>) =>
-  !i.archivedAt && (i.state === 'idea' || i.state === 'working' || i.state === 'waiting' || i.state === 'inPr' || !!i.finishing || askable(i));
+export const agentListens = (i: Pick<Item, 'kind' | 'state' | 'branch' | 'prototypeOf' | 'archivedAt' | 'finishing'>) =>
+  !i.archivedAt && (i.kind === 'question' || i.state === 'idea' || i.state === 'working' || i.state === 'waiting' || i.state === 'inPr' || !!i.finishing || askable(i));
 
 /**
  * A card needs the owner: it waits (but not while its worker takes in what the owner wrote on its
@@ -177,6 +181,8 @@ export interface Item {
   archivedAt?: string;
   /** Ideas only: what the discussion has settled so far. */
   idea?: Idea;
+  /** Question cards, and an idea that was one: the thread of looked-up answers it holds. */
+  thread?: Thread;
   /** A prototype's idea: the throwaway prototype is built for it and never lands itself. */
   prototypeOf?: string;
   /** A prototype of one of the variants its idea's agent planned: that variant's approach. */
@@ -279,6 +285,32 @@ export interface Idea {
   variants: PlannedPrototype[];
   /** How the brief's variants look, one mock each, shown beside it. */
   mocks: Mock[];
+}
+
+/** The thread of looked-up answers a Question card holds, as its card shows it. */
+export interface Thread {
+  /** The exchange with Obeya the thread started with: its id names the thread and its output directory. */
+  talk: number;
+  /** Its agent is reading, for what the owner asked on the card. */
+  thinking?: boolean;
+  answers: number;
+  files: number;
+}
+
+/** A file a looked-up answer comes with, in its thread's output directory: its path there and a one-line caption. */
+export interface AnswerFile {
+  name: string;
+  caption: string;
+}
+
+/**
+ * What makes a message a looked-up answer: the thread it belongs to (whose output directory holds
+ * its files), its files, and the question of the answer it continues.
+ */
+export interface AnswerRef {
+  thread: number;
+  files?: AnswerFile[];
+  continues?: string;
 }
 
 /** A few lines of HTML the idea's agent writes to show how something would look; the card shows it in a sandboxed frame. */
@@ -434,6 +466,8 @@ export interface CardEvent {
   replyTo?: number;
   /** The owner's words: the place in the card's demo video they are about. */
   spot?: Spot;
+  /** A looked-up answer: its exchange and thread, and its files. */
+  answer?: AnswerRef;
 }
 
 /** A place in a card's demo video the owner's words are about, as the worker reads it with them. */
@@ -568,6 +602,15 @@ export interface Talk {
   answerBy?: 'koordinator' | 'project';
   /** The answer came for the sheet, and the owner has not had the sheet in view since. */
   unread?: true;
+  /** A looked-up question: the thread it belongs to (the id of the exchange that started it). */
+  thread?: number;
+  /** A follow-up: the exchange whose answer it continues, and that one's question. */
+  follows?: number;
+  continues?: string;
+  /** The files the answer came with, in the thread's output directory. */
+  files?: AnswerFile[];
+  /** The thread moved onto a Question card: that card; its answers stand there from then on. */
+  movedTo?: string;
 }
 
 /**
@@ -692,7 +735,11 @@ export type CardAction =
   /** A video demo is published for colleagues right away, or again with the card's newer demo. */
   | { action: 'share' }
   /** Withdraws the published page. */
-  | { action: 'unshare' };
+  | { action: 'unshare' }
+  /** Question cards: the owner's words to the agent that looked the answers up. */
+  | { action: 'ask'; text: string; spoken?: boolean; images?: string[]; replyTo?: number }
+  /** Question cards: the thread becomes an idea, whose exploration agent starts from it. */
+  | { action: 'asIdea' };
 
 /**
  * Why the server refused a request. The server sends the code and an English detail
@@ -733,6 +780,10 @@ export type ErrorCode =
   | 'notDone'
   | 'notArchived'
   | 'notIdea'
+  /** The card holds no thread of looked-up answers (it is no Question card). */
+  | 'notQuestion'
+  /** A looked-up answer's file that is not in its thread's output directory. */
+  | 'noFile'
   /** The idea's agent is still working on its reply: building or planning waits for it. */
   | 'ideaThinking'
   /** A prototype for the idea is still running. */

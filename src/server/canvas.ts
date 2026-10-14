@@ -1,10 +1,10 @@
 // One canvas and everything that works on it: its repositories (each with adapter, workspaces,
 // workers, project agents and PR watcher), the board, the Koordinator and the voice commands.
 
-import { realpathSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync, mkdirSync, realpathSync } from 'node:fs';
+import { join, resolve, sep } from 'node:path';
 import { adapterProblems, adapterTreeAt, builtInAdapter, pickAdapter, repoAdapterTree } from '../adapters';
-import { Answers } from './answers';
+import { Answers, answersDir, answerTag, openWithSystem } from './answers';
 import { repoName } from '../adapters/generic';
 import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
@@ -286,7 +286,11 @@ export class CanvasRuntime {
       startBrief: (card) => this.repoOf(card).workers.startBrief(card),
       projectAgent: (project) => this.repoOf(project).projectAgents,
       ...(deps.permissionMode ? { permissionMode: deps.permissionMode } : {}),
-      onAnswer: (question, answer) => this.commander.tell(`The answer you looked up for the owner's question „${question}“ came in and was shown to them: ${answer}`),
+      dirOf: (thread) => answersDir(deps.home, id, thread),
+      imageFiles,
+      toObeya: (cardId, request) => this.forward(cardId, request),
+      onAnswer: (talk, question, answer) =>
+        this.commander.tell(`The answer ${answerTag(talk)} you looked up for the owner's question „${question}“ came in and was shown to them: ${answer}`),
     });
     this.commander = new Commander({
       board,
@@ -414,6 +418,7 @@ export class CanvasRuntime {
     const said = { text, spoken, ...(images.length ? { images } : {}), ...(replyTo ? { replyTo } : {}) };
     // the agent passes a request on in its words; the Koordinator reads the owner's own beside them
     this.said.set(cardId, { text, spoken });
+    if (card.kind === 'question') return this.act(cardId, { action: 'ask', ...said });
     if (card.state === 'idea') return this.act(cardId, { action: 'discuss', ...said });
     if (card.state === 'waiting' && card.need === 'question') return this.act(cardId, { action: 'answer', ...said });
     return this.act(cardId, { action: 'message', ...said, ...(spot ? { spot } : {}) });
@@ -473,6 +478,8 @@ export class CanvasRuntime {
       case 'stop':
         return this.repoOf(cardId).workers.stop(cardId);
       case 'message':
+        // a note to a Question card is a question to its agent
+        if (this.board.item(cardId)?.kind === 'question') return this.answers.ask(cardId, text.trim(), images, !!a.spoken, replyTo);
         return this.repoOf(cardId).workers.message(cardId, text.trim(), images, !!a.spoken, replyTo, this.spot(a.spot));
       case 'release':
         return this.repoOf(cardId).workers.released(cardId, !!a.now);
@@ -510,6 +517,10 @@ export class CanvasRuntime {
         return this.buildOnPrototype(cardId, a.workstream);
       case 'discard':
         return this.repoOf(this.prototypeCard(cardId)).workers.endPrototype(cardId, 'discarded');
+      case 'ask':
+        return this.answers.ask(cardId, text.trim(), images, !!a.spoken, replyTo);
+      case 'asIdea':
+        return this.questionAsIdea(cardId);
       case 'share':
         return this.sharing.share(cardId);
       case 'unshare':
@@ -517,6 +528,34 @@ export class CanvasRuntime {
       default:
         throw new BadRequest('invalid', 'unknown action');
     }
+  }
+
+  /** The output directory of a looked-up thread of this canvas. */
+  answerDir(thread: number): string {
+    if (!Number.isInteger(thread) || !this.board.threadTalk(thread).length) throw new BadRequest('invalid', 'unknown thread');
+    return answersDir(this.deps.home, this.id, thread);
+  }
+
+  /** "Im Ordner zeigen", or a click on an answer's file: opened with the system's app on this machine. */
+  async openAnswerFile(thread: number, file?: string) {
+    const dir = this.answerDir(thread);
+    mkdirSync(dir, { recursive: true });
+    const path = file === undefined ? dir : resolve(dir, String(file));
+    if (path !== dir && (!path.startsWith(dir + sep) || !existsSync(path))) throw new BadRequest('noFile', 'no such file in the answer’s directory');
+    if (!(await openWithSystem(path))) throw new BadRequest('invalid', 'the system has no app to open it with');
+  }
+
+  /**
+   * "Als Idee besprechen" on a Question card: it becomes an idea, whose exploration agent starts from
+   * the thread (questions, answers, the files in its output directory) instead of the look-up's session.
+   */
+  private questionAsIdea(cardId: string) {
+    const card = this.board.item(cardId);
+    if (card?.kind !== 'question') throw new BadRequest('notQuestion', 'the card is no Question card');
+    if (card.thread?.thinking) throw new BadRequest('ideaThinking', 'its agent is still reading; discuss it as an idea once the answer is there');
+    this.board.work(cardId, { kind: 'task', state: 'idea', idea: JSON.stringify({ status: 'open', brief: '' }), session_id: null });
+    this.board.log(cardId, 'state', 'owner', this.board.t.answer.asIdea);
+    this.explorers.tell(cardId, this.answers.opening(cardId));
   }
 
   /** Deletes a card of the owner's, stopping its worker first; a prototype is discarded into the archive instead. */

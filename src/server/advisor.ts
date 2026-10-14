@@ -2,14 +2,17 @@
 // how an agent's question to the owner is put together.
 
 import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
+import { existsSync, statSync } from 'node:fs';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import { type Language, LANGUAGE_NAMES } from '../core/locale';
-import type { Question } from '../core/types';
-import type { AgentRuntime } from './runtime';
+import type { AnswerFile, Question } from '../core/types';
+import type { AgentRuntime, AgentTool } from './runtime';
 
-/** An answer to a question the owner asked, for the card or the sheet. */
+/** An answer to a question the owner asked, for the card or the sheet, with the files it comes with. */
 export interface OwnerAnswer {
   text: string;
+  files?: AnswerFile[];
 }
 
 export interface Briefing {
@@ -25,6 +28,12 @@ export interface Briefing {
   language: Language;
   /** The workers' permission mode: the answering agent has their tools and runs as they do. */
   permissionMode?: PermissionMode;
+  /** The output directory of the thread: the answer may come with files in it. */
+  dir?: string;
+  /** Tools besides answer_owner (to_obeya, on a Question card). */
+  tools?: AgentTool[];
+  /** Screenshot files that come with the message. */
+  images?: string[];
 }
 
 /**
@@ -47,14 +56,21 @@ export function inform(b: Briefing): Promise<OwnerAnswer> {
         role: 'koordinator',
         ...(b.permissionMode ? { permissionMode: b.permissionMode } : {}),
         ...(b.resume ? { resume: b.resume } : {}),
+        ...(b.dir ? { dirs: [b.dir] } : {}),
         system: b.system,
         tools: [
           {
             name: 'answer_owner',
-            description: `Your answer to the owner, in ${LANGUAGE_NAMES[b.language]}: text in full (markdown, short paragraphs or a list; it stands in the card's log).`,
-            schema: { text: z.string() },
-            run: ({ text }) => settle({ text: String(text).trim() }),
+            description: `Your answer to the owner, in ${LANGUAGE_NAMES[b.language]}: text in full (markdown, short paragraphs or a list; it stands in the card's log).${b.dir ? ` files: files of yours in ${b.dir} the answer comes with, each with its path and a one-line caption in ${LANGUAGE_NAMES[b.language]}; the owner sees them under the text (a page or an image shown inline, any other file to open).` : ''}`,
+            schema: b.dir ? { text: z.string(), files: z.array(z.object({ path: z.string(), caption: z.string() })).max(MAX_FILES).optional() } : { text: z.string() },
+            run: ({ text, files }) => {
+              if (!b.dir || files === undefined) return settle({ text: String(text).trim() });
+              const checked = answerFiles(b.dir, files);
+              if (typeof checked === 'string') return `${checked} Nothing was shown yet: call answer_owner again.`;
+              return settle({ text: String(text).trim(), ...(checked.length ? { files: checked } : {}) });
+            },
           },
+          ...(b.tools ?? []),
         ],
         onEvent: (e) => {
           if (e.type === 'session') b.onSession?.(e.id);
@@ -72,8 +88,33 @@ export function inform(b: Briefing): Promise<OwnerAnswer> {
         },
       },
       b.message,
+      b.images,
     );
   });
+}
+
+/** Files one answer comes with, at most. */
+const MAX_FILES = 20;
+
+/**
+ * The files an answer names, as paths in its thread's output directory (absolute, or relative to
+ * it); what is wrong with them instead, for the agent to fix: a path outside the directory, or no file.
+ */
+export function answerFiles(dir: string, list: unknown): AnswerFile[] | string {
+  const root = resolve(dir);
+  const files: AnswerFile[] = [];
+  const wrong: string[] = [];
+  for (const f of (Array.isArray(list) ? list : []) as { path?: unknown; caption?: unknown }[]) {
+    const path = String(f?.path ?? '').trim();
+    const full = isAbsolute(path) ? resolve(path) : resolve(root, path);
+    if (!full.startsWith(root + sep)) wrong.push(`${path} is not in ${root}`);
+    else if (!existsSync(full) || !statSync(full).isFile()) wrong.push(`${path} is no file`);
+    else {
+      const name = relative(root, full).split(sep).join('/');
+      if (!files.some((x) => x.name === name)) files.push({ name, caption: clip(String(f?.caption ?? '').replace(/\s+/g, ' ').trim(), 200) });
+    }
+  }
+  return wrong.length ? `${wrong.join('; ')}: the files of an answer are in its output directory ${root}.` : files;
 }
 
 /** How to answer a question of the owner's, the same for every agent that answers one. */

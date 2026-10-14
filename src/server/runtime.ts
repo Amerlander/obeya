@@ -85,6 +85,8 @@ export interface AgentSpec {
   tools: AgentTool[];
   /** Resume this session instead of starting one. */
   resume?: string;
+  /** Directories outside `cwd` the agent works in as in its own (a looked-up thread's output directory). */
+  dirs?: string[];
   /** Read-only agents get no tools that change files or run commands. */
   readOnly?: boolean;
   /** Directories of local Claude Code plugins loaded into the session (skills, mainly). */
@@ -204,6 +206,7 @@ export const sdkRuntime: AgentRuntime = {
           : // a worker's own tools are allowed by the hook below: as allowedTools they would have the SDK warn that they pass by canUseTool
             { ...(spec.askOwner ? {} : { allowedTools: ownTools }), permissionMode: spec.permissionMode ?? 'auto' }),
         ...(spec.resume ? { resume: spec.resume } : {}),
+        ...(spec.dirs?.length ? { additionalDirectories: spec.dirs } : {}),
         ...(spec.effort ? { effort: spec.effort } : {}),
         ...(spec.model ? { model: spec.model } : {}),
         // on another machine only what the session itself needs: that machine has its own PATH and home

@@ -35,6 +35,7 @@ const de = {
   },
   answer: {
     failed: (why: string) => `Ich konnte die Frage nicht beantworten (${why}).`,
+    asIdea: 'Als Idee weiter besprochen.',
   },
   tool: {
     read: (file: string) => `Liest ${file}`,
@@ -304,6 +305,7 @@ const en: Messages = {
   },
   answer: {
     failed: (why: string) => `I could not answer the question (${why}).`,
+    asIdea: 'Discussed further as an idea.',
   },
   tool: {
     read: (file: string) => `Reads ${file}`,

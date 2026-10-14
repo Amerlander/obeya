@@ -8,7 +8,7 @@ import type { NotAProject } from '../core/plan-doc';
 import { type AgentEffort, type AgentModel, type AgentRole, type CardState, type ConfigProblemCode, type DemoSettingsProblem, type ErrorCode, EXPORT_HTML_MAX, type NarrationLanguage, type Theme, type VoiceKind, type Idea, type Need, type NextStep, type Queue, type OwnerHold, type RestartReason, type SetupId, type VoiceSetupId, type MachineSectionId, type NeededId, type PrId } from '../core/types';
 
 const de = {
-  kind: { task: 'Aufgabe', project: 'Projekt', workstream: 'Workstream', idea: 'Idee', prototype: 'Prototyp', becomesProject: 'Idee → Projekt', taskBecomesProject: 'Aufgabe → Projekt' },
+  kind: { task: 'Aufgabe', question: 'Frage', project: 'Projekt', workstream: 'Workstream', idea: 'Idee', prototype: 'Prototyp', becomesProject: 'Idee → Projekt', taskBecomesProject: 'Aufgabe → Projekt' },
   state: {
     idea: 'Idee',
     proposal: 'Vorschlag eines Agenten',
@@ -310,6 +310,8 @@ const de = {
     notDone: 'Archivieren lässt sich nur eine eigene Aufgabe, die live oder erledigt ist, oder eine verworfene Idee.',
     notArchived: 'Das liegt nicht mehr im Archiv.',
     notIdea: 'Das ist keine Idee (mehr).',
+    notQuestion: 'Diese Karte hält keine nachgeschlagenen Antworten.',
+    noFile: 'Diese Datei gibt es im Ordner der Antwort nicht (mehr).',
     ideaThinking: 'Der Agent arbeitet noch an seiner Antwort. Planen oder auf einem Prototyp bauen geht, sobald sie da ist.',
     prototypeRunning: 'Für diese Idee liegt noch ein Prototyp auf der Leinwand.',
     variantsRunning: 'Für jede geplante Variante läuft schon ein Prototyp. Für einen weiteren: den Ansatz nennen.',
@@ -1047,7 +1049,7 @@ const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDat
 type Strings = typeof de;
 
 const en: Strings = {
-  kind: { task: 'Task', project: 'Project', workstream: 'Workstream', idea: 'Idea', prototype: 'Prototype', becomesProject: 'Idea → Project', taskBecomesProject: 'Task → Project' },
+  kind: { task: 'Task', question: 'Question', project: 'Project', workstream: 'Workstream', idea: 'Idea', prototype: 'Prototype', becomesProject: 'Idea → Project', taskBecomesProject: 'Task → Project' },
   state: {
     idea: 'Idea',
     proposal: 'Proposed by an agent',
@@ -1335,6 +1337,8 @@ const en: Strings = {
     notDone: 'Only your own task that is live or done, or a dropped idea, can be archived.',
     notArchived: 'This is no longer in the archive.',
     notIdea: 'This is not an idea (any more).',
+    notQuestion: 'This card holds no looked-up answers.',
+    noFile: 'This file is not (or no longer) in the answer’s folder.',
     ideaThinking: 'The agent is still working on its reply. Planning or building on a prototype works once it is there.',
     prototypeRunning: 'A prototype for this idea is still on the canvas.',
     variantsRunning: 'A prototype already runs for every planned variant. For another one, name its approach.',

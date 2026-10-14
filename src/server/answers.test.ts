@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { waitingOn } from '../core/types';
+import { answersDir } from './answers';
 import { CanvasRuntime } from './canvas';
+import { serveAnswerFile } from './demo';
 import type { Focus } from './commands';
 import { Store } from './db';
 import { FakeRuntime, noForge, type FakeSession, gitRepo } from './testing';
@@ -93,7 +95,7 @@ describe('a question the Koordinator looks up', () => {
 
     // the Koordinator hears the answer with the next command
     const next = await say('und dann?', { card: w4.id }, 'reply', { confirm: 'Dann wartet er.' });
-    expect(next.brief).toContain('The answer you looked up for the owner\'s question „What would the worker do on W4');
+    expect(next.brief).toContain('The answer A1 you looked up for the owner\'s question „What would the worker do on W4');
   });
 
   test('about a card without a project: a thorough Koordinator turn answers, in the sheet when no card is open', async () => {
@@ -182,5 +184,237 @@ describe('a question the Koordinator looks up', () => {
     a.emit({ type: 'error', message: 'boom' });
     await settle();
     expect(board().events(w4.id).at(-1)!.text).toContain('Ich konnte die Frage nicht beantworten (boom)');
+  });
+});
+
+/** A question looked up in the sheet, answered by its agent in session `session`; returns the exchange's id. */
+async function lookedUp(said: string, question: string, answer: string, session: string, extra: Record<string, unknown> = {}) {
+  await say(said, {}, 'look_up', { question, confirm: 'Moment.', ...extra });
+  const a = answerer();
+  a.emit({ type: 'session', id: session });
+  a.call('answer_owner', { text: answer });
+  a.emit({ type: 'idle' });
+  await settle();
+  return board().talk().at(-1)!.id;
+}
+
+describe('a looked-up answer goes on', () => {
+  test('a follow-up resumes the agent that found the answer, and stands in the sheet as continuing it', async () => {
+    const first = await lookedUp('stimmen die Septembergutschriften?', 'Are the September credits right?', 'Ja, sie stimmen.', 'look-1');
+    expect(board().talk().at(-1)).toMatchObject({ thread: first, answer: 'Ja, sie stimmen.' });
+    const sessions = runtime.sessions.length;
+    await say('und im Oktober?', {}, 'look_up', { question: 'And the October credits so far?', follows: `A${first}`, confirm: 'Ich schaue nach.' });
+    // one agent, resumed: it still has everything it read and computed
+    const a = answerer();
+    expect(runtime.sessions.length).toBe(sessions + 1);
+    expect(a.spec.resume).toBe('look-1');
+    expect(a.inbox[0]).toContain('The owner follows up on your answer. They said: "und im Oktober?"');
+    expect(a.inbox[0]).toContain(answersDir(dir, canvas.id, first));
+    expect(a.spec.dirs).toEqual([answersDir(dir, canvas.id, first)]);
+    expect(board().talk().at(-1)).toMatchObject({ thread: first, follows: first, continues: 'Are the September credits right?' });
+    a.call('answer_owner', { text: 'Oktober bisher auch.' });
+    a.emit({ type: 'idle' });
+    await settle();
+    expect(board().talk().at(-1)).toMatchObject({ answer: 'Oktober bisher auch.', unread: true });
+  });
+
+  test('an unknown answer tag goes back to the Koordinator', async () => {
+    canvas.commander.hear('und weiter?', {});
+    await settle();
+    const s = runtime.sessions.filter(isKoordinator).at(-1)!;
+    expect(s.call('look_up', { question: 'More?', follows: 'A99', confirm: 'Moment.' })).toContain('Unknown answer A99');
+  });
+
+  test('follow-ups to one thread wait for each other', async () => {
+    const first = await lookedUp('frage', 'Q?', 'A.', 'look-1');
+    await say('und das?', {}, 'look_up', { question: 'Q2?', follows: `A${first}`, confirm: 'Moment.' });
+    const second = answerer();
+    const before = runtime.sessions.length;
+    await say('und jenes?', {}, 'look_up', { question: 'Q3?', follows: `A${first}`, confirm: 'Moment.' });
+    // the Koordinator read it, but its agent waits for the turn before
+    expect(runtime.sessions.length).toBe(before);
+    second.emit({ type: 'session', id: 'look-2' });
+    second.call('answer_owner', { text: 'Zwei.' });
+    second.emit({ type: 'idle' });
+    await settle();
+    const third = answerer();
+    expect(third).not.toBe(second);
+    expect(third.spec.resume).toBe('look-1');
+    expect(third.inbox[0]).toContain('und jenes?');
+  });
+
+  test('a session that cannot be resumed is replaced by a fresh agent that gets the thread so far', async () => {
+    const first = await lookedUp('stimmen die gutschriften?', 'Are the credits right?', 'Ja, 16,6 ct.', 'gone');
+    await say('und im oktober?', {}, 'look_up', { question: 'October?', follows: `A${first}`, confirm: 'Moment.' });
+    answerer().emit({ type: 'error', message: 'No conversation found with session ID: gone' });
+    await settle();
+    const fresh = answerer();
+    expect(fresh.spec.resume).toBeUndefined();
+    expect(fresh.inbox[0]).toContain('The question, as you understood it then: Are the credits right?');
+    expect(fresh.inbox[0]).toContain('You: Ja, 16,6 ct.');
+    expect(fresh.inbox[0]).toContain('They said: "und im oktober?"');
+    fresh.call('answer_owner', { text: 'Oktober: 12 ct.' });
+    fresh.emit({ type: 'idle' });
+    await settle();
+    expect(board().talk().at(-1)!.answer).toBe('Oktober: 12 ct.');
+  });
+
+  test("an answer comes with files in its thread's directory; a path outside it is refused", async () => {
+    await say('mach mir eine tabelle', {}, 'look_up', { question: 'A table of the credits?', confirm: 'Moment.' });
+    const thread = board().talk().at(-1)!.id;
+    const out = answersDir(dir, canvas.id, thread);
+    const a = answerer();
+    writeFileSync(join(out, 'credits.csv'), 'a,b\n');
+    mkdirSync(join(out, 'charts'));
+    writeFileSync(join(out, 'charts', 'price.html'), '<p>chart</p>');
+    writeFileSync(join(dir, 'secret.txt'), 'no');
+    expect(a.call('answer_owner', { text: 'Hier.', files: [{ path: join(dir, 'secret.txt'), caption: 'x' }] })).toContain('is not in');
+    expect(a.call('answer_owner', { text: 'Hier.', files: [{ path: '../secret.txt', caption: 'x' }] })).toContain('is not in');
+    expect(a.call('answer_owner', { text: 'Hier.', files: [{ path: 'missing.xlsx', caption: 'x' }] })).toContain('is no file');
+    expect(board().talk().at(-1)!.answer).toBeUndefined();
+    a.call('answer_owner', {
+      text: 'Hier.',
+      files: [
+        { path: join(out, 'credits.csv'), caption: 'Die Gutschriften je Monat' },
+        { path: 'charts/price.html', caption: 'Preis je Stunde' },
+      ],
+    });
+    a.emit({ type: 'idle' });
+    await settle();
+    expect(board().talk().at(-1)!.files).toEqual([
+      { name: 'credits.csv', caption: 'Die Gutschriften je Monat' },
+      { name: 'charts/price.html', caption: 'Preis je Stunde' },
+    ]);
+    // served from the directory, a page sandboxed and reporting its height; nothing outside it
+    const page = serveAnswerFile(out, 'charts/price.html', false);
+    expect(page.headers.get('content-security-policy')).toBe('sandbox allow-scripts');
+    expect(await page.text()).toContain('obeyaHeight');
+    expect(serveAnswerFile(out, 'credits.csv', true).headers.get('content-disposition')).toContain('credits.csv');
+    expect(serveAnswerFile(out, '../secret.txt', false).status).toBe(404);
+    expect(() => canvas.answerDir(thread + 100)).toThrow();
+  });
+
+  test("an answer in a card's log carries its thread, and a follow-up there resumes its agent", async () => {
+    const login = board().create({ title: 'Login', body: 'Login hängt.', x: 0, y: 0 });
+    await say('warum hängt login?', { card: login.id }, 'look_up', { question: 'Why does login hang?', confirm: 'Moment.' });
+    const thread = board().talk().at(-1)!.id;
+    let a = answerer();
+    a.emit({ type: 'session', id: 'login-1' });
+    a.call('answer_owner', { text: 'Ein Timeout.' });
+    a.emit({ type: 'idle' });
+    await settle();
+    expect(board().events(login.id).at(-1)).toMatchObject({ kind: 'say', author: 'koordinator', text: 'Ein Timeout.', answer: { thread } });
+    await say('welcher?', { card: login.id }, 'look_up', { question: 'Which timeout?', follows: `A${thread}`, confirm: 'Moment.' });
+    a = answerer();
+    expect(a.spec.resume).toBe('login-1');
+    a.call('answer_owner', { text: 'Der der Session.' });
+    a.emit({ type: 'idle' });
+    await settle();
+    expect(board().events(login.id).at(-1)).toMatchObject({ text: 'Der der Session.', answer: { thread, continues: 'Why does login hang?' } });
+  });
+});
+
+describe('a thread on a Question card', () => {
+  /** A thread of two answers in the sheet, moved onto a card. */
+  async function moved() {
+    const first = await lookedUp('stimmen die septembergutschriften?', 'September feed-in credits: correct?', 'Ja.', 'look-1');
+    const out = answersDir(dir, canvas.id, first);
+    await say('mach ein excel', {}, 'look_up', { question: 'An Excel of the numbers?', follows: `A${first}`, confirm: 'Moment.' });
+    const a = answerer();
+    writeFileSync(join(out, 'numbers.xlsx'), 'x');
+    a.call('answer_owner', { text: 'Hier die Tabelle.', files: [{ path: 'numbers.xlsx', caption: 'Die Viertelstunden' }] });
+    a.emit({ type: 'idle' });
+    await settle();
+    const card = canvas.answers.toCard(first);
+    return { first, card };
+  }
+
+  test('"Make it a card" moves the thread with its files onto a card that goes on with the same agent', async () => {
+    const { first, card } = await moved();
+    expect(card).toMatchObject({ kind: 'question', state: 'done', title: 'September feed-in credits: correct?', thread: { talk: first, answers: 2, files: 1 } });
+    expect(board().row(card.id).session_id).toBe('look-1');
+    expect(board().events(card.id).map((e) => [e.author, e.text, e.answer?.files?.length ?? 0])).toEqual([
+      ['owner', 'stimmen die septembergutschriften?', 0],
+      ['koordinator', 'Ja.', 0],
+      ['owner', 'mach ein excel', 0],
+      ['koordinator', 'Hier die Tabelle.', 1],
+    ]);
+    // the sheet points to the card instead
+    expect(board().talk().filter((x) => x.thread === first).every((x) => x.movedTo === card.id)).toBe(true);
+    // moved again, it is the same card
+    expect(canvas.answers.toCard(first).id).toBe(card.id);
+
+    // the owner's words on the card go straight to that agent, with to_obeya for what asks Obeya
+    canvas.tell(card.id, 'und im Oktober?', [], false);
+    expect(board().item(card.id)!.thread!.thinking).toBe(true);
+    const a = answerer();
+    expect(a.spec.resume).toBe('look-1');
+    expect(a.spec.tools.map((t) => t.name)).toContain('to_obeya');
+    expect(a.inbox[0]).toContain('und im Oktober?');
+    // what comes while it reads waits for its turn
+    canvas.tell(card.id, 'und November?', [], true);
+    const sessions = runtime.sessions.length;
+    a.call('answer_owner', { text: 'Oktober: 12 ct.' });
+    a.emit({ type: 'idle' });
+    await settle();
+    expect(runtime.sessions.length).toBe(sessions + 1);
+    const b = answerer();
+    expect(b.inbox[0]).toContain('und November?');
+    b.call('answer_owner', { text: 'November: noch nichts.' });
+    b.emit({ type: 'idle' });
+    await settle();
+    expect(board().item(card.id)!.thread).toEqual({ talk: first, answers: 4, files: 1 });
+    expect(board().events(card.id).filter((e) => e.kind === 'talk').map((e) => e.text).slice(-4)).toEqual(['und im Oktober?', 'und November?', 'Oktober: 12 ct.', 'November: noch nichts.']);
+  });
+
+  test('a follow-up asked in the sheet after the move goes to the card and stands there', async () => {
+    const { first, card } = await moved();
+    await say('und dezember?', {}, 'look_up', { question: 'December?', follows: `A${first}`, confirm: 'Moment.' });
+    const talk = board().talk().at(-1)!;
+    expect(talk.movedTo).toBe(card.id);
+    const a = answerer();
+    expect(a.spec.resume).toBe('look-1');
+    a.call('answer_owner', { text: 'Dezember: offen.' });
+    a.emit({ type: 'idle' });
+    await settle();
+    expect(board().events(card.id).filter((e) => e.kind === 'talk').map((e) => e.text).slice(-2)).toEqual(['und dezember?', 'Dezember: offen.']);
+    // the Koordinator hears it, and the sheet does not wait with it
+    expect(board().talk().at(-1)).toMatchObject({ answer: 'Dezember: offen.' });
+    expect(board().talk().at(-1)!.unread).toBeUndefined();
+  });
+
+  test('what the card asked when Obeya stopped is asked again', async () => {
+    const { card } = await moved();
+    canvas.tell(card.id, 'und im Oktober?', [], false);
+    canvas.shutdown();
+    canvas = open();
+    await settle();
+    const a = answerer();
+    expect(a.inbox[0]).toContain('und im Oktober?');
+    a.call('answer_owner', { text: 'Oktober: 12 ct.' });
+    a.emit({ type: 'idle' });
+    await settle();
+    expect(board().item(card.id)!.thread!.thinking).toBeUndefined();
+  });
+
+  test('"Discuss as idea" makes it an idea whose exploration agent starts from the thread; "Done" archives it', async () => {
+    const { first, card } = await moved();
+    canvas.act(card.id, { action: 'asIdea' });
+    const idea = board().item(card.id)!;
+    expect(idea).toMatchObject({ kind: 'task', state: 'idea' });
+    const explorer = runtime.sessions.at(-1)!;
+    expect(explorer.spec.role).toBe('explorer');
+    expect(explorer.spec.resume).toBeUndefined();
+    expect(explorer.inbox[0]).toContain('Obeya: Hier die Tabelle.');
+    expect(explorer.inbox[0]).toContain('numbers.xlsx – Die Viertelstunden');
+    expect(explorer.inbox[0]).toContain(answersDir(dir, canvas.id, first));
+
+    const other = await lookedUp('noch eine frage', 'Another?', 'Ja.', 'look-9');
+    const done = canvas.answers.toCard(other);
+    board().archive([done.id]);
+    expect(board().item(done.id)).toBeUndefined();
+    // put back by moving the thread again
+    expect(canvas.answers.toCard(other).id).toBe(done.id);
+    expect(board().item(done.id)).toBeDefined();
   });
 });

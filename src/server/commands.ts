@@ -3,6 +3,7 @@
 
 import { z } from 'zod';
 import { type AgentSetting, answering, askable, blocksSaving, type CanvasConfig, finished, type Item, type NextStep, type Notice, plannableAsProject, prototypeWorkstream, type Queue, type SpotInput } from '../core/types';
+import { answerTag, fromAnswerTag } from './answers';
 import { BadRequest, type Board, replyNote } from './board';
 import type { Config } from './config';
 import type { Moment } from './db';
@@ -161,8 +162,8 @@ interface Session {
   };
 }
 
-/** A question to look up: what the owner asked, and the card it is about. */
-type LookUp = { question: string; about?: string };
+/** A question to look up: what the owner asked, the card it is about, and the answer it follows up on (an exchange). */
+type LookUp = { question: string; about?: string; follows?: number };
 type Decision = { commands: Command[]; confirm: string; lookUp?: LookUp };
 
 /** The actions `act` takes, as the Koordinator names them. */
@@ -254,6 +255,7 @@ export class Commander {
       // nothing to take back: the answer follows once it is looked up
       const about = lookUp.about ?? card ?? (focus.project && this.o.board.item(focus.project) ? focus.project : undefined);
       reply(confirm, { question: lookUp.question, about: about ?? null });
+      if (lookUp.follows) this.o.board.followTalk(talk, lookUp.follows);
       this.o.lookUp?.(talk);
       if (said) this.o.onOwnerInput?.(card, 'talk', said, confirm);
       return { confirm };
@@ -529,17 +531,21 @@ export class Commander {
             "Never for a question about the work of an agent on a card (working, waiting for review, in PR, waiting, or finishing what remains, or a live or done card a note resumes its agent on): that agent knows its work, which is on its branch and not in the checkout look_up reads; pass the question to it (note, or feedback when it waits for review).",
             "An agent with a worker's tools (the shell, gh, the web) that reads the plan docs, the repository and the card's start task answers it in a few seconds; a question about a workstream goes to its project agent.",
             `question: the question in full, standing on its own (in English or German). card: the tag of the card it is about, if any (the open one unless the owner means another). confirm: a short ${LANGUAGE_NAMES[language]} acknowledgement, e.g. ${say.lookUp}`,
+            "follows: when the owner's words follow up on an answer you looked up (asking on, wanting more of it, a file made of it: „und im Oktober?“, „mach mir ein Excel daraus“), that answer's tag (A12): the agent that found it goes on with all it read and computed. In doubt, the newest answer. Left out, a fresh agent starts from nothing.",
           ].join('\n'),
-          schema: { question: z.string(), card: z.string().optional(), confirm: z.string() },
-          run: ({ question, card, confirm }) => {
+          schema: { question: z.string(), card: z.string().optional(), follows: z.string().optional(), confirm: z.string() },
+          run: ({ question, card, follows, confirm }) => {
             const q = String(question).trim();
             if (!q) return 'The question is missing.';
+            const followed = follows ? fromAnswerTag(String(follows)) : undefined;
+            if (follows && (!followed || !this.o.board.exchange(followed)?.thread))
+              return `Unknown answer ${String(follows)}; call look_up again with the tag of an answer you looked up (A12), or without follows.`;
             const about = card ? s.tags.get(String(card)) : undefined;
             if (card && (!about || !this.o.board.item(about))) return `Unknown tag ${String(card)}; call look_up again with a tag from the list, or without card.`;
             const agent = about ? this.o.board.item(about)! : undefined;
             if (agent && hasAgent(agent) && agent.id !== s.reading?.from)
               return `An agent is on ${String(card)} (${agent.need ?? agent.state}): it answers what is asked about its work, which is on its branch and not in the checkout look_up reads. Pass the owner's words to it with act (${agent.state === 'waiting' && (agent.need === 'demo' || agent.need === 'review') ? 'feedback' : 'note'}).`;
-            return finish([], String(confirm), { question: q, ...(about ? { about } : {}) });
+            return finish([], String(confirm), { question: q, ...(about ? { about } : {}), ...(followed ? { follows: followed } : {}) });
           },
         },
       ],
@@ -773,7 +779,7 @@ export class Commander {
   private brief(s: Session, transcript: string, focus: Focus, input: Input, shots = 0): string {
     const { items, groups: groupList } = this.o.board.snapshot();
     const groups = new Map(groupList.map((g) => [g.id, g.name]));
-    const relevant = items.filter((i) => i.kind !== 'project' && (!finished(i.state) || i.finishing || i.id === focus.card));
+    const relevant = items.filter((i) => i.kind !== 'project' && (!finished(i.state) || i.finishing || i.kind === 'question' || i.id === focus.card));
     const tag = (id: string) => {
       let t = s.tagOf.get(id);
       if (!t) {
@@ -793,6 +799,8 @@ export class Commander {
             ? `idea: ${i.idea.status}`
             : i.idea?.thinking
               ? `idea, its agent is working on its reply${i.idea.buildAfterReply ? '; built once the reply is there, unless it asks questions' : ''}`
+            : i.kind === 'question'
+              ? `question card: a thread of answers you looked up, moved onto a card; its agent ${i.thread?.thinking ? 'is reading' : 'answers what the owner asks on it (note)'}`
             : i.finishing
               ? i.followUp
                 ? `${i.state}, its agent answers the owner's follow-up`
@@ -832,7 +840,12 @@ export class Commander {
           ? `Your conversation with the owner before this session (oldest first; card tags did not exist then):\n${talk
               .map((t) => {
                 const open = t.cardId ? items.find((i) => i.id === t.cardId) : undefined;
-                const later = t.answer !== undefined ? ` → the answer you looked up: "${full.has(t) ? t.answer : clip(t.answer, 400)}"` : t.question ? ' (you were looking it up; no answer came)' : '';
+                const later =
+                  t.answer !== undefined
+                    ? ` → the answer ${answerTag(t.id)} you looked up${t.follows ? ` (following up on ${answerTag(t.follows)})` : ''}: "${full.has(t) ? t.answer : clip(t.answer, 400)}"`
+                    : t.question
+                      ? ' (you were looking it up; no answer came)'
+                      : '';
                 return `- ${when(t.at)}${open ? ` (with "${open.title}" open)` : ''} the owner: "${t.said}" → you: "${t.reply}"${t.undone ? ' (the owner took it back)' : ''}${later}`;
               })
               .join('\n')}`
@@ -979,4 +992,4 @@ On an idea, "Mach, was du vorschlägst" takes the step its agent would take next
 `.trim();
 
 /** Whether an agent is on the card: working on it, waiting for the owner, in a PR, or finishing what remains after the landing. */
-const hasAgent = (i: Item) => i.state === 'working' || i.state === 'waiting' || i.state === 'inPr' || !!i.finishing || askable(i);
+const hasAgent = (i: Item) => i.kind === 'question' || i.state === 'working' || i.state === 'waiting' || i.state === 'inPr' || !!i.finishing || askable(i);

@@ -13,6 +13,8 @@ import type { Language } from '../core/locale';
 import { MESSAGES, type Messages } from '../core/messages';
 import { allTicked, type OtherDoc, type PlanDoc } from '../core/plan-doc';
 import {
+  type AnswerFile,
+  type AnswerRef,
   type CanvasInfo,
   type CanvasSnapshot,
   type CardEvent,
@@ -36,6 +38,7 @@ import {
   type PlanDir,
   type Reshare,
   type Spot,
+  type Thread,
   STATES,
   finished,
   type Notice,
@@ -327,6 +330,25 @@ export class Board {
     return e;
   }
 
+  /**
+   * A message of a looked-up thread in a card's log: the owner's words or an answer, with its
+   * exchange and files; `at` keeps its time when a thread is copied onto its Question card.
+   */
+  logThread(cardId: string, e: { kind: 'say' | 'talk'; author: CardEvent['author']; text: string; images?: string[]; replyTo?: number; answer?: AnswerRef; at?: string }): CardEvent {
+    const added = this.store.addEvent({
+      cardId,
+      kind: e.kind,
+      author: e.author,
+      text: e.text,
+      ...(e.images?.length ? { images: e.images } : {}),
+      ...(e.replyTo ? { replyTo: e.replyTo } : {}),
+      ...(e.answer ? { answer: e.answer } : {}),
+      ...(e.at ? { at: e.at } : {}),
+    });
+    for (const fn of this.eventListeners) fn(added);
+    return added;
+  }
+
   /** Takes a line out of the card's log: a comment the owner deleted before anyone read it. */
   unlog(cardId: string, id: number) {
     this.store.deleteEvent(cardId, id);
@@ -534,6 +556,31 @@ export class Board {
     this.work(id, { idea: JSON.stringify({ ...this.idea(id), ...fields }) });
   }
 
+  /** The thread of looked-up answers a Question card (or an idea that was one) holds. */
+  thread(id: string): StoredThread {
+    const r = this.own(id);
+    if (!r.thread) throw new BadRequest('notQuestion', 'the card holds no thread of answers');
+    return JSON.parse(r.thread) as StoredThread;
+  }
+
+  setThread(id: string, fields: Partial<StoredThread>) {
+    this.work(id, { thread: JSON.stringify({ ...this.thread(id), ...fields }) });
+  }
+
+  /**
+   * A Question card for a thread of looked-up answers, near the card whose log holds them (`near`)
+   * or where there is room: its question as its title, the agent's session going on.
+   */
+  addQuestion(title: string, thread: StoredThread, session: string | undefined, repo: string | undefined, near?: string): Item {
+    const at = near && this.item(near) ? this.followUpSpot(near) : this.freeSpot();
+    const [row] = this.store.insert([
+      { canvas_id: this.canvas.id, kind: 'question', state: 'done', title: clipTitle(title), body: '', ...at, repo: repo && repo !== this.home ? repo : null, ...(near && this.item(near) ? { group_id: this.groupOf(this.own(near)) } : {}) },
+    ]);
+    this.store.update(row!.id, { thread: JSON.stringify(thread), ...(session ? { session_id: session } : {}) });
+    this.changed();
+    return this.item(row!.id)!;
+  }
+
   /** A card whose worker builds a throwaway prototype for the idea; placed below it, beside the prototypes already there. */
   addPrototype(ideaId: string, title: string, body: string, variant?: string): Item {
     const items = this.snapshot().items;
@@ -625,9 +672,33 @@ export class Board {
     return this.store.talk(this.canvas.id, limit);
   }
 
-  /** The answer to a question the Koordinator looked up. */
-  answerTalk(id: number, answer: string, by: 'koordinator' | 'project') {
-    this.store.answerTalk(id, answer, by);
+  /** The answer to a question the Koordinator looked up, with the files it comes with. */
+  answerTalk(id: number, answer: string, by: 'koordinator' | 'project', files: AnswerFile[] = []) {
+    this.store.answerTalk(id, answer, by, files);
+    this.changed();
+  }
+
+  /** The exchange follows up on the answer of `follows`: it goes on in that one's thread. */
+  followTalk(id: number, follows: number) {
+    const f = this.store.exchange(follows);
+    if (!f?.thread) throw new BadRequest('invalid', 'the exchange followed up on was not looked up');
+    this.store.followTalk(id, f.thread, follows);
+    this.changed();
+  }
+
+  /** The session of the agent that looks the exchange's question up. */
+  talkSession(id: number, session: string) {
+    this.store.talkSession(id, session);
+  }
+
+  /** The exchanges of a looked-up thread, oldest first. */
+  threadTalk(thread: number) {
+    return this.store.thread(this.canvas.id, thread);
+  }
+
+  /** The thread is on a Question card from now on. */
+  moveThread(thread: number, card: string) {
+    this.store.moveThread(this.canvas.id, thread, card);
     this.changed();
   }
 
@@ -747,7 +818,8 @@ export class Board {
   /** Archives every finished card of the owner's on the canvas; returns their ids. */
   archiveDone(): string[] {
     const ids = this.snapshot()
-      .items.filter((i) => i.source === 'manual' && finished(i.state) && !i.finishing)
+      // a Question card is done when the owner says so, not with the finished work
+      .items.filter((i) => i.source === 'manual' && i.kind !== 'question' && finished(i.state) && !i.finishing)
       .map((i) => i.id);
     if (ids.length) this.archive(ids);
     return ids;
@@ -1400,6 +1472,7 @@ export function toItems(rows: CardRow[], docs: PlanDoc[], home: string): Item[] 
         repo: r.repo ?? home,
         ...work(r),
         ...(r.state === 'idea' ? { idea: ideaOf(r) } : r.idea ? decided(r) : {}),
+        ...(r.thread ? { thread: threadOf(r) } : {}),
         ...(r.becomes_project ? { becomesProject: true } : {}),
         ...(r.prototype_of ? { prototypeOf: r.prototype_of, ...prototypeOf(r) } : {}),
         ...(r.built_on ? { builtOn: r.built_on } : {}),
@@ -1575,6 +1648,20 @@ export interface Message {
   images: string[];
 }
 
+/** A Question card's thread as stored: the exchange it started with, and its agent's turn. */
+export interface StoredThread {
+  talk: number;
+  /** Its agent is reading, for what the owner asked on the card. */
+  thinking?: boolean;
+  /**
+   * What the owner asked that the agent has not answered yet: behind a running turn, or left by a
+   * restart; `talk`: asked in Obeya's sheet, whose exchange gets the answer too.
+   */
+  pending?: (Message & { talk?: number })[];
+  answers: number;
+  files: number;
+}
+
 export interface Unread {
   why: 'parked' | 'dropped' | 'error' | 'restart';
   messages: Message[];
@@ -1587,6 +1674,16 @@ function decided(r: CardRow): Pick<Item, 'brief' | 'mocks'> {
   const i = JSON.parse(r.idea!) as StoredIdea;
   return { brief: i.brief, ...(i.mocks?.length ? { mocks: i.mocks } : {}) };
 }
+
+function threadOf(r: CardRow): Thread {
+  const t = JSON.parse(r.thread!) as StoredThread;
+  return { talk: t.talk, ...(t.thinking ? { thinking: true } : {}), answers: t.answers, files: t.files };
+}
+
+const clipTitle = (s: string) => {
+  const line = s.replace(/\s+/g, ' ').trim();
+  return line.length > 160 ? `${line.slice(0, 159)}…` : line;
+};
 
 function ideaOf(r: CardRow): Idea {
   const i = r.idea ? (JSON.parse(r.idea) as StoredIdea) : { status: 'open' as const, brief: '' };

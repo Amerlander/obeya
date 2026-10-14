@@ -12,7 +12,7 @@ import type { CanvasRuntime } from './canvas';
 import { defaultPushKey, type PageFocus, type PushKeyView } from '../core/push-key';
 import { type Focus, type Heard, type Input, isField } from './commands';
 import type { Config } from './config';
-import { serveDemoFile } from './demo';
+import { serveAnswerFile, serveDemoFile } from './demo';
 import { type NarrationHost, parseClipRequest } from './narration';
 import type { Restarter } from './self-update';
 import { looping, silence, type Transcriber } from './voice';
@@ -361,6 +361,28 @@ export function serve(
             return new Response('Not found', { status: 404 });
           }
         },
+      },
+      // "Make it a card": a looked-up thread moves onto a Question card
+      '/api/c/:canvas/threads/:thread/card': { POST: on((c, req) => c.answers.toCard(Number(req.params.thread))) },
+      // a file a looked-up answer comes with; `?download` to save it
+      '/api/c/:canvas/threads/:thread/files/*': {
+        GET: (req) => {
+          try {
+            const c = byId.get(req.params.canvas);
+            const url = new URL(req.url);
+            const file = decodeURIComponent(url.pathname.split('/files/').slice(1).join('/files/'));
+            return c ? serveAnswerFile(c.answerDir(Number(req.params.thread)), file, url.searchParams.has('download')) : new Response('Not found', { status: 404 });
+          } catch {
+            return new Response('Not found', { status: 404 });
+          }
+        },
+      },
+      // opens an answer's file (`file`), or its thread's directory, with the system's app
+      '/api/c/:canvas/threads/:thread/open': {
+        POST: on(async (c, req) => {
+          const { file } = (await req.json().catch(() => ({}))) as { file?: string };
+          await c.openAnswerFile(Number(req.params.thread), file);
+        }),
       },
       // a video demo as a file to pass on, where the repository has no share target (`?as=zip|html`)
       // the push-to-talk key anywhere on the machine, chosen in the settings, and the shell that hears it

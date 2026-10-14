@@ -22,7 +22,8 @@ export class ProjectAgents {
   ) {}
 
   /** Answers a question the owner asked about the project or one of its workstreams, in the project's session. */
-  inform(project: Item, message: string, onTool?: (name: string, input: Record<string, unknown>) => void): Promise<OwnerAnswer> {
+  /** `dir`: the output directory of the looked-up thread, which the answer's files are in. */
+  inform(project: Item, message: string, onTool?: (name: string, input: Record<string, unknown>) => void, dir?: string): Promise<OwnerAnswer> {
     return this.queued(project, () =>
       inform({
         runtime: this.runtime,
@@ -30,6 +31,7 @@ export class ProjectAgents {
         resume: this.board.row(project.id).session_id ?? undefined,
         onSession: (id) => this.board.work(project.id, { session_id: id }),
         ...(onTool ? { onTool } : {}),
+        ...(dir ? { dir } : {}),
         ...(this.permissionMode ? { permissionMode: this.permissionMode } : {}),
         system: `You are the project agent of the project "${project.title}", directed through Obeya. Its plan doc is ${project.plan?.file ?? '(none)'} in this repository; you know it and the history of its workstreams.\n\n${INFORM_RULES}`,
         message: [message, `Decisions taken in this project so far:\n${decisionLog(this.board.decisions(project.id))}`, this.preferences()].filter(Boolean).join('\n\n'),

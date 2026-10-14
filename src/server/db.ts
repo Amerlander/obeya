@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { CardEvent, CardKind, CardState, Mock, Need, Preference, PreferenceState, Spot, Talk } from '../core/types';
+import type { AnswerFile, AnswerRef, CardEvent, CardKind, CardState, Mock, Need, Preference, PreferenceState, Spot, Talk } from '../core/types';
 
 export interface CardRow {
   id: string;
@@ -84,6 +84,8 @@ export interface CardRow {
   held: string | null;
   /** 1 once the owner decided the card (an idea or a task of theirs) becomes a project: its worker writes the plan doc, and the project takes its place. */
   becomes_project: number;
+  /** JSON, a Question card (and an idea that was one): the thread of looked-up answers it holds (`StoredThread` in board.ts). */
+  thread: string | null;
 }
 
 export interface GroupRow {
@@ -302,17 +304,34 @@ export const MIGRATIONS = [
   `ALTER TABLE cards ADD COLUMN becomes_project INTEGER NOT NULL DEFAULT 0;
    UPDATE cards SET becomes_project = 1, idea = json_remove(idea, '$.project') WHERE json_extract(idea, '$.project');
    UPDATE cards SET queue = NULL WHERE json_extract(queue, '$.cutting') IS NOT NULL;`,
+  // looked-up answers go on: the agent's session, the thread and the answer a follow-up continues,
+  // the files an answer comes with, and the Question card a thread moved onto
+  `ALTER TABLE talk ADD COLUMN session_id TEXT;
+   ALTER TABLE talk ADD COLUMN thread INTEGER;
+   ALTER TABLE talk ADD COLUMN follows INTEGER;
+   ALTER TABLE talk ADD COLUMN files TEXT;
+   ALTER TABLE talk ADD COLUMN card TEXT;
+   ALTER TABLE events ADD COLUMN answer TEXT;
+   ALTER TABLE cards ADD COLUMN thread TEXT;`,
 ];
 
-const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot';
-type EventRow = Omit<CardEvent, 'images' | 'mocks' | 'replyTo' | 'spot'> & { code: CardEvent['code'] | null; images: string | null; mocks: string | null; replyTo: number | null; spot: string | null };
-const eventOf = ({ code, images, mocks, replyTo, spot, ...e }: EventRow): CardEvent => ({
+const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer';
+type EventRow = Omit<CardEvent, 'images' | 'mocks' | 'replyTo' | 'spot' | 'answer'> & {
+  code: CardEvent['code'] | null;
+  images: string | null;
+  mocks: string | null;
+  replyTo: number | null;
+  spot: string | null;
+  answer: string | null;
+};
+const eventOf = ({ code, images, mocks, replyTo, spot, answer, ...e }: EventRow): CardEvent => ({
   ...e,
   ...(code ? { code } : {}),
   ...(images ? { images: JSON.parse(images) as string[] } : {}),
   ...(mocks ? { mocks: JSON.parse(mocks) as Mock[] } : {}),
   ...(replyTo ? { replyTo } : {}),
   ...(spot ? { spot: JSON.parse(spot) as Spot } : {}),
+  ...(answer ? { answer: JSON.parse(answer) as AnswerRef } : {}),
 });
 
 export type NewRow = Pick<CardRow, 'canvas_id' | 'kind' | 'x' | 'y'> &
@@ -355,6 +374,7 @@ export type RowUpdate = Partial<
     | 'parked'
     | 'held'
     | 'becomes_project'
+    | 'thread'
   >
 >;
 
@@ -540,12 +560,16 @@ export class Store {
 
   // ---------------------------------------------------------------- events
 
-  addEvent(e: Omit<CardEvent, 'id' | 'at'>): CardEvent {
-    const at = now();
+  /** A line in a card's log, said now or (`at`) earlier: a thread copied onto its Question card keeps its times. */
+  addEvent(e: Omit<CardEvent, 'id' | 'at'> & { at?: string }): CardEvent {
+    const at = e.at ?? now();
     const { id } = this.db
-      .query('INSERT INTO events (card_id, at, kind, author, text, code, images, mocks, reply_to, spot) VALUES ($cardId, $at, $kind, $author, $text, $code, $images, $mocks, $replyTo, $spot) RETURNING id')
+      .query(
+        'INSERT INTO events (card_id, at, kind, author, text, code, images, mocks, reply_to, spot, answer) VALUES ($cardId, $at, $kind, $author, $text, $code, $images, $mocks, $replyTo, $spot, $answer) RETURNING id',
+      )
       .get({
         ...e,
+        answer: e.answer ? JSON.stringify(e.answer) : null,
         code: e.code ?? null,
         images: e.images?.length ? JSON.stringify(e.images) : null,
         mocks: e.mocks?.length ? JSON.stringify(e.mocks) : null,
@@ -763,9 +787,38 @@ export class Store {
     return this.db.query('SELECT token, due, body FROM commands WHERE canvas_id = $c ORDER BY due').all({ c: canvasId }) as { token: string; due: string; body: string }[];
   }
 
-  /** The answer to a looked-up question; one for the sheet (no card was open) waits there unread. */
-  answerTalk(id: number, answer: string, by: 'koordinator' | 'project') {
-    this.db.query('UPDATE talk SET answer = $answer, answer_by = $by, unread = card_id IS NULL WHERE id = $id').run({ id, answer, by });
+  /**
+   * The answer to a looked-up question, with its files; one for the sheet (no card was open, and its
+   * thread is on no Question card) waits there unread.
+   */
+  answerTalk(id: number, answer: string, by: 'koordinator' | 'project', files: AnswerFile[] = []) {
+    this.db
+      .query('UPDATE talk SET answer = $answer, answer_by = $by, files = $files, unread = card_id IS NULL AND card IS NULL WHERE id = $id')
+      .run({ id, answer, by, files: files.length ? JSON.stringify(files) : null });
+  }
+
+  /** A follow-up continues the answer `follows`, in the thread `thread`. */
+  followTalk(id: number, thread: number, follows: number) {
+    this.db.query('UPDATE talk SET thread = $thread, follows = $follows WHERE id = $id').run({ id, thread, follows });
+  }
+
+  /** The session of the agent that looks the exchange's question up. */
+  talkSession(id: number, session: string) {
+    this.db.query('UPDATE talk SET session_id = $session WHERE id = $id').run({ id, session });
+  }
+
+  /** The exchanges of a thread, oldest first, with the session each was looked up in. */
+  thread(canvasId: string, thread: number): (Talk & { about?: string; session?: string })[] {
+    return (this.db.query('SELECT * FROM talk WHERE canvas_id = $c AND (id = $t OR thread = $t) ORDER BY id').all({ c: canvasId, t: thread }) as TalkRow[]).map((r) => ({
+      ...withContinues(this.db, r),
+      ...(r.about ? { about: r.about } : {}),
+      ...(r.session_id ? { session: r.session_id } : {}),
+    }));
+  }
+
+  /** The thread moved onto a Question card: its exchanges, and every follow-up asked later, are answered there. */
+  moveThread(canvasId: string, thread: number, card: string) {
+    this.db.query('UPDATE talk SET card = $card, unread = 0 WHERE canvas_id = $c AND (id = $t OR thread = $t)').run({ c: canvasId, t: thread, card });
   }
 
   /** The owner saw the sheet's answers; whether any was unread. */
@@ -777,13 +830,13 @@ export class Store {
   talk(canvasId: string, limit = 20, withoutCard = false): Talk[] {
     return (this.db.query(`SELECT * FROM talk WHERE canvas_id = $c${withoutCard ? ' AND card_id IS NULL' : ''} ORDER BY id DESC LIMIT $limit`).all({ c: canvasId, limit }) as TalkRow[])
       .reverse()
-      .map(toTalk);
+      .map((r) => withContinues(this.db, r));
   }
 
   /** One exchange, with the card its question is about. */
   exchange(id: number): (Talk & { about?: string }) | null {
     const r = this.db.query('SELECT * FROM talk WHERE id = $id').get({ id }) as TalkRow | null;
-    return r ? { ...toTalk(r), ...(r.about ? { about: r.about } : {}) } : null;
+    return r ? { ...withContinues(this.db, r), ...(r.about ? { about: r.about } : {}) } : null;
   }
 
   /** Questions being looked up, oldest first. */
@@ -930,6 +983,11 @@ interface TalkRow {
   answer_by: 'koordinator' | 'project' | null;
   images: string | null;
   unread: number;
+  session_id: string | null;
+  thread: number | null;
+  follows: number | null;
+  files: string | null;
+  card: string | null;
 }
 
 const toTalk = (r: TalkRow): Talk => ({
@@ -945,4 +1003,15 @@ const toTalk = (r: TalkRow): Talk => ({
   ...(r.answer_by ? { answerBy: r.answer_by } : {}),
   ...(r.unread ? { unread: true } : {}),
   ...(r.images ? { images: JSON.parse(r.images) as string[] } : {}),
+  // a looked-up question is a thread of its own until it follows up on one
+  ...(r.question ? { thread: r.thread ?? r.id } : {}),
+  ...(r.follows ? { follows: r.follows } : {}),
+  ...(r.files ? { files: JSON.parse(r.files) as AnswerFile[] } : {}),
+  ...(r.card ? { movedTo: r.card } : {}),
 });
+
+/** An exchange with the question of the answer it continues, when it follows up on one. */
+function withContinues(db: Database, r: TalkRow): Talk {
+  const followed = r.follows ? (db.query('SELECT question FROM talk WHERE id = $id').get({ id: r.follows }) as { question: string | null } | null) : null;
+  return { ...toTalk(r), ...(followed?.question ? { continues: followed.question } : {}) };
+}
