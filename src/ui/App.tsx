@@ -25,7 +25,7 @@ import { Help, HelpButton } from './help';
 import { PlanDirNote, planDirBoxes } from './planDirs';
 import { attachTo, imageFiles } from './shots';
 import { cardDraft, fieldOn, focusedDraft, keepDrafts, MIC_DRAFT, OBEYA_DRAFT, takesImages } from './draft';
-import { type Heard, HoldToTalk, PushToTalk, ToldList, usePushToTalk, useTold, type Where } from './voice';
+import { type Heard, HoldToTalk, PushToTalk, SPACE_SHOWS_MS, ToldList, usePushToTalk, useTold, type Where } from './voice';
 import { sent, take, videoOf } from './spot';
 import { CanvasPill, CardView, DepLinks, Edges, Links, Minimap, OldBunPill, ProjectView, RestartPill, Sheet, UpdatePill, WorkspacesPill } from './parts';
 import { clampWidth, loadWidths, saveWidths, SHEET_W, type SheetWidths, widthsIn } from './sheetWidth';
@@ -720,7 +720,8 @@ function Canvas({
     const video = f?.type === 'card' ? (videoOf(f.id) ?? panelRef.current?.querySelector('video') ?? null) : null;
     pressing.current = { video, playing: !!video && !video.paused, at: performance.now(), space, dictating: !!focusedDraft() };
     video?.pause();
-    pttRef.current.start();
+    // a tap on Space plays or pauses the video: the microphone shows it listens only once Space stays down
+    pttRef.current.start(space ? SPACE_SHOWS_MS : 0);
   };
   /**
    * Let go: a tap on Space plays or pauses the video; after speaking, a video that played plays on,

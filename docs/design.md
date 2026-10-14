@@ -271,7 +271,9 @@ An idea is thought through on its card before anything is planned; no worker run
    it, and the card stays open. Hovering the magnifier shows the key beside it until the owner
    first zoomed with Z (per browser). Full screen was too much on a large monitor and hid where the
    owner was; before (2026-10-12) the owner zoomed in with the operating system. Space tapped
-   plays and pauses the video, so a demo that waits is started with it; ← and → jump 5 seconds back
+   plays and pauses the video, so a demo that waits is started with it. The recording starts with
+   the press, so no word is cut off, but the microphone lights up only once Space stays down for
+   200 ms (`SPACE_SHOWS_MS`); before (2026-10-14) it flickered at every tap. ← and → jump 5 seconds back
    and forward (`useSeekKeys`). The browser's controls keep every key to themselves once clicked, so
    the video hands the focus back to the page at once; before (2026-10-14) a click on the progress
    bar took Space away (no pause, no recording) and the arrows worked only after that click. A click

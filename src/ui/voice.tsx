@@ -39,6 +39,12 @@ const QUIET_DBFS = -60;
 /** How long the level may stay flat at the start of a recording before the owner is told. */
 const FLAT_MS = 1500;
 
+/**
+ * How long Space is held before the microphone shows it listens: a tap on Space plays or pauses the
+ * demo video, and the microphone lit up for that tap flickered. The recording runs from the press.
+ */
+export const SPACE_SHOWS_MS = 200;
+
 /** How long a note under a field about its dictation stays. */
 const NOTE_MS = 6000;
 
@@ -50,6 +56,9 @@ const NOTE_MS = 6000;
  */
 export function usePushToTalk(where: () => Where, field: (target: Where) => string, send: (target: Where, request: () => Promise<Heard>) => Promise<Heard>, onHeard: (h: Heard) => void) {
   const [phase, setPhase] = useState<Phase>('idle');
+  /** The microphone shows it listens: `shownAfter` into the recording. */
+  const [shown, setShown] = useState(false);
+  const showing = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [level, setLevel] = useState(0);
   const [flat, setFlat] = useState(false);
   /** Recordings let go of that Obeya has not answered yet. */
@@ -59,7 +68,8 @@ export function usePushToTalk(where: () => Where, field: (target: Where) => stri
   const held = useRef<number | null>(null);
   const frame = useRef(0);
 
-  async function start() {
+  /** `shownAfter`: how long after the press the microphone shows it listens. */
+  async function start(shownAfter = 0) {
     if (held.current !== null || rec.current) return;
     const pressed = performance.now();
     held.current = pressed;
@@ -96,6 +106,9 @@ export function usePushToTalk(where: () => Where, field: (target: Where) => stri
     rec.current = r;
     if (into) beginDictation(into);
     setPhase('listening');
+    const wait = shownAfter - (performance.now() - pressed);
+    if (wait > 0) showing.current = setTimeout(() => rec.current === r && setShown(true), wait);
+    else setShown(true);
     const buf = new Float32Array(m.analyser.fftSize);
     let loudest = 0;
     const meter = () => {
@@ -120,6 +133,8 @@ export function usePushToTalk(where: () => Where, field: (target: Where) => stri
     if (!r) return;
     rec.current = null;
     cancelAnimationFrame(frame.current);
+    clearTimeout(showing.current);
+    setShown(false);
     setLevel(0);
     setFlat(false);
     const length = performance.now() - r.t0;
@@ -172,7 +187,7 @@ export function usePushToTalk(where: () => Where, field: (target: Where) => stri
     holdRestart('voice', phase === 'idle' && !writing ? null : 'voice');
     return () => holdRestart('voice', null);
   }, [phase, writing]);
-  return { phase, level, flat, start, stop };
+  return { phase: shown ? phase : 'idle', level, flat, start, stop };
 }
 
 /** A command on its way: while it is transcribed or the Koordinator reads it, then its confirmation. */
