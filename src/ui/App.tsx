@@ -720,8 +720,8 @@ function Canvas({
     const video = f?.type === 'card' ? (videoOf(f.id) ?? panelRef.current?.querySelector('video') ?? null) : null;
     pressing.current = { video, playing: !!video && !video.paused, at: performance.now(), space, dictating: !!focusedDraft() };
     video?.pause();
-    // a tap on Space plays or pauses the video: the microphone shows it listens only once Space stays down
-    pttRef.current.start(space ? SPACE_SHOWS_MS : 0);
+    // a tap on Space plays or pauses the video: with one open, the microphone shows it listens only once Space stays down
+    pttRef.current.start(space && video ? SPACE_SHOWS_MS : 0);
   };
   /**
    * Let go: a tap on Space plays or pauses the video; after speaking, a video that played plays on,
