@@ -478,7 +478,7 @@ textarea.p-body:focus { border-color: var(--muted); }
 .split.alone { grid-template-columns: minmax(0, 1fr); }
 .p-state + .p-src { margin-top: 4px; }
 .split-main { overflow: auto; min-height: 0; padding-right: 4px; }
-.split-main > :first-child, .split-main .question.brief { margin-top: 0; }
+.split-main > :first-child { margin-top: 0; }
 .split-main .question, .split-main .p-body-field, .split-main textarea.p-body { max-width: none; }
 .split-talk { display: flex; flex-direction: column; min-height: 0; }
 .split-talk .p-h { margin-top: 0; }
