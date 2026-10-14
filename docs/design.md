@@ -368,7 +368,8 @@ An idea is thought through on its card before anything is planned; no worker run
    once in the archive), or when a prototype ends (discarded or built; Ideas, 4). The archive
    (button or `A`) lists archived cards under its button in the bar, as the queue does, by day,
    the most recently archived first, as small cards on a timeline with the time they were
-   archived; one unfolds from its card as on the canvas and can go back to the place it had. The
+   archived, each labelled with its kind or state („Idee → Projekt“, „Projekt“) unless it is a plain
+   task, nearly every entry, which goes without one; one unfolds from its card as on the canvas and can go back to the place it had. The
    list stays under the dim while that card is open, so the card folds back into it; a click
    beside it or Esc closes it. Until 2026-10-09 the archive was a sheet on the right. An
    ended prototype cannot: it shows, read-only, how it ended, its demo and conversation.

@@ -62,19 +62,25 @@ export function ArchivePill({ on, onToggle, onClose, held, archived, done, onOpe
               <section key={day}>
                 <h4>{day}</h4>
                 <ol className="timeline">
-                  {items.map((i) => (
-                    <li key={i.id}>
-                      <time>{t.archive.time(new Date(i.archivedAt!))}</time>
-                      <span className="tick" />
-                      <button className="a-card" ref={(el) => void (el ? els.set(i.id, el) : els.delete(i.id))} onClick={() => onOpen(i)}>
-                        <span className="a-ttl">{plain(i.title)}</span>
-                        <span className="hint">
-                          {i.idea || i.prototypeEnd ? stateLabel(i) : i.becomesProject ? becomesLabel(i) : t.kind[i.kind]}
-                          {i.kind === 'project' && ` · ${t.archive.workstreams(archived.filter((x) => x.parent === i.id).length)}`}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
+                  {items.map((i) => {
+                    // a plain task, nearly every entry, goes without a label, so the others stand out
+                    const label = i.idea || i.prototypeEnd ? stateLabel(i) : i.becomesProject ? becomesLabel(i) : i.kind === 'task' ? '' : t.kind[i.kind];
+                    return (
+                      <li key={i.id}>
+                        <time>{t.archive.time(new Date(i.archivedAt!))}</time>
+                        <span className="tick" />
+                        <button className="a-card" ref={(el) => void (el ? els.set(i.id, el) : els.delete(i.id))} onClick={() => onOpen(i)}>
+                          <span className="a-ttl">{plain(i.title)}</span>
+                          {label && (
+                            <span className="hint">
+                              {label}
+                              {i.kind === 'project' && ` · ${t.archive.workstreams(archived.filter((x) => x.parent === i.id).length)}`}
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
                 </ol>
               </section>
             ))
