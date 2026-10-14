@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
-import { clock, setLanguage, t } from './strings';
+import { clock, setLanguage, stateLabel, t } from './strings';
 
 afterEach(() => setLanguage('de', []));
 
@@ -28,4 +28,13 @@ test('the browser\'s variant of the language writes dates its way', () => {
 test('a language tag Intl refuses falls back to the usual variant', () => {
   setLanguage('en', ['en-US@posix']);
   expect(clock(new Date(2026, 9, 6, 15, 4))).toMatch(/03:04\sPM/);
+});
+
+test("a proposal of the Arbeitsrückschau is labelled as Obeya's, a worker's proposal as an agent's", () => {
+  setLanguage('en', []);
+  expect(stateLabel({ state: 'proposal', retro: 'Two cards hit the same wall.' })).toBe('Proposed by Obeya');
+  expect(stateLabel({ state: 'proposal' })).toBe('Proposed by an agent');
+  setLanguage('de', []);
+  expect(stateLabel({ state: 'proposal', retro: 'Zwei Karten scheiterten gleich.' })).toBe('Vorschlag von Obeya');
+  expect(stateLabel({ state: 'planned', retro: 'Zwei Karten scheiterten gleich.' })).toBe('Geplant');
 });

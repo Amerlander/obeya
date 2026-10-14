@@ -1508,7 +1508,8 @@ the owner's language (`src/core/locale.ts`).
     taken. It proposes at most three things, each resting on friction on at least two cards (tags
     the tool checks): a feature card (a script, a skill, a fix to a tool) that waits as a proposal
     in a free spot, with a sentence on the cards it rests on (`retro` on the card, shown under the
-    title as „Aus der Arbeitsrückschau: …“ and in its body), or a line for the repository's
+    title as „Aus der Arbeitsrückschau: …“ and in its body; its state reads „Vorschlag von Obeya“
+    where a worker's proposal reads „Vorschlag eines Agenten“), or a line for the repository's
     CLAUDE.md, which goes the way of the Rückschau's rules (a proposal for „CLAUDE.md von <repo>“,
     then the card „CLAUDE.md ergänzen“). Nothing is created silently and nothing starts by itself;
     skills of the user (`~/.claude/skills`) are out of scope. The owner can ask the Koordinator

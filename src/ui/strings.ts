@@ -20,6 +20,8 @@ const de = {
     live: 'Live',
     done: 'Erledigt',
   } satisfies Record<CardState, string>,
+  /** The state of a proposal the Arbeitsrückschau made, in place of `state.proposal`. */
+  proposalByObeya: 'Vorschlag von Obeya',
   need: { demo: 'Demo bereit', question: 'Frage an dich', review: 'Bereit zur Abnahme' } satisfies Record<Need, string>,
   demoWithQuestion: 'Demo bereit, mit Frage',
   answering: 'Agent arbeitet an deiner Nachricht',
@@ -1023,6 +1025,7 @@ const en: Strings = {
     live: 'Live',
     done: 'Done',
   },
+  proposalByObeya: 'Proposed by Obeya',
   need: { demo: 'Demo ready', question: 'Question for you', review: 'Ready for review' },
   demoWithQuestion: 'Demo ready, with a question',
   answering: 'Agent works on your message',
@@ -2022,7 +2025,7 @@ const longDay = (d: Date, today: Date) =>
 /** A number, with `digits` decimals at most. */
 const number = (n: number, digits = 0) => n.toLocaleString(locale, { maximumFractionDigits: digits, minimumFractionDigits: digits });
 
-export const stateLabel = (i: { state: CardState; need?: Need; pr?: unknown; queue?: Queue; idea?: Idea; question?: unknown; answering?: true; finishing?: boolean; followUp?: boolean; prototypeEnd?: 'discarded' | 'built' }) =>
+export const stateLabel = (i: { state: CardState; need?: Need; pr?: unknown; queue?: Queue; idea?: Idea; question?: unknown; answering?: true; finishing?: boolean; followUp?: boolean; prototypeEnd?: 'discarded' | 'built'; retro?: string }) =>
   i.prototypeEnd
     ? t.idea.ended[i.prototypeEnd]
     : i.finishing && (i.state === 'live' || i.state === 'done')
@@ -2049,7 +2052,9 @@ export const stateLabel = (i: { state: CardState; need?: Need; pr?: unknown; que
           : t.need[i.need]
       : i.state === 'inPr' && !i.pr
         ? t.openingPr
-        : t.state[i.state];
+        : i.state === 'proposal' && i.retro
+          ? t.proposalByObeya
+          : t.state[i.state];
 
 /** The owner's text for a refused request or a logged error code; the generic one for anything unknown. */
 /** An idea or a task decided as a project, until the project takes its place; a card that was an idea has the brief it was decided on. */
