@@ -40,7 +40,7 @@ visibly on the walls and decisions are made in front of the wall.
 
 - **Canvas** — a canvas spans one or more repositories; one Obeya serves several canvases.
 - **Cards** — everything on the canvas is a card: a task (`task`; in the UI an *Aufgabe*), an idea,
-  a prototype, or a `project`, a container backed by a plan doc whose workstreams are its child
+  a prototype, a Question card (`question`, a thread of looked-up answers, see Looked-up threads), or a `project`, a container backed by a plan doc whose workstreams are its child
   cards. Tasks have no further kind: whether one fixes a bug or adds something makes no difference
   to how it is worked on, so the owner does not pick one. A task's card names no kind either (that
   it is one shows); the others say what they are (idea, prototype, workstream number, project).
@@ -1757,6 +1757,49 @@ the owner's language (`src/core/locale.ts`).
   offers at the end is one "ja" away), and it is part of its stored memory. Until 2026-10-09 it
   heard only the first 1500 characters, and asked back when the owner said yes to a card offered
   further on. A question still open at a restart is looked up again.
+- **Looked-up threads** (`src/server/answers.ts`) — a look-up starts a thread, and the owner can
+  go on with it. The Koordinator knows each answer by a tag (`A12`, the exchange's id) in what it
+  hears of it and in its memory; when the owner's words follow up on one („und im Oktober?“,
+  „mach mir ein Excel daraus“), `look_up` names it in `follows` (in doubt the newest). The
+  follow-up then resumes the session of the agent that found that answer (its id stands on the
+  exchange in `talk`), which still has all it read and computed; a project's questions go on in
+  its project agent as before. Turns of one thread queue, so two never run in one session at
+  once. A session that cannot be resumed (its transcript gone) is replaced by a fresh agent that
+  gets the first question's context and the thread so far. The follow-up stands under the owner's
+  words with „↳ setzt fort: „…““ (and „liest …“ while it is looked up), so the owner sees which
+  answer Obeya took it for; its answer stands in the sheet or the open card's log as any. Until
+  2026-10-14 the look-up agent was one-shot: a follow-up went to a fresh agent that got only the
+  owner's words and the card, and started over.
+  Every thread has an output directory outside every repository, `~/.obeya/answers/<canvas>/<thread>/`
+  (never in git, like demos), named in each turn's message and given to the agent as a directory
+  of its own (`additionalDirectories`): files the owner asks for or that help go there (a
+  spreadsheet of the numbers, a chart or page, the queries and scripts behind them, a draft as a
+  document; no list of types), and `answer_owner` passes them with `files` (path and a one-line
+  caption). A path outside the directory, or no file, is refused and the agent asked again. Under
+  its text the answer shows them, in the sheet, a card's log and a Question card alike
+  (`AnswerFiles` in `src/ui/message.tsx`): a page in the sandboxed frame of an HTML artifact (same
+  CSP, height report), an image inline, any other file as a chip that opens it with the system's
+  app (`open`, `explorer.exe`, `xdg-open` on the machine Obeya runs on; where that fails the browser
+  downloads it), with ↓ to download, and „Im Ordner zeigen“ for the directory. A follow-up writes
+  into the same directory, so it builds on the files already there. Until 2026-10-14 an answer
+  was markdown only, and the agent ran in the Lesestand, where files would have been left as
+  uncommitted changes nobody saw.
+  Every looked-up answer has „Als Karte“ in its head, always in view: the thread moves onto a
+  **Question card** (`kind: 'question'`), next to the card whose log held it or where there is
+  room, its question as the title, its exchanges (the owner's words, the answers with their files
+  and times) as its conversation, the same session going on. The sheet keeps a line „Auf der Karte
+  „…““ in place of each of its answers, which opens the card; a follow-up asked in the sheet
+  afterwards goes to the card's agent and stands on the card. On the card the owner's words go
+  straight to that agent (`CanvasRuntime.tell` → `ask`, the shared conversation, Send and unsent
+  input), words that come while it reads go in with its next turn, and it passes on with
+  `to_obeya` what asks Obeya; a note the Koordinator passes to the card goes there too. It holds
+  answers, not work: its state is `done`, but it has a look of its own (a white card with a
+  blue-grey edge, „FRAGE“), shows the number of answers and files and whether its agent reads, is
+  not taken by „Erledigte archivieren“, and has no brief and no build, plan, prototype or park
+  buttons. It has two: „Als Idee besprechen“ (not while its agent reads) makes it an idea
+  (`task` in state `idea`) whose exploration agent starts afresh from the thread and its
+  directory, and „Erledigt“ archives it. „Als Karte“ on a thread already moved opens its card, back
+  from the archive if need be. The Koordinator lists Question cards among the cards it sees.
 - **Commands on their way** — after letting go of Space the microphone is free at once, and the
   owner may navigate or speak again: the target is fixed when the key goes down. Each recording
   has its own small line above the
@@ -2219,13 +2262,18 @@ card events (the log, with an error code where the UI words it, the owner's scre
 screenshots, workspaces and their leases,
 decision log, preferences, the Koordinator's conversation with the owner (what was said, its
 reply, the screenshots that came with it, the open card, whether it was taken back; a looked-up
-question, the card it is about, its answer and who gave it), groups (name, colour) and the group of each card, per-canvas settings (the home repository; which canvas a repository's own adapter named; per repository the card collecting its CLAUDE.md rules; the Rückschau's count and when its history begins; per repository the Arbeitsrückschau's count and when it last ran), the friction noted on each card's runs (per repository), and on a card the Arbeitsrückschau proposed what it rests on.
+question, the card it is about, its answer and who gave it, the session of the agent that looked
+it up, the thread it belongs to and the answer it follows up on, the files the answer came with,
+and the Question card the thread moved onto), a Question card's thread (the exchange it started
+with, whether its agent reads, what the owner asked that it has not answered yet, its counts of
+answers and files), the answer a message of a card's log is (its thread, files, the question it
+continues), groups (name, colour) and the group of each card, per-canvas settings (the home repository; which canvas a repository's own adapter named; per repository the card collecting its CLAUDE.md rules; the Rückschau's count and when its history begins; per repository the Arbeitsrückschau's count and when it last ran), the friction noted on each card's runs (per repository), and on a card the Arbeitsrückschau proposed what it rests on.
 
 Files under `~/.obeya/` (the same for the app and a checkout): the database (`obeya.db`), the
 owner's screenshots (`images/<canvas>/`), the configuration (`canvases.json`), the settings
 (`settings.json`, `demo.json`), where the running Obeya answers (`server.json`), the app's server
 log (`app.log`), voices and models (`voices/`), the workers' clones and worktrees
-(`workspaces/`), the static sites Obeya keeps (`sites/<key>/`), the env files their adapters
+(`workspaces/`), the files of looked-up answers (`answers/<canvas>/<thread>/`), the static sites Obeya keeps (`sites/<key>/`), the env files their adapters
 name (relative to the home, `sites/demos/deploy.env`, say), what a repository's share command keeps there, and `share/`, the directory share commands
 and deploys run in.
 

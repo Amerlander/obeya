@@ -22,7 +22,7 @@
   --lift: 0 1px 0 rgba(95,75,35,.18), 3px 6px 0 rgba(95,75,35,.12), 0 16px 26px -10px rgba(60,45,20,.35);
   --serif: Newsreader, "Iowan Old Style", Georgia, serif; --cond: "Plex Condensed", "Arial Narrow", sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --planned: #a0978a; --working: #1d5fe0; --waiting: #f27405; --approved: #3d9a1f; --inPr: #08888e; --live: #b4ab98; --proposal: #7b4fd6; --idea: #dc2f5e;
+  --planned: #a0978a; --working: #1d5fe0; --waiting: #f27405; --approved: #3d9a1f; --inPr: #08888e; --live: #b4ab98; --proposal: #7b4fd6; --idea: #dc2f5e; --question: #4f7896;
   --waiting-rgb: 242,116,5; --on-ink: #fff; --error: #c42b1c; --warn: #a3520a;
   --container: rgba(255,252,242,.45); --container-line: rgba(120,105,75,.22);
   --dim: rgba(40,32,18,.34); --panel: #fdfbf5; --chip: #f0ebdf;
@@ -35,7 +35,7 @@
   --bg: #121110; --dot: #26231f; --card: #23211d; --ink: #efe9dc; --muted: #a69e8e; --line: #36322b;
   --shadow: inset 0 1px 0 rgba(255,250,235,.05), 0 1px 0 rgba(0,0,0,.7), 1px 3px 0 rgba(0,0,0,.45);
   --lift: inset 0 1px 0 rgba(255,250,235,.06), 0 1px 0 rgba(0,0,0,.7), 3px 7px 0 rgba(0,0,0,.45), 0 18px 30px -10px rgba(0,0,0,.7);
-  --planned: #8a8274; --working: #5b95ff; --waiting: #ff8a1c; --approved: #78c448; --inPr: #27b9b6; --live: #5f594e; --proposal: #a587ff; --idea: #ff6289;
+  --planned: #8a8274; --working: #5b95ff; --waiting: #ff8a1c; --approved: #78c448; --inPr: #27b9b6; --live: #5f594e; --proposal: #a587ff; --idea: #ff6289; --question: #8db3cf;
   --waiting-rgb: 255,138,28; --on-ink: #16140f; --error: #ff7a63; --warn: #f0a85a;
   --container: rgba(255,250,235,.035); --container-line: rgba(255,250,235,.10);
   --dim: rgba(0,0,0,.55); --panel: #1f1d1a; --chip: #2c2925;
@@ -45,7 +45,7 @@
   --bg: #121110; --dot: #26231f; --card: #23211d; --ink: #efe9dc; --muted: #a69e8e; --line: #36322b;
   --shadow: inset 0 1px 0 rgba(255,250,235,.05), 0 1px 0 rgba(0,0,0,.7), 1px 3px 0 rgba(0,0,0,.45);
   --lift: inset 0 1px 0 rgba(255,250,235,.06), 0 1px 0 rgba(0,0,0,.7), 3px 7px 0 rgba(0,0,0,.45), 0 18px 30px -10px rgba(0,0,0,.7);
-  --planned: #8a8274; --working: #5b95ff; --waiting: #ff8a1c; --approved: #78c448; --inPr: #27b9b6; --live: #5f594e; --proposal: #a587ff; --idea: #ff6289;
+  --planned: #8a8274; --working: #5b95ff; --waiting: #ff8a1c; --approved: #78c448; --inPr: #27b9b6; --live: #5f594e; --proposal: #a587ff; --idea: #ff6289; --question: #8db3cf;
   --waiting-rgb: 255,138,28; --on-ink: #16140f; --error: #ff7a63; --warn: #f0a85a;
   --container: rgba(255,250,235,.035); --container-line: rgba(255,250,235,.10);
   --dim: rgba(0,0,0,.55); --panel: #1f1d1a; --chip: #2c2925;
@@ -125,7 +125,13 @@ h1, h2, .cfg-head h3, .p-title, .project > .head .ttl, .timeline .a-ttl { font-f
 .card.s-idea { background-color: color-mix(in srgb, var(--idea) 9%, var(--card)); }
 .card.idea-parked, .card.idea-dropped { opacity: .62; }
 .card.idea-dropped .ttl { text-decoration: line-through; text-decoration-color: var(--idea); text-decoration-thickness: 1.5px; }
+/* a Question card: a white index card filed with a blue-grey tab down its left edge, not yellowed like finished work */
+.card.q-card, .card.q-card.s-done { --c: var(--question); opacity: 1; background-color: var(--card); border-left: 4px solid var(--question); }
+.card.q-card .ttl, .card.q-card.s-done .ttl { font-weight: 600; }
+.card.q-card .state { left: 16px; }
+.card.q-card .kind { color: var(--question); text-transform: uppercase; letter-spacing: .07em; font-size: 10.5px; }
 /* the moving line: a pencil stroke being drawn, again and again */
+.card.q-card.thinking .state::after,
 .card.s-idea.thinking .state::after, .card.s-proposal.thinking .state::after, .card.underway .state::after,
 .card.s-working .state::after, .card.s-waiting.answering .state::after, .card.finishing .state::after { content: ""; width: 36px; height: 2px;
   background: linear-gradient(90deg, var(--c) 0 50%, transparent 50%) 0 0 / 200% 100% no-repeat,
@@ -548,6 +554,27 @@ textarea.p-body:focus { border-color: var(--muted); }
 .talk .msg.thinking .who::after { content: ""; display: inline-block; vertical-align: middle; margin-left: 8px; width: 34px; height: 3px; border-radius: 2px;
   background: linear-gradient(90deg, transparent, var(--idea), transparent); background-size: 200% 100%; animation: flow 1.4s linear infinite; }
 .mocks { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin: 8px 0 4px; }
+/* a looked-up answer: "Make it a card" in its head, always in view; its files under the text */
+.msg-card { float: right; margin: -2px 0 0 8px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 3px; background: none;
+  color: var(--muted); font: 500 11px var(--cond); cursor: pointer; }
+.msg-card:hover { color: var(--ink); border-color: var(--question); }
+.msg-card.on { color: var(--question); border-color: color-mix(in srgb, var(--question) 50%, transparent); }
+.talk .moved { margin: 2px 0 8px; }
+.talk .moved .msg-card { float: none; margin: 0; }
+.continues { margin-top: 4px; font-size: 11.5px; color: var(--muted); }
+.answer-files { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+.answer-files figure { margin: 0; min-width: 0; }
+.answer-files figcaption { font-size: 11.5px; color: var(--muted); margin-top: 3px; overflow-wrap: anywhere; }
+.answer-files figcaption a { color: inherit; }
+.answer-page iframe { width: 100%; min-height: 80px; border: 1px solid var(--line); border-radius: 2px; background: #fff; display: block; }
+.answer-image img { display: block; max-width: 100%; max-height: 480px; border: 1px solid var(--line); border-radius: 2px; background: #fff; }
+.file-chips { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.file-chip { display: inline-flex; align-items: stretch; border: 1px solid var(--line); border-radius: 11px; overflow: hidden; font: 12px var(--cond); }
+.file-chip .file-open { border: 0; background: none; padding: 2px 6px 2px 8px; color: var(--ink); cursor: pointer; font: inherit; }
+.file-chip .file-open:hover, .file-chip .file-down:hover { background: var(--line); }
+.file-chip .file-mark { color: var(--question); }
+.file-chip .file-down { padding: 2px 7px; border-left: 1px solid var(--line); color: var(--muted); text-decoration: none; }
+.file-chips .file-folder { font: 12px var(--cond); margin-left: 4px; }
 .mocks .mock { margin: 0; min-width: 0; }
 .mocks figcaption { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
 .mocks iframe { width: 100%; border: 1px solid var(--line); border-radius: 2px; background: #fff; display: block; }

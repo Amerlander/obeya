@@ -6,7 +6,7 @@ import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
 import type { Item, Preference, RepoRef, Reshare, Talk } from '../core/types';
 import { api, ApiError } from './api';
 import { plain } from './markdown';
-import { Body, Msg, Reading } from './message';
+import { AnswerFiles, Body, Continues, Msg, Reading, ThreadCard } from './message';
 import { errorText, t } from './strings';
 import { Composer } from './composer';
 import { OBEYA_DRAFT } from './draft';
@@ -37,7 +37,7 @@ export function KoordinatorSheet({ on, canvas, items, preferences, repos, talk, 
   return (
     <aside id="ksheet" className={on ? 'sheet on' : 'sheet'}>
       <h2>{t.koordinator.title}</h2>
-      <Conversation talk={talk} fresh={fresh} />
+      <Conversation talk={talk} fresh={fresh} items={items} onOpen={onOpen} />
       <TellKoordinator onTell={onTell} />
 
       <div className="k-rest">
@@ -138,7 +138,7 @@ function Fold({ kind, head, open, onToggle, children }: { kind?: string; head: s
 }
 
 /** What the owner said to the Koordinator with no card open, and its replies; newest last. */
-function Conversation({ talk, fresh }: { talk: Talk[]; fresh: number[] }) {
+function Conversation({ talk, fresh, items, onOpen }: { talk: Talk[]; fresh: number[]; items: Item[]; onOpen: (i: Item) => void }) {
   const box = useRef<HTMLDivElement>(null);
   const atEnd = useRef(true);
   const newest = useRef<number | undefined>(undefined);
@@ -179,6 +179,7 @@ function Conversation({ talk, fresh }: { talk: Talk[]; fresh: number[] }) {
           <Msg by="owner" who={t.author.owner} at={x.at}>
             <Body md={x.said} />
             <Shots ids={x.images} />
+            {x.continues && <Continues question={x.continues} reading={x.answer === undefined && !x.movedTo} />}
           </Msg>
           {x.reply === undefined ? (
             <Reading />
@@ -188,16 +189,31 @@ function Conversation({ talk, fresh }: { talk: Talk[]; fresh: number[] }) {
               {x.undone && <div className="hint">{t.koordinator.undone}</div>}
             </Msg>
           )}
-          {/* a question it looked up: the answer follows the acknowledgement */}
-          {x.question && x.answer === undefined && (
-            <Msg by="koordinator" className="thinking" who={t.author.koordinator}>
-              <div className="hint">{t.koordinator.lookingUp}</div>
-            </Msg>
-          )}
-          {x.answer !== undefined && (
-            <Msg by={x.answerBy ?? 'koordinator'} className={fresh.includes(x.id) ? 'fresh' : undefined} who={t.author[x.answerBy ?? 'koordinator']}>
-              <Body md={x.answer} />
-            </Msg>
+          {/* a thread moved onto a Question card goes on there: a line leads to it */}
+          {x.movedTo ? (
+            <div className="moved">
+              <ThreadCard thread={x.thread!} card={items.find((i) => i.id === x.movedTo)} onOpen={onOpen} />
+            </div>
+          ) : (
+            <>
+              {/* a question it looked up: the answer follows the acknowledgement */}
+              {x.question && x.answer === undefined && (
+                <Msg by="koordinator" className="thinking" who={t.author.koordinator}>
+                  <div className="hint">{t.koordinator.lookingUp}</div>
+                </Msg>
+              )}
+              {x.answer !== undefined && (
+                <Msg
+                  by={x.answerBy ?? 'koordinator'}
+                  className={fresh.includes(x.id) ? 'fresh' : undefined}
+                  who={t.author[x.answerBy ?? 'koordinator']}
+                  head={x.thread !== undefined && <ThreadCard thread={x.thread} onOpen={onOpen} />}
+                >
+                  <Body md={x.answer} />
+                  {x.thread !== undefined && <AnswerFiles thread={x.thread} files={x.files} />}
+                </Msg>
+              )}
+            </>
           )}
         </Fragment>
       ))}

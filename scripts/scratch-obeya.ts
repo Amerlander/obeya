@@ -78,7 +78,10 @@
 // What a learned rule's occasion is (card, quote, review), `replaces` and `target` need code that has them.
 // Groups are created through the API with their cards (keys; a workstream stands for its project),
 // in their colours by order. `talk` is the conversation with the Koordinator, oldest first (`card` a key;
-// `question` and `answer`, `answerBy` for a question it looked up).
+// `question` and `answer`, `answerBy` for a question it looked up; `follows`: the index of the
+// exchange whose answer it continues, in that one's thread; `files`: the answer's files, each with
+// its name, caption and either `content` or a file to copy (`from`), written to the thread's output
+// directory; needs code that has them).
 
 import { Database } from 'bun:sqlite';
 import { spawn, spawnSync } from 'node:child_process';
@@ -144,7 +147,17 @@ interface Stage {
   cards: StageCard[];
   preferences?: { key?: string; text: string; state?: string; card?: string; quote?: string; review?: boolean; replaces?: string; target?: string }[];
   groups?: { name: string; cards: string[] }[];
-  talk?: { said: string; reply: string; ago?: string; card?: string; question?: string; answer?: string; answerBy?: string }[];
+  talk?: {
+    said: string;
+    reply: string;
+    ago?: string;
+    card?: string;
+    question?: string;
+    answer?: string;
+    answerBy?: string;
+    follows?: number;
+    files?: { name: string; caption: string; content?: string; from?: string }[];
+  }[];
 }
 
 const ROOT = resolve(import.meta.dir, '..');
@@ -430,17 +443,36 @@ for (const [i, p] of (stage.preferences ?? []).entries()) {
   const r = db.query(`INSERT INTO preferences (${keys.join(', ')}) VALUES (${keys.map((k) => `$${k}`).join(', ')}) RETURNING id`).get(row) as { id: number };
   if (p.key) prefIds[p.key] = r.id;
 }
-for (const [i, x] of (stage.talk ?? []).entries())
-  db.query('INSERT INTO talk (canvas_id, at, said, reply, card_id, question, answer, answer_by) VALUES ($c, $at, $said, $reply, $card, $question, $answer, $by)').run({
-    c: canvas,
+const talkIds: number[] = [];
+const threadOf = new Map<number, number>();
+for (const [i, x] of (stage.talk ?? []).entries()) {
+  const row: Record<string, string | number | null> = {
+    canvas_id: canvas,
     at: ago(x.ago ?? '0s'),
     said: x.said,
     reply: x.reply,
-    card: x.card ? (ids[x.card] ?? fail(`talk ${i}: card ${x.card} does not exist`)) : null,
+    card_id: x.card ? (ids[x.card] ?? fail(`talk ${i}: card ${x.card} does not exist`)) : null,
     question: x.question ?? null,
     answer: x.answer ?? null,
-    by: x.answerBy ?? null,
-  });
+    answer_by: x.answerBy ?? null,
+  };
+  if (x.follows !== undefined) {
+    const followed = talkIds[x.follows] ?? fail(`talk ${i}: follows ${x.follows}, which comes later or does not exist`);
+    row.follows = followed;
+    row.thread = threadOf.get(followed) ?? followed;
+  }
+  if (x.files?.length) row.files = JSON.stringify(x.files.map((f) => ({ name: f.name, caption: f.caption })));
+  const keys = Object.keys(row);
+  const { id } = db.query(`INSERT INTO talk (${keys.join(', ')}) VALUES (${keys.map((k) => `$${k}`).join(', ')}) RETURNING id`).get(row) as { id: number };
+  talkIds.push(id);
+  const thread = typeof row.thread === 'number' ? row.thread : id;
+  threadOf.set(id, thread);
+  for (const f of x.files ?? []) {
+    const to = join(home, 'answers', canvas, String(thread), f.name);
+    mkdirSync(dirname(to), { recursive: true });
+    writeFileSync(to, f.from ? readFileSync(f.from) : (f.content ?? ''));
+  }
+}
 db.close();
 // the server keeps a snapshot of the canvas: a change through the API makes it read the database anew
 const first = stage.cards.find((c) => !c.project && !c.workstream);

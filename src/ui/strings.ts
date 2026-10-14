@@ -355,6 +355,7 @@ const de = {
     /** A card an agent works on: what the owner says goes straight to it, and it passes requests to Obeya on. */
     agent: (title: string) => `Agent · Aufgabe: ${title}`,
     idea: (title: string) => `Agent · Idee: ${title}`,
+    question: (title: string) => `Agent · Frage: ${title}`,
     project: (title: string) => `Obeya · Projekt: ${title}`,
     noMic: 'Kein Mikrofon: der Browser hat den Zugriff nicht erlaubt.',
     /** In the app's floating panel, while the owner holds the push-to-talk key in another app. */
@@ -460,6 +461,35 @@ const de = {
     outdated: 'Seiten werden inzwischen anders erzeugt; diese zeigt noch die frühere Fassung.',
     reshare: 'Erneut teilen',
     reshareHint: 'Erzeugt die Seite neu, mit derselben Demo; der Link bleibt.',
+  },
+  answer: {
+    makeCard: 'Als Karte',
+    makeCardHint: 'Legt diesen Faden (Fragen, Antworten, Dateien) als Frage-Karte auf die Leinwand; der Agent, der nachgeschlagen hat, liest dort weiter.',
+    onCard: (title: string) => `Auf der Karte „${title}“`,
+    onCardHint: 'Dieser Faden geht auf seiner Frage-Karte weiter.',
+    continues: (question: string) => `↳ setzt fort: „${question}“`,
+    reading: 'liest …',
+    showFolder: 'Im Ordner zeigen',
+    showFolderHint: 'Öffnet den Ordner mit allen Dateien dieser Antworten',
+    open: (caption: string) => (caption ? `${caption} – öffnen` : 'Öffnen'),
+    download: 'Herunterladen',
+    page: 'Seite',
+  },
+  question: {
+    kind: 'Frage',
+    reading: 'Agent liest …',
+    ready: 'Agent bereit',
+    count: (answers: number, files: number) =>
+      [answers === 1 ? 'eine Antwort' : `${answers} Antworten`, ...(files ? [files === 1 ? 'eine Datei' : `${files} Dateien`] : [])].join(' · '),
+    compose: 'Frag weiter …',
+    empty: 'Noch keine Antwort.',
+    asIdea: 'Als Idee besprechen',
+    asIdeaHint: 'Macht daraus eine Idee: ihr Explorations-Agent beginnt mit diesem Faden und hält einen Stand der Idee.',
+    asIdeaWaits: 'Erst wenn die Antwort da ist',
+    done: 'Erledigt',
+    doneHint: 'Legt die Karte ins Archiv; von dort kommt sie zurück.',
+    asIdeaAck: 'Wird als Idee besprochen.',
+    doneAck: 'Ins Archiv gelegt.',
   },
   koordinator: {
     button: 'Obeya',
@@ -1381,6 +1411,7 @@ const en: Strings = {
     card: (title: string) => `Obeya · Task: ${title}`,
     agent: (title: string) => `Agent · Task: ${title}`,
     idea: (title: string) => `Agent · Idea: ${title}`,
+    question: (title: string) => `Agent · Question: ${title}`,
     project: (title: string) => `Obeya · Project: ${title}`,
     noMic: 'No microphone: the browser did not allow access.',
     listening: 'Obeya is listening',
@@ -1476,6 +1507,35 @@ const en: Strings = {
     outdated: 'Pages are made differently by now; this one still shows the earlier version.',
     reshare: 'Share again',
     reshareHint: 'Makes the page afresh, with the same demo; the link stays.',
+  },
+  answer: {
+    makeCard: 'Make it a card',
+    makeCardHint: 'Puts this thread (questions, answers, files) on the canvas as a Question card; the agent that looked it up reads on there.',
+    onCard: (title: string) => `On the card “${title}”`,
+    onCardHint: 'This thread goes on on its Question card.',
+    continues: (question: string) => `↳ continues “${question}”`,
+    reading: 'reading …',
+    showFolder: 'Show in folder',
+    showFolderHint: 'Opens the folder with all the files of these answers',
+    open: (caption: string) => (caption ? `${caption} – open` : 'Open'),
+    download: 'Download',
+    page: 'Page',
+  },
+  question: {
+    kind: 'Question',
+    reading: 'agent reading …',
+    ready: 'agent ready',
+    count: (answers: number, files: number) =>
+      [answers === 1 ? 'one answer' : `${answers} answers`, ...(files ? [files === 1 ? 'one file' : `${files} files`] : [])].join(' · '),
+    compose: 'Ask on …',
+    empty: 'No answer yet.',
+    asIdea: 'Discuss as idea',
+    asIdeaHint: 'Makes it an idea: its exploration agent starts from this thread and keeps a brief.',
+    asIdeaWaits: 'Once the answer is in',
+    done: 'Done',
+    doneHint: 'Puts the card into the archive; it can come back from there.',
+    asIdeaAck: 'Discussed as an idea.',
+    doneAck: 'Archived.',
   },
   koordinator: {
     button: 'Obeya',
@@ -2101,8 +2161,12 @@ const longDay = (d: Date, today: Date) =>
 /** A number, with `digits` decimals at most. */
 const number = (n: number, digits = 0) => n.toLocaleString(locale, { maximumFractionDigits: digits, minimumFractionDigits: digits });
 
-export const stateLabel = (i: { state: CardState; need?: Need; pr?: unknown; queue?: Queue; idea?: Idea; question?: unknown; answering?: true; finishing?: boolean; followUp?: boolean; prototypeEnd?: 'discarded' | 'built'; retro?: string }) =>
-  i.prototypeEnd
+export const stateLabel = (i: { kind?: string; thread?: { thinking?: boolean }; state: CardState; need?: Need; pr?: unknown; queue?: Queue; idea?: Idea; question?: unknown; answering?: true; finishing?: boolean; followUp?: boolean; prototypeEnd?: 'discarded' | 'built'; retro?: string }) =>
+  i.kind === 'question'
+    ? i.thread?.thinking
+      ? t.question.reading
+      : t.question.ready
+    : i.prototypeEnd
     ? t.idea.ended[i.prototypeEnd]
     : i.finishing && (i.state === 'live' || i.state === 'done')
     ? i.followUp

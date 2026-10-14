@@ -58,7 +58,7 @@ export const CardView = memo(
       ((finished(item.state) && item.source === 'manual' && !item.finishing) || (item.idea?.status === 'dropped' && !prototyped));
     const kind =
       item.label ??
-      (item.parent ? t.kind.workstream : item.idea || item.proposal?.idea ? t.kind.idea : item.becomesProject ? becomesLabel(item) : item.prototypeOf ? t.kind.prototype : item.kind === 'project' ? t.kind.project : '');
+      (item.parent ? t.kind.workstream : item.kind === 'question' ? t.kind.question : item.idea || item.proposal?.idea ? t.kind.idea : item.becomesProject ? becomesLabel(item) : item.prototypeOf ? t.kind.prototype : item.kind === 'project' ? t.kind.project : '');
     // a plain task says nothing of its kind: that it is one shows
     const label = [item.state === 'proposal' && t.proposalMark, showRepo && item.repo, kind].filter(Boolean).join(' · ');
     // a card whose agent finishes after the landing, or opens its PR, shows its line like one at work: the usage limit it waits on, its reports
@@ -69,6 +69,7 @@ export const CardView = memo(
           ? t.pr.short(item.pr.number, item.pr.checks.filter((c) => c.state === 'failure').length, item.pr.conflict, item.pr.ready, item.pr.held?.score)
           : undefined;
     const meta =
+      (item.kind === 'question' && item.thread ? t.question.count(item.thread.answers, item.thread.files) : undefined) ??
       item.question?.text ??
       (item.idea?.yourTurn ? item.idea.questions[0]?.text : undefined) ??
       (item.queue && 'behind' in item.queue ? item.queue.reason : undefined) ??
@@ -81,7 +82,8 @@ export const CardView = memo(
       shape,
       `s-${item.state}`,
       item.idea && `idea-${item.idea.status}`,
-      (item.idea?.thinking || item.proposal?.revising) && 'thinking',
+      item.kind === 'question' && 'q-card',
+      (item.idea?.thinking || item.proposal?.revising || item.thread?.thinking) && 'thinking',
       item.idea && needsYou(item) && 'your-turn',
       underway && 'underway',
       answering(item) && 'answering',

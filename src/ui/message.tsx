@@ -2,8 +2,9 @@
 // and when above, the text below as paragraphs and lists; a reply quotes the message it answers
 // above its words, as chat apps do.
 
-import type { ReactNode } from 'react';
-import type { CardEvent } from '../core/types';
+import { createContext, type ReactNode, type RefObject, useContext, useEffect, useRef, useState } from 'react';
+import type { AnswerFile, CardEvent, Item } from '../core/types';
+import { answerFile, api } from './api';
 import { type Block, blocks, Inline, ListTree, plain, Table } from './markdown';
 import { clock as time, t } from './strings';
 import { parseQuestion } from './talk';
@@ -12,7 +13,8 @@ import { parseQuestion } from './talk';
  * A message's frame: `by` places and colours it (the owner's on the right), `who` heads it with its
  * time; `className` adds what kind it is (a question, the agent at work, the starting point).
  * `ev`: the log entry it shows, which a quote of it leads to; `onReply`: the owner can reply to it;
- * `onDelete`: the owner can delete it, with `deleteLabel` as the button's title.
+ * `onDelete`: the owner can delete it, with `deleteLabel` as the button's title; `head`: a button at
+ * the right of its head, always in view ("Make it a card").
  */
 export function Msg({
   by,
@@ -23,6 +25,7 @@ export function Msg({
   onReply,
   onDelete,
   deleteLabel,
+  head,
   children,
 }: {
   by: string;
@@ -33,6 +36,7 @@ export function Msg({
   onReply?: () => void;
   onDelete?: () => void;
   deleteLabel?: string;
+  head?: ReactNode;
   children?: ReactNode;
 }) {
   return (
@@ -40,6 +44,7 @@ export function Msg({
       <div className="who">
         {who}
         {at && <span className="t">{time(at)}</span>}
+        {head}
       </div>
       {onReply && (
         <button className="msg-reply" title={t.talk.reply} aria-label={t.talk.reply} onMouseDown={(e) => e.preventDefault()} onClick={onReply}>
@@ -148,3 +153,168 @@ export function Body({ md }: { md: string }) {
     });
   return <>{nodes(blocks(md, { breaks: true }))}</>;
 }
+
+/**
+ * The frame's height for the page in it to fit: what the page reports (`withHeightReport` in
+ * `src/core/frame.ts`) and the frame's border, up to `cap`; undefined until it has reported. A
+ * page as high as its frame would grow with each step: it stops after a few.
+ */
+export function useReportedHeight(frame: RefObject<HTMLIFrameElement | null>, cap: number) {
+  const [height, setHeight] = useState<number>();
+  useEffect(() => {
+    let steps = 0;
+    const on = (e: MessageEvent) => {
+      const h = e.source === frame.current?.contentWindow && (e.data as { obeyaHeight?: unknown } | null)?.obeyaHeight;
+      const f = frame.current;
+      // the border is inside the frame's height (border-box): without it the page is a few pixels too high and scrolls
+      if (typeof h === 'number' && h > 0 && f && steps++ < 30) setHeight(Math.min(Math.ceil(h) + f.offsetHeight - f.clientHeight, cap));
+    };
+    addEventListener('message', on);
+    return () => removeEventListener('message', on);
+  }, []);
+  return height;
+}
+
+// ------------------------------------------------------------------ looked-up answers
+
+/** The highest a page an answer comes with grows in its frame; a higher one scrolls inside it. */
+const PAGE_CAP = 900;
+
+const isPage = (name: string) => /\.html?$/i.test(name);
+const isImage = (name: string) => /\.(png|jpe?g|gif|webp|svg|avif)$/i.test(name);
+
+/** The mark of a file chip, by what the file is: a table, code, a document, anything else. */
+function fileMark(name: string) {
+  if (/\.(xlsx?|csv|tsv|ods|numbers)$/i.test(name)) return '▤';
+  if (/\.(sql|py|js|ts|sh|r|ipynb|json|ya?ml)$/i.test(name)) return '⌘';
+  if (/\.(docx?|odt|rtf|pdf|md|txt|eml)$/i.test(name)) return '✉';
+  return '◇';
+}
+
+/**
+ * The files a looked-up answer comes with, under its text, in the sheet, a card's log and a
+ * Question card alike: a page in the sandboxed frame of an HTML artifact, an image inline, any other
+ * file as a chip that opens it with the system's app (or downloads it, where that cannot be), and
+ * "Show in folder" for the thread's directory.
+ */
+export function AnswerFiles({ thread, files }: { thread: number; files?: AnswerFile[] }) {
+  if (!files?.length) return null;
+  const others = files.filter((f) => !isPage(f.name) && !isImage(f.name));
+  const open = (file?: string) =>
+    api.openAnswer(thread, file).catch(() => {
+      // the system has no app for it here (or Obeya runs elsewhere): the browser saves it instead
+      if (file !== undefined) location.assign(answerFile(thread, file, true));
+    });
+  return (
+    <div className="answer-files">
+      {files.filter((f) => isPage(f.name)).map((f) => (
+        <AnswerPage key={f.name} thread={thread} file={f} />
+      ))}
+      {files.filter((f) => isImage(f.name)).map((f) => (
+        <figure key={f.name} className="answer-image">
+          <a href={answerFile(thread, f.name)} target="_blank" rel="noreferrer">
+            <img src={answerFile(thread, f.name)} alt={f.caption || f.name} />
+          </a>
+          <figcaption>
+            {f.name}
+            {f.caption && ` · ${f.caption}`}
+          </figcaption>
+        </figure>
+      ))}
+      <div className="file-chips">
+        {others.map((f) => (
+          <span key={f.name} className="file-chip">
+            <button className="file-open" title={t.answer.open(f.caption)} onMouseDown={(e) => e.preventDefault()} onClick={() => void open(f.name)}>
+              <span className="file-mark">{fileMark(f.name)}</span> {f.name}
+            </button>
+            <a className="file-down" href={answerFile(thread, f.name, true)} title={t.answer.download} aria-label={t.answer.download}>
+              ↓
+            </a>
+          </span>
+        ))}
+        <button className="link file-folder" title={t.answer.showFolderHint} onMouseDown={(e) => e.preventDefault()} onClick={() => void open()}>
+          {t.answer.showFolder}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** A page an answer comes with: in the frame of an HTML artifact, its scripts away from Obeya's API, as high as it reports. */
+function AnswerPage({ thread, file }: { thread: number; file: AnswerFile }) {
+  const frame = useRef<HTMLIFrameElement>(null);
+  const height = useReportedHeight(frame, PAGE_CAP);
+  return (
+    <figure className="answer-page">
+      <iframe ref={frame} sandbox="allow-scripts" src={answerFile(thread, file.name)} title={file.caption || file.name} style={height ? { height } : undefined} />
+      <figcaption>
+        <a href={answerFile(thread, file.name)} target="_blank" rel="noreferrer">
+          {file.name}
+        </a>
+        {file.caption && ` · ${file.caption}`}
+      </figcaption>
+    </figure>
+  );
+}
+
+/**
+ * The head of a looked-up answer's message, right of who said it: "Make it a card", which moves the
+ * thread onto a Question card and opens it; or, once it is on one, the way there.
+ */
+export function ThreadCard({ thread, card, onOpen }: { thread: number; card?: Item; onOpen: (i: Item) => void }) {
+  const [busy, setBusy] = useState(false);
+  if (card)
+    return (
+      <button className="msg-card on" title={t.answer.onCardHint} onMouseDown={(e) => e.preventDefault()} onClick={() => onOpen(card)}>
+        ↗ {t.answer.onCard(plain(card.title))}
+      </button>
+    );
+  return (
+    <button
+      className="msg-card"
+      title={t.answer.makeCardHint}
+      disabled={busy}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={() => {
+        setBusy(true);
+        api
+          .threadCard(thread)
+          .then(onOpen)
+          .catch(() => {})
+          .finally(() => setBusy(false));
+      }}
+    >
+      ↗ {t.answer.makeCard}
+    </button>
+  );
+}
+
+/** The cards on the canvas, and how to open one (closing the card open), for a looked-up answer in a card's log. */
+export const Cards = createContext<{ items: Item[]; open: (i: Item) => void }>({ items: [], open: () => {} });
+
+/**
+ * What a looked-up answer in a card's conversation adds to it: "Make it a card" in its head (on a
+ * card that is not the thread's own), and its files under the text.
+ */
+export function useAnswer(e: CardEvent): { head?: ReactNode; files?: ReactNode; continues?: ReactNode } {
+  const { items, open } = useContext(Cards);
+  if (!e.answer) return {};
+  const { thread, files, continues } = e.answer;
+  const host = items.find((i) => i.id === e.cardId);
+  const own = host?.thread?.talk === thread;
+  return {
+    ...(own ? {} : { head: <ThreadCard thread={thread} card={items.find((i) => i.kind === 'question' && i.thread?.talk === thread)} onOpen={open} /> }),
+    files: <AnswerFiles thread={thread} files={files} />,
+    ...(continues ? { continues: <Continues question={continues} /> } : {}),
+  };
+}
+
+/** Under a follow-up: which answer it continues, and while it is looked up, that its agent reads. */
+export const Continues = ({ question, reading }: { question: string; reading?: boolean }) => (
+  <div className="continues">
+    {t.answer.continues(clipped(plain(question), 90))}
+    {reading && ` · ${t.answer.reading}`}
+  </div>
+);
+
+const clipped = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);

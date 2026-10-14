@@ -58,6 +58,9 @@ export function setCanvas(id: string) {
 }
 /** A path in the shown canvas's API. */
 export const at = (path: string) => `/api/c/${encodeURIComponent(canvasId)}${path}`;
+/** Where a looked-up answer's file is served; `download` to save it. */
+export const answerFile = (thread: number, name: string, download = false) =>
+  at(`/threads/${thread}/files/${name.split('/').map(encodeURIComponent).join('/')}${download ? '?download' : ''}`);
 
 type Where = { card: string } | { project: string } | null;
 /** The field on a card words were typed into, which tells the Koordinator what they were meant as. */
@@ -139,6 +142,10 @@ export const api = {
   /** Archives every finished card of the owner's on the canvas. */
   archiveDone: () => call<{ ids: string[] }>('POST', at('/archive')),
   act: (id: string, a: CardAction) => call<void>('POST', at(`/cards/${id}/act`), a),
+  /** "Make it a card": a looked-up thread moves onto a Question card, which comes back. */
+  threadCard: (thread: number) => call<Item>('POST', at(`/threads/${thread}/card`)),
+  /** Opens an answer's file with the system's app, or without `file` the thread's directory. */
+  openAnswer: (thread: number, file?: string) => call<void>('POST', at(`/threads/${thread}/open`), file === undefined ? {} : { file }),
   /** A new group with the cards in it; a name a group has already puts them into that one. */
   createGroup: (name: string, cards: string[], hue?: number) => call<Group>('POST', at('/groups'), { name, cards, hue }),
   /** Ends the group: its cards belong to none. Returns what brings it back. */

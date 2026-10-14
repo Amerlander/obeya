@@ -10,7 +10,7 @@ import { Branch } from './diff';
 import { landedRef } from './parts';
 import { useQueueMove } from './queue';
 import { Inline, plain } from './markdown';
-import { Body, Msg, Quote, Reading } from './message';
+import { Body, Msg, Quote, Reading, useAnswer, useReportedHeight } from './message';
 import { cardDraft, questionsKey, updateDraft, useDraft } from './draft';
 import { replyOn, setReply, useReply } from './reply';
 import { Composer } from './composer';
@@ -111,6 +111,17 @@ export function Detail(p: Props) {
     .join(' · ');
   // a proposal being reworked takes the agent's title and text: the fields come back with them, rather than keeping a draft
   const editable = item.source === 'manual' && (item.state === 'planned' || item.state === 'idea' || item.state === 'proposal') && !item.queue && !item.proposal?.revising;
+  if (item.kind === 'question' && item.thread)
+    return (
+      <>
+        <div className="p-kind">{[repo, t.question.kind].filter(Boolean).join(' · ')}</div>
+        <div className="p-title">
+          <Inline md={item.title} />
+        </div>
+        <QuestionView item={item} act={act} run={run} onTell={p.onTell} />
+        {error && <p className="p-error">{error}</p>}
+      </>
+    );
   if (item.state === 'idea' && item.idea)
     return (
       <>
@@ -574,6 +585,60 @@ function IdeaView({ item, act, run, onDelete, onTell }: { item: Item; act: (a: C
   );
 }
 
+// ------------------------------------------------------------------ Question cards
+
+/**
+ * A thread of looked-up answers on a card of its own: its conversation with the agent that looked
+ * them up, whom the owner's words reach directly, and the two ways on: discuss it as an idea, or done.
+ */
+function QuestionView({ item, act, run, onTell }: { item: Item; act: (a: CardAction, done: ActDone) => Promise<void>; run: Run; onTell: Tell }) {
+  const thread = item.thread!;
+  return (
+    <>
+      <div className="p-state">
+        ● {t.question.count(thread.answers, thread.files)} · {thread.thinking ? t.question.reading : t.question.ready}
+        {item.archivedAt && <span className="p-status"> · {t.archive.when(new Date(item.archivedAt))}</span>}
+      </div>
+      {item.archivedAt ? (
+        <Talk item={item} past />
+      ) : (
+        <Talk
+          item={item}
+          field={{
+            placeholder: t.question.compose,
+            quote: true,
+            onWords: async (words, images, replyTo) => onTell(words, images, 'note', replyTo),
+            onPicked: (text, images, replyTo) => act({ action: 'ask', text, images, ...(replyTo ? { replyTo } : {}) }, { close: false }),
+          }}
+        />
+      )}
+      <div className="actions">
+        {item.archivedAt ? (
+          <ArchiveButton item={item} run={run} />
+        ) : (
+          <>
+            <button
+              className="btn"
+              disabled={thread.thinking}
+              title={thread.thinking ? t.question.asIdeaWaits : t.question.asIdeaHint}
+              onClick={() => act({ action: 'asIdea' }, { close: false })}
+            >
+              {t.question.asIdea}
+            </button>
+            <button
+              className="btn primary"
+              title={t.question.doneHint}
+              onClick={() => run(() => api.archive(item.id), { close: true, ack: t.archive.archived(plain(item.title)), undo: () => api.unarchive(item.id) })}
+            >
+              {t.question.done}
+            </button>
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
 /**
  * A proposal: its text as the agent taking it on will read it (`children`, editable), why it was
  * proposed, and the questions to decide, which the owner may answer before taking it.
@@ -795,6 +860,7 @@ function Conversation({
   const events = useEvents(item.id);
   const box = useRef<HTMLDivElement>(null);
   const idea = item.state === 'idea' && !!item.idea;
+  const question = item.kind === 'question';
   const proposal = item.state === 'proposal';
   const asking = item.state === 'waiting' && item.need === 'question' ? item.question : undefined;
   const working = !past && agentWorks(item);
@@ -807,7 +873,7 @@ function Conversation({
   const byId = useMemo(() => new Map(events?.map((e) => [e.id, e])), [events]);
   if (!events || !turns) return null;
   if (hideEmpty && !turns.shown.length && !turns.pending.length) return null;
-  const agent = idea ? t.author.explorer : t.author.worker;
+  const agent = idea ? t.author.explorer : question ? t.author.koordinator : t.author.worker;
   // no agent's message ever closes a proposal's rounds: its rework shows only what came after the owner's latest words
   const since = proposal && turns.shown.length ? events.indexOf(turns.shown.at(-1)!.e) : -1;
   const pending = proposal ? turns.pending.filter((s) => events.indexOf(s) > since) : turns.pending;
@@ -851,12 +917,12 @@ function Conversation({
     <>
       <h4 className="p-h">{t.talk.heading}</h4>
       <div className="talk conv" ref={box}>
-        {turns.shown.length === 0 && !working && !turns.asked && !seed && <div className="hint">{idea ? t.idea.talkEmpty : proposal ? t.reviseHint : t.talk.empty}</div>}
+        {turns.shown.length === 0 && !working && !turns.asked && !seed && <div className="hint">{idea ? t.idea.talkEmpty : question ? t.question.empty : proposal ? t.reviseHint : t.talk.empty}</div>}
         {turns.shown.slice(0, seedAt).map(line)}
         {seed}
         {turns.shown.slice(seedAt).map(line)}
         {working ? (
-          <Msg by={idea ? 'explorer' : proposal ? 'koordinator' : 'worker'} className="thinking" who={proposal ? t.revising : `${agent} ${idea ? t.idea.thinking : t.talk.working}`}>
+          <Msg by={idea ? 'explorer' : proposal || question ? 'koordinator' : 'worker'} className="thinking" who={proposal ? t.revising : `${agent} ${idea ? t.idea.thinking : question ? t.answer.reading : t.talk.working}`}>
             {pending.at(-1) && <div className="hint">{clipLine(pending.at(-1)!.text)}</div>}
             <Steps steps={pending} />
           </Msg>
@@ -966,6 +1032,7 @@ const ownerSide = (e: CardEvent) => e.author === 'owner' || e.kind === 'answer';
 function Message({ turn, demoQuestion, quoted, onReply, onDelete }: { turn: Turn; demoQuestion?: Demo; quoted?: CardEvent; onReply?: (e: CardEvent) => void; onDelete?: () => void }) {
   const { e, steps } = turn;
   const q = e.kind === 'question' ? parseQuestion(e.text) : undefined;
+  const answer = useAnswer(e);
   return (
     <Msg
       by={ownerSide(e) ? 'owner' : e.author}
@@ -976,8 +1043,10 @@ function Message({ turn, demoQuestion, quoted, onReply, onDelete }: { turn: Turn
       onReply={onReply && !turn.quiet ? () => onReply(e) : undefined}
       onDelete={onDelete}
       deleteLabel={t.demo.unsay}
+      head={answer.head}
     >
       {quoted && <Quote e={quoted} />}
+      {answer.continues}
       {e.spot && <SpotLink cardId={e.cardId} spot={e.spot} />}
       {!turn.quiet && <Body md={q ? q.text : e.text} />}
       {q && !turn.settled && q.options.length > 0 && (
@@ -996,6 +1065,7 @@ function Message({ turn, demoQuestion, quoted, onReply, onDelete }: { turn: Turn
         </div>
       )}
       <Mocks mocks={e.mocks} />
+      {answer.files}
       <Shots ids={e.images} />
       <Steps steps={steps} />
     </Msg>
@@ -1028,27 +1098,6 @@ function MockFrame({ mock }: { mock: Mock }) {
       <iframe ref={frame} sandbox="allow-scripts" srcDoc={page} title={mock.title || t.idea.mock} style={{ height }} />
     </figure>
   );
-}
-
-/**
- * The frame's height for the page in it to fit: what the page reports (`withHeightReport` in
- * `src/core/frame.ts`) and the frame's border, up to `cap`; undefined until it has reported. A
- * page as high as its frame would grow with each step: it stops after a few.
- */
-function useReportedHeight(frame: RefObject<HTMLIFrameElement | null>, cap: number) {
-  const [height, setHeight] = useState<number>();
-  useEffect(() => {
-    let steps = 0;
-    const on = (e: MessageEvent) => {
-      const h = e.source === frame.current?.contentWindow && (e.data as { obeyaHeight?: unknown } | null)?.obeyaHeight;
-      const f = frame.current;
-      // the border is inside the frame's height (border-box): without it the page is a few pixels too high and scrolls
-      if (typeof h === 'number' && h > 0 && f && steps++ < 30) setHeight(Math.min(Math.ceil(h) + f.offsetHeight - f.clientHeight, cap));
-    };
-    addEventListener('message', on);
-    return () => removeEventListener('message', on);
-  }, []);
-  return height;
 }
 
 /** The highest an HTML demo's frame grows; a page higher still scrolls inside it. */

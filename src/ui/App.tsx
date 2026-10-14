@@ -9,6 +9,7 @@ import { GroupNames, growFrom, inside, Lasso, Ring, TerritoryLayer, useTerritori
 import { besideSheet, BOTTOM, type Cam, camFor, centreOn, chase, dragLimit, edgeScroll, FAR, flying, flyTo, keepInView, MAX_ZOOM, MIN_ZOOM, overviewCam, stopFlight, TOP, toWorld } from './camera';
 import { plain } from './markdown';
 import { type ActDone, Detail, type Pending } from './detail';
+import { Cards } from './message';
 import type { Field } from './api';
 import { setReply } from './reply';
 import { ArchivePill } from './archive';
@@ -83,7 +84,7 @@ async function soon<T>(get: () => T | undefined, ms = 3000): Promise<T | undefin
   return get();
 }
 /** The state whose colour an open card wears: a demo whose worker takes in the owner's answer is at work. */
-const shownState = (i: Item) => (answering(i) ? 'working' : i.state);
+const shownState = (i: Item) => (i.kind === 'question' ? 'question' : answering(i) ? 'working' : i.state);
 
 const camKey = (canvasId: string) => `obeya-cam-${canvasId}`;
 
@@ -427,6 +428,22 @@ function Canvas({
     recover();
   }
 
+  /**
+   * Opens a card the server made just now (a thread moved onto a Question card), which the canvas
+   * may not show yet; a card open now folds first.
+   */
+  async function openFresh(i: Item) {
+    const f = focusRef.current;
+    if (f?.type === 'card') {
+      if (f.id === i.id) return;
+      await closeCard({ keepUntitled: true });
+    }
+    flushSync(() => {
+      if (!snapshotRef.current.items.some((x) => x.id === i.id)) setPending((p) => [...p, i]);
+    });
+    await open(i);
+  }
+
   async function openProject(p: Item, quick = false) {
     const f = focusRef.current;
     setFocus(f?.type === 'project' ? { ...f, id: p.id } : { type: 'project', id: p.id, prevCam: camRef.current, prevSide: camSide.current });
@@ -747,7 +764,7 @@ function Canvas({
   const focusItem = focus ? (items.find((i) => i.id === focus.id) ?? archived.find((i) => i.id === focus.id)) : undefined;
   const target =
     focus?.type === 'card'
-      ? (focusItem && agentListens(focusItem) ? (focusItem.state === 'idea' ? t.voice.idea : t.voice.agent) : t.voice.card)(plain(focusItem?.title ?? ''))
+      ? (focusItem && agentListens(focusItem) ? (focusItem.kind === 'question' ? t.voice.question : focusItem.state === 'idea' ? t.voice.idea : t.voice.agent) : t.voice.card)(plain(focusItem?.title ?? ''))
       : focus?.type === 'project'
         ? t.voice.project(plain(focusItem?.title ?? ''))
         : t.voice.koordinator;
@@ -1271,6 +1288,7 @@ function Canvas({
           <div className="inner" ref={innerRef}>
             <div className="content">
               {openItem && (
+                <Cards.Provider value={{ items, open: (i) => void openFresh(i) }}>
                 <Detail
                   key={openItem.id}
                   item={openItem}
@@ -1289,6 +1307,7 @@ function Canvas({
                   onDone={onDone}
                   onTell={(text, images, field, replyTo) => tellTyped(text, images, { card: openItem.id }, field, replyTo)}
                 />
+                </Cards.Provider>
               )}
             </div>
           </div>
@@ -1302,7 +1321,7 @@ function Canvas({
           onAsk={(text, canvas) => void told.tell(t.voice.reading(t.voice.koordinator), undefined, () => (canvas ? api.commandOn(canvas, text) : api.command(text, null)))}
         />
         {setupOn && <Setup onClose={() => setSetupOn(false)} />}
-        <KoordinatorSheet on={kOn} canvas={snapshot.canvas.id} items={items} preferences={snapshot.preferences} repos={snapshot.canvas.repos} talk={snapshot.talk} reshare={snapshot.reshare} onOpen={open} onTell={(text, images) => tellTyped(text, images, null)} />
+        <KoordinatorSheet on={kOn} canvas={snapshot.canvas.id} items={items} preferences={snapshot.preferences} repos={snapshot.canvas.repos} talk={snapshot.talk} reshare={snapshot.reshare} onOpen={(i) => void openFresh(i)} onTell={(text, images) => tellTyped(text, images, null)} />
         <PushToTalk
           phase={ptt.phase}
           level={ptt.level}

@@ -198,12 +198,14 @@ export function ownerField(item: Pick<Item, 'state' | 'need' | 'question' | 'fin
 }
 
 /**
- * Whether the card's agent is at work on it, so its conversation ends with the agent at work: an
- * idea's agent thinking, a proposal reworked, a worker at work, taking in the owner's words on its
+ * Whether the card's agent is at work on it, so its conversation ends with the agent at work: a
+ * Question card's agent reading, an idea's agent thinking, a proposal reworked, a worker at work, taking in the owner's words on its
  * handover, or finishing after the landing (unless it waits for the owner's answer).
  */
-export const agentWorks = (i: Pick<Item, 'state' | 'need' | 'idea' | 'proposal' | 'answering' | 'finishing'>) =>
-  i.state === 'idea' && !!i.idea
+export const agentWorks = (i: Pick<Item, 'state' | 'need' | 'idea' | 'proposal' | 'answering' | 'finishing' | 'thread'> & Partial<Pick<Item, 'kind'>>) =>
+  i.kind === 'question'
+    ? !!i.thread?.thinking
+    : i.state === 'idea' && !!i.idea
     ? !!i.idea.thinking
     : i.state === 'proposal'
       ? !!i.proposal?.revising
