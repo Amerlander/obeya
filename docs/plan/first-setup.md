@@ -23,8 +23,12 @@ without a restart.
 - *Settings for this machine.* Every value field of the adapter has a form in the dialog, stored in
   the repository's entry in `canvases.json` (`settings`), read where it is used and shown with its
   source; saving them alone restarts nothing, but for `workspaces` (W5; design: Repository
-  settings). There is no `.obeya/settings.json` yet: what a fresh clone brings is the adapter's
-  code (W6).
+  settings).
+- *Settings for everyone.* `.obeya/settings.json`, read from the default branch without a restart,
+  between this machine's values and the adapter's code; „Für alle ins Repository übernehmen“
+  commits this machine's values there, or opens a pull request with them; the adapter skill writes
+  the value fields there (W6; design: Repository settings, Repo adapter; `docs/adapter.md`). The
+  main branch stays out of the file: it says where the file is read from.
 
 ## Design
 
@@ -92,7 +96,7 @@ demo's `howToRun` and `required`.
   the values in `canvases.json` read on use, no restart for saving them, the source of each value
   shown. Main branch and landing become changeable here. Done when switching a repository's landing
   from `pr` to `main` in the dialog applies to the next approval without a restart.
-- [ ] **W6:** Settings for everyone in `.obeya/settings.json`. See Settings as data: reading it
+- [x] **W6:** Settings for everyone in `.obeya/settings.json`. See Settings as data: reading it
   from the default branch without a restart, its place in the precedence, the button that commits
   it (directly or as a pull request), the adapter skill writing value fields there,
   `docs/adapter.md` and `docs/design.md` (Repo adapter, Configuration) updated. Done when a fresh

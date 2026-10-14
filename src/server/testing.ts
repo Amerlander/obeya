@@ -8,7 +8,7 @@ import type { AgentEvent, AgentRuntime, AgentSession, AgentSpec, PermissionAnswe
 import { git } from './workspaces';
 
 /** A forge for tests that never reach a pull request. */
-export const noForge: Forge = { status: () => ({}) as never, body: () => '', setBody: () => {}, merge: () => {} };
+export const noForge: Forge = { status: () => ({}) as never, body: () => '', setBody: () => {}, merge: () => {}, open: () => '' };
 
 /** A session whose tools and events the test drives. */
 export class FakeSession implements AgentSession {

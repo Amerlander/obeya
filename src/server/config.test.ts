@@ -2,13 +2,14 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { CanvasConfig, ConfigView, DemoSettingsView, LanguageView } from '../core/types';
+import { blocksSaving, type CanvasConfig, type ConfigView, type DemoSettingsView, type LanguageView } from '../core/types';
 import { CanvasRuntime } from './canvas';
 import { Config, demoSettingsProblems, readConfigFile } from './config';
 import { Store } from './db';
 import { serve } from './server';
 import { ownerLanguage } from './settings';
 import { FakeRuntime, noForge, gitRepo } from './testing';
+import { git } from './workspaces';
 
 let dir: string;
 let store: Store;
@@ -227,6 +228,81 @@ describe("Obeya's configuration", () => {
     const problems = (branch: string) => c.check([{ repos: [{ path: web, settings: { branch } }] }]).problems.map((p) => p.code);
     expect(problems('main')).toEqual([]);
     expect(problems('nope')).toEqual(['noBranch']);
+  });
+
+  test("a repository's .obeya/settings.json: its values show as from the repository, what is wrong in it as a problem that blocks nothing", () => {
+    const shop = gitRepo(join(dir, 'shop'), { 'README.md': 'hi\n', '.obeya/settings.json': '{ "checks": ["bun test"], "check": [] }\n' });
+    const c = config('file', []);
+    const { resolved, problems } = c.check([{ repos: [{ path: shop }] }]);
+    expect(resolved[0]!.repos[0]!.values.checks).toEqual({ value: ['bun test'], source: 'repository' });
+    expect(problems).toEqual([{ code: 'repoSettings', canvas: 0, repo: 0, detail: '.obeya/settings.json, check: no such field (did you mean checks?)' }]);
+    expect(blocksSaving(problems[0]!)).toBe(false);
+  });
+
+  test("„Für alle ins Repository übernehmen“ where work lands on main: committed there, and this machine's values then come from the repository", () => {
+    mkdirSync(join(dir, 'home'));
+    const settings = { branch: 'main', checks: ['bun test'], demo: { howToRun: 'bun dev' } };
+    writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings }] }]));
+    const c = config('file', [{ repos: [{ path: web, settings }] }]);
+    expect(c.view().resolved[0]!.repos[0]!.shareTo).toBe('main');
+    // the checkout's own change to the file is not overwritten
+    mkdirSync(join(web, '.obeya'));
+    writeFileSync(join(web, '.obeya/settings.json'), '{}\n');
+    expect(() => c.shareSettings({ path: web })).toThrow(expect.objectContaining({ code: 'settingsDirty' }));
+    rmSync(join(web, '.obeya'), { recursive: true });
+    // a change staged for something else stays staged, and out of the commit
+    writeFileSync(join(web, 'README.md'), 'staged\n');
+    git(web, 'add', 'README.md');
+
+    const done = c.shareSettings({ path: web });
+    expect(done).toMatchObject({ branch: 'main', committed: git(web, 'rev-parse', 'main').trim() });
+    expect(JSON.parse(git(web, 'show', 'main:.obeya/settings.json'))).toEqual({ checks: ['bun test'], demo: { howToRun: 'bun dev' } });
+    expect(git(web, 'show', '--name-only', '--format=%s', 'main').trim()).toBe('Obeya settings for everyone: checks, demo\n\n.obeya/settings.json');
+    expect(git(web, 'status', '--porcelain').trim()).toBe('M  README.md');
+    // the main branch stays this machine's; the rest come from the repository now
+    expect(readConfigFile(file)).toEqual([{ repos: [{ path: web, settings: { branch: 'main' } }] }]);
+    expect(c.view().resolved[0]!.repos[0]!.values).toMatchObject({ checks: { value: ['bun test'], source: 'repository' }, demo: { howToRun: { source: 'repository' } } });
+    expect([applied, restarts]).toEqual([1, 0]);
+    expect(() => c.shareSettings({ path: web })).toThrow(expect.objectContaining({ code: 'noSettings' }));
+  });
+
+  test("„Für alle ins Repository übernehmen“ where work goes out as pull requests: one is opened, this machine keeps its values until it is merged", () => {
+    mkdirSync(join(dir, 'home'));
+    const origin = join(dir, 'origin.git');
+    git(dir, 'clone', '--quiet', '--bare', web, origin);
+    git(web, 'remote', 'add', 'origin', origin);
+    git(web, 'fetch', '--quiet', 'origin');
+    const settings = { land: 'pr' as const, checks: ['bun test'] };
+    writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings }] }]));
+    const opened: { base: string; head: string; title: string }[] = [];
+    const c = new Config({
+      file,
+      source: 'file',
+      started: [{ repos: [{ path: web, settings }] }],
+      store,
+      running: () => [],
+      server: { port: 4417, home: dir, permissionMode: 'auto' },
+      forge: { ...noForge, open: (_cwd, pr) => (opened.push(pr), 'https://github.com/acme/web/pull/7') },
+      onSettings: () => void applied++,
+    });
+    const before = git(web, 'rev-parse', 'main').trim();
+    expect(c.shareSettings({ path: web })).toEqual({ pr: 'https://github.com/acme/web/pull/7' });
+    expect(opened).toEqual([expect.objectContaining({ base: 'main', head: expect.stringMatching(/^obeya-settings-\d{8}-\d{6}$/), title: 'Obeya settings for everyone: land, checks' })]);
+    expect(JSON.parse(git(origin, 'show', `${opened[0]!.head}:.obeya/settings.json`))).toEqual(settings);
+    expect(git(web, 'rev-parse', 'main').trim()).toBe(before);
+    expect(readConfigFile(file)).toEqual([{ repos: [{ path: web, settings }] }]);
+    // merged: the values the file now holds go from this machine's
+    c.takenOver(web, undefined, { land: 'pr', checks: ['bun test'] });
+    expect(readConfigFile(file)).toEqual([{ repos: [{ path: web }] }]);
+    expect(applied).toBe(0);
+  });
+
+  test("a value the file held already stays this machine's when someone else changes the file", () => {
+    mkdirSync(join(dir, 'home'));
+    writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings: { checks: ['a'], setup: 'x' } }] }]));
+    const c = config('file', []);
+    c.takenOver(web, { checks: ['a'] }, { checks: ['a'], setup: 'x' });
+    expect(readConfigFile(file)).toEqual([{ repos: [{ path: web, settings: { checks: ['a'] } }] }]);
   });
 
   test('shows the file when Obeya runs from it, the command line until something is saved', () => {

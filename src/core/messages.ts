@@ -271,7 +271,7 @@ const de = {
   },
   adapterSetup: {
     title: (repo: string) => `Obeya für ${repo} einrichten`,
-    body: 'Schreib den Adapter dieses Repositorys (`.obeya/adapter/index.ts`) mit dem Skill `obeya:adapter`: wie Obeya die App startet, welche Prüfungen laufen, wie Arbeit landet, wie eine Demo aufgenommen wird und wo die Plan-Docs liegen, die Obeya als Projekte zeigt. Was du im Repository nicht herausfindest (Login, Testdaten), frag mich.',
+    body: 'Schreib den Adapter dieses Repositorys (`.obeya/settings.json`, für Code `.obeya/adapter/index.ts`) mit dem Skill `obeya:adapter`: wie Obeya die App startet, welche Prüfungen laufen, wie Arbeit landet, wie eine Demo aufgenommen wird und wo die Plan-Docs liegen, die Obeya als Projekte zeigt. Was du im Repository nicht herausfindest (Login, Testdaten), frag mich.',
   },
   /** The card that turns a doc in the plan directory that is not a project into one. */
   preparePlanDoc: {
@@ -536,7 +536,7 @@ const en: Messages = {
   },
   adapterSetup: {
     title: (repo: string) => `Set up Obeya for ${repo}`,
-    body: "Write this repository's adapter (`.obeya/adapter/index.ts`) with the skill `obeya:adapter`: how Obeya starts the app, which checks run, how work lands, how a demo is recorded and where the plan docs are that Obeya shows as projects. Ask me what you cannot find out in the repository (login, test data).",
+    body: "Write this repository's adapter (`.obeya/settings.json`, for code `.obeya/adapter/index.ts`) with the skill `obeya:adapter`: how Obeya starts the app, which checks run, how work lands, how a demo is recorded and where the plan docs are that Obeya shows as projects. Ask me what you cannot find out in the repository (login, test data).",
   },
   preparePlanDoc: {
     title: (file: string) => `Prepare ${file.slice(file.lastIndexOf('/') + 1)} as a project`,

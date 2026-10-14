@@ -1,32 +1,36 @@
 // Checks the adapter of the repository in the working directory as it stands in the checkout
-// (`.obeya/adapter/index.ts`, committed or not), the way Obeya will load it once it is on the
-// default branch: it loads, every field is known and of the right type, the share command's or the
-// site's deploy program is there (the problems the configuration sheet reports). Prints what Obeya
-// makes of it, the docs in its plan directory among it: which are projects and which are not, and
-// why; exits with 1 when something is wrong.
+// (`.obeya/adapter/index.ts` and `.obeya/settings.json`, committed or not), the way Obeya will
+// load them once they are on the default branch: the module loads, every field of either is known
+// and of the right type, the share command's or the site's deploy program is there (the problems
+// the configuration sheet reports). Prints what Obeya makes of them, the docs in the plan directory
+// among it: which are projects and which are not, and why; exits with 1 when something is wrong.
 // Run with Bun (`bun check.ts [<module>]`), since it loads the adapter as Obeya does.
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { loadAdapter, REPO_ADAPTER_DIR } from '../../../../src/adapters/index.ts';
+import { builtInAdapter, loadAdapter, parseShared, REPO_ADAPTER_DIR, REPO_SETTINGS_FILE, withSettings } from '../../../../src/adapters/index.ts';
 import { allTicked, type NotAProject } from '../../../../src/core/plan-doc.ts';
 import { readPlanDocs, repoInfo } from '../../../../src/server/repo.ts';
 import { adapterRepoProblems } from '../../../../src/server/share.ts';
 
 const repo = repoInfo(process.cwd());
 const file = resolve(process.argv[2] ?? join(repo.path, REPO_ADAPTER_DIR, 'index.ts'));
-if (!existsSync(file)) {
-  console.log(`No adapter at ${file}: write ${REPO_ADAPTER_DIR}/index.ts in the repository first.`);
+const settingsFile = join(repo.path, REPO_SETTINGS_FILE);
+if (!existsSync(file) && !existsSync(settingsFile)) {
+  console.log(`Neither ${file} nor ${settingsFile}: write the repository's settings (and its adapter, for what is code) first.`);
   process.exit(1);
 }
-let adapter;
+let own;
 try {
-  adapter = loadAdapter(file, repo);
+  own = existsSync(file) ? loadAdapter(file, repo) : builtInAdapter(repo);
 } catch (e) {
   console.log(e instanceof Error ? e.message : String(e));
   process.exit(1);
 }
-const problems = adapterRepoProblems(adapter, repo.path);
+// the settings for everyone go before the module's values, as in Obeya
+const shared = existsSync(settingsFile) ? parseShared(readFileSync(settingsFile, 'utf8')) : { problems: [] };
+const adapter = withSettings(own, () => shared.settings);
+const problems = [...adapterRepoProblems(own, repo.path), ...shared.problems];
 
 let canvas: string;
 try {
@@ -48,7 +52,8 @@ const planLines = !existsSync(join(repo.path, adapter.planDocs.dir))
 const show = (v: unknown) => (v === undefined ? '(none)' : JSON.stringify(v));
 console.log(
   [
-    `adapter ${adapter.name}, from ${file}`,
+    `adapter ${adapter.name}, from ${existsSync(file) ? file : 'Obeya (no module of its own)'}`,
+    ...(shared.settings ? [`settings from ${settingsFile}: ${Object.keys(shared.settings).join(', ') || '(none)'}`] : []),
     `canvas: ${canvas}`,
     `setup: ${show(adapter.setup)}`,
     `checks: ${show(adapter.checks)}`,

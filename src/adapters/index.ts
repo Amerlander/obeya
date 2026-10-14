@@ -3,12 +3,12 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { defaultBranchCommit } from '../server/read-tree';
 import { onGitHub } from '../server/repo';
 import { COMPILED, resource } from '../server/resources';
-import type { RepoSettings, RepoValues, SettingSource } from '../core/types';
+import type { RepoSettings, RepoValues, SettingSource, SharedSettings } from '../core/types';
 import { detectedBranch, GIT } from '../server/workspaces';
 import { generic } from './generic';
 import * as kit from './kit';
 import { obeya } from './obeya';
-import { checkAdapter } from './schema';
+import { checkAdapter, checkShared } from './schema';
 import type { RepoAdapter, RepoInfo } from './types';
 
 /** Specific adapters first; the generic one matches every repository. */
@@ -110,16 +110,19 @@ export function withSettings(a: RepoAdapter, settings: () => RepoSettings | unde
 }
 
 /**
- * The repository's settings as they stand without this machine's, with where each comes from: the
- * adapter's code (a field it gives that differs from the generic adapter's; `land` whenever it
+ * The repository's settings as they stand without this machine's, with where each comes from: its
+ * `.obeya/settings.json` (`shared`), the adapter's code (a field it gives that differs from the generic adapter's; `land` whenever it
  * gives one), the clones the configuration names, detection, the generic adapter.
  */
-export function repoValues(a: RepoAdapter, repo: RepoInfo, clones = false): RepoValues {
+export function repoValues(a: RepoAdapter, repo: RepoInfo, clones = false, shared: SharedSettings = {}): RepoValues {
   const own = given.get(a) ?? {};
   const from = (field: keyof RepoAdapter): SettingSource =>
     field in own && (field === 'land' || JSON.stringify(own[field]) !== JSON.stringify(generic[field])) ? 'adapter' : field === 'land' ? 'detected' : 'default';
-  const value = <T>(v: T, field: keyof RepoAdapter) => ({ value: v, source: from(field) });
+  const value = <K extends Exclude<keyof SharedSettings, 'demo'>, T>(v: T, field: K) =>
+    shared[field] !== undefined ? { value: shared[field] as T, source: 'repository' as const } : { value: v, source: from(field) };
   const demo = own.demo ? 'adapter' : 'default';
+  const required = shared.demo?.required;
+  const howToRun = shared.demo?.howToRun;
   return {
     branch: { value: detectedBranch(repo.path), source: 'detected' },
     land: value(a.land, 'land'),
@@ -130,8 +133,46 @@ export function repoValues(a: RepoAdapter, repo: RepoInfo, clones = false): Repo
     softPaths: value(a.softPaths, 'softPaths'),
     workspaces: clones ? { value: 'clones', source: 'clones' } : value(a.workspaces, 'workspaces'),
     prNoise: value(a.prNoise ?? [], 'prNoise'),
-    demo: { required: { value: !!a.demo?.required, source: demo }, howToRun: { value: a.demo?.howToRun ?? '', source: demo } },
+    demo: {
+      required: required !== undefined ? { value: required, source: 'repository' } : { value: !!a.demo?.required, source: demo },
+      howToRun: howToRun !== undefined ? { value: howToRun, source: 'repository' } : { value: a.demo?.howToRun ?? '', source: demo },
+    },
   };
+}
+
+/** Where a repository keeps its settings for everyone (`SharedSettings`), beside its adapter, like `.vscode/settings.json`. */
+export const REPO_SETTINGS_FILE = '.obeya/settings.json';
+
+/** A repository's `.obeya/settings.json` as read: its settings that count, the file's own object, and what does not count. */
+export interface SharedRead {
+  settings?: SharedSettings;
+  /** The object the file holds, every field as it is; none where there is no file or it is no JSON object. */
+  raw?: Record<string, unknown>;
+  problems: string[];
+}
+
+/** Reads the text of a `.obeya/settings.json`: a field that is unknown or of the wrong type does not count, the rest does. */
+export function parseShared(text: string): SharedRead {
+  let made: unknown;
+  try {
+    made = JSON.parse(text);
+  } catch (e) {
+    return { problems: [`${REPO_SETTINGS_FILE} is no JSON: ${e instanceof Error ? e.message : String(e)}`] };
+  }
+  if (!made || typeof made !== 'object' || Array.isArray(made)) return { problems: [`${REPO_SETTINGS_FILE} holds no JSON object`] };
+  const raw = made as Record<string, unknown>;
+  const { settings, problems } = checkShared(raw);
+  return { settings, raw, problems: problems.map((p) => `${REPO_SETTINGS_FILE}, ${p}`) };
+}
+
+/**
+ * The repository's `.obeya/settings.json` as its default branch has it at `commit` (by
+ * `defaultBranchCommit`'s rule, like its own adapter), not as the checkout has it; nothing where
+ * the default branch has no such file.
+ */
+export function readShared(repoPath: string, commit = defaultBranchCommit(repoPath).commit): SharedRead {
+  const r = Bun.spawnSync([GIT, '-C', repoPath, 'cat-file', 'blob', `${commit}:${REPO_SETTINGS_FILE}`], { stderr: 'ignore' });
+  return r.exitCode === 0 ? parseShared(r.stdout.toString()) : { problems: [] };
 }
 
 /**

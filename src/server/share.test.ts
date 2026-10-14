@@ -74,6 +74,7 @@ function make(repo = dir) {
 }
 
 const forge: Forge = {
+  open: () => '',
   status: () => ({}) as never,
   body: (_cwd, url) => {
     const b = bodies.get(url);

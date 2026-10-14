@@ -4,7 +4,7 @@
 // own settings come from its command line and show read-only.
 
 import { type CSSProperties, Fragment, type ReactNode, useEffect, useId, useRef, useState } from 'react';
-import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigView, type DemoSettings, type DemoSettingsView, type DemoVoiceCheck, type Language, type HostConfig, type LanguageView, type NarrationLanguage, needsRestart, type RepoConfig, type RepoSettings, type RepoValues, type SettingValue, type SetupCheck, type Theme, THEMES, type ThemeView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
+import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigView, type DemoSettings, type DemoSettingsView, type DemoVoiceCheck, type Language, type HostConfig, type LanguageView, type NarrationLanguage, needsRestart, type RepoConfig, type RepoSettings, type RepoValues, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, type SetupCheck, type Theme, THEMES, type ThemeView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
 import { LANGUAGES } from '../core/locale';
 import { pushKeyFromEvent, type PushKeyView } from '../core/push-key';
 import { api, ApiError, reload } from './api';
@@ -189,6 +189,13 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }
                   setBusy(false);
                 }}
                 onReset={() => load(view)}
+                onReload={async () => {
+                  const v = await api.config();
+                  setView(v);
+                  load(v);
+                  setChecked(v);
+                  onProblems(v.problems.length);
+                }}
                 status={status}
                 json={json}
                 onJson={() => setJson(!json)}
@@ -308,13 +315,15 @@ interface CanvasesProps {
   onDraft: (draft: CanvasConfig[], origin: (string | null)[]) => void;
   onSave: () => void;
   onReset: () => void;
+  /** Reads the saved configuration again: the server changed it (settings taken over for everyone). */
+  onReload: () => Promise<void>;
   status: string;
   json: boolean;
   onJson: () => void;
 }
 
 /** The canvases with their repositories, saved together; Obeya then starts again with them. */
-function Canvases({ view, draft, origin, checked, changed, busy, focus, onAsk, onRecheck, onDraft, onSave, onReset, status, json, onJson }: CanvasesProps) {
+function Canvases({ view, draft, origin, checked, changed, busy, focus, onAsk, onRecheck, onDraft, onSave, onReset, onReload, status, json, onJson }: CanvasesProps) {
   const c = t.config;
   const problems = checked?.problems ?? [];
   const setCanvas = (i: number, x: CanvasConfig | null) =>
@@ -358,6 +367,7 @@ function Canvases({ view, draft, origin, checked, changed, busy, focus, onAsk, o
           focus={focus}
           ask={changed ? undefined : onAsk}
           onRecheck={onRecheck}
+          onReload={onReload}
           onChange={(y) => setCanvas(i, y)}
         />
       ))}
@@ -974,10 +984,11 @@ interface CanvasProps {
   /** Has the Koordinator create a task that fixes a problem; only for the configuration as saved, which is what it reads. */
   ask?: Ask;
   onRecheck: () => void;
+  onReload: () => Promise<void>;
   onChange: (c: CanvasConfig | null) => void;
 }
 
-function CanvasBlock({ n, canvas, resolved, running, pin, saved, adapters, problems, focus, ask, onRecheck, onChange }: CanvasProps) {
+function CanvasBlock({ n, canvas, resolved, running, pin, saved, adapters, problems, focus, ask, onRecheck, onReload, onChange }: CanvasProps) {
   const fresh = resolved && !running.includes(resolved.id);
   // the Koordinator of the canvas with the problem, where it runs: a card for it goes there
   const askHere = ask && ((text: string) => ask(text, resolved && running.includes(resolved.id) ? resolved.id : undefined));
@@ -1027,6 +1038,7 @@ function CanvasBlock({ n, canvas, resolved, running, pin, saved, adapters, probl
             where={`${here}, ${t.config.repoAt(r.path)}`}
             ask={askHere}
             onRecheck={onRecheck}
+            {...(saved ? { onReload } : {})}
             onChange={(x) => setRepo(i, x)}
           />
         ))}
@@ -1046,7 +1058,7 @@ function CanvasBlock({ n, canvas, resolved, running, pin, saved, adapters, probl
 interface RepoProps {
   repo: RepoConfig;
   home: boolean;
-  resolved?: { id: string; adapter: string; workspaces: 'clones' | 'worktrees'; adapterShares?: boolean; adapterSite?: string; values: RepoValues };
+  resolved?: { id: string; adapter: string; workspaces: 'clones' | 'worktrees'; adapterShares?: boolean; adapterSite?: string; values: RepoValues; shareTo: 'main' | 'pr' };
   /** The running canvas the repository is on, as saved; where a card for it can go. */
   canvasId?: string;
   adapters: string[];
@@ -1058,10 +1070,12 @@ interface RepoProps {
   ask?: (text: string) => void;
   /** Checks the configuration again: git was set up in the repository's folder. */
   onRecheck: () => void;
+  /** Reads the saved configuration again; only while the canvases are as saved, which is what settings are taken over from. */
+  onReload?: () => Promise<void>;
   onChange: (r: RepoConfig | null) => void;
 }
 
-function RepoRow({ repo, home, resolved, canvasId, adapters, problems, focus, where, ask, onRecheck, onChange }: RepoProps) {
+function RepoRow({ repo, home, resolved, canvasId, adapters, problems, focus, where, ask, onRecheck, onReload, onChange }: RepoProps) {
   const clonesBox = useRef<HTMLDivElement>(null);
   const [flash, setFlash] = useState(false);
   useEffect(() => {
@@ -1150,15 +1164,15 @@ function RepoRow({ repo, home, resolved, canvasId, adapters, problems, focus, wh
           </label>
         </div>
       )}
-      {resolved && <RepoSettingsBlock repo={repo} values={resolved.values} adapter={resolved.adapter} onChange={(settings) => onChange(without('settings', settings))} />}
+      {resolved && <RepoSettingsBlock repo={repo} values={resolved.values} adapter={resolved.adapter} shareTo={resolved.shareTo} {...(onReload ? { onReload } : {})} onChange={(settings) => onChange(without('settings', settings))} />}
       {problems.map((p, k) => (
         <div key={k} className="cfg-span">
           <Problem problem={p} where={where} ask={ask} />
           {p.code === 'notRepo' && noGit && <GitSetup key={noGit} path={noGit} confirm={t.setup.git.confirm} onDone={onRecheck} />}
         </div>
       ))}
-      {/* a repository without an adapter of its own (not one whose own does not load): a card on its canvas writes one */}
-      {canvasId && resolved?.adapter === 'generic' && !repo.adapter && !problems.some((p) => p.code === 'adapterLoad') && (
+      {/* a repository without an adapter or settings of its own (not one whose own adapter does not load): a card on its canvas writes them */}
+      {canvasId && resolved?.adapter === 'generic' && !repo.adapter && !problems.some((p) => p.code === 'adapterLoad') && !fromRepository(resolved.values) && (
         <div className="cfg-span">
           <AdapterSetup canvas={canvasId} repo={resolved.id} />
         </div>
@@ -1175,7 +1189,21 @@ type SettingKey = Exclude<keyof RepoSettings, 'demo'> | 'demoRequired' | 'howToR
  * the value that applies and where it comes from; changing one sets it on this machine, „Zurücksetzen“
  * takes it back to its source. Saved with the configuration; they apply at once.
  */
-function RepoSettingsBlock({ repo, values, adapter, onChange }: { repo: RepoConfig; values: RepoValues; adapter: string; onChange: (s: RepoSettings | undefined) => void }) {
+function RepoSettingsBlock({
+  repo,
+  values,
+  adapter,
+  shareTo,
+  onReload,
+  onChange,
+}: {
+  repo: RepoConfig;
+  values: RepoValues;
+  adapter: string;
+  shareTo: 'main' | 'pr';
+  onReload?: () => Promise<void>;
+  onChange: (s: RepoSettings | undefined) => void;
+}) {
   const [open, setOpen] = useState(false);
   const c = t.config.settings;
   const s = repo.settings ?? {};
@@ -1290,8 +1318,103 @@ function RepoSettingsBlock({ repo, values, adapter, onChange }: { repo: RepoConf
             </label>,
           )}
           {row('howToRun', c.howToRun, <textarea rows={Math.max(3, Math.ceil(value<string>('howToRun').length / 90) + 1)} aria-label={c.howToRun} value={value<string>('howToRun')} onChange={(e) => set('howToRun', e.target.value)} />, c.howToRunHint)}
+          <ShareSettings repo={repo} values={values} branch={value<string>('branch')} shareTo={shareTo} {...(onReload ? { onReload } : {})} />
         </div>
       )}
+    </div>
+  );
+}
+
+/** Whether the repository has settings for everyone (`.obeya/settings.json`): then it is set up, even on the generic adapter. */
+const fromRepository = (v: RepoValues) => SHARED_FIELDS.some((k) => (k === 'demo' ? v.demo.required.source === 'repository' || v.demo.howToRun.source === 'repository' : v[k].source === 'repository'));
+
+/** The repository's `.obeya/settings.json` as the dialog shows it: what the file holds now (`values` from the repository) with this machine's settings in front, but the main branch. */
+function sharedPreview(repo: RepoConfig, values: RepoValues): Record<string, unknown> {
+  const file: Record<string, unknown> = {};
+  for (const k of SHARED_FIELDS) {
+    if (k === 'demo') continue;
+    if (values[k].source === 'repository') file[k] = values[k].value;
+  }
+  const demo = {
+    ...(values.demo.required.source === 'repository' ? { required: values.demo.required.value } : {}),
+    ...(values.demo.howToRun.source === 'repository' ? { howToRun: values.demo.howToRun.value } : {}),
+  };
+  if (Object.keys(demo).length) file.demo = demo;
+  const { branch: _, ...mine } = repo.settings ?? {};
+  const merged = layerSettings<Record<string, unknown>>(file, mine as Record<string, unknown>) ?? {};
+  return Object.fromEntries(SHARED_FIELDS.filter((k) => merged[k] !== undefined).map((k) => [k, merged[k]]));
+}
+
+/**
+ * „Für alle ins Repository übernehmen“ under a repository's settings: this machine's values (but
+ * the main branch) go into its `.obeya/settings.json`, so that everyone who clones it gets them.
+ * It first shows the file as it would be and where it goes (a commit on the main branch, or a pull
+ * request), then does it at the owner's word. Only for the configuration as saved.
+ */
+function ShareSettings({ repo, values, branch, shareTo, onReload }: { repo: RepoConfig; values: RepoValues; branch: string; shareTo: 'main' | 'pr'; onReload?: () => Promise<void> }) {
+  const c = t.config.settings.share;
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<SettingsShared | null>(null);
+  const [error, setError] = useState('');
+  const { branch: _, ...mine } = repo.settings ?? {};
+  const count = Object.keys(mine).length + (mine.demo ? Object.keys(mine.demo).length - 1 : 0);
+  const go = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const r = await api.shareSettings(repo.path);
+      setDone(r);
+      setConfirming(false);
+      if ('committed' in r) await onReload?.();
+    } catch (e) {
+      setError(e instanceof ApiError ? `${errorText(e.code)}${e.code === 'settingsShare' ? ` ${e.message}` : ''}` : t.offlineError);
+    }
+    setBusy(false);
+  };
+  return (
+    <div className="cfg-field cfg-setting cfg-share-settings">
+      <div className="cfg-label">{c.label}</div>
+      <div className="cfg-control">
+        {done && 'committed' in done && <p className="hint ok">{c.committed(done.branch, done.committed.slice(0, 7))}</p>}
+        {done && 'pr' in done && (
+          <p className="hint ok">
+            {c.opened}{' '}
+            <a href={done.pr} target="_blank" rel="noreferrer">
+              {done.pr}
+            </a>
+            {c.openedAfter}
+          </p>
+        )}
+        {!done && !count && <p className="hint">{c.none}</p>}
+        {!done && count > 0 && !confirming && (
+          <>
+            <button type="button" className="btn small" disabled={!onReload} onClick={() => setConfirming(true)}>
+              {c.button(count)}
+            </button>
+            <p className="hint">{onReload ? c.hint : c.saveFirst}</p>
+          </>
+        )}
+        {confirming && (
+          <div className="cfg-share-confirm">
+            <p className="hint">{shareTo === 'main' ? c.toMain(branch) : c.toPr(branch)}</p>
+            <pre className="c-json">
+              <span className="hint">.obeya/settings.json</span>
+              {'\n'}
+              {JSON.stringify(sharedPreview(repo, values), null, 2)}
+            </pre>
+            <div className="cfg-actions">
+              <button type="button" className="btn primary small" disabled={busy} onClick={go}>
+                {shareTo === 'main' ? c.commit : c.openPr}
+              </button>
+              <button type="button" className="btn small" disabled={busy} onClick={() => setConfirming(false)}>
+                {c.cancel}
+              </button>
+            </div>
+          </div>
+        )}
+        {error && <p className="hint warn">{error}</p>}
+      </div>
     </div>
   );
 }
@@ -1353,7 +1476,7 @@ function Hosts({ hosts, onChange }: { hosts: HostConfig[]; onChange: (hosts: Hos
 }
 
 // problems whose detail says what to fix, in the repository's adapter rather than here
-const DETAILED: ConfigProblem['code'][] = ['adapterField', 'adapterLoad', 'unknownAdapter', 'hostName'];
+const DETAILED: ConfigProblem['code'][] = ['adapterField', 'adapterLoad', 'repoSettings', 'unknownAdapter', 'hostName'];
 
 /**
  * A problem of the configuration: what is wrong, the technical detail folded away where it says

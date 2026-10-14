@@ -303,6 +303,8 @@ export function serve(
           return Response.json({ ...reply, wav });
         },
       },
+      // „Für alle ins Repository übernehmen“: a repository's settings for this machine into its .obeya/settings.json
+      '/api/config/share-settings': { POST: async (req) => (config ? handle(async () => config.shareSettings(await req.json())) : new Response('Not found', { status: 404 })) },
       '/api/config/check': { POST: async (req) => (config ? handle(async () => config.check(await req.json())) : new Response('Not found', { status: 404 })) },
       '/api/c/:canvas/canvas': { GET: on((c) => c.board.snapshot()) },
       '/api/c/:canvas/cards': { POST: on(async (c, req) => c.board.create((await req.json()) as NewCard)) },

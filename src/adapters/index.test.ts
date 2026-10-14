@@ -5,8 +5,8 @@ import { join } from 'node:path';
 import { repoInfo } from '../server/repo';
 import { gitRepo } from '../server/testing';
 import { git } from '../server/workspaces';
-import type { RepoSettings } from '../core/types';
-import { adapterProblems, pickAdapter, withSettings } from '.';
+import { layerSettings, type RepoSettings } from '../core/types';
+import { adapterProblems, parseShared, pickAdapter, readShared, repoValues, withSettings } from '.';
 import { generic } from './generic';
 
 let dir: string;
@@ -157,5 +157,41 @@ describe('withSettings', () => {
     expect(b.demo).toEqual({ required: false, howToRun: 'bun dev', share: ['x'] });
     // the configuration's clones go before the setting
     expect(withSettings(generic, () => ({ workspaces: 'worktrees' }), true).workspaces).toBe('clones');
+  });
+});
+
+describe(".obeya/settings.json", () => {
+  test('is read from the default branch, not the checkout; a field that is wrong does not count, the rest does', () => {
+    const repo = gitRepo(join(dir, 'shop'), { 'README.md': 'hi\n', '.obeya/settings.json': '{ "land": "main", "checks": ["bun test"] }\n' });
+    expect(readShared(repo)).toEqual({ settings: { land: 'main', checks: ['bun test'] }, raw: { land: 'main', checks: ['bun test'] }, problems: [] });
+    // the checkout's own change counts once it is committed on the default branch
+    writeFileSync(join(repo, '.obeya/settings.json'), '{ "land": "pr" }\n');
+    expect(readShared(repo).settings).toEqual({ land: 'main', checks: ['bun test'] });
+    expect(readShared(gitRepo(join(dir, 'plain'))).settings).toBeUndefined();
+
+    const read = parseShared('{ "check": ["x"], "land": "sideways", "branch": "develop", "setup": "bun install", "demo": { "howToRun": "bun dev" } }');
+    expect(read.settings).toEqual({ setup: 'bun install', demo: { howToRun: 'bun dev' } });
+    expect(read.problems).toEqual([
+      '.obeya/settings.json, land: expected one of "main"|"pr"',
+      '.obeya/settings.json, check: no such field (did you mean checks?)',
+      '.obeya/settings.json, branch: the main branch is set on each machine (or detected), not in the repository',
+    ]);
+    expect(parseShared('{ land: main }').problems[0]).toStartWith('.obeya/settings.json is no JSON');
+    expect(parseShared('[]').problems).toEqual(['.obeya/settings.json holds no JSON object']);
+  });
+
+  test("its values come after this machine's and before the adapter's code, and say they come from the repository", () => {
+    const repo = gitRepo(join(dir, 'shop'), { 'README.md': 'hi\n', '.obeya/adapter/index.ts': OWN('shop').replace("land: 'main'", "land: 'main', checks: ['npm test']") });
+    const own = pickAdapter(repoInfo(repo));
+    const shared = { checks: ['bun test'], setup: 'bun install', demo: { howToRun: 'bun dev' } };
+    const mine: RepoSettings = { setup: '' };
+    const a = withSettings(own, () => layerSettings<RepoSettings>(shared, mine));
+    expect([a.checks, a.setup, a.land, a.demo?.howToRun]).toEqual([['bun test'], '', 'main', 'bun dev']);
+    expect(repoValues(own, repoInfo(repo), false, shared)).toMatchObject({
+      checks: { value: ['bun test'], source: 'repository' },
+      setup: { value: 'bun install', source: 'repository' },
+      land: { value: 'main', source: 'adapter' },
+      demo: { howToRun: { value: 'bun dev', source: 'repository' }, required: { value: false, source: 'default' } },
+    });
   });
 });

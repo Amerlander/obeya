@@ -4,6 +4,7 @@
 // adapter's value stands for it, and the rest of the adapter works.
 
 import { z } from 'zod';
+import type { SharedSettings } from '../core/types';
 import type { RepoAdapter } from './types';
 
 const fn = z.custom<(...args: never[]) => unknown>((v) => typeof v === 'function', { message: 'expected a function' });
@@ -68,6 +69,12 @@ export const settingsShape = z
   })
   .strict();
 
+/**
+ * What a repository's `.obeya/settings.json` may hold (`SharedSettings`): the settings for this
+ * machine but the main branch, which says where the file is read from.
+ */
+export const sharedShape = settingsShape.omit({ branch: true });
+
 // the fields each object knows, for a guess at what a misspelt one meant
 const KNOWN: Record<string, string[]> = {
   '': Object.keys(adapterShape.shape),
@@ -83,26 +90,42 @@ const KNOWN: Record<string, string[]> = {
  * wrong, and one line per problem, in English, starting with the field (`demo.howToRun: …`).
  */
 export function checkAdapter(made: Record<string, unknown>): { adapter: Partial<RepoAdapter>; problems: string[] } {
-  const parsed = adapterShape.safeParse(made);
-  if (parsed.success) return { adapter: made as Partial<RepoAdapter>, problems: [] };
-  const adapter: Record<string, unknown> = { ...made };
+  const { kept, problems } = checkFields(adapterShape, made, KNOWN);
+  return { adapter: kept as Partial<RepoAdapter>, problems };
+}
+
+/**
+ * Checks what a repository's `.obeya/settings.json` holds, the same way: the settings without the
+ * fields that are wrong, and one line per problem.
+ */
+export function checkShared(made: Record<string, unknown>): { settings: SharedSettings; problems: string[] } {
+  const { kept, problems } = checkFields(sharedShape, made, { '': Object.keys(sharedShape.shape), planDocs: ['dir', 'exclude'], demo: ['required', 'howToRun'] });
+  // the main branch says where the file is read from, so it is set on each machine
+  return { settings: kept as SharedSettings, problems: problems.map((p) => (p.startsWith('branch: ') ? 'branch: the main branch is set on each machine (or detected), not in the repository' : p)) };
+}
+
+/** `made` without the top-level fields `shape` refuses, and a line for each problem; `known` names the fields of each object, for a guess at a misspelt one. */
+function checkFields(shape: z.ZodType, made: Record<string, unknown>, known: Record<string, string[]>): { kept: Record<string, unknown>; problems: string[] } {
+  const parsed = shape.safeParse(made);
+  if (parsed.success) return { kept: made, problems: [] };
+  const kept: Record<string, unknown> = { ...made };
   const problems: string[] = [];
   for (const issue of parsed.error.issues) {
     const at = issue.path.join('.');
     if (issue.code === 'unrecognized_keys') {
       for (const key of issue.keys) {
-        const guess = closest(key, KNOWN[at] ?? []);
+        const guess = closest(key, known[at] ?? []);
         problems.push(`${at ? `${at}.` : ''}${key}: no such field${guess ? ` (did you mean ${guess}?)` : ''}`);
-        if (!at) delete adapter[key];
+        if (!at) delete kept[key];
       }
       continue;
     }
     const missing = issue.code === 'invalid_type' && issue.message.endsWith('received undefined');
     problems.push(`${at}: ${missing ? 'missing' : issue.message.replace(/^Invalid (input|option): /, '')}`);
     // the whole top-level field goes: half a `demo` or `planDocs` would be worse than the generic one
-    delete adapter[String(issue.path[0])];
+    delete kept[String(issue.path[0])];
   }
-  return { adapter: adapter as Partial<RepoAdapter>, problems };
+  return { kept, problems };
 }
 
 /** The known field a misspelt one most likely meant: the same ignoring case, the start of it, or at most two edits away. */

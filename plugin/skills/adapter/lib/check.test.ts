@@ -56,3 +56,27 @@ describe('check.ts', () => {
     expect(code).toBe(1);
   });
 });
+
+describe('check.ts with .obeya/settings.json', () => {
+  test("shows its values in front of the module's and reports what is wrong in it", () => {
+    const repo = gitRepo(join(dir, 'shop'), {
+      '.obeya/adapter/index.ts': "export default { name: 'shop', checks: ['npm test'] };\n",
+      '.obeya/settings.json': '{ "checks": ["bun test"], "land": "main", "chekcs": [] }\n',
+    });
+    const r = Bun.spawnSync([process.execPath, CHECK], { cwd: repo });
+    const out = r.stdout.toString();
+    expect(out).toContain('settings from');
+    expect(out).toContain('checks: ["bun test"]');
+    expect(out).toContain('land: main');
+    expect(out).toContain('- .obeya/settings.json, chekcs: no such field (did you mean checks?)');
+    expect(r.exitCode).toBe(1);
+  });
+
+  test('a repository with settings alone runs on the generic adapter with them', () => {
+    const repo = gitRepo(join(dir, 'shop'), { '.obeya/settings.json': '{ "setup": "bun install" }\n' });
+    const r = Bun.spawnSync([process.execPath, CHECK], { cwd: repo });
+    expect(r.stdout.toString()).toContain('setup: "bun install"');
+    expect(r.stdout.toString()).toContain('No problems.');
+    expect(r.exitCode).toBe(0);
+  });
+});

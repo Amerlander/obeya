@@ -8,9 +8,9 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, wri
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
-import { adapterNames } from '../adapters';
+import { adapterNames, readShared, REPO_SETTINGS_FILE, type SharedRead } from '../adapters';
 import { settingsShape } from '../adapters/schema';
-import { type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigSaved, type ConfigView, needsRestart, type RepoSettings, type DemoSettingsProblem, type DemoSettingsView, type DemoVoiceCheck, type LanguageView, type ResolvedCanvas, type ThemeView, type VoiceInstallJob } from '../core/types';
+import { type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigSaved, type ConfigView, needsRestart, type RepoSettings, SHARED_FIELDS, type SettingsShared, type SharedSettings, type DemoSettingsProblem, type DemoSettingsView, type DemoVoiceCheck, type LanguageView, type ResolvedCanvas, type ThemeView, type VoiceInstallJob } from '../core/types';
 import {
   DEMO_SETTINGS_FILE,
   type DemoSettings,
@@ -30,6 +30,8 @@ import { ConfigError, resolveCanvas } from './canvas';
 import type { Store } from './db';
 import { freshPath } from './path';
 import { repoInfo } from './repo';
+import type { Forge } from './forge';
+import { commitShared, proposeShared } from './shared-settings';
 import { GIT } from './workspaces';
 import { VERSION } from './resources';
 import { agentsView, languageView, pushKeyChoice, saveAgents, saveLanguage, savePushKey, saveTheme, themeView } from './settings';
@@ -166,6 +168,8 @@ export interface ConfigOptions {
   restart?: () => void;
   /** Only repositories' settings were saved: the running canvases take them over without a restart. */
   onSettings?: () => void;
+  /** Where „Für alle ins Repository übernehmen“ opens its pull request. */
+  forge?: Forge;
 }
 
 /** Whether the repository has the branch, locally or as `origin`'s. */
@@ -251,6 +255,71 @@ export class Config {
     return undefined;
   }
 
+  /**
+   * The repository's `.obeya/settings.json` changed from `before` to `after`: this machine's values
+   * that it now holds, and did not before, were taken over for everyone (here, or by whoever
+   * merged the same values), so they go from this machine's settings and come from the
+   * repository. Saved without anything following; the caller follows.
+   */
+  takenOver(path: string, before: SharedSettings | undefined, after: SharedSettings | undefined) {
+    if (this.o.source !== 'file' || !after || !existsSync(this.o.file)) return;
+    const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+    let changed = false;
+    const canvases = this.current().map((c) => ({
+      ...c,
+      repos: c.repos.map((r) => {
+        if (resolve(expand(r.path)) !== path || !r.settings) return r;
+        const s: RepoSettings = { ...r.settings, ...(r.settings.demo ? { demo: { ...r.settings.demo } } : {}) };
+        for (const k of SHARED_FIELDS) {
+          if (k === 'demo') continue;
+          if (s[k] !== undefined && same(s[k], after[k]) && !same(before?.[k], after[k])) delete s[k];
+        }
+        for (const k of ['required', 'howToRun'] as const)
+          if (s.demo?.[k] !== undefined && same(s.demo[k], after.demo?.[k]) && !same(before?.demo?.[k], after.demo?.[k])) delete s.demo[k];
+        if (s.demo && !Object.keys(s.demo).length) delete s.demo;
+        if (same(s, r.settings)) return r;
+        changed = true;
+        const { settings: _, ...rest } = r;
+        return Object.keys(s).length ? { ...rest, settings: s } : rest;
+      }),
+    }));
+    if (!changed) return;
+    writeFileSync(this.o.file, `${JSON.stringify(canvases, null, 2)}\n`);
+    this.read = undefined;
+    console.log(`Obeya: settings of ${path} now come from its ${REPO_SETTINGS_FILE}; removed from this machine's`);
+  }
+
+  /**
+   * „Für alle ins Repository übernehmen“: the settings saved for the repository at `path` (as the
+   * configuration names it) on this machine, but its main branch, go into its
+   * `.obeya/settings.json`: committed on the main branch where work lands there (they then come
+   * from the repository, here too), else as a pull request (once it is merged).
+   */
+  shareSettings(input: unknown): SettingsShared {
+    const parsed = z.object({ path: z.string() }).safeParse(input);
+    if (!parsed.success) throw new BadRequest('invalid', 'expected { path }');
+    const canvases = this.current();
+    const at = canvases.flatMap((c, canvas) => c.repos.map((r, repo) => ({ r, canvas, repo }))).find(({ r }) => r.path === parsed.data.path);
+    if (!at) throw new BadRequest('noSettings', `no repository ${parsed.data.path} in the configuration`);
+    const { branch: _, ...mine } = at.r.settings ?? {};
+    if (!Object.keys(mine).length) throw new BadRequest('noSettings', `${at.r.path}: nothing set on this machine to take over`);
+    const repoPath = resolve(expand(at.r.path));
+    const resolved = this.check(canvases).resolved[at.canvas];
+    const to = resolved?.repos[at.repo]?.shareTo ?? 'main';
+    if (to === 'pr') {
+      if (!this.o.forge) throw new BadRequest('settingsShare', 'no forge to open a pull request with');
+      const done = proposeShared(repoPath, mine, this.o.forge);
+      console.log(`Obeya: settings of ${repoPath} for everyone, as a pull request: ${'pr' in done ? done.pr : ''}`);
+      return done;
+    }
+    const { before: _was, after, ...done } = commitShared(repoPath, mine);
+    console.log(`Obeya: settings of ${repoPath} for everyone, committed on ${'branch' in done ? done.branch : ''}`);
+    // all of them are in the file now, also those it held already
+    this.takenOver(repoPath, undefined, after);
+    this.o.onSettings?.();
+    return done;
+  }
+
   view(): ConfigView {
     const { canvases, resolved, problems } = this.check(this.current());
     return {
@@ -301,7 +370,13 @@ export class Config {
         }),
       );
       try {
-        const { id, name, adapters, values, broken, refs, config } = resolveCanvas(c, this.o.store);
+        // each repository's `.obeya/settings.json`, read once for its values and its problems
+        const shared = new Map<string, SharedRead>();
+        const sharedOf = (path: string) => {
+          if (!shared.has(path)) shared.set(path, readShared(path));
+          return () => shared.get(path)!.settings;
+        };
+        const { id, name, adapters, infos, values, broken, refs, config } = resolveCanvas(c, this.o.store, undefined, sharedOf);
         const without = values();
         // what is wrong in a repository's own adapter is fixed there, not here: it keeps nothing from being saved
         c.repos.forEach((r, repo) => {
@@ -314,6 +389,7 @@ export class Config {
           }
           for (const detail of adapterRepoProblems(adapter, resolve(r.path), !!r.share))
             problems.push({ code: 'adapterField', canvas, repo, detail });
+          for (const detail of shared.get(infos[config.repos.indexOf(r)]!.path)?.problems ?? []) problems.push({ code: 'repoSettings', canvas, repo, detail });
         });
         // the repositories in the order given, though the home one runs first
         return {
@@ -327,6 +403,7 @@ export class Config {
               adapter: adapters[i]!.name,
               workspaces: adapters[i]!.workspaces,
               values: without[i]!,
+              shareTo: adapters[i]!.land === 'main' ? 'main' : 'pr',
               ...(demo?.site ? { adapterSite: demo.site.url } : demo?.share ? { adapterShares: true } : {}),
             };
           }),

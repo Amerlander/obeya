@@ -828,6 +828,12 @@ export type ErrorCode =
   | 'setupBusy'
   /** Sharing many pages again: no page is outdated. */
   | 'nothingOutdated'
+  /** „Für alle ins Repository übernehmen“: this machine sets nothing to take over. */
+  | 'noSettings'
+  /** „Für alle ins Repository übernehmen“: the checkout on the main branch has changes of its own in `.obeya/settings.json`. */
+  | 'settingsDirty'
+  /** „Für alle ins Repository übernehmen“: the commit, the push or the pull request failed; why comes with it. */
+  | 'settingsShare'
   /** Export: the video is too large for one HTML file. */
   | 'exportTooLarge'
   /** Export: the HTML artifact loads files beside its page, so it does not fit one HTML file. */
@@ -897,11 +903,29 @@ export interface RepoSettings {
 }
 
 /**
- * Where a repository's setting comes from where this machine sets none, highest first: the
- * adapter's code, the clones the configuration names (`workspaces` only), detection (main branch,
- * landing), the generic adapter.
+ * A repository's settings for everyone who runs Obeya on it, in `.obeya/settings.json` as its
+ * default branch has it (design: Repository settings): those for this machine but the main branch,
+ * which says where the file is read from.
  */
-export type SettingSource = 'adapter' | 'clones' | 'detected' | 'default';
+export type SharedSettings = Omit<RepoSettings, 'branch'>;
+
+/** The fields of `SharedSettings`, in the dialog's order. */
+export const SHARED_FIELDS = ['land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'demo'] as const satisfies readonly (keyof SharedSettings)[];
+
+/** `over` in front of `under`, field by field; the demo's two fields each on its own. */
+export function layerSettings<T extends RepoSettings>(under: T | undefined, over: T | undefined): T | undefined {
+  if (!under) return over;
+  if (!over) return under;
+  const demo = under.demo || over.demo ? { ...under.demo, ...over.demo } : undefined;
+  return { ...under, ...over, ...(demo ? { demo } : {}) };
+}
+
+/**
+ * Where a repository's setting comes from where this machine sets none, highest first: the
+ * repository's `.obeya/settings.json`, the adapter's code, the clones the configuration names
+ * (`workspaces` only), detection (main branch, landing), the generic adapter.
+ */
+export type SettingSource = 'repository' | 'adapter' | 'clones' | 'detected' | 'default';
 
 /** A setting's value without this machine's, and where it comes from. */
 export interface SettingValue<T> {
@@ -997,6 +1021,11 @@ export interface ResolvedCanvas {
     adapterSite?: string;
     /** Its settings without this machine's, with where each comes from. */
     values: RepoValues;
+    /**
+     * Where „Für alle ins Repository übernehmen“ puts `.obeya/settings.json`: a commit on the main
+     * branch where work lands there, else a pull request.
+     */
+    shareTo: 'main' | 'pr';
   }[];
 }
 
@@ -1010,7 +1039,7 @@ export interface ConfigProblem {
 }
 
 /** Whether a problem keeps the configuration from being saved: not one in a repository's own adapter, which is fixed there. */
-export const blocksSaving = (p: ConfigProblem) => p.code !== 'adapterField' && p.code !== 'adapterLoad';
+export const blocksSaving = (p: ConfigProblem) => p.code !== 'adapterField' && p.code !== 'adapterLoad' && p.code !== 'repoSettings';
 
 export type ConfigProblemCode =
   /** No canvas at all. */
@@ -1038,6 +1067,8 @@ export type ConfigProblemCode =
   | 'hostName'
   /** A main branch set for this machine that the repository does not have. */
   | 'noBranch'
+  /** Something in the repository's `.obeya/settings.json` that does not count (fixed there, so it keeps nothing from being saved). */
+  | 'repoSettings'
   /** Malformed: a bug in whoever wrote it. */
   | 'invalid';
 
@@ -1064,6 +1095,13 @@ export interface ConfigView {
   /** Saved, and Obeya starts again with it once no agent is in the middle of a turn. */
   restarting: boolean;
 }
+
+/** What „Für alle ins Repository übernehmen“ did with a repository's settings for this machine. */
+export type SettingsShared =
+  /** Committed `.obeya/settings.json` on the main branch: the settings now come from the repository. */
+  | { committed: string; branch: string }
+  /** Opened a pull request with it: once it is merged, the settings come from the repository. */
+  | { pr: string };
 
 /** What saving the configuration did: Obeya starts again with it, or (repositories' settings alone) it applies at once. */
 export interface ConfigSaved {

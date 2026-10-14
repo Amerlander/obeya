@@ -379,6 +379,50 @@ describe("a repository's settings for this machine", () => {
   });
 });
 
+describe("a repository's settings for everyone (.obeya/settings.json)", () => {
+  test("a fresh clone runs with them; this machine's go before them; a new version on the default branch applies without a restart", () => {
+    fresh();
+    const shop = gitRepo(join(dir, 'shop'), { 'README.md': 'Shop\n', '.obeya/settings.json': '{ "land": "main", "checks": ["bun test"], "planDocs": { "dir": "plans", "exclude": [] } }\n' });
+    const clone = join(dir, 'clone');
+    git(dir, 'clone', '--quiet', shop, clone);
+    let settings: RepoSettings | undefined;
+    canvas.shutdown();
+    canvas = new CanvasRuntime({ repos: [{ path: clone }] }, { store: new Store(':memory:'), home: dir, runtime, forge: noForge, settings: () => settings });
+    const adapter = canvas.repos[0]!.adapter;
+    // detection alone would send work from a clone with a remote out as pull requests only on GitHub; the file says main
+    expect([adapter.land, adapter.checks, adapter.planDocs.dir]).toEqual(['main', ['bun test'], 'plans']);
+    settings = { checks: [] };
+    expect(adapter.checks).toEqual([]);
+    settings = undefined;
+
+    // a change in the checkout counts once it is committed on the default branch
+    writeFileSync(join(clone, '.obeya/settings.json'), '{ "land": "main", "checks": ["bun test", "bun run lint"] }\n');
+    canvas.settingsChanged();
+    expect(adapter.checks).toEqual(['bun test']);
+    identify(clone);
+    git(clone, 'commit', '--quiet', '-am', 'Lint too');
+    canvas.settingsChanged();
+    expect([adapter.checks, adapter.planDocs.dir]).toEqual([['bun test', 'bun run lint'], 'docs/plan']);
+  });
+
+  test('where its workers work changed in it: Obeya starts again for it', () => {
+    fresh();
+    const shop = gitRepo(join(dir, 'shop'), { 'README.md': 'Shop\n', '.obeya/settings.json': '{ "land": "main" }\n' });
+    identify(shop);
+    const changed: string[] = [];
+    canvas.shutdown();
+    canvas = new CanvasRuntime({ repos: [{ path: shop }] }, { store: new Store(':memory:'), home: dir, runtime, forge: noForge, adapterChanged: (p) => changed.push(p) });
+    writeFileSync(join(shop, '.obeya/settings.json'), '{ "land": "main", "checks": ["bun test"] }\n');
+    git(shop, 'commit', '--quiet', '-am', 'Checks');
+    canvas.settingsChanged();
+    expect(changed).toEqual([]);
+    writeFileSync(join(shop, '.obeya/settings.json'), '{ "land": "main", "workspaces": "clones" }\n');
+    git(shop, 'commit', '--quiet', '-am', 'Clones');
+    canvas.settingsChanged();
+    expect(changed).toEqual([canvas.repos[0]!.info.path]);
+  });
+});
+
 test('a clone registered for a repository must be one of it', () => {
   fresh();
   const web = repo('web', 'Web');

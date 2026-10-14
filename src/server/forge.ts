@@ -59,6 +59,8 @@ export interface Forge {
    * reason when it cannot. Returns the commit the merge put on the base branch, where GitHub says.
    */
   merge(cwd: string, url: string, head: string): string | void;
+  /** Opens a pull request from the pushed branch `head` onto `base`; returns its URL. */
+  open(cwd: string, pr: { base: string; head: string; title: string; body: string }): string;
 }
 
 /** A GitHub pull request URL: `https://github.com/<owner>/<repo>/pull/<n>`. */
@@ -195,6 +197,16 @@ export const makeGhForge = (run: (cwd: string, ...args: string[]) => string): Fo
     try {
       writeFileSync(join(dir, 'body.md'), body);
       run(cwd, 'pr', 'edit', url, '--body-file', join(dir, 'body.md'));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
+  open(cwd, pr) {
+    const dir = mkdtempSync(join(tmpdir(), 'obeya-pr-body-'));
+    try {
+      writeFileSync(join(dir, 'body.md'), pr.body);
+      // gh prints the new pull request's URL last
+      return run(cwd, 'pr', 'create', '--base', pr.base, '--head', pr.head, '--title', pr.title, '--body-file', join(dir, 'body.md')).trim().split('\n').at(-1)!.trim();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

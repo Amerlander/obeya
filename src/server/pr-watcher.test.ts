@@ -40,6 +40,7 @@ beforeEach(() => {
   merges = [];
   refuse = undefined;
   const forge: Forge = {
+    open: () => '',
     status: () => status,
     body: () => '',
     setBody: () => {},
@@ -319,7 +320,7 @@ describe('watching', () => {
     // not yet ready, so Obeya does not merge it itself
     status.checks = [{ name: 'build', state: 'pending' }];
     let asked = 0;
-    const counting = new PrWatcher(board, workers, { status: () => (asked++, status), body: () => '', setBody: () => {}, merge: () => {} }, () => dir);
+    const counting = new PrWatcher(board, workers, { status: () => (asked++, status), body: () => '', setBody: () => {}, merge: () => {}, open: () => '' }, () => dir);
     counting.soon();
     counting.soon();
     await Bun.sleep(5);

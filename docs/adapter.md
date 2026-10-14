@@ -2,37 +2,51 @@
 
 Obeya runs on any git repository as it is. What it cannot know by itself is how *this* project
 works: how its app starts, which checks a change must pass, how approved work lands, how a worker
-records a demo. A repository says that in its adapter, a small TypeScript module at
-`.obeya/adapter/index.ts`, versioned with the code it describes (like `.vscode/` or `.claude/`).
+records a demo. A repository says that in its adapter, versioned with the code it describes (like
+`.vscode/` or `.claude/`): the values in `.obeya/settings.json`, which "Konfiguration" shows and
+changes without a line of code, and what is code (how the stack starts, a share script, the
+canvas's name) in a small TypeScript module at `.obeya/adapter/index.ts`. A repository that needs
+no code has no module.
 
 The quickest way to get one: in "Konfiguration", a repository that runs on the generic adapter has
 "Adapter einrichten lassen" ("Have the adapter set up"). It puts a card on the repository's
 canvas whose worker writes the adapter with the `obeya:adapter` skill: it reads the repository,
 starts the app, records a demo with it to prove the recipe, and asks you what it cannot find out
-(a login, test data). This page is the reference for what it writes, and for writing or changing
-one yourself.
+(a login, test data). The values you set for a repository in "Konfiguration" go into
+`.obeya/settings.json` with "Für alle ins Repository übernehmen" (see below). This page is the
+reference for what they write, and for writing or changing either yourself.
 
 ## A complete example
 
 A typical web app: a Node API and a Vite frontend, PostgreSQL in Docker Compose, tests and lint
 in `package.json`, work landing through pull requests on GitHub.
 
+`.obeya/settings.json`:
+
+```json
+{
+  "land": "pr",
+  "direct": false,
+  "checks": ["pnpm lint", "pnpm typecheck", "pnpm test"],
+  "setup": "pnpm install",
+  "planDocs": { "dir": "docs/plan", "exclude": ["TEMPLATE.md"] },
+  "softPaths": ["docs/"],
+  "workspaces": "clones",
+  "prNoise": ["vercel[bot]", "codecov[bot]"],
+  "demo": {
+    "required": true,
+    "howToRun": "Start the stack in your clone: `docker compose up -d db`, then `pnpm db:migrate && pnpm db:seed`, then `pnpm dev` in the background. The frontend runs on the port in `.dev-urls` (WEB_URL), the API on API_URL. Log in as demo@shop.test with the password `demo` (created by the seed); the seed also makes three orders to show. Stop the stack with `docker compose down` and the dev server by its PID when the demo is rendered."
+  }
+}
+```
+
+`.obeya/adapter/index.ts`:
+
 ```ts
-// .obeya/adapter/index.ts
 export default (kit) => ({
   name: 'shop',
   canvasId: () => 'shop',
   canvasName: () => 'Shop',
-  planDocs: { dir: 'docs/plan', exclude: ['TEMPLATE.md'] },
-
-  setup: 'pnpm install',
-  checks: ['pnpm lint', 'pnpm typecheck', 'pnpm test'],
-
-  land: 'pr',
-  direct: false,
-  softPaths: ['docs/'],
-  workspaces: 'clones',
-  prNoise: ['vercel[bot]', 'codecov[bot]'],
 
   stack: {
     start: 'docker compose up -d db && pnpm dev',
@@ -42,25 +56,22 @@ export default (kit) => ({
   },
 
   demo: {
-    required: true,
-    howToRun: [
-      'Start the stack in your clone: `docker compose up -d db`, then `pnpm db:migrate && pnpm db:seed`, then `pnpm dev` in the background.',
-      'The frontend runs on the port in `.dev-urls` (WEB_URL), the API on API_URL.',
-      'Log in as demo@shop.test with the password `demo` (created by the seed); the seed also makes three orders to show.',
-      'Stop the stack with `docker compose down` and the dev server by its PID when the demo is rendered.',
-    ].join(' '),
     share: ['bun', `${import.meta.dir}/share.ts`],
   },
 });
 ```
 
-The default export is the adapter, or (as here) a function that gets Obeya's helpers (`kit`) and
-returns it. The module imports nothing of Obeya's: it lives in your repository, not in Obeya's,
-so Obeya hands it what it may need. Files next to `index.ts` in `.obeya/adapter/` come along
-(a share script, say), and `import.meta.dir` finds them.
+The module's default export is the adapter, or (as here) a function that gets Obeya's helpers
+(`kit`) and returns it. The module imports nothing of Obeya's: it lives in your repository, not in
+Obeya's, so Obeya hands it what it may need. Files next to `index.ts` in `.obeya/adapter/` come
+along (a share script, say), and `import.meta.dir` finds them.
 
-Everything but `name` is optional. What an adapter leaves out comes from the generic adapter,
-whose values are given with each field below (`land` is the one Obeya tells from the repository).
+Everything but the module's `name` is optional. What both leave out comes from the generic
+adapter, whose values are given with each field below (`land` is the one Obeya tells from the
+repository). The fields that are values (`planDocs`, `setup`, `checks`, `land`, `direct`,
+`softPaths`, `workspaces`, `prNoise`, and the demo's `required` and `howToRun`) belong in
+`.obeya/settings.json`; the module may still give them, but the file goes before it. The others
+(`name`, `canvasId`, `canvasName`, `stack`, `demo.site`, `demo.share`) are the module's alone.
 
 ## The fields
 
@@ -207,6 +218,42 @@ Generic: none.
 Only for Obeya's built-in adapters, which are picked by it (`(repo) => boolean`). A repository's
 own adapter is picked because it is there; this field changes nothing.
 
+## `.obeya/settings.json`: the values, for everyone
+
+A JSON object with the fields that are values, each as described above (`demo` holds `required`
+and `howToRun` only). Every machine that runs Obeya on the repository reads it, a fresh clone
+included. Which value applies, highest first:
+
+1. The one set for this machine in "Konfiguration" (a repository's „Einstellungen“; kept in
+   `canvases.json` in Obeya's home, never in the repository).
+2. `.obeya/settings.json` **as the default branch has it**.
+3. The module's (`.obeya/adapter/index.ts`), or the adapter "Konfiguration" names.
+4. What Obeya detects (`land`, the main branch).
+5. The generic adapter's.
+
+"Konfiguration" shows each value with where it comes from („aus dem Repository“ for the file).
+Like the module, the file is read from the default branch, not from the checkout, so a change
+counts once it is on the default branch: then it applies without a restart (Obeya reads it again
+whenever it reads the default branch anew: a landing, a merged pull request, a fetch). The one
+exception is `workspaces`: clones or worktrees are set up when Obeya starts, so a change to it
+restarts Obeya, as a changed module does.
+
+The main branch is not in the file, since it says where the file is read from: a fresh clone has
+it from `origin`'s HEAD, and a machine that needs another sets it in "Konfiguration".
+
+**From "Konfiguration".** Below a repository's „Einstellungen“, „Für alle ins Repository
+übernehmen“ takes the values set for this machine (all but the main branch) into the file. It
+shows the file as it will be and where it goes; where work lands on the main branch, Obeya commits
+it there (beside the checkout, which keeps everything else as it is; a change of its own to the
+file is refused), and the values then come from the repository on this machine too. Where work
+goes out as pull requests, Obeya pushes the commit to a branch of its own (`obeya-settings-…`) and
+opens a pull request against the main branch; this machine keeps its values until the pull
+request is merged, then they come from the repository. What the file holds beside them stays.
+
+A field that is unknown or of the wrong type does not count, the rest does, as in the module (see
+Mistakes): each shows as a problem at the repository in "Konfiguration", starting with
+`.obeya/settings.json`.
+
 ## How Obeya picks a repository's adapter
 
 In this order:
@@ -215,6 +262,8 @@ In this order:
    one's name (`generic`), or the path of a module, relative to the repository.
 2. The repository's own, `.obeya/adapter/index.ts`, **as the default branch has it**.
 3. The first built-in one that matches; for any repository but Obeya's own, `generic`.
+
+The values of `.obeya/settings.json` go before whichever of these it is (see above).
 
 Obeya reads the repository's own adapter from the default branch (the local one when it has all
 of `origin`'s commits, else `origin`'s as last fetched), not from the checkout: the clones a canvas
@@ -226,7 +275,8 @@ once it is merged. Its files are copied per version into the repository's git di
 **A change takes effect once it is on the default branch:** when a merged pull request or a card's
 landing brings a new adapter, or a change to it, to the default branch Obeya reads, Obeya restarts
 by itself, as for a configuration saved in "Konfiguration": once no agent is in the middle of a
-step, and the page reloads. Commits that leave `.obeya/adapter/` as it is restart nothing. Where
+step, and the page reloads. Commits that leave `.obeya/adapter/` as it is restart nothing (a
+change to `.obeya/settings.json` applies without a restart, but for `workspaces`). Where
 the configuration names an adapter, the repository's own is not read, and a change to it restarts
 nothing either. Obeya started by hand without its supervisor (`--dev`) cannot restart itself: its
 log says so, and the change takes effect at the next start.
@@ -259,14 +309,14 @@ start. "Aufgabe zum Beheben anlegen" beside a problem has Obeya create a task th
 
 ## Testing an adapter
 
-1. **It loads and every field counts.** In the repository, with the adapter in the checkout
-   (committed or not), run the adapter skill's check from an Obeya checkout:
+1. **It loads and every field counts.** In the repository, with the module and the settings in the
+   checkout (committed or not), run the adapter skill's check from an Obeya checkout:
 
    ```bash
    bun ~/dev/obeya/plugin/skills/adapter/lib/check.ts
    ```
 
-   It prints what Obeya makes of the adapter (canvas, setup, checks, landing, workspaces, the demo
+   It prints what Obeya makes of both (canvas, setup, checks, landing, workspaces, the demo
    recipe, the site demos are shared on) and every problem "Konfiguration" would report for it (a
    field that is unknown or of the wrong type, a share or deploy program that is not there, both
    `demo.site` and `demo.share`), and exits with 1 when there is one. A worker runs it as
