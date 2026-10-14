@@ -49,7 +49,7 @@ interface Props {
   onDone: (d: ActDone, pending?: Pending) => void;
   /** Reads the plan doc of a workstream's project, at the workstream. */
   onReadPlan: (project: Item, mark?: string) => void;
-  /** Opens the configuration at the clone count (or the slots) of a repository: the card waits for a free clone. */
+  /** Opens the configuration at the clone count (or the slots) of a repository: the card waits for a free clone or slot. */
   onClones: (repo: string, field: 'clones' | 'slots') => void;
   onTell: Tell;
 }

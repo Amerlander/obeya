@@ -42,7 +42,7 @@ export interface ConfigFocus {
 }
 const FOCUS_KEY = 'obeya-config-focus';
 
-/** Opens the dialog next time at a repository's clone count or slots, as from a card waiting for a free clone. */
+/** Opens the dialog next time at a repository's clone count or slots, as from a card waiting for a free clone or slot. */
 export const showRepoClones = (f: ConfigFocus) => {
   showCanvasesSection();
   sessionStorage.setItem(FOCUS_KEY, JSON.stringify(f));
@@ -1037,7 +1037,7 @@ interface RepoProps {
   canvasId?: string;
   adapters: string[];
   problems: ConfigProblem[];
-  /** Its clone count or slots to scroll to and focus: the dialog was opened from a card waiting for a free clone. */
+  /** Its clone count or slots to scroll to and focus: the dialog was opened from a card waiting for a free clone or slot. */
   focus?: ConfigFocus;
   /** Where it is, for a request to the Koordinator. */
   where: string;
@@ -1127,8 +1127,8 @@ function RepoRow({ repo, home, resolved, canvasId, adapters, problems, focus, wh
         </div>
       )}
       {!clones && resolved && (
-        <div className="cfg-span cfg-clones">
-          <label className="cfg-has-info">
+        <div ref={clonesBox} className={flash ? 'cfg-span cfg-clones flash' : 'cfg-span cfg-clones'}>
+          <label className="cfg-slots cfg-has-info">
             <span className="hint">
               {t.config.slots} <Info text={t.config.slotsWorktreesHint} />
             </span>

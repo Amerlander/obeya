@@ -1460,7 +1460,8 @@ the owner's language (`src/core/locale.ts`).
   the queue, shown as "Wartet auf Workspace" with the reason, and starts by itself once one is
   free; cards queued after it count it as ahead of them. Its reason on the open card ends in a link
   ("Anzahl der Klone ändern", "Anzahl der Slots ändern" when slots are the limit) that opens the
-  configuration at its repository's clone count or slots, scrolled there and focused, since the
+  configuration at its repository's clone count or slots (a repository in worktrees has only
+  the slots), scrolled there and focused, since the
   owner may not know the pool is the limit nor where it is set. Clones only free up with a change of the
   board (stop, landing, a discarded prototype), so the Koordinator looks then; free clones found
   dirty are looked at again after a minute at the latest. Cards whose turn comes together go in the order they came
