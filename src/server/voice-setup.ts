@@ -1,13 +1,15 @@
 // What Obeya's voice in needs on this machine, checked for the settings sheet like a demo's setup
 // (`plugin/skills/demo/lib/setup.ts`): Whisper (the package in uv's cache or in
 // `OBEYA_WHISPER_PYTHON`, the model in the Hugging Face cache), ffmpeg (it decodes the recordings)
-// and uv (it brings Whisper). "Installieren" loads Whisper, which fetches it the first time, so the
-// first command does not wait minutes for it.
+// and uv (it brings Whisper, so it comes first, and "Installieren" for Whisper waits for it).
+// "Installieren" loads Whisper, which fetches it the first time, so the first command does not
+// wait minutes for it.
 
 import type { VoiceSetupItem, VoiceSetupView } from '../core/types';
 import { installHint, linuxFamily, output, whisperKit } from '../../plugin/skills/demo/lib/setup.ts';
 import { hfModelPresent } from '../../plugin/skills/demo/lib/voices.ts';
 import { BadRequest } from './board';
+import { freshPath } from './path';
 import type { ListenBackend } from './voice';
 
 export interface VoiceSetupOptions {
@@ -27,6 +29,7 @@ export class VoiceSetup {
   async view(): Promise<VoiceSetupView> {
     const env = this.o.env ?? process.env;
     const { platform, arch } = process;
+    await freshPath(env, platform);
     const { listen } = this.o.backends;
     const family = platform === 'linux' ? linuxFamily() : null;
     const hint = (id: 'ffmpeg' | 'uv') => installHint(id, platform, arch, family);
@@ -40,6 +43,9 @@ export class VoiceSetup {
       python ? output(python, ['-c', has], env) : output('uv', ['run', '--offline', '--quiet', '--no-project', ...kit.uvArgs, 'python', '-c', has], env),
     ]);
     const items: VoiceSetupItem[] = [];
+    // uv fetches Whisper unless its Python is given
+    const uv = python ? undefined : uvOut?.match(/uv (\S+)/)?.[1];
+    if (!python) items.push(uv ? { id: 'uv', state: 'ok', found: uv } : { id: 'uv', state: 'missing', install: hint('uv') });
     const found = kit.module.replace('_', '-');
     const model = env.OBEYA_WHISPER_MODEL ?? kit.model;
     // a model named without its repository (faster-whisper's own names) is not looked up
@@ -49,21 +55,17 @@ export class VoiceSetup {
       items.push({ id: 'whisper', state: 'missing', found: python, need: found, install: { commands: [`"${python}" -m pip install ${found}`] } });
     else {
       whisperMb = (packageOut === null ? (listen === 'mlx' ? 150 : 250) : 0) + modelMb;
-      items.push({ id: 'whisper', state: whisperMb ? 'later' : 'ok', found, ...(whisperMb ? { mb: whisperMb } : {}) });
+      items.push({ id: 'whisper', state: whisperMb ? 'later' : 'ok', found, ...(whisperMb ? { mb: whisperMb } : {}), ...(whisperMb && !python && !uv ? { waits: 'uv' as const } : {}) });
     }
     const ffmpeg = ffmpegOut?.match(/ffmpeg version (\S+)/)?.[1];
     items.push(ffmpeg ? { id: 'ffmpeg', state: 'ok', found: ffmpeg } : { id: 'ffmpeg', state: 'missing', install: hint('ffmpeg') });
-    // uv fetches Whisper unless its Python is given
-    if (!python) {
-      const uv = uvOut?.match(/uv (\S+)/)?.[1];
-      items.push(uv ? { id: 'uv', state: 'ok', found: uv } : { id: 'uv', state: 'missing', install: hint('uv') });
-    }
     return { platform, arch, listen, items, fetch: { parts: whisperMb ? ['whisper'] : [], mb: whisperMb }, ...(this.job ? { job: this.job } : {}) };
   }
 
   /** Loads Whisper, in the background; the view says how far it got. */
   async install(): Promise<VoiceSetupView> {
     if (this.job?.running) throw new BadRequest('voiceInstalling', 'voice is being installed');
+    if ((await this.view()).items.some((i) => i.waits)) throw new BadRequest('invalid', 'Whisper comes through uv, which is not installed yet');
     const job: NonNullable<VoiceSetupView['job']> = (this.job = { running: true, step: 'whisper', line: '' });
     this.done = (async () => {
       console.log('Obeya: loading Whisper (fetched the first time)');

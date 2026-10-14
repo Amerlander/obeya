@@ -25,6 +25,7 @@ import { installState, installVoice, KEY_ENV, sample } from '../../plugin/skills
 import { BadRequest } from './board';
 import { ConfigError, resolveCanvas } from './canvas';
 import type { Store } from './db';
+import { freshPath } from './path';
 import { repoInfo } from './repo';
 import { VERSION } from './resources';
 import { agentsView, languageView, pushKeyChoice, saveAgents, saveLanguage, savePushKey, saveTheme, themeView } from './settings';
@@ -349,7 +350,8 @@ export class Config {
   }
 
   /** What a render with these settings needs on this machine, and how to install what is missing. */
-  demoSetup(input: unknown): Promise<SetupCheck> {
+  async demoSetup(input: unknown): Promise<SetupCheck> {
+    await freshPath();
     return checkSetup(parseDemo(input), { home: this.o.server.home });
   }
 

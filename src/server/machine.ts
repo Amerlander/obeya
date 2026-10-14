@@ -12,7 +12,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
-import { delimiter, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 // by its path: the package exports no package.json, which Bun imports all the same but TypeScript does not
 import sdk from '../../node_modules/@anthropic-ai/claude-agent-sdk/package.json';
 import { blocksSaving, type FirstCanvas, type MachineItem, type MachineJob, type MachineSection, type MachineSectionId, type MachineView } from '../core/types';
@@ -25,6 +25,7 @@ import { type Config, expand } from './config';
 import { COMPILED } from './resources';
 import { claudeExecutable } from './runtime';
 import type { ShellReports } from './push-key';
+import { extendPath, freshPath } from './path';
 import { ownerLanguage, pushKeyChoice } from './settings';
 import type { VoiceSetup } from './voice-setup';
 
@@ -32,30 +33,6 @@ type Env = Record<string, string | undefined>;
 
 /** The Claude Code the Agent SDK brings, which Obeya was checked with. */
 export const CHECKED_CLAUDE: string = sdk.claudeCodeVersion;
-
-/** Where the official installers of Claude Code and uv put their programs. */
-export const localBin = () => join(homedir(), '.local', 'bin');
-
-/**
- * Puts the directories on the PATH that the programs Obeya checks and starts are installed in but
- * a process started from the desktop may lack: the official installers' `~/.local/bin`, and
- * Homebrew's on a Mac.
- */
-export function extendPath(env: Env = process.env, platform: string = process.platform) {
-  const dirs = [localBin(), ...(platform === 'darwin' ? ['/opt/homebrew/bin', '/usr/local/bin'] : [])];
-  const parts = (env.PATH ?? '').split(delimiter).filter(Boolean);
-  for (const d of dirs) if (existsSync(d) && !parts.includes(d)) parts.push(d);
-  env.PATH = parts.join(delimiter);
-}
-
-/** On Windows, what installers added to the user's and the machine's PATH since Obeya started. */
-async function windowsPath(env: Env) {
-  const out = await output('powershell', ['-NoProfile', '-Command', "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')"], env);
-  if (!out) return;
-  const parts = (env.PATH ?? '').split(';').filter(Boolean);
-  for (const d of out.trim().split(';')) if (d && !parts.includes(d)) parts.push(d);
-  env.PATH = parts.join(';');
-}
 
 /** The official installers, which need no admin rights: in a shell, or in PowerShell on Windows. */
 const INSTALLERS = {
@@ -239,13 +216,15 @@ export class MachineSetup {
   }
 
   async view(): Promise<MachineView> {
+    // as it was before the check: a job that ends meanwhile is followed once more, onto what it installed
+    const job = this.job && { ...this.job };
     const { sections } = await this.check();
     return {
       platform: this.platform,
       arch: this.o.arch ?? process.arch,
       sections,
       checkedClaude: CHECKED_CLAUDE,
-      ...(this.job ? { job: { ...this.job } } : {}),
+      ...(job ? { job } : {}),
       picker: !!folderDialog(this.platform, this.env, ''),
       cloneInto: homedir(),
       restarts: this.o.restarts,
@@ -255,6 +234,8 @@ export class MachineSetup {
   private async check(): Promise<Found> {
     const env = this.env;
     const platform = this.platform;
+    // on Windows what was installed since the last check, by Obeya or by hand
+    await freshPath(env, platform);
     const arch = this.o.arch ?? process.arch;
     const family = platform === 'linux' ? linuxFamily() : null;
     const brew = platform === 'darwin' && !!Bun.which('brew', { PATH: env.PATH ?? '' });
@@ -329,7 +310,7 @@ export class MachineSetup {
     const keyLine = this.o.shells?.item(pushKeyChoice(this.o.home).key);
     const keyItem = keyLine ? [keyLine] : [];
     const voiceItems = (voice?.items ?? []).map((i): MachineItem => {
-      if (i.id === 'whisper' && i.state === 'later') return { ...i, act: 'install' };
+      if (i.id === 'whisper' && i.state === 'later') return i.waits ? i : { ...i, act: 'install' };
       if (i.state === 'missing' && i.id !== 'whisper') return ownUv(missing(i));
       return i;
     });
@@ -374,8 +355,9 @@ export class MachineSetup {
     console.log(`Obeya: installing ${id} (${section})`);
     work
       .then(async () => {
-        if (this.platform === 'win32') await windowsPath(this.env);
+        // the official installers' directory, which the first of them creates, and Windows' PATH
         extendPath(this.env, this.platform);
+        await freshPath(this.env, this.platform);
         console.log(`Obeya: ${id} installed`);
       })
       .catch((e: Error) => {

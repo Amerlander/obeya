@@ -13,16 +13,6 @@ without a restart.
 
 ## Where it stands
 
-- *PATH after an outside install.* The setup assistant checks again whenever the window gets the
-  focus back (`src/ui/setup.tsx`), but on Windows Obeya reads the user's and the machine's `PATH`
-  from the registry again only after an installation it ran itself (`windowsPath` in
-  `src/server/machine.ts`). git or ffmpeg installed by hand, or by an installer Obeya opened, stays
-  "missing" until something else refreshes the process's `PATH`. In the test it caught up once the
-  folder was picked; why is not traced.
-- *uv and Whisper.* The voice section lists Whisper before uv (`src/server/voice-setup.ts`), and
-  "Installieren" for Whisper runs while uv is missing, so it fails.
-- *Folder or clone.* The first canvas offers two pills in a `tablist` ("Ordner auf diesem Rechner",
-  "Repository klonen"). In the test they read as buttons, not as a choice.
 - *A folder without git.* The first canvas rejects it (`notRepo`: "In diesem Ordner liegt kein
   git-Repository.") and offers nothing to set one up.
 - *Main branch.* `defaultBranch()` (`src/server/workspaces.ts`) and `defaultBranchCommit()`
@@ -77,7 +67,7 @@ demo's `howToRun` and `required`.
 
 ## Workstreams
 
-- [ ] **W1:** Setup assistant fixes. Every recheck on Windows reads `PATH` from the registry again,
+- [x] **W1:** Setup assistant fixes. Every recheck on Windows reads `PATH` from the registry again,
   not only after Obeya's own installations. uv moves above Whisper, and Whisper's "Installieren"
   waits until uv is there and says so. The folder/clone choice gets a new design; the worker picks
   one of the two variants the owner saw and shows it in the demo: choice cards ("Wo liegt dein

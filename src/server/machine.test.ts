@@ -9,6 +9,7 @@ import { Config } from './config';
 import { Store } from './db';
 import { CLONES, cloneName, machineHint, MachineSetup, runnable, WELCOME_FILE, welcome } from './machine';
 import { gitRepo } from './testing';
+import { VoiceSetup } from './voice-setup';
 
 let dir: string;
 let home: string;
@@ -108,6 +109,36 @@ describe('what Obeya needs on this machine', () => {
     expect(machineHint('gh', 'linux', 'pacman', false).commands).toEqual(['sudo pacman -S github-cli']);
     expect(machineHint('git', 'linux', null, false).commands).toEqual([]);
     expect(machineHint('claude', 'win32', null, false).commands).toEqual(['irm https://claude.ai/install.ps1 | iex']);
+  });
+
+  test('on Windows, every check reads the PATH from the registry again: git installed by hand is found at once', async () => {
+    const later = join(dir, 'Git', 'cmd');
+    // the registry's PATH, as PowerShell reads it
+    fake('powershell', `echo "C:\\Windows;${later}"`);
+    const machine = new MachineSetup({ home, config: config(), env: { PATH: bin }, platform: 'win32', arch: 'x64', compiled: true, restarts: true });
+    expect(section(await machine.view(), 'needed').items.find((i) => i.id === 'git')).toMatchObject({ state: 'missing' });
+    // the owner installs git by hand and comes back to the window
+    mkdirSync(later, { recursive: true });
+    writeFileSync(join(later, 'git'), '#!/bin/sh\ncase "$1" in --version) echo "git version 2.51.0.windows.1";; config) echo Ada;; esac\n');
+    chmodSync(join(later, 'git'), 0o755);
+    expect(section(await machine.view(), 'needed').items.find((i) => i.id === 'git')).toEqual({ id: 'git', state: 'ok', found: '2.51.0.windows.1' });
+  });
+
+  test('lists uv above Whisper, whose installation waits for it', async () => {
+    const voice = new VoiceSetup({ home, backends: { listen: 'faster' }, prepare: async () => {}, env: { PATH: bin } });
+    const machine = new MachineSetup({ home, config: config(), voice, env: { PATH: bin }, platform: 'linux', arch: 'x64', compiled: true, restarts: true });
+    const items = section(await machine.view(), 'voice').items;
+    expect(items.map((i) => i.id)).toEqual(['uv', 'whisper', 'ffmpeg']);
+    expect(items[0]).toMatchObject({ state: 'missing', act: 'install' });
+    expect(items[1]).toMatchObject({ state: 'later', waits: 'uv' });
+    expect(items[1]!.act).toBeUndefined();
+    await expect(machine.install({ section: 'voice', id: 'whisper' })).rejects.toThrow('does not install whisper');
+    await expect(voice.install()).rejects.toThrow('uv');
+    // with uv there, Whisper installs at a click
+    fake('uv', 'case "$1" in --version) echo "uv 0.9.2";; *) exit 1;; esac');
+    const whisper = section(await machine.view(), 'voice').items.find((i) => i.id === 'whisper')!;
+    expect(whisper).toMatchObject({ state: 'later', act: 'install' });
+    expect(whisper.waits).toBeUndefined();
   });
 
   test("sets git's name and e-mail as the owner gives them", async () => {

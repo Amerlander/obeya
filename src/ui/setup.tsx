@@ -85,7 +85,7 @@ export function voiceState(i: VoiceSetupItem | MachineItem) {
   const s = t.config.setup;
   // the app's key in another app: the key, or what is in the way (src/server/push-key.ts)
   if (i.id === 'globalKey') return i.state === 'ok' ? t.config.pushKey.on(pushKeyLabel(i.found ?? '')) : (t.config.pushKey.states[i.found ?? ''] ?? t.config.pushKey.states.error!);
-  if (i.state === 'later') return v.later(megabytes(i.mb ?? 0));
+  if (i.state === 'later') return (i.waits ? v.waits : v.later)(megabytes(i.mb ?? 0));
   if (i.state === 'missing') return i.found && i.need ? s.needs(i.found, i.need) : s.missing;
   return (i.found && v.found[i.found]) ?? i.found ?? s.there;
 }
@@ -367,22 +367,30 @@ function FirstCanvas({ view, ready, onView }: { view: MachineView; ready: boolea
         <p className="hint setup-saved">{saved.restarting ? s.first.restarting : s.first.startAgain}</p>
       ) : (
         <>
-          <div className="setup-modes" role="tablist">
+          <div className="setup-where" role="radiogroup" aria-labelledby="setup-where">
+            <b id="setup-where">{s.first.where}</b>
             {(['folder', 'clone'] as const).map((m) => (
-              <button key={m} role="tab" aria-selected={mode === m} className={mode === m ? 'pill on' : 'pill'} onClick={() => setMode(m)}>
-                {s.first.modes[m]}
-              </button>
+              <label key={m} className={mode === m ? 'setup-choice on' : 'setup-choice'}>
+                <input type="radio" name="setup-where" checked={mode === m} onChange={() => setMode(m)} />
+                <span>
+                  <b>{s.first.modes[m].title}</b>
+                  <span className="hint">{s.first.modes[m].hint}</span>
+                </span>
+              </label>
             ))}
           </div>
           {mode === 'folder' ? (
-            <div className="c-row">
-              <input className="c-path" spellCheck={false} placeholder={s.first.pathPlaceholder} value={path} onChange={(e) => setPath(e.target.value)} />
-              {view.picker && (
-                <button className="btn small setup-pick" onClick={pick}>
-                  {s.first.pick}
-                </button>
-              )}
-            </div>
+            <label>
+              <span className="hint">{s.first.folder}</span>
+              <span className="c-row">
+                <input className="c-path" spellCheck={false} placeholder={s.first.pathPlaceholder} value={path} onChange={(e) => setPath(e.target.value)} />
+                {view.picker && (
+                  <button className="btn small setup-pick" onClick={pick}>
+                    {s.first.pick}
+                  </button>
+                )}
+              </span>
+            </label>
           ) : (
             <>
               <label>

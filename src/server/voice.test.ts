@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { looping, silence, voiceBackends } from './voice';
@@ -47,12 +47,15 @@ test('the voice check names what is missing, how to install it here, and what "I
     const setup = new VoiceSetup({ home, backends: { listen: 'faster' }, prepare: async () => {}, env: { PATH: join(home, 'none') } });
     const view = await setup.view();
     const by = Object.fromEntries(view.items.map((i) => [i.id, i]));
+    // uv first: it brings Whisper
+    expect(view.items.map((i) => i.id)).toEqual(['uv', 'whisper', 'ffmpeg']);
     expect(by.ffmpeg).toMatchObject({ state: 'missing' });
     expect(by.ffmpeg!.install?.commands.length || by.ffmpeg!.install?.url).toBeTruthy();
     expect(by.uv).toMatchObject({ state: 'missing' });
     expect(by.uv!.install?.url).toContain('astral');
-    // without uv the package is not in its cache: fetched by "Installieren" or the first command
-    expect(by.whisper).toMatchObject({ state: 'later', found: 'faster-whisper' });
+    // without uv the package is not in its cache: fetched by "Installieren" or the first command, once uv is there
+    expect(by.whisper).toMatchObject({ state: 'later', found: 'faster-whisper', waits: 'uv' });
+    await expect(setup.install()).rejects.toThrow('uv');
     expect(by.speech).toBeUndefined();
     expect(view.fetch.parts).toEqual(['whisper']);
     expect(view.fetch.mb).toBe(by.whisper!.mb!);
@@ -71,12 +74,15 @@ test('"Installieren" loads Whisper, and says why when it fails', async () => {
   const home = mkdtempSync(join(tmpdir(), 'obeya-voice-setup-'));
   try {
     let loaded = 0;
-    const setup = new VoiceSetup({ home, backends: { listen: 'mlx' }, prepare: async () => void loaded++, env: { PATH: join(home, 'none') } });
+    // uv is there; the package is not in its cache
+    writeFileSync(join(home, 'uv'), '#!/bin/sh\ncase "$1" in --version) echo "uv 0.9.2";; *) exit 1;; esac\n');
+    chmodSync(join(home, 'uv'), 0o755);
+    const setup = new VoiceSetup({ home, backends: { listen: 'mlx' }, prepare: async () => void loaded++, env: { PATH: home } });
     await setup.install();
     await Bun.sleep(10);
     expect(loaded).toBe(1);
     expect((await setup.view()).job).toEqual({ running: false, step: 'whisper', line: '' });
-    const failing = new VoiceSetup({ home, backends: { listen: 'mlx' }, prepare: () => Promise.reject(new Error('transcription sidecar exited (1)')), env: { PATH: join(home, 'none') } });
+    const failing = new VoiceSetup({ home, backends: { listen: 'mlx' }, prepare: () => Promise.reject(new Error('transcription sidecar exited (1)')), env: { PATH: home } });
     await failing.install();
     await Bun.sleep(10);
     expect((await failing.view()).job).toMatchObject({ running: false, error: 'transcription sidecar exited (1)' });

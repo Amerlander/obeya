@@ -1014,7 +1014,11 @@ export interface AgentsView {
 
 /** What Obeya's own voice in needs on this machine (`src/server/voice-setup.ts`). */
 export type VoiceSetupId = 'whisper' | 'ffmpeg' | 'uv';
-export type VoiceSetupItem = Omit<SetupItem, 'id'> & { id: VoiceSetupId };
+export type VoiceSetupItem = Omit<SetupItem, 'id'> & {
+  id: VoiceSetupId;
+  /** Whisper, which uv fetches: "Installieren" waits until uv is there. */
+  waits?: 'uv';
+};
 
 export interface VoiceSetupView {
   platform: string;
@@ -1044,6 +1048,8 @@ export type MachineItem = Omit<SetupItem, 'id'> & {
    * terminal that logs in. `identity`: the owner gives git's name and e-mail, which Obeya sets.
    */
   act?: 'install' | 'login' | 'identity';
+  /** What has to be installed first (uv, which brings Whisper). */
+  waits?: 'uv';
 };
 
 export interface MachineSection {

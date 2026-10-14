@@ -594,7 +594,8 @@ the owner's language (`src/core/locale.ts`).
   name and e-mail, without which an agent's commit fails), *Pull Requests* (gh and its login:
   the generic adapter lands through pull requests, so it is needed at the first approval, not
   before), *Sprachbefehle* and *Demos* (the checks the configuration dialog makes, voice-setup.ts and
-  the demo skill's setup.ts, each with the size still to download; what both need shows once).
+  the demo skill's setup.ts, each with the size still to download; what both need shows once;
+  uv stands above Whisper, whose "Installieren" waits until uv is there and says so).
   The checkout's agents run on the Agent SDK's own Claude Code, so there it is always there; the
   compiled binary's run on the machine's, and the list says which version Obeya was checked with
   (the SDK's) when the machine's differs. Logins are read from `claude auth status` and `gh auth
@@ -608,8 +609,13 @@ the owner's language (`src/core/locale.ts`).
   e-mail are typed into two fields. The list checks again when the window gets the focus back.
   Obeya puts `~/.local/bin` (the official installers') and on a Mac Homebrew's directories on its
   `PATH` at start, so what was installed is found from a process the desktop started; on Windows
-  it reads the `PATH` from the registry again after an installation. On the first start the page
-  ends with the first canvas: a repository's folder (a path, or the system's folder dialog where
+  every check (the assistant's, the voice's and the demos' in the settings) first reads the user's
+  and the machine's `PATH` from the registry again (`src/server/path.ts`), so what was installed
+  meanwhile, by Obeya or by hand, turns "ok" once the window gets the focus back. On the first
+  start the page ends with the first canvas, under "Wo liegt dein Projekt?": two cards with a radio
+  button each, "Schon auf diesem Rechner" and "Auf GitHub / einem Server" (pills read as buttons in
+  a user test, not as a choice), with the fields of the one chosen below: a repository's folder (a
+  path, or the system's folder dialog where
   there is one: `osascript`, PowerShell's, zenity or kdialog) or a clone (`owner/name` through `gh
   repo clone` where gh is logged in, else from GitHub by its URL; any git URL; into the home
   directory unless another is given). Obeya writes `canvases.json` with it (its own adapter, else
