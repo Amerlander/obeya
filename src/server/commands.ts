@@ -497,9 +497,9 @@ export class Commander {
               {
                 name: 'configure',
                 description: [
-                  "Change Obeya's configuration on the owner's word: canvases is the whole new list as config shows it (keep what the owner did not ask to change). It is saved after the undo window, and Obeya then starts again with it once no agent is in the middle of a turn; the page reloads. Where only repositories' settings change (but workspaces), they apply at once, without a restart.",
+                  "Change Obeya's configuration on the owner's word: canvases is the whole new list as config shows it (keep what the owner did not ask to change). It is saved after the undo window and applies while Obeya runs, without a restart: a new canvas or repository starts at once; a repository whose agents now work elsewhere (clones, workspaces, slots, hosts, its adapter, workspaces in its settings) or that leaves has its agents restarted or stopped once they paused, the others working on.",
                   "A canvas's id follows its name (without one, the first repository's adapter names it), unless id is set: to rename a canvas, set id to its current id (from resolved), or it becomes a new, empty canvas and its cards stay under the old id, unseen. The first repository a canvas was served with stays its home and must stay listed. Server settings (port, permission mode) are not part of it; they come from the command line.",
-                  `confirm: one short ${LANGUAGE_NAMES[language]} sentence saying what changes and, unless only repositories' settings change, that Obeya then starts again, e.g. ${say.configure}`,
+                  `confirm: one short ${LANGUAGE_NAMES[language]} sentence saying what changes and, where a repository's agents restart for it, that they do once they paused, e.g. ${say.configure}`,
                 ].join('\n'),
                 schema: {
                   canvases: z.array(
@@ -975,7 +975,7 @@ const CONFIRM: Record<Language, { act: string; words: string; remember: string; 
     remember: '„Gemerkt, gilt ab sofort für alle Agenten.“ / „Kommt in die CLAUDE.md von <repository name>, über die Aufgabe „CLAUDE.md ergänzen“.“',
     retro: '„Ich mache die Arbeitsrückschau für den Shop; Vorschläge erscheinen als Karten.“',
     group: '„„Export“ und „Rabatt“ gehören jetzt zur Gruppe Abrechnung.“',
-    configure: '„Das Repository shop-web kommt auf die Leinwand Shop; Obeya startet danach neu.“',
+    configure: '„Das Repository shop-web kommt auf die Leinwand Shop.“ / „shop-web bekommt einen dritten Klon; seine Agenten starten neu, sobald sie pausieren.“',
     lookUp: '„Ich schaue im Plan nach.“ / „Moment, ich lese nach, was der Agent bei „…“ tun würde.“',
     idea: '„Neue Idee „Erlaubte Datenbankabfragen“, zum Durchdenken mit dir.“',
   },
@@ -985,7 +985,7 @@ const CONFIRM: Record<Language, { act: string; words: string; remember: string; 
     remember: '“Noted, it applies to all agents from now on.” / “It goes into the CLAUDE.md of <repository name>, through the task “Add to CLAUDE.md”.”',
     retro: '“I am running the work retrospective for the shop; proposals appear as cards.”',
     group: '““Export” and “Discount” now belong to the group Billing.”',
-    configure: '“The repository shop-web joins the canvas Shop; Obeya then restarts.”',
+    configure: '“The repository shop-web joins the canvas Shop.” / “shop-web gets a third clone; its agents restart once they paused.”',
     lookUp: '“Let me look at the plan.” / “One moment, I am reading what the agent would do on “…”.”',
     idea: '“New idea “Allowed database queries”, to think through with you.”',
   },

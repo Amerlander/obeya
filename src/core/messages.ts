@@ -5,6 +5,9 @@
 
 import type { Language } from './locale';
 
+/** What a worker pauses for: Obeya restarting, Obeya stopping, or only its repository's agents restarting (a change to its configuration). */
+export type Pause = 'restart' | 'stop' | 'repo';
+
 const de = {
   /** A time in the owner's words: „um 14:40“, or „am 7.10. um 14:40“ on another day. */
   when: (at: number) => {
@@ -75,12 +78,18 @@ const de = {
     parkKept: 'Der App-Stack im Workspace läuft weiter, während die Karte wartet: Er hält Daten, die bleiben sollen. Soll er trotzdem gestoppt werden, sag es dem Agenten.',
     parkFailed: (output: string) => `Den App-Stack im Workspace zu stoppen, ist fehlgeschlagen: ${output}`,
     stoppedPrOpen: (n: number) => `Gestoppt. Pull Request #${n} bleibt auf GitHub offen.`,
-    restartDue: (stop: boolean) => `${stop ? 'Beenden' : 'Neustart'} von Obeya angekündigt; der Agent pausiert beim nächsten sicheren Punkt.`,
-    restartWaits: (stop: boolean): string => (stop ? 'Obeya wartet auf das Beenden; der Agent macht weiter, wenn Obeya wieder läuft.' : 'Obeya wartet auf einen Neustart; der Agent macht danach weiter.'),
-    restartStillDue: (stop: boolean) => `Der Agent ist vor dem ${stop ? 'Beenden' : 'Neustart'} wieder aufgewacht; Obeya sagt ihm, dass ${stop ? 'das Beenden' : 'der Neustart'} noch auf ihn wartet.`,
+    restartDue: (pause: Pause) =>
+      `${pause === 'stop' ? 'Beenden von Obeya' : pause === 'repo' ? 'Neustart der Agenten dieses Repositorys' : 'Neustart von Obeya'} angekündigt; der Agent pausiert beim nächsten sicheren Punkt.`,
+    restartWaits: (pause: Pause): string =>
+      pause === 'stop'
+        ? 'Obeya wartet auf das Beenden; der Agent macht weiter, wenn Obeya wieder läuft.'
+        : pause === 'repo'
+          ? 'Obeya wartet, um die Agenten dieses Repositorys neu zu starten; der Agent macht danach weiter.'
+          : 'Obeya wartet auf einen Neustart; der Agent macht danach weiter.',
+    restartStillDue: (pause: Pause) => `Der Agent ist vor dem ${pause === 'stop' ? 'Beenden' : 'Neustart'} wieder aufgewacht; Obeya sagt ihm, dass ${pause === 'stop' ? 'das Beenden' : 'der Neustart'} noch auf ihn wartet.`,
     limitResumes: (when: string) => `Der Agent arbeitet ${when} automatisch weiter.`,
     limitRetries: (when: string) => `Obeya versucht es ${when} noch einmal.`,
-    paused: (stop: boolean): string => (stop ? 'Pausiert, bis Obeya wieder läuft.' : 'Pausiert bis zum Neustart von Obeya.'),
+    paused: (pause: Pause): string => (pause === 'stop' ? 'Pausiert, bis Obeya wieder läuft.' : pause === 'repo' ? 'Pausiert bis zum Neustart der Agenten dieses Repositorys.' : 'Pausiert bis zum Neustart von Obeya.'),
     hostLost: (host: string) => `Die Verbindung zu ${host} ist weg; der Agent macht weiter, sobald ${host} wieder erreichbar ist.`,
     hostBack: (host: string) => `${host} ist wieder erreichbar; der Agent macht weiter.`,
     stalled: 'Der Agent hat angehalten, ohne fertig zu sein.',
@@ -350,12 +359,17 @@ const en: Messages = {
     parkKept: 'The app stack in the workspace keeps running while the card waits: it holds data that should stay. To have it stopped anyway, tell the agent.',
     parkFailed: (output: string) => `Stopping the app stack in the workspace failed: ${output}`,
     stoppedPrOpen: (n: number) => `Stopped. Pull request #${n} stays open on GitHub.`,
-    restartDue: (stop: boolean) => `Obeya is about to ${stop ? 'stop' : 'restart'}; the agent pauses at the next safe point.`,
-    restartWaits: (stop: boolean) => (stop ? 'Obeya waits to stop; the agent goes on once Obeya runs again.' : 'Obeya waits to restart; the agent goes on after the restart.'),
-    restartStillDue: (stop: boolean) => `The agent woke before Obeya's ${stop ? 'stop' : 'restart'}; Obeya tells it the ${stop ? 'stop' : 'restart'} still waits for it.`,
+    restartDue: (pause: Pause) => `Obeya is about to ${pause === 'stop' ? 'stop' : pause === 'repo' ? "restart this repository's agents" : 'restart'}; the agent pauses at the next safe point.`,
+    restartWaits: (pause: Pause) =>
+      pause === 'stop'
+        ? 'Obeya waits to stop; the agent goes on once Obeya runs again.'
+        : pause === 'repo'
+          ? "Obeya waits to restart this repository's agents; the agent goes on after that."
+          : 'Obeya waits to restart; the agent goes on after the restart.',
+    restartStillDue: (pause: Pause) => `The agent woke before Obeya's ${pause === 'stop' ? 'stop' : 'restart'}; Obeya tells it the ${pause === 'stop' ? 'stop' : 'restart'} still waits for it.`,
     limitResumes: (when: string) => `The agent goes on by itself ${when}.`,
     limitRetries: (when: string) => `Obeya tries again ${when}.`,
-    paused: (stop: boolean) => (stop ? 'Paused until Obeya runs again.' : 'Paused until Obeya has restarted.'),
+    paused: (pause: Pause) => (pause === 'stop' ? 'Paused until Obeya runs again.' : pause === 'repo' ? "Paused until this repository's agents restart." : 'Paused until Obeya has restarted.'),
     hostLost: (host: string) => `The connection to ${host} is gone; the agent goes on once ${host} can be reached again.`,
     hostBack: (host: string) => `${host} can be reached again; the agent goes on.`,
     stalled: 'The agent stopped without being done.',

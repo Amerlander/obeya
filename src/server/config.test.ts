@@ -18,6 +18,8 @@ let api: string;
 let file: string;
 let restarts: number;
 let applied: number;
+/** The ids of the configurations the running canvases took over. */
+let taken: (string | null)[][];
 
 function repo(name: string) {
   return gitRepo(join(dir, name));
@@ -34,6 +36,7 @@ const config = (source: 'file' | 'args', started: CanvasConfig[], running: strin
     // not the machine's lock: a demo another agent renders meanwhile would hold up the sample
     ttsLock: join(dir, 'tts.lock'),
     restart: () => void restarts++,
+    apply: (_, ids) => void taken.push(ids),
     onSettings: () => void applied++,
   });
 
@@ -45,6 +48,7 @@ beforeEach(() => {
   file = join(dir, 'home', 'canvases.json');
   restarts = 0;
   applied = 0;
+  taken = [];
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -194,7 +198,7 @@ describe("Obeya's configuration", () => {
     expect(restarts).toBe(1);
   });
 
-  test("repositories' settings: tidied, applied at once without a restart; clones or worktrees restart", () => {
+  test("saved from the file, the running canvases take it over without a restart: settings tidied, canvases and repositories as they come", () => {
     mkdirSync(join(dir, 'home'));
     writeFileSync(file, JSON.stringify([{ repos: [{ path: web }] }]));
     const c = config('file', [{ repos: [{ path: web }] }]);
@@ -202,13 +206,15 @@ describe("Obeya's configuration", () => {
     expect(readConfigFile(file)).toEqual([{ repos: [{ path: web, settings: { land: 'main', checks: ['bun test'], setup: '' } }] }]);
     expect(c.repoSettings(web)).toEqual({ land: 'main', checks: ['bun test'], setup: '' });
     expect(c.repoSettings(api)).toBeUndefined();
-    expect([applied, restarts]).toEqual([1, 0]);
     // set back to what comes from elsewhere: nothing set
     c.save([{ repos: [{ path: web, settings: {} }] }]);
     expect(readConfigFile(file)).toEqual([{ repos: [{ path: web }] }]);
     expect(c.repoSettings(web)).toBeUndefined();
-    expect(c.save([{ repos: [{ path: web, settings: { workspaces: 'clones' } }] }])).toEqual({ restarting: true });
-    expect([applied, restarts]).toEqual([2, 1]);
+    expect(c.save([{ repos: [{ path: web, settings: { workspaces: 'clones' } }] }])).toEqual({ restarting: false, applied: true });
+    expect(c.save([{ repos: [{ path: web, clones: 2 }] }, { name: 'API', repos: [{ path: api }] }])).toEqual({ restarting: false, applied: true });
+    expect(taken).toEqual([['web'], ['web'], ['web'], ['web', 'api']]);
+    expect(restarts).toBe(0);
+    expect(c.view().restarting).toBe(false);
   });
 
   test("shows each repository's settings without this machine's, with where each comes from", () => {

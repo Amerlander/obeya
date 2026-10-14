@@ -59,10 +59,11 @@ function Splash({ offline }: { offline: boolean }) {
   );
 }
 
-function Live({ canvases }: { canvases: CanvasInfo[] }) {
-  const { snapshot, online, restart, update, waiting, oldBun } = useCanvas();
+function Live({ canvases: loaded }: { canvases: CanvasInfo[] }) {
+  const { snapshot, online, restart, update, waiting, oldBun, canvases } = useCanvas();
   if (!snapshot) return <Splash offline={!online} />;
-  return <Canvas snapshot={snapshot} online={online} restart={restart} update={update} canvases={canvases} waiting={waiting} oldBun={oldBun} />;
+  // a canvas started, stopped or renamed while the page is open: the switcher follows
+  return <Canvas snapshot={snapshot} online={online} restart={restart} update={update} canvases={canvases ?? loaded} waiting={waiting} oldBun={oldBun} />;
 }
 
 /** What is open, and the view to go back to: `prevCam` laid out beside a sheet `prevSide` wide. */

@@ -10,7 +10,7 @@ import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
 import { adapterNames, readShared, REPO_SETTINGS_FILE, type SharedRead } from '../adapters';
 import { settingsShape } from '../adapters/schema';
-import { type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigSaved, type ConfigView, needsRestart, type RepoSettings, SHARED_FIELDS, type SettingsShared, type SharedSettings, type DemoSettingsProblem, type DemoSettingsView, type DemoVoiceCheck, type LanguageView, type ResolvedCanvas, type ThemeView, type VoiceInstallJob } from '../core/types';
+import { type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigSaved, type ConfigView, type RepoSettings, SHARED_FIELDS, type SettingsShared, type SharedSettings, type DemoSettingsProblem, type DemoSettingsView, type DemoVoiceCheck, type LanguageView, type ResolvedCanvas, type ThemeView, type VoiceInstallJob } from '../core/types';
 import {
   DEMO_SETTINGS_FILE,
   type DemoSettings,
@@ -164,9 +164,17 @@ export interface ConfigOptions {
   narrationUrl?: string;
   /** The lock a heavy voice's sample waits for; the machine's (TTS_LOCK) unless a test gives its own. */
   ttsLock?: string;
-  /** Starts Obeya again with the saved configuration; absent where nothing restarts it (--dev). */
+  /**
+   * Starts Obeya again with the saved configuration, for canvases that came from the command line
+   * (the file is the configuration from then on); absent where nothing restarts it (--dev).
+   */
   restart?: () => void;
-  /** Only repositories' settings were saved: the running canvases take them over without a restart. */
+  /**
+   * The running canvases take the saved configuration over without a restart (`Canvases.apply`):
+   * `ids` are its canvases' ids, null where one does not resolve.
+   */
+  apply?: (canvases: CanvasConfig[], ids: (string | null)[]) => void;
+  /** Repositories' settings for everyone were committed: the running canvases read them again. */
   onSettings?: () => void;
   /** Where „Für alle ins Repository übernehmen“ opens its pull request. */
   forge?: Forge;
@@ -540,19 +548,20 @@ export class Config {
   }
 
   /**
-   * Saves a configuration that works, and starts Obeya again with it where something restarts it;
-   * where it differs from the one Obeya runs with only in repositories' settings, these apply at once.
+   * Saves a configuration that works, and the running canvases take it over (design: Live
+   * configuration). Where they came from the command line, Obeya starts again with it where
+   * something restarts it.
    */
   save(input: unknown): ConfigSaved {
-    const { canvases, problems: all } = this.check(input);
+    const { canvases, resolved, problems: all } = this.check(input);
     const problems = all.filter(blocksSaving);
     if (problems.length) throw new BadRequest('config', problems.map((p) => p.detail).join('; '));
     mkdirSync(dirname(this.o.file), { recursive: true });
     writeFileSync(this.o.file, `${JSON.stringify(canvases, null, 2)}\n`);
     this.read = undefined;
-    if (this.o.source === 'file' && !this.restarting && !needsRestart(this.o.started, canvases)) {
-      console.log(`Obeya: repositories' settings saved to ${this.o.file}; they apply at once`);
-      this.o.onSettings?.();
+    if (this.o.source === 'file' && !this.restarting && this.o.apply) {
+      console.log(`Obeya: configuration saved to ${this.o.file}; it applies at once`);
+      this.o.apply(expandConfig(canvases), resolved.map((r) => r?.id ?? null));
       return { restarting: false, applied: true };
     }
     console.log(`Obeya: configuration saved to ${this.o.file}`);

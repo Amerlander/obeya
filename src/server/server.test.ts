@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { CardAction, ClientMessage, ServerMessage } from '../core/types';
 import type { Board } from './board';
-import { CanvasRuntime } from './canvas';
+import { Canvases, CanvasRuntime } from './canvas';
 import type { Command } from './commands';
 import { Store } from './db';
 import { AppUpdates } from './app-update';
@@ -733,6 +733,38 @@ describe('cards that need the owner', () => {
     second.board.work(waiting.id, { state: 'working' });
     await until(() => counts().length === 3);
     expect(counts()[2]).toEqual({ main: 0, other: 1 });
+    ws.close();
+  });
+});
+
+describe('canvases that start and stop while Obeya runs', () => {
+  test('a new canvas is served at once and every page hears of it; the pages of one that stopped go elsewhere', async () => {
+    const other = join(dir, 'other');
+    gitRepo(other);
+    const set = new Canvases([], { store: new Store(':memory:'), home: join(dir, 'home2'), runtime, forge: noForge, restartIntervalMs: 5 });
+    const list = [canvas];
+    server.stop(true);
+    server = serve({ all: () => [...list, ...set.all()], onChange: (fn) => set.onChange(fn) }, { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0);
+    const messages: ServerMessage[] = [];
+    const ws = new WebSocket(new URL(api('/ws'), server.url.href.replace('http', 'ws')));
+    ws.onmessage = (e) => messages.push(JSON.parse(e.data));
+    await until(() => messages.some((m) => m.type === 'snapshot'));
+
+    set.apply([{ name: 'Andere', repos: [{ path: other }] }], ['andere']);
+    await until(() => messages.some((m) => m.type === 'canvases'));
+    expect(messages.find((m) => m.type === 'canvases')).toMatchObject({ canvases: [{ id: 'main' }, { id: 'andere', name: 'Andere' }] });
+    const listed = (await (await fetch(new URL('/api/canvases', server.url))).json()) as { id: string }[];
+    expect(listed.map((c) => c.id)).toEqual(['main', 'andere']);
+    const theirs = new WebSocket(new URL('/api/c/andere/ws', server.url.href.replace('http', 'ws')));
+    let closed = false;
+    theirs.onclose = () => (closed = true);
+    await until(() => theirs.readyState === WebSocket.OPEN);
+
+    // it leaves the configuration: nobody works on it, so it stops at once and its page is closed
+    set.apply([], []);
+    await until(() => closed);
+    expect(messages.filter((m) => m.type === 'canvases').at(-1)).toMatchObject({ canvases: [{ id: 'main' }] });
+    expect((await post('/api/c/andere/cards', JSON.stringify({ title: 'X', x: 0, y: 0 }))).status).toBe(404);
     ws.close();
   });
 });

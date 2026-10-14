@@ -94,5 +94,5 @@ there), and exits with 1 while there is one. Go on once it says "No problems."
 
 Commit `.obeya/` alone. In the summary say what the settings and the module set and why where it
 was a judgement call (the checks you left out, clones or worktrees), what the owner answered, and
-that they count once they are on the default branch (the settings at once; for a changed module,
-or clones or worktrees, Obeya restarts by itself).
+that they count once they are on the default branch (at once; where they move the workers between
+clones and worktrees, Obeya restarts the repository's agents by itself).

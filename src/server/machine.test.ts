@@ -16,7 +16,8 @@ let dir: string;
 let home: string;
 let bin: string;
 let store: Store;
-let restarts: number;
+/** The configurations the running canvases took over, as the test's Config handed them on. */
+let applied: string[][];
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'obeya-machine-'));
@@ -25,7 +26,7 @@ beforeEach(() => {
   mkdirSync(home);
   mkdirSync(bin);
   store = new Store(':memory:');
-  restarts = 0;
+  applied = [];
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -43,11 +44,11 @@ const config = () =>
     store,
     running: () => [],
     server: { port: 4417, home, permissionMode: 'auto' },
-    restart: () => void restarts++,
+    apply: (_, ids) => void applied.push(ids.map((id) => id ?? '?')),
   });
 
 const setup = (o: { compiled?: boolean; env?: Record<string, string> } = {}) =>
-  new MachineSetup({ home, config: config(), env: { PATH: bin, ...o.env }, platform: 'linux', arch: 'x64', compiled: o.compiled ?? true, restarts: true });
+  new MachineSetup({ home, config: config(), env: { PATH: bin, ...o.env }, platform: 'linux', arch: 'x64', compiled: o.compiled ?? true });
 
 const section = (v: MachineView, id: string) => v.sections.find((s) => s.id === id)!;
 
@@ -116,7 +117,7 @@ describe('what Obeya needs on this machine', () => {
     const later = join(dir, 'Git', 'cmd');
     // the registry's PATH, as PowerShell reads it
     fake('powershell', `echo "C:\\Windows;${later}"`);
-    const machine = new MachineSetup({ home, config: config(), env: { PATH: bin }, platform: 'win32', arch: 'x64', compiled: true, restarts: true });
+    const machine = new MachineSetup({ home, config: config(), env: { PATH: bin }, platform: 'win32', arch: 'x64', compiled: true });
     expect(section(await machine.view(), 'needed').items.find((i) => i.id === 'git')).toMatchObject({ state: 'missing' });
     // the owner installs git by hand and comes back to the window
     mkdirSync(later, { recursive: true });
@@ -128,7 +129,7 @@ describe('what Obeya needs on this machine', () => {
   test('lists uv above the speech recognition, whose installation waits for it', async () => {
     const local = { prepare: async () => {}, transcribe: async () => ({ text: '', doubtful: false }) };
     const voice = new VoiceSetup({ home, backends: { listen: 'parakeet' }, local, env: { PATH: bin } });
-    const machine = new MachineSetup({ home, config: config(), voice, env: { PATH: bin }, platform: 'linux', arch: 'x64', compiled: true, restarts: true });
+    const machine = new MachineSetup({ home, config: config(), voice, env: { PATH: bin }, platform: 'linux', arch: 'x64', compiled: true });
     const items = section(await machine.view(), 'voice').items;
     expect(items.map((i) => i.id)).toEqual(['uv', 'recognition', 'ffmpeg']);
     expect(items[0]).toMatchObject({ state: 'missing', act: 'install' });
@@ -154,12 +155,12 @@ describe('what Obeya needs on this machine', () => {
 });
 
 describe('the first canvas', () => {
-  test('a repository folder becomes a canvas whose workers use worktrees, and Obeya starts again', async () => {
+  test('a repository folder becomes a canvas whose workers use worktrees, and Obeya runs it at once', async () => {
     const repo = gitRepo(join(dir, 'shop'));
     git(repo, 'branch', '-m', 'master');
     const out = await setup().canvas({ path: repo });
-    expect(out).toEqual({ canvas: 'shop', branch: 'master', restarting: true });
-    expect(restarts).toBe(1);
+    expect(out).toEqual({ canvas: 'shop', branch: 'master', opens: true });
+    expect(applied).toEqual([['shop']]);
     expect(JSON.parse(readFileSync(join(home, 'canvases.json'), 'utf8'))).toEqual([{ repos: [{ path: repo }] }]);
     expect(readFileSync(join(home, WELCOME_FILE), 'utf8')).toBe('shop');
   });
@@ -208,14 +209,14 @@ describe('the first canvas', () => {
 
   test('a clone goes into a folder of its name and becomes the canvas', async () => {
     const origin = gitRepo(join(dir, 'origin', 'shop'));
-    const s = new MachineSetup({ home, config: config(), restarts: true });
+    const s = new MachineSetup({ home, config: config() });
     await s.canvas({ clone: origin, into: join(dir, 'code') });
     let v = await s.view();
     for (let i = 0; v.job?.running && i < 100; i++) await Bun.sleep(50), (v = await s.view());
-    expect(v.job).toMatchObject({ kind: 'clone', running: false, canvas: 'shop', branch: 'main' });
+    expect(v.job).toMatchObject({ kind: 'clone', running: false, canvas: 'shop', branch: 'main', opens: true });
     expect(existsSync(join(dir, 'code', 'shop', '.git'))).toBe(true);
     // the folder is there now: a second clone into it is refused
-    await expect(new MachineSetup({ home, config: config(), restarts: true }).canvas({ clone: origin, into: join(dir, 'code') })).rejects.toMatchObject({ code: 'cloneTarget' });
+    await expect(new MachineSetup({ home, config: config() }).canvas({ clone: origin, into: join(dir, 'code') })).rejects.toMatchObject({ code: 'cloneTarget' });
   });
 
   test('names a clone after its repository', () => {

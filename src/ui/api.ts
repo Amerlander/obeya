@@ -123,6 +123,8 @@ export const api = {
   },
   /** Has a restart that waits for workers go ahead now; false when none waits. */
   restartNow: () => call<{ restarting: boolean }>('POST', '/api/restart'),
+  /** Has the restart of this canvas's repositories' agents that waits for them go ahead at once. */
+  restartReposNow: () => call<{ restarting: boolean }>('POST', at('/restart')),
   /** Installs the newer version of the app once the workers paused, as a restart waits for them. */
   installUpdate: () => call<{ updating: boolean }>('POST', '/api/app-update/install'),
   create: (c: NewCard) => call<Item>('POST', at('/cards'), c),
@@ -305,13 +307,23 @@ export function reload() {
  * waits, the newer version of the app there is, how many cards on each canvas need the owner, and
  * the Bun it runs on when that is too old.
  */
-export function useCanvas(): { snapshot: CanvasSnapshot | null; online: boolean; restart: PendingRestart | null; update: AppUpdate | null; waiting: Record<string, number>; oldBun: string | null } {
+export function useCanvas(): {
+  snapshot: CanvasSnapshot | null;
+  online: boolean;
+  restart: PendingRestart | null;
+  update: AppUpdate | null;
+  waiting: Record<string, number>;
+  oldBun: string | null;
+  /** The canvases as they changed while the page is open (one started, stopped or renamed); null until they do. */
+  canvases: CanvasInfo[] | null;
+} {
   const [snapshot, setSnapshot] = useState<CanvasSnapshot | null>(null);
   const [online, setOnline] = useState(true);
   const [restart, setRestart] = useState<PendingRestart | null>(null);
   const [update, setUpdate] = useState<AppUpdate | null>(null);
   const [waiting, setWaiting] = useState<Record<string, number>>({});
   const [oldBun, setOldBun] = useState<string | null>(null);
+  const [canvases, setCanvases] = useState<CanvasInfo[] | null>(null);
   useEffect(() => {
     let ws: WebSocket;
     let retry: ReturnType<typeof setTimeout>;
@@ -337,6 +349,7 @@ export function useCanvas(): { snapshot: CanvasSnapshot | null; online: boolean;
         else if (msg.type === 'restart') setRestart(msg.restart);
         else if (msg.type === 'update') setUpdate(msg.update);
         else if (msg.type === 'waiting') setWaiting(msg.waiting);
+        else if (msg.type === 'canvases') setCanvases(msg.canvases);
         else if (msg.type === 'event') for (const fn of eventListeners) fn(msg.event);
         else if (msg.type === 'eventGone') for (const fn of goneListeners) fn(msg.cardId, msg.id);
         else if (msg.type === 'notice') notice(msg);
@@ -366,5 +379,5 @@ export function useCanvas(): { snapshot: CanvasSnapshot | null; online: boolean;
       ws.close();
     };
   }, []);
-  return { snapshot, online, restart, update, waiting, oldBun };
+  return { snapshot, online, restart, update, waiting, oldBun, canvases };
 }

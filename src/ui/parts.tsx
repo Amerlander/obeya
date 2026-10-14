@@ -208,6 +208,7 @@ export function CanvasPill({ canvas, canvases, waiting }: { canvas: CanvasInfo; 
 /** A restart that waits for workers or the owner: for whom and until when (on hover), and a button that has it go ahead now. */
 export function RestartPill({ restart, items }: { restart: PendingRestart; items: Item[] }) {
   const [going, setGoing] = useState(false);
+  if (restart.repos) return <ReposRestartPill restart={restart} items={items} />;
   const n = restart.cards.length + restart.elsewhere;
   const until = clock(restart.deadline);
   const titles = restart.cards.map((id) => plain(items.find((i) => i.id === id)?.title ?? id));
@@ -256,6 +257,55 @@ export function RestartPill({ restart, items }: { restart: PendingRestart; items
         )}
         <p className="hint">{stop ? t.restart.keptStop : restart.reason === 'update' ? t.restart.keptUpdate : t.restart.kept}</p>
         {n > 0 && <p className="hint">{stop ? t.restart.deadlineStop(until) : owner.length ? t.restart.deadlineOwner(until) : restart.reason === 'update' ? t.restart.deadlineUpdate(until) : t.restart.deadline(until)}</p>}
+      </div>
+    </div>
+  );
+}
+
+/** A restart of some repositories' agents alone, for a change to their configuration, that waits for them; Obeya runs on. */
+function ReposRestartPill({ restart, items }: { restart: PendingRestart; items: Item[] }) {
+  const [going, setGoing] = useState(false);
+  const r = t.restart.repos;
+  const until = clock(restart.deadline);
+  const titles = restart.cards.map((id) => plain(items.find((i) => i.id === id)?.title ?? id));
+  const now = () => {
+    setGoing(true);
+    api.restartReposNow().then(
+      (x) => x.restarting || setGoing(false),
+      () => setGoing(false),
+    );
+  };
+  if (going)
+    return (
+      <div className="pill restart going" id="restart">
+        <span className="spin">↻</span> {r.going}
+      </div>
+    );
+  return (
+    <div className="pill restart" id="restart">
+      <span className="spin">↻</span>
+      <span className="say">{r.pill(restart.cards.length)}</span>
+      <span className="hint">{t.restart.until(until)}</span>
+      <button onClick={now}>
+        {r.now}
+        <span className="tip risk" role="tooltip">
+          {r.nowRisk}
+        </span>
+      </button>
+      <div className="tip why" role="tooltip">
+        <p>{restart.leaving ? r.leaving : r.reason((restart.repos ?? []).join(', '), restart.reason === 'adapter')}</p>
+        {titles.length > 0 && (
+          <>
+            <p>{t.restart.waits}</p>
+            <ul>
+              {titles.map((x, i) => (
+                <li key={i}>{x}</li>
+              ))}
+            </ul>
+          </>
+        )}
+        {!restart.leaving && <p className="hint">{r.kept}</p>}
+        <p className="hint">{r.deadline(until)}</p>
       </div>
     </div>
   );

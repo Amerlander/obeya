@@ -664,8 +664,8 @@ the owner's language (`src/core/locale.ts`).
   without git gets the offer to set it up there instead (see Setting up git in a folder), whose
   confirmation also creates the canvas. Obeya
   writes `canvases.json` with it (its own adapter, else
-  the generic one, which works in worktrees; two clones when the adapter works in clones), restarts and the page opens
-  the canvas, on which a first card says what to try (the marker `welcome` in Obeya's home, read
+  the generic one, which works in worktrees; two clones when the adapter works in clones), starts the
+  canvas at once (see Live configuration) and the page opens it, on which a first card says what to try (the marker `welcome` in Obeya's home, read
   once when the canvas runs). Later the Konfiguration dialog opens the same list over the canvas
   ("Einrichtung prüfen"), without the first canvas. A scratch Obeya with `"setup": true` in its
   stage file starts like a first start.
@@ -698,7 +698,7 @@ the owner's language (`src/core/locale.ts`).
   (`useLib` in the skill's `lib/here.ts`). Nothing is written beside the code: the resources may
   be read-only, what Obeya writes is in its home. The binary is its own Bun for scripts: a share
   command's script runs as `obeya <script>` with `BUN_BE_BUN=1`. It supervises itself as `bun
-  start` does (restarting for a saved configuration) but has no checkout to follow, so it never
+  start` does (restarting when canvases given on its command line are saved) but has no checkout to follow, so it never
   restarts for new code. A macOS binary is signed ad hoc after its build: as Bun writes it, macOS
   kills it at start. Bun 1.3.12 leaves a copy of its runtime in the working directory of every
   compile (`.<hex>.bun-build`); the build compiles in the output directory and removes it. The
@@ -966,13 +966,15 @@ the owner's language (`src/core/locale.ts`).
   plan docs go too: it looks for plans the repository already keeps (`docs/`, `rfcs/`, `adr/`,
   `PLAN*.md`, a `TODO.md`), asks the owner in its one question whether that directory becomes
   the plan directory (its docs then prepared on the canvas) or a new `docs/plan/`, and its check
-  script lists which docs there are projects and why the others are not. Saving writes the file and restarts Obeya once no worker is
-  in the middle of a turn (as for new code), a tenth of a second after the answer went out; the page reloads. Started with repositories on the
-  command line, Obeya shows those, and saving makes the file the configuration it restarts with.
+  script lists which docs there are projects and why the others are not. Saving writes the file,
+  and the running canvases take it over without a restart (see Live configuration); the dialog
+  says it applies at once, and where agents of a repository restart for it, that they do once they
+  paused. Started with repositories on the command line, Obeya shows those, and saving ("Speichern
+  und neu starten") makes the file the configuration it restarts with, once no worker is in the
+  middle of a turn, a tenth of a second after the answer went out; the page reloads.
   Renaming a running canvas keeps its id (`id` in the file), so its cards stay. Each repository
   folds its settings under „Einstellungen“ below its row (see Repository settings), with the main
-  branch and how work lands in the folded line; saving the canvases when only these changed
-  ("Speichern", not "Speichern und neu starten") restarts nothing and says they apply at once.
+  branch and how work lands in the folded line.
   „Für alle ins Repository übernehmen“ below them takes the values saved for this machine into the
   repository's `.obeya/settings.json`; a repository that has one counts as set up, so "Adapter
   einrichten lassen" is not offered there. The server's own
@@ -1401,11 +1403,13 @@ the owner's language (`src/core/locale.ts`).
   turn counted as the one after the landing and ended the session, and the worker never heard that
   its work was on main: what it had promised for after the landing (publishing the hero video)
   stayed undone. When the landing
-  changed Obeya's own running code, or the repository's own adapter (also when Obeya pushed the
-  work straight onto the remote's main: the adapter it pushed differs from the one Obeya runs), the
-  worker is told Obeya restarts with it; what needs the new code waits through `after_restart`: the
+  changed Obeya's own running code, the worker is told Obeya restarts with it; where it changed
+  where the repository's agents work (its own adapter or `.obeya/settings.json`, landed on the
+  local main), that they restart with it (see Live configuration); a new version of the adapter
+  that leaves them where they work applies at once, and the worker hears nothing of a restart
+  (`restartsFor`: `obeya`, `repo`, or none). What needs the new code waits through `after_restart`: the
   worker ends its turn, the restart goes ahead, and the resumed worker hears that Obeya now runs its
-  change. A worker there that was told of a due restart in its turn and ends it pauses for it, as
+  change. Work pushed straight onto the remote's main applies once the Lesestand fetches it. A worker there that was told of a due restart in its turn and ends it pauses for it, as
   while it works: session and workspace stay, and the restart resumes it. Before (until 2026-10-09),
   a direct push never counted as restarting, and a turn ended for the restart ended the card, so
   what the worker had left for after the restart was never done. A turn there that an error cut off (the API
@@ -2374,14 +2378,13 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   (`withSettings` in `src/adapters/index.ts`) that read the repository's entry from the file as it
   is now (`Config.repoSettings`, the file read again once its time or size changed), and
   `defaultBranch` asks the running canvas for the main branch it set (`useBranchSetting`).
-  Saving restarts nothing where the configuration differs from the one Obeya started with only in
-  repositories' settings (`needsRestart`): the canvases then follow what they set up by them
+  Saving them restarts nothing (see Live configuration): the canvases follow what they set up by them
   (`settingsChanged`): the Lesestand moves to the checkout or a worktree when work now lands
   elsewhere, the plan directory is watched afresh, a repository whose work now goes out as pull
   requests gets its watcher (one that has one keeps it for the pull requests still open), and the
   page shows the main branch and how work lands. `workspaces` is the exception: clones or
-  worktrees are set up when a canvas starts, so changing it restarts Obeya, as the dialog says at
-  the field; where the configuration names clones it shows that instead. The Koordinator's
+  worktrees are set up when a repository's agents start, so changing it restarts that repository's
+  agents, as the dialog says at the field; where the configuration names clones it shows that instead. The Koordinator's
   `configure` keeps and changes them like the rest of the entry. Until 2026-10-14 these values
   could only be set in `.obeya/adapter/index.ts`, and saving the dialog always restarted Obeya.
   `.obeya/settings.json` (like `.vscode/settings.json`) is what a fresh clone brings with it: every
@@ -2389,9 +2392,9 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   from `origin`'s HEAD). It is read from the default branch like the repository's own adapter
   (`readShared`, at `defaultBranchCommit`), not from the checkout, once when a canvas starts and
   again whenever the Lesestand moves (a fetch, a landing) and when settings are saved
-  (`CanvasRuntime.reread`); a new version takes effect without a restart, the canvas following as
-  for a save, but where it changes where the workers work (`workspaces`): then Obeya restarts as
-  for a changed adapter. Its fields are checked like the module's (`checkShared` in
+  (`CanvasRuntime.moved`); a new version takes effect without a restart, the canvas following as
+  for a save, but where it changes where the workers work (`workspaces`): then the repository's
+  agents restart as for a changed adapter. Its fields are checked like the module's (`checkShared` in
   `src/adapters/schema.ts`): one that is unknown or of the wrong type does not count, and is a
   problem at the repository (`repoSettings`) that keeps nothing from being saved. „Für alle ins
   Repository übernehmen“ below the form (`Config.shareSettings`, `src/server/shared-settings.ts`)
@@ -2410,6 +2413,31 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   those values go from this machine's settings (`Config.takenOver`: a value the file now holds
   and did not hold before), so the dialog says they come from the repository. The adapter skill
   writes the value fields there, and the module only for what is code.
+- **Live configuration** — a configuration saved from the file (the dialog, the Koordinator's
+  `configure`, the setup assistant's first canvas) applies while Obeya runs, and so does a new
+  version of a repository's own adapter or `.obeya/settings.json`: Obeya does not restart for
+  them, and the page does not reload. `Config.save` hands the canvases with their ids to
+  `Canvases.apply` (`src/server/canvas.ts`): a canvas new in it starts at once (the setup
+  assistant's gets its welcome card then), one that changed takes the change
+  (`CanvasRuntime.apply`), one no longer in it stops once its agents paused, its cards kept. Within
+  a canvas, a new name and a repository new on it apply at once, and so do settings and a new
+  adapter version that leave the agents where they work. What a repository's agents are set up by
+  when they start (its entry but the settings, `repoShape`: clones, existing workspaces, slots,
+  other machines, the share command, the adapter it names; and where its workers work, by the
+  settings or the adapter) restarts that repository's agents alone, and a repository that left the
+  canvas stops: its workers hear of it as of a restart (`DueRestart.repo`) and pause at a safe
+  point, at most 15 minutes, and then the repository's set-up stops and starts again as the
+  configuration has it now (`restartRepos`), its workers resuming in their sessions; the other
+  repositories' agents work on, and a worker landing such a change waits for it through
+  `after_restart`. The bar shows the wait as for a restart ("Konfiguration wartet auf …", with the
+  repositories and the cards in the hover), and "Jetzt übernehmen" (`POST
+  /api/c/<canvas>/restart`) has it go ahead. A restart of all of Obeya that comes meanwhile is what
+  the workers hear of. Pages hear of canvases that start, stop or change their name or
+  repositories (`canvases` over the WebSocket), so the switcher follows; a page of a canvas that
+  stopped is closed and goes to the first canvas. Before (until 2026-10-14), any change but a
+  repository's settings restarted all of Obeya, once no worker on any canvas was in the middle of
+  a turn: adding a canvas or a repository, a clone more, a renamed canvas, a new version of an
+  adapter landed by a card.
 - **Repo adapter** — how to start and refresh the stack, where the frontend URL comes from, the
   recipe for running the app in a demo (login, test data, migrations: `demo.howToRun`), where plan
   docs live, which checks run and how approved work lands, the site or the command that shares demos (the
@@ -2431,11 +2459,12 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   `git clean`, and an earlier version's go. The canvas keeps the tree it was set up with (none for
   a repository without its own adapter; not looked at where the configuration names one); when the
   Lesestand moves (a fetch after a merged pull request, a landing on the local main) to a default
-  branch whose `.obeya/adapter/` tree is another, Obeya restarts (reason `adapter`) the way a saved
-  configuration does, once no worker is in the middle of a turn, and the page reloads; a landing
-  that brings it tells its worker so, as for Obeya's own code. Commits that leave the adapter as it
-  is restart nothing. Until 2026-10-09 a merged adapter, or a change to it, took effect only when
-  the owner quit and started Obeya again. The module's default export is the adapter
+  branch whose `.obeya/adapter/` tree is another, the new version takes the old one's place at
+  once (`Workers.useAdapter`, the canvas following as for saved settings); only where it changes
+  where the repository's workers work do its agents restart (reason `adapter`, see Live
+  configuration), and a landing that brings that tells its worker so. Until 2026-10-09 a merged
+  adapter, or a change to it, took effect only when the owner quit and started Obeya again; until
+  2026-10-14 it restarted all of Obeya. The module's default export is the adapter
   or a function that makes it from Obeya's helpers (`kit`: the generic adapter, the demo page
   templates, `esc`, `day`), so it imports nothing of Obeya's; Obeya loads it with `require` and
   fills what it leaves out from detection (`land`, see Landing) and the generic adapter. An adapter the configuration names that does
@@ -2447,7 +2476,7 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   at the repository in "Konfiguration" (with the error, keeping nothing from being saved) and in
   Obeya's log; "Adapter einrichten lassen" is not offered there. The canvas keeps the id and name
   that adapter gave it (the setting `own_adapter_of` notes which canvas it named), so its address
-  and cards stay, and once a fixed adapter reaches the default branch Obeya restarts with it. A
+  and cards stay, and once a fixed adapter reaches the default branch the canvas takes it over. A
   canvas that does not start at all (a repository gone, its home repository left out) is left out
   with the reason in the log and its problem in "Konfiguration"; the other canvases run
   (`startCanvases`). Until 2026-10-09 either took all of Obeya down at its next start. What it exports is checked against a schema (`src/adapters/schema.ts`,
@@ -2828,6 +2857,12 @@ the repository; the copy on the project is only for the archive).
 - Obeya restarts itself for new code on its own checkout instead of hot reloading: a restart is a
   path that already exists (workers resume by session id), hot reloading keeps old state alive
   next to new code. It also restarts for commits made outside Obeya.
+- Configuration changes apply in the running process, down to the repository whose agents they
+  concern (2026-10-14), rather than through a restart: a restart of all of Obeya waited for every
+  worker on every canvas and reloaded the page for a clone added to one repository. A repository's
+  set-up is the unit that restarts, since its workspaces and workers are made by what its entry
+  and adapter say when they start; everything else (names, settings, a new adapter that keeps the
+  workspaces) is read where it is used.
 - A due restart is announced to the workers, which pause for it themselves, rather than waiting
   for a moment in which none is busy (2026-10-01): with six workers in parallel such a moment
   rarely came, and the 15 minutes ran out in the middle of test runs and demo renders (four of the

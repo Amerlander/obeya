@@ -2007,7 +2007,7 @@ describe('a worktree per card', () => {
     rmSync(dir, { recursive: true, force: true });
     setup({ ...generic, land: 'main', workspaces: 'worktrees' });
     const restarting = (b: Board) =>
-      new Workers({ board: b, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'worktrees' }, restartsFor: () => true });
+      new Workers({ board: b, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'worktrees' }, restartsFor: () => 'obeya' });
     workers = restarting(board);
     const c = manual();
     workers.start(c.id);

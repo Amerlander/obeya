@@ -22,8 +22,8 @@ without a restart.
   `main`; set for this machine in the dialog too (W5).
 - *Settings for this machine.* Every value field of the adapter has a form in the dialog, stored in
   the repository's entry in `canvases.json` (`settings`), read where it is used and shown with its
-  source; saving them alone restarts nothing, but for `workspaces` (W5; design: Repository
-  settings).
+  source; saving them restarts nothing, but `workspaces` restarts the repository's agents (W5;
+  design: Repository settings, Live configuration).
 - *Settings for everyone.* `.obeya/settings.json`, read from the default branch without a restart,
   between this machine's values and the adapter's code; „Für alle ins Repository übernehmen“
   commits this machine's values there, or opens a pull request with them; the adapter skill writes

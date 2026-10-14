@@ -195,8 +195,6 @@ export interface MachineOptions {
   arch?: string;
   /** Whether this is the compiled binary, which runs the machine's Claude Code rather than the SDK's. */
   compiled?: boolean;
-  /** Whether saving the first canvas starts Obeya again by itself. */
-  restarts: boolean;
   /** The app's shell, for its push-to-talk key in another app (a line under voice while it runs). */
   shells?: ShellReports;
 }
@@ -210,7 +208,6 @@ interface Found {
 
 export class MachineSetup {
   private job?: MachineJob;
-  private canvasSaved = false;
 
   constructor(private o: MachineOptions) {}
 
@@ -233,7 +230,6 @@ export class MachineSetup {
       ...(job ? { job } : {}),
       picker: !!folderDialog(this.platform, this.env, ''),
       cloneInto: homedir(),
-      restarts: this.o.restarts,
     };
   }
 
@@ -460,7 +456,7 @@ export class MachineSetup {
     console.log(`Obeya: cloning ${spec} into ${dest}`);
     this.run(argv, (line) => (job.line = line.slice(0, 300)))
       .then(() => {
-        ({ canvas: job.canvas, branch: job.branch } = this.add(dest));
+        ({ canvas: job.canvas, branch: job.branch, opens: job.opens } = this.add(dest));
       })
       .catch((e: Error) => {
         job.error = e instanceof BadRequest ? e.message : e.message.split('\n').at(-1)!;
@@ -470,9 +466,8 @@ export class MachineSetup {
     return this.view();
   }
 
-  /** Adds the repository as a canvas of its own and saves the configuration; Obeya starts again with it. */
+  /** Adds the repository as a canvas of its own and saves the configuration; Obeya runs it at once. */
   private add(path: string): FirstCanvas {
-    if (this.canvasSaved) throw new BadRequest('setupBusy', 'the first canvas is saved; Obeya starts again with it');
     let next = [...this.o.config.current(), { repos: [{ path }] }];
     let { problems, resolved } = this.o.config.check(next);
     // an adapter that works in clones gets two, so two cards can be worked on at once
@@ -484,8 +479,7 @@ export class MachineSetup {
     if (problem) throw new BadRequest(problem.code === 'notRepo' ? 'notRepo' : 'config', problem.detail);
     const canvas = resolved.at(-1)!.id;
     writeFileSync(join(this.o.home, WELCOME_FILE), canvas);
-    const { restarting } = this.o.config.save(next);
-    this.canvasSaved = restarting;
-    return { canvas, branch: repoInfo(path).branch, restarting };
+    const { restarting, applied } = this.o.config.save(next);
+    return { canvas, branch: repoInfo(path).branch, opens: restarting || !!applied };
   }
 }

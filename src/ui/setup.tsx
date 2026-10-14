@@ -429,7 +429,7 @@ function FirstCanvas({ view, ready, onView }: { view: MachineView; ready: boolea
   const [into, setInto] = useState(view.cloneInto);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
-  const [saved, setSaved] = useState<{ canvas: string; branch?: string; restarting: boolean } | null>(null);
+  const [saved, setSaved] = useState<{ canvas: string; branch?: string; opens: boolean } | null>(null);
   // the main branch of the folder named, once Obeya looked at it; or that it is a folder without git
   const [found, setFound] = useState<{ path: string; branch?: string; noGit?: boolean } | null>(null);
   const s = t.setup;
@@ -437,7 +437,7 @@ function FirstCanvas({ view, ready, onView }: { view: MachineView; ready: boolea
   const job = view.job?.kind === 'clone' ? view.job : undefined;
   // a clone that ended as the first canvas
   useEffect(() => {
-    if (job && !job.running && job.canvas) setSaved({ canvas: job.canvas, branch: job.branch, restarting: view.restarts });
+    if (job && !job.running && job.canvas) setSaved({ canvas: job.canvas, branch: job.branch, opens: !!job.opens });
   }, [job?.running, job?.canvas]);
   useEffect(() => {
     const p = path.trim();
@@ -494,7 +494,7 @@ function FirstCanvas({ view, ready, onView }: { view: MachineView; ready: boolea
       {!ready && <p className="hint warn">{s.first.notReady}</p>}
       {saved ? (
         <p className="hint setup-saved">
-          {branch && `${s.first.branch(branch)} `}{saved.restarting ? s.first.restarting : s.first.startAgain}</p>
+          {branch && `${s.first.branch(branch)} `}{saved.opens ? s.first.opens : s.first.startAgain}</p>
       ) : (
         <>
           <div className="setup-where" role="radiogroup" aria-labelledby="setup-where">

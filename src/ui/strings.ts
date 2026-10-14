@@ -663,7 +663,7 @@ const de = {
       softPathsHint: 'Pfade, deren Änderungen nie als Konflikt zwischen zwei Aufgaben zählen (Doku, Plan-Dokumente), einer pro Zeile; ein / am Ende nimmt ein Verzeichnis.',
       workspaces: 'Agenten arbeiten in',
       workIn: { worktrees: 'Worktrees', clones: 'Klonen' },
-      workspacesHint: 'Ändern startet Obeya neu, sobald kein Agent mitten in einem Schritt ist.',
+      workspacesHint: 'Ändern startet die Agenten dieses Repositorys neu, sobald keiner mitten in einem Schritt ist; Obeya und alle anderen arbeiten weiter.',
       workspacesClones: 'In Klonen, weil oben Klone eingetragen sind.',
       prNoise: 'Konten ohne Review',
       prNoiseHint: 'Konten, deren Kommentare an Pull Requests kein Review sind (Deploy-Bots), eines pro Zeile.',
@@ -711,7 +711,9 @@ const de = {
     reset: 'Verwerfen',
     saved: 'Gespeichert. Obeya startet neu, sobald kein Agent mitten in einem Schritt ist; die Seite lädt dann von selbst neu.',
     savedOnly: 'Gespeichert. Gilt ab dem nächsten Start von Obeya.',
-    savedApplied: 'Gespeichert. Gilt ab sofort.',
+    savedApplied: 'Gespeichert. Gilt ab sofort, ohne Neustart.',
+    savedRestarts:
+      'Gespeichert. Gilt ab sofort. Wo die Agenten eines Repositorys jetzt anders arbeiten oder nicht mehr dabei sind, übernimmt Obeya es für sie, sobald sie an einem sicheren Punkt pausieren; alle anderen arbeiten weiter.',
     json: 'Als JSON',
     loading: 'Konfiguration wird geladen …',
     problem: {
@@ -963,7 +965,7 @@ const de = {
       cloneCreate: 'Klonen und Leinwand anlegen',
       cloning: 'Wird geklont …',
       cloneFailed: (why: string) => `Klonen fehlgeschlagen: ${why}`,
-      restarting: 'Gespeichert. Obeya startet mit der Leinwand neu und öffnet sie gleich hier.',
+      opens: 'Gespeichert. Die Leinwand öffnet sich gleich hier.',
       startAgain: 'Gespeichert. Bitte Obeya neu starten; die Leinwand öffnet sich dann hier.',
     },
     git: {
@@ -1026,6 +1028,21 @@ const de = {
     going: 'Obeya startet neu …',
     goingStop: 'Obeya wird beendet …',
     goingUpdate: 'Obeya wird aktualisiert …',
+    /** Only some repositories' agents restart, for a change to their configuration; Obeya runs on. */
+    repos: {
+      pill: (n: number) => `Konfiguration wartet auf ${n === 1 ? '1 Agenten' : `${n} Agenten`}`,
+      reason: (names: string, adapter: boolean) =>
+        adapter
+          ? `Auf dem Hauptzweig von ${names} hat sich geändert, wo seine Agenten arbeiten. Obeya startet sie damit neu, sobald sie an einem sicheren Punkt pausieren; alle anderen arbeiten weiter.`
+          : `Die Konfiguration von ${names} hat sich geändert. Obeya übernimmt sie für dessen Agenten, sobald sie an einem sicheren Punkt pausieren; alle anderen arbeiten weiter.`,
+      leaving: 'Die Leinwand ist nicht mehr in der Konfiguration. Obeya nimmt sie heraus, sobald ihre Agenten an einem sicheren Punkt pausieren; ihre Karten bleiben erhalten.',
+      kept: 'Obeya startet dafür nicht neu, und die Seite bleibt, wie sie ist. Die Agenten machen danach in ihrer Sitzung weiter.',
+      deadline: (time: string) => `Um ${time} übernimmt Obeya sie auf jeden Fall.`,
+      now: 'Jetzt übernehmen',
+      nowRisk:
+        'Ohne zu warten: Diese Agenten werden mitten im Schritt unterbrochen. Was sie gerade laufen lassen (Tests, Builds, gestartete Server, eine Demo-Aufnahme), wird gestoppt. Danach machen sie in ihrer Sitzung weiter und erfahren davon, müssen Abgebrochenes aber neu anstoßen.',
+      going: 'Wird übernommen …',
+    },
   },
   oldBun: {
     pill: (version: string) => `Bun ${version} ist zu alt`,
@@ -1813,7 +1830,7 @@ const en: Strings = {
       softPathsHint: 'Paths whose edits never count as a conflict between two tasks (docs, plan docs), one per line; a trailing / covers a directory.',
       workspaces: 'Agents work in',
       workIn: { worktrees: 'worktrees', clones: 'clones' },
-      workspacesHint: 'Changing it restarts Obeya once no agent is in the middle of a step.',
+      workspacesHint: "Changing it restarts this repository's agents once none is in the middle of a step; Obeya and everyone else work on.",
       workspacesClones: 'In clones, since clones are listed above.',
       prNoise: 'Accounts without review',
       prNoiseHint: 'Accounts whose pull request comments are not review feedback (deploy bots), one per line.',
@@ -1861,7 +1878,9 @@ const en: Strings = {
     reset: 'Discard',
     saved: 'Saved. Obeya restarts once no agent is in the middle of a step; the page then reloads by itself.',
     savedOnly: 'Saved. Applies from Obeya’s next start.',
-    savedApplied: 'Saved. Applies at once.',
+    savedApplied: 'Saved. Applies at once, without a restart.',
+    savedRestarts:
+      "Saved. Applies at once. Where a repository's agents now work differently or are no longer part of it, Obeya applies it for them once they pause at a safe point; everyone else works on.",
     json: 'As JSON',
     loading: 'Loading the configuration …',
     problem: {
@@ -2112,7 +2131,7 @@ const en: Strings = {
       cloneCreate: 'Clone and create canvas',
       cloning: 'Cloning …',
       cloneFailed: (why: string) => `Cloning failed: ${why}`,
-      restarting: 'Saved. Obeya starts again with the canvas and opens it here in a moment.',
+      opens: 'Saved. The canvas opens here in a moment.',
       startAgain: 'Saved. Please start Obeya again; the canvas then opens here.',
     },
     git: {
@@ -2175,6 +2194,20 @@ const en: Strings = {
     going: 'Obeya is restarting …',
     goingStop: 'Obeya is shutting down …',
     goingUpdate: 'Obeya is updating …',
+    repos: {
+      pill: (n: number) => `Configuration waits for ${n === 1 ? '1 agent' : `${n} agents`}`,
+      reason: (names: string, adapter: boolean) =>
+        adapter
+          ? `Where the agents of ${names} work changed on its default branch. Obeya restarts them with it once they pause at a safe point; everyone else works on.`
+          : `The configuration of ${names} changed. Obeya applies it for its agents once they pause at a safe point; everyone else works on.`,
+      leaving: 'The canvas is no longer in the configuration. Obeya takes it out once its agents pause at a safe point; its cards are kept.',
+      kept: 'Obeya does not restart for it, and the page stays as it is. The agents carry on in their session afterwards.',
+      deadline: (time: string) => `At ${time} Obeya applies it in any case.`,
+      now: 'Apply now',
+      nowRisk:
+        'Without waiting: these agents are cut off mid-step. What they are running (tests, builds, servers they started, a demo recording) is stopped. Afterwards they carry on in their session and learn of it, but have to start again what was cut off.',
+      going: 'Applying …',
+    },
   },
   oldBun: {
     pill: (version: string) => `Bun ${version} is too old`,

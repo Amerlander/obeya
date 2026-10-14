@@ -3,10 +3,10 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { boundsOf, CARD_SIZE } from '../core/layout';
-import type { RepoSettings } from '../core/types';
-import { CanvasRuntime, startCanvases } from './canvas';
+import type { RepoConfig, RepoSettings } from '../core/types';
+import { Canvases, CanvasRuntime, startCanvases } from './canvas';
 import { Store } from './db';
-import { FakeRuntime, gitRepo, identify, noForge, prAdapter } from './testing';
+import { FakeRuntime, gitRepo, identify, noForge, prAdapter, until } from './testing';
 import { git, HERE } from './workspaces';
 
 let dir: string;
@@ -405,21 +405,170 @@ describe("a repository's settings for everyone (.obeya/settings.json)", () => {
     expect([adapter.checks, adapter.planDocs.dir]).toEqual([['bun test', 'bun run lint'], 'docs/plan']);
   });
 
-  test('where its workers work changed in it: Obeya starts again for it', () => {
+  test("where its workers work changed in it: its agents restart with it once they paused, Obeya runs on", async () => {
     fresh();
     const shop = gitRepo(join(dir, 'shop'), { 'README.md': 'Shop\n', '.obeya/settings.json': '{ "land": "main" }\n' });
     identify(shop);
-    const changed: string[] = [];
+    const workers = new FakeRuntime();
     canvas.shutdown();
-    canvas = new CanvasRuntime({ repos: [{ path: shop }] }, { store: new Store(':memory:'), home: dir, runtime, forge: noForge, adapterChanged: (p) => changed.push(p) });
+    canvas = new CanvasRuntime({ repos: [{ path: shop }] }, { store: new Store(':memory:'), home: dir, runtime, workerRuntime: workers, forge: noForge, restartIntervalMs: 5 });
+    const card = canvas.board.create({ title: 'A', x: 0, y: 0 });
+    canvas.repos[0]!.workers.start(card.id);
+    const session = workers.last;
+    session.emit({ type: 'session', id: 'sess-a' });
     writeFileSync(join(shop, '.obeya/settings.json'), '{ "land": "main", "checks": ["bun test"] }\n');
     git(shop, 'commit', '--quiet', '-am', 'Checks');
     canvas.settingsChanged();
-    expect(changed).toEqual([]);
+    expect(canvas.pendingRestart()).toBeNull();
+    const before = canvas.repos[0]!;
     writeFileSync(join(shop, '.obeya/settings.json'), '{ "land": "main", "workspaces": "clones" }\n');
     git(shop, 'commit', '--quiet', '-am', 'Clones');
     canvas.settingsChanged();
-    expect(changed).toEqual([canvas.repos[0]!.info.path]);
+    // the worker at work hears of it and pauses; the restart waits for it
+    expect(canvas.pendingRestart()).toMatchObject({ reason: 'config', cards: [card.id], repos: ['shop'] });
+    expect(session.inbox.at(-1)).toContain("restart this repository's agents");
+    expect(canvas.repos[0]).toBe(before);
+    session.emit({ type: 'idle' });
+    await until(() => canvas.repos[0] !== before);
+    expect(canvas.repos[0]!.workspaces.mode).toBe('clones');
+    expect(canvas.pendingRestart()).toBeNull();
+    expect(session.closed).toBe(true);
+    expect(workers.last.spec.resume).toBe('sess-a');
+    expect(workers.last.inbox[0]).toContain("Obeya restarted this repository's agents");
+  });
+});
+
+describe('the configuration changed while the canvas runs', () => {
+  let web: string;
+  let api: string;
+  let workers: FakeRuntime;
+  const open = (repos: RepoConfig[]) => {
+    canvas.shutdown();
+    workers = new FakeRuntime();
+    const saved = () => repos;
+    canvas = new CanvasRuntime(
+      { name: 'Produkt', repos },
+      { store: new Store(':memory:'), home: dir, runtime, workerRuntime: workers, forge: noForge, restartIntervalMs: 5, settings: (path) => saved().find((r) => r.path === path)?.settings },
+    );
+    return canvas;
+  };
+  /** A card at work in the repository, its worker in the middle of a turn. */
+  const atWork = (repo: string, title: string) => {
+    const r = canvas.repos.find((x) => x.ref.id === repo)!;
+    const card = canvas.board.create({ title, x: 0, y: 0, repo });
+    r.workers.start(card.id);
+    workers.last.emit({ type: 'session', id: `sess-${title}` });
+    return { card, session: workers.last };
+  };
+  beforeEach(() => {
+    web = join(dir, 'web');
+    api = join(dir, 'api');
+  });
+
+  test('a new name and a repository new on the canvas apply at once; the workers at work go on', () => {
+    open([{ path: web, adapter: prAdapter() }]);
+    const { session } = atWork('web', 'A');
+    const runtimeOfWeb = canvas.repos[0]!;
+    canvas.apply({ name: 'Plattform', repos: [{ path: web, adapter: prAdapter() }, { path: api, adapter: prAdapter() }] });
+    expect(canvas.board.canvas.name).toBe('Plattform');
+    expect(canvas.id).toBe('produkt');
+    expect(canvas.board.canvas.repos.map((r) => r.id)).toEqual(['web', 'api']);
+    expect(canvas.repos[0]).toBe(runtimeOfWeb);
+    expect(canvas.pendingRestart()).toBeNull();
+    expect(session.closed).toBe(false);
+    expect(session.inbox.join()).not.toContain('restart');
+    // the new repository's plan doc is on the canvas
+    expect(canvas.board.snapshot().items.some((i) => i.kind === 'project' && i.repo === 'api')).toBe(true);
+  });
+
+  test("a repository whose clones changed restarts its agents once they paused; the other repository's work on", async () => {
+    open([
+      { path: web, adapter: prAdapter(), clones: 1 },
+      { path: api, adapter: prAdapter(), clones: 1 },
+    ]);
+    const w = atWork('web', 'W');
+    const a = atWork('api', 'A');
+    const [webBefore, apiBefore] = canvas.repos;
+    canvas.apply({ name: 'Produkt', repos: [{ path: web, adapter: prAdapter(), clones: 2 }, { path: api, adapter: prAdapter(), clones: 1 }] });
+    expect(canvas.pendingRestart()).toMatchObject({ reason: 'config', cards: [w.card.id], repos: ['web'] });
+    expect(w.session.inbox.at(-1)).toContain("restart this repository's agents");
+    expect(a.session.inbox.join()).not.toContain('restart');
+    w.session.emit({ type: 'idle' });
+    await until(() => canvas.repos[0] !== webBefore);
+    expect(canvas.repos[0]!.workspaces.list()).toHaveLength(2);
+    expect(canvas.repos[1]).toBe(apiBefore);
+    expect(a.session.closed).toBe(false);
+    expect(w.session.closed).toBe(true);
+    expect(workers.last.spec.resume).toBe('sess-W');
+  });
+
+  test('"Jetzt übernehmen" restarts them at once, cutting off the worker in its turn', () => {
+    open([{ path: web, adapter: prAdapter(), clones: 1 }]);
+    const w = atWork('web', 'W');
+    canvas.apply({ name: 'Produkt', repos: [{ path: web, adapter: prAdapter(), clones: 1, slots: 1 }] });
+    expect(canvas.pendingRestart()?.cards).toEqual([w.card.id]);
+    expect(canvas.restartNow()).toBe(true);
+    expect(canvas.pendingRestart()).toBeNull();
+    expect(w.session.closed).toBe(true);
+    expect(workers.last.spec.resume).toBe('sess-W');
+    expect(canvas.restartNow()).toBe(false);
+  });
+
+  test('a repository that left the canvas stops once its agents paused; its cards stay', async () => {
+    open([
+      { path: web, adapter: prAdapter() },
+      { path: api, adapter: prAdapter() },
+    ]);
+    const a = atWork('api', 'A');
+    canvas.apply({ name: 'Produkt', repos: [{ path: web, adapter: prAdapter() }] });
+    expect(canvas.pendingRestart()).toMatchObject({ cards: [a.card.id], repos: ['api'] });
+    a.session.emit({ type: 'idle' });
+    await until(() => canvas.repos.length === 1);
+    expect(canvas.board.canvas.repos.map((r) => r.id)).toEqual(['web']);
+    expect(a.session.closed).toBe(true);
+    expect(canvas.board.item(a.card.id)).toBeDefined();
+  });
+
+  test("a restart of all of Obeya that comes meanwhile is what the workers hear of; the repository's restart still goes", async () => {
+    open([{ path: web, adapter: prAdapter(), clones: 1 }]);
+    const w = atWork('web', 'W');
+    canvas.restartDue({ reason: 'code', deadline: Date.now() + 60_000 });
+    canvas.apply({ name: 'Produkt', repos: [{ path: web, adapter: prAdapter(), clones: 2 }] });
+    expect(w.session.inbox.at(-1)).toContain('new code landed on main');
+    expect(w.session.inbox.join()).not.toContain("restart this repository's agents");
+    expect(canvas.pendingRestart()?.repos).toEqual(['web']);
+  });
+});
+
+describe('the canvases Obeya serves', () => {
+  test('a canvas new in the configuration starts at once, one no longer in it stops, its cards kept', async () => {
+    fresh();
+    const web = repo('web', 'Web');
+    const api = repo('api', 'API');
+    canvas.shutdown();
+    const store = new Store(':memory:');
+    const started: string[] = [];
+    const set = new Canvases([{ name: 'Web', repos: [{ path: web, adapter: prAdapter() }] }], { store, home: dir, runtime: new FakeRuntime(), forge: noForge, restartIntervalMs: 5 }, (c) => started.push(c.id));
+    let changes = 0;
+    set.onChange(() => changes++);
+    const keep = set.get('web')!.board.create({ title: 'Bleibt', x: 0, y: 0 });
+    set.apply(
+      [
+        { name: 'Web', repos: [{ path: web, adapter: prAdapter() }] },
+        { name: 'API', repos: [{ path: api, adapter: prAdapter() }] },
+      ],
+      ['web', 'api'],
+    );
+    expect(set.all().map((c) => c.id)).toEqual(['web', 'api']);
+    expect(started).toEqual(['api']);
+    set.apply([{ name: 'API', repos: [{ path: api, adapter: prAdapter() }] }], ['api']);
+    // nobody at work on it: it stops at once
+    expect(set.all().map((c) => c.id)).toEqual(['api']);
+    expect(changes).toBeGreaterThan(1);
+    expect(store.cards('web').map((c) => c.id)).toContain(keep.id);
+    set.shutdown();
+    // the canvas variable the other tests shut down after them
+    canvas = new CanvasRuntime({ repos: [{ path: web, adapter: prAdapter() }] }, { store: new Store(':memory:'), home: dir, runtime: new FakeRuntime(), forge: noForge });
   });
 });
 

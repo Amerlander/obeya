@@ -4,7 +4,7 @@
 // own settings come from its command line and show read-only.
 
 import { type CSSProperties, Fragment, type ReactNode, useEffect, useId, useRef, useState } from 'react';
-import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigView, type DemoSettings, type DemoSettingsView, type DemoVoiceCheck, type Language, type HostConfig, type LanguageView, type NarrationLanguage, needsRestart, type RepoConfig, type RepoSettings, type RepoValues, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, type SetupCheck, type Theme, THEMES, type ThemeView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
+import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigView, type DemoSettings, type DemoSettingsView, type DemoVoiceCheck, type Language, type HostConfig, type LanguageView, type NarrationLanguage, restartsAgents, type RepoConfig, type RepoSettings, type RepoValues, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, type SetupCheck, type Theme, THEMES, type ThemeView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
 import { LANGUAGES } from '../core/locale';
 import { pushKeyFromEvent, type PushKeyView } from '../core/push-key';
 import { api, ApiError, reload } from './api';
@@ -28,7 +28,7 @@ type Ask = (text: string, canvas?: string) => void;
 /** The dialog's sections, in the order its list shows them. */
 type Section = 'canvases' | 'agents' | 'voice' | 'demos' | 'general';
 const SECTIONS: Section[] = ['canvases', 'agents', 'voice', 'demos', 'general'];
-// the section shown, per tab: a save restarts Obeya and a new language reloads the page, and the dialog comes back at it
+// the section shown, per tab: a new language reloads the page (as a save that restarts Obeya does), and the dialog comes back at it
 const SECTION_KEY = 'obeya-config-section';
 
 /** Opens the dialog at the canvases and their repositories next time, as from the note on a plan directory. */
@@ -185,7 +185,7 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }
                     const fresh = applied ? await api.config() : null;
                     setView({ ...(fresh ?? view), canvases: draft, restarting });
                     if (fresh) setChecked(fresh);
-                    setStatus(restarting ? c.saved : applied ? c.savedApplied : c.savedOnly);
+                    setStatus(restarting ? c.saved : applied ? (restartsAgents(view.canvases, draft) ? c.savedRestarts : c.savedApplied) : c.savedOnly);
                   } catch (e) {
                     setStatus(e instanceof ApiError ? errorText(e.code) : t.offlineError);
                   }
@@ -386,8 +386,8 @@ function Canvases({ view, draft, origin, checked, changed, busy, focus, onAsk, o
       {json && <pre className="c-json">{JSON.stringify(draft, null, 2)}</pre>}
       <div className="cfg-actions">
         <button className="btn primary" disabled={!changed || busy || problems.some(blocksSaving)} onClick={onSave}>
-          {/* repositories' settings alone apply at once */}
-          {view.server.restarts && (view.source === 'args' || view.restarting || needsRestart(view.canvases, draft)) ? c.save : c.saveOnly}
+          {/* a configuration from the file applies while Obeya runs; one from the command line becomes the file with a restart */}
+          {view.server.restarts && (view.source === 'args' || view.restarting) ? c.save : c.saveOnly}
         </button>
         {changed && (
           <button className="btn" disabled={busy} onClick={onReset}>

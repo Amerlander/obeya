@@ -32,8 +32,14 @@ export interface Voice {
   setup?: VoiceSetup;
 }
 
+/** The canvases a server serves: those that run now, and word whenever one starts, stops or changes (`Canvases`). */
+export interface Served {
+  all(): CanvasRuntime[];
+  onChange?(fn: () => void): () => void;
+}
+
 export function serve(
-  canvases: CanvasRuntime[],
+  served: Served | CanvasRuntime[],
   { transcriber, setup }: Voice,
   port: number,
   development = false,
@@ -48,39 +54,89 @@ export function serve(
   /** The newer version of the app its shell has ready. */
   updates = new AppUpdates(),
 ) {
-  const byId = new Map(canvases.map((c) => [c.id, c]));
+  const canvases = Array.isArray(served) ? { all: () => served } : served;
+  const byId = new Map<string, CanvasRuntime>();
   const started = crypto.randomUUID();
-  const sockets = new Map<string, Set<ServerWebSocket<{ canvas: string; page: string }>>>(canvases.map((c) => [c.id, new Set()]));
-  /** The restart that waits, as canvas `id` sees it. */
+  const sockets = new Map<string, Set<ServerWebSocket<{ canvas: string; page: string }>>>();
+  /** The restart that waits, as canvas `id` sees it: Obeya's, else that of some of its repositories' agents. */
   const pending = (id: string): PendingRestart | null => {
     const due = restarter?.due();
-    if (!due) return null;
+    if (!due) return byId.get(id)?.pendingRestart() ?? null;
     const here = due.waiting.filter((w) => w.canvas === id);
     return { reason: due.reason, since: due.since, deadline: due.deadline, cards: here.map((w) => w.card), elsewhere: due.waiting.length - here.length, owner: due.owner };
   };
   /** How many things on each canvas need the owner: each canvas's switcher points to the others. */
   const counted = (c: CanvasRuntime) => waitingOn(c.board.snapshot());
-  const waiting = Object.fromEntries(canvases.map((c) => [c.id, counted(c)]));
+  const waiting: Record<string, number> = {};
   const waitingMessage = () => JSON.stringify({ type: 'waiting', waiting } satisfies ServerMessage);
-  for (const c of canvases) {
-    const send = (msg: ServerMessage) => {
-      const text = JSON.stringify(msg);
-      for (const ws of sockets.get(c.id)!) ws.send(text);
-    };
-    restarter?.onChange(() => send({ type: 'restart', restart: pending(c.id) }));
-    updates.onChange(() => send({ type: 'update', update: updates.current() }));
-    c.board.onChange(() => {
-      send({ type: 'snapshot', snapshot: c.board.snapshot() });
-      const n = counted(c);
-      if (n === waiting[c.id]) return;
-      waiting[c.id] = n;
-      const text = waitingMessage();
-      for (const set of sockets.values()) for (const ws of set) ws.send(text);
-    });
-    c.board.onEvent((event) => send({ type: 'event', event }));
-    c.board.onEventGone((cardId, id) => send({ type: 'eventGone', cardId, id }));
-    c.board.onNotice((n) => send({ type: 'notice', ...n }));
-  }
+  const everyone = (text: string) => {
+    for (const set of sockets.values()) for (const ws of set) ws.send(text);
+  };
+  const sendTo = (id: string, msg: ServerMessage) => {
+    const text = JSON.stringify(msg);
+    for (const ws of sockets.get(id) ?? []) ws.send(text);
+  };
+  restarter?.onChange(() => {
+    for (const id of byId.keys()) sendTo(id, { type: 'restart', restart: pending(id) });
+  });
+  updates.onChange(() => everyone(JSON.stringify({ type: 'update', update: updates.current() } satisfies ServerMessage)));
+  /** What stops sending each canvas's changes to its pages. */
+  const detach = new Map<string, () => void>();
+  const attach = (c: CanvasRuntime) => {
+    byId.set(c.id, c);
+    if (!sockets.has(c.id)) sockets.set(c.id, new Set());
+    waiting[c.id] = counted(c);
+    const send = (msg: ServerMessage) => sendTo(c.id, msg);
+    const offs = [
+      c.board.onChange(() => {
+        send({ type: 'snapshot', snapshot: c.board.snapshot() });
+        const n = counted(c);
+        if (n === waiting[c.id]) return;
+        waiting[c.id] = n;
+        everyone(waitingMessage());
+      }),
+      c.board.onEvent((event) => send({ type: 'event', event })),
+      c.board.onEventGone((cardId, id) => send({ type: 'eventGone', cardId, id })),
+      c.board.onNotice((n) => send({ type: 'notice', ...n })),
+      // its repositories' agents restarted: what the switchers show of it may have changed with them
+      c.onPending(() => {
+        send({ type: 'restart', restart: pending(c.id) });
+        relist();
+      }),
+    ];
+    detach.set(c.id, () => offs.forEach((off) => off()));
+  };
+  /** The list the pages' canvas switchers show, as it was last sent. */
+  let listed = '';
+  /** Sends the canvases to every page where they changed (one started, stopped, renamed, or with other repositories). */
+  const relist = () => {
+    const now = canvases.all().map((c) => c.board.canvas);
+    const list = JSON.stringify(now);
+    if (list === listed) return;
+    const first = !listed;
+    listed = list;
+    if (first) return;
+    everyone(JSON.stringify({ type: 'canvases', canvases: now } satisfies ServerMessage));
+    everyone(waitingMessage());
+  };
+  for (const c of canvases.all()) attach(c);
+  relist();
+  // a canvas started or stopped while Obeya runs: the pages of one that stopped go to another
+  canvases.onChange?.(() => {
+    const now = canvases.all();
+    for (const [id, c] of [...byId])
+      if (!now.includes(c)) {
+        detach.get(id)?.();
+        detach.delete(id);
+        byId.delete(id);
+        delete waiting[id];
+        // the page asks for the canvases, and goes to the first there is
+        for (const ws of sockets.get(id) ?? []) ws.close();
+        sockets.delete(id);
+      }
+    for (const c of now) if (byId.get(c.id) !== c) attach(c);
+    relist();
+  });
 
   // The app's shell records a command when the owner holds the push-to-talk key in another app
   // (app/src/ptt.rs): it reports what it hears every few seconds, and asks where the owner was last.
@@ -93,7 +149,8 @@ export function serve(
   const lastFocus = (): PageFocus | null => {
     const last = [...focused.values()].sort((a, b) => b.at - a.at)[0];
     if (last && byId.has(last.canvas)) return (({ at: _, ...f }) => f)(last);
-    return canvases[0] ? { canvas: canvases[0].id } : null;
+    const first = canvases.all()[0];
+    return first ? { canvas: first.id } : null;
   };
 
   /** A click the Rückschau counts (a card deleted, a command taken back, a rule proposal decided on), once it went through. */
@@ -199,12 +256,14 @@ export function serve(
       '/': index,
       // the app's floating panel for the push-to-talk key in another app
       '/panel': panel,
-      '/api/canvases': { GET: () => Response.json(canvases.map((c) => c.board.canvas) satisfies CanvasInfo[]) },
+      '/api/canvases': { GET: () => Response.json(canvases.all().map((c) => c.board.canvas) satisfies CanvasInfo[]) },
       // Obeya's configuration: read, checked while the owner edits it, and saved (Obeya then starts again)
       '/api/config': {
         GET: () => (config ? Response.json(config.view()) : new Response('Not found', { status: 404 })),
         PUT: async (req) => (config ? handle(async () => config.save(await req.json())) : new Response('Not found', { status: 404 })),
       },
+      // the owner has the restart of a repository's agents that waits for them go ahead at once
+      '/api/c/:canvas/restart': { POST: on((c) => ({ restarting: c.restartNow() })) },
       // the owner has a restart that waits for workers go ahead at once
       '/api/restart': {
         POST: () =>

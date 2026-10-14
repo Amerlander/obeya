@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type { RepoAdapter } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
 import { LANGUAGE_NAMES, LANGUAGES } from '../core/locale';
-import { MESSAGES, type Messages } from '../core/messages';
+import { MESSAGES, type Messages, type Pause } from '../core/messages';
 import { basename } from 'node:path';
 import { answering, askable, pausable, type DemoKind, type DemoPage, formatQuestion, type Item, type Mock, type Question, type RestartReason, type Spot, type SpotInput } from '../core/types';
 import { BadRequest, type Board, replyNote } from './board';
@@ -61,11 +61,12 @@ export interface WorkerOptions {
   /** The files of the owner's screenshots, by id; unknown ones are left out. */
   imageFiles?: (ids?: string[]) => string[];
   /**
-   * Whether Obeya starts again for work that landed: it runs from this repository's checkout and the
-   * work changed code, or the work changed the repository's own adapter. `pushedFrom` is the
+   * Whether Obeya starts again for work that landed (`obeya`): it runs from this repository's
+   * checkout and the work changed code; or only this repository's agents do (`repo`): the work
+   * changed where they work (its own adapter, its `.obeya/settings.json`). `pushedFrom` is the
    * workspace work was pushed from straight to the remote's main, which leaves the checkout as it is.
    */
-  restartsFor?: (landed: Landed, pushedFrom?: string) => boolean;
+  restartsFor?: (landed: Landed, pushedFrom?: string) => 'obeya' | 'repo' | false;
   /** Added to every worker's environment: where Obeya is (`OBEYA_URL`), for a demo's narration. */
   env?: Record<string, string>;
   /** A card's work ended (landed, closed without a change, a prototype discarded or built): its runs can be read now. */
@@ -168,7 +169,12 @@ interface AskedPermission {
 export interface DueRestart {
   reason: RestartReason;
   deadline: number;
+  /** Only the agents of these workers' repository restart, for a change to its configuration; Obeya runs on. */
+  repo?: boolean;
 }
+
+/** What the worker pauses for, as the card's log says it. */
+const pauseOf = (due: DueRestart): Pause => (due.reason === 'stop' ? 'stop' : due.repo ? 'repo' : 'restart');
 
 /** Background work that ended wakes the worker within this; a turn that waits longer without a sign counts as ended. */
 const BACKGROUND_GRACE = 10 * 60_000;
@@ -205,6 +211,9 @@ const hostResumed = (host: string) =>
 const RESTARTED =
   'Obeya was restarted. Whatever you had running then was stopped with it: background commands, servers you started, and a command still running in your turn (its result shows exit code 137). Run again what you still need. If you had paused for the restart, go on from there.';
 
+const REPO_RESTARTED =
+  "Obeya restarted this repository's agents to apply a change to its configuration. Whatever you had running then was stopped with it: background commands, servers you started, and a command still running in your turn (its result shows exit code 137). Run again what you still need. If you had paused for the restart, go on from there.";
+
 const DUE_WHY: Record<RestartReason, string> = {
   code: 'restart (new code landed on main)',
   config: 'restart (the owner saved a new configuration)',
@@ -213,10 +222,28 @@ const DUE_WHY: Record<RestartReason, string> = {
   update: 'restart (the owner installs a new version of the app)',
 };
 
+/** Why Obeya restarts the agents of one repository alone: where they work changed, which they start again with. */
+const REPO_WHY: Partial<Record<RestartReason, string>> = {
+  config: 'the owner changed its configuration',
+  adapter: 'its adapter or settings changed on its default branch',
+};
+
+/** What is about to happen, who it stops, and when the worker goes on, for the messages below. */
+const dueText = (due: DueRestart) =>
+  due.repo
+    ? {
+        what: `restart this repository's agents (${REPO_WHY[due.reason] ?? REPO_WHY.config}), you among them,`,
+        whom: 'none of them',
+        thing: "restart of this repository's agents",
+        back: 'once it has restarted them',
+      }
+    : { what: `${DUE_WHY[due.reason]} and stops whatever its workers run at that moment.`, whom: 'no worker', thing: DUE_WHY[due.reason], back: 'once it runs again' };
+
 /** Tells a worker that Obeya is about to restart or stop, so that it pauses at a safe point instead of being cut off. */
 const restartNotice = (due: DueRestart) => {
   const minutes = Math.max(1, Math.round((due.deadline - Date.now()) / 60_000));
-  return `Obeya is about to ${DUE_WHY[due.reason]} and stops whatever its workers run at that moment. It waits until no worker is in the middle of a turn, at most ${minutes} more minute${minutes === 1 ? '' : 's'}. Pause at the next safe point: finish the step you are in, start nothing long (a test run, a demo render, a measurement), and end your turn, without handing over if you are not done. Background commands still running keep Obeya waiting: let those you need finish, stop the others (a scratch server you can start again). One that finishes before the restart wakes you for a turn that keeps Obeya waiting too: take in its result and end that turn as well. Obeya resumes you once it runs again, and you go on from there.`;
+  const d = dueText(due);
+  return `Obeya is about to ${due.repo ? `${d.what} which stops whatever you run at that moment.` : d.what} It waits until ${d.whom} is in the middle of a turn, at most ${minutes} more minute${minutes === 1 ? '' : 's'}. Pause at the next safe point: finish the step you are in, start nothing long (a test run, a demo render, a measurement), and end your turn, without handing over if you are not done. Background commands still running keep Obeya waiting: let those you need finish, stop the others (a scratch server you can start again). One that finishes before the restart wakes you for a turn that keeps Obeya waiting too: take in its result and end that turn as well. Obeya resumes you ${d.back}, and you go on from there.`;
 };
 
 /**
@@ -226,13 +253,14 @@ const restartNotice = (due: DueRestart) => {
  */
 const restartWaits = (due: DueRestart) => {
   const minutes = Math.max(1, Math.round((due.deadline - Date.now()) / 60_000));
-  return `Obeya is about to ${DUE_WHY[due.reason]} and stops whatever its workers run at that moment. It waits until no worker is in the middle of a turn, at most ${minutes} more minute${minutes === 1 ? '' : 's'}, and this turn keeps it waiting. Take in this message, leave the work it asks for until Obeya resumes you, and end your turn, without handing over. Obeya resumes you once it runs again, and you do that work then.`;
+  const d = dueText(due);
+  return `Obeya is about to ${due.repo ? `${d.what} which stops whatever you run at that moment.` : d.what} It waits until ${d.whom} is in the middle of a turn, at most ${minutes} more minute${minutes === 1 ? '' : 's'}, and this turn keeps it waiting. Take in this message, leave the work it asks for until Obeya resumes you, and end your turn, without handing over. Obeya resumes you ${d.back}, and you do that work then.`;
 };
 
 /** Tells a worker that paused for the restart, and was woken before it (by its background work, a message), that Obeya still waits for it. */
 const stillDue = (due: DueRestart) => {
   const minutes = Math.max(1, Math.round((due.deadline - Date.now()) / 60_000));
-  return `Obeya still waits for the ${DUE_WHY[due.reason]} you paused for, at most ${minutes} more minute${minutes === 1 ? '' : 's'}, and this turn keeps it waiting. Take in what started it (a background command that finished, a message), leave the work it leads to until Obeya resumes you, and end your turn.`;
+  return `Obeya still waits for the ${dueText(due).thing} you paused for, at most ${minutes} more minute${minutes === 1 ? '' : 's'}, and this turn keeps it waiting. Take in what started it (a background command that finished, a message), leave the work it leads to until Obeya resumes you, and end your turn.`;
 };
 
 const RESUMED =
@@ -264,6 +292,11 @@ export class Workers {
   private holding = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(private o: WorkerOptions) {}
+
+  /** A new version of the repository's adapter, which works in the same kind of workspaces: it applies from the next time one is asked. */
+  useAdapter(adapter: RepoAdapter) {
+    this.o.adapter = adapter;
+  }
 
   /** Whether a video demo here may go to a page for colleagues, which the worker then writes. */
   private get shares(): boolean {
@@ -684,7 +717,8 @@ export class Workers {
     }
     this.o.board.planDocsLanded(cardId, added);
     this.bump(cardId);
-    const restarts = this.o.restartsFor?.(result, direct ? (row.workspace ?? undefined) : undefined) ?? false;
+    const restartFor = this.o.restartsFor?.(result, direct ? (row.workspace ?? undefined) : undefined) ?? false;
+    const restarts = !!restartFor;
     this.o.board.work(cardId, {
       state: 'live',
       need: null,
@@ -704,9 +738,11 @@ export class Workers {
         direct
           ? `${by === 'owner' ? 'The owner approved your work to go directly onto main, and Obeya' : 'Obeya'} pushed it there without a pull request (${result.to.slice(0, 7)}); the card is live.`
           : `${by === 'owner' ? 'The owner approved your work, and it' : 'Your work'} is on main now (${result.to.slice(0, 7)}); the card is live.`,
-        restarts
+        restartFor === 'obeya'
           ? 'Obeya runs from that checkout and starts again with your change as soon as no worker is in the middle of a turn, which stops whatever you run then. If something that remains needs Obeya to run your change, call after_restart and end your turn: Obeya tells you once it runs it.'
-          : '',
+          : restartFor === 'repo'
+            ? "Your change moves where this repository's agents work: Obeya restarts them with it as soon as none of them is in the middle of a turn, you among them, which stops whatever you run then. If something that remains needs Obeya to run your change, call after_restart and end your turn: Obeya tells you once it runs it."
+            : '',
         comments ? `Before approving, the owner watched your demo video. ${comments.text}` : '',
         AFTER_LANDING,
       ]
@@ -920,8 +956,9 @@ export class Workers {
     return paused ? (JSON.parse(paused) as PausedState) : null;
   }
 
-  /** After a restart: resume every card whose worker was in the middle of a turn. */
-  resumeAll() {
+  /** After a restart (`repo`: of this repository's agents alone): resume every card whose worker was in the middle of a turn. */
+  resumeAll(repo = false) {
+    const restarted = repo ? REPO_RESTARTED : RESTARTED;
     for (const i of this.o.board.snapshot().items) {
       if (this.o.repo && i.repo !== this.o.repo) continue;
       // the page reloaded: the owner may watch on, or have gone
@@ -933,12 +970,12 @@ export class Workers {
         continue;
       }
       if (row.landed && row.workspace) {
-        this.resumeLanded(i, row.landed, row.session_id);
+        this.resumeLanded(i, row.landed, row.session_id, restarted);
         continue;
       }
       // a worker taking in the owner's words on its handover was in the middle of a turn too
       if (answering(i)) {
-        if (row.workspace && row.session_id) this.launch(i.id, RESTARTED, row.session_id);
+        if (row.workspace && row.session_id) this.launch(i.id, restarted, row.session_id);
         else this.answerTaken(i.id);
         continue;
       }
@@ -950,7 +987,7 @@ export class Workers {
       }
       if (i.state !== 'working' && i.state !== 'inPr') continue;
       if (!row.workspace) continue;
-      if (row.session_id) this.launch(i.id, RESTARTED, row.session_id);
+      if (row.session_id) this.launch(i.id, restarted, row.session_id);
       // it never reported a session: start one with the card
       else if (i.state === 'working') this.launch(i.id, this.briefing(i, row.branch ?? '', true), undefined, this.taskImages(i));
     }
@@ -966,13 +1003,13 @@ export class Workers {
   }
 
   /** After a restart: landed work's worker goes on with what remains; the restart it waited for has happened. */
-  private resumeLanded(card: Item, stored: string, session: string | null) {
+  private resumeLanded(card: Item, stored: string, session: string | null, restarted: string) {
     const l = JSON.parse(stored) as LandedState;
     if (!session) return this.finish(card.id);
     this.o.board.work(card.id, { landed: JSON.stringify({ ...(l.commit ? { commit: l.commit } : {}), ...(l.unchanged ? { unchanged: true } : {}), ...(l.followUp ? { followUp: true } : {}) } satisfies LandedState) });
     // an open question waits for its answer, which resumes the session
     if (card.state === 'waiting') return this.parkLater(card.id);
-    this.launch(card.id, l.restarts ? `Obeya has started again and runs main with your change now. ${RESTARTED}` : RESTARTED, session);
+    this.launch(card.id, l.restarts ? `${restarted === REPO_RESTARTED ? 'Obeya runs' : 'Obeya has started again and runs'} main with your change now. ${restarted}` : restarted, session);
   }
 
   /** Whether a worker is in the middle of a turn, or its ended turn waits for its background work. */
@@ -1006,7 +1043,7 @@ export class Workers {
       if (!live.busy || live.toldRestart) continue;
       this.tellRestart(cardId, live);
       live.session.send(restartNotice(due));
-      this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.restartDue(due.reason === 'stop'));
+      this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.restartDue(pauseOf(due)));
     }
   }
 
@@ -1133,7 +1170,7 @@ export class Workers {
     if (still) return `${text}\n\n${still}`;
     if (!this.restart || live.toldRestart) return text;
     this.tellRestart(cardId, live);
-    this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.restartWaits(this.restart.reason === 'stop'));
+    this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.restartWaits(pauseOf(this.restart)));
     return `${text}\n\n${restartWaits(this.restart)}`;
   }
 
@@ -1145,7 +1182,7 @@ export class Workers {
   private restartStillDue(cardId: string, live: Live): string | undefined {
     if (!this.restart || !live.restartPaused) return;
     live.restartPaused = false;
-    this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.restartStillDue(this.restart.reason === 'stop'));
+    this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.restartStillDue(pauseOf(this.restart)));
     return stillDue(this.restart);
   }
 
@@ -1157,7 +1194,7 @@ export class Workers {
   /** The worker ended its turn for the restart: the card says so, and its status line is again the one from before it heard of it. */
   private pausedForRestart(cardId: string, live: Live) {
     if (live.statusBeforeRestart !== undefined) this.o.board.work(cardId, { status_line: live.statusBeforeRestart });
-    this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.paused(this.restart!.reason === 'stop'));
+    this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.paused(pauseOf(this.restart!)));
   }
 
   private bump(cardId: string) {
@@ -1347,7 +1384,7 @@ export class Workers {
    */
   private failedAfterLanding(cardId: string, live: Live) {
     if (this.restart) {
-      this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.paused(this.restart.reason === 'stop'));
+      this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.paused(pauseOf(this.restart)));
       return;
     }
     if (!live.nudged) {

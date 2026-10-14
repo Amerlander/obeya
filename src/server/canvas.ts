@@ -3,13 +3,13 @@
 
 import { existsSync, mkdirSync, realpathSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
-import { adapterProblems, adapterTreeAt, builtInAdapter, inClones, pickAdapter, readShared, repoAdapterTree, repoValues, type SharedRead, withSettings } from '../adapters';
+import { adapterProblems, builtInAdapter, inClones, pickAdapter, readShared, repoAdapterTree, repoValues, type SharedRead, withSettings } from '../adapters';
 import { Answers, answersDir, answerTag, openWithSystem } from './answers';
 import { repoName } from '../adapters/generic';
 import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
 import type { Language } from '../core/locale';
-import { AGENT_DEFAULTS, agentListens, type AgentRole, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, plannableAsProject, type RepoConfig, type RepoRef, type RepoSettings, type SharedSettings, type SpotInput } from '../core/types';
+import { AGENT_DEFAULTS, agentListens, type AgentRole, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, type PendingRestart, plannableAsProject, type RepoConfig, type RepoRef, repoShape, type RepoSettings, type SharedSettings, type SpotInput } from '../core/types';
 import { BadRequest, Board, replyNote, type StoredIdea } from './board';
 import { type Command, Commander } from './commands';
 import type { Config } from './config';
@@ -26,7 +26,7 @@ import { ProjectAgents } from './project-agents';
 import { readPlanDocs, repoInfo, watchPlanDocs } from './repo';
 import { boundsOf, GAP, type Place, unionBounds } from '../core/layout';
 import { type AgentRuntime, withAgentSetting } from './runtime';
-import { changesCode } from './self-update';
+import { changesCode, RESTART_PATIENCE_MS, whenIdle } from './self-update';
 import { Sharing, shareArgv } from './share';
 import { siteMissing, siteName } from './site';
 import { type DueRestart, Workers } from './workers';
@@ -62,12 +62,10 @@ export interface CanvasDeps {
   language?: () => Language;
   /** The model and effort of a group of agents (`agentSetting`), asked whenever one starts; the defaults when left out. */
   agents?: (role: AgentRole) => AgentSetting;
-  /**
-   * A repository's own adapter (`.obeya/adapter/`), or where its workers work by its
-   * `.obeya/settings.json`, changed on its default branch: Obeya starts again for it, where
-   * something restarts it.
-   */
-  adapterChanged?: (repoPath: string) => void;
+  /** How long a restart of a repository's agents waits for them to pause at most; Obeya's patience for a restart when left out. */
+  restartPatienceMs?: number;
+  /** How often that restart looks whether they paused; every two seconds when left out. */
+  restartIntervalMs?: number;
   /**
    * The settings the owner set for a repository on this machine, by its path, read whenever one is
    * used (`Config.repoSettings`); those the canvas started with when left out.
@@ -88,6 +86,37 @@ export interface RepoRuntime {
   projectAgents: ProjectAgents;
 }
 
+/** A repository as the canvas runs it, with what it was set up by and what stops what it set up. */
+interface Repo extends RepoRuntime {
+  /** Its entry in the configuration. */
+  config: RepoConfig;
+  /** The version of its own adapter it runs on (its git tree); undefined where the configuration names the adapter. */
+  adapterTree: string | null | undefined;
+  /** Where its workers work by its adapter alone, without the settings. */
+  baseWorkspaces: RepoAdapter['workspaces'];
+  /** Stops its Lesestand and the retries for clones on other machines. */
+  stops: (() => void)[];
+  /** Stops watching its plan docs. */
+  docs?: () => void;
+  /** Watches its pull requests, once its work went out as one; it stays for those still open. */
+  prs?: PrWatcher;
+}
+
+/**
+ * A restart of some repositories' agents that waits for them to pause (their configuration
+ * changed where they work, or they leave the canvas): the repositories by path, why, since when and
+ * until when at most.
+ */
+interface RepoRestart {
+  paths: Set<string>;
+  reason: 'config' | 'adapter';
+  since: number;
+  deadline: number;
+  /** The cards it waits for, as the page was last told. */
+  waiting: string[];
+  stop: () => void;
+}
+
 /** How long a host that could not be reached at start (or failed to clone) waits before Obeya tries again. */
 const HOST_RETRY_MS = 2 * 60_000;
 
@@ -104,16 +133,21 @@ export class CanvasRuntime {
   readonly revisions: Revisions;
   /** Demos shared with colleagues, through the share command of the card's repository. */
   readonly sharing: Sharing;
-  readonly repos: RepoRuntime[] = [];
-  private stops: (() => void)[] = [];
-  private prWatchers: PrWatcher[] = [];
-  /** By repository: what watches its plan docs, and its pull requests once its work went out as one. */
-  private watching: { docs?: () => void; prs?: PrWatcher }[] = [];
+  /** Its repositories, the home one first. */
+  readonly repos: Repo[] = [];
+  /** Its configuration as it runs now (the home repository first). */
+  private config: CanvasConfig;
+  /** By repository's path: what takes back where the main branch the owner set is read. */
+  private branchSettings = new Map<string, () => void>();
   /** By repository's path: its `.obeya/settings.json` as the Lesestand last had it. */
   private shared = new Map<string, SharedRead>();
-  /** By repository: where its workers work by its adapter alone, and whether the configuration names clones for them. */
-  private baseWorkspaces: RepoAdapter['workspaces'][] = [];
-  private workspacesNamed: boolean[] = [];
+  /** The restart of some repositories' agents that waits, if one does. */
+  private pending: RepoRestart | null = null;
+  /** The restart of all of Obeya that waits, if one does: it covers the repositories' too. */
+  private obeyaDue: DueRestart | null = null;
+  private pendingListeners = new Set<() => void>();
+  /** Set while the canvas leaves the configuration: called once its agents paused and it stopped. */
+  private retiring: (() => void) | null = null;
   /** What the owner last said or typed to each card's agent, for the Koordinator to read beside a request the agent passes on. */
   private said = new Map<string, { text: string; spoken: boolean }>();
   /** Cards the owner is writing in, with their text before; a pause in typing hands it to the learner. */
@@ -129,176 +163,53 @@ export class CanvasRuntime {
     const agents = deps.agents ?? ((role: AgentRole) => AGENT_DEFAULTS[role]);
     deps = { ...deps, runtime: withAgentSetting(deps.runtime, agents), ...(deps.workerRuntime ? { workerRuntime: withAgentSetting(deps.workerRuntime, agents) } : {}) };
     this.deps = deps;
-    const settingsOf = (r: RepoConfig) => (deps.settings ? () => deps.settings!(resolve(r.path)) : () => r.settings);
     // the main branch the owner set counts from the start: the repository's id, its adapter and its Lesestand go by it
-    for (const r of config.repos) this.stops.push(useBranchSetting(r.path, () => settingsOf(r)()?.branch));
-    // the repository's settings for everyone, read again whenever its Lesestand moves (`sharedMoved`)
-    const shared = this.shared;
-    const sharedOf = (path: string) => {
-      if (!shared.has(path)) shared.set(path, readShared(path));
-      return () => shared.get(path)!.settings;
-    };
-    const resolved = resolveCanvas(config, deps.store, settingsOf, sharedOf);
-    const { id, name, infos, adapters, adapterTrees, broken, refs, stored } = resolved;
-    config = resolved.config;
-    this.baseWorkspaces = resolved.bases.map((b) => b.workspaces);
-    this.workspacesNamed = config.repos.map(namesClones);
-    adapters.forEach((a, i) => {
-      if (broken[i]) console.error(`Obeya: ${broken[i]}; ${infos[i]!.path} runs on the ${a.name} adapter until it is fixed on its default branch`);
-      for (const p of adapterProblems(a)) console.warn(`Obeya: adapter of ${infos[i]!.path}, ${p} (ignored)`);
-      for (const p of shared.get(infos[i]!.path)?.problems ?? []) console.warn(`Obeya: ${infos[i]!.path}: ${p} (ignored)`);
-      if (a.demo?.site && a.demo.share) console.warn(`Obeya: adapter of ${infos[i]!.path} names both demo.site and demo.share; the site is used`);
-    });
-    // whether each repository shares here, which the UI shows
-    refs.forEach((r, i) => Object.assign(r, shareRef(sharesOf(config.repos[i]!, infos[i]!, adapters[i]!), deps.home)));
-    const home = refs[0]!.id;
-    // whether the default branch now has another version of the repository's own adapter than the
-    // one this canvas was set up with; then Obeya starts again for it
-    const adapterMoved = (i: number): boolean => {
-      const was = adapterTrees[i];
-      if (was === undefined || !deps.adapterChanged || repoAdapterTree(infos[i]!.path) === was) return false;
-      deps.adapterChanged(infos[i]!.path);
-      return true;
-    };
+    for (const r of config.repos) this.useBranch(r);
+    const resolved = this.resolve(config);
+    const { id, name, refs, stored } = resolved;
+    this.config = resolved.config;
     const images = (this.images = new Images(join(deps.home, 'images', id)));
-    // where work lands on the local main, the checkout is the Lesestand; otherwise it is a pool clone on a card's branch
-    const reads = infos.map(
-      (info, i) =>
-        new ReadTree({
-          repoPath: info.path,
-          dir: adapters[i]!.land === 'main' ? null : join(deps.home, 'read', id, refs[i]!.id),
-          remote: !!info.remote,
-          onChange: () => {
-            this.board.lesestandMoved(refs[i]!.id, reads[i]!.head());
-            if (!adapterMoved(i)) this.sharedMoved(i);
-          },
-        }),
-    );
-    this.stops.push(() => reads.forEach((r) => r.stop()));
     this.board = new Board(
       deps.store,
-      { id, name, repos: refs },
-      () => {
-        const read = reads.map((r, i) => readPlanDocs(r.path, adapters[i]!));
-        return {
-          docs: read.flatMap(({ docs }, i) => docs.map((d) => (refs[i]!.id === home ? d : { ...d, file: `${refs[i]!.id}:${d.file}` }))),
-          dirs: read.map(({ others }, i) => ({ repo: refs[i]!.id, dir: adapters[i]!.planDocs.dir, others })),
-        };
-      },
+      { id, name, repos: [] },
+      () => this.planDocs(),
       images,
-      (repo, commit) => !!reads[refs.findIndex((r) => r.id === repo)]?.holds(commit),
+      (repo, commit) => !!this.repos.find((r) => r.ref.id === repo)?.read.holds(commit),
       deps.language,
     );
     const board = this.board;
-    const imageFiles = (ids: string[] = []) => ids.flatMap((i) => images.path(i) ?? []);
-    if (!stored) deps.store.setSetting(id, 'home_repo', home);
+    if (!stored) deps.store.setSetting(id, 'home_repo', refs[0]!.id);
     resolved.keep();
-    const preferences = () => board.preferencesText();
 
-    // the Koordinator needs the workers, and the workers ask it: it is set right after them
-    let koordinator!: Koordinator;
-    const workRetro = (this.workRetro = new WorkRetro({
+    this.workRetro = new WorkRetro({
       board,
       runtime: deps.runtime,
       pathFor: (repo) => (this.repos.find((r) => r.ref.id === repo) ?? this.repos[0]!).read.path,
-    }));
-    config.repos.forEach((rc, i) => {
-      const info = infos[i]!;
-      const adapter = adapters[i]!;
-      const ref = refs[i]!;
-      const read = reads[i]!;
-      const isHome = ref.id === home;
-      const share = sharesOf(rc, info, adapter);
-      const remoteHosts = info.remote && adapter.workspaces === 'clones' && adapter.land !== 'main' ? (rc.hosts ?? []) : [];
-      // the workers set up below say how many are busy where
-      let workers!: Workers;
-      const workspaces = new Workspaces(deps.store, id, {
-        mode: adapter.workspaces,
-        repoPath: info.path,
-        dir: isHome ? join(deps.home, 'workspaces', id) : join(deps.home, 'workspaces', id, ref.id),
-        repo: isHome ? null : ref.id,
-        machines: [{ host: null, ...(rc.slots !== undefined ? { slots: rc.slots } : {}) }, ...remoteHosts.map((h) => ({ host: h.name, ...(h.slots !== undefined ? { slots: h.slots } : {}) }))],
-        busy: (host) => workers.busyOn(host),
-      });
-      // a clone registered for this repository must be one of it
-      for (const w of rc.workspaces ?? []) workspaces.register(resolve(w), [info.remote, info.path].filter((x): x is string => !!x));
-      // landing on main needs clones that see the local main; otherwise they track the remote
-      if (rc.clones) workspaces.ensureClones(adapter.land === 'main' || !info.remote ? info.path : info.remote, rc.clones);
-      // clones on other machines, made in the background: a host that is off now gets them once it answers
-      if (remoteHosts.length) {
-        const token = githubToken(info.path, info.remote!);
-        for (const h of remoteHosts) {
-          const host = registerHost({ name: h.name, ssh: h.ssh, home: deps.home, claudeToken: () => claudeToken(deps.home) });
-          // cards that wait for a clone look again once the host answers after it did not
-          this.stops.push(host.onBack(() => board.changed()));
-          // the log tells what goes wrong once, not at every try while the host stays off
-          let told: string | null = null;
-          const ensure = async () => {
-            const wrong = await workspaces.ensureHostClones(host, h.root, info.remote!, h.clones, token);
-            if (!wrong) {
-              if (told) console.log(`clones on ${h.name}: in place`);
-              return board.changed();
-            }
-            if (wrong !== told) console.error(`clones on ${h.name}: ${wrong}; trying again every ${HOST_RETRY_MS / 60_000} minutes`);
-            told = wrong;
-            const retry = setTimeout(ensure, HOST_RETRY_MS);
-            this.stops.push(() => clearTimeout(retry));
-          };
-          void ensure();
-        }
-      }
-      const projectAgents = new ProjectAgents(board, deps.runtime, () => read.path, preferences, deps.permissionMode);
-      workers = new Workers({
-        board,
-        runtime: deps.workerRuntime ?? deps.runtime,
-        workspaces,
-        adapter,
-        shares: !!share,
-        repo: ref.id,
-        preferences,
-        onOwnerInput: (card, kind, text, context) => koordinator.learn(card, kind, text, context),
-        onPrOpened: (cardId) => this.sharing.prOpened(cardId),
-        onMerged: () => void read.refresh(),
-        onPrototype: (prototype, summary, demo) => this.prototypeReady(prototype, summary, demo),
-        onPrototypeAnswer: (prototype, question, answer) => this.prototypeAnswered(prototype, question, answer),
-        // where work lands on the local main, the Lesestand is the checkout and moves with the landing
-        // a push leaves the checkout as it is: Obeya starts again only for an adapter it reads once it fetches the push
-        restartsFor: (l: Landed, pushedFrom?: string) =>
-          pushedFrom
-            ? adapterTrees[i] !== undefined && !!deps.adapterChanged && adapterTreeAt(pushedFrom, l.to) !== adapterTrees[i]
-            : (!!deps.ownCheckout && sameDir(deps.ownCheckout, info.path) && changesCode(info.path, l.from, l.to)) || adapterMoved(i) || this.sharedMoved(i),
-        imageFiles,
-        onWorkEnded: (cardId, workspace) => workRetro.ended(cardId, workspace),
-        toObeya: (cardId, request) => this.forward(cardId, request),
-        ...(deps.permissionMode ? { permissionMode: deps.permissionMode } : {}),
-        ...(deps.workerEnv ? { env: deps.workerEnv } : {}),
-        ...(deps.parkGrace !== undefined ? { parkGrace: deps.parkGrace } : {}),
-      });
-      this.repos.push({ ref, info, adapter, share, read, workspaces, workers, projectAgents });
-      this.watch(this.repos.length - 1);
     });
+    // the Koordinator needs the workers, and the workers ask it: it is set right after them
+    resolved.config.repos.forEach((_, i) => this.addRepo(this.startRepo(resolved, i)));
     board.showPools(() =>
       this.repos.filter((r) => r.workspaces.pooled).map((r) => ({ repo: r.ref.id, hosts: r.workspaces.pool(r.workers.inTurn()) })),
     );
     for (const r of this.repos) r.workers.resumeAll();
-    koordinator = this.koordinator = new Koordinator({
+    const koordinator = (this.koordinator = new Koordinator({
       board,
       runtime: deps.runtime,
-      preferences,
+      preferences: this.preferences,
       home: () => this.repos[0]!.read.path,
       repoFor: (card) => {
         const r = this.repoOf(card);
         return { workers: r.workers, workspaces: r.workspaces, adapter: r.adapter, path: r.read.path };
       },
-    });
+    }));
     koordinator.resume();
     this.explorers = new Explorers({
       board,
       runtime: deps.runtime,
-      preferences,
+      preferences: this.preferences,
       pathFor: (card) => this.repoOf(card).read.path,
       onOwnerInput: (card, text) => koordinator.learn(card, 'idea', text),
-      imageFiles,
+      imageFiles: this.imageFiles,
       onReplied: (cardId, replied) => this.replied(cardId, replied),
       toObeya: (cardId, request) => this.forward(cardId, request),
       ...(deps.permissionMode ? { permissionMode: deps.permissionMode } : {}),
@@ -307,13 +218,13 @@ export class CanvasRuntime {
     this.answers = new Answers({
       board,
       runtime: deps.runtime,
-      preferences,
+      preferences: this.preferences,
       pathFor: (card) => (card ? this.repoOf(card) : this.repos[0]!).read.path,
       startBrief: (card) => this.repoOf(card).workers.startBrief(card),
       projectAgent: (project) => this.repoOf(project).projectAgents,
       ...(deps.permissionMode ? { permissionMode: deps.permissionMode } : {}),
       dirOf: (thread) => answersDir(deps.home, id, thread),
-      imageFiles,
+      imageFiles: this.imageFiles,
       toObeya: (cardId, request) => this.forward(cardId, request),
       onAnswer: (talk, question, answer) =>
         this.commander.tell(`The answer ${answerTag(talk)} you looked up for the owner's question „${question}“ came in and was shown to them: ${answer}`),
@@ -323,7 +234,7 @@ export class CanvasRuntime {
       runtime: deps.runtime,
       cwd: this.repos[0]!.read.path,
       execute: (c) => this.run(c),
-      imageFiles,
+      imageFiles: this.imageFiles,
       lookUp: (talk) => this.answers.lookUp(talk),
       onOwnerInput: (card, kind, text, reply) => this.koordinator.learn((card && board.item(card)) || null, kind, text, { reply }),
       ...(deps.config ? { config: deps.config } : {}),
@@ -333,7 +244,7 @@ export class CanvasRuntime {
     board.interruptTalk();
     this.commander.resume();
     this.answers.resume();
-    this.revisions = new Revisions({ board, runtime: deps.runtime, preferences, pathFor: (card) => this.repoOf(card).read.path, toObeya: (cardId, request) => this.forward(cardId, request), onRevised: (cardId, revised) => this.revised(cardId, revised) });
+    this.revisions = new Revisions({ board, runtime: deps.runtime, preferences: this.preferences, pathFor: (card) => this.repoOf(card).read.path, toObeya: (cardId, request) => this.forward(cardId, request), onRevised: (cardId, revised) => this.revised(cardId, revised) });
     this.revisions.resume();
     this.sharing = new Sharing({
       board,
@@ -352,69 +263,441 @@ export class CanvasRuntime {
     return this.board.canvas.id;
   }
 
+  private preferences = () => this.board.preferencesText();
+
+  private imageFiles = (ids: string[] = []) => ids.flatMap((i) => this.images.path(i) ?? []);
+
+  /** The settings the owner set for a repository on this machine, read whenever they are used. */
+  private settingsOf = (r: RepoConfig): (() => RepoSettings | undefined) => (this.deps.settings ? () => this.deps.settings!(resolve(r.path)) : () => r.settings);
+
+  /** The repository's settings for everyone, as its Lesestand last had them (read again whenever it moves, `reread`). */
+  private sharedOf = (path: string): (() => SharedSettings | undefined) => {
+    if (!this.shared.has(path)) this.shared.set(path, readShared(path));
+    return () => this.shared.get(path)!.settings;
+  };
+
+  /** What a configuration of this canvas amounts to, with this machine's settings and the repositories' (`resolveCanvas`). */
+  private resolve(config: CanvasConfig) {
+    return resolveCanvas(config, this.deps.store, this.settingsOf, this.sharedOf);
+  }
+
+  /** Registers where the main branch the owner set for the repository is read, once per path. */
+  private useBranch(r: RepoConfig) {
+    const path = resolve(r.path);
+    if (!this.branchSettings.has(path)) this.branchSettings.set(path, useBranchSetting(path, () => this.settingsOf(r)()?.branch));
+  }
+
+  /** The plan docs of all its repositories, each from its Lesestand: the home repository's by their bare path, the others' with the repository's id before it. */
+  private planDocs() {
+    const home = this.repos[0]?.ref.id;
+    const read = this.repos.map((r) => ({ r, ...readPlanDocs(r.read.path, r.adapter) }));
+    return {
+      docs: read.flatMap(({ r, docs }) => docs.map((d) => (r.ref.id === home ? d : { ...d, file: `${r.ref.id}:${d.file}` }))),
+      dirs: read.map(({ r, others }) => ({ repo: r.ref.id, dir: r.adapter.planDocs.dir, others })),
+    };
+  }
+
   /**
-   * Watches the plan docs of the repository at `index` in its Lesestand, afresh where they were
-   * watched (the directory or the Lesestand moved), and its pull requests once its work goes out as
-   * one; a watcher of pull requests stays, for those still open.
+   * Sets up the repository at `index` of a resolved configuration: its Lesestand, workspaces (clones
+   * here and on other machines), project agents and workers. Its workers resume nothing yet.
    */
-  private watch(index: number) {
+  private startRepo(resolved: Resolved, index: number): Repo {
+    const deps = this.deps;
+    const board = this.board;
+    const rc = resolved.config.repos[index]!;
+    const info = resolved.infos[index]!;
+    const adapter = resolved.adapters[index]!;
+    const ref = resolved.refs[index]!;
+    const isHome = index === 0;
+    if (resolved.broken[index]) console.error(`Obeya: ${resolved.broken[index]}; ${info.path} runs on the ${adapter.name} adapter until it is fixed on its default branch`);
+    for (const p of adapterProblems(adapter)) console.warn(`Obeya: adapter of ${info.path}, ${p} (ignored)`);
+    for (const p of this.shared.get(info.path)?.problems ?? []) console.warn(`Obeya: ${info.path}: ${p} (ignored)`);
+    if (adapter.demo?.site && adapter.demo.share) console.warn(`Obeya: adapter of ${info.path} names both demo.site and demo.share; the site is used`);
+    const share = sharesOf(rc, info, adapter);
+    // whether the repository shares here, which the UI shows
+    Object.assign(ref, shareRef(share, deps.home));
+    const stops: (() => void)[] = [];
+    // filled in below; what is set up here reaches it once it is
+    const repo = { config: rc, adapterTree: resolved.adapterTrees[index], baseWorkspaces: resolved.bases[index]!.workspaces, stops } as Repo;
+    // where work lands on the local main, the checkout is the Lesestand; otherwise it is a pool clone on a card's branch
+    const read = new ReadTree({
+      repoPath: info.path,
+      dir: adapter.land === 'main' ? null : join(deps.home, 'read', resolved.id, ref.id),
+      remote: !!info.remote,
+      onChange: () => {
+        board.lesestandMoved(repo.ref.id, read.head());
+        if (this.moved(repo) === 'follow') this.follow();
+      },
+    });
+    stops.push(() => read.stop());
+    const remoteHosts = info.remote && adapter.workspaces === 'clones' && adapter.land !== 'main' ? (rc.hosts ?? []) : [];
+    // the workers set up below say how many are busy where
+    let workers!: Workers;
+    const workspaces = new Workspaces(deps.store, resolved.id, {
+      mode: adapter.workspaces,
+      repoPath: info.path,
+      dir: isHome ? join(deps.home, 'workspaces', resolved.id) : join(deps.home, 'workspaces', resolved.id, ref.id),
+      repo: isHome ? null : ref.id,
+      machines: [{ host: null, ...(rc.slots !== undefined ? { slots: rc.slots } : {}) }, ...remoteHosts.map((h) => ({ host: h.name, ...(h.slots !== undefined ? { slots: h.slots } : {}) }))],
+      busy: (host) => workers.busyOn(host),
+    });
+    // a clone registered for this repository must be one of it
+    for (const w of rc.workspaces ?? []) workspaces.register(resolve(w), [info.remote, info.path].filter((x): x is string => !!x));
+    // landing on main needs clones that see the local main; otherwise they track the remote
+    if (rc.clones) workspaces.ensureClones(adapter.land === 'main' || !info.remote ? info.path : info.remote, rc.clones);
+    // clones on other machines, made in the background: a host that is off now gets them once it answers
+    if (remoteHosts.length) {
+      const token = githubToken(info.path, info.remote!);
+      let stopped = false;
+      stops.push(() => (stopped = true));
+      for (const h of remoteHosts) {
+        const host = registerHost({ name: h.name, ssh: h.ssh, home: deps.home, claudeToken: () => claudeToken(deps.home) });
+        // cards that wait for a clone look again once the host answers after it did not
+        stops.push(host.onBack(() => board.changed()));
+        // the log tells what goes wrong once, not at every try while the host stays off
+        let told: string | null = null;
+        const ensure = async () => {
+          const wrong = await workspaces.ensureHostClones(host, h.root, info.remote!, h.clones, token);
+          if (stopped) return;
+          if (!wrong) {
+            if (told) console.log(`clones on ${h.name}: in place`);
+            return board.changed();
+          }
+          if (wrong !== told) console.error(`clones on ${h.name}: ${wrong}; trying again every ${HOST_RETRY_MS / 60_000} minutes`);
+          told = wrong;
+          const retry = setTimeout(ensure, HOST_RETRY_MS);
+          stops.push(() => clearTimeout(retry));
+        };
+        void ensure();
+      }
+    }
+    const projectAgents = new ProjectAgents(board, deps.runtime, () => read.path, this.preferences, deps.permissionMode);
+    workers = new Workers({
+      board,
+      runtime: deps.workerRuntime ?? deps.runtime,
+      workspaces,
+      adapter,
+      shares: !!share,
+      repo: ref.id,
+      preferences: this.preferences,
+      onOwnerInput: (card, kind, text, context) => this.koordinator.learn(card, kind, text, context),
+      onPrOpened: (cardId) => this.sharing.prOpened(cardId),
+      onMerged: () => void read.refresh(),
+      onPrototype: (prototype, summary, demo) => this.prototypeReady(prototype, summary, demo),
+      onPrototypeAnswer: (prototype, question, answer) => this.prototypeAnswered(prototype, question, answer),
+      // where work lands on the local main, the Lesestand is the checkout and moves with the landing;
+      // a push leaves the checkout as it is: what it changes applies once the Lesestand fetches it
+      restartsFor: (l: Landed, pushedFrom?: string) => {
+        if (pushedFrom) return false;
+        if (deps.ownCheckout && sameDir(deps.ownCheckout, info.path) && changesCode(info.path, l.from, l.to)) return 'obeya';
+        const moved = this.moved(repo);
+        if (moved === 'follow') this.follow();
+        return moved === 'due' ? 'repo' : false;
+      },
+      imageFiles: this.imageFiles,
+      onWorkEnded: (cardId, workspace) => this.workRetro.ended(cardId, workspace),
+      toObeya: (cardId, request) => this.forward(cardId, request),
+      ...(deps.permissionMode ? { permissionMode: deps.permissionMode } : {}),
+      ...(deps.workerEnv ? { env: deps.workerEnv } : {}),
+      ...(deps.parkGrace !== undefined ? { parkGrace: deps.parkGrace } : {}),
+    });
+    return Object.assign(repo, { ref, info, adapter, share, read, workspaces, workers, projectAgents });
+  }
+
+  /** Puts a repository set up by `startRepo` on the canvas, last. */
+  private addRepo(r: Repo) {
+    this.repos.push(r);
+    this.board.canvas.repos.push(r.ref);
+    this.watch(r);
+  }
+
+  /** Stops what the repository set up: its Lesestand, the watchers, its workers' sessions. Its cards stay. */
+  private stopRepo(r: Repo) {
+    for (const stop of r.stops) stop();
+    r.docs?.();
+    r.prs?.stop();
+    r.workers.shutdown();
+  }
+
+  /**
+   * Watches the plan docs of the repository in its Lesestand, afresh where they were watched (the
+   * directory or the Lesestand moved), and its pull requests once its work goes out as one; a
+   * watcher of pull requests stays, for those still open.
+   */
+  private watch(r: Repo) {
     if (!this.deps.watch) return;
-    const { adapter, read, workers, info, ref } = this.repos[index]!;
-    const w = (this.watching[index] ??= {});
-    w.docs?.();
-    w.docs = watchPlanDocs(read.path, adapter, () => this.board.docsChanged());
-    if (adapter.land === 'pr' && !w.prs) {
+    r.docs?.();
+    r.docs = watchPlanDocs(r.read.path, r.adapter, () => this.board.docsChanged());
+    if (r.adapter.land === 'pr' && !r.prs) {
       const board = this.board;
-      w.prs = new PrWatcher(board, workers, this.deps.forge, (cardId) => localDir(board.row(cardId).workspace) ?? info.path, () => adapter.prNoise ?? [], ref.id, () => void read.refresh());
-      w.prs.start();
-      this.prWatchers.push(w.prs);
+      r.prs = new PrWatcher(board, r.workers, this.deps.forge, (cardId) => localDir(board.row(cardId).workspace) ?? r.info.path, () => r.adapter.prNoise ?? [], r.ref.id, () => void r.read.refresh());
+      r.prs.start();
     }
   }
 
   /**
-   * The owner saved settings of the repositories (`RepoSettings`) without a restart, or committed
-   * them for everyone (`.obeya/settings.json`): the adapters read them where they are used; what
-   * the canvas set up by them follows (`follow`).
+   * The configuration of the canvas changed while it runs (design: Live configuration). A new name
+   * applies at once, and so does a repository new on it. A repository whose agents now work
+   * elsewhere (other clones, other machines, another adapter, worktrees instead of clones) or that
+   * left the canvas has its agents restarted once they paused, or stopped; the other repositories
+   * work on, and their settings apply as they are read.
+   */
+  apply(next: CanvasConfig) {
+    // back in the configuration before it left: it stays, and so do its repositories
+    if (this.retiring) {
+      this.retiring = null;
+      this.cancelPending();
+    }
+    for (const r of next.repos) this.useBranch(r);
+    let resolved: Resolved;
+    try {
+      resolved = this.resolve(next);
+    } catch (e) {
+      console.error(`Obeya: the new configuration of the canvas ${this.id} does not resolve; it runs on as it was: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+    this.config = resolved.config;
+    if (resolved.name !== this.board.canvas.name) {
+      this.board.canvas.name = resolved.name;
+      this.deps.store.ensureCanvas(this.id, resolved.name);
+      console.log(`Obeya: the canvas ${this.id} is called ${resolved.name} now`);
+    }
+    const at = (path: string) => resolved.infos.findIndex((info) => info.path === path);
+    const changed = this.repos.filter((r) => {
+      const i = at(r.info.path);
+      if (i < 0 || repoShape(r.config) !== repoShape(resolved.config.repos[i]!) || r.ref.id !== resolved.refs[i]!.id) return true;
+      r.config = resolved.config.repos[i]!;
+      return false;
+    });
+    if (changed.length) this.due(changed.map((r) => r.info.path), 'config');
+    // a repository new on the canvas starts at once; one whose restart waits starts with it
+    resolved.infos.forEach((info, i) => {
+      if (this.repos.some((r) => r.info.path === info.path) || this.pending?.paths.has(info.path)) return;
+      const r = this.startRepo(resolved, i);
+      this.addRepo(r);
+      console.log(`Obeya: ${info.path} is on the canvas ${this.id} now`);
+      if (this.obeyaDue) r.workers.restartDue(this.obeyaDue);
+      r.workers.resumeAll(true);
+    });
+    this.settingsChanged();
+  }
+
+  /** The configuration no longer has the canvas: it stops once its agents paused, and then `done`. */
+  retire(done: () => void) {
+    this.retiring = done;
+    this.due(
+      this.repos.map((r) => r.info.path),
+      'config',
+    );
+  }
+
+  /**
+   * Restarts the agents of the repositories at `paths` once they paused (`restartRepos`), at most
+   * after Obeya's patience for a restart; Obeya and the other repositories' agents work on. They
+   * hear of it and pause at a safe point, unless a restart of all of Obeya is due already.
+   */
+  private due(paths: string[], reason: RepoRestart['reason']) {
+    if (!paths.length) return;
+    let p = this.pending;
+    const fresh = !p;
+    if (p) for (const path of paths) p.paths.add(path);
+    else {
+      const since = Date.now();
+      const patience = this.deps.restartPatienceMs ?? RESTART_PATIENCE_MS;
+      p = this.pending = { paths: new Set(paths), reason, since, deadline: since + patience, waiting: [], stop: () => {} };
+    }
+    const due: DueRestart = { reason: p.reason, deadline: p.deadline, repo: true };
+    for (const r of this.repos) if (paths.includes(r.info.path) && !this.obeyaDue) r.workers.restartDue(due);
+    console.log(`Obeya: ${this.retiring ? `the canvas ${this.id} leaves the configuration; it stops` : `restarting the agents of ${paths.join(', ')}`}${this.pendingBusy().length ? ' once they paused' : ''}`);
+    p.waiting = this.pendingBusy();
+    this.emitPending();
+    if (!fresh) return;
+    const pending = p;
+    pending.stop = whenIdle(
+      () => {
+        const now = this.pendingBusy();
+        if (this.pending === pending && now.join() !== pending.waiting.join()) {
+          pending.waiting = now;
+          this.emitPending();
+        }
+        return now.length > 0;
+      },
+      () => {
+        if (this.pending === pending) this.restartRepos();
+      },
+      pending.deadline - Date.now(),
+      this.deps.restartIntervalMs,
+    );
+  }
+
+  /** The cards whose worker the restart of repositories' agents waits for. */
+  private pendingBusy(): string[] {
+    const p = this.pending;
+    return p ? this.repos.filter((r) => p.paths.has(r.info.path)).flatMap((r) => r.workers.busyCards()) : [];
+  }
+
+  /** The restart of repositories' agents that waits is off (the canvas came back into the configuration): their workers hear so. */
+  private cancelPending() {
+    const p = this.pending;
+    if (!p) return;
+    this.pending = null;
+    p.stop();
+    for (const r of this.repos) if (p.paths.has(r.info.path)) r.workers.restartDue(this.obeyaDue);
+    this.emitPending();
+  }
+
+  /**
+   * Restarts the agents of the repositories the restart waited for: each one's set-up stops, and
+   * starts again as the configuration has it now, its workers resuming where they paused; one that
+   * left the canvas stays stopped, its cards kept. A canvas that left the configuration stops.
+   */
+  private restartRepos() {
+    const p = this.pending;
+    if (!p) return;
+    this.pending = null;
+    p.stop();
+    if (this.retiring) {
+      const done = this.retiring;
+      this.retiring = null;
+      this.shutdown();
+      console.log(`Obeya: the canvas ${this.id} stopped; its cards are kept`);
+      done();
+      return;
+    }
+    let resolved: Resolved;
+    try {
+      resolved = this.resolve(this.config);
+    } catch (e) {
+      console.error(`Obeya: the configuration of the canvas ${this.id} does not resolve; its repositories run on as they were: ${e instanceof Error ? e.message : String(e)}`);
+      for (const r of this.repos) if (p.paths.has(r.info.path)) r.workers.restartDue(this.obeyaDue);
+      this.emitPending();
+      return;
+    }
+    const started: Repo[] = [];
+    for (const path of p.paths) {
+      const at = this.repos.findIndex((r) => r.info.path === path);
+      if (at >= 0) this.stopRepo(this.repos[at]!);
+      const i = resolved.infos.findIndex((info) => info.path === path);
+      if (i < 0) {
+        if (at >= 0) this.repos.splice(at, 1);
+        this.branchSettings.get(path)?.();
+        this.branchSettings.delete(path);
+        console.log(`Obeya: ${path} left the canvas ${this.id}; its cards are kept`);
+        continue;
+      }
+      const r = this.startRepo(resolved, i);
+      if (at >= 0) this.repos.splice(at, 1, r);
+      else this.repos.push(r);
+      started.push(r);
+      console.log(`Obeya: restarted the agents of ${path}`);
+    }
+    this.board.canvas.repos.splice(0, this.board.canvas.repos.length, ...this.repos.map((r) => r.ref));
+    for (const r of started) {
+      this.watch(r);
+      if (this.obeyaDue) r.workers.restartDue(this.obeyaDue);
+      r.workers.resumeAll(true);
+    }
+    this.board.docsChanged();
+    this.emitPending();
+  }
+
+  /** Restarts the repositories' agents the restart waits for at once, cutting off those still in a turn; false when none waits. */
+  restartNow(): boolean {
+    if (!this.pending) return false;
+    this.restartRepos();
+    return true;
+  }
+
+  /** The restart of repositories' agents that waits, as the page shows it; null when none does. */
+  pendingRestart(): PendingRestart | null {
+    const p = this.pending;
+    if (!p) return null;
+    return {
+      reason: p.reason,
+      since: p.since,
+      deadline: p.deadline,
+      cards: p.waiting,
+      elsewhere: 0,
+      owner: [],
+      repos: this.repos.filter((r) => p.paths.has(r.info.path)).map((r) => r.ref.name),
+      ...(this.retiring ? { leaving: true } : {}),
+    };
+  }
+
+  /** Calls `fn` whenever the restart of repositories' agents begins to wait, waits for others, or happened. */
+  onPending(fn: () => void): () => void {
+    this.pendingListeners.add(fn);
+    return () => this.pendingListeners.delete(fn);
+  }
+
+  private emitPending() {
+    for (const fn of this.pendingListeners) fn();
+  }
+
+  /**
+   * The owner saved settings of the repositories (`RepoSettings`), or committed them for everyone
+   * (`.obeya/settings.json`): the adapters read them where they are used; what the canvas set up
+   * by them follows (`follow`), and a repository whose agents now work elsewhere restarts them.
    */
   settingsChanged() {
-    if (this.repos.some((_, i) => this.reread(i) === 'restart')) return;
+    for (const r of [...this.repos]) this.moved(r);
     this.follow();
   }
 
   /**
-   * The Lesestand of the repository at `index` moved: where its `.obeya/settings.json` changed with
-   * it, the canvas follows. Returns whether Obeya starts again for it (where its workers work
-   * changed).
+   * The Lesestand of the repository moved, or its settings were saved: reads its
+   * `.obeya/settings.json` and its own adapter again from the default branch. A new version of the
+   * adapter takes the old one's place at once (`Workers.useAdapter`). Where the repository's agents
+   * now work elsewhere (clones or worktrees, set up when they start), they restart once they paused
+   * (`due`). Says which of these it came to: `follow` where the canvas follows what changed.
    */
-  private sharedMoved(index: number): boolean {
-    const changed = this.reread(index);
-    if (changed === 'follow') this.follow();
-    return changed === 'restart';
+  private moved(r: Repo): 'same' | 'follow' | 'due' {
+    if (!this.repos.includes(r)) return 'same';
+    const path = r.info.path;
+    if (this.pending?.paths.has(path)) return 'due';
+    const shared = this.reread(r);
+    const tree = r.adapterTree === undefined ? undefined : repoAdapterTree(path);
+    let next: ReturnType<typeof repoAdapter> | null = null;
+    if (tree !== r.adapterTree) {
+      try {
+        next = repoAdapter(r.config, r.info, this.settingsOf(r.config), this.sharedOf(path));
+      } catch (e) {
+        console.error(`Obeya: the new version of the adapter of ${path} does not load: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    const base = next ? next.base.workspaces : r.baseWorkspaces;
+    const workIn = namesClones(r.config) ? 'clones' : (layerSettings<RepoSettings>(this.sharedOf(path)(), this.settingsOf(r.config)())?.workspaces ?? base);
+    if (workIn !== r.workspaces.mode) {
+      this.due([path], next ? 'adapter' : 'config');
+      return 'due';
+    }
+    if (next) {
+      if (next.broken) console.error(`Obeya: ${next.broken}; ${path} runs on the ${next.adapter.name} adapter until it is fixed on its default branch`);
+      else console.log(`Obeya: ${path} runs on the new version of its adapter`);
+      for (const p of adapterProblems(next.adapter)) console.warn(`Obeya: adapter of ${path}, ${p} (ignored)`);
+      Object.assign(r, { adapter: next.adapter, adapterTree: tree, baseWorkspaces: base, share: sharesOf(r.config, r.info, next.adapter) });
+      r.workers.useAdapter(next.adapter);
+      delete r.ref.share;
+      delete r.ref.shareNeeds;
+      Object.assign(r.ref, shareRef(r.share, this.deps.home));
+    }
+    return shared || next ? 'follow' : 'same';
   }
 
   /**
    * Reads the repository's `.obeya/settings.json` again from its default branch. Where it changed,
    * this machine's values that it now holds as well go (they were taken over for everyone, see
-   * `Config.takenOver`); where its workers now work elsewhere (clones or worktrees, set up at the
-   * start), Obeya starts again. Says which of these it came to.
+   * `Config.takenOver`). Says whether it changed.
    */
-  private reread(index: number): 'same' | 'follow' | 'restart' {
-    const r = this.repos[index];
-    if (!r) return 'same';
+  private reread(r: Repo): boolean {
     const path = r.info.path;
     const before = this.shared.get(path);
     const now = readShared(path);
-    if (JSON.stringify(now.settings) === JSON.stringify(before?.settings)) return 'same';
+    if (JSON.stringify(now.settings) === JSON.stringify(before?.settings)) return false;
     this.shared.set(path, now);
     for (const p of now.problems) console.warn(`Obeya: ${path}: ${p} (ignored)`);
     this.deps.config?.takenOver(path, before?.settings, now.settings);
-    const mine = this.deps.settings?.(path);
-    const workIn = this.workspacesNamed[index] ? 'clones' : (mine?.workspaces ?? now.settings?.workspaces ?? this.baseWorkspaces[index]);
-    if (workIn !== r.adapter.workspaces && this.deps.adapterChanged) {
-      this.deps.adapterChanged(path);
-      return 'restart';
-    }
-    return 'follow';
+    return true;
   }
 
   /**
@@ -423,14 +706,14 @@ export class CanvasRuntime {
    * each repository.
    */
   private follow() {
-    this.repos.forEach((r, i) => {
+    for (const r of this.repos) {
       r.info.branch = defaultBranch(r.info.path);
       for (const k of ['clones', 'pullRequests', 'direct'] as const) delete r.ref[k];
       Object.assign(r.ref, settled(r.info, r.adapter));
       // where work lands on the local main, the checkout is the Lesestand; otherwise a worktree on the default branch
       r.read.retarget(r.adapter.land === 'main' ? null : join(this.deps.home, 'read', this.id, r.ref.id));
-      this.watch(i);
-    });
+      this.watch(r);
+    }
     this.board.docsChanged();
   }
 
@@ -1093,7 +1376,7 @@ export class CanvasRuntime {
 
   /** The owner came back to a page of this canvas: its open pull requests are looked at now, and the versions of its share commands. */
   ownerBack() {
-    for (const w of this.prWatchers) w.soon();
+    for (const r of this.repos) r.prs?.soon();
     this.sharing.soon();
     this.siteCredentials();
   }
@@ -1113,19 +1396,19 @@ export class CanvasRuntime {
     if (changed) this.board.changed();
   }
 
-  /** Obeya is about to restart, or no longer is: the workers hear so and pause for it. */
+  /** Obeya is about to restart, or no longer is: the workers hear so and pause for it (or for their repository's restart that waits). */
   restartDue(due: DueRestart | null) {
-    for (const r of this.repos) r.workers.restartDue(due);
+    this.obeyaDue = due;
+    const p = this.pending;
+    for (const r of this.repos) r.workers.restartDue(due ?? (p?.paths.has(r.info.path) ? { reason: p.reason, deadline: p.deadline, repo: true } : null));
   }
 
   shutdown() {
+    this.pending?.stop();
+    this.pending = null;
     for (const [, w] of this.writing) clearTimeout(w.timer);
-    for (const stop of this.stops) stop();
-    for (const w of this.watching) {
-      w.docs?.();
-      w.prs?.stop();
-    }
-    for (const r of this.repos) r.workers.shutdown();
+    for (const stop of this.branchSettings.values()) stop();
+    for (const r of this.repos) this.stopRepo(r);
     this.koordinator.shutdown();
     this.explorers.shutdown();
   }
@@ -1155,6 +1438,74 @@ export function startCanvases(configs: CanvasConfig[], deps: CanvasDeps): Canvas
       return [];
     }
   });
+}
+
+/**
+ * The canvases Obeya serves, as its configuration has them while it runs (design: Live
+ * configuration): a canvas new in it starts at once, one that changed takes the change
+ * (`CanvasRuntime.apply`), one no longer in it stops once its agents paused, its cards kept.
+ */
+export class Canvases {
+  private list: CanvasRuntime[];
+  private listeners = new Set<() => void>();
+
+  constructor(
+    configs: CanvasConfig[],
+    private deps: CanvasDeps,
+    /** A canvas started while Obeya runs. */
+    private started: (c: CanvasRuntime) => void = () => {},
+  ) {
+    this.list = startCanvases(configs, deps);
+  }
+
+  all(): CanvasRuntime[] {
+    return this.list;
+  }
+
+  get(id: string): CanvasRuntime | undefined {
+    return this.list.find((c) => c.id === id);
+  }
+
+  /** Calls `fn` whenever a canvas starts, stops, or changes its name or repositories. */
+  onChange(fn: () => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  /**
+   * The configuration saved: `ids` are its canvases' ids as its check resolved them (null where one
+   * does not resolve; then no canvas leaves, since which one it is stays unknown).
+   */
+  apply(configs: CanvasConfig[], ids: (string | null)[]) {
+    configs.forEach((config, i) => {
+      const id = ids[i];
+      if (!id) return;
+      const running = this.get(id);
+      if (running) return running.apply(config);
+      const [c] = startCanvases([config], this.deps);
+      if (!c) return;
+      this.list.push(c);
+      console.log(`Obeya: the canvas ${c.board.canvas.name} (?c=${c.id}) runs now`);
+      this.started(c);
+    });
+    if (!ids.includes(null))
+      for (const c of [...this.list])
+        if (!ids.includes(c.id))
+          c.retire(() => {
+            this.list = this.list.filter((x) => x !== c);
+            this.emit();
+          });
+    this.emit();
+  }
+
+  /** Stops every canvas, for Obeya to end. */
+  shutdown() {
+    for (const c of this.list) c.shutdown();
+  }
+
+  private emit() {
+    for (const fn of this.listeners) fn();
+  }
 }
 
 // the setting that names the repository whose own adapter named the canvas
@@ -1199,28 +1550,17 @@ export function resolveCanvas(
       throw new ConfigError('notRepo', `${r.path} is not a git repository`, i);
     }
   });
-  // the version of the repository's own adapter on its default branch; undefined where the configuration names one
-  let adapterTrees = config.repos.map((r, i) => (r.adapter ? undefined : repoAdapterTree(infos[i]!.path)));
-  // a repository's own adapter that does not load is fixed in the repository: meanwhile the
-  // repository runs on the built-in adapter that matches it, with the error beside it
-  let broken: (string | undefined)[] = [];
-  let adapters = config.repos.map((r, i) => {
+  const each = config.repos.map((r, i) => {
     try {
-      return pickAdapter(infos[i]!, r.adapter);
+      return repoAdapter(r, infos[i]!, settings(r), shared(infos[i]!.path));
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      if (r.adapter) throw new ConfigError('unknownAdapter', message, i);
-      broken[i] = message;
-      return builtInAdapter(infos[i]!);
+      throw new ConfigError('unknownAdapter', e instanceof Error ? e.message : String(e), i);
     }
   });
-  // clones the configuration names are where the workers work, also where the adapter says worktrees
-  let bases = adapters.map((a, i) => (namesClones(config.repos[i]!) ? inClones(a) : a));
-  const layered = (i: number) => {
-    const [mine, ours] = [settings(config.repos[i]!), shared(infos[i]!.path)];
-    return () => layerSettings<RepoSettings>(ours(), mine());
-  };
-  adapters = bases.map((a, i) => withSettings(a, layered(i), namesClones(config.repos[i]!)));
+  let adapterTrees = each.map((e) => e.adapterTree);
+  let broken = each.map((e) => e.broken);
+  let bases = each.map((e) => e.base);
+  let adapters = each.map((e) => e.adapter);
   let refs = uniqueRefs(infos, adapters);
   // the canvas the repository's own adapter named stays the one while that adapter does not load,
   // with its address, name and cards
@@ -1249,6 +1589,35 @@ export function resolveCanvas(
   };
   const values = () => bases.map((a, i) => repoValues(a, infos[i]!, namesClones(config.repos[i]!), shared(infos[i]!.path)() ?? {}));
   return { config, id, name, infos, adapters, bases, values, adapterTrees, broken, refs, stored, keep };
+}
+
+/** What `resolveCanvas` resolved. */
+type Resolved = ReturnType<typeof resolveCanvas>;
+
+/**
+ * A repository's adapter as a canvas runs it: the one its configuration names, else its own on its
+ * default branch (`adapterTree`: that version's git tree, undefined where the configuration names
+ * one), else the built-in one that matches it; this machine's `settings` and the repository's
+ * `shared` ones in front of its own values (`adapter`), each read when it is asked for; where its
+ * workers work by the adapter and the clones the configuration names alone (`base`). A
+ * repository's own adapter that does not load is fixed in the repository: meanwhile the repository
+ * runs on the built-in adapter, with why beside it (`broken`). Throws where the adapter the
+ * configuration names does not load.
+ */
+export function repoAdapter(r: RepoConfig, info: RepoInfo, settings: () => RepoSettings | undefined, shared: () => SharedSettings | undefined) {
+  const adapterTree = r.adapter ? undefined : repoAdapterTree(info.path);
+  let broken: string | undefined;
+  let adapter: RepoAdapter;
+  try {
+    adapter = pickAdapter(info, r.adapter);
+  } catch (e) {
+    if (r.adapter) throw e;
+    broken = e instanceof Error ? e.message : String(e);
+    adapter = builtInAdapter(info);
+  }
+  // clones the configuration names are where the workers work, also where the adapter says worktrees
+  const base = namesClones(r) ? inClones(adapter) : adapter;
+  return { adapterTree, broken, base, adapter: withSettings(base, () => layerSettings<RepoSettings>(shared(), settings()), namesClones(r)) };
 }
 
 /** Whether a repository's configuration names clones for its workers (to create, existing ones, on other machines). */

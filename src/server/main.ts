@@ -10,9 +10,9 @@
 // ~/.obeya).
 //
 // Without --dev the process supervises the server: it runs it as a child and starts it again
-// when the server exits to pick up new code on Obeya's own checkout (self-update.ts), or a
-// configuration the owner saved (config.ts). Saved while the canvases came from the command line,
-// it starts the server from the file from then on.
+// when the server exits to pick up new code on Obeya's own checkout (self-update.ts). A
+// configuration the owner saves applies while the server runs (config.ts, `Canvases`); saved while
+// the canvases came from the command line, it starts the server again, from the file from then on.
 //
 // Ctrl-C, SIGTERM or `POST /api/stop` (the app, app/, and Windows, which has no SIGTERM) stops
 // Obeya the way a restart goes: workers in the middle of a turn hear of it and pause, and Obeya
@@ -34,7 +34,7 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import type { RestartReason } from '../core/types';
-import { type CanvasConfig, type CanvasRuntime, startCanvases } from './canvas';
+import { type CanvasConfig, Canvases } from './canvas';
 import { Config, CONFIG_FILE, expand, expandConfig, readConfigFile } from './config';
 import { checkPlugin } from './demo';
 import { NewerDatabase, Store } from './db';
@@ -159,15 +159,16 @@ const store = (() => {
 const own = process.env.OBEYA_SUPERVISED ? ownCheckout() : null;
 // the commit this server's code came from: what changed since decides what to install before a restart
 const ranFrom = own && headOf(own);
-let canvases: CanvasRuntime[] = [];
+let canvases: Canvases | undefined;
 let server: ReturnType<typeof serve> | undefined;
 let exitCode = RESTART;
+const live = () => canvases?.all() ?? [];
 /** Starts the server again once no worker is in the middle of a turn, or when the owner says so. */
-const busy = () => canvases.flatMap((c) => c.busy().map((card) => ({ canvas: c.id, card })));
+const busy = () => live().flatMap((c) => c.busy().map((card) => ({ canvas: c.id, card })));
 const restarter = new Restarter({
   busy,
   // a command in its undo window holds a restart off even when the page that said it reloads
-  held: () => (canvases.some((c) => c.commander.holding()) ? ['voice'] : []),
+  held: () => (live().some((c) => c.commander.holding()) ? ['voice'] : []),
   go: (reason) => {
     server?.stop(true);
     if (reason === 'stop') return shutdown(0);
@@ -183,7 +184,7 @@ const restarter = new Restarter({
 // workers in the middle of a turn hear of a restart that waits for them, and pause for it
 restarter.onChange(() => {
   const due = restarter.due();
-  for (const c of canvases) c.restartDue(due && { reason: due.reason, deadline: due.deadline });
+  for (const c of live()) c.restartDue(due && { reason: due.reason, deadline: due.deadline });
 });
 const restart = (reason: RestartReason, why: string) => {
   if (!restarter.due()) console.log(`Obeya: ${why}; restarting${busy().length ? ' once no worker is in the middle of a turn' : ''}`);
@@ -202,46 +203,47 @@ const config = new Config({
   source,
   started,
   store,
-  running: () => canvases.map((c) => c.id),
+  running: () => live().map((c) => c.id),
   server: { port: Number(values.port), home, permissionMode: values['permission-mode'], commit: commitOf() },
   narrationUrl: url,
   forge: ghForge,
   onSettings: () => {
-    for (const c of canvases) c.settingsChanged();
+    for (const c of live()) c.settingsChanged();
   },
+  apply: (configs, ids) => canvases?.apply(configs, ids),
   ...(process.env.OBEYA_SUPERVISED
     ? {
         restart: () => {
           // canvases from the command line come from the saved file from now on
-          if (source === 'args') exitCode = RESTART_FROM_FILE;
+          exitCode = RESTART_FROM_FILE;
           // after the answer is out: a restart with no worker to wait for stops this server at once
           setTimeout(() => restart('config', 'the configuration changed'), 100);
         },
       }
     : {}),
 });
-canvases = startCanvases(configs, {
-  store,
-  home,
-  runtime: sdkRuntime,
-  ...(values['idle-workers'] ? { workerRuntime: idleRuntime } : {}),
-  forge: ghForge,
-  permissionMode: values['permission-mode'] as 'auto',
-  watch: true,
-  ownCheckout: own,
-  config,
-  workerEnv: { OBEYA_URL: url },
-  ...(process.env.OBEYA_PARK_GRACE ? { parkGrace: Number(process.env.OBEYA_PARK_GRACE) * 1000 } : {}),
-  language: () => ownerLanguage(home),
-  agents: (role) => agentSetting(home, role),
-  settings: (path) => config.repoSettings(path),
-  // after the landing is recorded: a restart with no worker to wait for stops this server at once
-  adapterChanged: (path) =>
-    process.env.OBEYA_SUPERVISED
-      ? setTimeout(() => restart('adapter', `the adapter or the settings of ${path} changed on its default branch`), 100)
-      : console.log(`Obeya: the adapter or the settings of ${path} changed on its default branch; start Obeya again to use it`),
-});
-const ids = canvases.map((c) => c.id);
+canvases = new Canvases(
+  configs,
+  {
+    store,
+    home,
+    runtime: sdkRuntime,
+    ...(values['idle-workers'] ? { workerRuntime: idleRuntime } : {}),
+    forge: ghForge,
+    permissionMode: values['permission-mode'] as 'auto',
+    watch: true,
+    ownCheckout: own,
+    config,
+    workerEnv: { OBEYA_URL: url },
+    ...(process.env.OBEYA_PARK_GRACE ? { parkGrace: Number(process.env.OBEYA_PARK_GRACE) * 1000 } : {}),
+    language: () => ownerLanguage(home),
+    agents: (role) => agentSetting(home, role),
+    settings: (path) => config.repoSettings(path),
+  },
+  // the canvas the setup assistant created gets a first card that says what to try
+  (c) => welcome(home, [c]),
+);
+const ids = canvases.all().map((c) => c.id);
 if (new Set(ids).size !== ids.length) {
   console.error(`two canvases share an id: ${ids.join(', ')}; give them different names`);
   process.exit(2);
@@ -251,11 +253,11 @@ const transcriber = new VoiceIn(home, new LocalTranscriber(backends.listen));
 const voiceSetup = new VoiceSetup({ home, backends, local: transcriber.local });
 const shells = new ShellReports();
 const updates = new AppUpdates();
-const machine = new MachineSetup({ home, config, voice: voiceSetup, restarts: !!process.env.OBEYA_SUPERVISED, shells });
+const machine = new MachineSetup({ home, config, voice: voiceSetup, shells });
 // the canvas the assistant created gets a first card that says what to try
-welcome(home, canvases);
+welcome(home, canvases.all());
 const shutdown = (code: number) => {
-  for (const c of canvases) c.shutdown();
+  canvases?.shutdown();
   transcriber.stop();
   narration.stop();
   // the supervisor stays across a restart, and gives the entry up when it ends
@@ -284,8 +286,8 @@ server = serve(canvases, { transcriber, setup: voiceSetup }, Number(values.port)
 claim(home, { pid: process.env.OBEYA_SUPERVISED ? process.ppid : process.pid, port: server.port!, url: `http://127.0.0.1:${server.port}`, version: VERSION, app: !!process.env.OBEYA_APP });
 console.log(`Obeya ${own ? `from ${own}` : VERSION} on ${server.url} (${source === 'file' ? configFile : 'canvases from the command line'}), agents on ${claudeExecutable() ?? 'the Claude Code the Agent SDK brings'}`);
 if (own) watchOwnCode(own, (from, to) => restart('code', `${own} moved from ${from.slice(0, 7)} to ${to.slice(0, 7)}`));
-if (!canvases.length) console.log(`  no canvas yet: the setup assistant on ${server.url} checks this machine and creates the first`);
-for (const c of canvases) {
+if (!canvases.all().length) console.log(`  no canvas yet: the setup assistant on ${server.url} checks this machine and creates the first`);
+for (const c of canvases.all()) {
   console.log(`  ${c.board.canvas.name} (?c=${c.id})`);
   for (const r of c.repos)
     console.log(

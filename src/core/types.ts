@@ -899,7 +899,7 @@ export interface RepoConfig {
 /**
  * The values of a repository's adapter (`RepoAdapter`) and its main branch, as the owner sets them
  * in the configuration dialog for this machine (design: Settings as data). Read where they are used:
- * saving them restarts nothing, but for `workspaces`, which takes effect when Obeya starts again.
+ * saving them restarts nothing, but for `workspaces`, which restarts the repository's agents.
  */
 export interface RepoSettings {
   /** Its main branch, where cards start from and work lands; detected where left out (`defaultBranch`). */
@@ -960,16 +960,19 @@ export interface RepoValues {
   demo: { required: SettingValue<boolean>; howToRun: SettingValue<string> };
 }
 
-/** The configuration without what takes effect at once: whether saving `after` over `before` needs Obeya to start again. */
-export function needsRestart(before: CanvasConfig[], after: CanvasConfig[]): boolean {
-  const structure = (canvases: CanvasConfig[]) =>
-    JSON.stringify(
-      canvases.map((c) => ({
-        ...c,
-        repos: c.repos.map(({ settings, ...r }) => ({ ...r, workIn: settings?.workspaces })),
-      })),
-    );
-  return structure(before) !== structure(after);
+/**
+ * A repository's entry in the configuration without what applies as it is read (its settings but
+ * where its workers work): where it differs, the repository's agents restart with it.
+ */
+export function repoShape({ settings, ...r }: RepoConfig): string {
+  return JSON.stringify({ ...r, workIn: settings?.workspaces });
+}
+
+/** Whether saving `after` over `before` restarts or stops some repository's agents: one that left, or whose shape changed (`repoShape`). */
+export function restartsAgents(before: CanvasConfig[], after: CanvasConfig[]): boolean {
+  const shapes = (canvases: CanvasConfig[]) => new Map(canvases.flatMap((c) => c.repos.map((r) => [r.path, repoShape(r)] as const)));
+  const now = shapes(after);
+  return [...shapes(before)].some(([path, shape]) => now.get(path) !== shape);
 }
 
 /** The clones a repository gets whose adapter works in clones, the first canvas's or one added later: two cards run at once. */
@@ -1121,7 +1124,7 @@ export type SettingsShared =
 /** What saving the configuration did: Obeya starts again with it, or (repositories' settings alone) it applies at once. */
 export interface ConfigSaved {
   restarting: boolean;
-  /** Only repositories' settings changed: the running canvases use them from now on. */
+  /** Obeya runs with it now: canvases and repositories new in it started, settings apply as they are read, and agents whose repository's set-up changed restart once they paused. */
   applied?: boolean;
 }
 
@@ -1320,10 +1323,12 @@ export interface MachineJob {
   /** The last line of its output. */
   line: string;
   error?: string;
-  /** A clone that became the first canvas: its id, opened once Obeya runs again. */
+  /** A clone that became the first canvas: its id, opened once Obeya runs it. */
   canvas?: string;
   /** Its main branch. */
   branch?: string;
+  /** Obeya runs it now, or starts again with it by itself; else the owner starts Obeya again. */
+  opens?: boolean;
 }
 
 export interface MachineView {
@@ -1337,16 +1342,14 @@ export interface MachineView {
   picker: boolean;
   /** Where a clone goes by default: the owner's home directory. */
   cloneInto: string;
-  /** Saving the first canvas starts Obeya again by itself; else the owner starts it. */
-  restarts: boolean;
 }
 
-/** What choosing the first canvas did: it is saved, and Obeya starts again with it where something restarts it. */
+/** What choosing the first canvas did: it is saved, and Obeya runs it (`opens`), or the owner starts Obeya again. */
 export interface FirstCanvas {
   canvas: string;
   /** The repository's main branch, as Obeya found it. */
   branch: string;
-  restarting: boolean;
+  opens: boolean;
 }
 
 /** A folder for the first canvas, looked at before it is saved: whether it holds a repository, and on which main branch. */
@@ -1410,6 +1413,10 @@ export interface PendingRestart {
   elsewhere: number;
   /** What the owner does in some open page that it waits for, past the deadline too. */
   owner: OwnerHold[];
+  /** Only the agents of these repositories (by name) restart, for a change to their configuration; Obeya and the others work on. */
+  repos?: string[];
+  /** The canvas left the configuration: it stops once its agents paused. */
+  leaving?: boolean;
 }
 
 /** UI → server over the WebSocket. */
@@ -1443,6 +1450,8 @@ export type ServerMessage =
   | { type: 'update'; update: AppUpdate | null }
   /** On connect and whenever it changes: how many cards on each canvas need the owner, by canvas id. */
   | { type: 'waiting'; waiting: Record<string, number> }
+  /** Whenever a canvas starts, stops, or changes its name or repositories while Obeya runs. */
+  | { type: 'canvases'; canvases: CanvasInfo[] }
   /** A line for the owner above the microphone, wherever they are. */
   | ({ type: 'notice' } & Notice);
 
