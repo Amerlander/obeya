@@ -211,6 +211,9 @@ const de = {
     question: 'Frage',
     handover: 'Übergabe',
     settled: 'Durch deinen Hinweis erledigt.',
+    // under the owner's words the agent has not read yet: when it will (`step`: a worker, at its next tool step)
+    unread: (step: boolean) => `Noch nicht gelesen · ${step ? 'beim nächsten Schritt' : 'nach der laufenden Antwort'}`,
+    withdraw: 'Zurücknehmen: Der Agent bekommt es nicht; ist dein Feld leer, steht der Text wieder darin',
     demoQuestion: 'Frage im Demo-Bericht:',
     // who the task an agent started on comes from, at the top of its conversation
     opening: { owner: 'Du', plan: 'Plan-Doc', koordinator: 'Obeya', idea: 'Idee', proposal: 'Vorschlag' },
@@ -446,7 +449,7 @@ const de = {
     held: (n: number) => `${n === 1 ? '1 Kommentar geht' : `${n} Kommentare gehen`} an den Agenten, sobald du fertig geschaut hast`,
     sendNow: 'Jetzt senden',
     sendNowHint: 'Schickt sie gleich an den Agenten, ohne das Video zu Ende zu schauen',
-    unsay: 'Löschen: Der Kommentar geht nicht an den Agenten',
+    unsay: 'Zurücknehmen: Der Kommentar geht nicht an den Agenten; ist dein Feld leer, steht er wieder darin',
   },
   share: {
     share: 'Teilen',
@@ -1404,6 +1407,8 @@ const en: Strings = {
     question: 'Question',
     handover: 'Handover',
     settled: 'Settled by your note.',
+    unread: (step: boolean) => `Not read yet · ${step ? 'at its next step' : 'after its current reply'}`,
+    withdraw: 'Take back: the agent does not get it; if your field is empty, the text goes back into it',
     demoQuestion: 'Question in the demo report:',
     opening: { owner: 'You', plan: 'Plan doc', koordinator: 'Obeya', idea: 'Idea', proposal: 'Proposal' },
     more: 'more',
@@ -1620,7 +1625,7 @@ const en: Strings = {
     held: (n: number) => `${n === 1 ? '1 comment goes' : `${n} comments go`} to the agent once you have finished watching`,
     sendNow: 'Send now',
     sendNowHint: 'Sends them to the agent right away, without watching the video to its end',
-    unsay: 'Delete: the comment does not go to the agent',
+    unsay: 'Take back: the comment does not go to the agent; if your field is empty, it goes back into it',
   },
   share: {
     share: 'Share',

@@ -11,7 +11,7 @@ import { landedRef } from './parts';
 import { useQueueMove } from './queue';
 import { Inline, plain } from './markdown';
 import { Body, Msg, Quote, Reading, useAnswer, useReportedHeight } from './message';
-import { cardDraft, questionsKey, updateDraft, useDraft } from './draft';
+import { cardDraft, giveBack, questionsKey, updateDraft, useDraft } from './draft';
 import { replyOn, setReply, useReply } from './reply';
 import { Composer } from './composer';
 import { useFitHeight } from './fitHeight';
@@ -729,19 +729,15 @@ function ProposalView({
             questions={questions}
             heading={t.proposalQuestions}
             picks={answer}
-            // while it is reworked, the owner's words stand in the conversation and wait there
-            field={
-              revising
-                ? undefined
-                : {
-                    placeholder: t.compose.revise,
-                    listener,
-                    noImages: true,
-                    quote: true,
-                    onWords: (words, _, replyTo) => onRevise(words, undefined, replyTo),
-                    onPicked: (text, _, replyTo) => act({ action: 'revise', text, ...(replyTo ? { replyTo } : {}) }, { close: false }),
-                  }
-            }
+            // while it is reworked, the owner's words wait for the rework after it, unread until then
+            field={{
+              placeholder: t.compose.revise,
+              listener,
+              noImages: true,
+              quote: true,
+              onWords: (words, _, replyTo) => onRevise(words, undefined, replyTo),
+              onPicked: (text, _, replyTo) => act({ action: 'revise', text, ...(replyTo ? { replyTo } : {}) }, { close: false }),
+            }}
           />
         }
       />
@@ -942,7 +938,7 @@ function Conversation({
         demoQuestion={turn === handover ? item.demo : undefined}
         quoted={turn.e.replyTo ? byId.get(turn.e.replyTo) : undefined}
         onReply={onReply}
-        onDelete={held.includes(turn.e.id) ? () => void api.act(item.id, { action: 'unsay', id: turn.e.id }).catch(() => {}) : undefined}
+        onDelete={held.includes(turn.e.id) ? () => takeBack(item.id, turn.e) : undefined}
       />
       {turn.e.id === held.at(-1) && (
         <div className="held-note">
@@ -980,12 +976,27 @@ function Conversation({
             </div>
           )
         )}
+        {/* what the agent has not read yet stands below its work, until it reads it */}
+        {turns.unread.map((e) => (
+          <Message key={e.id} turn={{ e, steps: [] }} unread={t.talk.unread(!idea && !question && !proposal)} onDelete={() => takeBack(item.id, e)} />
+        ))}
         {!working && !past && koordinatorReads(events) && <Reading />}
         {!working && questions}
       </div>
     </>
   );
 }
+
+/**
+ * Takes back words of the owner's the agent has not read (a note waiting for its next step, a
+ * comment held back while the owner watches the demo): they leave the conversation, and go back
+ * into the card's field when it is empty.
+ */
+const takeBack = (cardId: string, e: CardEvent) =>
+  void api
+    .act(cardId, { action: 'unsay', id: e.id })
+    .then(() => giveBack(cardDraft(cardId), e.text, e.images))
+    .catch(() => {});
 
 /** Who wrote the task an agent started on: the owner, a plan doc, the Arbeitsrückschau, an agent's proposal, or a prototype's idea. */
 const opening = (item: Item): 'owner' | 'plan' | 'koordinator' | 'proposal' | 'idea' =>
@@ -1068,22 +1079,37 @@ const ownerSide = (e: CardEvent) => e.author === 'owner' || e.kind === 'answer';
 /**
  * One message of the conversation; a question with its options and what came of it, a handover with
  * its demo report's question; the owner's reply with the message it replies to (`quoted`) above it.
- * `onReply`: the owner can reply to it; `onDelete`: the owner can delete it (a comment not yet sent).
+ * `onReply`: the owner can reply to it; `onDelete`: the owner can take it back (a comment not yet
+ * sent, words not yet read); `unread`: the agent has not read it yet, and when it will.
  */
-function Message({ turn, demoQuestion, quoted, onReply, onDelete }: { turn: Turn; demoQuestion?: Demo; quoted?: CardEvent; onReply?: (e: CardEvent) => void; onDelete?: () => void }) {
+function Message({
+  turn,
+  demoQuestion,
+  quoted,
+  onReply,
+  onDelete,
+  unread,
+}: {
+  turn: Turn;
+  demoQuestion?: Demo;
+  quoted?: CardEvent;
+  onReply?: (e: CardEvent) => void;
+  onDelete?: () => void;
+  unread?: string;
+}) {
   const { e, steps } = turn;
   const q = e.kind === 'question' ? parseQuestion(e.text) : undefined;
   const answer = useAnswer(e);
   return (
     <Msg
       by={ownerSide(e) ? 'owner' : e.author}
-      className={[q && 'q', turn.settled && 'settled', onDelete && 'held'].filter(Boolean).join(' ')}
+      className={[q && 'q', turn.settled && 'settled', unread ? 'unread' : onDelete && 'held'].filter(Boolean).join(' ')}
       who={`${t.author[e.author]}${e.kind === 'question' ? ` · ${t.talk.question}` : e.kind === 'review' ? ` · ${t.talk.handover}` : ''}`}
       at={e.at}
       ev={e.id}
       onReply={onReply && !turn.quiet ? () => onReply(e) : undefined}
       onDelete={onDelete}
-      deleteLabel={t.demo.unsay}
+      deleteLabel={unread ? t.talk.withdraw : t.demo.unsay}
       head={answer.head}
     >
       {quoted && <Quote e={quoted} />}
@@ -1109,6 +1135,7 @@ function Message({ turn, demoQuestion, quoted, onReply, onDelete }: { turn: Turn
       {answer.files}
       <Shots ids={e.images} />
       <Steps steps={steps} />
+      {unread && <div className="hint unread-mark">{unread}</div>}
     </Msg>
   );
 }
@@ -2042,8 +2069,10 @@ function useEvents(cardId: string): CardEvent[] | null {
     const gone = new Set<number>();
     const off = onCardEvent((e) => {
       if (e.cardId !== cardId) return;
+      // a line comes again once it changed (the agent read the owner's words)
+      const known = (list: CardEvent[]) => [...list.filter((x) => x.id !== e.id), e].sort((a, b) => a.id - b.id);
       if (!loaded) early.push(e);
-      else setEvents((cur) => (cur && !cur.some((x) => x.id === e.id) ? [...cur, e] : cur));
+      else setEvents((cur) => cur && (cur.some((x) => x.id === e.id) ? known(cur) : [...cur, e]));
     });
     const offGone = onCardEventGone((c, id) => {
       if (c !== cardId) return;
@@ -2053,8 +2082,10 @@ function useEvents(cardId: string): CardEvent[] | null {
     api.events(cardId).then((list) => {
       if (!alive) return;
       loaded = true;
+      // what came meanwhile is newer than what the history says of the same line
+      const fresh = new Map(early.map((e) => [e.id, e]));
       const seen = new Set(list.map((e) => e.id));
-      setEvents([...list, ...early.filter((e) => !seen.has(e.id))].filter((e) => !gone.has(e.id)));
+      setEvents([...list.map((e) => fresh.get(e.id) ?? e), ...early.filter((e) => !seen.has(e.id))].filter((e) => !gone.has(e.id)));
     });
     return () => {
       alive = false;

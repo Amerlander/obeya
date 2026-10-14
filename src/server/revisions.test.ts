@@ -100,16 +100,43 @@ describe('a proposal reworked by what the owner says', () => {
     const p = proposal();
     expect(agentListens(board().item(p.id)!)).toBe(true);
     canvas.tell(p.id, 'Was würdest du nehmen?', [], false);
-    expect(board().item(p.id)!.proposal?.revising).toEqual({ words: 'Was würdest du nehmen?' });
+    expect(board().item(p.id)!.proposal?.revising).toMatchObject({ words: 'Was würdest du nehmen?' });
     expect(reviser()!.inbox[0]).toContain('Was würdest du nehmen?');
     expect(reviser()!.spec.tools.map((t) => t.name)).toContain('to_obeya');
     expect(runtime.sessions.some(isKoordinator)).toBe(false);
-    // the question stays above the owner's words; while it is reworked, the Koordinator hears what they say
+    // the question stays above the owner's words
     expect(board().events(p.id).map((e) => [e.kind, e.author])).toEqual([
       ['question', 'worker'],
       ['say', 'owner'],
     ]);
-    expect(agentListens(board().item(p.id)!)).toBe(false);
+  });
+
+  test('words said while it is reworked wait, unread, for the rework after it, and can be taken back until then', async () => {
+    const p = proposal();
+    canvas.tell(p.id, 'Nimm UTF-8.', [], false);
+    const first = reviser()!;
+    // the reviser still listens: the words wait for it
+    expect(agentListens(board().item(p.id)!)).toBe(true);
+    canvas.tell(p.id, 'Und Excel auch.', [], false);
+    canvas.tell(p.id, 'Doch nicht.', [], false);
+    const [excel, not] = board().events(p.id).slice(-2);
+    expect([excel!.unread, not!.unread]).toEqual([true, true]);
+    expect(reviser()).toBe(first);
+    canvas.press(p.id, { action: 'unsay', id: not!.id });
+    expect(board().events(p.id).map((e) => e.text)).not.toContain('Doch nicht.');
+    // the first rework is done: the next takes in what waited
+    first.call('revise_proposal', { title: p.title, task: `${p.body} Kodierung: UTF-8.`, questions: [], reply: 'UTF-8 steht im Text.' });
+    first.emit({ type: 'idle' });
+    await settle();
+    const next = reviser()!;
+    expect(next).not.toBe(first);
+    expect(next.inbox[0]).toContain('Und Excel auch.');
+    expect(next.inbox[0]).not.toContain('Nimm UTF-8.');
+    const read = board().events(p.id).find((e) => e.id === excel!.id)!;
+    expect(read.unread).toBeUndefined();
+    // it stands after the reply it waited for
+    expect(read.readAfter).toBeGreaterThan(excel!.id);
+    expect(() => canvas.press(p.id, { action: 'unsay', id: excel!.id })).toThrow();
   });
 
   test('accepting, passed on by the reviser, waits for the rework and then starts the proposal', async () => {
@@ -177,7 +204,7 @@ describe('a proposal reworked by what the owner says', () => {
   test('options picked in the panel go to the reviser at once and stand in the conversation', async () => {
     const p = proposal();
     canvas.press(p.id, { action: 'revise', text: '**Welche Kodierung?** UTF-8' });
-    expect(board().item(p.id)!.proposal?.revising).toEqual({ words: '**Welche Kodierung?** UTF-8' });
+    expect(board().item(p.id)!.proposal?.revising).toMatchObject({ words: '**Welche Kodierung?** UTF-8' });
     expect(reviser()!.inbox[0]).toContain('**Welche Kodierung?** UTF-8');
     expect(board().events(p.id).at(-1)).toMatchObject({ kind: 'say', author: 'owner', text: '**Welche Kodierung?** UTF-8' });
   });

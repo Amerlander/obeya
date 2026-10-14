@@ -104,6 +104,17 @@ interface LandedState {
   followUp?: boolean;
 }
 
+/**
+ * The owner's words Obeya holds for the worker while it is in a turn (`CardRow.unheard`), each with
+ * the lines of the log it carries: it takes them in with its next tool step's result, or, should
+ * the turn end before one, as the message that starts the next.
+ */
+interface Unheard {
+  said: number[];
+  text: string;
+  images: string[];
+}
+
 /** What is stored while the owner has paused the card's worker (`CardRow.paused`). */
 interface PausedState {
   /** What Obeya had for the worker meanwhile (its pull request's review, the landing), and a message it had not taken in yet: it hears them once it goes on. */
@@ -343,7 +354,8 @@ export class Workers {
     if (place && handover) return this.hold(card, text, images, spoken, replyTo, place);
     const words = this.words(cardId, text, images, replyTo, place);
     const shots = images.map((f) => basename(f));
-    const log = () => this.o.board.log(cardId, 'hint', 'owner', text, undefined, shots, undefined, replyTo, place);
+    // words that reach the worker in the middle of a turn wait for its next step, unread until then
+    const log = (later = false) => [this.o.board.log(cardId, 'hint', 'owner', text, undefined, shots, undefined, replyTo, place, later && this.takesLater(cardId)).id];
     // the worker sees the frame the words are about
     images = [...this.stills(place), ...images];
     if (handover) {
@@ -351,15 +363,16 @@ export class Workers {
       if (card.question) return this.answerDemo(card, text, images, spoken, replyTo);
       // the work still waits for approval while the worker takes the words in; a change they call for comes as a new handover
       this.takingIn(cardId);
-      log();
-      if (text) this.o.onOwnerInput?.(card, 'feedback', text);
-      // words without a place end the watching: the comments held back come first
+      // words without a place end the watching: the comments held back come first, and go with them
       const held = this.takeHeld(cardId);
+      const said = log(!held);
+      if (text) this.o.onOwnerInput?.(card, 'feedback', text);
       this.deliver(
         cardId,
         `The owner wrote on your handover${spoken ? ` (${SPOKEN})` : ''}. The card still waits for their approval of what you handed over; a change their words call for goes into a new handover:\n\n${held ? `${held.text}\n\nThen they wrote:\n\n` : ''}${words}`,
         [...(held?.images ?? []), ...images],
         true,
+        held ? [] : said,
       );
     } else if (card.state === 'waiting' && card.need === 'question') {
       // a note instead of an answer takes the question back: it may have settled it, else the worker asks anew
@@ -375,20 +388,21 @@ export class Workers {
         return;
       }
       this.o.board.work(cardId, { state: row.landed ? landedState(row.landed) : row.pr ? 'inPr' : 'working', need: null, detail: null });
-      log();
+      const said = log(true);
       if (text) this.o.onOwnerInput?.(card, 'note', text);
       this.deliver(
         cardId,
         `A note from the owner instead of an answer${spoken ? ` (${SPOKEN})` : ''}. It withdraws your question („${card.question?.text ?? ''}“): if the note settles it, go on; if not, ask again.\n\n${words}`,
         images,
         true,
+        said,
       );
     } else if (card.state === 'working' || card.state === 'inPr' || card.finishing) {
-      log();
+      const said = log(true);
       if (text) this.o.onOwnerInput?.(card, 'note', text);
       // a note to a paused worker lets it go on, with the note
       const how = card.paused ? 'with which they let you go on' : 'it does not stop you; adjust your plan if it changes anything';
-      this.deliver(cardId, `A note from the owner${spoken ? ` (${SPOKEN})` : ''} (${how}):\n\n${words}`, images, true);
+      this.deliver(cardId, `A note from the owner${spoken ? ` (${SPOKEN})` : ''} (${how}):\n\n${words}`, images, true, said);
     } else if (askable(card)) this.followUp(card, text, images, spoken, replyTo, place);
     else throw new BadRequest('noAgent', 'no agent works on this card');
   }
@@ -569,9 +583,21 @@ export class Workers {
     else this.releaseLater(cardId, this.o.releaseDelay ?? RELEASE_DELAY);
   }
 
-  /** Deletes a comment on a place in the demo video that is still held back: it leaves the conversation, and the worker never hears it. */
+  /**
+   * The owner takes back words the worker has not taken in: a comment on a place in the demo video
+   * that is still held back, or words Obeya holds until its next step. They leave the conversation,
+   * and the worker never hears them.
+   */
   unsay(cardId: string, id: number) {
     this.card(cardId);
+    const unheard = this.unheard(cardId);
+    const words = unheard.find((u) => u.said.includes(id));
+    if (words && this.o.board.unread(cardId, id)) {
+      const rest = unheard.filter((u) => u !== words);
+      this.o.board.work(cardId, { unheard: rest.length ? JSON.stringify(rest) : null });
+      for (const said of words.said) this.o.board.withdraw(cardId, said);
+      return;
+    }
     const held = this.held(cardId);
     if (!held.some((h) => h.id === id)) throw new BadRequest('notHeld', 'the comment is not held back: the worker has it already');
     const rest = held.filter((h) => h.id !== id);
@@ -1038,7 +1064,11 @@ export class Workers {
    */
   restartDue(due: DueRestart | null) {
     this.restart = due;
-    if (!due) return;
+    if (!due) {
+      // a worker that paused for it goes on with the owner's words that waited meanwhile
+      for (const cardId of this.live.keys()) if (!this.takesLater(cardId) && this.unheard(cardId).length) this.deliver(cardId, '');
+      return;
+    }
     for (const [cardId, live] of this.live) {
       if (!live.busy || live.toldRestart) continue;
       this.tellRestart(cardId, live);
@@ -1066,6 +1096,7 @@ export class Workers {
     if (project) live.project = { id: project, decision: this.o.board.decisions(project).at(-1)?.id ?? 0 };
     this.live.set(cardId, live);
     this.o.board.changed();
+    ({ text: message, images } = this.withUnheard(cardId, message, images));
     message = this.withRestart(cardId, live, message);
     live.pending = { text: message, images };
     live.session = this.o.runtime.start(
@@ -1076,7 +1107,8 @@ export class Workers {
         tools: this.tools(cardId, live, !!row.prototype_of),
         plugins: [OBEYA_PLUGIN],
         ...(this.o.env ? { env: this.o.env } : {}),
-        contextUpdate: () => [this.restartStillDue(cardId, live), this.preferencesUpdate(live), this.decisionsUpdate(cardId, live)].filter(Boolean).join('\n\n') || undefined,
+        contextUpdate: () =>
+          [this.restartStillDue(cardId, live), this.unheardNow(cardId, live), this.preferencesUpdate(live), this.decisionsUpdate(cardId, live)].filter(Boolean).join('\n\n') || undefined,
         askOwner: (request, signal) => this.askOwner(cardId, live, request, signal),
         ...(resume ? { resume } : {}),
         ...(this.o.permissionMode ? { permissionMode: this.o.permissionMode } : {}),
@@ -1095,9 +1127,11 @@ export class Workers {
 
   /**
    * Passes a message to the worker, resuming its session if it has none. While the owner has paused
-   * it, Obeya's messages wait (`owner` false); the owner's let it go on, after what waited.
+   * it, Obeya's messages wait (`owner` false); the owner's let it go on, after what waited. The
+   * owner's words of the log's lines `said` wait for the worker's next step while it is in a turn
+   * (`takesLater`), unread until then; other words go into the session's input at once.
    */
-  private deliver(cardId: string, text: string, images: string[] = [], owner = false) {
+  private deliver(cardId: string, text: string, images: string[] = [], owner = false, said: number[] = []) {
     const paused = this.pausedOf(cardId);
     if (paused && !owner) {
       this.o.board.work(cardId, { paused: JSON.stringify({ held: [...(paused.held ?? []), { text, images }] } satisfies PausedState) });
@@ -1116,10 +1150,15 @@ export class Workers {
       // the worker might start the stack again while the stop still runs, and lose it
       const generation = this.generation.get(cardId);
       void stopping.then(() => {
-        if (this.generation.get(cardId) === generation) this.deliver(cardId, text, images);
+        if (this.generation.get(cardId) === generation) this.deliver(cardId, text, images, false, said);
       });
       return;
     }
+    if (said.length && this.takesLater(cardId)) {
+      this.o.board.work(cardId, { unheard: JSON.stringify([...this.unheard(cardId), { said, text, images }] satisfies Unheard[]) });
+      return;
+    }
+    this.o.board.readNow(cardId, said);
     const parked = this.o.board.row(cardId).parked;
     if (parked) {
       this.o.board.work(cardId, { parked: null });
@@ -1131,6 +1170,7 @@ export class Workers {
       clearTimeout(live.waiting);
       live.waiting = undefined;
       this.setBusy(live, true);
+      ({ text, images } = this.withUnheard(cardId, text, images));
       const message = this.withRestart(cardId, live, text);
       live.pending = { text: message, images };
       live.session.send(message, images);
@@ -1141,6 +1181,58 @@ export class Workers {
     // no session to resume (it never reported one): a new one needs the card first
     const card = this.card(cardId);
     this.launch(cardId, `${this.briefing(card, row.branch ?? '', true)}\n\n${text}`, undefined, [...this.taskImages(card), ...images]);
+  }
+
+  /** Whether the worker is in the middle of a turn, so that the owner's words wait for its next step. */
+  private takesLater(cardId: string): boolean {
+    const live = this.live.get(cardId);
+    return !!live && live.busy && !live.waiting && !this.stopping.has(cardId) && !this.pausedOf(cardId);
+  }
+
+  private unheard(cardId: string): Unheard[] {
+    const stored = this.o.board.row(cardId).unheard;
+    return stored ? (JSON.parse(stored) as Unheard[]) : [];
+  }
+
+  /** The owner's words Obeya held for the worker, taken out: they are read from now on. */
+  private takeUnheard(cardId: string): Unheard[] {
+    const unheard = this.unheard(cardId);
+    if (!unheard.length) return [];
+    this.o.board.work(cardId, { unheard: null });
+    this.o.board.readNow(cardId, unheard.flatMap((u) => u.said));
+    return unheard;
+  }
+
+  /** A message that starts a turn, with the owner's words that waited for the worker's next step after it. */
+  private withUnheard(cardId: string, text: string, images: string[]): { text: string; images: string[] } {
+    const unheard = this.takeUnheard(cardId);
+    if (!unheard.length) return { text, images };
+    return { text: [text, ...unheard.map((u) => u.text)].filter(Boolean).join('\n\n---\n\n'), images: [...images, ...unheard.flatMap((u) => u.images)] };
+  }
+
+  /**
+   * The owner's words that waited for the worker's next step, passed with that step's result. A
+   * tool result carries no images: the worker opens the screenshots' files itself.
+   */
+  private unheardNow(cardId: string, live: Live): string | undefined {
+    if (this.live.get(cardId) !== live) return;
+    const unheard = this.takeUnheard(cardId);
+    if (!unheard.length) return;
+    const images = unheard.flatMap((u) => u.images);
+    return [...unheard.map((u) => u.text), ...(images.length ? [`The screenshots cannot come with a tool result: read their files to see them (${images.join(', ')}).`] : [])].join('\n\n---\n\n');
+  }
+
+  /**
+   * The worker's turn ended before a step took in the owner's words that waited for it: they start
+   * its next turn. Not while it stops for a restart or a usage limit, which it goes on from with them.
+   */
+  private unheardStarts(cardId: string, live: Live): boolean {
+    if (this.restart || live.limited || !this.unheard(cardId).length) return false;
+    const { text, images } = this.withUnheard(cardId, '', []);
+    this.setBusy(live, true);
+    live.pending = { text, images };
+    live.session.send(text, images);
+    return true;
   }
 
   /** Preferences the owner gave or changed since the worker last heard them, passed with its next tool result. */
@@ -1279,7 +1371,7 @@ export class Workers {
         break;
       case 'idle':
         live.background = e.background ?? 0;
-        this.turnEnded(cardId, live, live.background, false, e.more);
+        this.turnEnded(cardId, live, live.background, false, this.unheardStarts(cardId, live) || e.more);
         this.parkLater(cardId);
         break;
     }

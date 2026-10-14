@@ -813,9 +813,8 @@ export class CanvasRuntime {
     if (card.state === 'idea') return this.act(cardId, { action: 'discuss', ...said });
     if (card.state === 'proposal') {
       // a proposal's field takes no screenshots: the words alone
-      this.board.log(cardId, 'say', 'owner', text.trim(), undefined, undefined, undefined, this.board.quoted(cardId, replyTo)?.id);
       this.koordinator.learn(card, 'note', text.trim());
-      return this.act(cardId, { action: 'revise', text, spoken, ...(replyTo ? { replyTo } : {}) });
+      return this.act(cardId, { action: 'revise', text, spoken, ...(replyTo ? { replyTo } : {}) }, true);
     }
     if (card.state === 'waiting' && card.need === 'question') return this.act(cardId, { action: 'answer', ...said });
     return this.act(cardId, { action: 'message', ...said, ...(spot ? { spot } : {}) });
@@ -837,9 +836,8 @@ export class CanvasRuntime {
 
   /** The owner clicks in the card's panel: a click without words the learner reads counts towards the Rückschau. */
   press(cardId: string, a: CardAction) {
-    const r = this.act(cardId, a);
     // the options picked on a proposal go to its reviser without the Koordinator, which would have logged them
-    if (a.action === 'revise') this.board.log(cardId, 'say', 'owner', a.text.trim(), undefined, undefined, undefined, this.board.quoted(cardId, a.replyTo)?.id);
+    const r = this.act(cardId, a, true);
     // the end of watching a demo is no click of the owner's
     if (a.action !== 'release' && a.action !== 'unsay' && !(['message', 'answer', 'discuss'].includes(a.action) && 'text' in a && a.text?.trim())) this.koordinator.noticed();
     return r;
@@ -853,8 +851,11 @@ export class CanvasRuntime {
     return { at, ...(typeof still === 'string' && this.images.path(still) ? { still } : {}) };
   }
 
-  /** An owner action from the card's panel, or from a spoken command. */
-  act(cardId: string, a: CardAction) {
+  /**
+   * An owner action from the card's panel, or from a spoken command. `log`: words to a proposal's
+   * reviser go into its conversation (a spoken command's stand there already).
+   */
+  act(cardId: string, a: CardAction, log = false) {
     this.written(cardId);
     const text = 'text' in a ? (a.text ?? '') : '';
     const images = this.images.resolve('images' in a ? a.images : undefined);
@@ -884,8 +885,14 @@ export class CanvasRuntime {
         return this.repoOf(cardId).workers.message(cardId, text.trim(), images, !!a.spoken, replyTo, this.spot(a.spot));
       case 'release':
         return this.repoOf(cardId).workers.released(cardId, !!a.now);
-      case 'unsay':
+      case 'unsay': {
+        // words the card's agent has not read yet, whichever agent it is
+        const card = this.board.item(cardId);
+        if (card?.kind === 'question') return this.answers.unsay(cardId, a.id);
+        if (card?.state === 'idea') return this.explorers.unsay(cardId, a.id);
+        if (card?.state === 'proposal') return this.revisions.unsay(cardId, a.id);
         return this.repoOf(cardId).workers.unsay(cardId, a.id);
+      }
       case 'answer':
         return this.repoOf(cardId).workers.answer(cardId, text.trim(), images, !!a.spoken, replyTo);
       case 'approve':
@@ -897,8 +904,12 @@ export class CanvasRuntime {
       case 'dismiss':
         if (this.board.row(cardId).state !== 'proposal') throw new BadRequest('notProposal', 'not a proposal');
         return this.board.remove(cardId);
-      case 'revise':
-        return this.revisions.revise(cardId, `${replyNote(this.board.quoted(cardId, replyTo), 'koordinator')}${text.trim()}`, !!a.spoken);
+      case 'revise': {
+        // said while it is reworked, they wait for the next rework, unread until then
+        const later = !!this.board.item(cardId)?.proposal?.revising;
+        const said = log ? this.board.log(cardId, 'say', 'owner', text.trim(), undefined, undefined, undefined, replyTo, undefined, later).id : undefined;
+        return this.revisions.revise(cardId, `${replyNote(this.board.quoted(cardId, replyTo), 'koordinator')}${text.trim()}`, !!a.spoken, said);
+      }
       case 'discuss':
         return this.explorers.discuss(cardId, text.trim(), !!a.spoken, images, replyTo);
       case 'build':
@@ -1034,7 +1045,8 @@ export class CanvasRuntime {
   /** The revision is over (`revised`, or the agent ended without a text): a proposal accepted meanwhile is accepted now, unless it asks questions. */
   private revised(cardId: string, revised: boolean) {
     const card = this.board.item(cardId);
-    if (card?.state !== 'proposal' || !card.proposal?.acceptAfterRevision) return;
+    // words the owner said meanwhile are reworked in first
+    if (card?.state !== 'proposal' || !card.proposal?.acceptAfterRevision || card.proposal.revising) return;
     this.board.acceptAfterRevision(cardId, false);
     const asks = card.proposal.questions.length;
     if (revised && !asks) return this.accept(cardId, [], true);

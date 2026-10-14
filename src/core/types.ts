@@ -88,12 +88,12 @@ export const answering = (i: Pick<Item, 'state' | 'need' | 'answering'>) => i.st
 /**
  * Whether an agent hears what the owner says or types on the card when it is open: its worker (at
  * work, waiting, in a pull request, finishing after the landing, or one a question resumes on a
- * finished card), an idea's exploration agent, or the agent that reworks a proposal (not while it
- * does: the words then wait for nobody). The words then go straight to it; on any other card they
- * go to the Koordinator.
+ * finished card), an idea's exploration agent, or the agent that reworks a proposal (while it
+ * does, the words wait for the rework after it). The words then go straight to it; on any other
+ * card they go to the Koordinator.
  */
-export const agentListens = (i: Pick<Item, 'kind' | 'state' | 'branch' | 'prototypeOf' | 'archivedAt' | 'finishing' | 'proposal'>) =>
-  !i.archivedAt && (i.kind === 'question' || i.state === 'idea' || (i.state === 'proposal' && !i.proposal?.revising) || i.state === 'working' || i.state === 'waiting' || i.state === 'inPr' || !!i.finishing || askable(i));
+export const agentListens = (i: Pick<Item, 'kind' | 'state' | 'branch' | 'prototypeOf' | 'archivedAt' | 'finishing'>) =>
+  !i.archivedAt && (i.kind === 'question' || i.state === 'idea' || i.state === 'proposal' || i.state === 'working' || i.state === 'waiting' || i.state === 'inPr' || !!i.finishing || askable(i));
 
 /**
  * A card needs the owner: it waits (but not while its worker takes in what the owner wrote on its
@@ -247,10 +247,21 @@ export interface Proposal {
   /** Why the worker proposes it, for the owner only; the card's text does not say it. */
   reason?: string;
   questions: Question[];
-  /** What the owner said it should become (`spoken`: through speech recognition), while an agent reworks the text, the reason and the questions by it. */
-  revising?: { words: string; spoken?: boolean };
+  /**
+   * What the owner said it should become (`spoken`: through speech recognition; `said`: the lines of
+   * the log with these words), while an agent reworks the text, the reason and the questions by it;
+   * `next`: what they said meanwhile, which the rework after it takes in.
+   */
+  revising?: Revising & { next?: Revising[] };
   /** "Übernehmen und starten" was clicked while it was reworked: it is accepted once the new text is there, unless that asks questions. */
   acceptAfterRevision?: true;
+}
+
+/** The owner's words a proposal is reworked by. */
+export interface Revising {
+  words: string;
+  spoken?: boolean;
+  said?: number[];
 }
 
 /** A decision taken on a card: an answer to a worker's question, or the owner's call on an idea. */
@@ -476,6 +487,10 @@ export interface CardEvent {
   spot?: Spot;
   /** A looked-up answer: its exchange and thread, and its files. */
   answer?: AnswerRef;
+  /** The owner's words the card's agent has not read yet: Obeya holds them for it, and the owner can still take them back. */
+  unread?: true;
+  /** The owner's words the agent read later than they were written: they stand after this line of the log, where it read them. */
+  readAfter?: number;
 }
 
 /** A place in a card's demo video the owner's words are about, as the worker reads it with them. */

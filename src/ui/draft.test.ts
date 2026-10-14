@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { cardDraft, draftOf, dropDraft, keepDrafts, markupOf, setMarkup, updateDraft } from './draft';
+import { cardDraft, draftOf, dropDraft, giveBack, keepDrafts, markupOf, setMarkup, updateDraft } from './draft';
 
 const store = () => {
   const m = new Map<string, string>();
@@ -52,4 +52,14 @@ test('the marks on a screenshot are kept beside its original by the marked image
   setMarkup('marked1', null);
   expect(markupOf('marked1')).toBeUndefined();
   expect(s.getItem('obeya-markups-shop')).toBeNull();
+});
+
+test('words taken back go into an empty field with their screenshots; a field with newer words keeps those', () => {
+  const key = cardDraft('back');
+  giveBack(key, 'Bitte auch Excel.', ['shot.png']);
+  expect(draftOf(key)).toMatchObject({ text: 'Bitte auch Excel.', images: ['shot.png'] });
+  updateDraft(key, { text: 'Etwas anderes.', images: [] });
+  giveBack(key, 'Und PDF.');
+  expect(draftOf(key)).toMatchObject({ text: 'Etwas anderes.', images: [] });
+  dropDraft(key);
 });

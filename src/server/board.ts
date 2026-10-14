@@ -32,6 +32,7 @@ import {
   type PrReviewEntry,
   type ProjectHistory,
   type Proposal,
+  type Revising,
   type NextStep,
   type PlannedPrototype,
   type Question,
@@ -315,7 +316,7 @@ export class Board {
    * Appends a line to the card's log; `replyTo`: the message the owner's words reply to (`quoted`),
    * `spot`: the place in the demo video they are about.
    */
-  log(cardId: string, kind: CardEvent['kind'], author: CardEvent['author'], text: string, code?: ErrorCode, images?: string[], mocks?: Mock[], replyTo?: number, spot?: Spot): CardEvent {
+  log(cardId: string, kind: CardEvent['kind'], author: CardEvent['author'], text: string, code?: ErrorCode, images?: string[], mocks?: Mock[], replyTo?: number, spot?: Spot, unread?: boolean): CardEvent {
     const e = this.store.addEvent({
       cardId,
       kind,
@@ -326,6 +327,7 @@ export class Board {
       ...(mocks?.length ? { mocks } : {}),
       ...(replyTo ? { replyTo } : {}),
       ...(spot ? { spot } : {}),
+      ...(unread ? { unread: true as const } : {}),
     });
     for (const fn of this.eventListeners) fn(e);
     return e;
@@ -335,7 +337,7 @@ export class Board {
    * A message of a looked-up thread in a card's log: the owner's words or an answer, with its
    * exchange and files; `at` keeps its time when a thread is copied onto its Question card.
    */
-  logThread(cardId: string, e: { kind: 'say' | 'talk'; author: CardEvent['author']; text: string; images?: string[]; replyTo?: number; answer?: AnswerRef; at?: string }): CardEvent {
+  logThread(cardId: string, e: { kind: 'say' | 'talk'; author: CardEvent['author']; text: string; images?: string[]; replyTo?: number; answer?: AnswerRef; at?: string; unread?: boolean }): CardEvent {
     const added = this.store.addEvent({
       cardId,
       kind: e.kind,
@@ -345,6 +347,7 @@ export class Board {
       ...(e.replyTo ? { replyTo: e.replyTo } : {}),
       ...(e.answer ? { answer: e.answer } : {}),
       ...(e.at ? { at: e.at } : {}),
+      ...(e.unread ? { unread: true as const } : {}),
     });
     for (const fn of this.eventListeners) fn(added);
     return added;
@@ -354,6 +357,34 @@ export class Board {
   unlog(cardId: string, id: number) {
     this.store.deleteEvent(cardId, id);
     for (const fn of this.goneListeners) fn(cardId, id);
+  }
+
+  /**
+   * The card's agent read the owner's words of these lines now: in the conversation they move to
+   * where it read them (`CardEvent.readAfter`), and can no longer be taken back.
+   */
+  readNow(cardId: string, ids: number[]) {
+    if (!ids.length) return;
+    for (const e of this.store.readEvents(cardId, ids)) for (const fn of this.eventListeners) fn(e);
+  }
+
+  /**
+   * The owner takes back words the agent has not read: they leave the conversation, and so does
+   * what they said aloud for them, which stood as the same words just before.
+   */
+  withdraw(cardId: string, id: number) {
+    const events = this.store.events(cardId);
+    const at = events.findIndex((e) => e.id === id);
+    const said = events[at];
+    if (!said) return;
+    const spoken = events.slice(0, at).findLast((e) => e.author === 'owner');
+    if (spoken?.kind === 'say' && spoken.text.trim() === said.text.trim()) this.unlog(cardId, spoken.id);
+    this.unlog(cardId, id);
+  }
+
+  /** Whether the line is the owner's words the card's agent has not read yet. */
+  unread(cardId: string, id: number): boolean {
+    return !!this.store.event(cardId, id)?.unread;
   }
 
   /** The message of the card's conversation the owner's words reply to, if `id` is one: what someone said, not a step or a state change. */
@@ -770,13 +801,32 @@ export class Board {
     return idea;
   }
 
-  /** The owner wants a proposal changed: an agent reworks it by their words, and it waits for that. */
-  revising(id: string, words: string, spoken: boolean) {
+  /**
+   * The owner wants a proposal changed: an agent reworks it by their words, and it waits for that.
+   * Words said while it is reworked wait for the rework after it. Returns whether they wait.
+   */
+  revising(id: string, words: string, spoken: boolean, said?: number): boolean {
     const row = this.own(id);
     if (row.state !== 'proposal') throw new BadRequest('notProposal', 'not a proposal');
     const proposal: Proposal = row.proposal ? JSON.parse(row.proposal) : { questions: [] };
-    this.store.update(id, { proposal: JSON.stringify({ ...proposal, revising: { words: words.slice(0, 20000), ...(spoken ? { spoken } : {}) } } satisfies Proposal) });
+    const these: Revising = { words: words.slice(0, 20000), ...(spoken ? { spoken } : {}), ...(said ? { said: [said] } : {}) };
+    const revising = proposal.revising ? { ...proposal.revising, next: [...(proposal.revising.next ?? []), these] } : these;
+    this.store.update(id, { proposal: JSON.stringify({ ...proposal, revising } satisfies Proposal) });
     this.changed();
+    return revising !== these;
+  }
+
+  /** The owner takes back words that wait for the proposal's next rework; false when none of them are these. */
+  unrevise(id: string, said: number): boolean {
+    const row = this.own(id);
+    const proposal: Proposal | undefined = row.proposal ? JSON.parse(row.proposal) : undefined;
+    const next = proposal?.revising?.next;
+    if (!proposal?.revising || !next?.some((r) => r.said?.includes(said))) return false;
+    const rest = next.filter((r) => !r.said?.includes(said));
+    const { next: _, ...revising } = proposal.revising;
+    this.store.update(id, { proposal: JSON.stringify({ ...proposal, revising: { ...revising, ...(rest.length ? { next: rest } : {}) } } satisfies Proposal) });
+    this.changed();
+    return true;
   }
 
   /** "Übernehmen und starten" during a revision (`on`), or taken back; false when that was so already. */
@@ -798,7 +848,9 @@ export class Board {
   revised(id: string, p?: { title: string; task: string; reason?: string; idea?: boolean; questions: Question[] }): boolean {
     const row = this.store.card(id);
     if (!row || row.canvas_id !== this.canvas.id || row.deleted_at || row.state !== 'proposal') return false;
-    const { revising: _, ...was }: Proposal = row.proposal ? JSON.parse(row.proposal) : { questions: [] };
+    const { revising: done, ...was }: Proposal = row.proposal ? JSON.parse(row.proposal) : { questions: [] };
+    // what the owner said meanwhile is the next rework's
+    const next = done?.next?.length ? { revising: merged(done.next) } : {};
     const proposal: Proposal = p
       ? {
           ...(p.idea ? { idea: true } : {}),
@@ -807,7 +859,7 @@ export class Board {
           ...(was.acceptAfterRevision ? { acceptAfterRevision: true } : {}),
         }
       : was;
-    this.store.update(id, { ...(p ? { title: p.title.slice(0, 200), body: p.task.slice(0, 20000) } : {}), proposal: JSON.stringify(proposal) });
+    this.store.update(id, { ...(p ? { title: p.title.slice(0, 200), body: p.task.slice(0, 20000) } : {}), proposal: JSON.stringify({ ...proposal, ...next } satisfies Proposal) });
     this.changed();
     return true;
   }
@@ -1664,6 +1716,8 @@ export interface StoredIdea {
 export interface Message {
   text: string;
   images: string[];
+  /** The lines of the card's log with the owner's words it carries: unread until the agent takes it in. */
+  said?: number[];
 }
 
 /** A Question card's thread as stored: the exchange it started with, and its agent's turn. */
@@ -1684,6 +1738,13 @@ export interface Unread {
   why: 'parked' | 'dropped' | 'error' | 'restart';
   messages: Message[];
 }
+
+/** The owner's words said one after the other while a proposal was reworked, as one rework's. */
+const merged = (said: Revising[]): Revising => ({
+  words: said.map((r) => r.words).join('\n\n'),
+  ...(said.some((r) => r.spoken) ? { spoken: true } : {}),
+  said: said.flatMap((r) => r.said ?? []),
+});
 
 const toDecision = (d: DecisionRow): Decision => ({ id: d.id, cardId: d.card_id, question: d.question, answer: d.answer, by: d.by, at: d.at });
 

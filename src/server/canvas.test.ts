@@ -717,9 +717,12 @@ describe("the owner's words on a card with an agent", () => {
     canvas.board.onNotice((n) => notices.push(n));
 
     canvas.tell(c.id, 'mach noch eine Folgeaufgabe für Excel', [], true);
-    expect(worker.inbox.at(-1)).toContain('mach noch eine Folgeaufgabe für Excel');
-    expect(worker.inbox.at(-1)).toContain('speech recognition may have misheard');
-    expect(canvas.board.events(c.id).at(-1)).toMatchObject({ kind: 'hint', author: 'owner', text: 'mach noch eine Folgeaufgabe für Excel' });
+    expect(canvas.board.events(c.id).at(-1)).toMatchObject({ kind: 'hint', author: 'owner', text: 'mach noch eine Folgeaufgabe für Excel', unread: true });
+    // the worker in its turn takes the words in with its next step
+    const heard = worker.toolStep();
+    expect(heard).toContain('mach noch eine Folgeaufgabe für Excel');
+    expect(heard).toContain('speech recognition may have misheard');
+    expect(canvas.board.events(c.id).at(-1)!.unread).toBeUndefined();
 
     const result = worker.call('to_obeya', { request: 'A follow-up card for an Excel export' }) as Promise<string>;
     await settle();

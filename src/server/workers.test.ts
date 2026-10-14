@@ -351,6 +351,7 @@ describe('workers', () => {
     const c = manual();
     workers.start(c.id);
     runtime.last.call('ask', { question: 'CSV oder Excel?', options: ['CSV', 'Excel'] });
+    runtime.last.emit({ type: 'idle' });
     workers.message(c.id, 'Exportier erst mal gar nichts, ich kläre das.');
     expect(state(c.id)).toBe('working');
     expect(board.item(c.id)!.question).toBeUndefined();
@@ -365,7 +366,7 @@ describe('workers', () => {
     const c = manual();
     workers.start(c.id);
     workers.message(c.id, 'Bitte auch Excel.');
-    expect(runtime.last.inbox.at(-1)).toContain('Bitte auch Excel.');
+    expect(runtime.last.toolStep()).toContain('Bitte auch Excel.');
     expect(runtime.last.call('reply', { text: 'Mache ich: Excel kommt als zweites Format dazu.' })).toBe('Shown to the owner. Carry on.');
     expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'talk', author: 'worker', text: 'Mache ich: Excel kommt als zweites Format dazu.' });
     expect(state(c.id)).toBe('working');
@@ -376,6 +377,77 @@ describe('workers', () => {
     expect(runtime.last.inbox.length).toBe(before + 1);
   });
 
+  test('a note during a turn waits, unread, for the next step, and stands where the worker read it', () => {
+    const c = manual();
+    workers.start(c.id);
+    const s = runtime.last;
+    s.emit({ type: 'tool', name: 'Read', input: { file_path: 'export.ts' } });
+    workers.message(c.id, 'Bitte auch Excel.', ['/tmp/shot.png']);
+    const note = board.events(c.id).at(-1)!;
+    expect(note).toMatchObject({ kind: 'hint', unread: true });
+    // not in the session's input, where the CLI would take it at a moment Obeya does not learn
+    expect(s.inbox.join()).not.toContain('Bitte auch Excel.');
+    s.emit({ type: 'tool', name: 'Edit', input: { file_path: 'export.ts' } });
+    const edit = board.events(c.id).at(-1)!;
+    const heard = s.toolStep()!;
+    expect(heard).toContain('A note from the owner');
+    expect(heard).toContain('Bitte auch Excel.');
+    // a tool result carries no images: the worker reads the file
+    expect(heard).toContain('read their files to see them (/tmp/shot.png)');
+    expect(board.events(c.id).find((e) => e.id === note.id)).toMatchObject({ readAfter: edit.id });
+    expect(board.events(c.id).find((e) => e.id === note.id)!.unread).toBeUndefined();
+    // taken once
+    expect(s.toolStep()).toBeUndefined();
+  });
+
+  test('a note the turn ended before taking in starts the next turn', () => {
+    const c = manual();
+    workers.start(c.id);
+    const s = runtime.last;
+    s.emit({ type: 'text', text: 'Fertig mit dem Export.' });
+    workers.message(c.id, 'Und die Spaltennamen auf Deutsch.');
+    const before = s.inbox.length;
+    s.emit({ type: 'idle' });
+    expect(s.inbox.length).toBe(before + 1);
+    expect(s.inbox.at(-1)).toContain('Und die Spaltennamen auf Deutsch.');
+    // no nudge for the turn: the note's is the next
+    expect(s.inbox.join()).not.toContain('without a handover');
+    expect(board.events(c.id).find((e) => e.text === 'Und die Spaltennamen auf Deutsch.')!.unread).toBeUndefined();
+    // between turns a note goes in at once, read
+    s.emit({ type: 'idle' });
+    workers.message(c.id, 'Danke.');
+    expect(s.inbox.at(-1)).toContain('Danke.');
+    expect(board.events(c.id).at(-1)!.unread).toBeUndefined();
+  });
+
+  test('a note not read yet can be taken back: the worker never hears it', () => {
+    const c = manual();
+    workers.start(c.id);
+    const s = runtime.last;
+    workers.message(c.id, 'Bitte auch Excel.');
+    workers.message(c.id, 'Und PDF.');
+    const [excel, pdf] = board.events(c.id).slice(-2);
+    workers.unsay(c.id, excel!.id);
+    expect(board.events(c.id).map((e) => e.id)).not.toContain(excel!.id);
+    const heard = s.toolStep()!;
+    expect(heard).not.toContain('Bitte auch Excel.');
+    expect(heard).toContain('Und PDF.');
+    // once read, it stays
+    expect(() => workers.unsay(c.id, pdf!.id)).toThrow(BadRequest);
+  });
+
+  test('notes not read when the session ends go to it when it goes on', () => {
+    const c = manual();
+    workers.start(c.id);
+    runtime.last.emit({ type: 'session', id: 'sess-1' });
+    workers.message(c.id, 'Bitte auch Excel.');
+    workers.pause(c.id);
+    expect(board.events(c.id).find((e) => e.text === 'Bitte auch Excel.')!.unread).toBe(true);
+    workers.resume(c.id);
+    expect(runtime.last.inbox[0]).toContain('Bitte auch Excel.');
+    expect(board.events(c.id).find((e) => e.text === 'Bitte auch Excel.')!.unread).toBeUndefined();
+  });
+
   test('a note in reply to a message points the worker at it, and the conversation keeps which one', () => {
     const c = manual();
     workers.start(c.id);
@@ -383,16 +455,17 @@ describe('workers', () => {
     const replied = board.events(c.id).at(-1)!;
     workers.message(c.id, 'Lieber Komma.', [], false, replied.id);
     // the worker has the whole message in its session: the start of it says which one
-    expect(runtime.last.inbox.at(-1)).toContain('[In reply to your message: „Ich exportiere die Zählerstände als CSV mit Semikolon als Trenner, wie Excel es in Deutschland erwartet. Mehr dazu. Mehr dazu. Mehr dazu. Mehr dazu. Mehr dazu. …“]\n\nLieber Komma.');
+    expect(runtime.last.toolStep()).toContain('[In reply to your message: „Ich exportiere die Zählerstände als CSV mit Semikolon als Trenner, wie Excel es in Deutschland erwartet. Mehr dazu. Mehr dazu. Mehr dazu. Mehr dazu. Mehr dazu. …“]\n\nLieber Komma.');
     expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'hint', author: 'owner', text: 'Lieber Komma.', replyTo: replied.id });
     // Obeya's words in the conversation the worker never had: it reads them whole
     const aside = board.log(c.id, 'say', 'koordinator', 'Die Karte „Import“ liegt auf einer anderen Leinwand.');
     workers.message(c.id, 'Dann lass es.', [], false, aside.id);
-    expect(runtime.last.inbox.at(-1)).toContain("[In reply to Obeya's message in the card's conversation: „Die Karte „Import“ liegt auf einer anderen Leinwand.“]\n\nDann lass es.");
+    expect(runtime.last.toolStep()).toContain("[In reply to Obeya's message in the card's conversation: „Die Karte „Import“ liegt auf einer anderen Leinwand.“]\n\nDann lass es.");
     // a question answered in reply to it says so too
     runtime.last.call('ask', { question: 'CSV oder Excel?', options: ['CSV', 'Excel'] });
     const asked = board.events(c.id).findLast((e) => e.kind === 'question')!;
     workers.answer(c.id, 'CSV', [], false, asked.id);
+    runtime.last.emit({ type: 'idle' });
     expect(runtime.last.inbox.at(-1)).toContain('[In reply to your question: „CSV oder Excel?');
     expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'answer', replyTo: asked.id });
   });
@@ -722,6 +795,7 @@ describe('workers', () => {
     git(clone, 'add', '.');
     git(clone, 'commit', '--quiet', '-m', 'Export');
     runtime.last.call('ready_for_review', { summary: 'Export gebaut.' });
+    runtime.last.emit({ type: 'idle' });
     expect(state(c.id)).toBe('waiting:review');
     expect(board.item(c.id)!.summary).toBe('Export gebaut.');
 
@@ -1921,7 +1995,7 @@ describe('a worktree per card', () => {
     expect(s.call('ready_for_review', { summary: 'S' })).toContain('on main already');
     // the owner can still reach it, and it works on
     workers.message(c.id, 'Auch die alten Karten nachtragen.');
-    expect(s.inbox.at(-1)).toContain('Auch die alten Karten nachtragen.');
+    expect(s.toolStep()).toContain('Auch die alten Karten nachtragen.');
     expect(s.call('after_restart', {})).toContain('does not start again');
     s.emit({ type: 'tool', name: 'Bash', input: { command: 'bun scripts/backfill.ts' } });
     s.emit({ type: 'idle' });
@@ -1962,7 +2036,7 @@ describe('a worktree per card', () => {
     // a second word while it answers reaches the same session
     workers.message(c.id, 'Und die Untertitel?');
     expect(runtime.last).toBe(f);
-    expect(f.inbox.at(-1)).toContain('Und die Untertitel?');
+    expect(f.toolStep()).toContain('Und die Untertitel?');
     expect(f.call('reply', { text: 'Mit gh release upload.' })).toContain('Shown');
     // its closing words repeat the reply: they fold under it
     f.emit({ type: 'text', text: 'Mit gh release upload, wie gesagt.' });

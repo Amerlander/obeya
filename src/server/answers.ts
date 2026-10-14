@@ -56,6 +56,8 @@ export class Answers {
   private busy = new Set<number>();
   /** The turns of each thread, one after the other: two never run in one session at once. */
   private turns = new Map<number, Promise<unknown>>();
+  /** Question cards whose agent is in a turn: what the owner asks meanwhile waits for the next, unread until then. */
+  private reading = new Set<string>();
 
   constructor(private o: AnswerOptions) {}
 
@@ -112,13 +114,27 @@ export class Answers {
    */
   ask(cardId: string, text: string, images: string[], spoken: boolean, replyTo?: number, talk?: number) {
     const card = this.questionCard(cardId);
-    this.o.board.logThread(cardId, { kind: 'talk', author: 'owner', text, images: images.map((f) => f.split(/[\\/]/).pop()!), ...(replyTo ? { replyTo } : {}) });
+    const e = this.o.board.logThread(cardId, { kind: 'talk', author: 'owner', text, images: images.map((f) => f.split(/[\\/]/).pop()!), ...(replyTo ? { replyTo } : {}), unread: this.reading.has(cardId) && !talk });
     const quoted = replyTo ? this.o.board.quoted(cardId, replyTo) : undefined;
     const said = `${replyNote(quoted, 'koordinator')}${text}${imageNote(images)}`;
     const thread = this.o.board.thread(cardId);
-    const pending = [...(thread.pending ?? []), { text: spoken ? `(${SPOKEN}:) ${said}` : said, images, ...(talk ? { talk } : {}) }];
+    const pending = [...(thread.pending ?? []), { text: spoken ? `(${SPOKEN}:) ${said}` : said, images, said: [e.id], ...(talk ? { talk } : {}) }];
     this.o.board.setThread(cardId, { thinking: true, pending });
     this.queue(thread.talk, () => this.cardTurn(card.id));
+  }
+
+  /**
+   * The owner takes back words the card's agent has not read, which wait for its next turn: they
+   * leave the conversation, and the agent never hears them. A follow-up asked in Obeya's sheet
+   * waits for its answer there, so it stays.
+   */
+  unsay(cardId: string, id: number) {
+    this.questionCard(cardId);
+    const pending = this.o.board.thread(cardId).pending ?? [];
+    const words = pending.find((p) => p.said?.includes(id));
+    if (!words || words.talk || !this.o.board.unread(cardId, id)) throw new BadRequest('notHeld', 'the agent has read these words already');
+    this.o.board.setThread(cardId, { pending: pending.filter((p) => p !== words) });
+    this.o.board.withdraw(cardId, id);
   }
 
   /** After a restart: questions still being looked up are looked up again, and Question cards answer what waited. */
@@ -185,6 +201,8 @@ export class Answers {
     if (!root?.question) return;
     const { by, about, project } = this.agentFor(root);
     const words = taken.map((p) => p.text).join('\n\n');
+    this.o.board.readNow(cardId, taken.flatMap((p) => p.said ?? []));
+    this.reading.add(cardId);
     let a: OwnerAnswer;
     try {
       a = await this.consult({
@@ -204,6 +222,8 @@ export class Answers {
       });
     } catch (e) {
       a = { text: this.o.board.t.answer.failed(e instanceof Error ? e.message : String(e)) };
+    } finally {
+      this.reading.delete(cardId);
     }
     const text = clip(a.text, 12000);
     // the card may have become an idea meanwhile; the answer stands in its conversation all the same

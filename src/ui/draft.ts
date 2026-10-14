@@ -139,6 +139,16 @@ export function updateDraft(key: string, change: Partial<Draft> | ((d: Draft) =>
   changed();
 }
 
+/**
+ * Words the owner took back before anyone read them go back into the draft, with their
+ * screenshots, when it is empty; else they are gone, as the newer words in it count.
+ */
+export function giveBack(key: string, text: string, images: string[] = []) {
+  const d = draftOf(key);
+  if (d.text.trim() || d.images.length || d.uploading) return;
+  updateDraft(key, { text, images });
+}
+
 /** Forgets a draft whose field is gone for good. */
 export function dropDraft(key: string) {
   if (drafts.delete(key)) changed();

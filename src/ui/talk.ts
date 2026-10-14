@@ -23,6 +23,8 @@ export interface Talk {
   shown: Turn[];
   /** The steps of a turn without a message yet. */
   pending: CardEvent[];
+  /** What the owner said that the agent has not read yet, in the order said: it stands below its work, until it reads it. */
+  unread: CardEvent[];
   /** The question the card waits on, with the steps that led to it: it stands at the end, to be answered. */
   asked?: Turn;
 }
@@ -71,18 +73,21 @@ export function demoHandover(demo: Demo, shown: Turn[]): Turn | undefined {
 }
 
 /**
- * A card's events as its conversation: what the owner says, the agents' replies, questions and
- * handovers, each with the steps that led to it (and a worker's closing words after it, which
- * mostly repeat it), and the state changes between them. What the
- * owner says to a worker that does not `reply` is answered by the first words it says after it.
+ * A card's events as its conversation, in the order the agent saw them: what the owner says, where
+ * the agent read it (`CardEvent.readAfter`), the agents' replies, questions and handovers, each with
+ * the steps that led to it (and a worker's closing words after it, which mostly repeat it), and the
+ * state changes between them. The agent's steps before it read the owner's words close above them
+ * (`closed`). What the owner says to a worker that does not `reply` is answered by the first words
+ * it says after it. What the agent has not read yet stands apart (`unread`).
  * `asking`: the question the card waits on. `over`: no agent works on the card, so no message will
  * come for the steps without one (`settle`).
  */
-export function talkTurns(events: CardEvent[], opts: { asking?: Question; over?: boolean } = {}): Talk {
+export function talkTurns(all: CardEvent[], opts: { asking?: Question; over?: boolean } = {}): Talk {
   const shown: Turn[] = [];
   let steps: CardEvent[] = [];
   // the owner said something to the agent, and the worker has not answered yet
   let open = false;
+  const events = asRead(all.filter((e) => !e.unread));
   events.forEach((e, i) => {
     const where = place(e, events[i - 1]);
     if (where === 'step' && open && e.kind === 'say' && e.author === 'worker') {
@@ -104,7 +109,14 @@ export function talkTurns(events: CardEvent[], opts: { asking?: Question; over?:
       open = false;
     } else {
       // a spoken command that became a note or an answer stands once, as that
-      if (e.kind === 'say' && duplicate(events, i)) return;
+      if (e.kind === 'say' && duplicate(all, all.indexOf(e))) return;
+      if (toAgent(e)) {
+        const run = closed(steps);
+        if (run) {
+          shown.push(run);
+          steps = [];
+        }
+      }
       shown.push({ e, steps: [] });
       if (toAgent(e)) open = true;
     }
@@ -119,7 +131,26 @@ export function talkTurns(events: CardEvent[], opts: { asking?: Question; over?:
     settle(shown, steps, events);
     steps = [];
   }
-  return { shown, pending: steps, ...(asked ? { asked } : {}) };
+  return { shown, pending: steps, unread: all.filter((e) => e.unread), ...(asked ? { asked } : {}) };
+}
+
+/** The events in the order the agent saw them: the owner's words it read later stand after the line it read them at, in the order said. */
+function asRead(events: CardEvent[]): CardEvent[] {
+  if (!events.some((e) => e.readAfter)) return events;
+  const place = (e: CardEvent) => (e.readAfter ? e.readAfter + 0.5 : e.id);
+  return [...events].sort((a, b) => place(a) - place(b) || a.id - b.id);
+}
+
+/**
+ * The agent's steps before it read the owner's words, closed above them: its last words in them as
+ * its message, or, without words, as its steps. Steps only Obeya and the Koordinator noted go on to
+ * the next message.
+ */
+function closed(steps: CardEvent[]): Turn | undefined {
+  const words = steps.findLast((s) => s.kind === 'say' && agentAuthor(s));
+  if (words) return { e: words, steps: steps.filter((s) => s !== words) };
+  const own = steps.find(agentAuthor);
+  return own ? { e: own, steps, quiet: true } : undefined;
 }
 
 /** A proposal's conversation without where its open questions were asked: the last time each was. */
@@ -144,10 +175,8 @@ function settle(shown: Turn[], pending: CardEvent[], events: CardEvent[]) {
     runs.set(where, [...(runs.get(where) ?? []), s]);
   }
   for (const [where, run] of [...runs].reverse()) {
-    const words = run.findLast((s) => s.kind === 'say' && agentAuthor(s));
-    const own = run.find(agentAuthor);
-    if (words) shown.splice(where, 0, { e: words, steps: run.filter((s) => s !== words) });
-    else if (own) shown.splice(where, 0, { e: own, steps: run, quiet: true });
+    const turn = closed(run);
+    if (turn) shown.splice(where, 0, turn);
   }
 }
 

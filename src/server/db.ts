@@ -88,6 +88,8 @@ export interface CardRow {
   thread: string | null;
   /** JSON, while the owner has paused the card's worker (`PausedState` in workers.ts): what came for it meanwhile. */
   paused: string | null;
+  /** JSON: the owner's words Obeya holds for the card's worker until it takes them in, at its next tool step or turn (`Unheard` in workers.ts). */
+  unheard: string | null;
 }
 
 export interface GroupRow {
@@ -317,18 +319,24 @@ export const MIGRATIONS = [
    ALTER TABLE cards ADD COLUMN thread TEXT;`,
   // the owner paused the card's worker: session and workspace stay until it goes on
   `ALTER TABLE cards ADD COLUMN paused TEXT;`,
+  // the owner's words the card's agent has not read yet, and where those it read later stand
+  `ALTER TABLE events ADD COLUMN unread INTEGER;
+   ALTER TABLE events ADD COLUMN read_after INTEGER;
+   ALTER TABLE cards ADD COLUMN unheard TEXT;`,
 ];
 
-const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer';
-type EventRow = Omit<CardEvent, 'images' | 'mocks' | 'replyTo' | 'spot' | 'answer'> & {
+const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, unread, read_after AS readAfter';
+type EventRow = Omit<CardEvent, 'images' | 'mocks' | 'replyTo' | 'spot' | 'answer' | 'unread' | 'readAfter'> & {
   code: CardEvent['code'] | null;
   images: string | null;
   mocks: string | null;
   replyTo: number | null;
   spot: string | null;
   answer: string | null;
+  unread: number | null;
+  readAfter: number | null;
 };
-const eventOf = ({ code, images, mocks, replyTo, spot, answer, ...e }: EventRow): CardEvent => ({
+const eventOf = ({ code, images, mocks, replyTo, spot, answer, unread, readAfter, ...e }: EventRow): CardEvent => ({
   ...e,
   ...(code ? { code } : {}),
   ...(images ? { images: JSON.parse(images) as string[] } : {}),
@@ -336,6 +344,8 @@ const eventOf = ({ code, images, mocks, replyTo, spot, answer, ...e }: EventRow)
   ...(replyTo ? { replyTo } : {}),
   ...(spot ? { spot: JSON.parse(spot) as Spot } : {}),
   ...(answer ? { answer: JSON.parse(answer) as AnswerRef } : {}),
+  ...(unread ? { unread: true as const } : {}),
+  ...(readAfter ? { readAfter } : {}),
 });
 
 export type NewRow = Pick<CardRow, 'canvas_id' | 'kind' | 'x' | 'y'> &
@@ -380,6 +390,7 @@ export type RowUpdate = Partial<
     | 'becomes_project'
     | 'thread'
     | 'paused'
+    | 'unheard'
   >
 >;
 
@@ -570,7 +581,7 @@ export class Store {
     const at = e.at ?? now();
     const { id } = this.db
       .query(
-        'INSERT INTO events (card_id, at, kind, author, text, code, images, mocks, reply_to, spot, answer) VALUES ($cardId, $at, $kind, $author, $text, $code, $images, $mocks, $replyTo, $spot, $answer) RETURNING id',
+        'INSERT INTO events (card_id, at, kind, author, text, code, images, mocks, reply_to, spot, answer, unread) VALUES ($cardId, $at, $kind, $author, $text, $code, $images, $mocks, $replyTo, $spot, $answer, $unread) RETURNING id',
       )
       .get({
         ...e,
@@ -580,6 +591,7 @@ export class Store {
         mocks: e.mocks?.length ? JSON.stringify(e.mocks) : null,
         replyTo: e.replyTo ?? null,
         spot: e.spot ? JSON.stringify(e.spot) : null,
+        unread: e.unread ? 1 : null,
         at,
       }) as { id: number };
     return { ...e, id, at };
@@ -590,6 +602,21 @@ export class Store {
       .query(`SELECT ${EVENT_COLUMNS} FROM events WHERE card_id = $c ORDER BY id DESC LIMIT $limit`)
       .all({ c: cardId, limit }) as EventRow[];
     return rows.reverse().map(eventOf);
+  }
+
+  /**
+   * The agent read the owner's words of these events now: they are read, and those logged before
+   * the card's latest line that was read stand after it (`readAfter`). Returns those that were unread, as they are now.
+   */
+  readEvents(cardId: string, ids: number[]): CardEvent[] {
+    return this.db.transaction(() => {
+      ids = ids.filter((id) => this.event(cardId, id)?.unread);
+      if (!ids.length) return [];
+      const { last } = this.db.query('SELECT MAX(id) AS last FROM events WHERE card_id = $c AND unread IS NULL').get({ c: cardId }) as { last: number | null };
+      const read = this.db.query('UPDATE events SET unread = NULL, read_after = CASE WHEN $last > id THEN $last END WHERE card_id = $c AND id = $id AND unread = 1');
+      for (const id of ids) read.run({ c: cardId, id, last });
+      return ids.map((id) => this.event(cardId, id)).filter((e) => !!e);
+    })();
   }
 
   /** Takes an event out of the card's log. */

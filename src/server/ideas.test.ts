@@ -112,12 +112,21 @@ describe('an idea', () => {
     const first = explorer();
     first.emit({ type: 'session', id: 'sess-1' });
     canvas.act(i.id, { action: 'discuss', text: 'Zweitens.' });
+    canvas.act(i.id, { action: 'discuss', text: 'Ach, vergiss das.' });
     expect(first.inbox).toHaveLength(1);
+    // unread until its next turn, and until then the owner can take it back
+    const [second, forget] = board().events(i.id).slice(-2);
+    expect([second!.unread, forget!.unread]).toEqual([true, true]);
+    canvas.act(i.id, { action: 'unsay', id: forget!.id });
     first.call('reply', { text: 'Zu erstens.' });
     first.emit({ type: 'idle' });
     // the queued message is the next turn of the same session
     expect(first.closed).toBe(false);
     expect(first.inbox[1]).toContain('Zweitens.');
+    expect(first.inbox[1]).not.toContain('vergiss');
+    const reply = board().events(i.id).find((e) => e.text === 'Zu erstens.')!;
+    expect(board().events(i.id).find((e) => e.id === second!.id)).toMatchObject({ readAfter: reply.id });
+    expect(() => canvas.act(i.id, { action: 'unsay', id: second!.id })).toThrow();
     first.call('reply', { text: 'Zu zweitens.' });
     first.emit({ type: 'idle' });
     expect(first.closed).toBe(true);

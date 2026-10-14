@@ -101,8 +101,9 @@ export interface AgentSpec {
   /** The group the agent belongs to, whose model and effort the owner chooses (`withAgentSetting`). */
   role?: AgentRole;
   /**
-   * Asked after every tool step: what changed since the session's instructions were built, for the
-   * agent to read with that step's result without being stopped; nothing when nothing did.
+   * Asked after every tool step of the agent's own (not a subagent's): what changed since the
+   * session's instructions were built, or what waited for its next step, for the agent to read with
+   * that step's result without being stopped; nothing when nothing did. Asking takes it: it is read.
    */
   contextUpdate?: () => string | undefined;
   /**
@@ -227,8 +228,9 @@ export const sdkRuntime: AgentRuntime = {
               ],
             },
           ],
-          PostToolUse: [{ hooks: [async () => withContext('PostToolUse', spec.contextUpdate?.())] }],
-          PostToolUseFailure: [{ hooks: [async () => withContext('PostToolUseFailure', spec.contextUpdate?.())] }],
+          // a subagent's step would pass it to the subagent, which the agent may never hear of
+          PostToolUse: [{ hooks: [async (input) => withContext('PostToolUse', input.agent_id ? undefined : spec.contextUpdate?.())] }],
+          PostToolUseFailure: [{ hooks: [async (input) => withContext('PostToolUseFailure', input.agent_id ? undefined : spec.contextUpdate?.())] }],
         },
       },
     });

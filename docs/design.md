@@ -242,8 +242,10 @@ An idea is thought through on its card before anything is planned; no worker run
    with words or without) go to the reviser at once, without the Koordinator or an undo window, and
    stand in the conversation as the owner's words; accepting instead takes the picks into the text
    as above. Meanwhile the proposal shows „wird überarbeitet“ (in the
-   conversation, where the field was), cannot be edited or only accepted („Übernehmen“), and takes
-   no second revision; it is not among the cards that need the owner. The owner's words stand in
+   conversation, above the field), cannot be edited or only accepted („Übernehmen“), and is not
+   among the cards that need the owner. Words said meanwhile wait, unread, for the rework after it,
+   which takes them in together (`Proposal.revising.next`; before 2026-10-14 the field was gone
+   during a rework). The owner's words stand in
    its conversation, then the reviser's reply (its answer to what they asked, and what it changed),
    „Vorschlag überarbeitet.“ when the proposal reads otherwise now, and the questions it asks anew.
    Before (2026-10-14), the reviser could not reply, and a question lived only at the end of the
@@ -322,8 +324,9 @@ An idea is thought through on its card before anything is planned; no worker run
    hears them with the approval, to propose as a card what still matters). Ten minutes after the
    last one without such a sign (a browser gone away, a restart) they go anyway. The release waits
    1.5 s, so an approval clicked as the card folds takes them; „Jetzt senden“ does not wait. Until
-   they go, each stands dashed with a bin in its corner: deleting one takes it out of the log
-   (`eventGone` to the pages), and the worker never hears it; once sent, it can no longer go.
+   they go, each stands dashed with a bin in its corner: taking one back takes it out of the log
+   (`eventGone` to the pages), and the worker never hears it; its words go back into the card's
+   field if that is empty, as with a note not read yet (see Communication); once sent, it can no longer go.
    Before (2026-10-12), a comment once said stayed, and only the end of the video sent them early. The worker gets them in one message,
    each as `[Demo video at 1:23, chapter „…“, narration: „…“]` above the words, with its frame as an
    image, and reworks the demo once instead of for each comment; a comment is no answer to the demo
@@ -519,6 +522,32 @@ works, also while it takes in the owner's words on its handover, the conversatio
 latest step, cut to its first line and 140 characters, whole while the mouse is over it (until 2026-10-09 only the card's state said so then); the question the card waits on (its own, or the one in its demo report) stands at the end with its options,
 and the card's one field under it; a question a note took back stays, without options, „Durch deinen Hinweis erledigt“.
 A card that was an idea continues the idea's conversation in the same list.
+
+A conversation shows things in the order the agent saw them (2026-10-14), on every card the same
+way. The owner's words stand where the agent read them, not where they were sent: Obeya holds them
+while the agent is in a turn and marks the moment it takes them in on their line of the log
+(`CardEvent.readAfter`: the last line read before them; `talkTurns` sorts them in after it). The
+agent's steps from before then close above them, as its last words among them or, without words,
+as a block of its steps („Agent · Verlauf“); its steps after them and its reply stand below. Until
+it has read them, they stand below its work, muted and dashed, marked „Noch nicht gelesen · beim
+nächsten Schritt“ on a task and „… · nach der laufenden Antwort“ on an idea, a proposal or a
+Question card, several in the order sent (`CardEvent.unread`). Each has a bin: taking it back
+takes it out of the log, and no agent hears it; its text and screenshots go back into the card's
+field when that is empty, else they are gone, since newer words stand there (`giveBack` in
+`src/ui/draft.ts`, shared with the demo comments Obeya holds back). It takes effect at once,
+without undo: the words are back in the field, or were meant to go. When an agent reads them:
+- A worker: with the result of its next tool step, through the hook that passes it preferences and
+  decisions (`AgentSpec.contextUpdate`, `unheard` on the card), screenshots as their files, which
+  it opens itself, since a tool result carries no images. A turn that ends before another step
+  starts the next with them. A session that ends first (paused, a restart, a machine cut off)
+  gets them with the message it goes on with; after a stop they wait for the next start.
+- An idea's agent, a proposal's reviser, a Question card's agent: when their next turn starts,
+  after the reply they waited for.
+Words said while the agent is between turns start its next one and are read at once. Before, a
+note went straight into the worker's session, which the CLI folded in at its next step, but Obeya
+learned only at the turn's end which messages a turn had taken (and the SDK cannot take one back
+but by a control request); the conversation showed every step of the turn in one bubble at its
+end, below the note, so the steps from before it stood after it.
 
 The owner can reply to one message of a card's conversation, as in chat apps (2026-10-09): a button
 in the corner of each message (shown while the pointer is on it; `Msg` and `Quote` in
@@ -1209,10 +1238,12 @@ the owner's language (`src/core/locale.ts`).
   small runtime interface, so the orchestration is tested against a fake. Two SDK hooks ride on
   every session: before a Bash call, the refusal of long foreground sleeps; after every tool call,
   what changed since the session's instructions were built (`AgentSpec.contextUpdate`) goes to the
-  agent with that call's result. Workers and idea agents use it for the owner's preferences: a
+  agent with that call's result; not with a subagent's calls, whose results the agent never sees.
+  Workers and idea agents use it for the owner's preferences: a
   preference learned or changed while one runs reaches it once, at its next tool call, without a
   message or a new turn. A workstream's worker hears its project's new decisions the same way
-  (those on its own card it heard as answers). A worker's session also has `canUseTool`: a call
+  (those on its own card it heard as answers), and the owner's notes that came during its turn
+  (see Communication). A worker's session also has `canUseTool`: a call
   the settings want confirmed becomes the question its card waits on (see Communication). Its own
   Obeya tools run without asking through a `PreToolUse` hook that allows them; as bare
   `allowedTools` (until 2026-10-10) they had the SDK print a `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED`
@@ -1785,7 +1816,7 @@ the owner's language (`src/core/locale.ts`).
   work probably sees the words only at its next tool call, so a forwarded request may wait behind
   a long step (a render); "gib frei" typed on a card waiting for review costs the worker a turn
   before it reaches the Koordinator, several seconds, where the button „Freigeben“ is immediate.
-  On any other card (planned, queued, finished without an agent, a proposal being reworked), with a project open
+  On any other card (planned, queued, finished without an agent), with a project open
   or nothing, the Koordinator reads the words, with that card or project in focus.
   A Koordinator turn reads
   the transcript as speech that may be misheard (typed words as written) and either acts or replies. Acting takes one or

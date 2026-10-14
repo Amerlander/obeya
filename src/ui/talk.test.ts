@@ -43,10 +43,12 @@ test("a task's conversation: the owner's words, the worker's replies and handove
   const review = ev('review', 'worker', 'CSV und Excel exportierbar.');
   const approved = ev('state', 'owner', 'Freigegeben und auf main.');
   const { shown, pending } = talkTurns([started, read, status, note, reply, session, edit, review, approved]);
+  // the steps before the worker read the note close above it
   expect(shown).toEqual([
     { e: started, steps: [], line: true },
+    { e: read, steps: [read, status], quiet: true },
     { e: note, steps: [] },
-    { e: reply, steps: [read, status] },
+    { e: reply, steps: [] },
     { e: review, steps: [session, edit] },
     { e: approved, steps: [], line: true },
   ]);
@@ -61,12 +63,40 @@ test('a note the worker did not reply to is answered by the first words it says 
   const later = ev('say', 'worker', 'Excel ist drin, die Tests laufen.');
   const review = ev('review', 'worker', 'CSV und Excel.');
   expect(talkTurns([read, note, edit, ok, later], {}).shown).toEqual([
+    { e: read, steps: [read], quiet: true },
     { e: note, steps: [] },
-    { e: ok, steps: [read, edit] },
+    { e: ok, steps: [edit] },
   ]);
   expect(talkTurns([read, note, edit, ok, later, review]).shown.at(-1)).toEqual({ e: review, steps: [later] });
   // words from before anything was said to the worker are no reply
   expect(talkTurns([ev('say', 'worker', 'Ich lese mich ein.'), read]).shown).toEqual([]);
+});
+
+test('the owner\'s words stand where the agent read them: its steps before close above them, what it has not read stands apart', () => {
+  const read = ev('activity', 'worker', 'Liest server/export.ts');
+  const note = ev('hint', 'owner', 'Bitte auch Excel.');
+  const edit = ev('activity', 'worker', 'Ändert server/export.ts');
+  const test_ = ev('activity', 'worker', 'Führt bun test aus');
+  const later = ev('hint', 'owner', 'Und PDF?');
+  // read with the result of the edit
+  const taken = { ...note, readAfter: edit.id };
+  const after = ev('activity', 'worker', 'Ändert server/pdf.ts');
+  const talk = talkTurns([read, taken, edit, test_, { ...later, unread: true }, after]);
+  expect(talk.shown).toEqual([
+    { e: read, steps: [read, edit], quiet: true },
+    { e: taken, steps: [] },
+  ]);
+  expect(talk.pending).toEqual([test_, after]);
+  expect(talk.unread).toEqual([{ ...later, unread: true }]);
+  // two read at the same step stand in the order said
+  const both = talkTurns([read, { ...note, readAfter: edit.id }, edit, { ...later, readAfter: edit.id }]).shown.map((x) => x.e.id);
+  expect(both).toEqual([read.id, note.id, later.id]);
+  // on an idea, words read when its next turn starts stand after the reply they waited for
+  const asked = ev('talk', 'owner', 'Was meinst du?');
+  const thinking = ev('activity', 'explorer', 'Liest docs/design.md');
+  const more = ev('talk', 'owner', 'Und die Kosten?');
+  const reply = ev('talk', 'explorer', 'Zwei Varianten im Stand.');
+  expect(talkTurns([asked, thinking, { ...more, readAfter: reply.id }, reply]).shown.map((x) => x.e.id)).toEqual([asked.id, reply.id, more.id]);
 });
 
 test("a worker's closing words after its reply or handover fold under it, also once nobody works on the card", () => {
@@ -84,6 +114,7 @@ test("a worker's closing words after its reply or handover fold under it, also o
         { e: reply, steps: [read, closing] },
       ],
       pending: [],
+      unread: [],
     });
 });
 
@@ -121,6 +152,7 @@ test('a conversation nobody works on ends with its last message or line, the ste
       { e: err, steps: [], line: true },
     ],
     pending: [],
+    unread: [],
   });
   // the agent's last words in a turn without a message are its message, before the line that came later
   const read = ev('activity', 'worker', 'Liest docs/design.md');

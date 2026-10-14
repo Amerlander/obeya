@@ -351,8 +351,12 @@ describe('a thread on a Question card', () => {
     expect(a.spec.resume).toBe('look-1');
     expect(a.spec.tools.map((t) => t.name)).toContain('to_obeya');
     expect(a.inbox[0]).toContain('und im Oktober?');
-    // what comes while it reads waits for its turn
+    // what comes while it reads waits for its turn, unread until then, and can be taken back
     canvas.tell(card.id, 'und November?', [], true);
+    canvas.tell(card.id, 'und Dezember?', [], false);
+    const [november, december] = board().events(card.id).slice(-2);
+    expect([november!.unread, december!.unread]).toEqual([true, true]);
+    canvas.press(card.id, { action: 'unsay', id: december!.id });
     const sessions = runtime.sessions.length;
     a.call('answer_owner', { text: 'Oktober: 12 ct.' });
     a.emit({ type: 'idle' });
@@ -360,6 +364,10 @@ describe('a thread on a Question card', () => {
     expect(runtime.sessions.length).toBe(sessions + 1);
     const b = answerer();
     expect(b.inbox[0]).toContain('und November?');
+    expect(b.inbox[0]).not.toContain('und Dezember?');
+    // read once its turn starts: after the answer it waited for
+    const answered = board().events(card.id).find((e) => e.text === 'Oktober: 12 ct.')!;
+    expect(board().events(card.id).find((e) => e.id === november!.id)).toMatchObject({ readAfter: answered.id });
     b.call('answer_owner', { text: 'November: noch nichts.' });
     b.emit({ type: 'idle' });
     await settle();

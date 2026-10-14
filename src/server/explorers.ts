@@ -40,7 +40,7 @@ interface Live {
   session: AgentSession;
   /** The messages the running turn answers. */
   current: Message[];
-  /** Messages that arrived during a turn; they go in together once it ends. */
+  /** Messages that arrived during a turn; they go in together once it ends, unread until then. */
   queue: Message[];
   replied: boolean;
   lastText: string;
@@ -68,11 +68,30 @@ export class Explorers {
       this.o.board.setIdea(cardId, { status: 'open' });
       this.o.board.log(cardId, 'state', 'owner', this.o.board.t.idea.reopened);
     }
-    this.o.board.log(cardId, 'talk', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo);
+    // words said while the agent works on a reply wait for its next turn, unread until then
+    const said = this.o.board.log(cardId, 'talk', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo, undefined, this.live.has(cardId));
     this.o.board.setIdea(cardId, { yourTurn: false, questions: [], next: undefined });
     if (text) this.o.onOwnerInput?.(card, text);
     const quoted = replyTo ? this.o.board.quoted(cardId, replyTo) : undefined;
-    this.send(card, `The owner says${spoken ? ` (${SPOKEN})` : ''}:\n\n${replyNote(quoted, 'explorer')}${text}${imageNote(images)}`, images);
+    this.send(card, `The owner says${spoken ? ` (${SPOKEN})` : ''}:\n\n${replyNote(quoted, 'explorer')}${text}${imageNote(images)}`, images, false, [said.id]);
+  }
+
+  /**
+   * The owner takes back words the agent has not read: words waiting for its next turn, or left
+   * unanswered by a turn that was cut off. They leave the conversation, and the agent never hears them.
+   */
+  unsay(cardId: string, id: number) {
+    this.idea(cardId);
+    if (!this.o.board.unread(cardId, id)) throw new BadRequest('notHeld', 'the agent has read these words already');
+    const taken = (m: Message) => !m.said?.includes(id);
+    const live = this.live.get(cardId);
+    const { unread } = this.o.board.idea(cardId);
+    if (live?.queue.some((m) => !taken(m))) live.queue = live.queue.filter(taken);
+    else if (unread?.messages.some((m) => !taken(m))) {
+      const messages = unread.messages.filter(taken);
+      this.o.board.setIdea(cardId, { unread: messages.length ? { ...unread, messages } : undefined });
+    } else throw new BadRequest('notHeld', 'the agent has read these words already');
+    this.o.board.withdraw(cardId, id);
   }
 
   /**
@@ -142,18 +161,19 @@ export class Explorers {
     this.live.clear();
   }
 
-  private send(card: Item, message: string, images: string[] = [], quiet = false) {
+  private send(card: Item, message: string, images: string[] = [], quiet = false, said: number[] = []) {
     const live = this.live.get(card.id);
     if (live) {
       // queued, it goes in with whatever else came, which may well need a reply
-      live.queue.push({ text: message, images });
+      live.queue.push({ text: message, images, said });
       return;
     }
     const row = this.o.board.row(card.id);
     // what an interrupted turn left unanswered goes first
     const { unread } = this.o.board.idea(card.id);
-    const current = [...(unread?.messages ?? []), { text: message, images }];
+    const current = [...(unread?.messages ?? []), { text: message, images, said }];
     this.o.board.setIdea(card.id, { thinking: true, unread: undefined });
+    this.o.board.readNow(card.id, current.flatMap((m) => m.said ?? []));
     const text = unread ? `${UNREAD_NOTE[unread.why]}\n\n${unread.messages.map((m) => m.text).join('\n\n')}\n\n---\n\n${message}` : message;
     const all = current.flatMap((m) => m.images);
     if (row.session_id) return this.launch(card, current, text, row.session_id, all, quiet);
@@ -227,6 +247,7 @@ export class Explorers {
         if (live.queue.length) {
           const queued = live.queue.splice(0);
           live.current = queued;
+          this.o.board.readNow(cardId, queued.flatMap((m) => m.said ?? []));
           live.session.send(
             [...queued.map((m) => m.text), this.buildNote(cardId, live)].filter(Boolean).join('\n\n'),
             queued.flatMap((m) => m.images),

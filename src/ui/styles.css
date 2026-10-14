@@ -557,6 +557,10 @@ textarea.p-body:focus { border-color: var(--muted); }
 .held-send:hover { background: color-mix(in srgb, var(--working) 12%, var(--card)); }
 /* a comment held back for the agent: not sent yet, so it can still be deleted (the bin always shows) */
 .talk .msg.held { outline: 1px dashed color-mix(in srgb, var(--working) 40%, transparent); outline-offset: -1px; }
+/* the owner's words the agent has not read yet: below its work, muted, until it reads them */
+.talk .msg.unread { outline: 1px dashed color-mix(in srgb, var(--working) 40%, transparent); outline-offset: -1px; }
+.talk .msg.unread > :not(.msg-delete):not(.unread-mark) { opacity: .6; }
+.talk .msg.unread > .unread-mark { margin-top: 4px; font-size: 12px; color: var(--working); }
 .talk .msg.flash { animation: msg-flash 2.4s ease-out; }
 @keyframes msg-flash {
   0%, 45% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--working) 60%, transparent), var(--shadow); background: color-mix(in srgb, var(--working) 14%, var(--card)); }

@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { LANGUAGE_NAMES } from '../core/locale';
 import { formatQuestion, type Item, type Question } from '../core/types';
 import { toQuestion } from './advisor';
-import type { Board } from './board';
+import { BadRequest, type Board } from './board';
 import type { AgentRuntime } from './runtime';
 import { toObeyaTool } from './to-obeya';
 
@@ -40,10 +40,18 @@ export class Revisions {
 
   constructor(private o: RevisionOptions) {}
 
-  /** The owner's words on a proposal: it waits while an agent reworks it by them. */
-  revise(cardId: string, words: string, spoken: boolean) {
-    this.o.board.revising(cardId, words, spoken);
-    this.run(cardId);
+  /**
+   * The owner's words on a proposal (`said`: the line of the log with them): it waits while an
+   * agent reworks it by them. Said while it is reworked, they wait for the rework after it.
+   */
+  revise(cardId: string, words: string, spoken: boolean, said?: number) {
+    if (!this.o.board.revising(cardId, words, spoken, said)) this.run(cardId);
+  }
+
+  /** The owner takes back words that wait for the next rework: they leave the conversation, and no agent hears them. */
+  unsay(cardId: string, id: number) {
+    if (!this.o.board.unread(cardId, id) || !this.o.board.unrevise(cardId, id)) throw new BadRequest('notHeld', 'the agent has read these words already');
+    this.o.board.withdraw(cardId, id);
   }
 
   /** After a restart: proposals still being reworked are reworked again. */
@@ -57,6 +65,7 @@ export class Revisions {
     const said = card?.proposal?.revising;
     if (!card || !said) return;
     this.busy.add(cardId);
+    this.o.board.readNow(cardId, said.said ?? []);
     this.ask(card, said)
       .then(
         (r) => {
@@ -81,7 +90,11 @@ export class Revisions {
       )
       .then((revised) => revised !== undefined && this.o.onRevised?.(cardId, revised))
       .catch((e) => console.error('revision:', e))
-      .finally(() => this.busy.delete(cardId));
+      .finally(() => {
+        this.busy.delete(cardId);
+        // what the owner said meanwhile is reworked in by the next
+        this.run(cardId);
+      });
   }
 
   /** The reworked proposal, or null when the agent only passed the words on to Obeya. */
