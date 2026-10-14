@@ -8,7 +8,8 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { chromium, type Browser, type BrowserContext, type Locator, type Page } from 'playwright-core';
+import type { Browser, BrowserContext, Locator, Page } from 'playwright-core';
+import { launchChromium } from '../../../lib/chromium.ts';
 import { type NarrationLanguage, readDemoSettings, withVoice } from './settings.ts';
 import { checkSetup, describeSetup, type ListenBackend, listenKit } from './setup.ts';
 import { CLOCK, type Cut, type Frame, frameDurations, laterLabel, onPaintTime, readClock, untagged, videoTime } from './timeline.ts';
@@ -399,23 +400,7 @@ function synthesize(scenes: Scene[], dir: string): Narration {
  * screencast captured only the top 813 of 900 pixels.
  */
 async function launch(viewport: { width: number; height: number }) {
-  const args = [`--window-size=${viewport.width},${viewport.height}`];
-  if (process.env.DEMO_CHROME) return chromium.launch({ executablePath: process.env.DEMO_CHROME, args });
-  // Chrome where it is installed, else Edge (on every Windows), else Playwright's own Chromium
-  // (on Linux on ARM, where there is no Chrome).
-  const missing: string[] = [];
-  for (const channel of ['chrome', 'msedge', undefined]) {
-    try {
-      return await chromium.launch({ channel, args });
-    } catch (error) {
-      const message = String((error as Error).message);
-      if (!/is not found at|Executable doesn't exist|not supported on/i.test(message)) throw error;
-      missing.push(channel ?? 'chromium');
-    }
-  }
-  throw new Error(
-    `no browser to record with (tried ${missing.join(', ')}): install Google Chrome, or run \`npx playwright-core install chromium\` in ${LIB}, or set DEMO_CHROME to a Chromium-based browser`,
-  );
+  return launchChromium({ args: [`--window-size=${viewport.width},${viewport.height}`] });
 }
 
 /**

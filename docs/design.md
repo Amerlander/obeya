@@ -1963,7 +1963,8 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   the repository: `plugin/` is a Claude Code plugin named `obeya` whose skill `demo`
   (`plugin/skills/demo/`) holds the instructions (`SKILL.md`, paths through `${CLAUDE_SKILL_DIR}`),
   the director (`lib/director.ts`, Playwright on the local Chrome, else Edge, else Playwright's
-  own Chromium, as on Linux on ARM where there is no Chrome; cut with ffmpeg, run with plain
+  own Chromium, as on Linux on ARM where there is no Chrome, launched by the plugin's
+  `lib/chromium.ts`, which the browser skill shares; cut with ffmpeg, run with plain
   `node`; on macOS, Linux and Windows, checked 2026-10-05), the overlay (`lib/overlay.js`) and the narration (`lib/tts.py`, synthesis and listening
   back), with Playwright among Obeya's dependencies. Obeya loads the plugin into every
   worker session (the Agent SDK's `plugins` option, a local plugin), so the worker has the skill
@@ -2324,6 +2325,23 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   dropped: only refusing a deploy while the live manifest lists pages missing here, which left the
   owner nothing to do but copy files by hand, and a shared storage directory (a synced folder or a
   bucket) as the site's source, which pushes the problem onto every user's setup.
+- **UI checks** — workers check web UIs with the plugin's skill `browser` (`plugin/skills/browser/`,
+  `obeya:browser`): `lib/browser.ts`, run with plain `node`, starts a headless browser and drives
+  it over CDP from the shell (open, nav, tabs, eval, text, screenshot, pdf, and `input` with
+  trusted clicks, drags, wheel, keys held across steps, typing, waits and `@selector` targets),
+  with the names and syntax of the owner's earlier private skill `chrome-headless`, so workers'
+  habits and notes carried over. That skill kept one browser per machine in a shared state file,
+  so every session reused whatever instance ran, and a browser outlived its check: an unmuted one
+  played demo narration through the speakers. Now each Claude Code session has its own: the state
+  file in the OS temp directory is named by the session's process (`CLAUDE_PID`, which Claude Code
+  gives every command), and `start` leaves a detached Node process (`serve`) that launches the
+  browser through Playwright (`plugin/lib/chromium.ts`, the demo's Chromium) with a CDP port and
+  `--mute-audio`, and closes it once the session's process has ended (checked every second), at
+  `stop` (CDP `Browser.close`, which works on Windows, where killing the holder would leave the
+  browser behind) or on a signal. Without `CLAUDE_PID` (a terminal) there is one browser per
+  user until `stop`. `--fake-mic` plays a WAV as the microphone; on macOS the old skill also moved
+  the audio service in-process for it, which Chrome launched by Playwright no longer needs
+  (checked 2026-10-14). Its tests run real browsers on macOS and Linux.
 - **Repository settings** (`settings` of a repository's entry in `canvases.json`, `RepoSettings`;
   for everyone `.obeya/settings.json` in the repository, `SharedSettings`) — the adapter's fields
   that are values (`land`, `direct`, `checks`, `setup`, `planDocs`, `softPaths`, `workspaces`,

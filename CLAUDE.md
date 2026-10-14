@@ -14,10 +14,11 @@ shows them as projects); when one is done, what lasts moves into `docs/design.md
   `~/.obeya` of a running Obeya): `bun scripts/scratch-obeya.ts <stage.json>` stages one with its
   cards in about a second (its header describes the stage file; `--stop <port>` ends it). Its
   workers are idle; with `--real-workers` they are real agents on the machine's Claude login.
-- UI checks run in headless Chrome through the `chrome-headless` skill (`input` for trusted
-  clicks, drags, keys held for push-to-talk; `start --fake-mic <wav>` for voice). A claude-in-chrome
-  tab is often hidden, which freezes `requestAnimationFrame`: camera flights and the unfold never
-  finish there.
+- UI checks run in a headless browser through the `browser` skill of Obeya's plugin
+  (`obeya:browser`; a session without the plugin reads `plugin/skills/browser/SKILL.md`): `input`
+  for trusted clicks, drags, keys held for push-to-talk; `start --fake-mic <wav>` for voice. A
+  claude-in-chrome tab is often hidden, which freezes `requestAnimationFrame`: camera flights and
+  the unfold never finish there.
 - Voice on this machine: `OBEYA_WHISPER_PYTHON=/Users/sadilek/dev/stimmzwilling/.venv/bin/python`
   (has `mlx_whisper`; the model is cached).
 - The Obeya instance for this repo runs on port 4417 with `~/.obeya`. It restarts itself once
