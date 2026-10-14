@@ -935,6 +935,31 @@ export function needsRestart(before: CanvasConfig[], after: CanvasConfig[]): boo
   return structure(before) !== structure(after);
 }
 
+/** The clones a repository gets whose adapter works in clones, the first canvas's or one added later: two cards run at once. */
+export const CLONES = 2;
+
+/**
+ * The draft with `CLONES` filled in for each repository the saved configuration does not have whose
+ * adapter works in clones (`resolved`, by index) and that names none, once per path: `filled` keeps the
+ * paths, so a count emptied again stays empty. Null when nothing is filled in.
+ */
+export function withClones(draft: CanvasConfig[], saved: CanvasConfig[], resolved: (ResolvedCanvas | null)[], filled: Set<string>): CanvasConfig[] | null {
+  const known = new Set(saved.flatMap((c) => c.repos.map((r) => r.path.trim())));
+  let changed = false;
+  const next = draft.map((c, i) => ({
+    ...c,
+    repos: c.repos.map((r, j) => {
+      const path = r.path.trim();
+      if (!path || known.has(path) || filled.has(path) || resolved[i]?.repos[j]?.workspaces !== 'clones') return r;
+      filled.add(path);
+      if (r.clones !== undefined || r.workspaces?.length) return r;
+      changed = true;
+      return { ...r, clones: CLONES };
+    }),
+  }));
+  return changed ? next : null;
+}
+
 /** A machine reached over SSH that a repository's workers run on, in clones of their own there. */
 export interface HostConfig {
   /** What the owner calls it; workspaces there are named by it. */

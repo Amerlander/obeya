@@ -914,7 +914,9 @@ the owner's language (`src/core/locale.ts`).
   browser tooltip with a wait on plain text.
   Each canvas is a heading line (number, name, id, whether it runs) over a table of its repositories:
   path, adapter, share command, one row each. Each canvas shows its id and whether it runs, each repository its id,
-  adapter, whether workers use clones or worktrees, and the command that shares its demos (empty:
+  adapter, whether workers use clones or worktrees (a repository added in the dialog whose adapter works
+  in clones gets as many as the first canvas's, two, filled in once its path is checked and changeable before
+  saving), and the command that shares its demos (empty:
   the adapter's site, shown as „Site: <url>“, or its command, or an export; see Sharing a demo); problems (no git repository, an unknown
   adapter, two canvases with one id, a canvas's home repository left out, a share command whose program is not there) show at the field while
   editing and keep it from being saved; where a path without a repository is a folder, the

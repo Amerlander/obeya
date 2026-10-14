@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { type Item, openPerGroup } from './types';
+import { CLONES, type Item, openPerGroup, type ResolvedCanvas, withClones } from './types';
 
 const card = (over: Partial<Item>): Item => ({ id: 'x', kind: 'task', state: 'planned', title: '', body: '', x: 0, y: 0, source: 'manual', repo: 'r', ...over });
 
@@ -23,5 +23,24 @@ describe('openPerGroup', () => {
     ]);
     // a group whose cards are all done has none open
     expect(open.get('c')).toBeUndefined();
+  });
+});
+
+describe('withClones', () => {
+  const at = (...workspaces: ('clones' | 'worktrees')[]): ResolvedCanvas => ({ id: 'c', name: 'c', repos: workspaces.map((w) => ({ id: 'r', adapter: 'generic', workspaces: w, values: {} as never })) });
+
+  test('fills in a repository added in clones, once per path', () => {
+    const saved = [{ repos: [{ path: '/a' }] }];
+    const filled = new Set<string>();
+    const draft = [{ repos: [{ path: '/a' }, { path: '/b' }] }];
+    const next = withClones(draft, saved, [at('clones', 'clones')], filled);
+    expect(next).toEqual([{ repos: [{ path: '/a' }, { path: '/b', clones: CLONES }] }]);
+    // emptied again, it stays empty
+    expect(withClones(draft, saved, [at('clones', 'clones')], filled)).toBeNull();
+  });
+
+  test('leaves worktrees, counts of its own and repositories not checked yet', () => {
+    const draft = [{ repos: [{ path: '/w' }, { path: '/n', clones: 0 }, { path: '/l', workspaces: ['/x'] }, { path: '' }] }, { repos: [{ path: '/u' }] }];
+    expect(withClones(draft, [], [at('worktrees', 'clones', 'clones', 'clones'), null], new Set())).toBeNull();
   });
 });

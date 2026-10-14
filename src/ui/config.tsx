@@ -4,7 +4,7 @@
 // own settings come from its command line and show read-only.
 
 import { type CSSProperties, Fragment, type ReactNode, useEffect, useId, useRef, useState } from 'react';
-import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigView, type DemoSettings, type DemoSettingsView, type DemoVoiceCheck, type Language, type HostConfig, type LanguageView, type NarrationLanguage, needsRestart, type RepoConfig, type RepoSettings, type RepoValues, type SettingValue, type SetupCheck, type Theme, THEMES, type ThemeView, type VoiceKind, type VoiceSetupView } from '../core/types';
+import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigView, type DemoSettings, type DemoSettingsView, type DemoVoiceCheck, type Language, type HostConfig, type LanguageView, type NarrationLanguage, needsRestart, type RepoConfig, type RepoSettings, type RepoValues, type SettingValue, type SetupCheck, type Theme, THEMES, type ThemeView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
 import { LANGUAGES } from '../core/locale';
 import { pushKeyFromEvent, type PushKeyView } from '../core/push-key';
 import { api, ApiError, reload } from './api';
@@ -65,7 +65,10 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }
   };
   // the id each canvas of the draft had when loaded: renaming a running canvas keeps it, and its cards
   const [origin, setOrigin] = useState<(string | null)[]>([]);
+  // a repository added here whose adapter works in clones gets as many as the first canvas's, once it is checked
+  const filled = useRef(new Set<string>());
   const load = (v: ConfigView) => {
+    filled.current.clear();
     setDraft(v.canvases);
     setOrigin(v.resolved.map((r) => r?.id ?? null));
   };
@@ -93,19 +96,28 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }
     }, console.error);
   }, [on]);
 
+  const take = (c: Checked, checkedDraft: CanvasConfig[]) => {
+    setChecked(c);
+    const next = view && withClones(checkedDraft, view.canvases, c.resolved, filled.current);
+    if (next) setDraft(next);
+  };
+
   // the draft is checked as it is edited: paths, adapters, ids
   const seq = useRef(0);
   useEffect(() => {
     if (!view || !changed) return void (view && setChecked(view));
     const n = ++seq.current;
-    const h = setTimeout(() => api.checkConfig(draft).then((c) => n === seq.current && setChecked(c), console.error), 300);
+    const h = setTimeout(() => api.checkConfig(draft).then((c) => n === seq.current && take(c, draft), console.error), 300);
     return () => clearTimeout(h);
   }, [draft, view]);
 
   const problems = checked?.problems ?? [];
   const c = t.config;
   // a path that became a repository here (git set up in its folder): its problem goes
-  const recheck = () => api.checkConfig(draft).then(setChecked, console.error);
+  const recheck = () => {
+    const n = ++seq.current;
+    api.checkConfig(draft).then((v) => n === seq.current && take(v, draft), console.error);
+  };
   return (
     // a press on the dim around the dialog closes it; a press that starts inside does not
     <div id="config" className={on ? 'on' : undefined} onPointerDown={(e) => e.target === e.currentTarget && onClose()}>

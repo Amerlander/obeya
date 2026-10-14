@@ -15,7 +15,7 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 // by its path: the package exports no package.json, which Bun imports all the same but TypeScript does not
 import sdk from '../../node_modules/@anthropic-ai/claude-agent-sdk/package.json';
-import { blocksSaving, type FirstCanvas, type MachineItem, type MachineJob, type MachineSection, type MachineSectionId, type MachineView, type SetupFolder, type GitSetupPreview } from '../core/types';
+import { blocksSaving, CLONES, type FirstCanvas, type MachineItem, type MachineJob, type MachineSection, type MachineSectionId, type MachineView, type SetupFolder, type GitSetupPreview } from '../core/types';
 import { readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
 import { checkSetup, installHint, type LinuxFamily, linuxFamily, output } from '../../plugin/skills/demo/lib/setup.ts';
 import { installVoice } from '../../plugin/skills/demo/lib/voices.ts';
@@ -172,9 +172,6 @@ export function welcome(home: string, canvases: CanvasRuntime[]) {
   const { title, body } = c.board.t.welcome;
   c.board.create({ title, body, ...at });
 }
-
-/** The clones a first canvas gets whose adapter works in clones. */
-export const CLONES = 2;
 
 /** The folder a clone gets: the repository's name, from a URL or `owner/name`. */
 export function cloneName(spec: string): string {
