@@ -122,6 +122,13 @@ export function talkTurns(events: CardEvent[], opts: { asking?: Question; over?:
   return { shown, pending: steps, ...(asked ? { asked } : {}) };
 }
 
+/** A proposal's conversation without where its open questions were asked: the last time each was. */
+export function withoutOpen(events: CardEvent[], open: Question[]): CardEvent[] {
+  if (!open.length) return events;
+  const asked = new Set(open.map((q) => events.findLast((e) => e.kind === 'question' && parseQuestion(e.text).text === q.text)?.id));
+  return events.filter((e) => !asked.has(e.id));
+}
+
 /**
  * Steps no message came after, in a conversation nobody works on any more, go where they happened,
  * before what came later. Each run of them between two turns ends with the agent's last words in

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Item } from '../core/types';
+import { agentListens, type Item } from '../core/types';
 import { CanvasRuntime } from './canvas';
 import { Store } from './db';
 import { FakeRuntime, type FakeSession, gitRepo, noForge } from './testing';
@@ -78,7 +78,7 @@ describe('a proposal reworked by what the owner says', () => {
     expect(r.inbox[0]).toContain('Nimm auch Excel mit, und UTF-8 ist gesetzt.');
     expect(() => board().accept(p.id)).toThrow('being reworked');
 
-    r.call('revise_proposal', { title: 'CSV- und Excel-Export prüfen', task: 'CSV und Excel schreiben Umlaute falsch. Kodierung: UTF-8.', reason: 'Beim Export aufgefallen.', questions: [] });
+    r.call('revise_proposal', { title: 'CSV- und Excel-Export prüfen', task: 'CSV und Excel schreiben Umlaute falsch. Kodierung: UTF-8.', reason: 'Beim Export aufgefallen.', questions: [], reply: 'Excel ist dabei, UTF-8 steht im Text.' });
     r.emit({ type: 'idle' });
     await settle();
     const after = board().item(p.id)!;
@@ -86,10 +86,81 @@ describe('a proposal reworked by what the owner says', () => {
     expect(after.title).toBe('CSV- und Excel-Export prüfen');
     expect(after.body).toBe('CSV und Excel schreiben Umlaute falsch. Kodierung: UTF-8.');
     expect(after.proposal).toEqual({ reason: 'Beim Export aufgefallen.', questions: [] });
+    // the question it settled stays in the conversation where it was asked, the reviser's answer after the owner's words
     expect(board().events(p.id).map((e) => [e.kind, e.author, e.text])).toEqual([
+      ['question', 'worker', 'Welche Kodierung?\n– UTF-8\n– Latin-1'],
       ['say', 'owner', 'Nimm auch Excel mit, und UTF-8 ist gesetzt.'],
       ['say', 'koordinator', 'Ich überarbeite den Vorschlag.'],
+      ['talk', 'worker', 'Excel ist dabei, UTF-8 steht im Text.'],
       ['state', 'koordinator', 'Vorschlag überarbeitet.'],
+    ]);
+  });
+
+  test('words on the open proposal go straight to its reviser, without the Koordinator or an undo window', () => {
+    const p = proposal();
+    expect(agentListens(board().item(p.id)!)).toBe(true);
+    canvas.tell(p.id, 'Was würdest du nehmen?', [], false);
+    expect(board().item(p.id)!.proposal?.revising).toEqual({ words: 'Was würdest du nehmen?' });
+    expect(reviser()!.inbox[0]).toContain('Was würdest du nehmen?');
+    expect(reviser()!.spec.tools.map((t) => t.name)).toContain('to_obeya');
+    expect(runtime.sessions.some(isKoordinator)).toBe(false);
+    // the question stays above the owner's words; while it is reworked, the Koordinator hears what they say
+    expect(board().events(p.id).map((e) => [e.kind, e.author])).toEqual([
+      ['question', 'worker'],
+      ['say', 'owner'],
+    ]);
+    expect(agentListens(board().item(p.id)!)).toBe(false);
+  });
+
+  test('accepting, passed on by the reviser, waits for the rework and then starts the proposal', async () => {
+    const from = board().create({ title: 'Export', x: 0, y: 0 });
+    const p = board().propose(from.id, { title: 'CSV-Export prüfen', task: 'Der CSV-Export schreibt Umlaute falsch.', reason: 'Beim Export aufgefallen.' });
+    canvas.tell(p.id, 'Übernimm ihn und leg los', [], true);
+    const r = reviser()!;
+    const result = r.call('to_obeya', { request: 'Accept the proposal and start it' }) as Promise<string>;
+    await settle();
+    const k = runtime.sessions.filter(isKoordinator).at(-1)!;
+    const tag = k.inbox.at(-1)!.match(/(K\d+) \[proposal\] "CSV-Export prüfen"/)![1]!;
+    expect(k.call('act', { actions: [{ do: 'accept', card: tag }], confirm: 'Ich übernehme den Vorschlag und starte ihn.' })).not.toContain('goes by a click');
+    k.emit({ type: 'idle' });
+    expect(await result).toBe('Obeya: Ich übernehme den Vorschlag und starte ihn.');
+    await settle(30);
+    expect(board().item(p.id)!.proposal?.acceptAfterRevision).toBe(true);
+    // nothing to rework: the reviser ends without a new text, and the proposal goes as it is
+    r.emit({ type: 'idle' });
+    await settle();
+    expect(board().item(p.id)!.state).not.toBe('proposal');
+    expect(board().events(p.id).some((e) => e.kind === 'error')).toBe(false);
+  });
+
+  test('words that only ask are answered, and the proposal stays as it was', async () => {
+    const p = proposal();
+    canvas.press(p.id, { action: 'revise', text: 'Was würdest du nehmen?' });
+    const r = reviser()!;
+    r.call('revise_proposal', { title: p.title, task: p.body, reason: 'Beim Export aufgefallen.', questions: [{ question: 'Welche Kodierung?', options: ['UTF-8', 'Latin-1'] }], reply: 'UTF-8: das lesen alle heutigen Programme.' });
+    r.emit({ type: 'idle' });
+    await settle();
+    expect(board().item(p.id)!.proposal).toEqual({ reason: 'Beim Export aufgefallen.', questions: [{ text: 'Welche Kodierung?', options: ['UTF-8', 'Latin-1'] }] });
+    // the kept question is not asked a second time, and nothing reads as revised
+    expect(board().events(p.id).map((e) => [e.kind, e.author, e.text])).toEqual([
+      ['question', 'worker', 'Welche Kodierung?\n– UTF-8\n– Latin-1'],
+      ['say', 'owner', 'Was würdest du nehmen?'],
+      ['talk', 'worker', 'UTF-8: das lesen alle heutigen Programme.'],
+    ]);
+  });
+
+  test('a question the reviser asks anew stands in the conversation after its reply', async () => {
+    const p = proposal();
+    canvas.press(p.id, { action: 'revise', text: '**Welche Kodierung?** UTF-8. Und Excel?' });
+    const r = reviser()!;
+    r.call('revise_proposal', { title: p.title, task: `${p.body} Kodierung: UTF-8.`, questions: [{ question: 'Excel auch?', options: ['Ja', 'Nein'] }], reply: 'UTF-8 steht im Text; ob Excel dazukommt, entscheidest du.' });
+    r.emit({ type: 'idle' });
+    await settle();
+    expect(board().events(p.id).map((e) => [e.kind, e.author, e.text]).slice(1)).toEqual([
+      ['say', 'owner', '**Welche Kodierung?** UTF-8. Und Excel?'],
+      ['talk', 'worker', 'UTF-8 steht im Text; ob Excel dazukommt, entscheidest du.'],
+      ['state', 'koordinator', 'Vorschlag überarbeitet.'],
+      ['question', 'worker', 'Excel auch?\n– Ja\n– Nein'],
     ]);
   });
 

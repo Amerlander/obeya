@@ -790,7 +790,7 @@ function Canvas({
   const focusItem = focus ? (items.find((i) => i.id === focus.id) ?? archived.find((i) => i.id === focus.id)) : undefined;
   const target =
     focus?.type === 'card'
-      ? (focusItem && agentListens(focusItem) ? (focusItem.kind === 'question' ? t.voice.question : focusItem.state === 'idea' ? t.voice.idea : t.voice.agent) : t.voice.card)(plain(focusItem?.title ?? ''))
+      ? (focusItem && agentListens(focusItem) ? (focusItem.kind === 'question' ? t.voice.question : focusItem.state === 'idea' ? t.voice.idea : focusItem.state === 'proposal' ? t.voice.proposal : t.voice.agent) : t.voice.card)(plain(focusItem?.title ?? ''))
       : focus?.type === 'project'
         ? t.voice.project(plain(focusItem?.title ?? ''))
         : t.voice.koordinator;

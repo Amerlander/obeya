@@ -225,11 +225,18 @@ An idea is thought through on its card before anything is planned; no worker run
    "Übernehmen und besprechen" makes it an open idea whose exploration agent opens the discussion
    with the text and its questions; "Als Aufgabe übernehmen" plans it as a task instead. Instead
    of editing a proposal by hand, the owner may say (or type into its field „Was soll anders
-   werden?“) what should change: the Koordinator reads it as `revise`, and after the undo window a
-   read-only agent (`revisions.ts`, a Koordinator turn, in the card's repository) rewrites title, text,
+   werden?“) what should change. With the proposal open, the words go straight to a read-only
+   agent (`revisions.ts`, in the card's repository), as on a card with an agent, without the
+   Koordinator or an undo window („Agent · Vorschlag: …“ under the mic). It rewrites title, text,
    reason and questions by those words, keeping what they did not touch; a question the words
-   settle goes, and its decision into the text. As with an idea, the conversation about it stands
-   beside the proposal, its questions at the end of it and the field under it; the proposal's text
+   settle goes, and its decision into the text. What the words ask of Obeya (accept or dismiss the
+   proposal, a rule, another card) it passes on with `to_obeya`; accepting passed on that way waits
+   for the rework as the button does, and words that only did that leave the proposal as it was.
+   Said of a proposal that is not open, the Koordinator reads the words as `revise`. What the words only ask („Was würdest du
+   nehmen?“) the reviser answers and leaves the proposal as it was there. As with an idea, the
+   conversation about it stands beside the proposal, its open questions at the end of it and the
+   field under it; a question stands where it was asked once it is settled (or while the proposal
+   is reworked), so the owner still sees what they answered; the proposal's text
    and reason are on the left, its buttons below both. The text box is as tall as the text and
    the panel grows with it up to the screen's height; only beyond that does the box scroll. Options picked there and sent („Antworten“,
    with words or without) go to the reviser at once, without the Koordinator or an undo window, and
@@ -237,7 +244,13 @@ An idea is thought through on its card before anything is planned; no worker run
    as above. Meanwhile the proposal shows „wird überarbeitet“ (in the
    conversation, where the field was), cannot be edited or only accepted („Übernehmen“), and takes
    no second revision; it is not among the cards that need the owner. The owner's words stand in
-   its conversation, then „Vorschlag überarbeitet.“; an agent
+   its conversation, then the reviser's reply (its answer to what they asked, and what it changed),
+   „Vorschlag überarbeitet.“ when the proposal reads otherwise now, and the questions it asks anew.
+   Before (2026-10-14), the reviser could not reply, and a question lived only at the end of the
+   conversation: the owner who asked about it saw neither the question nor an answer once it was
+   settled, only their own words. The Koordinator read the words first and the reviser started
+   after the undo window; meanwhile the owner's words stood above the question they asked about.
+   An agent
    that ends without a text leaves the proposal as it was, with the error. A revision still running
    at a restart starts again. „Übernehmen und starten“ (on a proposed idea „Übernehmen und
    besprechen“) does not wait, as "So bauen" on an idea does not (2026-10-06: the owner who
@@ -247,7 +260,7 @@ An idea is thought through on its card before anything is planned; no worker run
    without a text. The panel stays open while it waits: the button reads „Startet nach der
    Überarbeitung …“ with „Doch nicht übernehmen“ beside it, and the canvas card says „danach
    übernommen“. The waiting button and its take-back are one component with an idea's. Said by
-   voice, accepting during a revision is still refused, see below. Before (2026-10-06), the button
+   voice to the Koordinator while the proposal is reworked, accepting is still refused, see below. Before (2026-10-06), the button
    was disabled until the new text was there. Before,
    a proposal was the worker's reason and suggestion as one text, in the first person, with open
    questions buried in it; taken as it was, it went to the next worker as if the owner had
@@ -1726,7 +1739,8 @@ the owner's language (`src/core/locale.ts`).
   Projekt: …"); the words go exactly where it says (`agentListens` in `src/core/types.ts`, the same
   for the label and the route). On a card an agent listens on (its worker at work, waiting, in a
   pull request or finishing after the landing, the one a question resumes on a finished card, a
-  prototype's worker, an idea's exploration agent) what the owner types or says goes straight to
+  prototype's worker, an idea's exploration agent, the agent that reworks a proposal unless it is
+  at it already) what the owner types or says goes straight to
   that agent (`CanvasRuntime.tell`), typed words at once, spoken ones as soon as the speech
   recognition has written them down, with the screenshots shown with them: by the card's state, talk to an idea,
   the answer to the worker's question, or else words the worker takes in (a note while it works,
@@ -1747,7 +1761,7 @@ the owner's language (`src/core/locale.ts`).
   work probably sees the words only at its next tool call, so a forwarded request may wait behind
   a long step (a render); "gib frei" typed on a card waiting for review costs the worker a turn
   before it reaches the Koordinator, several seconds, where the button „Freigeben“ is immediate.
-  On any other card (planned, queued, finished without an agent, a proposal), with a project open
+  On any other card (planned, queued, finished without an agent, a proposal being reworked), with a project open
   or nothing, the Koordinator reads the words, with that card or project in focus.
   A Koordinator turn reads
   the transcript as speech that may be misheard (typed words as written) and either acts or replies. Acting takes one or
@@ -1788,9 +1802,9 @@ the owner's language (`src/core/locale.ts`).
   seconds after it reached the owner, so "Rückgängig" takes back anything, even an approval. A page
   that opens in that window (a reload) shows the confirmation with „Rückgängig“ again for the rest
   of it. Only
-  talking to an idea goes on at once: it changes nothing. With a proposal open, what the owner says about it is,
+  talking to an idea goes on at once: it changes nothing. What the owner says to the Koordinator about a proposal is,
   in doubt, a revision (`revise`, with their words and the undo window); accepting in the same
-  breath is refused, since the owner should see what they take. A note, an answer or feedback the
+  breath, or while it is reworked, is refused, since the owner should see what they take. A note, an answer or feedback the
   Koordinator passes to a card's agent (said in its sheet: „sag dem Export, …“) waits for undo like
   every command to Obeya, and spoken words reach the agent with the remark that speech recognition
   may have misheard them. `commands.live.test.ts` checks against the real model (`OBEYA_LIVE=1`)
@@ -2921,6 +2935,11 @@ the repository; the copy on the project is only for the archive).
   or in the Koordinator's quick turn (2026-10-06): the worker may be gone or busy with its own card,
   and writing a whole card text would slow every confirmation down. Before, the owner could only
   type the changes into the proposal's text themselves.
+- On an open proposal, the owner's words go straight to its reviser, which passes on what asks
+  Obeya for something, as on any card with an agent (2026-10-14). Before, the Koordinator read them
+  first, since they might accept or dismiss the proposal rather than change it: the reviser
+  started only after the undo window, and on a task the same words would have gone straight to its
+  agent.
 - A worker's question goes straight to the owner, with the worker's own pick (2026-10-07). Before,
   a project agent answered a workstream's questions and the Koordinator those of a card without a
   project, escalating only what they could not settle; they were allowed technical judgement calls

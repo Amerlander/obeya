@@ -1,12 +1,15 @@
 // A proposal reworked by what the owner said about it: an agent rewrites its text, reason and
 // questions in one read-only turn, and the proposal waits for it. What the owner did not touch stays.
+// The owner's words on an open proposal come straight to this agent, as to a card's worker, and it
+// passes on what asks Obeya for something (`to_obeya`).
 
 import { z } from 'zod';
 import { LANGUAGE_NAMES } from '../core/locale';
-import type { Item } from '../core/types';
+import { formatQuestion, type Item, type Question } from '../core/types';
 import { toQuestion } from './advisor';
 import type { Board } from './board';
 import type { AgentRuntime } from './runtime';
+import { toObeyaTool } from './to-obeya';
 
 export interface RevisionOptions {
   board: Board;
@@ -14,6 +17,8 @@ export interface RevisionOptions {
   /** The checkout the agent may read in: the card's repository. */
   pathFor: (card: Item) => string;
   preferences?: () => string;
+  /** Passes on to Obeya what the owner's words ask of it (accept the proposal, a rule, another card), with the card in focus. */
+  toObeya?: (cardId: string, request: string) => Promise<string>;
   /** The revision is over: the new text stands (`revised`), or the agent ended without one and the old text stays. */
   onRevised?: (cardId: string, revised: boolean) => void;
 }
@@ -25,6 +30,8 @@ interface Revised {
   reason?: string;
   idea?: boolean;
   questions: { question: string; options?: string[]; multiple?: boolean }[];
+  /** Its turn in the conversation: the answer to what the owner asked, and what changed. */
+  reply?: string;
 }
 
 export class Revisions {
@@ -53,9 +60,17 @@ export class Revisions {
     this.ask(card, said)
       .then(
         (r) => {
+          // the words only asked Obeya for something: the proposal stays as it was, and what Obeya did stands in its conversation
+          if (!r) return this.o.board.revised(cardId) || undefined;
           const questions = r.questions.map((q) => toQuestion(q.question, q.options, q.multiple));
-          if (!this.o.board.revised(cardId, { title: r.title, task: r.task, ...(r.reason ? { reason: r.reason } : {}), idea: !!r.idea, questions })) return;
-          this.o.board.log(cardId, 'state', 'koordinator', this.o.board.t.koordinator.revised);
+          const p = { title: r.title, task: r.task, ...(r.reason?.trim() ? { reason: r.reason.trim() } : {}), idea: !!r.idea, questions };
+          if (!this.o.board.revised(cardId, p)) return;
+          const reply = r.reply?.trim();
+          if (reply) this.o.board.log(cardId, 'talk', 'worker', reply.slice(0, 4000));
+          if (changed(card, p)) this.o.board.log(cardId, 'state', 'koordinator', this.o.board.t.koordinator.revised);
+          // a question asked anew stands in the conversation from now on; one it kept stands where it was asked
+          const asked = new Set(card.proposal!.questions.map(key));
+          for (const q of questions) if (!asked.has(key(q))) this.o.board.log(cardId, 'question', 'worker', formatQuestion(q, this.o.board.language()));
           return true;
         },
         (e) => {
@@ -69,15 +84,18 @@ export class Revisions {
       .finally(() => this.busy.delete(cardId));
   }
 
-  private ask(card: Item, said: { words: string; spoken?: boolean }): Promise<Revised> {
+  /** The reworked proposal, or null when the agent only passed the words on to Obeya. */
+  private ask(card: Item, said: { words: string; spoken?: boolean }): Promise<Revised | null> {
     return new Promise((resolve, reject) => {
       let done = false;
+      let passed = false;
+      const toObeya = this.o.toObeya;
       const session = this.o.runtime.start(
         {
           cwd: this.o.pathFor(card),
           readOnly: true,
           role: 'koordinator',
-          system: [SYSTEM, this.o.preferences?.() ?? ''].filter(Boolean).join('\n\n'),
+          system: [SYSTEM, this.o.toObeya ? TO_OBEYA : '', this.o.preferences?.() ?? ''].filter(Boolean).join('\n\n'),
           tools: [
             {
               name: 'revise_proposal',
@@ -86,6 +104,7 @@ export class Revisions {
                 `title: short and precise. task: the card's text, written for the agent who will take it on, which has seen neither the card it came from nor this conversation: what is wrong or wanted, where (files, names), what done looks like; as the owner would write a card: no "I", no "my question"; other cards named by their title.`,
                 `reason: for the owner only, why it is proposed, a sentence or two (keep it unless what the owner said changes it). idea: true for something to think through with the owner before anyone builds it.`,
                 `questions: what the owner still has to decide, each with up to four short options; keep them out of task. A question the owner's words settle goes, and its decision goes into task.`,
+                `reply: your turn in the conversation beside the proposal, a sentence or two for the owner: the answer to what they asked (asked which option you would take: your pick and why), and what you changed, without repeating the text.`,
               ].join(' '),
               schema: {
                 title: z.string(),
@@ -93,6 +112,7 @@ export class Revisions {
                 reason: z.string().optional(),
                 idea: z.boolean().optional(),
                 questions: z.array(z.object({ question: z.string(), options: z.array(z.string()).max(4).optional(), multiple: z.boolean().optional() })).max(5),
+                reply: z.string(),
               },
               run: (r) => {
                 if (done) return 'Only the first one counts.';
@@ -102,6 +122,14 @@ export class Revisions {
                 return 'Recorded. End your turn now.';
               },
             },
+            ...(toObeya
+              ? [
+                  toObeyaTool((request) => {
+                    passed = true;
+                    return toObeya(card.id, request);
+                  }),
+                ]
+              : []),
           ],
           onEvent: (e) => {
             if (e.type === 'error' && !done) {
@@ -109,7 +137,8 @@ export class Revisions {
               reject(new Error(e.message));
             } else if (e.type === 'idle') {
               session.close();
-              if (!done) reject(new Error('der Agent hat keinen neuen Text geliefert'));
+              if (passed && !done) resolve(null);
+              else if (!done) reject(new Error('der Agent hat keinen neuen Text geliefert'));
             }
           },
         },
@@ -137,7 +166,25 @@ export class Revisions {
   }
 }
 
+/** A question as the conversation holds it. */
+const key = (q: Question) => JSON.stringify([q.text, q.options, !!q.multiple]);
+
+/** Whether the proposal reads otherwise now: words that only asked something leave it as it was. */
+function changed(card: Item, p: { title: string; task: string; reason?: string; idea: boolean; questions: Question[] }): boolean {
+  const was = card.proposal!;
+  return (
+    p.title !== card.title ||
+    p.task !== card.body ||
+    (p.reason ?? '') !== (was.reason ?? '') ||
+    p.idea !== !!was.idea ||
+    JSON.stringify(p.questions.map(key)) !== JSON.stringify(was.questions.map(key))
+  );
+}
+
+const TO_OBEYA =
+  "Some of the owner's words ask Obeya rather than you: accept the proposal (and start it), dismiss it, a new card, a rule to remember („Merk dir …“), an action on another card, a question about the canvas or another card. Pass those on with to_obeya: Obeya does them as the owner meant, with a confirmation the owner can take back. When that is all they said, revise_proposal is not needed.";
+
 const SYSTEM = `
-You rework a card an agent proposed on Obeya, a canvas on which the owner directs coding agents. The owner read the proposal and said what should change: what to add, drop, decide or put differently. Rewrite the proposal by their words: what they did not touch stays as it was, in its wording; what they said goes in, as they meant it, in the card's text and not as a quote of them. Spoken words may be misheard: read them for what they most likely meant.
-The card's text is all the agent who takes it on gets, so it must stand on its own. Read in the repository only where the owner's words need it (a file, a name they mention). Then call revise_proposal once with the whole proposal and end your turn. You cannot change files.
+You rework a card an agent proposed on Obeya, a canvas on which the owner directs coding agents. The owner read the proposal and spoke to you about it: what to add, drop, decide or put differently, or a question. Rewrite the proposal by their words: what they did not touch stays as it was, in its wording; what they said goes in, as they meant it, in the card's text and not as a quote of them. What they only asked (which option you would take, what something means) you answer in your reply; the decision stays theirs, so the proposal stays as it was there. Spoken words may be misheard: read them for what they most likely meant.
+The card's text is all the agent who takes it on gets, so it must stand on its own. Read in the repository only where the owner's words need it (a file, a name they mention). Then call revise_proposal once with the whole proposal and your reply, and end your turn. You cannot change files.
 `.trim();

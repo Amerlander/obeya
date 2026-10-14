@@ -88,11 +88,12 @@ export const answering = (i: Pick<Item, 'state' | 'need' | 'answering'>) => i.st
 /**
  * Whether an agent hears what the owner says or types on the card when it is open: its worker (at
  * work, waiting, in a pull request, finishing after the landing, or one a question resumes on a
- * finished card) or an idea's exploration agent. The words then go straight to it; on any other
- * card they go to the Koordinator.
+ * finished card), an idea's exploration agent, or the agent that reworks a proposal (not while it
+ * does: the words then wait for nobody). The words then go straight to it; on any other card they
+ * go to the Koordinator.
  */
-export const agentListens = (i: Pick<Item, 'kind' | 'state' | 'branch' | 'prototypeOf' | 'archivedAt' | 'finishing'>) =>
-  !i.archivedAt && (i.kind === 'question' || i.state === 'idea' || i.state === 'working' || i.state === 'waiting' || i.state === 'inPr' || !!i.finishing || askable(i));
+export const agentListens = (i: Pick<Item, 'kind' | 'state' | 'branch' | 'prototypeOf' | 'archivedAt' | 'finishing' | 'proposal'>) =>
+  !i.archivedAt && (i.kind === 'question' || i.state === 'idea' || (i.state === 'proposal' && !i.proposal?.revising) || i.state === 'working' || i.state === 'waiting' || i.state === 'inPr' || !!i.finishing || askable(i));
 
 /**
  * A card needs the owner: it waits (but not while its worker takes in what the owner wrote on its

@@ -20,7 +20,7 @@ import { AttachButton, imageUrl, ShotStrip, Shots, useShotInput } from './shots'
 import { useStickToEnd } from './stickToEnd';
 import { dismissPlace, type Place, seekTo, usePlace, videoOf, watch } from './spot';
 import { becomesLabel, clock as time, errorText, stateLabel, t } from './strings';
-import { agentWorks, demoHandover, koordinatorReads, ownerField, parseQuestion, started, talkAlone, talkTurns, type Turn, worked as isWorked } from './talk';
+import { agentWorks, demoHandover, koordinatorReads, ownerField, parseQuestion, started, talkAlone, talkTurns, type Turn, withoutOpen, worked as isWorked } from './talk';
 
 /**
  * What the panel does after an action: fold the card and confirm (with undo, when it has one), or stay open.
@@ -907,7 +907,10 @@ function Conversation({
   const working = !past && agentWorks(item);
   const asked = JSON.stringify(item.idea?.questions ?? asking ?? []);
   const onScroll = useStickToEnd(box, `${events?.at(-1)?.id}|${working}|${asked}`, events);
-  const turns = useMemo(() => (events ? talkTurns(events, { asking, over: !working }) : null), [events, asked, working]);
+  // a proposal's open questions stand at the end, where they are answered, rather than where they were asked
+  const open = proposal && !working ? (item.proposal?.questions ?? []) : [];
+  const openKey = JSON.stringify(open);
+  const turns = useMemo(() => (events ? talkTurns(withoutOpen(events, open), { asking, over: !working }) : null), [events, asked, working, openKey]);
   const byId = useMemo(() => new Map(events?.map((e) => [e.id, e])), [events]);
   if (!events || !turns) return null;
   if (hideEmpty && !turns.shown.length && !turns.pending.length) return null;
@@ -960,7 +963,7 @@ function Conversation({
         {seed}
         {turns.shown.slice(seedAt).map(line)}
         {working ? (
-          <Msg by={idea ? 'explorer' : proposal || question ? 'koordinator' : 'worker'} className="thinking" who={proposal ? t.revising : `${agent} ${idea ? t.idea.thinking : question ? t.answer.reading : t.talk.working}`}>
+          <Msg by={idea ? 'explorer' : question ? 'koordinator' : 'worker'} className="thinking" who={proposal ? t.revising : `${agent} ${idea ? t.idea.thinking : question ? t.answer.reading : t.talk.working}`}>
             {pending.at(-1) && <Gist text={pending.at(-1)!.text} />}
             <Steps steps={pending} />
           </Msg>

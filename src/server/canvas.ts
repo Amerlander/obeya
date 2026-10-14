@@ -333,7 +333,7 @@ export class CanvasRuntime {
     board.interruptTalk();
     this.commander.resume();
     this.answers.resume();
-    this.revisions = new Revisions({ board, runtime: deps.runtime, preferences, pathFor: (card) => this.repoOf(card).read.path, onRevised: (cardId, revised) => this.revised(cardId, revised) });
+    this.revisions = new Revisions({ board, runtime: deps.runtime, preferences, pathFor: (card) => this.repoOf(card).read.path, toObeya: (cardId, request) => this.forward(cardId, request), onRevised: (cardId, revised) => this.revised(cardId, revised) });
     this.revisions.resume();
     this.sharing = new Sharing({
       board,
@@ -513,9 +513,9 @@ export class CanvasRuntime {
 
   /**
    * What the owner says or types with a card open that an agent listens on (`agentListens`) goes
-   * straight to that agent, by the card's state: talk to an idea, the answer to its worker's
-   * question, or else words the worker takes in (a note while it works, words on its handover, a
-   * question once its work is done). The agent passes on what asks Obeya for something (`to_obeya`).
+   * straight to that agent, by the card's state: talk to an idea, words a proposal is reworked by,
+   * the answer to its worker's question, or else words the worker takes in (a note while it works,
+   * words on its handover, a question once its work is done). The agent passes on what asks Obeya for something (`to_obeya`).
    * `replyTo`: the message of the card's conversation the words reply to; `spot`: the place in the
    * card's demo video they are about.
    */
@@ -528,6 +528,12 @@ export class CanvasRuntime {
     this.said.set(cardId, { text, spoken });
     if (card.kind === 'question') return this.act(cardId, { action: 'ask', ...said });
     if (card.state === 'idea') return this.act(cardId, { action: 'discuss', ...said });
+    if (card.state === 'proposal') {
+      // a proposal's field takes no screenshots: the words alone
+      this.board.log(cardId, 'say', 'owner', text.trim(), undefined, undefined, undefined, this.board.quoted(cardId, replyTo)?.id);
+      this.koordinator.learn(card, 'note', text.trim());
+      return this.act(cardId, { action: 'revise', text, spoken, ...(replyTo ? { replyTo } : {}) });
+    }
     if (card.state === 'waiting' && card.need === 'question') return this.act(cardId, { action: 'answer', ...said });
     return this.act(cardId, { action: 'message', ...said, ...(spot ? { spot } : {}) });
   }

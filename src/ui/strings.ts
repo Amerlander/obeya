@@ -371,6 +371,7 @@ const de = {
     card: (title: string) => `Obeya · Aufgabe: ${title}`,
     /** A card an agent works on: what the owner says goes straight to it, and it passes requests to Obeya on. */
     agent: (title: string) => `Agent · Aufgabe: ${title}`,
+    proposal: (title: string) => `Agent · Vorschlag: ${title}`,
     idea: (title: string) => `Agent · Idee: ${title}`,
     question: (title: string) => `Agent · Frage: ${title}`,
     project: (title: string) => `Obeya · Projekt: ${title}`,
@@ -1532,6 +1533,7 @@ const en: Strings = {
     koordinator: 'Obeya',
     card: (title: string) => `Obeya · Task: ${title}`,
     agent: (title: string) => `Agent · Task: ${title}`,
+    proposal: (title: string) => `Agent · Proposal: ${title}`,
     idea: (title: string) => `Agent · Idea: ${title}`,
     question: (title: string) => `Agent · Question: ${title}`,
     project: (title: string) => `Obeya · Project: ${title}`,

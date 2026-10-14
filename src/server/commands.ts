@@ -720,7 +720,8 @@ export class Commander {
       case 'accept':
       case 'dismiss':
         if (card.state !== 'proposal') return `the card is no proposal (${is})`;
-        if (a.do === 'accept' && card.proposal?.revising)
+        // passed on by its reviser, accepting waits for the reworked text, as the button does
+        if (a.do === 'accept' && card.proposal?.revising && card.id !== s.reading?.from)
           return 'the proposal is being reworked by what the owner said; accepting it goes by a click, which waits for the new text: drop this action and say so in confirm';
         break;
       case 'revise':

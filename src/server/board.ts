@@ -41,6 +41,7 @@ import {
   type Thread,
   STATES,
   finished,
+  formatQuestion,
   type Notice,
 } from '../core/types';
 import type { CardRow, DecisionRow, Friction, FrictionNote, GroupRow, NewRow, RowUpdate, Store } from './db';
@@ -487,6 +488,8 @@ export class Board {
         group_id: from?.group ?? null,
       },
     ]);
+    // its questions stand in its conversation as the proposing agent asked them, and stay there once settled
+    for (const q of proposal.questions) this.log(row!.id, 'question', 'worker', formatQuestion(q, this.language()));
     this.changed();
     return toItems([row!], [], this.home)[0]!;
   }

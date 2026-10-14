@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { type CardEvent, formatQuestion } from '../core/types';
-import { agentWorks, demoHandover, koordinatorReads, ownerField, parseQuestion, split, talkAlone, talkTurns } from './talk';
+import { agentWorks, demoHandover, koordinatorReads, ownerField, parseQuestion, split, talkAlone, talkTurns, withoutOpen } from './talk';
 
 let id = 0;
 const ev = (kind: CardEvent['kind'], author: CardEvent['author'], text: string): CardEvent => ({ id: ++id, cardId: 'c', at: '2026-10-01T10:00:00Z', kind, author, text });
@@ -261,4 +261,17 @@ test("the Koordinator reads the owner's words on a card until its confirmation f
   expect(koordinatorReads([said, ev('say', 'koordinator', '„Export“ startet.')])).toBe(false);
   expect(koordinatorReads([said, ev('state', 'koordinator', 'Überarbeitet.')])).toBe(false);
   expect(koordinatorReads([ev('hint', 'owner', 'Und die Tests?')])).toBe(false);
+});
+
+test("a proposal's open questions leave where they were asked; settled ones stay there", () => {
+  const format = { text: 'Welches Format?', options: ['CSV', 'Excel'] };
+  const pdf = { text: 'Auch PDF?', options: ['Ja', 'Nein'] };
+  const q1 = ev('question', 'worker', formatQuestion(format, 'de'));
+  const q2 = ev('question', 'worker', formatQuestion(pdf, 'de'));
+  const owner = ev('say', 'owner', 'Was würdest du nehmen?');
+  const reply = ev('talk', 'koordinator', 'CSV, das liest jedes Programm.');
+  const events = [q1, q2, owner, reply];
+  expect(withoutOpen(events, [])).toEqual(events);
+  // the reviser settled the format and kept PDF open: that one is answered at the end
+  expect(withoutOpen(events, [pdf])).toEqual([q1, owner, reply]);
 });
