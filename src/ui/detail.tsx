@@ -49,6 +49,8 @@ interface Props {
   onDone: (d: ActDone, pending?: Pending) => void;
   /** Reads the plan doc of a workstream's project, at the workstream. */
   onReadPlan: (project: Item, mark?: string) => void;
+  /** Opens the configuration at the clone count (or the slots) of a repository: the card waits for a free clone. */
+  onClones: (repo: string, field: 'clones' | 'slots') => void;
   onTell: Tell;
 }
 
@@ -281,7 +283,12 @@ export function Detail(p: Props) {
             <div className="q-text">{t.queue.checkingLong}</div>
           ) : 'workspace' in item.queue ? (
             <>
-              <div className="q-text">{t.queue.workspaceLong[item.queue.workspace]}</div>
+              <div className="q-text">
+                {t.queue.workspaceLong[item.queue.workspace]}{' '}
+                <button className="link" onClick={() => p.onClones(item.repo, item.queue && 'workspace' in item.queue && item.queue.workspace === 'slots' ? 'slots' : 'clones')}>
+                  {t.queue.workspaceConfig[item.queue.workspace]}
+                </button>
+              </div>
               <QueuePlace item={item} items={all} />
               <div className="actions">
                 <button className="btn" onClick={() => act({ action: 'dequeue' }, { close: false })}>

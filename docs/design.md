@@ -1440,7 +1440,10 @@ the owner's language (`src/core/locale.ts`).
   again — the owner can start it anyway. A card the Koordinator lets start while no workspace is
   free (all clones leased, or every free one with uncommitted changes) waits for one in its place in
   the queue, shown as "Wartet auf Workspace" with the reason, and starts by itself once one is
-  free; cards queued after it count it as ahead of them. Clones only free up with a change of the
+  free; cards queued after it count it as ahead of them. Its reason on the open card ends in a link
+  ("Anzahl der Klone ändern", "Anzahl der Slots ändern" when slots are the limit) that opens the
+  configuration at its repository's clone count or slots, scrolled there and focused, since the
+  owner may not know the pool is the limit nor where it is set. Clones only free up with a change of the
   board (stop, landing, a discarded prototype), so the Koordinator looks then; free clones found
   dirty are looked at again after a minute at the latest. Cards whose turn comes together go in the order they came
   to the Koordinator, the one waiting longest first. The owner sets the order where the waits leave

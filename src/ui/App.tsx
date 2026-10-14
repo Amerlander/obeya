@@ -13,7 +13,7 @@ import type { Field } from './api';
 import { setReply } from './reply';
 import { ArchivePill } from './archive';
 import { useBarFit } from './barFit';
-import { ConfigDialog, showCanvasesSection } from './config';
+import { ConfigDialog, showCanvasesSection, showRepoClones } from './config';
 import { Setup } from './setup';
 import { KoordinatorSheet } from './koordinator';
 import { QueuePill } from './queue';
@@ -1279,6 +1279,10 @@ function Canvas({
                   parent={openItem.parent ? (items.find((p) => p.id === openItem.parent) ?? archived.find((p) => p.id === openItem.parent)) : undefined}
                   from={openItem.from ? (items.find((p) => p.id === openItem.from) ?? archived.find((p) => p.id === openItem.from)) : undefined}
                   onReadPlan={(project, mark) => readPlan(project, { mark })}
+                  onClones={(repo, field) => {
+                    showRepoClones({ canvas: snapshot.canvas.id, repo, field });
+                    setCOn(true);
+                  }}
                   onEdit={onEdit}
                   flush={flushEdit}
                   onDelete={deleteOpen}

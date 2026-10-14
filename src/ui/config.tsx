@@ -34,6 +34,20 @@ const SECTION_KEY = 'obeya-config-section';
 /** Opens the dialog at the canvases and their repositories next time, as from the note on a plan directory. */
 export const showCanvasesSection = () => sessionStorage.setItem(SECTION_KEY, 'canvases');
 
+/** A repository's clone count (or its slots) to show and focus when the dialog opens. */
+export interface ConfigFocus {
+  canvas: string;
+  repo: string;
+  field: 'clones' | 'slots';
+}
+const FOCUS_KEY = 'obeya-config-focus';
+
+/** Opens the dialog next time at a repository's clone count or slots, as from a card waiting for a free clone. */
+export const showRepoClones = (f: ConfigFocus) => {
+  showCanvasesSection();
+  sessionStorage.setItem(FOCUS_KEY, JSON.stringify(f));
+};
+
 export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }: { on: boolean; onClose: () => void; onSetup: () => void; onAsk: Ask; onTalk: () => void; onProblems: (n: number) => void }) {
   const [view, setView] = useState<ConfigView | null>(null);
   const [draft, setDraft] = useState<CanvasConfig[]>([]);
@@ -56,6 +70,9 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }
     setOrigin(v.resolved.map((r) => r?.id ?? null));
   };
 
+  // the field to show once the canvases are there; a new object each time, so a second jump to the same one still scrolls
+  const [focus, setFocus] = useState<ConfigFocus | null>(null);
+
   const changed = !!view && JSON.stringify(draft) !== JSON.stringify(view.canvases);
   const changedRef = useRef(changed);
   changedRef.current = changed;
@@ -64,6 +81,9 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }
     if (!on) return;
     const s = sessionStorage.getItem(SECTION_KEY) as Section | null;
     if (s && SECTIONS.includes(s)) setSectionState(s);
+    const f = sessionStorage.getItem(FOCUS_KEY);
+    sessionStorage.removeItem(FOCUS_KEY);
+    setFocus(f ? (JSON.parse(f) as ConfigFocus) : null);
     api.config().then((v) => {
       setView(v);
       if (!changedRef.current) load(v);
@@ -138,6 +158,7 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }
                 checked={checked}
                 changed={changed}
                 busy={busy}
+                focus={focus}
                 onAsk={onAsk}
                 onRecheck={recheck}
                 onDraft={(d, o) => {
@@ -269,6 +290,7 @@ interface CanvasesProps {
   checked: Checked | null;
   changed: boolean;
   busy: boolean;
+  focus: ConfigFocus | null;
   onAsk: Ask;
   onRecheck: () => void;
   onDraft: (draft: CanvasConfig[], origin: (string | null)[]) => void;
@@ -280,7 +302,7 @@ interface CanvasesProps {
 }
 
 /** The canvases with their repositories, saved together; Obeya then starts again with them. */
-function Canvases({ view, draft, origin, checked, changed, busy, onAsk, onRecheck, onDraft, onSave, onReset, status, json, onJson }: CanvasesProps) {
+function Canvases({ view, draft, origin, checked, changed, busy, focus, onAsk, onRecheck, onDraft, onSave, onReset, status, json, onJson }: CanvasesProps) {
   const c = t.config;
   const problems = checked?.problems ?? [];
   const setCanvas = (i: number, x: CanvasConfig | null) =>
@@ -321,6 +343,7 @@ function Canvases({ view, draft, origin, checked, changed, busy, onAsk, onRechec
           saved={!changed}
           adapters={view.adapters}
           problems={problems.filter((p) => p.canvas === i)}
+          focus={focus}
           ask={changed ? undefined : onAsk}
           onRecheck={onRecheck}
           onChange={(y) => setCanvas(i, y)}
@@ -933,13 +956,14 @@ interface CanvasProps {
   saved: boolean;
   adapters: string[];
   problems: ConfigProblem[];
+  focus: ConfigFocus | null;
   /** Has the Koordinator create a task that fixes a problem; only for the configuration as saved, which is what it reads. */
   ask?: Ask;
   onRecheck: () => void;
   onChange: (c: CanvasConfig | null) => void;
 }
 
-function CanvasBlock({ n, canvas, resolved, running, pin, saved, adapters, problems, ask, onRecheck, onChange }: CanvasProps) {
+function CanvasBlock({ n, canvas, resolved, running, pin, saved, adapters, problems, focus, ask, onRecheck, onChange }: CanvasProps) {
   const fresh = resolved && !running.includes(resolved.id);
   // the Koordinator of the canvas with the problem, where it runs: a card for it goes there
   const askHere = ask && ((text: string) => ask(text, resolved && running.includes(resolved.id) ? resolved.id : undefined));
@@ -985,6 +1009,7 @@ function CanvasBlock({ n, canvas, resolved, running, pin, saved, adapters, probl
             canvasId={saved && resolved && running.includes(resolved.id) ? resolved.id : undefined}
             adapters={adapters}
             problems={problems.filter((p) => p.repo === i)}
+            {...(focus && resolved?.id === focus.canvas && resolved.repos[i]?.id === focus.repo ? { focus } : {})}
             where={`${here}, ${t.config.repoAt(r.path)}`}
             ask={askHere}
             onRecheck={onRecheck}
@@ -1012,6 +1037,8 @@ interface RepoProps {
   canvasId?: string;
   adapters: string[];
   problems: ConfigProblem[];
+  /** Its clone count or slots to scroll to and focus: the dialog was opened from a card waiting for a free clone. */
+  focus?: ConfigFocus;
   /** Where it is, for a request to the Koordinator. */
   where: string;
   ask?: (text: string) => void;
@@ -1020,7 +1047,18 @@ interface RepoProps {
   onChange: (r: RepoConfig | null) => void;
 }
 
-function RepoRow({ repo, home, resolved, canvasId, adapters, problems, where, ask, onRecheck, onChange }: RepoProps) {
+function RepoRow({ repo, home, resolved, canvasId, adapters, problems, focus, where, ask, onRecheck, onChange }: RepoProps) {
+  const clonesBox = useRef<HTMLDivElement>(null);
+  const [flash, setFlash] = useState(false);
+  useEffect(() => {
+    const box = clonesBox.current;
+    if (!focus || !box) return;
+    box.scrollIntoView({ block: 'center' });
+    box.querySelector<HTMLInputElement>(focus.field === 'slots' ? '.cfg-slots input' : '.cfg-clone-count input')?.focus({ preventScroll: true });
+    setFlash(true);
+    const h = setTimeout(() => setFlash(false), 2400);
+    return () => clearTimeout(h);
+  }, [focus]);
   // a path without a repository that is a folder: git can be set up there
   const noGit = useFolderWithoutGit(problems.some((p) => p.code === 'notRepo') ? repo.path.trim() : '');
   const clones = resolved?.workspaces === 'clones' || !!repo.clones || !!repo.workspaces?.length;
@@ -1062,12 +1100,12 @@ function RepoRow({ repo, home, resolved, canvasId, adapters, problems, where, as
         ✕
       </button>
       {clones && (
-        <div className="cfg-span cfg-clones">
-          <label>
+        <div ref={clonesBox} className={flash ? 'cfg-span cfg-clones flash' : 'cfg-span cfg-clones'}>
+          <label className="cfg-clone-count">
             <span className="hint">{t.config.clones}</span>
             <input type="number" min={0} max={20} placeholder="0" value={repo.clones ?? ''} onChange={(e) => onChange(without('clones', Number(e.target.value) || undefined))} />
           </label>
-          <label className="cfg-has-info">
+          <label className="cfg-slots cfg-has-info">
             <span className="hint">
               {t.config.slots} <Info text={t.config.slotsHint} />
             </span>

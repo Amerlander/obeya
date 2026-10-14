@@ -260,6 +260,8 @@ const de = {
       dirty: 'Kein Workspace frei: Jeder freie hat noch nicht committete Änderungen. Die Aufgabe startet von selbst, sobald einer sauber ist.',
       slots: 'Kein Slot frei: Auf jedem Rechner mit freiem Workspace arbeiten so viele Agenten, wie er Slots hat. Die Aufgabe startet von selbst, sobald einer fertig ist.',
     },
+    /** On the card: opens the configuration at the repository's clone count, or its slots. */
+    workspaceConfig: { none: 'Anzahl der Klone ändern', dirty: 'Anzahl der Klone ändern', slots: 'Anzahl der Slots ändern' },
     force: 'Trotzdem starten',
     dequeue: 'Aus der Warteschlange nehmen',
     forced: 'Gestartet, trotz möglicher Merge-Konflikte.',
@@ -1287,6 +1289,7 @@ const en: Strings = {
       dirty: 'No workspace free: every free one has uncommitted changes. The task starts by itself as soon as one is clean.',
       slots: 'No slot free: every machine with a free workspace has as many agents at work as it has slots. The task starts by itself as soon as one is done.',
     },
+    workspaceConfig: { none: 'Change the number of clones', dirty: 'Change the number of clones', slots: 'Change the number of slots' },
     force: 'Start anyway',
     dequeue: 'Take out of the queue',
     forced: 'Started, despite possible merge conflicts.',
