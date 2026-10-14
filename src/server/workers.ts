@@ -7,7 +7,7 @@ import type { CardDiff } from '../core/diff';
 import { LANGUAGE_NAMES, LANGUAGES } from '../core/locale';
 import { MESSAGES, type Messages } from '../core/messages';
 import { basename } from 'node:path';
-import { answering, askable, type DemoKind, type DemoPage, formatQuestion, type Item, type Mock, type Question, type RestartReason, type Spot, type SpotInput } from '../core/types';
+import { answering, askable, pausable, type DemoKind, type DemoPage, formatQuestion, type Item, type Mock, type Question, type RestartReason, type Spot, type SpotInput } from '../core/types';
 import { BadRequest, type Board, replyNote } from './board';
 import { type Asked, decisionLog, toQuestion, withPick } from './advisor';
 import { checkArtifact, DEMO_SKILL, DEMO_SKILL_FILE, demoSkillName, OBEYA_PLUGIN, placeIn, readChapters } from './demo';
@@ -103,6 +103,12 @@ interface LandedState {
   followUp?: boolean;
 }
 
+/** What is stored while the owner has paused the card's worker (`CardRow.paused`). */
+interface PausedState {
+  /** What Obeya had for the worker meanwhile (its pull request's review, the landing), and a message it had not taken in yet: it hears them once it goes on. */
+  held?: { text: string; images: string[] }[];
+}
+
 interface Live {
   session: AgentSession;
   /** The machine its workspace is on (null: the one Obeya runs on), where it holds a slot while in a turn. */
@@ -139,7 +145,7 @@ interface Live {
   /** The card's status line from when the worker heard of the restart, back once it paused: a line about pausing is stale once it goes on. */
   statusBeforeRestart?: string | null;
   /** The worker ended a turn for the restart that is due: a turn that starts before the restart (its background work woke it) hears that Obeya still waits. */
-  paused?: boolean;
+  restartPaused?: boolean;
   /** The owner's preferences as the worker last heard them: in its instructions, or since then. */
   preferences: string;
   /** The project the card is a workstream of, and the last of its decisions the worker has heard of. */
@@ -229,6 +235,9 @@ const stillDue = (due: DueRestart) => {
   return `Obeya still waits for the ${DUE_WHY[due.reason]} you paused for, at most ${minutes} more minute${minutes === 1 ? '' : 's'}, and this turn keeps it waiting. Take in what started it (a background command that finished, a message), leave the work it leads to until Obeya resumes you, and end your turn.`;
 };
 
+const RESUMED =
+  'The owner paused you and has now let you go on. Pausing ended your session at once: whatever you had running was stopped with it, background commands, servers you started, and a command still running in your turn (its result shows exit code 137). Run again what you still need, and go on where you stopped.';
+
 const AFTER_LANDING =
   'Your workspace and this session stay until you end a turn with nothing left to wait for (a question, the restart); then both end. Commits you make here no longer land.';
 
@@ -283,7 +292,7 @@ export class Workers {
     // the run before is not resumed, but the Arbeitsrückschau still reads it
     if (row.session_id) this.o.board.log(card.id, 'state', 'obeya', this.o.board.t.worker.restarted(this.o.board.t.worker.earlierRun(row.session_id)));
     // a fresh session knows of no stack that was stopped
-    this.o.board.work(card.id, { state: 'working', need: null, detail: null, status_line: null, workspace: path, branch, session_id: null, pr: null, approved_at: null, parked: null });
+    this.o.board.work(card.id, { state: 'working', need: null, detail: null, status_line: null, workspace: path, branch, session_id: null, pr: null, approved_at: null, parked: null, paused: null });
     this.o.board.log(card.id, 'state', 'obeya', this.o.board.t.worker.started(branch));
     this.launch(card.id, this.briefing(card, branch, !!row.branch), undefined, this.taskImages(card));
   }
@@ -317,6 +326,7 @@ export class Workers {
         cardId,
         `The owner wrote on your handover${spoken ? ` (${SPOKEN})` : ''}. The card still waits for their approval of what you handed over; a change their words call for goes into a new handover:\n\n${held ? `${held.text}\n\nThen they wrote:\n\n` : ''}${words}`,
         [...(held?.images ?? []), ...images],
+        true,
       );
     } else if (card.state === 'waiting' && card.need === 'question') {
       // a note instead of an answer takes the question back: it may have settled it, else the worker asks anew
@@ -338,11 +348,14 @@ export class Workers {
         cardId,
         `A note from the owner instead of an answer${spoken ? ` (${SPOKEN})` : ''}. It withdraws your question („${card.question?.text ?? ''}“): if the note settles it, go on; if not, ask again.\n\n${words}`,
         images,
+        true,
       );
     } else if (card.state === 'working' || card.state === 'inPr' || card.finishing) {
       log();
       if (text) this.o.onOwnerInput?.(card, 'note', text);
-      this.deliver(cardId, `A note from the owner${spoken ? ` (${SPOKEN})` : ''} (it does not stop you; adjust your plan if it changes anything):\n\n${words}`, images);
+      // a note to a paused worker lets it go on, with the note
+      const how = card.paused ? 'with which they let you go on' : 'it does not stop you; adjust your plan if it changes anything';
+      this.deliver(cardId, `A note from the owner${spoken ? ` (${SPOKEN})` : ''} (${how}):\n\n${words}`, images, true);
     } else if (askable(card)) this.followUp(card, text, images, spoken, replyTo, place);
     else throw new BadRequest('noAgent', 'no agent works on this card');
   }
@@ -392,7 +405,7 @@ export class Workers {
     this.recordDecision(card, q, text || '(Screenshot)');
     if (text) this.o.onOwnerInput?.(card, 'answer', text, { question: q });
     if (card.prototypeOf) this.o.onPrototypeAnswer?.(card, q, text || '(Screenshot)');
-    this.deliver(cardId, `Answer to your question (from the owner${spoken ? `; ${SPOKEN}` : ''}):\n\n${this.words(cardId, text, images, replyTo)}`, images);
+    this.deliver(cardId, `Answer to your question (from the owner${spoken ? `; ${SPOKEN}` : ''}):\n\n${this.words(cardId, text, images, replyTo)}`, images, true);
   }
 
   /**
@@ -427,6 +440,7 @@ export class Workers {
         ? `Before Obeya restarted, a tool call of yours (${call}) waited for the owner's permission. The owner allowed it${said}\n\nMake the call again if you still need it; it runs without asking again.`
         : `Before Obeya restarted, a tool call of yours (${call}) waited for the owner's permission. The owner did not allow it${said}`,
       images,
+      true,
     );
   }
 
@@ -449,6 +463,7 @@ export class Workers {
       card.id,
       `The owner answered the question in your demo report („${q}“)${spoken ? ` (${SPOKEN})` : ''}. The card still waits for their approval of what you handed over; a change their words call for goes into a new handover:\n\n${held ? `${held.text}\n\nThen they answered:\n\n` : ''}${this.words(card.id, text, images, replyTo)}`,
       [...(held?.images ?? []), ...images],
+      true,
     );
   }
 
@@ -546,6 +561,7 @@ export class Workers {
       cardId,
       `The owner watched your demo video and commented on places in it. The card still waits for their approval of what you handed over; a change their words call for goes into a new handover:\n\n${held.text}`,
       held.images,
+      true,
     );
   }
 
@@ -615,6 +631,7 @@ export class Workers {
         .filter(Boolean)
         .join('\n\n'),
       comments?.images,
+      true,
     );
   }
 
@@ -661,6 +678,7 @@ export class Workers {
           ...(comments ? [`Before approving, the owner watched your demo video. ${comments.text}`] : []),
         ].join('\n\n'),
         comments?.images,
+        by === 'owner',
       );
       return;
     }
@@ -695,6 +713,7 @@ export class Workers {
         .filter(Boolean)
         .join('\n\n'),
       comments?.images,
+      by === 'owner',
     );
   }
 
@@ -712,6 +731,7 @@ export class Workers {
         cardId,
         `The owner approved your work. It changed nothing in the repository, so nothing lands and there is no pull request: the card is done.${comments ? `\n\nBefore approving, the owner watched your demo video. ${comments.text}` : ''}\n\n${AFTER_LANDING}`,
         comments?.images,
+        true,
       );
   }
 
@@ -719,10 +739,10 @@ export class Workers {
    * Landed work's worker hears about it and may finish what remains (a migration, say) in its
    * workspace, which stays until then. Without a session to tell, the workspace goes at once.
    */
-  private afterLanding(cardId: string, message: string, images: string[] = []) {
+  private afterLanding(cardId: string, message: string, images: string[] = [], owner = false) {
     const row = this.o.board.row(cardId);
     if (!row.workspace || (!this.live.has(cardId) && !row.session_id)) return this.finish(cardId);
-    this.deliver(cardId, message, images);
+    this.deliver(cardId, message, images, owner);
   }
 
   /** Landed work's worker is done: its session ends and its workspace is freed. */
@@ -736,7 +756,7 @@ export class Workers {
       // the card is done either way; a leftover worktree does no harm
       console.error('freeing a landed workspace:', e);
     }
-    this.o.board.work(cardId, { landed: null, workspace: null, status_line: null, parked: null, ...(row.state === 'waiting' ? { state: row.landed ? landedState(row.landed) : 'live', need: null, detail: null } : {}) });
+    this.o.board.work(cardId, { landed: null, workspace: null, status_line: null, parked: null, paused: null, ...(row.state === 'waiting' ? { state: row.landed ? landedState(row.landed) : 'live', need: null, detail: null } : {}) });
     this.o.board.workDone(cardId);
     // the Arbeitsrückschau read the card's runs when its work ended
     if (!(row.landed && (JSON.parse(row.landed) as LandedState).followUp)) this.o.onWorkEnded?.(cardId, row.workspace);
@@ -763,6 +783,7 @@ export class Workers {
     this.o.onWorkEnded?.(cardId, this.o.board.row(cardId).workspace);
     this.end(cardId);
     this.bump(cardId);
+    this.o.board.work(cardId, { paused: null });
     try {
       this.o.workspaces.discard(cardId, this.o.board.row(cardId).branch ?? '');
     } catch (e) {
@@ -861,8 +882,42 @@ export class Workers {
     // work on the branch keeps its workspace, so starting again goes on from there
     const keep = this.o.workspaces.hasWork(cardId);
     if (!keep) this.o.workspaces.release(cardId);
-    this.o.board.work(cardId, { state: 'planned', need: null, detail: null, pr: null, approved_at: null, ...(keep ? {} : { workspace: null }) });
+    this.o.board.work(cardId, { state: 'planned', need: null, detail: null, pr: null, approved_at: null, paused: null, ...(keep ? {} : { workspace: null }) });
     this.o.board.log(cardId, 'state', 'owner', card.pr ? this.o.board.t.worker.stoppedPrOpen(card.pr.number) : this.o.board.t.worker.stopped);
+  }
+
+  /**
+   * The owner pauses the card's worker: its session ends at once, in the middle of a step if need
+   * be, and whatever it ran with it. Card, workspace, branch and session stay; the slot it held is
+   * free. It goes on where it stopped once the owner resumes it or writes to it (`deliver`); what
+   * Obeya has for it meanwhile waits until then, and its app stack is parked like a waiting card's.
+   */
+  pause(cardId: string) {
+    const card = this.card(cardId);
+    if (!pausable(card)) throw new BadRequest('noAgent', card.paused ? 'the agent is paused already' : 'no agent works on this card');
+    // a message the worker had not taken in yet goes to it with the rest
+    const pending = this.live.get(cardId)?.pending;
+    this.end(cardId);
+    this.bump(cardId);
+    clearTimeout(this.reconnecting.get(cardId));
+    this.reconnecting.delete(cardId);
+    this.o.board.work(cardId, { paused: JSON.stringify((pending ? { held: [pending] } : {}) satisfies PausedState) });
+    this.o.board.log(cardId, 'state', 'owner', this.o.board.t.worker.pausedByOwner);
+    this.parkLater(cardId);
+  }
+
+  /** The owner lets the paused worker go on; it hears what came for it meanwhile. An open question goes on with its answer instead. */
+  resume(cardId: string) {
+    const card = this.card(cardId);
+    if (!card.paused) throw new BadRequest('notPaused', 'the agent is not paused');
+    if (card.state === 'waiting') throw new BadRequest('noAgent', 'the card waits for your answer, which lets the agent go on');
+    this.deliver(cardId, '', [], true);
+  }
+
+  /** What the owner's pause holds for the worker, or null when it is not paused. */
+  private pausedOf(cardId: string): PausedState | null {
+    const paused = this.o.board.row(cardId).paused;
+    return paused ? (JSON.parse(paused) as PausedState) : null;
   }
 
   /** After a restart: resume every card whose worker was in the middle of a turn. */
@@ -872,6 +927,11 @@ export class Workers {
       // the page reloaded: the owner may watch on, or have gone
       if (i.held?.length) this.releaseLater(i.id, this.o.holdGrace ?? HOLD_GRACE);
       const row = this.o.board.row(i.id);
+      // the owner's pause holds across the restart
+      if (row.paused) {
+        this.pausedOverRestart(i.id, row.landed);
+        continue;
+      }
       if (row.landed && row.workspace) {
         this.resumeLanded(i, row.landed, row.session_id);
         continue;
@@ -894,6 +954,15 @@ export class Workers {
       // it never reported a session: start one with the card
       else if (i.state === 'working') this.launch(i.id, this.briefing(i, row.branch ?? '', true), undefined, this.taskImages(i));
     }
+  }
+
+  /** After a restart, a paused worker stays paused: a restart it waited for has happened, which it hears once it goes on. */
+  private pausedOverRestart(cardId: string, stored: string | null) {
+    this.parkLater(cardId);
+    const l = stored ? (JSON.parse(stored) as LandedState) : null;
+    if (!l?.restarts) return;
+    this.o.board.work(cardId, { landed: JSON.stringify({ ...(l.commit ? { commit: l.commit } : {}), ...(l.unchanged ? { unchanged: true } : {}), ...(l.followUp ? { followUp: true } : {}) } satisfies LandedState) });
+    this.deliver(cardId, 'Obeya has started again and runs main with your change now.');
   }
 
   /** After a restart: landed work's worker goes on with what remains; the restart it waited for has happened. */
@@ -987,7 +1056,23 @@ export class Workers {
     });
   }
 
-  private deliver(cardId: string, text: string, images: string[] = []) {
+  /**
+   * Passes a message to the worker, resuming its session if it has none. While the owner has paused
+   * it, Obeya's messages wait (`owner` false); the owner's let it go on, after what waited.
+   */
+  private deliver(cardId: string, text: string, images: string[] = [], owner = false) {
+    const paused = this.pausedOf(cardId);
+    if (paused && !owner) {
+      this.o.board.work(cardId, { paused: JSON.stringify({ held: [...(paused.held ?? []), { text, images }] } satisfies PausedState) });
+      return;
+    }
+    if (paused) {
+      this.o.board.work(cardId, { paused: null });
+      this.o.board.log(cardId, 'state', 'owner', this.o.board.t.worker.resumedByOwner);
+      const held = paused.held ?? [];
+      text = [RESUMED, ...(held.length ? [`While you were paused, Obeya had this for you:\n\n${held.map((h) => h.text).join('\n\n---\n\n')}`] : []), ...(text ? [`Then:\n\n${text}`] : [])].join('\n\n');
+      images = [...held.flatMap((h) => h.images), ...images];
+    }
     this.unpark(cardId);
     const stopping = this.stopping.get(cardId);
     if (stopping) {
@@ -1058,8 +1143,8 @@ export class Workers {
    * it (a background command that finished, which the worker would otherwise go on from).
    */
   private restartStillDue(cardId: string, live: Live): string | undefined {
-    if (!this.restart || !live.paused) return;
-    live.paused = false;
+    if (!this.restart || !live.restartPaused) return;
+    live.restartPaused = false;
     this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.restartStillDue(this.restart.reason === 'stop'));
     return stillDue(this.restart);
   }
@@ -1191,7 +1276,7 @@ export class Workers {
     live.held = undefined;
     live.acted = false;
     // a turn that took in the restart pauses for it, whatever else keeps the worker busy
-    if (this.restart && live.toldRestart && !more) live.paused = true;
+    if (this.restart && live.toldRestart && !more) live.restartPaused = true;
     const card = this.o.board.item(cardId);
     if (!card) return;
     if (closing !== undefined) this.o.board.log(cardId, 'closing', 'worker', closing);
@@ -1330,7 +1415,7 @@ export class Workers {
    */
   private waitsForOwner(cardId: string): boolean {
     const card = this.o.board.item(cardId);
-    if (!card || !(card.state === 'waiting' || (card.state === 'inPr' && card.pr))) return false;
+    if (!card || !(card.state === 'waiting' || (card.state === 'inPr' && card.pr) || card.paused)) return false;
     if (answering(card) || this.live.get(cardId)?.busy) return false;
     const row = this.o.board.row(cardId);
     return !!row.workspace && !row.parked;

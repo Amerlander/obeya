@@ -1,7 +1,7 @@
 // The unfolded card: what it is, what its worker does, and what the owner decides.
 
 import { Fragment, type ReactNode, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { agentListens, askable, buildableOn, type CardAction, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, EXPORT_HTML_MAX, finished, finishingUp, type Item, type Mock, type NextStep, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, type Spot } from '../core/types';
+import { agentListens, askable, buildableOn, type CardAction, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, EXPORT_HTML_MAX, finished, finishingUp, type Item, type Mock, type NextStep, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, type Spot } from '../core/types';
 import { mockPage } from '../core/frame';
 import { answerText, toggle } from './answer';
 import { ApiError, api, at, type Field, holdRestart, onCardEvent, onCardEventGone } from './api';
@@ -242,6 +242,8 @@ export function Detail(p: Props) {
   // an agent is on the card and can be stopped
   const running = item.state === 'working' || item.state === 'waiting' || !!item.finishing;
   const archivable = finished(item.state) && item.source === 'manual' && !item.finishing;
+  // a paused agent goes on by a click; with a question open, by its answer
+  const resumable = !!item.paused && item.state !== 'waiting';
   const where = (
     <p className="p-src">
       <Branch item={item} />
@@ -277,7 +279,7 @@ export function Detail(p: Props) {
     <>
       {kind && <div className="p-kind">{kind}</div>}
       {editable ? <ManualTitle item={item} onEdit={p.onEdit} /> : <div className="p-title">{item.title ? <Inline md={item.title} /> : t.titlePlaceholder}</div>}
-      <div className={finishingUp(item) ? 'p-state finishing' : 'p-state'}>
+      <div className={['p-state', finishingUp(item) && 'finishing', item.paused && 'paused'].filter(Boolean).join(' ')}>
         ● {stateLabel(item)}
         {item.statusLine && (item.state === 'working' || item.state === 'inPr' || item.finishing) && <span className="p-status"> · {item.statusLine}</span>}
         {item.archivedAt && <span className="p-status"> · {t.archive.when(new Date(item.archivedAt))}</span>}
@@ -464,11 +466,21 @@ export function Detail(p: Props) {
       )}
 
       {/* the decisions go below both columns, as on an idea or a proposal */}
-      {worked && (running || archivable) && (
+      {worked && (running || archivable || pausable(item) || resumable) && (
         <div className="actions">
+          {resumable && (
+            <button className="btn primary" title={t.pause.resumeHint} onClick={() => act({ action: 'resume' }, { close: false })}>
+              <PlayMark /> {t.pause.resume}
+            </button>
+          )}
           {review ? prototypeActions || approveButton : running && prototypeActions}
+          {pausable(item) && (
+            <button className="btn" title={t.pause.hint} onClick={() => act({ action: 'pause' }, { close: false })}>
+              <PauseMark /> {t.pause.button}
+            </button>
+          )}
           {running && (
-            <button className="btn" onClick={() => act({ action: 'stop' }, { close: true, ack: t.stopped })}>
+            <button className="btn" title={t.stopHint} onClick={() => act({ action: 'stop' }, { close: true, ack: t.stopped })}>
               {t.stop}
             </button>
           )}
@@ -482,6 +494,19 @@ export function Detail(p: Props) {
     </>
   );
 }
+
+/** The marks on the buttons that pause a worker and let it go on. */
+const PauseMark = () => (
+  <svg className="btn-mark" viewBox="0 0 12 12" width="11" height="11" aria-hidden>
+    <rect x="2" y="1.5" width="2.6" height="9" rx=".6" fill="currentColor" />
+    <rect x="7.4" y="1.5" width="2.6" height="9" rx=".6" fill="currentColor" />
+  </svg>
+);
+const PlayMark = () => (
+  <svg className="btn-mark" viewBox="0 0 12 12" width="11" height="11" aria-hidden>
+    <path d="M3 1.5v9l7.5-4.5z" fill="currentColor" />
+  </svg>
+);
 
 // ------------------------------------------------------------------ ideas
 
@@ -1819,7 +1844,7 @@ function TaskTalk({
         field
           ? {
               key: `${item.state}:${item.need ?? ''}:${field}:${key}`,
-              placeholder: { note: askable(item) || item.followUp ? t.compose.followUp : t.compose.working, answer: t.compose.question, feedback: t.compose.review, demo: t.compose.demo, discuss: '', revise: t.compose.revise }[field],
+              placeholder: { note: item.paused ? t.pause.compose : askable(item) || item.followUp ? t.compose.followUp : t.compose.working, answer: t.compose.question, feedback: t.compose.review, demo: t.compose.demo, discuss: '', revise: t.compose.revise }[field],
               listener,
               onWords: tell(field),
               onPicked: (text, images, replyTo) => act({ action: 'answer', text, images, ...(replyTo ? { replyTo } : {}) }, { close: true, ack: t.answered }),

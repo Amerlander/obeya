@@ -23,6 +23,8 @@ export type CardState = (typeof STATES)[number];
 export const finished = (s: CardState) => s === 'live' || s === 'done';
 /** A finished card whose agent still works: after the landing, or answering a follow-up question. */
 export const finishingUp = (i: Pick<Item, 'state' | 'finishing'>) => !!i.finishing && finished(i.state);
+/** Whether the owner can pause the card's worker: at work on the card, on its pull request, or finishing after the landing. */
+export const pausable = (i: Pick<Item, 'state' | 'finishing' | 'paused'>) => !i.paused && (i.state === 'working' || i.state === 'inPr' || finishingUp(i));
 
 /**
  * A finished card an agent worked on, on the canvas, with no agent on it now: what the owner asks
@@ -203,6 +205,11 @@ export interface Item {
   finishing?: boolean;
   /** While `finishing`: nothing just landed, the owner asked about the finished card and its agent answers. */
   followUp?: boolean;
+  /**
+   * The owner paused the card's worker: nothing of it runs, its session and workspace stay, and it
+   * goes on where it stopped with „Weitermachen“ or the owner's next words to it.
+   */
+  paused?: true;
   /** Waiting for approval, its branch holds no change (checked at the handover): approving makes the card `done`. */
   noChange?: boolean;
   /** Screenshots the owner attached to the card's task; its worker gets them at the start. */
@@ -674,6 +681,9 @@ export type CardAction =
   /** On a project: all its planned workstreams go to the Koordinator, which orders them. */
   | { action: 'start' }
   | { action: 'stop' }
+  /** The worker stops at once and goes on later where it stopped (`resume`, or the owner's next words to it). */
+  | { action: 'pause' }
+  | { action: 'resume' }
   /** `images`: ids of screenshots uploaded before (`POST /api/c/<canvas>/images`); with them the text may be empty. */
   /** `spoken`: the words came through speech recognition, which the agent is told. */
   /** `replyTo`: the message of the card's conversation the words reply to (`CardEvent.replyTo`). */
@@ -759,6 +769,8 @@ export type ErrorCode =
   | 'notMovable'
   | 'notPlannable'
   | 'noAgent'
+  /** Resuming an agent the owner has not paused. */
+  | 'notPaused'
   | 'noQuestion'
   | 'notReady'
   /** Deleting a comment on the demo video: it is no longer held back, the worker has it. */

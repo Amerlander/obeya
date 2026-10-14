@@ -429,7 +429,21 @@ resumed after a restart first ends a turn of its own over what the previous one 
 background command the restart stopped), and counting that would use up the nudge before the
 worker's own turn, whose status line would then reach the owner as a question. A
 worker that went to the owner for having stopped and then works on by itself takes that question
-back. The owner can send a note at any time; it reaches the worker without stopping it. The SDK
+back. The owner can send a note at any time; it reaches the worker without stopping it.
+The owner can also pause the worker („Pausieren“ beside „Stoppen“, on a card at work, in its PR or
+finishing after the landing; by voice „halt mal an“): its session ends at once, in the middle of a
+step if need be, with whatever it ran, while the card keeps its state, workspace, branch and
+session (`paused` on the card's row) and its slot is free. The card reads „Agent pausiert“ in pencil
+grey without the moving line; a restart of Obeya leaves it paused, and its app stack is parked
+after the grace like a waiting card's. „Weitermachen“ (by voice „mach weiter“) resumes the session,
+and the worker hears that it was paused and that what ran was stopped (exit code 137); a note to a
+paused worker resumes it the same way and goes along (its field says so: „Hinweis an den Agenten –
+er macht damit weiter“). What Obeya has for it meanwhile (its pull request's review, the landing of
+a merged PR) and a message it had not taken in yet wait and go along then. „Stoppen“ still ends the
+agent and plans the card again; until 2026-10-14 it was called „Anhalten“, which reads like a pause,
+and was the only way to halt an agent, losing its session. Rejected: pausing at the next safe point,
+as for a restart: the owner pauses an agent that goes the wrong way, and waiting for its step to
+end lets it go on doing so. The SDK
 hands a waiting message to the agent only after its running tool call, so a note never cuts a
 command off (tests and renders included), and workers keep their tool calls short instead: they
 wait for anything external (a deploy, a CI run, a point in time) in the background
@@ -1363,7 +1377,7 @@ the owner's language (`src/core/locale.ts`).
   reads their state, checks and comments.
 - **After landing** — the worker is told its work is on main (or that its PR was merged) and may
   finish what remains, in its workspace, which stays at what landed until then (the card is `live`,
-  "Live · Agent arbeitet"; notes reach it, "Anhalten" ends it). Ending a turn with nothing to wait
+  "Live · Agent arbeitet"; notes reach it, "Pausieren" halts it, "Stoppen" ends it). Ending a turn with nothing to wait
   for ends its session and removes worktree and branch (a clone is free again). A turn that ends
   while a message from Obeya is still to come is not that turn: work approved while its worker
   ends a reply (the owner said yes to its question and approved at once) lands while the reply's
@@ -1384,7 +1398,7 @@ the owner's language (`src/core/locale.ts`).
   what the worker had left for after the restart was never done. A turn there that an error cut off (the API
   overloaded, say) does not count as done: like a turn that ends without a handover while the
   worker works, it is tried once more, and if that fails too the owner gets the reason as a question
-  ("Nochmal versuchen", or "Anhalten" to end the card without the rest); the card's conversation
+  ("Nochmal versuchen", or "Stoppen" to end the card without the rest); the card's conversation
   shows a question asked while finishing like any other, not the worker at work. Before (until 2026-10),
   such a turn ended the card, and what remained after the landing was silently left undone. While a
   restart is due, the failed turn instead pauses for it, which resumes the worker, so that a second
@@ -1720,7 +1734,7 @@ the owner's language (`src/core/locale.ts`).
   the remark that speech recognition may have misheard them. They stand in the card's
   conversation under „Du“ at once; nothing waits for "Rückgängig", and there is no line above the
   mic for typed words (a recording shows „„Export“ · wird aufgeschrieben …“ while the recognition works).
-  Words that ask Obeya for something rather than the agent (approve, stop, start, a follow-up or
+  Words that ask Obeya for something rather than the agent (approve, pause, stop, start, a follow-up or
   new card, "Merk dir", grouping cards, an action on another card, a question about the canvas or
   another card) the agent passes on with `to_obeya(request)`, one tool built once for workers,
   prototypes' workers and exploration agents (`src/server/to-obeya.ts`), whose instructions say in

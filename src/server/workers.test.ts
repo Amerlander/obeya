@@ -953,6 +953,18 @@ describe('parking: the stack of a card that waits for the owner', () => {
     expect(runtime.last.inbox.at(-1)).not.toContain('app stack');
   });
 
+  test('a paused worker has its stack stopped like a waiting card, and hears so when it goes on', async () => {
+    parking();
+    const c = manual();
+    workers.start(c.id);
+    workers.pause(c.id);
+    await until(() => board.row(c.id).parked);
+    expect(stopped(c.id)).toBe(true);
+    workers.resume(c.id);
+    expect(runtime.last.inbox[0]).toContain('The owner paused you and has now let you go on');
+    expect(runtime.last.inbox[0]).toContain('Obeya stopped the app stack in your workspace');
+  });
+
   test('an answer within the grace keeps the stack running', async () => {
     parking({}, 60);
     const c = manual();
@@ -2514,5 +2526,96 @@ describe('tool calls the settings refuse or want confirmed', () => {
     void runtime.last.permission('Bash', { command: 'bun run migrate' });
     await flush();
     expect(state(c.id)).toBe('waiting:question');
+  });
+});
+
+describe('pausing: the owner halts a worker and lets it go on', () => {
+  /** A card at work, its session known as `sess-1`. */
+  const atWork = () => {
+    const c = manual();
+    workers.start(c.id);
+    runtime.last.emit({ type: 'session', id: 'sess-1' });
+    runtime.last.emit({ type: 'tool', name: 'Bash', input: { command: 'bun test' } });
+    return c;
+  };
+
+  test('pausing ends the session at once and keeps card, workspace and session; resuming goes on in that session', () => {
+    const c = atWork();
+    const { workspace, branch } = board.row(c.id);
+    const session = runtime.last;
+    workers.pause(c.id);
+    expect(session.closed).toBe(true);
+    expect(workers.busy()).toBe(false);
+    expect(board.item(c.id)).toMatchObject({ state: 'working', paused: true });
+    expect(board.row(c.id)).toMatchObject({ workspace, branch, session_id: 'sess-1' });
+    expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', author: 'owner', text: 'Pausiert. Der Agent macht weiter, wenn du „Weitermachen“ klickst oder ihm schreibst.' });
+    expect(() => workers.pause(c.id)).toThrow(BadRequest);
+
+    const n = runtime.sessions.length;
+    workers.resume(c.id);
+    expect(runtime.sessions.length).toBe(n + 1);
+    expect(runtime.last.spec.resume).toBe('sess-1');
+    expect(runtime.last.inbox[0]).toContain('The owner paused you and has now let you go on');
+    expect(runtime.last.inbox[0]).toContain('exit code 137');
+    expect(board.item(c.id)!.paused).toBeUndefined();
+    expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', author: 'owner', text: 'Weiter.' });
+    expect(workers.busy()).toBe(true);
+    expect(() => workers.resume(c.id)).toThrow(BadRequest);
+  });
+
+  test("a note to a paused worker lets it go on with the note", () => {
+    const c = atWork();
+    workers.pause(c.id);
+    workers.message(c.id, 'Nimm lieber CSV.');
+    expect(runtime.last.spec.resume).toBe('sess-1');
+    expect(runtime.last.inbox[0]).toContain('The owner paused you and has now let you go on');
+    expect(runtime.last.inbox[0]).toContain('A note from the owner (with which they let you go on):\n\nNimm lieber CSV.');
+    expect(board.item(c.id)!.paused).toBeUndefined();
+  });
+
+  test("what Obeya has for a paused worker waits until it goes on, and so does a message it had not taken in", () => {
+    const c = atWork();
+    workers.message(c.id, 'Und Excel?');
+    workers.pause(c.id);
+    const n = runtime.sessions.length;
+    workers.prEvent(c.id, 'Check rot.', 'A check of your pull request failed: test.');
+    expect(runtime.sessions.length).toBe(n);
+    expect(board.item(c.id)!.paused).toBe(true);
+    workers.resume(c.id);
+    const first = runtime.last.inbox[0]!;
+    expect(first).toContain('While you were paused, Obeya had this for you');
+    expect(first).toContain('Und Excel?');
+    expect(first).toContain('A check of your pull request failed: test.');
+  });
+
+  test('a paused worker stays paused across a restart of Obeya', () => {
+    const c = atWork();
+    workers.pause(c.id);
+    workers.shutdown();
+    const n = runtime.sessions.length;
+    workers.resumeAll();
+    expect(runtime.sessions.length).toBe(n);
+    expect(board.item(c.id)!.paused).toBe(true);
+    workers.resume(c.id);
+    expect(runtime.last.spec.resume).toBe('sess-1');
+  });
+
+  test('stopping a paused worker plans the card again, and a new start is not paused', () => {
+    const c = atWork();
+    workers.pause(c.id);
+    workers.stop(c.id);
+    expect(state(c.id)).toBe('planned');
+    expect(board.item(c.id)!.paused).toBeUndefined();
+    workers.start(c.id);
+    expect(board.item(c.id)!.paused).toBeUndefined();
+    expect(workers.busy()).toBe(true);
+  });
+
+  test('only a worker at work can be paused', () => {
+    const c = manual();
+    expect(() => workers.pause(c.id)).toThrow(BadRequest);
+    workers.start(c.id);
+    runtime.last.call('ask', { question: 'CSV oder Excel?' });
+    expect(() => workers.pause(c.id)).toThrow(BadRequest);
   });
 });

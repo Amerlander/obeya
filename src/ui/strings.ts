@@ -141,7 +141,19 @@ const de = {
     short: 'Teil gelandet',
     long: 'Ein Teil ist schon gelandet, das Plan-Doc hält den Workstream aber offen. Ein neuer Lauf macht den Rest.',
   },
-  stop: 'Anhalten',
+  stop: 'Stoppen',
+  stopHint: 'Beendet den Agenten: die Aufgabe ist wieder geplant, ein neuer Start beginnt mit einer neuen Sitzung. Committete Arbeit bleibt auf dem Branch.',
+  pause: {
+    button: 'Pausieren',
+    hint: 'Hält den Agenten sofort an, auch mitten in einem Schritt. Er behält Sitzung und Workspace und macht dort weiter, wo er war, sobald du „Weitermachen“ klickst oder ihm schreibst.',
+    resume: 'Weitermachen',
+    resumeHint: 'Der Agent macht dort weiter, wo du ihn angehalten hast.',
+    working: 'Agent pausiert',
+    inPr: 'Im PR · Agent pausiert',
+    live: 'Live · Agent pausiert',
+    done: 'Erledigt · Agent pausiert',
+    compose: 'Hinweis an den Agenten – er macht damit weiter',
+  },
   approve: 'Freigeben',
   approvePr: 'Freigeben (PR)',
   approveDirect: 'Direkt auf main',
@@ -242,7 +254,7 @@ const de = {
   accepted: 'Vorschlag übernommen und gestartet.',
   acceptedIdea: 'Vorschlag als Idee übernommen; der Agent eröffnet die Diskussion.',
   dismissed: 'Vorschlag verworfen.',
-  stopped: 'Agent angehalten.',
+  stopped: 'Agent gestoppt.',
   queue: {
     button: 'Warteschlange',
     count: (n: number) => (n === 0 ? 'Keine Aufgabe in der Warteschlange' : n === 1 ? 'Eine Aufgabe in der Warteschlange' : `${n} Aufgaben in der Warteschlange`),
@@ -292,6 +304,7 @@ const de = {
     notMovable: 'Die Aufgabe kann in der Warteschlange nicht weiter.',
     notPlannable: 'Als Projekt planen lässt sich nur eine Idee oder eine eigene, geplante Aufgabe, an der noch niemand gearbeitet hat.',
     noAgent: 'An dieser Aufgabe arbeitet gerade kein Agent.',
+    notPaused: 'Der Agent ist nicht pausiert.',
     noQuestion: 'Hier ist keine Frage mehr offen.',
     notReady: 'Das ist nicht bereit zur Abnahme.',
     notHeld: 'Der Kommentar ist schon beim Agenten.',
@@ -1302,6 +1315,18 @@ const en: Strings = {
     long: 'A part has landed already, but the plan doc keeps the workstream open. A new run does the rest.',
   },
   stop: 'Stop',
+  stopHint: 'Ends the agent: the task is planned again, and starting it again begins a new session. Committed work stays on the branch.',
+  pause: {
+    button: 'Pause',
+    hint: 'Halts the agent at once, even in the middle of a step. It keeps its session and workspace and goes on where it was as soon as you click “Resume” or write to it.',
+    resume: 'Resume',
+    resumeHint: 'The agent goes on where you paused it.',
+    working: 'Agent paused',
+    inPr: 'In PR · agent paused',
+    live: 'Live · agent paused',
+    done: 'Done · agent paused',
+    compose: 'A note to the agent – it goes on with it',
+  },
   approve: 'Approve',
   approvePr: 'Approve (PR)',
   approveDirect: 'Straight to main',
@@ -1441,6 +1466,7 @@ const en: Strings = {
     notMovable: 'The task cannot move further in the queue.',
     notPlannable: 'Only an idea, or a planned task of your own nobody has worked on yet, can be planned as a project.',
     noAgent: 'No agent is working on this task right now.',
+    notPaused: 'The agent is not paused.',
     noQuestion: 'No question is open here any more.',
     notReady: 'This is not ready for review.',
     notHeld: 'The comment is with the agent already.',
@@ -2345,13 +2371,17 @@ const longDay = (d: Date, today: Date) =>
 /** A number, with `digits` decimals at most. */
 const number = (n: number, digits = 0) => n.toLocaleString(locale, { maximumFractionDigits: digits, minimumFractionDigits: digits });
 
-export const stateLabel = (i: { kind?: string; thread?: { thinking?: boolean }; state: CardState; need?: Need; pr?: unknown; queue?: Queue; idea?: Idea; question?: unknown; answering?: true; finishing?: boolean; followUp?: boolean; prototypeEnd?: 'discarded' | 'built'; retro?: string }) =>
+export const stateLabel = (i: { kind?: string; thread?: { thinking?: boolean }; state: CardState; need?: Need; pr?: unknown; queue?: Queue; idea?: Idea; question?: unknown; answering?: true; finishing?: boolean; followUp?: boolean; paused?: true; prototypeEnd?: 'discarded' | 'built'; retro?: string }) =>
   i.kind === 'question'
     ? i.thread?.thinking
       ? t.question.reading
       : t.question.ready
     : i.prototypeEnd
     ? t.idea.ended[i.prototypeEnd]
+    : i.paused && i.state !== 'waiting'
+    ? i.finishing
+      ? i.state === 'done' ? t.pause.done : t.pause.live
+      : i.state === 'inPr' ? t.pause.inPr : t.pause.working
     : i.finishing && (i.state === 'live' || i.state === 'done')
     ? i.followUp
       ? i.state === 'done' ? t.followingUpDone : t.followingUp

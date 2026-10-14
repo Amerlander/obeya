@@ -88,6 +88,7 @@ export const CardView = memo(
       underway && 'underway',
       answering(item) && 'answering',
       finishingUp(item) && 'finishing',
+      item.paused && 'paused',
       item.queue && 'queued', dep && `dep-${dep}`, lifted && 'lifted', dragging && 'dragging', pop && 'pop'].filter(Boolean).join(' ');
     return (
       <div

@@ -143,6 +143,10 @@ h1, h2, .cfg-head h3, .p-title, .project > .head .ttl, .timeline .a-ttl { font-f
 /* its agent still at work after the landing: the yellowed stock, but awake, its state line in the working colour */
 .card.finishing { opacity: 1; }
 .card.finishing .state, .p-state.finishing { --c: var(--working); }
+.btn .btn-mark { margin-right: 3px; vertical-align: -1px; }
+/* its agent paused by the owner: the line stands still, in pencil grey */
+.card.paused .state, .p-state.paused { --c: var(--muted); }
+.card.paused .state::after { display: none; }
 .card .landed-part { color: var(--approved); border: 1px solid color-mix(in srgb, var(--approved) 45%, transparent); border-radius: 2px; padding: 0 5px; font-weight: 500; }
 .card.s-live .ttl, .card.s-done .ttl { font-weight: 500; }
 /* a proposal is a card only pencilled in: no stock yet, a dashed outline */

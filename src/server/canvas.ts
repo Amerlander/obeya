@@ -579,6 +579,10 @@ export class CanvasRuntime {
         return this.koordinator.reorder(cardId, !!a.earlier);
       case 'stop':
         return this.repoOf(cardId).workers.stop(cardId);
+      case 'pause':
+        return this.repoOf(cardId).workers.pause(cardId);
+      case 'resume':
+        return this.repoOf(cardId).workers.resume(cardId);
       case 'message':
         // a note to a Question card is a question to its agent
         if (this.board.item(cardId)?.kind === 'question') return this.answers.ask(cardId, text.trim(), images, !!a.spoken, replyTo);
@@ -1046,6 +1050,8 @@ export class CanvasRuntime {
       case 'dismiss':
       case 'dequeue':
       case 'stop':
+      case 'pause':
+      case 'resume':
         return this.act(c.card, { action: c.do });
       case 'configure':
         return this.deps.config?.save(c.canvases);

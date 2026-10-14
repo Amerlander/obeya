@@ -86,6 +86,8 @@ export interface CardRow {
   becomes_project: number;
   /** JSON, a Question card (and an idea that was one): the thread of looked-up answers it holds (`StoredThread` in board.ts). */
   thread: string | null;
+  /** JSON, while the owner has paused the card's worker (`PausedState` in workers.ts): what came for it meanwhile. */
+  paused: string | null;
 }
 
 export interface GroupRow {
@@ -313,6 +315,8 @@ export const MIGRATIONS = [
    ALTER TABLE talk ADD COLUMN card TEXT;
    ALTER TABLE events ADD COLUMN answer TEXT;
    ALTER TABLE cards ADD COLUMN thread TEXT;`,
+  // the owner paused the card's worker: session and workspace stay until it goes on
+  `ALTER TABLE cards ADD COLUMN paused TEXT;`,
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer';
@@ -375,6 +379,7 @@ export type RowUpdate = Partial<
     | 'held'
     | 'becomes_project'
     | 'thread'
+    | 'paused'
   >
 >;
 

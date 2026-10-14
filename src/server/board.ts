@@ -1575,6 +1575,7 @@ function work(r: CardRow): Partial<Item> {
     ...(r.workspace ? { workspace: r.workspace.replace(/^ssh:\/\/([^/]+)/, '$1:') } : {}),
     ...(r.landed && r.workspace ? { finishing: true, ...((JSON.parse(r.landed) as { followUp?: boolean }).followUp ? { followUp: true } : {}) } : {}),
     ...(detail.noChange && (r.need === 'review' || r.need === 'demo') ? { noChange: true } : {}),
+    ...(r.paused ? { paused: true } : {}),
   };
 }
 
