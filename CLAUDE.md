@@ -49,8 +49,10 @@ shows them as projects); when one is done, what lasts moves into `docs/design.md
   `.voice/elevenlabs.key` of the main checkout (`/Users/sadilek/dev/obeya`, gitignored); render with
   an `OBEYA_HOME` whose `demo.json` names both (`voice: elevenlabs`, `voiceName`, `keyFile`), as
   `scripts/hero-video/render.ts` sets up for the hero video (its README says how to change and
-  re-render it). Credits are limited: only for public videos, never as Obeya's own demo voice. Qwen3-TTS
-  references of the owner's voice lie beside the key, each with its transcript (`.txt`):
+  re-render it). Credits are limited: only for public videos, never as Obeya's own demo voice, and
+  even there only once: a public video is iterated in local renders in the owner's Qwen3 voice, and
+  the ElevenLabs render happens after the owner has approved the video. Qwen3-TTS references of the
+  owner's voice lie beside the key, each with its transcript (`.txt`):
   `.voice/qwen-reference-de.wav` (a recording) and `qwen-reference-en.wav` (cut from the ElevenLabs
   voice); the demo settings' `reference` names the one of the narration language. Qwen3 is good
   enough for demos, ElevenLabs marginally better for the site, so the site stays with ElevenLabs
