@@ -55,8 +55,9 @@ shows them as projects); when one is done, what lasts moves into `docs/design.md
   voice); the demo settings' `reference` names the one of the narration language. Qwen3 is good
   enough for demos, ElevenLabs marginally better for the site, so the site stays with ElevenLabs
   (owner, 2026-10-12); `scripts/hero-video/qwen.py` renders the hero narration in Qwen3 to compare.
-- gh calls against sadilek/obeya go through `bun scripts/gh.ts <gh args…>`: it runs gh as the
-  account `sadilek`, since the machine's active gh account may be another without admin rights.
+- gh calls against this repository's GitHub repository go through `bun scripts/gh.ts <gh args…>`:
+  it runs gh on the checkout's origin as the account that owns it (`sadilek` for sadilek/obeya),
+  since the machine's active gh account may be another without admin rights.
 - A recurring step that needs a longer CLI call (an upload, say) goes into a script in the repo,
   not into the docs as a command to copy.
 - Commit directly to `main`; this repo uses no feature branches or pull requests. An Obeya worker

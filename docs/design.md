@@ -767,9 +767,11 @@ the owner's language (`src/core/locale.ts`).
   commits since, the version to propose, how far GitHub's main is behind, the latest release and
   `site-media`, the site's video against the last UI commit, the build's secrets) and, with
   `draft <tag>`, whether the build's draft holds everything. `scripts/gh.ts` runs any other gh
-  call as the account `sadilek` on sadilek/obeya (its login's token as GH_TOKEN, the repository as
-  GH_REPO), since the machine's active gh account may lack the admin rights a workflow run or a
-  rerun needs; the status script and the video's upload take their token from it. Every release renders the hero video
+  call on the checkout's origin as the account that owns it (the repository as GH_REPO, the token
+  of the owner's gh login as GH_TOKEN), since the machine's active gh account may lack the admin
+  rights a workflow run or a rerun needs; the status script and the video's upload take their
+  environment from it. Nothing names sadilek/obeya: in a fork they act on the fork as its owner,
+  and without a gh login for the owner (an organisation) gh runs as it would anyway. Every release renders the hero video
   again and takes the site's screenshots again from that render; the card's demo is the new video,
   so the owner watches it and approves the release in one step. After the landing the worker pushes
   `main`, tags, watches the build, checks the draft and uploads the video; the owner publishes.

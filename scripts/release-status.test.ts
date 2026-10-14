@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { draft, expectedAssets, type Gh, nextVersion, REPO, report, SECRETS, status } from './release-status';
+import { draft, expectedAssets, type Gh, nextVersion, report, SECRETS, status } from './release-status';
 
 // a repository with GitHub as a bare remote beside it; gh is a function that answers from a table
 const tmp = mkdtempSync(join(tmpdir(), 'obeya-release-status-'));
@@ -38,8 +38,8 @@ type Release = { tag_name: string; draft?: boolean; prerelease?: boolean; body?:
 function gh(releases: Release[], { latest = 'v0.1.0', secrets = SECRETS, files = {} as Record<string, string> } = {}): Gh {
   return (args) => {
     const call = args.join(' ');
-    if (call === `api repos/${REPO}/releases`) return JSON.stringify(releases.map((r) => ({ draft: false, prerelease: false, assets: [], ...r })));
-    if (call === `api repos/${REPO}/releases/latest --jq .tag_name`) return latest;
+    if (call === 'api repos/{owner}/{repo}/releases') return JSON.stringify(releases.map((r) => ({ draft: false, prerelease: false, assets: [], ...r })));
+    if (call === 'api repos/{owner}/{repo}/releases/latest --jq .tag_name') return latest;
     if (call.startsWith('secret list')) return secrets.join('\n');
     if (args[1] === 'download') return files[args[args.indexOf('--pattern') + 1]!] ?? null;
     return null;
@@ -131,7 +131,7 @@ test('without gh it says that GitHub could not be read', () => {
   const s = status(dir, () => null);
   expect(s.problems).toEqual([
     'Nothing that runs changed since v0.1.0.',
-    "GitHub's releases could not be read (gh login of sadilek?).",
+    "GitHub's releases could not be read (gh login of the repository's owner?).",
     'The repository secrets could not be read.',
   ]);
 });

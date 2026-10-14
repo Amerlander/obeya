@@ -2,34 +2,53 @@ import { afterAll, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { githubRepo } from './gh';
 
-// gh.ts against a fake gh on PATH that logs each call with the token and repository it got, so
-// nothing on GitHub is touched
+// gh.ts in a checkout whose origin each test sets, against a fake gh on PATH that logs each call
+// with the token and repository it got, so nothing on GitHub is touched; gh has logins for the
+// accounts in FAKE_LOGINS
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-test-'));
 afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
+const checkout = path.join(dir, 'checkout');
+fs.mkdirSync(path.join(checkout, 'scripts'), { recursive: true });
+fs.copyFileSync(path.join(import.meta.dirname, 'gh.ts'), path.join(checkout, 'scripts', 'gh.ts'));
+Bun.spawnSync(['git', 'init', '-q', checkout]);
 const bin = path.join(dir, 'bin');
 fs.mkdirSync(bin);
 const log = path.join(dir, 'gh.log');
 fs.writeFileSync(path.join(bin, 'gh'), `#!/bin/sh
 echo "[$GH_TOKEN] [$GH_REPO] $*" >> "${log}"
 case "$1 $2" in
-  "auth token") [ -n "$FAKE_NO_LOGIN" ] && { echo "no oauth token found for github.com account $4" >&2; exit 1; }; echo "token-of-$4";;
+  "auth token") case " $FAKE_LOGINS " in *" $4 "*) echo "token-of-$4";; *) echo "no oauth token found for github.com account $4" >&2; exit 1;; esac;;
   "run rerun") cat; echo "rerun on stdout"; echo "rerun on stderr" >&2; exit 3;;
 esac
 `, { mode: 0o755 });
 
-function gh(args: string[], env: Record<string, string> = {}) {
+function gh(origin: string | null, args: string[], logins = 'sadilek alice') {
+  Bun.spawnSync(['git', '-C', checkout, 'remote', 'remove', 'origin']);
+  if (origin) Bun.spawnSync(['git', '-C', checkout, 'remote', 'add', 'origin', origin]);
   fs.rmSync(log, { force: true });
-  const r = Bun.spawnSync(['bun', path.join(import.meta.dirname, 'gh.ts'), ...args], {
-    env: { ...process.env, GH_TOKEN: 'from-the-shell', GITHUB_TOKEN: 'also-from-the-shell', PATH: `${bin}${path.delimiter}${process.env.PATH}`, ...env },
+  const r = Bun.spawnSync(['bun', path.join(checkout, 'scripts', 'gh.ts'), ...args], {
+    cwd: os.tmpdir(),
+    env: { ...process.env, GH_TOKEN: 'from-the-shell', GITHUB_TOKEN: 'also-from-the-shell', PATH: `${bin}${path.delimiter}${process.env.PATH}`, FAKE_LOGINS: logins },
     stdin: Buffer.from('from stdin\n'),
   });
   const calls = fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split('\n') : [];
   return { code: r.exitCode, stdout: r.stdout.toString(), stderr: r.stderr.toString(), calls };
 }
 
-test.skipIf(process.platform === 'win32')('runs gh with the token of sadilek, not the one from the shell, on sadilek/obeya', () => {
-  expect(gh(['workflow', 'run', 'build.yml', '--ref', 'main', '-f', 'sign=true'])).toEqual({
+test('reads owner/name from the URLs GitHub hands out, and nothing else', () => {
+  expect(githubRepo('git@github.com:sadilek/obeya.git\n')).toBe('sadilek/obeya');
+  expect(githubRepo('https://github.com/alice/obeya.git')).toBe('alice/obeya');
+  expect(githubRepo('https://github.com/alice/my.obeya')).toBe('alice/my.obeya');
+  expect(githubRepo('ssh://git@github.com/alice/obeya.git')).toBe('alice/obeya');
+  expect(githubRepo('https://x-access-token:abc@github.com/alice/obeya')).toBe('alice/obeya');
+  expect(githubRepo('/Users/alice/dev/obeya')).toBeNull();
+  expect(githubRepo('git@gitlab.com:alice/obeya.git')).toBeNull();
+});
+
+test.skipIf(process.platform === 'win32')('runs gh on the origin as its owner, not with the token from the shell', () => {
+  expect(gh('git@github.com:sadilek/obeya.git', ['workflow', 'run', 'build.yml', '--ref', 'main', '-f', 'sign=true'])).toEqual({
     code: 0,
     stdout: '',
     stderr: '',
@@ -40,20 +59,36 @@ test.skipIf(process.platform === 'win32')('runs gh with the token of sadilek, no
   });
 });
 
+test.skipIf(process.platform === 'win32')('in a fork, on the fork as the fork\'s owner', () => {
+  expect(gh('https://github.com/alice/obeya.git', ['run', 'list']).calls).toEqual([
+    '[] [] auth token --user alice',
+    '[token-of-alice] [alice/obeya] run list',
+  ]);
+});
+
+test.skipIf(process.platform === 'win32')('without a login for the owner (an organisation), gh runs as it would anyway', () => {
+  expect(gh('git@github.com:some-org/obeya.git', ['run', 'list']).calls).toEqual([
+    '[] [] auth token --user some-org',
+    '[from-the-shell] [some-org/obeya] run list',
+  ]);
+});
+
 test.skipIf(process.platform === 'win32')('passes stdin, stdout, stderr and the exit code through', () => {
-  const r = gh(['run', 'rerun', '123', '--failed']);
+  const r = gh('git@github.com:sadilek/obeya.git', ['run', 'rerun', '123', '--failed']);
   expect(r.code).toBe(3);
   expect(r.stdout).toBe('from stdin\nrerun on stdout\n');
   expect(r.stderr).toBe('rerun on stderr\n');
 });
 
 test.skipIf(process.platform === 'win32')('leaves a repository named in the args to gh, which prefers it to GH_REPO', () => {
-  expect(gh(['run', 'list', '--repo', 'someone/else']).calls[1]).toBe('[token-of-sadilek] [sadilek/obeya] run list --repo someone/else');
+  expect(gh('git@github.com:sadilek/obeya.git', ['run', 'list', '--repo', 'someone/else']).calls[1]).toBe('[token-of-sadilek] [sadilek/obeya] run list --repo someone/else');
 });
 
-test.skipIf(process.platform === 'win32')('without a gh login for sadilek it says how to get one and runs nothing', () => {
-  const r = gh(['run', 'list'], { FAKE_NO_LOGIN: '1' });
-  expect(r.code).toBe(1);
-  expect(r.stderr).toStartWith('no gh login for sadilek: gh auth login, then try again\n');
-  expect(r.calls).toEqual(['[] [] auth token --user sadilek']);
+test.skipIf(process.platform === 'win32')('without a GitHub origin it says so and runs nothing', () => {
+  for (const origin of [null, '/Users/alice/dev/obeya']) {
+    const r = gh(origin, ['run', 'list']);
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain('is no GitHub repository, which gh would run on');
+    expect(r.calls).toEqual([]);
+  }
 });

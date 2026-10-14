@@ -2,7 +2,7 @@
 // `chapters.vtt` from the render's directory as `hero.mp4`, `hero.vtt` and `hero.chapters.vtt` of
 // the release `site-media` (creating the
 // release the first time, replacing the assets after that), then runs the Pages workflow, which
-// fetches them into site/media/. It acts as the GitHub account `sadilek` through GH_TOKEN, without
+// fetches them into site/media/. It acts on the checkout's origin as the account that owns it, without
 // switching the account gh has active (scripts/gh.ts). With `--poster` it first takes the poster
 // (`site/img/hero-poster.jpg`) and the README's picture of the video (`docs/images/video.jpg`)
 // again from the new video; they are in git and go out with the next push of main. `--poster-only`
@@ -14,7 +14,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { ghEnv, REPO } from '../gh.ts';
+import { ghEnv } from '../gh.ts';
 
 const RELEASE = 'site-media';
 const OUT = process.env.HERO_OUT ?? path.join(os.homedir(), 'demos', 'obeya-hero');
@@ -49,9 +49,9 @@ if (posterOnly) {
   process.exit(0);
 }
 
-let env: NodeJS.ProcessEnv;
+let repo: string, env: NodeJS.ProcessEnv;
 try {
-  env = ghEnv();
+  ({ repo, env } = ghEnv());
 } catch (e) {
   fail((e as Error).message);
 }
@@ -63,13 +63,13 @@ try {
   fs.copyFileSync(video, files[0], fs.constants.COPYFILE_FICLONE);
   fs.copyFileSync(captions, files[1], fs.constants.COPYFILE_FICLONE);
   fs.copyFileSync(chapters, files[2], fs.constants.COPYFILE_FICLONE);
-  const exists = spawnSync('gh', ['release', 'view', RELEASE, '--repo', REPO], { env, stdio: 'ignore' }).status === 0;
+  const exists = spawnSync('gh', ['release', 'view', RELEASE], { env, stdio: 'ignore' }).status === 0;
   if (exists) {
     console.log(`Replacing hero.mp4, hero.vtt and hero.chapters.vtt in the release ${RELEASE}`);
-    run('gh', ['release', 'upload', RELEASE, ...files, '--clobber', '--repo', REPO], env);
+    run('gh', ['release', 'upload', RELEASE, ...files, '--clobber'], env);
   } else {
     console.log(`Creating the release ${RELEASE} with hero.mp4, hero.vtt and hero.chapters.vtt`);
-    run('gh', ['release', 'create', RELEASE, ...files, '--repo', REPO, '--title', 'Site media',
+    run('gh', ['release', 'create', RELEASE, ...files, '--title', 'Site media',
       '--notes', 'Video for obeya.si, fetched by the Pages workflow.', '--prerelease', '--latest=false'], env);
   }
 } finally {
@@ -77,6 +77,6 @@ try {
 }
 
 console.log('Running the Pages workflow');
-run('gh', ['workflow', 'run', 'pages.yml', '--repo', REPO], env);
-console.log(`Published: https://github.com/${REPO}/actions/workflows/pages.yml shows the run.`);
+run('gh', ['workflow', 'run', 'pages.yml'], env);
+console.log(`Published: https://github.com/${repo}/actions/workflows/pages.yml shows the run.`);
 if (poster) console.log('The poster changed: commit site/img/hero-poster.jpg and docs/images/video.jpg and push main, which publishes them.');

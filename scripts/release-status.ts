@@ -10,17 +10,17 @@
 //       what the build workflow's draft release for <tag> holds: every installer, update and
 //       signature, SHA256SUMS, and a latest.json of the tag's version that names every platform.
 //
-// It reads `main` and asks GitHub as the account `sadilek` (with the token of its gh login, without
-// switching the account gh has active), through scripts/gh.ts. It changes nothing,
+// It reads `main` and asks GitHub about the checkout's origin as the account that owns it (with
+// the token of its gh login, without switching the account gh has active), through
+// scripts/gh.ts. It changes nothing,
 // and exits with 1 when something stands in the way.
 
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ACCOUNT, ghEnv, REPO } from './gh';
+import { CHECKOUT, ghEnv } from './gh';
 import { RELEASE, RUNS, type Latest } from './release';
 
-export { REPO };
 const MAIN = 'main';
 /** What the build workflow signs with (docs/release.md); APPLE_NOTARY_ISSUER only with a team key. */
 export const SECRETS = ['APPLE_CERTIFICATE', 'APPLE_CERTIFICATE_PASSWORD', 'APPLE_NOTARY_KEY', 'APPLE_NOTARY_KEY_ID', 'TAURI_SIGNING_PRIVATE_KEY'];
@@ -84,7 +84,7 @@ const newer = (a: string, b: string) => {
 type GhRelease = { tag_name: string; draft: boolean; prerelease: boolean; body?: string; assets: { name: string; updated_at: string }[] };
 
 function releases(gh: Gh): GhRelease[] | null {
-  const out = gh(['api', `repos/${REPO}/releases`]);
+  const out = gh(['api', 'repos/{owner}/{repo}/releases']);
   return out === null ? null : JSON.parse(out);
 }
 
@@ -118,10 +118,10 @@ export function status(cwd: string, gh: Gh): Status {
 
   const list = releases(gh);
   const site = list?.find((r) => r.tag_name === 'site-media');
-  const latest = list ? (gh(['api', `repos/${REPO}/releases/latest`, '--jq', '.tag_name']) ?? null) : null;
+  const latest = list ? (gh(['api', 'repos/{owner}/{repo}/releases/latest', '--jq', '.tag_name']) ?? null) : null;
   const drafts = list?.filter((r) => r.draft).map((r) => r.tag_name) ?? [];
   const siteMedia = site ? { prerelease: site.prerelease, latest: latest === 'site-media', video: site.assets.find((a) => a.name === 'hero.mp4')?.updated_at } : null;
-  if (!list) problems.push(`GitHub's releases could not be read (gh login of ${ACCOUNT}?).`);
+  if (!list) problems.push(`GitHub's releases could not be read (gh login of the repository's owner?).`);
   else if (!site) problems.push('There is no release site-media (scripts/hero-video/publish.ts creates it).');
   else {
     if (!site.prerelease) problems.push('site-media is not a pre-release: tick "Set as a pre-release" on it, else it can become the latest release.');
@@ -133,7 +133,7 @@ export function status(cwd: string, gh: Gh): Status {
   const since = siteMedia?.video;
   const uiSinceVideo = since ? Number(git(cwd, 'rev-list', '--count', `--since=${since}`, MAIN, '--', UI) ?? 0) : 0;
 
-  const secrets = gh(['secret', 'list', '--repo', REPO, '--json', 'name', '--jq', '.[].name']);
+  const secrets = gh(['secret', 'list', '--json', 'name', '--jq', '.[].name']);
   const missing = secrets === null ? null : SECRETS.filter((s) => !secrets.split('\n').includes(s));
   if (missing === null) problems.push('The repository secrets could not be read.');
   else if (missing.length) problems.push(`Secrets missing: ${missing.join(', ')} (docs/release.md).`);
@@ -182,7 +182,7 @@ export function draft(tag: string, gh: Gh): { problems: string[]; notes: string;
   const missing = expectedAssets().filter((n) => !have.includes(n));
   if (missing.length) problems.push(`Missing: ${missing.join(', ')}.`);
   let latest: Latest | undefined;
-  const json = have.includes('latest.json') ? gh(['release', 'download', tag, '--repo', REPO, '--pattern', 'latest.json', '--output', '-']) : null;
+  const json = have.includes('latest.json') ? gh(['release', 'download', tag, '--pattern', 'latest.json', '--output', '-']) : null;
   if (json !== null) {
     latest = JSON.parse(json) as Latest;
     if (latest.version !== tag.replace(/^v/, '')) problems.push(`latest.json says version ${latest.version}, not ${tag}.`);
@@ -192,11 +192,11 @@ export function draft(tag: string, gh: Gh): { problems: string[]; notes: string;
   return { problems, notes: release.body ?? '', latest };
 }
 
-/** gh as the account `sadilek`, without switching the account gh has active (scripts/gh.ts). */
-function ghAsSadilek(): Gh {
+/** gh on the checkout's origin as its owner, without switching the account gh has active (scripts/gh.ts). */
+function ghAsOwner(cwd: string): Gh {
   let env: NodeJS.ProcessEnv;
   try {
-    env = ghEnv();
+    env = ghEnv(cwd).env;
   } catch (e) {
     console.error((e as Error).message);
     process.exit(1);
@@ -209,7 +209,7 @@ function ghAsSadilek(): Gh {
 
 if (import.meta.main) {
   const [command, tag] = process.argv.slice(2);
-  const gh = ghAsSadilek();
+  const gh = ghAsOwner(CHECKOUT);
   if (command === 'draft' && tag) {
     const d = draft(tag, gh);
     if (d.latest) console.log(`latest.json: ${d.latest.version}, ${Object.keys(d.latest.platforms).join(', ') || 'no platform'}`);
@@ -217,7 +217,7 @@ if (import.meta.main) {
     console.log(d.problems.length ? `\nIn the way:\n${d.problems.map((p) => `- ${p}`).join('\n')}` : `\nThe draft holds everything (${expectedAssets().length} files).`);
     process.exit(d.problems.length ? 1 : 0);
   } else if (!command) {
-    const s = status(join(import.meta.dirname, '..'), gh);
+    const s = status(CHECKOUT, gh);
     console.log(report(s));
     process.exit(s.problems.length ? 1 : 0);
   } else {

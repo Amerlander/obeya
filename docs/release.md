@@ -12,10 +12,10 @@ Every release takes the site along: the hero video is rendered again from the Ob
 released, and the site's screenshots are taken again with it. When the owner says "Mach ein
 Release", the project skill `.claude/skills/release/SKILL.md` goes through these steps in this
 order, on an Obeya card or in a terminal; it adds when to ask the owner and what to look at.
-The scripts that talk to GitHub act as the account `sadilek` themselves (with its gh login,
-without switching the account gh has active); other gh calls go through `bun scripts/gh.ts <gh
-args…>`, which does the same on sadilek/obeya, since the machine's active account may lack the
-admin rights a workflow run or a rerun needs.
+The scripts that talk to GitHub act on the checkout's origin as the account that owns it
+(`sadilek` for sadilek/obeya, with its gh login, without switching the account gh has active);
+other gh calls go through `bun scripts/gh.ts <gh args…>`, which does the same, since the
+machine's active account may lack the admin rights a workflow run or a rerun needs.
 
 1. Where things stand: `bun scripts/release-status.ts` prints the last version tag, the commits
    since then that change what runs (the release's notes will be their subjects), the version to
