@@ -166,7 +166,7 @@ describe('the first canvas', () => {
     git(repo, 'branch', '-m', 'master');
     mkdirSync(join(dir, 'empty'));
     expect(setup().folder({ path: `${repo}/` })).toEqual({ repo: true, branch: 'master' });
-    expect(setup().folder({ path: join(dir, 'empty') })).toEqual({ repo: false });
+    expect(setup().folder({ path: join(dir, 'empty') })).toEqual({ repo: false, folder: true });
     expect(setup().folder({ path: join(dir, 'nirgends') })).toEqual({ repo: false });
   });
 
@@ -174,6 +174,26 @@ describe('the first canvas', () => {
     mkdirSync(join(dir, 'empty'));
     await expect(setup().canvas({ path: join(dir, 'empty') })).rejects.toMatchObject({ code: 'notRepo' });
     expect(existsSync(join(home, 'canvases.json'))).toBe(false);
+  });
+
+  test('a folder without git becomes a canvas once git is set up there', async () => {
+    const shop = join(dir, 'shop');
+    mkdirSync(join(shop, 'node_modules'), { recursive: true });
+    writeFileSync(join(shop, 'node_modules', 'x.js'), '');
+    writeFileSync(join(shop, 'app.ts'), '');
+    // the name and e-mail the assistant's step for them set
+    const before = process.env.GIT_CONFIG_GLOBAL;
+    process.env.GIT_CONFIG_GLOBAL = join(dir, 'gitconfig');
+    writeFileSync(process.env.GIT_CONFIG_GLOBAL, '[user]\n\tname = Ada\n\temail = ada@example.com\n[init]\n\tdefaultBranch = main\n');
+    try {
+      const s = setup();
+      expect(s.gitPreview({ path: shop })).toMatchObject({ files: 2, ignored: ['node_modules/'] });
+      expect(s.gitSetup({ path: shop })).toEqual({ branch: 'main' });
+      expect(await s.canvas({ path: shop })).toMatchObject({ canvas: 'shop', branch: 'main' });
+    } finally {
+      if (before === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+      else process.env.GIT_CONFIG_GLOBAL = before;
+    }
   });
 
   test('a clone goes into a folder of its name and becomes the canvas', async () => {

@@ -15,13 +15,14 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 // by its path: the package exports no package.json, which Bun imports all the same but TypeScript does not
 import sdk from '../../node_modules/@anthropic-ai/claude-agent-sdk/package.json';
-import { blocksSaving, type FirstCanvas, type MachineItem, type MachineJob, type MachineSection, type MachineSectionId, type MachineView, type SetupFolder } from '../core/types';
+import { blocksSaving, type FirstCanvas, type MachineItem, type MachineJob, type MachineSection, type MachineSectionId, type MachineView, type SetupFolder, type GitSetupPreview } from '../core/types';
 import { readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
 import { checkSetup, installHint, type LinuxFamily, linuxFamily, output } from '../../plugin/skills/demo/lib/setup.ts';
 import { installVoice } from '../../plugin/skills/demo/lib/voices.ts';
 import { BadRequest } from './board';
 import type { CanvasRuntime } from './canvas';
 import { type Config, expand } from './config';
+import { previewGitSetup, setUpGit, withoutGit } from './git-setup';
 import { repoInfo } from './repo';
 import { COMPILED } from './resources';
 import { claudeExecutable } from './runtime';
@@ -145,6 +146,13 @@ function waited(argv: string[], env: Env): Promise<string | null> {
     p.on('error', () => done(null));
     p.on('close', (code) => done(code === 0 ? out : null));
   });
+}
+
+/** The folder a request names, as an absolute path. */
+function folderOf(input: unknown): string {
+  const { path } = (input ?? {}) as { path?: unknown };
+  if (typeof path !== 'string' || !path.trim()) throw new BadRequest('invalid', 'a folder');
+  return resolve(expand(path.trim()));
 }
 
 /** The marker of a canvas the assistant created: once it runs, it gets a first card that says what to try. */
@@ -418,13 +426,22 @@ export class MachineSetup {
 
   /** A folder the owner names for the first canvas: whether it holds a repository, and its main branch. */
   folder(input: unknown): SetupFolder {
-    const { path } = (input ?? {}) as { path?: unknown };
-    if (typeof path !== 'string' || !path.trim()) throw new BadRequest('invalid', 'a folder');
+    const path = folderOf(input);
     try {
-      return { repo: true, branch: repoInfo(resolve(expand(path.trim()))).branch };
+      return { repo: true, branch: repoInfo(path).branch };
     } catch {
-      return { repo: false };
+      return withoutGit(path) ? { repo: false, folder: true } : { repo: false };
     }
+  }
+
+  /** What the first commit of a folder without git would hold; changes nothing. */
+  gitPreview(input: unknown): GitSetupPreview {
+    return previewGitSetup(folderOf(input));
+  }
+
+  /** Sets up git in a folder that has none, with its first commit; the owner saw the preview. */
+  gitSetup(input: unknown): { branch: string } {
+    return setUpGit(folderOf(input));
   }
 
   /** The first canvas: a repository's folder, saved at once; or a clone of one, in the background. */

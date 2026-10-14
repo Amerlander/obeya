@@ -13,8 +13,8 @@ without a restart.
 
 ## Where it stands
 
-- *A folder without git.* The first canvas rejects it (`notRepo`: "In diesem Ordner liegt kein
-  git-Repository.") and offers nothing to set one up.
+- *A folder without git.* The first canvas and "+ Repository" offer to set git up there, with a
+  preview of the first commit (W2).
 - *Main branch.* Detected by one function, `defaultBranch()` (`src/server/workspaces.ts`; W3), and
   shown in the first setup. It cannot be set anywhere yet (W5).
 - *Landing.* The generic adapter has `land: 'pr'`, remote or not. In a repository without a remote,
@@ -75,7 +75,7 @@ demo's `howToRun` and `required`.
   button, the path field below) or one field that takes a path or a repository and says what it
   recognised ("Erkannt: Repository auf GitHub. Wird geklont nach …"). Independent of the rest.
   Done when git installed by hand on Windows turns "ok" as soon as the window gets the focus back.
-- [ ] **W2:** Set up git in a folder that has none. See Setting up git in a folder; on the first
+- [x] **W2:** Set up git in a folder that has none. See Setting up git in a folder; on the first
   canvas and at "+ Repository" in the configuration. Done when a folder with a `node_modules/` and
   an `.env` becomes a canvas whose first commit holds neither, after the owner saw the preview.
 - [x] **W3:** Recognise the main branch. See Main branch and landing by detection. One function

@@ -225,6 +225,9 @@ export function serve(
       '/api/setup/login': { POST: async (req) => (machine ? handle(async () => machine.login(await req.json())) : new Response('Not found', { status: 404 })) },
       '/api/setup/identity': { POST: async (req) => (machine ? handle(async () => machine.identity(await req.json())) : new Response('Not found', { status: 404 })) },
       '/api/setup/folder': { POST: async (req) => (machine ? handle(async () => machine.folder(await req.json())) : new Response('Not found', { status: 404 })) },
+      // setting up git in a folder that has none: what the first commit holds, then the commit
+      '/api/setup/git-preview': { POST: async (req) => (machine ? handle(async () => machine.gitPreview(await req.json())) : new Response('Not found', { status: 404 })) },
+      '/api/setup/git': { POST: async (req) => (machine ? handle(async () => machine.gitSetup(await req.json())) : new Response('Not found', { status: 404 })) },
       '/api/setup/canvas': { POST: async (req) => (machine ? handle(async () => machine.canvas(await req.json())) : new Response('Not found', { status: 404 })) },
       // the system's folder dialog, open as long as the owner takes
       '/api/setup/pick': {

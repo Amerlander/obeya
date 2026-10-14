@@ -765,6 +765,10 @@ export type ErrorCode =
   | 'notRepo'
   /** Setup: the folder a clone would go to exists already. */
   | 'cloneTarget'
+  /** Setting up git in a folder: git has no name and e-mail for the first commit. */
+  | 'noIdentity'
+  /** Setting up git in a folder failed; it is as it was. */
+  | 'gitSetup'
   /** Setup: an installation or a clone is running already. */
   | 'setupBusy'
   /** Sharing many pages again: no page is outdated. */
@@ -1101,6 +1105,28 @@ export interface FirstCanvas {
 export interface SetupFolder {
   repo: boolean;
   branch?: string;
+  /** A folder without a repository, in which git can be set up. */
+  folder?: boolean;
+}
+
+/** From this size on a file is marked as large in the preview of a first commit. */
+export const LARGE_FILE = 1_000_000;
+
+/** What the first commit of a folder without git would hold, shown before the owner confirms it. */
+export interface GitSetupPreview {
+  path: string;
+  /** The branch the repository starts on. */
+  branch: string;
+  /** The `.gitignore` Obeya writes, where the folder has none. */
+  gitignore?: string;
+  files: number;
+  bytes: number;
+  /** What goes in, by the folder's own entries: a directory with its files counted. */
+  entries: { path: string; dir: boolean; files: number; bytes: number }[];
+  /** Files of a size worth a second look, largest first. */
+  large: { path: string; bytes: number }[];
+  /** What stays out, as git lists it (an ignored directory once). */
+  ignored: string[];
 }
 
 /**

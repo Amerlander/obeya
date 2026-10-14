@@ -336,6 +336,8 @@ const de = {
     voiceInstalling: 'Es wird schon eine Stimme installiert.',
     notRepo: 'In diesem Ordner liegt kein git-Repository.',
     cloneTarget: 'Diesen Ordner gibt es schon. Einen anderen Zielordner wählen, oder den vorhandenen als Ordner angeben.',
+    noIdentity: 'git kennt noch keinen Namen und keine E-Mail für Commits. Bitte in der Einrichtung bei „Name und E-Mail für Commits“ eintragen, dann noch einmal.',
+    gitSetup: 'git ließ sich nicht einrichten; der Ordner ist wie vorher.',
     setupBusy: 'Es läuft schon eine Installation oder ein Klon. Gleich noch einmal.',
     invalid: 'Das hat nicht geklappt. Der Server hat die Aktion abgelehnt.',
   } satisfies Record<ErrorCode, string>,
@@ -822,6 +824,27 @@ const de = {
       cloneFailed: (why: string) => `Klonen fehlgeschlagen: ${why}`,
       restarting: 'Gespeichert. Obeya startet mit der Leinwand neu und öffnet sie gleich hier.',
       startAgain: 'Gespeichert. Bitte Obeya neu starten; die Leinwand öffnet sich dann hier.',
+    },
+    git: {
+      none: 'In diesem Ordner liegt noch kein git-Repository. Obeya kann eins einrichten: Vorher zeigt es, was in den ersten Commit kommt.',
+      offer: 'Hier ein git-Repository einrichten',
+      looking: 'Obeya sieht nach, was hineinkäme …',
+      title: 'Der erste Commit',
+      summary: (files: number, size: string, branch: string) => `${files === 1 ? '1 Datei' : `${files} Dateien`}, ${size}, auf dem Branch ${branch}. Agenten sehen nur, was committet ist.`,
+      files: (n: number) => (n === 1 ? '1 Datei' : `${n} Dateien`),
+      large: 'Große Dateien',
+      largeHint: 'Gehören sie wirklich ins Repository?',
+      ignored: 'Bleibt draußen',
+      more: (n: number) => `und ${n} weitere`,
+      gitignore: 'Obeya legt eine .gitignore an: Build-Ausgaben, Abhängigkeiten und Geheimnisse (.env, Schlüssel) bleiben draußen.',
+      gitignoreShow: '.gitignore ansehen',
+      change: 'Soll etwas nicht hinein: in eine .gitignore im Ordner eintragen und neu ansehen.',
+      again: 'Neu ansehen',
+      confirm: 'Einrichten und committen',
+      confirmCanvas: 'Einrichten, committen und Leinwand anlegen',
+      cancel: 'Abbrechen',
+      working: 'Wird eingerichtet …',
+      done: (branch: string) => `git ist eingerichtet, auf dem Branch ${branch}.`,
     },
   },
   restart: {
@@ -1335,6 +1358,8 @@ const en: Strings = {
     voiceInstalling: 'A voice is already being installed.',
     notRepo: 'There is no git repository in this folder.',
     cloneTarget: 'This folder exists already. Choose another one to clone into, or give the existing one as the folder.',
+    noIdentity: 'git has no name and e-mail for commits yet. Please enter them in the setup under "Name and e-mail for commits", then try again.',
+    gitSetup: 'git could not be set up; the folder is as it was.',
     setupBusy: 'An installation or a clone is running already. Try again in a moment.',
     invalid: 'That did not work. The server refused the action.',
   },
@@ -1808,6 +1833,27 @@ const en: Strings = {
       restarting: 'Saved. Obeya starts again with the canvas and opens it here in a moment.',
       startAgain: 'Saved. Please start Obeya again; the canvas then opens here.',
     },
+    git: {
+      none: 'There is no git repository in this folder yet. Obeya can set one up, and shows first what goes into the first commit.',
+      offer: 'Set up a git repository here',
+      looking: 'Obeya is looking at what would go in …',
+      title: 'The first commit',
+      summary: (files: number, size: string, branch: string) => `${files === 1 ? '1 file' : `${files} files`}, ${size}, on the branch ${branch}. Agents only see what is committed.`,
+      files: (n: number) => (n === 1 ? '1 file' : `${n} files`),
+      large: 'Large files',
+      largeHint: 'Do they really belong in the repository?',
+      ignored: 'Stays out',
+      more: (n: number) => `and ${n} more`,
+      gitignore: 'Obeya writes a .gitignore: build output, dependencies and secrets (.env, keys) stay out.',
+      gitignoreShow: 'Show .gitignore',
+      change: 'To keep something out: list it in a .gitignore in the folder and look again.',
+      again: 'Look again',
+      confirm: 'Set up and commit',
+      confirmCanvas: 'Set up, commit and create canvas',
+      cancel: 'Cancel',
+      working: 'Setting up …',
+      done: (branch: string) => `git is set up, on the branch ${branch}.`,
+    },
   },
   restart: {
     pill: (n: number, owner: OwnerHold[], reason: RestartReason) => {
@@ -2029,6 +2075,11 @@ export function pushKeyLabel(key: string, mac = typeof navigator !== 'undefined'
     .join('+');
 }
 
+/** A file's size: bytes, KB or MB (as 1000s, like the systems' file managers mostly show them). */
+export const fileSize = (bytes: number) => {
+  const [n, unit] = bytes < 1000 ? [bytes, 'B'] : bytes < 1e6 ? [bytes / 1e3, 'KB'] : bytes < 1e9 ? [bytes / 1e6, 'MB'] : [bytes / 1e9, 'GB'];
+  return `${n.toLocaleString(locale, { maximumFractionDigits: n < 10 ? 1 : 0 })} ${unit}`;
+};
 /** A time of day, hours and minutes. */
 export const clock = (d: Date | string | number) => new Date(d).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 /** A short date: day and month. */

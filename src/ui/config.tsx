@@ -9,7 +9,7 @@ import { LANGUAGES } from '../core/locale';
 import { pushKeyFromEvent, type PushKeyView } from '../core/push-key';
 import { api, ApiError, reload } from './api';
 import { keep } from './keep';
-import { demoState, megabytes, PLATFORMS, SetupList, voiceState } from './setup';
+import { demoState, GitSetup, megabytes, PLATFORMS, SetupList, useFolderWithoutGit, voiceState } from './setup';
 import { errorText, pushKeyLabel, t } from './strings';
 import { applyTheme } from './theme';
 
@@ -84,6 +84,8 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }
 
   const problems = checked?.problems ?? [];
   const c = t.config;
+  // a path that became a repository here (git set up in its folder): its problem goes
+  const recheck = () => api.checkConfig(draft).then(setChecked, console.error);
   return (
     // a press on the dim around the dialog closes it; a press that starts inside does not
     <div id="config" className={on ? 'on' : undefined} onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -137,6 +139,7 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }
                 changed={changed}
                 busy={busy}
                 onAsk={onAsk}
+                onRecheck={recheck}
                 onDraft={(d, o) => {
                   setDraft(d);
                   setOrigin(o);
@@ -267,6 +270,7 @@ interface CanvasesProps {
   changed: boolean;
   busy: boolean;
   onAsk: Ask;
+  onRecheck: () => void;
   onDraft: (draft: CanvasConfig[], origin: (string | null)[]) => void;
   onSave: () => void;
   onReset: () => void;
@@ -276,7 +280,7 @@ interface CanvasesProps {
 }
 
 /** The canvases with their repositories, saved together; Obeya then starts again with them. */
-function Canvases({ view, draft, origin, checked, changed, busy, onAsk, onDraft, onSave, onReset, status, json, onJson }: CanvasesProps) {
+function Canvases({ view, draft, origin, checked, changed, busy, onAsk, onRecheck, onDraft, onSave, onReset, status, json, onJson }: CanvasesProps) {
   const c = t.config;
   const problems = checked?.problems ?? [];
   const setCanvas = (i: number, x: CanvasConfig | null) =>
@@ -318,6 +322,7 @@ function Canvases({ view, draft, origin, checked, changed, busy, onAsk, onDraft,
           adapters={view.adapters}
           problems={problems.filter((p) => p.canvas === i)}
           ask={changed ? undefined : onAsk}
+          onRecheck={onRecheck}
           onChange={(y) => setCanvas(i, y)}
         />
       ))}
@@ -930,10 +935,11 @@ interface CanvasProps {
   problems: ConfigProblem[];
   /** Has the Koordinator create a task that fixes a problem; only for the configuration as saved, which is what it reads. */
   ask?: Ask;
+  onRecheck: () => void;
   onChange: (c: CanvasConfig | null) => void;
 }
 
-function CanvasBlock({ n, canvas, resolved, running, pin, saved, adapters, problems, ask, onChange }: CanvasProps) {
+function CanvasBlock({ n, canvas, resolved, running, pin, saved, adapters, problems, ask, onRecheck, onChange }: CanvasProps) {
   const fresh = resolved && !running.includes(resolved.id);
   // the Koordinator of the canvas with the problem, where it runs: a card for it goes there
   const askHere = ask && ((text: string) => ask(text, resolved && running.includes(resolved.id) ? resolved.id : undefined));
@@ -981,6 +987,7 @@ function CanvasBlock({ n, canvas, resolved, running, pin, saved, adapters, probl
             problems={problems.filter((p) => p.repo === i)}
             where={`${here}, ${t.config.repoAt(r.path)}`}
             ask={askHere}
+            onRecheck={onRecheck}
             onChange={(x) => setRepo(i, x)}
           />
         ))}
@@ -1008,10 +1015,14 @@ interface RepoProps {
   /** Where it is, for a request to the Koordinator. */
   where: string;
   ask?: (text: string) => void;
+  /** Checks the configuration again: git was set up in the repository's folder. */
+  onRecheck: () => void;
   onChange: (r: RepoConfig | null) => void;
 }
 
-function RepoRow({ repo, home, resolved, canvasId, adapters, problems, where, ask, onChange }: RepoProps) {
+function RepoRow({ repo, home, resolved, canvasId, adapters, problems, where, ask, onRecheck, onChange }: RepoProps) {
+  // a path without a repository that is a folder: git can be set up there
+  const noGit = useFolderWithoutGit(problems.some((p) => p.code === 'notRepo') ? repo.path.trim() : '');
   const clones = resolved?.workspaces === 'clones' || !!repo.clones || !!repo.workspaces?.length;
   const without = <K extends keyof RepoConfig>(k: K, v: RepoConfig[K] | undefined): RepoConfig => {
     const next = { ...repo };
@@ -1080,6 +1091,7 @@ function RepoRow({ repo, home, resolved, canvasId, adapters, problems, where, as
       {problems.map((p, k) => (
         <div key={k} className="cfg-span">
           <Problem problem={p} where={where} ask={ask} />
+          {p.code === 'notRepo' && noGit && <GitSetup key={noGit} path={noGit} confirm={t.setup.git.confirm} onDone={onRecheck} />}
         </div>
       ))}
       {/* a repository without an adapter of its own (not one whose own does not load): a card on its canvas writes one */}

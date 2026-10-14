@@ -1220,5 +1220,18 @@ button.link:hover { text-decoration: underline; }
 .setup-first .c-path { width: 100%; padding: 7px 9px; }
 .setup-pick { margin-top: 0 !important; flex: none; }
 .setup-saved { font-size: 13.5px; color: var(--ink); }
+/* setting up git in a folder: the offer, then what the first commit holds */
+.git-setup { margin: 8px 0; }
+.git-setup > b { display: block; margin-top: 4px; }
+.git-setup p { margin: 4px 0; }
+.git-entries { list-style: none; margin: 6px 0; padding: 0; max-width: 640px; columns: 2 260px; column-gap: 24px; }
+.git-entries li { display: flex; justify-content: space-between; gap: 12px; padding: 2px 0; break-inside: avoid; }
+.git-setup code { font: 12.5px var(--mono); background: none; border: 0; padding: 0; }
+.git-entries li code { overflow-wrap: anywhere; }
+.git-entries li .hint { flex: none; }
+.git-entries li.large, .git-entries li.large .hint { color: var(--warn); }
+.git-large { margin: 8px 0; }
+.git-ignore-file summary { cursor: pointer; }
+.git-ignore-file pre { font: 12px var(--mono); margin: 6px 0; padding: 8px 10px; background: var(--card); border: 1px solid var(--line); border-radius: 4px; }
 .setup code { font: 12px var(--mono); }
 .setup .c-how code { padding: 2px 6px; border-radius: 2px; background: var(--card); border: 1px solid var(--line); user-select: all; }

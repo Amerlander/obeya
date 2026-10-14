@@ -4,12 +4,12 @@
 // start (no canvas yet) it fills the page and ends with the first canvas, from a folder or a clone;
 // later the settings open it over the canvas.
 
-import { type ReactNode, useEffect, useRef, useState } from 'react';
-import type { Language, MachineItem, MachineSection, MachineView, SetupItem, VoiceSetupItem } from '../core/types';
+import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
+import { type GitSetupPreview, LARGE_FILE, type Language, type MachineItem, type MachineSection, type MachineView, type SetupItem, type VoiceSetupItem } from '../core/types';
 import { LANGUAGES } from '../core/locale';
 import { api, ApiError, reload } from './api';
 import { Sign } from './logo';
-import { errorText, pushKeyLabel, t } from './strings';
+import { errorText, fileSize, pushKeyLabel, t } from './strings';
 
 export const megabytes = (mb: number) => (mb >= 1000 ? `${(mb / 1000).toFixed(1).replace('.', ',')} GB` : `${mb} MB`);
 export const PLATFORMS: Record<string, string> = { darwin: 'macOS', win32: 'Windows', linux: 'Linux' };
@@ -311,8 +311,8 @@ function FirstCanvas({ view, ready, onView }: { view: MachineView; ready: boolea
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const [saved, setSaved] = useState<{ canvas: string; branch?: string; restarting: boolean } | null>(null);
-  // the main branch of the folder named, once Obeya looked at it
-  const [found, setFound] = useState<{ path: string; branch?: string } | null>(null);
+  // the main branch of the folder named, once Obeya looked at it; or that it is a folder without git
+  const [found, setFound] = useState<{ path: string; branch?: string; noGit?: boolean } | null>(null);
   const s = t.setup;
   const failed = (e: unknown) => setStatus(e instanceof ApiError ? `${errorText(e.code)}${e.code === 'invalid' || e.code === 'config' ? ` ${e.message}` : ''}` : t.offlineError);
   const job = view.job?.kind === 'clone' ? view.job : undefined;
@@ -323,10 +323,11 @@ function FirstCanvas({ view, ready, onView }: { view: MachineView; ready: boolea
   useEffect(() => {
     const p = path.trim();
     if (!p) return setFound(null);
-    const timer = setTimeout(() => api.setupFolder(p).then((f) => setFound({ path: p, branch: f.branch }), () => setFound(null)), 300);
+    const timer = setTimeout(() => api.setupFolder(p).then((f) => setFound({ path: p, branch: f.branch, noGit: f.folder }), () => setFound(null)), 300);
     return () => clearTimeout(timer);
   }, [path]);
   const branch = saved?.branch ?? (mode === 'folder' && found?.path === path.trim() ? found.branch : undefined);
+  const noGit = mode === 'folder' && found?.path === path.trim() && !!found.noGit;
   // once Obeya runs with the canvas (by itself, or started again by the owner), the page opens it
   const opened = useRef(false);
   useEffect(() => {
@@ -401,6 +402,7 @@ function FirstCanvas({ view, ready, onView }: { view: MachineView; ready: boolea
                 </span>
               </label>
               {branch && <p className="hint setup-branch">{s.first.branch(branch)}</p>}
+              {noGit && <GitSetup key={path.trim()} path={path.trim()} confirm={s.git.confirmCanvas} onDone={create} />}
             </>
           ) : (
             <>
@@ -414,7 +416,7 @@ function FirstCanvas({ view, ready, onView }: { view: MachineView; ready: boolea
               </label>
             </>
           )}
-          {job?.running ? (
+          {noGit ? null : job?.running ? (
             <p className="hint c-install">
               <span className="c-step">{s.first.cloning}</span> <code>{job.line}</code>
             </p>
@@ -430,5 +432,126 @@ function FirstCanvas({ view, ready, onView }: { view: MachineView; ready: boolea
       )}
       {status && <p className="p-error">{status}</p>}
     </section>
+  );
+}
+
+/** The path, once Obeya found a folder without git there (where git can be set up); else empty. */
+export function useFolderWithoutGit(path: string): string {
+  const [found, setFound] = useState('');
+  useEffect(() => {
+    setFound('');
+    if (!path) return;
+    const timer = setTimeout(() => api.setupFolder(path).then((f) => setFound(f.folder ? path : ''), () => {}), 300);
+    return () => clearTimeout(timer);
+  }, [path]);
+  return found;
+}
+
+// what stays out, listed up to this many
+const IGNORED_SHOWN = 12;
+
+/**
+ * Sets up git in a folder that has none: the offer, then what the first commit holds (the folder's
+ * entries with their sizes, large files marked, what stays out, the `.gitignore` Obeya writes), and
+ * only once the owner confirms, the repository with its first commit. The first canvas and
+ * "+ Repository" in the configuration both show it.
+ */
+export function GitSetup({ path, confirm, onDone }: { path: string; confirm: string; onDone: (branch: string) => void }) {
+  const [preview, setPreview] = useState<GitSetupPreview | null>(null);
+  const [busy, setBusy] = useState<'looking' | 'working' | null>(null);
+  const [error, setError] = useState('');
+  const s = t.setup.git;
+  const failed = (e: unknown) => setError(e instanceof ApiError ? `${errorText(e.code)}${e.code === 'gitSetup' || e.code === 'invalid' ? ` ${e.message}` : ''}` : t.offlineError);
+  const look = async () => {
+    setBusy('looking');
+    setError('');
+    try {
+      setPreview(await api.setupGitPreview(path));
+    } catch (e) {
+      failed(e);
+    }
+    setBusy(null);
+  };
+  const go = async () => {
+    setBusy('working');
+    setError('');
+    try {
+      const { branch } = await api.setupGit(path);
+      onDone(branch);
+    } catch (e) {
+      failed(e);
+    }
+    setBusy(null);
+  };
+  const p = preview;
+  return (
+    <div className="git-setup">
+      {!p ? (
+        <>
+          <p className="hint">{s.none}</p>
+          <button className="btn small" disabled={!!busy} onClick={look}>
+            {busy === 'looking' ? s.looking : s.offer}
+          </button>
+        </>
+      ) : (
+        <>
+          <b>{s.title}</b>
+          <p className="hint">{s.summary(p.files, fileSize(p.bytes), p.branch)}</p>
+          <ul className="git-entries">
+            {p.entries.map((e) => (
+              <li key={e.path} className={!e.dir && e.bytes >= LARGE_FILE ? 'large' : undefined}>
+                <code>{e.path}</code>
+                <span className="hint">{e.dir ? `${s.files(e.files)} · ${fileSize(e.bytes)}` : fileSize(e.bytes)}</span>
+              </li>
+            ))}
+          </ul>
+          {p.large.length > 0 && (
+            <div className="git-large">
+              <b>{s.large}</b> <span className="hint">{s.largeHint}</span>
+              <ul className="git-entries">
+                {p.large.map((f) => (
+                  <li key={f.path} className="large">
+                    <code>{f.path}</code>
+                    <span className="hint">{fileSize(f.bytes)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {p.ignored.length > 0 && (
+            <p className="git-ignored">
+              <b>{s.ignored}:</b> {p.ignored.slice(0, IGNORED_SHOWN).map((f, i) => (
+                <Fragment key={f}>
+                  {i > 0 && ', '}
+                  <code>{f}</code>
+                </Fragment>
+              ))}
+              {p.ignored.length > IGNORED_SHOWN && ` ${s.more(p.ignored.length - IGNORED_SHOWN)}`}
+            </p>
+          )}
+          {p.gitignore !== undefined && (
+            <details className="git-ignore-file">
+              <summary className="hint">
+                {s.gitignore} <u>{s.gitignoreShow}</u>
+              </summary>
+              <pre>{p.gitignore}</pre>
+            </details>
+          )}
+          <p className="hint">{s.change}</p>
+          <div className="c-actions">
+            <button className="btn primary" disabled={!!busy} onClick={go}>
+              {busy === 'working' ? s.working : confirm}
+            </button>
+            <button className="btn small" disabled={!!busy} onClick={look}>
+              {s.again}
+            </button>
+            <button className="btn small" disabled={!!busy} onClick={() => setPreview(null)}>
+              {s.cancel}
+            </button>
+          </div>
+        </>
+      )}
+      {error && <p className="p-error">{error}</p>}
+    </div>
   );
 }

@@ -619,13 +619,28 @@ the owner's language (`src/core/locale.ts`).
   there is one: `osascript`, PowerShell's, zenity or kdialog) or a clone (`owner/name` through `gh
   repo clone` where gh is logged in, else from GitHub by its URL; any git URL; into the home
   directory unless another is given). Below a folder's path it shows the main branch Obeya found
-  there (`POST /api/setup/folder`), and after a clone the clone's, beside "Gespeichert". Obeya
+  there (`POST /api/setup/folder`), and after a clone the clone's, beside "Gespeichert". A folder
+  without git gets the offer to set it up there instead (see Setting up git in a folder), whose
+  confirmation also creates the canvas. Obeya
   writes `canvases.json` with it (its own adapter, else
   the generic one, with two clones when the adapter works in clones), restarts and the page opens
   the canvas, on which a first card says what to try (the marker `welcome` in Obeya's home, read
   once when the canvas runs). Later the Konfiguration dialog opens the same list over the canvas
   ("Einrichtung prüfen"), without the first canvas. A scratch Obeya with `"setup": true` in its
   stage file starts like a first start.
+- **Setting up git in a folder** — where the first canvas or "+ Repository" in the configuration
+  is given a folder in which git finds no repository, it offers "Hier ein git-Repository
+  einrichten" (`src/server/git-setup.ts`, shown by one component, `GitSetup` in
+  `src/ui/setup.tsx`). It first shows what the first commit would hold
+  (`POST /api/setup/git-preview`): the folder's own entries with their files counted and their
+  sizes, files from 1 MB on listed apart as large, what stays out, and the default `.gitignore`
+  (build output, dependencies, secrets: `node_modules/`, `dist/`, `.env*` but `.env.example`, keys)
+  that Obeya writes where the folder has none. The preview is computed against a git directory of
+  its own in the temp directory, so looking changes nothing; the owner keeps more out with a
+  `.gitignore` of their own and "Neu ansehen". Confirming (`POST /api/setup/git`) runs `git init` on
+  git's `init.defaultBranch`, else `main`, and commits every file not ignored, since workers only
+  see committed files, under the name and e-mail of the assistant's step for them (none: it says
+  so and does nothing). A step that fails undoes what came before, so the folder is as it was.
 - **One file** — `bun run build` (`scripts/build.ts`) compiles the server with Bun
   (`bun build --compile`) into one binary for this machine, or with `--all` (or named targets) one
   per platform (macOS arm64 and x64, Linux x64 and arm64, Windows x64; Bun cross-compiles, about
@@ -888,7 +903,9 @@ the owner's language (`src/core/locale.ts`).
   adapter, whether workers use clones or worktrees, and the command that shares its demos (empty:
   the adapter's site, shown as „Site: <url>“, or its command, or an export; see Sharing a demo); problems (no git repository, an unknown
   adapter, two canvases with one id, a canvas's home repository left out, a share command whose program is not there) show at the field while
-  editing and keep it from being saved. Problems in a repository's own adapter (`adapterField`:
+  editing and keep it from being saved; where a path without a repository is a folder, the
+  problem offers to set up git there (see Setting up git in a folder), after which it goes.
+  Problems in a repository's own adapter (`adapterField`:
   a field unknown, of the wrong type or incomplete, a share program not there; `adapterLoad`: it
   does not load, and the repository runs on the generic adapter; see Repo adapter)
   show at the repository with what is wrong, and keep nothing from being saved, since they are
