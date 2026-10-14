@@ -15,10 +15,8 @@ without a restart.
 
 - *A folder without git.* The first canvas rejects it (`notRepo`: "In diesem Ordner liegt kein
   git-Repository.") and offers nothing to set one up.
-- *Main branch.* `defaultBranch()` (`src/server/workspaces.ts`) and `defaultBranchCommit()`
-  (`src/server/read-tree.ts`) read `origin/HEAD` and fall back to `main`. A repository on
-  `master` without a remote gets worktrees, plan docs and the landing based on a branch that does
-  not exist. The main branch cannot be set anywhere.
+- *Main branch.* Detected by one function, `defaultBranch()` (`src/server/workspaces.ts`; W3), and
+  shown in the first setup. It cannot be set anywhere yet (W5).
 - *Landing.* The generic adapter has `land: 'pr'`, remote or not. In a repository without a remote,
   approving tells the worker to open a pull request that cannot exist.
 - *Settings as code.* `land`, `direct`, `checks`, `setup`, `planDocs`, `softPaths`, `workspaces`,
@@ -40,9 +38,11 @@ files. The commit's name and e-mail are the ones from the setup assistant's step
 
 ### Main branch and landing by detection
 
-The main branch is `origin/HEAD` where there is one, else the checkout's current branch, else the
-only local branch, else `init.defaultBranch`. One function replaces the two that fall back to
-`main` today. Without a GitHub remote (no `origin`, or one neither on github.com nor on a host `gh`
+The main branch is `origin/HEAD` where there is one, else the only local branch, else a local
+branch named as `init.defaultBranch`, `main` or `master`, else the checkout's current branch, else
+`init.defaultBranch` (cards' branches never count). The usual names come before the current branch
+so that checking out another branch for a while does not move where work lands. One function
+replaced the two that fell back to `main`. Without a GitHub remote (no `origin`, or one neither on github.com nor on a host `gh`
 is logged into) the landing defaults to `main`; with one it stays `pr`. A setting (below) wins
 over detection.
 
@@ -78,7 +78,7 @@ demo's `howToRun` and `required`.
 - [ ] **W2:** Set up git in a folder that has none. See Setting up git in a folder; on the first
   canvas and at "+ Repository" in the configuration. Done when a folder with a `node_modules/` and
   an `.env` becomes a canvas whose first commit holds neither, after the owner saw the preview.
-- [ ] **W3:** Recognise the main branch. See Main branch and landing by detection. One function
+- [x] **W3:** Recognise the main branch. See Main branch and landing by detection. One function
   for both callers; the first setup shows the branch it found. Done when a local repository on
   `master` without a remote gets worktrees, plan docs and landings on `master`.
 - [ ] **W4:** Landing follows the remote. See Main branch and landing by detection. Done when

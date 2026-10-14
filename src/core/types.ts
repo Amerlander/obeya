@@ -1070,6 +1070,8 @@ export interface MachineJob {
   error?: string;
   /** A clone that became the first canvas: its id, opened once Obeya runs again. */
   canvas?: string;
+  /** Its main branch. */
+  branch?: string;
 }
 
 export interface MachineView {
@@ -1090,7 +1092,15 @@ export interface MachineView {
 /** What choosing the first canvas did: it is saved, and Obeya starts again with it where something restarts it. */
 export interface FirstCanvas {
   canvas: string;
+  /** The repository's main branch, as Obeya found it. */
+  branch: string;
   restarting: boolean;
+}
+
+/** A folder for the first canvas, looked at before it is saved: whether it holds a repository, and on which main branch. */
+export interface SetupFolder {
+  repo: boolean;
+  branch?: string;
 }
 
 /**

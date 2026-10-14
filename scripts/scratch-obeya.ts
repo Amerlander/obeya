@@ -21,7 +21,7 @@
 // The stage file (JSON; every field but `cards` optional):
 //   {
 //     "name": "Shop", "canvases": ["Website"],
-//     "port": 4480, "dir": "/tmp/obeya-scratch-4480", "adapter": "obeya", "clones": 2,
+//     "port": 4480, "dir": "/tmp/obeya-scratch-4480", "adapter": "obeya", "clones": 2, "mainBranch": "master",
 //     "share": "share.ts", "poolCheckout": true, "slots": 3,
 //     "hosts": [{ "name": "Workhorse", "ssh": "me@workhorse.local", "clones": 2, "slots": 2 }],
 //     "files": { "src/cli.ts": "…" },
@@ -57,9 +57,10 @@
 // state, need, statusLine, summary, noDemo, question, demo, queue (`behind` by key; `since` defaults to
 // now), scope (files), branch, createdAgo, archivedAgo, events ([{ kind, author, text, ago?, mocks? }]; an idea's reply with `mocks` needs code that has them),
 // workspace (true: the card holds the next free clone, for an adapter that works in clones; with
-// `branch` checked out there, holding a commit), prototypeOf (the key of the idea it is a prototype of),
+// `branch` checked out there, holding a commit; for an adapter that works in worktrees, `branch` is
+// required and the card gets a worktree of its own on it), prototypeOf (the key of the idea it is a prototype of),
 // and `row` for any other column of `cards` (objects are stored as JSON). Times: "90s", "15m", "2h",
-// "3d" ago. `"setup": true` serves no canvas (no configuration, no repository given): the first start,
+// "3d" ago. `mainBranch` is the branch the repositories are on (default `main`). `"setup": true` serves no canvas (no configuration, no repository given): the first start,
 // which shows the setup assistant; the repository is still made, for the assistant to pick, and
 // `cards` may be empty. `"adapter": ""` names none: the repository's own (`.obeya/adapter/` among `files`) or the generic one. `share` is the repository's share command as the configuration holds it (a script among
 // `files`, say); `poolCheckout` makes the repository's checkout a workspace of the pool too
@@ -126,6 +127,8 @@ interface Stage {
   port?: number;
   dir?: string;
   adapter?: string;
+  /** The branch the repositories are on (default `main`). */
+  mainBranch?: string;
   /** Clones for an adapter that works in clones (generic): real workers need one each. */
   clones?: number;
   /** The repository's share command, as in the configuration. */
@@ -176,6 +179,7 @@ const home = join(dir, 'home');
 /** Where a host keeps the repository's clones. */
 const rootOn = (h: { root?: string }) => h.root ?? `${dir}/far`;
 const repo = join(dir, 'repo');
+const mainBranch = stage.mainBranch ?? 'main';
 mkdirSync(home, { recursive: true });
 
 // the repository
@@ -185,7 +189,7 @@ for (const [path, text] of Object.entries(files)) {
   mkdirSync(dirname(join(repo, path)), { recursive: true });
   writeFileSync(join(repo, path), text);
 }
-run('git', ['init', '-q', '-b', 'main'], repo);
+run('git', ['init', '-q', '-b', mainBranch], repo);
 run('git', ['add', '-A'], repo);
 run('git', ['-c', 'user.name=Scratch', '-c', 'user.email=scratch@example.com', 'commit', '-qm', 'init'], repo);
 // a workspace of the pool is a clone of the repository's origin, the checkout included
@@ -193,14 +197,14 @@ if (stage.poolCheckout || stage.hosts?.length) {
   run('git', ['clone', '-q', '--bare', repo, join(dir, 'scratch.git')], dir);
   run('git', ['remote', 'add', 'origin', join(dir, 'scratch.git')], repo);
   run('git', ['fetch', '-q', 'origin'], repo);
-  run('git', ['branch', '-q', '-u', 'origin/main'], repo);
+  run('git', ['branch', '-q', '-u', `origin/${mainBranch}`], repo);
 }
 // the repositories of the further canvases
 const further = (stage.canvases ?? []).map((name, i) => {
   const path = join(dir, `repo-${i + 2}`);
   mkdirSync(path, { recursive: true });
   writeFileSync(join(path, 'README.md'), `# ${name}\n`);
-  run('git', ['init', '-q', '-b', 'main'], path);
+  run('git', ['init', '-q', '-b', mainBranch], path);
   run('git', ['add', '-A'], path);
   run('git', ['-c', 'user.name=Scratch', '-c', 'user.email=scratch@example.com', 'commit', '-qm', 'init'], path);
   return { name, repos: [{ path, ...(stage.adapter === '' ? {} : { adapter: stage.adapter ?? 'obeya' }) }] };
@@ -367,14 +371,23 @@ for (const [i, c] of stage.cards.entries()) {
   if (c.branch !== undefined) row.branch = c.branch;
   if (c.workspace) {
     const free = db.query('SELECT path FROM workspaces WHERE card_id IS NULL ORDER BY path').get() as { path: string } | null;
-    if (!free) fail(`card ${c.key ?? i}: no free clone for it ("clones" in the stage, an adapter that works in clones)`);
-    db.query('UPDATE workspaces SET card_id = $id WHERE path = $path').run({ id, path: free!.path });
-    row.workspace = free!.path;
+    // no clones: the adapter works in worktrees, one per card under Obeya's home
+    const tree = !free && !!c.branch && !stage.clones;
+    if (!free && !tree) fail(`card ${c.key ?? i}: no free clone for it ("clones" in the stage, an adapter that works in clones), nor a branch for a worktree`);
+    const path = tree ? join(home, 'workspaces', canvas, id.slice(0, 8)) : free!.path;
+    if (tree) {
+      mkdirSync(dirname(path), { recursive: true });
+      run('git', ['worktree', 'add', '-q', '-b', c.branch!, path, mainBranch], repo);
+      db.query('INSERT INTO workspaces (path, canvas_id, card_id) VALUES ($path, $c, $id)').run({ path, c: canvas, id });
+    } else {
+      db.query('UPDATE workspaces SET card_id = $id WHERE path = $path').run({ id, path });
+      if (c.branch) run('git', ['checkout', '-q', '-b', c.branch], path);
+    }
+    row.workspace = path;
     if (c.branch) {
-      run('git', ['checkout', '-q', '-b', c.branch], free!.path);
-      writeFileSync(join(free!.path, 'scratch.txt'), `${c.title ?? c.branch}\n`);
-      run('git', ['add', '-A'], free!.path);
-      run('git', ['-c', 'user.name=Scratch', '-c', 'user.email=scratch@example.com', 'commit', '-qm', c.title ?? c.branch], free!.path);
+      writeFileSync(join(path, 'scratch.txt'), `${c.title ?? c.branch}\n`);
+      run('git', ['add', '-A'], path);
+      run('git', ['-c', 'user.name=Scratch', '-c', 'user.email=scratch@example.com', 'commit', '-qm', c.title ?? c.branch], path);
     }
   }
   if (c.prototypeOf !== undefined) row.prototype_of = ids[c.prototypeOf] ?? fail(`card ${c.key ?? i}: prototypeOf names ${c.prototypeOf}, which does not exist`);

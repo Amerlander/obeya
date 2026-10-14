@@ -1651,6 +1651,22 @@ describe('a worktree per card', () => {
     expect(git(main, 'branch', '--list', 'obeya/*')).toBe('');
   });
 
+  test('a repository on master without a remote: cards start from master and land there', async () => {
+    git(main, 'branch', '-m', 'master');
+    commitIn(main, 'base.ts', 'Auf master');
+    const a = manual();
+    workers.start(a.id);
+    const wa = board.row(a.id).workspace!;
+    expect(git(wa, 'log', '--format=%s', '-1')).toBe('Auf master');
+    commitIn(wa, 'a.ts', 'A');
+    expect(spaces.changes(a.id).map((c) => c.file)).toEqual(['a.ts']);
+    runtime.last.call('ready_for_review', { summary: 'S' });
+    await workers.approve(a.id);
+    expect(state(a.id)).toBe('live');
+    expect(git(main, 'log', '--format=%s', '-3', 'master').split('\n')).toEqual(['A', 'Auf master', 'init']);
+    expect(git(main, 'branch', '--list', 'main')).toBe('');
+  });
+
   test("an idea built on a prototype takes over its worktree and branch, and lands from there", async () => {
     const idea = board.create({ idea: true, title: 'Logo', x: 0, y: 0 });
     const prototype = board.addPrototype(idea.id, 'Prototyp: Logo – Wortmarke', 'Wortmarke');

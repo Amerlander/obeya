@@ -618,7 +618,9 @@ the owner's language (`src/core/locale.ts`).
   path, or the system's folder dialog where
   there is one: `osascript`, PowerShell's, zenity or kdialog) or a clone (`owner/name` through `gh
   repo clone` where gh is logged in, else from GitHub by its URL; any git URL; into the home
-  directory unless another is given). Obeya writes `canvases.json` with it (its own adapter, else
+  directory unless another is given). Below a folder's path it shows the main branch Obeya found
+  there (`POST /api/setup/folder`), and after a clone the clone's, beside "Gespeichert". Obeya
+  writes `canvases.json` with it (its own adapter, else
   the generic one, with two clones when the adapter works in clones), restarts and the page opens
   the canvas, on which a first card says what to try (the marker `welcome` in Obeya's home, read
   once when the canvas runs). Later the Konfiguration dialog opens the same list over the canvas
@@ -963,12 +965,23 @@ the owner's language (`src/core/locale.ts`).
   and on a canvas with several repositories every card names its own. Cards on other canvases that
   need the owner show as a count at their entry in the switcher and, while it is closed, as the sum
   on the pill; the server pushes every canvas's count to all of them when one changes.
+- **Main branch** (`defaultBranch` in `src/server/workspaces.ts`) — where cards start from, work
+  lands and plan docs and the adapter are read from; one function for all of them, the canvas's
+  label and the first setup. It is `origin`'s HEAD where the checkout knows one. Else (a repository
+  only on this machine, or a remote added without `origin/HEAD`) it is the repository's only branch
+  that is not a card's (`obeya/…`); else the one of them named as git's `init.defaultBranch`,
+  `main` or `master`; else the branch the checkout is on, unless that is a card's; else
+  `init.defaultBranch`, else `main`. The usual names come before the checked-out branch so that a
+  branch the owner checks out for a while does not become the main branch: landing on the local
+  main still refuses while the checkout is not on it (`landCheckout`). Until 2026-10-14 it was
+  `origin/HEAD` or `main`, so a repository on `master` without a remote got worktrees and landings
+  on a branch that did not exist.
 - **Lesestand** (`src/server/read-tree.ts`) — every repository of a canvas has a directory on its
   default branch that its plan docs are read from (the canvas, „Plandokument lesen“, the last state
   kept on a project) and that the agents that answer or judge rather than work on a card run in:
   project agents, ideas' exploration agents, the Koordinator (and its look-ups, learner and
   Rückschau), the Arbeitsrückschau and the voice commands' session. Where work lands on the local main (`land: 'main'`, Obeya), it
-  is the configured checkout itself, which is always on `main`, uncommitted plan docs included.
+  is the configured checkout itself, which is always on its main branch, uncommitted plan docs included.
   Otherwise the configured checkout is often one of the pool's clones and on the branch of the card
   that leased it last, so the Lesestand is a detached worktree of it under Obeya's home
   (`read/<canvas>/<repo>`), on the commit `repoAdapterFile` reads too (`defaultBranchCommit`: the

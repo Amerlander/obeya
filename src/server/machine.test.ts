@@ -10,6 +10,7 @@ import { Store } from './db';
 import { CLONES, cloneName, machineHint, MachineSetup, runnable, WELCOME_FILE, welcome } from './machine';
 import { gitRepo } from './testing';
 import { VoiceSetup } from './voice-setup';
+import { git } from './workspaces';
 
 let dir: string;
 let home: string;
@@ -152,11 +153,21 @@ describe('what Obeya needs on this machine', () => {
 describe('the first canvas', () => {
   test('a repository folder becomes a canvas with clones for its adapter, and Obeya starts again', async () => {
     const repo = gitRepo(join(dir, 'shop'));
+    git(repo, 'branch', '-m', 'master');
     const out = await setup().canvas({ path: repo });
-    expect(out).toEqual({ canvas: 'shop', restarting: true });
+    expect(out).toEqual({ canvas: 'shop', branch: 'master', restarting: true });
     expect(restarts).toBe(1);
     expect(JSON.parse(readFileSync(join(home, 'canvases.json'), 'utf8'))).toEqual([{ repos: [{ path: repo, clones: CLONES }] }]);
     expect(readFileSync(join(home, WELCOME_FILE), 'utf8')).toBe('shop');
+  });
+
+  test('says of a folder before it is saved whether it holds a repository, and its main branch', () => {
+    const repo = gitRepo(join(dir, 'shop'));
+    git(repo, 'branch', '-m', 'master');
+    mkdirSync(join(dir, 'empty'));
+    expect(setup().folder({ path: `${repo}/` })).toEqual({ repo: true, branch: 'master' });
+    expect(setup().folder({ path: join(dir, 'empty') })).toEqual({ repo: false });
+    expect(setup().folder({ path: join(dir, 'nirgends') })).toEqual({ repo: false });
   });
 
   test('a folder without a repository is refused', async () => {
@@ -171,7 +182,7 @@ describe('the first canvas', () => {
     await s.canvas({ clone: origin, into: join(dir, 'code') });
     let v = await s.view();
     for (let i = 0; v.job?.running && i < 100; i++) await Bun.sleep(50), (v = await s.view());
-    expect(v.job).toMatchObject({ kind: 'clone', running: false, canvas: 'shop' });
+    expect(v.job).toMatchObject({ kind: 'clone', running: false, canvas: 'shop', branch: 'main' });
     expect(existsSync(join(dir, 'code', 'shop', '.git'))).toBe(true);
     // the folder is there now: a second clone into it is refused
     await expect(new MachineSetup({ home, config: config(), restarts: true }).canvas({ clone: origin, into: join(dir, 'code') })).rejects.toMatchObject({ code: 'cloneTarget' });

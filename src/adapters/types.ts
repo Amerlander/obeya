@@ -4,6 +4,7 @@ export interface RepoInfo {
   path: string;
   /** `origin` URL, if any. */
   remote: string | null;
+  /** Its main branch, where cards start from and work lands (`defaultBranch`). */
   branch: string;
 }
 

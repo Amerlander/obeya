@@ -81,6 +81,18 @@ describe('the Lesestand', () => {
     expect(projects(c)).toEqual(['Export']);
   });
 
+  test('of a repository on master without a remote is on master, while the checkout is on a card\'s branch', () => {
+    checkout = origin;
+    git(checkout, 'branch', '-m', 'master');
+    git(checkout, 'checkout', '--quiet', '-b', 'obeya/card');
+    git(checkout, 'rm', '--quiet', 'docs/plan/export.md');
+    git(checkout, 'commit', '--quiet', '-m', 'card');
+    const c = open();
+    expect(c.repos[0]!.read.path).toBe(join(dir, 'home', 'read', 'shop', 'origin'));
+    expect(projects(c)).toEqual(['Export']);
+    expect(c.board.snapshot().canvas.repos[0]!.branch).toBe('master');
+  });
+
   test('shows a doc that reached origin once it refreshes, and lets a deleted one go', async () => {
     const c = open();
     push({ 'docs/plan/import.md': doc('Import') });

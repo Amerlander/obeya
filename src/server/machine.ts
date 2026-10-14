@@ -15,13 +15,14 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 // by its path: the package exports no package.json, which Bun imports all the same but TypeScript does not
 import sdk from '../../node_modules/@anthropic-ai/claude-agent-sdk/package.json';
-import { blocksSaving, type FirstCanvas, type MachineItem, type MachineJob, type MachineSection, type MachineSectionId, type MachineView } from '../core/types';
+import { blocksSaving, type FirstCanvas, type MachineItem, type MachineJob, type MachineSection, type MachineSectionId, type MachineView, type SetupFolder } from '../core/types';
 import { readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
 import { checkSetup, installHint, type LinuxFamily, linuxFamily, output } from '../../plugin/skills/demo/lib/setup.ts';
 import { installVoice } from '../../plugin/skills/demo/lib/voices.ts';
 import { BadRequest } from './board';
 import type { CanvasRuntime } from './canvas';
 import { type Config, expand } from './config';
+import { repoInfo } from './repo';
 import { COMPILED } from './resources';
 import { claudeExecutable } from './runtime';
 import type { ShellReports } from './push-key';
@@ -415,6 +416,17 @@ export class MachineSetup {
     return { path: out ? out.replace(/(?<=.)[/\\]$/, '') : null };
   }
 
+  /** A folder the owner names for the first canvas: whether it holds a repository, and its main branch. */
+  folder(input: unknown): SetupFolder {
+    const { path } = (input ?? {}) as { path?: unknown };
+    if (typeof path !== 'string' || !path.trim()) throw new BadRequest('invalid', 'a folder');
+    try {
+      return { repo: true, branch: repoInfo(resolve(expand(path.trim()))).branch };
+    } catch {
+      return { repo: false };
+    }
+  }
+
   /** The first canvas: a repository's folder, saved at once; or a clone of one, in the background. */
   async canvas(input: unknown): Promise<FirstCanvas | MachineView> {
     const { path, clone, into } = (input ?? {}) as { path?: unknown; clone?: unknown; into?: unknown };
@@ -434,7 +446,7 @@ export class MachineSetup {
     console.log(`Obeya: cloning ${spec} into ${dest}`);
     this.run(argv, (line) => (job.line = line.slice(0, 300)))
       .then(() => {
-        job.canvas = this.add(dest).canvas;
+        ({ canvas: job.canvas, branch: job.branch } = this.add(dest));
       })
       .catch((e: Error) => {
         job.error = e instanceof BadRequest ? e.message : e.message.split('\n').at(-1)!;
@@ -460,6 +472,6 @@ export class MachineSetup {
     writeFileSync(join(this.o.home, WELCOME_FILE), canvas);
     const { restarting } = this.o.config.save(next);
     this.canvasSaved = restarting;
-    return { canvas, restarting };
+    return { canvas, branch: repoInfo(path).branch, restarting };
   }
 }

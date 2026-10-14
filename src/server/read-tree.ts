@@ -6,7 +6,7 @@
 
 import { existsSync, mkdirSync, realpathSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { GIT } from './workspaces';
+import { defaultBranch, GIT } from './workspaces';
 
 type Git = (...args: string[]) => string | null;
 
@@ -18,12 +18,13 @@ const gitIn =
   };
 
 /**
- * The default branch's commit as Obeya reads it: the local branch where it has everything
- * `origin`'s has (work lands there first), else `origin`'s; HEAD in a repository with neither.
+ * The default branch (`defaultBranch`) and its commit as Obeya reads it: the local branch where it
+ * has everything `origin`'s has (work lands there first), else `origin`'s; HEAD in a repository
+ * with neither.
  */
 export function defaultBranchCommit(repoPath: string): { branch: string; commit: string } {
   const git = gitIn(repoPath);
-  const branch = git('symbolic-ref', '--short', 'refs/remotes/origin/HEAD')?.replace(/^origin\//, '') ?? 'main';
+  const branch = defaultBranch(repoPath);
   const local = git('rev-parse', '--verify', '--quiet', `refs/heads/${branch}`);
   const remote = git('rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`);
   const commit = local && remote ? (git('merge-base', '--is-ancestor', remote, local) !== null ? local : remote) : (local ?? remote ?? 'HEAD');

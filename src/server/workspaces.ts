@@ -415,10 +415,9 @@ export class Workspaces {
   private async land(cardId: string, branch: string): Promise<LandProblem | Landed> {
     const ws = this.leasedBy(cardId);
     if (!ws) return { code: 'land', worker: false, detail: 'the card has no workspace' };
-    let base = 'main';
     try {
       if (await gitAsync(ws, 'status', '--porcelain')) return { code: 'landDirty', worker: true, detail: 'uncommitted changes in the workspace' };
-      base = defaultBranch(this.o.mode === 'worktrees' ? this.o.repoPath : ws);
+      const base = defaultBranch(this.o.mode === 'worktrees' ? this.o.repoPath : ws);
       const upstream = this.o.mode === 'worktrees' ? base : `origin/${base}`;
       if (this.o.mode === 'clones') await gitAsync(ws, 'fetch', '--quiet', 'origin');
       const conflict = await rebaseOnto(ws, upstream, base);
@@ -620,7 +619,6 @@ export class Workspaces {
 
 }
 
-/** The remote's default branch as the checkout knows it (`main` if origin has no HEAD). */
 export interface Change {
   file: string;
   /** Changed ranges in the new file, as git's hunk header has them: "120-134 in function decide". */
@@ -655,13 +653,37 @@ export function parseChanges(diff: string): Change[] {
   return out.filter((c) => c.file);
 }
 
+/**
+ * The repository's main branch, where cards start from and work lands: `origin`'s HEAD where the
+ * checkout knows one. Else its only branch that is not a card's; else the one of them named as
+ * git's `init.defaultBranch`, `main` or `master`, so that a branch the owner checks out for a
+ * while does not take its place; else the branch the checkout is on, unless that is a card's;
+ * else `init.defaultBranch`, else `main`.
+ */
 export function defaultBranch(path: string): string {
-  try {
-    return git(path, 'symbolic-ref', '--short', 'refs/remotes/origin/HEAD').replace(/^origin\//, '');
-  } catch {
-    return 'main';
-  }
+  const read = (...args: string[]) => {
+    try {
+      return git(path, ...args);
+    } catch {
+      return '';
+    }
+  };
+  const origin = read('symbolic-ref', '--short', '-q', 'refs/remotes/origin/HEAD');
+  if (origin) return origin.replace(/^origin\//, '');
+  const own = read('for-each-ref', '--format=%(refname:short)', 'refs/heads/')
+    .split('\n')
+    .filter((b) => b && !b.startsWith(CARD_BRANCH));
+  if (own.length === 1) return own[0]!;
+  const init = read('config', '--get', 'init.defaultBranch');
+  const usual = [init, 'main', 'master'].find((b) => b && own.includes(b));
+  if (usual) return usual;
+  const current = read('symbolic-ref', '--short', '-q', 'HEAD');
+  if (current && !current.startsWith(CARD_BRANCH)) return current;
+  return init || 'main';
 }
+
+/** What every card's branch begins with. */
+const CARD_BRANCH = 'obeya/';
 
 /** `obeya/<slug>` from a card title, kept short and unique by the card id. */
 export function branchName(title: string, cardId: string): string {
@@ -674,5 +696,5 @@ export function branchName(title: string, cardId: string): string {
     .replace(/^-|-$/g, '')
     .slice(0, 40)
     .replace(/-$/, '');
-  return `obeya/${slug || 'card'}-${cardId.slice(0, 6)}`;
+  return `${CARD_BRANCH}${slug || 'card'}-${cardId.slice(0, 6)}`;
 }

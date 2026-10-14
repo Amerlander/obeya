@@ -310,14 +310,23 @@ function FirstCanvas({ view, ready, onView }: { view: MachineView; ready: boolea
   const [into, setInto] = useState(view.cloneInto);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
-  const [saved, setSaved] = useState<{ canvas: string; restarting: boolean } | null>(null);
+  const [saved, setSaved] = useState<{ canvas: string; branch?: string; restarting: boolean } | null>(null);
+  // the main branch of the folder named, once Obeya looked at it
+  const [found, setFound] = useState<{ path: string; branch?: string } | null>(null);
   const s = t.setup;
   const failed = (e: unknown) => setStatus(e instanceof ApiError ? `${errorText(e.code)}${e.code === 'invalid' || e.code === 'config' ? ` ${e.message}` : ''}` : t.offlineError);
   const job = view.job?.kind === 'clone' ? view.job : undefined;
   // a clone that ended as the first canvas
   useEffect(() => {
-    if (job && !job.running && job.canvas) setSaved({ canvas: job.canvas, restarting: view.restarts });
+    if (job && !job.running && job.canvas) setSaved({ canvas: job.canvas, branch: job.branch, restarting: view.restarts });
   }, [job?.running, job?.canvas]);
+  useEffect(() => {
+    const p = path.trim();
+    if (!p) return setFound(null);
+    const timer = setTimeout(() => api.setupFolder(p).then((f) => setFound({ path: p, branch: f.branch }), () => setFound(null)), 300);
+    return () => clearTimeout(timer);
+  }, [path]);
+  const branch = saved?.branch ?? (mode === 'folder' && found?.path === path.trim() ? found.branch : undefined);
   // once Obeya runs with the canvas (by itself, or started again by the owner), the page opens it
   const opened = useRef(false);
   useEffect(() => {
@@ -364,7 +373,8 @@ function FirstCanvas({ view, ready, onView }: { view: MachineView; ready: boolea
       <p className="hint">{s.first.hint}</p>
       {!ready && <p className="hint warn">{s.first.notReady}</p>}
       {saved ? (
-        <p className="hint setup-saved">{saved.restarting ? s.first.restarting : s.first.startAgain}</p>
+        <p className="hint setup-saved">
+          {branch && `${s.first.branch(branch)} `}{saved.restarting ? s.first.restarting : s.first.startAgain}</p>
       ) : (
         <>
           <div className="setup-where" role="radiogroup" aria-labelledby="setup-where">
@@ -380,17 +390,20 @@ function FirstCanvas({ view, ready, onView }: { view: MachineView; ready: boolea
             ))}
           </div>
           {mode === 'folder' ? (
-            <label>
-              <span className="hint">{s.first.folder}</span>
-              <span className="c-row">
-                <input className="c-path" spellCheck={false} placeholder={s.first.pathPlaceholder} value={path} onChange={(e) => setPath(e.target.value)} />
-                {view.picker && (
-                  <button className="btn small setup-pick" onClick={pick}>
-                    {s.first.pick}
-                  </button>
-                )}
-              </span>
-            </label>
+            <>
+              <label>
+                <span className="hint">{s.first.folder}</span>
+                <span className="c-row">
+                  <input className="c-path" spellCheck={false} placeholder={s.first.pathPlaceholder} value={path} onChange={(e) => setPath(e.target.value)} />
+                  {view.picker && (
+                    <button className="btn small setup-pick" onClick={pick}>
+                      {s.first.pick}
+                    </button>
+                  )}
+                </span>
+              </label>
+              {branch && <p className="hint setup-branch">{s.first.branch(branch)}</p>}
+            </>
           ) : (
             <>
               <label>

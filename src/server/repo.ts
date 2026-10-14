@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync, watch } from 'node:fs'
 import { basename, dirname, join } from 'node:path';
 import type { RepoAdapter, RepoInfo } from '../adapters/types';
 import { notAProject, type OtherDoc, type PlanDoc, parsePlanDoc } from '../core/plan-doc';
-import { GIT } from './workspaces';
+import { defaultBranch, GIT } from './workspaces';
 
 export function repoInfo(path: string): RepoInfo {
   const git = (...args: string[]) => {
@@ -10,7 +10,7 @@ export function repoInfo(path: string): RepoInfo {
     return r.exitCode === 0 ? r.stdout.toString().trim() : null;
   };
   if (git('rev-parse', '--git-dir') === null) throw new Error(`${path} is not a git repository`);
-  return { path, remote: git('remote', 'get-url', 'origin'), branch: git('branch', '--show-current') || 'HEAD' };
+  return { path, remote: git('remote', 'get-url', 'origin'), branch: defaultBranch(path) };
 }
 
 /**
