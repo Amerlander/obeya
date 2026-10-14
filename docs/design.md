@@ -1409,7 +1409,12 @@ the owner's language (`src/core/locale.ts`).
   asked or handed over meanwhile (at most 15 minutes), since it stops whatever a worker runs. The
   workers it waits for are told it is due, and so is a worker that starts a turn before it: they
   start nothing long, stop background work they can start again, and pause at the next safe point
-  by ending their turn (no nudge, no question to the owner; the card's log says it paused). A
+  by ending their turn (no nudge, no question to the owner; the card's log says it paused).
+  Background work a worker lets finish wakes it for a turn before the restart, and so does a message;
+  such a turn hears once that Obeya still waits and that it holds the restart up (with its first tool
+  step, or with the message; the card's log says so), and the worker ends it again. Until 2026-10-14 it heard nothing: a
+  worker woken by the render it had paused beside went on from there, checking frames and starting
+  the next render, and kept the restart waiting all the while. A
   resumed worker hears that what ran was stopped (exit code 137) and goes on. A worker that waits for the restart to finish its landed work is not
   in a turn and does not hold it up. The restart also waits while the owner watches a demo video or
   dictates in an open page (from the press until the words are in the field or Obeya has read

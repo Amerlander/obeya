@@ -186,6 +186,37 @@ describe('workers', () => {
     expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', text: 'Pausiert bis zum Neustart von Obeya.' });
   });
 
+  test('a worker that paused for the restart with its render still running hears, when the render wakes it, that Obeya still waits', () => {
+    const c = manual();
+    workers.start(c.id);
+    const busy = runtime.last;
+    busy.emit({ type: 'text', text: 'Das Video rendert.' });
+    workers.restartDue({ reason: 'code', deadline: Date.now() + 15 * 60_000 });
+    expect(busy.inbox.at(-1)).toContain('take in its result and end that turn as well');
+    // still in its turn, before it paused: nothing more to hear
+    expect(busy.toolStep()).toBeUndefined();
+    busy.emit({ type: 'text', text: 'Pausiert; das Rendern läuft weiter.' });
+    busy.emit({ type: 'idle', background: 1 });
+    expect(workers.busy()).toBe(true);
+    // the render finishes and wakes the worker, which would go on from there
+    const told = busy.inbox.length;
+    busy.emit({ type: 'tool', name: 'Bash', input: { command: 'tail -2 render.log' } });
+    expect(busy.toolStep()).toContain('Obeya still waits for the restart (new code landed on main) you paused for, at most 15 more minutes');
+    expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', text: 'Der Agent ist vor dem Neustart wieder aufgewacht; Obeya sagt ihm, dass der Neustart noch auf ihn wartet.' });
+    // once per turn
+    expect(busy.toolStep()).toBeUndefined();
+    expect(busy.inbox.length).toBe(told);
+    busy.emit({ type: 'idle' });
+    expect(workers.busy()).toBe(false);
+    expect(state(c.id)).toBe('working');
+    expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', text: 'Pausiert bis zum Neustart von Obeya.' });
+    // a note from the owner before the restart says so with the note
+    workers.message(c.id, 'Nimm die dunkle Variante.');
+    expect(busy.inbox.at(-1)).toContain('Nimm die dunkle Variante.');
+    expect(busy.inbox.at(-1)).toContain('Obeya still waits for the restart');
+    expect(busy.toolStep()).toBeUndefined();
+  });
+
   test('a status line the worker reports as it pauses for the restart gives way to the one from before: it goes on after the restart', () => {
     const c = manual();
     workers.start(c.id);
