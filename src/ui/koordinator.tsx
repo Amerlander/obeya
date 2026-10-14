@@ -11,6 +11,7 @@ import { errorText, t } from './strings';
 import { Composer } from './composer';
 import { OBEYA_DRAFT } from './draft';
 import { Shots } from './shots';
+import { useStickToEnd } from './stickToEnd';
 
 interface Props {
   on: boolean;
@@ -140,39 +141,15 @@ function Fold({ kind, head, open, onToggle, children }: { kind?: string; head: s
 /** What the owner said to the Koordinator with no card open, and its replies; newest last. */
 function Conversation({ talk, fresh, items, onOpen }: { talk: Talk[]; fresh: number[]; items: Item[]; onOpen: (i: Item) => void }) {
   const box = useRef<HTMLDivElement>(null);
-  const atEnd = useRef(true);
-  const newest = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    const el = box.current;
-    if (!el) return;
-    // every change on the canvas brings a new snapshot: only what the owner just said takes the
-    // conversation back to its end, so they can read further up in the meantime
-    const last = talk.at(-1)?.id;
-    if (last !== newest.current) atEnd.current = true;
-    newest.current = last;
-    if (atEnd.current) el.scrollTop = el.scrollHeight;
-  }, [talk]);
-  useEffect(() => {
-    // the newest exchange stays in view when the sheet grows or shrinks, or the text wraps anew once
-    // the font is in, unless the owner scrolled up
-    const el = box.current;
-    if (!el) return;
-    const keep = new ResizeObserver(() => {
-      if (atEnd.current) el.scrollTop = el.scrollHeight;
-    });
-    keep.observe(el);
-    for (const x of el.children) keep.observe(x);
-    return () => keep.disconnect();
-  }, [talk]);
+  // every change on the canvas brings a new snapshot: only what the owner just said takes the
+  // conversation back to its end, so they can read further up in the meantime
+  const onScroll = useStickToEnd(box, talk.at(-1)?.id, talk);
   if (!talk.length) return null;
   return (
     <div
       className="talk conv"
       ref={box}
-      onScroll={(e) => {
-        const el = e.currentTarget;
-        atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 4;
-      }}
+      onScroll={onScroll}
     >
       {talk.map((x) => (
         <Fragment key={x.id}>

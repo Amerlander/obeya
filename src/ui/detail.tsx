@@ -17,6 +17,7 @@ import { Composer } from './composer';
 import { useFitHeight } from './fitHeight';
 import { type Box, onto, ZOOM_EASE, ZOOM_MS, zoomBox } from './zoomBox';
 import { AttachButton, imageUrl, ShotStrip, Shots, useShotInput } from './shots';
+import { useStickToEnd } from './stickToEnd';
 import { dismissPlace, type Place, seekTo, usePlace, videoOf, watch } from './spot';
 import { becomesLabel, clock as time, errorText, stateLabel, t } from './strings';
 import { agentWorks, demoHandover, koordinatorReads, ownerField, parseQuestion, started, talkAlone, talkTurns, type Turn, worked as isWorked } from './talk';
@@ -865,10 +866,7 @@ function Conversation({
   const asking = item.state === 'waiting' && item.need === 'question' ? item.question : undefined;
   const working = !past && agentWorks(item);
   const asked = JSON.stringify(item.idea?.questions ?? asking ?? []);
-  useEffect(() => {
-    const el = box.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [events, working, asked]);
+  const onScroll = useStickToEnd(box, `${events?.at(-1)?.id}|${working}|${asked}`, events);
   const turns = useMemo(() => (events ? talkTurns(events, { asking, over: !working }) : null), [events, asked, working]);
   const byId = useMemo(() => new Map(events?.map((e) => [e.id, e])), [events]);
   if (!events || !turns) return null;
@@ -916,7 +914,7 @@ function Conversation({
   return (
     <>
       <h4 className="p-h">{t.talk.heading}</h4>
-      <div className="talk conv" ref={box}>
+      <div className="talk conv" ref={box} onScroll={onScroll}>
         {turns.shown.length === 0 && !working && !turns.asked && !seed && <div className="hint">{idea ? t.idea.talkEmpty : question ? t.question.empty : proposal ? t.reviseHint : t.talk.empty}</div>}
         {turns.shown.slice(0, seedAt).map(line)}
         {seed}

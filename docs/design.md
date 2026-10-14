@@ -291,7 +291,10 @@ An idea is thought through on its card before anything is planned; no worker run
    from the video (same origin) and uploads it as a screenshot; the server adds the chapter and the
    sentence of the narration at that time (`placeIn` in `src/server/demo.ts`, by its share of the
    scene's caption) and keeps the place on the event (`CardEvent.spot`). The conversation shows the
-   words with the frame and „▶ 1:23 · chapter“, a click plays the video from there. On a card
+   words with the frame and „▶ 1:23 · chapter“, a click plays the video from there; it stays at its
+   newest comment also once the frames have loaded (`useStickToEnd`, which the Koordinator's sheet
+   shares), where before (2026-10-14) the frames loading after the jump to the end pushed the newest
+   comments below the edge after a few of them. On a card
    waiting for approval, such comments do not go to the worker one by one: the conversation shows
    each at once, with „N Kommentare gehen an den Agenten, sobald du fertig geschaut hast“ and
    „Jetzt senden“ under the last, and Obeya holds them back (`held` on the card) until the owner has
