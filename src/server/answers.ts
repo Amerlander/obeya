@@ -374,7 +374,7 @@ const followUp = (said: string, question: string | undefined, onCard: boolean) =
 
 /** Where the thread's files go, as every turn of it hears. */
 const filesNote = (dir: string) =>
-  `Your output directory for this conversation is ${dir}, outside every repository; it stays with the conversation, so what you wrote there before is there still. Files the owner asks for, or that help your answer, go there and never into a repository: a spreadsheet of the numbers, a chart or a page, the queries and scripts behind them, a draft as a document, whatever fits. Pass those the owner should see with answer_owner's files, each with a one-line caption; a page (HTML) or an image shows under your answer, any other file opens with the owner's app for it.`;
+  `Your output directory for this conversation is ${dir}, outside every repository; it stays with the conversation, so what you wrote there before is there still, and earlier answers still show their files: leave those as they are and write a changed version under a new name. Files the owner asks for, or that help your answer, go there and never into a repository: a spreadsheet of the numbers, a chart or a page, the queries and scripts behind them, a draft as a document, whatever fits. Pass those the owner should see with answer_owner's files, each with a one-line caption; a page (HTML) or an image shows under your answer, any other file opens with the owner's app for it.`;
 
 const answerRef = (thread: number, files?: AnswerFile[], continues?: string): AnswerRef => ({
   thread,
