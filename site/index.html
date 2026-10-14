@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Obeya: direct AI coding agents like a team</title>
-<meta name="description" content="Obeya is an open-source canvas for directing AI coding agents. Every task is a card, agents work in the background, and you decide by voice from a narrated demo instead of reading code.">
-<meta property="og:title" content="Obeya: direct coding agents like a team">
-<meta property="og:description" content="An open-source canvas for directing AI coding agents. You approve the demo, not the code.">
+<title>Obeya: direct AI coding agents like an engineering director</title>
+<meta name="description" content="Obeya is an open-source canvas for directing AI coding agents. Every task is a card, agents work in the background, and you decide by voice from a narrated demo instead of testing every change yourself.">
+<meta property="og:title" content="Obeya: direct coding agents like an engineering director">
+<meta property="og:description" content="An open-source canvas for directing AI coding agents. You watch the demo instead of testing it yourself.">
 <meta property="og:image" content="https://obeya.si/img/canvas.png">
 <meta property="og:url" content="https://obeya.si/">
 <link rel="icon" href="img/logo.svg" type="image/svg+xml">
@@ -29,9 +29,9 @@
 <main>
   <section class="hero">
     <p class="eyebrow">Open source · runs on your machine</p>
-    <h1>Direct coding agents like a team.</h1>
+    <h1>Direct coding agents like an engineering director.</h1>
     <p class="lede">Every task is a card on a canvas. Agents work in the background, each in its own clone or worktree.
-      You make the decisions like an engineering director: by voice, from a narrated demo instead of reading code.</p>
+      You decide by voice, from a narrated demo, the way a director decides in a launch review.</p>
     <div class="cta">
       <a class="btn primary" href="#start">Get started</a>
       <a class="btn" href="https://github.com/sadilek/obeya">View on GitHub</a>
@@ -127,9 +127,10 @@
     <article class="pillar">
       <div class="text">
         <span class="tag green">Demos</span>
-        <h2>Approve the demo, not the code.</h2>
-        <p>Every change comes back with a short report and something to look at: a narrated screen recording with chapters,
-          or a page when the result is a layout or variants side by side. Approve it or say what to change. Obeya lands the work on main.</p>
+        <h2>Watch the demo instead of testing it yourself.</h2>
+        <p>Lean back, as in a launch review. Every change comes back with a short report and something to look at:
+          a narrated screen recording with chapters, or a page when the result is a layout or variants side by side.
+          No clicking through the app to see whether it works. Approve it or say what to change. Obeya lands the work on main.</p>
       </div>
       <img class="shot" src="img/demo.png" width="1360" height="950" loading="lazy" alt="A card unfolded with the demo video of a tip calculator, its chapters and the approve button">
     </article>
@@ -147,10 +148,38 @@
   </section>
 
   <section class="how" id="how">
+    <!-- the switch between the usual way and the detours: two radios, so that it works without JavaScript -->
+    <input class="how-in" type="radio" name="how" id="how-std" checked>
+    <input class="how-in" type="radio" name="how" id="how-ext">
     <div class="head">
-      <h2>From idea to main</h2>
-      <p>One card's way along the wall. A clear task goes straight to work; the detours are there when you need them.</p>
+      <div>
+        <h2>From idea to main</h2>
+        <p class="std">The usual way of a card: three steps, and the work in between is the agent's.</p>
+        <p class="ext">One card's way along the wall. A clear task goes straight to work; the detours are there when you need them.</p>
+      </div>
+      <div class="seg" aria-label="Show">
+        <label for="how-std">Standard case</label>
+        <label for="how-ext">Extended cases</label>
+      </div>
     </div>
+    <ol class="steps">
+      <li class="step">
+        <h3><span class="n">1</span>Say the task</h3>
+        <div class="card s-working"><div class="ttl">Export invoices as CSV</div><div class="meta">“One row per invoice, VAT in its own column”</div><div class="state">Agent at work</div></div>
+        <p>Hold the space bar and say what you want. It becomes a card, and an agent builds it in its own clone or worktree. You don't watch.</p>
+      </li>
+      <li class="step">
+        <h3><span class="n">2</span>Watch the demo</h3>
+        <div class="card s-waiting"><b class="badge">!</b><div class="ttl">Export invoices as CSV</div><div class="meta">Narrated demo, three chapters, a short report</div><div class="state">Demo ready</div></div>
+        <p>The agent comes back with a demo of the finished work. You lean back and watch, instead of testing it yourself.</p>
+      </li>
+      <li class="step">
+        <h3><span class="n">3</span>Approve</h3>
+        <div class="card s-approved"><div class="ttl">Export invoices as CSV</div><div class="meta">Landed on main</div><div class="state">Approved</div></div>
+        <p>Approve it with a click or a word. Obeya lands the branch on main or carries a pull request to the merge.</p>
+      </li>
+    </ol>
+    <p class="more">Not clear yet, or not quite right? <label for="how-ext">The extended cases</label> show ideas, prototypes, another round and what an agent proposes on the way.</p>
     <div class="flow">
       <div class="mark f-opt">If it isn't clear yet</div>
       <div class="station f-idea">

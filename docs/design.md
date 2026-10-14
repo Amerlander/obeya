@@ -797,9 +797,16 @@ the owner's language (`src/core/locale.ts`).
   and CSS, no framework and no build, and JavaScript only for the video's play button and its
   chapter list, so it opens
   straight from the file too. From
-  the top: one sentence and the hero video; four pillars with screenshots (the canvas, voice, the
-  demo the owner approves instead of the code, the order in which cards run: parallel where they
-  can, one after the other where they must); "From idea to main", a card's way along a wall as
+  the top: one sentence ("Direct coding agents like an engineering director": the picture of the
+  one who decides and directs spoke to a test reader more than "like a team") and the hero video;
+  four pillars with screenshots (the canvas, voice, the demo the owner watches instead of testing
+  the change themselves, as in a launch review: the audience reads no code anyway, so the contrast
+  is with testing, not with code review; the order in which cards run: parallel where they
+  can, one after the other where they must); "From idea to main" with a switch between the
+  standard case, shown first, and the extended cases (two radios and CSS, no JavaScript): the
+  standard case is the three steps most cards take, say the task, watch the demo, approve, each a
+  card in its state, so that the page reads simple at first sight; the extended cases are a card's
+  way along a wall as
   cards in their states, drawn as the canvas draws them: the detours of an idea and its prototypes,
   a task's work, its demo with the round back for changes, the merge and an agent's proposal
   hanging off it, dashed with ✦ (one column below 900 px). Only the demo carries the "!" pin of a

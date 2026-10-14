@@ -100,8 +100,30 @@ section { max-width: var(--wide); margin: 0 auto; padding: 0 24px; }
   animation: draw 1.6s cubic-bezier(.5,0,.3,1) infinite; }
 @keyframes draw { 0% { background-position: 100% 0; } 55% { background-position: 0 0; } 100% { background-position: -100% 0; } }
 
-/* ---------- how it works: a card's way along the wall, with its detours ---------- */
-.how { margin-top: 144px; }
+/* ---------- how it works: the usual three steps, or a card's way along the wall with its detours ---------- */
+.how { margin-top: 144px; position: relative; }
+.how .head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 20px 40px; }
+.how .head > div:first-child { flex: 1 1 26em; }
+/* the switch: a segmented control of two labels over radios that are out of sight but take the keys */
+.how-in { position: absolute; opacity: 0; pointer-events: none; }
+.seg { display: inline-flex; padding: 3px; gap: 3px; background: var(--card); border-radius: 3px; box-shadow: var(--shadow); }
+.seg label { padding: 7px 16px; border-radius: 2px; font-size: 15px; font-weight: 600; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.seg label:hover { color: var(--ink); }
+#how-std:checked ~ .head label[for=how-std], #how-ext:checked ~ .head label[for=how-ext] { background: var(--ink); color: var(--card); }
+#how-std:focus-visible ~ .head label[for=how-std], #how-ext:focus-visible ~ .head label[for=how-ext] { outline: 2px solid var(--blue); outline-offset: 2px; }
+.how .head .ext, .how .flow, #how-ext:checked ~ .head .std, #how-ext:checked ~ .steps, #how-ext:checked ~ .more { display: none; }
+#how-ext:checked ~ .head .ext { display: block; }
+#how-ext:checked ~ .flow { display: grid; }
+/* the standard case: three steps side by side, each a card in its state */
+.steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); column-gap: 64px; }
+.step h3 { font-size: 24px; display: flex; align-items: baseline; gap: 12px; margin-bottom: 18px; }
+.step .n { font-family: "Plex Condensed", sans-serif; font-size: 14px; font-weight: 600; color: var(--muted);
+  width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--grey); display: inline-grid; place-items: center; flex: none; transform: translateY(-3px); }
+.step .card::after { content: "→"; position: absolute; right: -44px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 22px; }
+.step:last-child .card::after { content: none; }
+.step p { font-size: 16px; color: #4d4537; margin: 18px 0 0; line-height: 1.5; }
+.more { margin: 40px 0 0; font-size: 16px; color: var(--muted); }
+.more label { color: var(--ink); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .flow { display: grid; grid-template-columns: repeat(5, 1fr); column-gap: 28px; align-items: start;
   grid-template-areas:
     "opt   opt   start  .     .     "
@@ -181,6 +203,9 @@ footer { max-width: var(--wide); margin: 0 auto; padding: 28px 24px 48px; displa
 footer span { margin-right: auto; }
 
 @media (max-width: 900px) {
+  .steps { grid-template-columns: 1fr; row-gap: 36px; }
+  .steps > * { max-width: 340px; }
+  .step .card::after { content: none; }
   .flow { grid-template-columns: 1fr; grid-template-areas: none; }
   .flow > * { grid-area: auto; max-width: 340px; }
   .flow p { margin: 10px 0 26px; font-size: 15px; }
