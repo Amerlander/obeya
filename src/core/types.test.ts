@@ -27,7 +27,7 @@ describe('openPerGroup', () => {
 });
 
 describe('withClones', () => {
-  const at = (...workspaces: ('clones' | 'worktrees')[]): ResolvedCanvas => ({ id: 'c', name: 'c', repos: workspaces.map((w) => ({ id: 'r', adapter: 'generic', workspaces: w, values: {} as never })) });
+  const at = (...workspaces: ('clones' | 'worktrees')[]): ResolvedCanvas => ({ id: 'c', name: 'c', repos: workspaces.map((w) => ({ id: 'r', adapter: 'generic', workspaces: w, values: {} as never, shareTo: 'main' })) });
 
   test('fills in a repository added in clones, once per path', () => {
     const saved = [{ repos: [{ path: '/a' }] }];
