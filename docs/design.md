@@ -597,8 +597,8 @@ the owner's language (`src/core/locale.ts`).
 - **Setup assistant** (`src/server/machine.ts`, `src/ui/setup.tsx`) — one list of what Obeya
   needs on this machine, in four parts: *Agenten* (needed: Claude Code, its login, git, and git's
   name and e-mail, without which an agent's commit fails), *Pull Requests* (gh and its login:
-  the generic adapter lands through pull requests, so it is needed at the first approval, not
-  before), *Sprachbefehle* and *Demos* (the checks the configuration dialog makes, voice-setup.ts and
+  work in a repository on GitHub lands through pull requests, so it is needed at its first
+  approval, not before), *Sprachbefehle* and *Demos* (the checks the configuration dialog makes, voice-setup.ts and
   the demo skill's setup.ts, each with the size still to download; what both need shows once;
   uv stands above Whisper, whose "Installieren" waits until uv is there and says so).
   The checkout's agents run on the Agent SDK's own Claude Code, so there it is always there; the
@@ -1239,7 +1239,14 @@ the owner's language (`src/core/locale.ts`).
   home there by their own installers.
 - **Landing** — per adapter. `pr`: approval leaves the branch for the PR loop. `main`
   (Obeya): approval rebases the branch onto `main` and fast-forwards the Obeya checkout; the card
-  is `live`. Commits that conflict one by one but not as a whole land squashed into one commit.
+  is `live`. An adapter that does not say (the generic one, or a repository's own without `land`)
+  gets it by detection (`detectedLand` in `src/adapters/index.ts`): `pr` where `origin` is on
+  GitHub, else `main`. On GitHub means github.com (or a subdomain of it) or a host the GitHub CLI
+  is logged into, read from its `hosts.yml` (`ghHosts` in `src/server/repo.ts`, where gh keeps it
+  on each system) rather than asked of `gh auth status`, which checks each login over the network.
+  A repository on another forge (GitLab, a server of its own) lands on its local main and pushes
+  nothing. Until 2026-10-14 the generic adapter had `pr` whatever the remote, so approving work in
+  a repository without one told the worker to open a pull request that could not exist. Commits that conflict one by one but not as a whole land squashed into one commit.
   Uncommitted work or a real conflict sends the card back to its worker with the approval kept:
   its next handover (no new demo needed) lands on its own. `pr` with `direct`: an approval "Direkt
   auf main" (`approve(card, { direct })`, refused with `noDirect` where the adapter lacks `direct`)
@@ -2162,7 +2169,7 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   the owner quit and started Obeya again. The module's default export is the adapter
   or a function that makes it from Obeya's helpers (`kit`: the generic adapter, the demo page
   templates, `esc`, `day`), so it imports nothing of Obeya's; Obeya loads it with `require` and
-  fills what it leaves out from the generic adapter. An adapter the configuration names that does
+  fills what it leaves out from detection (`land`, see Landing) and the generic adapter. An adapter the configuration names that does
   not exist or does not load is a configuration problem at the repository ("Diesen Adapter gibt es
   nicht, oder sein Modul lädt nicht.", with the error) that keeps it from being saved. A
   repository's own adapter that does not load (a syntax error, a failing import, no default export

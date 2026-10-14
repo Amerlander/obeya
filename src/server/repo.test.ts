@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmdirSync, rmSync, unlinkSync, watch, writeFile
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { generic } from '../adapters/generic';
-import { oldLinuxBun, readPlanDocs, watchPlanDocs } from './repo';
+import { ghHosts, oldLinuxBun, onGitHub, readPlanDocs, remoteHost, watchPlanDocs } from './repo';
 
 const DOC = '# P\n\n## Workstreams\n\n- [ ] **W1:** One.\n';
 
@@ -167,4 +167,34 @@ describe('watchPlanDocs', () => {
     rmSync(join(repo, 'docs/plan'), { recursive: true });
     expect(await gone).toBe(true);
   }, 6 * swamped);
+});
+
+describe('a remote on GitHub', () => {
+  test('is told by the host of its URL, in every form git takes, and a path has none', () => {
+    const hosts = (urls: string[]) => urls.map(remoteHost);
+    expect(hosts(['https://github.com/acme/shop.git', 'ssh://git@GitHub.com:22/acme/shop.git', 'git@github.com:acme/shop.git', 'github.com:acme/shop'])).toEqual(['github.com', 'github.com', 'github.com', 'github.com']);
+    expect(hosts(['/srv/git/shop', '../shop', 'file:///srv/git/shop', 'C:\\repos\\shop', 'C:/repos/shop'])).toEqual([null, null, null, null, null]);
+    expect(onGitHub('https://github.com/acme/shop.git', () => [])).toBe(true);
+    expect(onGitHub('git@ssh.github.com:acme/shop.git', () => [])).toBe(true);
+    expect(onGitHub('https://gitlab.com/acme/shop.git', () => [])).toBe(false);
+    expect(onGitHub('https://git.acme.com/acme/shop.git', () => ['git.acme.com'])).toBe(true);
+    expect(onGitHub('/srv/git/shop', () => ['github.com'])).toBe(false);
+  });
+
+  test("on another host counts where the GitHub CLI is logged into it, by its hosts.yml where gh keeps it", () => {
+    const dir = mkdtempSync(join(tmpdir(), 'obeya-gh-'));
+    try {
+      const yml = 'github.com:\n    users:\n        t:\n    user: t\n    git_protocol: ssh\ngit.acme.com:\n    user: t\n';
+      for (const d of ['own', 'xdg/gh', 'AppData/GitHub CLI']) {
+        mkdirSync(join(dir, d), { recursive: true });
+        writeFileSync(join(dir, d, 'hosts.yml'), yml);
+      }
+      expect(ghHosts({ GH_CONFIG_DIR: join(dir, 'own'), XDG_CONFIG_HOME: join(dir, 'none') })).toEqual(['github.com', 'git.acme.com']);
+      expect(ghHosts({ XDG_CONFIG_HOME: join(dir, 'xdg') })).toEqual(['github.com', 'git.acme.com']);
+      expect(ghHosts({ AppData: join(dir, 'AppData') }, 'win32')).toEqual(['github.com', 'git.acme.com']);
+      expect(ghHosts({ GH_CONFIG_DIR: join(dir, 'none') })).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

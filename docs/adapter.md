@@ -60,7 +60,7 @@ so Obeya hands it what it may need. Files next to `index.ts` in `.obeya/adapter/
 (a share script, say), and `import.meta.dir` finds them.
 
 Everything but `name` is optional. What an adapter leaves out comes from the generic adapter,
-whose values are given with each field below.
+whose values are given with each field below (`land` is the one Obeya tells from the repository).
 
 ## The fields
 
@@ -106,7 +106,8 @@ How approved work lands. `pr`: the card's branch is pushed and goes out as a pul
 watches it, brings review comments and failing CI back to the worker and marks the card live once
 it is merged (this needs the GitHub CLI, `gh`, logged in). `main`: Obeya rebases the branch onto
 the local `main` and fast-forwards the checkout Obeya runs on, no pull request, nothing pushed.
-Generic: `pr`.
+Generic: `pr` where `origin` is on GitHub (github.com, or a host the GitHub CLI is logged into),
+else `main`, since a pull request needs somewhere to go.
 
 ### `direct` — boolean
 

@@ -1,4 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync, watch } from 'node:fs';
+import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import type { RepoAdapter, RepoInfo } from '../adapters/types';
 import { notAProject, type OtherDoc, type PlanDoc, parsePlanDoc } from '../core/plan-doc';
@@ -11,6 +12,35 @@ export function repoInfo(path: string): RepoInfo {
   };
   if (git('rev-parse', '--git-dir') === null) throw new Error(`${path} is not a git repository`);
   return { path, remote: git('remote', 'get-url', 'origin'), branch: defaultBranch(path) };
+}
+
+/**
+ * The host of a git remote URL (`https://host/…`, `ssh://user@host:22/…`, `user@host:path`); null
+ * for a repository on this machine (a path, `file://`, a Windows drive).
+ */
+export function remoteHost(url: string): string | null {
+  const m = url.includes('://') ? /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/]*@)?([^/:]+)/i.exec(url) : /^(?:[^@/\\]+@)?([^/\\:]{2,}):/.exec(url);
+  return m ? m[1]!.toLowerCase() : null;
+}
+
+/**
+ * The hosts the GitHub CLI is logged into, from its `hosts.yml` (its config directory as gh finds
+ * it: `GH_CONFIG_DIR`, `XDG_CONFIG_HOME/gh`, on Windows `%AppData%\GitHub CLI`, else `~/.config/gh`).
+ * Read from the file rather than asked of `gh auth status`, which checks each login over the network.
+ */
+export function ghHosts(env: NodeJS.ProcessEnv = process.env, platform: string = process.platform): string[] {
+  const dir = env.GH_CONFIG_DIR || (env.XDG_CONFIG_HOME ? join(env.XDG_CONFIG_HOME, 'gh') : platform === 'win32' && env.AppData ? join(env.AppData, 'GitHub CLI') : join(homedir(), '.config', 'gh'));
+  try {
+    return [...readFileSync(join(dir, 'hosts.yml'), 'utf8').matchAll(/^([^\s#:][^:]*):\s*$/gm)].map((m) => m[1]!.trim().toLowerCase());
+  } catch {
+    return [];
+  }
+}
+
+/** Whether a remote is on GitHub: github.com, or a host the GitHub CLI is logged into (GitHub Enterprise). */
+export function onGitHub(url: string, hosts: () => string[] = ghHosts): boolean {
+  const host = remoteHost(url);
+  return !!host && (host === 'github.com' || host.endsWith('.github.com') || hosts().includes(host));
 }
 
 /**

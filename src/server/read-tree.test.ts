@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { CanvasRuntime } from './canvas';
 import { Store } from './db';
 import { ReadTree } from './read-tree';
-import { FakeRuntime, gitRepo, identify, noForge } from './testing';
+import { FakeRuntime, gitRepo, identify, noForge, prAdapter } from './testing';
 import { git } from './workspaces';
 
 const doc = (title: string, ticked = '') =>
@@ -51,8 +51,9 @@ function push(files: Record<string, string | null>) {
   git(other, 'push', '--quiet', 'origin', 'main');
 }
 
-function open(adapter?: string) {
-  canvas = new CanvasRuntime({ name: 'Shop', repos: [{ path: checkout, ...(adapter ? { adapter } : {}) }] }, { store: new Store(':memory:'), home: join(dir, 'home'), runtime: new FakeRuntime(), forge: noForge });
+// its `origin` stands in for one on GitHub, where work goes out as pull requests
+function open(adapter = prAdapter()) {
+  canvas = new CanvasRuntime({ name: 'Shop', repos: [{ path: checkout, adapter }] }, { store: new Store(':memory:'), home: join(dir, 'home'), runtime: new FakeRuntime(), forge: noForge });
   return canvas;
 }
 
@@ -207,24 +208,27 @@ describe("a repository's own adapter", () => {
     return canvas;
   };
 
-  test('that lands or changes on the default branch asks for a restart; other commits do not', async () => {
+  test('that changes on the default branch asks for a restart; other commits do not', async () => {
+    // its `origin` stands in for one on GitHub: the adapter says that work goes out as pull requests
+    push({ '.obeya/adapter/index.ts': adapter('shop', ", land: 'pr'") });
+    git(checkout, 'pull', '--quiet');
     const c = openWatched(checkout);
-    expect(c.repos[0]!.adapter.name).toBe('generic');
+    expect(c.repos[0]!.adapter.name).toBe('shop');
     push({ 'docs/plan/import.md': doc('Import') });
     await c.repos[0]!.read.refresh();
     expect(changed).toEqual([]);
-    push({ '.obeya/adapter/index.ts': adapter('shop') });
+    push({ '.obeya/adapter/index.ts': adapter('shop', ", land: 'pr', setup: 'bun install'") });
     await c.repos[0]!.read.refresh();
     expect(changed).toEqual([checkout]);
 
     // started again with it, a change to it asks again, and a commit beside it does not
     c.shutdown();
     const again = openWatched(checkout);
-    expect(again.repos[0]!.adapter.name).toBe('shop');
+    expect(again.repos[0]!.adapter.setup).toBe('bun install');
     push({ 'README.md': 'Shop\n' });
     await again.repos[0]!.read.refresh();
     expect(changed).toEqual([]);
-    push({ '.obeya/adapter/index.ts': adapter('shop', ", checks: ['bun test']") });
+    push({ '.obeya/adapter/index.ts': adapter('shop', ", land: 'pr', checks: ['bun test']") });
     await again.repos[0]!.read.refresh();
     expect(changed).toEqual([checkout]);
   });

@@ -68,6 +68,39 @@ describe('pickAdapter', () => {
     expect(existsSync(join(plain, '.git/obeya'))).toBe(false);
   });
 
+  test('lands through pull requests where origin is on GitHub, else on the main branch, unless the adapter says otherwise', () => {
+    const repo = gitRepo(join(dir, 'shop'));
+    const land = (name?: string) => pickAdapter(repoInfo(repo), name).land;
+    expect([land(), land('generic')]).toEqual(['main', 'main']);
+    git(repo, 'remote', 'add', 'origin', 'git@github.com:acme/shop.git');
+    expect([land(), land('generic')]).toEqual(['pr', 'pr']);
+    git(repo, 'remote', 'set-url', 'origin', 'https://gitlab.com/acme/shop.git');
+    expect(land()).toBe('main');
+    // a GitHub Enterprise host the GitHub CLI is logged into
+    const gh = join(dir, 'gh');
+    mkdirSync(gh);
+    writeFileSync(join(gh, 'hosts.yml'), 'github.acme.com:\n    user: t\n    git_protocol: https\n');
+    git(repo, 'remote', 'set-url', 'origin', 'https://github.acme.com/acme/shop.git');
+    const was = process.env.GH_CONFIG_DIR;
+    process.env.GH_CONFIG_DIR = gh;
+    try {
+      expect(land()).toBe('pr');
+    } finally {
+      if (was === undefined) delete process.env.GH_CONFIG_DIR;
+      else process.env.GH_CONFIG_DIR = was;
+    }
+
+    // the repository's own adapter: what it says wins, what it leaves out comes from detection
+    const own = gitRepo(join(dir, 'own'), { '.obeya/adapter/index.ts': "export default { name: 'own', land: 'pr' };\n" });
+    expect(pickAdapter(repoInfo(own)).land).toBe('pr');
+    const silent = gitRepo(join(dir, 'silent'), { '.obeya/adapter/index.ts': "export default { name: 'silent' };\n" });
+    expect(pickAdapter(repoInfo(silent)).land).toBe('main');
+    git(silent, 'remote', 'add', 'origin', 'https://github.com/acme/silent.git');
+    expect(pickAdapter(repoInfo(silent)).land).toBe('pr');
+    // Obeya's own lands on main whatever its remote
+    expect(land('obeya')).toBe('main');
+  });
+
   test('a field that is misspelt, of the wrong type or incomplete is named and does not count; the rest of the adapter works', () => {
     const adapter = `export default {
       name: 'shop',
@@ -93,8 +126,8 @@ describe('pickAdapter', () => {
       'check: no such field (did you mean checks?)',
       'Setup: no such field (did you mean setup?)',
     ]);
-    // what is wrong goes, the generic adapter's stands in its place
-    expect(a).toMatchObject({ name: 'shop', land: 'pr', softPaths: ['docs/plan/'], workspaces: 'worktrees' });
+    // what is wrong goes, detection's or the generic adapter's stands in its place: without a remote, work lands on main
+    expect(a).toMatchObject({ name: 'shop', land: 'main', softPaths: ['docs/plan/'], workspaces: 'worktrees' });
     expect(a.canvasName(repoInfo(repo))).toBe('shop');
     expect(a.demo).toBeUndefined();
     expect(a.stack).toBeUndefined();

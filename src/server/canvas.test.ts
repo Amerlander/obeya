@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { boundsOf } from '../core/layout';
 import { CanvasRuntime, startCanvases } from './canvas';
 import { Store } from './db';
-import { FakeRuntime, noForge, gitRepo } from './testing';
+import { FakeRuntime, gitRepo, identify, noForge, prAdapter } from './testing';
 import { git, HERE } from './workspaces';
 
 let dir: string;
@@ -29,7 +29,7 @@ beforeEach(() => {
   const api = repo('api', 'API');
   runtime = new FakeRuntime();
   canvas = new CanvasRuntime(
-    { name: 'Produkt', repos: [{ path: web, clones: 1 }, { path: api, clones: 1 }] },
+    { name: 'Produkt', repos: [{ path: web, clones: 1, adapter: prAdapter() }, { path: api, clones: 1, adapter: prAdapter() }] },
     { store: new Store(':memory:'), home: dir, runtime, forge: noForge },
   );
 });
@@ -291,6 +291,41 @@ test("the cards' workers run on their own runtime when one is given (a scratch O
   expect(runtime.sessions.some((s) => s.spec.cwd === canvas.board.row(a.id).workspace)).toBe(false);
 });
 
+describe('where the adapter does not say how work lands', () => {
+  test('a repository without a remote gets its approved work on its main branch', async () => {
+    fresh();
+    const shop = gitRepo(join(dir, 'shop'));
+    git(shop, 'branch', '-m', 'master');
+    const workers = new FakeRuntime();
+    canvas.shutdown();
+    canvas = new CanvasRuntime({ repos: [{ path: shop, clones: 1 }] }, { store: new Store(':memory:'), home: dir, runtime, workerRuntime: workers, forge: noForge });
+    expect(canvas.repos[0]!.adapter).toMatchObject({ name: 'generic', land: 'main' });
+    expect(canvas.board.snapshot().canvas.repos[0]!.pullRequests).toBeUndefined();
+    const card = canvas.board.create({ title: 'Readme', x: 0, y: 0 });
+    canvas.repos[0]!.workers.start(card.id);
+    const ws = canvas.board.row(card.id).workspace!;
+    identify(ws);
+    writeFileSync(join(ws, 'README.md'), 'Shop\n');
+    git(ws, 'commit', '--quiet', '-am', 'Readme');
+    workers.last.call('ready_for_review', { summary: 'Readme' });
+    workers.last.emit({ type: 'idle' });
+    await canvas.repos[0]!.workers.approve(card.id);
+    expect(item(card.id).state).toBe('live');
+    expect(git(shop, 'log', '-1', '--format=%s', 'master').trim()).toBe('Readme');
+    expect(workers.last.inbox.at(-1)).not.toContain('pull request');
+  });
+
+  test('a repository whose origin is on GitHub goes on through pull requests', () => {
+    fresh();
+    const shop = gitRepo(join(dir, 'shop'));
+    git(shop, 'remote', 'add', 'origin', 'git@github.com:acme/shop.git');
+    canvas.shutdown();
+    canvas = new CanvasRuntime({ repos: [{ path: shop }] }, { store: new Store(':memory:'), home: dir, runtime, forge: noForge });
+    expect(canvas.repos[0]!.adapter).toMatchObject({ name: 'generic', land: 'pr' });
+    expect(canvas.board.snapshot().canvas.repos[0]!.pullRequests).toBe(true);
+  });
+});
+
 test('a clone registered for a repository must be one of it', () => {
   fresh();
   const web = repo('web', 'Web');
@@ -322,7 +357,7 @@ test('what the owner writes in a card, or says to the Koordinator without one, r
   fresh();
   const web = repo('web', 'Web');
   canvas.shutdown();
-  canvas = new CanvasRuntime({ repos: [{ path: web }] }, { store: new Store(':memory:'), home: dir, runtime, forge: noForge, writingPauseMs: 30 });
+  canvas = new CanvasRuntime({ repos: [{ path: web, adapter: prAdapter() }] }, { store: new Store(':memory:'), home: dir, runtime, forge: noForge, writingPauseMs: 30 });
   const learners = () => runtime.sessions.filter((s) => s.spec.tools.some((t) => t.name === 'propose'));
   const done = async () => {
     learners().at(-1)!.emit({ type: 'idle' });

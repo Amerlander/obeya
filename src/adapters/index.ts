@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { defaultBranchCommit } from '../server/read-tree';
+import { onGitHub } from '../server/repo';
 import { COMPILED, resource } from '../server/resources';
 import { GIT } from '../server/workspaces';
 import { generic } from './generic';
@@ -31,19 +32,28 @@ export const adapterNames = () => ADAPTERS.map((a) => a.name);
 export function pickAdapter(repo: RepoInfo, name?: string): RepoAdapter {
   if (name) {
     const a = ADAPTERS.find((x) => x.name === name);
-    if (a) return a;
+    if (a) return detected(a, repo);
     if (!/[/\\]|\.[cm]?[jt]s$/.test(name)) throw new Error(`Unknown adapter "${name}" (known: ${adapterNames().join(', ')}, or the path of a module)`);
     const file = isAbsolute(name) ? name : resolve(repo.path, name);
     if (!existsSync(file)) throw new Error(`adapter module ${file} does not exist`);
-    return loadAdapter(file);
+    return loadAdapter(file, repo);
   }
   const own = repoAdapterFile(repo.path);
-  if (own) return loadAdapter(own);
+  if (own) return loadAdapter(own, repo);
   return builtInAdapter(repo);
 }
 
 /** The first built-in adapter that matches the repository: what it runs on without an adapter of its own. */
-export const builtInAdapter = (repo: RepoInfo): RepoAdapter => ADAPTERS.find((a) => a.matches(repo))!;
+export const builtInAdapter = (repo: RepoInfo): RepoAdapter => detected(ADAPTERS.find((a) => a.matches(repo))!, repo);
+
+/**
+ * How work lands where the adapter does not say: through pull requests where `origin` is on GitHub
+ * (`onGitHub`), else on the main branch of the checkout, since a pull request needs somewhere to go.
+ */
+export const detectedLand = (repo: RepoInfo): RepoAdapter['land'] => (repo.remote && onGitHub(repo.remote) ? 'pr' : 'main');
+
+// the generic adapter says nothing of the repository: how work lands comes from detection
+const detected = (a: RepoAdapter, repo: RepoInfo): RepoAdapter => (a === generic ? { ...generic, land: detectedLand(repo) } : a);
 
 // what was wrong with a loaded adapter's fields (`schema.ts`), by the adapter made of it
 const problems = new WeakMap<RepoAdapter, string[]>();
@@ -52,11 +62,11 @@ const problems = new WeakMap<RepoAdapter, string[]>();
 export const adapterProblems = (a: RepoAdapter): string[] => problems.get(a) ?? [];
 
 /**
- * Loads an adapter module: its default export is the adapter, or a function that makes it from
- * Obeya's helpers (`kit.ts`). What it leaves out, or gets wrong (`adapterProblems`), comes from the
- * generic adapter.
+ * Loads the adapter module of `repo`: its default export is the adapter, or a function that makes
+ * it from Obeya's helpers (`kit.ts`). What it leaves out, or gets wrong (`adapterProblems`), comes
+ * from detection (`land`) and the generic adapter.
  */
-export function loadAdapter(file: string): RepoAdapter {
+export function loadAdapter(file: string, repo: RepoInfo): RepoAdapter {
   let made: unknown;
   try {
     const mod = require(file) as { default?: unknown };
@@ -67,7 +77,7 @@ export function loadAdapter(file: string): RepoAdapter {
   if (!made || typeof made !== 'object' || typeof (made as RepoAdapter).name !== 'string')
     throw new Error(`adapter module ${file} exports no adapter (a default export with a name, or a function returning one)`);
   const checked = checkAdapter(made as Record<string, unknown>);
-  const adapter = { ...generic, ...checked.adapter } as RepoAdapter;
+  const adapter = { ...detected(generic, repo), ...checked.adapter } as RepoAdapter;
   if (checked.problems.length) problems.set(adapter, checked.problems);
   return adapter;
 }

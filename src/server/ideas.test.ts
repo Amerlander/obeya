@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CanvasRuntime } from './canvas';
 import { MIGRATIONS, Store } from './db';
-import { FakeRuntime, noForge, type FakeSession, gitRepo, identify } from './testing';
+import { FakeRuntime, noForge, type FakeSession, gitRepo, identify, prAdapter } from './testing';
 import { git } from './workspaces';
 
 let dir: string;
@@ -14,7 +14,7 @@ let runtime: FakeRuntime;
 let canvas: CanvasRuntime;
 
 const open = (clones = 1) =>
-  new CanvasRuntime({ repos: [{ path: main, clones }] }, { store, home: dir, runtime, forge: noForge, commandDelayMs: 10, permissionMode: 'acceptEdits' });
+  new CanvasRuntime({ repos: [{ path: main, clones, adapter: prAdapter() }] }, { store, home: dir, runtime, forge: noForge, commandDelayMs: 10, permissionMode: 'acceptEdits' });
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'obeya-ideas-'));

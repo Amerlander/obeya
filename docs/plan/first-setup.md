@@ -17,8 +17,8 @@ without a restart.
   preview of the first commit (W2).
 - *Main branch.* Detected by one function, `defaultBranch()` (`src/server/workspaces.ts`; W3), and
   shown in the first setup. It cannot be set anywhere yet (W5).
-- *Landing.* The generic adapter has `land: 'pr'`, remote or not. In a repository without a remote,
-  approving tells the worker to open a pull request that cannot exist.
+- *Landing.* Detected from the remote where the adapter does not say (W4): `pr` on GitHub, else
+  `main`. It cannot be set anywhere but in the adapter yet (W5).
 - *Settings as code.* `land`, `direct`, `checks`, `setup`, `planDocs`, `softPaths`, `workspaces`,
   `prNoise` and the demo's `howToRun` and `required` can only be set in `.obeya/adapter/index.ts`:
   TypeScript, loaded from the default branch, whose change restarts Obeya (`adapterChanged` in
@@ -81,7 +81,7 @@ demo's `howToRun` and `required`.
 - [x] **W3:** Recognise the main branch. See Main branch and landing by detection. One function
   for both callers; the first setup shows the branch it found. Done when a local repository on
   `master` without a remote gets worktrees, plan docs and landings on `master`.
-- [ ] **W4:** Landing follows the remote. See Main branch and landing by detection. Done when
+- [x] **W4:** Landing follows the remote. See Main branch and landing by detection. Done when
   approving a card in a repository without a remote lands it on the main branch, and a repository
   with a GitHub remote still goes through pull requests.
 - [ ] **W5:** Repository settings in the dialog, for this machine. See Settings as data: the form,
