@@ -921,7 +921,7 @@ function Conversation({
         {turns.shown.slice(seedAt).map(line)}
         {working ? (
           <Msg by={idea ? 'explorer' : proposal || question ? 'koordinator' : 'worker'} className="thinking" who={proposal ? t.revising : `${agent} ${idea ? t.idea.thinking : question ? t.answer.reading : t.talk.working}`}>
-            {pending.at(-1) && <div className="hint">{clipLine(pending.at(-1)!.text)}</div>}
+            {pending.at(-1) && <Gist text={pending.at(-1)!.text} />}
             <Steps steps={pending} />
           </Msg>
         ) : (
@@ -1123,6 +1123,19 @@ const clipLine = (s: string) => {
   const line = s.split('\n').find((l) => l.trim())?.trim() ?? '';
   return line.length > 140 ? line.slice(0, 139) + '…' : line;
 };
+
+/** The agent's latest words, cut to their first line; under the mouse, all of them. */
+function Gist({ text }: { text: string }) {
+  const line = clipLine(text);
+  const full = text.trim();
+  if (line === full) return <div className="hint">{line}</div>;
+  return (
+    <div className="hint gist">
+      <span className="gist-line">{line}</span>
+      <span className="gist-full">{full}</span>
+    </div>
+  );
+}
 
 type Run = (fn: () => Promise<void>, done: ActDone) => Promise<void>;
 

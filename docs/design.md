@@ -486,7 +486,7 @@ happened, before the lines that came later. The agent's last words among them st
 Obeya or the Koordinator noted there goes. The agent's words are kept whole up to 12 000 characters, as
 an idea agent's replies are (a worker's `reply` is cut at 2000; until 2026-10-09 a worker's were cut at 600, so a last message ended in „…“). While the worker
 works, also while it takes in the owner's words on its handover, the conversation ends with it at work and its
-latest step (until 2026-10-09 only the card's state said so then); the question the card waits on (its own, or the one in its demo report) stands at the end with its options,
+latest step, cut to its first line and 140 characters, whole while the mouse is over it (until 2026-10-09 only the card's state said so then); the question the card waits on (its own, or the one in its demo report) stands at the end with its options,
 and the card's one field under it; a question a note took back stays, without options, „Durch deinen Hinweis erledigt“.
 A card that was an idea continues the idea's conversation in the same list.
 
