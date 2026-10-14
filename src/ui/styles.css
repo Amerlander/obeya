@@ -1210,14 +1210,13 @@ button.link:hover { text-decoration: underline; }
 /* "Wo liegt dein Projekt?": two cards with a radio button each, the fields for the one chosen below */
 .setup-where { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0 10px; }
 .setup-where > b { grid-column: 1 / -1; }
-.setup-first label.setup-choice { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+.setup-first label.setup-choice { display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 10px; row-gap: 2px; margin: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
 .setup-first label.setup-choice:hover { border-color: var(--ink); }
 .setup-first label.setup-choice.on { border: 2px solid var(--ink); padding: 11px 13px; }
-.setup-choice input { margin: 2px 0 0; accent-color: var(--ink); }
-.setup-choice b, .setup-choice .hint { display: block; }
-.setup-choice .hint { margin-top: 2px; }
+.setup-choice input { margin: 0; accent-color: var(--ink); }
+.setup-choice .hint { grid-column: 2; }
 .setup-first label { display: block; margin: 6px 0; }
-.setup-first label > .hint { display: block; font-size: 11.5px; margin-bottom: 2px; }
+.setup-first label:not(.setup-choice) > .hint { display: block; font-size: 11.5px; margin-bottom: 2px; }
 .setup-first .c-path { width: 100%; padding: 7px 9px; }
 .setup-pick { margin-top: 0 !important; flex: none; }
 .setup-saved { font-size: 13.5px; color: var(--ink); }

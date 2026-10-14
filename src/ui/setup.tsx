@@ -382,10 +382,8 @@ function FirstCanvas({ view, ready, onView }: { view: MachineView; ready: boolea
             {(['folder', 'clone'] as const).map((m) => (
               <label key={m} className={mode === m ? 'setup-choice on' : 'setup-choice'}>
                 <input type="radio" name="setup-where" checked={mode === m} onChange={() => setMode(m)} />
-                <span>
-                  <b>{s.first.modes[m].title}</b>
-                  <span className="hint">{s.first.modes[m].hint}</span>
-                </span>
+                <b>{s.first.modes[m].title}</b>
+                <span className="hint">{s.first.modes[m].hint}</span>
               </label>
             ))}
           </div>
