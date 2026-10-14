@@ -9,6 +9,7 @@ translates into it, badly and unsure of its words (German speech, told English: 
 of a bit of a doubt“), and the longer the recording, the likelier one of its parts fails the test below.
 faster-whisper decodes the first window from the encoder pass that heard the language (see Faster.languages).
 Writes JSON lines on stdout: {"id": ..., "text": "...", "doubtful": bool} or {"id": ..., "error": "..."}.
+Ends with its stdin, after the recording it is on; when Obeya is gone by then, quietly.
 Audio is decoded by ffmpeg (for both backends: faster-whisper's own decoder, PyAV, broke with
 newer PyAV releases), so any format the browser records (webm/opus, wav) works. The model is
 loaded at start, before "ready". Each recording's length and level go to stderr (the server's log), so
@@ -163,6 +164,8 @@ def main() -> None:
             segments = whisper.transcribe(audio, job.get("prompt") or None, language)
             text = " ".join(s["text"].strip() for s in segments)
             print(json.dumps({"id": job["id"], "text": text.strip(), "doubtful": any(map(doubtful, segments))}), flush=True)
+        except BrokenPipeError:
+            raise
         except Exception as e:  # one bad recording must not take the sidecar down
             print(json.dumps({"id": job["id"], "error": str(e)}), flush=True)
 
@@ -202,4 +205,9 @@ def dbfs(x: float) -> str:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except BrokenPipeError:
+        # Obeya went away before it read the answer (stopped or restarted while Whisper wrote): nobody
+        # is left to tell, and Python's flush of stdout at exit would fail on the closed pipe once more
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())

@@ -52,6 +52,8 @@ export function usePushToTalk(where: () => Where, field: (target: Where) => stri
   const [phase, setPhase] = useState<Phase>('idle');
   const [level, setLevel] = useState(0);
   const [flat, setFlat] = useState(false);
+  /** Recordings let go of that Obeya has not answered yet. */
+  const [writing, setWriting] = useState(0);
   const mic = useRef<Promise<{ stream: MediaStream; ctx: AudioContext; analyser: AnalyserNode }> | null>(null);
   const rec = useRef<{ recording: Recording; t0: number; target: Where; into: string | null; spot: Taken | null } | null>(null);
   const held = useRef<number | null>(null);
@@ -122,8 +124,9 @@ export function usePushToTalk(where: () => Where, field: (target: Where) => stri
     setFlat(false);
     const length = performance.now() - r.t0;
     setPhase('idle');
+    setWriting((n) => n + 1);
     void r.recording.stop().then(async (audio) => {
-      if (r.into) return void into(r.into, r.target, length < 350 ? null : audio);
+      if (r.into) return into(r.into, r.target, length < 350 ? null : audio);
       // a tap is not a command
       if (length < 350) return;
       // what stands in the field goes out with the words and leaves it; nothing heard, it comes back
@@ -143,7 +146,7 @@ export function usePushToTalk(where: () => Where, field: (target: Where) => stri
       if (!h.unheard && !failed) return;
       updateDraft(key, (d) => ({ text: [text, d.text].filter((x) => x.trim()).join(' '), images: [...images, ...d.images.filter((id) => !images.includes(id))] }));
       if (reply && !(r.target && 'card' in r.target && replyOn(r.target.card))) setReply(reply);
-    });
+    }).finally(() => setWriting((n) => n - 1));
   }
 
   /** A dictation: what was heard goes into the field at its cursor; nothing heard leaves the field as it was, and says so. */
@@ -163,11 +166,12 @@ export function usePushToTalk(where: () => Where, field: (target: Where) => stri
   }
 
   useEffect(() => () => void mic.current?.then((m) => m.stream.getTracks().forEach((tr) => tr.stop())), []);
-  // a restart waits while the owner speaks
+  // a restart waits while the owner speaks and until what they said is in the field or answered:
+  // until 2026-10-14 it went ahead once they let go, and a long dictation's words were lost
   useEffect(() => {
-    holdRestart('voice', phase === 'idle' ? null : 'voice');
+    holdRestart('voice', phase === 'idle' && !writing ? null : 'voice');
     return () => holdRestart('voice', null);
-  }, [phase]);
+  }, [phase, writing]);
   return { phase, level, flat, start, stop };
 }
 

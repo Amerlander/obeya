@@ -140,7 +140,12 @@ def serve(args) -> None:
             reply |= {"ok": True, "seconds": round(time.monotonic() - started, 2)}
         except Exception as failed:  # a bad request or a failed generation; the model stays loaded
             reply |= {"error": f"{type(failed).__name__}: {failed}"[:600]}
-        answer(reply)
+        try:
+            answer(reply)
+        except BrokenPipeError:
+            # whoever asked went away before the clip was done (Obeya stopped or restarted): nobody
+            # is left to tell, and closing the protocol at exit would fail on the closed pipe once more
+            os._exit(0)
 
 
 def main() -> None:

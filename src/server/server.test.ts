@@ -674,6 +674,24 @@ describe('a restart that waits', () => {
     await until(() => gone === 1);
     watching.close();
   });
+
+  test('waits for a dictation the server is still writing down, also when no page holds it off', async () => {
+    let gone = 0;
+    const restarter = new Restarter({ busy: () => [], go: () => gone++, patienceMs: 0, intervalMs: 10 });
+    let written = (_: string) => {};
+    const writing = new Promise<string>((resolve) => (written = resolve));
+    server.stop(true);
+    server = serve([canvas], { transcriber: { transcribe: async () => ({ text: await writing, doubtful: false }) } }, 0, false, undefined, restarter);
+    const dictated = fetch(new URL(api('/voice?listen'), server.url), { method: 'POST', body: 'AUDIO' });
+    await until(() => restarter['holds'].size === 1);
+    restarter.request('code');
+    expect(restarter.due()).toMatchObject({ owner: ['voice'] });
+    await Bun.sleep(50);
+    expect(gone).toBe(0);
+    written('Ein langes Diktat');
+    expect(await (await dictated).json()).toMatchObject({ text: 'Ein langes Diktat' });
+    await until(() => gone === 1);
+  });
 });
 
 describe('cards that need the owner', () => {

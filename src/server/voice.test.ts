@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { resource } from './resources';
 import { looping, silence, voiceBackends } from './voice';
 import { VoiceSetup } from './voice-setup';
 
@@ -90,3 +91,30 @@ test('"Installieren" loads Whisper, and says why when it fails', async () => {
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+test('the Whisper sidecar ends quietly when Obeya is gone before it has written a recording down', async () => {
+  // a fake mlx-whisper that takes a moment for a recording longer than the warm-up's second
+  const dir = mkdtempSync(join(tmpdir(), 'obeya-sidecar-'));
+  try {
+    writeFileSync(join(dir, 'mlx_whisper.py'), 'import time\ndef transcribe(audio, **kw):\n    time.sleep(1 if len(audio) > 16000 else 0)\n    return {"text": "Hallo"}\n');
+    expect(Bun.spawnSync(['ffmpeg', '-loglevel', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=3', join(dir, 'speech.wav')]).exitCode).toBe(0);
+    const p = Bun.spawn(['uv', 'run', '--quiet', '--no-project', '--with', 'numpy', 'python', join(resource('voice'), 'whisper_sidecar.py')], {
+      stdin: 'pipe',
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: { ...process.env, PYTHONPATH: dir },
+    });
+    const out = (p.stdout as ReadableStream<Uint8Array>).getReader();
+    expect(new TextDecoder().decode((await out.read()).value)).toContain('"ready": true');
+    p.stdin.write(`${JSON.stringify({ id: 1, path: join(dir, 'speech.wav') })}\n`);
+    // Obeya ends the sidecar's stdin as it stops, and is gone before the words are written
+    p.stdin.end();
+    await out.cancel();
+    expect(await p.exited).toBe(0);
+    const log = await new Response(p.stderr).text();
+    expect(log).toContain('whisper: 3.0 s');
+    expect(log).not.toContain('BrokenPipeError');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}, 60_000);

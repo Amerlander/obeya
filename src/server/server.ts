@@ -118,6 +118,24 @@ export function serve(
       return c ? handle(() => fn(c, req)) : Response.json({ code: 'invalid', error: 'unknown canvas' }, { status: 404 });
     };
 
+  /**
+   * A restart waits for what the owner said on the server's own count too, until its answer is
+   * written, whether or not the page that sent it still holds it off: one that came while Whisper
+   * wrote lost the words (until 2026-10-14).
+   */
+  let answering = 0;
+  const holdingRestart =
+    <T,>(fn: (c: CanvasRuntime, req: Req) => Promise<T>) =>
+    async (c: CanvasRuntime, req: Req): Promise<T> => {
+      const holder = `request ${++answering}`;
+      restarter?.hold(holder, ['voice']);
+      try {
+        return await fn(c, req);
+      } finally {
+        restarter?.hold(holder);
+      }
+    };
+
   const focusOf = (req: Request): Focus => {
     const q = new URL(req.url).searchParams;
     return { ...(q.get('card') ? { card: q.get('card')! } : {}), ...(q.get('project') ? { project: q.get('project')! } : {}) };
@@ -405,7 +423,7 @@ export function serve(
       // what the owner said (audio), for the open card's agent or the Koordinator; the body is the
       // recording, or a form with it (`audio`) and the words typed in the field before it (`text`)
       '/api/c/:canvas/voice': {
-        POST: on(async (c, req) => {
+        POST: on(holdingRestart(async (c, req) => {
           // screenshots shown with the recording (`?image=<id>`, repeated), checked before transcribing
           const params = new URL(req.url).searchParams;
           const images = params.getAll('image');
@@ -428,7 +446,7 @@ export function serve(
           const at = params.get('at');
           const spot = at !== null && at !== '' ? { at: Number(at), ...(params.get('still') ? { still: params.get('still')! } : {}) } : undefined;
           return heard(c, words, focusOf(req), images, { ...(replyTo ? { replyTo } : {}), ...(spot ? { spot } : {}) });
-        }),
+        })),
       },
       // the owner started speaking: transcription and the Koordinator get ready meanwhile
       '/api/c/:canvas/voice/warm': {

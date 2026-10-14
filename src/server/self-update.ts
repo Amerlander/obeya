@@ -76,7 +76,7 @@ export class Restarter {
   private gone = false;
   private stopWaiting = () => {};
   private listeners = new Set<() => void>();
-  /** What the owner does in each open page (by connection), as the page last said. */
+  /** What the owner does in each open page (by connection), as the page last said, and in each request the server answers. */
   private holds = new Map<string, OwnerHold[]>();
 
   constructor(private o: RestarterOptions) {}
@@ -91,7 +91,7 @@ export class Restarter {
     return () => this.listeners.delete(fn);
   }
 
-  /** What the owner does in the open page `page` that a restart waits for; none, or `[]`, when the page closes. */
+  /** What the owner does in the open page `page` (or a request the server answers) that a restart waits for; none, or `[]`, when the page closes. */
   hold(page: string, what: OwnerHold[] = []) {
     if (what.length) this.holds.set(page, what);
     else this.holds.delete(page);

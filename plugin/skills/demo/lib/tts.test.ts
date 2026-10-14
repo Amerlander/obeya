@@ -220,4 +220,41 @@ def load_model(repo):
     expect(existsSync(join(dir, 'a.wav')) && existsSync(join(dir, 'c.wav'))).toBe(true);
     expect(existsSync(join(dir, 'b.wav'))).toBe(false);
   });
+  test('ends quietly when whoever asked is gone before the clip is done', async () => {
+    const pkg = join(dir, 'fake', 'mlx_audio', 'tts');
+    mkdirSync(pkg, { recursive: true });
+    writeFileSync(join(dir, 'fake', 'mlx_audio', '__init__.py'), '');
+    writeFileSync(join(pkg, '__init__.py'), '');
+    writeFileSync(
+      join(pkg, 'utils.py'),
+      String.raw`
+import time, numpy
+class Segment:
+    def __init__(self, n): self.audio = numpy.zeros(n, dtype=numpy.float32)
+class Model:
+    sample_rate = 24000
+    def generate(self, text, **kwargs):
+        time.sleep(1)
+        yield Segment(2400)
+def load_model(repo):
+    return Model()
+`,
+    );
+    writeFileSync(join(dir, 'ref.wav'), '');
+    writeFileSync(join(dir, 'ref.txt'), 'Das ist meine Stimme.');
+    const p = Bun.spawn(['uv', 'run', '--quiet', '--no-project', '--with', 'numpy', 'python', join(LIB, 'qwen3.py'), '--model', 'm', '--language', 'de', '--reference', join(dir, 'ref.wav'), '--serve'], {
+      stdin: 'pipe',
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: { ...process.env, PYTHONPATH: join(dir, 'fake') },
+    });
+    const out = (p.stdout as ReadableStream<Uint8Array>).getReader();
+    expect(new TextDecoder().decode((await out.read()).value)).toContain('"ready": true');
+    p.stdin.write(`${JSON.stringify({ text: 'Ein Satz.', out: join(dir, 'a.wav'), id: 1 })}\n`);
+    p.stdin.end();
+    // Obeya stops while the clip is made: nobody reads the answer
+    await out.cancel();
+    expect(await p.exited).toBe(0);
+    expect(await new Response(p.stderr).text()).not.toContain('BrokenPipeError');
+  }, 60_000);
 });

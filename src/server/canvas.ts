@@ -197,10 +197,16 @@ export class CanvasRuntime {
           const host = registerHost({ name: h.name, ssh: h.ssh, home: deps.home, claudeToken: () => claudeToken(deps.home) });
           // cards that wait for a clone look again once the host answers after it did not
           this.stops.push(host.onBack(() => board.changed()));
+          // the log tells what goes wrong once, not at every try while the host stays off
+          let told: string | null = null;
           const ensure = async () => {
             const wrong = await workspaces.ensureHostClones(host, h.root, info.remote!, h.clones, token);
-            if (!wrong) return board.changed();
-            console.error(`clones on ${h.name}: ${wrong}`);
+            if (!wrong) {
+              if (told) console.log(`clones on ${h.name}: in place`);
+              return board.changed();
+            }
+            if (wrong !== told) console.error(`clones on ${h.name}: ${wrong}; trying again every ${HOST_RETRY_MS / 60_000} minutes`);
+            told = wrong;
             const retry = setTimeout(ensure, HOST_RETRY_MS);
             this.stops.push(() => clearTimeout(retry));
           };

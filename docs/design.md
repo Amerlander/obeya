@@ -1194,7 +1194,7 @@ the owner's language (`src/core/locale.ts`).
   clones, one table row per machine, as the Koordinator's `configure` does by voice; only a
   repository that works in clones and lands through its remote can have them (`hostRepo`), and a
   name stands for one machine across the configuration (`hostName`). Obeya clones the repository
-  there itself in the background (an unreachable host is tried again every two minutes) and
+  there itself in the background (an unreachable host is tried again every two minutes; the log says what went wrong once, and again only when that changes or the clones are in place) and
   registers each clone as the workspace `ssh://<host>/<path>`; a new card goes there when the
   machines before it have no slot (see Workspaces). A workspace's name says where it is, so every git call
   in it (`git`, `gitAsync`, `exists`), the adapter's stack commands and the worker's session run
@@ -1399,9 +1399,12 @@ the owner's language (`src/core/locale.ts`).
   by ending their turn (no nudge, no question to the owner; the card's log says it paused). A
   resumed worker hears that what ran was stopped (exit code 137) and goes on. A worker that waits for the restart to finish its landed work is not
   in a turn and does not hold it up. The restart also waits while the owner watches a demo video or
-  dictates in an open page (from the press until Obeya has read the words), past the
-  15 minutes too: the page tells the server over its WebSocket whenever that starts or stops, and a
-  page that closes lets go. A command in its undo window holds the restart off on the server's
+  dictates in an open page (from the press until the words are in the field or Obeya has read
+  them), past the 15 minutes too: the page tells the server over its WebSocket whenever that starts
+  or stops, and a page that closes lets go. The server also holds it off itself while it answers a
+  recording (`/voice`), whether or not the page still does. Until 2026-10-14 a dictation into a
+  field let go when the owner let go of the key: a restart that waited for it went ahead while
+  Whisper wrote, and the words of a long dictation were lost. A command in its undo window holds the restart off on the server's
   own count, whether or not the page that said it is still open, and until it has run. Until
   2026-10-12 the page held it: a page that reloaded in the window (the language changed in the
   settings) let go, the restart went ahead, and the confirmed command was lost with the server's
@@ -1423,7 +1426,8 @@ the owner's language (`src/core/locale.ts`).
   a second count as one press). The sidecars (transcription, speech, narration voice) run in a
   process group of their own, so the terminal's Ctrl-C does not reach them: they keep working while
   Obeya waits, and Obeya ends them once it stops by ending their stdin, which they finish as a
-  normal end (killed instead, Python left the semaphore of the model download's progress bar
+  normal end after the request they are on (Obeya gone by the time they answer it, they end
+  quietly: until 2026-10-14 the Whisper sidecar left a BrokenPipeError traceback in the log) (killed instead, Python left the semaphore of the model download's progress bar
   behind and its resource tracker warned about it on the terminal, until 2026-10-12; one still
   there after 30 s is killed) (on Windows, where a detached process would open
   a console window for every program it starts, the Python sidecars ignore Ctrl-C instead). A stop does not wait for the owner's video or dictation, since the
