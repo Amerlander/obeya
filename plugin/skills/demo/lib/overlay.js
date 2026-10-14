@@ -53,8 +53,53 @@
     return root;
   }
 
+  // The part of an element that can be seen: its box cut to every ancestor that clips its
+  // overflow (a scrolling list, a card's conversation) and to the window. A message scrolled half
+  // out of a conversation counted with its whole box, and the ring reached over the card's edge.
+  function visibleRect(el) {
+    const r = el.getBoundingClientRect();
+    let { left, top, right, bottom } = r;
+    let fixed = getComputedStyle(el).position === 'fixed';
+    for (let a = parentOf(el); a && !fixed; a = parentOf(a)) {
+      const style = getComputedStyle(a);
+      const paint = /paint|strict|content/.test(style.contain);
+      const clipsX = paint || style.overflowX !== 'visible';
+      const clipsY = paint || style.overflowY !== 'visible';
+      // overflow does not apply to inline boxes
+      if ((clipsX || clipsY) && !/^(inline|contents)$/.test(style.display)) {
+        // the padding box: borders and scrollbars hide what scrolls under them
+        const b = a.getBoundingClientRect();
+        const x = b.left + a.clientLeft;
+        const y = b.top + a.clientTop;
+        // the root scrolls with the window, which is cut below
+        if (a !== document.documentElement && a !== document.body) {
+          if (clipsX) {
+            left = Math.max(left, x);
+            right = Math.min(right, x + a.clientWidth);
+          }
+          if (clipsY) {
+            top = Math.max(top, y);
+            bottom = Math.min(bottom, y + a.clientHeight);
+          }
+        }
+      }
+      // nothing above a fixed element clips it
+      fixed = style.position === 'fixed';
+    }
+    left = Math.max(left, 0);
+    top = Math.max(top, 0);
+    right = Math.min(right, window.innerWidth);
+    bottom = Math.min(bottom, window.innerHeight);
+    return right > left && bottom > top ? { left, top, right, bottom } : null;
+  }
+
+  function parentOf(el) {
+    return el.parentElement || (el.parentNode instanceof ShadowRoot ? el.parentNode.host : null);
+  }
+
+  // The ring goes around what can be seen of its elements; one not visible at all does not count.
   function unionRect(elements) {
-    const rects = elements.filter((e) => e && e.isConnected).map((e) => e.getBoundingClientRect());
+    const rects = elements.filter((e) => e && e.isConnected).map(visibleRect).filter(Boolean);
     if (!rects.length) return null;
     const left = Math.min(...rects.map((r) => r.left));
     const top = Math.min(...rects.map((r) => r.top));
@@ -83,7 +128,8 @@
   function track() {
     for (const ring of rings) {
       const r = unionRect(ring.elements);
-      // A ring whose element is gone (a closed dialog) must not linger over whatever is there now.
+      // A ring whose elements are gone (a closed dialog) or scrolled out of sight must not linger
+      // over whatever is there now.
       ring.box.style.display = r ? '' : 'none';
       ring.hole.style.display = r ? '' : 'none';
       if (!r) continue;

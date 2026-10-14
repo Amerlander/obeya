@@ -2057,6 +2057,11 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   than the wait. `skip` therefore fades only once the wait has run five seconds; those first
   seconds are cut without a trace (the picture rarely changes in them), the rest falls into the white.
   The review table flags a scene with more than 5 s without narration.
+  A highlight ring goes around what can be seen of its elements: each element's box is cut to
+  every ancestor that clips its overflow (a scrolling list, a card's conversation) and to the
+  window, an element out of sight does not count, and this holds while the ring follows scrolling.
+  Until 2026-10-14 the ring took the elements' whole boxes: around two comments in a card's
+  conversation it took in the task message scrolled out above them and covered half the card.
   Obeya takes the chapter times from the captions and serves the video, poster and captions of
   the card's demo (range requests). The card shows it on the left, the
   conversation with the field for feedback beside it and approve below both; feedback asks for a new render. When the result is something to look at

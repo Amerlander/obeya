@@ -147,7 +147,8 @@ is presented without "I" or "we".
 
 Director helpers (`d`): `goto`, `click`, `type` (clears, then types at reading pace; `''`
 clears), `drag(from, to, ms?)` (onto an element or a point, the pointer moving along),
-`scrollTo`, `highlight(locator | locator[], label?)` (ring that follows scrolling; cleared at each
+`scrollTo`, `highlight(locator | locator[], label?)` (ring around the visible part of its elements, cut
+at the edge of a scrolling list or the window, that follows scrolling; cleared at each
 scene and by `clearHighlights()`; not inside iframes; several in one scene all stay bright, each
 with its own label, and only the rest of the page is dimmed), `untilSpoken(fraction)` to time an action
 to the narration, `pdfFrom(button, name)` (PDF from a new-tab button → PNG pages),
