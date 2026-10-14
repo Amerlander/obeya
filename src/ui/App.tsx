@@ -1075,8 +1075,8 @@ function Canvas({
   keys.current = (e: KeyboardEvent) => {
     const f = focusRef.current;
     const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
-    // text fields in a sheet handle their own keys (Esc cancels an edit there)
-    if (typing && (e.target as Element).closest('.sheet')) return;
+    // a field being edited handles its own keys (Esc cancels the edit there); any other field's Esc closes what it is in
+    if (typing && (e.target as Element).closest('[data-esc]')) return;
     // the settings take the next key as the push-to-talk key in another app
     if (document.querySelector('.c-push-key.listening')) return;
     // the configuration over the page takes the keys until it closes, Esc closing it
@@ -1114,6 +1114,7 @@ function Canvas({
       if (f?.type !== 'card' && aOnRef.current) return setAOn(false);
       if (typing) (e.target as HTMLElement).blur();
       if (f?.type === 'card') closeCard();
+      else if (kOnRef.current) setKOn(false);
       else if (f?.type === 'project' && readingRef.current && sheetProject) readPlan(sheetProject, null);
       else if (f?.type === 'project') closeProject();
       return;

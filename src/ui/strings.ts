@@ -59,7 +59,7 @@ const de = {
           { keys: [['Doppelklick']], text: 'Neue Aufgabe an dieser Stelle' },
           { keys: [['N']], text: 'Neue Aufgabe in der Mitte' },
           { keys: [['Tab']], text: 'Zur nächsten Karte, die dich braucht, oder zu Obeyas Antwort' },
-          { keys: [['Esc']], text: 'Karte oder Projekt schließen' },
+          { keys: [['Esc']], text: 'Karte, Projekt oder Obeya schließen' },
         ],
       },
       {
@@ -1234,7 +1234,7 @@ const en: Strings = {
           { keys: [['Double-click']], text: 'New task right there' },
           { keys: [['N']], text: 'New task in the middle' },
           { keys: [['Tab']], text: 'Next card that needs you, or Obeya’s answer' },
-          { keys: [['Esc']], text: 'Close the card or project' },
+          { keys: [['Esc']], text: 'Close the card, project or Obeya' },
         ],
       },
       {

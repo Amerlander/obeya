@@ -2649,7 +2649,11 @@ the repository; the copy on the project is only for the archive).
   closing only change its colour: it is one element fixed over the room the bar keeps for it,
   never moved into another parent (before, closing put it back into the bar, which still ended
   at the sidebar, so it showed up left of it and slid right with the bar). The other
-  sheets have a ✕ there. The bar's buttons always fit into it
+  sheets have a ✕ there. Esc closes any of the sheets, from a text field in it too, as from a
+  card's field; a field being edited (a preference, say) takes Esc first, to cancel the edit, and
+  says so with a `data-esc` attribute, which the canvas's key handler steps aside for. With a card
+  open beside a sheet, the first Esc closes the card, the second the sheet. Until 2026-10-14 Esc
+  left Obeya's sidebar open and did nothing in any sheet's field. The bar's buttons always fit into it
   (`src/ui/barFit.ts`): narrower than its contents, beside a wide sheet or in a narrow window, it
   gives up in steps the wordmark for the sign and the branch, then the labels for icons a few at a
   time, then the pool and `?`, then all but the sheets' buttons. Which step is measured (the bar's

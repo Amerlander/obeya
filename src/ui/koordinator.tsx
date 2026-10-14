@@ -231,6 +231,7 @@ function ProposalRow({ p, items, rules, repos, onOpen }: { p: Preference; items:
         <span className="pref-text">{p.text}</span>
       ) : (
         <textarea
+          data-esc
           autoFocus
           value={draft}
           rows={2}
@@ -413,6 +414,7 @@ function PreferenceRow({ p }: { p: Preference }) {
         </span>
       ) : (
         <textarea
+          data-esc
           autoFocus
           value={draft}
           rows={2}
