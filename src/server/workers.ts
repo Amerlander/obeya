@@ -213,6 +213,16 @@ const restartNotice = (due: DueRestart) => {
   return `Obeya is about to ${DUE_WHY[due.reason]} and stops whatever its workers run at that moment. It waits until no worker is in the middle of a turn, at most ${minutes} more minute${minutes === 1 ? '' : 's'}. Pause at the next safe point: finish the step you are in, start nothing long (a test run, a demo render, a measurement), and end your turn, without handing over if you are not done. Background commands still running keep Obeya waiting: let those you need finish, stop the others (a scratch server you can start again). One that finishes before the restart wakes you for a turn that keeps Obeya waiting too: take in its result and end that turn as well. Obeya resumes you once it runs again, and you go on from there.`;
 };
 
+/**
+ * Tells a worker whose turn a message starts while a restart is due (a conflict after an approval,
+ * an answer, a card started) that the turn keeps Obeya waiting: it takes the message in and leaves
+ * what it asks for until Obeya resumes it, instead of judging a step short enough to do first.
+ */
+const restartWaits = (due: DueRestart) => {
+  const minutes = Math.max(1, Math.round((due.deadline - Date.now()) / 60_000));
+  return `Obeya is about to ${DUE_WHY[due.reason]} and stops whatever its workers run at that moment. It waits until no worker is in the middle of a turn, at most ${minutes} more minute${minutes === 1 ? '' : 's'}, and this turn keeps it waiting. Take in this message, leave the work it asks for until Obeya resumes you, and end your turn, without handing over. Obeya resumes you once it runs again, and you do that work then.`;
+};
+
 /** Tells a worker that paused for the restart, and was woken before it (by its background work, a message), that Obeya still waits for it. */
 const stillDue = (due: DueRestart) => {
   const minutes = Math.max(1, Math.round((due.deadline - Date.now()) / 60_000));
@@ -1029,13 +1039,17 @@ export class Workers {
     return others.length ? `Decisions taken in this project while you work:\n${decisionLog(others)}` : undefined;
   }
 
-  /** A message that starts a turn while a restart is due tells the worker of it, once. */
+  /**
+   * A message that starts a turn while a restart is due tells the worker of it, once: that the
+   * work the message asks for waits until Obeya resumes it (workers in a turn heard of it already).
+   */
   private withRestart(cardId: string, live: Live, text: string): string {
     const still = this.restartStillDue(cardId, live);
     if (still) return `${text}\n\n${still}`;
     if (!this.restart || live.toldRestart) return text;
     this.tellRestart(cardId, live);
-    return `${text}\n\n${restartNotice(this.restart)}`;
+    this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.restartWaits(this.restart.reason === 'stop'));
+    return `${text}\n\n${restartWaits(this.restart)}`;
   }
 
   /**

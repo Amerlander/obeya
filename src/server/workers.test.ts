@@ -273,7 +273,14 @@ describe('workers', () => {
     expect(runtime.last.inbox.length).toBe(before + 1);
     expect(runtime.last.inbox.at(-1)).toContain('Answer to your question');
     expect(runtime.last.inbox.at(-1)).toContain('Obeya is about to restart (the owner saved a new configuration)');
-    expect(runtime.last.inbox.at(-1)).toContain('at most 1 more minute.');
+    expect(runtime.last.inbox.at(-1)).toContain('at most 1 more minute, and this turn keeps it waiting');
+    // not the notice for a worker in the middle of a step: the answer's work waits for the restart
+    expect(runtime.last.inbox.at(-1)).toContain('leave the work it asks for until Obeya resumes you');
+    expect(runtime.last.inbox.at(-1)).not.toContain('finish the step you are in');
+    expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', text: 'Obeya wartet auf einen Neustart; der Agent macht danach weiter.' });
+    runtime.last.emit({ type: 'idle' });
+    expect(state(c.id)).toBe('working');
+    expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', text: 'Pausiert bis zum Neustart von Obeya.' });
   });
 
   test('a worker started while a restart is due hears of it in its briefing', () => {
@@ -1760,6 +1767,37 @@ describe('a worktree per card', () => {
     const err = await workers.approve(c.id).catch((e) => e);
     expect(err).toMatchObject({ code: 'landMerge' });
     expect(state(c.id)).toBe('waiting:review');
+  });
+
+  test('an approval while a restart is due that cannot land: the worker leaves the conflict until Obeya resumes it', async () => {
+    const a = manual();
+    const b = board.create({ title: 'Zweite Karte', x: 0, y: 0 });
+    workers.start(a.id);
+    workers.start(b.id);
+    commitIn(board.row(a.id).workspace!, 'same.ts', 'A');
+    commitIn(board.row(b.id).workspace!, 'same.ts', 'B');
+    const sa = runtime.sessions.find((s) => s.spec.cwd === board.row(a.id).workspace)!;
+    const sb = runtime.sessions.find((s) => s.spec.cwd === board.row(b.id).workspace)!;
+    sa.call('ready_for_review', { summary: 'S' });
+    await workers.approve(a.id);
+    sb.call('ready_for_review', { summary: 'S' });
+    sb.emit({ type: 'idle' });
+    // the landing of the first card is about to restart Obeya; the owner approves the second meanwhile
+    workers.restartDue({ reason: 'code', deadline: Date.now() + 12 * 60_000 });
+    expect(board.events(b.id).at(-1)).not.toMatchObject({ kind: 'state', text: expect.stringContaining('Neustart') });
+    await workers.approve(b.id);
+    expect(state(b.id)).toBe('working');
+    expect(sb.inbox.at(-1)).toContain('conflicts in same.ts');
+    expect(sb.inbox.at(-1)).toContain('Obeya is about to restart (new code landed on main)');
+    expect(sb.inbox.at(-1)).toContain('leave the work it asks for until Obeya resumes you, and end your turn, without handing over');
+    expect(sb.inbox.at(-1)).not.toContain('finish the step you are in');
+    expect(board.events(b.id).at(-1)).toMatchObject({ kind: 'state', author: 'obeya', text: 'Obeya wartet auf einen Neustart; der Agent macht danach weiter.' });
+    // it ends the turn at once: paused, the approval still held for the handover after the restart
+    sb.emit({ type: 'idle' });
+    expect(workers.busyCards()).not.toContain(b.id);
+    expect(state(b.id)).toBe('working');
+    expect(board.row(b.id).approved_at).toBeTruthy();
+    expect(board.events(b.id).at(-1)).toMatchObject({ kind: 'state', text: 'Pausiert bis zum Neustart von Obeya.' });
   });
 
   test('an approval that could not land holds: the worker brings the branch up to date and it lands', async () => {

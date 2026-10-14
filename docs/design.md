@@ -1416,9 +1416,15 @@ the owner's language (`src/core/locale.ts`).
   the new code then fails where it imports what is missing); workers resume, and an open page reloads when it reconnects to a new server process. The restart waits
   until no worker is in the middle of a turn or waiting for its background work, even one that has
   asked or handed over meanwhile (at most 15 minutes), since it stops whatever a worker runs. The
-  workers it waits for are told it is due, and so is a worker that starts a turn before it: they
-  start nothing long, stop background work they can start again, and pause at the next safe point
-  by ending their turn (no nudge, no question to the owner; the card's log says it paused).
+  workers it waits for are told it is due: they start nothing long, stop background work they can
+  start again, and pause at the next safe point by ending their turn (no nudge, no question to the
+  owner; the card's log says it paused). A worker whose turn a message starts before the restart (a
+  card started, an answer, an approval whose work did not land for a conflict) hears that the turn
+  keeps Obeya waiting: it takes the message in, leaves the work it asks for until Obeya resumes it,
+  and ends the turn at once (the card's log says so). Until 2026-10-14 such a turn heard the notice
+  for a worker in the middle of a step ("finish the step you are in"): a worker sent back to resolve
+  a conflict after an approval judged the rebase short, resolved it, handed over and had the work
+  land before it paused.
   Background work a worker lets finish wakes it for a turn before the restart, and so does a message;
   such a turn hears once that Obeya still waits and that it holds the restart up (with its first tool
   step, or with the message; the card's log says so), and the worker ends it again. Until 2026-10-14 it heard nothing: a
