@@ -1186,13 +1186,14 @@ function DemoView({
   const artifactHeight = useReportedHeight(artifact, ARTIFACT_CAP);
   const [now, setNow] = useState(0);
   const src = (f: string) => at(`/cards/${cardId}/demo/${f}`);
-  // start once the card has unfolded, like the mock, the first time only; a demo kept on a finished card waits to be played
-  const [autostart] = useState(() => autoplay && demo.kind !== 'html' && firstOpening(localStorage, cardId, demo));
+  // start once the card has unfolded, like the mock, the first time only; a demo kept on a finished card waits to be played.
+  // A page out of sight (a tab in the background, an agent's browser) does not start it: nobody would see it, only hear it
+  const [autostart] = useState(() => autoplay && demo.kind !== 'html' && !document.hidden && firstOpening(localStorage, cardId, demo));
   // a video that does not start on its own shows a big play button over it until it first plays
   const [started, setStarted] = useState(autostart);
   useEffect(() => {
     if (!autostart) return;
-    const h = setTimeout(() => video.current?.play().catch(() => setStarted(false)), 300);
+    const h = setTimeout(() => (document.hidden ? setStarted(false) : video.current?.play().catch(() => setStarted(false))), 300);
     return () => clearTimeout(h);
   }, []);
   useEffect(() => () => holdRestart('video', null), []);

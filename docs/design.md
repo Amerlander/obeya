@@ -263,7 +263,7 @@ An idea is thought through on its card before anything is planned; no worker run
    turn ends the card is the owner's again. Before (2026-10-08), feedback sent the card back to
    `working` and took the approval away until the next handover, so it waited for "Rückgängig"
    like a command. The demo plays on its own the first time the card is opened
-   (per browser; a new render counts as new), later it waits to be played, with a big play button
+   (per browser; a new render counts as new) in a page in sight, later it waits to be played, with a big play button
    over it like a shared page's (also when the browser blocks the first play). Z or the
    magnifier on the video zooms it out of the card to as large as the window allows above the
    microphone, over the greyed page (`useZoom` in `src/ui/detail.tsx`): the same video element,
@@ -1447,7 +1447,7 @@ the owner's language (`src/core/locale.ts`).
   has it go ahead at once, its hover text saying what that cuts off. The page that reloads keeps
   what was open: just before the reload it writes down (per tab, in `sessionStorage`) the open card,
   project (its plan doc read or not) and sheet, the scroll position of every scrolled box in them,
-  the drafts in their text fields and where the demo video stood; the new page opens them again
+  the drafts in their text fields and where the demo video stood (it plays on only in a tab in sight); the new page opens them again
   without flights or unfold and puts positions and drafts back while their content loads
   (`src/ui/keep.ts`). The camera is kept anyway.
 - **Stopping** — Ctrl-C, SIGTERM or `POST /api/stop` (the app; Windows has no SIGTERM), with or

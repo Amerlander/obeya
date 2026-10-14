@@ -115,7 +115,8 @@ export function restore(k: Pick<Kept, 'scroll' | 'drafts' | 'video'>, settleMs =
     const v = video && document.querySelector<HTMLVideoElement>('#panel video');
     if (video && v && v.readyState >= HTMLMediaElement.HAVE_METADATA) {
       v.currentTime = video.time;
-      if (video.playing) v.play().catch(() => {});
+      // a tab reloaded in the background keeps the place but does not play on out of sight
+      if (video.playing && !document.hidden) v.play().catch(() => {});
       video = undefined;
     }
     setTimeout(tick, 100);
