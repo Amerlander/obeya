@@ -1087,6 +1087,10 @@ const de = {
     button: 'Archiv',
     title: 'Erledigte Aufgaben, Projekte, verworfene Ideen und Prototypen',
     empty: 'Noch nichts archiviert.',
+    search: 'Im Archiv suchen',
+    clearSearch: 'Suche leeren',
+    /** No archived card matches what the owner typed into the archive's search field. */
+    noMatch: (q: string) => `Nichts im Archiv passt zu „${q}“.`,
     archive: 'Archivieren',
     archiveDone: (n: number) => (n === 1 ? '1 erledigte Aufgabe archivieren' : `${n} erledigte Aufgaben archivieren`),
     unarchive: 'Zurück auf die Leinwand',
@@ -2267,6 +2271,10 @@ const en: Strings = {
     button: 'Archive',
     title: 'Finished tasks, projects, dropped ideas and prototypes',
     empty: 'Nothing archived yet.',
+    search: 'Search the archive',
+    clearSearch: 'Clear the search',
+    /** No archived card matches what the owner typed into the archive's search field. */
+    noMatch: (q: string) => `Nothing in the archive matches “${q}”.`,
     archive: 'Archive',
     archiveDone: (n: number) => (n === 1 ? 'Archive 1 finished task' : `Archive ${n} finished tasks`),
     unarchive: 'Back onto the canvas',

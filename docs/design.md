@@ -390,7 +390,12 @@ An idea is thought through on its card before anything is planned; no worker run
    (button or `A`) lists archived cards under its button in the bar, as the queue does, by day,
    the most recently archived first, as small cards on a timeline with the time they were
    archived, each labelled with its kind or state („Idee → Projekt“, „Projekt“) unless it is a plain
-   task, nearly every entry, which goes without one; one unfolds from its card as on the canvas and can go back to the place it had. The
+   task, nearly every entry, which goes without one; one unfolds from its card as on the canvas and can go back to the place it had. A
+   search field over the list, with the cursor in it as the list opens, filters it as the owner
+   types: a card stays when it holds every word typed (case and accents aside) in its title, text,
+   summary, last status or label, a project also in its goal and workstreams; the words are marked
+   in the titles. The search stays while the list is closed, selected when it opens again, so typing
+   starts a new one and a card folds back into the list it was opened from. The
    list stays under the dim while that card is open, so the card folds back into it; a click
    beside it or Esc closes it. Until 2026-10-09 the archive was a sheet on the right. An
    ended prototype cannot: it shows, read-only, how it ended, its demo and conversation.
