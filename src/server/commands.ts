@@ -810,7 +810,7 @@ export class Commander {
       const state = i.queue
         ? queued(i.queue, items)
         : i.need
-          ? `${i.state}: ${i.need}${answering(i) ? ", its agent works on the owner's answer to the question in its demo report" : ''}`
+          ? `${i.state}: ${i.need}${answering(i) ? ", its agent works on the owner's answer to the question in its demo report" : i.answered ? ', its agent answered what the owner wrote on its handover' : ''}`
           : i.idea && i.idea.status !== 'open'
             ? `idea: ${i.idea.status}`
             : i.idea?.thinking

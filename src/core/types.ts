@@ -150,6 +150,11 @@ export interface Item {
    */
   answering?: true;
   /**
+   * Its worker answered what the owner wrote or said on its handover without a new demo: the card
+   * waits for the owner because of that answer, not a demo to watch.
+   */
+  answered?: true;
+  /**
    * The owner's comments on places in the demo video (their event ids) that Obeya holds back while
    * they watch, to give them to the worker in one message once they are done (`Spot`).
    */

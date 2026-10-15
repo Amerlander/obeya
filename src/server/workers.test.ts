@@ -1234,6 +1234,38 @@ describe('handing over with a demo', () => {
     expect(needsYou(board.item(c.id)!)).toBe(true);
   });
 
+  test('an answer to the owner\'s words without a new demo marks the card answered; a new demo is a demo again', () => {
+    const c = manual();
+    workers.start(c.id);
+    runtime.last.call('ready_for_review', { summary: 'S', demo: { dir: demoDir(), chapters: ['Vorher', 'Nachher'] } });
+    runtime.last.emit({ type: 'idle' });
+    expect(board.item(c.id)!.answered).toBeUndefined();
+    // a reply alone
+    workers.message(c.id, 'Warum zwei Spalten?');
+    expect(board.item(c.id)!.answered).toBeUndefined();
+    runtime.last.emit({ type: 'tool', name: 'Read', input: {} });
+    runtime.last.call('reply', { text: 'Weil die Tabelle sonst zu breit wird.' });
+    runtime.last.emit({ type: 'idle' });
+    expect(state(c.id)).toBe('waiting:demo');
+    expect(board.item(c.id)!.answered).toBe(true);
+    expect(needsYou(board.item(c.id)!)).toBe(true);
+    // further words: the card is at work again, not answered
+    workers.message(c.id, 'Und die Kopfzeile?');
+    expect(board.item(c.id)!.answering).toBe(true);
+    expect(board.item(c.id)!.answered).toBeUndefined();
+    // a handover that keeps the demo answers them too
+    runtime.last.call('ready_for_review', { summary: 'Kopfzeile ergänzt.' });
+    runtime.last.emit({ type: 'idle' });
+    expect(state(c.id)).toBe('waiting:demo');
+    expect(board.item(c.id)!.answered).toBe(true);
+    // a new demo is what the owner looks at next
+    workers.message(c.id, 'Zeig mal.');
+    runtime.last.call('ready_for_review', { summary: 'Mit Video.', demo: { dir: demoDir(), chapters: ['Vorher', 'Nachher'] } });
+    runtime.last.emit({ type: 'idle' });
+    expect(state(c.id)).toBe('waiting:demo');
+    expect(board.item(c.id)!.answered).toBeUndefined();
+  });
+
   test('a worker taking in an answer resumes after a restart; a session that ends gives the demo back to the owner', async () => {
     const c = manual();
     workers.start(c.id);

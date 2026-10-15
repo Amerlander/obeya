@@ -275,7 +275,10 @@ An idea is thought through on its card before anything is planned; no worker run
    („Agent arbeitet an deiner Nachricht“, no badge, not counted as needing the owner), „Freigeben“
    stays, and a change the words call for comes as a new handover. A worker whose words asked
    Obeya for something instead (gib frei, a follow-up) passes them on (`to_obeya`), and once its
-   turn ends the card is the owner's again. Before (2026-10-08), feedback sent the card back to
+   turn ends the card is the owner's again. A turn that ends without a new demo (a reply, a
+   handover that keeps the demo) leaves the card reading „Agent hat geantwortet, wartet auf dich“
+   (`answered`) instead of „Demo bereit“, whether or not the owner had watched the demo; a new demo
+   reads „Demo bereit“ again. Until 2026-10-15 the card read „Demo bereit“ after any answer. Before (2026-10-08), feedback sent the card back to
    `working` and took the approval away until the next handover, so it waited for "Rückgängig"
    like a command. The demo plays on its own the first time the card is opened
    (per browser; a new render counts as new) in a page in sight, later it waits to be played, with a big play button

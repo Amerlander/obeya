@@ -1625,7 +1625,7 @@ export function toItems(rows: CardRow[], docs: PlanDoc[], home: string): Item[] 
 
 /** The fields a worker adds to a card. */
 function work(r: CardRow): Partial<Item> {
-  const detail = r.detail ? (JSON.parse(r.detail) as { question?: Item['question']; summary?: string; noDemo?: string; noChange?: boolean; answering?: boolean }) : {};
+  const detail = r.detail ? (JSON.parse(r.detail) as { question?: Item['question']; summary?: string; noDemo?: string; noChange?: boolean; answering?: boolean; answered?: boolean }) : {};
   // `answering` stood in the demo until 2026-10-08, when only a demo's question could be answered
   const demo = r.demo ? (({ dir: _, answering: __, ...d }) => d)(JSON.parse(r.demo) as Item['demo'] & { dir: string; answering?: boolean }) : undefined;
   const answering = (detail.answering || (r.demo && (JSON.parse(r.demo) as { answering?: boolean }).answering)) && (r.need === 'review' || r.need === 'demo');
@@ -1642,6 +1642,7 @@ function work(r: CardRow): Partial<Item> {
     ...(demo?.question && !demo.answer && r.need === 'demo' ? { question: { text: demo.question, options: [] } } : {}),
     ...(detail.summary && (r.need === 'review' || r.need === 'demo') ? { summary: detail.summary } : {}),
     ...(answering ? { answering: true } : {}),
+    ...(detail.answered && !answering && (r.need === 'review' || r.need === 'demo') ? { answered: true } : {}),
     ...(r.held ? { held: (JSON.parse(r.held) as { id: number }[]).map((h) => h.id) } : {}),
     // approved work is held for its next handover while the card is at work; on a waiting card it is landing
     ...(r.approved_at && r.state === 'waiting' ? { landing: true } : {}),

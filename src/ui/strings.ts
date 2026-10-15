@@ -25,6 +25,7 @@ const de = {
   need: { demo: 'Demo bereit', question: 'Frage an dich', review: 'Bereit zur Abnahme' } satisfies Record<Need, string>,
   demoWithQuestion: 'Demo bereit, mit Frage',
   answering: 'Agent arbeitet an deiner Nachricht',
+  agentAnswered: 'Agent hat geantwortet, wartet auf dich',
   finishing: 'Live · Agent arbeitet',
   openingPr: 'Freigegeben · Agent öffnet den PR',
   finishingLong: 'Auf main. Der Agent erledigt noch, was nach dem Landen ansteht; danach endet seine Sitzung.',
@@ -1233,6 +1234,7 @@ const en: Strings = {
   need: { demo: 'Demo ready', question: 'Question for you', review: 'Ready for review' },
   demoWithQuestion: 'Demo ready, with a question',
   answering: 'Agent works on your message',
+  agentAnswered: 'Agent answered, waiting for you',
   finishing: 'Live · agent working',
   openingPr: 'Approved · agent opening the PR',
   finishingLong: 'On main. The agent still does what was waiting for the landing; then its session ends.',
@@ -2432,7 +2434,7 @@ const longDay = (d: Date, today: Date) =>
 /** A number, with `digits` decimals at most. */
 const number = (n: number, digits = 0) => n.toLocaleString(locale, { maximumFractionDigits: digits, minimumFractionDigits: digits });
 
-export const stateLabel = (i: { kind?: string; thread?: { thinking?: boolean }; state: CardState; need?: Need; pr?: unknown; queue?: Queue; idea?: Idea; question?: unknown; answering?: true; finishing?: boolean; followUp?: boolean; paused?: true; prototypeEnd?: 'discarded' | 'built'; retro?: string }) =>
+export const stateLabel = (i: { kind?: string; thread?: { thinking?: boolean }; state: CardState; need?: Need; pr?: unknown; queue?: Queue; idea?: Idea; question?: unknown; answering?: true; answered?: true; finishing?: boolean; followUp?: boolean; paused?: true; prototypeEnd?: 'discarded' | 'built'; retro?: string }) =>
   i.kind === 'question'
     ? i.paused
       ? t.pause.working
@@ -2470,7 +2472,9 @@ export const stateLabel = (i: { kind?: string; thread?: { thinking?: boolean }; 
         ? t.answering
         : i.need === 'demo' && i.question
           ? t.demoWithQuestion
-          : t.need[i.need]
+          : i.answered
+            ? t.agentAnswered
+            : t.need[i.need]
       : i.state === 'inPr' && !i.pr
         ? t.openingPr
         : i.state === 'proposal' && i.retro

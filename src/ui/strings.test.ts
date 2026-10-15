@@ -38,3 +38,10 @@ test("a proposal of the Arbeitsrückschau is labelled as Obeya's, a worker's pro
   expect(stateLabel({ state: 'proposal', retro: 'Zwei Karten scheiterten gleich.' })).toBe('Vorschlag von Obeya');
   expect(stateLabel({ state: 'planned', retro: 'Zwei Karten scheiterten gleich.' })).toBe('Geplant');
 });
+
+test('a card whose agent answered the owner without a new demo says so instead of "Demo ready"', () => {
+  setLanguage('en', []);
+  expect(stateLabel({ state: 'waiting', need: 'demo' })).toBe('Demo ready');
+  expect(stateLabel({ state: 'waiting', need: 'demo', answered: true })).toBe('Agent answered, waiting for you');
+  expect(stateLabel({ state: 'waiting', need: 'review', answered: true })).toBe('Agent answered, waiting for you');
+});

@@ -1427,7 +1427,7 @@ export class Workers {
       if (!acted && !handedOver) return this.waitForWorker(cardId, live);
       // it paused for the restart, which resumes it, still taking in the answer
       if (this.restart && live.toldRestart && !handedOver) return this.pausedForRestart(cardId, live);
-      this.answerTaken(cardId);
+      this.answerTaken(cardId, true);
     }
     if (handedOver) {
       // work the owner approved already lands once its worker handed over what stood in the way
@@ -1503,12 +1503,15 @@ export class Workers {
     this.o.board.work(cardId, { detail: JSON.stringify({ ...(detail ? (JSON.parse(detail) as Record<string, unknown>) : {}), answering: true }) });
   }
 
-  /** The worker has taken in the owner's words on its handover: work still waiting is the owner's again. */
-  private answerTaken(cardId: string) {
+  /**
+   * The worker has taken in the owner's words on its handover: work still waiting is the owner's
+   * again, `answered` when its turn ended with words for them rather than a new demo.
+   */
+  private answerTaken(cardId: string, answered = false) {
     const { detail, demo } = this.o.board.row(cardId);
     if (detail) {
       const { answering, ...rest } = JSON.parse(detail) as Record<string, unknown>;
-      if (answering) this.o.board.work(cardId, { detail: JSON.stringify(rest) });
+      if (answering) this.o.board.work(cardId, { detail: JSON.stringify({ ...rest, ...(answered ? { answered: true } : {}) }) });
     }
     // where it stood until 2026-10-08
     if (demo) {
@@ -1852,6 +1855,8 @@ export class Workers {
             if (d && none) return 'Not handed over: pass either a demo or no_demo, not both.';
             // approved work that could not land comes back to be landed, not reviewed: its demo stands
             const approved = !!row.approved_at;
+            // a handover in answer to the owner's words that brings no new demo is an answer to them, not a demo to watch
+            const answered = !d && !!row.detail && !!(JSON.parse(row.detail) as { answering?: boolean }).answering;
             // without a new demo, the one on the card stands, unless the worker says there is nothing to show
             const kept = !d && !none && !!row.demo;
             if (!d && !kept && !none && this.o.adapter.demo?.required && !approved)
@@ -1884,7 +1889,7 @@ export class Workers {
               // the worker's last status line is about the work it hands over: it would show again once the card is at work
               ...(approved ? { status_line: this.o.board.t.worker.landing } : { state: 'waiting', need: d || kept ? 'demo' : 'review', status_line: null }),
               // approving work that changes nothing makes the card done, which the owner sees before approving
-              detail: JSON.stringify({ summary: s, ...(none ? { noDemo: none } : {}), ...(this.o.workspaces.hasWork(cardId) ? {} : { noChange: true }) }),
+              detail: JSON.stringify({ summary: s, ...(none ? { noDemo: none } : {}), ...(this.o.workspaces.hasWork(cardId) ? {} : { noChange: true }), ...(answered && !approved ? { answered: true } : {}) }),
               ...(demoJson ? { demo: demoJson } : {}),
               // an earlier demo would show on the finished card as if it were this work's
               ...(none && !approved ? { demo: null } : {}),
