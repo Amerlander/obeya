@@ -45,6 +45,10 @@ shows them as projects); when one is done, what lasts moves into `docs/design.md
 - The colleagues use Windows or Linux: features must work there; macOS-only tools (e.g. `say`)
   only as an additional option.
 - Demo videos and voice recordings never go into git.
+- Before a demo video goes to the owner, watch it for faults of the demo itself and fix them first:
+  every dictated text it shows is transcribed completely and correctly (no missing words or
+  numbers, no misrecognitions), and what the agents in it say points out no fault (a comment cut
+  off, input missing).
 - Public videos (the site's hero video, anything for obeya.si) are narrated in the owner's ElevenLabs
   voice clone (voice ID `IErGHDQU4vPqicCi8dwR`), not the voice of the demo settings. Its API key is in
   `.voice/elevenlabs.key` of the main checkout (`/Users/sadilek/dev/obeya`, gitignored); render with
