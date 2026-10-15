@@ -50,6 +50,15 @@ export const SPACE_SHOWS_MS = 200;
 const NOTE_MS = 6000;
 
 /**
+ * The page is going away (another canvas, a reload): the browser cuts off a command still being
+ * read, which Obeya has and reads on. Until 2026-10-15 that counted as failed, the field got its
+ * words and screenshots back, and the draft kept for the page's next load brought them back again.
+ */
+let leaving = false;
+addEventListener('pagehide', () => void (leaving = true));
+addEventListener('pageshow', () => void (leaving = false));
+
+/**
  * Recording and sending; `level` drives the ring while listening, `flat` says the microphone delivers
  * nothing. A recording begun with the cursor in a text field is dictated into it. Any other one
  * `send` hands on with the draft `field` names for its target, and settles with what Obeya made of
@@ -167,7 +176,7 @@ export function usePushToTalk(
           throw e;
         }),
       );
-      if (!h.unheard && !failed) return;
+      if (!h.unheard && (!failed || leaving)) return;
       updateDraft(key, (d) => ({ text: [text, d.text].filter((x) => x.trim()).join(' '), images: [...images, ...d.images.filter((id) => !images.includes(id))] }));
       if (reply && !(r.target && 'card' in r.target && replyOn(r.target.card))) setReply(reply);
     }).finally(() => setWriting((n) => n - 1));

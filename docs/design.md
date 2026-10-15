@@ -676,7 +676,10 @@ open, go with the next recording (Voice in: one draft per field). Dropped on the
 (⌘V) anywhere outside a text field, they land in that field. Only where no field is spoken to (the
 canvas with no card open and the sidebar closed) the microphone keeps screenshots of its own: picked
 with the small button to its right, dropped on it or pasted, they show beside it. A recording in
-which nothing was heard or understood leaves them where they were. Until 2026-10-12 the microphone
+which nothing was heard or understood leaves them where they were, and so does one that failed. One
+that the page cut off by going away (switching canvas, a reload) counts as sent: Obeya has it and
+reads on. Until 2026-10-15 that counted as failed, and the screenshots came back on the next load,
+to go out a second time with the next command. Until 2026-10-12 the microphone
 always had that store of its own, also beside an open card's field: a screenshot pasted into the
 field and then spoken about went out without it.
 
