@@ -3006,7 +3006,8 @@ the repository; the copy on the project is only for the archive).
   title field, and a card closed without a title was dropped with its text. Deleting offers undo.
   An empty canvas names speaking first
   (hold Space and say what Obeya should build; the card appears where the pointer is on letting go),
-  the double-click second. The bar's "New task"
+  the double-click second; above the notes on the plan directories, with a fixed space between
+  (it follows them when the view moves). The bar's "New task"
   button only teaches the double-click: it opens a note saying so with one "Got it", and goes for
   good (per browser) once the owner has created a card by double-click, which keeps the bar
   uncluttered. Until 2026-10-15 the button created a card in the middle.

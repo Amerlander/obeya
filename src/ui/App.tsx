@@ -1267,9 +1267,9 @@ function Canvas({
             <GroupNames shapes={territories.shapes} />
           </div>
         </div>
-        {/* on an empty canvas the camera centres the note on the plan directory: the hint goes above it */}
+        {/* on an empty canvas the camera centres the notes on the plan directories: the hint stands above them, with space between */}
         {!items.length && (
-          <div className={planDirs ? 'empty above-note' : 'empty'}>
+          <div className={notes.length ? 'empty above-note' : 'empty'} {...(notes.length ? { style: { top: cam.y + Math.min(...notes.map((b) => b.y)) * cam.s - 48 } } : {})}>
             <p className="none">{t.empty.none}</p>
             <p>{t.empty.speak}</p>
             <p className="where">{t.empty.where}</p>
