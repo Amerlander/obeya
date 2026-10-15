@@ -1174,7 +1174,10 @@ the owner's language (`src/core/locale.ts`).
   fly-to, unfold-in-place, semantic zoom, edge indicators, minimap, and a frosted top bar the
   canvas slides under. The bar keeps no hint line: `?` (or the round `?` button beside "Neue
   Aufgabe") shows the legend of mouse and keys as a box over the greyed page (`src/ui/help.tsx`),
-  and Esc, `?` or a click beside it closes it. Left in the bar, after the canvas switcher: the
+  and Esc, `?` or a click beside it closes it. The `?` button only teaches the key: opened by the
+  button, the legend's foot says that `?` opens it too and that the button goes once the key has;
+  the first time the key opens it, the foot says the button has gone, and it stays gone (per
+  browser). Until 2026-10-15 the button stood there always. Left in the bar, after the canvas switcher: the
   archive's button, the queue's and "Neue Aufgabe" (2026-10-09). The queue's button counts the
   waiting cards (grey); a click lists them under it in turn, each with what it waits for and the
   buttons that move it, and a row opens its card; a click beside the list or Esc closes it. The

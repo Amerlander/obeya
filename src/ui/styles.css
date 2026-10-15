@@ -323,6 +323,7 @@ button.pill.help:hover, button.pill.help.on { color: var(--ink); }
 #help .keys { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px; }
 #help kbd { font: inherit; font-size: 12px; font-weight: 500; white-space: nowrap; padding: 2px 7px; border-radius: 2px; background: var(--chip); border: 1px solid var(--line); box-shadow: 0 1px 0 var(--line); }
 #help .or, #help .plus { color: var(--muted); font-size: 12px; }
+#help .key-note { margin: 16px 0 0; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
 #help .hint-box { width: 440px; display: flex; flex-direction: column; align-items: flex-end; gap: 18px; }
 #help .hint-box p { margin: 0; align-self: stretch; font-size: 15px; line-height: 1.45; }
 .empty { position: fixed; left: calc(50% - var(--side, 0px) / 2); top: 50%; transform: translate(-50%, -50%); color: var(--muted); pointer-events: none; text-align: center; white-space: nowrap; }

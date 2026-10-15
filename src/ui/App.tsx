@@ -21,7 +21,7 @@ import { QueuePill } from './queue';
 import { depsOf } from './deps';
 import { collect, keep, type Kept, restore, type SideSheet, takeKept } from './keep';
 import { Sign, Wordmark } from './logo';
-import { doubleClickKnown, Help, HelpButton, knowDoubleClick, NewCardHint } from './help';
+import { doubleClickKnown, Help, HelpButton, helpKeyKnown, knowDoubleClick, knowHelpKey, NewCardHint } from './help';
 import { PlanDirNote, planDirBoxes } from './planDirs';
 import { attachTo, imageFiles } from './shots';
 import { cardDraft, fieldOn, focusedDraft, keepDrafts, MIC_DRAFT, OBEYA_DRAFT, takesImages } from './draft';
@@ -252,6 +252,9 @@ function Canvas({
     requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('#ksheet .tell textarea')?.focus({ preventScroll: true }));
   };
   const [helpOn, setHelpOn] = useState(false);
+  // the bar's `?` button stays until the owner opened the legend with the key; the legend's foot says so
+  const [helpKnown, setHelpKnown] = useState(helpKeyKnown);
+  const [helpNote, setHelpNote] = useState<'button' | 'gone'>();
   // the bar's button for a new task stays until the owner created one by double-click; it only says how
   const [dblKnown, setDblKnown] = useState(doubleClickKnown);
   const [newHintOn, setNewHintOn] = useState(false);
@@ -1110,7 +1113,12 @@ function Canvas({
     }
     if (e.key === '?' && !typing) {
       e.preventDefault();
+      setHelpNote(helpKnown ? undefined : 'gone');
       setHelpOn(true);
+      if (!helpKnown) {
+        knowHelpKey();
+        setHelpKnown(true);
+      }
       return;
     }
     // hold Space anywhere but in a text field to speak; the demo pauses while the owner talks, and a tap plays or pauses it
@@ -1296,7 +1304,15 @@ function Canvas({
               + <span className="lbl">{t.newCard}</span>
             </button>
           )}
-          <HelpButton on={helpOn} onClick={() => setHelpOn(!helpOn)} />
+          {!helpKnown && (
+            <HelpButton
+              on={helpOn}
+              onClick={() => {
+                setHelpNote('button');
+                setHelpOn(!helpOn);
+              }}
+            />
+          )}
           <div className="right">
             {!online && <div className="pill offline">{t.offline}</div>}
             {oldBun && <OldBunPill version={oldBun} />}
@@ -1334,7 +1350,7 @@ function Canvas({
           onFollow={(wx, wy) => !focusRef.current && chase(camRef.current, viewOn(wx, wy), setCam)}
         />
         <div id="dim" className={dim ? 'on' : undefined} onClick={() => closeCard()} />
-        {helpOn && <Help onClose={() => setHelpOn(false)} />}
+        {helpOn && <Help note={helpNote} onClose={() => setHelpOn(false)} />}
         {newHintOn && <NewCardHint onClose={() => setNewHintOn(false)} />}
         <div id="panel" ref={panelRef}>
           <button className="close" title={t.close} onClick={() => closeCard()}>

@@ -45,6 +45,11 @@ const de = {
     button: 'Bedienung (?)',
     title: 'Bedienung',
     or: 'oder',
+    /** The legend's foot while the bar has its `?` button: opened by the button, and by the key for the first time. */
+    keyNote: {
+      button: 'Diese Übersicht öffnet auch die Taste ?. Sobald du sie einmal benutzt hast, verschwindet der ?-Button aus der Leiste.',
+      gone: 'Ab jetzt öffnest du diese Übersicht mit der Taste ?. Der ?-Button ist aus der Leiste verschwunden.',
+    },
     sections: [
       {
         title: 'Leinwand',
@@ -1260,6 +1265,10 @@ const en: Strings = {
     button: 'Controls (?)',
     title: 'Controls',
     or: 'or',
+    keyNote: {
+      button: 'The ? key opens this overview too. Once you have used it, the ? button leaves the bar.',
+      gone: 'From now on, the ? key opens this overview. The ? button has left the bar.',
+    },
     sections: [
       {
         title: 'Canvas',

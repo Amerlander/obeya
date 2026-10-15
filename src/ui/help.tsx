@@ -12,8 +12,12 @@ export function HelpButton({ on, onClick }: { on: boolean; onClick: () => void }
   );
 }
 
-/** The legend; a click beside it, Esc or `?` closes it. */
-export function Help({ onClose }: { onClose: () => void }) {
+/**
+ * The legend; a click beside it, Esc or `?` closes it. `note` is its foot while the bar still has the
+ * button: opened by the button it says the key goes away with the button, opened by the key for the
+ * first time it says the button has gone.
+ */
+export function Help({ onClose, note }: { onClose: () => void; note?: 'button' | 'gone' }) {
   return (
     <div id="help" onClick={onClose}>
       <div className="box" role="dialog" aria-label={t.help.title} onClick={(e) => e.stopPropagation()}>
@@ -48,9 +52,27 @@ export function Help({ onClose }: { onClose: () => void }) {
             </section>
           ))}
         </div>
+        {note && <p className="key-note">{note === 'button' ? t.help.keyNote.button : t.help.keyNote.gone}</p>}
       </div>
     </div>
   );
+}
+
+/** Set once the owner opened the legend with `?`: the bar's `?` button goes. */
+const HELP_KEY_KNOWN = 'obeya-help-key-known';
+
+export function helpKeyKnown() {
+  try {
+    return localStorage.getItem(HELP_KEY_KNOWN) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function knowHelpKey() {
+  try {
+    localStorage.setItem(HELP_KEY_KNOWN, '1');
+  } catch {}
 }
 
 /** Set once the owner created a task by double-click on the canvas: the bar's button for a new task goes. */
