@@ -6,7 +6,7 @@
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
 import type { Item, Preference, RepoRef, Reshare, SettingProposal, Talk } from '../core/types';
 import { api, ApiError } from './api';
-import { plain } from './markdown';
+import { Inline, plain } from './markdown';
 import { AnswerFiles, Body, Continues, Msg, Reading, ThreadCard } from './message';
 import { errorText, t } from './strings';
 import { Composer } from './composer';
@@ -355,7 +355,7 @@ function SettingRow({ p, items, repo, onOpen }: { p: SettingProposal; items: Ite
       )}
       {now !== null && <span className="occasion">{now ? k.settingNow(now) : k.settingEmpty}</span>}
       <span className="occasion">
-        {k.fromRetro}: {p.basis}{' '}
+        {k.fromRetro}: <Inline md={p.basis} />{' '}
         {p.cards.map((c, i) => {
           const card = items.find((x) => x.id === c.id);
           return (
@@ -380,6 +380,11 @@ function SettingRow({ p, items, repo, onOpen }: { p: SettingProposal; items: Ite
         <button className="btn primary" disabled={busy || (draft !== null && !draft.trim())} title={repo?.pullRequests ? k.forEveryonePr(branch) : k.forEveryoneMain(branch)} onClick={() => take('repository')}>
           {k.forEveryone}
         </button>
+      </span>
+      <span className="occasion">
+        {k.onMachine}: {k.onMachineHint} {k.forEveryone}: {repo?.pullRequests ? k.forEveryonePr(branch) : k.forEveryoneMain(branch)}
+      </span>
+      <span className="pref-actions">
         {draft === null ? (
           <button className="btn" disabled={busy} onClick={() => setDraft(asText(p.value))}>
             {k.change}
@@ -392,9 +397,6 @@ function SettingRow({ p, items, repo, onOpen }: { p: SettingProposal; items: Ite
         <button className="btn danger" disabled={busy} onClick={() => decide(() => api.rejectSetting(p.id))}>
           {k.reject}
         </button>
-      </span>
-      <span className="occasion">
-        {k.onMachine}: {k.onMachineHint} {k.forEveryone}: {repo?.pullRequests ? k.forEveryonePr(branch) : k.forEveryoneMain(branch)}
       </span>
       {error && <span className="p-error">{error}</span>}
     </li>

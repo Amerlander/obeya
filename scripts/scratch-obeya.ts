@@ -48,6 +48,8 @@
 //       { "text": "…", "state": "proposed", "target": "<repo id>" }
 //     ],
 //     "groups": [{ "name": "Abrechnung", "cards": ["A", "B", "P"] }],
+//     "friction": [{ "card": "A", "what": "…", "cost": "…", "fix": "…", "ago": "1h" }],
+//     "settingProposals": [{ "field": "howToRun", "value": "bun run dev", "basis": "…", "cards": ["A", "B"] }],
 //     "talk": [{ "said": "…", "reply": "…", "ago": "2h", "card": "A", "answer": "…" }]
 //   }
 // A card is created (x and y default to a free place; `idea`, `repo`, `from` as in
@@ -81,7 +83,10 @@
 // `question` and `answer`, `answerBy` for a question it looked up; `follows`: the index of the
 // exchange whose answer it continues, in that one's thread; `files`: the answer's files, each with
 // its name, caption and either `content` or a file to copy (`from`), written to the thread's output
-// directory; needs code that has them).
+// directory; needs code that has them). `friction` is what the Arbeitsrückschau noted on a card's
+// runs (`card` a key), read by its next retrospective; `settingProposals` are values for a
+// repository's settings it proposed (`field`: checks, setup, softPaths or howToRun; `cards` keys;
+// `repo` defaults to the canvas's home repository); both need code that has them.
 
 import { Database } from 'bun:sqlite';
 import { spawn, spawnSync } from 'node:child_process';
@@ -147,6 +152,8 @@ interface Stage {
   cards: StageCard[];
   preferences?: { key?: string; text: string; state?: string; card?: string; quote?: string; review?: boolean; replaces?: string; target?: string }[];
   groups?: { name: string; cards: string[] }[];
+  friction?: { card: string; what: string; cost: string; fix: string; ago?: string; repo?: string }[];
+  settingProposals?: { field: string; value: string | string[]; basis: string; cards: string[]; repo?: string }[];
   talk?: {
     said: string;
     reply: string;
@@ -473,6 +480,27 @@ for (const [i, x] of (stage.talk ?? []).entries()) {
     writeFileSync(to, f.from ? readFileSync(f.from) : (f.content ?? ''));
   }
 }
+const homeRepo = () => (db.query(`SELECT value FROM settings WHERE canvas_id = $c AND key = 'home_repo'`).get({ c: canvas }) as { value: string } | null)?.value ?? canvas;
+for (const [i, f] of (stage.friction ?? []).entries())
+  db.query('INSERT INTO friction (canvas_id, repo, card_id, at, what, cost, fix) VALUES ($c, $repo, $card, $at, $what, $cost, $fix)').run({
+    c: canvas,
+    repo: f.repo ?? homeRepo(),
+    card: ids[f.card] ?? fail(`friction ${i}: card ${f.card} does not exist`),
+    at: ago(f.ago ?? '0s'),
+    what: f.what,
+    cost: f.cost,
+    fix: f.fix,
+  });
+for (const [i, p] of (stage.settingProposals ?? []).entries())
+  db.query('INSERT INTO setting_proposals (canvas_id, repo, field, value, basis, cards, created_at) VALUES ($c, $repo, $field, $value, $basis, $cards, $at)').run({
+    c: canvas,
+    repo: p.repo ?? homeRepo(),
+    field: p.field,
+    value: JSON.stringify(p.value),
+    basis: p.basis,
+    cards: JSON.stringify(p.cards.map((k) => ids[k] ?? fail(`setting proposal ${i}: card ${k} does not exist`))),
+    at: new Date().toISOString(),
+  });
 db.close();
 // the server keeps a snapshot of the canvas: a change through the API makes it read the database anew
 const first = stage.cards.find((c) => !c.project && !c.workstream);
