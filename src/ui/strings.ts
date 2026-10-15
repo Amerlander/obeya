@@ -645,7 +645,7 @@ const de = {
     adapter: 'Adapter',
     adapterAuto: (picked?: string) => (picked ? `automatisch (${picked})` : 'automatisch'),
     adapterHint:
-      'Was Obeya über ein Repository weiß, wo dessen Einstellungen nichts sagen. „generic“ passt auf jedes Repository und weiß nichts vom Projekt: alles kommt aus den Einstellungen. „obeya“ ist nur für Obeyas eigenes Repository. Ein Repository kann einen eigenen Adapter in .obeya/adapter/ mitbringen, dann nimmt „automatisch“ ihn. Code braucht es dort nur für das, was Einstellungen nicht sagen können: die App starten und stoppen, Demos auf einer Website teilen, den Namen der Leinwand.',
+      'Der Adapter ergänzt die Einstellungen um das, was sie nicht sagen können: wie Obeya die App startet und stoppt, wo Demos geteilt werden, wie die Leinwand heißt. Das ist Code, den ein Repository in .obeya/adapter/ mitbringt; „automatisch“ nimmt ihn, wo es ihn gibt. Sonst gilt „generic“: Er passt auf jedes Repository und ergänzt nichts, alles kommt aus den Einstellungen. „obeya“ ist der Adapter von Obeyas eigenem Repository.',
     adapterSetupHint:
       'Obeya weiß noch nicht, wie diese App startet, welche Prüfungen laufen und wie ein Agent sie für eine Demo startet. Trag es in den Einstellungen selbst ein, oder lass einen Agenten das Repository lesen, die Einstellungen für alle ausfüllen und eine Demo damit ausprobieren.',
     adapterSetup: 'Von einem Agenten ausfüllen lassen',
@@ -711,9 +711,6 @@ const de = {
       workspacesClones: 'In Klonen, weil oben Klone eingetragen sind.',
       prNoise: 'Konten ohne Review',
       prNoiseHint: 'Konten, deren Kommentare an Pull Requests kein Review sind (Deploy-Bots), eines pro Zeile.',
-      demoRequired: 'Demo',
-      demoRequiredLabel: 'Ein Agent übergibt nur mit Demo',
-      demoRequiredHint: 'Ohne Haken zeigt ein Agent eine Demo nur, wo er sie für hilfreich hält, und darf mit einer schriftlichen Zusammenfassung allein übergeben.',
       howToRun: 'App für die Demo starten',
       howToRunHint: 'Wie ein Agent die App für eine Demo startet: Login, Testdaten, Migrationen. Bleibt es leer, findet jeder Agent es selbst im Repository heraus.',
       share: {
@@ -721,7 +718,7 @@ const de = {
         button: (n: number) => (n === 1 ? 'Für alle ins Repository übernehmen (ein Wert) …' : `Für alle ins Repository übernehmen (${n} Werte) …`),
         hint: 'Schreibt die Werte, die auf diesem Rechner gesetzt sind, nach .obeya/settings.json im Repository. Wer es klont, bekommt sie mit; hier kommen sie dann aus dem Repository.',
         hintBranch: 'Der Hauptbranch, den du hier gesetzt hast, bleibt auf diesem Rechner: Von ihm liest Obeya die Datei, deshalb steht er nicht darin.',
-        saveFirst: 'Der Dialog hat noch ungespeicherte Änderungen. Speichere sie zuerst mit dem Knopf ganz unten; danach schreibt dieser Knopf die gespeicherten Werte ins Repository.',
+        saveFirst: 'Der Dialog hat noch ungespeicherte Änderungen. Speichere sie zuerst ganz unten im Dialog; danach schreibt diese Schaltfläche die gespeicherten Werte ins Repository.',
         none: 'Auf diesem Rechner ist nichts gesetzt, was ins Repository könnte.',
         toMain: (branch: string) => `Obeya committet die Datei auf ${branch}, ohne den Checkout sonst anzufassen:`,
         toPr: (branch: string) => `Obeya öffnet dafür einen Pull Request gegen ${branch}; bis er gemergt ist, gelten die Werte weiter nur auf diesem Rechner:`,
@@ -959,7 +956,7 @@ const de = {
     sections: {
       needed: { title: 'Agenten', hint: 'Ohne Claude Code und git arbeitet kein Agent. Claude Code läuft auf deinem Claude-Abo; die Agenten committen unter deinem Namen.' },
       pr: { title: 'Pull Requests', hint: 'Freigegebene Arbeit geht als Pull Request auf GitHub, außer der eigene Obeya-Adapter eines Repositories sagt etwas anderes. Nötig erst bei der ersten Freigabe.' },
-      voice: { title: 'Sprachbefehle', hint: 'Leertaste halten und sagen, was zu tun ist; in der App auch, während ein anderes Programm vorne ist, mit der rechten Wahltaste (Mac) oder rechten Strg-Taste, in den Einstellungen änderbar. Obeya bestätigt schriftlich: auf der Karte oder in Obeyas Fenster (Knopf oben rechts, Taste K).' },
+      voice: { title: 'Sprachbefehle', hint: 'Leertaste halten und sagen, was zu tun ist; in der App auch, während ein anderes Programm vorne ist, mit der rechten Wahltaste (Mac) oder rechten Strg-Taste, in den Einstellungen änderbar. Obeya bestätigt schriftlich: auf der Karte oder in Obeyas Fenster (Schaltfläche oben rechts, Taste K).' },
       demos: { title: 'Demos', hint: 'Agenten zeigen ihre Arbeit als vertontes Video. Ohne das schicken sie eine Zusammenfassung.' },
     } satisfies Record<MachineSectionId, { title: string; hint: string }>,
     names: {
@@ -1863,7 +1860,7 @@ const en: Strings = {
     adapter: 'Adapter',
     adapterAuto: (picked?: string) => (picked ? `automatic (${picked})` : 'automatic'),
     adapterHint:
-      'What Obeya knows about a repository where its settings say nothing. “generic” fits any repository and knows nothing of the project: everything comes from the settings. “obeya” is for Obeya’s own repository only. A repository can bring an adapter of its own in .obeya/adapter/; “automatic” then picks it. Code is needed there only for what settings cannot say: starting and stopping the app, sharing demos on a website, the canvas’s name.',
+      'The adapter adds what the settings cannot say: how Obeya starts and stops the app, where demos are shared, what the canvas is called. It is code a repository brings in .obeya/adapter/; “automatic” picks it where there is one. Otherwise “generic” applies: it fits any repository and adds nothing, so everything comes from the settings. “obeya” is the adapter of Obeya’s own repository.',
     adapterSetupHint:
       'Obeya does not know yet how this app starts, which checks run or how an agent runs it for a demo. Fill it in under Settings yourself, or let an agent read the repository, fill in the settings for everyone and try a demo with them.',
     adapterSetup: 'Have an agent fill them in',
@@ -1929,9 +1926,6 @@ const en: Strings = {
       workspacesClones: 'In clones, since clones are listed above.',
       prNoise: 'Accounts without review',
       prNoiseHint: 'Accounts whose pull request comments are not review feedback (deploy bots), one per line.',
-      demoRequired: 'Demo',
-      demoRequiredLabel: 'An agent hands over only with a demo',
-      demoRequiredHint: 'Unticked, an agent shows a demo only where it thinks it helps, and may hand over with a written summary alone.',
       howToRun: 'Run the app for a demo',
       howToRunHint: 'How an agent runs the app for a demo: login, test data, migrations. Left empty, each agent finds it out from the repository itself.',
       share: {
@@ -1939,7 +1933,7 @@ const en: Strings = {
         button: (n: number) => (n === 1 ? 'Take over into the repository for everyone (one value) …' : `Take over into the repository for everyone (${n} values) …`),
         hint: 'Writes the values set on this machine to .obeya/settings.json in the repository. Whoever clones it gets them; here they then come from the repository.',
         hintBranch: 'The main branch you set here stays on this machine: Obeya reads the file from it, so it is not in it.',
-        saveFirst: 'The dialog has changes that are not saved yet. Save them first with the button at the very bottom; then this button writes the saved values into the repository.',
+        saveFirst: 'The dialog has changes that are not saved yet. Save them first at the very bottom of the dialog; then this button writes the saved values into the repository.',
         none: 'Nothing is set on this machine that could go into the repository.',
         toMain: (branch: string) => `Obeya commits the file on ${branch}, leaving the rest of the checkout as it is:`,
         toPr: (branch: string) => `Obeya opens a pull request against ${branch} for it; until it is merged, the values still apply only on this machine:`,

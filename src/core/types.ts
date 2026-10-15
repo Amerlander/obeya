@@ -184,7 +184,7 @@ export interface Item {
   held?: number[];
   /** The owner approved the work and Obeya lands it on main (seconds of git): still `waiting`, but no longer the owner's. */
   landing?: true;
-  /** Why the worker handed over without a demo, in the rare case there was nothing to show (`need` is `review`). */
+  /** Why the worker handed over without a demo (`need` is `review`), on cards from before every handover brought one (2026-10-15). */
   noDemo?: string;
   /** The demo, when `need` is `demo`; its files are served under `/api/cards/:id/demo/`. */
   demo?: Demo;
@@ -1016,7 +1016,7 @@ export interface RepoSettings {
   softPaths?: string[];
   workspaces?: 'clones' | 'worktrees';
   prNoise?: string[];
-  demo?: { required?: boolean; howToRun?: string };
+  demo?: { howToRun?: string };
 }
 
 /**
@@ -1029,7 +1029,7 @@ export type SharedSettings = Omit<RepoSettings, 'branch'>;
 /** The fields of `SharedSettings`, in the dialog's order. */
 export const SHARED_FIELDS = ['land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'demo'] as const satisfies readonly (keyof SharedSettings)[];
 
-/** `over` in front of `under`, field by field; the demo's two fields each on its own. */
+/** `over` in front of `under`, field by field; the demo's fields each on its own. */
 export function layerSettings<T extends RepoSettings>(under: T | undefined, over: T | undefined): T | undefined {
   if (!under) return over;
   if (!over) return under;
@@ -1061,7 +1061,7 @@ export interface RepoValues {
   softPaths: SettingValue<string[]>;
   workspaces: SettingValue<'clones' | 'worktrees'>;
   prNoise: SettingValue<string[]>;
-  demo: { required: SettingValue<boolean>; howToRun: SettingValue<string> };
+  demo: { howToRun: SettingValue<string> };
 }
 
 /**

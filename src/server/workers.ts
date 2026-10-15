@@ -1922,7 +1922,7 @@ export class Workers {
       },
       {
         name: 'ready_for_review',
-        description: `Hand the finished work to the owner, after committing it, running the checks${this.o.adapter.demo ? ' and making the demo' : ''}. The summary (in ${language}) is the whole report the owner reads: what changed from the user's point of view and what they really need to know (something left open or not verified, a decision you took for them), in a few short paragraphs at most. A problem you noticed outside the task goes to propose_card, not into the summary. ${this.o.adapter.demo?.required ? 'The demo is required: ' : 'With a demo, pass '}a video's directory and chapter titles in scene order, or an HTML artifact's directory, with its report (in ${language}); without a new one, the demo already on the card stands. Only when there is nothing to show at all, pass no_demo instead. Then end your turn.`,
+        description: `Hand the finished work to the owner, after committing it, running the checks and making the demo. The summary (in ${language}) is the whole report the owner reads: what changed from the user's point of view and what they really need to know (something left open or not verified, a decision you took for them), in a few short paragraphs at most. A problem you noticed outside the task goes to propose_card, not into the summary. The demo: a video's directory and chapter titles in scene order, or an HTML artifact's directory, with its report (in ${language}); without a new one, the demo already on the card stands. Then end your turn.`,
         schema: {
           summary: z.string(),
           demo: z
@@ -1946,29 +1946,23 @@ export class Workers {
                 : {}),
             })
             .optional(),
-          no_demo: z
-            .string()
-            .optional()
-            .describe(`the exception, for when there is nothing to show (the work turned out to be done already, say): why, in ${language}; the summary then stands alone`),
         },
-        run: ({ summary, demo, no_demo }) => {
+        run: ({ summary, demo }) => {
           type Demo = { kind?: DemoKind; dir: string; chapters?: string[]; question?: string; page?: DemoPage };
           const given = demo as Demo | undefined;
           const handOverWork = (d: Demo | undefined): string => {
             const s = clip(String(summary), 6000);
-            const none = typeof no_demo === 'string' && no_demo.trim() ? clip(no_demo.trim(), 1000) : undefined;
             const row = this.o.board.row(cardId);
             if (row.landed) return 'Not handed over: your work is on main already.';
             if (row.pr) return 'Not handed over: the work is in its pull request, where Obeya follows it.';
-            if (d && none) return 'Not handed over: pass either a demo or no_demo, not both.';
             // approved work that could not land comes back to be landed, not reviewed: its demo stands
             const approved = !!row.approved_at;
             // a handover in answer to the owner's words that brings no new demo is an answer to them, not a demo to watch
             const answered = !d && !!row.detail && !!(JSON.parse(row.detail) as { answering?: boolean }).answering;
-            // without a new demo, the one on the card stands, unless the worker says there is nothing to show
-            const kept = !d && !none && !!row.demo;
-            if (!d && !kept && !none && this.o.adapter.demo?.required && !approved)
-              return `Not handed over: this repository requires a demo. Record it with ${this.demoSkill(cardId)}, or make an HTML artifact when the result is something to look at, then call ready_for_review again with it. Only if there is nothing to show at all, pass no_demo with the reason.`;
+            // without a new demo, the one on the card stands
+            const kept = !d && !!row.demo;
+            if (!d && !kept && !approved)
+              return `Not handed over: every handover brings a demo. Record it with ${this.demoSkill(cardId)}, or make an HTML artifact when the result is something to look at, then call ready_for_review again with it.`;
             let demoJson: string | undefined;
             if (d) {
               const kind = d.kind ?? 'video';
@@ -1989,7 +1983,7 @@ export class Workers {
               }
             }
             handOver();
-            const e = this.o.board.log(cardId, 'review', 'worker', none ? `${s}\n\n${this.o.board.t.worker.noDemo(none)}` : s);
+            const e = this.o.board.log(cardId, 'review', 'worker', s);
             // the demo report's question goes with the handover it came with, also once a later one keeps the demo
             if (demoJson) demoJson = JSON.stringify({ ...(JSON.parse(demoJson) as object), handover: e.id });
             // approved work does not wait for the owner again: it stays with Obeya until its turn has ended
@@ -1997,10 +1991,8 @@ export class Workers {
               // the worker's last status line is about the work it hands over: it would show again once the card is at work
               ...(approved ? { status_line: this.o.board.t.worker.landing } : { state: 'waiting', need: d || kept ? 'demo' : 'review', status_line: null }),
               // approving work that changes nothing makes the card done, which the owner sees before approving
-              detail: JSON.stringify({ summary: s, ...(none ? { noDemo: none } : {}), ...(this.o.workspaces.hasWork(cardId) ? {} : { noChange: true }), ...(answered && !approved ? { answered: true } : {}) }),
+              detail: JSON.stringify({ summary: s, ...(this.o.workspaces.hasWork(cardId) ? {} : { noChange: true }), ...(answered && !approved ? { answered: true } : {}) }),
               ...(demoJson ? { demo: demoJson } : {}),
-              // an earlier demo would show on the finished card as if it were this work's
-              ...(none && !approved ? { demo: null } : {}),
             });
             const card = this.o.board.item(cardId);
             if (card?.prototypeOf) this.o.onPrototype?.(card, s, demoJson);
@@ -2213,15 +2205,15 @@ ${idea.idea.brief}` : '',
         `To run the app in your workspace: \`${stack.start}\`; after a backend change, \`${stack.refresh}\` rather than starting it all again. Once it runs, the frontend's URL is in \`${stack.urls.file}\` under ${stack.urls.frontendKey}.${stack.stop ? ' While the card waits for the owner, Obeya stops the stack; your next message then says so.' : ''}`,
       );
     if (this.o.adapter.checks?.length && !card.prototypeOf) parts.push(`Before ready_for_review, run: ${this.o.adapter.checks.map((c) => `\`${c}\``).join(', ')}.`);
-    if (this.o.adapter.demo)
-      parts.push(
-        [
-          `${this.o.adapter.demo.required ? 'Then show' : 'Where it helps the owner, show'} the owner the result, so they can judge at a glance whether the work is done, and hand it over with ready_for_review.`,
-          `Usually that is a demo of the change, recorded with ${this.demoSkill(card.id)} as its instructions say (directory, chapter titles). Its length follows the size of the change, never padded: 30–60 s for a small one (a fix: the broken behaviour, then the fixed one), 1½–3 min for a larger one. Skip the skill's last steps (opening the page, the notification, the chat reply): Obeya shows the demo on the card.${this.shares ? ' The owner may share the demo, a video or an HTML artifact, with colleagues of the team on a page of its own: hand it over with that page (title, text), written for them.' : ''} ${this.o.adapter.demo.howToRun.trim() ? `How to run the app for the demo: ${this.o.adapter.demo.howToRun}` : "The repository's settings say nothing yet about how to run the app for a demo: find it out from the repository (README, scripts, configuration) and say in your summary how you ran it."}`,
-          "When the result is something to look at rather than something that happens (drafts of a logo or a layout side by side, a comparison of variants, an analysis), make an HTML artifact instead: an index.html in a new directory under ~/demos/ (never in git), self-contained or with the files it loads beside it, made for the owner to decide on, and hand it over with kind 'html'. It shows in a sandboxed frame on the card, about 800 px wide, without Obeya's API.",
-          `Only when there is nothing to show at all (the task turned out to be done already, say), hand over with no_demo and why instead. That is the exception: the owner wants something to see.`,
-        ].join(' '),
-      );
+    const howToRun = this.o.adapter.demo?.howToRun.trim();
+    parts.push(
+      [
+        `Then show the owner the result with a demo, so they can judge at a glance whether the work is done, and hand it over with ready_for_review.`,
+        `Usually that is a video of the change, recorded with ${this.demoSkill(card.id)} as its instructions say (directory, chapter titles). Its length follows the size of the change, never padded: 30–60 s for a small one (a fix: the broken behaviour, then the fixed one), 1½–3 min for a larger one. Skip the skill's last steps (opening the page, the notification, the chat reply): Obeya shows the demo on the card.${this.shares ? ' The owner may share the demo, a video or an HTML artifact, with colleagues of the team on a page of its own: hand it over with that page (title, text), written for them.' : ''} ${howToRun ? `How to run the app for the demo: ${howToRun}` : "The repository's settings say nothing yet about how to run the app for a demo: find it out from the repository (README, scripts, configuration) and say in your summary how you ran it."}`,
+        "When the result is something to look at rather than something that happens (drafts of a logo or a layout side by side, a comparison of variants, an analysis, an answer), make an HTML artifact instead: an index.html in a new directory under ~/demos/ (never in git), self-contained or with the files it loads beside it, made for the owner to decide on, and hand it over with kind 'html'. It shows in a sandboxed frame on the card, about 800 px wide, without Obeya's API.",
+        'Where either would do, record the video: watching the work happen is what the owner enjoys most.',
+      ].join(' '),
+    );
     return parts.join('\n\n');
   }
 

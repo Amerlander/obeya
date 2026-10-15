@@ -3,8 +3,6 @@
 import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { generic } from '../adapters/generic';
-import type { RepoAdapter } from '../adapters/types';
 import type { Forge } from './forge';
 import type { AgentEvent, AgentRuntime, AgentSession, AgentSpec, PermissionAnswer } from './runtime';
 import { git } from './workspaces';
@@ -158,5 +156,10 @@ exec sh -c "$*"
   return program;
 }
 
-/** The generic adapter of a repository whose settings leave demos to the worker: a handover may be a summary alone. */
-export const noDemos: RepoAdapter = { ...generic, demo: { required: false, howToRun: '' } };
+
+/** A demo for a handover in a test that is not about demos: an HTML artifact in a directory of its own. */
+export function artifact(): { kind: 'html'; dir: string } {
+  const dir = mkdtempSync(join(tmpdir(), 'obeya-artifact-'));
+  writeFileSync(join(dir, 'index.html'), '<p>Ergebnis</p>\n');
+  return { kind: 'html', dir };
+}

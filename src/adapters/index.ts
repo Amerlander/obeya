@@ -99,7 +99,7 @@ export function withSettings(a: RepoAdapter, settings: () => RepoSettings | unde
         const s = settings();
         if (field !== 'demo') return s?.[field] ?? a[field];
         if (!s?.demo) return a.demo;
-        return { required: false, howToRun: '', ...a.demo, ...s.demo };
+        return { howToRun: '', ...a.demo, ...(s.demo.howToRun !== undefined ? { howToRun: s.demo.howToRun } : {}) };
       },
     });
   const p = problems.get(a);
@@ -121,7 +121,6 @@ export function repoValues(a: RepoAdapter, repo: RepoInfo, clones = false, share
   const value = <K extends Exclude<keyof SharedSettings, 'demo'>, T>(v: T, field: K) =>
     shared[field] !== undefined ? { value: shared[field] as T, source: 'repository' as const } : { value: v, source: from(field) };
   const demo = own.demo ? 'adapter' : 'default';
-  const required = shared.demo?.required;
   const howToRun = shared.demo?.howToRun;
   return {
     branch: { value: detectedBranch(repo.path), source: 'detected' },
@@ -134,7 +133,6 @@ export function repoValues(a: RepoAdapter, repo: RepoInfo, clones = false, share
     workspaces: clones ? { value: 'clones', source: 'clones' } : value(a.workspaces, 'workspaces'),
     prNoise: value(a.prNoise ?? [], 'prNoise'),
     demo: {
-      required: required !== undefined ? { value: required, source: 'repository' } : { value: !!a.demo?.required, source: demo },
       howToRun: howToRun !== undefined ? { value: howToRun, source: 'repository' } : { value: a.demo?.howToRun ?? '', source: demo },
     },
   };

@@ -111,7 +111,7 @@ describe('pickAdapter', () => {
       land: 'merge',
       softPaths: 'docs/',
       canvasName: 'Shop',
-      demo: { required: true, howtorun: 'bun dev' },
+      demo: { howtorun: 'bun dev' },
       stack: { start: 'bun dev', refresh: 'bun dev', urls: { file: '.env', frontend: 'URL' } },
       workspaces: 'worktrees',
     };\n`;
@@ -131,12 +131,16 @@ describe('pickAdapter', () => {
     // what is wrong goes, detection's or the generic adapter's stands in its place: without a remote, work lands on main
     expect(a).toMatchObject({ name: 'shop', land: 'main', softPaths: ['docs/plan/'], workspaces: 'worktrees' });
     expect(a.canvasName(repoInfo(repo))).toBe('shop');
-    expect(a.demo).toEqual({ required: true, howToRun: '' });
+    expect(a.demo).toEqual({ howToRun: '' });
     expect(a.stack).toBeUndefined();
     expect('check' in a).toBe(false);
     // one without mistakes has none, a built-in one neither
     expect(adapterProblems(pickAdapter(repoInfo(gitRepo(join(dir, 'ok'), { '.obeya/adapter/index.ts': OWN('ok') }))))).toEqual([]);
     expect(adapterProblems(pickAdapter(repoInfo(repo), 'generic'))).toEqual([]);
+    // one from before every handover had a demo still says whether it needs one: that is no mistake, only no longer read
+    const before = `export default { name: 'old', demo: { required: false, howToRun: 'bun dev' } };\n`;
+    expect(adapterProblems(pickAdapter(repoInfo(gitRepo(join(dir, 'old'), { '.obeya/adapter/index.ts': before }))))).toEqual([]);
+    expect(parseShared('{ "demo": { "required": true, "howToRun": "bun dev" } }').problems).toEqual([]);
   });
 });
 
@@ -147,14 +151,12 @@ describe('withSettings', () => {
     expect([a.land, a.checks, a.workspaces]).toEqual(['main', ['bun test'], 'clones']);
     s = { checks: [], workspaces: 'worktrees' };
     expect([a.land, a.checks, a.workspaces]).toEqual(['pr', [], 'clones']);
-    // the generic adapter requires a demo without a recipe; what is set here goes in front of it, beside the adapter's own fields
-    expect(a.demo).toEqual({ required: true, howToRun: '' });
-    s = { demo: { required: false } };
-    expect(a.demo).toEqual({ required: false, howToRun: '' });
+    // the generic adapter has no recipe for a demo; one set here goes in front of it, beside the adapter's own fields
+    expect(a.demo).toEqual({ howToRun: '' });
     s = { demo: { howToRun: 'bun dev' } };
-    expect(a.demo).toEqual({ required: true, howToRun: 'bun dev' });
-    const b = withSettings({ ...generic, demo: { required: true, howToRun: 'bun dev', share: ['x'] } }, () => ({ demo: { required: false } }));
-    expect(b.demo).toEqual({ required: false, howToRun: 'bun dev', share: ['x'] });
+    expect(a.demo).toEqual({ howToRun: 'bun dev' });
+    const b = withSettings({ ...generic, demo: { howToRun: 'bun dev', share: ['x'] } }, () => ({ demo: { howToRun: 'bun start' } }));
+    expect(b.demo).toEqual({ howToRun: 'bun start', share: ['x'] });
     // the configuration's clones go before the setting
     expect(withSettings(generic, () => ({ workspaces: 'worktrees' }), true).workspaces).toBe('clones');
   });
@@ -191,7 +193,7 @@ describe(".obeya/settings.json", () => {
       checks: { value: ['bun test'], source: 'repository' },
       setup: { value: 'bun install', source: 'repository' },
       land: { value: 'main', source: 'adapter' },
-      demo: { howToRun: { value: 'bun dev', source: 'repository' }, required: { value: true, source: 'default' } },
+      demo: { howToRun: { value: 'bun dev', source: 'repository' } },
     });
   });
 });

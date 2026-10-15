@@ -136,7 +136,7 @@ describe("Obeya's configuration", () => {
 
   test("a misspelt field in a repository's own adapter is a problem at the repository, which keeps nothing from being saved", () => {
     const own = gitRepo(join(dir, 'shop'), {
-      '.obeya/adapter/index.ts': "export default { name: 'shop', check: ['bun test'], demo: { required: false, howToRun: 'bun dev', share: ['no-such-program-anywhere'] } };\n",
+      '.obeya/adapter/index.ts': "export default { name: 'shop', check: ['bun test'], demo: { howToRun: 'bun dev', share: ['no-such-program-anywhere'] } };\n",
     });
     const c = config('args', [{ repos: [{ path: web }] }]);
     const checked = c.check([{ repos: [{ path: web }, { path: own }] }]);
@@ -152,7 +152,7 @@ describe("Obeya's configuration", () => {
   test("an adapter naming both a site and a share command: the site is used, and the command is a problem", () => {
     const site = { title: 'Demos', url: 'https://demos.example.dev', deploy: ['no-such-deploy-anywhere', '{dir}'] };
     const own = gitRepo(join(dir, 'shop'), {
-      '.obeya/adapter/index.ts': `export default { name: 'shop', demo: { required: false, howToRun: 'bun dev', share: ['git'], site: ${JSON.stringify(site)} } };\n`,
+      '.obeya/adapter/index.ts': `export default { name: 'shop', demo: { howToRun: 'bun dev', share: ['git'], site: ${JSON.stringify(site)} } };\n`,
     });
     const c = config('args', [{ repos: [{ path: web }] }]);
     const checked = c.check([{ repos: [{ path: own }] }]);
@@ -228,10 +228,10 @@ describe("Obeya's configuration", () => {
       checks: { value: [], source: 'default' },
       planDocs: { value: { dir: 'docs/plan' }, source: 'default' },
       workspaces: { value: 'worktrees', source: 'default' },
-      demo: { required: { value: true, source: 'default' } },
+      demo: { howToRun: { value: '', source: 'default' } },
     });
     // this machine's own come on top, in the draft: the values beside them stay what they would be without
-    expect(values({ adapter: 'obeya', settings: { land: 'pr' } })).toMatchObject({ land: { value: 'main', source: 'adapter' }, checks: { source: 'adapter' }, planDocs: { source: 'default' }, demo: { required: { value: true, source: 'adapter' } } });
+    expect(values({ adapter: 'obeya', settings: { land: 'pr' } })).toMatchObject({ land: { value: 'main', source: 'adapter' }, checks: { source: 'adapter' }, planDocs: { source: 'default' }, demo: { howToRun: { source: 'adapter' } } });
     expect(values({ clones: 1 }).workspaces).toEqual({ value: 'clones', source: 'clones' });
     const problems = (branch: string) => c.check([{ repos: [{ path: web, settings: { branch } }] }]).problems.map((p) => p.code);
     expect(problems('main')).toEqual([]);

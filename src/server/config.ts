@@ -59,7 +59,7 @@ function tidySettings(s: z.infer<typeof settingsShape> | undefined): RepoSetting
   if (!s) return undefined;
   const list = (l?: string[]) => l?.map((x) => x.trim()).filter(Boolean);
   const dir = s.planDocs?.dir.trim().replace(/\/+$/, '');
-  const demo = s.demo && { ...(s.demo.required !== undefined ? { required: s.demo.required } : {}), ...(s.demo.howToRun !== undefined ? { howToRun: s.demo.howToRun.trim() } : {}) };
+  const demo = s.demo?.howToRun !== undefined ? { howToRun: s.demo.howToRun.trim() } : undefined;
   const out: RepoSettings = {
     ...(s.branch?.trim() ? { branch: s.branch.trim() } : {}),
     ...(s.land ? { land: s.land } : {}),
@@ -277,7 +277,7 @@ export class Config {
         if (k === 'demo') continue;
         if (s[k] !== undefined && same(s[k], after[k]) && !same(before?.[k], after[k])) delete s[k];
       }
-      for (const k of ['required', 'howToRun'] as const)
+      for (const k of ['howToRun'] as const)
         if (s.demo?.[k] !== undefined && same(s.demo[k], after.demo?.[k]) && !same(before?.demo?.[k], after.demo?.[k])) delete s.demo[k];
     });
     if (changed) console.log(`Obeya: settings of ${path} now come from its ${REPO_SETTINGS_FILE}; removed from this machine's`);

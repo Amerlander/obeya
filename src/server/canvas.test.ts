@@ -6,7 +6,7 @@ import { boundsOf, CARD_SIZE } from '../core/layout';
 import type { RepoConfig, RepoSettings } from '../core/types';
 import { Canvases, CanvasRuntime, startCanvases } from './canvas';
 import { Store } from './db';
-import { FakeRuntime, gitRepo, identify, noForge, prAdapter, until } from './testing';
+import { artifact, FakeRuntime, gitRepo, identify, noForge, prAdapter, until } from './testing';
 import { git, HERE } from './workspaces';
 
 let dir: string;
@@ -308,7 +308,7 @@ describe('where the adapter does not say how work lands', () => {
     identify(ws);
     writeFileSync(join(ws, 'README.md'), 'Shop\n');
     git(ws, 'commit', '--quiet', '-am', 'Readme');
-    workers.last.call('ready_for_review', { summary: 'Readme', no_demo: 'Nur die Readme.' });
+    workers.last.call('ready_for_review', { summary: 'Readme', demo: artifact() });
     workers.last.emit({ type: 'idle' });
     await canvas.repos[0]!.workers.approve(card.id);
     expect(item(card.id).state).toBe('live');
@@ -344,7 +344,7 @@ describe("a repository's settings for this machine", () => {
     identify(shop);
     writeFileSync(join(ws, 'README.md'), 'Shop\n');
     git(ws, 'commit', '--quiet', '-am', 'Readme');
-    workers.last.call('ready_for_review', { summary: 'Readme', no_demo: 'Nur die Readme.' });
+    workers.last.call('ready_for_review', { summary: 'Readme', demo: artifact() });
     workers.last.emit({ type: 'idle' });
 
     settings = { land: 'main' };

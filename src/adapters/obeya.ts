@@ -14,7 +14,6 @@ export const obeya: RepoAdapter = {
   workspaces: 'worktrees',
   softPaths: ['docs/'],
   demo: {
-    required: true,
     howToRun: [
       'a scratch Obeya from your worktree, staged by `bun scripts/scratch-obeya.ts <stage.json>` (its header describes the stage file): a fresh repository with plan docs, a fresh OBEYA_HOME and the cards in the states the demo needs, in about a second.',
       "Keep `stage.json` in the demo directory and stage afresh before every take: call the script from the demo's `login` (`execFileSync('bun', [`${worktree}/scripts/scratch-obeya.ts`, `${import.meta.dirname}/stage.json`])`) and record against the `url` it prints.",

@@ -10,7 +10,7 @@ import { Store } from './db';
 import { AppUpdates } from './app-update';
 import { Restarter } from './self-update';
 import { serve } from './server';
-import { FakeRuntime, gitRepo, identify, noForge, until } from './testing';
+import { artifact, FakeRuntime, gitRepo, identify, noForge, until } from './testing';
 import { git } from './workspaces';
 import type { Transcript } from './voice';
 
@@ -796,7 +796,7 @@ describe('landing approved work', () => {
       writeFileSync(join(clone, `${title}.ts`), title);
       git(clone, 'add', '.');
       git(clone, 'commit', '--quiet', '-m', title);
-      session.call('ready_for_review', { summary: 'S', no_demo: 'Nichts zu zeigen.' });
+      session.call('ready_for_review', { summary: 'S', demo: artifact() });
       session.emit({ type: 'idle' });
       return c;
     };

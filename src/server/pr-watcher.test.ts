@@ -2,12 +2,13 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { generic } from '../adapters/generic';
 import { needsYou } from '../core/types';
 import { Board } from './board';
 import { Store } from './db';
 import type { Forge, PrStatus } from './forge';
 import { PrWatcher } from './pr-watcher';
-import { FakeRuntime, gitRepo, noDemos } from './testing';
+import { artifact, FakeRuntime, gitRepo } from './testing';
 import { Workers } from './workers';
 import { git, Workspaces } from './workspaces';
 
@@ -34,7 +35,7 @@ beforeEach(() => {
   workspaces.ensureClones(main, 1);
   runtime = new FakeRuntime();
   opened = [];
-  workers = new Workers({ board, runtime, workspaces, adapter: { ...noDemos, land: 'pr', workspaces: 'clones' }, onPrOpened: (id) => opened.push(id) });
+  workers = new Workers({ board, runtime, workspaces, adapter: { ...generic, land: 'pr', workspaces: 'clones' }, onPrOpened: (id) => opened.push(id) });
   status = { state: 'OPEN', mergeable: 'MERGEABLE', mergeState: 'CLEAN', head: 'aaa', author: 'owner', checks: [], comments: [] };
   merges = [];
   refuse = undefined;
@@ -71,7 +72,7 @@ async function inPr() {
   const c = board.create({ title: 'Export', x: 0, y: 0 });
   workers.start(c.id);
   commit(c.id);
-  runtime.last.call('ready_for_review', { summary: 'S' });
+  runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
   await workers.approve(c.id);
   return c.id;
 }
@@ -97,7 +98,7 @@ describe('the PR phase', () => {
     const c = board.create({ title: 'Export', x: 0, y: 0 });
     workers.start(c.id);
     commit(c.id);
-    runtime.last.call('ready_for_review', { summary: 'S' });
+    runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
     board.work(c.id, { share: JSON.stringify({ slug: 'export', url: 'https://demos.example/export/', dir: '/d' }) });
     await workers.approve(c.id);
     expect(runtime.last.inbox.at(-1)).toContain('shared with the team on a page of its own: https://demos.example/export/. Link it');

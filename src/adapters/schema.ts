@@ -22,7 +22,8 @@ const site = z
     language: z.enum(['de', 'en']).optional(),
   })
   .strict();
-const demo = z.object({ required: z.boolean(), howToRun: z.string(), share: strings.min(1).optional(), site: site.optional() }).strict();
+// `required` said until 2026-10-15 whether a handover needed a demo; every one does now, and an adapter that still says it loads without a problem
+const demo = z.object({ required: z.boolean().optional(), howToRun: z.string(), share: strings.min(1).optional(), site: site.optional() }).strict();
 const stack = z
   .object({
     start: z.string(),
@@ -65,6 +66,7 @@ export const settingsShape = z
     softPaths: strings.optional(),
     workspaces: z.enum(['clones', 'worktrees']).optional(),
     prNoise: strings.optional(),
+    // `required`: no longer read, as in an adapter's `demo`
     demo: z.object({ required: z.boolean().optional(), howToRun: z.string().optional() }).strict().optional(),
   })
   .strict();
@@ -99,7 +101,7 @@ export function checkAdapter(made: Record<string, unknown>): { adapter: Partial<
  * fields that are wrong, and one line per problem.
  */
 export function checkShared(made: Record<string, unknown>): { settings: SharedSettings; problems: string[] } {
-  const { kept, problems } = checkFields(sharedShape, made, { '': Object.keys(sharedShape.shape), planDocs: ['dir', 'exclude'], demo: ['required', 'howToRun'] });
+  const { kept, problems } = checkFields(sharedShape, made, { '': Object.keys(sharedShape.shape), planDocs: ['dir', 'exclude'], demo: ['howToRun'] });
   // the main branch says where the file is read from, so it is set on each machine
   return { settings: kept as SharedSettings, problems: problems.map((p) => (p.startsWith('branch: ') ? 'branch: the main branch is set on each machine (or detected), not in the repository' : p)) };
 }

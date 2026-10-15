@@ -60,7 +60,7 @@ console.log(
     `land: ${adapter.land}${adapter.direct ? ' (direct allowed)' : ''}, workspaces: ${adapter.workspaces}`,
     `planDocs: ${show(adapter.planDocs)}, softPaths: ${show(adapter.softPaths)}`,
     ...planLines,
-    `demo: ${adapter.demo ? `required ${adapter.demo.required}; share ${show(adapter.demo.share)}${site ? `; site ${site.title} at ${site.url}, deploy ${show(site.deploy)}` : ''}\nhowToRun: ${adapter.demo.howToRun}` : '(none: a written summary is enough)'}`,
+    `demo: share ${show(adapter.demo?.share)}${site ? `; site ${site.title} at ${site.url}, deploy ${show(site.deploy)}` : ''}\nhowToRun: ${adapter.demo?.howToRun || '(none: each worker finds out from the repository how to run the app)'}`,
     ...(adapter.prNoise ? [`prNoise: ${show(adapter.prNoise)}`] : []),
     ...(adapter.stack ? [`stack: ${show(adapter.stack)}`] : []),
   ].join('\n'),

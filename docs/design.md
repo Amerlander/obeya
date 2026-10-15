@@ -26,9 +26,10 @@ visibly on the walls and decisions are made in front of the wall.
 - **Every change gets a demo.** Its length follows the size of the change, not its kind: a small
   one 30–60 s, a larger one 1½–3 min, never padded; projects one demo per workstream. Backend behaviour is shown through the app's own inspection views; "covered by
   tests" is no reason to leave it out. What is to be looked at rather than watched (logo drafts,
-  a layout, variants side by side) is shown as an HTML artifact instead of a video. Only when there
-  is nothing to show at all ("das gibt es schon") does the worker hand over without one, and says
-  why.
+  a layout, variants side by side, an analysis, an answer) is shown as an HTML artifact instead
+  of a video; the worker picks which, the video where either would do. There is no handover without
+  one (owner, 2026-10-15): until then a worker could hand over with `no_demo` and a reason where
+  there was nothing to show, and a repository's settings could leave demos to the worker.
 - **Voice first, mouse welcome.** Push-to-talk anywhere; buttons for the obvious actions. No live
   transcript: what the owner says to an open card's agent shows in its conversation, a command to
   Obeya gets a short written confirmation with undo. What was said and answered stays in the
@@ -56,12 +57,12 @@ visibly on the walls and decisions are made in front of the wall.
   archive; the last card leaving it ends it, and so does deleting it, which takes all its cards out.
 - **States** — `idea` → `planned` → `working` → `waiting` (demo ready | question) →
   `approved` → `in PR` → `live`, or `done` when the work changed no code; an agent's `proposal`
-  is started when accepted. Demos are required unless the repository's settings or adapter say
-  otherwise (the generic adapter requires them, with no recipe for running the app: the worker
-  then finds that out from the repository; until 2026-10-15 it had no demo at all, so a repository
-  without an adapter of its own got no word about demos, and ticking „Ein Agent übergibt nur mit
-  Demo“ there did nothing while the recipe was empty). Where they are not required, a worker may
-  hand over with a written summary alone: `waiting: review`. An idea is `open`, `parked` or `dropped`.
+  is started when accepted. Every handover brings a demo; where the repository has no recipe for
+  running its app (the generic adapter has none), the worker finds that out from the repository.
+  `waiting: review`, a handover with a written summary alone, is left only on cards from before
+  2026-10-15, when a repository's settings could leave demos to the worker („Ein Agent übergibt nur
+  mit Demo“, off for every repository without an adapter of its own, which then got no word about
+  demos). An idea is `open`, `parked` or `dropped`.
 - **Agents**
   - *Worker*, one per card while it is worked on: implementation, local reviews, demo.
   - *Project agent*, one per project, long-lived: knows the plan doc and the history of every
@@ -446,7 +447,7 @@ both as one text, picks first, for whoever reads it later (decision log, Koordin
 it from them. An answer leaves the card open, picked or written, and stands in its conversation at
 once; until 2026-10-15 an answer with a pick folded the card („Antwort ist beim Agenten.“), one
 without kept it open; `propose_card(title, task, reason, idea?, questions?)` (Card lifecycle, 1);
-`ready_for_review(summary, demo | no_demo)`, whose summary is the report the owner reads; and
+`ready_for_review(summary, demo)`, whose summary is the report the owner reads; and
 `to_obeya(request)`, for what the owner's words to it ask of Obeya rather than of the worker
 (Voice in). A turn that ends without `ask` or `ready_for_review` gets one nudge,
 then its last words become a question to the owner; when that turn failed in the session (the
@@ -2339,10 +2340,10 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   the report counts a scrollbar across the page's foot), and once the page has reported, the frame
   does not scroll (up to its cap of 30,000 px): before, the page came out a few pixels higher than
   the frame, or a page whose images grow with its width fitted only beside a scrollbar, and the
-  frame kept a bar of its own that scrolled by a few pixels. A handover with `no_demo` (the
-  reason) instead is the exception the worker's brief names as such: the card waits for review
-  with the buttons on top and the summary and the reason as the handover in its conversation, and a demo from an earlier handover leaves the card, since it
-  showed other work. Artifacts stay in `~/demos/`, never in git; a pull request links a demo
+  frame kept a bar of its own that scrolled by a few pixels. A handover without a demo is refused,
+  unless the card has one from an earlier handover, which then stands; until 2026-10-15 one with
+  `no_demo` (the reason) waited for review with the summary and the reason as its handover, and a
+  card from then still shows it so. Artifacts stay in `~/demos/`, never in git; a pull request links a demo
   only once it is shared (below).
 - **Sharing a demo** — every demo, video or HTML artifact, has "Teilen" above it, on waiting cards
   and on cards long done (archived ones too); prototypes are not shared. The button sits at the
@@ -2550,7 +2551,7 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
 - **Repository settings** (`settings` of a repository's entry in `canvases.json`, `RepoSettings`;
   for everyone `.obeya/settings.json` in the repository, `SharedSettings`) — the adapter's fields
   that are values (`land`, `direct`, `checks`, `setup`, `planDocs`, `softPaths`, `workspaces`,
-  `prNoise`, the demo's `required` and `howToRun`) and the main branch, set for this machine in
+  `prNoise`, the demo's `howToRun`) and the main branch, set for this machine in
   the configuration dialog without TypeScript. Precedence, highest first: this machine's values,
   the repository's `.obeya/settings.json`, the adapter's code, detection (main branch, landing),
   the generic adapter (`layerSettings` puts the two layers of settings together, `withSettings`
@@ -2574,6 +2575,9 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   agents, as the dialog says at the field; where the configuration names clones it shows that instead. The Koordinator's
   `configure` keeps and changes them like the rest of the entry. Until 2026-10-14 these values
   could only be set in `.obeya/adapter/index.ts`, and saving the dialog always restarted Obeya.
+  Until 2026-10-15 the demo had `required` too (the checkbox „Ein Agent übergibt nur mit Demo“);
+  every handover brings a demo now, and a file or adapter that still says it loads without a
+  problem, the value no longer read.
   `.obeya/settings.json` (like `.vscode/settings.json`) is what a fresh clone brings with it: every
   value field but the main branch, which says where the file is read from (a fresh clone has it
   from `origin`'s HEAD). It is read from the default branch like the repository's own adapter

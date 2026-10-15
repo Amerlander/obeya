@@ -34,7 +34,6 @@ in `package.json`, work landing through pull requests on GitHub.
   "workspaces": "clones",
   "prNoise": ["vercel[bot]", "codecov[bot]"],
   "demo": {
-    "required": true,
     "howToRun": "Start the stack in your clone: `docker compose up -d db`, then `pnpm db:migrate && pnpm db:seed`, then `pnpm dev` in the background. The frontend runs on the port in `.dev-urls` (WEB_URL), the API on API_URL. Log in as demo@shop.test with the password `demo` (created by the seed); the seed also makes three orders to show. Stop the stack with `docker compose down` and the dev server by its PID when the demo is rendered."
   }
 }
@@ -69,7 +68,7 @@ along (a share script, say), and `import.meta.dir` finds them.
 Everything but the module's `name` is optional. What both leave out comes from the generic
 adapter, whose values are given with each field below (`land` is the one Obeya tells from the
 repository). The fields that are values (`planDocs`, `setup`, `checks`, `land`, `direct`,
-`softPaths`, `workspaces`, `prNoise`, and the demo's `required` and `howToRun`) belong in
+`softPaths`, `workspaces`, `prNoise`, and the demo's `howToRun`) belong in
 `.obeya/settings.json`; the module may still give them, but the file goes before it. The others
 (`name`, `canvasId`, `canvasName`, `stack`, `demo.site`, `demo.share`) are the module's alone.
 
@@ -162,13 +161,12 @@ holds the frontend's URL under `frontendKey`. Every worker's brief says so. Gene
   database, say), and Obeya leaves it running and says so on the card. The owner who wants it
   stopped anyway tells the worker.
 
-### `demo` — `{ required, howToRun, site?, share? }`
+### `demo` — `{ howToRun, site?, share? }`
 
-Demos: a worker shows its result as a narrated video (or an HTML page for something to look at),
-recorded with Obeya's demo skill. Generic: `{ required: true, howToRun: '' }`.
+Demos: every handover brings one, a narrated video recorded with Obeya's demo skill or an HTML
+page for something to look at; the worker picks which. Generic: `{ howToRun: '' }`. A `required`
+from before 2026-10-15, when a repository could leave demos to the worker, is no longer read.
 
-- `required`: whether a handover needs a demo. `false` leaves it to the worker where it helps, and
-  a written summary alone is then enough.
 - `howToRun`: the recipe for running the app for a recording, written for the worker, in a few
   sentences: what to start and how (or "the stack above"), migrations and test data, how to log in
   and as whom, which URL, and what to stop afterwards. Everything a newcomer to the project would
@@ -221,8 +219,8 @@ own adapter is picked because it is there; this field changes nothing.
 
 ## `.obeya/settings.json`: the values, for everyone
 
-A JSON object with the fields that are values, each as described above (`demo` holds `required`
-and `howToRun` only). Every machine that runs Obeya on the repository reads it, a fresh clone
+A JSON object with the fields that are values, each as described above (`demo` holds `howToRun`
+only). Every machine that runs Obeya on the repository reads it, a fresh clone
 included. Which value applies, highest first:
 
 1. The one set for this machine in "Konfiguration" (a repository's „Einstellungen“; kept in

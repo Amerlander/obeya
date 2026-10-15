@@ -15,7 +15,7 @@ const CHECK = join(import.meta.dir, 'check.ts');
 /** Runs the check in a repository whose adapter has the given demo (and these files), as a worker runs it. */
 function check(demo: Record<string, unknown>, files: Record<string, string> = {}): { code: number; out: string } {
   const repo = gitRepo(join(dir, 'shop'), {
-    '.obeya/adapter/index.ts': `export default { name: 'shop', demo: ${JSON.stringify({ required: false, howToRun: 'bun dev', ...demo })} };\n`,
+    '.obeya/adapter/index.ts': `export default { name: 'shop', demo: ${JSON.stringify({ howToRun: 'bun dev', ...demo })} };\n`,
     ...files,
   });
   const r = Bun.spawnSync([process.execPath, CHECK], { cwd: repo });

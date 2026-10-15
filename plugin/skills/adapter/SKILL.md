@@ -44,7 +44,7 @@ Find out, from the files rather than by guessing:
 ## 2. Ask what the repository does not tell
 
 Some things only the owner knows: the login for a demo when no seed makes one, which test data
-shows the app well, whether every handover needs a demo, whether approved work may go straight
+shows the app well, whether approved work may go straight
 onto the default branch, where demos are shared with colleagues (a static site: `demo.site`), and
 where plan docs go: the directory of plans you found (its docs then converted with "Als Projekt
 aufbereiten" on the canvas), or a new `docs/plan/`. Collect them and ask in one question
@@ -56,7 +56,7 @@ an environment variable), never itself.
 
 Start from the example in the reference and keep only the fields that differ from the generic
 adapter's values. The values go into `.obeya/settings.json`: `setup`, `checks`, `land`, `direct`,
-`planDocs`, `softPaths`, `workspaces`, `prNoise`, and `demo` with `required` and `howToRun`. The
+`planDocs`, `softPaths`, `workspaces`, `prNoise`, and `demo` with `howToRun`. The
 owner sees and changes them in "Konfiguration" without a line of TypeScript. The module is only
 for the rest: `stack`, `demo.site` or `demo.share`, `canvasId` and `canvasName`; a repository that
 needs none of them has no module. The module imports nothing of Obeya's; its default export is

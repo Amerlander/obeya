@@ -1206,7 +1206,7 @@ function RepoRow({ repo, home, resolved, canvasId, adapters, problems, focus, wh
 }
 
 /** The settings of a repository a value can say, set on this machine (`RepoSettings`). */
-type SettingKey = Exclude<keyof RepoSettings, 'demo'> | 'demoRequired' | 'howToRun';
+type SettingKey = Exclude<keyof RepoSettings, 'demo'> | 'howToRun';
 
 /**
  * A repository's settings for this machine, folded under „Einstellungen“ below its row: each shows
@@ -1248,21 +1248,19 @@ function RepoSettingsBlock({
   }, [shown, open]);
   const c = t.config.settings;
   const s = repo.settings ?? {};
-  const base: Record<SettingKey, SettingValue<unknown>> = { ...values, demoRequired: values.demo.required, howToRun: values.demo.howToRun };
-  const own = (k: SettingKey): unknown => (k === 'demoRequired' ? s.demo?.required : k === 'howToRun' ? s.demo?.howToRun : s[k]);
+  const base: Record<SettingKey, SettingValue<unknown>> = { ...values, howToRun: values.demo.howToRun };
+  const own = (k: SettingKey): unknown => (k === 'howToRun' ? s.demo?.howToRun : s[k]);
   const value = <T,>(k: SettingKey) => (own(k) ?? base[k].value) as T;
   const set = (k: SettingKey, v: unknown) => {
     const next: RepoSettings = { ...s };
-    if (k === 'demoRequired' || k === 'howToRun') {
-      const demo = { ...next.demo, [k === 'demoRequired' ? 'required' : 'howToRun']: v };
-      if (v === undefined) delete demo[k === 'demoRequired' ? 'required' : 'howToRun'];
-      if (Object.keys(demo).length) next.demo = demo;
-      else delete next.demo;
+    if (k === 'howToRun') {
+      if (v === undefined) delete next.demo;
+      else next.demo = { howToRun: v as string };
     } else if (v === undefined) delete next[k];
     else (next as Record<string, unknown>)[k] = v;
     onChange(Object.keys(next).length ? next : undefined);
   };
-  const keys: SettingKey[] = ['branch', 'land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'demoRequired', 'howToRun'];
+  const keys: SettingKey[] = ['branch', 'land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'howToRun'];
   const setHere = keys.filter((k) => own(k) !== undefined).length;
   const fromRepo = keys.filter((k) => own(k) === undefined && base[k].source === 'repository').length;
   const lines = (k: SettingKey) => value<string[]>(k).join('\n');
@@ -1351,15 +1349,6 @@ function RepoSettingsBlock({
             base.workspaces.source === 'clones' ? undefined : c.workspacesHint,
           )}
           {land === 'pr' && row('prNoise', c.prNoise, <textarea rows={2} spellCheck={false} aria-label={c.prNoise} value={lines('prNoise')} onChange={(e) => set('prNoise', e.target.value.split('\n'))} />, c.prNoiseHint)}
-          {row(
-            'demoRequired',
-            c.demoRequired,
-            <label className="c-check">
-              <input type="checkbox" checked={value<boolean>('demoRequired')} onChange={(e) => set('demoRequired', e.target.checked)} />
-              {c.demoRequiredLabel}
-            </label>,
-            c.demoRequiredHint,
-          )}
           {row('howToRun', c.howToRun, <textarea rows={Math.max(3, Math.ceil(value<string>('howToRun').length / 90) + 1)} aria-label={c.howToRun} value={value<string>('howToRun')} onChange={(e) => set('howToRun', e.target.value)} />, c.howToRunHint)}
           <ShareSettings repo={repo} values={values} branch={value<string>('branch')} shareTo={shareTo} shareDirect={shareDirect} {...(onReload ? { onReload } : {})} />
         </div>
@@ -1369,7 +1358,7 @@ function RepoSettingsBlock({
 }
 
 /** Whether the repository has settings for everyone (`.obeya/settings.json`): then it is set up, even on the generic adapter. */
-const fromRepository = (v: RepoValues) => SHARED_FIELDS.some((k) => (k === 'demo' ? v.demo.required.source === 'repository' || v.demo.howToRun.source === 'repository' : v[k].source === 'repository'));
+const fromRepository = (v: RepoValues) => SHARED_FIELDS.some((k) => (k === 'demo' ? v.demo.howToRun.source === 'repository' : v[k].source === 'repository'));
 
 /** The repository's `.obeya/settings.json` as the dialog shows it: what the file holds now (`values` from the repository) with this machine's settings in front, but the main branch. */
 function sharedPreview(repo: RepoConfig, values: RepoValues): Record<string, unknown> {
@@ -1378,11 +1367,7 @@ function sharedPreview(repo: RepoConfig, values: RepoValues): Record<string, unk
     if (k === 'demo') continue;
     if (values[k].source === 'repository') file[k] = values[k].value;
   }
-  const demo = {
-    ...(values.demo.required.source === 'repository' ? { required: values.demo.required.value } : {}),
-    ...(values.demo.howToRun.source === 'repository' ? { howToRun: values.demo.howToRun.value } : {}),
-  };
-  if (Object.keys(demo).length) file.demo = demo;
+  if (values.demo.howToRun.source === 'repository') file.demo = { howToRun: values.demo.howToRun.value };
   const { branch: _, ...mine } = repo.settings ?? {};
   const merged = layerSettings<Record<string, unknown>>(file, mine as Record<string, unknown>) ?? {};
   return Object.fromEntries(SHARED_FIELDS.filter((k) => merged[k] !== undefined).map((k) => [k, merged[k]]));

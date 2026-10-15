@@ -67,12 +67,11 @@ export interface RepoAdapter {
   workspaces: 'clones' | 'worktrees';
 
   /**
-   * Demos: whether a worker must hand over with one, and how it runs the app to record it (for
-   * the `demo` skill). Without it, the generic adapter's: required, with no recipe, so the worker
-   * finds out from the repository how to run the app.
+   * Demos, which every handover brings: how a worker runs the app to record one (for the `demo`
+   * skill), and where demos are shared. Without it, the generic adapter's: no recipe, so the
+   * worker finds out from the repository how to run the app.
    */
   demo?: {
-    required: boolean;
     howToRun: string;
     /**
      * The command (argv) that shares a demo with colleagues on a page outside Obeya. Obeya runs
