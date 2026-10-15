@@ -565,7 +565,7 @@ function IdeaView({ item, act, run, onDelete, onTell }: { item: Item; act: (a: C
                 listener: agentListens(item) ? undefined : t.voice.card(plain(item.title)),
                 quote: true,
                 onWords: async (words, images, replyTo) => onTell(words, images, 'discuss', replyTo),
-                onPicked: (text, images, replyTo) => act({ action: 'discuss', text, images, ...(replyTo ? { replyTo } : {}) }, { close: false }),
+                onPicked: (text, _, images, replyTo) => act({ action: 'discuss', text, images, ...(replyTo ? { replyTo } : {}) }, { close: false }),
               }}
             />
           )
@@ -650,7 +650,7 @@ function QuestionView({ item, act, run, onTell }: { item: Item; act: (a: CardAct
             placeholder: t.question.compose,
             quote: true,
             onWords: async (words, images, replyTo) => onTell(words, images, 'note', replyTo),
-            onPicked: (text, images, replyTo) => act({ action: 'ask', text, images, ...(replyTo ? { replyTo } : {}) }, { close: false }),
+            onPicked: (text, _, images, replyTo) => act({ action: 'ask', text, images, ...(replyTo ? { replyTo } : {}) }, { close: false }),
           }}
         />
       )}
@@ -737,7 +737,7 @@ function ProposalView({
               noImages: true,
               quote: true,
               onWords: (words, _, replyTo) => onRevise(words, undefined, replyTo),
-              onPicked: (text, _, replyTo) => act({ action: 'revise', text, ...(replyTo ? { replyTo } : {}) }, { close: false }),
+              onPicked: (text, _, __, replyTo) => act({ action: 'revise', text, ...(replyTo ? { replyTo } : {}) }, { close: false }),
             }}
           />
         }
@@ -1159,11 +1159,11 @@ function Message({
       {quoted && <Quote e={quoted} />}
       {answer.continues}
       {e.spot && <SpotLink cardId={e.cardId} spot={e.spot} />}
-      {!turn.quiet && <Body md={q ? q.text : e.text} />}
+      {!turn.quiet && <Body md={q ? q.text : (turn.words ?? e.text)} />}
       {q && !turn.settled && q.options.length > 0 && (
         <ul className="q-opts">
           {q.options.map((o) => (
-            <li key={o} className={turn.answer?.includes(o) ? 'on' : ''}>
+            <li key={o} className={(turn.picks ? turn.picks.includes(o) : turn.answer?.includes(o)) ? 'on' : ''}>
               <Inline md={o} />
             </li>
           ))}
@@ -1929,7 +1929,7 @@ function TaskTalk({
               placeholder: { note: item.paused ? t.pause.compose : askable(item) || item.followUp ? t.compose.followUp : agentWorks(item) ? t.compose.working : t.compose.idle, answer: t.compose.question, feedback: t.compose.review, demo: t.compose.demo, discuss: '', revise: t.compose.revise }[field],
               listener,
               onWords: tell(field),
-              onPicked: (text, images, replyTo) => act({ action: 'answer', text, images, ...(replyTo ? { replyTo } : {}) }, { close: true, ack: t.answered }),
+              onPicked: (text, [picks = []], images, replyTo) => act({ action: 'answer', text, picks, images, ...(replyTo ? { replyTo } : {}) }, { close: true, ack: t.answered }),
             }
           : undefined
       }
@@ -1959,12 +1959,16 @@ interface TalkField {
   /** Starts the field afresh when it changes (another question, another state). */
   key?: string;
   noImages?: boolean;
-  /** The picks name their questions also when there is one: the conversation is read later without it beside. */
+  /**
+   * The picks stand in the text, each with its question: the conversation is read later without
+   * the questions beside. Without it the text is the owner's words, and the picks go apart from
+   * them; the conversation marks them on the question.
+   */
   quote?: boolean;
   /** Words alone go to the card's agent, or to the Koordinator that `listener` names; `replyTo`: the message they reply to. */
   onWords: (text: string, images?: string[], replyTo?: number) => Promise<void>;
-  /** Picked options go to the agent as they are, with the words. */
-  onPicked: (text: string, images?: string[], replyTo?: number) => Promise<void>;
+  /** Picked options go to the agent with the words: `picks` holds them for each question, and with `quote` the text names them too. */
+  onPicked: (text: string, picks: string[][], images?: string[], replyTo?: number) => Promise<void>;
 }
 
 /**
@@ -1982,7 +1986,7 @@ function Talk({ item, questions = [], heading = t.ask.question, picks, past, fie
   const at = field && !field.listener && !options ? place : null;
   const send = async (words: string, images?: string[]) => {
     const replyTo = reply?.id;
-    await (picked ? field!.onPicked(answerText(questions, picks!.picks, words, field!.quote), images, replyTo) : field!.onWords(words, images, replyTo));
+    await (picked ? field!.onPicked(field!.quote ? answerText(questions, picks!.picks, words) : words.trim(), picks!.picks, images, replyTo) : field!.onWords(words, images, replyTo));
     picks?.clear();
     if (reply && replyOn(item.id) === reply) setReply(null);
   };

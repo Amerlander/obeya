@@ -317,9 +317,9 @@ export class Board {
 
   /**
    * Appends a line to the card's log; `replyTo`: the message the owner's words reply to (`quoted`),
-   * `spot`: the place in the demo video they are about.
+   * `spot`: the place in the demo video they are about, `picks`: the options an answer picked.
    */
-  log(cardId: string, kind: CardEvent['kind'], author: CardEvent['author'], text: string, code?: ErrorCode, images?: string[], mocks?: Mock[], replyTo?: number, spot?: Spot, unread?: boolean): CardEvent {
+  log(cardId: string, kind: CardEvent['kind'], author: CardEvent['author'], text: string, code?: ErrorCode, images?: string[], mocks?: Mock[], replyTo?: number, spot?: Spot, unread?: boolean, picks?: string[]): CardEvent {
     const e = this.store.addEvent({
       cardId,
       kind,
@@ -331,6 +331,7 @@ export class Board {
       ...(replyTo ? { replyTo } : {}),
       ...(spot ? { spot } : {}),
       ...(unread ? { unread: true as const } : {}),
+      ...(picks?.length ? { picks } : {}),
     });
     for (const fn of this.eventListeners) fn(e);
     return e;

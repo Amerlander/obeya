@@ -74,6 +74,8 @@ describe('refused requests', () => {
     const c = card();
     expect(await codeOf(act(c.id, { action: 'answer', text: 'x' }))).toBe('noQuestion');
     expect(await codeOf(act(c.id, { action: 'answer', text: '  ' }))).toBe('emptyText');
+    // an option picked is an answer without words
+    expect(await codeOf(act(c.id, { action: 'answer', text: '', picks: ['Ja'] }))).toBe('noQuestion');
     expect(await codeOf(act(c.id, { action: 'approve' }))).toBe('notReady');
     expect(await codeOf(act(c.id, { action: 'force' }))).toBe('notQueued');
     expect(await codeOf(act(c.id, { action: 'dismiss' }))).toBe('notProposal');

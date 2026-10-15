@@ -336,20 +336,23 @@ export const MIGRATIONS = [
      created_at TEXT NOT NULL,
      decided_at TEXT
    );`,
+  // the options the owner picked in an answer, apart from their own words
+  `ALTER TABLE events ADD COLUMN picks TEXT;`,
 ];
 
-const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, unread, read_after AS readAfter';
-type EventRow = Omit<CardEvent, 'images' | 'mocks' | 'replyTo' | 'spot' | 'answer' | 'unread' | 'readAfter'> & {
+const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter';
+type EventRow = Omit<CardEvent, 'images' | 'mocks' | 'replyTo' | 'spot' | 'answer' | 'picks' | 'unread' | 'readAfter'> & {
   code: CardEvent['code'] | null;
   images: string | null;
   mocks: string | null;
   replyTo: number | null;
   spot: string | null;
   answer: string | null;
+  picks: string | null;
   unread: number | null;
   readAfter: number | null;
 };
-const eventOf = ({ code, images, mocks, replyTo, spot, answer, unread, readAfter, ...e }: EventRow): CardEvent => ({
+const eventOf = ({ code, images, mocks, replyTo, spot, answer, picks, unread, readAfter, ...e }: EventRow): CardEvent => ({
   ...e,
   ...(code ? { code } : {}),
   ...(images ? { images: JSON.parse(images) as string[] } : {}),
@@ -357,6 +360,7 @@ const eventOf = ({ code, images, mocks, replyTo, spot, answer, unread, readAfter
   ...(replyTo ? { replyTo } : {}),
   ...(spot ? { spot: JSON.parse(spot) as Spot } : {}),
   ...(answer ? { answer: JSON.parse(answer) as AnswerRef } : {}),
+  ...(picks ? { picks: JSON.parse(picks) as string[] } : {}),
   ...(unread ? { unread: true as const } : {}),
   ...(readAfter ? { readAfter } : {}),
 });
@@ -595,7 +599,7 @@ export class Store {
     const at = e.at ?? now();
     const { id } = this.db
       .query(
-        'INSERT INTO events (card_id, at, kind, author, text, code, images, mocks, reply_to, spot, answer, unread) VALUES ($cardId, $at, $kind, $author, $text, $code, $images, $mocks, $replyTo, $spot, $answer, $unread) RETURNING id',
+        'INSERT INTO events (card_id, at, kind, author, text, code, images, mocks, reply_to, spot, answer, picks, unread) VALUES ($cardId, $at, $kind, $author, $text, $code, $images, $mocks, $replyTo, $spot, $answer, $picks, $unread) RETURNING id',
       )
       .get({
         ...e,
@@ -605,6 +609,7 @@ export class Store {
         mocks: e.mocks?.length ? JSON.stringify(e.mocks) : null,
         replyTo: e.replyTo ?? null,
         spot: e.spot ? JSON.stringify(e.spot) : null,
+        picks: e.picks?.length ? JSON.stringify(e.picks) : null,
         unread: e.unread ? 1 : null,
         at,
       }) as { id: number };

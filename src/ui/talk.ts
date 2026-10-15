@@ -2,7 +2,7 @@
 
 import { LANGUAGES } from '../core/locale';
 import { MESSAGES } from '../core/messages';
-import { askable, type CardEvent, type Demo, finishingUp, formatQuestion, type Item, pausable, type Question } from '../core/types';
+import { askable, type CardEvent, type Demo, finishingUp, formatQuestion, type Item, ownWords, pausable, type Question } from '../core/types';
 import type { Field } from './api';
 
 /** One entry of the conversation: a message, with how the agent got to it folded under it, or a small line. */
@@ -14,6 +14,10 @@ export interface Turn {
   line?: true;
   /** A worker's question: the answer it got. */
   answer?: string;
+  /** A worker's question: the options the owner picked in the answer, marked on it. */
+  picks?: string[];
+  /** The owner's answer whose picks its question marks: what the message says beside them, their own words. */
+  words?: string;
   /** A worker's question the owner's note took back instead of an answer. */
   settled?: true;
   /** Only the agent's steps, without words: a turn it ended silently, in a conversation nobody works on any more. */
@@ -140,6 +144,7 @@ export function talkTurns(all: CardEvent[], opts: { asking?: Question; over?: bo
     }
   });
   for (const turn of shown) if (turn.e.kind === 'question') Object.assign(turn, outcome(events, turn.e));
+  marked(shown);
   const asked = opts.asking ? openQuestion(shown, opts.asking) : undefined;
   if (asked) {
     shown.splice(shown.indexOf(asked), 1);
@@ -218,13 +223,27 @@ function duplicate(events: CardEvent[], i: number): boolean {
 }
 
 /** How a question ended: answered, or taken back by a note of the owner's before anything else was asked. */
-function outcome(events: CardEvent[], q: CardEvent): Pick<Turn, 'answer' | 'settled'> {
+function outcome(events: CardEvent[], q: CardEvent): Pick<Turn, 'answer' | 'picks' | 'settled'> {
   const after = events.slice(events.indexOf(q) + 1);
   const until = after.findIndex((e) => e.kind === 'question');
   const before = until < 0 ? after : after.slice(0, until);
   const answer = before.find((e) => e.kind === 'answer');
-  if (answer) return { answer: answer.text };
+  if (answer) return { answer: answer.text, ...(answer.picks ? { picks: answer.picks } : {}) };
   return before.some((e) => e.kind === 'hint' && e.author === 'owner') ? { settled: true } : {};
+}
+
+/**
+ * The options an answer picked stand once, marked on the question it answers: its message keeps the
+ * owner's own words, and an answer that was nothing but a pick stands as no message of its own.
+ */
+function marked(shown: Turn[]) {
+  for (const q of shown.filter((x) => x.picks)) {
+    const i = shown.findIndex((x, j) => j > shown.indexOf(q) && x.e.kind === 'answer');
+    const a = shown[i];
+    if (!a?.e.picks) continue;
+    a.words = ownWords(a.e);
+    if (!a.words && !a.e.images?.length) shown.splice(i, 1);
+  }
 }
 
 /**

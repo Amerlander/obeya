@@ -216,6 +216,27 @@ test('questions carry their answer; a note instead of an answer settles one; the
   expect(old.shown).toEqual([{ e: note, steps: [] }]);
 });
 
+test('the options an answer picked stand on its question once, not again in the owner’s message', () => {
+  const q1 = ev('question', 'worker', formatQuestion({ text: 'CSV oder Excel?', options: ['CSV', 'Excel'] }, 'de'));
+  const a1 = { ...ev('answer', 'owner', 'CSV\n\nUnd mit Kopfzeile.'), picks: ['CSV'] };
+  const q2 = ev('question', 'worker', formatQuestion({ text: 'Auch PDF?', options: ['Ja', 'Nein'] }, 'de'));
+  const a2 = { ...ev('answer', 'owner', 'Nein'), picks: ['Nein'] };
+  const q3 = ev('question', 'worker', formatQuestion({ text: 'Welches Trennzeichen?', options: [';', ','] }, 'de'));
+  // an answer from before the picks were kept apart stands in its own words, the pick among them
+  const a3 = ev('answer', 'owner', ';\n\nWie Excel.');
+  expect(talkTurns([q1, a1, q2, a2, q3, a3]).shown).toEqual([
+    { e: q1, steps: [], answer: a1.text, picks: ['CSV'] },
+    { e: a1, steps: [], words: 'Und mit Kopfzeile.' },
+    // a pick alone is no message of its own
+    { e: q2, steps: [], answer: 'Nein', picks: ['Nein'] },
+    { e: q3, steps: [], answer: a3.text },
+    { e: a3, steps: [] },
+  ]);
+  // with a screenshot it stays, without words
+  const shot = { ...a2, images: ['x.png'] };
+  expect(talkTurns([q2, shot]).shown[1]).toEqual({ e: shot, steps: [], words: '' });
+});
+
 test('a question reads back from the log with its options', () => {
   expect(parseQuestion(formatQuestion({ text: 'Welche Spalten?', options: ['Datum', 'Stand'], multiple: true }, 'de'))).toEqual({ text: 'Welche Spalten?', options: ['Datum', 'Stand'] });
   expect(parseQuestion(formatQuestion({ text: 'Which columns?', options: ['Date', 'Reading'], multiple: true }, 'en'))).toEqual({ text: 'Which columns?', options: ['Date', 'Reading'] });

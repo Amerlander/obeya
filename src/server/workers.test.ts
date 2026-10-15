@@ -260,6 +260,23 @@ describe('workers', () => {
     expect(gone).toBe(1);
   });
 
+  test('an answer tells the worker the options picked apart from the owner’s own words', () => {
+    const c = manual();
+    workers.start(c.id);
+    runtime.last.call('ask', { question: 'CSV oder Excel?', options: ['CSV', 'Excel'] });
+    runtime.last.emit({ type: 'idle' });
+    // an option the question does not offer is dropped
+    workers.answer(c.id, 'Und mit Kopfzeile.', [], false, undefined, ['CSV', 'PDF']);
+    expect(runtime.last.inbox.at(-1)).toContain('Answer to your question (from the owner):\n\nThey picked „CSV“.\n\nThey added in their own words:\n\nUnd mit Kopfzeile.');
+    // the log holds the answer as one text, and which options it picked
+    expect(board.events(c.id).findLast((e) => e.kind === 'answer')).toMatchObject({ text: 'CSV\n\nUnd mit Kopfzeile.', picks: ['CSV'] });
+    runtime.last.emit({ type: 'idle' });
+    runtime.last.call('ask', { question: 'Auch PDF?', options: ['Ja', 'Nein'] });
+    runtime.last.emit({ type: 'idle' });
+    workers.answer(c.id, '', [], false, undefined, ['Nein']);
+    expect(runtime.last.inbox.at(-1)).toEndWith('They picked „Nein“.');
+  });
+
   test('a turn that starts while a restart is due hears of it with its message', () => {
     const c = manual();
     workers.start(c.id);

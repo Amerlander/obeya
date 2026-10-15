@@ -896,8 +896,9 @@ export class CanvasRuntime {
     const images = this.images.resolve('images' in a ? a.images : undefined);
     // a reply to anything but a message of this card's conversation is the words alone
     const replyTo = 'replyTo' in a ? this.board.quoted(cardId, a.replyTo)?.id : undefined;
-    // a prototype may leave it to the idea's brief what it shows; a screenshot may speak for itself
-    if ('text' in a && (typeof text !== 'string' || (!text.trim() && a.action !== 'prototype' && !images.length) || text.length > 20000))
+    // a prototype may leave it to the idea's brief what it shows; a screenshot or an option picked may speak for itself
+    const picks = a.action === 'answer' && Array.isArray(a.picks) ? a.picks.filter((o): o is string => typeof o === 'string') : [];
+    if ('text' in a && (typeof text !== 'string' || (!text.trim() && a.action !== 'prototype' && !images.length && !picks.length) || text.length > 20000))
       throw new BadRequest('emptyText', 'text must be a non-empty string');
     switch (a.action) {
       case 'start':
@@ -934,7 +935,7 @@ export class CanvasRuntime {
         return this.repoOf(cardId).workers.unsay(cardId, a.id);
       }
       case 'answer':
-        return this.repoOf(cardId).workers.answer(cardId, text.trim(), images, !!a.spoken, replyTo);
+        return this.repoOf(cardId).workers.answer(cardId, text.trim(), images, !!a.spoken, replyTo, picks);
       case 'approve':
         return this.repoOf(cardId).workers.approve(cardId, { direct: !!a.direct });
       case 'accept':

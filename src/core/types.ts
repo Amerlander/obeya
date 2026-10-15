@@ -526,10 +526,21 @@ export interface CardEvent {
   spot?: Spot;
   /** A looked-up answer: its exchange and thread, and its files. */
   answer?: AnswerRef;
+  /** The owner's answer to a worker's question: the options they picked, which lead its text (`pickedAnswer`). */
+  picks?: string[];
   /** The owner's words the card's agent has not read yet: Obeya holds them for it, and the owner can still take them back. */
   unread?: true;
   /** The owner's words the agent read later than they were written: they stand after this line of the log, where it read them. */
   readAfter?: number;
+}
+
+/** The owner's answer as the log holds it: the options picked, then their own words. */
+export const pickedAnswer = (picks: string[], words: string) => [picks.join(', '), words.trim()].filter(Boolean).join('\n\n');
+
+/** The owner's own words in an answer, without the options picked that lead it. */
+export function ownWords(e: Pick<CardEvent, 'text' | 'picks'>): string {
+  const lead = e.picks?.join(', ');
+  return lead && e.text.startsWith(lead) ? e.text.slice(lead.length).trim() : e.text;
 }
 
 /** A place in a card's demo video the owner's words are about, as the worker reads it with them. */
@@ -779,7 +790,8 @@ export type CardAction =
   /** `replyTo`: the message of the card's conversation the words reply to (`CardEvent.replyTo`). */
   /** `spot`: the place in the card's demo video the words are about. */
   | { action: 'message'; text: string; spoken?: boolean; images?: string[]; replyTo?: number; spot?: SpotInput }
-  | { action: 'answer'; text: string; spoken?: boolean; images?: string[]; replyTo?: number }
+  /** `picks`: the options of the question the owner picked; with them the text, their own words, may be empty. */
+  | { action: 'answer'; text: string; spoken?: boolean; images?: string[]; replyTo?: number; picks?: string[] }
   /**
    * The owner has finished watching the demo video: the comments on places in it that Obeya held back
    * go to the worker. `now`: they sent them themselves ("Jetzt senden"), so they go without a moment's wait.

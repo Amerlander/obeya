@@ -3,16 +3,11 @@
 import type { Question } from '../core/types';
 
 /**
- * One line per answered question (`**question** picks`), then the owner's own words. A single
- * question is answered with its picks alone unless `quote`, as in an idea's conversation, which
- * is read later without the question beside it.
+ * One line per answered question (`**question** picks`), then the owner's own words: as in an
+ * idea's conversation, which is read later without the questions beside it.
  */
-export function answerText(questions: Question[], picks: string[][], words: string, quote = false): string {
-  const answered = questions.map((q, i) => [q, picks[i] ?? []] as const).filter(([, p]) => p.length);
-  const lines =
-    answered.length === 1 && questions.length === 1 && !quote
-      ? [answered[0]![1].join(', ')]
-      : answered.map(([q, p]) => `**${oneLine(q.text)}** ${p.join(', ')}`);
+export function answerText(questions: Question[], picks: string[][], words: string): string {
+  const lines = questions.flatMap((q, i) => (picks[i]?.length ? [`**${oneLine(q.text)}** ${picks[i]!.join(', ')}`] : []));
   return [lines.join('\n'), words.trim()].filter(Boolean).join('\n\n');
 }
 

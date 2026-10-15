@@ -5,11 +5,10 @@ const format = { text: 'Welches Format?', options: ['CSV', 'PDF', 'Excel'] };
 const whom = { text: 'Für wen?\nKurz.', options: ['Vermieter', 'Verwalter'], multiple: true };
 
 describe('an answer', () => {
-  test('to one question is its pick, then the owner’s words', () => {
-    expect(answerText([format], [['CSV']], '')).toBe('CSV');
-    expect(answerText([format], [['CSV']], ' aber mit Kopfzeile ')).toBe('CSV\n\naber mit Kopfzeile');
+  test('to one question names it, then the owner’s words', () => {
+    expect(answerText([format], [['CSV']], '')).toBe('**Welches Format?** CSV');
+    expect(answerText([format], [['CSV']], ' aber mit Kopfzeile ')).toBe('**Welches Format?** CSV\n\naber mit Kopfzeile');
     expect(answerText([format], [[]], 'Lieber JSON.')).toBe('Lieber JSON.');
-    expect(answerText([format], [['CSV']], '', true)).toBe('**Welches Format?** CSV');
   });
 
   test('to several questions names each answered one', () => {

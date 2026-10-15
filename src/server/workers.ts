@@ -7,7 +7,7 @@ import type { CardDiff } from '../core/diff';
 import { LANGUAGE_NAMES, LANGUAGES } from '../core/locale';
 import { MESSAGES, type Messages, type Pause } from '../core/messages';
 import { basename } from 'node:path';
-import { answering, askable, pausable, type DemoKind, type DemoPage, formatQuestion, type Item, type Mock, type Question, type RestartReason, type Spot, type SpotInput } from '../core/types';
+import { answering, askable, pausable, type DemoKind, type DemoPage, formatQuestion, type Item, type Mock, ownWords, pickedAnswer, type Question, type RestartReason, type Spot, type SpotInput } from '../core/types';
 import { BadRequest, type Board, replyNote } from './board';
 import { type Asked, decisionLog, toQuestion, withPick } from './advisor';
 import { checkArtifact, DEMO_SKILL, DEMO_SKILL_FILE, demoSkillName, OBEYA_PLUGIN, placeIn, readChapters } from './demo';
@@ -219,6 +219,13 @@ const limitLine = (line: string | null | undefined) => !!line && LANGUAGES.some(
 /** Said of the owner's words when they came through speech recognition. */
 export const SPOKEN = 'spoken, so speech recognition may have misheard words';
 
+/** An answer as the worker reads it: the options the owner picked, apart from the words they added. */
+export function answerNote(picks: string[], text: string): string {
+  if (!picks.length) return text;
+  const words = ownWords({ text, picks });
+  return `They picked ${picks.map((o) => `„${o}“`).join(', ')}.${words ? `\n\nThey added in their own words:\n\n${words}` : ''}`;
+}
+
 const LIMIT_LIFTED = 'The usage limit that stopped your last turn has reset. Go on where you stopped.';
 
 const END_TURN = 'Recorded. End your turn now without further work; the reply arrives as your next message.';
@@ -376,7 +383,7 @@ export class Workers {
     images = [...this.stills(place), ...images];
     if (handover) {
       // under a demo whose report asks a question, the words answer it, whatever else they say
-      if (card.question) return this.answerDemo(card, text, images, spoken, replyTo);
+      if (card.question) return this.answerDemo(card, text, images, spoken, replyTo, []);
       // the work still waits for approval while the worker takes the words in; a change they call for comes as a new handover
       this.takingIn(cardId);
       // words without a place end the watching: the comments held back come first, and go with them
@@ -528,9 +535,17 @@ export class Workers {
     }
   }
 
-  answer(cardId: string, text: string, images: string[] = [], spoken = false, replyTo?: number) {
+  /**
+   * The owner answered the card's question: `words` are their own, `picks` the options they picked
+   * (those not among the question's are dropped). The log holds both as one text, picks first
+   * (`pickedAnswer`); the worker reads which is which.
+   */
+  answer(cardId: string, words: string, images: string[] = [], spoken = false, replyTo?: number, picks: string[] = []) {
     const card = this.card(cardId);
-    if (card.state === 'waiting' && card.need === 'demo' && card.question) return this.answerDemo(card, text, images, spoken, replyTo);
+    const options = card.question?.options ?? [];
+    const picked = options.filter((o) => picks.includes(o));
+    const text = pickedAnswer(picked, words);
+    if (card.state === 'waiting' && card.need === 'demo' && card.question) return this.answerDemo(card, text, images, spoken, replyTo, picked);
     if (!(card.state === 'waiting' && card.need === 'question')) throw new BadRequest('noQuestion', 'the card has no open question');
     const row = this.o.board.row(cardId);
     const detail = row.detail ? (JSON.parse(row.detail) as { question?: Question; permission?: AskedPermission }) : {};
@@ -538,11 +553,11 @@ export class Workers {
     const question = detail.question;
     const q = question?.text ?? this.pendingQuestion(cardId) ?? '';
     this.o.board.work(cardId, { state: row.landed ? landedState(row.landed) : row.pr ? 'inPr' : 'working', need: null, detail: null });
-    this.o.board.log(cardId, 'answer', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo);
+    this.o.board.log(cardId, 'answer', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo, undefined, undefined, picked);
     this.recordDecision(card, q, text || '(Screenshot)');
     if (text) this.o.onOwnerInput?.(card, 'answer', text, { question: q });
     if (card.prototypeOf) this.o.onPrototypeAnswer?.(card, q, text || '(Screenshot)');
-    this.deliver(cardId, `Answer to your question (from the owner${spoken ? `; ${SPOKEN}` : ''}):\n\n${this.words(cardId, text, images, replyTo)}`, images, true);
+    this.deliver(cardId, `Answer to your question (from the owner${spoken ? `; ${SPOKEN}` : ''}):\n\n${this.words(cardId, answerNote(picked, text), images, replyTo)}`, images, true);
   }
 
   /**
@@ -586,19 +601,19 @@ export class Workers {
    * approval. While the worker takes in the answer (it may rework the demo), the card is not the
    * owner's; once its turn ends without a new handover, the demo is theirs again.
    */
-  private answerDemo(card: Item, text: string, images: string[], spoken: boolean, replyTo?: number) {
+  private answerDemo(card: Item, text: string, images: string[], spoken: boolean, replyTo: number | undefined, picks: string[]) {
     const q = card.question!.text;
     const held = this.takeHeld(card.id);
     const demo = JSON.parse(this.o.board.row(card.id).demo!) as Record<string, unknown>;
     this.o.board.work(card.id, { demo: JSON.stringify({ ...demo, answer: text || '(Screenshot)' }) });
     this.takingIn(card.id);
-    this.o.board.log(card.id, 'answer', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo);
+    this.o.board.log(card.id, 'answer', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo, undefined, undefined, picks);
     this.recordDecision(card, q, text || '(Screenshot)');
     if (text) this.o.onOwnerInput?.(card, 'answer', text, { question: q });
     if (card.prototypeOf) this.o.onPrototypeAnswer?.(card, q, text || '(Screenshot)');
     this.deliver(
       card.id,
-      `The owner answered the question in your demo report („${q}“)${spoken ? ` (${SPOKEN})` : ''}. The card still waits for their approval of what you handed over; a change their words call for goes into a new handover:\n\n${held ? `${held.text}\n\nThen they answered:\n\n` : ''}${this.words(card.id, text, images, replyTo)}`,
+      `The owner answered the question in your demo report („${q}“)${spoken ? ` (${SPOKEN})` : ''}. The card still waits for their approval of what you handed over; a change their words call for goes into a new handover:\n\n${held ? `${held.text}\n\nThen they answered:\n\n` : ''}${this.words(card.id, answerNote(picks, text), images, replyTo)}`,
       [...(held?.images ?? []), ...images],
       true,
     );

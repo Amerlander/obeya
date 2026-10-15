@@ -434,9 +434,13 @@ paused (before 2026-10-09, a card the owner approved for a PR read „In PR · P
 a line from before the handover, while its worker was rebasing for the PR); `reply(text)`, its answer to a note or feedback in the card's conversation, which
 does not end its turn; `ask(question, options, multiple, pick, pick_why)`, which returns at once — the worker ends its turn
 and the answer arrives as its next message (the owner picks one option, several when `multiple`,
-or writes their own answer; `pick` and `pick_why` are the options the worker would choose if it
+or writes their own answer, or both; `pick` and `pick_why` are the options the worker would choose if it
 had to decide, and why, which the card marks "Würde ich nehmen" the way an idea's questions show
-its agent's pick); `propose_card(title, task, reason, idea?, questions?)` (Card lifecycle, 1);
+its agent's pick). The options picked go apart from the owner's words (`picks` of the answer): the
+worker reads `They picked „…“.` and, below it, what they `added in their own words`; the log keeps
+both as one text, picks first, for whoever reads it later (decision log, Koordinator). Until
+2026-10-15 the pick went out as the first line of the owner's words, so the worker could not tell
+it from them; `propose_card(title, task, reason, idea?, questions?)` (Card lifecycle, 1);
 `ready_for_review(summary, demo | no_demo)`, whose summary is the report the owner reads; and
 `to_obeya(request)`, for what the owner's words to it ask of Obeya rather than of the worker
 (Voice in). A turn that ends without `ask` or `ready_for_review` gets one nudge,
@@ -553,7 +557,9 @@ question answer it (Card lifecycle, 3).
 Every card shows its exchanges as a conversation („Gespräch“), the way an idea does (`talkTurns`
 in `src/ui/talk.ts`). Messages are what the owner says (notes, answers, feedback, spoken or typed,
 with screenshots, standing once as the agent got them), the worker's
-questions with their options and the pick, its replies, its handovers (the one a demo came with
+questions with their options and the pick (marked on the question only: the owner's message
+under it holds just their own words, and a pick alone is no message of its own; until 2026-10-15
+the message repeated the pick as its first line), its replies, its handovers (the one a demo came with
 carries its report's question, muted once answered; a later handover that keeps the demo leaves it
 there: until 2026-10-09 the question moved to the newest handover and stood there orange, as if open), and what the Koordinator looked up for the owner; small lines between them are
 the state changes (started, pull request opened, approved, landed, stopped, errors). Everything
