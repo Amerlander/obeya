@@ -27,7 +27,9 @@ shows them as projects); when one is done, what lasts moves into `docs/design.md
   `main` moves to commits that change code, a commit of yours included (workers resume, the page
   reloads); docs-only commits leave it running. Keep tests off it.
 - No project-specific logic in the core: what a project needs goes into its settings
-  (`.obeya/settings.json` in that repository), not into this repo.
+  (`.obeya/settings.json` in that repository), not into this repo. Those settings stay few and
+  generic: each describes something that holds for any kind of app, not one kind of web stack, and
+  no two cover the same need; where two overlap, merge them.
 - UI strings live in one place, `src/ui/strings.ts`, in German and English (two tables of one shape).
   German UI texts and docs call a button "Button" or "Schaltfläche", never "Knopf".
 - An interaction that several kinds of card share (answering questions with comments and one Send
