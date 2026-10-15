@@ -1057,13 +1057,15 @@ the owner's language (`src/core/locale.ts`).
   (or the field has the focus), so the page stays calm; the text shows on the icon at once, not as a
   browser tooltip with a wait on plain text.
   Each canvas is a heading line (number, name, id, whether it runs) over a table of its repositories:
-  path and share command, one row each. Each canvas shows its id and whether it runs, each repository its id,
+  its path, one row each. Each canvas shows its id and whether it runs, each repository its id,
   whether workers use clones or worktrees and, where it has one, that it brings its own adapter
   („eigener Adapter (.obeya/adapter/)“; until 2026-10-15 a column let the owner pick one: „automatisch“, „generic“ or
   „obeya“, which only Obeya's own repository could use) (a repository added in the dialog whose adapter works
   in clones gets as many as the first canvas's, two, filled in once its path is checked and changeable before
-  saving), and the command that shares its demos (empty:
-  the adapter's site, shown as „Site: <url>“, or its command, or an export; see Sharing a demo); problems (no git repository, a repository the canvas
+  saving). The command that shares its demos is a row of its settings, for this machine only, since
+  it often needs credentials, so „Für alle“ does not take it over (empty: the adapter's site, shown
+  as „Site: <url>“, or its command, or an export; see Sharing a demo); until 2026-10-15 it stood
+  beside the path, as prominent as the path while the other settings were folded away. Problems (no git repository, a repository the canvas
   has already under this or another path, two canvases with one id, a canvas's home repository left out, a share command whose program is not there) show at the field while
   editing and keep it from being saved; where a path without a repository is a folder, the
   problem offers to set up git there (see Setting up git in a folder), after which it goes.

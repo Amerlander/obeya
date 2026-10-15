@@ -996,12 +996,10 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 .cfg-actions .cfg-json { margin: 0 0 0 auto; }
 .cfg-actions .cfg-json.on { background: var(--ink); color: var(--bg); }
 /* what to know about a field: an icon beside its label, shown only while the pointer is on the field or the
-   label (the nearest .cfg-has-info) or the field has the focus; the share command's label heads a column, so
-   any of its fields shows it */
+   label (the nearest .cfg-has-info) or the field has the focus */
 .cfg-info { display: inline-flex; vertical-align: -3px; margin-left: 2px; padding: 0 1px; border: 0; background: none; color: var(--muted);
   cursor: help; line-height: 0; opacity: 0; transition: opacity .12s; }
-.cfg-has-info:hover .cfg-info, .cfg-has-info:focus-within .cfg-info,
-  .cfg-repos:has(.c-share:hover, .c-share:focus) > .cfg-share .cfg-info { opacity: 1; }
+.cfg-has-info:hover .cfg-info, .cfg-has-info:focus-within .cfg-info { opacity: 1; }
 .cfg-has-info:is(:hover, :focus-within) .cfg-has-info:not(:hover, :focus-within) .cfg-info { opacity: 0; }
 .cfg-info:hover, .cfg-info.on, #config .cfg-info:focus-visible { opacity: 1; color: var(--ink); }
 .cfg-info:focus-visible { outline: 1px solid var(--muted); outline-offset: 1px; border-radius: 50%; }
@@ -1015,7 +1013,7 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 .cfg-canvas-head h4 { margin: 0; font-size: 15px; white-space: nowrap; }
 .cfg-canvas-head input { width: 260px; }
 .cfg-canvas > .hint { margin: 0 0 8px; }
-.cfg-repos { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.6fr) 24px; gap: 4px 12px; align-items: start; }
+.cfg-repos { display: grid; grid-template-columns: minmax(0, 1fr) 24px; gap: 4px 12px; align-items: start; }
 .cfg-repos > .hint { font-size: 11.5px; padding-bottom: 2px; }
 .cfg-cell { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 3px 0; }
 .cfg-cell > .c-path, .cfg-cell > select { width: 100%; }

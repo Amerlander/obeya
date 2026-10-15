@@ -1049,9 +1049,6 @@ function CanvasBlock({ n, canvas, resolved, running, pin, saved, problems, focus
       {fresh && <p className="hint warn">{t.config.freshHint}</p>}
       <div className="cfg-repos">
         <span className="hint">{t.config.path}</span>
-        <span className="hint cfg-has-info cfg-share">
-          {t.config.share} <Info text={t.config.shareHint} />
-        </span>
         <span />
         {canvas.repos.map((r, i) => (
           <RepoRow
@@ -1139,16 +1136,6 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
           <span className="hint">{`${resolved.id}${home ? ` · ${t.config.home}` : ''} · ${resolved.workspaces === 'clones' ? t.config.clonesMode : t.config.worktrees}${resolved.adapter === 'generic' ? '' : ` · ${t.config.ownAdapter}`}`}</span>
         )}
       </div>
-      <div className="cfg-cell">
-        <input
-          className="c-path c-share"
-          aria-label={t.config.share}
-          value={repo.share ?? ''}
-          placeholder={resolved?.adapterSite ? t.config.shareSite(resolved.adapterSite) : resolved?.adapterShares ? t.config.shareAdapter(resolved.adapter) : t.config.shareNone}
-          spellCheck={false}
-          onChange={(e) => onChange(without('share', e.target.value || undefined))}
-        />
-      </div>
       <button className="c-del" title={t.config.removeRepo} onClick={() => onChange(null)}>
         ✕
       </button>
@@ -1189,7 +1176,20 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
           </label>
         </div>
       )}
-      {resolved && <RepoSettingsBlock show={focus?.field === 'settings' ? focus : undefined} repo={repo} values={resolved.values} adapter={resolved.adapter} shareTo={resolved.shareTo} shareDirect={!!resolved.shareDirect} takeover={takeover} onChange={(settings) => onChange(without('settings', settings))} />}
+      {resolved && (
+        <RepoSettingsBlock
+          show={focus?.field === 'settings' ? focus : undefined}
+          repo={repo}
+          values={resolved.values}
+          adapter={resolved.adapter}
+          shareTo={resolved.shareTo}
+          shareDirect={!!resolved.shareDirect}
+          shareFrom={resolved.adapterSite ? { site: resolved.adapterSite } : resolved.adapterShares ? 'adapter' : null}
+          takeover={takeover}
+          onShare={(share) => onChange(without('share', share))}
+          onChange={(settings) => onChange(without('settings', settings))}
+        />
+      )}
       {problems.map((p, k) => (
         <div key={k} className="cfg-span">
           <Problem problem={p} where={where} ask={ask} />
@@ -1221,7 +1221,9 @@ function RepoSettingsBlock({
   adapter,
   shareTo,
   shareDirect,
+  shareFrom,
   takeover,
+  onShare,
   onChange,
 }: {
   /** The setting to fold open, scroll to and mark: the dialog was opened from a proposal for it. */
@@ -1231,7 +1233,11 @@ function RepoSettingsBlock({
   adapter: string;
   shareTo: 'main' | 'pr';
   shareDirect: boolean;
+  /** Where demos are shared without this machine's command: the adapter's site, its command, or nowhere (they are exported). */
+  shareFrom: { site: string } | 'adapter' | null;
   takeover: Takeover;
+  /** Sets this machine's share command; none takes the adapter's again. */
+  onShare: (share: string | undefined) => void;
   onChange: (s: RepoSettings | undefined) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -1262,29 +1268,31 @@ function RepoSettingsBlock({
     onChange(Object.keys(next).length ? next : undefined);
   };
   const keys: SettingKey[] = ['branch', 'land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'howToRun'];
-  const setHere = keys.filter((k) => own(k) !== undefined).length;
+  // the share command is this machine's too, though not a value „Für alle“ takes over
+  const setHere = keys.filter((k) => own(k) !== undefined).length + (repo.share ? 1 : 0);
   const fromRepo = keys.filter((k) => own(k) === undefined && base[k].source === 'repository').length;
   const lines = (k: SettingKey) => value<string[]>(k).join('\n');
-  const row = (k: SettingKey, label: string, control: ReactNode, hint?: string) => {
-    const here = own(k) !== undefined;
-    const from = base[k].source;
-    return (
-      <div className={shown === k ? 'cfg-field cfg-setting flash' : 'cfg-field cfg-setting'} key={k} data-setting={k}>
-        <div className="cfg-label">
-          {label}
-          <span className={here ? 'cfg-source here' : 'cfg-source'}>{here ? c.source.machine : from === 'adapter' ? c.source.adapter(adapter) : c.source[from]}</span>
-          {here && (
-            <button type="button" className="cfg-reset" title={c.resetHint} onClick={() => set(k, undefined)}>
-              {c.reset}
-            </button>
-          )}
-        </div>
-        <div className="cfg-control">
-          {control}
-          {hint && <p className="hint">{hint}</p>}
-        </div>
+  // a setting: its label with where its value comes from (and „Zurücksetzen“ where it is set here), its control and what to know about it
+  const field = (key: string, label: string, here: boolean, from: string, reset: () => void, control: ReactNode, hint?: string) => (
+    <div className={shown === key ? 'cfg-field cfg-setting flash' : 'cfg-field cfg-setting'} key={key} data-setting={key}>
+      <div className="cfg-label">
+        {label}
+        <span className={here ? 'cfg-source here' : 'cfg-source'}>{here ? c.source.machine : from}</span>
+        {here && (
+          <button type="button" className="cfg-reset" title={c.resetHint} onClick={reset}>
+            {c.reset}
+          </button>
+        )}
       </div>
-    );
+      <div className="cfg-control">
+        {control}
+        {hint && <p className="hint">{hint}</p>}
+      </div>
+    </div>
+  );
+  const row = (k: SettingKey, label: string, control: ReactNode, hint?: string) => {
+    const from = base[k].source;
+    return field(k, label, own(k) !== undefined, from === 'adapter' ? c.source.adapter(adapter) : c.source[from], () => set(k, undefined), control, hint);
   };
   const land = value<'main' | 'pr'>('land');
   const planDocs = value<{ dir: string; exclude: string[] }>('planDocs');
@@ -1351,6 +1359,22 @@ function RepoSettingsBlock({
           )}
           {land === 'pr' && row('prNoise', c.prNoise, <textarea rows={2} spellCheck={false} aria-label={c.prNoise} value={lines('prNoise')} onChange={(e) => set('prNoise', e.target.value.split('\n'))} />, c.prNoiseHint)}
           {row('howToRun', c.howToRun, <textarea rows={Math.max(3, Math.ceil(value<string>('howToRun').length / 90) + 1)} aria-label={c.howToRun} value={value<string>('howToRun')} onChange={(e) => set('howToRun', e.target.value)} />, c.howToRunHint)}
+          {field(
+            'share',
+            t.config.share,
+            !!repo.share,
+            shareFrom ? c.source.adapter(adapter) : c.source.default,
+            () => onShare(undefined),
+            <input
+              className="c-path"
+              aria-label={t.config.share}
+              value={repo.share ?? ''}
+              placeholder={shareFrom === null ? t.config.shareNone : shareFrom === 'adapter' ? t.config.shareAdapter(adapter) : t.config.shareSite(shareFrom.site)}
+              spellCheck={false}
+              onChange={(e) => onShare(e.target.value || undefined)}
+            />,
+            t.config.shareHint,
+          )}
           <ShareSettings repo={repo} values={values} branch={value<string>('branch')} shareTo={shareTo} shareDirect={shareDirect} takeover={takeover} />
         </div>
       )}
