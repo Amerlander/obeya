@@ -681,7 +681,7 @@ export async function runDemo(spec: DemoSpec, demoDir: string) {
     const end = i + 1 < marks.length ? marks[i + 1]!.start : total;
     const silent = end - m.speechEnd - GAP_SECONDS;
     const idle = silent > SILENCE_WARN ? `  ← ${Math.round(silent)} s without narration: cut it with d.skip where it only waits` : '';
-    console.log(`  ${String(i + 1).padStart(2)}  ${mmss(m.start)}  ${m.title.padEnd(32).slice(0, 32)}${idle}`);
+    console.log(`  ${String(i + 1).padStart(2)}  ${mmss(m.start)}  ${m.title.padEnd(32).slice(0, 32)}${idle}`.trimEnd());
   });
   if (d.cuts.length) console.log(`cut ${d.cuts.length / 2}× (${Math.round(d.cuts.reduce((s, c) => s + c.to - c.from, 0))} s of waiting)`);
   console.log(`stills → ${reviewDir}: NN-mid.jpg (middle of each scene), NN.jpg (its end)`);
