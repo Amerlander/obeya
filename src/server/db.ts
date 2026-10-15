@@ -484,13 +484,14 @@ export class Store {
       .all(Object.fromEntries(parentIds.map((id, i) => [`p${i}`, id]))) as CardRow[];
   }
 
-  /** Deletes the owner's cards that never got a title, created before `before`; returns how many. */
+  /** Deletes the owner's cards left empty (no title, text or screenshots), created before `before`; returns how many. */
   sweepUntitled(canvasId: string, before: string): number {
     return this.db
       .query(
         `UPDATE cards SET deleted_at = $now
          WHERE canvas_id = $c AND plan_ref IS NULL AND deleted_at IS NULL AND state = 'planned'
-           AND TRIM(COALESCE(title, '')) = '' AND created_at < $before`,
+           AND TRIM(COALESCE(title, '')) = '' AND TRIM(COALESCE(body, '')) = '' AND images IS NULL
+           AND created_at < $before`,
       )
       .run({ c: canvasId, before, now: now() }).changes;
   }

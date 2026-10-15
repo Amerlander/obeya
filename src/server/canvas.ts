@@ -9,7 +9,7 @@ import { repoName } from '../adapters/generic';
 import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
 import type { Language } from '../core/locale';
-import { AGENT_DEFAULTS, agentListens, type AgentRole, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, type PendingRestart, plannableAsProject, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, type SharedSettings, type SpotInput } from '../core/types';
+import { AGENT_DEFAULTS, agentListens, type AgentRole, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, type PendingRestart, plannableAsProject, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, type SharedSettings, type SpotInput } from '../core/types';
 import { BadRequest, Board, replyNote, type StoredIdea } from './board';
 import { type Command, Commander } from './commands';
 import type { Config } from './config';
@@ -203,8 +203,11 @@ export class CanvasRuntime {
         const r = this.repoOf(card);
         return { workers: r.workers, workspaces: r.workspaces, adapter: r.adapter, path: r.read.path };
       },
+      imageFiles: this.imageFiles,
     }));
     koordinator.resume();
+    // a card whose page closed before Obeya named it
+    for (const i of board.snapshot().items) if (i.state === 'planned' && !i.queue && nameless(i)) void koordinator.name(i.id);
     this.explorers = new Explorers({
       board,
       runtime: deps.runtime,
@@ -749,6 +752,7 @@ export class CanvasRuntime {
     // an idea's agent starts from the card's text, and opens the discussion with it
     if (p.state === 'idea' && state !== 'idea') {
       this.written(cardId);
+      void this.koordinator.name(cardId);
       this.explorers.open(cardId);
     }
   }
@@ -870,7 +874,7 @@ export class CanvasRuntime {
     // the options picked on a proposal go to its reviser without the Koordinator, which would have logged them
     const r = this.act(cardId, a, true);
     // the end of watching a demo is no click of the owner's
-    if (a.action !== 'release' && a.action !== 'unsay' && !(['message', 'answer', 'discuss'].includes(a.action) && 'text' in a && a.text?.trim())) this.koordinator.noticed();
+    if (a.action !== 'release' && a.action !== 'unsay' && a.action !== 'name' && !(['message', 'answer', 'discuss'].includes(a.action) && 'text' in a && a.text?.trim())) this.koordinator.noticed();
     return r;
   }
 
@@ -898,6 +902,8 @@ export class CanvasRuntime {
     switch (a.action) {
       case 'start':
         return this.koordinator.request(cardId);
+      case 'name':
+        return void this.koordinator.name(cardId);
       case 'force':
         return this.koordinator.force(cardId);
       case 'dequeue':

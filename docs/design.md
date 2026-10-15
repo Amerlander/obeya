@@ -2988,8 +2988,15 @@ the repository; the copy on the project is only for the archive).
   window of moderate height much of its room.
 - Opening a card takes 300 ms: a 130 ms flight brings it to the middle, then it unfolds in 170 ms;
   closing runs the same in reverse. Fast enough not to wait on, long enough to keep the context.
-- Manual cards are created by double-click or `n`, and edited in the unfolded card; a new card
-  closed without a title is dropped. Deleting offers undo. An empty canvas names speaking first
+- Manual cards are created by double-click or `n`, and edited in the unfolded card; it opens with
+  the cursor in the text field. The title is optional (its field says so): a card closed or started
+  with a text or screenshots but no title gets one from Obeya (`Koordinator.name`, a short read-only
+  session of the „Kleine Aufgaben“ group; the text's first line when it gives none), before its
+  start is judged; until then the canvas shows the text's first line, muted. A title the owner
+  types meanwhile stands. A new card closed empty is dropped, and so is one left empty by a closed
+  page, on Obeya's next start. Before (2026-10-15) a card needed a title, the cursor started in the
+  title field, and a card closed without a title was dropped with its text. Deleting offers undo.
+  An empty canvas names speaking first
   (hold Space and say what Obeya should build; the card appears where the pointer is on letting go),
   the double-click second. The bar's "New task"
   button only teaches the double-click: it opens a note saying so with one "Got it", and goes for

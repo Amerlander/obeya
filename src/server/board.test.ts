@@ -352,15 +352,17 @@ describe('manual cards', () => {
     expect(() => board.patch('nope', { x: 1 })).toThrow(BadRequest);
   });
 
-  test('untitled cards left over from a closed page are dropped on start', () => {
+  test('empty cards left over from a closed page are dropped on start; one with a text waits to be named', () => {
     const fresh = board.create({ title: '', x: 0, y: 0 });
     const old = board.create({ title: ' ', x: 0, y: 0 });
     const kept = board.create({ title: 'Echt', x: 0, y: 0 });
-    store.db.query("UPDATE cards SET created_at = '2020-01-01T00:00:00.000Z' WHERE id IN ($a, $b)").run({ a: old.id, b: kept.id });
+    const written = board.create({ title: '', body: 'Eine Aufgabe', x: 0, y: 0 });
+    store.db.query("UPDATE cards SET created_at = '2020-01-01T00:00:00.000Z' WHERE id IN ($a, $b, $c)").run({ a: old.id, b: kept.id, c: written.id });
     const again = new Board(store, { id: 'shop', name: 'Shop', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => ({ docs, dirs: [] }));
     const ids = again.snapshot().items.map((i) => i.id);
     expect(ids).toContain(fresh.id);
     expect(ids).toContain(kept.id);
+    expect(ids).toContain(written.id);
     expect(ids).not.toContain(old.id);
   });
 

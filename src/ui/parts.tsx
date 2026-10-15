@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useRef, useState } from 'react';
 import { type Bounds, shapeOf } from '../core/layout';
-import { answering, type AppUpdate, type CanvasInfo, type ClonePool, finished, finishingUp, type Item, needsYou, type PendingRestart, type PoolHost, type ProjectHistory, stoppedArchivable } from '../core/types';
+import { answering, type AppUpdate, type CanvasInfo, type ClonePool, finished, finishingUp, type Item, needsYou, type PendingRestart, type PoolHost, type ProjectHistory, stoppedArchivable, titleFrom } from '../core/types';
 import { api } from './api';
 import type { Cam } from './camera';
 import type { Shape } from './groups';
@@ -105,7 +105,7 @@ export const CardView = memo(
             <span>{label}</span>
           </div>
         )}
-        <div className={item.title ? 'ttl' : 'ttl untitled'}>{item.title ? <Inline md={item.title} /> : t.titlePlaceholder}</div>
+        <div className={item.title ? 'ttl' : 'ttl untitled'}>{item.title ? <Inline md={item.title} /> : titleFrom(item.body) || t.titlePlaceholder}</div>
         {meta && <div className="meta">{meta}</div>}
         <div className="state">
           {underway ?? stateLabel(item)}

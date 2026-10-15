@@ -111,6 +111,20 @@ export const agentListens = (i: Pick<Item, 'kind' | 'state' | 'branch' | 'protot
   !i.archivedAt && (i.kind === 'question' || i.state === 'idea' || i.state === 'proposal' || i.state === 'working' || i.state === 'waiting' || i.state === 'inPr' || !!i.finishing || askable(i));
 
 /**
+ * A card the owner left without a title but with a task (text or screenshots): Obeya names it from
+ * that (`Koordinator.name`). Without either it is an empty card, dropped when closed.
+ */
+export const nameless = (i: Pick<Item, 'kind' | 'title' | 'body' | 'images'>) => i.kind !== 'project' && !i.title.trim() && (!!i.body.trim() || !!i.images?.length);
+
+/** A title from a task's first words, on a card not named yet, and when Obeya's naming fails. */
+export function titleFrom(body: string): string {
+  const line = body.trim().split('\n')[0]!.trim();
+  if (line.length <= 70) return line;
+  const cut = line.slice(0, 70);
+  return `${cut.slice(0, cut.lastIndexOf(' ') > 30 ? cut.lastIndexOf(' ') : 70)}…`;
+}
+
+/**
  * A card needs the owner: it waits (but not while its worker takes in what the owner wrote on its
  * handover, nor once they approved it and its work lands), is a proposal, has a pull request that only waits for the
  * owner's merge, or is an open idea whose agent has replied and is done.
@@ -754,6 +768,8 @@ export interface CardPatch {
 export type CardAction =
   /** On a project: all its planned workstreams go to the Koordinator, which orders them. */
   | { action: 'start' }
+  /** A card the owner closed without a title (`nameless`): Obeya names it from its text. */
+  | { action: 'name' }
   | { action: 'stop' }
   /** The worker stops at once and goes on later where it stopped (`resume`, or the owner's next words to it). */
   | { action: 'pause' }

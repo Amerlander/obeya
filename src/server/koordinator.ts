@@ -5,7 +5,7 @@
 import { z } from 'zod';
 import type { RepoAdapter } from '../adapters/types';
 import { inQueue, move, movable } from '../core/queue';
-import { type AgentRole, type CardEvent, type Item, type Preference, type Queue, START_ALL_HOLD_MS, type WorkspaceShortage } from '../core/types';
+import { type AgentRole, type CardEvent, type Item, nameless, type Preference, type Queue, START_ALL_HOLD_MS, titleFrom, type WorkspaceShortage } from '../core/types';
 import { BadRequest, type Board } from './board';
 import type { Utterance } from './db';
 import type { AgentRuntime, AgentTool } from './runtime';
@@ -67,6 +67,8 @@ export interface KoordinatorOptions {
   holdMs?: number;
   /** After how many of the owner's inputs the Rückschau runs; REVIEW_EVERY by default. */
   reviewEvery?: number;
+  /** The files of screenshots by their ids. */
+  imageFiles?: (ids?: string[]) => string[];
 }
 
 export class Koordinator {
@@ -81,6 +83,8 @@ export class Koordinator {
   private draining = false;
   /** A look again at cards waiting for a workspace, which can free up without a change of the board (a dirty clone cleaned up). */
   private recheck?: ReturnType<typeof setTimeout>;
+  /** Cards being named now: asked again, the same session answers. */
+  private naming = new Map<string, Promise<void>>();
 
   constructor(private o: KoordinatorOptions) {
     o.board.onChange(() => this.scheduleDrain());
@@ -433,6 +437,8 @@ export class Koordinator {
   }
 
   private async decide(cardId: string) {
+    // a card started without a title gets one first: its worker, branch and the owner know it by it
+    if (this.o.board.item(cardId) && nameless(this.o.board.item(cardId)!)) await this.name(cardId);
     const card = this.o.board.item(cardId);
     // taken out of the queue or deleted while waiting for its turn
     if (!card || card.state !== 'planned' || !card.queue || !('checking' in card.queue)) return;
@@ -626,6 +632,64 @@ export class Koordinator {
     }
   }
 
+  // ---------------------------------------------------------------- naming
+
+  /**
+   * A card the owner left without a title (`nameless`) gets one from its text and screenshots, by a
+   * short session; a title the owner types meanwhile stands. Without an answer the text's start
+   * stands in.
+   */
+  name(cardId: string): Promise<void> {
+    const card = this.o.board.item(cardId);
+    if (!card || !nameless(card)) return Promise.resolve();
+    let naming = this.naming.get(cardId);
+    if (!naming) {
+      naming = this.writeTitle(card)
+        .then((title) => {
+          const now = this.o.board.item(cardId);
+          if (now && !now.title.trim() && title) this.o.board.patch(cardId, { title });
+        })
+        .finally(() => this.naming.delete(cardId));
+      this.naming.set(cardId, naming);
+    }
+    return naming;
+  }
+
+  private writeTitle(card: Item): Promise<string> {
+    const fallback = titleFrom(card.body);
+    return new Promise((resolve) => {
+      let title: string | null = null;
+      const session = this.o.runtime.start(
+        {
+          cwd: this.o.repoFor(card).path,
+          readOnly: true,
+          role: 'chores',
+          system: NAME_SYSTEM(this.language),
+          tools: [
+            {
+              name: 'title',
+              description: `The card's title, in ${this.language}.`,
+              schema: { title: z.string() },
+              run: (a) => {
+                if (title !== null) return 'Already named.';
+                title = String(a.title).replace(/\s+/g, ' ').trim().slice(0, 200);
+                return 'Recorded. End your turn now.';
+              },
+            },
+          ],
+          onEvent: (e) => {
+            if (e.type === 'idle' || e.type === 'error') {
+              session.close();
+              resolve(title || fallback);
+            }
+          },
+        },
+        card.body.trim() ? `The task:\n${card.body.trim()}` : 'The task is in the screenshots alone (shown below).',
+        this.o.imageFiles?.(card.images) ?? [],
+      );
+    });
+  }
+
   // ---------------------------------------------------------------- the estimate
 
   private estimate(card: Item, active: Item[], ahead: Item[] = []): Promise<Scope> {
@@ -811,6 +875,8 @@ export class Koordinator {
     return i;
   }
 }
+
+const NAME_SYSTEM = (language: string) => `You name a card on Obeya, a canvas on which the owner directs coding agents. The owner wrote the card's task (below) without a title. Give it one with the tool title: in ${language}, short and precise like a ticket title (at most about 70 characters), saying what the task changes or achieves; no quotes, no full stop at the end. Then end your turn.`;
 
 const SYSTEM = (language: string) => `
 You are the Koordinator of Obeya, a canvas on which the owner directs coding agents; the owner knows you simply as Obeya. Several workers work at the same time, each in its own workspace, and their branches are rebased onto the main branch one after the other. Your job here: before a card starts, estimate which files it will change, and judge whether running it next to the cards in progress is likely to end in merge conflicts. Only those keep it waiting; everything else should run in parallel. Cards queued ahead of it count too: they came first and start before it, so a card likely to conflict with one of them waits behind it rather than overtaking it.

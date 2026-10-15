@@ -1,7 +1,7 @@
 // The unfolded card: what it is, what its worker does, and what the owner decides.
 
 import { Fragment, type ReactNode, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { agentListens, askable, buildableOn, type CardAction, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, EXPORT_HTML_MAX, finished, finishingUp, type Item, type Mock, type NextStep, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, type Spot, stopped, stoppedArchivable } from '../core/types';
+import { agentListens, askable, buildableOn, type CardAction, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, EXPORT_HTML_MAX, finished, finishingUp, type Item, type Mock, type NextStep, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, type Spot, stopped, stoppedArchivable, titleFrom } from '../core/types';
 import { mockPage } from '../core/frame';
 import { answerText, toggle } from './answer';
 import { ApiError, api, at, type Field, holdRestart, onCardEvent, onCardEventGone } from './api';
@@ -128,7 +128,7 @@ export function Detail(p: Props) {
     return (
       <>
         {kind && <div className="p-kind">{kind}</div>}
-        {item.archivedAt ? <div className="p-title">{item.title ? <Inline md={item.title} /> : t.titlePlaceholder}</div> : <ManualTitle item={item} onEdit={p.onEdit} />}
+        {item.archivedAt ? <div className="p-title">{item.title ? <Inline md={item.title} /> : titleFrom(item.body) || t.titlePlaceholder}</div> : <ManualTitle item={item} onEdit={p.onEdit} />}
         <IdeaView item={item} act={act} run={run} onDelete={p.onDelete} onTell={p.onTell} />
         {error && <p className="p-error">{error}</p>}
       </>
@@ -279,7 +279,7 @@ export function Detail(p: Props) {
   return (
     <>
       {kind && <div className="p-kind">{kind}</div>}
-      {editable ? <ManualTitle item={item} onEdit={p.onEdit} /> : <div className="p-title">{item.title ? <Inline md={item.title} /> : t.titlePlaceholder}</div>}
+      {editable ? <ManualTitle item={item} onEdit={p.onEdit} /> : <div className="p-title">{item.title ? <Inline md={item.title} /> : titleFrom(item.body) || t.titlePlaceholder}</div>}
       <div className={['p-state', finishingUp(item) && 'finishing', item.paused && 'paused'].filter(Boolean).join(' ')}>
         ● {stateLabel(item)}
         {item.statusLine && (item.state === 'working' || item.state === 'inPr' || item.finishing) && <span className="p-status"> · {item.statusLine}</span>}
@@ -1820,17 +1820,23 @@ function ManualTitle({ item, onEdit }: { item: Item; onEdit: (p: CardPatch) => v
   // one line of text that wraps: a long title shows in full instead of running out of the box
   const ref = useRef<HTMLTextAreaElement>(null);
   useFitHeight(ref, title);
+  // the title Obeya gave the card while it is open shows, unless the owner has typed in the field
+  const typed = useRef(false);
+  useEffect(() => {
+    if (!typed.current && !title && item.title) setTitle(item.title);
+  }, [item.title]);
   return (
     <textarea
       ref={ref}
       className="p-title"
       rows={1}
       value={title}
-      placeholder={t.titlePlaceholder}
+      placeholder={t.titleOptional}
       maxLength={200}
       onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
       onChange={(e) => {
         const v = e.target.value.replace(/\s*\n\s*/g, ' ');
+        typed.current = true;
         setTitle(v);
         onEdit({ title: v });
       }}

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { type Bounds, boundsOf, CARD_SIZE, type Place, PROJECT_HEAD, PROJECT_PAD, unionBounds } from '../core/layout';
-import { agentListens, answering, type CanvasInfo, type CanvasSnapshot, type CardPatch, finished, type Group, type Item, needsYou, openPerGroup, type PendingRestart, type PlanDir, START_ALL_HOLD_MS, type AppUpdate, unreadAnswers } from '../core/types';
+import { agentListens, answering, type CanvasInfo, type CanvasSnapshot, type CardPatch, finished, type Group, type Item, nameless, needsYou, openPerGroup, type PendingRestart, type PlanDir, START_ALL_HOLD_MS, titleFrom, type AppUpdate, unreadAnswers } from '../core/types';
 import { api, ApiError, beforeReload, onNotice, reportFocus, setCanvas, useCanvas } from './api';
 import { GroupNames, growFrom, inside, Lasso, Ring, TerritoryLayer, useTerritories } from './groups';
 import { besideSheet, BOTTOM, type Cam, camFor, centreOn, chase, dragLimit, edgeScroll, FAR, flying, flyTo, keepInView, MAX_ZOOM, MIN_ZOOM, overviewCam, placeIn, shows, stopFlight, TOP, toWorld } from './camera';
@@ -305,12 +305,14 @@ function Canvas({
     edit.current = null;
     return Object.keys(e.patch).length ? api.patch(e.id, e.patch) : Promise.resolve();
   };
-  // the open card's title as typed, which the snapshot may not carry yet
-  const openTitle = useRef('');
+  // what the open card holds as typed, which the snapshot may not carry yet
+  const openDraft = useRef<Pick<Item, 'kind' | 'title' | 'body' | 'images'>>({ kind: 'task', title: '', body: '' });
   const onEdit = (p: CardPatch) => {
     const id = focusRef.current?.id;
     if (!id) return;
-    if (p.title !== undefined) openTitle.current = p.title;
+    if (p.title !== undefined) openDraft.current.title = p.title;
+    if (p.body !== undefined) openDraft.current.body = p.body;
+    if (p.images !== undefined) openDraft.current.images = p.images;
     if (edit.current?.id !== id) flushEdit().catch(console.error);
     const e = (edit.current ??= { id, patch: {} });
     Object.assign(e.patch, p);
@@ -324,7 +326,7 @@ function Canvas({
     if (f?.type === 'card') return;
     if (i.kind === 'project') return openProject(i);
     setFocus({ type: 'card', id: i.id, prevCam: camRef.current, prevSide: camSide.current, project: f });
-    openTitle.current = i.title;
+    openDraft.current = { kind: i.kind, title: i.title, body: i.body, images: i.images ?? [] };
     setOpened(i.archivedAt ? i : null);
     // bring the card to the middle at a readable scale first, so the unfold starts where the eye is;
     // an archived card is not on the canvas and unfolds from its row in the archive
@@ -346,8 +348,11 @@ function Canvas({
     setDim(true);
     if (!quick) await sleep(UNFOLD_MS);
     panel.classList.add('ready');
+    // a card of the owner's without a title is written in its text first: Obeya names it from that
     const title = panel.querySelector<HTMLTextAreaElement>('textarea.p-title');
-    if (title && !title.value) title.focus();
+    const body = panel.querySelector<HTMLTextAreaElement>('textarea.p-body');
+    if (title && !title.value) (body ?? title).focus();
+    body?.setSelectionRange(body.value.length, body.value.length);
   }
 
   // a card that starts or finishes work while open changes its width and colour: resize in place
@@ -415,7 +420,7 @@ function Canvas({
     const f = focusRef.current;
     const panel = panelRef.current;
     if (f?.type !== 'card' || !panel) return;
-    flushEdit().catch(console.error);
+    const saved = flushEdit().catch(console.error);
     panel.querySelector('video')?.pause();
     const i = byId(f.id);
     const el = fromEl(f.id, !!f.project);
@@ -428,8 +433,12 @@ function Canvas({
     panel.className = '';
     setOpenId(null);
     setFocus(f.project);
-    // a new card left without a title was not wanted
-    if (!keepUntitled && i?.source === 'manual' && !openTitle.current.trim()) api.remove(i.id).catch(console.error);
+    // a new card left empty was not wanted; one with a task but no title, Obeya names
+    const draft = openDraft.current;
+    if (i?.source === 'manual' && !draft.title.trim()) {
+      if (nameless(draft)) saved.then(() => api.act(i.id, { action: 'name' })).catch(console.error);
+      else if (!keepUntitled) api.remove(i.id).catch(console.error);
+    }
     await fly(back(f), FLY_MS);
     // the card may have gone (archived, deleted) and taken the last content in view with it
     recover();
@@ -492,9 +501,11 @@ function Canvas({
     const f = focusRef.current;
     if (f?.type !== 'card') return;
     const i = byId(f.id);
-    const title = openTitle.current.trim();
+    const title = openDraft.current.title.trim() || titleFrom(openDraft.current.body);
     if (edit.current) clearTimeout(edit.current.timer);
     edit.current = null;
+    // nothing for Obeya to name: the card goes
+    openDraft.current = { kind: i?.kind ?? 'task', title: '', body: '' };
     await closeCard({ keepUntitled: true });
     if (!i) return;
     await api.remove(i.id);

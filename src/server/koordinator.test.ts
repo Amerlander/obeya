@@ -367,6 +367,58 @@ describe('Koordinator', () => {
   });
 });
 
+describe('Koordinator names a card the owner left without a title', () => {
+  const namings = () => runtime.sessions.filter((s) => s.spec.tools.some((t) => t.name === 'title'));
+  const task = (body: string) => board.create({ title: '', body, x: 0, y: 0 });
+
+  test('from its text, by a short read-only session; asked twice, one session answers', async () => {
+    const a = task('Der Dialog soll den Cursor ins Textfeld setzen.');
+    const naming = k.name(a.id);
+    void k.name(a.id);
+    expect(namings()).toHaveLength(1);
+    expect(namings()[0]!.spec).toMatchObject({ readOnly: true, role: 'chores' });
+    expect(namings()[0]!.inbox[0]).toContain('Der Dialog soll den Cursor ins Textfeld setzen.');
+    namings()[0]!.call('title', { title: '  Cursor startet\nim Textfeld ' });
+    namings()[0]!.emit({ type: 'idle' });
+    await naming;
+    expect(item(a.id).title).toBe('Cursor startet im Textfeld');
+  });
+
+  test('a title the owner types meanwhile stands; without an answer the text’s start stands in', async () => {
+    const a = task('Erste Zeile\nmehr');
+    const naming = k.name(a.id);
+    board.patch(a.id, { title: 'Meiner' });
+    namings()[0]!.call('title', { title: 'Obeyas' });
+    namings()[0]!.emit({ type: 'idle' });
+    await naming;
+    expect(item(a.id).title).toBe('Meiner');
+
+    const b = task('Erste Zeile\nmehr');
+    const failed = k.name(b.id);
+    namings().at(-1)!.emit({ type: 'error', message: 'down' });
+    await failed;
+    expect(item(b.id).title).toBe('Erste Zeile');
+  });
+
+  test('an empty card or one with a title is not named', async () => {
+    await k.name(task('').id);
+    await k.name(card('Titel').id);
+    expect(namings()).toHaveLength(0);
+  });
+
+  test('a card started without a title is named before it is judged', async () => {
+    const a = task('Mach was.');
+    k.request(a.id);
+    await settle();
+    expect(item(a.id).state).toBe('planned');
+    namings()[0]!.call('title', { title: 'Etwas machen' });
+    namings()[0]!.emit({ type: 'idle' });
+    await settle();
+    expect(item(a.id)).toMatchObject({ title: 'Etwas machen', state: 'working' });
+    expect(board.row(a.id).branch).toContain('etwas-machen');
+  });
+});
+
 describe('Koordinator waits for a free workspace', () => {
   let clones: string[];
 

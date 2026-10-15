@@ -148,7 +148,7 @@ const SHEET_TALK = 30;
 /** The setting that names the card collecting accepted rules for a repository's CLAUDE.md, per repository. */
 const CLAUDE_MD_SETTING = 'claude_md_card:';
 
-/** How long an untitled card of the owner's may exist before Obeya drops it on start. */
+/** How long an empty card of the owner's (no title, text or screenshots) may exist before Obeya drops it on start. */
 const UNTITLED_GRACE_MS = 10 * 60_000;
 
 export class BadRequest extends Error {
@@ -225,7 +225,7 @@ export class Board {
     readonly language: () => Language = () => 'de',
   ) {
     store.ensureCanvas(canvas.id, canvas.name);
-    // a new card whose page closed before it got a title was never wanted
+    // a new card whose page closed before anything was written in it was never wanted
     store.sweepUntitled(canvas.id, new Date(Date.now() - UNTITLED_GRACE_MS).toISOString());
   }
 
