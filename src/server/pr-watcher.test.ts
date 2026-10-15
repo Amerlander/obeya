@@ -242,18 +242,6 @@ describe('watching', () => {
     expect(state(id)).toBe('live');
   });
 
-  test('a PR found ready before Obeya merged is merged on the next round', async () => {
-    const id = await inPr();
-    runtime.last.call('pr_opened', { url: URL_ });
-    runtime.last.emit({ type: 'idle' });
-    runtime.last.emit({ type: 'idle' });
-    // what an Obeya that left the merge to the owner kept (a real PR, ready for two days)
-    board.work(id, { pr: JSON.stringify({ ...JSON.parse(board.row(id).pr!), readyHead: 'aaa' }) });
-    watcher.poll();
-    expect(merges).toEqual(['aaa']);
-    expect(state(id)).toBe('live');
-  });
-
   test('a merge GitHub refuses leaves it to the owner, tried again each round; new work takes that back', async () => {
     const id = await inPr();
     runtime.last.call('pr_opened', { url: URL_ });

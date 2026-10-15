@@ -918,8 +918,7 @@ A task's branch (and its plan doc) stands under its title, with the size of its 
 („+120 −30 in 5 Dateien“, `Branch` in `src/ui/diff.tsx`): before landing, the branch in its
 workspace against the default branch, committed or not, new files included; once landed, what the
 landing put on the default branch (`Shipped.base..commit`: the default branch before a landing on
-main, a merge commit's first parent; cards that landed before 2026-10-12, or whose merge commit
-GitHub did not name, have none). A click shows the whole diff over the page, file by file, with
+main, a merge commit's first parent; a card whose merge commit GitHub did not name has none). A click shows the whole diff over the page, file by file, with
 large files folded; while the card has a workspace, „Pfad kopieren“ copies its directory
 (`host:/dir` on another machine). The owner rarely reads the code, so it stays a quiet line, read
 when the card opens and again as the work moves on (`GET …/cards/:id/diff`, `?full` for the diff
@@ -2008,8 +2007,7 @@ card that never ran does not count; the setting `work_retro_cards:<repo>`), afte
 card that completed the count, the retrospective runs. A new repository's first ones come sooner
 (`WORK_RETRO_RAMP`): after its first finished card, then after 2 more and 4 more, then every 10, so
 the owner does not wait long for the first improvements; the retrospectives a repository had are
-counted (`work_retro_runs:<repo>`, the owner's own included), and one that had some before they were
-counted is past the ramp.
+counted (`work_retro_runs:<repo>`, the owner's own included).
 
 The retrospective is one read-only session in that repository's Lesestand, so it sees its CLAUDE.md,
 scripts and skills, reads the notes since the last one (`work_retro_since:<repo>`) card by card,
@@ -2688,8 +2686,7 @@ clear from where it is shown. The person follows from "Das ist meine eigene Stim
 the first person only in the owner's own voice, otherwise the narration presents the work without
 "I". `node lib/settings.ts` prints what applies, for the agent writing the narration; `DEMO_VOICE`
 overrides the voice for one render (another provider, never the owner's own, or a `.wav` that
-Qwen3-TTS clones). Settings from before the providers carry over: `gemini` keeps its key file,
-`clone` becomes the owner's own command, still to be written. The owner's clone is Obeya's Qwen3
+Qwen3-TTS clones). The owner's clone is Obeya's Qwen3
 voice with the reference clip of the owner's voice project (Stimmzwilling,
 `data/voice/derived/reference4_A.wav` with its transcript), so Obeya holds it across renders; it
 never leaves the machine.
@@ -2835,8 +2832,7 @@ its border (and the report counts a scrollbar across the page's foot), and once 
 reported, the frame does not scroll (up to its cap of 30,000 px).
 
 A handover without a demo is refused, unless the card has one from an earlier handover, which then
-stands; a card from before 2026-10-15 that was handed over with `no_demo` (the reason) still shows
-the summary and the reason as its handover. Artifacts stay in `~/demos/`, never in git; a pull
+stands. Artifacts stay in `~/demos/`, never in git; a pull
 request links a demo only once it is shared (see Sharing a demo).
 
 ### Sharing a demo
@@ -2864,7 +2860,7 @@ earlier one and offers "Neu teilen"; nothing is replaced on its own.
 
 The page has a title and two to five sentences for colleagues who have never seen Obeya: where the
 repository has a target, `ready_for_review` takes them with every demo (`demo.page`), and for a demo
-handed over before that a short read-only session writes them from the worker's last summary when
+handed over without them a short read-only session writes them from the worker's last summary when
 the owner shares, kept with the demo afterwards.
 
 #### Share commands
@@ -2882,8 +2878,8 @@ in `OBEYA_REPO`, one call at a time, in `share/` under Obeya's home. The calls a
 
 The slug comes from the card's title and id once and stays, so a link keeps working across
 publishing again. The command's stderr goes into the card's log, a failure with its output as an
-error, and the card stays as it was. A share held, publishing or withdrawing at a restart goes on
-after it.
+error, and the card stays as it was. A share publishing or withdrawing at a restart goes on after
+it.
 
 A share command from the configuration runs like the adapter's; its words are split at spaces
 outside quotes, a program given as a path and any script are found in the repository (what the
@@ -2961,8 +2957,8 @@ The page (`src/server/demo-page.ts`) is the one a share command publishes (the a
 `src/adapters/kit.ts`, hands it to the command), without its link to the overview. Its own words
 (the date line, the captions' name, the links, the play button) are in the demo's language: the one
 the demo's `index.html` names (the director writes the report page in the narration language; an
-artifact names its own), else the narration language of the demo settings. A share command that
-passes no language still gets the German page. Its video waits with a big play button over it until
+artifact names its own), else the narration language of the demo settings. A page made without a
+language is German. Its video waits with a big play button over it until
 it first plays: a click anywhere on the video but its controls starts it, rather than the small
 button in the corner. It does not start on its own: browsers play sound only after a click on the
 page (in Obeya, the click that opens the card), so it could only start muted, which the owner did
@@ -2993,8 +2989,7 @@ clones and repositories naming the same site share it: `site/` is deployed whole
 or withdrawal, one directory per page with the demo's files, its `index.html` and a `meta.json`
 (kind, title, text, chapters, PR, when first shared and when its video or artifact last changed, a
 hash of the demo's own files, the page's language), plus the overview; `backup/` holds a page set
-aside while a deploy runs, put back when it fails. The format of `meta.json` is the one the first
-static-host command kept, read as it is, so its site moves over with one `mv`. Pages are written
+aside while a deploy runs, put back when it fails. Pages are written
 with Obeya's templates, each in its demo's language ("Geteilt am", "Alle Demos"), the overview in
 the site's; a page keeps its date while its demo's own files stay the same (not the copies on the
 site, which carry the script Obeya adds to an artifact). The guard against a directory lacking pages
@@ -3041,10 +3036,8 @@ and deploys again (pull, then push), with a line on each of their cards; the nex
 machine brings them back as well. Until then, or while this machine is off, the page is offline.
 
 A manifest that cannot be read (network, a login, not a manifest) refuses the deploy, since
-deploying blind could take pages offline; a site with nothing at its URL (404 there too) is the
-first deploy, and a site deployed before it had a manifest (its overview answers) deploys only from
-a machine that has every page the overview links, so the machine that moved its directory over goes
-first. A host may answer every missing file with a page of its own and HTTP 200 (Cloudflare Pages
+deploying blind could take pages offline; a site with no manifest at its URL (404) is the first
+deploy. A host may answer every missing file with a page of its own and HTTP 200 (Cloudflare Pages
 serves the overview for a site without a `404.html`): a manifest answered with the same page as a
 file that cannot be there counts as missing, not as unreadable. A page another machine withdrew
 costs its card here the link, with a line naming the machine: noticed with the next share to that
@@ -3277,8 +3270,7 @@ the archive.
 
 A plan doc that disappears ends its project: the project goes into the archive with that last state,
 and returns with its placement when the same file comes back. Known edges: a renamed doc makes a new
-project and leaves the old one archived. A project from before the doc was kept has nothing to show
-and stays hidden.
+project and leaves the old one archived.
 
 #### Watching the plan directory
 
@@ -3623,8 +3615,7 @@ of what the owner may say.
   which stayed on the canvas until a restart; a watch that follows its path from a second change
   lost right after the first (2026-10-08); the macOS poll from fseventsd dropping events
   (2026-10-09). Reading old content from the git history instead was rejected as fragile (PRs and
-  clones, renames); it served only once, to backfill Obeya's own projects from before
-  (`scripts/backfill-archived-projects.ts`, run 2026-10-01 for M2, M3, M4, M6 and M7).
+  clones, renames).
 - **Repository settings without TypeScript, read where they are used** (2026-10-14). Until then
   these values could only be set in `.obeya/adapter/index.ts`, and saving the dialog always
   restarted Obeya.
@@ -3673,7 +3664,12 @@ a checkout's self-update opens that Obeya instead of serving the home beside it.
 The app and a checkout share the home (`~/.obeya`, `OBEYA_HOME` moves it for both): canvases,
 settings, voices, models and worktrees carry over, and workers one of them paused the other resumes.
 An Obeya older than the database (`PRAGMA user_version` above its migrations, written by a newer
-checkout) leaves it alone and says to update instead of failing later.
+checkout) leaves it alone and says to update instead of failing later. The database starts from the
+schema Obeya was released with (`SCHEMA` in `src/server/db.ts`, `user_version` 40, the steps it took
+before); later changes are migrations after it. The first converts what an Obeya before the release
+kept in shapes that changed since, so no code reads those shapes. A database an Obeya before the
+release left below that schema is left alone too, with the commit to start once to bring it up to
+date (`OlderDatabase`).
 
 ### Setup assistant
 

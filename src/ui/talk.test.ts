@@ -210,10 +210,6 @@ test('questions carry their answer; a note instead of an answer settles one; the
   expect(asked).toEqual({ e: q3, steps: [work] });
   // a question answered on the owner's behalf is no longer open, whatever the card says
   expect(talkTurns([...events, ev('answer', 'project', 'Nein')], { asking: { text: 'Auch PDF?', options: [] } }).asked).toBeUndefined();
-  // a card from before notes took questions back still waits on its question after a note
-  const old = talkTurns([q2, note], { asking: { text: 'Welches Trennzeichen?', options: [] } });
-  expect(old.asked).toEqual({ e: q2, steps: [] });
-  expect(old.shown).toEqual([{ e: note, steps: [] }]);
 });
 
 test('the options an answer picked stand on its question once, not again in the owner’s message', () => {
@@ -222,7 +218,7 @@ test('the options an answer picked stand on its question once, not again in the 
   const q2 = ev('question', 'worker', formatQuestion({ text: 'Auch PDF?', options: ['Ja', 'Nein'] }, 'de'));
   const a2 = { ...ev('answer', 'owner', 'Nein'), picks: ['Nein'] };
   const q3 = ev('question', 'worker', formatQuestion({ text: 'Welches Trennzeichen?', options: [';', ','] }, 'de'));
-  // an answer from before the picks were kept apart stands in its own words, the pick among them
+  // an answer that picked nothing stands in its own words
   const a3 = ev('answer', 'owner', ';\n\nWie Excel.');
   expect(talkTurns([q1, a1, q2, a2, q3, a3]).shown).toEqual([
     { e: q1, steps: [], answer: a1.text, picks: ['CSV'] },
@@ -272,7 +268,7 @@ test('a card has one field for the owner, and under a demo with a question it ta
 });
 
 test('ideas, proposals and tasks an agent worked on with a result share the layout with the conversation beside', () => {
-  const demo = { chapters: [] };
+  const demo = { kind: 'video' as const, chapters: [] };
   expect(split({ state: 'idea' })).toBe(true);
   expect(split({ state: 'proposal' })).toBe(true);
   expect(split({ state: 'waiting', branch: 'obeya/x', demo })).toBe(true);
@@ -288,12 +284,12 @@ test('a task an agent works on shows its conversation alone until there is a res
   expect(talkAlone({ state: 'working', branch: 'obeya/x' })).toBe(true);
   expect(talkAlone({ state: 'waiting', branch: 'obeya/x' })).toBe(true);
   expect(talkAlone({ state: 'done', branch: 'obeya/x' })).toBe(true);
-  expect(talkAlone({ state: 'working', branch: 'obeya/x', demo: { chapters: [] } })).toBe(false);
+  expect(talkAlone({ state: 'working', branch: 'obeya/x', demo: { kind: 'video', chapters: [] } })).toBe(false);
   expect(talkAlone({ state: 'working', branch: 'obeya/x', brief: '' })).toBe(true);
   expect(talkAlone({ state: 'planned' })).toBe(false);
   // a stopped task lays out as one an agent worked on: the task opens its conversation
   expect(talkAlone({ state: 'planned', branch: 'obeya/x' })).toBe(true);
-  expect(split({ state: 'planned', branch: 'obeya/x', demo: { chapters: [] } })).toBe(true);
+  expect(split({ state: 'planned', branch: 'obeya/x', demo: { kind: 'video', chapters: [] } })).toBe(true);
   expect(talkAlone({ state: 'idea' })).toBe(false);
 });
 
@@ -336,13 +332,10 @@ test("a demo report's question stays with the handover it came with when a later
   const reply = ev('talk', 'worker', 'Geparkt.');
   const again = ev('review', 'worker', 'Entscheidung im Plan-Doc festgehalten.');
   const { shown } = talkTurns([first, answer, reply, again], { over: true });
-  const demo = { chapters: [], question: 'Weiter testen oder parken?', answer: 'Erst einmal parken.' };
+  const demo = { kind: 'video' as const, chapters: [], question: 'Weiter testen oder parken?', answer: 'Erst einmal parken.' };
   expect(demoHandover({ ...demo, handover: first.id }, shown)?.e).toBe(first);
-  // a demo from before it knew its handover: the last one before the answer
-  expect(demoHandover(demo, shown)?.e).toBe(first);
   // a new demo with a later handover goes with that one
   expect(demoHandover({ ...demo, handover: again.id }, shown)?.e).toBe(again);
-  expect(demoHandover({ chapters: [], question: 'Q?' }, shown)?.e).toBe(again);
 });
 
 test("the Koordinator reads the owner's words on a card until its confirmation follows them; a revised proposal's picked options are not read", () => {
@@ -381,7 +374,4 @@ test('what an agent did until it was paused stays above the line once it went on
   expect(t.shown.map((x) => x.e)).toEqual([asked, read, paused, more, resumed]);
   expect(t.shown[1]).toMatchObject({ steps: [read, thought], quiet: true });
   expect(t.pending).toEqual([now]);
-  // a line from before 2026-10-15, which said how it goes on, is one too
-  const old = ev('state', 'owner', 'Paused. The agent goes on when you click “Resume” or write to it.');
-  expect(talkTurns([asked, read, old, resumed]).shown.map((x) => x.e)).toEqual([asked, read, old, resumed]);
 });

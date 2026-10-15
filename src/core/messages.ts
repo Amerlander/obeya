@@ -267,8 +267,6 @@ const de = {
     loginWall: (status: number) => `HTTP ${status}, eine Umleitung auf eine Anmeldung; die headers der Site fehlen oder stimmen nicht`,
     notManifest: 'keine Manifest-Datei',
     headerKey: (key: string, header: string) => `Der Header ${header} der Site braucht ${key}, und die env-Datei der Site hat es nicht.`,
-    siteBefore: (slugs: string[]) =>
-      `Nicht deployt: Die Site zeigt ${slugs.length === 1 ? 'eine Seite' : `${slugs.length} Seiten`}, die diesem Rechner fehlen (${slugs.join(', ')}), und hat noch kein Manifest; ein Deploy nähme ${slugs.length === 1 ? 'sie' : 'sie alle'} offline. Zuerst von dem Rechner teilen, der sie hat.`,
     pulling: (pages: number, mib: string) => `Lade ${pages === 1 ? 'eine Seite' : `${pages} Seiten`} von der Site, die andere Rechner geteilt haben (${mib} MiB) …`,
     pulled: (done: number, of: number) => `${done} von ${of} Seiten geladen.`,
     downloadFailed: (file: string, why: string) => `${file} war von der Site nicht zu laden (${why}).`,
@@ -548,8 +546,6 @@ const en: Messages = {
     loginWall: (status: number) => `HTTP ${status}, a redirect to a login; the site’s headers are missing or wrong`,
     notManifest: 'not a manifest',
     headerKey: (key: string, header: string) => `The site’s header ${header} needs ${key}, which the site’s env file lacks.`,
-    siteBefore: (slugs: string[]) =>
-      `Not deployed: the site shows ${slugs.length === 1 ? 'a page' : `${slugs.length} pages`} this machine lacks (${slugs.join(', ')}) and has no manifest yet; a deploy would take ${slugs.length === 1 ? 'it' : 'them'} offline. Share from the machine that has them first.`,
     pulling: (pages: number, mib: string) => `Downloading ${pages === 1 ? 'a page' : `${pages} pages`} other machines shared from the site (${mib} MiB) …`,
     pulled: (done: number, of: number) => `Downloaded ${done} of ${of} pages.`,
     downloadFailed: (file: string, why: string) => `${file} could not be downloaded from the site (${why}).`,

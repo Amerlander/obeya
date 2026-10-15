@@ -37,7 +37,7 @@ import type { RestartReason } from '../core/types';
 import { type CanvasConfig, Canvases } from './canvas';
 import { Config, CONFIG_FILE, expand, expandConfig, readConfigFile } from './config';
 import { checkPlugin } from './demo';
-import { NewerDatabase, Store } from './db';
+import { Store, UnusableDatabase } from './db';
 import { ghForge } from './forge';
 import { NarrationHost } from './narration';
 import { claudeExecutable, idleRuntime, sdkRuntime } from './runtime';
@@ -148,7 +148,7 @@ const store = (() => {
   try {
     return new Store(join(home, 'obeya.db'));
   } catch (e) {
-    if (!(e instanceof NewerDatabase)) throw e;
+    if (!(e instanceof UnusableDatabase)) throw e;
     console.error(`Obeya: ${e.message}`);
     process.exit(1);
   }

@@ -538,15 +538,6 @@ function IdeaView({ item, act, run, onDelete, onTell }: { item: Item; act: (a: C
               {idea.brief.trim() ? <Body md={idea.brief} /> : <div className="hint">{t.idea.briefEmpty}</div>}
               <Mocks mocks={idea.mocks} />
             </div>
-            {/* a demo copied onto the idea, from before every prototype kept its own */}
-            {item.demo && !item.prototypes?.length && (
-              <>
-                <h4 className="p-h">{t.idea.prototypeDemo}</h4>
-                <DemoView item={item} summary="" demo={item.demo} autoplay={false}>
-                  <p className="hint">{t.idea.prototypeKept}</p>
-                </DemoView>
-              </>
-            )}
             <PrototypeDemos item={item} />
           </>
         }

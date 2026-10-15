@@ -217,15 +217,6 @@ describe('the archive of projects', () => {
     expect(() => board.unarchive(p!.id)).toThrow(expect.objectContaining({ code: 'planCard' }));
   });
 
-  test('a project from before Obeya kept the doc stays hidden when its doc goes', () => {
-    const p = board.snapshot().items[0]!;
-    store.db.query('UPDATE cards SET plan = NULL WHERE id = $id').run({ id: p.id });
-    docs = [];
-    board.docsChanged();
-    expect(board.snapshot().items).toEqual([]);
-    expect(board.archived()).toEqual([]);
-  });
-
   test('a project lists its decisions and those of the idea its doc was written from', () => {
     const idea = board.create({ idea: true, title: 'Idee B', x: 0, y: 0 });
     board.decide({ project_id: null, card_id: idea.id, question: 'Idee „Idee B“: wie weiter?', answer: 'Als Projekt.', by: 'owner' });

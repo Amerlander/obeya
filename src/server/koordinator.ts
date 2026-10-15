@@ -5,7 +5,7 @@
 import { z } from 'zod';
 import type { RepoAdapter } from '../adapters/types';
 import { inQueue, move, movable } from '../core/queue';
-import { type AgentRole, type CardEvent, type Item, nameless, type Preference, type Queue, START_ALL_HOLD_MS, titleFrom, type WorkspaceShortage } from '../core/types';
+import { type AgentRole, type CardEvent, type Item, nameless, type Preference, START_ALL_HOLD_MS, titleFrom, type Wait, type WorkspaceShortage } from '../core/types';
 import { BadRequest, type Board } from './board';
 import type { Utterance } from './db';
 import type { AgentRuntime, AgentTool } from './runtime';
@@ -94,12 +94,6 @@ export class Koordinator {
   resume() {
     const together = new Set<string>();
     for (const i of this.o.board.snapshot().items) {
-      // a start that found no workspace before cards waited for one: it waits now
-      if (i.state === 'planned' && !i.queue && !i.archivedAt) {
-        const last = this.o.board.events(i.id).at(-1);
-        const shortage = last?.kind === 'error' && last.code ? SHORTAGE[last.code] : undefined;
-        if (shortage) this.setQueue(i.id, { workspace: shortage }, last!.at);
-      }
       if (i.state !== 'planned' || !i.queue) continue;
       if ('checking' in i.queue && i.queue.together) together.add(i.queue.together);
       else if ('checking' in i.queue) this.serial(() => this.decide(i.id));
@@ -142,7 +136,7 @@ export class Koordinator {
     return this.o.board
       .snapshot()
       .items.filter((i) => i.parent === projectId && i.state === 'planned' && i.queue && 'checking' in i.queue && i.queue.together === projectId)
-      .sort((a, b) => (a.queue!.since ?? '').localeCompare(b.queue!.since ?? ''));
+      .sort((a, b) => a.queue!.since.localeCompare(b.queue!.since));
   }
 
   /** Start a queued card anyway. */
@@ -164,8 +158,8 @@ export class Koordinator {
     if (!movable(card)) throw new BadRequest('notQueued', 'the card is not waiting');
     const { past, why } = move(cardId, earlier, this.o.board.snapshot().items);
     if (!past || why) throw new BadRequest('notMovable', past ? `${why}: ${past.id}` : 'nothing to pass');
-    const mine = card.queue!.since ?? new Date().toISOString();
-    let theirs = past.queue!.since ?? mine;
+    const mine = card.queue!.since;
+    let theirs = past.queue!.since;
     // two cards that came in the same millisecond: the order between them is the id's, so the one moved gets a time of its own
     if (theirs === mine) theirs = new Date(Date.parse(mine) + (earlier ? -1 : 1)).toISOString();
     this.setQueue(cardId, card.queue!, theirs);
@@ -433,7 +427,7 @@ export class Koordinator {
     return this.o.board
       .snapshot()
       .items.filter((i) => i.id !== card.id && i.repo === card.repo && inQueue(i) && (i.queue!.since ?? '') < since)
-      .sort((a, b) => (a.queue!.since ?? '').localeCompare(b.queue!.since ?? ''));
+      .sort((a, b) => a.queue!.since.localeCompare(b.queue!.since));
   }
 
   private async decide(cardId: string) {
@@ -493,7 +487,7 @@ export class Koordinator {
     // what waits already came first, as for a single card
     const ahead = items
       .filter((i) => i.repo === repo && !ids.has(i.id) && inQueue(i))
-      .sort((a, b) => (a.queue!.since ?? '').localeCompare(b.queue!.since ?? ''));
+      .sort((a, b) => a.queue!.since.localeCompare(b.queue!.since));
     let plan: Planned[];
     try {
       plan = await this.schedule(this.o.board.item(projectId)!, batch, active, ahead);
@@ -587,7 +581,7 @@ export class Koordinator {
     // the card waiting longest goes first: one queued later must not take its turn
     const waiting = items
       .filter((i) => i.state === 'planned' && i.queue && ('behind' in i.queue || 'workspace' in i.queue))
-      .sort((a, b) => (a.queue!.since ?? '').localeCompare(b.queue!.since ?? ''));
+      .sort((a, b) => a.queue!.since.localeCompare(b.queue!.since));
     // a repository whose workspaces are taken by a card waiting longer is not asked again
     const full = new Set<string | undefined>();
     // the owner's question to a finished card whose agent needs a full clone goes before queued cards
@@ -864,7 +858,7 @@ export class Koordinator {
   }
 
   /** A card keeps the time it came to the Koordinator for as long as it stays queued. */
-  private setQueue(cardId: string, q: Queue | null, keep?: string) {
+  private setQueue(cardId: string, q: Wait | null, keep?: string) {
     const since = keep ?? this.o.board.item(cardId)?.queue?.since ?? new Date().toISOString();
     this.o.board.work(cardId, { queue: q ? JSON.stringify({ ...q, since }) : null });
   }

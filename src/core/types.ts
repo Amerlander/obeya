@@ -79,7 +79,7 @@ export function prototypeWorkstream(items: Item[], projectId: string): Item | un
   return named.length === 1 ? named[0] : undefined;
 }
 
-/** What a `waiting` card waits for. `review` stands in for `demo` until workers record demos (M4). */
+/** What a `waiting` card waits for: `demo` a handover with a demo, `review` one without. */
 export type Need = 'demo' | 'question' | 'review';
 
 /** A question an agent asks the owner, with answer options to choose from when it has them. */
@@ -184,8 +184,6 @@ export interface Item {
   held?: number[];
   /** The owner approved the work and Obeya lands it on main (seconds of git): still `waiting`, but no longer the owner's. */
   landing?: true;
-  /** Why the worker handed over without a demo (`need` is `review`), on cards from before every handover brought one (2026-10-15). */
-  noDemo?: string;
   /** The demo, when `need` is `demo`; its files are served under `/api/cards/:id/demo/`. */
   demo?: Demo;
   /** The demo's page for colleagues, once the owner shared it (or is about to). */
@@ -442,11 +440,10 @@ export const START_ALL_HOLD_MS = 8000;
  * `workspace`: the Koordinator let the card start, but no workspace was free for it (`none`: all
  * leased or none set up; `dirty`: every free one has uncommitted changes); it starts once one is.
  */
-export type Queue = (
-  | { checking: true; together?: string }
-  | { behind: string[]; reason: string }
-  | { workspace: WorkspaceShortage }
-) & { since?: string };
+export type Queue = Wait & { since: string };
+
+/** What a card in the queue waits for (`Queue`). */
+export type Wait = { checking: true; together?: string } | { behind: string[]; reason: string } | { workspace: WorkspaceShortage };
 
 /** Why a card waits to start: no clone free (`none`), the free ones dirty, or every machine with a clean free one busy to its slots (`slots`). */
 export type WorkspaceShortage = 'none' | 'dirty' | 'slots';
@@ -458,15 +455,14 @@ export type WorkspaceShortage = 'none' | 'dirty' | 'slots';
 export type DemoKind = 'video' | 'html';
 
 export interface Demo {
-  /** Absent on demos from before HTML artifacts: those are videos. */
-  kind?: DemoKind;
+  kind: DemoKind;
   /** Seconds and title of each scene; none for an HTML artifact. */
   chapters: [number, string][];
   /** A question only the owner can answer, beyond "approve or give feedback". */
   question?: string;
   /** The owner's answer to it; the demo keeps waiting for approval. */
   answer?: string;
-  /** The handover event it came with: a later handover may keep the demo, and its question stays with the first. Absent before 2026-10-09. */
+  /** The handover event it came with: a later handover may keep the demo, and its question stays with the first. */
   handover?: number;
   /** The page it is shared on, for colleagues who have never seen Obeya: written by the worker at handover, or later from its summary. */
   page?: DemoPage;

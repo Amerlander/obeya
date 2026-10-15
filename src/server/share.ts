@@ -39,16 +39,13 @@ export interface SharePage {
   slug: string;
   title: string;
   text: string;
-  /** A video, or an HTML artifact (since 2026-10-05; absent from commands' input before). */
+  /** A video, or an HTML artifact. */
   kind: DemoKind;
   /** Seconds and title of each scene; none for an artifact. */
   chapters: [number, string][];
   /** The card's pull request, once it has one. */
   pr: string | null;
-  /**
-   * The demo's language, for the page's own words (`language` of the kit's page templates; since
-   * 2026-10-07, absent from commands' input before, when pages were German).
-   */
+  /** The demo's language, for the page's own words (`language` of the kit's page templates). */
   language: PageLanguage;
   /** The demo's directory: `demo.mp4`, `poster.jpg`, `captions.vtt`; an artifact's `index.html` and the files it loads. */
   dir: string;
@@ -94,7 +91,7 @@ export interface ShareTarget {
   version(): Promise<Versions | null>;
 }
 
-/** A share command as a target, keyed by its argv as pages were before targets. */
+/** A share command as a target, keyed by its argv. */
 export function commandTarget({ command, repo }: ShareCommand, home: string, t: Messages['share']): ShareTarget {
   return {
     key: `command:${JSON.stringify(command)}`,
@@ -200,9 +197,7 @@ export class Sharing {
   /** After a restart: a share under way goes on, a withdrawal too; pages published with an earlier version are marked. */
   resume() {
     for (const r of this.o.board.sharedRows()) {
-      let s = JSON.parse(r.share!) as StoredShare;
-      // held for the owner to take back, as shares were until 2026-10-02: it goes out now
-      if ((s.state as string) === 'pending') this.set(r.id, (s = { ...s, state: 'publishing' }));
+      const s = JSON.parse(r.share!) as StoredShare;
       // one of many shared again goes on with the rest of them
       if (s.state === 'publishing' && s.again && this.o.board.reshareRun()?.queue[0] === r.id) continue;
       if (s.state === 'publishing') void serial(() => this.publish(r.id));
@@ -297,7 +292,7 @@ export class Sharing {
 
   /**
    * Asks each share target with pages out for the version of the pages it writes, and marks the
-   * pages published with another one (or before commands said theirs): sharing them again would
+   * pages published with another one (or with none said): sharing them again would
    * make a difference. A card whose page another machine withdrew loses its link.
    */
   async checkVersions() {
@@ -386,7 +381,7 @@ export class Sharing {
     let dir: string;
     if (s.refresh) {
       // the page as it is: a newer demo on the card waits for "Neu teilen"
-      const now = s.shown ?? (demo?.page && demo.dir === s.dir ? { ...demo.page, chapters: demo.chapters, kind: demo.kind ?? 'video' } : null);
+      const now = s.shown;
       if (!now || !s.dir || !target) {
         if (s.again) return back(t.demoGone);
         this.set(cardId, atRest(s));
@@ -398,11 +393,11 @@ export class Sharing {
     } else {
       if (!demo || !target) return back(t.noDemo);
       const page = await this.page(card, demo);
-      shown = { title: page.title, text: page.text, chapters: demo.chapters, kind: demo.kind ?? 'video' };
+      shown = { title: page.title, text: page.text, chapters: demo.chapters, kind: demo.kind };
       dir = demo.dir;
     }
     const pr = this.prOf(cardId);
-    const input: SharePage = { slug: s.slug, ...shown, kind: shown.kind ?? 'video', pr, language: this.languageOf(dir), dir, shared: this.others(cardId, target.key) };
+    const input: SharePage = { slug: s.slug, ...shown, pr, language: this.languageOf(dir), dir, shared: this.others(cardId, target.key) };
     const r = await target.publish(input, (text) => this.o.board.log(cardId, 'activity', 'obeya', text));
     this.lost(target.key, r.gone);
     if ('why' in r) return back(r.why, r.said);
@@ -424,7 +419,7 @@ export class Sharing {
    * Puts the page's link into the pull request's description, unless it is there already (the
    * worker put it there, or Obeya did before). A line of Obeya's own is found again by its marker.
    */
-  private linkPr(cardId: string, pr: string, url: string, cwd: string, kind: DemoKind = 'video') {
+  private linkPr(cardId: string, pr: string, url: string, cwd: string, kind: DemoKind) {
     const n = parsePrUrl(pr)?.number;
     try {
       const body = withDemoLink(this.o.forge.body(cwd, pr), url, kind, this.o.board.t);
@@ -547,8 +542,8 @@ export class Sharing {
   }
 
   /**
-   * The page's text for a demo handed over before workers wrote one: a short session writes it
-   * from the worker's summary. Without one, the card's title and the summary's start stand in.
+   * The page's text for a demo handed over without one (its repository did not share then): a short
+   * session writes it from the worker's summary. Without one, the card's title and the summary's start stand in.
    */
   private writePage(card: Item, demo: Demo): Promise<DemoPage> {
     // a card's summary goes with its approval; the log keeps every handover

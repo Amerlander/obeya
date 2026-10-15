@@ -49,7 +49,7 @@ export const SITES_DIR = 'sites';
 export const MAX_FILE = 25 * 1024 * 1024;
 const VIDEO_FILES = ['demo.mp4', 'poster.jpg', 'captions.vtt'];
 
-/** What a page's directory on the site keeps besides its files, for the overview: the format of the share command sites were kept with before. */
+/** What a page's directory on the site keeps besides its files, for the overview. */
 interface Meta {
   /** Absent on video pages. */
   kind?: 'html';
@@ -62,8 +62,7 @@ interface Meta {
   at: string;
   /** A hash of the video or the artifact's files as the demo has them. */
   source: string;
-  /** The page's language; absent on pages written before sites knew it. */
-  language?: PageLanguage;
+  language: PageLanguage;
 }
 
 /** The site's directory name: its URL's host and path. */
@@ -131,11 +130,10 @@ interface Manifest {
   pages: Record<string, Entry>;
 }
 
-/** The live site: its manifest; none for a site not deployed yet, or deployed before sites had one (with the pages its overview links). */
+/** The live site: its manifest; none for a site not deployed yet. */
 interface Live {
   deploy: string | null;
   pages: Record<string, Entry>;
-  linked: string[];
 }
 
 /** A page this Obeya may have as shared that another machine withdrew. */
@@ -169,8 +167,6 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
   const checkSite = (shared: string[], self: string, live: Live) => {
     const missing = shared.filter((s) => s !== self && !existsSync(join(dir, s, 'meta.json')));
     if (missing.length) throw new Refused(t.siteLacks(dir, missing));
-    const before = live.linked.filter((s) => s !== self && !existsSync(join(dir, s, 'meta.json')));
-    if (before.length) throw new Refused(t.siteBefore(before));
   };
 
   const deployEnv = (): Record<string, string> => {
@@ -227,19 +223,15 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
     if (r.ok) {
       const body = await r.text();
       const m = manifestOf(body);
-      if (m) return { deploy: m.deploy ?? null, pages: m.pages, linked: [] };
+      if (m) return { deploy: m.deploy, pages: m.pages };
       // a host may answer a missing file with a page of its own (Cloudflare Pages serves the
       // overview for a site without a 404.html): the manifest is missing when a file that cannot
       // be there gets the same answer
       const missing = await answer(`${MANIFEST}.${randomUUID()}`);
       if (!missing.ok || (await missing.text()) !== body) throw unreadable(t.notManifest);
     } else if (r.status !== 404) throw unreadable(status(r));
-    // no manifest: a site not deployed yet (nothing there at all), or one deployed before sites had one
-    const page = await answer('');
-    if (page.status === 404) return { deploy: null, pages: {}, linked: [] };
-    if (!page.ok) throw unreadable(status(page));
-    const linked = [...new Set([...(await page.text()).matchAll(/href="([a-z0-9][a-z0-9-]{0,80})\/"/g)].map((m) => m[1]!))];
-    return { deploy: null, pages: {}, linked };
+    // no manifest: a site not deployed yet
+    return { deploy: null, pages: {} };
   };
 
   /** The manifest in a file the live site served; null when it is none. */
@@ -252,13 +244,10 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
     }
   };
 
-  /** The manifest of this directory: as written with the last change, plus pages kept before it (by the command sites were kept with before). */
+  /** The manifest of this directory, as written with the last change. */
   const readLocal = (): Manifest => {
     const file = join(dir, MANIFEST);
-    const m: Manifest = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : { deploy: '', machine, at: '', pages: {} };
-    for (const slug of pageDirs())
-      if (!m.pages[slug] || m.pages[slug].withdrawn) m.pages[slug] = { ...entryOf(slug), rev: (m.pages[slug]?.rev ?? 0) + 1, machine };
-    return m;
+    return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : { deploy: '', machine, at: '', pages: {} };
   };
 
   /** Writes the manifest for the next deployment, under a name of its own; returns it. Pages whose directory is not there are left out. */
@@ -269,8 +258,6 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
     writeFileSync(join(dir, MANIFEST), JSON.stringify({ deploy, machine, at: new Date().toISOString(), pages } satisfies Manifest, null, 1));
     return deploy;
   };
-
-  const pageDirs = () => (existsSync(dir) ? readdirSync(dir).filter((d) => existsSync(join(dir, d, 'meta.json'))) : []);
 
   /** A page of the directory as the manifest lists it. */
   const entryOf = (slug: string): Entry => {
@@ -618,6 +605,7 @@ export function siteVersions(site: DemoSite): Versions {
     first: at,
     at,
     source: '',
+    language: 'de',
   };
   const hash = (pages: string[]) => createHash('sha256').update(pages.join('\0')).digest('hex').slice(0, 12);
   const languages: PageLanguage[] = ['de', 'en'];
@@ -626,9 +614,9 @@ export function siteVersions(site: DemoSite): Versions {
   return { video, html };
 }
 
-/** A page of the site, in its language (German for pages from before sites knew it). */
+/** A page of the site, in its language. */
 function pageHtml(site: DemoSite, m: Meta, poster: boolean): string {
-  const language = m.language ?? 'de';
+  const { language } = m;
   const w = PAGE_WORDS[language];
   const parts = {
     title: m.title,

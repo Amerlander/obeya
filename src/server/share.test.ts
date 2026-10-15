@@ -247,7 +247,7 @@ describe('sharing a demo', () => {
     expect(() => sharing.unshare(card('X').id)).toThrow(BadRequest);
   });
 
-  test('a demo from before pages were written gets its text from a short session over the summary', async () => {
+  test('a demo handed over without its page gets its text from a short session over the summary', async () => {
     const c = card('Zähler', { page: undefined });
     board.log(c.id, 'review', 'worker', 'Export gebaut: CSV mit Semikolon.');
     sharing.share(c.id);
@@ -263,14 +263,12 @@ describe('sharing a demo', () => {
     expect(board.item(c.id)!.demo!.page).toEqual({ title: 'Zählerstände als CSV', text: 'Vermieter laden Zählerstände als CSV herunter.' });
   });
 
-  test('after a restart, a share under way goes on, one held as shares were before too', async () => {
+  test('after a restart, a share under way goes on', async () => {
     const a = card('A');
-    const b = card('B');
     board.work(a.id, { share: JSON.stringify({ slug: 'a', state: 'publishing' }) });
-    board.work(b.id, { share: JSON.stringify({ slug: 'b', state: 'pending' }) });
     sharing.resume();
-    await until(() => share(a.id)?.state === 'shared' && share(b.id)?.state === 'shared');
-    expect(calls().map((c) => c.input.slug).sort()).toEqual(['a', 'b']);
+    await until(() => share(a.id)?.state === 'shared');
+    expect(calls().map((c) => c.input.slug)).toEqual(['a']);
   });
 });
 
@@ -314,7 +312,7 @@ describe('a page published with an earlier version of the command', () => {
     expect([share(v.id)!.outdated, share(h.id)!.outdated]).toEqual([undefined, true]);
   });
 
-  test('a page shared before commands said their version counts as earlier; without one nothing is marked', async () => {
+  test('a page shared without a version counts as earlier; a command that says none marks nothing', async () => {
     const c = card();
     sharing.share(c.id);
     await until(() => share(c.id)?.state === 'shared');
@@ -374,7 +372,7 @@ describe('a page published with an earlier version of the command', () => {
   test('marked after a restart', async () => {
     version('v2');
     const c = card();
-    board.work(c.id, { share: JSON.stringify({ slug: 's', url: 'https://demos.example/s/', dir: join(dir, `demo-${c.id}`), version: 'v1' }) });
+    board.work(c.id, { share: JSON.stringify({ slug: 's', url: 'https://demos.example/s/', dir: join(dir, `demo-${c.id}`), shown: { title: 'T', text: '', chapters: [], kind: 'video' }, version: 'v1' }) });
     sharing.resume();
     await until(() => !!share(c.id)?.outdated);
   });
@@ -680,7 +678,7 @@ describe('exporting a demo, where the repository has no share target', () => {
     // a share command's page, with the caption file beside it, names the track in English too
     const parts = { title: 'CSV export', text: '', chapters: [], pr: null, when: '', tabTitle: '', video: { src: 'demo.mp4' }, captions: { src: 'captions.vtt' } };
     expect(demoPageHtml({ ...parts, language: 'en' })).toContain('<track kind="captions" src="captions.vtt" srclang="en" label="English">');
-    // without a language, as from a command written before, the page stays German
+    // without a language the page is German
     expect(demoPageHtml(parts)).toContain('<track kind="captions" src="captions.vtt" srclang="de" label="Deutsch">');
   });
 

@@ -2,7 +2,7 @@
 
 import { LANGUAGES } from '../core/locale';
 import { MESSAGES } from '../core/messages';
-import { askable, type CardEvent, type Demo, finishingUp, formatQuestion, type Item, ownWords, pausable, type Question } from '../core/types';
+import { askable, type CardEvent, type Demo, finishingUp, type Item, ownWords, pausable, type Question } from '../core/types';
 import type { Field } from './api';
 
 /** One entry of the conversation: a message, with how the agent got to it folded under it, or a small line. */
@@ -67,14 +67,9 @@ const place = (e: CardEvent, prev: CardEvent | undefined): 'owner' | 'agent' | '
   }
 };
 
-/**
- * The handover a demo came with: a later one may keep it. A demo from before it knew its handover
- * (2026-10-09) came with the last one before the owner answered its question, else the last one.
- */
+/** The handover a demo came with: a later one may keep it. */
 export function demoHandover(demo: Demo, shown: Turn[]): Turn | undefined {
-  if (demo.handover !== undefined) return shown.find((x) => x.e.id === demo.handover);
-  const answer = demo.answer === undefined ? -1 : shown.findLastIndex((x) => x.e.kind === 'answer' && x.e.text === demo.answer);
-  return (answer < 0 ? shown : shown.slice(0, answer)).findLast((x) => x.e.kind === 'review');
+  return demo.handover === undefined ? undefined : shown.find((x) => x.e.id === demo.handover);
 }
 
 /**
@@ -145,11 +140,8 @@ export function talkTurns(all: CardEvent[], opts: { asking?: Question; over?: bo
   });
   for (const turn of shown) if (turn.e.kind === 'question') Object.assign(turn, outcome(events, turn.e));
   marked(shown);
-  const asked = opts.asking ? openQuestion(shown, opts.asking) : undefined;
-  if (asked) {
-    shown.splice(shown.indexOf(asked), 1);
-    delete asked.settled;
-  }
+  const asked = opts.asking ? openQuestion(shown) : undefined;
+  if (asked) shown.splice(shown.indexOf(asked), 1);
   if (opts.over && !asked) {
     settle(shown, steps, events);
     steps = [];
@@ -166,8 +158,8 @@ function repliesLater(events: CardEvent[], i: number): boolean {
   return false;
 }
 
-/** The line that the owner paused the card's agent (before 2026-10-15 it went on with how the agent goes on again). */
-const pauseLine = (e: CardEvent) => e.kind === 'state' && e.author === 'owner' && LANGUAGES.some((l) => e.text.startsWith(MESSAGES[l].worker.pausedByOwner));
+/** The line that the owner paused the card's agent. */
+const pauseLine = (e: CardEvent) => e.kind === 'state' && e.author === 'owner' && LANGUAGES.some((l) => e.text === MESSAGES[l].worker.pausedByOwner);
 
 /** The events in the order the agent saw them: the owner's words it read later stand after the line it read them at, in the order said. */
 function asRead(events: CardEvent[]): CardEvent[] {
@@ -246,14 +238,10 @@ function marked(shown: Turn[]) {
   }
 }
 
-/**
- * The card's last question, if it is the one the card waits on: nothing answered it, and no note
- * took it back (a card from before notes did so still waits on it, in the same words).
- */
-function openQuestion(shown: Turn[], asking: Question): Turn | undefined {
+/** The card's last question, if it is the one the card waits on: nothing answered it, and no note took it back. */
+function openQuestion(shown: Turn[]): Turn | undefined {
   const last = shown.findLast((x) => x.e.kind === 'question');
-  if (!last || last.answer !== undefined) return;
-  return !last.settled || LANGUAGES.some((l) => last.e.text === formatQuestion(asking, l)) ? last : undefined;
+  return last && last.answer === undefined && !last.settled ? last : undefined;
 }
 
 /** A question as the log holds it (`formatQuestion`): its text and the options after it. */

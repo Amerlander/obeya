@@ -36,12 +36,6 @@ describe('demo settings', () => {
     expect(describeDemoSettings({ language: 'de', voice: 'piper', listenBack: false }, undefined)).toContain('listening back: off');
   });
 
-  test('carry over what they said before the providers', () => {
-    expect(tidyDemoSettings({ language: 'de', voice: 'gemini', geminiKeyFile: '~/k' })).toEqual({ language: 'de', voice: 'gemini', keyFile: '~/k' });
-    // the clone becomes the owner's own command, which they still write
-    expect(tidyDemoSettings({ language: 'de', voice: 'clone', voiceProject: '~/voice' })).toEqual({ language: 'de', voice: 'command', ownVoice: true });
-  });
-
   test('are written to and read from the home', () => {
     writeDemoSettings({ language: 'en', voice: 'command', command: 'speak', ownVoice: true }, home);
     expect(readDemoSettings(home)).toEqual({ language: 'en', voice: 'command', command: 'speak', ownVoice: true });
@@ -52,7 +46,7 @@ describe('demo settings', () => {
     expect(withVoice(saved, undefined)).toBe(saved);
     expect(withVoice(saved, 'gemini')).toEqual({ language: 'en', voice: 'gemini', command: 'speak' });
     expect(withVoice(saved, '/tmp/someone.wav')).toEqual({ language: 'en', voice: 'qwen3', reference: '/tmp/someone.wav' });
-    expect(() => withVoice(saved, 'clone')).toThrow('unknown voice');
+    expect(() => withVoice(saved, 'robot')).toThrow('unknown voice');
   });
 
   test("speak in the first person only in the owner's own voice", () => {

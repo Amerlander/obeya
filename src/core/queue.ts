@@ -12,7 +12,7 @@ export const movable = (i: Item) => i.state === 'planned' && !!i.queue && ('behi
 
 /** The waiting cards, first in turn first. */
 export function queueOrder(items: Item[]): Item[] {
-  return items.filter(inQueue).sort((a, b) => (a.queue!.since ?? '').localeCompare(b.queue!.since ?? '') || a.id.localeCompare(b.id));
+  return items.filter(inQueue).sort((a, b) => a.queue!.since.localeCompare(b.queue!.since) || a.id.localeCompare(b.id));
 }
 
 const behind = (i: Item) => (i.queue && 'behind' in i.queue ? i.queue.behind : []);

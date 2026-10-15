@@ -254,7 +254,7 @@ describe('the Koordinator remembers', () => {
       state: 'waiting',
       need: 'demo',
       detail: JSON.stringify({ summary }),
-      demo: JSON.stringify({ dir: '/d', chapters: [] }),
+      demo: JSON.stringify({ kind: 'video', dir: '/d', chapters: [] }),
     });
     const k = commander();
     const heard = k.hear('Freigegeben und lege eine Folgekarte für den ambient-Ton an', { card: a.id });
@@ -305,7 +305,7 @@ describe('the Koordinator remembers', () => {
 
   test("the question in a demo report is the card's open question: „ja“ to it answers it", async () => {
     const a = board.create({ title: 'Archiv', x: 0, y: 0 });
-    board.work(a.id, { state: 'waiting', need: 'demo', demo: JSON.stringify({ dir: '/d', chapters: [], question: 'Alte Projekte nachtragen?' }) });
+    board.work(a.id, { state: 'waiting', need: 'demo', demo: JSON.stringify({ kind: 'video', dir: '/d', chapters: [], question: 'Alte Projekte nachtragen?' }) });
     const k = commander();
     const heard = k.hear('ja zum Archiv', {});
     await settle();
@@ -541,7 +541,7 @@ describe('the Koordinator remembers', () => {
 });
 
 describe('what the agent of a card passes on from the owner\'s words', () => {
-  const DEMO = JSON.stringify({ dir: '/d', chapters: [], question: 'Alte Projekte nachtragen?' });
+  const DEMO = JSON.stringify({ kind: 'video', dir: '/d', chapters: [], question: 'Alte Projekte nachtragen?' });
   /** A card in each state an agent is on, as `board.work` sets it. */
   const STATES: Record<string, Record<string, string>> = {
     working: { state: 'working' },
@@ -642,7 +642,7 @@ describe('what the owner says or types to the Koordinator about a card with an a
   });
 
   test('a question about the work of an agent goes to that agent, not to a look-up of main', async () => {
-    open({ state: 'waiting', need: 'demo', demo: JSON.stringify({ dir: '/d', chapters: [] }) });
+    open({ state: 'waiting', need: 'demo', demo: JSON.stringify({ kind: 'video', dir: '/d', chapters: [] }) });
     const k = commander();
     const question = 'Ist bei Export sichergestellt, dass beim Anhalten alles committed ist?';
     const heard = k.hear(question, {}, [], { typed: true });

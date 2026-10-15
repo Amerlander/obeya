@@ -1,12 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { Database } from 'bun:sqlite';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { generic } from '../adapters/generic';
 import type { PlanDoc } from '../core/plan-doc';
 import { Board } from './board';
-import { MIGRATIONS, Store } from './db';
+import { Store } from './db';
 import { Koordinator, overlaps } from './koordinator';
 import { move, queueOrder } from '../core/queue';
 import { artifact, FakeRuntime, type FakeSession, gitRepo } from './testing';
@@ -598,7 +597,7 @@ describe('Koordinator waits for a free workspace', () => {
     expect(item(b.id).state).toBe('working');
   });
 
-  test('taken out of the queue, it no longer starts; a start that failed before waits after a restart', async () => {
+  test('taken out of the queue, it no longer starts', async () => {
     pool(1);
     const a = card('A');
     k.request(a.id);
@@ -608,16 +607,9 @@ describe('Koordinator waits for a free workspace', () => {
     await scope(['src/b.ts']);
     k.dequeue(b.id);
     expect(item(b.id).queue).toBeUndefined();
-
-    // as before cards waited for a workspace: the start was logged as failed
-    const c = card('C');
-    board.log(c.id, 'error', 'obeya', 'no workspace registered or all are leased', 'noWorkspace');
-    k.resume();
-    expect(item(c.id).queue).toMatchObject({ workspace: 'none' });
     workers.stop(a.id);
     await settle();
     expect(item(b.id).state).toBe('planned');
-    expect(item(c.id).state).toBe('working');
   });
 });
 
@@ -922,18 +914,6 @@ describe('preference memory', () => {
     learnSession().call('propose', { rule: 'Dateinamen entscheidet der Agent selbst.' });
     await learn('propose', { rule: 'Nicht nach Kleinkram fragen.' });
     expect(texts('proposed')).toEqual(['Dateinamen entscheidet der Agent selbst.']);
-  });
-
-  test('the rules stored before proposals existed stay active', () => {
-    const path = join(dir, 'old.db');
-    const old = new Database(path);
-    const before = MIGRATIONS.findIndex((m) => m.includes('ADD COLUMN state'));
-    for (const m of MIGRATIONS.slice(0, before)) old.run(m);
-    old.run(`PRAGMA user_version = ${before}`);
-    old.run(`INSERT INTO canvases (id, name, created_at) VALUES ('c', 'C', 'now')`);
-    old.run(`INSERT INTO preferences (canvas_id, text, created_at) VALUES ('c', 'Antworten auf Deutsch.', 'now')`);
-    old.close();
-    expect(new Store(path).preferences('c')).toEqual([{ id: 1, text: 'Antworten auf Deutsch.', state: 'active' }]);
   });
 
   test('workers get the rules, and what the owner tells them is offered for learning', async () => {

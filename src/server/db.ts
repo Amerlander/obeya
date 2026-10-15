@@ -130,214 +130,207 @@ export interface DecisionRow {
   at: string;
 }
 
-// Append only; each entry runs once, tracked in `PRAGMA user_version`.
+/** The schema Obeya was released with. */
+const SCHEMA = `
+  CREATE TABLE canvases (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE groups (
+    id TEXT PRIMARY KEY,
+    canvas_id TEXT NOT NULL REFERENCES canvases(id),
+    name TEXT NOT NULL,
+    hue INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE cards (
+    id TEXT PRIMARY KEY,
+    canvas_id TEXT NOT NULL REFERENCES canvases(id),
+    kind TEXT NOT NULL,
+    state TEXT,
+    need TEXT,
+    title TEXT,
+    body TEXT,
+    x REAL NOT NULL,
+    y REAL NOT NULL,
+    parent_id TEXT REFERENCES cards(id),
+    plan_ref TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT,
+    session_id TEXT,
+    workspace TEXT,
+    branch TEXT,
+    status_line TEXT,
+    detail TEXT,
+    from_id TEXT REFERENCES cards(id),
+    scope TEXT,
+    queue TEXT,
+    pr TEXT,
+    repo TEXT,
+    demo TEXT,
+    archived_at TEXT,
+    idea TEXT,
+    prototype_of TEXT REFERENCES cards(id),
+    approved_at TEXT,
+    landed TEXT,
+    images TEXT,
+    plan TEXT,
+    plan_docs TEXT,
+    prototype TEXT,
+    built_on TEXT REFERENCES cards(id),
+    share TEXT,
+    retro TEXT,
+    proposal TEXT,
+    group_id TEXT REFERENCES groups(id),
+    shipped TEXT,
+    parked TEXT,
+    held TEXT,
+    becomes_project INTEGER NOT NULL DEFAULT 0,
+    thread TEXT,
+    paused TEXT,
+    unheard TEXT,
+    UNIQUE (canvas_id, plan_ref)
+  );
+  CREATE TABLE workspaces (
+    path TEXT PRIMARY KEY,
+    canvas_id TEXT NOT NULL REFERENCES canvases(id),
+    card_id TEXT REFERENCES cards(id),
+    repo TEXT
+  );
+  CREATE TABLE events (
+    id INTEGER PRIMARY KEY,
+    card_id TEXT NOT NULL REFERENCES cards(id),
+    at TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    author TEXT NOT NULL,
+    text TEXT NOT NULL,
+    code TEXT,
+    images TEXT,
+    mocks TEXT,
+    reply_to INTEGER,
+    spot TEXT,
+    answer TEXT,
+    picks TEXT,
+    unread INTEGER,
+    read_after INTEGER
+  );
+  CREATE INDEX events_card ON events (card_id, id);
+  CREATE TABLE decisions (
+    id INTEGER PRIMARY KEY,
+    canvas_id TEXT NOT NULL REFERENCES canvases(id),
+    project_id TEXT REFERENCES cards(id),
+    card_id TEXT NOT NULL REFERENCES cards(id),
+    question TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    by TEXT NOT NULL,
+    at TEXT NOT NULL
+  );
+  CREATE TABLE settings (
+    canvas_id TEXT NOT NULL REFERENCES canvases(id),
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    PRIMARY KEY (canvas_id, key)
+  );
+  CREATE TABLE preferences (
+    id INTEGER PRIMARY KEY,
+    canvas_id TEXT NOT NULL REFERENCES canvases(id),
+    text TEXT NOT NULL,
+    card_id TEXT REFERENCES cards(id),
+    created_at TEXT NOT NULL,
+    deleted_at TEXT,
+    state TEXT NOT NULL DEFAULT 'active',
+    quote TEXT,
+    review INTEGER NOT NULL DEFAULT 0,
+    replaces INTEGER REFERENCES preferences(id),
+    decided_at TEXT,
+    target TEXT
+  );
+  -- what the owner said to the Koordinator and what it answered: its memory across sessions
+  CREATE TABLE talk (
+    id INTEGER PRIMARY KEY,
+    canvas_id TEXT NOT NULL REFERENCES canvases(id),
+    at TEXT NOT NULL,
+    said TEXT NOT NULL,
+    reply TEXT NOT NULL,
+    card_id TEXT REFERENCES cards(id),
+    undone INTEGER NOT NULL DEFAULT 0,
+    question TEXT,
+    about TEXT,
+    answer TEXT,
+    answer_by TEXT,
+    images TEXT,
+    unread INTEGER NOT NULL DEFAULT 0,
+    session_id TEXT,
+    thread INTEGER,
+    follows INTEGER,
+    files TEXT,
+    card TEXT
+  );
+  -- the Arbeitsrückschau: friction noted on a card's run, per repository
+  CREATE TABLE friction (
+    id INTEGER PRIMARY KEY,
+    canvas_id TEXT NOT NULL REFERENCES canvases(id),
+    repo TEXT NOT NULL,
+    card_id TEXT NOT NULL REFERENCES cards(id),
+    at TEXT NOT NULL,
+    what TEXT NOT NULL,
+    cost TEXT NOT NULL,
+    fix TEXT NOT NULL
+  );
+  CREATE INDEX friction_repo ON friction (canvas_id, repo, at);
+  -- a command the owner has the confirmation of, while it waits for "Rückgängig": it outlives a restart
+  CREATE TABLE commands (
+    token TEXT PRIMARY KEY,
+    canvas_id TEXT NOT NULL REFERENCES canvases(id),
+    due TEXT NOT NULL,
+    body TEXT NOT NULL
+  );
+  -- a value for a repository's setting the Arbeitsrückschau proposes, and where the owner took it
+  CREATE TABLE setting_proposals (
+    id INTEGER PRIMARY KEY,
+    canvas_id TEXT NOT NULL REFERENCES canvases(id),
+    repo TEXT NOT NULL,
+    field TEXT NOT NULL,
+    value TEXT NOT NULL,
+    basis TEXT NOT NULL,
+    cards TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'proposed',
+    created_at TEXT NOT NULL,
+    decided_at TEXT
+  );`;
+
+/**
+ * The `user_version` of a database at `SCHEMA`: the steps its schema took before the release. One
+ * that took fewer is from an Obeya before it (`OlderDatabase`).
+ */
+export const RELEASED = 40;
+
+// Append only; each entry runs once on a database at `SCHEMA`, tracked in `PRAGMA user_version` after `RELEASED`.
 export const MIGRATIONS = [
-  `CREATE TABLE canvases (
-     id TEXT PRIMARY KEY,
-     name TEXT NOT NULL,
-     created_at TEXT NOT NULL
-   );
-   CREATE TABLE cards (
-     id TEXT PRIMARY KEY,
-     canvas_id TEXT NOT NULL REFERENCES canvases(id),
-     kind TEXT NOT NULL,
-     state TEXT,
-     need TEXT,
-     title TEXT,
-     body TEXT,
-     x REAL NOT NULL,
-     y REAL NOT NULL,
-     parent_id TEXT REFERENCES cards(id),
-     plan_ref TEXT,
-     created_at TEXT NOT NULL,
-     updated_at TEXT NOT NULL,
-     deleted_at TEXT,
-     UNIQUE (canvas_id, plan_ref)
-   );`,
-  `ALTER TABLE cards ADD COLUMN session_id TEXT;
-   ALTER TABLE cards ADD COLUMN workspace TEXT;
-   ALTER TABLE cards ADD COLUMN branch TEXT;
-   ALTER TABLE cards ADD COLUMN status_line TEXT;
-   ALTER TABLE cards ADD COLUMN detail TEXT;
-   ALTER TABLE cards ADD COLUMN from_id TEXT REFERENCES cards(id);
-   CREATE TABLE workspaces (
-     path TEXT PRIMARY KEY,
-     canvas_id TEXT NOT NULL REFERENCES canvases(id),
-     card_id TEXT REFERENCES cards(id)
-   );
-   CREATE TABLE events (
-     id INTEGER PRIMARY KEY,
-     card_id TEXT NOT NULL REFERENCES cards(id),
-     at TEXT NOT NULL,
-     kind TEXT NOT NULL,
-     author TEXT NOT NULL,
-     text TEXT NOT NULL
-   );
-   CREATE INDEX events_card ON events (card_id, id);
-   CREATE TABLE decisions (
-     id INTEGER PRIMARY KEY,
-     canvas_id TEXT NOT NULL REFERENCES canvases(id),
-     project_id TEXT REFERENCES cards(id),
-     card_id TEXT NOT NULL REFERENCES cards(id),
-     question TEXT NOT NULL,
-     answer TEXT NOT NULL,
-     by TEXT NOT NULL,
-     at TEXT NOT NULL
-   );`,
-  `ALTER TABLE cards ADD COLUMN scope TEXT;
-   ALTER TABLE cards ADD COLUMN queue TEXT;`,
-  `CREATE TABLE settings (
-     canvas_id TEXT NOT NULL REFERENCES canvases(id),
-     key TEXT NOT NULL,
-     value TEXT NOT NULL,
-     PRIMARY KEY (canvas_id, key)
-   );
-   CREATE TABLE preferences (
-     id INTEGER PRIMARY KEY,
-     canvas_id TEXT NOT NULL REFERENCES canvases(id),
-     text TEXT NOT NULL,
-     card_id TEXT REFERENCES cards(id),
-     created_at TEXT NOT NULL,
-     deleted_at TEXT
-   );`,
-  `ALTER TABLE events ADD COLUMN code TEXT;`,
-  `ALTER TABLE cards ADD COLUMN pr TEXT;`,
-  // a canvas may span several repositories; null is the canvas's home repository
-  `ALTER TABLE cards ADD COLUMN repo TEXT;
-   ALTER TABLE workspaces ADD COLUMN repo TEXT;`,
-  // the demo outlives the review it was made for; a card waiting with one moves it out of `detail`
-  `ALTER TABLE cards ADD COLUMN demo TEXT;
-   UPDATE cards SET demo = json_extract(detail, '$.demo') WHERE need = 'demo' AND json_extract(detail, '$.demo') IS NOT NULL;`,
-  `ALTER TABLE cards ADD COLUMN archived_at TEXT;`,
-  // ideas are discussed before they are planned; a spike prototypes one and never lands
-  `ALTER TABLE cards ADD COLUMN idea TEXT;
-   ALTER TABLE cards ADD COLUMN spike_of TEXT REFERENCES cards(id);`,
-  // what the owner said to the Koordinator and what it answered: its memory across sessions
-  `CREATE TABLE talk (
-     id INTEGER PRIMARY KEY,
-     canvas_id TEXT NOT NULL REFERENCES canvases(id),
-     at TEXT NOT NULL,
-     said TEXT NOT NULL,
-     reply TEXT NOT NULL,
-     card_id TEXT REFERENCES cards(id),
-     undone INTEGER NOT NULL DEFAULT 0
-   );`,
-  // an idea whose agent had the last word waits for the owner
-  `UPDATE cards SET idea = json_set(idea, '$.yourTurn', json('true'))
-   WHERE state = 'idea' AND idea IS NOT NULL
-     AND (SELECT author FROM events WHERE card_id = cards.id AND kind = 'talk' ORDER BY id DESC LIMIT 1) = 'explorer';`,
-  // screenshots the owner attached to a message (a JSON list of image ids)
-  `ALTER TABLE events ADD COLUMN images TEXT;`,
-  // a question the Koordinator looks up: answered later, by itself or a project agent
-  `ALTER TABLE talk ADD COLUMN question TEXT;
-   ALTER TABLE talk ADD COLUMN about TEXT;
-   ALTER TABLE talk ADD COLUMN answer TEXT;
-   ALTER TABLE talk ADD COLUMN answer_by TEXT;`,
-  // an approval that could not land yet holds until the worker has fixed what stood in the way
-  `ALTER TABLE cards ADD COLUMN approved_at TEXT;`,
-  // landed work whose worker still finishes what remains after the landing
-  `ALTER TABLE cards ADD COLUMN landed TEXT;`,
-  // screenshots of a card's task, and of a command typed to the Koordinator (JSON lists of image ids)
-  `ALTER TABLE cards ADD COLUMN images TEXT;
-   ALTER TABLE talk ADD COLUMN images TEXT;`,
-  // a project keeps its plan doc's last state, so it can go into the archive when the doc goes;
-  // an idea's card remembers the plan docs its work added, so the project knows where it came from
-  `ALTER TABLE cards ADD COLUMN plan TEXT;
-   ALTER TABLE cards ADD COLUMN plan_docs TEXT;`,
-  // a spike is called a prototype now
-  `ALTER TABLE cards RENAME COLUMN spike_of TO prototype_of;`,
-  // a learned rule is a proposal until the owner accepts it; the rules kept so far stay active
-  `ALTER TABLE preferences ADD COLUMN state TEXT NOT NULL DEFAULT 'active';
-   ALTER TABLE preferences ADD COLUMN quote TEXT;
-   ALTER TABLE preferences ADD COLUMN review INTEGER NOT NULL DEFAULT 0;
-   ALTER TABLE preferences ADD COLUMN replaces INTEGER REFERENCES preferences(id);
-   ALTER TABLE preferences ADD COLUMN decided_at TEXT;`,
-  // a discarded or built prototype goes into the archive; an idea may be built on a prototype's branch
-  `ALTER TABLE cards ADD COLUMN prototype TEXT;
-   ALTER TABLE cards ADD COLUMN built_on TEXT REFERENCES cards(id);`,
-  // a video demo shared with colleagues on a page outside Obeya
-  `ALTER TABLE cards ADD COLUMN share TEXT;`,
-  // a learned rule about a repository goes into its CLAUDE.md, not the preference memory
-  `ALTER TABLE preferences ADD COLUMN target TEXT;`,
-  // bugfix and feature are one kind now: a task
-  `UPDATE cards SET kind = 'task' WHERE kind IN ('bugfix', 'feature');`,
-  // the Arbeitsrückschau: friction noted on a card's run, per repository, and the cards it proposed
-  `CREATE TABLE friction (
-     id INTEGER PRIMARY KEY,
-     canvas_id TEXT NOT NULL REFERENCES canvases(id),
-     repo TEXT NOT NULL,
-     card_id TEXT NOT NULL REFERENCES cards(id),
-     at TEXT NOT NULL,
-     what TEXT NOT NULL,
-     cost TEXT NOT NULL,
-     fix TEXT NOT NULL
-   );
-   CREATE INDEX friction_repo ON friction (canvas_id, repo, at);
-   ALTER TABLE cards ADD COLUMN retro TEXT;`,
-  `ALTER TABLE cards ADD COLUMN proposal TEXT;`,
-  // groups of cards, shown as coloured territories behind them
-  `CREATE TABLE groups (
-     id TEXT PRIMARY KEY,
-     canvas_id TEXT NOT NULL REFERENCES canvases(id),
-     name TEXT NOT NULL,
-     hue INTEGER NOT NULL,
-     created_at TEXT NOT NULL
-   );
-   ALTER TABLE cards ADD COLUMN group_id TEXT REFERENCES groups(id);`,
-  // an idea's agent shows how a variant looks in a few lines of HTML beside its reply
-  `ALTER TABLE events ADD COLUMN mocks TEXT;`,
-  // what a card's work landed with, kept after its worker is done
-  `ALTER TABLE cards ADD COLUMN shipped TEXT;`,
-  // the app stack of a waiting card's workspace, stopped until its worker needs it again
-  `ALTER TABLE cards ADD COLUMN parked TEXT;`,
-  // an answer looked up for the Koordinator's sheet that the owner has not seen there yet
-  `ALTER TABLE talk ADD COLUMN unread INTEGER NOT NULL DEFAULT 0;`,
-  // the message of the card's conversation the owner's words reply to
-  `ALTER TABLE events ADD COLUMN reply_to INTEGER;`,
-  // the place in the demo video the owner's words are about, and those Obeya holds back while they watch
-  `ALTER TABLE events ADD COLUMN spot TEXT;
-   ALTER TABLE cards ADD COLUMN held TEXT;`,
-  // a command the owner has the confirmation of, while it waits for "Rückgängig": it outlives a restart
-  `CREATE TABLE commands (
-     token TEXT PRIMARY KEY,
-     canvas_id TEXT NOT NULL REFERENCES canvases(id),
-     due TEXT NOT NULL,
-     body TEXT NOT NULL
-   );`,
-  // a task can become a project too, so the mark leaves the idea's JSON; splitting a card is gone, and one being cut is planned again
-  `ALTER TABLE cards ADD COLUMN becomes_project INTEGER NOT NULL DEFAULT 0;
-   UPDATE cards SET becomes_project = 1, idea = json_remove(idea, '$.project') WHERE json_extract(idea, '$.project');
-   UPDATE cards SET queue = NULL WHERE json_extract(queue, '$.cutting') IS NOT NULL;`,
-  // looked-up answers go on: the agent's session, the thread and the answer a follow-up continues,
-  // the files an answer comes with, and the Question card a thread moved onto
-  `ALTER TABLE talk ADD COLUMN session_id TEXT;
-   ALTER TABLE talk ADD COLUMN thread INTEGER;
-   ALTER TABLE talk ADD COLUMN follows INTEGER;
-   ALTER TABLE talk ADD COLUMN files TEXT;
-   ALTER TABLE talk ADD COLUMN card TEXT;
-   ALTER TABLE events ADD COLUMN answer TEXT;
-   ALTER TABLE cards ADD COLUMN thread TEXT;`,
-  // the owner paused the card's worker: session and workspace stay until it goes on
-  `ALTER TABLE cards ADD COLUMN paused TEXT;`,
-  // the owner's words the card's agent has not read yet, and where those it read later stand
-  `ALTER TABLE events ADD COLUMN unread INTEGER;
-   ALTER TABLE events ADD COLUMN read_after INTEGER;
-   ALTER TABLE cards ADD COLUMN unheard TEXT;`,
-  // a value for a repository's setting the Arbeitsrückschau proposes, and where the owner took it
-  `CREATE TABLE setting_proposals (
-     id INTEGER PRIMARY KEY,
-     canvas_id TEXT NOT NULL REFERENCES canvases(id),
-     repo TEXT NOT NULL,
-     field TEXT NOT NULL,
-     value TEXT NOT NULL,
-     basis TEXT NOT NULL,
-     cards TEXT NOT NULL,
-     state TEXT NOT NULL DEFAULT 'proposed',
-     created_at TEXT NOT NULL,
-     decided_at TEXT
-   );`,
-  // the options the owner picked in an answer, apart from their own words
-  `ALTER TABLE events ADD COLUMN picks TEXT;`,
+  // what an Obeya before the release kept in shapes that changed since, in today's: demos and
+  // shared pages without a kind are videos; a share held for undo publishes; `answering` moves out
+  // of the demo; a demo's question goes with the last handover before the owner answered it (else
+  // the last one); a project whose doc went before Obeya kept it gets an empty one; the pause line
+  // loses its second sentence; a repository with retrospectives before they were counted is past the ramp
+  `UPDATE cards SET demo = json_set(demo, '$.kind', 'video') WHERE demo IS NOT NULL AND json_extract(demo, '$.kind') IS NULL;
+   UPDATE cards SET share = json_set(share, '$.shown.kind', 'video') WHERE json_extract(share, '$.shown') IS NOT NULL AND json_extract(share, '$.shown.kind') IS NULL;
+   UPDATE cards SET share = json_set(share, '$.state', 'publishing') WHERE json_extract(share, '$.state') = 'pending';
+   UPDATE cards SET detail = json_set(coalesce(detail, '{}'), '$.answering', json('true')), demo = json_remove(demo, '$.answering')
+    WHERE json_extract(demo, '$.answering');
+   UPDATE cards SET demo = json_set(demo, '$.handover', (
+       SELECT max(e.id) FROM events e WHERE e.card_id = cards.id AND e.kind = 'review'
+          AND e.id < coalesce((SELECT max(a.id) FROM events a WHERE a.card_id = cards.id AND a.kind = 'answer' AND a.text = json_extract(cards.demo, '$.answer')), 9e18)))
+    WHERE json_extract(demo, '$.question') IS NOT NULL AND json_extract(demo, '$.handover') IS NULL
+      AND EXISTS (SELECT 1 FROM events e WHERE e.card_id = cards.id AND e.kind = 'review');
+   UPDATE cards SET plan = json_object('file', plan_ref, 'title', coalesce(title, plan_ref), 'goal', '', 'workstreams', json('[]'), 'markdown', '')
+    WHERE kind = 'project' AND plan_ref IS NOT NULL AND plan IS NULL;
+   UPDATE events SET text = 'Paused.' WHERE kind = 'state' AND author = 'owner' AND text LIKE 'Paused. %';
+   UPDATE events SET text = 'Pausiert.' WHERE kind = 'state' AND author = 'owner' AND text LIKE 'Pausiert. %';
+   INSERT INTO settings (canvas_id, key, value)
+     SELECT canvas_id, 'work_retro_runs:' || substr(key, 18), '3' FROM settings s WHERE key LIKE 'work_retro_since:%'
+        AND NOT EXISTS (SELECT 1 FROM settings r WHERE r.canvas_id = s.canvas_id AND r.key = 'work_retro_runs:' || substr(s.key, 18));`,
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter';
@@ -411,14 +404,22 @@ export type RowUpdate = Partial<
   >
 >;
 
-/** The database was written by a newer Obeya (the checkout and the app share one home): this one leaves it alone. */
-export class NewerDatabase extends Error {
-  constructor(
-    readonly path: string,
-    readonly version: number,
-    readonly known: number,
-  ) {
+/** A database this Obeya cannot open as it is: it leaves it alone. */
+export class UnusableDatabase extends Error {}
+
+/** The database was written by a newer Obeya (the checkout and the app share one home). */
+export class NewerDatabase extends UnusableDatabase {
+  constructor(path: string, version: number, known: number) {
     super(`${path} is from a newer Obeya (schema ${version}; this one knows ${known}): update Obeya or start the newer one`);
+  }
+}
+
+/** The database was written by an Obeya before the release and not brought up to it. */
+export class OlderDatabase extends UnusableDatabase {
+  constructor(path: string, version: number) {
+    super(
+      `${path} is from an Obeya before its release (schema ${version}): start the Obeya of commit 1cfa1dd once to bring it up to date, or move it away to start afresh`,
+    );
   }
 }
 
@@ -431,13 +432,19 @@ export class Store {
     this.db.run('PRAGMA journal_mode = WAL');
     this.db.run('PRAGMA foreign_keys = ON');
     const { user_version } = this.db.query('PRAGMA user_version').get() as { user_version: number };
-    if (user_version > MIGRATIONS.length) {
+    const latest = RELEASED + MIGRATIONS.length;
+    if (user_version > latest || (user_version > 0 && user_version < RELEASED)) {
       this.db.close();
-      throw new NewerDatabase(path, user_version, MIGRATIONS.length);
+      throw user_version > latest ? new NewerDatabase(path, user_version, latest) : new OlderDatabase(path, user_version);
     }
-    for (let v = user_version; v < MIGRATIONS.length; v++) {
+    if (user_version === 0)
       this.db.transaction(() => {
-        this.db.run(MIGRATIONS[v]!);
+        this.db.run(SCHEMA);
+        this.db.run(`PRAGMA user_version = ${RELEASED}`);
+      })();
+    for (let v = Math.max(user_version, RELEASED); v < latest; v++) {
+      this.db.transaction(() => {
+        this.db.run(MIGRATIONS[v - RELEASED]!);
         this.db.run(`PRAGMA user_version = ${v + 1}`);
       })();
     }

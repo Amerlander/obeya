@@ -214,18 +214,6 @@ describe('Arbeitsrückschau', () => {
     expect([board.setting('work_retro_runs:home'), board.setting('work_retro_cards:home')]).toEqual(['6', '0']);
   });
 
-  test('a repository that had retrospectives before they were counted is past the ramp', async () => {
-    retro = new WorkRetro({ board, runtime, pathFor: () => main, transcript: () => null, every: 3 });
-    board.setSetting('work_retro_since:home', '2026-10-01T00:00:00.000Z');
-    ran('A', 'a');
-    ran('B', 'b');
-    await retro.idle();
-    expect(board.setting('work_retro_runs:home')).toBeNull();
-    ran('C', 'c');
-    await retro.idle();
-    expect(board.setting('work_retro_runs:home')).toBe('4');
-  });
-
   test('asked for with nothing noted, the owner hears so', async () => {
     const notices: string[] = [];
     board.onNotice((n) => notices.push(n.text));

@@ -97,11 +97,9 @@ export class WorkRetro {
     return true;
   }
 
-  /** How many retrospectives the repository had; one that had some before they were counted is past the ramp. */
+  /** How many retrospectives the repository had. */
   private runs(repo: string): number {
-    const b = this.o.board;
-    const n = b.setting(runsKey(repo));
-    return n !== null ? Number(n) : b.setting(sinceKey(repo)) ? (this.o.ramp ?? WORK_RETRO_RAMP).length : 0;
+    return Number(this.o.board.setting(runsKey(repo)) ?? 0);
   }
 
   private ran(repo: string) {

@@ -216,18 +216,6 @@ describe('a site Obeya keeps', () => {
     expect(readFileSync(join(siteDir(), 'a-111111/index.html'), 'utf8')).toContain("Range: 'bytes=0-'");
   });
 
-  test('reads pages written by the share command sites were kept with before, as they are', async () => {
-    const old = join(siteDir(), 'alt-999999');
-    mkdirSync(old, { recursive: true });
-    writeFileSync(join(old, 'demo.mp4'), 'old video');
-    const at = '2026-03-01T10:00:00.000Z';
-    writeFileSync(join(old, 'meta.json'), JSON.stringify({ title: 'Alte Demo', text: 'Von früher.', chapters: [], pr: null, first: at, at, source: 'x' }));
-    await target.publish(page('neu-111111', { shared: ['alt-999999'] }));
-    expect(overview()).toContain('Alte Demo');
-    expect(overview()).toContain('1. März 2026');
-    expect(existsSync(join(deployed(), 'alt-999999/demo.mp4'))).toBe(true);
-  });
-
   test('a page published again with the same video keeps its date and its place in the overview', async () => {
     await target.publish(page('a-111111'));
     await target.publish(page('b-222222', { shared: ['a-111111'] }));
@@ -386,25 +374,9 @@ describe('several machines publishing to one site', () => {
     expect(live().pages['a-111111']).toMatchObject({ withdrawn: true });
   });
 
-  test('a site deployed before it had a manifest deploys only from a machine that has the pages it shows', async () => {
-    mkdirSync(deployed(), { recursive: true });
-    writeFileSync(join(deployed(), 'index.html'), '<ul><li><a href="alt-999999/">Alte Demo</a></li></ul>');
-    expect(await b.publish(page('b-222222'))).toMatchObject({ why: expect.stringContaining('the site shows a page this machine lacks (alt-999999) and has no manifest yet') });
-    const old = join(siteDir(), 'alt-999999');
-    mkdirSync(old, { recursive: true });
-    writeFileSync(join(old, 'demo.mp4'), 'old video');
-    writeFileSync(join(old, 'meta.json'), JSON.stringify({ title: 'Alte Demo', text: 'Von früher.', chapters: [], pr: null, first: '2026-03-01T10:00:00.000Z', at: '2026-03-01T10:00:00.000Z', source: 'x' }));
-    expect(await target.publish(page('a-111111'))).toMatchObject({ url: `${URL_}a-111111/` });
-    expect(live().pages['alt-999999']).toMatchObject({ rev: 1, machine: 'a', files: { 'demo.mp4': { size: 9 } } });
-    expect(await b.publish(page('b-222222'))).toMatchObject({ url: `${URL_}b-222222/` });
-    expect(readFileSync(join(siteDir(other), 'alt-999999/demo.mp4'), 'utf8')).toBe('old video');
-  });
-
   test('a host that answers a missing file with its overview: a site without a manifest yet, not an unreadable one', async () => {
     host.fallback = true;
     mkdirSync(deployed(), { recursive: true });
-    writeFileSync(join(deployed(), 'index.html'), '<ul><li><a href="alt-999999/">Alte Demo</a></li></ul>');
-    expect(await target.publish(page('a-111111'))).toMatchObject({ why: expect.stringContaining('the site shows a page this machine lacks (alt-999999) and has no manifest yet') });
     writeFileSync(join(deployed(), 'index.html'), '<ul></ul>');
     expect(await target.publish(page('a-111111'))).toMatchObject({ url: `${URL_}a-111111/` });
     expect(live().pages['a-111111']).toMatchObject({ rev: 1, machine: 'a' });

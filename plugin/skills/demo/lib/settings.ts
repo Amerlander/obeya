@@ -64,25 +64,19 @@ export const expandHome = (p: string) => p.replace(/^~(?=$|[\\/])/, os.homedir()
 
 const TEXT_FIELDS = ['command', 'url', 'voiceName', 'reference', 'keyFile'] as const;
 
-/**
- * Keeps what is a valid setting, drops the rest; trims texts and leaves out empty ones. Settings
- * from before the providers (`clone` with a voice project, `gemini` with `geminiKeyFile`) carry
- * over as far as they can: the clone becomes the owner's own command, still to be written.
- */
+/** Keeps what is a valid setting, drops the rest; trims texts and leaves out empty ones. */
 export function tidyDemoSettings(input: unknown, fallbackLanguage: NarrationLanguage = DEFAULT_DEMO_SETTINGS.language): DemoSettings {
   const o = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
   const language = NARRATION_LANGUAGES.find((l) => l === o.language) ?? fallbackLanguage;
-  const legacyClone = o.voice === 'clone';
-  const voice = legacyClone ? 'command' : (VOICES.find((v) => v === o.voice) ?? DEFAULT_DEMO_SETTINGS.voice);
+  const voice = VOICES.find((v) => v === o.voice) ?? DEFAULT_DEMO_SETTINGS.voice;
   const out: DemoSettings = { language, voice };
-  if (o.ownVoice === true || legacyClone) out.ownVoice = true;
+  if (o.ownVoice === true) out.ownVoice = true;
   if (o.listenBack === false) out.listenBack = false;
   for (const k of TEXT_FIELDS) {
     const v = str(o[k]);
     if (v) out[k] = v;
   }
-  if (!out.keyFile && voice === 'gemini' && str(o.geminiKeyFile)) out.keyFile = str(o.geminiKeyFile);
   return out;
 }
 

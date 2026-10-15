@@ -632,8 +632,8 @@ export class Workers {
   private place(cardId: string, spot: SpotInput): Spot {
     const at = Math.max(0, Math.round(spot.at * 10) / 10);
     const demo = this.o.board.row(cardId).demo;
-    const d = demo ? (JSON.parse(demo) as { dir: string; kind?: DemoKind; chapters?: [number, string][] }) : undefined;
-    return { at, ...(d && d.kind !== 'html' ? placeIn(d.dir, d.chapters ?? [], at) : {}), ...(spot.still ? { still: spot.still } : {}) };
+    const d = demo ? (JSON.parse(demo) as { dir: string; kind: DemoKind; chapters: [number, string][] }) : undefined;
+    return { at, ...(d && d.kind !== 'html' ? placeIn(d.dir, d.chapters, at) : {}), ...(spot.still ? { still: spot.still } : {}) };
   }
 
   /** The file of the frame at a place in the video, if it has one. */
@@ -1616,15 +1616,10 @@ export class Workers {
    * again, `answered` when its turn ended with words for them rather than a new demo.
    */
   private answerTaken(cardId: string, answered = false) {
-    const { detail, demo } = this.o.board.row(cardId);
+    const { detail } = this.o.board.row(cardId);
     if (detail) {
       const { answering, ...rest } = JSON.parse(detail) as Record<string, unknown>;
       if (answering) this.o.board.work(cardId, { detail: JSON.stringify({ ...rest, ...(answered ? { answered: true } : {}) }) });
-    }
-    // where it stood until 2026-10-08
-    if (demo) {
-      const { answering, ...rest } = JSON.parse(demo) as Record<string, unknown>;
-      if (answering) this.o.board.work(cardId, { demo: JSON.stringify(rest) });
     }
   }
 

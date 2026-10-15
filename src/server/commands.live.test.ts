@@ -26,7 +26,7 @@ const cwds: string[] = [];
 const cwd = () => cwds[cwds.push(mkdtempSync(join(tmpdir(), 'obeya-live-'))) - 1]!;
 afterAll(() => cwds.forEach((d) => rmSync(d, { recursive: true, force: true })));
 
-const DEMO = JSON.stringify({ dir: '/d', chapters: [], question: 'Alte Projekte nachtragen?' });
+const DEMO = JSON.stringify({ kind: 'video', dir: '/d', chapters: [], question: 'Alte Projekte nachtragen?' });
 const STATES: Record<string, Record<string, string>> = {
   working: { state: 'working' },
   question: { state: 'waiting', need: 'question', detail: JSON.stringify({ question: { text: 'CSV oder Excel?', options: ['CSV', 'Excel'] } }) },

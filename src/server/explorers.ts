@@ -105,7 +105,7 @@ export class Explorers {
   unsay(cardId: string, id: number) {
     this.idea(cardId);
     if (!this.o.board.unread(cardId, id)) throw new BadRequest('notHeld', 'the agent has read these words already');
-    const taken = (m: Message) => !m.said?.includes(id);
+    const taken = (m: Message) => !m.said.includes(id);
     const live = this.live.get(cardId);
     const { unread } = this.o.board.idea(cardId);
     if (live?.queue.some((m) => !taken(m))) live.queue = live.queue.filter(taken);
@@ -209,7 +209,7 @@ export class Explorers {
     }
     const current = [...(unread?.messages ?? []), { text: message, images, said }];
     this.o.board.setIdea(card.id, { thinking: true, unread: undefined });
-    this.o.board.readNow(card.id, current.flatMap((m) => m.said ?? []));
+    this.o.board.readNow(card.id, current.flatMap((m) => m.said));
     const text = unread ? `${UNREAD_NOTE[unread.why]}\n\n${unread.messages.map((m) => m.text).join('\n\n')}\n\n---\n\n${message}` : message;
     const all = current.flatMap((m) => m.images);
     if (row.session_id) return this.launch(card, current, text, row.session_id, all, quiet);
@@ -283,7 +283,7 @@ export class Explorers {
         if (live.queue.length) {
           const queued = live.queue.splice(0);
           live.current = queued;
-          this.o.board.readNow(cardId, queued.flatMap((m) => m.said ?? []));
+          this.o.board.readNow(cardId, queued.flatMap((m) => m.said));
           live.session.send(
             [...queued.map((m) => m.text), this.buildNote(cardId, live)].filter(Boolean).join('\n\n'),
             queued.flatMap((m) => m.images),

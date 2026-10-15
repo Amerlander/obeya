@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CanvasRuntime } from './canvas';
-import { MIGRATIONS, Store } from './db';
+import { Store } from './db';
 import { FakeRuntime, noForge, type FakeSession, gitRepo, identify } from './testing';
 import { git } from './workspaces';
 
@@ -285,25 +285,6 @@ describe('an idea', () => {
     s.call('reply', { text: 'Bauen.', next: { step: 'build', why: 'Der Stand reicht als Auftrag.' } });
     s.emit({ type: 'idle' });
     expect(item(i.id).idea!.next).toEqual({ step: 'build', why: 'Der Stand reicht als Auftrag.' });
-  });
-
-  test('an idea whose agent had the last word before the update waits for the owner', () => {
-    const path = join(dir, 'obeya.db');
-    const s = new Store(path);
-    s.ensureCanvas('c', 'C');
-    const idea = JSON.stringify({ status: 'open', brief: '' });
-    const [answered, asked] = s.insert([0, 1].map((y) => ({ canvas_id: 'c', kind: 'task' as const, state: 'idea' as const, idea, x: 0, y })));
-    const say = (card: string, author: 'owner' | 'explorer') => s.addEvent({ cardId: card, kind: 'talk', author, text: '…' });
-    say(answered!.id, 'owner');
-    say(answered!.id, 'explorer');
-    say(asked!.id, 'explorer');
-    say(asked!.id, 'owner');
-    // the migration that came with it, as it ran on a store from before
-    s.db.run(MIGRATIONS.find((m) => m.includes('yourTurn'))!);
-    const yourTurn = (id: string) => (JSON.parse(s.card(id)!.idea!) as { yourTurn?: boolean }).yourTurn;
-    expect(yourTurn(answered!.id)).toBe(true);
-    expect(yourTurn(asked!.id)).toBeUndefined();
-    s.db.close();
   });
 
   test('what the owner says is offered for learning preferences', async () => {

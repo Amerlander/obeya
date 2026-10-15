@@ -169,7 +169,7 @@ export class Answers {
   unsay(cardId: string, id: number) {
     this.questionCard(cardId);
     const pending = this.o.board.thread(cardId).pending ?? [];
-    const words = pending.find((p) => p.said?.includes(id));
+    const words = pending.find((p) => p.said.includes(id));
     if (!words || words.talk || !this.o.board.unread(cardId, id)) throw new BadRequest('notHeld', 'the agent has read these words already');
     this.o.board.setThread(cardId, { pending: pending.filter((p) => p !== words) });
     this.o.board.withdraw(cardId, id);
@@ -241,7 +241,7 @@ export class Answers {
     const { by, about, project } = this.agentFor(root);
     const words = taken.map((p) => p.text).join('\n\n');
     const resumed = this.resumed.delete(cardId) ? `${RESUMED}\n\n` : '';
-    this.o.board.readNow(cardId, taken.flatMap((p) => p.said ?? []));
+    this.o.board.readNow(cardId, taken.flatMap((p) => p.said));
     this.reading.add(cardId);
     const end = new AbortController();
     this.turnEnds.set(cardId, end);

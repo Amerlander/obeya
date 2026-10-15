@@ -76,12 +76,12 @@ export interface PrState {
 
 /** What a card's work landed with (`CardRow.shipped`); it stays after the worker is done. */
 export interface Shipped {
-  /** The commit on the default branch that holds the work; none on cards that landed before it was kept. */
+  /** The commit on the default branch that holds the work; none while it is not known (`fetch`). */
   commit?: string;
   /**
    * Where the work's diff starts, so `base..commit` is what it changed: the default branch before it
    * landed, or a merge commit's first parent (`<commit>^`). None where that is not known (a merge
-   * GitHub did not name, cards that landed before it was kept).
+   * GitHub did not name).
    */
   base?: string;
   /** Merged as a pull request: that one. */
@@ -100,7 +100,7 @@ export interface StoredShare {
   url?: string;
   dir?: string;
   /** What the published page says, so it can be published again with the PR's link when the card has a newer demo by then. */
-  shown?: { title: string; text: string; chapters: [number, string][]; /** Absent on pages from before HTML artifacts were shared: videos. */ kind?: DemoKind };
+  shown?: { title: string; text: string; chapters: [number, string][]; kind: DemoKind };
   /** The pull request the published page links. */
   pr?: string;
   /** While `publishing`: the page goes out again as it is, now with the PR's link; the card shows it as shared meanwhile. */
@@ -133,9 +133,7 @@ const RESHARE_SETTING = 'reshare';
 export function reshareable(r: CardRow): boolean {
   const s = r.share ? (JSON.parse(r.share) as StoredShare) : null;
   if (!s?.url || !s.outdated || s.state || !s.dir) return false;
-  const demo = r.demo ? (JSON.parse(r.demo) as { dir: string; kind?: DemoKind }) : null;
-  const kind = s.shown ? s.shown.kind : demo?.dir === s.dir ? demo.kind : null;
-  return kind !== null && existsSync(join(s.dir, kind === 'html' ? 'index.html' : 'demo.mp4'));
+  return !!s.shown && existsSync(join(s.dir, s.shown.kind === 'html' ? 'index.html' : 'demo.mp4'));
 }
 
 /** A request the server refuses: a stable code for the UI's text, and an English detail. */
@@ -411,8 +409,8 @@ export class Board {
   demoFiles(id: string): { dir: string; kind: DemoKind } | null {
     const r = this.own(id);
     if (!r.demo) return null;
-    const d = JSON.parse(r.demo) as { dir: string; kind?: DemoKind };
-    return { dir: d.dir, kind: d.kind ?? 'video' };
+    const { dir, kind } = JSON.parse(r.demo) as { dir: string; kind: DemoKind };
+    return { dir, kind };
   }
 
   /** The plan doc of a project, as written, for the owner to read. */
@@ -949,7 +947,7 @@ export class Board {
   archived(): Item[] {
     // the docs as they are now decide what is archived
     this.snapshot();
-    const rows = this.store.archived(this.canvas.id).filter((r) => !r.plan_ref || r.plan);
+    const rows = this.store.archived(this.canvas.id);
     const projects = rows.filter((r) => r.plan_ref);
     const docs = projects.map((r) => JSON.parse(r.plan!) as PlanDoc);
     const kids = this.store.children(projects.map((r) => r.id));
@@ -1451,8 +1449,7 @@ export class Board {
 
   /**
    * Keeps each doc's last state on its project. A project whose doc is gone, or whose work is done
-   * (not among the `open` docs), goes into the archive (rows from before Obeya kept the state have
-   * nothing to show there, and stay hidden); one whose doc is back, or open again, returns to the canvas.
+   * (not among the `open` docs), goes into the archive; one whose doc is back, or open again, returns to the canvas.
    */
   private keepDocs(all: PlanDoc[], open: PlanDoc[]) {
     const byFile = new Map(all.map((d) => [d.file, d]));
@@ -1462,7 +1459,7 @@ export class Board {
       for (const r of this.store.projects(this.canvas.id)) {
         const doc = byFile.get(r.plan_ref!);
         const plan = doc ? JSON.stringify(doc) : r.plan;
-        const archived_at = doc && shown.has(doc.file) ? null : plan ? (r.archived_at ?? at) : r.archived_at;
+        const archived_at = doc && shown.has(doc.file) ? null : (r.archived_at ?? at);
         if (r.plan !== plan || r.archived_at !== archived_at) this.store.update(r.id, { plan, archived_at });
       }
     })();
@@ -1678,10 +1675,9 @@ export function toItems(rows: CardRow[], docs: PlanDoc[], home: string): Item[] 
 
 /** The fields a worker adds to a card. */
 function work(r: CardRow): Partial<Item> {
-  const detail = r.detail ? (JSON.parse(r.detail) as { question?: Item['question']; summary?: string; noDemo?: string; noChange?: boolean; answering?: boolean; answered?: boolean }) : {};
-  // `answering` stood in the demo until 2026-10-08, when only a demo's question could be answered
-  const demo = r.demo ? (({ dir: _, answering: __, ...d }) => d)(JSON.parse(r.demo) as Item['demo'] & { dir: string; answering?: boolean }) : undefined;
-  const answering = (detail.answering || (r.demo && (JSON.parse(r.demo) as { answering?: boolean }).answering)) && (r.need === 'review' || r.need === 'demo');
+  const detail = r.detail ? (JSON.parse(r.detail) as { question?: Item['question']; summary?: string; noChange?: boolean; answering?: boolean; answered?: boolean }) : {};
+  const demo = r.demo ? (({ dir: _, ...d }) => d)(JSON.parse(r.demo) as Item['demo'] & { dir: string }) : undefined;
+  const answering = detail.answering && (r.need === 'review' || r.need === 'demo');
   const scope = r.scope ? (JSON.parse(r.scope) as { files: string[] }).files : undefined;
   const pr = r.pr ? (JSON.parse(r.pr) as PrState) : undefined;
   const share = shareOf(r);
@@ -1700,7 +1696,6 @@ function work(r: CardRow): Partial<Item> {
     ...(r.held ? { held: (JSON.parse(r.held) as { id: number }[]).map((h) => h.id) } : {}),
     // approved work is held for its next handover while the card is at work; on a waiting card it is landing
     ...(r.approved_at && r.state === 'waiting' ? { landing: true } : {}),
-    ...(detail.noDemo && r.need === 'review' ? { noDemo: detail.noDemo } : {}),
     ...(demo ? { demo } : {}),
     ...(share ? { share } : {}),
     ...(r.from_id ? { from: r.from_id } : {}),
@@ -1782,7 +1777,7 @@ export interface Message {
   text: string;
   images: string[];
   /** The lines of the card's log with the owner's words it carries: unread until the agent takes it in. */
-  said?: number[];
+  said: number[];
 }
 
 /** A Question card's thread as stored: the exchange it started with, and its agent's turn. */
