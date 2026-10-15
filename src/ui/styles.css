@@ -292,6 +292,13 @@ button.pill:hover { box-shadow: var(--lift); }
 .proposals li { background: color-mix(in srgb, var(--proposal) 9%, var(--chip)); border-left: 3px solid var(--proposal); }
 .proposals li:hover { background: color-mix(in srgb, var(--proposal) 9%, var(--chip)); }
 .proposals .pref-text { cursor: default; font-weight: 600; }
+.proposals .setting-kind { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; color: var(--proposal); font-size: 11.5px; font-weight: 600; letter-spacing: .02em; }
+.proposals .setting-kind .from { margin-left: auto; font-weight: 400; color: var(--ink); cursor: pointer; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 2px; }
+.proposals .setting-diff { flex-basis: 100%; display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: start; }
+.proposals .setting-label { color: var(--muted); font-size: 12px; padding-top: 6px; }
+.proposals .setting-diff .setting-value.was { color: var(--muted); background: transparent; border: 1px dashed var(--line); }
+.proposals .setting-diff .setting-value.was.setting-none { font-family: inherit; font-style: italic; }
+.proposals .setting-diff textarea { min-width: 0; }
 .proposals .setting-value { flex-basis: 100%; margin: 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; background: var(--card); border-radius: 2px; padding: 6px 8px; }
 .proposals.prefs .setting textarea { flex-basis: 100%; font: 12px/1.45 var(--mono); }
 .prefs .pref-actions .take-on { flex-basis: 100%; color: var(--muted); font-size: 12px; }
@@ -1015,6 +1022,8 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 .cfg-clones input { width: 80px; }
 /* opened from a card waiting for a free clone: the clone settings it means light up */
 .cfg-clones.flash { animation: cfg-flash 2.4s ease-out; }
+.cfg-setting.flash { animation: cfg-setting-flash 2.4s ease-out; }
+@keyframes cfg-setting-flash { 0%, 45% { background: color-mix(in srgb, var(--proposal) 14%, transparent); } }
 @keyframes cfg-flash { 0%, 45% { border-left-color: var(--working); background: color-mix(in srgb, var(--working) 12%, transparent); } }
 /* a repository's settings for this machine, folded under its row */
 .cfg-settings { padding: 0 0 6px 16px; border-left: 2px solid var(--line); }

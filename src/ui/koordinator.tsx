@@ -29,9 +29,11 @@ interface Props {
   talk: Talk[];
   reshare?: Reshare;
   onOpen: (i: Item) => void;
+  /** Opens the configuration dialog at a repository's setting. */
+  onConfig: (repo: string, setting: string) => void;
 }
 
-export function KoordinatorSheet({ on, canvas, items, preferences, settings, repos, talk, reshare, onOpen, onTell }: Props) {
+export function KoordinatorSheet({ on, canvas, items, preferences, settings, repos, talk, reshare, onOpen, onTell, onConfig }: Props) {
   const proposals = preferences.filter((p) => p.state === 'proposed');
   const rules = preferences.filter((p) => p.state === 'active');
   const [folds, setFolds] = useFolds(canvas);
@@ -68,7 +70,7 @@ export function KoordinatorSheet({ on, canvas, items, preferences, settings, rep
                 <p className="hint">{t.koordinator.settingsHint}</p>
                 <ul className="prefs proposals">
                   {settings.map((p) => (
-                    <SettingRow key={p.id} p={p} items={items} repo={repos.find((r) => r.id === p.repo)} onOpen={onOpen} />
+                    <SettingRow key={p.id} p={p} items={items} repo={repos.find((r) => r.id === p.repo)} onOpen={onOpen} onConfig={() => onConfig(p.repo, p.field)} />
                   ))}
                 </ul>
               </>
@@ -317,6 +319,16 @@ function ProposalRow({ p, items, rules, repos, onOpen }: { p: Preference; items:
   );
 }
 
+/** A cog: what a setting proposal changes is the configuration. */
+function GearIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  );
+}
+
 /** A value as the owner reads and edits it: a list one entry a line. */
 const asText = (v: string | string[]) => (Array.isArray(v) ? v.join('\n') : v);
 
@@ -325,7 +337,7 @@ const asText = (v: string | string[]) => (Array.isArray(v) ? v.join('\n') : v);
  * the value it would replace: the owner takes it, as it is or changed, on this machine or into the
  * repository for everyone (neither is the default: they choose each time), or rejects it.
  */
-function SettingRow({ p, items, repo, onOpen }: { p: SettingProposal; items: Item[]; repo: RepoRef | undefined; onOpen: (i: Item) => void }) {
+function SettingRow({ p, items, repo, onOpen, onConfig }: { p: SettingProposal; items: Item[]; repo: RepoRef | undefined; onOpen: (i: Item) => void; onConfig: () => void }) {
   const [draft, setDraft] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -347,13 +359,28 @@ function SettingRow({ p, items, repo, onOpen }: { p: SettingProposal; items: Ite
   const branch = repo?.branch ?? 'main';
   return (
     <li className="proposal setting">
-      <span className="pref-text">{k.settingFor(t.config.settings[p.field], repo?.name ?? p.repo)}</span>
-      {draft === null ? (
-        <pre className="setting-value">{asText(p.value)}</pre>
-      ) : (
-        <textarea data-esc autoFocus value={draft} rows={Math.max(3, draft.split('\n').length + 1)} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && (e.stopPropagation(), setDraft(null))} />
-      )}
-      {now !== null && <span className="occasion">{now ? k.settingNow(now) : k.settingEmpty}</span>}
+      <span className="setting-kind">
+        <GearIcon />
+        {k.settingKind(repo?.name ?? p.repo)}
+        <a className="from" onClick={onConfig}>
+          {k.openConfig}
+        </a>
+      </span>
+      <span className="pref-text">{t.config.settings[p.field]}</span>
+      <span className="setting-diff">
+        {now !== null && (
+          <>
+            <span className="setting-label">{k.settingWas}</span>
+            <pre className={now ? 'setting-value was' : 'setting-value was setting-none'}>{now || k.settingEmpty}</pre>
+          </>
+        )}
+        <span className="setting-label">{k.settingNew}</span>
+        {draft === null ? (
+          <pre className="setting-value">{asText(p.value)}</pre>
+        ) : (
+          <textarea data-esc autoFocus value={draft} rows={Math.max(3, draft.split('\n').length + 1)} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && (e.stopPropagation(), setDraft(null))} />
+        )}
+      </span>
       <span className="occasion">
         {k.fromRetro}: <Inline md={p.basis} />{' '}
         {p.cards.map((c, i) => {

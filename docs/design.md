@@ -1758,7 +1758,11 @@ the owner's language (`src/core/locale.ts`).
     the setting and the value the run shows works.
   - Every 10 finished cards of a repository (counted when work ends, whether or not they had
     friction; a card that never ran does not count; the setting `work_retro_cards:<repo>`), after
-    the notes of the card that completed the count, the retrospective runs: one read-only session
+    the notes of the card that completed the count, the retrospective runs. A new repository's
+    first ones come sooner (`WORK_RETRO_RAMP`): after its first finished card, then after 2 more
+    and 4 more, then every 10, so the owner does not wait long for the first improvements; the
+    retrospectives a repository had are counted (`work_retro_runs:<repo>`, the owner's own
+    included), and one that had some before they were counted is past the ramp. The retrospective is one read-only session
     in that repository's Lesestand, so it sees its CLAUDE.md, scripts and skills, reads the notes
     since the last one (`work_retro_since:<repo>`) card by card, with the proposals of earlier
     retrospectives: those the owner dismissed, so it does not repeat them, and those waiting or
@@ -1775,9 +1779,12 @@ the owner's language (`src/core/locale.ts`).
     2026-10-15 every repository requires demos by default, so an empty „App für die Demo starten“
     is the usual case: each worker finds out how to start the app, and the retrospective proposes
     the recipe they arrived at. A setting proposal (`setting_proposals`, one waiting per setting and
-    repository) waits in Obeya's sheet under „Vorschläge“ beside the rules, with the setting and
-    repository, the value (a list one entry a line), the value now („Bisher: …“), the sentence it
-    rests on and the cards, each a link; the Koordinator button counts it. The owner takes it, as it
+    repository) waits in Obeya's sheet under „Vorschläge“ beside the rules, marked as what it is,
+    a change to the configuration: a cog and „Konfiguration ändern · <repo>“ over the setting's
+    name, then the value now („Bisher“, „(leer)“ where empty) above the new one („Neu“, a list one
+    entry a line), the sentence it rests on and the cards, each a link; „In der Konfiguration
+    ansehen“ opens the configuration dialog at that setting of the repository, folded open and
+    marked (`ConfigFocus` with `settings`). The Koordinator button counts it. The owner takes it, as it
     is or changed („Ändern“), with one of two buttons, neither preselected: „Auf diesem Rechner“
     sets it in this machine's settings (`Config.takeSetting` through `Config.save`, applying at once),
     „Für alle ins Repository“ puts this value alone into `.obeya/settings.json` the way „Für alle
@@ -2763,7 +2770,10 @@ the repository; the copy on the project is only for the archive).
   this machine set. Rejected: workers' hand-over summaries saying how they ran the app (longer
   summaries for the owner, for something the friction notes carry with their fix), and proposing
   the landing, the main branch or where workers work, which are the owner's choices rather than
-  knowledge friction shows missing.
+  knowledge friction shows missing. The owner asked for the proposal to show plainly that it
+  changes the configuration (2026-10-15), hence its head and the link into the dialog. The
+  retrospective's ramp for a new repository (after 1, 2 more and 4 more cards) came with it: at
+  10 cards from the start, the first improvements came late.
 - Preferences hold only how agents work with the owner through Obeya; rules about a repository,
   taste in code that holds in every repository included, go into its CLAUDE.md (2026-10-02). At
   first the learner drew no line, and repository facts landed among the preferences, unversioned

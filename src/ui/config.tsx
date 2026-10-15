@@ -35,11 +35,13 @@ const SECTION_KEY = 'obeya-config-section';
 /** Opens the dialog at the canvases and their repositories next time, as from the note on a plan directory. */
 export const showCanvasesSection = () => sessionStorage.setItem(SECTION_KEY, 'canvases');
 
-/** A repository's clone count (or its slots) to show and focus when the dialog opens. */
+/** A repository's clone count (or its slots, or one of its settings, folded open) to show and focus when the dialog opens. */
 export interface ConfigFocus {
   canvas: string;
   repo: string;
-  field: 'clones' | 'slots';
+  field: 'clones' | 'slots' | 'settings';
+  /** With `settings`: the setting to show. */
+  setting?: string;
 }
 const FOCUS_KEY = 'obeya-config-focus';
 
@@ -1100,7 +1102,7 @@ function RepoRow({ repo, home, resolved, canvasId, adapters, problems, focus, wh
   const [flash, setFlash] = useState(false);
   useEffect(() => {
     const box = clonesBox.current;
-    if (!focus || !box) return;
+    if (!focus || focus.field === 'settings' || !box) return;
     box.scrollIntoView({ block: 'center' });
     box.querySelector<HTMLInputElement>(focus.field === 'slots' ? '.cfg-slots input' : '.cfg-clone-count input')?.focus({ preventScroll: true });
     setFlash(true);
@@ -1184,7 +1186,7 @@ function RepoRow({ repo, home, resolved, canvasId, adapters, problems, focus, wh
           </label>
         </div>
       )}
-      {resolved && <RepoSettingsBlock repo={repo} values={resolved.values} adapter={resolved.adapter} shareTo={resolved.shareTo} shareDirect={!!resolved.shareDirect} {...(onReload ? { onReload } : {})} onChange={(settings) => onChange(without('settings', settings))} />}
+      {resolved && <RepoSettingsBlock show={focus?.field === 'settings' ? focus : undefined} repo={repo} values={resolved.values} adapter={resolved.adapter} shareTo={resolved.shareTo} shareDirect={!!resolved.shareDirect} {...(onReload ? { onReload } : {})} onChange={(settings) => onChange(without('settings', settings))} />}
       {problems.map((p, k) => (
         <div key={k} className="cfg-span">
           <Problem problem={p} where={where} ask={ask} />
@@ -1210,6 +1212,7 @@ type SettingKey = Exclude<keyof RepoSettings, 'demo'> | 'demoRequired' | 'howToR
  * takes it back to its source. Saved with the configuration; they apply at once.
  */
 function RepoSettingsBlock({
+  show,
   repo,
   values,
   adapter,
@@ -1218,6 +1221,8 @@ function RepoSettingsBlock({
   onReload,
   onChange,
 }: {
+  /** The setting to fold open, scroll to and mark: the dialog was opened from a proposal for it. */
+  show: ConfigFocus | undefined;
   repo: RepoConfig;
   values: RepoValues;
   adapter: string;
@@ -1227,6 +1232,18 @@ function RepoSettingsBlock({
   onChange: (s: RepoSettings | undefined) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const [shown, setShown] = useState<string | null>(null);
+  useEffect(() => {
+    if (!show) return;
+    setOpen(true);
+    setShown(show.setting ?? null);
+    const h = setTimeout(() => setShown(null), 2400);
+    return () => clearTimeout(h);
+  }, [show]);
+  useEffect(() => {
+    if (shown) box.current?.querySelector(`[data-setting="${shown}"]`)?.scrollIntoView({ block: 'center' });
+  }, [shown, open]);
   const c = t.config.settings;
   const s = repo.settings ?? {};
   const base: Record<SettingKey, SettingValue<unknown>> = { ...values, demoRequired: values.demo.required, howToRun: values.demo.howToRun };
@@ -1251,7 +1268,7 @@ function RepoSettingsBlock({
     const here = own(k) !== undefined;
     const from = base[k].source;
     return (
-      <div className="cfg-field cfg-setting" key={k}>
+      <div className={shown === k ? 'cfg-field cfg-setting flash' : 'cfg-field cfg-setting'} key={k} data-setting={k}>
         <div className="cfg-label">
           {label}
           <span className={here ? 'cfg-source here' : 'cfg-source'}>{here ? c.source.machine : from === 'adapter' ? c.source.adapter(adapter) : c.source[from]}</span>
@@ -1271,7 +1288,7 @@ function RepoSettingsBlock({
   const land = value<'main' | 'pr'>('land');
   const planDocs = value<{ dir: string; exclude: string[] }>('planDocs');
   return (
-    <div className="cfg-span cfg-settings">
+    <div className="cfg-span cfg-settings" ref={box}>
       <button type="button" className={open ? 'cfg-settings-toggle on' : 'cfg-settings-toggle'} aria-expanded={open} onClick={() => setOpen(!open)}>
         <span className="cfg-caret" aria-hidden="true" />
         {c.open}

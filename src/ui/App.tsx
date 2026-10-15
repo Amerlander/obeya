@@ -1392,7 +1392,10 @@ function Canvas({
           onAsk={(text, canvas) => void told.tell(t.voice.reading(t.voice.koordinator), undefined, () => (canvas ? api.commandOn(canvas, text) : api.command(text, null, undefined, undefined, undefined, undefined, placeNow())))}
         />
         {setupOn && <Setup onClose={() => setSetupOn(false)} />}
-        <KoordinatorSheet on={kOn} canvas={snapshot.canvas.id} items={items} preferences={snapshot.preferences} settings={snapshot.settingProposals ?? []} repos={snapshot.canvas.repos} talk={snapshot.talk} reshare={snapshot.reshare} onOpen={(i) => void openFresh(i)} onTell={(text, images) => tellTyped(text, images, null)} />
+        <KoordinatorSheet on={kOn} canvas={snapshot.canvas.id} items={items} preferences={snapshot.preferences} settings={snapshot.settingProposals ?? []} repos={snapshot.canvas.repos} talk={snapshot.talk} reshare={snapshot.reshare} onOpen={(i) => void openFresh(i)} onTell={(text, images) => tellTyped(text, images, null)} onConfig={(repo, setting) => {
+            showRepoClones({ canvas: snapshot.canvas.id, repo, field: 'settings', setting });
+            setCOn(true);
+          }} />
         <PushToTalk
           phase={ptt.phase}
           level={ptt.level}
