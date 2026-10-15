@@ -1,29 +1,51 @@
-// Inline markdown as plan docs use it: `code`, **bold**, *emphasis* and _emphasis_, ~~strike~~, [links](url).
+// Inline markdown as plan docs use it: `code`, **bold**, *emphasis* and _emphasis_, ~~strike~~, [links](url),
+// and bare web addresses, as agents write them in their messages.
 // An asterisk opens emphasis only before a non-space and closes it only after one, so `5 * 3` and
 // a list's `* ` stay as they are; neither may touch a word outside, so `a*b*c` stays too.
 
 import type { ReactNode } from 'react';
 
-const TOKEN = /`([^`]+)`|\*\*(.+?)\*\*(?!\*)|~~(.+?)~~|(?<![\w])_(.+?)_(?![\w])|(?<![\w*])\*(?![\s*])(.+?)(?<![\s*])\*(?![\w*])|\[([^\]]+)\]\(([^)\s]+)\)/g;
+const TOKEN = /`([^`]+)`|\*\*(.+?)\*\*(?!\*)|~~(.+?)~~|(?<![\w])_(.+?)_(?![\w])|(?<![\w*])\*(?![\s*])(.+?)(?<![\s*])\*(?![\w*])|\[([^\]]+)\]\(([^)\s]+)\)|(?<![\w/])(https?:\/\/[^\s<>`"]+)/g;
+
+/**
+ * A bare address without what the sentence put after it: closing punctuation, and a parenthesis
+ * that closes one opened before the address (Wikipedia's `…/Foo_(bar)` keeps its own).
+ */
+function bareUrl(s: string): string {
+  for (;;) {
+    const cut = s.replace(/[.,;:!?'*_\]]+$/, '');
+    const unbalanced = cut.endsWith(')') && cut.split('(').length < cut.split(')').length;
+    const next = unbalanced ? cut.slice(0, -1) : cut;
+    if (next === s) return s;
+    s = next;
+  }
+}
 
 export function Inline({ md }: { md: string }) {
   return <>{render(md)}</>;
 }
 
-function render(md: string): ReactNode[] {
+/** `inLink`: the text of a link, where an address is only words, since a link holds no other. */
+function render(md: string, inLink = false): ReactNode[] {
   const out: ReactNode[] = [];
   let last = 0;
   let k = 0;
   for (const m of md.matchAll(TOKEN)) {
     if (m.index > last) out.push(md.slice(last, m.index));
-    const [, code, bold, strike, em, star, text, href] = m;
+    const [, code, bold, strike, em, star, text, href, bare] = m;
+    let end = m.index + m[0].length;
     if (code !== undefined) out.push(<code key={k++}>{code}</code>);
-    else if (bold !== undefined) out.push(<b key={k++}>{render(bold)}</b>);
-    else if (strike !== undefined) out.push(<s key={k++}>{render(strike)}</s>);
-    else if (em !== undefined || star !== undefined) out.push(<em key={k++}>{render(em ?? star!)}</em>);
-    else if (/^https?:/.test(href!)) out.push(<a key={k++} href={href} target="_blank" rel="noreferrer">{render(text!)}</a>);
-    else out.push(<span key={k++}>{render(text!)}</span>);
-    last = m.index + m[0].length;
+    else if (bold !== undefined) out.push(<b key={k++}>{render(bold, inLink)}</b>);
+    else if (strike !== undefined) out.push(<s key={k++}>{render(strike, inLink)}</s>);
+    else if (em !== undefined || star !== undefined) out.push(<em key={k++}>{render(em ?? star!, inLink)}</em>);
+    else if (bare !== undefined) {
+      const url = bareUrl(bare);
+      end = m.index + url.length;
+      // shown without its scheme, which says nothing in a sentence
+      out.push(inLink ? url : <a key={k++} className="link" href={url} target="_blank" rel="noreferrer">{url.replace(/^https?:\/\/(www\.)?/, '')}</a>);
+    } else if (/^https?:/.test(href!) && !inLink) out.push(<a key={k++} className="link" href={href} target="_blank" rel="noreferrer">{render(text!, true)}</a>);
+    else out.push(<span key={k++}>{render(text!, inLink)}</span>);
+    last = end;
   }
   if (last < md.length) out.push(md.slice(last));
   return out;
@@ -31,7 +53,7 @@ function render(md: string): ReactNode[] {
 
 /** Plain text for places that clamp or truncate. */
 export function plain(md: string): string {
-  return md.replace(TOKEN, (_, code, bold, strike, em, star, text) => code ?? plain(bold ?? strike ?? em ?? star ?? text ?? ''));
+  return md.replace(TOKEN, (_, code, bold, strike, em, star, text, _href, bare) => code ?? bare ?? plain(bold ?? strike ?? em ?? star ?? text ?? ''));
 }
 
 // ------------------------------------------------------------------ whole documents

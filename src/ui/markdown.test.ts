@@ -21,8 +21,25 @@ describe('inline markdown', () => {
     expect(html('5 * 3 * 2')).toBe('5 * 3 * 2');
   });
 
+  test('bare web addresses are links, shown without their scheme and without the sentence around them', () => {
+    const a = (url: string, shown: string) => `<a class="link" href="${url}" target="_blank" rel="noreferrer">${shown}</a>`;
+    expect(html('Done: https://github.com/o/r/pull/911#issuecomment-6188630477. Next.')).toBe(
+      `Done: ${a('https://github.com/o/r/pull/911#issuecomment-6188630477', 'github.com/o/r/pull/911#issuecomment-6188630477')}. Next.`,
+    );
+    expect(html('(see https://www.example.com/a), or')).toBe(`(see ${a('https://www.example.com/a', 'example.com/a')}), or`);
+    expect(html('https://en.wikipedia.org/wiki/Foo_(bar)!')).toBe(`${a('https://en.wikipedia.org/wiki/Foo_(bar)', 'en.wikipedia.org/wiki/Foo_(bar)')}!`);
+    expect(html('**on https://x.io/a_b_c**')).toBe(`<b>on ${a('https://x.io/a_b_c', 'x.io/a_b_c')}</b>`);
+    expect(html('`https://x.io` and file:///tmp/a')).toBe('<code>https://x.io</code> and file:///tmp/a');
+  });
+
+  test('a markdown link keeps its text, an address in it included', () => {
+    expect(html('[the PR](https://x.io/1)')).toBe('<a class="link" href="https://x.io/1" target="_blank" rel="noreferrer">the PR</a>');
+    expect(html('[https://x.io/1](https://x.io/1)')).toBe('<a class="link" href="https://x.io/1" target="_blank" rel="noreferrer">https://x.io/1</a>');
+  });
+
   test('plain text drops the markers, nested ones too', () => {
     expect(plain('*wichtig* and **bold *em***, `*code*`')).toBe('wichtig and bold em, *code*');
+    expect(plain('see https://x.io/a_b_ and [it](https://x.io)')).toBe('see https://x.io/a_b_ and it');
   });
 });
 

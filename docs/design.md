@@ -1915,7 +1915,10 @@ the owner's language (`src/core/locale.ts`).
   (`Msg` and `Body` in `src/ui/message.tsx`, shared by both): the owner's on the right, who and
   when above, the text as markdown (each line a paragraph, lists, tables, code, quotes holding
   all of these in turn; the same parser as plan docs, `blocks` in `src/ui/markdown.tsx`), a
-  taken-back reply struck through. Until 2026-10-09 the sheet showed a log of its own (time and
+  taken-back reply struck through. A web address in the text is a link, as a markdown link is,
+  shown without its `https://` and without the punctuation the sentence put after it; links keep
+  the text's ink with a faint line under it, and the pointer marks one like a highlighter (until
+  2026-10-15 a bare address was plain text). Until 2026-10-09 the sheet showed a log of its own (time and
   name in a column of monospace, the answers' markdown as raw lines); until 2026-10-10 messages
   knew only paragraphs and bullet lists, and an agent's table showed as raw lines of `|`; until
   2026-10-12 a quote, in a message or a plan doc, ran its lines together into one paragraph and

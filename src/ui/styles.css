@@ -57,6 +57,13 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); c
 button, input, textarea { font: inherit; color: inherit; }
 code { font: .92em var(--mono); background: var(--chip); border-radius: 2px; padding: 0 .25em; }
 a { color: inherit; }
+/* a link in text, written by an agent or in a plan doc: in the text's ink with a faint pencil line under it,
+   which the pointer marks like a highlighter */
+a.link { text-decoration: underline 1px color-mix(in srgb, currentColor 28%, transparent); text-underline-offset: .22em;
+  border-radius: 2px; box-decoration-break: clone; -webkit-box-decoration-break: clone;
+  transition: text-decoration-color .12s, background-color .12s, box-shadow .12s; }
+a.link:hover, a.link:focus-visible { --hl: color-mix(in srgb, var(--question) 17%, transparent); text-decoration-color: var(--question);
+  background: var(--hl); box-shadow: 0 0 0 2px var(--hl); outline: none; }
 /* headings are titles on paper, in the serif; the rest stays in the condensed sans */
 h1, h2, .cfg-head h3, .p-title, .project > .head .ttl, .timeline .a-ttl { font-family: var(--serif); font-weight: 600; letter-spacing: -.005em; }
 
