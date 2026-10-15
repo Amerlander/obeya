@@ -736,7 +736,7 @@ short and starts again from the owner's words.
 
 Pausing ends the agent's session at once, in the middle of a step if need be, with whatever it ran,
 and keeps the card's state and the session (`paused` on the card's row). A worker keeps its
-workspace and branch, its slot is free, and its app stack is parked after the grace like a waiting
+workspace and branch, its slot is free, and its app is parked after the grace like a waiting
 card's; one paused on its handover leaves the card waiting for approval („Demo bereit · Agent
 pausiert“), Freigeben included. An idea's agent keeps the messages it had not answered (as when the
 idea is parked), a Question card's agent what it was asked (the thread's pending words).
@@ -1461,14 +1461,15 @@ those without slots shows no pill.
 ### Parking
 
 A card that waits for the owner (handed over, asked, its pull request open), its worker without a
-turn or background work, has the app stack in its workspace stopped after a grace of five minutes
+turn or background work, has the app in its workspace stopped after a grace of five minutes
 (`OBEYA_PARK_GRACE` in seconds for a demo or a live check; a quick reply should not pay for a
-restart): Obeya runs the settings' `stack.stop` there through the platform's shell
-(`src/server/stack.ts`), unless `stack.keep` exits 0 (the stack holds data that must stay; the card
-says it keeps running, and the owner who wants it stopped anyway tells the worker). The card's log
-says the stack was stopped (`parked` on the card's row); the next message to the worker carries a
-line that it was, with `stack.start`, and clears it. A message that arrives while the stop runs
-waits for it, so the worker cannot start the stack only to have it stopped. A stop that fails is an
+restart): Obeya runs the settings' `app.stop` there through the platform's shell
+(`src/server/app-command.ts`), unless `app.keep` exits 0 (the app holds data that must stay; the
+card says it keeps running, and the owner who wants it stopped anyway tells the worker). The card's
+log says the app was stopped (`parked` on the card's row); the next message to the worker carries a
+line that it was, telling it to start it again as the recipe says, and clears it. A message that
+arrives while the stop runs waits for it, so the worker cannot start the app only to have it
+stopped. A stop that fails is an
 error on the card, and the worker hears nothing. After a restart, waiting cards are parked the same
 way. The workspace stays the card's; only its processes go.
 
@@ -2021,10 +2022,10 @@ two cards (tags the tool checks):
 - a line for the repository's CLAUDE.md, which goes the way of the Rückschau's rules (a proposal for
   „CLAUDE.md von <repo>“, then the card „CLAUDE.md ergänzen“);
 - a value for one of the repository's settings (`PROPOSED_SETTINGS`: `checks`, `setup`, `softPaths`,
-  the demo's `howToRun`), for knowledge the workers each worked out themselves; its brief lists
+  the app's `run`), for knowledge the workers each worked out themselves; its brief lists
   those settings as they apply now (this machine's and the repository's settings in front of Obeya's
-  defaults, `settingsNow` in the canvas). Every handover brings a demo, so an empty „App für die Demo starten“
-  is the usual case: each worker finds out how to start the app, and the retrospective proposes the
+  defaults, `settingsNow` in the canvas). Every handover brings a demo, so an empty „So läuft die App“
+  is the usual case: each worker finds out how to run the app, and the retrospective proposes the
   recipe they arrived at.
 
 Nothing is created silently and nothing starts by itself; skills of the user (`~/.claude/skills`)
@@ -2772,12 +2773,12 @@ machine with a GPU).
 
 ### Recording a demo
 
-How to run each project's app for a demo is its settings' `demo.howToRun` (say, the app stack,
-login, test data, migrations; Obeya: the scratch instance); without Obeya, `bun lib/recipe.ts` in a
-repository prints it. The worker records once the change is committed and checked, as the recipe
+How to run each project's app, for a demo too, is its settings' `app.run` (say, how to start it,
+what to do after a change, where its address is, login, test data, migrations; Obeya: the scratch
+instance); without Obeya, `bun lib/recipe.ts` in a repository prints it. The worker records once the change is committed and checked, as the recipe
 says how to run the app (Obeya: a scratch instance from the worktree, staged by
 `scripts/scratch-obeya.ts` from a stage file before every take, its workers idle unless the change
-is about agents (`--real-workers`); elsewhere, say, the clone's own app stack), and hands over the
+is about agents (`--real-workers`); elsewhere, say, the clone's own app), and hands over the
 directory and chapter titles with `ready_for_review`.
 
 Before the first render it runs `node demo.ts --dry`: `login`, `open` and the scenes against the
@@ -3296,19 +3297,22 @@ made again.
 
 ### Repository settings
 
-What Obeya knows about a repository is in its settings: how to start and refresh its app stack, the
-recipe for running the app in a demo (login, test data, migrations: `demo.howToRun`), where plan
-docs live, which checks run and how approved work lands, the static site demos are shared on. They
+What Obeya knows about a repository is in its settings: the recipe for running its app (how to
+start it, what to do after a change, where it is, login and test data for a demo: `app.run`), how
+Obeya stops it while a card waits, where plan docs live, which checks run and how approved work lands, the static site demos are shared on. They
 are values, in two layers: `.obeya/settings.json` in the repository (`SharedSettings`), for everyone,
 and `settings` of the repository's entry in `canvases.json` (`RepoSettings`), set for this machine
 in the configuration dialog without a line of code, which holds the main branch too.
 
 The fields: `land`, `direct`, `checks`, `setup`, `planDocs`, `softPaths`, `workspaces`, `prNoise`,
-`stack` and `demo`. `stack` has `start`, `refresh`, `urls` (the `file` of `KEY=value` lines and the
-`frontendKey` in it that holds the frontend's URL), `stop` and `keep`; it is in every worker's
-brief, its `stop` and `keep` park a waiting card (see Parking), and a stack without `start` counts
-as none (`usableStack` in `src/adapters/index.ts`), so the dialog can save one while the owner is
-still filling it in. `demo` has `howToRun` and `site` (see Static sites). The reference for every
+`app` and `demo`. `app` has `run`, `stop` and `keep`. Only what Obeya itself acts on is a command:
+`stop` and `keep` park a waiting card (see Parking). `run` is prose, for any kind of app (a web app
+with or without hot reload, a frontend that needs a reload, a CLI, a desktop or mobile app, a URL
+printed to the console): every worker's brief has it word for word, and its demo paragraph points
+back to it. Obeya neither starts the app nor looks for its address; the agents do, from the recipe.
+`demo` has `site` (see Static sites). The fields of `app` and `demo` are each a setting of their
+own (`NESTED_SETTINGS`): this machine may set `app.stop` and leave `app.run` to the repository, and
+each comes from where it is set. The reference for every
 field is `docs/settings.md`, linked from the README.
 
 Two things are this machine's alone and never in `.obeya/settings.json`: the command that shares the
@@ -3409,7 +3413,7 @@ tell (login, test data), write the file, check it with `lib/check.ts` (it reads 
 `.obeya/settings.json` as Obeya would read it from the default branch, prints what Obeya makes of
 it, the plan docs among it, and lists the problems: the field problems and the site's, from the
 same functions the configuration dialog uses, and a `.obeya/adapter/` still there), run setup and
-checks, and prove `demo.howToRun` by recording a demo with it. The compiled binary's resources
+checks, and prove `app.run` by recording a demo with it. The compiled binary's resources
 carry `docs/settings.md` where the skill finds it up the tree, and `check.ts` bundled like
 `recipe.ts`.
 
@@ -3441,9 +3445,9 @@ filled in once its path is checked and changeable before saving). The command th
 is a row of its settings, for this machine only, since it often needs credentials, so „Für alle“
 does not take it over (empty: the demo site of its settings, shown as „Site: <url>“, or an export;
 see Where a demo goes). Each repository folds its settings under „Einstellungen“ below its row (see
-Repository settings), with the main branch and how work lands in the folded line; the app stack
-(„App-Stack“: start, refresh, the URL file and the frontend's key in it, stop, keep) and the demo
-site („Demo-Site“: title, URL, deploy command, env file, headers as `Name: value` lines, the largest
+Repository settings), with the main branch and how work lands in the folded line; the app's
+recipe („So läuft die App“, a large text field), its stop command („Stoppen, solange eine Karte
+wartet“) and, once there is one, its keep condition, and the demo site („Demo-Site“: title, URL, deploy command, env file, headers as `Name: value` lines, the largest
 file in MiB, the overview's language) have their fields there like the other settings; „Für alle ins
 Repository übernehmen“ below them takes the values saved for this machine into the repository's
 `.obeya/settings.json`. What is taken over is what is saved: while the dialog has changes not saved
@@ -3645,6 +3649,18 @@ of what the owner may say.
   lost right after the first (2026-10-08); the macOS poll from fseventsd dropping events
   (2026-10-09). Reading old content from the git history instead was rejected as fragile (PRs and
   clones, renames).
+- **One recipe for running the app, and only the commands Obeya runs** (2026-10-15). Until then
+  `stack` had `start`, `refresh` ("after a backend change") and `urls` (a file of `KEY=value` lines
+  and the key of the frontend's URL) beside `stop` and `keep`, shown as five „App-Stack“ fields,
+  and `demo.howToRun` held a recipe in prose for the demo alone. Obeya ran only `stop` and `keep`;
+  `start`, `refresh` and `urls` made up one sentence of the brief, so they guessed at categories
+  (a backend, a frontend, a URL file) that many kinds of app lack, and the work repository's recipe
+  already repeated them in prose. Now `app.run` is that prose for every worker, `stop` and `keep`
+  stay commands, and `demo` keeps only `site`. A structured form (a start command, "after a change to
+  X, run Y" rules, where the app is) was dropped: it still guesses at categories, and the agent reads
+  it as prose anyway. Obeya managing the app (starting it, waiting for it, an „App öffnen“ on the
+  card) was dropped by the owner: nothing in Obeya needs the address. No migration, since Obeya is
+  not released: `stack` and `demo.howToRun` are unknown fields now.
 - **Repository settings without TypeScript, read where they are used** (2026-10-14). Until then
   these values could only be set in `.obeya/adapter/index.ts`, and saving the dialog always
   restarted Obeya.
@@ -4181,7 +4197,7 @@ Persistent (SQLite):
   open questions with its agent's picks and suggested next step, a prototype's idea, how it ended
   and its worker's proposal to build on it, the prototype an idea is built on, landed work whose
   worker still finishes; an approval held until the work can land; what landed work shipped with; a
-  waiting card's stopped app stack; a worker's proposal waiting for the owner (why, its open
+  waiting card's stopped app; a worker's proposal waiting for the owner (why, its open
   questions); a project's plan doc as last read and the idea or task it came from; that a card
   becomes a project, and the plan docs its landed work added;
 - the shared demo page: slug, link, the demo directory it shows, what the page shows (title, text,

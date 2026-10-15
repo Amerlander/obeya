@@ -236,7 +236,7 @@ it carries the owner's cloned voice.
 
 ## How to run the app
 
-Under Obeya, the worker's brief says how to run the app of its repository for a demo (the recipe is
-`demo.howToRun` of the repository's settings, `.obeya/settings.json`). Without Obeya, ask it: `bun ${CLAUDE_SKILL_DIR}/lib/recipe.ts`, run
+Under Obeya, the worker's brief says how to run the app of its repository (the recipe is
+`app.run` of the repository's settings, `.obeya/settings.json`). Without Obeya, ask it: `bun ${CLAUDE_SKILL_DIR}/lib/recipe.ts`, run
 in the repository, prints the recipe when its settings have one. Otherwise the
 repository's own docs (CLAUDE.md, README) say how to start it.

@@ -1,13 +1,12 @@
 ---
 name: settings
-description: Write a repository's Obeya settings (`.obeya/settings.json`) — how its app starts and stops, which checks run, how work lands, how a demo is recorded, where demos are shared, where its plan docs are — from what the repository shows, prove the demo recipe by recording a demo with it, and ask the owner what the repository does not tell. Use when a task asks to set up Obeya for a repository, to write or fix its settings, or names this skill.
+description: Write a repository's Obeya settings (`.obeya/settings.json`) — how its app runs and stops, which checks run, how work lands, where demos are shared, where its plan docs are — from what the repository shows, prove the recipe for running the app by recording a demo with it, and ask the owner what the repository does not tell. Use when a task asks to set up Obeya for a repository, to write or fix its settings, or names this skill.
 ---
 
 # Writing a repository's settings
 
 Obeya learns how a project works from the repository's settings for everyone, in
-`.obeya/settings.json`: setup, checks, landing, plan docs, the app stack, the demo recipe, the
-demo site. The owner sees and changes them in "Konfiguration". The reference for every field and
+`.obeya/settings.json`: setup, checks, landing, plan docs, how to run the app, the demo site. The owner sees and changes them in "Konfiguration". The reference for every field and
 when a change takes effect is `${CLAUDE_SKILL_DIR}/../../../docs/settings.md`. Read it first; this
 skill is the way to fill it in.
 
@@ -23,13 +22,15 @@ Find out, from the files rather than by guessing:
   `justfile`, `pyproject.toml`, `Cargo.toml`, `go.mod`, `Gemfile` …). The CI configuration
   (`.github/workflows/`, `.gitlab-ci.yml`, …) says which checks a change must pass and in which
   order; take those that run on one machine in minutes, without services the workspace lacks.
-- **The app and its stack**: README, CONTRIBUTING, CLAUDE.md or AGENTS.md, `docker-compose.yml` /
-  `compose.yaml`, `.env.example`, `Procfile`, dev scripts. What starts in which order, which ports
-  it takes (fixed ones mean one stack per clone: `workspaces: 'clones'`), migrations, seed data,
-  where the frontend's URL comes from, and how to stop the stack of one workspace (`stack.stop`;
-  `stack.keep` where some stacks hold data that must stay).
+- **The app**: README, CONTRIBUTING, CLAUDE.md or AGENTS.md, `docker-compose.yml` /
+  `compose.yaml`, `.env.example`, `Procfile`, dev scripts. What kind of app it is (a web app, a CLI,
+  a desktop or mobile app), what starts in which order, which ports it takes (fixed ones mean one
+  app per clone: `workspaces: 'clones'`), what to do after which kind of change (restart a
+  service, reload the page, rebuild; nothing where it reloads by itself), where it gives its
+  address (a file it writes, the console), migrations, seed data, and how to stop the app of one
+  workspace (`app.stop`; `app.keep` where some hold data that must stay).
 - **An adapter module from before**: a `.obeya/adapter/index.ts` held what the settings hold now
-  (the stack, the demo site). Obeya no longer reads it: take its values over, then delete
+  (how the app runs, the demo site). Obeya no longer reads it: take its values over, then delete
   `.obeya/adapter/`. What it held that is set on each machine in "Konfiguration" goes into your
   summary for the owner: the canvas's name, a share command (its script moves elsewhere in the
   repository).
@@ -55,20 +56,20 @@ onto the default branch, where demos are shared with colleagues (a static site: 
 where plan docs go: the directory of plans you found (its docs then converted with "Als Projekt
 aufbereiten" on the canvas), or a new `docs/plan/`. Collect them and ask in one question
 (the `ask` tool under Obeya), with the options you found, while you go on with the rest. A secret
-(a real password, an API key) goes into `howToRun` only as where to find it (a file outside git,
+(a real password, an API key) goes into `app.run` only as where to find it (a file outside git,
 an environment variable), never itself.
 
 ## 3. Write `.obeya/settings.json`
 
 Start from the example in the reference and keep only the fields that differ from Obeya's
 defaults: `setup`, `checks`, `land`, `direct`, `planDocs`, `softPaths`, `workspaces`, `prNoise`,
-`stack`, and `demo` with `howToRun` and `site`.
+`app` with `run`, `stop` and `keep`, and `demo` with `site`.
 
-`demo.howToRun` is the part that decides whether workers can show their work. Write it for a
+`app.run` is the part that decides whether workers can run and show their work. Write it for a
 newcomer, as a few sentences: what to start, in which order and how (in the background, which
-ports), migrations and seed data, the login and the URL to open, how to reach a state worth
-showing, and what to stop afterwards (by PID, not by name: other workers run their own stacks on
-the same machine).
+ports), what to do after which kind of change, where the app gives its address, migrations and
+seed data, the login, how to reach a state worth showing, and what to stop afterwards (by PID,
+not by name: other workers run their own apps on the same machine).
 
 Then check it:
 
@@ -85,7 +86,7 @@ problems."
 ## 4. Prove it
 
 - Run `setup` and every command of `checks` in this workspace, as a worker will.
-- Follow `stack` and `howToRun` word for word, as if you had never seen the project: start the
+- Follow `app.run` word for word, as if you had never seen the project: start the
   app, open it, log in. Where the recipe falls short (a step missing, a port taken, data that is
   not there), fix the recipe, not just the running app, and run it again from the start.
 - Record a short demo with the demo skill (`obeya:demo`), the app run by the recipe and nothing

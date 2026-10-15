@@ -1,7 +1,7 @@
 // Where a card's worker works, and how approved work lands.
 //
 // `clones`: a pool of full clones per canvas, leased one card at a time (for repositories with tools
-// that break in worktrees, or one app stack per clone), here and on other machines; a new card
+// that break in worktrees, or one app per clone), here and on other machines; a new card
 // takes a clone on the first machine whose busy workers leave it a slot (design: Hosts). `worktrees`: one worktree of the Obeya checkout per card,
 // created on start, as many in parallel as there are cards unless the repository has slots; kept
 // across stop and restart until the card's work has landed.

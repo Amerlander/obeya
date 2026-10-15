@@ -10,8 +10,8 @@ import type { SharedSettings } from '../core/types';
 const strings = z.array(z.string());
 
 const planDocs = z.object({ dir: z.string(), exclude: strings }).strict();
-// what a site or a stack needs to be used (a title, a URL, commands) is checked where it is used
-// (`siteProblem`, `usableStack`): the dialog saves one while the owner fills it in
+// what a site needs to be used (a title, a URL, a command) is checked where it is used
+// (`siteProblem`): the dialog saves one while the owner fills it in
 const site = z
   .object({
     title: z.string(),
@@ -23,16 +23,8 @@ const site = z
     language: z.enum(['de', 'en']).optional(),
   })
   .strict();
-const demo = z.object({ howToRun: z.string().optional(), site: site.optional() }).strict();
-const stack = z
-  .object({
-    start: z.string(),
-    refresh: z.string().optional(),
-    urls: z.object({ file: z.string(), frontendKey: z.string() }).strict().optional(),
-    stop: z.string().optional(),
-    keep: z.string().optional(),
-  })
-  .strict();
+const demo = z.object({ site: site.optional() }).strict();
+const app = z.object({ run: z.string().optional(), stop: z.string().optional(), keep: z.string().optional() }).strict();
 
 /** What a repository's settings for this machine may hold (`RepoSettings`): how it works, and its main branch. */
 export const settingsShape = z
@@ -46,7 +38,7 @@ export const settingsShape = z
     softPaths: strings.optional(),
     workspaces: z.enum(['clones', 'worktrees']).optional(),
     prNoise: strings.optional(),
-    stack: stack.optional(),
+    app: app.optional(),
     demo: demo.optional(),
   })
   .strict();
@@ -63,8 +55,7 @@ const KNOWN: Record<string, string[]> = {
   planDocs: Object.keys(planDocs.shape),
   demo: Object.keys(demo.shape),
   'demo.site': Object.keys(site.shape),
-  stack: Object.keys(stack.shape),
-  'stack.urls': ['file', 'frontendKey'],
+  app: Object.keys(app.shape),
 };
 
 /**

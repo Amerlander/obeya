@@ -11,7 +11,7 @@ import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
 import { REPO_ADAPTER_DIR, REPO_SETTINGS_FILE } from '../adapters';
 import { settingsShape } from '../adapters/schema';
-import { type AgentsView, blocksSaving, type CanvasConfig, type DemoSite, type ConfigChecked, type ConfigProblem, type ConfigSaved, type ConfigView, type RepoSettings, SHARED_FIELDS, type SettingsShared, type SharedSettings, type DemoSettingsProblem, type DemoSettingsView, type DemoVoiceCheck, type LanguageView, type ResolvedCanvas, type ThemeView, type VoiceInstallJob, layerSettings, type ProposedSetting, settingPatch } from '../core/types';
+import { type AgentsView, blocksSaving, type CanvasConfig, type DemoSite, type ConfigChecked, type ConfigProblem, type ConfigSaved, type ConfigView, type RepoSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type SettingsShared, type SharedSettings, type DemoSettingsProblem, type DemoSettingsView, type DemoVoiceCheck, type LanguageView, type ResolvedCanvas, type ThemeView, type VoiceInstallJob, layerSettings, type ProposedSetting, settingPatch } from '../core/types';
 import {
   DEMO_SETTINGS_FILE,
   type DemoSettings,
@@ -60,8 +60,7 @@ function tidySettings(s: z.infer<typeof settingsShape> | undefined): RepoSetting
   const list = (l?: string[]) => l?.map((x) => x.trim()).filter(Boolean);
   const dir = s.planDocs?.dir.trim().replace(/\/+$/, '');
   const site = tidySite(s.demo?.site);
-  const demo = s.demo?.howToRun !== undefined || site ? { ...(s.demo?.howToRun !== undefined ? { howToRun: s.demo.howToRun.trim() } : {}), ...(site ? { site } : {}) } : undefined;
-  const stack = tidyStack(s.stack);
+  const app = tidyApp(s.app);
   const out: RepoSettings = {
     ...(s.branch?.trim() ? { branch: s.branch.trim() } : {}),
     ...(s.land ? { land: s.land } : {}),
@@ -72,19 +71,20 @@ function tidySettings(s: z.infer<typeof settingsShape> | undefined): RepoSetting
     ...(s.softPaths ? { softPaths: list(s.softPaths)! } : {}),
     ...(s.workspaces ? { workspaces: s.workspaces } : {}),
     ...(s.prNoise ? { prNoise: list(s.prNoise)! } : {}),
-    ...(stack ? { stack } : {}),
-    ...(demo && Object.keys(demo).length ? { demo } : {}),
+    ...(app ? { app } : {}),
+    ...(site ? { demo: { site } } : {}),
   };
   return Object.keys(out).length ? out : undefined;
 }
 
-/** A stack as it is saved: its commands trimmed, those left empty out; none where nothing is filled in. */
-function tidyStack(s: RepoSettings['stack']): RepoSettings['stack'] {
+/**
+ * How the app runs, as it is saved: each field trimmed. An empty recipe is a value of its own (none,
+ * over the repository's); an empty command is none and goes. None where nothing is left.
+ */
+function tidyApp(s: RepoSettings['app']): RepoSettings['app'] {
   if (!s) return undefined;
-  const opt = (v?: string) => (v?.trim() ? v.trim() : undefined);
-  const urls = s.urls && (s.urls.file.trim() || s.urls.frontendKey.trim()) ? { file: s.urls.file.trim(), frontendKey: s.urls.frontendKey.trim() } : undefined;
-  const out = { start: s.start.trim(), ...(opt(s.refresh) ? { refresh: opt(s.refresh) } : {}), ...(urls ? { urls } : {}), ...(opt(s.stop) ? { stop: opt(s.stop) } : {}), ...(opt(s.keep) ? { keep: opt(s.keep) } : {}) };
-  return out.start || Object.keys(out).length > 1 ? out : undefined;
+  const out = { ...(s.run !== undefined ? { run: s.run.trim() } : {}), ...(s.stop?.trim() ? { stop: s.stop.trim() } : {}), ...(s.keep?.trim() ? { keep: s.keep.trim() } : {}) };
+  return Object.keys(out).length ? out : undefined;
 }
 
 /** A demo site as it is saved: its fields trimmed, those left empty out; none where nothing is filled in. */
@@ -285,11 +285,11 @@ export class Config {
     const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
     const changed = this.dropSettings(path, (s) => {
       for (const k of SHARED_FIELDS) {
-        if (k === 'demo') continue;
-        if (s[k] !== undefined && same(s[k], after[k]) && !same(before?.[k], after[k])) delete s[k];
+        if (isNested(k)) {
+          const [mine, theirs, was] = [s[k], after[k], before?.[k]] as (Record<string, unknown> | undefined)[];
+          for (const f of NESTED_SETTINGS[k]) if (mine?.[f] !== undefined && same(mine[f], theirs?.[f]) && !same(was?.[f], theirs?.[f])) delete mine[f];
+        } else if (s[k] !== undefined && same(s[k], after[k]) && !same(before?.[k], after[k])) delete s[k];
       }
-      for (const k of ['howToRun', 'site'] as const)
-        if (s.demo?.[k] !== undefined && same(s.demo[k], after.demo?.[k]) && !same(before?.demo?.[k], after.demo?.[k])) delete s.demo[k];
     });
     if (changed) console.log(`Obeya: settings of ${path} now come from its ${REPO_SETTINGS_FILE}; removed from this machine's`);
   }
@@ -305,9 +305,10 @@ export class Config {
       ...c,
       repos: c.repos.map((r) => {
         if (resolve(expand(r.path)) !== path || !r.settings) return r;
-        const s: RepoSettings = { ...r.settings, ...(r.settings.demo ? { demo: { ...r.settings.demo } } : {}) };
+        const s: RepoSettings = { ...r.settings };
+        for (const k of Object.keys(NESTED_SETTINGS) as NestedSetting[]) if (s[k]) (s as Record<string, unknown>)[k] = { ...s[k] };
         drop(s);
-        if (s.demo && !Object.keys(s.demo).length) delete s.demo;
+        for (const k of Object.keys(NESTED_SETTINGS) as NestedSetting[]) if (s[k] && !Object.keys(s[k]).length) delete s[k];
         if (JSON.stringify(s) === JSON.stringify(r.settings)) return r;
         changed = true;
         const { settings: _, ...rest } = r;
@@ -352,7 +353,7 @@ export class Config {
     this.takenOver(path, undefined, after);
     // where this machine set another value, the repository's applies here as well from now on
     this.dropSettings(path, (s) => {
-      if (field === 'howToRun') delete s.demo?.howToRun;
+      if (field === 'run') delete s.app?.run;
       else delete s[field];
     });
     this.o.onSettings?.();

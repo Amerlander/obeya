@@ -13,6 +13,4 @@ export const generic: RepoAdapter = {
   land: 'pr',
   workspaces: 'worktrees',
   softPaths: ['docs/plan/'],
-  // without a recipe the worker finds out how to run the app
-  demo: { howToRun: '' },
 };

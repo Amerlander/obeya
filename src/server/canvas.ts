@@ -56,7 +56,7 @@ export interface CanvasDeps {
   writingPauseMs?: number;
   /** Added to every worker's environment (`OBEYA_URL`). */
   workerEnv?: Record<string, string>;
-  /** How long a waiting card's stack runs on before it is stopped (Parking); five minutes when left out. */
+  /** How long a waiting card's app runs on before it is stopped (Parking); five minutes when left out. */
   parkGrace?: number;
   /** The language Obeya speaks to the owner now (`ownerLanguage`); German when left out (the tests). */
   language?: () => Language;
@@ -270,7 +270,7 @@ export class CanvasRuntime {
   /** The settings of a repository the Arbeitsrückschau may propose a value for, as they apply now. */
   private settingsNow = (repo: string): Record<ProposedSetting, string | string[]> | undefined => {
     const a = this.repos.find((r) => r.ref.id === repo)?.adapter;
-    return a && { checks: a.checks ?? [], setup: a.setup ?? '', softPaths: a.softPaths, howToRun: a.demo?.howToRun ?? '' };
+    return a && { checks: a.checks ?? [], setup: a.setup ?? '', softPaths: a.softPaths, run: a.app?.run ?? '' };
   };
 
   private imageFiles = (ids: string[] = []) => ids.flatMap((i) => this.images.path(i) ?? []);

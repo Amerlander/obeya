@@ -11,7 +11,7 @@ import { generic } from '../adapters/generic';
 import { Board } from './board';
 import { Store } from './db';
 import { hostName, onHost, RECHECK_DOWN_MS, registerHost, remote, sessionFiles, type SshHost } from './hosts';
-import { runStackCommand } from './stack';
+import { runAppCommand } from './app-command';
 import { FakeRuntime, fakeSsh, gitRepo, identify, until } from './testing';
 import { Workers } from './workers';
 import { git, gitAsync, HERE, Workspaces } from './workspaces';
@@ -58,11 +58,11 @@ describe('a workspace on a host', () => {
 
   test("runs the stack commands of the settings there", async () => {
     mkdirSync(join(dir, 'ws'));
-    const r = await runStackCommand(onHost(name, join(dir, 'ws')), 'pwd -P && echo stopped > stack.log');
+    const r = await runAppCommand(onHost(name, join(dir, 'ws')), 'pwd -P && echo stopped > stack.log');
     expect(r.ok).toBe(true);
     expect(readFileSync(join(dir, 'ws', 'stack.log'), 'utf8')).toBe('stopped\n');
     writeFileSync(join(dir, 'net', 'down'), '');
-    expect((await runStackCommand(onHost(name, join(dir, 'ws')), 'true')).ok).toBe(false);
+    expect((await runAppCommand(onHost(name, join(dir, 'ws')), 'true')).ok).toBe(false);
   });
 
   test('copies directories there and back', async () => {

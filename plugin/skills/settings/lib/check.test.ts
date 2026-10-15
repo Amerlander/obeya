@@ -23,9 +23,10 @@ const SITE = { title: 'Demos', url: 'https://demos.example.dev', deploy: 'git {d
 
 describe('check.ts', () => {
   test('shows the settings and finds nothing wrong with them', () => {
-    const { code, out } = check({ setup: 'bun install', stack: { start: 'bun dev' }, demo: { howToRun: 'bun dev', site: SITE } });
+    const { code, out } = check({ setup: 'bun install', app: { run: 'Start it with `bun dev`.', stop: 'pkill -F .pid' }, demo: { site: SITE } });
     expect(out).toContain('setup: "bun install"');
-    expect(out).toContain('stack: {"start":"bun dev"}');
+    expect(out).toContain('app.run: Start it with `bun dev`.');
+    expect(out).toContain('app.stop: "pkill -F .pid", app.keep: (none)');
     expect(out).toContain('demo site: Demos at https://demos.example.dev, deploy "git {dir}"');
     expect(out).toContain('No problems.');
     expect(code).toBe(0);

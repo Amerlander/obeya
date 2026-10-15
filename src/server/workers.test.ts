@@ -72,7 +72,7 @@ beforeEach(() =>
     workspaces: 'clones',
     setup: 'bun install',
     checks: ['bun test'],
-    stack: { start: 'bun run stack', refresh: 'bun run api:restart', urls: { file: '.stack.env', frontendKey: 'WEB_URL' } },
+    app: { run: 'Start it with `bun run stack`; after an API change, `bun run api:restart`. The URL is in `.stack.env` under WEB_URL.' },
   }),
 );
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
@@ -117,8 +117,8 @@ describe('workers', () => {
     expect(runtime.last.spec.cwd).toBe(row.workspace!);
     expect(runtime.last.inbox[0]).toContain('Zählerstände exportieren');
     expect(runtime.last.inbox[0]).toContain('`bun install`');
-    expect(runtime.last.inbox[0]).toContain('To run the app in your workspace: `bun run stack`; after a backend change, `bun run api:restart`');
-    expect(runtime.last.inbox[0]).toContain('in `.stack.env` under WEB_URL');
+    expect(runtime.last.inbox[0]).toContain('How to run the app: Start it with `bun run stack`; after an API change, `bun run api:restart`. The URL is in `.stack.env` under WEB_URL.');
+    expect(runtime.last.inbox[0]).toContain('Run the app for it as the recipe above says.');
     // a repository without demos gets Obeya's skills all the same: the one that writes its settings among them
     expect(runtime.last.spec.plugins).toEqual([OBEYA_PLUGIN]);
     // the only clone is taken
@@ -1005,15 +1005,14 @@ describe('workers', () => {
   });
 });
 
-describe('parking: the stack of a card that waits for the owner', () => {
-  const stack = { start: 'bun run stack', refresh: 'bun run api:restart', urls: { file: '.stack.env', frontendKey: 'WEB_URL' } };
-  /** Workers whose settings stop the stack by writing `parked.log` in the workspace, after a grace of `grace` ms. */
-  const parking = (more: Partial<NonNullable<RepoAdapter['stack']>> = {}, grace = 10) => {
+describe('parking: the app of a card that waits for the owner', () => {
+  /** Workers whose settings stop the app by writing `parked.log` in the workspace, after a grace of `grace` ms. */
+  const parking = (more: Partial<NonNullable<RepoAdapter['app']>> = {}, grace = 10) => {
     workers = new Workers({
       board,
       runtime,
       workspaces: spaces,
-      adapter: { ...generic, land: 'main', workspaces: 'clones', stack: { ...stack, stop: 'echo stopped >> parked.log', ...more } },
+      adapter: { ...generic, land: 'main', workspaces: 'clones', app: { run: 'Start it with `bun run stack`.', stop: 'echo stopped >> parked.log', ...more } },
       parkGrace: grace,
     });
   };
@@ -1026,26 +1025,36 @@ describe('parking: the stack of a card that waits for the owner', () => {
     return c;
   };
 
-  test('a card that waits has its stack stopped after the grace, and its worker hears so with the next message', async () => {
+  test('a card that waits has its app stopped after the grace, and its worker hears so with the next message', async () => {
     parking();
     const c = handOver();
     expect(state(c.id)).toBe('waiting:demo');
-    expect(runtime.last.inbox[0]).toContain('While the card waits for the owner, Obeya stops the stack');
+    expect(runtime.last.inbox[0]).toContain('While the card waits for the owner, Obeya stops the app in your workspace');
     await until(() => board.row(c.id).parked);
     expect(stopped(c.id)).toBe(true);
     expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', author: 'obeya', text: board.t.worker.parked });
     workers.message(c.id, 'Bitte noch die Spalte umbenennen.');
     expect(runtime.last.inbox.at(-1)).toContain('Bitte noch die Spalte umbenennen.');
-    expect(runtime.last.inbox.at(-1)).toContain('Obeya stopped the app stack in your workspace (`echo stopped >> parked.log`)');
-    expect(runtime.last.inbox.at(-1)).toContain('start it (`bun run stack`)');
+    expect(runtime.last.inbox.at(-1)).toContain('Obeya stopped the app in your workspace (`echo stopped >> parked.log`)');
+    expect(runtime.last.inbox.at(-1)).toContain('start it again as the recipe in your brief says');
     expect(board.row(c.id).parked).toBeNull();
     // only once: the message after that says nothing of it
     runtime.last.emit({ type: 'idle' });
     workers.message(c.id, 'Danke.');
-    expect(runtime.last.inbox.at(-1)).not.toContain('app stack');
+    expect(runtime.last.inbox.at(-1)).not.toContain('stopped the app');
   });
 
-  test('a paused worker has its stack stopped like a waiting card, and hears so when it goes on', async () => {
+  test('without a recipe, the worker still hears that the app stops while the card waits', async () => {
+    parking({ run: undefined });
+    const c = handOver();
+    expect(runtime.last.inbox[0]).not.toContain('How to run the app:');
+    expect(runtime.last.inbox[0]).toContain('While the card waits for the owner, Obeya stops the app in your workspace');
+    await until(() => board.row(c.id).parked);
+    workers.message(c.id, 'Noch eine Spalte.');
+    expect(runtime.last.inbox.at(-1)).toContain('When you need it again, start it again.');
+  });
+
+  test('a paused worker has its app stopped like a waiting card, and hears so when it goes on', async () => {
     parking();
     const c = manual();
     workers.start(c.id);
@@ -1054,10 +1063,10 @@ describe('parking: the stack of a card that waits for the owner', () => {
     expect(stopped(c.id)).toBe(true);
     workers.resume(c.id);
     expect(runtime.last.inbox[0]).toContain('The owner paused you and has now let you go on');
-    expect(runtime.last.inbox[0]).toContain('Obeya stopped the app stack in your workspace');
+    expect(runtime.last.inbox[0]).toContain('Obeya stopped the app in your workspace');
   });
 
-  test('an answer within the grace keeps the stack running', async () => {
+  test('an answer within the grace keeps the app running', async () => {
     parking({}, 60);
     const c = manual();
     workers.start(c.id);
@@ -1066,10 +1075,10 @@ describe('parking: the stack of a card that waits for the owner', () => {
     workers.answer(c.id, 'Datum und Stand.');
     await Bun.sleep(100);
     expect(stopped(c.id)).toBe(false);
-    expect(runtime.last.inbox.at(-1)).not.toContain('app stack');
+    expect(runtime.last.inbox.at(-1)).not.toContain('stopped the app');
   });
 
-  test('a worker whose background work still runs keeps its stack', async () => {
+  test('a worker whose background work still runs keeps its app', async () => {
     parking();
     const c = manual();
     workers.start(c.id);
@@ -1079,7 +1088,7 @@ describe('parking: the stack of a card that waits for the owner', () => {
     expect(stopped(c.id)).toBe(false);
   });
 
-  test('a card still at work keeps its stack', async () => {
+  test('a card still at work keeps its app', async () => {
     parking();
     const c = manual();
     workers.start(c.id);
@@ -1089,7 +1098,7 @@ describe('parking: the stack of a card that waits for the owner', () => {
     expect(stopped(c.id)).toBe(false);
   });
 
-  test('a stack that holds what must stay keeps running, and the owner hears why', async () => {
+  test('an app that holds what must stay keeps running, and the owner hears why', async () => {
     parking({ keep: 'exit 0' });
     const c = handOver();
     await until(() => board.events(c.id).at(-1)!.text === board.t.worker.parkKept);
@@ -1097,24 +1106,24 @@ describe('parking: the stack of a card that waits for the owner', () => {
     expect(board.row(c.id).parked).toBeNull();
   });
 
-  test('a stack that does not need keeping is stopped', async () => {
+  test('an app that does not need keeping is stopped', async () => {
     parking({ keep: 'exit 1' });
     const c = handOver();
     await until(() => board.row(c.id).parked);
     expect(stopped(c.id)).toBe(true);
   });
 
-  test('a stop that fails is an error on the card, and the worker is not told of a stopped stack', async () => {
+  test('a stop that fails is an error on the card, and the worker is not told of a stopped app', async () => {
     parking({ stop: 'echo "no pid file" >&2; exit 3' });
     const c = handOver();
     await until(() => board.events(c.id).at(-1)!.kind === 'error');
     expect(board.events(c.id).at(-1)!.text).toBe(board.t.worker.parkFailed('no pid file'));
     expect(board.row(c.id).parked).toBeNull();
     workers.message(c.id, 'Noch etwas.');
-    expect(runtime.last.inbox.at(-1)).not.toContain('app stack');
+    expect(runtime.last.inbox.at(-1)).not.toContain('stopped the app');
   });
 
-  test('a message while the stop runs reaches the worker once the stack is stopped', async () => {
+  test('a message while the stop runs reaches the worker once the app is stopped', async () => {
     parking({ stop: 'sleep 0.3; echo stopped >> parked.log' });
     const c = handOver();
     await Bun.sleep(80);
@@ -1124,7 +1133,7 @@ describe('parking: the stack of a card that waits for the owner', () => {
     await until(() => runtime.last.inbox.length > before);
     expect(stopped(c.id)).toBe(true);
     expect(runtime.last.inbox.at(-1)).toContain('Noch etwas.');
-    expect(runtime.last.inbox.at(-1)).toContain('Obeya stopped the app stack');
+    expect(runtime.last.inbox.at(-1)).toContain('Obeya stopped the app');
   });
 
   test('after a restart, a card that waits is parked; its worker hears so when the session resumes', async () => {
@@ -1139,7 +1148,7 @@ describe('parking: the stack of a card that waits for the owner', () => {
     await until(() => board.row(c.id).parked);
     workers.answer(c.id, 'Datum.');
     expect(runtime.last.spec.resume).toBe('sess-1');
-    expect(runtime.last.inbox[0]).toContain('Obeya stopped the app stack');
+    expect(runtime.last.inbox[0]).toContain('Obeya stopped the app');
   });
 
   test('without a stop in the settings nothing is stopped', async () => {
@@ -1161,7 +1170,7 @@ describe('handing over with a demo', () => {
 
   test('the worker gets the demo skill from the plugin that comes with Obeya, its brief names it, and it knows where Obeya is', () => {
     rmSync(dir, { recursive: true, force: true });
-    setup({ ...generic, land: 'main', workspaces: 'clones', demo: { howToRun: 'bun start' } });
+    setup({ ...generic, land: 'main', workspaces: 'clones', app: { run: 'bun start' } });
     const c = manual();
     workers.start(c.id);
     expect(runtime.last.spec.plugins).toEqual([OBEYA_PLUGIN]);
@@ -1325,7 +1334,7 @@ describe('handing over with a demo', () => {
 
   test('after feedback, the worker may hand over again without a new demo: the one on the card stands', () => {
     rmSync(dir, { recursive: true, force: true });
-    setup({ ...generic, land: 'main', workspaces: 'clones', demo: { howToRun: 'bun start' } });
+    setup({ ...generic, land: 'main', workspaces: 'clones', app: { run: 'bun start' } });
     const c = manual();
     workers.start(c.id);
     runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir()) });
@@ -1338,7 +1347,7 @@ describe('handing over with a demo', () => {
 
   test('where demos are shared, a video or an artifact comes with its page for colleagues, kept with the demo', () => {
     rmSync(dir, { recursive: true, force: true });
-    setup({ ...generic, land: 'main', workspaces: 'clones', demo: { howToRun: 'bun start', site: { title: 'Demos', url: 'https://demos.example.dev', deploy: 'deploy {dir}' } } });
+    setup({ ...generic, land: 'main', workspaces: 'clones', app: { run: 'bun start' }, demo: { site: { title: 'Demos', url: 'https://demos.example.dev', deploy: 'deploy {dir}' } } });
     const c = manual();
     workers.start(c.id);
     expect(runtime.last.inbox[0]).toContain('share the demo, a video or an HTML artifact, with colleagues');
@@ -1366,10 +1375,10 @@ describe('handing over with a demo', () => {
     expect(runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir(), ['Nur eins']) })).toContain('Not handed over');
     expect(state(c.id)).toBe('working');
     rmSync(dir, { recursive: true, force: true });
-    setup({ ...generic, land: 'main', workspaces: 'clones', demo: { howToRun: 'bun start' } });
+    setup({ ...generic, land: 'main', workspaces: 'clones', app: { run: 'bun start' } });
     const d = manual();
     workers.start(d.id);
-    expect(runtime.last.inbox[0]).toContain('How to run the app for the demo: bun start');
+    expect(runtime.last.inbox[0]).toContain('How to run the app: bun start');
     expect(runtime.last.call('ready_for_review', { summary: 'S' })).toContain(`every handover brings a demo. Record it with the demo skill (\`${demoSkillName()}\`; if your session does not know it, read its file ${DEMO_SKILL_FILE} and follow that)`);
     expect(state(d.id)).toBe('working');
   });
@@ -1396,7 +1405,8 @@ describe('handing over with a demo', () => {
     const c = manual();
     workers.start(c.id);
     expect(runtime.last.inbox[0]).toContain('Then show the owner the result with a demo');
-    expect(runtime.last.inbox[0]).toContain("The repository's settings say nothing yet about how to run the app for a demo: find it out from the repository");
+    expect(runtime.last.inbox[0]).toContain("The repository's settings say nothing yet about how to run the app: find it out from the repository");
+    expect(runtime.last.inbox[0]).not.toContain('How to run the app:');
     expect(runtime.last.inbox[0]).toContain('Where either would do, record the video');
     expect(runtime.last.inbox[0]).not.toContain('no_demo');
     expect(runtime.last.call('ready_for_review', { summary: 'Gibt es schon.' })).toContain('Not handed over: every handover brings a demo.');
@@ -1953,7 +1963,7 @@ describe('a worktree per card', () => {
 
   test('an approval that could not land holds: the worker brings the branch up to date and it lands', async () => {
     rmSync(dir, { recursive: true, force: true });
-    setup({ ...generic, land: 'main', workspaces: 'worktrees', demo: { howToRun: 'bun start' } });
+    setup({ ...generic, land: 'main', workspaces: 'worktrees', app: { run: 'bun start' } });
     const demo = join(dir, 'demo');
     mkdirSync(demo);
     writeFileSync(join(demo, 'demo.mp4'), '0');

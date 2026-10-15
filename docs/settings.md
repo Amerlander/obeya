@@ -29,14 +29,11 @@ in `package.json`, work landing through pull requests on GitHub, demos shared on
   "softPaths": ["docs/"],
   "workspaces": "clones",
   "prNoise": ["vercel[bot]", "codecov[bot]"],
-  "stack": {
-    "start": "docker compose up -d db && pnpm dev",
-    "refresh": "pnpm --filter api restart",
-    "urls": { "file": ".dev-urls", "frontendKey": "WEB_URL" },
+  "app": {
+    "run": "Start it in your clone with `docker compose up -d db && pnpm dev`, then `pnpm db:migrate && pnpm db:seed`. The page reloads by itself after a frontend change; after an API change, `pnpm --filter api restart`. Once it runs, `.dev-urls` holds the frontend's URL (WEB_URL) and the API's (API_URL). Log in as demo@shop.test with the password `demo` (created by the seed); the seed also makes three orders to show.",
     "stop": "docker compose down && pkill -F .dev.pid"
   },
   "demo": {
-    "howToRun": "Start the stack in your clone (see stack), then `pnpm db:migrate && pnpm db:seed`. The frontend runs on the port in `.dev-urls` (WEB_URL), the API on API_URL. Log in as demo@shop.test with the password `demo` (created by the seed); the seed also makes three orders to show.",
     "site": {
       "title": "Team demos",
       "url": "https://demos.example.dev",
@@ -101,7 +98,7 @@ Default: `["docs/plan/"]`.
 
 Where workers work. `clones`: a pool of full clones per repository, leased by one card at a time;
 the number comes from "Konfiguration" (clones to create, or existing ones to use). Use it when
-every workspace runs its own app stack (ports, a database, Docker) or the tools break in a git
+every workspace runs its own app (ports, a database, Docker) or the tools break in a git
 worktree. `worktrees`: a git worktree of the configured checkout per card, any number in parallel
 unless "Konfiguration" gives the repository slots. Default: `worktrees`. A repository whose
 configuration names clones (clones to create, existing ones, or other machines) works in clones
@@ -112,33 +109,37 @@ whatever the settings say.
 Accounts whose pull request comments are not review feedback (deploy previews, coverage bots):
 their comments do not go to the worker. Default: none.
 
-### `stack` — `{ start, refresh?, urls?: { file, frontendKey }, stop?, keep? }`
+### `app` — `{ run?, stop?, keep? }`
 
-How a worker brings the app up in its workspace: `start` starts it all, `refresh` picks up a
-backend change without starting everything again, and once it runs, the `KEY=value` file `file`
-holds the frontend's URL under `frontendKey`. Every worker's brief says so. Default: none; a stack
-without `start` counts as none.
+How the app runs, for any kind of app (a web app with or without hot reload, a frontend that needs
+a reload, a CLI, a desktop or mobile app). Only `stop` and `keep` are commands, since Obeya runs
+them itself; how the app starts and where it is, the workers find from the recipe.
 
-- `stop`: stops the stack in a workspace, and does nothing where none runs. With it, Obeya parks a
+- `run`: the recipe, in prose, written for a new colleague: how to start the app (in the
+  background, which ports), what to do after which kind of change (restart the API, reload the
+  page, rebuild; nothing where it reloads by itself), where the app gives its address (a file it
+  writes, the console), migrations and test data, how to log in and as whom for a demo, and what
+  to stop afterwards. Every worker gets it in its brief word for word, not only for its demo;
+  `bun lib/recipe.ts` of the demo skill prints it. Without one, each worker finds out from the
+  repository how to run the app.
+- `stop`: stops the app in a workspace, and does nothing where none runs. With it, Obeya parks a
   card that waits for the owner (handed over, asked, its pull request open) once its worker has
   nothing running and five minutes have passed: it runs `stop` in the workspace (through `sh -c`,
   `cmd /c` on Windows), so a waiting card costs disk, not memory. The worker's next message tells
-  it the stack was stopped; it starts it again with `start` when it needs it. A stop that fails is
-  an error on the card.
-- `keep`: run before `stop`; exiting 0 means the stack holds what must not be lost (a restored
+  it the app was stopped; it starts it again as the recipe says when it needs it. A stop that
+  fails is an error on the card.
+- `keep`: run before `stop`; exiting 0 means the app holds what must not be lost (a restored
   database, say), and Obeya leaves it running and says so on the card. The owner who wants it
   stopped anyway tells the worker.
 
-### `demo` — `{ howToRun?, site? }`
+Each of the three is a setting of its own: this machine may set one and leave the others to the
+repository. Default: none.
+
+### `demo` — `{ site? }`
 
 Demos: every handover brings one, a narrated video recorded with Obeya's demo skill or an HTML
-page for something to look at; the worker picks which.
+page for something to look at; the worker picks which, and runs the app for it as `app.run` says.
 
-- `howToRun`: the recipe for running the app for a recording, written for the worker, in a few
-  sentences: what to start and how (or "the stack"), migrations and test data, how to log in and
-  as whom, which URL, and what to stop afterwards. Everything a newcomer to the project would have
-  to ask about. The worker gets it in its brief word for word; `bun lib/recipe.ts` of the demo
-  skill prints it. Without one, each worker finds out from the repository how to run the app.
 - `site`: a static site Obeya keeps and deploys itself, so that "Teilen" puts a demo on a page for
   colleagues, for a host that takes a directory (Cloudflare Pages, Netlify, an S3 bucket, a
   directory a web server serves):
@@ -228,7 +229,7 @@ forced; a protected branch refuses it). What the file holds beside them stays.
 
 Obeya checks every field of the file. A field it does not know (`check:` for `checks:`) or of the
 wrong type (`"checks": "pnpm test"` instead of a list) does not count, and a mistake inside one
-(`stack.urls.frontend` for `frontendKey`) takes the whole field along: Obeya's default stands in
+(`app.stp` for `stop`) takes the whole field along: Obeya's default stands in
 its place, and the rest of the settings work. Each one shows as a problem at the repository in
 "Konfiguration", starting with `.obeya/settings.json`, with the field and, for a misspelt one,
 what it probably meant (`check: no such field (did you mean checks?)` under "Details").
@@ -251,11 +252,11 @@ create a task that fixes it.
    ```
 
    It prints what Obeya makes of them (setup, checks, landing, workspaces, the plan docs, the
-   stack, the demo site and recipe) and every problem "Konfiguration" would report for them, and
+   app's recipe and commands, the demo site) and every problem "Konfiguration" would report for them, and
    exits with 1 when there is one. A worker runs it as `bun ${CLAUDE_SKILL_DIR}/lib/check.ts`.
-2. **The commands work.** Run `setup` and each of `checks` in a fresh clone; start the stack as
-   `stack` and `howToRun` say, and open the frontend.
-3. **A demo comes out of `howToRun`.** Record one with the demo skill, following the recipe and
+2. **The commands work.** Run `setup` and each of `checks` in a fresh clone; start the app as
+   `app.run` says and open it; run `app.stop` and see it stop.
+3. **A demo comes out of `app.run`.** Record one with the demo skill, following the recipe and
    nothing else. This is what the settings skill does before it hands over.
 4. **On a canvas, once it is merged.** A canvas reads the settings from the default branch only,
    so steps 1–3 are what can be tried before the merge. Once they are on the default branch, the

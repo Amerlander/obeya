@@ -4,7 +4,7 @@
 // own settings come from its command line and show read-only.
 
 import { type CSSProperties, Fragment, type ReactNode, useEffect, useId, useRef, useState } from 'react';
-import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigChecked, type ConfigProblem, type ConfigView, type DemoSettings, type DemoSettingsView, type DemoSite, type DemoVoiceCheck, type Language, type HostConfig, type LanguageView, type NarrationLanguage, restartsAgents, type RepoConfig, type RepoSettings, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, type SetupCheck, type StackSettings, type Theme, THEMES, type ThemeView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
+import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigChecked, type ConfigProblem, type ConfigView, type DemoSettings, type DemoSettingsView, type DemoSite, type DemoVoiceCheck, type Language, type HostConfig, type LanguageView, type NarrationLanguage, restartsAgents, type RepoConfig, type RepoSettings, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type SetupCheck, type Theme, THEMES, type ThemeView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
 import { LANGUAGES } from '../core/locale';
 import { pushKeyFromEvent, type PushKeyView } from '../core/push-key';
 import { api, ApiError, reload } from './api';
@@ -1252,8 +1252,11 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
   );
 }
 
-/** The settings of a repository, set on this machine (`RepoSettings`); the demo's each on its own. */
-type SettingKey = Exclude<keyof RepoSettings, 'demo'> | 'howToRun' | 'site';
+/** The settings of a repository, set on this machine (`RepoSettings`); those of `app` and `demo` each on its own. */
+type SettingKey = Exclude<keyof RepoSettings, NestedSetting> | 'run' | 'stop' | 'keep' | 'site';
+
+/** The setting of `app` or `demo` that holds the field `k`, if one does. */
+const nestedOf = (k: SettingKey): NestedSetting | undefined => (Object.keys(NESTED_SETTINGS) as NestedSetting[]).find((n) => (NESTED_SETTINGS[n] as readonly string[]).includes(k));
 
 /**
  * A repository's settings for this machine, folded under „Einstellungen“ below its row: each shows
@@ -1296,22 +1299,26 @@ function RepoSettingsBlock({
   }, [shown, open]);
   const c = t.config.settings;
   const s = repo.settings ?? {};
-  const base: Record<SettingKey, SettingValue<unknown>> = { ...values, howToRun: values.demo.howToRun, site: values.demo.site };
-  const own = (k: SettingKey): unknown => (k === 'howToRun' || k === 'site' ? s.demo?.[k] : s[k]);
+  const { app: _, demo: __, ...flat } = values;
+  const base: Record<SettingKey, SettingValue<unknown>> = { ...flat, ...values.app, ...values.demo };
+  const own = (k: SettingKey): unknown => {
+    const n = nestedOf(k);
+    return n ? (s[n] as Record<string, unknown> | undefined)?.[k] : s[k as keyof RepoSettings];
+  };
   const value = <T,>(k: SettingKey) => (own(k) ?? base[k].value) as T;
   const set = (k: SettingKey, v: unknown) => {
-    const next: RepoSettings = { ...s };
-    if (k === 'howToRun' || k === 'site') {
-      const demo: NonNullable<RepoSettings['demo']> = { ...s.demo };
-      if (v === undefined) delete demo[k];
-      else (demo as Record<string, unknown>)[k] = v;
-      if (Object.keys(demo).length) next.demo = demo;
-      else delete next.demo;
-    } else if (v === undefined) delete next[k];
-    else (next as Record<string, unknown>)[k] = v;
-    onChange(Object.keys(next).length ? next : undefined);
+    const next: Record<string, unknown> = { ...s };
+    const n = nestedOf(k);
+    const at: Record<string, unknown> = n ? { ...s[n] } : next;
+    if (v === undefined) delete at[k];
+    else at[k] = v;
+    if (n) {
+      if (Object.keys(at).length) next[n] = at;
+      else delete next[n];
+    }
+    onChange(Object.keys(next).length ? (next as RepoSettings) : undefined);
   };
-  const keys: SettingKey[] = ['branch', 'land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'stack', 'howToRun', 'site'];
+  const keys: SettingKey[] = ['branch', 'land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'run', 'stop', 'keep', 'site'];
   // the share command is this machine's too, though not a value „Für alle“ takes over
   const setHere = keys.filter((k) => own(k) !== undefined).length + (repo.share ? 1 : 0);
   const fromRepo = keys.filter((k) => own(k) === undefined && base[k].source === 'repository').length;
@@ -1340,11 +1347,8 @@ function RepoSettingsBlock({
   };
   const land = value<'main' | 'pr'>('land');
   const planDocs = value<{ dir: string; exclude: string[] }>('planDocs');
-  const stack = value<StackSettings | null>('stack') ?? { start: '' };
-  const setStack = (patch: Partial<StackSettings>) => set('stack', { ...stack, ...patch });
   const site = value<DemoSite | null>('site') ?? { title: '', url: '', deploy: '' };
   const setSite = (patch: Partial<DemoSite>) => set('site', { ...site, ...patch });
-  const urls = stack.urls ?? { file: '', frontendKey: '' };
   const siteUsable = !!site.title.trim() && !!site.url.trim() && !!site.deploy.trim();
   // a part of a setting with several fields: its label above it; a wide one takes the whole row
   const sub = (label: string, control: ReactNode, wide = false) => (
@@ -1415,20 +1419,10 @@ function RepoSettingsBlock({
             base.workspaces.source === 'clones' ? undefined : c.workspacesHint,
           )}
           {land === 'pr' && row('prNoise', c.prNoise, <textarea rows={2} spellCheck={false} aria-label={c.prNoise} value={lines('prNoise')} onChange={(e) => set('prNoise', e.target.value.split('\n'))} />, c.prNoiseHint)}
-          {row(
-            'stack',
-            c.stack,
-            <div className="cfg-sub">
-              {sub(c.stackStart, <input className="c-path" aria-label={c.stackStart} placeholder="docker compose up -d && pnpm dev" spellCheck={false} value={stack.start} onChange={(e) => setStack({ start: e.target.value })} />, true)}
-              {sub(c.stackRefresh, <input className="c-path" aria-label={c.stackRefresh} spellCheck={false} value={stack.refresh ?? ''} onChange={(e) => setStack({ refresh: e.target.value })} />, true)}
-              {sub(c.stackUrlFile, <input className="c-path" aria-label={c.stackUrlFile} placeholder=".dev-urls" spellCheck={false} value={urls.file} onChange={(e) => setStack({ urls: { ...urls, file: e.target.value } })} />)}
-              {sub(c.stackFrontendKey, <input className="c-path" aria-label={c.stackFrontendKey} placeholder="WEB_URL" spellCheck={false} value={urls.frontendKey} onChange={(e) => setStack({ urls: { ...urls, frontendKey: e.target.value } })} />)}
-              {sub(c.stackStop, <input className="c-path" aria-label={c.stackStop} placeholder="docker compose down" spellCheck={false} value={stack.stop ?? ''} onChange={(e) => setStack({ stop: e.target.value })} />)}
-              {sub(c.stackKeep, <input className="c-path" aria-label={c.stackKeep} spellCheck={false} value={stack.keep ?? ''} onChange={(e) => setStack({ keep: e.target.value })} />)}
-            </div>,
-            c.stackHint,
-          )}
-          {row('howToRun', c.howToRun, <textarea rows={Math.max(3, Math.ceil(value<string>('howToRun').length / 90) + 1)} aria-label={c.howToRun} value={value<string>('howToRun')} onChange={(e) => set('howToRun', e.target.value)} />, c.howToRunHint)}
+          {row('run', c.run, <textarea rows={Math.max(6, Math.ceil(value<string>('run').length / 70) + 1)} aria-label={c.run} placeholder={c.runPlaceholder} value={value<string>('run')} onChange={(e) => set('run', e.target.value)} />, c.runHint)}
+          {row('stop', c.stop, <input className="c-path" aria-label={c.stop} placeholder="docker compose down" spellCheck={false} value={value<string>('stop')} onChange={(e) => set('stop', e.target.value)} />, c.stopHint)}
+          {!!value<string>('stop').trim() &&
+            row('keep', c.keep, <input className="c-path" aria-label={c.keep} placeholder="grep -q PERSIST=1 .env" spellCheck={false} value={value<string>('keep')} onChange={(e) => set('keep', e.target.value)} />, c.keepHint)}
           {row(
             'site',
             c.site,
@@ -1500,7 +1494,7 @@ function RepoSettingsBlock({
 }
 
 /** Whether the repository has settings for everyone (`.obeya/settings.json`): then it is set up. */
-const fromRepository = (v: RepoValues) => SHARED_FIELDS.some((k) => (k === 'demo' ? v.demo.howToRun.source === 'repository' || v.demo.site.source === 'repository' : v[k].source === 'repository'));
+const fromRepository = (v: RepoValues) => SHARED_FIELDS.some((k) => (isNested(k) ? Object.values(v[k]).some((f) => f.source === 'repository') : v[k].source === 'repository'));
 
 const MIB = 1024 * 1024;
 
@@ -1518,12 +1512,11 @@ function headerLines(text: string): Record<string, string> | undefined {
 function sharedPreview(repo: RepoConfig, values: RepoValues): Record<string, unknown> {
   const file: Record<string, unknown> = {};
   for (const k of SHARED_FIELDS) {
-    if (k === 'demo') continue;
-    if (values[k].source === 'repository') file[k] = values[k].value;
+    if (isNested(k)) {
+      const fields = Object.entries(values[k] as Record<string, SettingValue<unknown>>).filter(([, f]) => f.source === 'repository');
+      if (fields.length) file[k] = Object.fromEntries(fields.map(([f, v]) => [f, v.value]));
+    } else if (values[k].source === 'repository') file[k] = values[k].value;
   }
-  const { howToRun, site } = values.demo;
-  if (howToRun.source === 'repository' || site.source === 'repository')
-    file.demo = { ...(howToRun.source === 'repository' ? { howToRun: howToRun.value } : {}), ...(site.source === 'repository' ? { site: site.value } : {}) };
   const { branch: _, ...mine } = repo.settings ?? {};
   const merged = layerSettings<Record<string, unknown>>(file, mine as Record<string, unknown>) ?? {};
   return Object.fromEntries(SHARED_FIELDS.filter((k) => merged[k] !== undefined).map((k) => [k, merged[k]]));

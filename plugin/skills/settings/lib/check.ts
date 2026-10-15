@@ -46,9 +46,9 @@ console.log(
     `land: ${adapter.land}${adapter.direct ? ' (direct allowed)' : ''}, workspaces: ${adapter.workspaces}`,
     `planDocs: ${show(adapter.planDocs)}, softPaths: ${show(adapter.softPaths)}`,
     ...planLines,
-    `stack: ${show(adapter.stack)}`,
+    `app.run: ${adapter.app?.run || '(none: each worker finds out from the repository how to run the app)'}`,
+    `app.stop: ${show(adapter.app?.stop)}, app.keep: ${show(adapter.app?.keep)}`,
     `demo site: ${site ? `${site.title} at ${site.url}, deploy ${show(site.deploy)}` : '(none: demos are exported as a file, unless a machine names a share command)'}`,
-    `howToRun: ${adapter.demo?.howToRun || '(none: each worker finds out from the repository how to run the app)'}`,
     ...(adapter.prNoise ? [`prNoise: ${show(adapter.prNoise)}`] : []),
   ].join('\n'),
 );

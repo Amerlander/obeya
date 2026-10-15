@@ -49,7 +49,7 @@
 //     ],
 //     "groups": [{ "name": "Abrechnung", "cards": ["A", "B", "P"] }],
 //     "friction": [{ "card": "A", "what": "…", "cost": "…", "fix": "…", "ago": "1h" }],
-//     "settingProposals": [{ "field": "howToRun", "value": "bun run dev", "basis": "…", "cards": ["A", "B"] }],
+//     "settingProposals": [{ "field": "run", "value": "bun run dev", "basis": "…", "cards": ["A", "B"] }],
 //     "talk": [{ "said": "…", "reply": "…", "ago": "2h", "card": "A", "answer": "…" }]
 //   }
 // A card is created (x and y default to a free place; `idea`, `repo`, `from` as in
@@ -85,7 +85,7 @@
 // its name, caption and either `content` or a file to copy (`from`), written to the thread's output
 // directory; needs code that has them). `friction` is what the Arbeitsrückschau noted on a card's
 // runs (`card` a key), read by its next retrospective; `settingProposals` are values for a
-// repository's settings it proposed (`field`: checks, setup, softPaths or howToRun; `cards` keys;
+// repository's settings it proposed (`field`: checks, setup, softPaths or run; `cards` keys;
 // `repo` defaults to the canvas's home repository); both need code that has them.
 
 import { Database } from 'bun:sqlite';

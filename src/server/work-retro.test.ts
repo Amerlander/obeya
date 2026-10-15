@@ -142,29 +142,29 @@ describe('Arbeitsrückschau', () => {
     expect(second.inbox[0]).toContain('- card "Skript für Starts" (taken)');
   });
 
-  test('workers who each worked out how to run the app: the retrospective proposes the recipe for „App für die Demo starten“', async () => {
-    const now = { checks: ['bun test'], setup: '', softPaths: ['docs/'], howToRun: '' };
+  test('workers who each worked out how to run the app: the retrospective proposes the recipe for „So läuft die App“', async () => {
+    const now = { checks: ['bun test'], setup: '', softPaths: ['docs/'], run: '' };
     retro = new WorkRetro({ board, runtime, pathFor: () => main, transcript: (id) => files[id] ?? null, every: 2, ramp: [], settingsFor: () => now });
     board.showSettings(() => now);
     files = { a: SAMPLE, b: SAMPLE };
     const a = ran('Login-Seite', 'a');
     await settle();
     // the notes see what the repository's settings say, so a recipe worked out shows as friction with its value
-    expect(noteSessions()[0]!.inbox[0]).toContain('- howToRun ("Run the app for a demo": how a worker starts the app to record its demo): (empty)');
-    await note({ what: 'searched how to start the app', fix: 'set howToRun: bun run dev -p 4500' });
+    expect(noteSessions()[0]!.inbox[0]).toContain('- run ("How to run the app": the recipe every worker reads, in prose: how to start the app, what to do after which kind of change, where it gives its address, the login and test data for a demo): (empty)');
+    await note({ what: 'searched how to start the app', fix: 'set run: bun run dev -p 4500' });
     const b = ran('Warenkorb', 'b');
-    await note({ what: 'tried three ways to start the app', fix: 'set howToRun: bun run dev -p 4500, log in as demo' });
+    await note({ what: 'tried three ways to start the app', fix: 'set run: bun run dev -p 4500, log in as demo' });
     await settle();
     const s = retroSessions()[0]! as FakeSession;
     expect(s.inbox[0]).toContain("The repository's settings in Obeya now");
     expect(s.inbox[0]).toContain('- checks (the commands a worker runs before it hands its work over): "bun test"');
-    expect(s.inbox[0]).toContain('- howToRun ("Run the app for a demo": how a worker starts the app to record its demo): (empty)');
+    expect(s.inbox[0]).toContain('- run ("How to run the app": the recipe every worker reads, in prose: how to start the app, what to do after which kind of change, where it gives its address, the login and test data for a demo): (empty)');
 
-    expect(s.call('setting', { field: 'howToRun', value: 'bun run dev -p 4500', basis: 'Nur einer.', cards: ['K1'] })).toContain('at least two cards');
-    expect(s.call('setting', { field: 'howToRun', value: '  ', basis: '…', cards: ['K1', 'K2'] })).toContain('value is missing');
+    expect(s.call('setting', { field: 'run', value: 'bun run dev -p 4500', basis: 'Nur einer.', cards: ['K1'] })).toContain('at least two cards');
+    expect(s.call('setting', { field: 'run', value: '  ', basis: '…', cards: ['K1', 'K2'] })).toContain('value is missing');
     const recipe = 'bun run dev -p 4500\nAnmelden als demo@example.com';
-    expect(s.call('setting', { field: 'howToRun', value: recipe, basis: 'Auf „Login-Seite“ und „Warenkorb“ suchten die Agenten, wie die App startet.', cards: ['K1', 'K2'] })).toBe('Proposed.');
-    expect(s.call('setting', { field: 'howToRun', value: 'anders', basis: '…', cards: ['K1', 'K2'] })).toContain('already waits');
+    expect(s.call('setting', { field: 'run', value: recipe, basis: 'Auf „Login-Seite“ und „Warenkorb“ suchten die Agenten, wie die App startet.', cards: ['K1', 'K2'] })).toBe('Proposed.');
+    expect(s.call('setting', { field: 'run', value: 'anders', basis: '…', cards: ['K1', 'K2'] })).toContain('already waits');
     expect(s.call('setting', { field: 'checks', value: 'bun test\nbun run typecheck\n', basis: '…', cards: ['K1', 'K2'] })).toBe('Proposed.');
     s.emit({ type: 'idle' });
 
@@ -172,7 +172,7 @@ describe('Arbeitsrückschau', () => {
       {
         id: expect.any(Number),
         repo: 'home',
-        field: 'howToRun',
+        field: 'run',
         value: recipe,
         basis: 'Auf „Login-Seite“ und „Warenkorb“ suchten die Agenten, wie die App startet.',
         cards: [
@@ -195,7 +195,7 @@ describe('Arbeitsrückschau', () => {
     retro.now('home');
     await settle();
     const next = retroSessions()[1]!;
-    expect(next.inbox[0]).toContain(`- setting howToRun = ${JSON.stringify(recipe)} (Auf „Login-Seite“ und „Warenkorb“ suchten die Agenten, wie die App startet.)`);
+    expect(next.inbox[0]).toContain(`- setting run = ${JSON.stringify(recipe)} (Auf „Login-Seite“ und „Warenkorb“ suchten die Agenten, wie die App startet.)`);
     expect(next.inbox[0]).toContain('- setting checks = ["bun test","bun run typecheck"] (taken)');
   });
 

@@ -246,7 +246,7 @@ export class WorkRetro {
           },
           {
             name: 'setting',
-            description: `Propose a value for one of the repository's settings that Obeya gives every worker: ${PROPOSED_SETTINGS.join(', ')}. value: a string for setup and howToRun, a list of strings for checks and softPaths; basis in ${LANGUAGE_NAMES[b.language()]}; cards: the tags of the cards it rests on (at least two).`,
+            description: `Propose a value for one of the repository's settings that Obeya gives every worker: ${PROPOSED_SETTINGS.join(', ')}. value: a string for setup and run, a list of strings for checks and softPaths; basis in ${LANGUAGE_NAMES[b.language()]}; cards: the tags of the cards it rests on (at least two).`,
             schema: { field: z.enum(PROPOSED_SETTINGS), value: z.union([z.string(), z.array(z.string())]), basis: z.string(), cards: z.array(z.string()) },
             run: ({ field, value, basis, cards }) => {
               if (made >= WORK_RETRO_PROPOSALS) return f(`At most ${WORK_RETRO_PROPOSALS} proposals. End your turn now.`);
@@ -317,12 +317,12 @@ const SETTING_MEANING: Record<ProposedSetting, string> = {
   checks: 'the commands a worker runs before it hands its work over',
   setup: 'the command that prepares a fresh workspace, e.g. installs dependencies',
   softPaths: 'paths (a trailing / covers a directory) whose edits never count as a merge conflict between two cards, resolved when a branch is rebased, e.g. docs',
-  howToRun: '"Run the app for a demo": how a worker starts the app to record its demo',
+  run: '"How to run the app": the recipe every worker reads, in prose: how to start the app, what to do after which kind of change, where it gives its address, the login and test data for a demo',
 };
 
-/** A proposed value as the setting takes it: a command or recipe for setup and howToRun, a list of non-empty strings for the others. */
+/** A proposed value as the setting takes it: a command or recipe for setup and run, a list of non-empty strings for the others. */
 function settingValue(field: ProposedSetting, value: unknown): string | string[] | null {
-  if (field === 'setup' || field === 'howToRun') {
+  if (field === 'setup' || field === 'run') {
     const v = typeof value === 'string' ? value.trim() : Array.isArray(value) ? value.map(String).join('\n').trim() : '';
     return v ? clip(v, 4000) : null;
   }
@@ -340,7 +340,7 @@ Note the friction a change to the repository would prevent in future runs:
 - a script that failed and was rewritten;
 - a long search for how to start, run, test or demo something;
 - a tool or check used wrongly, a missing piece of knowledge about the repository;
-- working out what one of the repository's settings in Obeya (listed with the card, where they are) would have said: how to start the app for a demo, which checks to run, how to prepare a fresh workspace. Its fix names the setting and the value the run shows works: the commands as the worker finally ran them.
+- working out what one of the repository's settings in Obeya (listed with the card, where they are) would have said: how to run the app, which checks to run, how to prepare a fresh workspace. Its fix names the setting and the value the run shows works: the commands as the worker finally ran them.
 Not friction: a test or type check failing on the change being made and then fixed (that is the work itself), one quick slip corrected at once at no cost, a call blocked by a rule that then worked the other way at once.
 
 Note 0 to 3, the costliest first; most runs have one or none. Call note for each: what (concretely: the command, the file, the error), cost (the steps or time it took, a wrong turn), fix (what would have prevented it: a script, a skill, a line in the CLAUDE.md, a clearer error message; concretely). In ${language}, a sentence each: the owner reads them on the card. You may read the repository (you cannot change it) to check whether that already exists. Then call done.
@@ -354,12 +354,12 @@ Look for friction that recurs on at least two different cards, the same detour t
 - a skill (.claude/skills/…) for a procedure they keep fumbling;
 - a fix to a tool, a check or an error message that misleads;
 - a line in the repository's CLAUDE.md, for knowledge they lacked;
-- a value for one of the repository's settings in Obeya (listed after the friction, as they are now), where workers each worked out what it would have told them: how to run the app for a demo (howToRun), which checks to run, the setup of a fresh workspace. Obeya hands a setting to every worker where it needs it, so where one holds the knowledge it beats a CLAUDE.md line.
+- a value for one of the repository's settings in Obeya (listed after the friction, as they are now), where workers each worked out what it would have told them: how to run the app (run), which checks to run, the setup of a fresh workspace. Obeya hands a setting to every worker where it needs it, so where one holds the knowledge it beats a CLAUDE.md line.
 Read the repository first: its CLAUDE.md, its docs, scripts and skills. Propose nothing it has already; where it has it but the workers did not find it, propose making it findable (a CLAUDE.md line). Skills of the user (~/.claude/skills) are out of scope.
 
 Propose at most ${WORK_RETRO_PROPOSALS}, only for patterns on at least two cards and only what you expect the owner to take; most of the time that is fewer, or none.
 - card: a feature card. title in ${LANGUAGE_NAMES[language]}, naming what it builds: ${language === 'de' ? '„Skript \`scripts/x.ts\` für …“, „Skill für …“' : '“Script \`scripts/x.ts\` for …”, “Skill for …”'}. body in ${LANGUAGE_NAMES[language]}: what to build and how to verify it, so a worker needs no other context, and the friction it prevents. basis: one sentence in ${LANGUAGE_NAMES[language]} for the owner, naming the cards it rests on and what went wrong on them. cards: the tags of those cards.
 - rule: a line for the CLAUDE.md: rule short, general, in ${LANGUAGE_NAMES[language]}; basis and cards as for card. It waits for the owner and goes into the CLAUDE.md through the card ${MESSAGES[language].quote(MESSAGES[language].claudeMd.title)}.
-- setting: field and the whole value it should have (it replaces the one now), from what the notes show works, checked against the repository: for howToRun a recipe a worker can follow without searching (the commands, the port, how to get past a login, what to stage); basis and cards as for card. The owner takes it on their machine or into the repository's .obeya/settings.json for everyone.
+- setting: field and the whole value it should have (it replaces the one now), from what the notes show works, checked against the repository: for run a recipe a worker can follow without searching (the commands, what to do after a change, where the app's address is, how to get past a login, what to stage); basis and cards as for card. The owner takes it on their machine or into the repository's .obeya/settings.json for everyone.
 The owner does not know the tags: name cards by their titles in basis. Do not propose again what was proposed before, above all what the owner dismissed, in other words either. Then call done.
 `.trim();

@@ -211,12 +211,12 @@ describe("Obeya's configuration", async () => {
       checks: { value: [], source: 'default' },
       planDocs: { value: { dir: 'docs/plan' }, source: 'default' },
       workspaces: { value: 'worktrees', source: 'default' },
-      demo: { howToRun: { value: '', source: 'default' } },
+      app: { run: { value: '', source: 'default' } },
     });
     // this machine's own come on top, in the draft: the values beside them stay what they would be without
-    const own = gitRepo(join(dir, 'own'), { '.obeya/settings.json': '{ "land": "main", "checks": ["bun test"], "demo": { "howToRun": "bun dev" } }\n' });
+    const own = gitRepo(join(dir, 'own'), { '.obeya/settings.json': '{ "land": "main", "checks": ["bun test"], "app": { "run": "bun dev" } }\n' });
     const ownValues = (await c.check([{ repos: [{ path: own, settings: { land: 'pr' } }] }])).resolved[0]!.repos[0]!.values;
-    expect(ownValues).toMatchObject({ land: { value: 'main', source: 'repository' }, checks: { source: 'repository' }, planDocs: { source: 'default' }, demo: { howToRun: { source: 'repository' } } });
+    expect(ownValues).toMatchObject({ land: { value: 'main', source: 'repository' }, checks: { source: 'repository' }, planDocs: { source: 'default' }, app: { run: { source: 'repository' } } });
     expect((await values({ clones: 1 })).workspaces).toEqual({ value: 'clones', source: 'clones' });
     const problems = async (branch: string) => (await c.check([{ repos: [{ path: web, settings: { branch } }] }])).problems.map((p) => p.code);
     expect(await problems('main')).toEqual([]);
@@ -234,7 +234,7 @@ describe("Obeya's configuration", async () => {
 
   test("„Für alle ins Repository übernehmen“ where work lands on main: committed there, and this machine's values then come from the repository", async () => {
     mkdirSync(join(dir, 'home'));
-    const settings = { branch: 'main', checks: ['bun test'], demo: { howToRun: 'bun dev' } };
+    const settings = { branch: 'main', checks: ['bun test'], app: { run: 'bun dev' } };
     writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings }] }]));
     const c = config('file', [{ repos: [{ path: web, settings }] }]);
     expect((await c.checkSaved()).resolved[0]!.repos[0]!.shareTo).toBe('main');
@@ -249,12 +249,12 @@ describe("Obeya's configuration", async () => {
 
     const done = (await c.shareSettings({ path: web }));
     expect(done).toMatchObject({ branch: 'main', committed: git(web, 'rev-parse', 'main').trim() });
-    expect(JSON.parse(git(web, 'show', 'main:.obeya/settings.json'))).toEqual({ checks: ['bun test'], demo: { howToRun: 'bun dev' } });
-    expect(git(web, 'show', '--name-only', '--format=%s', 'main').trim()).toBe('Obeya settings for everyone: checks, demo\n\n.obeya/settings.json');
+    expect(JSON.parse(git(web, 'show', 'main:.obeya/settings.json'))).toEqual({ checks: ['bun test'], app: { run: 'bun dev' } });
+    expect(git(web, 'show', '--name-only', '--format=%s', 'main').trim()).toBe('Obeya settings for everyone: checks, app\n\n.obeya/settings.json');
     expect(git(web, 'status', '--porcelain').trim()).toBe('M  README.md');
     // the main branch stays this machine's; the rest come from the repository now
     expect(readConfigFile(file)).toEqual([{ repos: [{ path: web, settings: { branch: 'main' } }] }]);
-    expect((await c.checkSaved()).resolved[0]!.repos[0]!.values).toMatchObject({ checks: { value: ['bun test'], source: 'repository' }, demo: { howToRun: { source: 'repository' } } });
+    expect((await c.checkSaved()).resolved[0]!.repos[0]!.values).toMatchObject({ checks: { value: ['bun test'], source: 'repository' }, app: { run: { source: 'repository' } } });
     expect([applied, restarts]).toEqual([1, 0]);
     await expect(c.shareSettings({ path: web })).rejects.toMatchObject({ code: 'noSettings' });
   });
@@ -318,8 +318,8 @@ describe("Obeya's configuration", async () => {
     mkdirSync(join(dir, 'home'));
     writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings: { checks: ['bun test'], setup: 'bun install' } }] }]));
     const c = config('file', []);
-    expect((await c.takeSetting(web, 'howToRun', 'bun dev --port 4000', 'machine'))).toBeNull();
-    expect(readConfigFile(file)).toEqual([{ repos: [{ path: web, settings: { checks: ['bun test'], setup: 'bun install', demo: { howToRun: 'bun dev --port 4000' } } }] }]);
+    expect((await c.takeSetting(web, 'run', 'bun dev --port 4000', 'machine'))).toBeNull();
+    expect(readConfigFile(file)).toEqual([{ repos: [{ path: web, settings: { checks: ['bun test'], setup: 'bun install', app: { run: 'bun dev --port 4000' } } }] }]);
     expect((await c.takeSetting(web, 'checks', ['bun run typecheck'], 'machine'))).toBeNull();
     expect(readConfigFile(file)[0]!.repos[0]!.settings!.checks).toEqual(['bun run typecheck']);
     // nothing went into the repository
@@ -329,15 +329,15 @@ describe("Obeya's configuration", async () => {
 
   test('a setting the Arbeitsrückschau proposed, taken for everyone where work lands on main: that value alone is committed, and applies here too', async () => {
     mkdirSync(join(dir, 'home'));
-    writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings: { checks: ['bun test'], demo: { howToRun: 'npm start' } } }] }]));
+    writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings: { checks: ['bun test'], app: { run: 'npm start' } } }] }]));
     const c = config('file', []);
-    const done = (await c.takeSetting(web, 'howToRun', 'bun dev --port 4000', 'repository'));
+    const done = (await c.takeSetting(web, 'run', 'bun dev --port 4000', 'repository'));
     expect(done).toMatchObject({ branch: 'main', committed: git(web, 'rev-parse', 'main').trim() });
-    expect(JSON.parse(git(web, 'show', 'main:.obeya/settings.json'))).toEqual({ demo: { howToRun: 'bun dev --port 4000' } });
-    expect(git(web, 'log', '-1', '--format=%s', 'main').trim()).toBe('Obeya settings for everyone: demo');
+    expect(JSON.parse(git(web, 'show', 'main:.obeya/settings.json'))).toEqual({ app: { run: 'bun dev --port 4000' } });
+    expect(git(web, 'log', '-1', '--format=%s', 'main').trim()).toBe('Obeya settings for everyone: app');
     // this machine's other value for it went, so the repository's applies here; its checks stay its own
     expect(readConfigFile(file)).toEqual([{ repos: [{ path: web, settings: { checks: ['bun test'] } }] }]);
-    expect((await c.checkSaved()).resolved[0]!.repos[0]!.values.demo.howToRun).toEqual({ value: 'bun dev --port 4000', source: 'repository' });
+    expect((await c.checkSaved()).resolved[0]!.repos[0]!.values.app.run).toEqual({ value: 'bun dev --port 4000', source: 'repository' });
     expect(applied).toBe(1);
   });
 
@@ -527,11 +527,11 @@ describe('the configuration over HTTP', () => {
     try {
       const b = live.board;
       const [a1, a2] = [b.create({ title: 'Login-Seite', x: 0, y: 0 }), b.create({ title: 'Warenkorb', x: 0, y: 0 })];
-      const run = b.proposeSetting({ repo: 'web', field: 'howToRun', value: 'bun dev --port 4000; log in as demo@example.com', basis: 'Beide suchten den Start der App.', cards: [a1.id, a2.id] });
+      const run = b.proposeSetting({ repo: 'web', field: 'run', value: 'bun dev --port 4000; log in as demo@example.com', basis: 'Beide suchten den Start der App.', cards: [a1.id, a2.id] });
       const checks = b.proposeSetting({ repo: 'web', field: 'checks', value: ['bun test', 'bun run typecheck'], basis: 'Beide vergaßen den Typcheck.', cards: [a1.id, a2.id] });
       const setup = b.proposeSetting({ repo: 'web', field: 'setup', value: 'bun install', basis: '…', cards: [a1.id, a2.id] });
       expect(b.snapshot().settingProposals).toEqual([
-        { id: run, repo: 'web', field: 'howToRun', value: 'bun dev --port 4000; log in as demo@example.com', basis: 'Beide suchten den Start der App.', cards: [{ id: a1.id, title: 'Login-Seite' }, { id: a2.id, title: 'Warenkorb' }], now: '' },
+        { id: run, repo: 'web', field: 'run', value: 'bun dev --port 4000; log in as demo@example.com', basis: 'Beide suchten den Start der App.', cards: [{ id: a1.id, title: 'Login-Seite' }, { id: a2.id, title: 'Warenkorb' }], now: '' },
         expect.objectContaining({ id: checks, now: ['bun test'] }),
         expect.objectContaining({ id: setup, now: '' }),
       ]);
@@ -541,17 +541,17 @@ describe('the configuration over HTTP', () => {
       expect((await post(`/api/c/web/setting-proposals/${run}/take`, { where: 'nowhere' })).status).toBe(400);
       // on this machine, in the owner's words
       expect((await post(`/api/c/web/setting-proposals/${run}/take`, { where: 'machine', value: ' bun dev --port 4100 ' })).status).toBe(200);
-      expect(c.repoSettings(web)).toEqual({ checks: ['bun test'], demo: { howToRun: 'bun dev --port 4100' } });
-      expect(notices.at(-1)).toBe('„App für die Demo starten“ für web gilt jetzt auf diesem Rechner.');
+      expect(c.repoSettings(web)).toEqual({ checks: ['bun test'], app: { run: 'bun dev --port 4100' } });
+      expect(notices.at(-1)).toBe('„So läuft die App“ für web gilt jetzt auf diesem Rechner.');
       // for everyone: committed on main, that value alone
       expect((await post(`/api/c/web/setting-proposals/${checks}/take`, { where: 'repository' })).body).toMatchObject({ branch: 'main' });
       expect(JSON.parse(git(web, 'show', 'main:.obeya/settings.json'))).toEqual({ checks: ['bun test', 'bun run typecheck'] });
-      expect(c.repoSettings(web)).toEqual({ demo: { howToRun: 'bun dev --port 4100' } });
+      expect(c.repoSettings(web)).toEqual({ app: { run: 'bun dev --port 4100' } });
       expect(notices.at(-1)).toBe('„Prüfungen“ für web steht jetzt in .obeya/settings.json auf main und gilt für alle.');
       expect((await post(`/api/c/web/setting-proposals/${setup}/reject`)).status).toBe(204);
       expect(b.snapshot().settingProposals).toBeUndefined();
       expect(b.settingProposals().map((p) => [p.field, p.state, p.value])).toEqual([
-        ['howToRun', 'machine', 'bun dev --port 4100'],
+        ['run', 'machine', 'bun dev --port 4100'],
         ['checks', 'repository', ['bun test', 'bun run typecheck']],
         ['setup', 'rejected', 'bun install'],
       ]);

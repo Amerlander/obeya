@@ -1,12 +1,12 @@
-// A command of the `stack` of a repository's settings, run in a workspace by Obeya itself (design: Parking).
+// A command of the `app` of a repository's settings (`stop`, `keep`), run in a workspace by Obeya itself (design: Parking).
 
 import { remote } from './hosts';
 
-/** A stack's stop takes seconds; one that hangs this long counts as failed. */
-const STACK_TIMEOUT = 2 * 60_000;
+/** An app's stop takes seconds; one that hangs this long counts as failed. */
+const APP_TIMEOUT = 2 * 60_000;
 
 /** Runs `command` through the platform's shell in `cwd` (there, for a workspace on another machine): whether it exited 0, and what it printed. */
-export async function runStackCommand(cwd: string, command: string, timeout = STACK_TIMEOUT): Promise<{ ok: boolean; output: string }> {
+export async function runAppCommand(cwd: string, command: string, timeout = APP_TIMEOUT): Promise<{ ok: boolean; output: string }> {
   const there = remote(cwd);
   if (there) {
     const r = await there.host.run(command, { cwd: there.path, timeout });

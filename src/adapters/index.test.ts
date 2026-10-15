@@ -54,23 +54,21 @@ describe('withSettings', () => {
     expect([a.land, a.checks, a.workspaces]).toEqual(['main', ['bun test'], 'clones']);
     s = { checks: [], workspaces: 'worktrees' };
     expect([a.land, a.checks, a.workspaces]).toEqual(['pr', [], 'clones']);
-    // the defaults have no recipe for a demo; one set goes in front of it, the demo site beside it
-    expect(a.demo).toEqual({ howToRun: '' });
-    s = { demo: { howToRun: 'bun dev' } };
-    expect(a.demo).toEqual({ howToRun: 'bun dev' });
+    // the defaults say nothing about the app or the demo site
+    expect([a.app, a.demo]).toEqual([undefined, undefined]);
+    s = { app: { run: 'Start it with `bun dev`.' } };
+    expect(a.app).toEqual({ run: 'Start it with `bun dev`.' });
     const site = { title: 'Demos', url: 'https://demos.example.dev', deploy: 'git {dir}' };
     s = { demo: { site } };
-    expect(a.demo).toEqual({ howToRun: '', site });
+    expect(a.demo).toEqual({ site });
     // the configuration's clones go before the setting
     expect(withSettings(generic, () => ({ workspaces: 'worktrees' }), true).workspaces).toBe('clones');
   });
 
-  test('a stack counts once it says how the app starts', () => {
-    let s: RepoSettings | undefined = { stack: { start: ' ', stop: 'docker compose down' } };
-    const a = withSettings(generic, () => s);
-    expect(a.stack).toBeUndefined();
-    s = { stack: { start: 'docker compose up -d', stop: 'docker compose down' } };
-    expect(a.stack).toEqual({ start: 'docker compose up -d', stop: 'docker compose down' });
+  test("the app's fields each come from where they are set", () => {
+    const shared: RepoSettings = { app: { run: 'Start it with `docker compose up -d`.', stop: 'docker compose down' } };
+    const a = withSettings(generic, () => layerSettings<RepoSettings>(shared, { app: { stop: './stop.sh' } }));
+    expect(a.app).toEqual({ run: 'Start it with `docker compose up -d`.', stop: './stop.sh' });
   });
 });
 
@@ -83,8 +81,8 @@ describe('.obeya/settings.json', () => {
     expect(readShared(repo).settings).toEqual({ land: 'main', checks: ['bun test'] });
     expect(readShared(gitRepo(join(dir, 'plain'))).settings).toBeUndefined();
 
-    const read = parseShared('{ "check": ["x"], "land": "sideways", "branch": "develop", "setup": "bun install", "demo": { "howToRun": "bun dev" } }');
-    expect(read.settings).toEqual({ setup: 'bun install', demo: { howToRun: 'bun dev' } });
+    const read = parseShared('{ "check": ["x"], "land": "sideways", "branch": "develop", "setup": "bun install", "app": { "run": "bun dev" } }');
+    expect(read.settings).toEqual({ setup: 'bun install', app: { run: 'bun dev' } });
     expect(read.problems).toEqual([
       '.obeya/settings.json, land: expected one of "main"|"pr"',
       '.obeya/settings.json, check: no such field (did you mean checks?)',
@@ -94,32 +92,32 @@ describe('.obeya/settings.json', () => {
     expect(parseShared('[]').problems).toEqual(['.obeya/settings.json holds no JSON object']);
   });
 
-  test('holds the stack and the demo site; a field misspelt in them is named and the whole field does not count', () => {
-    const stack = { start: 'bun dev', refresh: 'bun dev', urls: { file: '.env', frontendKey: 'URL' }, stop: 'pkill -F .pid' };
+  test('holds the app and the demo site; a field misspelt in them is named and the whole field does not count', () => {
+    const app = { run: 'Start it with `bun dev`; the URL is in `.env` under URL.', stop: 'pkill -F .pid', keep: 'test -f .keep' };
     const site = { title: 'Demos', url: 'https://demos.example.dev', deploy: 'bunx wrangler pages deploy {dir}', env: 'sites/demos.env', headers: { 'X-Key': '${KEY}' }, language: 'de' };
-    expect(parseShared(JSON.stringify({ stack, demo: { site } }))).toMatchObject({ settings: { stack, demo: { site } }, problems: [] });
-    const read = parseShared(JSON.stringify({ stack: { ...stack, urls: { file: '.env', frontend: 'URL' } }, demo: { howtorun: 'bun dev' } }));
+    expect(parseShared(JSON.stringify({ app, demo: { site } }))).toMatchObject({ settings: { app, demo: { site } }, problems: [] });
+    const read = parseShared(JSON.stringify({ app: { ...app, stp: 'x' }, demo: { site, howToRun: 'bun dev' }, stack: { start: 'bun dev' } }));
     expect(read.settings).toEqual({});
     expect(read.problems).toEqual([
-      '.obeya/settings.json, stack.urls.frontendKey: missing',
-      '.obeya/settings.json, stack.urls.frontend: no such field (did you mean frontendKey?)',
-      '.obeya/settings.json, demo.howtorun: no such field (did you mean howToRun?)',
+      '.obeya/settings.json, app.stp: no such field (did you mean stop?)',
+      '.obeya/settings.json, demo.howToRun: no such field',
+      '.obeya/settings.json, stack: no such field',
     ]);
   });
 
   test("its values come after this machine's and before the defaults, and say they come from the repository", () => {
     const repo = gitRepo(join(dir, 'shop'), { 'README.md': 'hi\n' });
-    const shared = { checks: ['bun test'], setup: 'bun install', stack: { start: 'bun dev' }, demo: { howToRun: 'bun dev' } };
-    const mine: RepoSettings = { setup: '' };
+    const shared = { checks: ['bun test'], setup: 'bun install', app: { run: 'bun dev', stop: 'pkill -F .pid' } };
+    const mine: RepoSettings = { setup: '', app: { run: 'bun dev --port 4000' } };
     const a = withSettings(defaultsFor(repoInfo(repo)), () => layerSettings<RepoSettings>(shared, mine));
-    expect([a.checks, a.setup, a.land, a.stack, a.demo?.howToRun]).toEqual([['bun test'], '', 'main', { start: 'bun dev' }, 'bun dev']);
+    expect([a.checks, a.setup, a.land, a.app]).toEqual([['bun test'], '', 'main', { run: 'bun dev --port 4000', stop: 'pkill -F .pid' }]);
     expect(repoValues(repoInfo(repo), false, shared)).toMatchObject({
       checks: { value: ['bun test'], source: 'repository' },
       setup: { value: 'bun install', source: 'repository' },
       land: { value: 'main', source: 'detected' },
       planDocs: { value: { dir: 'docs/plan' }, source: 'default' },
-      stack: { value: { start: 'bun dev' }, source: 'repository' },
-      demo: { howToRun: { value: 'bun dev', source: 'repository' }, site: { value: null, source: 'default' } },
+      app: { run: { value: 'bun dev', source: 'repository' }, stop: { value: 'pkill -F .pid', source: 'repository' }, keep: { value: '', source: 'default' } },
+      demo: { site: { value: null, source: 'default' } },
     });
   });
 });

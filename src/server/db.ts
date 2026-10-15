@@ -78,7 +78,7 @@ export interface CardRow {
    * planned again once the Lesestand holds that commit.
    */
   shipped: string | null;
-  /** When Obeya stopped the app stack in the card's workspace while the card waited (Parking); gone once its worker heard so. */
+  /** When Obeya stopped the app in the card's workspace while the card waited (Parking); gone once its worker heard so. */
   parked: string | null;
   /** JSON: the owner's comments on places in the demo video Obeya holds back while they watch (event ids, `Item.held`). */
   held: string | null;

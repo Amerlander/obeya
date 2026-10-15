@@ -74,9 +74,9 @@ const de = {
     /** The owner paused the worker, and let it go on again. */
     pausedByOwner: 'Pausiert.',
     resumedByOwner: 'Weiter.',
-    parked: 'App-Stack im Workspace gestoppt, solange die Karte wartet. Der Agent startet ihn wieder, wenn er ihn braucht.',
-    parkKept: 'Der App-Stack im Workspace läuft weiter, während die Karte wartet: Er hält Daten, die bleiben sollen. Soll er trotzdem gestoppt werden, sag es dem Agenten.',
-    parkFailed: (output: string) => `Den App-Stack im Workspace zu stoppen, ist fehlgeschlagen: ${output}`,
+    parked: 'App im Workspace gestoppt, solange die Karte wartet. Der Agent startet sie wieder, wenn er sie braucht.',
+    parkKept: 'Die App im Workspace läuft weiter, während die Karte wartet: Sie hält Daten, die bleiben sollen. Soll sie trotzdem gestoppt werden, sag es dem Agenten.',
+    parkFailed: (output: string) => `Die App im Workspace zu stoppen, ist fehlgeschlagen: ${output}`,
     stoppedPrOpen: (n: number) => `Gestoppt. Pull Request #${n} bleibt auf GitHub offen.`,
     restartDue: (pause: Pause) =>
       `${pause === 'stop' ? 'Beenden von Obeya' : pause === 'repo' ? 'Neustart der Agenten dieses Repositorys' : 'Neustart von Obeya'} angekündigt; der Agent pausiert beim nächsten sicheren Punkt.`,
@@ -225,7 +225,7 @@ const de = {
     from: (repo: string, why: string, cards: string) => `Aus der Arbeitsrückschau für ${repo}. ${why} Karten: ${cards}.`,
     done: (repo: string, made: number) =>
       `Arbeitsrückschau für ${repo}: ${made ? `${made === 1 ? 'ein Vorschlag' : `${made} Vorschläge`}, auf der Leinwand und bei Obeya.` : 'nichts, was sich auf mehreren Karten wiederholt.'}`,
-    settings: { checks: 'Prüfungen', setup: 'Einrichten', softPaths: 'Weiche Pfade', howToRun: 'App für die Demo starten' },
+    settings: { checks: 'Prüfungen', setup: 'Einrichten', softPaths: 'Weiche Pfade', run: 'So läuft die App' },
     onMachine: (setting: string, repo: string) => `„${setting}“ für ${repo} gilt jetzt auf diesem Rechner.`,
     committed: (setting: string, repo: string, branch: string) => `„${setting}“ für ${repo} steht jetzt in .obeya/settings.json auf ${branch} und gilt für alle.`,
     opened: (setting: string, repo: string, pr: string) => `„${setting}“ für ${repo}: Pull Request geöffnet, ${pr}. Bis er gemergt ist, gilt der Wert auf diesem Rechner.`,
@@ -288,7 +288,7 @@ const de = {
   },
   adapterSetup: {
     title: (repo: string) => `Obeya für ${repo} einrichten`,
-    body: 'Füll mit dem Skill `obeya:settings` die Einstellungen dieses Repositorys für alle aus (`.obeya/settings.json`, in der Konfiguration unter „Einstellungen“ als „aus dem Repository“ zu sehen): welche Prüfungen laufen, wie Arbeit landet, wie ein Agent die App startet und stoppt und wie er sie für eine Demo startet, und wo die Plan-Docs liegen, die Obeya als Projekte zeigt. Hat das Repository noch ein `.obeya/adapter/`, übernimm, was darin steht, in die Einstellungen und lösch es. Was du im Repository nicht herausfindest (Login, Testdaten), frag mich.',
+    body: 'Füll mit dem Skill `obeya:settings` die Einstellungen dieses Repositorys für alle aus (`.obeya/settings.json`, in der Konfiguration unter „Einstellungen“ als „aus dem Repository“ zu sehen): welche Prüfungen laufen, wie Arbeit landet, wie ein Agent die App betreibt (starten, nach einer Änderung, für eine Demo), wie Obeya sie stoppt, und wo die Plan-Docs liegen, die Obeya als Projekte zeigt. Hat das Repository noch ein `.obeya/adapter/`, übernimm, was darin steht, in die Einstellungen und lösch es. Was du im Repository nicht herausfindest (Login, Testdaten), frag mich.',
   },
   /** The card that turns a doc in the plan directory that is not a project into one. */
   preparePlanDoc: {
@@ -360,9 +360,9 @@ const en: Messages = {
     stopped: 'Stopped.',
     pausedByOwner: 'Paused.',
     resumedByOwner: 'Resumed.',
-    parked: 'Stopped the app stack in the workspace while the card waits. The agent starts it again when it needs it.',
-    parkKept: 'The app stack in the workspace keeps running while the card waits: it holds data that should stay. To have it stopped anyway, tell the agent.',
-    parkFailed: (output: string) => `Stopping the app stack in the workspace failed: ${output}`,
+    parked: 'Stopped the app in the workspace while the card waits. The agent starts it again when it needs it.',
+    parkKept: 'The app in the workspace keeps running while the card waits: it holds data that should stay. To have it stopped anyway, tell the agent.',
+    parkFailed: (output: string) => `Stopping the app in the workspace failed: ${output}`,
     stoppedPrOpen: (n: number) => `Stopped. Pull request #${n} stays open on GitHub.`,
     restartDue: (pause: Pause) => `Obeya is about to ${pause === 'stop' ? 'stop' : pause === 'repo' ? "restart this repository's agents" : 'restart'}; the agent pauses at the next safe point.`,
     restartWaits: (pause: Pause) =>
@@ -506,7 +506,7 @@ const en: Messages = {
     from: (repo: string, why: string, cards: string) => `From the work retrospective for ${repo}. ${why} Cards: ${cards}.`,
     done: (repo: string, made: number) =>
       `Work retrospective for ${repo}: ${made ? `${made === 1 ? 'one proposal' : `${made} proposals`}, on the canvas and with Obeya.` : 'nothing that recurs on several cards.'}`,
-    settings: { checks: 'Checks', setup: 'Setup', softPaths: 'Soft paths', howToRun: 'Run the app for a demo' },
+    settings: { checks: 'Checks', setup: 'Setup', softPaths: 'Soft paths', run: 'How to run the app' },
     onMachine: (setting: string, repo: string) => `“${setting}” for ${repo} now applies on this machine.`,
     committed: (setting: string, repo: string, branch: string) => `“${setting}” for ${repo} is now in .obeya/settings.json on ${branch} and applies to everyone.`,
     opened: (setting: string, repo: string, pr: string) => `“${setting}” for ${repo}: pull request opened, ${pr}. Until it is merged, the value applies on this machine.`,
@@ -565,7 +565,7 @@ const en: Messages = {
   },
   adapterSetup: {
     title: (repo: string) => `Set up Obeya for ${repo}`,
-    body: "With the skill `obeya:settings`, fill in this repository's settings for everyone (`.obeya/settings.json`, shown in the configuration under “Settings” as “from the repository”): which checks run, how work lands, how an agent starts and stops the app and runs it for a demo, and where the plan docs are that Obeya shows as projects. If the repository still has a `.obeya/adapter/`, move what it says into the settings and delete it. Ask me what you cannot find out in the repository (login, test data).",
+    body: "With the skill `obeya:settings`, fill in this repository's settings for everyone (`.obeya/settings.json`, shown in the configuration under “Settings” as “from the repository”): which checks run, how work lands, how an agent runs the app (starting it, after a change, for a demo), how Obeya stops it, and where the plan docs are that Obeya shows as projects. If the repository still has a `.obeya/adapter/`, move what it says into the settings and delete it. Ask me what you cannot find out in the repository (login, test data).",
   },
   preparePlanDoc: {
     title: (file: string) => `Prepare ${file.slice(file.lastIndexOf('/') + 1)} as a project`,

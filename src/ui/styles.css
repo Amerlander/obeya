@@ -1054,7 +1054,7 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 .cfg-share-confirm .c-json { margin: 6px 0 8px; white-space: pre-wrap; }
 .cfg-share-actions { display: flex; gap: 8px; }
 .cfg-plan { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; max-width: 640px; }
-/* a setting with several fields (the app stack, the demo site), each labelled above it */
+/* a setting with several fields (the demo site), each labelled above it */
 .cfg-sub { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 12px; max-width: 640px; }
 .cfg-sub > label { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .cfg-sub > label.wide { grid-column: 1 / -1; }

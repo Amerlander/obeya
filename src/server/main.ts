@@ -26,7 +26,7 @@
 // start waits for it.
 //
 // --idle-workers: no agent works on a started card (a scratch Obeya for a demo, scripts/scratch-obeya.ts).
-// OBEYA_PARK_GRACE=<seconds>: how long a waiting card's app stack runs on before Obeya stops it
+// OBEYA_PARK_GRACE=<seconds>: how long a waiting card's app runs on before Obeya stops it
 // (Parking; 300 by default), shorter for a demo or a live check.
 
 import { existsSync } from 'node:fs';

@@ -538,7 +538,7 @@ describe('sharing to a site', () => {
 test("a repository whose settings name a site: the canvas says the env file it lacks, until it is there", () => {
   const shop = gitRepo(join(dir, 'shop'), {
     'docs/plan/plan.md': '# Laden\n\n## Goal\n\nG.\n',
-    '.obeya/settings.json': JSON.stringify({ demo: { howToRun: 'bun dev', site: SITE() } }),
+    '.obeya/settings.json': JSON.stringify({ app: { run: 'bun dev' }, demo: { site: SITE() } }),
   });
   rmSync(join(home, 'sites/demos/deploy.env'));
   const canvas = new CanvasRuntime({ repos: [{ path: shop }] }, { store: new Store(':memory:'), home, runtime: new FakeRuntime(), forge: noForge });

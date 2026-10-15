@@ -87,7 +87,7 @@ const home = join(dir, 'home');
 const files: Record<string, string> = {
   'README.md': '# Scratch\n',
   'docs/plan/tool.md': '# Tool\n\n## Workstreams\n\n- [ ] **W1:** Configuration.\n',
-  '.obeya/settings.json': '{ "demo": { "howToRun": "Nothing to run." } }\n',
+  '.obeya/settings.json': '{ "app": { "run": "Nothing to run." } }\n',
   'share.ts': `const kit = await import(process.env.OBEYA_KIT);
 if (process.argv[2] !== 'publish') process.exit(process.argv[2] === 'version' ? 1 : 0);
 const page = JSON.parse(await Bun.stdin.text());
@@ -146,9 +146,9 @@ await check('the settings show the version and no checkout; the repository has i
   expect(view.server.commit === null, `commit ${view.server.commit}`);
   expect(view.server.restarts, 'not supervised');
   const checked = await json('/api/config/check');
-  const howToRun = checked.resolved[0]?.repos[0]?.values.demo.howToRun;
-  expect(howToRun?.source === 'repository', `howToRun ${JSON.stringify(howToRun)} (${JSON.stringify(checked.problems)})`);
-  return `version ${view.server.version}, howToRun from the repository`;
+  const run = checked.resolved[0]?.repos[0]?.values.app.run;
+  expect(run?.source === 'repository', `app.run ${JSON.stringify(run)} (${JSON.stringify(checked.problems)})`);
+  return `version ${view.server.version}, app.run from the repository`;
 });
 
 await check('the demo setup finds Playwright among the resources', async () => {

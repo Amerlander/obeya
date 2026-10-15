@@ -718,7 +718,7 @@ export interface Preference {
 export type PreferenceState = 'proposed' | 'active' | 'rejected' | 'filed';
 
 /** The settings of a repository the Arbeitsrückschau may propose a value for, in the dialog's order: what friction on workers' runs shows missing. */
-export const PROPOSED_SETTINGS = ['checks', 'setup', 'softPaths', 'howToRun'] as const;
+export const PROPOSED_SETTINGS = ['checks', 'setup', 'softPaths', 'run'] as const;
 export type ProposedSetting = (typeof PROPOSED_SETTINGS)[number];
 
 /** A value for a setting of a repository (`RepoSettings`) that the Arbeitsrückschau proposes, with the cards it rests on. */
@@ -727,7 +727,7 @@ export interface SettingProposal {
   /** The repository's id. */
   repo: string;
   field: ProposedSetting;
-  /** A command or recipe for `setup` and `howToRun`, a list for `checks` and `softPaths`. */
+  /** A command for `setup`, the recipe for `run` (`app.run`), a list for `checks` and `softPaths`. */
   value: string | string[];
   /** One sentence for the owner: what went wrong on the cards it rests on. */
   basis: string;
@@ -744,7 +744,7 @@ export type SettingProposalState = 'proposed' | 'machine' | 'repository' | 'reje
 
 /** `value` as this machine's settings for the repository hold it (`RepoSettings`). */
 export function settingPatch(field: ProposedSetting, value: string | string[] | undefined): RepoSettings {
-  if (field === 'howToRun') return { demo: { ...(value !== undefined ? { howToRun: value as string } : {}) } };
+  if (field === 'run') return { app: { ...(value !== undefined ? { run: value as string } : {}) } };
   return { [field]: value } as RepoSettings;
 }
 
@@ -1000,21 +1000,21 @@ export interface RepoConfig {
   settings?: RepoSettings;
 }
 
-/** How a worker brings the repository's app up in its workspace (`stack` of its settings). */
-export interface StackSettings {
-  /** Starts it all. */
-  start: string;
-  /** Picks up a backend change without starting everything again. */
-  refresh?: string;
-  /** The `KEY=value` file the running stack writes, and the key in it that holds the frontend's URL. */
-  urls?: { file: string; frontendKey: string };
+/** How the repository's app runs (`app` of its settings): the recipe the workers read, and the two commands Obeya runs itself. */
+export interface AppSettings {
   /**
-   * Stops the stack in a workspace, and does nothing where none runs. Obeya runs it there when the
+   * How to run the app, in prose for a new colleague: how to start it, what to do after which kind
+   * of change, where it gives its address, the login and test data for a demo. Every worker's brief
+   * has it; empty, each worker finds it out from the repository.
+   */
+  run?: string;
+  /**
+   * Stops the app in a workspace, and does nothing where none runs. Obeya runs it there when the
    * card waits for the owner and its worker has nothing running (Parking), and tells the worker with
    * its next message.
    */
   stop?: string;
-  /** Exits 0 when the workspace's stack holds what must not be lost (a restored database, say): Obeya then leaves it running. */
+  /** Exits 0 when the workspace's app holds what must not be lost (a restored database, say): Obeya then leaves it running. */
   keep?: string;
 }
 
@@ -1059,8 +1059,8 @@ export interface RepoSettings {
   softPaths?: string[];
   workspaces?: 'clones' | 'worktrees';
   prNoise?: string[];
-  stack?: StackSettings;
-  demo?: { howToRun?: string; site?: DemoSite };
+  app?: AppSettings;
+  demo?: { site?: DemoSite };
 }
 
 /**
@@ -1071,14 +1071,20 @@ export interface RepoSettings {
 export type SharedSettings = Omit<RepoSettings, 'branch'>;
 
 /** The fields of `SharedSettings`, in the dialog's order. */
-export const SHARED_FIELDS = ['land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'stack', 'demo'] as const satisfies readonly (keyof SharedSettings)[];
+export const SHARED_FIELDS = ['land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'app', 'demo'] as const satisfies readonly (keyof SharedSettings)[];
 
-/** `over` in front of `under`, field by field; the demo's fields each on its own. */
+/** The settings made of fields that are each set, layered and taken over on their own, and their fields. */
+export const NESTED_SETTINGS = { app: ['run', 'stop', 'keep'], demo: ['site'] } as const satisfies { [K in keyof RepoSettings]?: readonly (keyof NonNullable<RepoSettings[K]>)[] };
+export type NestedSetting = keyof typeof NESTED_SETTINGS;
+export const isNested = (field: string): field is NestedSetting => field in NESTED_SETTINGS;
+
+/** `over` in front of `under`, field by field; the fields of `app` and `demo` each on its own. */
 export function layerSettings<T extends RepoSettings>(under: T | undefined, over: T | undefined): T | undefined {
   if (!under) return over;
   if (!over) return under;
-  const demo = under.demo || over.demo ? { ...under.demo, ...over.demo } : undefined;
-  return { ...under, ...over, ...(demo ? { demo } : {}) };
+  const out: RepoSettings = { ...under, ...over };
+  for (const k of Object.keys(NESTED_SETTINGS) as NestedSetting[]) if (under[k] || over[k]) out[k] = { ...under[k], ...over[k] };
+  return out as T;
 }
 
 /**
@@ -1105,9 +1111,8 @@ export interface RepoValues {
   softPaths: SettingValue<string[]>;
   workspaces: SettingValue<'clones' | 'worktrees'>;
   prNoise: SettingValue<string[]>;
-  /** None where nothing says how the app starts. */
-  stack: SettingValue<StackSettings | null>;
-  demo: { howToRun: SettingValue<string>; site: SettingValue<DemoSite | null> };
+  app: { run: SettingValue<string>; stop: SettingValue<string>; keep: SettingValue<string> };
+  demo: { site: SettingValue<DemoSite | null> };
 }
 
 /**

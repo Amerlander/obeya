@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { defaultBranchCommit } from '../server/read-tree';
 import { onGitHub } from '../server/repo';
 import { COMPILED, resource } from '../server/resources';
-import type { RepoSettings, RepoValues, SharedSettings, StackSettings } from '../core/types';
+import type { NESTED_SETTINGS, NestedSetting, RepoSettings, RepoValues, SharedSettings } from '../core/types';
 import { detectedBranch, type GitSteps, gitStepsSync } from '../server/workspaces';
 import { generic } from './generic';
 import { checkShared } from './schema';
@@ -27,7 +27,7 @@ export const defaultsFor = (repo: RepoInfo): RepoAdapter => ({ ...generic, land:
 export const detectedLand = (repo: RepoInfo): RepoAdapter['land'] => (repo.remote && onGitHub(repo.remote) ? 'pr' : 'main');
 
 /** The fields the settings may set, as `RepoAdapter` names them, read each time they are asked for. */
-const LIVE = ['land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'prNoise', 'stack', 'demo'] as const;
+const LIVE = ['land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'prNoise', 'app', 'demo'] as const;
 
 /**
  * The repository's settings (`RepoSettings`: its `.obeya/settings.json` with this machine's in
@@ -43,17 +43,12 @@ export function withSettings(a: RepoAdapter, settings: () => RepoSettings | unde
       enumerable: true,
       get: () => {
         const s = settings();
-        if (field === 'stack') return usableStack(s?.stack ?? a.stack);
-        if (field !== 'demo') return s?.[field] ?? a[field];
-        if (!s?.demo) return a.demo;
-        return { howToRun: s.demo.howToRun ?? a.demo?.howToRun ?? '', ...(s.demo.site ? { site: s.demo.site } : {}) };
+        if (field === 'app' || field === 'demo') return s?.[field] || a[field] ? { ...a[field], ...s?.[field] } : undefined;
+        return s?.[field] ?? a[field];
       },
     });
   return b;
 }
-
-/** The stack where it says how the app starts; none for one the owner is still filling in. */
-export const usableStack = (stack: StackSettings | undefined): StackSettings | undefined => (stack?.start.trim() ? stack : undefined);
 
 /**
  * The repository's settings as they stand without this machine's, with where each comes from: its
@@ -61,9 +56,13 @@ export const usableStack = (stack: StackSettings | undefined): StackSettings | u
  */
 export function repoValues(repo: RepoInfo, clones = false, shared: SharedSettings = {}, detected = detectedBranch(repo.path)): RepoValues {
   const a = defaultsFor(repo);
-  const value = <K extends Exclude<keyof SharedSettings, 'demo'>, T>(v: T, field: K) =>
+  const value = <K extends Exclude<keyof SharedSettings, NestedSetting>, T>(v: T, field: K) =>
     shared[field] !== undefined ? { value: shared[field] as T, source: 'repository' as const } : { value: v, source: field === 'land' ? ('detected' as const) : ('default' as const) };
-  const { howToRun, site } = shared.demo ?? {};
+  // a field of `app` or `demo` from the repository, else none
+  const nested = <K extends NestedSetting, F extends (typeof NESTED_SETTINGS)[K][number], T>(k: K, f: F, none: T) => {
+    const v = (shared[k] as Record<string, unknown> | undefined)?.[f];
+    return v !== undefined ? { value: v as T, source: 'repository' as const } : { value: none, source: 'default' as const };
+  };
   return {
     branch: { value: detected, source: 'detected' },
     land: value(a.land, 'land'),
@@ -74,11 +73,8 @@ export function repoValues(repo: RepoInfo, clones = false, shared: SharedSetting
     softPaths: value(a.softPaths, 'softPaths'),
     workspaces: clones ? { value: 'clones', source: 'clones' } : value(a.workspaces, 'workspaces'),
     prNoise: value(a.prNoise ?? [], 'prNoise'),
-    stack: value(null, 'stack'),
-    demo: {
-      howToRun: howToRun !== undefined ? { value: howToRun, source: 'repository' } : { value: a.demo?.howToRun ?? '', source: 'default' },
-      site: site ? { value: site, source: 'repository' } : { value: null, source: 'default' },
-    },
+    app: { run: nested('app', 'run', ''), stop: nested('app', 'stop', ''), keep: nested('app', 'keep', '') },
+    demo: { site: nested('demo', 'site', null) },
   };
 }
 

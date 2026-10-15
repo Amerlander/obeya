@@ -2,9 +2,9 @@
 // settings in front (`.obeya/settings.json`, then this machine's). The core only talks to this
 // interface.
 
-import type { DemoSite, StackSettings } from '../core/types';
+import type { AppSettings, DemoSite } from '../core/types';
 
-export type { DemoSite, StackSettings };
+export type { AppSettings, DemoSite };
 
 export interface RepoInfo {
   path: string;
@@ -43,15 +43,14 @@ export interface RepoAdapter {
   workspaces: 'clones' | 'worktrees';
 
   /**
-   * Demos, which every handover brings: how a worker runs the app to record one (for the `demo`
-   * skill), and the static site Obeya keeps and deploys itself to share them (`src/server/site.ts`),
-   * which goes before no share at all but after the share command of this machine's configuration.
+   * The static site Obeya keeps and deploys itself to share demos on (`src/server/site.ts`), which
+   * goes before no share at all but after the share command of this machine's configuration.
    */
-  demo?: { howToRun: string; site?: DemoSite };
+  demo?: { site?: DemoSite };
 
   /** Accounts whose pull request comments are not review feedback (deploy bots and the like). */
   prNoise?: string[];
 
-  /** How a worker brings up the app in its workspace and finds the frontend. */
-  stack?: StackSettings;
+  /** How the app runs: the recipe in every worker's brief, and how Obeya stops it while a card waits (Parking). */
+  app?: AppSettings;
 }

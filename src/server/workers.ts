@@ -17,7 +17,7 @@ import type { InputContext } from './koordinator';
 import { type AgentEvent, type AgentRuntime, type AgentSession, type AgentTool, failureReason, type PermissionAnswer, type PermissionRequest } from './runtime';
 import { TO_OBEYA, toObeyaTool } from './to-obeya';
 import { HOST_DIR, hostName, remote } from './hosts';
-import { runStackCommand } from './stack';
+import { runAppCommand } from './app-command';
 import { branchName, type Landed, WorkspaceError, type Workspaces } from './workspaces';
 import type { PrState, Shipped } from './board';
 import { parsePrUrl } from './forge';
@@ -48,7 +48,7 @@ export interface WorkerOptions {
   backgroundGrace?: number;
   /** How long an ended turn waits at most while the worker's background work still runs. */
   backgroundLimit?: number;
-  /** How long a card waits for the owner, its worker idle, before Obeya stops its workspace's app stack (`stack.stop`). */
+  /** How long a card waits for the owner, its worker idle, before Obeya stops its workspace's app (`app.stop`). */
   parkGrace?: number;
   /** How long the owner's comments on places in the demo video wait at most for them to finish watching. */
   holdGrace?: number;
@@ -301,7 +301,7 @@ const FOLLOW_UP =
   "Answer with reply (ask, for a decision that is the owner's). Commits you make here do not land: a change to the code the owner's words call for becomes a card of its own (propose_card). Workspace and session end once you end a turn with nothing left to wait for.";
 
 const IN_WORKTREE =
-  "No clone of the repository was free, so this is a temporary worktree, where the repository's app stack and tooling may not run. If answering needs a full clone, call need_clone and end your turn: Obeya resumes you in the next free clone.";
+  "No clone of the repository was free, so this is a temporary worktree, where the repository's app and tooling may not run. If answering needs a full clone, call need_clone and end your turn: Obeya resumes you in the next free clone.";
 
 export class Workers {
   private live = new Map<string, Live>();
@@ -311,7 +311,7 @@ export class Workers {
   private generation = new Map<string, number>();
   /** The restart that waits for workers, if one does. */
   private restart: DueRestart | null = null;
-  /** Cards that wait for the owner, until their grace runs out and Obeya stops their stack. */
+  /** Cards that wait for the owner, until their grace runs out and Obeya stops their app. */
   private parking = new Map<string, ReturnType<typeof setTimeout>>();
   /** Cards whose stack is being stopped: a message to their worker waits until it is. */
   private stopping = new Map<string, Promise<void>>();
@@ -353,7 +353,7 @@ export class Workers {
     this.bump(card.id);
     // the run before is not resumed, but the Arbeitsrückschau still reads it
     if (row.session_id) this.o.board.log(card.id, 'state', 'obeya', this.o.board.t.worker.restarted(this.o.board.t.worker.earlierRun(row.session_id)));
-    // a fresh session knows of no stack that was stopped
+    // a fresh session knows of no app that was stopped
     this.o.board.work(card.id, { state: 'working', need: null, detail: null, status_line: null, workspace: path, branch, session_id: null, pr: null, approved_at: null, parked: null, paused: null });
     this.o.board.log(card.id, 'state', 'obeya', this.o.board.t.worker.started(branch));
     this.launch(card.id, this.briefing(card, branch, !!row.branch), undefined, this.taskImages(card));
@@ -1058,7 +1058,7 @@ export class Workers {
    * middle of a step if need be, and whatever it ran with it (background work included). Card,
    * state, workspace, branch and session stay; the slot it held is free. It goes on where it stopped
    * once the owner resumes it or writes to it (`deliver`); what Obeya has for it meanwhile waits
-   * until then, and its app stack is parked like a waiting card's. A worker taking in the owner's
+   * until then, and its app is parked like a waiting card's. A worker taking in the owner's
    * words on its handover is paused the same way: the card still waits for approval, and the
    * worker finishes taking them in once it goes on.
    */
@@ -1254,7 +1254,7 @@ export class Workers {
     this.unpark(cardId);
     const stopping = this.stopping.get(cardId);
     if (stopping) {
-      // the worker might start the stack again while the stop still runs, and lose it
+      // the worker might start the app again while the stop still runs, and lose it
       const generation = this.generation.get(cardId);
       void stopping.then(() => {
         if (this.generation.get(cardId) === generation) this.deliver(cardId, text, images, false, said);
@@ -1657,9 +1657,9 @@ export class Workers {
     return !!row.workspace && !row.parked;
   }
 
-  /** A card that waits for the owner has its stack stopped once a quick reply has not come (`stack.stop`). */
+  /** A card that waits for the owner has its app stopped once a quick reply has not come (`app.stop`). */
   private parkLater(cardId: string) {
-    if (!this.o.adapter.stack?.stop || !this.waitsForOwner(cardId)) return;
+    if (!this.o.adapter.app?.stop || !this.waitsForOwner(cardId)) return;
     clearTimeout(this.parking.get(cardId));
     this.parking.set(
       cardId,
@@ -1672,7 +1672,7 @@ export class Workers {
     );
   }
 
-  /** A card that is no longer left waiting keeps its stack. */
+  /** A card that is no longer left waiting keeps its app. */
   private unpark(cardId: string) {
     clearTimeout(this.parking.get(cardId));
     this.parking.delete(cardId);
@@ -1730,16 +1730,18 @@ export class Workers {
     }
   }
 
-  /** Stops the stack in the card's workspace, unless it holds what must stay (`stack.keep`). */
+  /** Stops the app in the card's workspace, unless it holds what must stay (`app.keep`). */
   private async park(cardId: string) {
-    const { stop, keep } = this.o.adapter.stack!;
+    const { stop, keep } = this.o.adapter.app ?? {};
+    // the settings lost the command since the grace began
+    if (!stop) return;
     const workspace = this.o.board.row(cardId).workspace!;
     const generation = this.generation.get(cardId);
-    if (keep && (await runStackCommand(workspace, keep)).ok) {
+    if (keep && (await runAppCommand(workspace, keep)).ok) {
       if (this.generation.get(cardId) === generation) this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.parkKept);
       return;
     }
-    const result = await runStackCommand(workspace, stop!);
+    const result = await runAppCommand(workspace, stop);
     // the card's work ended or started afresh meanwhile: its row is no longer this workspace's
     if (this.generation.get(cardId) !== generation) return;
     if (!result.ok) {
@@ -1751,8 +1753,8 @@ export class Workers {
   }
 
   private parkedNote(): string {
-    const { stop, start } = this.o.adapter.stack!;
-    return `While the card waited, Obeya stopped the app stack in your workspace (\`${stop}\`) to free the machine. When you need it again, start it (\`${start}\`).`;
+    const { stop, run } = this.o.adapter.app ?? {};
+    return `While the card waited, Obeya stopped the app in your workspace${stop ? ` (\`${stop}\`)` : ''} to free the machine. When you need it again, start it again${run?.trim() ? ' as the recipe in your brief says' : ''}.`;
   }
 
   /**
@@ -2032,7 +2034,7 @@ export class Workers {
         ? [
             {
               name: 'need_clone',
-              description: "Only in a follow-up in a temporary worktree: answering the owner needs a full clone (the repository's app stack or tooling, which may not run here). Then end your turn; Obeya resumes you in the next free clone.",
+              description: "Only in a follow-up in a temporary worktree: answering the owner needs a full clone (the repository's app or tooling, which may not run here). Then end your turn; Obeya resumes you in the next free clone.",
               schema: {},
               run: () => {
                 const row = this.o.board.row(cardId);
@@ -2189,17 +2191,15 @@ ${idea.idea.brief}` : '',
           : `You are on branch ${branch}, fresh from the default branch.`,
     );
     if (this.o.adapter.setup) parts.push(`First run \`${this.o.adapter.setup}\` in the clone.`);
-    const stack = this.o.adapter.stack;
-    if (stack)
-      parts.push(
-        `To run the app in your workspace: \`${stack.start}\`${stack.refresh?.trim() ? `; after a backend change, \`${stack.refresh}\` rather than starting it all again` : ''}.${stack.urls?.file && stack.urls.frontendKey ? ` Once it runs, the frontend's URL is in \`${stack.urls.file}\` under ${stack.urls.frontendKey}.` : ''}${stack.stop?.trim() ? ' While the card waits for the owner, Obeya stops the stack; your next message then says so.' : ''}`,
-      );
+    const { run, stop } = this.o.adapter.app ?? {};
+    const parking = stop ? ' While the card waits for the owner, Obeya stops the app in your workspace; your next message then says so.' : '';
+    if (run?.trim()) parts.push(`How to run the app: ${run.trim()}${parking}`);
+    else if (parking) parts.push(parking.trim());
     if (this.o.adapter.checks?.length && !card.prototypeOf) parts.push(`Before ready_for_review, run: ${this.o.adapter.checks.map((c) => `\`${c}\``).join(', ')}.`);
-    const howToRun = this.o.adapter.demo?.howToRun.trim();
     parts.push(
       [
         `Then show the owner the result with a demo, so they can judge at a glance whether the work is done, and hand it over with ready_for_review.`,
-        `Usually that is a video of the change, recorded with ${this.demoSkill(card.id)} as its instructions say (directory, chapter titles). Its length follows the size of the change, never padded: 30–60 s for a small one (a fix: the broken behaviour, then the fixed one), 1½–3 min for a larger one. Skip the skill's last steps (opening the page, the notification, the chat reply): Obeya shows the demo on the card.${this.shares ? ' The owner may share the demo, a video or an HTML artifact, with colleagues of the team on a page of its own: hand it over with that page (title, text), written for them.' : ''} ${howToRun ? `How to run the app for the demo: ${howToRun}` : "The repository's settings say nothing yet about how to run the app for a demo: find it out from the repository (README, scripts, configuration) and say in your summary how you ran it."}`,
+        `Usually that is a video of the change, recorded with ${this.demoSkill(card.id)} as its instructions say (directory, chapter titles). Its length follows the size of the change, never padded: 30–60 s for a small one (a fix: the broken behaviour, then the fixed one), 1½–3 min for a larger one. Skip the skill's last steps (opening the page, the notification, the chat reply): Obeya shows the demo on the card.${this.shares ? ' The owner may share the demo, a video or an HTML artifact, with colleagues of the team on a page of its own: hand it over with that page (title, text), written for them.' : ''} ${run?.trim() ? 'Run the app for it as the recipe above says.' : "The repository's settings say nothing yet about how to run the app: find it out from the repository (README, scripts, configuration) and say in your summary how you ran it."}`,
         "When the result is something to look at rather than something that happens (drafts of a logo or a layout side by side, a comparison of variants, an analysis, an answer), make an HTML artifact instead: an index.html in a new directory under ~/demos/ (never in git), self-contained or with the files it loads beside it, made for the owner to decide on, and hand it over with kind 'html'. It shows in a sandboxed frame on the card, about 800 px wide, without Obeya's API.",
         'Where either would do, record the video: watching the work happen is what the owner enjoys most.',
       ].join(' '),
