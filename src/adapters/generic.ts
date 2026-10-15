@@ -10,7 +10,6 @@ export function repoName(repo: RepoInfo): string {
 /** Any repository that keeps plan docs under `docs/plan/`. */
 export const generic: RepoAdapter = {
   name: 'generic',
-  matches: () => true,
   canvasId: repoName,
   canvasName: repoName,
   planDocs: { dir: 'docs/plan', exclude: ['TEMPLATE.md'] },

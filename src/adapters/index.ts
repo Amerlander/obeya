@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import { defaultBranchCommit } from '../server/read-tree';
 import { onGitHub } from '../server/repo';
 import { COMPILED, resource } from '../server/resources';
@@ -7,12 +7,8 @@ import type { RepoSettings, RepoValues, SettingSource, SharedSettings } from '..
 import { detectedBranch, GIT } from '../server/workspaces';
 import { generic } from './generic';
 import * as kit from './kit';
-import { obeya } from './obeya';
 import { checkAdapter, checkShared } from './schema';
 import type { RepoAdapter, RepoInfo } from './types';
-
-/** Specific adapters first; the generic one matches every repository. */
-const ADAPTERS: RepoAdapter[] = [obeya, generic];
 
 /** Where a repository keeps its own adapter (`index.ts` in it), like `.vscode/` or `.claude/`. */
 export const REPO_ADAPTER_DIR = '.obeya/adapter';
@@ -23,29 +19,14 @@ export const REPO_ADAPTER_DIR = '.obeya/adapter';
  */
 export const KIT_PATH = COMPILED ? resource('kit.js') : join(import.meta.dir, 'kit.ts');
 
-export const adapterNames = () => ADAPTERS.map((a) => a.name);
-
-/**
- * The repository's adapter: the one the configuration names (a built-in one's name, or the path of
- * a module, relative to the repository), else the repository's own (`.obeya/adapter/`), else the
- * first built-in one that matches.
- */
-export function pickAdapter(repo: RepoInfo, name?: string): RepoAdapter {
-  if (name) {
-    const a = ADAPTERS.find((x) => x.name === name);
-    if (a) return detected(a, repo);
-    if (!/[/\\]|\.[cm]?[jt]s$/.test(name)) throw new Error(`Unknown adapter "${name}" (known: ${adapterNames().join(', ')}, or the path of a module)`);
-    const file = isAbsolute(name) ? name : resolve(repo.path, name);
-    if (!existsSync(file)) throw new Error(`adapter module ${file} does not exist`);
-    return loadAdapter(file, repo);
-  }
+/** The repository's adapter: its own (`.obeya/adapter/`), else the generic one. */
+export function pickAdapter(repo: RepoInfo): RepoAdapter {
   const own = repoAdapterFile(repo.path);
-  if (own) return loadAdapter(own, repo);
-  return builtInAdapter(repo);
+  return own ? loadAdapter(own, repo) : genericFor(repo);
 }
 
-/** The first built-in adapter that matches the repository: what it runs on without an adapter of its own. */
-export const builtInAdapter = (repo: RepoInfo): RepoAdapter => detected(ADAPTERS.find((a) => a.matches(repo))!, repo);
+/** The generic adapter for the repository: what it runs on without an adapter of its own. */
+export const genericFor = (repo: RepoInfo): RepoAdapter => ({ ...generic, land: detectedLand(repo) });
 
 /**
  * How work lands where the adapter does not say: through pull requests where `origin` is on GitHub
@@ -53,17 +34,13 @@ export const builtInAdapter = (repo: RepoInfo): RepoAdapter => detected(ADAPTERS
  */
 export const detectedLand = (repo: RepoInfo): RepoAdapter['land'] => (repo.remote && onGitHub(repo.remote) ? 'pr' : 'main');
 
-// the generic adapter says nothing of the repository: how work lands comes from detection
-const detected = (a: RepoAdapter, repo: RepoInfo): RepoAdapter => (a === generic ? { ...generic, land: detectedLand(repo) } : a);
-
 // what was wrong with a loaded adapter's fields (`schema.ts`), by the adapter made of it
 const problems = new WeakMap<RepoAdapter, string[]>();
 
-// the fields an adapter's code gives itself, by the adapter made of it; a built-in one's are its own
+// the fields an adapter's code gives itself, by the adapter made of it
 const given = new WeakMap<RepoAdapter, Partial<RepoAdapter>>();
-given.set(obeya, obeya);
 
-/** What is wrong with an adapter's fields, one line each; none for a built-in one. */
+/** What is wrong with an adapter's fields, one line each; none for the generic one. */
 export const adapterProblems = (a: RepoAdapter): string[] => problems.get(a) ?? [];
 
 /**
@@ -189,7 +166,7 @@ export function loadAdapter(file: string, repo: RepoInfo): RepoAdapter {
   if (!made || typeof made !== 'object' || typeof (made as RepoAdapter).name !== 'string')
     throw new Error(`adapter module ${file} exports no adapter (a default export with a name, or a function returning one)`);
   const checked = checkAdapter(made as Record<string, unknown>);
-  const adapter = { ...detected(generic, repo), ...checked.adapter } as RepoAdapter;
+  const adapter = { ...genericFor(repo), ...checked.adapter } as RepoAdapter;
   if (checked.problems.length) problems.set(adapter, checked.problems);
   given.set(adapter, checked.adapter);
   return adapter;

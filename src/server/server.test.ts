@@ -782,9 +782,7 @@ describe('landing approved work', () => {
     git(repo, 'fetch', '--quiet', 'origin');
     const pushing = join(dir, 'pushing');
     writeFileSync(join(origin, 'hooks/pre-receive'), `#!/bin/sh\ntouch '${pushing}'\nsleep 1\n`, { mode: 0o755 });
-    const adapter = join(dir, 'adapter.ts');
-    writeFileSync(adapter, "export default { name: 'pushed', land: 'pr', direct: true, workspaces: 'clones' };\n");
-    const pushed = new CanvasRuntime({ repos: [{ path: repo, adapter, clones: 2 }] }, { store: new Store(':memory:'), home: join(dir, 'home2'), runtime, forge: noForge });
+    const pushed = new CanvasRuntime({ repos: [{ path: repo, clones: 2, settings: { land: 'pr', direct: true, workspaces: 'clones' } }] }, { store: new Store(':memory:'), home: join(dir, 'home2'), runtime, forge: noForge });
     server.stop(true);
     server = serve([canvas, pushed], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0);
     const handedOver = (title: string) => {

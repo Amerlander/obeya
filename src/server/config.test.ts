@@ -54,17 +54,17 @@ afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 describe("Obeya's configuration", () => {
   test('says what each canvas amounts to: its id, name, repositories and their adapters', () => {
-    const c = config('args', [{ name: 'Produkt', repos: [{ path: web }, { path: api, adapter: 'obeya' }] }], ['produkt']);
+    api = gitRepo(join(dir, 'api-own'), { '.obeya/adapter/index.ts': "export default { name: 'api' };\n" });
+    const c = config('args', [{ name: 'Produkt', repos: [{ path: web }, { path: api }] }], ['produkt']);
     const v = c.view();
     expect(v).toMatchObject({ file, source: 'args', running: ['produkt'], problems: [], restarting: false, server: { port: 4417, restarts: true } });
-    expect(v.adapters).toContain('obeya');
     expect(v.resolved).toMatchObject([
       {
         id: 'produkt',
         name: 'Produkt',
         repos: [
           { id: 'web', adapter: 'generic', workspaces: 'worktrees' },
-          { id: 'api', adapter: 'obeya', workspaces: 'worktrees' },
+          { id: 'api-own', adapter: 'api', workspaces: 'worktrees' },
         ],
       },
     ]);
@@ -76,20 +76,19 @@ describe("Obeya's configuration", () => {
     expect(mode({})).toBe('worktrees');
     expect(mode({ clones: 2 })).toBe('clones');
     expect(mode({ workspaces: [api] })).toBe('clones');
-    expect(mode({ adapter: 'obeya', clones: 1 })).toBe('clones');
+    expect(mode({ settings: { workspaces: 'worktrees' }, clones: 1 })).toBe('clones');
   });
 
   test('finds what keeps a configuration from working, by canvas and repository', () => {
     const c = config('file', []);
     const { problems } = c.check([
       { name: 'A', repos: [{ path: web }, { path: join(dir, 'nowhere') }] },
-      { name: 'B', repos: [{ path: api, adapter: 'nope', workspaces: [join(dir, 'nowhere')] }] },
+      { name: 'B', repos: [{ path: api, workspaces: [join(dir, 'nowhere')] }] },
       { name: 'Leer', repos: [] },
     ]);
     expect(problems.map(({ code, canvas, repo }) => ({ code, canvas, repo }))).toEqual([
       { code: 'notRepo', canvas: 0, repo: 1 },
       { code: 'notClone', canvas: 1, repo: 0 },
-      { code: 'unknownAdapter', canvas: 1, repo: 0 },
       { code: 'noRepo', canvas: 2, repo: undefined },
     ]);
     // the id follows the name, unless it is kept
@@ -127,7 +126,7 @@ describe("Obeya's configuration", () => {
     expect(check([{ path: web, slots: 0, hosts: [{ ...host, slots: 1 }] }]).canvases[0]!.repos[0]).toMatchObject({ slots: 0, hosts: [{ ...host, slots: 1 }] });
     expect(check([{ path: web, hosts: [host] }]).canvases[0]!.repos[0]).not.toHaveProperty('slots');
     // landing on the main of this checkout, or no remote: the host could not clone it
-    expect(check([{ path: web, adapter: 'obeya', hosts: [host] }]).problems.map((p) => p.code)).toEqual(['hostRepo']);
+    expect(check([{ path: web, settings: { land: 'main' }, hosts: [host] }]).problems.map((p) => p.code)).toEqual(['hostRepo']);
     expect(check([{ path: api, hosts: [host] }]).problems.map((p) => p.code)).toEqual(['hostRepo']);
     Bun.spawnSync(['git', '-C', api, 'remote', 'add', 'origin', 'https://github.com/acme/api.git']);
     expect(check([{ path: web, hosts: [host] }, { path: api, hosts: [{ ...host, ssh: 'other@box.local' }] }]).problems).toEqual([{ code: 'hostName', canvas: 0, repo: 1, detail: expect.stringContaining('me@box.local') }]);
@@ -190,7 +189,7 @@ describe("Obeya's configuration", () => {
     expect(existsSync(file)).toBe(false);
     expect(restarts).toBe(0);
 
-    expect(c.save([{ name: ' ', repos: [{ path: web, adapter: '', workspaces: [' '], clones: 0 }, { path: api, clones: 2 }] }])).toEqual({ restarting: true });
+    expect(c.save([{ name: ' ', repos: [{ path: web, workspaces: [' '], clones: 0 }, { path: api, clones: 2 }] }])).toEqual({ restarting: true });
     expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual([{ repos: [{ path: web }, { path: api, clones: 2 }] }]);
     expect(readConfigFile(file)).toEqual([{ repos: [{ path: web }, { path: api, clones: 2 }] }]);
     expect(restarts).toBe(1);
@@ -231,7 +230,9 @@ describe("Obeya's configuration", () => {
       demo: { howToRun: { value: '', source: 'default' } },
     });
     // this machine's own come on top, in the draft: the values beside them stay what they would be without
-    expect(values({ adapter: 'obeya', settings: { land: 'pr' } })).toMatchObject({ land: { value: 'main', source: 'adapter' }, checks: { source: 'adapter' }, planDocs: { source: 'default' }, demo: { howToRun: { source: 'adapter' } } });
+    const own = gitRepo(join(dir, 'own'), { '.obeya/adapter/index.ts': "export default { name: 'own', land: 'main', checks: ['bun test'], demo: { howToRun: 'bun dev' } };\n" });
+    const ownValues = c.check([{ repos: [{ path: own, settings: { land: 'pr' } }] }]).resolved[0]!.repos[0]!.values;
+    expect(ownValues).toMatchObject({ land: { value: 'main', source: 'adapter' }, checks: { source: 'adapter' }, planDocs: { source: 'default' }, demo: { howToRun: { source: 'adapter' } } });
     expect(values({ clones: 1 }).workspaces).toEqual({ value: 'clones', source: 'clones' });
     const problems = (branch: string) => c.check([{ repos: [{ path: web, settings: { branch } }] }]).problems.map((p) => p.code);
     expect(problems('main')).toEqual([]);
@@ -331,10 +332,10 @@ describe("Obeya's configuration", () => {
 
   test('a setting the Arbeitsrückschau proposed, taken on this machine: it joins the values set there', () => {
     mkdirSync(join(dir, 'home'));
-    writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings: { checks: ['bun test'], demo: { required: true } } }] }]));
+    writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings: { checks: ['bun test'], setup: 'bun install' } }] }]));
     const c = config('file', []);
     expect(c.takeSetting(web, 'howToRun', 'bun dev --port 4000', 'machine')).toBeNull();
-    expect(readConfigFile(file)).toEqual([{ repos: [{ path: web, settings: { checks: ['bun test'], demo: { required: true, howToRun: 'bun dev --port 4000' } } }] }]);
+    expect(readConfigFile(file)).toEqual([{ repos: [{ path: web, settings: { checks: ['bun test'], setup: 'bun install', demo: { howToRun: 'bun dev --port 4000' } } }] }]);
     expect(c.takeSetting(web, 'checks', ['bun run typecheck'], 'machine')).toBeNull();
     expect(readConfigFile(file)[0]!.repos[0]!.settings!.checks).toEqual(['bun run typecheck']);
     // nothing went into the repository

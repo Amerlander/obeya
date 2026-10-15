@@ -22,8 +22,7 @@ const site = z
     language: z.enum(['de', 'en']).optional(),
   })
   .strict();
-// `required` said until 2026-10-15 whether a handover needed a demo; every one does now, and an adapter that still says it loads without a problem
-const demo = z.object({ required: z.boolean().optional(), howToRun: z.string(), share: strings.min(1).optional(), site: site.optional() }).strict();
+const demo = z.object({ howToRun: z.string(), share: strings.min(1).optional(), site: site.optional() }).strict();
 const stack = z
   .object({
     start: z.string(),
@@ -38,7 +37,6 @@ const stack = z
 export const adapterShape = z
   .object({
     name: z.string().min(1),
-    matches: fn.optional(),
     canvasId: fn.optional(),
     canvasName: fn.optional(),
     planDocs: planDocs.optional(),
@@ -66,8 +64,7 @@ export const settingsShape = z
     softPaths: strings.optional(),
     workspaces: z.enum(['clones', 'worktrees']).optional(),
     prNoise: strings.optional(),
-    // `required`: no longer read, as in an adapter's `demo`
-    demo: z.object({ required: z.boolean().optional(), howToRun: z.string().optional() }).strict().optional(),
+    demo: z.object({ howToRun: z.string().optional() }).strict().optional(),
   })
   .strict();
 

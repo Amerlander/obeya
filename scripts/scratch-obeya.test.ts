@@ -37,7 +37,7 @@ test('stages a scratch Obeya with its cards in the states the stage file gives',
   const r = Bun.spawnSync([process.execPath, script, stage]);
   expect(r.stderr.toString()).toBe('');
   const staged = JSON.parse(r.stdout.toString()) as { url: string; canvas: string; cards: Record<string, string> };
-  expect(staged.url).toBe(`http://127.0.0.1:${port}/?c=obeya`);
+  expect(staged.url).toBe(`http://127.0.0.1:${port}/?c=repo`);
   const { items } = (await (await fetch(`http://127.0.0.1:${port}/api/c/${staged.canvas}/canvas`)).json()) as CanvasSnapshot;
   const card = (key: string) => items.find((i) => i.id === staged.cards[key])!;
   expect(card('P')).toMatchObject({ kind: 'project', x: 0, y: 0 });
@@ -48,6 +48,6 @@ test('stages a scratch Obeya with its cards in the states the stage file gives',
   expect(card('D').from).toBe(staged.cards.C!);
   const created = Bun.spawnSync(['sqlite3', join(dir, 'home/obeya.db'), `SELECT created_at FROM cards WHERE id = '${staged.cards.A}'`]).stdout.toString();
   expect(Date.now() - Date.parse(created.trim())).toBeGreaterThan(7000_000);
-  const events = (await (await fetch(`http://127.0.0.1:${port}/api/c/obeya/cards/${staged.cards.B}/events`)).json()) as { text: string }[];
+  const events = (await (await fetch(`http://127.0.0.1:${port}/api/c/${staged.canvas}/cards/${staged.cards.B}/events`)).json()) as { text: string }[];
   expect(events.map((e) => e.text)).toContain('wartet');
 }, 20_000);

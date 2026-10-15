@@ -94,20 +94,6 @@ export function gitRepo(path: string, files: Record<string, string> = { 'README.
   return path;
 }
 
-let prAdapterFile: string | undefined;
-
-/**
- * An adapter module that lands work through pull requests, for a repository whose `origin` stands
- * in for one on GitHub: a path, which would make it land on its main branch by detection.
- */
-export function prAdapter(): string {
-  if (prAdapterFile && existsSync(prAdapterFile)) return prAdapterFile;
-  templateDir ??= mkdtempSync(join(tmpdir(), 'obeya-template-'));
-  prAdapterFile = join(templateDir, 'pr-adapter.ts');
-  writeFileSync(prAdapterFile, "export default { name: 'pr', land: 'pr' };\n");
-  return prAdapterFile;
-}
-
 /** Removes the templates of `gitRepo`; test-setup.ts calls it once all tests have run. */
 export function removeTemplates() {
   if (templateDir) rmSync(templateDir, { recursive: true, force: true });

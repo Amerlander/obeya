@@ -8,7 +8,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { builtInAdapter, loadAdapter, parseShared, REPO_ADAPTER_DIR, REPO_SETTINGS_FILE, withSettings } from '../../../../src/adapters/index.ts';
+import { genericFor, loadAdapter, parseShared, REPO_ADAPTER_DIR, REPO_SETTINGS_FILE, withSettings } from '../../../../src/adapters/index.ts';
 import { allTicked, type NotAProject } from '../../../../src/core/plan-doc.ts';
 import { readPlanDocs, repoInfo } from '../../../../src/server/repo.ts';
 import { adapterRepoProblems } from '../../../../src/server/share.ts';
@@ -22,7 +22,7 @@ if (!existsSync(file) && !existsSync(settingsFile)) {
 }
 let own;
 try {
-  own = existsSync(file) ? loadAdapter(file, repo) : builtInAdapter(repo);
+  own = existsSync(file) ? loadAdapter(file, repo) : genericFor(repo);
 } catch (e) {
   console.log(e instanceof Error ? e.message : String(e));
   process.exit(1);

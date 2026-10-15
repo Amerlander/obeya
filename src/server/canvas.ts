@@ -3,7 +3,7 @@
 
 import { existsSync, mkdirSync, realpathSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
-import { adapterProblems, builtInAdapter, inClones, pickAdapter, readShared, repoAdapterTree, repoValues, type SharedRead, withSettings } from '../adapters';
+import { adapterProblems, genericFor, inClones, pickAdapter, readShared, repoAdapterTree, repoValues, type SharedRead, withSettings } from '../adapters';
 import { Answers, answersDir, answerTag, openWithSystem } from './answers';
 import { repoName } from '../adapters/generic';
 import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
@@ -90,8 +90,8 @@ export interface RepoRuntime {
 interface Repo extends RepoRuntime {
   /** Its entry in the configuration. */
   config: RepoConfig;
-  /** The version of its own adapter it runs on (its git tree); undefined where the configuration names the adapter. */
-  adapterTree: string | null | undefined;
+  /** The version of its own adapter it runs on (its git tree); null without one. */
+  adapterTree: string | null;
   /** Where its workers work by its adapter alone, without the settings. */
   baseWorkspaces: RepoAdapter['workspaces'];
   /** Stops its Lesestand and the retries for clones on other machines. */
@@ -667,15 +667,8 @@ export class CanvasRuntime {
     const path = r.info.path;
     if (this.pending?.paths.has(path)) return 'due';
     const shared = this.reread(r);
-    const tree = r.adapterTree === undefined ? undefined : repoAdapterTree(path);
-    let next: ReturnType<typeof repoAdapter> | null = null;
-    if (tree !== r.adapterTree) {
-      try {
-        next = repoAdapter(r.config, r.info, this.settingsOf(r.config), this.sharedOf(path));
-      } catch (e) {
-        console.error(`Obeya: the new version of the adapter of ${path} does not load: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    }
+    const tree = repoAdapterTree(path);
+    const next = tree !== r.adapterTree ? repoAdapter(r.config, r.info, this.settingsOf(r.config), this.sharedOf(path)) : null;
     const base = next ? next.base.workspaces : r.baseWorkspaces;
     const workIn = namesClones(r.config) ? 'clones' : (layerSettings<RepoSettings>(this.sharedOf(path)(), this.settingsOf(r.config)())?.workspaces ?? base);
     if (workIn !== r.workspaces.mode) {
@@ -1609,11 +1602,7 @@ export function resolveCanvas(
     if (infos.findIndex((x) => x.path === info.path) < i) throw new ConfigError('sameRepo', `${config.repos[i]!.path} is on the canvas already`, i);
   });
   const each = config.repos.map((r, i) => {
-    try {
-      return repoAdapter(r, infos[i]!, settings(r), shared(infos[i]!.path));
-    } catch (e) {
-      throw new ConfigError('unknownAdapter', e instanceof Error ? e.message : String(e), i);
-    }
+    return repoAdapter(r, infos[i]!, settings(r), shared(infos[i]!.path));
   });
   let adapterTrees = each.map((e) => e.adapterTree);
   let broken = each.map((e) => e.broken);
@@ -1637,7 +1626,7 @@ export function resolveCanvas(
     infos = order.map((i) => infos[i]!);
     adapters = order.map((i) => adapters[i]!);
     bases = order.map((i) => bases[i]!);
-    adapterTrees = order.map((i) => adapterTrees[i]);
+    adapterTrees = order.map((i) => adapterTrees[i]!);
     broken = order.map((i) => broken[i]);
     refs = uniqueRefs(infos, adapters);
   }
@@ -1653,25 +1642,22 @@ export function resolveCanvas(
 type Resolved = ReturnType<typeof resolveCanvas>;
 
 /**
- * A repository's adapter as a canvas runs it: the one its configuration names, else its own on its
- * default branch (`adapterTree`: that version's git tree, undefined where the configuration names
- * one), else the built-in one that matches it; this machine's `settings` and the repository's
+ * A repository's adapter as a canvas runs it: its own on its default branch (`adapterTree`: that
+ * version's git tree), else the generic one; this machine's `settings` and the repository's
  * `shared` ones in front of its own values (`adapter`), each read when it is asked for; where its
  * workers work by the adapter and the clones the configuration names alone (`base`). A
  * repository's own adapter that does not load is fixed in the repository: meanwhile the repository
- * runs on the built-in adapter, with why beside it (`broken`). Throws where the adapter the
- * configuration names does not load.
+ * runs on the generic adapter, with why beside it (`broken`).
  */
 export function repoAdapter(r: RepoConfig, info: RepoInfo, settings: () => RepoSettings | undefined, shared: () => SharedSettings | undefined) {
-  const adapterTree = r.adapter ? undefined : repoAdapterTree(info.path);
+  const adapterTree = repoAdapterTree(info.path);
   let broken: string | undefined;
   let adapter: RepoAdapter;
   try {
-    adapter = pickAdapter(info, r.adapter);
+    adapter = pickAdapter(info);
   } catch (e) {
-    if (r.adapter) throw e;
     broken = e instanceof Error ? e.message : String(e);
-    adapter = builtInAdapter(info);
+    adapter = genericFor(info);
   }
   // clones the configuration names are where the workers work, also where the adapter says worktrees
   const base = namesClones(r) ? inClones(adapter) : adapter;

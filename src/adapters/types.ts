@@ -34,8 +34,6 @@ export interface DemoSite {
 
 export interface RepoAdapter {
   name: string;
-  /** Whether this adapter is meant for the repository (checked when none is named explicitly). */
-  matches(repo: RepoInfo): boolean;
   /** One canvas per repository: clones of the same repository share it. */
   canvasId(repo: RepoInfo): string;
   canvasName(repo: RepoInfo): string;

@@ -194,6 +194,7 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }
                 }}
                 onSave={async () => {
                   setBusy(true);
+                  let applies = false;
                   try {
                     const { restarting, applied } = await api.saveConfig(draft);
                     // settings applied at once change what the repositories amount to (where „Für alle“ goes, say): read it again
@@ -201,10 +202,12 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }
                     setView({ ...(fresh ?? view), canvases: draft, restarting });
                     if (fresh) setChecked(fresh);
                     setStatus(restarting ? c.saved : applied ? (restartsAgents(view.canvases, draft) ? c.savedRestarts : c.savedApplied) : c.savedOnly);
+                    applies = !restarting;
                   } catch (e) {
                     setStatus(e instanceof ApiError ? errorText(e.code) : t.offlineError);
                   }
                   setBusy(false);
+                  return applies;
                 }}
                 onReset={() => load(view)}
                 onReload={async () => {
@@ -331,7 +334,8 @@ interface CanvasesProps {
   onAsk: Ask;
   onRecheck: () => void;
   onDraft: (draft: CanvasConfig[], origin: (string | null)[]) => void;
-  onSave: () => void;
+  /** Saves the draft; says whether it was saved and applies without a restart. */
+  onSave: () => Promise<boolean>;
   onReset: () => void;
   /** Reads the saved configuration again: the server changed it (settings taken over for everyone). */
   onReload: () => Promise<void>;
@@ -344,6 +348,8 @@ interface CanvasesProps {
 function Canvases({ view, draft, origin, checked, changed, busy, focus, onAsk, onRecheck, onDraft, onSave, onReset, onReload, status, json, onJson }: CanvasesProps) {
   const c = t.config;
   const problems = checked?.problems ?? [];
+  // „Für alle“ takes over what is saved: with changes in the dialog it saves them first, where that applies without a restart
+  const prepare = changed && view.source === 'file' && !view.restarting && !problems.some(blocksSaving) ? onSave : undefined;
   const setCanvas = (i: number, x: CanvasConfig | null) =>
     x
       ? onDraft(
@@ -380,12 +386,12 @@ function Canvases({ view, draft, origin, checked, changed, busy, focus, onAsk, o
           running={view.running}
           pin={origin[i] && view.running.includes(origin[i]) ? origin[i] : undefined}
           saved={!changed}
-          adapters={view.adapters}
           problems={problems.filter((p) => p.canvas === i)}
           focus={focus}
           ask={changed ? undefined : onAsk}
           onRecheck={onRecheck}
           onReload={onReload}
+          {...(prepare ? { prepare } : {})}
           onChange={(y) => setCanvas(i, y)}
         />
       ))}
@@ -400,7 +406,7 @@ function Canvases({ view, draft, origin, checked, changed, busy, focus, onAsk, o
       {changed && gone.length > 0 && <p className="hint warn">{c.gone(gone.join(', '))}</p>}
       {json && <pre className="c-json">{JSON.stringify(draft, null, 2)}</pre>}
       <div className="cfg-actions">
-        <button className="btn primary" disabled={!changed || busy || problems.some(blocksSaving)} onClick={onSave}>
+        <button className="btn primary" disabled={!changed || busy || problems.some(blocksSaving)} onClick={() => void onSave()}>
           {/* a configuration from the file applies while Obeya runs; one from the command line becomes the file with a restart */}
           {view.server.restarts && (view.source === 'args' || view.restarting) ? c.save : c.saveOnly}
         </button>
@@ -1000,17 +1006,18 @@ interface CanvasProps {
   pin?: string;
   /** The configuration shown is the one saved: a running canvas is the one shown. */
   saved: boolean;
-  adapters: string[];
   problems: ConfigProblem[];
   focus: ConfigFocus | null;
   /** Has the Koordinator create a task that fixes a problem; only for the configuration as saved, which is what it reads. */
   ask?: Ask;
   onRecheck: () => void;
   onReload: () => Promise<void>;
+  /** Saves the dialog's changes before settings are taken over for everyone; none where saving restarts Obeya. */
+  prepare?: () => Promise<boolean>;
   onChange: (c: CanvasConfig | null) => void;
 }
 
-function CanvasBlock({ n, canvas, resolved, running, pin, saved, adapters, problems, focus, ask, onRecheck, onReload, onChange }: CanvasProps) {
+function CanvasBlock({ n, canvas, resolved, running, pin, saved, problems, focus, ask, onRecheck, onReload, prepare, onChange }: CanvasProps) {
   const fresh = resolved && !running.includes(resolved.id);
   // the Koordinator of the canvas with the problem, where it runs: a card for it goes there
   const askHere = ask && ((text: string) => ask(text, resolved && running.includes(resolved.id) ? resolved.id : undefined));
@@ -1042,9 +1049,6 @@ function CanvasBlock({ n, canvas, resolved, running, pin, saved, adapters, probl
       {fresh && <p className="hint warn">{t.config.freshHint}</p>}
       <div className="cfg-repos">
         <span className="hint">{t.config.path}</span>
-        <span className="hint cfg-has-info cfg-adapter">
-          {t.config.adapter} <Info text={t.config.adapterHint} />
-        </span>
         <span className="hint cfg-has-info cfg-share">
           {t.config.share} <Info text={t.config.shareHint} />
         </span>
@@ -1056,13 +1060,12 @@ function CanvasBlock({ n, canvas, resolved, running, pin, saved, adapters, probl
             home={i === 0}
             resolved={resolved?.repos[i]}
             canvasId={saved && resolved && running.includes(resolved.id) ? resolved.id : undefined}
-            adapters={adapters}
             problems={problems.filter((p) => p.repo === i)}
             {...(focus && resolved?.id === focus.canvas && resolved.repos[i]?.id === focus.repo ? { focus } : {})}
             where={`${here}, ${t.config.repoAt(r.path)}`}
             ask={askHere}
             onRecheck={onRecheck}
-            {...(saved ? { onReload } : {})}
+            takeover={{ saved, onReload, ...(prepare ? { prepare } : {}) }}
             onChange={(x) => setRepo(i, x)}
           />
         ))}
@@ -1085,7 +1088,6 @@ interface RepoProps {
   resolved?: { id: string; adapter: string; workspaces: 'clones' | 'worktrees'; adapterShares?: boolean; adapterSite?: string; values: RepoValues; shareTo: 'main' | 'pr'; shareDirect?: boolean };
   /** The running canvas the repository is on, as saved; where a card for it can go. */
   canvasId?: string;
-  adapters: string[];
   problems: ConfigProblem[];
   /** Its clone count or slots to scroll to and focus: the dialog was opened from a card waiting for a free clone or slot. */
   focus?: ConfigFocus;
@@ -1094,12 +1096,20 @@ interface RepoProps {
   ask?: (text: string) => void;
   /** Checks the configuration again: git was set up in the repository's folder. */
   onRecheck: () => void;
-  /** Reads the saved configuration again; only while the canvases are as saved, which is what settings are taken over from. */
-  onReload?: () => Promise<void>;
+  takeover: Takeover;
   onChange: (r: RepoConfig | null) => void;
 }
 
-function RepoRow({ repo, home, resolved, canvasId, adapters, problems, focus, where, ask, onRecheck, onReload, onChange }: RepoProps) {
+/** What „Für alle“ needs of the dialog: whether the canvases are as saved (what is taken over), how to read them again, how to save them first. */
+interface Takeover {
+  saved: boolean;
+  /** Reads the saved configuration again: the server changed it. */
+  onReload: () => Promise<void>;
+  /** Saves the dialog's changes; none where saving restarts Obeya. Says whether they were saved. */
+  prepare?: () => Promise<boolean>;
+}
+
+function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, onRecheck, takeover, onChange }: RepoProps) {
   const clonesBox = useRef<HTMLDivElement>(null);
   const [flash, setFlash] = useState(false);
   useEffect(() => {
@@ -1125,18 +1135,9 @@ function RepoRow({ repo, home, resolved, canvasId, adapters, problems, focus, wh
     <>
       <div className="cfg-cell">
         <input className="c-path" aria-label={t.config.path} value={repo.path} placeholder={t.config.path} spellCheck={false} onChange={(e) => onChange({ ...repo, path: e.target.value })} />
-        {resolved && <span className="hint">{`${resolved.id}${home ? ` · ${t.config.home}` : ''} · ${resolved.workspaces === 'clones' ? t.config.clonesMode : t.config.worktrees}`}</span>}
-      </div>
-      <div className="cfg-cell">
-        <select className="c-adapter" value={repo.adapter ?? ''} onChange={(e) => onChange(without('adapter', e.target.value || undefined))} aria-label={t.config.adapter}>
-          <option value="">{t.config.adapterAuto(repo.adapter ? undefined : resolved?.adapter)}</option>
-          {/* a module's path from the file: kept as it is, the dialog offers only the built-in ones */}
-          {(repo.adapter && !adapters.includes(repo.adapter) ? [...adapters, repo.adapter] : adapters).map((a) => (
-            <option key={a} value={a}>
-              {a}
-            </option>
-          ))}
-        </select>
+        {resolved && (
+          <span className="hint">{`${resolved.id}${home ? ` · ${t.config.home}` : ''} · ${resolved.workspaces === 'clones' ? t.config.clonesMode : t.config.worktrees}${resolved.adapter === 'generic' ? '' : ` · ${t.config.ownAdapter}`}`}</span>
+        )}
       </div>
       <div className="cfg-cell">
         <input
@@ -1188,7 +1189,7 @@ function RepoRow({ repo, home, resolved, canvasId, adapters, problems, focus, wh
           </label>
         </div>
       )}
-      {resolved && <RepoSettingsBlock show={focus?.field === 'settings' ? focus : undefined} repo={repo} values={resolved.values} adapter={resolved.adapter} shareTo={resolved.shareTo} shareDirect={!!resolved.shareDirect} {...(onReload ? { onReload } : {})} onChange={(settings) => onChange(without('settings', settings))} />}
+      {resolved && <RepoSettingsBlock show={focus?.field === 'settings' ? focus : undefined} repo={repo} values={resolved.values} adapter={resolved.adapter} shareTo={resolved.shareTo} shareDirect={!!resolved.shareDirect} takeover={takeover} onChange={(settings) => onChange(without('settings', settings))} />}
       {problems.map((p, k) => (
         <div key={k} className="cfg-span">
           <Problem problem={p} where={where} ask={ask} />
@@ -1196,7 +1197,7 @@ function RepoRow({ repo, home, resolved, canvasId, adapters, problems, focus, wh
         </div>
       ))}
       {/* a repository without an adapter or settings of its own (not one whose own adapter does not load): a card on its canvas writes them */}
-      {canvasId && resolved?.adapter === 'generic' && !repo.adapter && !problems.some((p) => p.code === 'adapterLoad') && !fromRepository(resolved.values) && (
+      {canvasId && resolved?.adapter === 'generic' && !problems.some((p) => p.code === 'adapterLoad') && !fromRepository(resolved.values) && (
         <div className="cfg-span">
           <AdapterSetup canvas={canvasId} repo={resolved.id} />
         </div>
@@ -1220,7 +1221,7 @@ function RepoSettingsBlock({
   adapter,
   shareTo,
   shareDirect,
-  onReload,
+  takeover,
   onChange,
 }: {
   /** The setting to fold open, scroll to and mark: the dialog was opened from a proposal for it. */
@@ -1230,7 +1231,7 @@ function RepoSettingsBlock({
   adapter: string;
   shareTo: 'main' | 'pr';
   shareDirect: boolean;
-  onReload?: () => Promise<void>;
+  takeover: Takeover;
   onChange: (s: RepoSettings | undefined) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -1350,7 +1351,7 @@ function RepoSettingsBlock({
           )}
           {land === 'pr' && row('prNoise', c.prNoise, <textarea rows={2} spellCheck={false} aria-label={c.prNoise} value={lines('prNoise')} onChange={(e) => set('prNoise', e.target.value.split('\n'))} />, c.prNoiseHint)}
           {row('howToRun', c.howToRun, <textarea rows={Math.max(3, Math.ceil(value<string>('howToRun').length / 90) + 1)} aria-label={c.howToRun} value={value<string>('howToRun')} onChange={(e) => set('howToRun', e.target.value)} />, c.howToRunHint)}
-          <ShareSettings repo={repo} values={values} branch={value<string>('branch')} shareTo={shareTo} shareDirect={shareDirect} {...(onReload ? { onReload } : {})} />
+          <ShareSettings repo={repo} values={values} branch={value<string>('branch')} shareTo={shareTo} shareDirect={shareDirect} takeover={takeover} />
         </div>
       )}
     </div>
@@ -1379,7 +1380,7 @@ function sharedPreview(repo: RepoConfig, values: RepoValues): Record<string, unk
  * It first shows the file as it would be and where it goes (a commit on the main branch, or a pull
  * request), then does it at the owner's word. Only for the configuration as saved.
  */
-function ShareSettings({ repo, values, branch, shareTo, shareDirect, onReload }: { repo: RepoConfig; values: RepoValues; branch: string; shareTo: 'main' | 'pr'; shareDirect: boolean; onReload?: () => Promise<void> }) {
+function ShareSettings({ repo, values, branch, shareTo, shareDirect, takeover }: { repo: RepoConfig; values: RepoValues; branch: string; shareTo: 'main' | 'pr'; shareDirect: boolean; takeover: Takeover }) {
   const c = t.config.settings.share;
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1387,14 +1388,17 @@ function ShareSettings({ repo, values, branch, shareTo, shareDirect, onReload }:
   const [error, setError] = useState('');
   const { branch: _, ...mine } = repo.settings ?? {};
   const count = Object.keys(mine).length + (mine.demo ? Object.keys(mine.demo).length - 1 : 0);
+  const { saved, onReload, prepare } = takeover;
   const go = async (direct = false) => {
     setBusy(true);
     setError('');
     try {
+      // what is taken over is what is saved: the dialog's changes are saved first (why not, its status line says)
+      if (!saved && !(await prepare?.())) return setBusy(false);
       const r = await api.shareSettings(repo.path, direct);
       setDone(r);
       setConfirming(false);
-      if ('committed' in r) await onReload?.();
+      if ('committed' in r) await onReload();
     } catch (e) {
       setError(e instanceof ApiError ? `${errorText(e.code)}${e.code === 'settingsShare' ? ` ${e.message}` : ''}` : t.offlineError);
     }
@@ -1417,14 +1421,15 @@ function ShareSettings({ repo, values, branch, shareTo, shareDirect, onReload }:
         {!done && !count && <p className="hint">{c.none}</p>}
         {!done && count > 0 && !confirming && (
           <>
-            <button type="button" className="btn small" disabled={!onReload} onClick={() => setConfirming(true)}>
+            <button type="button" className="btn small" disabled={!saved && !prepare} onClick={() => setConfirming(true)}>
               {c.button(count)}
             </button>
-            <p className="hint">{onReload ? `${c.hint}${repo.settings?.branch ? ` ${c.hintBranch}` : ''}` : c.saveFirst}</p>
+            <p className="hint">{saved || prepare ? `${c.hint}${repo.settings?.branch ? ` ${c.hintBranch}` : ''}` : c.saveFirst}</p>
           </>
         )}
         {confirming && (
           <div className="cfg-share-confirm">
+            {!saved && <p className="hint">{c.savesFirst}</p>}
             <p className="hint">{shareTo === 'main' ? c.toMain(branch) : shareDirect ? c.toPrOrDirect(branch) : c.toPr(branch)}</p>
             <pre className="c-json">
               <span className="hint">.obeya/settings.json</span>
@@ -1509,7 +1514,7 @@ function Hosts({ hosts, onChange }: { hosts: HostConfig[]; onChange: (hosts: Hos
 }
 
 // problems whose detail says what to fix, in the repository's adapter rather than here
-const DETAILED: ConfigProblem['code'][] = ['adapterField', 'adapterLoad', 'repoSettings', 'unknownAdapter', 'hostName'];
+const DETAILED: ConfigProblem['code'][] = ['adapterField', 'adapterLoad', 'repoSettings', 'hostName'];
 
 /**
  * A problem of the configuration: what is wrong, the technical detail folded away where it says

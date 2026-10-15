@@ -808,8 +808,7 @@ the owner's language (`src/core/locale.ts`).
   no other process can read, so what other processes run or import goes beside it as real files,
   in `resources/` (13 MB): the plugin with its skills and the `playwright-core` the demo skill
   records with, the voice sidecars, the adapter kit bundled into one module (`kit.js`), the
-  skills' scripts that read adapters (`recipe.ts`, `check.ts`) bundled with Obeya's built-in
-  ones, and `docs/adapter.md` for the adapter skill. The server finds them through one function
+  skills' scripts that read adapters (`recipe.ts`, `check.ts`) bundled with the generic one, and `docs/adapter.md` for the adapter skill. The server finds them through one function
   (`resource()` in `src/server/resources.ts`): `OBEYA_RESOURCES` when set, else `resources`
   beside the binary (or `Resources` of a macOS app bundle), else the checkout. The demo skill's
   modules the server carries (the setup check, the voices) are told where their files are
@@ -1058,12 +1057,14 @@ the owner's language (`src/core/locale.ts`).
   (or the field has the focus), so the page stays calm; the text shows on the icon at once, not as a
   browser tooltip with a wait on plain text.
   Each canvas is a heading line (number, name, id, whether it runs) over a table of its repositories:
-  path, adapter, share command, one row each. Each canvas shows its id and whether it runs, each repository its id,
-  adapter, whether workers use clones or worktrees (a repository added in the dialog whose adapter works
+  path and share command, one row each. Each canvas shows its id and whether it runs, each repository its id,
+  whether workers use clones or worktrees and, where it has one, that it brings its own adapter
+  („eigener Adapter (.obeya/adapter/)“; until 2026-10-15 a column let the owner pick one: „automatisch“, „generic“ or
+  „obeya“, which only Obeya's own repository could use) (a repository added in the dialog whose adapter works
   in clones gets as many as the first canvas's, two, filled in once its path is checked and changeable before
   saving), and the command that shares its demos (empty:
   the adapter's site, shown as „Site: <url>“, or its command, or an export; see Sharing a demo); problems (no git repository, a repository the canvas
-  has already under this or another path, an unknown adapter, two canvases with one id, a canvas's home repository left out, a share command whose program is not there) show at the field while
+  has already under this or another path, two canvases with one id, a canvas's home repository left out, a share command whose program is not there) show at the field while
   editing and keep it from being saved; where a path without a repository is a folder, the
   problem offers to set up git there (see Setting up git in a folder), after which it goes.
   Problems in a repository's own adapter (`adapterField`:
@@ -1099,13 +1100,13 @@ the owner's language (`src/core/locale.ts`).
   branch and how work lands in the folded line.
   „Für alle ins Repository übernehmen“ below them takes the values saved for this machine into the
   repository's `.obeya/settings.json`; a repository that has one counts as set up, so „Von einem
-  Agenten ausfüllen lassen“ is not offered there. While the dialog has changes not saved yet, the
-  button is off and says so: save first with the button at the very bottom (until 2026-10-15
-  „Erst speichern: übernommen wird, was gespeichert ist.“, which read as if saving were the
-  takeover). An ⓘ at the adapter column says what an adapter is for: „generic“ fits any
-  repository and knows nothing of it, „obeya“ is Obeya's own, a repository's own one in
-  `.obeya/adapter/` is picked by „automatisch“, and code is needed there only for what settings
-  cannot say (the stack, sharing on a site, the canvas's name). The server's own
+  Agenten ausfüllen lassen“ is not offered there. What is taken over is what is saved: while the
+  dialog has changes not saved yet, the takeover saves them first, all of them like „Speichern“
+  (the confirmation says so), then writes the file; only where saving restarts Obeya (a
+  configuration from the command line) is the button off, saying to save first. Until
+  2026-10-15 it was always off then, with „Erst speichern: übernommen wird, was gespeichert ist.“,
+  which read as if saving were the takeover. A setting's label starts level with the first line
+  of its field rather than centred beside the field and its hint. The server's own
   settings (port, data directory, the agents' permission mode) come from the command line and the
   environment (`OBEYA_PORT`, `OBEYA_HOME`) and show read-only. The Koordinator reads the configuration (`config` tool) to answer questions about it
   and changes it on the owner's word (`configure`, the whole new list, checked like the dialog's),
@@ -2576,8 +2577,8 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   `configure` keeps and changes them like the rest of the entry. Until 2026-10-14 these values
   could only be set in `.obeya/adapter/index.ts`, and saving the dialog always restarted Obeya.
   Until 2026-10-15 the demo had `required` too (the checkbox „Ein Agent übergibt nur mit Demo“);
-  every handover brings a demo now, and a file or adapter that still says it loads without a
-  problem, the value no longer read.
+  every handover brings a demo now, and the field is gone (a file or adapter that still has it
+  shows it as a problem: `demo.required: no such field`).
   `.obeya/settings.json` (like `.vscode/settings.json`) is what a fresh clone brings with it: every
   value field but the main branch, which says where the file is read from (a fresh clone has it
   from `origin`'s HEAD). It is read from the default branch like the repository's own adapter
@@ -2640,17 +2641,18 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   `.obeya/settings.json` beside it (see Repository settings), which goes before the module's
   values whichever adapter runs; the module stays for what is code (`stack`, `demo.site` or
   `share`, `canvasId` and `canvasName`), and only a change to it (or to `workspaces`) restarts
-  Obeya. A repository with the file and no module runs on the built-in adapter with it. Obeya picks a
-  repository's adapter in this order (`src/adapters/index.ts`): the one the configuration names
-  (`adapter`: a built-in one's name, or the path of a module, relative to the repository), the
-  repository's own, the first built-in one that matches (`obeya` by its `origin`, else
-  `generic`). The repository's own comes from its default branch, not the checkout: the clones a
+  Obeya. A repository with the file and no module runs on the generic adapter with it. A
+  repository runs on its own adapter, else on the generic one (`pickAdapter` in
+  `src/adapters/index.ts`); Obeya's own repository carries its adapter like any other. Until
+  2026-10-15 the configuration could name one (`adapter`: a built-in one's name, or the path of a
+  module; `--adapter` on the command line), and Obeya's own was built in (`src/adapters/obeya.ts`,
+  picked by its `origin`). The repository's own comes from its default branch, not the checkout: the clones a
   canvas works in are on cards' branches, and one from before the adapter changed (or came) would
   have another one or none. The default branch is the local one where it has all of `origin`'s,
   else `origin`'s as last fetched. Its files are written once per version (the git tree's id)
   into the repository's git directory, `.git/obeya/adapter-<tree>/`, out of reach of checkouts and
   `git clean`, and an earlier version's go. The canvas keeps the tree it was set up with (none for
-  a repository without its own adapter; not looked at where the configuration names one); when the
+  a repository without its own adapter); when the
   Lesestand moves (a fetch after a merged pull request, a landing on the local main) to a default
   branch whose `.obeya/adapter/` tree is another, the new version takes the old one's place at
   once (`Workers.useAdapter`, the canvas following as for saved settings); only where it changes
@@ -2660,12 +2662,10 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   2026-10-14 it restarted all of Obeya. The module's default export is the adapter
   or a function that makes it from Obeya's helpers (`kit`: the generic adapter, the demo page
   templates, `esc`, `day`), so it imports nothing of Obeya's; Obeya loads it with `require` and
-  fills what it leaves out from detection (`land`, see Landing) and the generic adapter. An adapter the configuration names that does
-  not exist or does not load is a configuration problem at the repository ("Diesen Adapter gibt es
-  nicht, oder sein Modul lädt nicht.", with the error) that keeps it from being saved. A
+  fills what it leaves out from detection (`land`, see Landing) and the generic adapter. A
   repository's own adapter that does not load (a syntax error, a failing import, no default export
-  with a `name`) is fixed in the repository: meanwhile the repository runs on the built-in adapter
-  that matches it (`generic`, for any repository but Obeya's own), with the problem `adapterLoad`
+  with a `name`) is fixed in the repository: meanwhile the repository runs on the generic adapter,
+  with the problem `adapterLoad`
   at the repository in "Konfiguration" (with the error, keeping nothing from being saved) and in
   Obeya's log; „Von einem Agenten ausfüllen lassen“ is not offered there. The canvas keeps the id and name
   that adapter gave it (the setting `own_adapter_of` notes which canvas it named), so its address
@@ -2959,8 +2959,8 @@ the repository; the copy on the project is only for the archive).
 - A canvas belongs to a repository, not a checkout: the adapter names it, so the clones share
   one. A project's adapter lives in its own repository (`.obeya/adapter/`, read from the default
   branch; see Repo adapter), not in Obeya's, which is open source: until 2026-10-05 adapters lived
-  here and were picked by the `origin` URL; only Obeya's own (`src/adapters/obeya.ts`) still is.
-  The generic one covers any repo with `docs/plan/`.
+  here and were picked by the `origin` URL; Obeya's own stayed until 2026-10-15 and is now in this
+  repository's `.obeya/` like any other. The generic one covers any repo with `docs/plan/`.
 - A card has one fixed size; a delivered workstream shrinks to a chip once its agent is done, a project wraps its
   children, and a workstream cannot be dragged out of its project. New projects are placed in a
   grid below the existing ones. A proposal or follow-up goes below the card it came from, or, when

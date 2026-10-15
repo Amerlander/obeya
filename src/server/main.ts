@@ -1,12 +1,12 @@
 // obeya [--config <canvases.json>]
-// obeya <repo>… [--name <canvas>] [--adapter <name>] [--workspace <path>]… [--clones <n>]
+// obeya <repo>… [--name <canvas>] [--workspace <path>]… [--clones <n>]
 //   [--port <n>] [--dev] [--permission-mode <mode>] [--idle-workers]
 //
 // Serves canvases at http://127.0.0.1:<port>. Without repositories: the canvases the JSON file
-// lists, `[{ "name"?, "id"?, "repos": [{ "path", "adapter"?, "workspaces"?, "clones"? }] }]`, by default
+// lists, `[{ "name"?, "id"?, "repos": [{ "path", "workspaces"?, "clones"? }] }]`, by default
 // $OBEYA_HOME/canvases.json; while that does not exist, none, and the page shows the setup
 // assistant, which checks the machine and creates the first canvas (machine.ts). With repositories: one canvas with them (the first is its home;
-// --adapter, --workspace and --clones apply to it). Data lives in $OBEYA_HOME/obeya.db (default
+// --workspace and --clones apply to it). Data lives in $OBEYA_HOME/obeya.db (default
 // ~/.obeya).
 //
 // Without --dev the process supervises the server: it runs it as a child and starts it again
@@ -61,7 +61,6 @@ const { values, positionals } = parseArgs({
   options: {
     config: { type: 'string' },
     name: { type: 'string' },
-    adapter: { type: 'string' },
     port: { type: 'string', default: process.env.OBEYA_PORT ?? '4417' },
     dev: { type: 'boolean', default: false },
     workspace: { type: 'string', multiple: true, default: [] },
@@ -122,7 +121,7 @@ if (source === 'file' && !values.config && !existsSync(configFile)) {
   started = [];
 } else if (source === 'file') {
   if (!existsSync(configFile)) {
-    console.error(`usage: obeya [--config <file>] | <repo>… [--name <canvas>] [--adapter <name>] [--workspace <path>]… [--clones <n>]; [--port <n>] [--dev] [--permission-mode <mode>]
+    console.error(`usage: obeya [--config <file>] | <repo>… [--name <canvas>] [--workspace <path>]… [--clones <n>]; [--port <n>] [--dev] [--permission-mode <mode>]
 (without repositories Obeya reads ${configFile}, which does not exist)`);
     process.exit(2);
   }
@@ -135,7 +134,6 @@ if (source === 'file' && !values.config && !existsSync(configFile)) {
         i === 0
           ? {
               path: resolve(expand(path)),
-              ...(values.adapter ? { adapter: values.adapter } : {}),
               ...(values.workspace.length ? { workspaces: values.workspace.map((w) => resolve(expand(w))) } : {}),
               ...(values.clones ? { clones: Number(values.clones) } : {}),
             }

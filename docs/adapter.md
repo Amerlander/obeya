@@ -212,11 +212,6 @@ from before 2026-10-15, when a repository could leave demos to the worker, is no
 
 Generic: none.
 
-### `matches` — a function of the repository
-
-Only for Obeya's built-in adapters, which are picked by it (`(repo) => boolean`). A repository's
-own adapter is picked because it is there; this field changes nothing.
-
 ## `.obeya/settings.json`: the values, for everyone
 
 A JSON object with the fields that are values, each as described above (`demo` holds `howToRun`
@@ -257,14 +252,9 @@ Mistakes): each shows as a problem at the repository in "Konfiguration", startin
 
 ## How Obeya picks a repository's adapter
 
-In this order:
-
-1. The one "Konfiguration" names for the repository (`adapter` in `canvases.json`): a built-in
-   one's name (`generic`), or the path of a module, relative to the repository.
-2. The repository's own, `.obeya/adapter/index.ts`, **as the default branch has it**.
-3. The first built-in one that matches; for any repository but Obeya's own, `generic`.
-
-The values of `.obeya/settings.json` go before whichever of these it is (see above).
+A repository runs on its own adapter, `.obeya/adapter/index.ts` **as the default branch has it**,
+else on the generic one; Obeya's own repository is no exception. The values of
+`.obeya/settings.json` go before either (see above).
 
 Obeya reads the repository's own adapter from the default branch (the local one when it has all
 of `origin`'s commits, else `origin`'s as last fetched), not from the checkout: the clones a canvas
@@ -277,9 +267,7 @@ once it is merged. Its files are copied per version into the repository's git di
 landing brings a new adapter, or a change to it, to the default branch Obeya reads, Obeya restarts
 by itself, as for a configuration saved in "Konfiguration": once no agent is in the middle of a
 step, and the page reloads. Commits that leave `.obeya/adapter/` as it is restart nothing (a
-change to `.obeya/settings.json` applies without a restart, but for `workspaces`). Where
-the configuration names an adapter, the repository's own is not read, and a change to it restarts
-nothing either. Obeya started by hand without its supervisor (`--dev`) cannot restart itself: its
+change to `.obeya/settings.json` applies without a restart, but for `workspaces`). Obeya started by hand without its supervisor (`--dev`) cannot restart itself: its
 log says so, and the change takes effect at the next start.
 
 ## Mistakes

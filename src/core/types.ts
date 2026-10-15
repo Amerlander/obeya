@@ -976,8 +976,6 @@ export type ErrorCode =
 /** A repository on a canvas, as Obeya's configuration lists it (`canvases.json`). */
 export interface RepoConfig {
   path: string;
-  /** The adapter's name; without it, the repository's `origin` picks one. */
-  adapter?: string;
   /** Clones to register as workspaces (adapters that use clones). */
   workspaces?: string[];
   /** Clones to create under Obeya's home (adapters that use clones). */
@@ -1171,9 +1169,7 @@ export type ConfigProblemCode =
   | 'notRepo'
   /** A repository the canvas has already, under this path or another. */
   | 'sameRepo'
-  /** An adapter the configuration names that does not exist or does not load. */
-  | 'unknownAdapter'
-  /** The repository's own adapter does not load; the repository runs on the built-in one meanwhile. */
+  /** The repository's own adapter does not load; the repository runs on the generic one meanwhile. */
   | 'adapterLoad'
   /** Two canvases with the same id. */
   | 'sameId'
@@ -1209,8 +1205,6 @@ export interface ConfigView {
   problems: ConfigProblem[];
   /** The ids of the canvases this server runs. */
   running: string[];
-  /** The adapters a repository can name. */
-  adapters: string[];
   /**
    * Settings of the running server, from its command line; its version (`package.json`), and the
    * commit of the checkout it runs from (null for the compiled binary).

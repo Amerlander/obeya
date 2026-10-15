@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { CanvasRuntime } from './canvas';
 import { Store } from './db';
 import { ReadTree } from './read-tree';
-import { artifact, FakeRuntime, gitRepo, identify, noForge, prAdapter, until } from './testing';
+import { artifact, FakeRuntime, gitRepo, identify, noForge, until } from './testing';
 import { git } from './workspaces';
 
 const doc = (title: string, ticked = '') =>
@@ -52,8 +52,8 @@ function push(files: Record<string, string | null>) {
 }
 
 // its `origin` stands in for one on GitHub, where work goes out as pull requests
-function open(adapter = prAdapter()) {
-  canvas = new CanvasRuntime({ name: 'Shop', repos: [{ path: checkout, adapter }] }, { store: new Store(':memory:'), home: join(dir, 'home'), runtime: new FakeRuntime(), forge: noForge });
+function open(land: 'main' | 'pr' = 'pr') {
+  canvas = new CanvasRuntime({ name: 'Shop', repos: [{ path: checkout, settings: { land } }] }, { store: new Store(':memory:'), home: join(dir, 'home'), runtime: new FakeRuntime(), forge: noForge });
   return canvas;
 }
 
@@ -119,7 +119,7 @@ describe('the Lesestand', () => {
 
   test('is the checkout itself where work lands on the local main, uncommitted docs included', () => {
     writeFileSync(join(checkout, 'docs/plan/draft.md'), doc('Entwurf'));
-    const c = open('obeya');
+    const c = open('main');
     expect(c.repos[0]!.read.path).toBe(checkout);
     expect(projects(c)).toEqual(['Entwurf', 'Export']);
     expect(existsSync(join(dir, 'home', 'read'))).toBe(false);

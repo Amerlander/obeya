@@ -8,7 +8,7 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, wri
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
-import { adapterNames, readShared, REPO_SETTINGS_FILE, type SharedRead } from '../adapters';
+import { readShared, REPO_SETTINGS_FILE, type SharedRead } from '../adapters';
 import { settingsShape } from '../adapters/schema';
 import { type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigSaved, type ConfigView, type RepoSettings, SHARED_FIELDS, type SettingsShared, type SharedSettings, type DemoSettingsProblem, type DemoSettingsView, type DemoVoiceCheck, type LanguageView, type ResolvedCanvas, type ThemeView, type VoiceInstallJob, layerSettings, type ProposedSetting, settingPatch } from '../core/types';
 import {
@@ -84,7 +84,6 @@ const shape = z.array(
         z
           .object({
             path: z.string(),
-            adapter: z.string().optional(),
             workspaces: z.array(z.string()).optional(),
             clones: z.number().int().min(0).max(20).optional(),
             slots: z.number().int().min(0).max(20).optional(),
@@ -110,7 +109,7 @@ const shape = z.array(
     .strict(),
 );
 
-/** The configuration as it is saved: no empty names, adapters, clone lists or counts. */
+/** The configuration as it is saved: no empty names, clone lists or counts. */
 function tidy(canvases: z.infer<typeof shape>): CanvasConfig[] {
   return canvases.map((c) => ({
     ...(c.name?.trim() ? { name: c.name.trim() } : {}),
@@ -122,7 +121,6 @@ function tidy(canvases: z.infer<typeof shape>): CanvasConfig[] {
       const settings = tidySettings(r.settings);
       return {
         path: r.path.trim(),
-        ...(r.adapter?.trim() ? { adapter: r.adapter.trim() } : {}),
         ...(workspaces.length ? { workspaces } : {}),
         ...(r.clones ? { clones: r.clones } : {}),
         ...(r.slots !== undefined ? { slots: r.slots } : {}),
@@ -397,7 +395,6 @@ export class Config {
       resolved,
       problems,
       running: this.o.running(),
-      adapters: adapterNames(),
       server: { commit: null, ...this.o.server, version: VERSION, restarts: !!this.o.restart },
       restarting: this.restarting,
     };

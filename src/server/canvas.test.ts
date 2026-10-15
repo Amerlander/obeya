@@ -6,7 +6,7 @@ import { boundsOf, CARD_SIZE } from '../core/layout';
 import type { RepoConfig, RepoSettings } from '../core/types';
 import { Canvases, CanvasRuntime, startCanvases } from './canvas';
 import { Store } from './db';
-import { artifact, FakeRuntime, gitRepo, identify, noForge, prAdapter, until } from './testing';
+import { artifact, FakeRuntime, gitRepo, identify, noForge, until } from './testing';
 import { git, HERE } from './workspaces';
 
 let dir: string;
@@ -30,7 +30,7 @@ beforeEach(() => {
   const api = repo('api', 'API');
   runtime = new FakeRuntime();
   canvas = new CanvasRuntime(
-    { name: 'Produkt', repos: [{ path: web, clones: 1, adapter: prAdapter() }, { path: api, clones: 1, adapter: prAdapter() }] },
+    { name: 'Produkt', repos: [{ path: web, clones: 1, settings: { land: 'pr' } }, { path: api, clones: 1, settings: { land: 'pr' } }] },
     { store: new Store(':memory:'), home: dir, runtime, forge: noForge },
   );
 });
@@ -466,10 +466,10 @@ describe('the configuration changed while the canvas runs', () => {
   });
 
   test('a new name and a repository new on the canvas apply at once; the workers at work go on', () => {
-    open([{ path: web, adapter: prAdapter() }]);
+    open([{ path: web, settings: { land: 'pr' } }]);
     const { session } = atWork('web', 'A');
     const runtimeOfWeb = canvas.repos[0]!;
-    canvas.apply({ name: 'Plattform', repos: [{ path: web, adapter: prAdapter() }, { path: api, adapter: prAdapter() }] });
+    canvas.apply({ name: 'Plattform', repos: [{ path: web, settings: { land: 'pr' } }, { path: api, settings: { land: 'pr' } }] });
     expect(canvas.board.canvas.name).toBe('Plattform');
     expect(canvas.id).toBe('produkt');
     expect(canvas.board.canvas.repos.map((r) => r.id)).toEqual(['web', 'api']);
@@ -483,13 +483,13 @@ describe('the configuration changed while the canvas runs', () => {
 
   test("a repository whose clones changed restarts its agents once they paused; the other repository's work on", async () => {
     open([
-      { path: web, adapter: prAdapter(), clones: 1 },
-      { path: api, adapter: prAdapter(), clones: 1 },
+      { path: web, settings: { land: 'pr' }, clones: 1 },
+      { path: api, settings: { land: 'pr' }, clones: 1 },
     ]);
     const w = atWork('web', 'W');
     const a = atWork('api', 'A');
     const [webBefore, apiBefore] = canvas.repos;
-    canvas.apply({ name: 'Produkt', repos: [{ path: web, adapter: prAdapter(), clones: 2 }, { path: api, adapter: prAdapter(), clones: 1 }] });
+    canvas.apply({ name: 'Produkt', repos: [{ path: web, settings: { land: 'pr' }, clones: 2 }, { path: api, settings: { land: 'pr' }, clones: 1 }] });
     expect(canvas.pendingRestart()).toMatchObject({ reason: 'config', cards: [w.card.id], repos: ['web'] });
     expect(w.session.inbox.at(-1)).toContain("restart this repository's agents");
     expect(a.session.inbox.join()).not.toContain('restart');
@@ -503,9 +503,9 @@ describe('the configuration changed while the canvas runs', () => {
   });
 
   test('"Jetzt übernehmen" restarts them at once, cutting off the worker in its turn', () => {
-    open([{ path: web, adapter: prAdapter(), clones: 1 }]);
+    open([{ path: web, settings: { land: 'pr' }, clones: 1 }]);
     const w = atWork('web', 'W');
-    canvas.apply({ name: 'Produkt', repos: [{ path: web, adapter: prAdapter(), clones: 1, slots: 1 }] });
+    canvas.apply({ name: 'Produkt', repos: [{ path: web, settings: { land: 'pr' }, clones: 1, slots: 1 }] });
     expect(canvas.pendingRestart()?.cards).toEqual([w.card.id]);
     expect(canvas.restartNow()).toBe(true);
     expect(canvas.pendingRestart()).toBeNull();
@@ -516,11 +516,11 @@ describe('the configuration changed while the canvas runs', () => {
 
   test('a repository that left the canvas stops once its agents paused; its cards stay', async () => {
     open([
-      { path: web, adapter: prAdapter() },
-      { path: api, adapter: prAdapter() },
+      { path: web, settings: { land: 'pr' } },
+      { path: api, settings: { land: 'pr' } },
     ]);
     const a = atWork('api', 'A');
-    canvas.apply({ name: 'Produkt', repos: [{ path: web, adapter: prAdapter() }] });
+    canvas.apply({ name: 'Produkt', repos: [{ path: web, settings: { land: 'pr' } }] });
     expect(canvas.pendingRestart()).toMatchObject({ cards: [a.card.id], repos: ['api'] });
     a.session.emit({ type: 'idle' });
     await until(() => canvas.repos.length === 1);
@@ -530,10 +530,10 @@ describe('the configuration changed while the canvas runs', () => {
   });
 
   test("a restart of all of Obeya that comes meanwhile is what the workers hear of; the repository's restart still goes", async () => {
-    open([{ path: web, adapter: prAdapter(), clones: 1 }]);
+    open([{ path: web, settings: { land: 'pr' }, clones: 1 }]);
     const w = atWork('web', 'W');
     canvas.restartDue({ reason: 'code', deadline: Date.now() + 60_000 });
-    canvas.apply({ name: 'Produkt', repos: [{ path: web, adapter: prAdapter(), clones: 2 }] });
+    canvas.apply({ name: 'Produkt', repos: [{ path: web, settings: { land: 'pr' }, clones: 2 }] });
     expect(w.session.inbox.at(-1)).toContain('new code landed on main');
     expect(w.session.inbox.join()).not.toContain("restart this repository's agents");
     expect(canvas.pendingRestart()?.repos).toEqual(['web']);
@@ -548,27 +548,27 @@ describe('the canvases Obeya serves', () => {
     canvas.shutdown();
     const store = new Store(':memory:');
     const started: string[] = [];
-    const set = new Canvases([{ name: 'Web', repos: [{ path: web, adapter: prAdapter() }] }], { store, home: dir, runtime: new FakeRuntime(), forge: noForge, restartIntervalMs: 5 }, (c) => started.push(c.id));
+    const set = new Canvases([{ name: 'Web', repos: [{ path: web, settings: { land: 'pr' } }] }], { store, home: dir, runtime: new FakeRuntime(), forge: noForge, restartIntervalMs: 5 }, (c) => started.push(c.id));
     let changes = 0;
     set.onChange(() => changes++);
     const keep = set.get('web')!.board.create({ title: 'Bleibt', x: 0, y: 0 });
     set.apply(
       [
-        { name: 'Web', repos: [{ path: web, adapter: prAdapter() }] },
-        { name: 'API', repos: [{ path: api, adapter: prAdapter() }] },
+        { name: 'Web', repos: [{ path: web, settings: { land: 'pr' } }] },
+        { name: 'API', repos: [{ path: api, settings: { land: 'pr' } }] },
       ],
       ['web', 'api'],
     );
     expect(set.all().map((c) => c.id)).toEqual(['web', 'api']);
     expect(started).toEqual(['api']);
-    set.apply([{ name: 'API', repos: [{ path: api, adapter: prAdapter() }] }], ['api']);
+    set.apply([{ name: 'API', repos: [{ path: api, settings: { land: 'pr' } }] }], ['api']);
     // nobody at work on it: it stops at once
     expect(set.all().map((c) => c.id)).toEqual(['api']);
     expect(changes).toBeGreaterThan(1);
     expect(store.cards('web').map((c) => c.id)).toContain(keep.id);
     set.shutdown();
     // the canvas variable the other tests shut down after them
-    canvas = new CanvasRuntime({ repos: [{ path: web, adapter: prAdapter() }] }, { store: new Store(':memory:'), home: dir, runtime: new FakeRuntime(), forge: noForge });
+    canvas = new CanvasRuntime({ repos: [{ path: web, settings: { land: 'pr' } }] }, { store: new Store(':memory:'), home: dir, runtime: new FakeRuntime(), forge: noForge });
   });
 });
 
@@ -603,7 +603,7 @@ test('what the owner writes in a card, or says to the Koordinator without one, r
   fresh();
   const web = repo('web', 'Web');
   canvas.shutdown();
-  canvas = new CanvasRuntime({ repos: [{ path: web, adapter: prAdapter() }] }, { store: new Store(':memory:'), home: dir, runtime, forge: noForge, writingPauseMs: 30 });
+  canvas = new CanvasRuntime({ repos: [{ path: web, settings: { land: 'pr' } }] }, { store: new Store(':memory:'), home: dir, runtime, forge: noForge, writingPauseMs: 30 });
   const learners = () => runtime.sessions.filter((s) => s.spec.tools.some((t) => t.name === 'propose'));
   const done = async () => {
     learners().at(-1)!.emit({ type: 'idle' });

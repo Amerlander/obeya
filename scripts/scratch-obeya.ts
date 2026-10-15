@@ -21,7 +21,7 @@
 // The stage file (JSON; every field but `cards` optional):
 //   {
 //     "name": "Shop", "canvases": ["Website"],
-//     "port": 4480, "dir": "/tmp/obeya-scratch-4480", "adapter": "obeya", "clones": 2, "mainBranch": "master",
+//     "port": 4480, "dir": "/tmp/obeya-scratch-4480", "clones": 2, "mainBranch": "master",
 //     "share": "share.ts", "poolCheckout": true, "slots": 3,
 //     "hosts": [{ "name": "Workhorse", "ssh": "me@workhorse.local", "clones": 2, "slots": 2 }],
 //     "files": { "src/cli.ts": "…" },
@@ -64,7 +64,7 @@
 // and `row` for any other column of `cards` (objects are stored as JSON). Times: "90s", "15m", "2h",
 // "3d" ago. `mainBranch` is the branch the repositories are on (default `main`). `"setup": true` serves no canvas (no configuration, no repository given): the first start,
 // which shows the setup assistant; the repository is still made, for the assistant to pick, and
-// `cards` may be empty. `"adapter": ""` names none: the repository's own (`.obeya/adapter/` among `files`) or the generic one. `share` is the repository's share command as the configuration holds it (a script among
+// `cards` may be empty. The repository runs on its own adapter where `files` hold one (`.obeya/adapter/index.ts`, `.obeya/settings.json`), else on the generic one. `share` is the repository's share command as the configuration holds it (a script among
 // `files`, say); `poolCheckout` makes the repository's checkout a workspace of the pool too
 // (`workspaces` in the configuration), as a pool of clones often has it, with a bare origin in
 // <dir>; with either, the server
@@ -134,7 +134,6 @@ interface Stage {
   canvases?: string[];
   port?: number;
   dir?: string;
-  adapter?: string;
   /** The branch the repositories are on (default `main`). */
   mainBranch?: string;
   /** Clones for the workers, who then work in clones whatever the adapter says: real workers need one each. */
@@ -227,7 +226,7 @@ const further = (stage.canvases ?? []).map((name, i) => {
   run('git', ['init', '-q', '-b', mainBranch], path);
   run('git', ['add', '-A'], path);
   run('git', ['-c', 'user.name=Scratch', '-c', 'user.email=scratch@example.com', 'commit', '-qm', 'init'], path);
-  return { name, repos: [{ path, ...(stage.adapter === '' ? {} : { adapter: stage.adapter ?? 'obeya' }) }] };
+  return { name, repos: [{ path }] };
 });
 // the origin at the same path on each host, which clones it from there
 for (const h of stage.hosts ?? []) {
@@ -274,7 +273,6 @@ if (configured)
           repos: [
             {
               path: repo,
-              ...(stage.adapter === '' ? {} : { adapter: stage.adapter ?? 'obeya' }),
               ...(stage.clones ? { clones: stage.clones } : {}),
               ...(stage.poolCheckout ? { workspaces: [repo] } : {}),
               ...(stage.slots !== undefined ? { slots: stage.slots } : {}),
@@ -289,7 +287,7 @@ if (configured)
       2,
     ),
   );
-const canvasArgs = stage.setup ? [] : configured ? ['--config', configFile] : [repo, ...(stage.adapter === '' ? [] : ['--adapter', stage.adapter ?? 'obeya']), ...(stage.clones ? ['--clones', String(stage.clones)] : [])];
+const canvasArgs = stage.setup ? [] : configured ? ['--config', configFile] : [repo, ...(stage.clones ? ['--clones', String(stage.clones)] : [])];
 const serverArgs = [...canvasArgs, '--port', String(port), ...(supervised ? [] : ['--dev']), ...(idle && canIdle ? ['--idle-workers'] : [])];
 const server = spawn(binary ?? process.execPath, binary ? serverArgs : ['src/server/main.ts', ...serverArgs], {
   cwd: binary ? dir : code,
