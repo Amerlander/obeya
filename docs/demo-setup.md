@@ -28,6 +28,7 @@ opened after the installation (on Windows, `winget` changes the PATH only for ne
 | uv | runs the Python parts (narration, speech recognition) in environments of their own; it fetches Python itself | `brew install uv` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | `winget install --id=astral-sh.uv -e` |
 | A voice | speaking the narration | see below | see below | see below |
 | Speech recognition (Parakeet) | listening back to every clip | fetched by the first render | same | same |
+| poppler (`pdftoppm`) | only for demos that show a PDF (`d.pdfFrom`) | `brew install poppler` | `sudo apt install poppler-utils` | `winget install oschwartz10612.Poppler` |
 
 The browser is looked for in this order: `DEMO_CHROME` (the path of any Chromium-based browser),
 Chrome, Edge, Playwright's own Chromium.
@@ -39,14 +40,14 @@ The voice is chosen in Obeya's settings ("Demos"); "Anhören" plays a sentence i
 - **Piper**, the default: runs on any CPU at about twice real time. Obeya installs it on request
   (about 265 MB, into `voices/` in Obeya's home); without Obeya, `node
   plugin/skills/demo/lib/voices.ts install`.
-- **Qwen3-TTS**: more natural, and it can clone a voice from a clip. It needs a lot of memory: on a
+- **Qwen3-TTS**: more natural, and it can clone a voice from a clip. It is a large download: on a
   Mac with Apple Silicon through MLX (about 5 GB), elsewhere through PyTorch, in practice only
-  with a GPU (about 8 GB). Obeya installs it on request too.
+  with a GPU (about 8 GB); while it speaks it holds several GB of memory. Obeya installs it on request too.
 - **macOS `say`**: on a Mac only, nothing to install, clearly more synthetic.
 - **A hosted service**: Gemini, OpenAI, ElevenLabs or Azure, with the API key in its environment
   variable (`GEMINI_API_KEY`, `OPENAI_API_KEY`, `ELEVENLABS_API_KEY`, `AZURE_SPEECH_KEY`) or in a
   key file named in the settings. ElevenLabs uses `eleven_multilingual_v2`;
-  `DEMO_ELEVENLABS_MODEL` names another (`eleven_v4` reads audio tags such as `[short pause]`).
+  `DEMO_ELEVENLABS_MODEL` names another (`eleven_v3` and `eleven_v4` read audio tags such as `[short pause]`).
 - **Your own**: a command (the text on stdin, the WAV written to `$DEMO_WAV`) or an HTTP endpoint
   (POST `{"text", "language"}` as JSON, audio back). Tick "Das ist meine eigene Stimme" when it
   speaks in your voice; the narration is then in the first person.

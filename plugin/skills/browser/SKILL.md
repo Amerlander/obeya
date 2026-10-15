@@ -59,9 +59,10 @@ node $B input "down:Space" "wait:3000" "up:Space" "eval:document.title"   # hold
 ```
 
 Steps: `click:X,Y`, `dbl:X,Y`, `drag:X1,Y1,X2,Y2`, `wheel:X,Y,DX,DY[,ctrl]`, `key:NAME`,
-`down:NAME`, `up:NAME` (a character, Enter, Escape, Tab, Space, Backspace, arrows), `type:TEXT`,
-`wait:MS`, `shot:FILE.png`, `eval:JS`. Coordinates can be `@<css selector>` (the centre of the first
-match, scrolled into view).
+`down:NAME`, `up:NAME` (a character, Enter, Escape, Tab, Space, Backspace, ArrowUp, ArrowDown,
+ArrowLeft, ArrowRight), `type:TEXT`, `wait:MS`, `shot:FILE.png`, `eval:JS`. `click`, `dbl` and the
+start of `drag` (`drag:@sel,X2,Y2`) also take `@<css selector>` (the centre of the first match,
+scrolled into view); `wheel` and a drag's end take numbers only.
 
 For pages that record audio, `start --fake-mic speech.wav` grants the microphone and plays the WAV
 in a loop as its input. The page has to be a secure context (`https`, or `localhost` /

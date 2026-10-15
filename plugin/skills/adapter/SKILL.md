@@ -29,8 +29,9 @@ Find out, from the files rather than by guessing:
   where the frontend's URL comes from, and how to stop the stack of one workspace (`stack.stop`;
   `stack.keep` where some stacks hold data that must stay).
 - **Logging in and test data**: seed scripts, fixtures, test users in the docs or the seed.
-- **Landing**: the `origin` remote (GitHub: `land: 'pr'`; no remote: `land: 'main'`), whether the
-  default branch is protected, which bots comment on pull requests (`prNoise`).
+- **Landing**: the `origin` remote (Obeya detects `land`: `pr` on GitHub, else `main`; write it
+  only to differ), whether the default branch is protected, which bots comment on pull requests
+  (`prNoise`).
 - **Plan docs**: where the project keeps its plans, if it does: `docs/plan/`, other directories
   under `docs/`, `rfcs/`, `adr/`, `PLAN*.md`, a `TODO.md`. Obeya shows each `*.md` directly in one
   directory (`planDocs.dir`) as a project when it has a checklist under `## Workstreams` (or
@@ -59,7 +60,8 @@ adapter's values. The values go into `.obeya/settings.json`: `setup`, `checks`, 
 `planDocs`, `softPaths`, `workspaces`, `prNoise`, and `demo` with `howToRun`. The
 owner sees and changes them in "Konfiguration" without a line of TypeScript. The module is only
 for the rest: `stack`, `demo.site` or `demo.share`, `canvasId` and `canvasName`; a repository that
-needs none of them has no module. The module imports nothing of Obeya's; its default export is
+needs none of them has no module. A module's `demo` needs a `howToRun` of its own (`''` where the
+recipe is in the settings file, which goes before it). The module imports nothing of Obeya's; its default export is
 the adapter, or `(kit) => adapter` when it needs Obeya's helpers. Files it needs beside it (a
 share script) go into `.obeya/adapter/` too.
 

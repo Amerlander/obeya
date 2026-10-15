@@ -19,8 +19,10 @@ shows them as projects); when one is done, what lasts moves into `docs/design.md
   for trusted clicks, drags, keys held for push-to-talk; `start --fake-mic <wav>` for voice. A
   claude-in-chrome tab is often hidden, which freezes `requestAnimationFrame`: camera flights and
   the unfold never finish there.
-- Voice on this machine: `OBEYA_WHISPER_PYTHON=/Users/sadilek/dev/stimmzwilling/.venv/bin/python`
-  (has `mlx_whisper`; the model is cached).
+- Voice on this machine: Parakeet through uv, the default, needs nothing set. For Whisper instead:
+  `OBEYA_WHISPER_BACKEND=mlx OBEYA_WHISPER_PYTHON=/Users/sadilek/dev/stimmzwilling/.venv/bin/python`
+  (has `mlx_whisper`; the model is cached). That Python alone, without the backend, fails: it has no
+  `onnx_asr` for Parakeet.
 - The Obeya instance for this repo runs on port 4417 with `~/.obeya`. It restarts itself once
   `main` moves to commits that change code, a commit of yours included (workers resume, the page
   reloads); docs-only commits leave it running. Keep tests off it.
@@ -29,8 +31,9 @@ shows them as projects); when one is done, what lasts moves into `docs/design.md
 - UI strings live in one place, `src/ui/strings.ts`, in German and English (two tables of one shape).
   German UI texts and docs call a button "Button" or "Schaltfläche", never "Knopf".
 - An interaction that several kinds of card share (answering questions with comments and one Send
-  button, the conversation history, "Los geht's" while the agent is still working) is built once in
-  shared code and works the same on each of them; no card kind gets its own variant.
+  button, the conversation history, starting („So bauen“, „Übernehmen und starten“) while the agent
+  is still working) is built once in shared code and works the same on each of them; no card kind
+  gets its own variant.
 - Whatever the owner has entered on a card but not sent yet (text, pasted screenshots, picked answer
   options, comments) survives closing the card, switching canvases and a page reload, for every
   input on the card, not only the text field.

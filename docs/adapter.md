@@ -55,6 +55,7 @@ export default (kit) => ({
   },
 
   demo: {
+    howToRun: '', // a module's `demo` needs it; the recipe itself is in .obeya/settings.json
     share: ['bun', `${import.meta.dir}/share.ts`],
   },
 });
@@ -133,11 +134,11 @@ Generic: `['docs/plan/']`.
 
 ### `workspaces` — `'clones'` or `'worktrees'`
 
-Where workers work. `clones`: a pool of full clones per canvas, leased by one card at a time; the
+Where workers work. `clones`: a pool of full clones per repository, leased by one card at a time; the
 number comes from "Konfiguration" (clones to create, or existing ones to use). Use it when every
 workspace runs its own app stack (ports, a database, Docker) or the tools break in a git worktree.
-`worktrees`: a git worktree of the configured checkout per card, as many in parallel as there are
-cards. Generic: `worktrees`. A repository whose configuration names clones (clones to create,
+`worktrees`: a git worktree of the configured checkout per card, any number in parallel unless
+"Konfiguration" gives the repository slots. Generic: `worktrees`. A repository whose configuration names clones (clones to create,
 existing ones, or other machines) works in clones whatever the adapter says.
 
 ### `prNoise` — account names
@@ -229,8 +230,9 @@ included. Which value applies, highest first:
 Like the module, the file is read from the default branch, not from the checkout, so a change
 counts once it is on the default branch: then it applies without a restart (Obeya reads it again
 whenever it reads the default branch anew: a landing, a merged pull request, a fetch). The one
-exception is `workspaces`: clones or worktrees are set up when Obeya starts, so a change to it
-restarts Obeya, as a changed module does.
+exception is `workspaces`: clones or worktrees are set up when a repository's agents start, so a
+change to it restarts that repository's agents once they paused; Obeya and the other repositories
+work on.
 
 The main branch is not in the file, since it says where the file is read from: a fresh clone has
 it from `origin`'s HEAD, and a machine that needs another sets it in "Konfiguration".
@@ -264,11 +266,10 @@ once it is merged. Its files are copied per version into the repository's git di
 (`.git/obeya/adapter-<tree>/`), out of reach of checkouts and `git clean`.
 
 **A change takes effect once it is on the default branch:** when a merged pull request or a card's
-landing brings a new adapter, or a change to it, to the default branch Obeya reads, Obeya restarts
-by itself, as for a configuration saved in "Konfiguration": once no agent is in the middle of a
-step, and the page reloads. Commits that leave `.obeya/adapter/` as it is restart nothing (a
-change to `.obeya/settings.json` applies without a restart, but for `workspaces`). Obeya started by hand without its supervisor (`--dev`) cannot restart itself: its
-log says so, and the change takes effect at the next start.
+landing brings a new adapter, or a change to it, to the default branch Obeya reads, the new version
+takes the old one's place at once, without a restart. Only where it changes where the workers work
+(clones or worktrees) do that repository's agents restart, once they paused; the others work on.
+A change to `.obeya/settings.json` applies the same way.
 
 ## Mistakes
 
@@ -313,9 +314,7 @@ start. "Aufgabe zum Beheben anlegen" beside a problem has Obeya create a task th
 2. **The commands work.** Run `setup` and each of `checks` in a fresh clone; start the stack as
    `stack` and `howToRun` say, and open the frontend.
 3. **A demo comes out of `howToRun`.** Record one with the demo skill, following the recipe and
-   nothing else. This is what the setup skill does before it hands over.
-4. **Before it is merged, on a canvas.** Name the module in the checkout as the repository's
-   adapter: `"adapter": ".obeya/adapter/index.ts"` (relative to the repository) in
-   `canvases.json`, or tell Obeya. Once Obeya restarts with it, a card started gets its
-   brief from it. Remove the entry again once the adapter is merged, so the default branch's
-   version counts.
+   nothing else. This is what the adapter skill does before it hands over.
+4. **On a canvas, once it is merged.** A canvas reads the adapter from the default branch only, so
+   steps 1–3 are what can be tried before the merge. Once it is on the default branch, the next
+   card started gets its brief from it.

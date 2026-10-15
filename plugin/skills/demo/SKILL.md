@@ -151,7 +151,7 @@ clears), `drag(from, to, ms?)` (onto an element or a point, the pointer moving a
 at the edge of a scrolling list or the window, that follows scrolling; cleared at each
 scene and by `clearHighlights()`; not inside iframes; several in one scene all stay bright, each
 with its own label, and only the rest of the page is dimmed), `untilSpoken(fraction)` to time an action
-to the narration, `pdfFrom(button, name)` (PDF from a new-tab button → PNG pages),
+to the narration, `pdfFrom(button, name)` (PDF from a new-tab button → PNG pages; needs `pdftoppm` from poppler),
 `showImage(png, top, caption)`, `panImage(top)`, `hideImage`, `skip(fn)` (runs a wait and cuts
 it from the video, see above), `wait`, `evaluate(fn, arg?)` (`page.evaluate` that fails
 once the page has not answered for 20 s), and `d.page` for raw Playwright. Keep the recording on the app's own pages: other material (a results page, a report)
@@ -163,7 +163,7 @@ goes on screen with `showImage`, since a `goto` to another origin and back broke
 cd ~/demos/<repo-dir>-<slug> && node demo.ts --narration       # only the narration, cached
 cd ~/demos/<repo-dir>-<slug> && node demo.ts --dry              # only the scenes, no video
 cd ~/demos/<repo-dir>-<slug> && node demo.ts                    # the voice of the settings
-cd ~/demos/<repo-dir>-<slug> && DEMO_VOICE=piper node demo.ts   # another voice, into piper/
+cd ~/demos/<repo-dir>-<slug> && DEMO_VOICE=say node demo.ts     # another voice, into say/
 ```
 
 Start the narration as soon as the `say` texts are written, while you still script the scenes
@@ -194,16 +194,16 @@ is not installed stops the render with how to install it: from the configuration
 voice; `DEMO_VOICE=<path>.wav` clones that clip with Qwen3-TTS (its exact transcript beside it as
 `.txt`). Clips are cached by voice and text, so re-runs after a
 visual fix skip synthesis. Each clip is transcribed back with Parakeet (on the CPU, as Obeya hears
-voice commands) and synthesised again (up to three takes) when it does not
+voice commands) and synthesised again (up to three takes, two with a hosted service) when it does not
 match. Listening back can be off in the settings ("Erzählung gegenhören"), and a
 recognition that cannot be loaded turns it off for that render; then the review table says "not heard
 back" and the report page "nicht gegengehört": name that in the report's `findings`. A voice that
-loads a large model (Qwen3-TTS, the owner's command) takes 5–10 GB, so only one such
+loads a large model (Qwen3-TTS, the owner's command) takes 7–12 GB with Whisper, so only one such
 demo loads it at a time (lock `~/.cache/demo-skill/tts.lock`); the others log "waiting for it"
 and wait, which is expected, not a hang. Under Obeya (`OBEYA_URL` set), Obeya holds Qwen3-TTS
 loaded for all demos and for about 5 minutes after the last clip: the narration then logs
-"synthesised by Obeya", parallel demos take turns clip by clip, and only listening back waits for
-the lock. Recording uses the local Chrome, else Edge, else
+"synthesised by Obeya", parallel demos take turns clip by clip, and only listening back with Whisper waits
+for the lock (Parakeet takes none). Recording uses the local Chrome, else Edge, else
 Playwright's own Chromium (`DEMO_CHROME` names another; headless screencast, 1440×900); it runs
 on macOS, Linux and Windows. A failing scene (or `login`, `open`) stops the run with the page's
 `URL:`, a `Screenshot:` of it (`.work/failure.png`) and the `Cause:`, Playwright's message with

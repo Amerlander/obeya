@@ -61,14 +61,14 @@ one).
 On the canvas, double-click to write a task, then start its agent ("Start agent"). The card
 shows what the agent is doing; when it waits for you ("need you" in the top bar), open it to
 answer a question or watch the demo and approve it ("Approve"). Hold Space to say what to do
-instead of typing; `?` in the top bar lists every key.
+instead of typing; `?` lists every key.
 
 ## From source
 
 Obeya is developed this way: started from a checkout, it updates itself whenever the checkout
 moves to new code.
 
-- [Bun](https://bun.sh) 1.3 or newer.
+- [Bun](https://bun.sh) 1.3.14 or newer (on Linux, older 1.3 releases can hang the canvas).
 - [Claude Code](https://claude.com/claude-code), installed and logged in. Obeya starts it for every agent;
   the agents run on your own login.
 - git, and the [GitHub CLI](https://cli.github.com) (`gh`, logged in) for repositories whose work
@@ -109,7 +109,8 @@ it, and `bun start` while the app runs says where it runs. An Obeya older than t
 ran on the home (an app not yet updated after a newer checkout) leaves the database alone and
 says to update. Workers run on the Claude Code login of the machine.
 The canvases and their repositories can be seen and changed in the app ("Configuration") or by
-telling Obeya; saving writes `canvases.json` and restarts Obeya with it.
+telling Obeya; saving writes `canvases.json`, and the running canvases take it over at once
+(started with repositories on the command line, Obeya restarts with the file).
 
 Voice runs Parakeet (`onnx-asr`) in a sidecar through `uv run`, or in a Python of your own with that
 package (`OBEYA_WHISPER_PYTHON=/path/to/python`). `OBEYA_WHISPER_BACKEND` chooses Whisper instead:
