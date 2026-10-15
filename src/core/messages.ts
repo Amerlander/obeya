@@ -226,6 +226,10 @@ const de = {
     from: (repo: string, why: string, cards: string) => `Aus der Arbeitsrückschau für ${repo}. ${why} Karten: ${cards}.`,
     done: (repo: string, made: number) =>
       `Arbeitsrückschau für ${repo}: ${made ? `${made === 1 ? 'ein Vorschlag' : `${made} Vorschläge`}, auf der Leinwand und bei Obeya.` : 'nichts, was sich auf mehreren Karten wiederholt.'}`,
+    settings: { checks: 'Prüfungen', setup: 'Einrichten', softPaths: 'Weiche Pfade', howToRun: 'App für die Demo starten' },
+    onMachine: (setting: string, repo: string) => `„${setting}“ für ${repo} gilt jetzt auf diesem Rechner.`,
+    committed: (setting: string, repo: string, branch: string) => `„${setting}“ für ${repo} steht jetzt in .obeya/settings.json auf ${branch} und gilt für alle.`,
+    opened: (setting: string, repo: string, pr: string) => `„${setting}“ für ${repo}: Pull Request geöffnet, ${pr}. Bis er gemergt ist, gilt der Wert auf diesem Rechner.`,
   },
   share: {
     share: 'Teilen: Die Seite geht online.',
@@ -506,6 +510,10 @@ const en: Messages = {
     from: (repo: string, why: string, cards: string) => `From the work retrospective for ${repo}. ${why} Cards: ${cards}.`,
     done: (repo: string, made: number) =>
       `Work retrospective for ${repo}: ${made ? `${made === 1 ? 'one proposal' : `${made} proposals`}, on the canvas and with Obeya.` : 'nothing that recurs on several cards.'}`,
+    settings: { checks: 'Checks', setup: 'Setup', softPaths: 'Soft paths', howToRun: 'Run the app for a demo' },
+    onMachine: (setting: string, repo: string) => `“${setting}” for ${repo} now applies on this machine.`,
+    committed: (setting: string, repo: string, branch: string) => `“${setting}” for ${repo} is now in .obeya/settings.json on ${branch} and applies to everyone.`,
+    opened: (setting: string, repo: string, pr: string) => `“${setting}” for ${repo}: pull request opened, ${pr}. Until it is merged, the value applies on this machine.`,
   },
   share: {
     share: 'Share: the page goes online.',

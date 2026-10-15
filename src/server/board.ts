@@ -29,6 +29,9 @@ import {
   type Mock,
   type NewCard,
   type PreferenceState,
+  type ProposedSetting,
+  type SettingProposal,
+  type SettingProposalState,
   type PrReviewEntry,
   type ProjectHistory,
   type Proposal,
@@ -551,6 +554,33 @@ export class Board {
     return this.store.retroProposals(this.canvas.id, repo !== this.home ? repo : null);
   }
 
+  /** A value for a repository's setting the Arbeitsrückschau proposes: it waits in Obeya's sheet beside the rules. */
+  proposeSetting(p: { repo: string; field: ProposedSetting; value: string | string[]; basis: string; cards: string[] }): number {
+    this.checkRepo(p.repo);
+    const id = this.store.addSettingProposal(this.canvas.id, { ...p, basis: p.basis.slice(0, 2000) });
+    this.changed();
+    return id;
+  }
+
+  /** The settings the Arbeitsrückschau proposed, with what became of them: those of a repository, or all. */
+  settingProposals(repo?: string) {
+    return this.store.settingProposals(this.canvas.id, repo);
+  }
+
+  /** The waiting setting proposal; a BadRequest where it was decided meanwhile or never was. */
+  settingProposal(id: number): SettingProposal {
+    const p = this.settingProposals().find((x) => x.id === id && x.state === 'proposed');
+    if (!p) throw new BadRequest('unknownSetting', 'no such setting proposal');
+    const { state: _, ...rest } = p;
+    return rest;
+  }
+
+  /** The owner took a setting proposal (on this machine, or into the repository for everyone, with `value`) or rejected it; a rejected one is kept, so it does not come back. */
+  decideSetting(id: number, state: Exclude<SettingProposalState, 'proposed'>, value?: string | string[]) {
+    if (!this.store.decideSettingProposal(this.canvas.id, id, state, value)) throw new BadRequest('unknownSetting', 'no such setting proposal');
+    this.changed();
+  }
+
   addFriction(repo: string, cardId: string, notes: FrictionNote[]) {
     if (notes.length) this.store.addFriction(this.canvas.id, repo, cardId, notes);
   }
@@ -982,11 +1012,18 @@ export class Board {
     const reshare = this.reshare();
     const pools = this.clonePools();
     const planDirs = this.planDirs(all);
+    const settingProposals = this.settingProposals()
+      .filter((p) => p.state === 'proposed')
+      .map(({ state: _, ...p }) => {
+        const now = this.settingsNow?.(p.repo)?.[p.field];
+        return now === undefined ? p : { ...p, now };
+      });
     this.cache = {
       canvas: this.canvas,
       items,
       groups: this.store.groups(this.canvas.id).map(toGroup),
       preferences: this.store.preferences(this.canvas.id, ['proposed', 'active']),
+      ...(settingProposals.length ? { settingProposals } : {}),
       talk: this.store.talk(this.canvas.id, SHEET_TALK, true),
       ...(pools.length ? { workspaces: pools } : {}),
       ...(reshare ? { reshare } : {}),
@@ -1058,6 +1095,15 @@ export class Board {
    */
   showPools(pools: () => ClonePool[]) {
     this.pools = pools;
+    this.changed();
+  }
+
+  /** The repositories' settings a setting proposal shows beside its value, as they apply now (`showSettings`). */
+  private settingsNow?: (repo: string) => Record<ProposedSetting, string | string[]> | undefined;
+
+  /** Who says how the repositories' settings stand; saving them reads the plan docs again (`docsChanged`), so the cache holds. */
+  showSettings(now: (repo: string) => Record<ProposedSetting, string | string[]> | undefined) {
+    this.settingsNow = now;
     this.changed();
   }
 

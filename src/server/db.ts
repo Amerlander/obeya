@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { AnswerFile, AnswerRef, CardEvent, CardKind, CardState, Mock, Need, Preference, PreferenceState, Spot, Talk } from '../core/types';
+import type { AnswerFile, AnswerRef, CardEvent, CardKind, CardState, Mock, Need, Preference, PreferenceState, ProposedSetting, SettingProposal, SettingProposalState, Spot, Talk } from '../core/types';
 
 export interface CardRow {
   id: string;
@@ -323,6 +323,19 @@ export const MIGRATIONS = [
   `ALTER TABLE events ADD COLUMN unread INTEGER;
    ALTER TABLE events ADD COLUMN read_after INTEGER;
    ALTER TABLE cards ADD COLUMN unheard TEXT;`,
+  // a value for a repository's setting the Arbeitsrückschau proposes, and where the owner took it
+  `CREATE TABLE setting_proposals (
+     id INTEGER PRIMARY KEY,
+     canvas_id TEXT NOT NULL REFERENCES canvases(id),
+     repo TEXT NOT NULL,
+     field TEXT NOT NULL,
+     value TEXT NOT NULL,
+     basis TEXT NOT NULL,
+     cards TEXT NOT NULL,
+     state TEXT NOT NULL DEFAULT 'proposed',
+     created_at TEXT NOT NULL,
+     decided_at TEXT
+   );`,
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, unread, read_after AS readAfter';
@@ -965,6 +978,43 @@ export class Store {
         .query(`SELECT COALESCE(title, '') AS title, retro, COALESCE(state, 'planned') AS state, deleted_at FROM cards WHERE canvas_id = $c AND retro IS NOT NULL AND repo IS $repo ORDER BY created_at, rowid`)
         .all({ c: canvasId, repo }) as { title: string; retro: string; state: CardState; deleted_at: string | null }[]
     ).map(({ deleted_at, ...r }) => ({ ...r, dismissed: !!deleted_at && r.state === 'proposal' }));
+  }
+
+  addSettingProposal(canvasId: string, p: Omit<SettingProposal, 'id' | 'cards'> & { cards: string[] }): number {
+    return (
+      this.db
+        .query(
+          `INSERT INTO setting_proposals (canvas_id, repo, field, value, basis, cards, created_at)
+           VALUES ($c, $repo, $field, $value, $basis, $cards, $now) RETURNING id`,
+        )
+        .get({ c: canvasId, repo: p.repo, field: p.field, value: JSON.stringify(p.value), basis: p.basis, cards: JSON.stringify(p.cards), now: now() }) as { id: number }
+    ).id;
+  }
+
+  /** The settings the Arbeitsrückschau proposed, oldest first, with what became of them: those of a repository, or all; the cards they rest on with their titles. */
+  settingProposals(canvasId: string, repo?: string): (SettingProposal & { state: SettingProposalState })[] {
+    const rows = this.db
+      .query(`SELECT * FROM setting_proposals WHERE canvas_id = $c AND ($repo IS NULL OR repo = $repo) ORDER BY id`)
+      .all({ c: canvasId, repo: repo ?? null }) as { id: number; repo: string; field: ProposedSetting; value: string; basis: string; cards: string; state: SettingProposalState }[];
+    const title = this.db.query(`SELECT COALESCE(title, '') AS title FROM cards WHERE id = $id`);
+    return rows.map((r) => ({
+      id: r.id,
+      repo: r.repo,
+      field: r.field,
+      value: JSON.parse(r.value) as string | string[],
+      basis: r.basis,
+      cards: (JSON.parse(r.cards) as string[]).map((id) => ({ id, title: (title.get({ id }) as { title: string } | null)?.title ?? '' })),
+      state: r.state,
+    }));
+  }
+
+  /** Decides a waiting setting proposal, with the value the owner took; whether one waited. */
+  decideSettingProposal(canvasId: string, id: number, state: Exclude<SettingProposalState, 'proposed'>, value?: string | string[]): boolean {
+    return (
+      this.db
+        .query(`UPDATE setting_proposals SET state = $state, decided_at = $now, value = COALESCE($value, value) WHERE canvas_id = $c AND id = $id AND state = 'proposed'`)
+        .run({ c: canvasId, id, state, now: now(), value: value === undefined ? null : JSON.stringify(value) }).changes > 0
+    );
   }
 
   // ---------------------------------------------------------------- settings

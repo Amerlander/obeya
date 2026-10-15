@@ -593,6 +593,14 @@ export function serve(
         }),
       },
       '/api/c/:canvas/preferences/:id/reject': { POST: on((c, req) => click(c, c.rejectRule(Number(req.params.id)))) },
+      // a value for a repository's setting the Arbeitsrückschau proposed: taken on this machine or for everyone (`where`), or rejected
+      '/api/c/:canvas/setting-proposals/:id/take': {
+        POST: on(async (c, req) => {
+          const { where, value } = (await req.json().catch(() => ({}))) as { where?: unknown; value?: unknown };
+          return click(c, c.takeSetting(Number(req.params.id), where, value) ?? {});
+        }),
+      },
+      '/api/c/:canvas/setting-proposals/:id/reject': { POST: on((c, req) => click(c, c.rejectSetting(Number(req.params.id)))) },
       // "Erneut teilen" for many outdated pages at once: `count` of them, the newest demos first, or all (null)
       '/api/c/:canvas/reshare': {
         POST: on(async (c, req) => {

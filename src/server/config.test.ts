@@ -329,6 +329,58 @@ describe("Obeya's configuration", () => {
     expect(applied).toBe(1);
   });
 
+  test('a setting the Arbeitsrückschau proposed, taken on this machine: it joins the values set there', () => {
+    mkdirSync(join(dir, 'home'));
+    writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings: { checks: ['bun test'], demo: { required: true } } }] }]));
+    const c = config('file', []);
+    expect(c.takeSetting(web, 'howToRun', 'bun dev --port 4000', 'machine')).toBeNull();
+    expect(readConfigFile(file)).toEqual([{ repos: [{ path: web, settings: { checks: ['bun test'], demo: { required: true, howToRun: 'bun dev --port 4000' } } }] }]);
+    expect(c.takeSetting(web, 'checks', ['bun run typecheck'], 'machine')).toBeNull();
+    expect(readConfigFile(file)[0]!.repos[0]!.settings!.checks).toEqual(['bun run typecheck']);
+    // nothing went into the repository
+    expect(existsSync(join(web, '.obeya/settings.json'))).toBe(false);
+    expect(taken).toHaveLength(2);
+  });
+
+  test('a setting the Arbeitsrückschau proposed, taken for everyone where work lands on main: that value alone is committed, and applies here too', () => {
+    mkdirSync(join(dir, 'home'));
+    writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings: { checks: ['bun test'], demo: { howToRun: 'npm start' } } }] }]));
+    const c = config('file', []);
+    const done = c.takeSetting(web, 'howToRun', 'bun dev --port 4000', 'repository');
+    expect(done).toMatchObject({ branch: 'main', committed: git(web, 'rev-parse', 'main').trim() });
+    expect(JSON.parse(git(web, 'show', 'main:.obeya/settings.json'))).toEqual({ demo: { howToRun: 'bun dev --port 4000' } });
+    expect(git(web, 'log', '-1', '--format=%s', 'main').trim()).toBe('Obeya settings for everyone: demo');
+    // this machine's other value for it went, so the repository's applies here; its checks stay its own
+    expect(readConfigFile(file)).toEqual([{ repos: [{ path: web, settings: { checks: ['bun test'] } }] }]);
+    expect(c.view().resolved[0]!.repos[0]!.values.demo.howToRun).toEqual({ value: 'bun dev --port 4000', source: 'repository' });
+    expect(applied).toBe(1);
+  });
+
+  test('a setting the Arbeitsrückschau proposed, taken for everyone where work goes out as pull requests: one is opened, and the value applies here meanwhile', () => {
+    mkdirSync(join(dir, 'home'));
+    const origin = join(dir, 'origin.git');
+    git(dir, 'clone', '--quiet', '--bare', web, origin);
+    git(web, 'remote', 'add', 'origin', origin);
+    git(web, 'fetch', '--quiet', 'origin');
+    const settings = { land: 'pr' as const };
+    writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings }] }]));
+    const opened: { title: string; head: string }[] = [];
+    const c = new Config({
+      file,
+      source: 'file',
+      started: [],
+      store,
+      running: () => [],
+      server: { port: 4417, home: dir, permissionMode: 'auto' },
+      forge: { ...noForge, open: (_cwd, pr) => (opened.push(pr), 'https://github.com/acme/web/pull/8') },
+      apply: () => {},
+    });
+    expect(c.takeSetting(web, 'setup', 'bun install', 'repository')).toEqual({ pr: 'https://github.com/acme/web/pull/8' });
+    expect(opened).toMatchObject([{ title: 'Obeya settings for everyone: setup' }]);
+    expect(JSON.parse(git(origin, 'show', `${opened[0]!.head}:.obeya/settings.json`))).toEqual({ setup: 'bun install' });
+    expect(readConfigFile(file)).toEqual([{ repos: [{ path: web, settings: { land: 'pr', setup: 'bun install' } }] }]);
+  });
+
   test("a value the file held already stays this machine's when someone else changes the file", () => {
     mkdirSync(join(dir, 'home'));
     writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings: { checks: ['a'], setup: 'x' } }] }]));
@@ -456,6 +508,54 @@ describe('the configuration over HTTP', () => {
       endpoint.stop(true);
     }
   }, 60_000);
+
+  test('a setting the Arbeitsrückschau proposed waits in the snapshot with its cards and the value now, and is taken where the owner says', async () => {
+    mkdirSync(join(dir, 'home'));
+    writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings: { checks: ['bun test'] } }] }]));
+    const c = config('file', []);
+    const live = new CanvasRuntime({ repos: [{ path: web }] }, { store, home: dir, runtime: new FakeRuntime(), forge: noForge, config: c, settings: (p) => c.repoSettings(p) });
+    const at = serve([live], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, c);
+    const post = async (path: string, body?: unknown) => {
+      const res = await fetch(new URL(path, at.url), { method: 'POST', ...(body === undefined ? {} : { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } }) });
+      return { status: res.status, body: res.status === 204 ? null : ((await res.json()) as Record<string, unknown>) };
+    };
+    try {
+      const b = live.board;
+      const [a1, a2] = [b.create({ title: 'Login-Seite', x: 0, y: 0 }), b.create({ title: 'Warenkorb', x: 0, y: 0 })];
+      const run = b.proposeSetting({ repo: 'web', field: 'howToRun', value: 'bun dev --port 4000; log in as demo@example.com', basis: 'Beide suchten den Start der App.', cards: [a1.id, a2.id] });
+      const checks = b.proposeSetting({ repo: 'web', field: 'checks', value: ['bun test', 'bun run typecheck'], basis: 'Beide vergaßen den Typcheck.', cards: [a1.id, a2.id] });
+      const setup = b.proposeSetting({ repo: 'web', field: 'setup', value: 'bun install', basis: '…', cards: [a1.id, a2.id] });
+      expect(b.snapshot().settingProposals).toEqual([
+        { id: run, repo: 'web', field: 'howToRun', value: 'bun dev --port 4000; log in as demo@example.com', basis: 'Beide suchten den Start der App.', cards: [{ id: a1.id, title: 'Login-Seite' }, { id: a2.id, title: 'Warenkorb' }], now: '' },
+        expect.objectContaining({ id: checks, now: ['bun test'] }),
+        expect.objectContaining({ id: setup, now: '' }),
+      ]);
+      const notices: string[] = [];
+      b.onNotice((n) => notices.push(n.text));
+
+      expect((await post(`/api/c/web/setting-proposals/${run}/take`, { where: 'nowhere' })).status).toBe(400);
+      // on this machine, in the owner's words
+      expect((await post(`/api/c/web/setting-proposals/${run}/take`, { where: 'machine', value: ' bun dev --port 4100 ' })).status).toBe(200);
+      expect(c.repoSettings(web)).toEqual({ checks: ['bun test'], demo: { howToRun: 'bun dev --port 4100' } });
+      expect(notices.at(-1)).toBe('„App für die Demo starten“ für web gilt jetzt auf diesem Rechner.');
+      // for everyone: committed on main, that value alone
+      expect((await post(`/api/c/web/setting-proposals/${checks}/take`, { where: 'repository' })).body).toMatchObject({ branch: 'main' });
+      expect(JSON.parse(git(web, 'show', 'main:.obeya/settings.json'))).toEqual({ checks: ['bun test', 'bun run typecheck'] });
+      expect(c.repoSettings(web)).toEqual({ demo: { howToRun: 'bun dev --port 4100' } });
+      expect(notices.at(-1)).toBe('„Prüfungen“ für web steht jetzt in .obeya/settings.json auf main und gilt für alle.');
+      expect((await post(`/api/c/web/setting-proposals/${setup}/reject`)).status).toBe(204);
+      expect(b.snapshot().settingProposals).toBeUndefined();
+      expect(b.settingProposals().map((p) => [p.field, p.state, p.value])).toEqual([
+        ['howToRun', 'machine', 'bun dev --port 4100'],
+        ['checks', 'repository', ['bun test', 'bun run typecheck']],
+        ['setup', 'rejected', 'bun install'],
+      ]);
+      expect(await post(`/api/c/web/setting-proposals/${setup}/take`, { where: 'machine' })).toMatchObject({ status: 400, body: { code: 'unknownSetting' } });
+    } finally {
+      at.stop(true);
+      live.shutdown();
+    }
+  });
 
   test('a configuration command of the Koordinator saves it after the undo window', () => {
     canvas.run({ do: 'configure', canvases: [{ name: 'Neu', repos: [{ path: web }] }] });

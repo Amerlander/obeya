@@ -34,10 +34,11 @@ test('an idea decided as a project keeps the mark, and a card still being cut is
     ]);
     s.update(cut!.id, { queue: JSON.stringify({ cutting: true }) });
     s.db.close();
-    // the store as it stood before the migration: without the columns it and the later ones add
+    // the store as it stood before the migration: without the columns and tables it and the later ones add
     const at = MIGRATIONS.findIndex((m) => m.includes('ADD COLUMN becomes_project'));
     const before = new Database(path);
     for (const [, table, column] of MIGRATIONS.slice(at).join('\n').matchAll(/ALTER TABLE (\w+) ADD COLUMN (\w+)/g)) before.run(`ALTER TABLE ${table} DROP COLUMN ${column}`);
+    for (const [, table] of MIGRATIONS.slice(at).join('\n').matchAll(/CREATE TABLE (\w+)/g)) before.run(`DROP TABLE ${table}`);
     before.run(`PRAGMA user_version = ${at}`);
     before.close();
     const after = new Store(path);

@@ -292,6 +292,9 @@ button.pill:hover { box-shadow: var(--lift); }
 .proposals li { background: color-mix(in srgb, var(--proposal) 9%, var(--chip)); border-left: 3px solid var(--proposal); }
 .proposals li:hover { background: color-mix(in srgb, var(--proposal) 9%, var(--chip)); }
 .proposals .pref-text { cursor: default; font-weight: 600; }
+.proposals .setting-value { flex-basis: 100%; margin: 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; background: var(--card); border-radius: 2px; padding: 6px 8px; }
+.proposals.prefs .setting textarea { flex-basis: 100%; font: 12px/1.45 var(--mono); }
+.prefs .pref-actions .take-on { align-self: center; color: var(--muted); font-size: 12px; }
 .kpill .n.prop { background: var(--proposal); }
 /* an answer waits in Obeya's sheet: orange, like everything that waits for the owner */
 .kpill .n.unread { background: var(--waiting); }

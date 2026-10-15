@@ -9,7 +9,7 @@ import { repoName } from '../adapters/generic';
 import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
 import type { Language } from '../core/locale';
-import { AGENT_DEFAULTS, agentListens, type AgentRole, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, type PendingRestart, plannableAsProject, type RepoConfig, type RepoRef, repoShape, type RepoSettings, type SharedSettings, type SpotInput } from '../core/types';
+import { AGENT_DEFAULTS, agentListens, type AgentRole, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, type PendingRestart, plannableAsProject, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, type SharedSettings, type SpotInput } from '../core/types';
 import { BadRequest, Board, replyNote, type StoredIdea } from './board';
 import { type Command, Commander } from './commands';
 import type { Config } from './config';
@@ -185,7 +185,9 @@ export class CanvasRuntime {
       board,
       runtime: deps.runtime,
       pathFor: (repo) => (this.repos.find((r) => r.ref.id === repo) ?? this.repos[0]!).read.path,
+      settingsFor: this.settingsNow,
     });
+    board.showSettings(this.settingsNow);
     // the Koordinator needs the workers, and the workers ask it: it is set right after them
     resolved.config.repos.forEach((_, i) => this.addRepo(this.startRepo(resolved, i)));
     board.showPools(() =>
@@ -264,6 +266,12 @@ export class CanvasRuntime {
   }
 
   private preferences = () => this.board.preferencesText();
+
+  /** The settings of a repository the Arbeitsrückschau may propose a value for, as they apply now. */
+  private settingsNow = (repo: string): Record<ProposedSetting, string | string[]> | undefined => {
+    const a = this.repos.find((r) => r.ref.id === repo)?.adapter;
+    return a && { checks: a.checks ?? [], setup: a.setup ?? '', softPaths: a.softPaths, howToRun: a.demo?.howToRun ?? '' };
+  };
 
   private imageFiles = (ids: string[] = []) => ids.flatMap((i) => this.images.path(i) ?? []);
 
@@ -780,6 +788,29 @@ export class CanvasRuntime {
   rejectRule(id: number) {
     this.board.rejectProposal(id);
     this.fileRules();
+  }
+
+  /**
+   * The owner takes a setting the Arbeitsrückschau proposed, as it is or with their `value`: on
+   * this machine, or into the repository's `.obeya/settings.json` for everyone (`Config.takeSetting`).
+   */
+  takeSetting(id: number, where: unknown, value?: unknown): SettingsShared | null {
+    if (where !== 'machine' && where !== 'repository') throw new BadRequest('invalid', 'where is machine or repository');
+    const p = this.board.settingProposal(id);
+    const v = value === undefined ? p.value : typeof p.value === 'string' ? (typeof value === 'string' && value.trim() ? value.trim() : null) : Array.isArray(value) ? value.map(String).map((x) => x.trim()).filter(Boolean) : null;
+    if (v === null || (Array.isArray(v) && !v.length)) throw new BadRequest('invalid', 'the value is missing');
+    const r = this.repos.find((x) => x.ref.id === p.repo);
+    if (!r || !this.deps.config) throw new BadRequest('invalid', 'no configuration to set it in');
+    const done = this.deps.config.takeSetting(resolve(r.config.path), p.field, v, where);
+    this.board.decideSetting(id, where, v);
+    const m = this.board.t.retro;
+    const name = m.settings[p.field];
+    this.board.notify({ text: !done ? m.onMachine(name, r.ref.name) : 'pr' in done ? m.opened(name, r.ref.name, done.pr) : m.committed(name, r.ref.name, done.branch) });
+    return done;
+  }
+
+  rejectSetting(id: number) {
+    this.board.decideSetting(id, 'rejected');
   }
 
   /**

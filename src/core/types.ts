@@ -577,6 +577,8 @@ export interface CanvasSnapshot {
   /** The canvas's groups, the oldest first. */
   groups: Group[];
   preferences: Preference[];
+  /** The settings the Arbeitsrückschau proposes for the canvas's repositories, waiting for the owner; none when none waits. */
+  settingProposals?: SettingProposal[];
   /** The owner's latest exchanges with the Koordinator without an open card (those with one are in its log). */
   talk: Talk[];
   /** The clone pools of the repositories that use clones; none when no repository does. */
@@ -678,6 +680,37 @@ export interface Preference {
 }
 
 export type PreferenceState = 'proposed' | 'active' | 'rejected' | 'filed';
+
+/** The settings of a repository the Arbeitsrückschau may propose a value for, in the dialog's order: what friction on workers' runs shows missing. */
+export const PROPOSED_SETTINGS = ['checks', 'setup', 'softPaths', 'howToRun'] as const;
+export type ProposedSetting = (typeof PROPOSED_SETTINGS)[number];
+
+/** A value for a setting of a repository (`RepoSettings`) that the Arbeitsrückschau proposes, with the cards it rests on. */
+export interface SettingProposal {
+  id: number;
+  /** The repository's id. */
+  repo: string;
+  field: ProposedSetting;
+  /** A command or recipe for `setup` and `howToRun`, a list for `checks` and `softPaths`. */
+  value: string | string[];
+  /** One sentence for the owner: what went wrong on the cards it rests on. */
+  basis: string;
+  cards: { id: string; title: string }[];
+  /** The setting's value as it applies now, in the snapshot. */
+  now?: string | string[];
+}
+
+/**
+ * What became of a setting proposal: waiting, set on this machine, put into the repository's
+ * `.obeya/settings.json` for everyone, or rejected.
+ */
+export type SettingProposalState = 'proposed' | 'machine' | 'repository' | 'rejected';
+
+/** `value` as this machine's settings for the repository hold it (`RepoSettings`). */
+export function settingPatch(field: ProposedSetting, value: string | string[] | undefined): RepoSettings {
+  if (field === 'howToRun') return { demo: { ...(value !== undefined ? { howToRun: value as string } : {}) } };
+  return { [field]: value } as RepoSettings;
+}
 
 export interface NewCard {
   title: string;
@@ -821,6 +854,7 @@ export type ErrorCode =
   /** The cloud service for voice in failed or refused the check's sentence (the detail says what it said). */
   | 'voiceCloud'
   | 'unknownPreference'
+  | 'unknownSetting'
   /** An uploaded screenshot is no image the agents read, or too large. */
   | 'imageType'
   | 'imageTooLarge'

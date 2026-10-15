@@ -1717,7 +1717,8 @@ the owner's language (`src/core/locale.ts`).
   the CLAUDE.md of a repository; `target` in `preferences`), which the owner may switch. The owner
   accepts one, edits it before accepting, or rejects it; an accepted change takes the place of its
   rule. Rejected proposals are kept (state `rejected` in `preferences`), so the learner can see
-  them. A rule accepted for a CLAUDE.md (state `filed`) goes into its repository's open card
+  them. Values for a repository's settings the Arbeitsrückschau proposes stand under the rules in
+  the same section (see Arbeitsrückschau). A rule accepted for a CLAUDE.md (state `filed`) goes into its repository's open card
   „CLAUDE.md ergänzen“ (planned and not yet with the Koordinator; the setting `claude_md_card:<repo>`
   names it), or into a new one when there is none; so does one the owner gives outright for a
   repository, by voice or in the sheet's field for a new rule, which has the same „Gehört in“; its worker writes the rules into the CLAUDE.md
@@ -1734,7 +1735,7 @@ the owner's language (`src/core/locale.ts`).
   Rückschau, with its parts (a read-only reading session, a count in the canvas's settings,
   proposals on the usual way), but a different source (the workers' transcripts, not the owner's
   words), beat (finished cards, not the owner's inputs), place (the repository of the friction, not
-  the home repository) and result (feature cards, not rules). Two stages:
+  the home repository) and result (feature cards and values for settings, not only rules). Two stages:
   - When a card's work ends (landed, closed without a change, a prototype discarded or built, or a
     card deleted with work not finished), Obeya draws an excerpt from the transcripts of its runs
     without a model. The Agent SDK keeps a session's transcript at
@@ -1751,7 +1752,10 @@ the owner's language (`src/core/locale.ts`).
     gives no excerpt and no error. A short read-only session in the repository's Lesestand (a small job, see Models
     and effort) makes 0–3 friction notes of a non-empty excerpt (what went wrong, what it cost,
     what would have prevented it), stored per repository and card in `friction`; an empty excerpt
-    gets no session.
+    gets no session. It is told the repository's settings a retrospective may propose (checks,
+    setup, soft paths, „App für die Demo starten“) as they apply now, so a worker working out what
+    one would have said (how to start the app, which checks to run) becomes a note whose fix names
+    the setting and the value the run shows works.
   - Every 10 finished cards of a repository (counted when work ends, whether or not they had
     friction; a card that never ran does not count; the setting `work_retro_cards:<repo>`), after
     the notes of the card that completed the count, the retrospective runs: one read-only session
@@ -1764,7 +1768,26 @@ the owner's language (`src/core/locale.ts`).
     title as „Aus der Arbeitsrückschau: …“ and in its body; its state reads „Vorschlag von Obeya“
     where a worker's proposal reads „Vorschlag eines Agenten“), or a line for the repository's
     CLAUDE.md, which goes the way of the Rückschau's rules (a proposal for „CLAUDE.md von <repo>“,
-    then the card „CLAUDE.md ergänzen“). Nothing is created silently and nothing starts by itself;
+    then the card „CLAUDE.md ergänzen“), or a value for one of the repository's settings
+    (`PROPOSED_SETTINGS`: `checks`, `setup`, `softPaths`, the demo's `howToRun`), for knowledge the
+    workers each worked out themselves; its brief lists those settings as they apply now (the
+    adapter with this machine's and the repository's settings, `settingsNow` in the canvas). Since
+    2026-10-15 every repository requires demos by default, so an empty „App für die Demo starten“
+    is the usual case: each worker finds out how to start the app, and the retrospective proposes
+    the recipe they arrived at. A setting proposal (`setting_proposals`, one waiting per setting and
+    repository) waits in Obeya's sheet under „Vorschläge“ beside the rules, with the setting and
+    repository, the value (a list one entry a line), the value now („Bisher: …“), the sentence it
+    rests on and the cards, each a link; the Koordinator button counts it. The owner takes it, as it
+    is or changed („Ändern“), with one of two buttons, neither preselected: „Auf diesem Rechner“
+    sets it in this machine's settings (`Config.takeSetting` through `Config.save`, applying at once),
+    „Für alle ins Repository“ puts this value alone into `.obeya/settings.json` the way „Für alle
+    ins Repository übernehmen“ does (see Repository settings): committed on the main branch where
+    work lands there, this machine's own value for that setting then going so the repository's
+    applies here too; as a pull request otherwise, the value set on this machine meanwhile (it
+    goes once the merge brings the file, `takenOver`). A line under the buttons says what each
+    does; a notice says where the value went (with the pull request's link). „Verwerfen“ keeps it
+    as rejected, and the next retrospective hears what became of each.
+    Nothing is created silently and nothing starts by itself;
     skills of the user (`~/.claude/skills`) are out of scope. The owner can ask the Koordinator
     for it at once („Mach eine Arbeitsrückschau für den Shop“, the action `work_retro`): it reads the
     notes since the last one, the count starts again, and the owner hears what came of it.
@@ -2537,7 +2560,9 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   machine's values (the commit at once; a pull request when the merge reaches the Lesestand),
   those values go from this machine's settings (`Config.takenOver`: a value the file now holds
   and did not hold before), so the dialog says they come from the repository. The adapter skill
-  writes the value fields there, and the module only for what is code.
+  writes the value fields there, and the module only for what is code. The Arbeitsrückschau
+  proposes values for some of them, which the owner takes on this machine or into the file for
+  everyone, one value at a time (see Arbeitsrückschau).
 - **Live configuration** — a configuration saved from the file (the dialog, the Koordinator's
   `configure`, the setup assistant's first canvas) applies while Obeya runs, and so does a new
   version of a repository's own adapter or `.obeya/settings.json`: Obeya does not restart for
@@ -2645,7 +2670,7 @@ it up, the thread it belongs to and the answer it follows up on, the files the a
 and the Question card the thread moved onto), a Question card's thread (the exchange it started
 with, whether its agent reads, what the owner asked that it has not answered yet, its counts of
 answers and files), the answer a message of a card's log is (its thread, files, the question it
-continues), groups (name, colour) and the group of each card, per-canvas settings (the home repository; which canvas a repository's own adapter named; per repository the card collecting its CLAUDE.md rules; the Rückschau's count and when its history begins; per repository the Arbeitsrückschau's count and when it last ran), the friction noted on each card's runs (per repository), and on a card the Arbeitsrückschau proposed what it rests on.
+continues), groups (name, colour) and the group of each card, per-canvas settings (the home repository; which canvas a repository's own adapter named; per repository the card collecting its CLAUDE.md rules; the Rückschau's count and when its history begins; per repository the Arbeitsrückschau's count and when it last ran), the friction noted on each card's runs (per repository), and on a card the Arbeitsrückschau proposed what it rests on, and the settings' values it proposed (`setting_proposals`: repository, setting, value, basis, cards, and where the owner took it).
 
 Files under `~/.obeya/` (the same for the app and a checkout): the database (`obeya.db`), the
 owner's screenshots (`images/<canvas>/`), the configuration (`canvases.json`), the settings
@@ -2730,6 +2755,15 @@ the repository; the copy on the project is only for the archive).
   every hand-over longer), and raw transcripts in the retrospective (far too much context). It
   runs on its beat and on the owner's word; its results are proposals in the repository of the
   friction, never cards created or started silently.
+- The Arbeitsrückschau proposes values for a repository's settings too (2026-10-15), once demos
+  were required by default and workers kept working out how to start the app. They wait in
+  Obeya's sheet beside the rules rather than as cards on the canvas: taking one is a click, no
+  work for an agent. Where the value goes is the owner's choice each time, this machine or the
+  repository for everyone, with neither as a default; for everyone it is that one value, not all
+  this machine set. Rejected: workers' hand-over summaries saying how they ran the app (longer
+  summaries for the owner, for something the friction notes carry with their fix), and proposing
+  the landing, the main branch or where workers work, which are the owner's choices rather than
+  knowledge friction shows missing.
 - Preferences hold only how agents work with the owner through Obeya; rules about a repository,
   taste in code that holds in every repository included, go into its CLAUDE.md (2026-10-02). At
   first the learner drew no line, and repository facts landed among the preferences, unversioned

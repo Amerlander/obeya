@@ -1,9 +1,10 @@
 // The Koordinator's sheet: the conversation, with the height the sheet has, and below it sections
-// that open and close: the rules it learned and proposes, and the owner's preferences; and shared
-// demos to bring up to date at once.
+// that open and close: the rules it learned and proposes, with the values for repositories'
+// settings the Arbeitsrückschau proposes, and the owner's preferences; and shared demos to bring
+// up to date at once.
 
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
-import type { Item, Preference, RepoRef, Reshare, Talk } from '../core/types';
+import type { Item, Preference, RepoRef, Reshare, SettingProposal, Talk } from '../core/types';
 import { api, ApiError } from './api';
 import { plain } from './markdown';
 import { AnswerFiles, Body, Continues, Msg, Reading, ThreadCard } from './message';
@@ -21,6 +22,8 @@ interface Props {
   onTell: (text: string, images?: string[]) => void;
   items: Item[];
   preferences: Preference[];
+  /** Values for repositories' settings the Arbeitsrückschau proposes. */
+  settings: SettingProposal[];
   /** The canvas's repositories, whose CLAUDE.md a proposal may go into. */
   repos: RepoRef[];
   talk: Talk[];
@@ -28,13 +31,14 @@ interface Props {
   onOpen: (i: Item) => void;
 }
 
-export function KoordinatorSheet({ on, canvas, items, preferences, repos, talk, reshare, onOpen, onTell }: Props) {
+export function KoordinatorSheet({ on, canvas, items, preferences, settings, repos, talk, reshare, onOpen, onTell }: Props) {
   const proposals = preferences.filter((p) => p.state === 'proposed');
   const rules = preferences.filter((p) => p.state === 'active');
   const [folds, setFolds] = useFolds(canvas);
   const fresh = useRead(on, talk);
-  // the proposals stay closed only as long as no proposal came after the owner closed them
-  const proposalsOpen = !folds.proposalsClosed || proposals.some((p) => !folds.proposalsClosed!.includes(p.id));
+  // the proposals stay closed only as long as no proposal came after the owner closed them; a setting's id counts negative beside the rules'
+  const ids = [...proposals.map((p) => p.id), ...settings.map((p) => -p.id)];
+  const proposalsOpen = !folds.proposalsClosed || ids.some((id) => !folds.proposalsClosed!.includes(id));
   return (
     <aside id="ksheet" className={on ? 'sheet on' : 'sheet'}>
       <h2>{t.koordinator.title}</h2>
@@ -42,19 +46,33 @@ export function KoordinatorSheet({ on, canvas, items, preferences, repos, talk, 
       <TellKoordinator onTell={onTell} />
 
       <div className="k-rest">
-        {proposals.length > 0 && (
+        {ids.length > 0 && (
           <Fold
             kind="proposals"
-            head={t.koordinator.proposalsHead(proposals.length)}
+            head={t.koordinator.proposalsHead(ids.length)}
             open={proposalsOpen}
-            onToggle={() => setFolds({ ...folds, proposalsClosed: proposalsOpen ? proposals.map((p) => p.id) : undefined })}
+            onToggle={() => setFolds({ ...folds, proposalsClosed: proposalsOpen ? ids : undefined })}
           >
-            <p className="hint">{t.koordinator.proposalsHint}</p>
-            <ul className="prefs proposals">
-              {proposals.map((p) => (
-                <ProposalRow key={p.id} p={p} items={items} rules={rules} repos={repos} onOpen={onOpen} />
-              ))}
-            </ul>
+            {proposals.length > 0 && (
+              <>
+                <p className="hint">{t.koordinator.proposalsHint}</p>
+                <ul className="prefs proposals">
+                  {proposals.map((p) => (
+                    <ProposalRow key={p.id} p={p} items={items} rules={rules} repos={repos} onOpen={onOpen} />
+                  ))}
+                </ul>
+              </>
+            )}
+            {settings.length > 0 && (
+              <>
+                <p className="hint">{t.koordinator.settingsHint}</p>
+                <ul className="prefs proposals">
+                  {settings.map((p) => (
+                    <SettingRow key={p.id} p={p} items={items} repo={repos.find((r) => r.id === p.repo)} onOpen={onOpen} />
+                  ))}
+                </ul>
+              </>
+            )}
           </Fold>
         )}
 
@@ -293,6 +311,90 @@ function ProposalRow({ p, items, rules, repos, onOpen }: { p: Preference; items:
         <button className="btn danger" onClick={() => decide(() => api.rejectProposal(p.id))}>
           {t.koordinator.reject}
         </button>
+      </span>
+      {error && <span className="p-error">{error}</span>}
+    </li>
+  );
+}
+
+/** A value as the owner reads and edits it: a list one entry a line. */
+const asText = (v: string | string[]) => (Array.isArray(v) ? v.join('\n') : v);
+
+/**
+ * A value for a repository's setting the Arbeitsrückschau proposes, with the cards it rests on and
+ * the value it would replace: the owner takes it, as it is or changed, on this machine or into the
+ * repository for everyone (neither is the default: they choose each time), or rejects it.
+ */
+function SettingRow({ p, items, repo, onOpen }: { p: SettingProposal; items: Item[]; repo: RepoRef | undefined; onOpen: (i: Item) => void }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const k = t.koordinator;
+  const list = Array.isArray(p.value);
+  const decide = async (act: () => Promise<unknown>) => {
+    setBusy(true);
+    try {
+      await act();
+      setError('');
+    } catch (e) {
+      setError(e instanceof ApiError ? `${errorText(e.code)}${e.code === 'settingsShare' ? ` ${e.message}` : ''}` : t.offlineError);
+    }
+    setBusy(false);
+  };
+  const edited = draft === null || draft.trim() === asText(p.value) ? undefined : list ? draft.split('\n').map((x) => x.trim()).filter(Boolean) : draft.trim();
+  const take = (where: 'machine' | 'repository') => decide(() => api.takeSetting(p.id, where, edited));
+  const now = p.now === undefined ? null : asText(p.now).trim();
+  const branch = repo?.branch ?? 'main';
+  return (
+    <li className="proposal setting">
+      <span className="pref-text">{k.settingFor(t.config.settings[p.field], repo?.name ?? p.repo)}</span>
+      {draft === null ? (
+        <pre className="setting-value">{asText(p.value)}</pre>
+      ) : (
+        <textarea data-esc autoFocus value={draft} rows={Math.max(3, draft.split('\n').length + 1)} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && (e.stopPropagation(), setDraft(null))} />
+      )}
+      {now !== null && <span className="occasion">{now ? k.settingNow(now) : k.settingEmpty}</span>}
+      <span className="occasion">
+        {k.fromRetro}: {p.basis}{' '}
+        {p.cards.map((c, i) => {
+          const card = items.find((x) => x.id === c.id);
+          return (
+            <Fragment key={c.id}>
+              {i > 0 && ', '}
+              {card ? (
+                <a className="from" onClick={() => onOpen(card)}>
+                  {plain(c.title)}
+                </a>
+              ) : (
+                plain(c.title)
+              )}
+            </Fragment>
+          );
+        })}
+      </span>
+      <span className="pref-actions">
+        <span className="take-on">{k.takeOn}</span>
+        <button className="btn primary" disabled={busy || (draft !== null && !draft.trim())} title={k.onMachineHint} onClick={() => take('machine')}>
+          {k.onMachine}
+        </button>
+        <button className="btn primary" disabled={busy || (draft !== null && !draft.trim())} title={repo?.pullRequests ? k.forEveryonePr(branch) : k.forEveryoneMain(branch)} onClick={() => take('repository')}>
+          {k.forEveryone}
+        </button>
+        {draft === null ? (
+          <button className="btn" disabled={busy} onClick={() => setDraft(asText(p.value))}>
+            {k.change}
+          </button>
+        ) : (
+          <button className="btn" disabled={busy} onClick={() => setDraft(null)}>
+            {k.cancel}
+          </button>
+        )}
+        <button className="btn danger" disabled={busy} onClick={() => decide(() => api.rejectSetting(p.id))}>
+          {k.reject}
+        </button>
+      </span>
+      <span className="occasion">
+        {k.onMachine}: {k.onMachineHint} {k.forEveryone}: {repo?.pullRequests ? k.forEveryonePr(branch) : k.forEveryoneMain(branch)}
       </span>
       {error && <span className="p-error">{error}</span>}
     </li>

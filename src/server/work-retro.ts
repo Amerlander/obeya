@@ -2,10 +2,11 @@
 // When a card's work ends, an excerpt of its runs (transcript.ts, no model) goes to a short session
 // that notes the friction in it; every WORK_RETRO_EVERY finished cards of a repository, or when the
 // owner asks, a session in that repository's checkout reads the notes since the last one and
-// proposes cards (a script, a skill) or CLAUDE.md lines for friction that recurs across cards.
+// proposes cards (a script, a skill), CLAUDE.md lines or values for the repository's settings for
+// friction that recurs across cards.
 
 import { z } from 'zod';
-import type { CardEvent } from '../core/types';
+import { type CardEvent, PROPOSED_SETTINGS, type ProposedSetting } from '../core/types';
 import type { Board } from './board';
 import type { FrictionNote } from './db';
 import { readSession } from './koordinator';
@@ -24,6 +25,8 @@ export interface WorkRetroOptions {
   transcript?: (sessionId: string, cwd: string | null) => string | null;
   /** After how many finished cards of a repository the retrospective runs; WORK_RETRO_EVERY by default. */
   every?: number;
+  /** The values of a repository's settings a retrospective may propose, as they apply now; none where they cannot be read. */
+  settingsFor?: (repo: string) => Record<ProposedSetting, string | string[]> | undefined;
 }
 
 /** A card whose work ended, as read at that moment: what follows may delete or archive it. */
@@ -98,11 +101,12 @@ export class WorkRetro {
     const text = excerptText(runs);
     if (!text) return;
     const notes: FrictionNote[] = [];
+    const settings = this.settingsText(card.repo);
     await readSession(this.o.runtime, {
       cwd: this.o.pathFor(card.repo),
       system: NOTES_SYSTEM(LANGUAGE_NAMES[this.o.board.language()]),
       role: 'chores',
-      brief: `The card: "${card.title}".\n\nThe excerpt of its worker's ${runs.length > 1 ? `${runs.length} runs` : 'run'}:\n\n${text}`,
+      brief: `The card: "${card.title}".${settings ? `\n\n${settings}` : ''}\n\nThe excerpt of its worker's ${runs.length > 1 ? `${runs.length} runs` : 'run'}:\n\n${text}`,
       tools: (finish): AgentTool[] => [
         {
           name: 'note',
@@ -152,8 +156,19 @@ export class WorkRetro {
     const proposed = b.retroProposals(repo);
     const rules = b.preferences('proposed', 'rejected', 'filed').filter((p) => p.target === repo);
     const list = (xs: string[]) => xs.map((x) => `- ${x}`).join('\n');
-    const dismissed = [...proposed.filter((p) => p.dismissed).map((p) => `card "${p.title}" (${p.retro})`), ...rules.filter((p) => p.state === 'rejected').map((p) => `CLAUDE.md line "${p.text}"`)];
-    const before = [...proposed.filter((p) => !p.dismissed).map((p) => `card "${p.title}" (${p.state === 'proposal' ? 'waiting for the owner' : 'taken'})`), ...rules.filter((p) => p.state !== 'rejected').map((p) => `CLAUDE.md line "${p.text}" (${p.state === 'proposed' ? 'waiting for the owner' : 'taken'})`)];
+    const values = b.settingProposals(repo);
+    const valueText = (p: (typeof values)[number]) => `setting ${p.field} = ${JSON.stringify(p.value)}`;
+    const dismissed = [
+      ...proposed.filter((p) => p.dismissed).map((p) => `card "${p.title}" (${p.retro})`),
+      ...rules.filter((p) => p.state === 'rejected').map((p) => `CLAUDE.md line "${p.text}"`),
+      ...values.filter((p) => p.state === 'rejected').map((p) => `${valueText(p)} (${p.basis})`),
+    ];
+    const before = [
+      ...proposed.filter((p) => !p.dismissed).map((p) => `card "${p.title}" (${p.state === 'proposal' ? 'waiting for the owner' : 'taken'})`),
+      ...rules.filter((p) => p.state !== 'rejected').map((p) => `CLAUDE.md line "${p.text}" (${p.state === 'proposed' ? 'waiting for the owner' : 'taken'})`),
+      ...values.filter((p) => p.state !== 'rejected').map((p) => `${valueText(p)} (${p.state === 'proposed' ? 'waiting for the owner' : 'taken'})`),
+    ];
+    const settings = this.settingsText(repo);
     let made = 0;
     const basisOf = (cards: unknown): { ids: string[] } | string => {
       const ids = [...new Set((Array.isArray(cards) ? cards : []).map((t) => tags.get(String(t))).filter((x): x is string => !!x))];
@@ -166,6 +181,7 @@ export class WorkRetro {
       role: 'chores',
       brief: [
         `The repository: ${name}. The friction noted on its cards since the last Arbeitsrückschau, card by card:\n\n${byCard.join('\n\n')}`,
+        settings,
         dismissed.length ? `Proposals of earlier Arbeitsrückschauen the owner dismissed (do not propose them again, in other words either):\n${list(dismissed)}` : '',
         before.length ? `Proposed before and waiting or taken (do not propose them again):\n${list(before)}` : '',
       ]
@@ -207,11 +223,37 @@ export class WorkRetro {
               return after();
             },
           },
+          {
+            name: 'setting',
+            description: `Propose a value for one of the repository's settings that Obeya gives every worker: ${PROPOSED_SETTINGS.join(', ')}. value: a string for setup and howToRun, a list of strings for checks and softPaths; basis in ${LANGUAGE_NAMES[b.language()]}; cards: the tags of the cards it rests on (at least two).`,
+            schema: { field: z.enum(PROPOSED_SETTINGS), value: z.union([z.string(), z.array(z.string())]), basis: z.string(), cards: z.array(z.string()) },
+            run: ({ field, value, basis, cards }) => {
+              if (made >= WORK_RETRO_PROPOSALS) return f(`At most ${WORK_RETRO_PROPOSALS} proposals. End your turn now.`);
+              const k = String(field) as ProposedSetting;
+              if (!PROPOSED_SETTINGS.includes(k)) return `Not recorded: field is one of ${PROPOSED_SETTINGS.join(', ')}.`;
+              const v = settingValue(k, value);
+              if (v === null) return 'Not recorded: the value is missing.';
+              const on = basisOf(cards);
+              if (typeof on === 'string') return on;
+              if (b.settingProposals(repo).some((p) => p.state === 'proposed' && p.field === k)) return `Not recorded: a value for ${k} already waits for the owner.`;
+              b.proposeSetting({ repo, field: k, value: v, basis: clip(String(basis).trim(), 600), cards: on.ids });
+              made++;
+              return after();
+            },
+          },
           { name: 'done', description: 'Nothing (more) to propose.', schema: {}, run: () => f('Fine. End your turn now.') },
         ];
       },
     });
     if (told) b.notify({ text: b.t.retro.done(name, made) });
+  }
+
+  /** The repository's settings a retrospective may propose a value for, as they apply now, for a session's brief; empty where they cannot be read. */
+  private settingsText(repo: string): string {
+    const now = this.o.settingsFor?.(repo);
+    if (!now) return '';
+    const shown = (v: string | string[]) => (Array.isArray(v) ? (v.length ? v.map((x) => JSON.stringify(x)).join(', ') : '(none)') : v.trim() ? JSON.stringify(v) : '(empty)');
+    return `The repository's settings in Obeya now, which every worker gets in its brief:\n${PROPOSED_SETTINGS.map((k) => `- ${k} (${SETTING_MEANING[k]}): ${shown(now[k])}`).join('\n')}`;
   }
 
   private serial(fn: () => Promise<void>) {
@@ -247,6 +289,24 @@ const sinceKey = (repo: string) => `work_retro_since:${repo}`;
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
+/** What each setting a retrospective may propose is for, as the sessions read it. */
+const SETTING_MEANING: Record<ProposedSetting, string> = {
+  checks: 'the commands a worker runs before it hands its work over',
+  setup: 'the command that prepares a fresh workspace, e.g. installs dependencies',
+  softPaths: 'paths (a trailing / covers a directory) whose edits never count as a merge conflict between two cards, resolved when a branch is rebased, e.g. docs',
+  howToRun: '"Run the app for a demo": how a worker starts the app to record its demo',
+};
+
+/** A proposed value as the setting takes it: a command or recipe for setup and howToRun, a list of non-empty strings for the others. */
+function settingValue(field: ProposedSetting, value: unknown): string | string[] | null {
+  if (field === 'setup' || field === 'howToRun') {
+    const v = typeof value === 'string' ? value.trim() : Array.isArray(value) ? value.map(String).join('\n').trim() : '';
+    return v ? clip(v, 4000) : null;
+  }
+  const list = (Array.isArray(value) ? value : typeof value === 'string' ? value.split('\n') : []).map((x) => String(x).trim()).filter(Boolean);
+  return list.length ? list.slice(0, 20).map((x) => clip(x, 500)) : null;
+}
+
 const NOTES_SYSTEM = (language: string) => `
 You are the Koordinator of Obeya, a canvas on which the owner directs coding agents; the owner knows you simply as Obeya. Each worker works on one card in its own workspace of a repository. You look back at how a worker worked, so that future runs in this repository go faster.
 
@@ -256,7 +316,8 @@ Note the friction a change to the repository would prevent in future runs:
 - a command with wrong flags, or run the wrong way, and corrected;
 - a script that failed and was rewritten;
 - a long search for how to start, run, test or demo something;
-- a tool or check used wrongly, a missing piece of knowledge about the repository.
+- a tool or check used wrongly, a missing piece of knowledge about the repository;
+- working out what one of the repository's settings in Obeya (listed with the card, where they are) would have said: how to start the app for a demo, which checks to run, how to prepare a fresh workspace. Its fix names the setting and the value the run shows works: the commands as the worker finally ran them.
 Not friction: a test or type check failing on the change being made and then fixed (that is the work itself), one quick slip corrected at once at no cost, a call blocked by a rule that then worked the other way at once.
 
 Note 0 to 3, the costliest first; most runs have one or none. Call note for each: what (concretely: the command, the file, the error), cost (the steps or time it took, a wrong turn), fix (what would have prevented it: a script, a skill, a line in the CLAUDE.md, a clearer error message; concretely). In ${language}, a sentence each: the owner reads them on the card. You may read the repository (you cannot change it) to check whether that already exists. Then call done.
@@ -269,11 +330,13 @@ Look for friction that recurs on at least two different cards, the same detour t
 - a script (scripts/…) for what workers keep putting together by hand or keep getting wrong;
 - a skill (.claude/skills/…) for a procedure they keep fumbling;
 - a fix to a tool, a check or an error message that misleads;
-- a line in the repository's CLAUDE.md, for knowledge they lacked.
+- a line in the repository's CLAUDE.md, for knowledge they lacked;
+- a value for one of the repository's settings in Obeya (listed after the friction, as they are now), where workers each worked out what it would have told them: how to run the app for a demo (howToRun), which checks to run, the setup of a fresh workspace. Obeya hands a setting to every worker where it needs it, so where one holds the knowledge it beats a CLAUDE.md line.
 Read the repository first: its CLAUDE.md, its docs, scripts and skills. Propose nothing it has already; where it has it but the workers did not find it, propose making it findable (a CLAUDE.md line). Skills of the user (~/.claude/skills) are out of scope.
 
 Propose at most ${WORK_RETRO_PROPOSALS}, only for patterns on at least two cards and only what you expect the owner to take; most of the time that is fewer, or none.
 - card: a feature card. title in ${LANGUAGE_NAMES[language]}, naming what it builds: ${language === 'de' ? '„Skript \`scripts/x.ts\` für …“, „Skill für …“' : '“Script \`scripts/x.ts\` for …”, “Skill for …”'}. body in ${LANGUAGE_NAMES[language]}: what to build and how to verify it, so a worker needs no other context, and the friction it prevents. basis: one sentence in ${LANGUAGE_NAMES[language]} for the owner, naming the cards it rests on and what went wrong on them. cards: the tags of those cards.
 - rule: a line for the CLAUDE.md: rule short, general, in ${LANGUAGE_NAMES[language]}; basis and cards as for card. It waits for the owner and goes into the CLAUDE.md through the card ${MESSAGES[language].quote(MESSAGES[language].claudeMd.title)}.
+- setting: field and the whole value it should have (it replaces the one now), from what the notes show works, checked against the repository: for howToRun a recipe a worker can follow without searching (the commands, the port, how to get past a login, what to stage); basis and cards as for card. The owner takes it on their machine or into the repository's .obeya/settings.json for everyone.
 The owner does not know the tags: name cards by their titles in basis. Do not propose again what was proposed before, above all what the owner dismissed, in other words either. Then call done.
 `.trim();

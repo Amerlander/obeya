@@ -10,7 +10,7 @@ import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
 import { adapterNames, readShared, REPO_SETTINGS_FILE, type SharedRead } from '../adapters';
 import { settingsShape } from '../adapters/schema';
-import { type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigSaved, type ConfigView, type RepoSettings, SHARED_FIELDS, type SettingsShared, type SharedSettings, type DemoSettingsProblem, type DemoSettingsView, type DemoVoiceCheck, type LanguageView, type ResolvedCanvas, type ThemeView, type VoiceInstallJob } from '../core/types';
+import { type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigSaved, type ConfigView, type RepoSettings, SHARED_FIELDS, type SettingsShared, type SharedSettings, type DemoSettingsProblem, type DemoSettingsView, type DemoVoiceCheck, type LanguageView, type ResolvedCanvas, type ThemeView, type VoiceInstallJob, layerSettings, type ProposedSetting, settingPatch } from '../core/types';
 import {
   DEMO_SETTINGS_FILE,
   type DemoSettings,
@@ -270,31 +270,82 @@ export class Config {
    * repository. Saved without anything following; the caller follows.
    */
   takenOver(path: string, before: SharedSettings | undefined, after: SharedSettings | undefined) {
-    if (this.o.source !== 'file' || !after || !existsSync(this.o.file)) return;
+    if (!after) return;
     const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+    const changed = this.dropSettings(path, (s) => {
+      for (const k of SHARED_FIELDS) {
+        if (k === 'demo') continue;
+        if (s[k] !== undefined && same(s[k], after[k]) && !same(before?.[k], after[k])) delete s[k];
+      }
+      for (const k of ['required', 'howToRun'] as const)
+        if (s.demo?.[k] !== undefined && same(s.demo[k], after.demo?.[k]) && !same(before?.demo?.[k], after.demo?.[k])) delete s.demo[k];
+    });
+    if (changed) console.log(`Obeya: settings of ${path} now come from its ${REPO_SETTINGS_FILE}; removed from this machine's`);
+  }
+
+  /**
+   * Removes from this machine's settings for the repository at `path` what `drop` deletes from a
+   * copy of them, saved without anything following; whether something went.
+   */
+  private dropSettings(path: string, drop: (s: RepoSettings) => void): boolean {
+    if (this.o.source !== 'file' || !existsSync(this.o.file)) return false;
     let changed = false;
     const canvases = this.current().map((c) => ({
       ...c,
       repos: c.repos.map((r) => {
         if (resolve(expand(r.path)) !== path || !r.settings) return r;
         const s: RepoSettings = { ...r.settings, ...(r.settings.demo ? { demo: { ...r.settings.demo } } : {}) };
-        for (const k of SHARED_FIELDS) {
-          if (k === 'demo') continue;
-          if (s[k] !== undefined && same(s[k], after[k]) && !same(before?.[k], after[k])) delete s[k];
-        }
-        for (const k of ['required', 'howToRun'] as const)
-          if (s.demo?.[k] !== undefined && same(s.demo[k], after.demo?.[k]) && !same(before?.demo?.[k], after.demo?.[k])) delete s.demo[k];
+        drop(s);
         if (s.demo && !Object.keys(s.demo).length) delete s.demo;
-        if (same(s, r.settings)) return r;
+        if (JSON.stringify(s) === JSON.stringify(r.settings)) return r;
         changed = true;
         const { settings: _, ...rest } = r;
         return Object.keys(s).length ? { ...rest, settings: s } : rest;
       }),
     }));
-    if (!changed) return;
+    if (!changed) return false;
     writeFileSync(this.o.file, `${JSON.stringify(canvases, null, 2)}\n`);
     this.read = undefined;
-    console.log(`Obeya: settings of ${path} now come from its ${REPO_SETTINGS_FILE}; removed from this machine's`);
+    return true;
+  }
+
+  /**
+   * A value for a repository's setting that the Arbeitsrückschau proposed, taken by the owner for
+   * the repository at `path` (absolute): on this machine, or into its `.obeya/settings.json` for
+   * everyone, the way „Für alle ins Repository übernehmen“ goes, with this value alone. Committed
+   * on the main branch, this machine's own value for it goes, so the repository's applies here
+   * too; as a pull request, it is set on this machine as well until the pull request is merged
+   * (`takenOver` then removes it). Says where it went for everyone; nothing for this machine.
+   */
+  takeSetting(path: string, field: ProposedSetting, value: string | string[], where: 'machine' | 'repository'): SettingsShared | null {
+    const canvases = this.current();
+    const at = canvases.flatMap((c, canvas) => c.repos.map((r, repo) => ({ r, canvas, repo }))).find(({ r }) => resolve(expand(r.path)) === path);
+    if (!at) throw new BadRequest('invalid', `no repository ${path} in the configuration`);
+    const patch = settingPatch(field, value);
+    const onMachine = () =>
+      this.save(canvases.map((c, i) => (i !== at.canvas ? c : { ...c, repos: c.repos.map((r, j) => (j !== at.repo ? r : { ...r, settings: layerSettings(r.settings, patch) })) })));
+    if (where === 'machine') {
+      onMachine();
+      return null;
+    }
+    const to = this.check(canvases).resolved[at.canvas]?.repos[at.repo]?.shareTo ?? 'main';
+    if (to === 'pr') {
+      if (!this.o.forge) throw new BadRequest('settingsShare', 'no forge to open a pull request with');
+      const done = proposeShared(path, patch, this.o.forge);
+      console.log(`Obeya: ${field} of ${path} for everyone, as a pull request: ${'pr' in done ? done.pr : ''}`);
+      onMachine();
+      return done;
+    }
+    const { before: _, after, ...done } = commitShared(path, patch);
+    console.log(`Obeya: ${field} of ${path} for everyone, committed on ${'branch' in done ? done.branch : ''}`);
+    this.takenOver(path, undefined, after);
+    // where this machine set another value, the repository's applies here as well from now on
+    this.dropSettings(path, (s) => {
+      if (field === 'howToRun') delete s.demo?.howToRun;
+      else delete s[field];
+    });
+    this.o.onSettings?.();
+    return done;
   }
 
   /**

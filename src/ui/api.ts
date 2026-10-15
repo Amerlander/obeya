@@ -220,6 +220,9 @@ export const api = {
   acceptProposal: (id: number, text?: string, target?: string | null) =>
     call<void>('POST', at(`/preferences/${id}/accept`), { ...(text === undefined ? {} : { text }), ...(target === undefined ? {} : { target }) }),
   rejectProposal: (id: number) => call<void>('POST', at(`/preferences/${id}/reject`)),
+  /** Takes a setting the Arbeitsrückschau proposed, as it is or with the owner's `value`: on this machine, or into the repository for everyone. */
+  takeSetting: (id: number, where: 'machine' | 'repository', value?: string | string[]) => call<unknown>('POST', at(`/setting-proposals/${id}/take`), { where, ...(value === undefined ? {} : { value }) }),
+  rejectSetting: (id: number) => call<void>('POST', at(`/setting-proposals/${id}/reject`)),
   /** Shares outdated pages again, the newest demos first: `count` of them, or all with null. */
   reshare: (count: number | null) => call<void>('POST', at('/reshare'), { count }),
   stopReshare: () => call<void>('POST', at('/reshare/stop')),

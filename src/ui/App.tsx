@@ -1061,7 +1061,7 @@ function Canvas({
   // answers in Obeya's sheet the owner has not seen: Obeya waits for them like a card
   const unread = kOn ? 0 : unreadAnswers(snapshot.talk);
   const attentionCount = attention.length + (unread ? 1 : 0);
-  const proposalCount = snapshot.preferences.filter((p) => p.state === 'proposed').length;
+  const proposalCount = snapshot.preferences.filter((p) => p.state === 'proposed').length + (snapshot.settingProposals?.length ?? 0);
   const doneCount = items.filter((i) => i.source === 'manual' && finished(i.state)).length;
   async function archiveDone() {
     const { ids } = await api.archiveDone();
@@ -1392,7 +1392,7 @@ function Canvas({
           onAsk={(text, canvas) => void told.tell(t.voice.reading(t.voice.koordinator), undefined, () => (canvas ? api.commandOn(canvas, text) : api.command(text, null, undefined, undefined, undefined, undefined, placeNow())))}
         />
         {setupOn && <Setup onClose={() => setSetupOn(false)} />}
-        <KoordinatorSheet on={kOn} canvas={snapshot.canvas.id} items={items} preferences={snapshot.preferences} repos={snapshot.canvas.repos} talk={snapshot.talk} reshare={snapshot.reshare} onOpen={(i) => void openFresh(i)} onTell={(text, images) => tellTyped(text, images, null)} />
+        <KoordinatorSheet on={kOn} canvas={snapshot.canvas.id} items={items} preferences={snapshot.preferences} settings={snapshot.settingProposals ?? []} repos={snapshot.canvas.repos} talk={snapshot.talk} reshare={snapshot.reshare} onOpen={(i) => void openFresh(i)} onTell={(text, images) => tellTyped(text, images, null)} />
         <PushToTalk
           phase={ptt.phase}
           level={ptt.level}
