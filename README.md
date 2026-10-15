@@ -15,7 +15,7 @@ visibly on the walls. More on [obeya.si](https://obeya.si).
 
 [![The demo video: an idea said into the microphone, built by an agent that records its own demo, approved and landed on main](docs/images/video.jpg)](https://obeya.si/#film)
 
-The video shows Obeya at work in two minutes: an idea is said into the microphone, an agent builds
+The video shows Obeya at work in four minutes: an idea is said into the microphone, an agent builds
 it and records its demo, and the approval lands it on `main` ([watch on obeya.si](https://obeya.si/#film),
 with captions).
 
