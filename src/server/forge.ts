@@ -69,11 +69,60 @@ export function parsePrUrl(url: string): { owner: string; repo: string; number: 
   return m ? { owner: m[1]!, repo: m[2]!, number: Number(m[3]) } : null;
 }
 
-function gh(cwd: string, ...args: string[]): string {
-  const r = Bun.spawnSync(['gh', ...args], { cwd, stderr: 'pipe' });
+/** Where gh runs: the directory, and the owner of the repository it works on, where known. */
+export interface GhAt {
+  cwd: string;
+  owner?: string;
+}
+
+/** The owner of a GitHub repository by its remote URL (https, ssh or scp-like), or none for any other. */
+export function githubOwner(remote: string): string | undefined {
+  return /^(?:https?:\/\/|ssh:\/\/)?(?:[^@/]+@)?github\.com[:/]([^/]+)\/[^/]+?\/?$/.exec(remote.trim())?.[1];
+}
+
+/** How long a token gh keeps for an account is taken as it stands. */
+const TOKEN_TTL = 10 * 60_000;
+const tokens = new Map<string, { token: string | null; at: number }>();
+
+/**
+ * gh's environment for a repository of `owner`: the token of gh's login for that account where it
+ * has one, so that a private repository of the owner is seen whichever account gh has active on
+ * this machine (another one finds no such repository); else gh as it runs anyway (an
+ * organisation's repository, say).
+ */
+function ghEnv(owner: string | undefined): NodeJS.ProcessEnv | undefined {
+  if (!owner) return undefined;
+  let known = tokens.get(owner);
+  if (!known || Date.now() - known.at > TOKEN_TTL) {
+    // without GH_TOKEN, which gh would hand back instead of the account's own token
+    const { GH_TOKEN: _, GITHUB_TOKEN: __, ...plain } = process.env;
+    const r = Bun.spawnSync(['gh', 'auth', 'token', '--user', owner], { env: plain, stderr: 'pipe' });
+    known = { token: (r.exitCode === 0 && r.stdout.toString().trim()) || null, at: Date.now() };
+    tokens.set(owner, known);
+  }
+  if (!known.token) return undefined;
+  const { GITHUB_TOKEN: _, ...env } = process.env;
+  return { ...env, GH_TOKEN: known.token };
+}
+
+function gh({ cwd, owner }: GhAt, ...args: string[]): string {
+  const env = ghEnv(owner);
+  const r = Bun.spawnSync(['gh', ...args], { cwd, stderr: 'pipe', ...(env ? { env } : {}) });
   if (r.exitCode !== 0) throw new Error(`gh ${args.slice(0, 3).join(' ')}: ${r.stderr.toString().trim()}`);
   return r.stdout.toString();
 }
+
+/** The owner of the GitHub repository a checkout's `origin` is, where it is one. */
+function originOwner(cwd: string): string | undefined {
+  const r = Bun.spawnSync(['git', '-C', cwd, 'remote', 'get-url', 'origin'], { stderr: 'ignore' });
+  return r.exitCode === 0 ? githubOwner(r.stdout.toString()) : undefined;
+}
+
+/** Where gh runs for the pull request at `url`. */
+const atPr = (cwd: string, url: string): GhAt => {
+  const owner = parsePrUrl(url)?.owner;
+  return owner ? { cwd, owner } : { cwd };
+};
 
 interface GhPr {
   state: PrStatus['state'];
@@ -88,12 +137,12 @@ interface GhPr {
 }
 
 /** GitHub through a `gh` runner (the real CLI, or canned output in tests). */
-export const makeGhForge = (run: (cwd: string, ...args: string[]) => string): Forge => ({
+export const makeGhForge = (run: (at: GhAt, ...args: string[]) => string, ownerOf: (cwd: string) => string | undefined = originOwner): Forge => ({
   status(cwd, url) {
     const ref = parsePrUrl(url);
     if (!ref) throw new Error(`not a GitHub pull request URL: ${url}`);
-    const pr = JSON.parse(run(cwd, 'pr', 'view', url, '--json', 'state,mergeable,mergeStateStatus,headRefOid,mergeCommit,author,statusCheckRollup,comments,reviews')) as GhPr;
-    const inline = JSON.parse(run(cwd, 'api', `repos/${ref.owner}/${ref.repo}/pulls/${ref.number}/comments`, '--paginate')) as {
+    const pr = JSON.parse(run(atPr(cwd, url), 'pr', 'view', url, '--json', 'state,mergeable,mergeStateStatus,headRefOid,mergeCommit,author,statusCheckRollup,comments,reviews')) as GhPr;
+    const inline = JSON.parse(run(atPr(cwd, url), 'api', `repos/${ref.owner}/${ref.repo}/pulls/${ref.number}/comments`, '--paginate')) as {
       id: number;
       user: { login: string };
       body: string;
@@ -108,7 +157,7 @@ export const makeGhForge = (run: (cwd: string, ...args: string[]) => string): Fo
     // is known by its first comment
     const threads = JSON.parse(
       run(
-        cwd,
+        atPr(cwd, url),
         'api',
         'graphql',
         '-F',
@@ -189,14 +238,14 @@ export const makeGhForge = (run: (cwd: string, ...args: string[]) => string): Fo
     };
   },
   body(cwd, url) {
-    return (JSON.parse(run(cwd, 'pr', 'view', url, '--json', 'body')) as { body: string }).body;
+    return (JSON.parse(run(atPr(cwd, url), 'pr', 'view', url, '--json', 'body')) as { body: string }).body;
   },
   setBody(cwd, url, body) {
     // a file, not an argument: a long description would pass Windows' limit on a command line
     const dir = mkdtempSync(join(tmpdir(), 'obeya-pr-body-'));
     try {
       writeFileSync(join(dir, 'body.md'), body);
-      run(cwd, 'pr', 'edit', url, '--body-file', join(dir, 'body.md'));
+      run(atPr(cwd, url), 'pr', 'edit', url, '--body-file', join(dir, 'body.md'));
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -206,7 +255,7 @@ export const makeGhForge = (run: (cwd: string, ...args: string[]) => string): Fo
     try {
       writeFileSync(join(dir, 'body.md'), pr.body);
       // gh prints the new pull request's URL last
-      return run(cwd, 'pr', 'create', '--base', pr.base, '--head', pr.head, '--title', pr.title, '--body-file', join(dir, 'body.md')).trim().split('\n').at(-1)!.trim();
+      return run({ cwd, owner: ownerOf(cwd) }, 'pr', 'create', '--base', pr.base, '--head', pr.head, '--title', pr.title, '--body-file', join(dir, 'body.md')).trim().split('\n').at(-1)!.trim();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -215,12 +264,12 @@ export const makeGhForge = (run: (cwd: string, ...args: string[]) => string): Fo
     const ref = parsePrUrl(url);
     if (!ref) throw new Error(`not a GitHub pull request URL: ${url}`);
     // the repository's own merge methods (some allow squash only); squash first where it allows several
-    const allows = JSON.parse(run(cwd, 'api', `repos/${ref.owner}/${ref.repo}`, '--jq', '{squash: .allow_squash_merge, merge: .allow_merge_commit, rebase: .allow_rebase_merge}')) as Record<string, boolean>;
+    const allows = JSON.parse(run(atPr(cwd, url), 'api', `repos/${ref.owner}/${ref.repo}`, '--jq', '{squash: .allow_squash_merge, merge: .allow_merge_commit, rebase: .allow_rebase_merge}')) as Record<string, boolean>;
     const method = (['squash', 'merge', 'rebase'] as const).find((m) => allows[m] !== false) ?? 'squash';
     // no --delete-branch: that also switches branches in the workspace; the repository deletes merged branches or not
-    run(cwd, 'pr', 'merge', url, `--${method}`, '--match-head-commit', head);
+    run(atPr(cwd, url), 'pr', 'merge', url, `--${method}`, '--match-head-commit', head);
     try {
-      return run(cwd, 'pr', 'view', url, '--json', 'mergeCommit', '--jq', '.mergeCommit.oid').trim() || undefined;
+      return run(atPr(cwd, url), 'pr', 'view', url, '--json', 'mergeCommit', '--jq', '.mergeCommit.oid').trim() || undefined;
     } catch {
       // merged all the same: the first fetch after it stands in for the commit (Workers.merged)
       return undefined;

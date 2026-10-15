@@ -1,10 +1,33 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { confidence, lastAsked, makeGhForge, parsePrUrl, readable, readyToMerge, reviewOf, reviewStale, type PrStatus } from './forge';
+import { confidence, githubOwner, lastAsked, makeGhForge, parsePrUrl, readable, readyToMerge, reviewOf, reviewStale, type PrStatus } from './forge';
 
 test('parsePrUrl', () => {
   expect(parsePrUrl('https://github.com/example-org/app/pull/813')).toEqual({ owner: 'example-org', repo: 'app', number: 813 });
   expect(parsePrUrl('https://github.com/a/b/issues/1')).toBeNull();
+});
+
+test('githubOwner', () => {
+  expect(githubOwner('git@github.com:acme/app.git\n')).toBe('acme');
+  expect(githubOwner('https://github.com/acme/app')).toBe('acme');
+  expect(githubOwner('ssh://git@github.com/acme/app.git')).toBe('acme');
+  expect(githubOwner('/home/me/app')).toBeUndefined();
+  expect(githubOwner('git@gitlab.com:acme/app.git')).toBeUndefined();
+});
+
+test('gh runs as the account that owns the repository: of the pull request, or of the origin a new one goes to', () => {
+  const owners: (string | undefined)[] = [];
+  const forge = makeGhForge(
+    (at, ...args) => {
+      owners.push(at.owner);
+      return args[1] === 'view' ? JSON.stringify({ body: 'Text' }) : 'https://github.com/acme/app/pull/1\n';
+    },
+    (cwd) => (cwd === '/repo' ? 'acme' : undefined),
+  );
+  forge.body('/elsewhere', 'https://github.com/someone/private/pull/42');
+  expect(forge.open('/repo', { base: 'main', head: 'x', title: 'T', body: 'B' })).toBe('https://github.com/acme/app/pull/1');
+  forge.open('/local', { base: 'main', head: 'x', title: 'T', body: 'B' });
+  expect(owners).toEqual(['someone', 'acme', undefined]);
 });
 
 test('gh output becomes a PR status', () => {

@@ -257,6 +257,11 @@ export interface Item {
   paused?: true;
   /** Waiting for approval, its branch holds no change (checked at the handover): approving makes the card `done`. */
   noChange?: boolean;
+  /**
+   * Waiting for approval, its branch changes how work lands (`.obeya/settings.json`, checked at the
+   * handover): approving lands it as the branch says, not as the repository does until then.
+   */
+  lands?: CardLanding;
   /** Screenshots the owner attached to the card's task; its worker gets them at the start. */
   images?: string[];
   /** A card that was an idea and has been decided: the brief it was decided on. */
@@ -1090,6 +1095,9 @@ export interface RepoSettings {
  * which says where the file is read from.
  */
 export type SharedSettings = Omit<RepoSettings, 'branch'>;
+
+/** How a card's own branch says its work lands, where it changes the repository's settings for that. */
+export type CardLanding = Partial<Pick<RepoSettings, 'land' | 'direct'>>;
 
 /** The fields of `SharedSettings`, in the dialog's order. */
 export const SHARED_FIELDS = ['land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'app', 'demo'] as const satisfies readonly (keyof SharedSettings)[];

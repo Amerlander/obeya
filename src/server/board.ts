@@ -1686,7 +1686,7 @@ export function toItems(rows: CardRow[], docs: PlanDoc[], home: string): Item[] 
 
 /** The fields a worker adds to a card. */
 function work(r: CardRow): Partial<Item> {
-  const detail = r.detail ? (JSON.parse(r.detail) as { question?: Item['question']; summary?: string; noChange?: boolean; answering?: boolean; answered?: boolean }) : {};
+  const detail = r.detail ? (JSON.parse(r.detail) as { question?: Item['question']; summary?: string; noChange?: boolean; lands?: Item['lands']; answering?: boolean; answered?: boolean }) : {};
   const demo = r.demo ? (({ dir: _, ...d }) => d)(JSON.parse(r.demo) as Item['demo'] & { dir: string }) : undefined;
   const answering = detail.answering && (r.need === 'review' || r.need === 'demo');
   const scope = r.scope ? (JSON.parse(r.scope) as { files: string[] }).files : undefined;
@@ -1715,6 +1715,7 @@ function work(r: CardRow): Partial<Item> {
     ...(r.workspace ? { workspace: r.workspace.replace(/^ssh:\/\/([^/]+)/, '$1:') } : {}),
     ...(landed && (r.workspace || landed.needsClone) ? { finishing: true, ...(landed.followUp ? { followUp: true } : {}), ...(landed.needsClone && !r.workspace ? { waitsForClone: true } : {}) } : {}),
     ...(detail.noChange && (r.need === 'review' || r.need === 'demo') ? { noChange: true } : {}),
+    ...(detail.lands && (r.need === 'review' || r.need === 'demo') ? { lands: detail.lands } : {}),
     ...(r.paused ? { paused: true } : {}),
   };
 }

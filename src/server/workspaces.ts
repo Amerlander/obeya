@@ -405,6 +405,21 @@ export class Workspaces {
     if (path) this.store.setLease(path, null);
   }
 
+  /**
+   * The card's workspace and the commit its branch left the branch it lands on at, where it has
+   * one: what the branch changes is told by comparing its `HEAD` with that commit.
+   */
+  forkPoint(cardId: string): { ws: string; base: string } | null {
+    const ws = this.leasedBy(cardId);
+    if (!ws) return null;
+    try {
+      const main = this.main(ws);
+      return { ws, base: git(ws, 'merge-base', 'HEAD', this.o.mode === 'worktrees' ? main : `origin/${main}`) };
+    } catch {
+      return null;
+    }
+  }
+
   /** The files under `dir` that the card's branch adds, against the branch it lands on. */
   addedFiles(cardId: string, dir: string): string[] {
     const ws = this.leasedBy(cardId);

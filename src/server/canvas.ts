@@ -393,11 +393,16 @@ export class CanvasRuntime {
       runtime: deps.workerRuntime ?? deps.runtime,
       workspaces,
       adapter,
+      machineSettings: this.settingsOf(rc),
       shares: () => !!repo.site,
       repo: ref.id,
       preferences: this.preferences,
       onOwnerInput: (card, kind, text, context) => this.koordinator.learn(card, kind, text, context),
-      onPrOpened: (cardId) => this.sharing.prOpened(cardId),
+      onPrOpened: (cardId) => {
+        // a card whose own branch has its work go out as a pull request, where the repository's does not yet
+        this.watchPrs(repo);
+        this.sharing.prOpened(cardId);
+      },
       onMerged: () => void read.refresh(),
       onPrototype: (prototype, summary, demo) => this.prototypeReady(prototype, summary, demo),
       onPrototypeAnswer: (prototype, question, answer) => this.prototypeAnswered(prototype, question, answer),
@@ -437,18 +442,22 @@ export class CanvasRuntime {
 
   /**
    * Watches the plan docs of the repository in its Lesestand, afresh where they were watched (the
-   * directory or the Lesestand moved), and its pull requests once its work goes out as one; a
-   * watcher of pull requests stays, for those still open.
+   * directory or the Lesestand moved), and its pull requests once its work goes out as one or a
+   * card is in one (its own branch said so); a watcher of pull requests stays, for those still open.
    */
   private watch(r: Repo) {
     if (!this.deps.watch) return;
     r.docs?.();
     r.docs = watchPlanDocs(r.read.path, r.adapter, () => this.board.docsChanged());
-    if (r.adapter.land === 'pr' && !r.prs) {
-      const board = this.board;
-      r.prs = new PrWatcher(board, r.workers, this.deps.forge, (cardId) => localDir(board.row(cardId).workspace) ?? r.info.path, () => r.adapter.prNoise ?? [], r.ref.id, () => void r.read.refresh());
-      r.prs.start();
-    }
+    if (r.adapter.land === 'pr' || this.board.snapshot().items.some((i) => i.state === 'inPr' && i.repo === r.ref.id)) this.watchPrs(r);
+  }
+
+  /** Watches the repository's pull requests, unless it does already. */
+  private watchPrs(r: Repo) {
+    if (!this.deps.watch || r.prs) return;
+    const board = this.board;
+    r.prs = new PrWatcher(board, r.workers, this.deps.forge, (cardId) => localDir(board.row(cardId).workspace) ?? r.info.path, () => r.adapter.prNoise ?? [], r.ref.id, () => void r.read.refresh());
+    r.prs.start();
   }
 
   /**

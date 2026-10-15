@@ -222,12 +222,15 @@ export function Detail(p: Props) {
   );
 
   // work that changes nothing in the repository ends with the approval: no pull request, nothing lands
-  // where work goes out as a pull request, the owner may have it pushed onto main directly instead
-  const direct = !item.noChange && !!p.repos.find((r) => r.id === item.repo)?.direct;
+  // where work goes out as a pull request, the button says so, and where the settings allow it the
+  // owner may have it pushed onto main directly instead; a card's own branch may change both
+  const repoRef = p.repos.find((r) => r.id === item.repo);
+  const pr = !item.noChange && (item.lands?.land ?? (repoRef?.pullRequests ? 'pr' : 'main')) === 'pr';
+  const direct = pr && (item.lands?.direct ?? !!repoRef?.direct);
   const approveButton = (
     <>
       <button className="btn primary" onClick={() => act({ action: 'approve' }, item.noChange ? { close: true, ack: t.approvedNoChange } : { close: true, ack: t.approved, pending: t.approving })}>
-        {item.noChange ? t.approveNoChange : direct ? t.approvePr : t.approve}
+        {item.noChange ? t.approveNoChange : pr ? t.approvePr : t.approve}
       </button>
       {direct && (
         <button className="btn" title={t.directHint} onClick={() => act({ action: 'approve', direct: true }, { close: true, ack: t.approvedDirect, pending: t.approvingDirect })}>

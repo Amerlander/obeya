@@ -7,7 +7,7 @@ import type { CardDiff } from '../core/diff';
 import { LANGUAGE_NAMES, LANGUAGES } from '../core/locale';
 import { MESSAGES, type Messages, type Pause } from '../core/messages';
 import { basename } from 'node:path';
-import { answering, askable, pausable, type DemoKind, type DemoPage, formatQuestion, type Item, type Mock, ownWords, pickedAnswer, type Question, type RestartReason, type Spot, type SpotInput, started } from '../core/types';
+import { answering, askable, pausable, type CardLanding, type DemoKind, type DemoPage, formatQuestion, type Item, type Mock, ownWords, pickedAnswer, type Question, type RepoSettings, type RestartReason, type Spot, type SpotInput, started } from '../core/types';
 import { BadRequest, type Board, replyNote } from './board';
 import { type Asked, decisionLog, toQuestion, withPick } from './advisor';
 import { checkArtifact, DEMO_SKILL, DEMO_SKILL_FILE, demoSkillName, OBEYA_PLUGIN, placeIn, readChapters } from './demo';
@@ -18,7 +18,8 @@ import { type AgentEvent, type AgentRuntime, type AgentSession, type AgentTool, 
 import { TO_OBEYA, toObeyaTool } from './to-obeya';
 import { HOST_DIR, hostName, remote } from './hosts';
 import { runAppCommand } from './app-command';
-import { branchName, type Landed, WorkspaceError, type Workspaces } from './workspaces';
+import { readingShared } from '../adapters';
+import { branchName, gitStepsSync, type Landed, together, WorkspaceError, type Workspaces } from './workspaces';
 import type { PrState, Shipped } from './board';
 import { parsePrUrl } from './forge';
 
@@ -27,6 +28,11 @@ export interface WorkerOptions {
   runtime: AgentRuntime;
   workspaces: Workspaces;
   adapter: RepoAdapter;
+  /**
+   * The settings the owner set for the repository on this machine, in front of its
+   * `.obeya/settings.json`: how work lands where they say so, whatever a card's branch changes.
+   */
+  machineSettings?: () => RepoSettings | undefined;
   /** Whether the repository shares demos on a page now (the configuration's command, the site its settings name); its settings' site alone when left out. */
   shares?: () => boolean;
   permissionMode?: 'auto' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk' | 'default';
@@ -759,8 +765,9 @@ export class Workers {
   async approve(cardId: string, { direct = false }: { direct?: boolean } = {}) {
     const card = this.card(cardId);
     if (!(card.state === 'waiting' && (card.need === 'review' || card.need === 'demo')) || this.landing.has(cardId)) throw new BadRequest('notReady', 'the card is not ready for review');
+    const lands = this.landingOf(cardId);
     // where work lands on main anyway, approving it directly is approving it
-    if (direct && this.o.adapter.land === 'pr' && !this.o.adapter.direct)
+    if (direct && lands.land === 'pr' && !lands.direct)
       throw new BadRequest('noDirect', 'this repository lands approved work only through a pull request; its settings do not allow pushing it directly');
     if (direct && card.prototypeOf) throw new BadRequest('noDirect', 'a prototype never lands');
     // comments on places in the demo video the owner made before approving go with the approval
@@ -770,7 +777,7 @@ export class Workers {
     if (card.prototypeOf) return this.endPrototype(cardId, 'discarded');
     // work that changed nothing (a demo, an analysis) has nothing to land and no pull request to open
     if (!this.o.workspaces.hasWork(cardId)) return this.close(cardId, 'owner', comments);
-    if (this.o.adapter.land === 'main' || direct) {
+    if (lands.land === 'main' || direct) {
       // the click ends the owner's turn: while the work lands, the card no longer needs them
       this.o.board.work(cardId, { approved_at: new Date().toISOString() });
       return this.land(cardId, 'owner', comments);
@@ -798,6 +805,28 @@ export class Workers {
   }
 
   /**
+   * How the card's work lands: as the repository's settings say, except where its own branch
+   * changes that in `.obeya/settings.json` (the card that sets up the settings, say) and the
+   * settings of this machine do not say otherwise. Then as the branch says: the owner approves the
+   * change with the work, and has answered how work lands in the card that makes it. `own` holds
+   * what the branch decides.
+   */
+  landingOf(cardId: string): { land: 'main' | 'pr'; direct: boolean; own?: CardLanding } {
+    const repo = { land: this.o.adapter.land, direct: !!this.o.adapter.direct };
+    const fork = this.o.workspaces.forkPoint(cardId);
+    if (!fork) return repo;
+    const [now, before] = gitStepsSync(fork.ws, together(readingShared('HEAD'), readingShared(fork.base)));
+    const machine = this.o.machineSettings?.();
+    const own: CardLanding = {};
+    for (const field of ['land', 'direct'] as const) {
+      const v = now.settings?.[field];
+      if (v !== undefined && v !== before.settings?.[field] && machine?.[field] === undefined) Object.assign(own, { [field]: v });
+    }
+    if (own.land === undefined && own.direct === undefined) return repo;
+    return { land: own.land ?? repo.land, direct: own.direct ?? repo.direct, own };
+  }
+
+  /**
    * Lands approved work on main: on the Obeya checkout, or, where work otherwise goes out as a pull
    * request, pushed directly onto `origin`'s default branch. What the worker can fix (main moved on
    * and the change conflicts, uncommitted work) goes back to it with the approval kept: its next
@@ -821,7 +850,7 @@ export class Workers {
   private async landNow(cardId: string, by: 'owner' | 'obeya', comments?: Comments) {
     const row = this.o.board.row(cardId);
     // only a direct approval is held where work goes out as a pull request
-    const direct = this.o.adapter.land === 'pr';
+    const direct = this.landingOf(cardId).land === 'pr';
     // read before landing: the landed branch adds nothing against main
     const added = this.planDocsAdded(cardId);
     const result = await (direct ? this.o.workspaces.pushToMain(cardId) : this.o.workspaces.landOnMain(cardId, row.branch!));
@@ -1976,6 +2005,8 @@ export class Workers {
             }
             handOver();
             const report = this.report(cardId, s);
+            // the owner sees before approving where work lands that its own branch decides
+            const own = this.landingOf(cardId).own;
             const e = this.o.board.log(cardId, 'review', 'worker', s);
             // the demo report's question goes with the handover it came with, also once a later one keeps the demo
             if (demoJson) demoJson = JSON.stringify({ ...(JSON.parse(demoJson) as object), handover: e.id });
@@ -1984,7 +2015,7 @@ export class Workers {
               // the worker's last status line is about the work it hands over: it would show again once the card is at work
               ...(approved ? { status_line: this.o.board.t.worker.landing } : { state: 'waiting', need: d || kept ? 'demo' : 'review', status_line: null }),
               // approving work that changes nothing makes the card done, which the owner sees before approving
-              detail: JSON.stringify({ summary: report, ...(this.o.workspaces.hasWork(cardId) ? {} : { noChange: true }), ...(answered && !approved ? { answered: true } : {}) }),
+              detail: JSON.stringify({ summary: report, ...(this.o.workspaces.hasWork(cardId) ? (own ? { lands: own } : {}) : { noChange: true }), ...(answered && !approved ? { answered: true } : {}) }),
               ...(demoJson ? { demo: demoJson } : {}),
             });
             const card = this.o.board.item(cardId);

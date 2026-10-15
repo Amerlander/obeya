@@ -91,6 +91,49 @@ describe('landing through a pull request', () => {
   });
 });
 
+describe('a card whose own branch changes how work lands', () => {
+  const settingUp = (settings: object) => {
+    const c = manual();
+    workers.start(c.id);
+    const clone = board.row(c.id).workspace!;
+    mkdirSync(join(clone, '.obeya'), { recursive: true });
+    writeFileSync(join(clone, '.obeya/settings.json'), JSON.stringify(settings));
+    git(clone, 'add', '.');
+    git(clone, 'commit', '--quiet', '-m', 'Obeya settings');
+    runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
+    return c;
+  };
+
+  test('lands as the branch says: on main where the repository still has pull requests, which the owner sees before approving', async () => {
+    rmSync(dir, { recursive: true, force: true });
+    setup({ ...generic, land: 'pr', workspaces: 'clones' });
+    const c = settingUp({ land: 'main' });
+    expect(board.item(c.id)!.lands).toEqual({ land: 'main' });
+    await workers.approve(c.id);
+    expect(state(c.id)).toBe('live');
+    expect(board.item(c.id)!.pr).toBeUndefined();
+    expect(git(main, 'log', '--format=%s', '-1')).toBe('Obeya settings');
+  });
+
+  test('as a pull request where the repository still lands on main', async () => {
+    const c = settingUp({ land: 'pr' });
+    expect(board.item(c.id)!.lands).toEqual({ land: 'pr' });
+    await workers.approve(c.id);
+    expect(state(c.id)).toBe('inPr');
+    expect(git(main, 'log', '--format=%s', '-1')).toBe('init');
+  });
+
+  test('the settings of this machine go first', async () => {
+    rmSync(dir, { recursive: true, force: true });
+    setup({ ...generic, land: 'pr', workspaces: 'clones' });
+    setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'pr', workspaces: 'clones' }, machineSettings: () => ({ land: 'pr' }) }));
+    const c = settingUp({ land: 'main', checks: ['bun test'] });
+    expect(board.item(c.id)!.lands).toBeUndefined();
+    await workers.approve(c.id);
+    expect(state(c.id)).toBe('inPr');
+  });
+});
+
 describe('approving directly onto main where work goes out as a pull request', () => {
   beforeEach(() => {
     rmSync(dir, { recursive: true, force: true });

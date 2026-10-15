@@ -511,9 +511,9 @@ a place goes at once, with its place and frame.
 
 ### Approval and landing
 
-Where work lands through pull requests, approval puts the card `in PR`: its worker opens the PR
-(until it reports one, the card reads „Freigegeben · Agent öffnet den PR“ with the worker's status
-line, not "in PR" without a link) and Obeya carries it through the merge, which it does itself (see
+Where work lands through pull requests, the approve button reads "Freigeben (PR)", and approval
+puts the card `in PR`: its worker opens the PR (until it reports one, the card reads „Freigegeben ·
+Agent öffnet den PR“ with the worker's status line, not "in PR" without a link) and Obeya carries it through the merge, which it does itself (see
 PR loop). Review comments, failed checks and conflicts go to the worker; only what needs judgement —
 a review comment that questions a decision, a conflict with product meaning — comes back to the
 owner as a question on the card, and the answer returns it to the PR. A PR closed without a merge
@@ -1617,6 +1617,14 @@ settings), read at each approval:
 - `main` (Obeya): approval rebases the branch onto `main` and fast-forwards the Obeya checkout; the
   card is `live`.
 
+A card whose own branch changes `land` or `direct` in `.obeya/settings.json` (the card that sets up
+the settings, say) lands as its branch says, unless the settings for this machine say otherwise
+(`landingOf` in `src/server/workers.ts`): the owner approves the change with the work, and answered
+in that card how work lands. The handover records it (`lands` on the card), so the approve button
+says so before the click. Where the branch has the work go out as a pull request in a repository
+that lands on main, the canvas watches the repository's pull requests from the moment the worker
+reports one.
+
 Where the settings do not say, it is detected (`detectedLand` in `src/adapters/index.ts`): `pr`
 where `origin` is on GitHub, else `main`. On GitHub means github.com (or a subdomain of it) or a host the GitHub CLI is logged into,
 read from its `hosts.yml` (`ghHosts` in `src/server/repo.ts`, where gh keeps it on each system)
@@ -1666,7 +1674,10 @@ Per repository a watcher polls every open PR through `gh` every two minutes (sta
 checks, conversation and review comments, inline comments), and right away when the owner comes back
 to an Obeya page (it becomes visible or gets the focus; at most once in 15 seconds): the owner
 merges on GitHub and returns. The watcher sits behind a small forge interface
-(`src/server/forge.ts`) so the loop is tested against a fake.
+(`src/server/forge.ts`) so the loop is tested against a fake. gh runs as the account that owns the
+repository (the PR's, or the `origin` a new PR goes to) where gh has a login for it, its token as
+`GH_TOKEN`, whatever account gh has active: another one does not see a private repository of the
+owner, and the watcher would never learn of the merge.
 
 New comments, failed checks (once per check and commit) and a conflict (once per commit) go to the
 worker as a message, which says what happened and leaves the how to the repository's ways (say, a
@@ -1793,6 +1804,12 @@ archived card has no field.
   `--force-with-lease`, while the first repository it opened PRs in merges `main` into a PR branch,
   never force-pushes, and has its own skill for review comments. Obeya says what happened on the PR,
   the repository says how to answer it.
+- **The card that changes how work lands lands the new way, and gh runs as the repository's owner**
+  (2026-10-16). Before, Obeya read `land` only from the default branch: the card that set up a
+  GitHub repository's settings wrote `land: main` as the owner had answered, yet its approval went
+  out as a pull request, under a button that said only "Freigeben". The merged PR then left the
+  card "in PR": the watcher ran gh as the machine's active account, which could not see the
+  owner's private repository.
 - **Landing is detected from the remote** (2026-10-14). Until then Obeya's defaults had `pr`
   whatever the remote, so approving work in a repository without one told the worker to open a pull
   request that could not exist.
