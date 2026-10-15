@@ -52,3 +52,34 @@ export function Help({ onClose }: { onClose: () => void }) {
     </div>
   );
 }
+
+/** Set once the owner created a task by double-click on the canvas: the bar's button for a new task goes. */
+const DOUBLE_CLICK_KNOWN = 'obeya-double-click-known';
+
+export function doubleClickKnown() {
+  try {
+    return localStorage.getItem(DOUBLE_CLICK_KNOWN) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function knowDoubleClick() {
+  try {
+    localStorage.setItem(DOUBLE_CLICK_KNOWN, '1');
+  } catch {}
+}
+
+/** What the bar's button for a new task opens: a task is created by double-click; a click beside it, Esc or the button closes it. */
+export function NewCardHint({ onClose }: { onClose: () => void }) {
+  return (
+    <div id="help" onClick={onClose}>
+      <div className="box hint-box" role="dialog" aria-label={t.newCard} onClick={(e) => e.stopPropagation()}>
+        <p>{t.newCardHint.text}</p>
+        <button className="btn primary" autoFocus onClick={onClose}>
+          {t.newCardHint.ok}
+        </button>
+      </div>
+    </div>
+  );
+}

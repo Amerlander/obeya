@@ -38,6 +38,8 @@ const de = {
   progress: (live: number, all: number) => `${live} von ${all} live`,
   needsYou: 'brauchen dich',
   newCard: 'Neue Aufgabe',
+  /** What the button for a new task says until the owner has double-clicked a task into being once. */
+  newCardHint: { text: 'Eine neue Aufgabe legst du mit einem Doppelklick auf die Fläche an, an der Stelle, wo sie hin soll. Nach dem ersten Mal verschwindet dieser Knopf.', ok: 'Verstanden' },
   /** The legend of mouse and keys, shown over the page on `?`. Each row: its alternatives, each a combination. */
   help: {
     button: 'Bedienung (?)',
@@ -1211,7 +1213,8 @@ const de = {
     alt: 'Screenshot',
     uploading: 'lädt …',
   },
-  empty: 'Noch keine Aufgaben. Doppelklick auf die Fläche legt eine an.',
+  /** On an empty canvas: speaking first, the double-click second. */
+  empty: { none: 'Noch keine Aufgaben.', speak: 'Halte die Leertaste und sag, was Obeya bauen soll.', click: 'Oder doppelklicke auf die Fläche, um selbst eine anzulegen.' },
 };
 
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
@@ -1248,6 +1251,7 @@ const en: Strings = {
   progress: (live: number, all: number) => `${live} of ${all} live`,
   needsYou: 'need you',
   newCard: 'New task',
+  newCardHint: { text: 'To create a task, double-click on the canvas where it should go. After the first time, this button goes away.', ok: 'Got it' },
   help: {
     button: 'Controls (?)',
     title: 'Controls',
@@ -2377,7 +2381,7 @@ const en: Strings = {
     alt: 'Screenshot',
     uploading: 'uploading …',
   },
-  empty: 'No tasks yet. Double-click on the canvas to create one.',
+  empty: { none: 'No tasks yet.', speak: 'Hold Space and say what Obeya should build.', click: 'Or double-click on the canvas to create one yourself.' },
 };
 
 const tables: Record<Language, Strings> = { de, en };

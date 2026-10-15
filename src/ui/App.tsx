@@ -21,7 +21,7 @@ import { QueuePill } from './queue';
 import { depsOf } from './deps';
 import { collect, keep, type Kept, restore, type SideSheet, takeKept } from './keep';
 import { Sign, Wordmark } from './logo';
-import { Help, HelpButton } from './help';
+import { doubleClickKnown, Help, HelpButton, knowDoubleClick, NewCardHint } from './help';
 import { PlanDirNote, planDirBoxes } from './planDirs';
 import { attachTo, imageFiles } from './shots';
 import { cardDraft, fieldOn, focusedDraft, keepDrafts, MIC_DRAFT, OBEYA_DRAFT, takesImages } from './draft';
@@ -252,6 +252,9 @@ function Canvas({
     requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('#ksheet .tell textarea')?.focus({ preventScroll: true }));
   };
   const [helpOn, setHelpOn] = useState(false);
+  // the bar's button for a new task stays until the owner created one by double-click; it only says how
+  const [dblKnown, setDblKnown] = useState(doubleClickKnown);
+  const [newHintOn, setNewHintOn] = useState(false);
   const [setupOn, setSetupOn] = useState(false);
   // what is wrong in the configuration as saved, marked on its button; it changes only with a save
   // or a repository's adapter, and Obeya starts again for either, so the page reads it once
@@ -1023,6 +1026,11 @@ function Canvas({
     // the pointer capture retargets the event to the viewport, so look at what is under the pointer
     if (focusRef.current || document.elementFromPoint(e.clientX, e.clientY)?.closest('.item')) return;
     createAt(toWorld(camRef.current, e.clientX, e.clientY));
+    if (!dblKnown) {
+      knowDoubleClick();
+      setDblKnown(true);
+      setNewHintOn(false);
+    }
   }
 
   useEffect(() => {
@@ -1086,6 +1094,11 @@ function Canvas({
         e.preventDefault();
         setCOn(false);
       }
+      return;
+    }
+    // so does the hint on how to create a task; Space and Enter press its button
+    if (newHintOn) {
+      if (e.key === 'Escape') setNewHintOn(false);
       return;
     }
     // the legend over the page takes the keys until it closes
@@ -1236,7 +1249,13 @@ function Canvas({
           </div>
         </div>
         {/* on an empty canvas the camera centres the note on the plan directory: the hint goes above it */}
-        {!items.length && <div className={planDirs ? 'empty above-note' : 'empty'}>{t.empty}</div>}
+        {!items.length && (
+          <div className={planDirs ? 'empty above-note' : 'empty'}>
+            <p className="none">{t.empty.none}</p>
+            <p>{t.empty.speak}</p>
+            <p>{t.empty.click}</p>
+          </div>
+        )}
         {!ring && <Lasso pts={lasso} />}
         {ring && (
           <Ring
@@ -1271,9 +1290,11 @@ function Canvas({
             icon={<BarIcon d="M3 4h18v4H3zM5 8v12h14V8M10 12h4" />}
           />
           <QueuePill items={items} onOpen={open} />
-          <button className="pill new-card" title={t.newCard} onClick={() => focusRef.current?.type !== 'card' && createAtCentre()}>
-            + <span className="lbl">{t.newCard}</span>
-          </button>
+          {!dblKnown && (
+            <button className="pill new-card" title={t.newCard} onClick={() => focusRef.current?.type !== 'card' && setNewHintOn(true)}>
+              + <span className="lbl">{t.newCard}</span>
+            </button>
+          )}
           <HelpButton on={helpOn} onClick={() => setHelpOn(!helpOn)} />
           <div className="right">
             {!online && <div className="pill offline">{t.offline}</div>}
@@ -1313,6 +1334,7 @@ function Canvas({
         />
         <div id="dim" className={dim ? 'on' : undefined} onClick={() => closeCard()} />
         {helpOn && <Help onClose={() => setHelpOn(false)} />}
+        {newHintOn && <NewCardHint onClose={() => setNewHintOn(false)} />}
         <div id="panel" ref={panelRef}>
           <button className="close" title={t.close} onClick={() => closeCard()}>
             ✕

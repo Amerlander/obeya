@@ -2921,8 +2921,12 @@ the repository; the copy on the project is only for the archive).
   window of moderate height much of its room.
 - Opening a card takes 300 ms: a 130 ms flight brings it to the middle, then it unfolds in 170 ms;
   closing runs the same in reverse. Fast enough not to wait on, long enough to keep the context.
-- Manual cards are created by double-click, the button or `n`, and edited in the unfolded card;
-  a new card closed without a title is dropped. Deleting offers undo.
+- Manual cards are created by double-click or `n`, and edited in the unfolded card; a new card
+  closed without a title is dropped. Deleting offers undo. An empty canvas names speaking first
+  (hold Space and say what Obeya should build), the double-click second. The bar's "New task"
+  button only teaches the double-click: it opens a note saying so with one "Got it", and goes for
+  good (per browser) once the owner has created a card by double-click, which keeps the bar
+  uncluttered. Until 2026-10-15 the button created a card in the middle.
 - The server words no UI text for refusals: it answers `{ code, error }` with a stable code
   (`ErrorCode` in `src/core/types.ts`) and an English detail, and log entries of a failed start
   carry the code too. The UI shows its text for the code from `strings.ts`, a generic one for
