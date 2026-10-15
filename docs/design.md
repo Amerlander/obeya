@@ -3917,7 +3917,8 @@ Python sidecars ignore Ctrl-C instead.
   processes before, 8,400 now (each a few milliseconds of a run that waits for it).
 - **Tests run a file per process** (`bun test --parallel`, the repository's check, 2026-10-15): run
   one after the other, the suite took 165 s on the owner's Mac, waiting most of that time for git;
-  in parallel 27 s (Bun 1.4 or later; older Bun ignores the flag). The longest file sets how long
+  in parallel 27 s (Bun 1.4 or later; older Bun ignores the flag; the owner's Mac, CI and the
+  builds moved to Bun 1.4.3 for it). The longest file sets how long
   the run takes, so the workers' tests are split by theme (`workers*.test.ts`), sharing their setup
   in `workers-fixture.ts`. That module's bindings are read live; a test replaces one through its
   setter (`setWorkers`), and each file calls `eachTest()`, as files run one after the other in one
@@ -4007,7 +4008,8 @@ arm64 and x64, Windows x64, Linux x64 and arm64, the AppImage on Ubuntu 22.04 fo
 run typecheck` and `bun test` run beside it on Linux (with uv and ffmpeg, which the demo voice's
 tests use).
 
-Builds and tests use Bun 1.3.14 or later: in 1.3.12 on Linux, an `fs.watch` closed while Bun still
+Builds and tests use Bun 1.4.3 (since 2026-10-15, for tests a file per process, `bun test
+--parallel`); Obeya needs 1.3.14 or later: in 1.3.12 on Linux, an `fs.watch` closed while Bun still
 listed its directory deadlocked a thread of Bun's work pool, and every later bundle of a page (the
 canvas, the panel), which waits for that whole pool, hung for good (found 2026-10-13 from the
 panel's test, which hung on GitHub's runner after the plan-doc watch tests). `bun start` from a
