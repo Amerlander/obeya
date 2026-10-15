@@ -1097,6 +1097,8 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 .c-del:hover { color: var(--error); }
 .c-row { display: flex; gap: 8px; align-items: center; margin: 4px 0; }
 .c-row .hint { font-size: 11.5px; min-width: 0; }
+/* the hint beside it wraps, the button keeps its label on one line */
+.c-row > .btn { flex: none; white-space: nowrap; margin-top: 0; }
 .c-path { flex: 1; min-width: 0; font-family: var(--mono) !important; font-size: 12px !important; }
 .c-problem { margin: 6px 0 0; font-size: 13px; }
 .c-problem details { margin-top: 4px; }
