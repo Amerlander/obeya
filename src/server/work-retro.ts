@@ -1,6 +1,7 @@
 // The Arbeitsrückschau: Obeya looks back at how the workers worked, to make future runs cheaper.
 // When a card's work ends, an excerpt of its runs (transcript.ts, no model) goes to a short session
-// that notes the friction in it; every WORK_RETRO_EVERY finished cards of a repository, or when the
+// that notes the friction in it; after WORK_RETRO_RAMP finished cards of a new repository (1, 2 more,
+// 4 more), then every WORK_RETRO_EVERY, or when the
 // owner asks, a session in that repository's checkout reads the notes since the last one and
 // proposes cards (a script, a skill), CLAUDE.md lines or values for the repository's settings for
 // friction that recurs across cards.
@@ -25,6 +26,8 @@ export interface WorkRetroOptions {
   transcript?: (sessionId: string, cwd: string | null) => string | null;
   /** After how many finished cards of a repository the retrospective runs; WORK_RETRO_EVERY by default. */
   every?: number;
+  /** How many finished cards each of a repository's first retrospectives waits for; WORK_RETRO_RAMP by default. */
+  ramp?: number[];
   /** The values of a repository's settings a retrospective may propose, as they apply now; none where they cannot be read. */
   settingsFor?: (repo: string) => Record<ProposedSetting, string | string[]> | undefined;
 }
@@ -70,19 +73,39 @@ export class WorkRetro {
    */
   now(repo: string) {
     this.o.board.setSetting(countKey(repo), '0');
+    this.ran(repo);
     this.serial(() => this.retro(repo, true));
   }
 
-  /** Counts a finished card of the repository; whether the retrospective is due. The count is a setting, so it survives a restart. */
+  /**
+   * Counts a finished card of the repository; whether the retrospective is due. A new repository's
+   * first retrospectives come sooner (`ramp`: after its first card, 2 more, 4 more), so the owner
+   * does not wait long for the first improvements; then every WORK_RETRO_EVERY. The count and the
+   * retrospectives run are settings, so they survive a restart.
+   */
   private count(repo: string): boolean {
     const b = this.o.board;
+    const ramp = this.o.ramp ?? WORK_RETRO_RAMP;
+    const runs = this.runs(repo);
     const n = Number(b.setting(countKey(repo)) ?? 0) + 1;
-    if (n < (this.o.every ?? WORK_RETRO_EVERY)) {
+    if (n < (runs < ramp.length ? ramp[runs]! : (this.o.every ?? WORK_RETRO_EVERY))) {
       b.setSetting(countKey(repo), String(n));
       return false;
     }
     b.setSetting(countKey(repo), '0');
+    this.ran(repo);
     return true;
+  }
+
+  /** How many retrospectives the repository had; one that had some before they were counted is past the ramp. */
+  private runs(repo: string): number {
+    const b = this.o.board;
+    const n = b.setting(runsKey(repo));
+    return n !== null ? Number(n) : b.setting(sinceKey(repo)) ? (this.o.ramp ?? WORK_RETRO_RAMP).length : 0;
+  }
+
+  private ran(repo: string) {
+    this.o.board.setSetting(runsKey(repo), String(this.runs(repo) + 1));
   }
 
   /** The excerpt of the card's runs, made into 0 to 3 friction notes by a short session; none without an excerpt. */
@@ -279,13 +302,15 @@ export function earlierRuns(events: CardEvent[]): string[] {
   });
 }
 
-/** After how many finished cards of a repository the retrospective runs, and at most how much it proposes. */
+/** After how many finished cards of a repository the retrospective runs, the first few sooner, and at most how much it proposes. */
 export const WORK_RETRO_EVERY = 10;
+export const WORK_RETRO_RAMP = [1, 2, 4];
 const WORK_RETRO_PROPOSALS = 3;
 const MAX_NOTES = 3;
 /** The settings that keep a repository's count across restarts, and when its last retrospective was. */
 const countKey = (repo: string) => `work_retro_cards:${repo}`;
 const sinceKey = (repo: string) => `work_retro_since:${repo}`;
+const runsKey = (repo: string) => `work_retro_runs:${repo}`;
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 

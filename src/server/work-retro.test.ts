@@ -28,7 +28,7 @@ beforeEach(() => {
   board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: main, branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
   runtime = new FakeRuntime();
   files = {};
-  retro = new WorkRetro({ board, runtime, pathFor: () => main, transcript: (id) => files[id] ?? null, every: 3 });
+  retro = new WorkRetro({ board, runtime, pathFor: () => main, transcript: (id) => files[id] ?? null, every: 3, ramp: [] });
   const workspaces = new Workspaces(store, 'c', { mode: 'worktrees', repoPath: main, dir: join(dir, 'ws') });
   workers = new Workers({ board, runtime, workspaces, adapter: { ...generic, land: 'main', workspaces: 'worktrees' }, onWorkEnded: (id, ws) => retro.ended(id, ws) });
 });
@@ -144,7 +144,7 @@ describe('Arbeitsrückschau', () => {
 
   test('workers who each worked out how to run the app: the retrospective proposes the recipe for „App für die Demo starten“', async () => {
     const now = { checks: ['bun test'], setup: '', softPaths: ['docs/'], howToRun: '' };
-    retro = new WorkRetro({ board, runtime, pathFor: () => main, transcript: (id) => files[id] ?? null, every: 2, settingsFor: () => now });
+    retro = new WorkRetro({ board, runtime, pathFor: () => main, transcript: (id) => files[id] ?? null, every: 2, ramp: [], settingsFor: () => now });
     board.showSettings(() => now);
     files = { a: SAMPLE, b: SAMPLE };
     const a = ran('Login-Seite', 'a');
@@ -197,6 +197,33 @@ describe('Arbeitsrückschau', () => {
     const next = retroSessions()[1]!;
     expect(next.inbox[0]).toContain(`- setting howToRun = ${JSON.stringify(recipe)} (Auf „Login-Seite“ und „Warenkorb“ suchten die Agenten, wie die App startet.)`);
     expect(next.inbox[0]).toContain('- setting checks = ["bun test","bun run typecheck"] (taken)');
+  });
+
+  test('a new repository’s first retrospectives come after its first finished card, 2 more and 4 more, then at the usual beat', async () => {
+    retro = new WorkRetro({ board, runtime, pathFor: () => main, transcript: () => null, every: 3 });
+    const runs: number[] = [];
+    for (let i = 1; i <= 13; i++) {
+      ran(`Karte ${i}`, `s${i}`);
+      await retro.idle();
+      if (board.setting('work_retro_runs:home') !== String(runs.length)) runs.push(i);
+    }
+    expect(runs).toEqual([1, 3, 7, 10, 13]);
+    // the owner's own retrospective counts as one, and the count starts again
+    retro.now('home');
+    await retro.idle();
+    expect([board.setting('work_retro_runs:home'), board.setting('work_retro_cards:home')]).toEqual(['6', '0']);
+  });
+
+  test('a repository that had retrospectives before they were counted is past the ramp', async () => {
+    retro = new WorkRetro({ board, runtime, pathFor: () => main, transcript: () => null, every: 3 });
+    board.setSetting('work_retro_since:home', '2026-10-01T00:00:00.000Z');
+    ran('A', 'a');
+    ran('B', 'b');
+    await retro.idle();
+    expect(board.setting('work_retro_runs:home')).toBeNull();
+    ran('C', 'c');
+    await retro.idle();
+    expect(board.setting('work_retro_runs:home')).toBe('4');
   });
 
   test('asked for with nothing noted, the owner hears so', async () => {
