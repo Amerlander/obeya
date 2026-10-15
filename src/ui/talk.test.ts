@@ -68,6 +68,12 @@ test('a note the worker did not reply to is answered by the first words it says 
     { e: ok, steps: [edit] },
   ]);
   expect(talkTurns([read, note, edit, ok, later, review]).shown.at(-1)).toEqual({ e: review, steps: [later] });
+  // words on the way to its reply are steps of it
+  const reply = ev('talk', 'worker', 'Excel kommt.');
+  expect(talkTurns([note, edit, ok, reply]).shown).toEqual([
+    { e: note, steps: [] },
+    { e: reply, steps: [edit, ok] },
+  ]);
   // words from before anything was said to the worker are no reply
   expect(talkTurns([ev('say', 'worker', 'Ich lese mich ein.'), read]).shown).toEqual([]);
 });

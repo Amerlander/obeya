@@ -2040,7 +2040,7 @@ export class Workers {
                 if (!l?.worktree) return 'Not recorded: you work in a full clone already.';
                 this.o.board.work(cardId, { landed: JSON.stringify({ ...l, needsClone: true } satisfies LandedState) });
                 this.o.board.log(cardId, 'activity', 'worker', this.o.board.t.worker.needsClone);
-                return 'Recorded. End your turn now: Obeya resumes you in the next free clone.';
+                return 'Recorded. Tell the owner with reply that you go on once a clone is free, then end your turn: Obeya resumes you in the next free clone.';
               },
             } satisfies AgentTool,
           ]

@@ -80,7 +80,7 @@ export function demoHandover(demo: Demo, shown: Turn[]): Turn | undefined {
  * the steps it took between the two), and the
  * state changes between them. The agent's steps before it read the owner's words close above them
  * (`closed`). What the owner says to a worker that does not `reply` is answered by the first words
- * it says after it. What the agent has not read yet stands apart (`unread`).
+ * it says after it; words before its reply are steps on the way to it. What the agent has not read yet stands apart (`unread`).
  * `asking`: the question the card waits on. `over`: no agent works on the card, so no message will
  * come for the steps without one (`settle`). `paused`: the agent is paused now, at the last line that says so.
  */
@@ -93,7 +93,7 @@ export function talkTurns(all: CardEvent[], opts: { asking?: Question; over?: bo
   const lastPause = events.findLast(pauseLine);
   events.forEach((e, i) => {
     const where = place(e, events[i - 1]);
-    if (where === 'step' && open && e.kind === 'say' && e.author === 'worker') {
+    if (where === 'step' && open && e.kind === 'say' && e.author === 'worker' && !repliesLater(events, i)) {
       shown.push({ e, steps });
       steps = [];
       open = false;
@@ -150,6 +150,15 @@ export function talkTurns(all: CardEvent[], opts: { asking?: Question; over?: bo
     steps = [];
   }
   return { shown, pending: steps, unread: all.filter((e) => e.unread), ...(asked ? { asked } : {}) };
+}
+
+/** Whether the worker replies after its words at `i`, before the owner says anything more: then those words were a step on the way to the reply. */
+function repliesLater(events: CardEvent[], i: number): boolean {
+  for (const e of events.slice(i + 1)) {
+    if (toAgent(e)) return false;
+    if (e.kind === 'talk' && agentAuthor(e)) return true;
+  }
+  return false;
 }
 
 /** The line that the owner paused the card's agent (before 2026-10-15 it went on with how the agent goes on again). */

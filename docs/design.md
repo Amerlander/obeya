@@ -544,7 +544,9 @@ else folds away under the agent's next message as „Verlauf“ (a worker's clos
 or handover under that message, as its last step): tool calls, thoughts, status lines,
 the Koordinator's confirmations, Obeya's notes (restarts, sessions, what happens on the pull
 request). A note the worker answered without `reply` (a card from before it, a worker that forgot)
-is answered by the first words the worker said after it. Once no agent works on the card and no
+is answered by the first words the worker said after it, unless a reply follows them before the
+owner says more: then they were a step on the way to it (until 2026-10-15 they stood as a message
+of their own above the reply). Once no agent works on the card and no
 question is open, no message is coming for the steps after the last one: they go where they
 happened, before the lines that came later. The agent's last words among them stand as its message
 (the closing words after a landing, say), a turn it ended without words as its steps, and what only
@@ -1313,8 +1315,8 @@ the owner's language (`src/core/locale.ts`).
   `origin`'s copy of the branch or at the default branch; under `follow-up/<card>` in the
   repository's workspaces directory, in no pool and taking no clone, and removed (with `git
   worktree prune` in its clone) once the follow-up ends. Its worker is told the repository's app
-  stack and tooling may not run there; if answering needs them, it calls `need_clone` and ends its
-  turn: session and worktree end, and the card waits without a workspace for the next clean free
+  stack and tooling may not run there; if answering needs them, it calls `need_clone`, tells the
+  owner with `reply` and ends its turn: session and worktree end, and the card waits without a workspace for the next clean free
   clone, its status line „Wartet auf Workspace“ (it counts in the pill with the cards waiting for a
   workspace). The Koordinator's drain gives it the next one, before the queued cards
   (`leasable(true)`, then `takeClone`), and its session resumes there by itself; what the owner says
