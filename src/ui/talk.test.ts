@@ -320,3 +320,23 @@ test("a proposal's open questions leave where they were asked; settled ones stay
   // the reviser settled the format and kept PDF open: that one is answered at the end
   expect(withoutOpen(events, [pdf])).toEqual([q1, owner, reply]);
 });
+
+test('what an agent did until it was paused stays above the line once it went on; while paused, its bubble shows it', () => {
+  const asked = ev('talk', 'owner', 'Was bräuchte ein Export?');
+  const read = ev('activity', 'explorer', '$ git ls-files');
+  const thought = ev('activity', 'explorer', '$ ls data');
+  const paused = ev('state', 'owner', 'Pausiert.');
+  // paused now: the steps wait for the paused bubble, above the line
+  expect(talkTurns([asked, read, thought, paused], { paused: true })).toMatchObject({ shown: [{ e: asked }, { e: paused, line: true }], pending: [read, thought] });
+  // gone on with a message: the steps stand where it stopped, the new work after the message
+  const more = ev('talk', 'owner', 'Und Excel?');
+  const resumed = ev('state', 'owner', 'Weiter.');
+  const now = ev('activity', 'explorer', '$ cat data/strom.csv');
+  const t = talkTurns([asked, read, thought, paused, more, resumed, now]);
+  expect(t.shown.map((x) => x.e)).toEqual([asked, read, paused, more, resumed]);
+  expect(t.shown[1]).toMatchObject({ steps: [read, thought], quiet: true });
+  expect(t.pending).toEqual([now]);
+  // a line from before 2026-10-15, which said how it goes on, is one too
+  const old = ev('state', 'owner', 'Paused. The agent goes on when you click “Resume” or write to it.');
+  expect(talkTurns([asked, read, old, resumed]).shown.map((x) => x.e)).toEqual([asked, read, old, resumed]);
+});

@@ -1,6 +1,7 @@
 // A card's conversation, from its events.
 
 import { LANGUAGES } from '../core/locale';
+import { MESSAGES } from '../core/messages';
 import { askable, type CardEvent, type Demo, finishingUp, formatQuestion, type Item, pausable, type Question } from '../core/types';
 import type { Field } from './api';
 
@@ -80,14 +81,15 @@ export function demoHandover(demo: Demo, shown: Turn[]): Turn | undefined {
  * (`closed`). What the owner says to a worker that does not `reply` is answered by the first words
  * it says after it. What the agent has not read yet stands apart (`unread`).
  * `asking`: the question the card waits on. `over`: no agent works on the card, so no message will
- * come for the steps without one (`settle`).
+ * come for the steps without one (`settle`). `paused`: the agent is paused now, at the last line that says so.
  */
-export function talkTurns(all: CardEvent[], opts: { asking?: Question; over?: boolean } = {}): Talk {
+export function talkTurns(all: CardEvent[], opts: { asking?: Question; over?: boolean; paused?: boolean } = {}): Talk {
   const shown: Turn[] = [];
   let steps: CardEvent[] = [];
   // the owner said something to the agent, and the worker has not answered yet
   let open = false;
   const events = asRead(all.filter((e) => !e.unread));
+  const lastPause = events.findLast(pauseLine);
   events.forEach((e, i) => {
     const where = place(e, events[i - 1]);
     if (where === 'step' && open && e.kind === 'say' && e.author === 'worker') {
@@ -101,7 +103,18 @@ export function talkTurns(all: CardEvent[], opts: { asking?: Question; over?: bo
       if (last) last.steps.push(e);
       else steps.push(e);
     }
-    else if (where === 'line' || where === 'aside') shown.push({ e, steps: [], ...(where === 'line' ? { line: true as const } : {}) });
+    else if (where === 'line' || where === 'aside') {
+      // what the agent did until the owner paused it stays above that line once it went on; while it
+      // is paused there, its bubble shows it
+      if (pauseLine(e) && !(opts.paused && e === lastPause)) {
+        const run = closed(steps);
+        if (run) {
+          shown.push(run);
+          steps = [];
+        }
+      }
+      shown.push({ e, steps: [], ...(where === 'line' ? { line: true as const } : {}) });
+    }
     else if (where === 'agent') {
       // a turn that ended without a reply took its last words as the reply
       shown.push({ e, steps: steps.filter((s) => !(s.kind === 'say' && s.text === e.text.trim())) });
@@ -133,6 +146,9 @@ export function talkTurns(all: CardEvent[], opts: { asking?: Question; over?: bo
   }
   return { shown, pending: steps, unread: all.filter((e) => e.unread), ...(asked ? { asked } : {}) };
 }
+
+/** The line that the owner paused the card's agent (before 2026-10-15 it went on with how the agent goes on again). */
+const pauseLine = (e: CardEvent) => e.kind === 'state' && e.author === 'owner' && LANGUAGES.some((l) => e.text.startsWith(MESSAGES[l].worker.pausedByOwner));
 
 /** The events in the order the agent saw them: the owner's words it read later stand after the line it read them at, in the order said. */
 function asRead(events: CardEvent[]): CardEvent[] {

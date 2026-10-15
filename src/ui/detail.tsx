@@ -896,7 +896,7 @@ function Conversation({
   // a proposal's open questions stand at the end, where they are answered, rather than where they were asked
   const open = proposal && !working ? (item.proposal?.questions ?? []) : [];
   const openKey = JSON.stringify(open);
-  const turns = useMemo(() => (events ? talkTurns(withoutOpen(events, open), { asking, over: !working && !paused }) : null), [events, asked, working, paused, openKey]);
+  const turns = useMemo(() => (events ? talkTurns(withoutOpen(events, open), { asking, over: !working && !paused, paused }) : null), [events, asked, working, paused, openKey]);
   const byId = useMemo(() => new Map(events?.map((e) => [e.id, e])), [events]);
   if (!events || !turns) return null;
   if (hideEmpty && !turns.shown.length && !turns.pending.length) return null;

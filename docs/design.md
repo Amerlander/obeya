@@ -466,7 +466,8 @@ Question card's agent what it was asked (the thread's pending words). The bubble
 agent stopped, standing still in pencil grey: „Agent pausiert · ▶ Weitermachen“, with the line
 „Pausiert.“ under it (the bubble and the field say how it goes on, so the line does not, and still
 reads right once it went on); going on, like a message, brings the bubble at work to the end again,
-below that line, the owner's words and „Weiter.“. The card on the canvas reads paused too,
+below that line, the owner's words and „Weiter.“, while the steps it took until the pause stay
+above the line, as the agent's message there. The card on the canvas reads paused too,
 without the moving line; a restart of Obeya leaves every paused agent paused. „Weitermachen“ (by voice
 „mach weiter“) resumes the same session, and the agent hears that it was paused and that what ran
 was stopped (exit code 137); what the owner writes to a paused agent resumes it the same way and goes
