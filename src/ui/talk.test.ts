@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { type CardEvent, formatQuestion } from '../core/types';
+import { type CardEvent, formatQuestion, pausable } from '../core/types';
 import { agentWorks, demoHandover, koordinatorReads, ownerField, parseQuestion, split, talkAlone, talkTurns, withoutOpen } from './talk';
 
 let id = 0;
@@ -252,14 +252,27 @@ test('a task an agent works on shows its conversation alone until there is a res
   expect(talkAlone({ state: 'idea' })).toBe(false);
 });
 
-test("a worker taking in the owner's words on its handover is at work in the conversation, as one at work or finishing after the landing is", () => {
-  expect(agentWorks({ state: 'waiting', need: 'demo', answering: true })).toBe(true);
-  expect(agentWorks({ state: 'waiting', need: 'review', answering: true })).toBe(true);
-  expect(agentWorks({ state: 'waiting', need: 'demo' })).toBe(false);
-  expect(agentWorks({ state: 'waiting', need: 'question' })).toBe(false);
-  expect(agentWorks({ state: 'working' })).toBe(true);
-  expect(agentWorks({ state: 'live', finishing: true })).toBe(true);
-  expect(agentWorks({ state: 'live' })).toBe(false);
+test('the conversation ends with the agent at work exactly while its agent works on something, whatever the card\'s state', () => {
+  const task = { kind: 'task' } as const;
+  // a worker in a turn: at work, taking in the owner's words on its handover, on its pull request, after the landing
+  expect(agentWorks({ ...task, state: 'working', inTurn: true })).toBe(true);
+  expect(agentWorks({ ...task, state: 'waiting', inTurn: true })).toBe(true);
+  expect(agentWorks({ ...task, state: 'inPr', inTurn: true })).toBe(true);
+  expect(agentWorks({ ...task, state: 'live', inTurn: true })).toBe(true);
+  // idle: its pull request waits for review, or it waits for a usage limit
+  expect(agentWorks({ ...task, state: 'inPr' })).toBe(false);
+  expect(agentWorks({ ...task, state: 'working' })).toBe(false);
+  // paused: nothing of it runs
+  expect(agentWorks({ ...task, state: 'working', inTurn: true, paused: true })).toBe(false);
+  const idea = (thinking: boolean) => ({ status: 'open' as const, brief: '', thinking, yourTurn: false, questions: [], variants: [], mocks: [] });
+  expect(agentWorks({ ...task, state: 'idea', idea: idea(true) })).toBe(true);
+  expect(agentWorks({ ...task, state: 'idea', idea: idea(false) })).toBe(false);
+  expect(agentWorks({ kind: 'question', state: 'done', thread: { talk: 1, thinking: true, answers: 0, files: 0 } })).toBe(true);
+  expect(agentWorks({ kind: 'question', state: 'done', thread: { talk: 1, answers: 0, files: 0 }, paused: true })).toBe(false);
+  // a proposal reworked is at work too, but no agent there can be paused
+  const reworked = { ...task, state: 'proposal' as const, proposal: { questions: [], revising: { words: 'kürzer' } } };
+  expect(agentWorks(reworked)).toBe(true);
+  expect(pausable(reworked)).toBe(false);
 });
 
 test('a refused tool call stands as a line between the messages, not folded with the steps', () => {

@@ -13,8 +13,8 @@ import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AnswerFile, AnswerRef, CardEvent, Item, Talk } from '../core/types';
-import { INFORM_RULES, inform, type OwnerAnswer } from './advisor';
+import { type AnswerFile, type AnswerRef, type CardEvent, type Item, pausable, type Talk } from '../core/types';
+import { INFORM_RULES, inform, Interrupted, type OwnerAnswer } from './advisor';
 import { BadRequest, type Board, replyNote } from './board';
 import { imageNote } from './images';
 import type { AgentRuntime } from './runtime';
@@ -30,7 +30,7 @@ export interface AnswerOptions {
   startBrief: (card: Item) => string | undefined;
   /** The project agent of a project answers what is asked about it and its workstreams. */
   projectAgent: (project: Item) => {
-    inform: (project: Item, message: string, onTool?: (name: string, input: Record<string, unknown>) => void, dir?: string) => Promise<OwnerAnswer>;
+    inform: (project: Item, message: string, onTool?: (name: string, input: Record<string, unknown>) => void, dir?: string, signal?: AbortSignal) => Promise<OwnerAnswer>;
   };
   /** A thread's output directory, outside every repository. */
   dirOf: (thread: number) => string;
@@ -58,6 +58,10 @@ export class Answers {
   private turns = new Map<number, Promise<unknown>>();
   /** Question cards whose agent is in a turn: what the owner asks meanwhile waits for the next, unread until then. */
   private reading = new Set<string>();
+  /** Ends the running turn of a Question card's agent, for the owner's pause. */
+  private turnEnds = new Map<string, AbortController>();
+  /** Question cards whose agent the owner let go on after a pause: its next turn hears so. */
+  private resumed = new Set<string>();
 
   constructor(private o: AnswerOptions) {}
 
@@ -119,8 +123,42 @@ export class Answers {
     const said = `${replyNote(quoted, 'koordinator')}${text}${imageNote(images)}`;
     const thread = this.o.board.thread(cardId);
     const pending = [...(thread.pending ?? []), { text: spoken ? `(${SPOKEN}:) ${said}` : said, images, said: [e.id], ...(talk ? { talk } : {}) }];
+    // the owner's words let a paused agent go on, with what it had not answered yet
+    if (card.paused) this.goOn(cardId);
     this.o.board.setThread(cardId, { thinking: true, pending });
     this.queue(thread.talk, () => this.cardTurn(card.id));
+  }
+
+  /**
+   * The owner pauses the Question card's agent while it reads: its session ends at once, in the
+   * middle of a step if need be. What it was asked stays pending, for when the owner resumes it or
+   * asks more.
+   */
+  pause(cardId: string) {
+    const card = this.questionCard(cardId);
+    if (!pausable(card)) throw new BadRequest('noAgent', card.paused ? 'the agent is paused already' : 'the agent is not working on anything');
+    this.o.board.work(cardId, { paused: '{}' });
+    this.o.board.setThread(cardId, { thinking: false });
+    this.o.board.log(cardId, 'state', 'owner', this.o.board.t.worker.pausedByOwner);
+    this.turnEnds.get(cardId)?.abort();
+  }
+
+  /** The owner lets the paused agent go on: it answers what it was asked. */
+  resume(cardId: string) {
+    const card = this.questionCard(cardId);
+    if (!card.paused) throw new BadRequest('notPaused', 'the agent is not paused');
+    this.goOn(cardId);
+    const thread = this.o.board.thread(cardId);
+    // the owner may have taken back all it was asked meanwhile
+    if (!thread.pending?.length) return;
+    this.o.board.setThread(cardId, { thinking: true });
+    this.queue(thread.talk, () => this.cardTurn(cardId));
+  }
+
+  private goOn(cardId: string) {
+    this.o.board.work(cardId, { paused: null });
+    this.o.board.log(cardId, 'state', 'owner', this.o.board.t.worker.resumedByOwner);
+    this.resumed.add(cardId);
   }
 
   /**
@@ -137,8 +175,8 @@ export class Answers {
     this.o.board.withdraw(cardId, id);
   }
 
-  /** After a restart: questions still being looked up are looked up again, and Question cards answer what waited. */
-  resume() {
+  /** After a restart: questions still being looked up are looked up again, and Question cards answer what waited (not while paused). */
+  resumeAll() {
     for (const i of this.o.board.snapshot().items) {
       if (i.kind !== 'question' || !i.thread?.thinking) continue;
       if (this.o.board.thread(i.id).pending?.length) this.queue(i.thread.talk, () => this.cardTurn(i.id));
@@ -196,13 +234,17 @@ export class Answers {
     const card = this.o.board.item(cardId);
     const stored = card?.kind === 'question' ? this.o.board.thread(cardId) : undefined;
     const taken = stored?.pending ?? [];
-    if (!card || !stored || !taken.length) return;
+    // paused while it waited for its turn: it goes on once the owner lets it
+    if (!card || !stored || !taken.length || card.paused) return;
     const root = this.o.board.exchange(stored.talk);
     if (!root?.question) return;
     const { by, about, project } = this.agentFor(root);
     const words = taken.map((p) => p.text).join('\n\n');
+    const resumed = this.resumed.delete(cardId) ? `${RESUMED}\n\n` : '';
     this.o.board.readNow(cardId, taken.flatMap((p) => p.said ?? []));
     this.reading.add(cardId);
+    const end = new AbortController();
+    this.turnEnds.set(cardId, end);
     let a: OwnerAnswer;
     try {
       a = await this.consult({
@@ -217,13 +259,17 @@ export class Answers {
         },
         onSession: (id) => this.o.board.work(cardId, { session_id: id }),
         resume: this.o.board.row(cardId).session_id ?? undefined,
-        message: followUp(words, undefined, true),
+        message: `${resumed}${followUp(words, undefined, true)}`,
         fallback: `${this.message(root.said, root.question, about, project)}\n\n${this.history(stored.talk, cardId)}\n\n${followUp(words, undefined, true)}`,
+        signal: end.signal,
       });
     } catch (e) {
+      // paused: what it was asked stays pending
+      if (e instanceof Interrupted) return;
       a = { text: this.o.board.t.answer.failed(e instanceof Error ? e.message : String(e)) };
     } finally {
       this.reading.delete(cardId);
+      if (this.turnEnds.get(cardId) === end) this.turnEnds.delete(cardId);
     }
     const text = clip(a.text, 12000);
     // the card may have become an idea meanwhile; the answer stands in its conversation all the same
@@ -252,12 +298,13 @@ export class Answers {
     fallback?: string;
     card?: string;
     images?: string[];
+    signal?: AbortSignal;
     onTool: (name: string, input: Record<string, unknown>) => void;
     onSession: (id: string) => void;
   }): Promise<OwnerAnswer> {
     const dir = this.o.dirOf(c.thread);
     mkdirSync(dir, { recursive: true });
-    if (c.by === 'project') return this.o.projectAgent(c.project!).inform(c.project!, `${c.message}\n\n${filesNote(dir)}`, c.onTool, dir);
+    if (c.by === 'project') return this.o.projectAgent(c.project!).inform(c.project!, `${c.message}\n\n${filesNote(dir)}`, c.onTool, dir, c.signal);
     const toObeya = c.card && this.o.toObeya ? this.o.toObeya : undefined;
     const ask = (message: string, resume?: string) =>
       inform({
@@ -273,9 +320,13 @@ export class Answers {
         ...(c.images?.length ? { images: c.images } : {}),
         ...(toObeya ? { tools: [toObeyaTool((request) => toObeya(c.card!, request))] } : {}),
         ...(this.o.permissionMode ? { permissionMode: this.o.permissionMode } : {}),
+        ...(c.signal ? { signal: c.signal } : {}),
       });
     if (!c.resume) return ask(c.fallback ?? c.message);
-    return ask(c.message, c.resume).catch(() => ask(c.fallback ?? c.message));
+    return ask(c.message, c.resume).catch((e) => {
+      if (e instanceof Interrupted) throw e;
+      return ask(c.fallback ?? c.message);
+    });
   }
 
   /** Who answers a thread: the project agent for a project or one of its workstreams, else a Koordinator turn. */
@@ -391,6 +442,10 @@ const followUp = (said: string, question: string | undefined, onCard: boolean) =
   ]
     .filter(Boolean)
     .join('\n\n');
+
+/** What the agent of a Question card hears when the owner lets it go on after a pause. */
+const RESUMED =
+  'The owner paused you while you worked on your answer and has now let you go on. Pausing ended your session at once: whatever you had running was stopped with it (a command still running shows exit code 137). What they asked is still unanswered.';
 
 /** Where the thread's files go, as every turn of it hears. */
 const filesNote = (dir: string) =>

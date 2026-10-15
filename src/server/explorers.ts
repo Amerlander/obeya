@@ -73,7 +73,29 @@ export class Explorers {
     this.o.board.setIdea(cardId, { yourTurn: false, questions: [], next: undefined });
     if (text) this.o.onOwnerInput?.(card, text);
     const quoted = replyTo ? this.o.board.quoted(cardId, replyTo) : undefined;
-    this.send(card, `The owner says${spoken ? ` (${SPOKEN})` : ''}:\n\n${replyNote(quoted, 'explorer')}${text}${imageNote(images)}`, images, false, [said.id]);
+    this.send(card, `The owner says${spoken ? ` (${SPOKEN})` : ''}:\n\n${replyNote(quoted, 'explorer')}${text}${imageNote(images)}`, images, false, [said.id], true);
+  }
+
+  /**
+   * The owner pauses the idea's agent while it works on a reply: its session ends at once, in the
+   * middle of a step if need be, and what it has not answered yet stays with the idea (`interrupt`).
+   * It goes on with those messages once the owner resumes it or says something more.
+   */
+  pause(cardId: string) {
+    const card = this.idea(cardId);
+    if (!this.live.has(cardId)) throw new BadRequest('noAgent', card.paused ? 'the agent is paused already' : 'the agent is not working on anything');
+    this.interrupt(cardId, 'paused');
+    this.o.board.work(cardId, { paused: '{}' });
+    this.o.board.log(cardId, 'state', 'owner', this.o.board.t.worker.pausedByOwner);
+  }
+
+  /** The owner lets the paused agent go on: it answers what it had not answered yet. */
+  resume(cardId: string) {
+    const card = this.idea(cardId);
+    if (!card.paused) throw new BadRequest('notPaused', 'the agent is not paused');
+    // a reply already given left nothing unanswered: it goes on with what it did after it, its words no new reply
+    const unanswered = !!this.o.board.idea(cardId).unread;
+    this.send(card, unanswered ? 'Answer them now.' : RESUMED, [], !unanswered, [], true);
   }
 
   /**
@@ -112,13 +134,14 @@ export class Explorers {
     this.send(card, text, [], quiet);
   }
 
-  /** Ends the idea's session; its id stays, so the conversation can go on later. */
+  /** Ends the idea's session; its id stays, so the conversation can go on later. A pause ends with it (the idea parked, dropped, decided). */
   close(cardId: string) {
     const live = this.live.get(cardId);
     this.live.delete(cardId);
     live?.session.close();
     const card = this.o.board.item(cardId);
     if (card?.idea?.thinking) this.o.board.setIdea(cardId, { thinking: false });
+    if (card?.paused) this.o.board.work(cardId, { paused: null });
   }
 
   /**
@@ -131,6 +154,10 @@ export class Explorers {
       // a reply already given answered the turn's messages
       const messages = [...(live.replied ? [] : live.current), ...live.queue];
       if (messages.length) this.o.board.setIdea(cardId, { unread: { why, messages } });
+    } else {
+      // parked or dropped while paused: that is what the agent hears when it goes on
+      const { unread } = this.o.board.idea(cardId);
+      if (unread?.why === 'paused') this.o.board.setIdea(cardId, { unread: { ...unread, why } });
     }
     this.close(cardId);
   }
@@ -161,7 +188,8 @@ export class Explorers {
     this.live.clear();
   }
 
-  private send(card: Item, message: string, images: string[] = [], quiet = false, said: number[] = []) {
+  /** `owner`: the owner's words, which let a paused agent go on; what Obeya tells it waits with what it has not answered yet. */
+  private send(card: Item, message: string, images: string[] = [], quiet = false, said: number[] = [], owner = false) {
     const live = this.live.get(card.id);
     if (live) {
       // queued, it goes in with whatever else came, which may well need a reply
@@ -171,6 +199,14 @@ export class Explorers {
     const row = this.o.board.row(card.id);
     // what an interrupted turn left unanswered goes first
     const { unread } = this.o.board.idea(card.id);
+    if (row.paused) {
+      if (!owner) {
+        this.o.board.setIdea(card.id, { unread: { why: unread?.why ?? 'paused', messages: [...(unread?.messages ?? []), { text: message, images, said }] } });
+        return;
+      }
+      this.o.board.work(card.id, { paused: null });
+      this.o.board.log(card.id, 'state', 'owner', this.o.board.t.worker.resumedByOwner);
+    }
     const current = [...(unread?.messages ?? []), { text: message, images, said }];
     this.o.board.setIdea(card.id, { thinking: true, unread: undefined });
     this.o.board.readNow(card.id, current.flatMap((m) => m.said ?? []));
@@ -415,6 +451,10 @@ const OPENING =
 const OPENING_PROPOSED =
   "A worker proposed this idea while on another card, and the owner took it up to discuss it. They have not said more yet: what the card says above is where the conversation starts, with what the owner decided on the proposal and the questions still open. Look into it and open the discussion.";
 
+/** The owner let the paused agent go on after it had replied already. */
+const RESUMED =
+  'The owner paused you after your reply and has now let you go on. Pausing ended your session at once: whatever you had running was stopped with it (a command still running shows exit code 137). Go on where you stopped.';
+
 /** The owner clicked "So bauen" during the agent's turn. */
 const BUILD_AFTER_REPLY =
   'The owner clicked "So bauen" while you worked on this reply: once it is there, a worker builds the idea from the brief as you leave it, unless your reply asks questions; then nothing is built, and the owner decides again after answering them.';
@@ -424,6 +464,8 @@ const UNREAD_NOTE: Record<Unread['why'], string> = {
   dropped: 'The owner dropped the idea while you were working on a reply, which ended that turn. These messages are still unanswered; take them in with the one after them:',
   error: 'Your last turn ended with an error before you replied. These messages are still unanswered; take them in with the one after them:',
   restart: 'Obeya was restarted while you worked on a reply. These messages are still unanswered; take them in with the one after them:',
+  paused:
+    'The owner paused you while you worked on a reply and has now let you go on. Pausing ended your session at once: whatever you had running was stopped with it (a command still running shows exit code 137). These messages are still unanswered; take them in with the one after them:',
 };
 
 /** The prototypes as the agent planned them: each with an approach of its own, and a task. */

@@ -583,6 +583,53 @@ describe('an idea', () => {
     expect(explorer().inbox).toEqual(['The owner says:\n\nFünftens.']);
   });
 
+  test('its agent paused during a reply keeps what it has not answered, stays paused across a restart, and answers it once resumed', () => {
+    const i = idea();
+    expect(() => canvas.act(i.id, { action: 'pause' })).toThrow('not working on anything');
+    canvas.act(i.id, { action: 'discuss', text: 'Erstens.' });
+    const first = explorer();
+    first.emit({ type: 'session', id: 'sess-1' });
+    canvas.act(i.id, { action: 'pause' });
+    expect(first.closed).toBe(true);
+    expect(item(i.id)).toMatchObject({ paused: true, idea: { status: 'open', thinking: false } });
+    expect(() => canvas.act(i.id, { action: 'pause' })).toThrow('paused already');
+    canvas.shutdown();
+    canvas = open();
+    const explorers = () => runtime.sessions.filter((x) => x.spec.tools.some((t) => t.name === 'update_brief')).length;
+    expect(explorers()).toBe(1);
+    expect(item(i.id).paused).toBe(true);
+    canvas.act(i.id, { action: 'resume' });
+    const later = explorer();
+    expect(later.spec.resume).toBe('sess-1');
+    expect(later.inbox[0]).toContain('The owner paused you while you worked on a reply and has now let you go on');
+    expect(later.inbox[0]).toContain('exit code 137');
+    expect(later.inbox[0]).toContain('Erstens.');
+    expect(item(i.id)).toMatchObject({ idea: { thinking: true } });
+    expect(item(i.id).paused).toBeUndefined();
+    expect(() => canvas.act(i.id, { action: 'resume' })).toThrow('not paused');
+    turn(later, 'Zu Erstens.');
+    expect(talk(i.id).at(-1)).toEqual(['explorer', 'Zu Erstens.']);
+  });
+
+  test('told more while paused, its agent goes on with that and what it had not answered; parked, it is no longer paused', () => {
+    const i = idea();
+    canvas.act(i.id, { action: 'discuss', text: 'Erstens.' });
+    explorer().emit({ type: 'session', id: 'sess-1' });
+    canvas.act(i.id, { action: 'pause' });
+    canvas.act(i.id, { action: 'discuss', text: 'Zweitens.' });
+    const next = explorer();
+    expect(next.inbox[0]).toContain('The owner paused you while you worked on a reply');
+    expect(next.inbox[0]!.indexOf('Erstens.')).toBeLessThan(next.inbox[0]!.indexOf('Zweitens.'));
+    expect(item(i.id).paused).toBeUndefined();
+
+    canvas.act(i.id, { action: 'pause' });
+    canvas.act(i.id, { action: 'park' });
+    expect(item(i.id).paused).toBeUndefined();
+    expect(item(i.id).idea).toMatchObject({ status: 'parked', thinking: false });
+    canvas.act(i.id, { action: 'discuss', text: 'Drittens.' });
+    expect(explorer().inbox[0]).toContain('The owner parked the idea while you were working on a reply');
+  });
+
   test('a turn that ends with an error keeps what it did not answer', () => {
     const i = idea();
     canvas.act(i.id, { action: 'discuss', text: 'Erstens.' });

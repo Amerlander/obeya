@@ -1,7 +1,7 @@
 // A card's conversation, from its events.
 
 import { LANGUAGES } from '../core/locale';
-import { answering, askable, type CardEvent, type Demo, finishingUp, formatQuestion, type Item, type Question } from '../core/types';
+import { askable, type CardEvent, type Demo, finishingUp, formatQuestion, type Item, pausable, type Question } from '../core/types';
 import type { Field } from './api';
 
 /** One entry of the conversation: a message, with how the agent got to it folded under it, or a small line. */
@@ -234,19 +234,11 @@ export function ownerField(item: Pick<Item, 'state' | 'need' | 'question' | 'fin
 }
 
 /**
- * Whether the card's agent is at work on it, so its conversation ends with the agent at work: a
- * Question card's agent reading, an idea's agent thinking, a proposal reworked, a worker at work, taking in the owner's words on its
- * handover, or finishing after the landing (unless it waits for the owner's answer); not while the owner has paused it.
+ * Whether the card's agent is at work on it, so its conversation ends with the agent at work: an
+ * agent working on something, which the owner can pause (`pausable`), or a proposal reworked.
  */
-export const agentWorks = (i: Pick<Item, 'state' | 'need' | 'idea' | 'proposal' | 'answering' | 'finishing' | 'thread'> & Partial<Pick<Item, 'kind' | 'paused'>>) =>
-  !i.paused &&
-  (i.kind === 'question'
-    ? !!i.thread?.thinking
-    : i.state === 'idea' && !!i.idea
-    ? !!i.idea.thinking
-    : i.state === 'proposal'
-      ? !!i.proposal?.revising
-      : i.state === 'working' || answering(i) || finishingUp(i));
+export const agentWorks = (i: Pick<Item, 'kind' | 'state' | 'idea' | 'thread' | 'inTurn' | 'paused' | 'proposal'>) =>
+  pausable(i) || (i.state === 'proposal' && !!i.proposal?.revising);
 
 /**
  * Whether the Koordinator still reads what the owner said on the card: their words stand in the log

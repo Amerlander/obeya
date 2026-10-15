@@ -2685,11 +2685,80 @@ describe('pausing: the owner halts a worker and lets it go on', () => {
     expect(workers.busy()).toBe(true);
   });
 
-  test('only a worker at work can be paused', () => {
+  test('only a worker in a turn can be paused: one that asked and ended its turn has nothing running', () => {
     const c = manual();
     expect(() => workers.pause(c.id)).toThrow(BadRequest);
     workers.start(c.id);
+    expect(board.item(c.id)!.inTurn).toBe(true);
     runtime.last.call('ask', { question: 'CSV oder Excel?' });
+    runtime.last.emit({ type: 'idle' });
+    expect(board.item(c.id)!.inTurn).toBeUndefined();
     expect(() => workers.pause(c.id)).toThrow(BadRequest);
+  });
+
+  test('a card in its pull request offers a pause only while its worker is in a turn', () => {
+    const c = atWork();
+    board.work(c.id, { state: 'inPr', pr: JSON.stringify({ url: 'https://github.com/acme/app/pull/7', number: 7, seen: [], reported: [] }) });
+    runtime.last.emit({ type: 'idle' });
+    // the pull request waits for review: nothing runs, nothing to pause
+    expect(board.item(c.id)).toMatchObject({ state: 'inPr' });
+    expect(board.item(c.id)!.inTurn).toBeUndefined();
+    expect(() => workers.pause(c.id)).toThrow(BadRequest);
+    // a review comment starts its next turn, which can be paused
+    workers.prEvent(c.id, 'Kommentar.', 'A review comment on your pull request: use CSV.');
+    expect(board.item(c.id)!.inTurn).toBe(true);
+    workers.pause(c.id);
+    expect(board.item(c.id)).toMatchObject({ state: 'inPr', paused: true });
+    expect(board.item(c.id)!.inTurn).toBeUndefined();
+    workers.resume(c.id);
+    expect(runtime.last.inbox[0]).toContain('The owner paused you and has now let you go on');
+    expect(board.item(c.id)!.inTurn).toBe(true);
+  });
+
+  test("a worker taking in the owner's words on its handover can be paused: the card still waits for approval, and it finishes taking them in once it goes on", () => {
+    const c = atWork();
+    const clone = board.row(c.id).workspace!;
+    writeFileSync(join(clone, 'export.ts'), 'export {}\n');
+    git(clone, 'add', '.');
+    git(clone, 'commit', '--quiet', '-m', 'Export');
+    runtime.last.call('ready_for_review', { summary: 'Export gebaut.' });
+    runtime.last.emit({ type: 'idle' });
+    expect(() => workers.pause(c.id)).toThrow(BadRequest);
+    workers.message(c.id, 'Bitte mit Kopfzeile.');
+    expect(board.item(c.id)).toMatchObject({ state: 'waiting', need: 'review', answering: true, inTurn: true });
+    const session = runtime.last;
+    workers.pause(c.id);
+    expect(session.closed).toBe(true);
+    expect(board.item(c.id)).toMatchObject({ state: 'waiting', need: 'review', answering: true, paused: true, summary: 'Export gebaut.' });
+    expect(board.item(c.id)!.inTurn).toBeUndefined();
+
+    workers.resume(c.id);
+    expect(runtime.last.spec.resume).toBe('sess-1');
+    expect(runtime.last.inbox[0]).toContain('The owner paused you and has now let you go on');
+    // the words it had not taken in yet go along
+    expect(runtime.last.inbox[0]).toContain('Bitte mit Kopfzeile.');
+    expect(board.item(c.id)).toMatchObject({ state: 'waiting', answering: true, inTurn: true });
+    expect(board.item(c.id)!.paused).toBeUndefined();
+    runtime.last.call('ready_for_review', { summary: 'Mit Kopfzeile.' });
+    runtime.last.emit({ type: 'idle' });
+    expect(board.item(c.id)).toMatchObject({ state: 'waiting', need: 'review', summary: 'Mit Kopfzeile.' });
+    expect(board.item(c.id)!.answering).toBeUndefined();
+  });
+
+  test('a note to a worker paused on its handover lets it go on with the note', () => {
+    const c = atWork();
+    const clone = board.row(c.id).workspace!;
+    writeFileSync(join(clone, 'export.ts'), 'export {}\n');
+    git(clone, 'add', '.');
+    git(clone, 'commit', '--quiet', '-m', 'Export');
+    runtime.last.call('ready_for_review', { summary: 'Export gebaut.' });
+    runtime.last.emit({ type: 'idle' });
+    workers.message(c.id, 'Bitte mit Kopfzeile.');
+    workers.pause(c.id);
+    workers.message(c.id, 'Und Fußzeile.');
+    expect(runtime.last.inbox[0]).toContain('The owner paused you and has now let you go on');
+    expect(runtime.last.inbox[0]).toContain('Und Fußzeile.');
+    expect(board.item(c.id)).toMatchObject({ state: 'waiting', answering: true, inTurn: true });
+    expect(board.item(c.id)!.paused).toBeUndefined();
   });
 });

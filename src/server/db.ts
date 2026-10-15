@@ -86,7 +86,7 @@ export interface CardRow {
   becomes_project: number;
   /** JSON, a Question card (and an idea that was one): the thread of looked-up answers it holds (`StoredThread` in board.ts). */
   thread: string | null;
-  /** JSON, while the owner has paused the card's worker (`PausedState` in workers.ts): what came for it meanwhile. */
+  /** JSON, while the owner has paused the card's agent: for a worker what came for it meanwhile (`PausedState` in workers.ts), `{}` for an idea's or a Question card's agent, which keep what waits for them with the idea or the thread. */
   paused: string | null;
   /** JSON: the owner's words Obeya holds for the card's worker until it takes them in, at its next tool step or turn (`Unheard` in workers.ts). */
   unheard: string | null;

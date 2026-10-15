@@ -391,6 +391,51 @@ describe('a thread on a Question card', () => {
     expect(board().talk().at(-1)!.unread).toBeUndefined();
   });
 
+  test('its agent paused while it reads keeps what it was asked, stays paused across a restart, and answers it once resumed', async () => {
+    const { card } = await moved();
+    expect(() => canvas.act(card.id, { action: 'pause' })).toThrow('not working on anything');
+    canvas.tell(card.id, 'und im Oktober?', [], false);
+    const a = answerer();
+    canvas.act(card.id, { action: 'pause' });
+    expect(a.closed).toBe(true);
+    await settle();
+    expect(board().item(card.id)).toMatchObject({ paused: true, thread: { answers: 2 } });
+    expect(board().item(card.id)!.thread!.thinking).toBeUndefined();
+    // nothing answered it: the question stands last
+    expect(board().events(card.id).filter((e) => e.kind === 'talk').at(-1)!.text).toBe('und im Oktober?');
+    canvas.shutdown();
+    canvas = open();
+    await settle();
+    expect(answerer()).toBe(a);
+    expect(board().item(card.id)!.paused).toBe(true);
+    canvas.act(card.id, { action: 'resume' });
+    await settle();
+    const b = answerer();
+    expect(b).not.toBe(a);
+    expect(b.spec.resume).toBe('look-1');
+    expect(b.inbox[0]).toContain('The owner paused you while you worked on your answer and has now let you go on');
+    expect(b.inbox[0]).toContain('und im Oktober?');
+    expect(board().item(card.id)).toMatchObject({ thread: { thinking: true } });
+    expect(board().item(card.id)!.paused).toBeUndefined();
+    b.call('answer_owner', { text: 'Oktober: 12 ct.' });
+    b.emit({ type: 'idle' });
+    await settle();
+    expect(board().item(card.id)!.thread).toEqual({ talk: board().item(card.id)!.thread!.talk, answers: 3, files: 1 });
+  });
+
+  test('asked more while paused, its agent goes on with that and what it was asked before', async () => {
+    const { card } = await moved();
+    canvas.tell(card.id, 'und im Oktober?', [], false);
+    canvas.act(card.id, { action: 'pause' });
+    await settle();
+    canvas.tell(card.id, 'und November?', [], false);
+    await settle();
+    const b = answerer();
+    expect(b.inbox[0]).toContain('The owner paused you');
+    expect(b.inbox[0]!.indexOf('und im Oktober?')).toBeLessThan(b.inbox[0]!.indexOf('und November?'));
+    expect(board().item(card.id)!.paused).toBeUndefined();
+  });
+
   test('what the card asked when Obeya stopped is asked again', async () => {
     const { card } = await moved();
     canvas.tell(card.id, 'und im Oktober?', [], false);

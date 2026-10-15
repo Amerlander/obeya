@@ -977,6 +977,8 @@ export class Board {
       items = toItems(this.store.cards(this.canvas.id), docs, this.home);
     }
     items = this.withPrototypes(items);
+    const inTurn = new Set([...this.turns].flatMap((f) => f()));
+    if (inTurn.size) items = items.map((i) => (inTurn.has(i.id) ? { ...i, inTurn: true } : i));
     const reshare = this.reshare();
     const pools = this.clonePools();
     const planDirs = this.planDirs(all);
@@ -1037,6 +1039,14 @@ export class Board {
         },
       ];
     });
+  }
+
+  /** Who says which cards' workers are in a turn: one per repository's workers (`showTurns`). */
+  private turns = new Set<() => string[]>();
+
+  /** Who says which cards' workers are in a turn; a worker's turn starts and ends with `changed`, so the cache holds. */
+  showTurns(turns: () => string[]) {
+    this.turns.add(turns);
   }
 
   /** The repositories' clone pools by machine, as those who run them say (`showPools`). */
@@ -1735,7 +1745,7 @@ export interface StoredThread {
 }
 
 export interface Unread {
-  why: 'parked' | 'dropped' | 'error' | 'restart';
+  why: 'parked' | 'dropped' | 'error' | 'restart' | 'paused';
   messages: Message[];
 }
 

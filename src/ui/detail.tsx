@@ -242,8 +242,6 @@ export function Detail(p: Props) {
   // an agent is on the card and can be stopped
   const running = item.state === 'working' || item.state === 'waiting' || !!item.finishing;
   const archivable = finished(item.state) && item.source === 'manual' && !item.finishing;
-  // a paused agent goes on by a click; with a question open, by its answer
-  const resumable = !!item.paused && item.state !== 'waiting';
   const where = (
     <p className="p-src">
       <Branch item={item} />
@@ -466,19 +464,9 @@ export function Detail(p: Props) {
       )}
 
       {/* the decisions go below both columns, as on an idea or a proposal */}
-      {worked && (running || archivable || pausable(item) || resumable) && (
+      {worked && (running || archivable) && (
         <div className="actions">
-          {resumable && (
-            <button className="btn primary" title={t.pause.resumeHint} onClick={() => act({ action: 'resume' }, { close: false })}>
-              <PlayMark /> {t.pause.resume}
-            </button>
-          )}
           {review ? prototypeActions || approveButton : running && prototypeActions}
-          {pausable(item) && (
-            <button className="btn" title={t.pause.hint} onClick={() => act({ action: 'pause' }, { close: false })}>
-              <PauseMark /> {t.pause.button}
-            </button>
-          )}
           {running && (
             <button className="btn" title={t.stopHint} onClick={() => act({ action: 'stop' }, { close: true, ack: t.stopped })}>
               {t.stop}
@@ -495,7 +483,7 @@ export function Detail(p: Props) {
   );
 }
 
-/** The marks on the buttons that pause a worker and let it go on. */
+/** The marks on the buttons that pause an agent and let it go on. */
 const PauseMark = () => (
   <svg className="btn-mark" viewBox="0 0 12 12" width="11" height="11" aria-hidden>
     <rect x="2" y="1.5" width="2.6" height="9" rx=".6" fill="currentColor" />
@@ -901,12 +889,14 @@ function Conversation({
   const proposal = item.state === 'proposal';
   const asking = item.state === 'waiting' && item.need === 'question' ? item.question : undefined;
   const working = !past && agentWorks(item);
+  // a paused agent's steps stay where they were, in its bubble standing still
+  const paused = !past && !!item.paused;
   const asked = JSON.stringify(item.idea?.questions ?? asking ?? []);
-  const onScroll = useStickToEnd(box, `${events?.at(-1)?.id}|${working}|${asked}`, events);
+  const onScroll = useStickToEnd(box, `${events?.at(-1)?.id}|${working}|${paused}|${asked}`, events);
   // a proposal's open questions stand at the end, where they are answered, rather than where they were asked
   const open = proposal && !working ? (item.proposal?.questions ?? []) : [];
   const openKey = JSON.stringify(open);
-  const turns = useMemo(() => (events ? talkTurns(withoutOpen(events, open), { asking, over: !working }) : null), [events, asked, working, openKey]);
+  const turns = useMemo(() => (events ? talkTurns(withoutOpen(events, open), { asking, over: !working && !paused }) : null), [events, asked, working, paused, openKey]);
   const byId = useMemo(() => new Map(events?.map((e) => [e.id, e])), [events]);
   if (!events || !turns) return null;
   if (hideEmpty && !turns.shown.length && !turns.pending.length) return null;
@@ -958,8 +948,26 @@ function Conversation({
         {turns.shown.slice(0, seedAt).map(line)}
         {seed}
         {turns.shown.slice(seedAt).map(line)}
-        {working ? (
-          <Msg by={idea ? 'explorer' : question ? 'koordinator' : 'worker'} className="thinking" who={proposal ? t.revising : `${agent} ${idea ? t.idea.thinking : question ? t.answer.reading : t.talk.working}`}>
+        {working || paused ? (
+          // the agent at work, with a pause beside its name; paused, it stands still with Resume
+          <Msg
+            by={idea ? 'explorer' : question ? 'koordinator' : 'worker'}
+            className={paused ? 'paused' : 'thinking'}
+            who={proposal ? t.revising : `${agent} ${paused ? t.pause.paused : idea ? t.idea.thinking : question ? t.answer.reading : t.talk.working}`}
+            head={
+              paused ? (
+                <button className="turn-resume" title={t.pause.resumeHint} onClick={() => turn(item.id, 'resume')}>
+                  <PlayMark /> {t.pause.resume}
+                </button>
+              ) : (
+                pausable(item) && (
+                  <button className="turn-pause" title={t.pause.hint} aria-label={t.pause.button} onClick={() => turn(item.id, 'pause')}>
+                    <PauseMark />
+                  </button>
+                )
+              )
+            }
+          >
             {pending.at(-1) && <Gist text={pending.at(-1)!.text} />}
             <Steps steps={pending} />
           </Msg>
@@ -986,6 +994,9 @@ function Conversation({
     </>
   );
 }
+
+/** Pauses the agent's turn on the card, or lets the paused agent go on; the card shows it once the server has. */
+const turn = (cardId: string, action: 'pause' | 'resume') => void api.act(cardId, { action }).catch(() => {});
 
 /**
  * Takes back words of the owner's the agent has not read (a note waiting for its next step, a
@@ -1874,7 +1885,7 @@ function TaskTalk({
         field
           ? {
               key: `${item.state}:${item.need ?? ''}:${field}:${key}`,
-              placeholder: { note: item.paused ? t.pause.compose : askable(item) || item.followUp ? t.compose.followUp : t.compose.working, answer: t.compose.question, feedback: t.compose.review, demo: t.compose.demo, discuss: '', revise: t.compose.revise }[field],
+              placeholder: { note: item.paused ? t.pause.compose : askable(item) || item.followUp ? t.compose.followUp : agentWorks(item) ? t.compose.working : t.compose.idle, answer: t.compose.question, feedback: t.compose.review, demo: t.compose.demo, discuss: '', revise: t.compose.revise }[field],
               listener,
               onWords: tell(field),
               onPicked: (text, images, replyTo) => act({ action: 'answer', text, images, ...(replyTo ? { replyTo } : {}) }, { close: true, ack: t.answered }),

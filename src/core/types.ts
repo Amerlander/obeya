@@ -23,8 +23,14 @@ export type CardState = (typeof STATES)[number];
 export const finished = (s: CardState) => s === 'live' || s === 'done';
 /** A finished card whose agent still works: after the landing, or answering a follow-up question. */
 export const finishingUp = (i: Pick<Item, 'state' | 'finishing'>) => !!i.finishing && finished(i.state);
-/** Whether the owner can pause the card's worker: at work on the card, on its pull request, or finishing after the landing. */
-export const pausable = (i: Pick<Item, 'state' | 'finishing' | 'paused'>) => !i.paused && (i.state === 'working' || i.state === 'inPr' || finishingUp(i));
+/**
+ * Whether the card's agent is working on something right now, so that the owner can pause it: a
+ * Question card's agent reading, an idea's agent working on its reply, a worker in a turn (whatever
+ * the card's state: at work, taking in the owner's words on its handover, on its pull request, after
+ * the landing). An idle agent is no such agent: there is nothing running to pause.
+ */
+export const pausable = (i: Pick<Item, 'kind' | 'state' | 'idea' | 'thread' | 'inTurn' | 'paused'>) =>
+  !i.paused && (i.kind === 'question' ? !!i.thread?.thinking : i.state === 'idea' && i.idea ? i.idea.thinking : !!i.inTurn);
 
 /**
  * A finished card an agent worked on, on the canvas, with no agent on it now: what the owner asks
@@ -206,9 +212,12 @@ export interface Item {
   finishing?: boolean;
   /** While `finishing`: nothing just landed, the owner asked about the finished card and its agent answers. */
   followUp?: boolean;
+  /** Its worker is in a turn right now, its background work included (a render, a watcher): what it does shows, and the owner can pause it. */
+  inTurn?: true;
   /**
-   * The owner paused the card's worker: nothing of it runs, its session and workspace stay, and it
-   * goes on where it stopped with „Weitermachen“ or the owner's next words to it.
+   * The owner paused the card's agent (its worker, the idea's agent, the Question card's agent):
+   * nothing of it runs, its session stays, and it goes on where it stopped with „Weitermachen“ or
+   * the owner's next words to it.
    */
   paused?: true;
   /** Waiting for approval, its branch holds no change (checked at the handover): approving makes the card `done`. */

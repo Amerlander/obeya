@@ -34,6 +34,15 @@ export interface Briefing {
   tools?: AgentTool[];
   /** Screenshot files that come with the message. */
   images?: string[];
+  /** Ends the turn at once, its session with it (the owner paused the agent): the answer fails with `Interrupted`. */
+  signal?: AbortSignal;
+}
+
+/** A turn that answered nothing because it was ended on purpose (`Briefing.signal`). */
+export class Interrupted extends Error {
+  constructor() {
+    super('interrupted');
+  }
 }
 
 /**
@@ -42,6 +51,7 @@ export interface Briefing {
  */
 export function inform(b: Briefing): Promise<OwnerAnswer> {
   return new Promise((resolve, reject) => {
+    if (b.signal?.aborted) return reject(new Interrupted());
     let answer: OwnerAnswer | null = null;
     let last = '';
     const settle = (a: OwnerAnswer) => {
@@ -90,6 +100,10 @@ export function inform(b: Briefing): Promise<OwnerAnswer> {
       b.message,
       b.images,
     );
+    b.signal?.addEventListener('abort', () => {
+      session.close();
+      if (!answer) reject(new Interrupted());
+    });
   });
 }
 

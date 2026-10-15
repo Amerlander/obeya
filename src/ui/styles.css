@@ -569,6 +569,20 @@ textarea.p-body:focus { border-color: var(--muted); }
 .talk .msg.fresh { box-shadow: inset 3px 0 0 var(--waiting), var(--shadow); }
 .talk .msg.thinking .who::after { content: ""; display: inline-block; vertical-align: middle; margin-left: 8px; width: 34px; height: 3px; border-radius: 2px;
   background: linear-gradient(90deg, transparent, var(--idea), transparent); background-size: 200% 100%; animation: flow 1.4s linear infinite; }
+/* the agent at work has its pause at the right of its name, faint until pointed at; paused, it stands still in pencil grey with Resume */
+.talk .msg:is(.thinking, .paused) .who { display: flex; align-items: center; column-gap: 8px; min-height: 20px; }
+.talk .msg.thinking .who::after { order: 0; margin-left: 0; }
+.turn-pause, .turn-resume { order: 1; margin-left: auto; flex: none; }
+.turn-pause { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 20px; padding: 0;
+  border: 1px solid var(--line); border-radius: 3px; background: none; color: var(--muted); opacity: .55; cursor: pointer; }
+.turn-pause .btn-mark { margin: 0; }
+.turn-pause:hover, .turn-pause:focus-visible { opacity: 1; color: var(--ink); border-color: var(--muted); }
+.talk .msg.paused .who { color: var(--muted); }
+.talk .msg.paused > :not(.who) { opacity: .7; }
+.turn-resume { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border: 0; border-radius: 3px;
+  background: var(--ink); color: var(--card); font: 600 11.5px var(--cond); cursor: pointer; }
+.turn-resume .btn-mark { margin: 0; }
+.turn-resume:hover { opacity: .85; }
 .mocks { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin: 8px 0 4px; }
 /* a looked-up answer: "Make it a card" in its head, always in view; its files under the text */
 .msg-card { float: right; margin: -2px 0 0 8px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 3px; background: none;

@@ -446,18 +446,40 @@ background command the restart stopped), and counting that would use up the nudg
 worker's own turn, whose status line would then reach the owner as a question. A
 worker that went to the owner for having stopped and then works on by itself takes that question
 back. The owner can send a note at any time; it reaches the worker without stopping it.
-The owner can also pause the worker („Pausieren“ beside „Stoppen“, on a card at work, in its PR or
-finishing after the landing; by voice „halt mal an“): its session ends at once, in the middle of a
-step if need be, with whatever it ran, while the card keeps its state, workspace, branch and
-session (`paused` on the card's row) and its slot is free. The card reads „Agent pausiert“ in pencil
-grey without the moving line; a restart of Obeya leaves it paused, and its app stack is parked
-after the grace like a waiting card's. „Weitermachen“ (by voice „mach weiter“) resumes the session,
-and the worker hears that it was paused and that what ran was stopped (exit code 137); a note to a
-paused worker resumes it the same way and goes along (its field says so: „Hinweis an den Agenten –
-er macht damit weiter“). What Obeya has for it meanwhile (its pull request's review, the landing of
-a merged PR) and a message it had not taken in yet wait and go along then. „Stoppen“ still ends the
-agent and plans the card again; until 2026-10-14 it was called „Anhalten“, which reads like a pause,
-and was the only way to halt an agent, losing its session. Rejected: pausing at the next safe point,
+The owner can also pause the agent while it works on something: the conversation's bubble that shows
+it at work („Agent arbeitet …“) has a pause mark at its right, faint until pointed at but always
+there (a mark that shows only on hover would hide it from first-time users and touch screens); by
+voice „halt mal an“. The bubble and the pause follow the same condition (`pausable` in
+`src/core/types.ts`, which the server checks too): a Question card's agent reading, an idea's agent
+working on its reply, a worker in a turn (`Item.inTurn`, which the server sets from the worker's
+live session, background work included), whatever the card's state: at work, taking in the owner's
+words on its handover, in its PR (on review comments or a note), finishing after the landing. An
+idle agent shows no bubble and offers no pause: a PR card whose worker opened the PR and waits for
+review has nothing running, and a note or the PR's review starts its next turn (its field then reads
+„Hinweis an den Agenten – er macht sich daran“, not that it works on). Pausing ends the
+agent's session at once, in the middle of a step if need be, with whatever it ran, and keeps the
+card's state and the session (`paused` on the card's row). A worker keeps its workspace and branch,
+its slot is free, and its app stack is parked after the grace like a waiting card's; one paused on
+its handover leaves the card waiting for approval („Demo bereit · Agent pausiert“), Freigeben
+included. An idea's agent keeps the messages it had not answered (as when the idea is parked), a
+Question card's agent what it was asked (the thread's pending words). The bubble stays where it was,
+standing still in pencil grey: „Agent pausiert · ▶ Weitermachen“, and so does the card on the canvas,
+without the moving line; a restart of Obeya leaves every paused agent paused. „Weitermachen“ (by voice
+„mach weiter“) resumes the same session, and the agent hears that it was paused and that what ran
+was stopped (exit code 137); what the owner writes to a paused agent resumes it the same way and goes
+along (the field says so: „Hinweis an den Agenten – er macht damit weiter“), for an idea's or a
+Question card's agent together with what it had not answered. What Obeya has for a paused worker
+meanwhile (its pull request's review, the landing of a merged PR) and a message it had not taken in
+yet wait and go along then. The agent reworking a proposal has no pause: its rework is short and
+starts again from the owner's words. Until 2026-10-15 „Pausieren“ and „Weitermachen“ stood in the
+card's action row beside „Stoppen“, for workers only, and pause was offered for every card at work,
+in its PR or finishing after the landing: on a PR card whose worker was idle there was nothing to
+pause, and a worker taking in the owner's words on a waiting card, which the owner watches most
+closely (before a paid render, say), could not be paused. The action row holds decisions about the
+card; pausing is about the turn running now, so it moved to where the owner watches that turn.
+„Stoppen“ stays in the row: it ends the agent and plans the card again, a decision about the card;
+until 2026-10-14 it was called „Anhalten“, which reads like a pause, and was the only way to halt an
+agent, losing its session. Rejected: pausing at the next safe point,
 as for a restart: the owner pauses an agent that goes the wrong way, and waiting for its step to
 end lets it go on doing so. The SDK
 hands a waiting message to the agent only after its running tool call, so a note never cuts a
@@ -1446,7 +1468,7 @@ the owner's language (`src/core/locale.ts`).
   reads their state, checks and comments.
 - **After landing** — the worker is told its work is on main (or that its PR was merged) and may
   finish what remains, in its workspace, which stays at what landed until then (the card is `live`,
-  "Live · Agent arbeitet"; notes reach it, "Pausieren" halts it, "Stoppen" ends it). Ending a turn with nothing to wait
+  "Live · Agent arbeitet"; notes reach it, the pause on its working bubble halts it, "Stoppen" ends it). Ending a turn with nothing to wait
   for ends its session and removes worktree and branch (a clone is free again). A turn that ends
   while a message from Obeya is still to come is not that turn: work approved while its worker
   ends a reply (the owner said yes to its question and approved at once) lands while the reply's

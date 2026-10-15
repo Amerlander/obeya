@@ -243,7 +243,7 @@ export class CanvasRuntime {
     });
     board.interruptTalk();
     this.commander.resume();
-    this.answers.resume();
+    this.answers.resumeAll();
     this.revisions = new Revisions({ board, runtime: deps.runtime, preferences: this.preferences, pathFor: (card) => this.repoOf(card).read.path, toObeya: (cardId, request) => this.forward(cardId, request), onRevised: (cardId, revised) => this.revised(cardId, revised) });
     this.revisions.resume();
     this.sharing = new Sharing({
@@ -876,9 +876,12 @@ export class CanvasRuntime {
       case 'stop':
         return this.repoOf(cardId).workers.stop(cardId);
       case 'pause':
-        return this.repoOf(cardId).workers.pause(cardId);
-      case 'resume':
-        return this.repoOf(cardId).workers.resume(cardId);
+      case 'resume': {
+        // whichever agent works on the card: a Question card's, an idea's, or its worker
+        const card = this.board.item(cardId);
+        const agent = card?.kind === 'question' ? this.answers : card?.state === 'idea' ? this.explorers : this.repoOf(cardId).workers;
+        return a.action === 'pause' ? agent.pause(cardId) : agent.resume(cardId);
+      }
       case 'message':
         // a note to a Question card is a question to its agent
         if (this.board.item(cardId)?.kind === 'question') return this.answers.ask(cardId, text.trim(), images, !!a.spoken, replyTo);

@@ -145,13 +145,18 @@ const de = {
   stopHint: 'Beendet den Agenten: die Aufgabe ist wieder geplant, ein neuer Start beginnt mit einer neuen Sitzung. Committete Arbeit bleibt auf dem Branch.',
   pause: {
     button: 'Pausieren',
-    hint: 'Hält den Agenten sofort an, auch mitten in einem Schritt. Er behält Sitzung und Workspace und macht dort weiter, wo er war, sobald du „Weitermachen“ klickst oder ihm schreibst.',
+    hint: 'Pausieren: hält den Agenten sofort an, auch mitten in einem Schritt, mit allem, was er gerade laufen hat. Er behält seine Sitzung und macht dort weiter, wo er war, sobald du „Weitermachen“ klickst oder ihm schreibst.',
     resume: 'Weitermachen',
     resumeHint: 'Der Agent macht dort weiter, wo du ihn angehalten hast.',
+    /** After the agent's name, in the conversation where it worked. */
+    paused: 'pausiert',
     working: 'Agent pausiert',
     inPr: 'Im PR · Agent pausiert',
     live: 'Live · Agent pausiert',
     done: 'Erledigt · Agent pausiert',
+    idea: 'Idee · Agent pausiert',
+    /** Paused while it took in the owner's words on its handover: the card still waits for approval. */
+    waiting: (need: string) => `${need} · Agent pausiert`,
     compose: 'Hinweis an den Agenten – er macht damit weiter',
   },
   approve: 'Freigeben',
@@ -168,6 +173,8 @@ const de = {
   send: 'Senden',
   compose: {
     working: 'Hinweis an den Agenten – er arbeitet weiter',
+    /** While nothing of the agent runs (its pull request waits for review, say): the note starts it. */
+    idle: 'Hinweis an den Agenten – er macht sich daran',
     followUp: 'Nachfrage an den Agenten – er antwortet hier',
     question: 'Eigene Antwort',
     review: 'Feedback – der Agent arbeitet daran weiter',
@@ -1344,13 +1351,16 @@ const en: Strings = {
   stopHint: 'Ends the agent: the task is planned again, and starting it again begins a new session. Committed work stays on the branch.',
   pause: {
     button: 'Pause',
-    hint: 'Halts the agent at once, even in the middle of a step. It keeps its session and workspace and goes on where it was as soon as you click “Resume” or write to it.',
+    hint: 'Pause: halts the agent at once, even in the middle of a step, with whatever it has running. It keeps its session and goes on where it was as soon as you click “Resume” or write to it.',
     resume: 'Resume',
     resumeHint: 'The agent goes on where you paused it.',
+    paused: 'paused',
     working: 'Agent paused',
     inPr: 'In PR · agent paused',
     live: 'Live · agent paused',
     done: 'Done · agent paused',
+    idea: 'Idea · agent paused',
+    waiting: (need: string) => `${need} · agent paused`,
     compose: 'A note to the agent – it goes on with it',
   },
   approve: 'Approve',
@@ -1367,6 +1377,7 @@ const en: Strings = {
   send: 'Send',
   compose: {
     working: 'A note to the agent – it keeps working',
+    idle: 'A note to the agent – it gets to work on it',
     followUp: 'A follow-up question to the agent – it answers here',
     question: 'Your own answer',
     review: 'Feedback – the agent goes on working on it',
@@ -2423,13 +2434,19 @@ const number = (n: number, digits = 0) => n.toLocaleString(locale, { maximumFrac
 
 export const stateLabel = (i: { kind?: string; thread?: { thinking?: boolean }; state: CardState; need?: Need; pr?: unknown; queue?: Queue; idea?: Idea; question?: unknown; answering?: true; finishing?: boolean; followUp?: boolean; paused?: true; prototypeEnd?: 'discarded' | 'built'; retro?: string }) =>
   i.kind === 'question'
-    ? i.thread?.thinking
+    ? i.paused
+      ? t.pause.working
+      : i.thread?.thinking
       ? t.question.reading
       : t.question.ready
     : i.prototypeEnd
     ? t.idea.ended[i.prototypeEnd]
-    : i.paused && i.state !== 'waiting'
-    ? i.finishing
+    : i.paused
+    ? i.idea
+      ? t.pause.idea
+      : i.state === 'waiting' && i.need
+      ? t.pause.waiting(t.need[i.need])
+      : i.finishing
       ? i.state === 'done' ? t.pause.done : t.pause.live
       : i.state === 'inPr' ? t.pause.inPr : t.pause.working
     : i.finishing && (i.state === 'live' || i.state === 'done')

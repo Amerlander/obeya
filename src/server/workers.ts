@@ -302,7 +302,10 @@ export class Workers {
   /** Cards with comments on places in the demo video held back: when they go to the worker without the owner's sign. */
   private holding = new Map<string, ReturnType<typeof setTimeout>>();
 
-  constructor(private o: WorkerOptions) {}
+  constructor(private o: WorkerOptions) {
+    // what a worker does shows on its card while it is in a turn, and only then can it be paused
+    o.board.showTurns(() => this.inTurn());
+  }
 
   /** A new version of the repository's adapter, which works in the same kind of workspaces: it applies from the next time one is asked. */
   useAdapter(adapter: RepoAdapter) {
@@ -949,14 +952,17 @@ export class Workers {
   }
 
   /**
-   * The owner pauses the card's worker: its session ends at once, in the middle of a step if need
-   * be, and whatever it ran with it. Card, workspace, branch and session stay; the slot it held is
-   * free. It goes on where it stopped once the owner resumes it or writes to it (`deliver`); what
-   * Obeya has for it meanwhile waits until then, and its app stack is parked like a waiting card's.
+   * The owner pauses the card's worker while it is in a turn: its session ends at once, in the
+   * middle of a step if need be, and whatever it ran with it (background work included). Card,
+   * state, workspace, branch and session stay; the slot it held is free. It goes on where it stopped
+   * once the owner resumes it or writes to it (`deliver`); what Obeya has for it meanwhile waits
+   * until then, and its app stack is parked like a waiting card's. A worker taking in the owner's
+   * words on its handover is paused the same way: the card still waits for approval, and the
+   * worker finishes taking them in once it goes on.
    */
   pause(cardId: string) {
     const card = this.card(cardId);
-    if (!pausable(card)) throw new BadRequest('noAgent', card.paused ? 'the agent is paused already' : 'no agent works on this card');
+    if (!pausable(card)) throw new BadRequest('noAgent', card.paused ? 'the agent is paused already' : 'the agent is not working on anything');
     // a message the worker had not taken in yet goes to it with the rest
     const pending = this.live.get(cardId)?.pending;
     this.end(cardId);
@@ -968,11 +974,10 @@ export class Workers {
     this.parkLater(cardId);
   }
 
-  /** The owner lets the paused worker go on; it hears what came for it meanwhile. An open question goes on with its answer instead. */
+  /** The owner lets the paused worker go on, whatever the card's state; it hears what came for it meanwhile. */
   resume(cardId: string) {
     const card = this.card(cardId);
     if (!card.paused) throw new BadRequest('notPaused', 'the agent is not paused');
-    if (card.state === 'waiting') throw new BadRequest('noAgent', 'the card waits for your answer, which lets the agent go on');
     this.deliver(cardId, '', [], true);
   }
 
