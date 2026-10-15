@@ -102,18 +102,12 @@ describe("Obeya's configuration", async () => {
     expect((await c.check({})).problems.map((p) => p.code)).toEqual(['invalid']);
   });
 
-  test("a repository's share command is checked: its program must be there, a script is found in the repository", async () => {
-    const c = config('file', []);
-    writeFileSync(join(web, 'share.ts'), '');
-    const problems = async (share: string) => (await c.check([{ repos: [{ path: web, share }] }])).problems.map((p) => p.code);
-    expect(await problems('share.ts --site demos')).toEqual([]);
-    expect(await problems('./share.ts')).toEqual([]);
-    expect(await problems('git')).toEqual([]);
-    expect(await problems('scripts/nowhere.sh')).toEqual(['shareCommand']);
-    expect(await problems('no-such-program-anywhere publish')).toEqual(['shareCommand']);
-    // an empty one is no command: the demo site of the settings counts, or demos are exported
-    expect(await problems('  ')).toEqual([]);
-    expect((await c.check([{ repos: [{ path: web, share: ' ' }] }])).canvases).toEqual([{ repos: [{ path: web }] }]);
+  test("a repository's share command, which went, is dropped from the file as it is read", async () => {
+    mkdirSync(join(dir, 'home'));
+    writeFileSync(file, JSON.stringify([{ name: 'Web', repos: [{ path: web, share: 'share.ts', clones: 2 }] }]));
+    expect(readConfigFile(file)).toEqual([{ name: 'Web', repos: [{ path: web, clones: 2 }] }]);
+    // the dialog sends none
+    expect((await config('file', []).check([{ repos: [{ path: web, share: 'share.ts' }] }])).problems.map((p) => p.code)).toEqual(['invalid']);
   });
 
   test('hosts: tidied, only for a repository with clones whose work goes out through its remote, one machine per name', async () => {
@@ -134,14 +128,13 @@ describe("Obeya's configuration", async () => {
     expect((await check([{ path: web, hosts: [{ ...host, name: 'a/b' }] }])).problems.map((p) => p.code)).toEqual(['invalid']);
   });
 
-  test("a demo site that cannot be used is a problem at the repository, unless this machine shares with a command of its own", async () => {
+  test("a demo site that cannot be used is a problem at the repository", async () => {
     const site = { title: 'Demos', url: 'https://demos.example.dev', deploy: 'no-such-deploy-anywhere {dir}' };
     const own = gitRepo(join(dir, 'shop'), { '.obeya/settings.json': JSON.stringify({ demo: { site } }) });
     const c = config('args', [{ repos: [{ path: web }] }]);
     const checked = (await c.check([{ repos: [{ path: own }] }]));
     expect(checked.problems).toEqual([{ code: 'demoSite', canvas: 0, repo: 0, detail: "demo.site.deploy: the deploy command's program no-such-deploy-anywhere is not on the PATH" }]);
     expect(checked.resolved[0]!.repos[0]!.values.demo.site).toEqual({ value: site, source: 'repository' });
-    expect((await c.check([{ repos: [{ path: own, share: 'git' }] }])).problems).toEqual([]);
     // one this machine sets without a URL
     expect((await c.check([{ repos: [{ path: web, settings: { demo: { site: { ...site, url: 'demos', deploy: 'git {dir}' } } } }] }])).problems.map((p) => p.detail)).toEqual(['demo.site.url: expected an http(s) URL']);
   });

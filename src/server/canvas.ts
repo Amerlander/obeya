@@ -27,7 +27,7 @@ import { readPlanDocs, watchPlanDocs } from './repo';
 import { boundsOf, GAP, type Place, unionBounds } from '../core/layout';
 import { type AgentRuntime, withAgentSetting } from './runtime';
 import { changesCode, RESTART_PATIENCE_MS, whenIdle } from './self-update';
-import { Sharing, shareArgv, siteIncomplete } from './share';
+import { Sharing, siteIncomplete } from './share';
 import { siteMissing, siteName } from './site';
 import { type DueRestart, Workers } from './workers';
 import { branchSetting, defaultBranch, detectingBranch, gitCalls, type GitSteps, gitStepsSync, type Landed, together, useBranchSetting, Workspaces } from './workspaces';
@@ -77,8 +77,8 @@ export interface RepoRuntime {
   ref: RepoRef;
   info: RepoInfo;
   adapter: RepoAdapter;
-  /** Where its demos are shared (the configuration's command, else the demo site of its settings); null where they are exported. */
-  share: Shares | null;
+  /** The demo site of its settings, where its demos are shared; null where they are exported. */
+  site: DemoSite | null;
   /** Its Lesestand: the default branch, where plan docs are read and the agents that only read work. */
   read: ReadTree;
   workspaces: Workspaces;
@@ -129,7 +129,7 @@ export class CanvasRuntime {
   readonly images: Images;
   readonly answers: Answers;
   readonly revisions: Revisions;
-  /** Demos shared with colleagues, through the share command of the card's repository. */
+  /** Demos shared with colleagues, on the demo site of the card's repository. */
   readonly sharing: Sharing;
   /** Its repositories, the home one first. */
   readonly repos: Repo[] = [];
@@ -255,7 +255,7 @@ export class CanvasRuntime {
       forge: deps.forge,
       sourceFor: (card) => {
         const r = this.repoOf(card);
-        return r.share ? { ...r.share, repo: r.info.path } : null;
+        return r.site ? { site: r.site, repo: r.info.path } : null;
       },
     });
     this.sharing.resume();
@@ -325,9 +325,9 @@ export class CanvasRuntime {
     const ref = resolved.refs[index]!;
     const isHome = index === 0;
     for (const p of this.shared.get(info.path)?.problems ?? []) console.warn(`Obeya: ${info.path}: ${p} (ignored)`);
-    const share = sharesOf(rc, info, adapter);
+    const site = siteOf(adapter);
     // whether the repository shares here, which the UI shows
-    Object.assign(ref, shareRef(share, deps.home));
+    Object.assign(ref, shareRef(site, deps.home));
     const stops: (() => void)[] = [];
     // filled in below; what is set up here reaches it once it is
     const repo = { config: rc, stops } as Repo;
@@ -390,7 +390,7 @@ export class CanvasRuntime {
       runtime: deps.workerRuntime ?? deps.runtime,
       workspaces,
       adapter,
-      shares: () => !!repo.share,
+      shares: () => !!repo.site,
       repo: ref.id,
       preferences: this.preferences,
       onOwnerInput: (card, kind, text, context) => this.koordinator.learn(card, kind, text, context),
@@ -414,7 +414,7 @@ export class CanvasRuntime {
       ...(deps.workerEnv ? { env: deps.workerEnv } : {}),
       ...(deps.parkGrace !== undefined ? { parkGrace: deps.parkGrace } : {}),
     });
-    return Object.assign(repo, { ref, info, adapter, share, read, workspaces, workers, projectAgents });
+    return Object.assign(repo, { ref, info, adapter, site, read, workspaces, workers, projectAgents });
   }
 
   /** Puts a repository set up by `startRepo` on the canvas, last. */
@@ -682,12 +682,12 @@ export class CanvasRuntime {
       this.due([path], shared ? 'repository' : 'config');
       return 'due';
     }
-    const share = sharesOf(r.config, r.info, r.adapter);
-    if (JSON.stringify(share) !== JSON.stringify(r.share)) {
-      r.share = share;
+    const site = siteOf(r.adapter);
+    if (JSON.stringify(site) !== JSON.stringify(r.site)) {
+      r.site = site;
       delete r.ref.share;
       delete r.ref.shareNeeds;
-      Object.assign(r.ref, shareRef(share, this.deps.home));
+      Object.assign(r.ref, shareRef(site, this.deps.home));
       return 'follow';
     }
     return shared || problems ? 'follow' : 'same';
@@ -1441,7 +1441,7 @@ export class CanvasRuntime {
     return this.repos.flatMap((r) => r.workers.busyCards());
   }
 
-  /** The owner came back to a page of this canvas: its open pull requests are looked at now, and the versions of its share commands. */
+  /** The owner came back to a page of this canvas: its open pull requests are looked at now, and its demo sites. */
   ownerBack() {
     for (const r of this.repos) r.prs?.soon();
     this.sharing.soon();
@@ -1452,7 +1452,7 @@ export class CanvasRuntime {
   private siteCredentials() {
     let changed = false;
     for (const r of this.repos) {
-      const next = shareRef(r.share, this.deps.home);
+      const next = shareRef(r.site, this.deps.home);
       if (r.ref.share !== next.share || r.ref.shareNeeds?.file !== next.shareNeeds?.file) {
         delete r.ref.share;
         delete r.ref.shareNeeds;
@@ -1706,21 +1706,17 @@ function settled(info: RepoInfo, adapter: RepoAdapter): Pick<RepoRef, 'branch' |
   };
 }
 
-/** Where a repository shares demos, without its checkout. */
-type Shares = { command: string[] } | { site: DemoSite };
-
-/** Where a repository shares demos: this machine's share command, else the site its settings name once it is complete; null without either. */
-function sharesOf(config: RepoConfig, info: RepoInfo, adapter: RepoAdapter): Shares | null {
-  if (config.share?.trim()) return { command: shareArgv(config.share, info.path) };
+/** Where a repository shares demos: the site its settings name, once it is complete; null without one. */
+function siteOf(adapter: RepoAdapter): DemoSite | null {
   const site = adapter.demo?.site;
-  return site && !siteIncomplete(site) ? { site } : null;
+  return site && !siteIncomplete(site) ? site : null;
 }
 
-/** What the canvas tells the UI about it: a target here, or the env file a site lacks on this machine. */
-function shareRef(share: Shares | null, home: string): Pick<RepoRef, 'share' | 'shareNeeds'> {
-  if (!share) return {};
-  const missing = 'site' in share ? siteMissing(home, share.site) : null;
-  return missing && 'site' in share ? { shareNeeds: { site: siteName(share.site), file: missing } } : { share: true };
+/** What the canvas tells the UI about it: a site to share on here, or the env file the site lacks on this machine. */
+function shareRef(site: DemoSite | null, home: string): Pick<RepoRef, 'share' | 'shareNeeds'> {
+  if (!site) return {};
+  const missing = siteMissing(home, site);
+  return missing ? { shareNeeds: { site: siteName(site), file: missing } } : { share: true };
 }
 
 function sameDir(a: string, b: string): boolean {

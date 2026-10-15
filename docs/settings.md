@@ -142,7 +142,7 @@ page for something to look at; the worker picks which, and runs the app for it a
 
 - `site`: a static site Obeya keeps and deploys itself, so that "Teilen" puts a demo on a page for
   colleagues, for a host that takes a directory (Cloudflare Pages, Netlify, an S3 bucket, a
-  directory a web server serves):
+  directory a web server serves). Without a site, "Teilen" exports a demo as a file:
 
   ```json
   "site": {
@@ -157,8 +157,9 @@ page for something to look at; the worker picks which, and runs the app for it a
   ```
 
   `title` is the overview's heading and the pages' tab titles; a page is at `url/<slug>/`.
-  `deploy` is a command line, run in the repository (a program given as a path is found there; a
-  script runs with Obeya's Bun), with `{dir}` for the site's directory. Optional: `env`, a file of
+  `deploy` is a command line with `{dir}` for the site's directory, run in a directory under
+  Obeya's home with `OBEYA_REPO` set to the repository's checkout (a program given as a path is
+  found in the repository; a script runs with Obeya's Bun). Optional: `env`, a file of
   `KEY=value` lines relative to Obeya's home; `headers`, for reading the live site behind a login,
   `${KEY}` from `env`; `maxFile`, the largest file the host takes in bytes (25 MiB without it);
   `language`, the overview's words (else the demo settings' language).
@@ -178,15 +179,7 @@ page for something to look at; the worker picks which, and runs the app for it a
 
 Default: no recipe, no site.
 
-### Not in the file: the share command and the canvas
-
-A host that needs more than deploying a directory gets a share command instead of a site: a
-setting of each machine ("Befehl zum Teilen von Demos" in „Einstellungen“), since it often needs
-credentials. Obeya runs it in a directory under its home with `OBEYA_HOME`, `OBEYA_REPO` (the
-repository's checkout) and `OBEYA_KIT` (the module with Obeya's page templates) set: `publish`
-with the page as JSON on stdin (`SharePage` in `src/server/share.ts`) prints the page's URL;
-`withdraw <slug>` takes it down; `version` may print the version of the pages it writes. It goes
-before the site. Without either, "Teilen" exports a demo as a file.
+### Not in the file: the canvas
 
 The canvas a repository is on, its name and id, are in "Konfiguration" too. Without a name, a
 canvas is named after its first repository (the name in its `origin` URL, else its directory's).

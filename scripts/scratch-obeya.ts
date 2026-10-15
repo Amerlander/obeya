@@ -22,7 +22,7 @@
 //   {
 //     "name": "Shop", "canvases": ["Website"],
 //     "port": 4480, "dir": "/tmp/obeya-scratch-4480", "clones": 2, "mainBranch": "master",
-//     "share": "share.ts", "poolCheckout": true, "slots": 3,
+//     "poolCheckout": true, "slots": 3,
 //     "hosts": [{ "name": "Workhorse", "ssh": "me@workhorse.local", "clones": 2, "slots": 2 }],
 //     "files": { "src/cli.ts": "…" },
 //     "plans": { "docs/plan/werkzeug.md": "# Werkzeug\n\n## Workstreams\n\n- [ ] **W1:** Konfiguration.\n" },
@@ -64,10 +64,9 @@
 // and `row` for any other column of `cards` (objects are stored as JSON). Times: "90s", "15m", "2h",
 // "3d" ago. `mainBranch` is the branch the repositories are on (default `main`). `"setup": true` serves no canvas (no configuration, no repository given): the first start,
 // which shows the setup assistant; the repository is still made, for the assistant to pick, and
-// `cards` may be empty. The repository has settings of its own where `files` hold `.obeya/settings.json`. `share` is the repository's share command as the configuration holds it (a script among
-// `files`, say); `poolCheckout` makes the repository's checkout a workspace of the pool too
+// `cards` may be empty. The repository has settings of its own where `files` hold `.obeya/settings.json` (a demo site among them, say). `poolCheckout` makes the repository's checkout a workspace of the pool too
 // (`workspaces` in the configuration), as a pool of clones often has it, with a bare origin in
-// <dir>; with either, the server
+// <dir>; with it, the server
 // starts from a configuration file in <dir>. `slots` caps the workers busy at once on this machine
 // (an idle worker counts as busy). `hosts` are other machines over SSH (as in the configuration;
 // `root` defaults to <dir>/far there): the repository gets a bare origin in <dir>, copied to each
@@ -137,8 +136,6 @@ interface Stage {
   mainBranch?: string;
   /** Clones for the workers, who then work in clones whatever the settings say: real workers need one each. */
   clones?: number;
-  /** The repository's share command, as in the configuration. */
-  share?: string;
   /** The repository's checkout is a workspace of the pool too. */
   poolCheckout?: boolean;
   /** Workers busy at once on this machine. */
@@ -259,9 +256,9 @@ const out = openSync(log, 'a');
 // not supervised: a scratch Obeya restarts itself only when asked to
 const supervised = args.includes('--restarts');
 const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'OBEYA_SUPERVISED')), OBEYA_HOME: home };
-// a share command and a pool's workspaces live in the configuration, which the command line cannot give
+// a pool's workspaces live in the configuration, which the command line cannot give
 const configFile = join(dir, 'canvases.json');
-const configured = !!stage.share || !!stage.poolCheckout || stage.slots !== undefined || !!stage.hosts?.length || !!stage.name || further.length > 0;
+const configured = !!stage.poolCheckout || stage.slots !== undefined || !!stage.hosts?.length || !!stage.name || further.length > 0;
 if (configured)
   writeFileSync(
     configFile,
@@ -275,7 +272,6 @@ if (configured)
               ...(stage.clones ? { clones: stage.clones } : {}),
               ...(stage.poolCheckout ? { workspaces: [repo] } : {}),
               ...(stage.slots !== undefined ? { slots: stage.slots } : {}),
-              ...(stage.share ? { share: stage.share } : {}),
               ...(stage.hosts?.length ? { hosts: stage.hosts.map(({ gone: _, ...h }) => ({ ...h, root: rootOn(h) })) } : {}),
             },
           ],

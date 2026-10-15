@@ -1,7 +1,7 @@
 // Obeya as one file: the server compiled with Bun (`bun build --compile`) into a binary that needs
 // no Bun and no checkout, with the UI and SQLite in it, and beside it the resources other
 // processes run or import (src/server/resources.ts): the plugin with the demo skill and the
-// Playwright it records with, the voice sidecars, and the kit share scripts import bundled into one module;
+// Playwright it records with, and the voice sidecars;
 // the skills' scripts that read a repository's settings (`recipe.ts`, `check.ts`) are bundled with them in place.
 //
 //   bun scripts/build.ts [<target>…] [--all] [--out <dir>]
@@ -51,7 +51,6 @@ function resources(dir: string) {
   cpSync(join(ROOT, 'LICENSE'), join(dir, 'LICENSE'));
   // the settings skill reads the reference up the tree, as in the checkout
   cpSync(join(ROOT, 'docs', 'settings.md'), join(dir, 'docs', 'settings.md'));
-  run([process.execPath, 'build', 'src/adapters/kit.ts', '--target', 'bun', '--outfile', join(dir, 'kit.js')]);
   for (const script of ['plugin/skills/demo/lib/recipe.ts', 'plugin/skills/settings/lib/check.ts'])
     run([process.execPath, 'build', script, '--target', 'bun', '--outfile', join(dir, script)]);
 }

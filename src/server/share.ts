@@ -1,31 +1,23 @@
-// Sharing a card's demo with colleagues, a video or an HTML artifact: a page outside Obeya, on a
-// static site Obeya keeps itself (`demo.site` of the repository's settings, site.ts), or published
-// by the share command this machine's configuration names for the repository. Obeya writes the page's text when
-// the worker did not, and runs the command in a directory under Obeya's home (not in the checkout,
-// often a workspace of the pool too), with the checkout in `OBEYA_REPO`:
-// `publish` with the page as JSON on stdin, which prints the page's URL; `withdraw <slug>`; and,
-// where the command knows it, `version`, which prints the version of the pages it writes (the
-// video pages', then `html:<version>` for artifact pages where those differ): a page published with
-// another one is offered to share again ("Erneut teilen"), on its card, or many at once from the
-// Koordinator's sheet.
-// Once the card has a pull request, its description links the page and the page links it. The
-// target is the share command of the repository's configuration, else the site its settings name.
-// A repository with neither (or a site whose credentials are not on this machine) exports
+// Sharing a card's demo with colleagues, a video or an HTML artifact: a page outside Obeya, on the
+// static site Obeya keeps itself (`demo.site` of the repository's settings, site.ts). Obeya writes
+// the page's text when the worker did not. The site says the version of the pages it writes (the
+// video pages', the artifact pages'): a page published with another one is offered to share again
+// ("Erneut teilen"), on its card, or many at once from the Koordinator's sheet.
+// Once the card has a pull request, its description links the page and the page links it. A
+// repository without a site (or with a site whose credentials are not on this machine) exports
 // the demo instead: the same page as a ZIP with its files, or as one HTML file.
 // Pages of one target are on one site, so they share its version and each publish names the others.
 
-import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import { z } from 'zod';
-import { KIT_PATH } from '../adapters';
 import { LANGUAGE_NAMES } from '../core/locale';
 import { MESSAGES, type Messages } from '../core/messages';
 import { type Demo, type DemoKind, type DemoPage, EXPORT_HTML_MAX, type Item } from '../core/types';
 import { BadRequest, type Board, type PrState, reshareable, type StoredReshare, type StoredShare } from './board';
 import type { DemoSite } from '../adapters/types';
 import { readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
-import { BUN_ENV } from './resources';
 import { type Gone, siteMissing, siteTarget } from './site';
 import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, type DemoPageParts, day, demoPageHtml, PAGE_WORDS, type PageLanguage, withHeightReport } from './demo-page';
 import { type Forge, parsePrUrl } from './forge';
@@ -33,7 +25,7 @@ import type { AgentRuntime } from './runtime';
 import { branchName } from './workspaces';
 import { zip } from './zip';
 
-/** What the share command gets on stdin for `publish`; `withdraw` gets `slug` and `shared` only. */
+/** What a page on the site is made of. */
 export interface SharePage {
   /** Stays the same for a card, so a shared link keeps working when the page is published again. */
   slug: string;
@@ -45,22 +37,19 @@ export interface SharePage {
   chapters: [number, string][];
   /** The card's pull request, once it has one. */
   pr: string | null;
-  /** The demo's language, for the page's own words (`language` of the kit's page templates). */
+  /** The demo's language, for the page's own words (`language` of the page templates). */
   language: PageLanguage;
   /** The demo's directory: `demo.mp4`, `poster.jpg`, `captions.vtt`; an artifact's `index.html` and the files it loads. */
   dir: string;
-  /** The slugs of the other pages Obeya has stored as shared through this command: the site must still hold them. */
+  /** The slugs of the other pages Obeya has stored as shared on this site: the site must still hold them. */
   shared: string[];
 }
 
-/** A repository's share command (argv), and the repository's checkout, passed to it as `OBEYA_REPO`. */
-export interface ShareCommand {
-  command: string[];
+/** Where a repository's demos go: the site its settings name; with its checkout. */
+export interface ShareSource {
+  site: DemoSite;
   repo: string;
 }
-
-/** Where a repository's demos go: its share command, or the site its settings name; with its checkout. */
-export type ShareSource = ShareCommand | { site: DemoSite; repo: string };
 
 /**
  * Where a card's pages go. Pages whose targets have the same key are on one site: the target's
@@ -80,43 +69,19 @@ export interface ShareTarget {
   publish(page: SharePage, log?: (text: string) => void): Promise<({ url: string; said: string } | { why: string; said: string }) & { gone?: Gone[] }>;
   withdraw(slug: string, shared: string[], log?: (text: string) => void): Promise<{ why?: string; said: string; gone?: Gone[] }>;
   /**
-   * Of a site: the pages another machine withdrew (their cards here lose their link), and the pages
-   * shared from here (`shared`) that the live site lacks or has older, taken offline by another
-   * machine's deployment that came in between.
+   * The pages another machine withdrew (their cards here lose their link), and the pages shared
+   * from here (`shared`) that the live site lacks or has older, taken offline by another machine's
+   * deployment that came in between.
    */
-  audit?(shared: string[]): Promise<{ gone: Gone[]; missing: string[] }>;
-  /** Of a site: deploys again what this machine has, for the pages `audit` found missing. */
-  repair?(shared: string[], log?: (text: string) => void): Promise<{ why?: string; said: string; gone?: Gone[] }>;
-  /** The version of the pages the target writes, which changes whenever its pages would come out different; null when it says none. */
-  version(): Promise<Versions | null>;
-}
-
-/** A share command as a target, keyed by its argv. */
-export function commandTarget({ command, repo }: ShareCommand, home: string, t: Messages['share']): ShareTarget {
-  return {
-    key: `command:${JSON.stringify(command)}`,
-    repo,
-    async publish(page) {
-      const r = await run([...command, 'publish'], JSON.stringify(page), repo, home);
-      const url = r.out.split('\n').map((l) => l.trim()).filter((l) => /^https?:\/\/\S+$/.test(l)).at(-1);
-      if (r.code !== 0 || !url) return { why: r.code !== 0 ? t.commandFailed(r.code) : t.noUrl, said: tail(r.err || r.out) };
-      // stdout carries the URL, logged with the share; what the command says on the way is on stderr
-      return { url, said: r.err.trim() ? tail(r.err) : '' };
-    },
-    async withdraw(slug, shared) {
-      const r = await run([...command, 'withdraw', slug], JSON.stringify({ slug, shared }), repo, home);
-      if (r.code !== 0) return { why: t.notWithdrawnFailed(r.code), said: tail(r.err || r.out) };
-      return { said: r.err.trim() || r.out.trim() ? tail(`${r.out}\n${r.err}`) : '' };
-    },
-    async version() {
-      const r = await run([...command, 'version'], '', repo, home);
-      return r.code === 0 ? parseVersions(r.out) : null;
-    },
-  };
+  audit(shared: string[]): Promise<{ gone: Gone[]; missing: string[] }>;
+  /** Deploys again what this machine has, for the pages `audit` found missing. */
+  repair(shared: string[], log?: (text: string) => void): Promise<{ why?: string; said: string; gone?: Gone[] }>;
+  /** The version of the pages the target writes, which changes whenever its pages would come out different. */
+  version(): Promise<Versions>;
 }
 
 /**
- * Where share commands run, under Obeya's home: not in the checkout, which is often a workspace
+ * Where a site's deploy runs, under Obeya's home: not in the checkout, which is often a workspace
  * of the pool too, and a file a command leaves in its working directory (`wrangler pages deploy`
  * writes its cache there) would keep the workspace from being leased until someone cleans up.
  */
@@ -127,10 +92,7 @@ export interface SharingOptions {
   runtime: AgentRuntime;
   /** Where the card's repository shares demos; null when it shares none. */
   sourceFor: (card: Item) => ShareSource | null;
-  /**
-   * Obeya's data directory, passed to the command as `OBEYA_HOME` (with `OBEYA_KIT`, the helpers a
-   * share script imports); the command runs in a directory of it (`SHARE_CWD`).
-   */
+  /** Obeya's data directory, passed to a site's deploy as `OBEYA_HOME`; the deploy runs in a directory of it (`SHARE_CWD`). */
   home: string;
   /** Where the card's pull request is, for the page's link in its description. */
   forge: Forge;
@@ -138,10 +100,10 @@ export interface SharingOptions {
   machine?: string;
 }
 
-/** A share command (or a site's deploy) that has not finished by then is stopped (an upload of a few files takes seconds). */
+/** A site's deploy that has not finished by then is stopped (an upload of a few files takes seconds). */
 export const COMMAND_TIMEOUT = 15 * 60_000;
 
-/** The pages of all canvases go through one command at a time: a site directory takes one change at a time. */
+/** The pages of all canvases go out one at a time: a site directory takes one change at a time. */
 let chain: Promise<unknown> = Promise.resolve();
 const serial = <T>(fn: () => Promise<T>): Promise<T> => {
   const next = chain.then(fn, fn);
@@ -152,7 +114,7 @@ const serial = <T>(fn: () => Promise<T>): Promise<T> => {
 export class Sharing {
   /** When the versions were last asked for because the owner came back. */
   private checked = 0;
-  /** A page of the run sharing many again is waiting for the command, or going out. */
+  /** A page of the run sharing many again is waiting for its turn, or going out. */
   private resharing = false;
 
   constructor(private o: SharingOptions) {}
@@ -245,7 +207,7 @@ export class Sharing {
     this.o.board.setReshareRun(null);
   }
 
-  /** The next page of the run sharing many again, once the command is free. */
+  /** The next page of the run sharing many again, once the site is free. */
   private nextAgain() {
     if (this.resharing || !this.o.board.reshareRun()?.queue.length) return;
     this.resharing = true;
@@ -280,9 +242,8 @@ export class Sharing {
   }
 
   /**
-   * The owner came back to Obeya: the versions are asked again (at most once a minute), since a
-   * share command from another repository changes without Obeya restarting, and a site is asked
-   * which pages another machine withdrew.
+   * The owner came back to Obeya: each site is asked again (at most once a minute) which pages
+   * another machine withdrew, or took offline.
    */
   soon() {
     if (Date.now() - this.checked < 60_000) return;
@@ -291,9 +252,9 @@ export class Sharing {
   }
 
   /**
-   * Asks each share target with pages out for the version of the pages it writes, and marks the
-   * pages published with another one (or with none said): sharing them again would
-   * make a difference. A card whose page another machine withdrew loses its link.
+   * Asks each site with pages out for the version of the pages it writes, and marks the pages
+   * published with another one: sharing them again would make a difference. A card whose page
+   * another machine withdrew loses its link.
    */
   async checkVersions() {
     const targets = new Map<string, ShareTarget>();
@@ -304,12 +265,10 @@ export class Sharing {
     }
     for (const target of targets.values()) {
       this.mark(target.key, await target.version());
-      if (target.audit) {
-        const shared = this.others('', target.key);
-        const { gone, missing } = await target.audit(shared);
-        this.lost(target.key, gone);
-        if (missing.length) await this.repair(target, shared, missing);
-      }
+      const shared = this.others('', target.key);
+      const { gone, missing } = await target.audit(shared);
+      this.lost(target.key, gone);
+      if (missing.length) await this.repair(target, shared, missing);
     }
   }
 
@@ -321,7 +280,7 @@ export class Sharing {
       .map((r) => r.id);
     const log = (kind: 'activity' | 'state' | 'error', text: string) => ids.forEach((id) => this.o.board.log(id, kind, 'obeya', text));
     const t = this.o.board.t.share;
-    const r = await target.repair!(shared, (text) => log('activity', text));
+    const r = await target.repair(shared, (text) => log('activity', text));
     this.lost(target.key, r.gone);
     if (r.why) return log('error', [t.notRestored(r.why), r.said].filter(Boolean).join('\n\n'));
     if (r.said) log('activity', r.said);
@@ -341,7 +300,7 @@ export class Sharing {
   }
 
   /** Marks each page at rest shared through the target as published with another version than its current one, or not. */
-  private mark(key: string, versions: Versions | null) {
+  private mark(key: string, versions: Versions) {
     for (const r of this.o.board.sharedRows()) {
       const s = JSON.parse(r.share!) as StoredShare;
       const card = this.find(r.id);
@@ -609,9 +568,8 @@ export class Sharing {
   /** Where the card's pages go; null when its repository shares none, or its site's credentials are not on this machine. */
   private target(card: Item): ShareTarget | null {
     const src = this.o.sourceFor(card);
-    if (!src) return null;
-    if ('site' in src) return siteMissing(this.o.home, src.site) ? null : siteTarget(src.site, src.repo, this.o.home, this.o.board.t.share, { machine: this.o.machine });
-    return commandTarget(src, this.o.home, this.o.board.t.share);
+    if (!src || siteMissing(this.o.home, src.site)) return null;
+    return siteTarget(src.site, src.repo, this.o.home, this.o.board.t.share, { machine: this.o.machine });
   }
 
   private card(cardId: string): Item {
@@ -699,41 +657,25 @@ export function withDemoLink(body: string, url: string, kind: DemoKind = 'video'
   return body.trim() ? `${body.trimEnd()}\n\n${line}\n` : `${line}\n`;
 }
 
-/**
- * The versions a share command says its pages are written in: the first word for video pages (and
- * for all, from a command that says one only), `html:<version>` for artifact pages.
- */
+/** The versions a site writes its pages in: video pages', and artifact pages' where those differ. */
 export interface Versions {
   video: string;
   html?: string;
 }
 
-export function parseVersions(out: string): Versions | null {
-  const words = out.trim().split('\n').at(-1)?.trim().split(/\s+/).filter(Boolean) ?? [];
-  if (!words[0]) return null;
-  const html = words.find((w) => w.startsWith('html:'))?.slice('html:'.length);
-  return { video: words[0], ...(html ? { html } : {}) };
-}
-
 /** The version a page of the kind is written in now. */
-const versionOf = (v: Versions | null, kind: DemoKind = 'video') => (v ? (kind === 'html' ? (v.html ?? v.video) : v.video) : null);
+const versionOf = (v: Versions, kind: DemoKind = 'video') => (kind === 'html' ? (v.html ?? v.video) : v.video);
 
 /** A card's page keeps this slug for good: a shared link stays the same, and an export is named by it. */
 const slugOf = (card: Item) => branchName(card.title, card.id).slice('obeya/'.length);
 
-/**
- * A share command line as the configuration holds it, as argv: words split at spaces outside
- * quotes. A program given as a path, and any script, is found in the repository (`~` is the home
- * directory); a script (`.ts`, `.js`) runs with Obeya's own Bun, on every platform.
- */
-export function shareArgv(line: string, repoPath: string): string[] {
-  return scriptArgv(commandWords(line), repoPath);
-}
-
 /** The words of a command line, as a shell would split it where quotes ("…", '…') keep spaces. */
 export const commandWords = (line: string): string[] => [...line.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3]!);
 
-/** Argv whose program, given as a path, is found in the repository, and a script runs with Obeya's own Bun. */
+/**
+ * Argv whose program, given as a path, is found in the repository (`~` is the home directory), and
+ * a script (`.ts`, `.js`) runs with Obeya's own Bun, on every platform.
+ */
 export function scriptArgv(words: string[], repoPath: string): string[] {
   if (!words.length) return [];
   let [program, ...rest] = words as [string, ...string[]];
@@ -741,14 +683,6 @@ export function scriptArgv(words: string[], repoPath: string): string[] {
   const script = /\.(m?[jt]sx?|cjs)$/.test(program);
   if ((script || /[\\/]/.test(program)) && !isAbsolute(program)) program = resolve(repoPath, program);
   return script ? [process.execPath, program, ...rest] : [program, ...rest];
-}
-
-/** Why a share command cannot run: its program is not there. */
-export function shareProblem(argv: string[]): string | null {
-  const program = argv[0] === process.execPath ? argv[1] : argv[0];
-  if (!program) return 'the share command is empty';
-  if (isAbsolute(program)) return existsSync(program) ? null : `the share command's program ${program} does not exist`;
-  return Bun.which(program) ? null : `the share command's program ${program} is not on the PATH`;
 }
 
 /** What the demo site lacks to be shared on (a title, an http(s) URL, a deploy command); null where it has it. */
@@ -766,22 +700,11 @@ export function siteIncomplete(site: DemoSite): string | null {
 export function siteProblem(site: DemoSite, repoPath: string): string | null {
   const incomplete = siteIncomplete(site);
   if (incomplete) return incomplete;
-  const wrong = shareProblem(scriptArgv(commandWords(site.deploy), repoPath));
-  return wrong ? `demo.site.deploy: ${wrong.replace('the share command', 'the deploy command')}` : null;
-}
-
-/** Runs the share command in `SHARE_CWD` under Obeya's home; never throws. */
-async function run(argv: string[], stdin: string, repo: string, home: string): Promise<{ code: number; out: string; err: string }> {
-  try {
-    const cwd = join(home, SHARE_CWD);
-    mkdirSync(cwd, { recursive: true });
-    const env = { ...process.env, ...(argv[0] === process.execPath ? BUN_ENV : {}), OBEYA_HOME: home, OBEYA_KIT: KIT_PATH, OBEYA_REPO: repo };
-    const p = Bun.spawn(argv, { cwd, stdin: new Blob([stdin]), stdout: 'pipe', stderr: 'pipe', env, timeout: COMMAND_TIMEOUT });
-    const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
-    return { code, out, err };
-  } catch (e) {
-    return { code: -1, out: '', err: e instanceof Error ? e.message : String(e) };
-  }
+  const argv = scriptArgv(commandWords(site.deploy), repoPath);
+  const program = argv[0] === process.execPath ? argv[1] : argv[0];
+  if (!program) return 'demo.site.deploy: the deploy command is empty';
+  if (isAbsolute(program)) return existsSync(program) ? null : `demo.site.deploy: the deploy command's program ${program} does not exist`;
+  return Bun.which(program) ? null : `demo.site.deploy: the deploy command's program ${program} is not on the PATH`;
 }
 
 /** The last lines of a command's output, for the card's log. */

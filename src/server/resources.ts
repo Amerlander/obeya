@@ -1,5 +1,5 @@
 // Where Obeya's files are that other processes run or import: the plugin with the demo skill
-// (loaded into every worker's session), the voice sidecars, the kit share scripts import (`OBEYA_KIT`). In the
+// (loaded into every worker's session) and the voice sidecars. In the
 // checkout they are the checkout's own; the compiled binary (`bun build --compile`, built by
 // `scripts/build.ts`) carries its modules in Bun's embedded file system, which no other process
 // can read, so its build puts them as real files into a `resources` directory beside it. That

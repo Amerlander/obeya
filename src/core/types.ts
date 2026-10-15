@@ -483,7 +483,7 @@ export interface DemoPage {
 export const EXPORT_HTML_MAX = 15 * 1024 * 1024;
 
 /**
- * A card's shared demo page. `publishing` while the share command runs, `shared` once the page is
+ * A card's shared demo page. `publishing` while it goes out, `shared` once the page is
  * up, `withdrawing` while it is taken down.
  */
 export interface Share {
@@ -492,7 +492,7 @@ export interface Share {
   url?: string;
   /** The card has a newer demo than the one on the page. */
   stale?: boolean;
-  /** The page shows the card's demo, but the share command writes pages differently now ("Erneut teilen"). */
+  /** The page shows the card's demo, but the site writes pages differently now ("Erneut teilen"). */
   outdated?: boolean;
 }
 
@@ -619,7 +619,7 @@ export interface CanvasSnapshot {
   talk: Talk[];
   /** The clone pools of the repositories that use clones; none when no repository does. */
   workspaces?: ClonePool[];
-  /** Shared pages the share commands now write differently, and sharing many of them again; none when there is neither. */
+  /** Shared pages their sites now write differently, and sharing many of them again; none when there is neither. */
   reshare?: Reshare;
   /** The plan directories the canvas has a note about (`PlanDir`); none when it has none. */
   planDirs?: PlanDir[];
@@ -985,12 +985,6 @@ export interface RepoConfig {
   /** How many of its workers may be busy at once on this machine; left out, as many as it has clones, or any number in worktrees. */
   slots?: number;
   /**
-   * The command that shares a demo on a page outside Obeya (`publish`, `withdraw <slug>`;
-   * `SharePage` in `src/server/share.ts`), as a command line: it takes the place of the demo site of the repository's settings.
-   * Without either, "Teilen" exports the demo as a file.
-   */
-  share?: string;
-  /**
    * Other machines its workers run on, reached over SSH (design: Hosts), in the order a new card
    * looks for a free slot after this one. Only for a repository whose workers use clones and whose work goes out through its
    * remote.
@@ -1230,8 +1224,6 @@ export type ConfigProblemCode =
   | 'homeMissing'
   /** A clone listed as a workspace that is no git repository. */
   | 'notClone'
-  /** A share command whose program is not there. */
-  | 'shareCommand'
   /** The demo site the repository's settings name cannot be used: a field is missing, or its deploy command names a program that is not there. */
   | 'demoSite'
   /** A host that cannot work for the repository: its workers use worktrees, or its work does not go out through a remote. */

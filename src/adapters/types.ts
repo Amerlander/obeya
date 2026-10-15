@@ -43,8 +43,8 @@ export interface RepoAdapter {
   workspaces: 'clones' | 'worktrees';
 
   /**
-   * The static site Obeya keeps and deploys itself to share demos on (`src/server/site.ts`), which
-   * goes before no share at all but after the share command of this machine's configuration.
+   * The static site Obeya keeps and deploys itself to share demos on (`src/server/site.ts`);
+   * without one, "Teilen" exports a demo as a file.
    */
   demo?: { site?: DemoSite };
 

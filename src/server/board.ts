@@ -105,9 +105,9 @@ export interface StoredShare {
   pr?: string;
   /** While `publishing`: the page goes out again as it is, now with the PR's link; the card shows it as shared meanwhile. */
   refresh?: true;
-  /** The version of the pages the share command wrote when it published this one (its `version`); none when it said none. */
+  /** The version of the pages the site wrote when it published this one; none for a page shared before versions were kept. */
   version?: string;
-  /** The command writes its pages differently now: sharing again would make a difference. */
+  /** The site writes its pages differently now: sharing again would make a difference. */
   outdated?: true;
   /** While `publishing` (with `refresh`): the page goes out again as it is, one of many the owner shares again at once. */
   again?: true;
@@ -126,7 +126,7 @@ export interface StoredReshare {
 const RESHARE_SETTING = 'reshare';
 
 /**
- * A page at rest the share command now writes differently, whose demo is still at hand: the one on
+ * A page at rest the site now writes differently, whose demo is still at hand: the one on
  * the card, or the one it showed, kept with the share, and its files still on disk (demos are
  * deleted to free space; a page whose files are gone stays as it is, with nothing to offer).
  */

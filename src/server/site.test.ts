@@ -543,7 +543,7 @@ test("a repository whose settings name a site: the canvas says the env file it l
   rmSync(join(home, 'sites/demos/deploy.env'));
   const canvas = new CanvasRuntime({ repos: [{ path: shop }] }, { store: new Store(':memory:'), home, runtime: new FakeRuntime(), forge: noForge });
   try {
-    expect(canvas.repos[0]!.share).toEqual({ site: SITE() });
+    expect(canvas.repos[0]!.site).toEqual(SITE());
     expect(canvas.board.canvas.repos[0]).toMatchObject({ shareNeeds: { site: siteName(SITE()), file: 'sites/demos/deploy.env' } });
     expect(canvas.board.canvas.repos[0]!.share).toBeUndefined();
     writeFileSync(join(home, 'sites/demos/deploy.env'), 'TOKEN=1\n');

@@ -1,19 +1,19 @@
 // Checks a compiled Obeya (`bun run build`) on this machine, the way someone without Bun or a
 // checkout would use it: a scratch repository with its own settings (`.obeya/settings.json`) and
-// share command, the binary started as `obeya` starts (supervised), and then what it hands to other
+// demo site, the binary started as `obeya` starts (supervised), and then what it hands to other
 // processes. Runs on macOS, Linux and Windows.
 //
 //   bun scripts/check-binary.ts <obeya> [--voice] [--demo] [--worker] [--port <n>] [--keep]
 //
 // Always: the canvas answers, the settings show the version and no checkout, the repository's own
 // settings are read, the demo setup finds Playwright among the resources, and a script run with the
-// binary's Bun (`BUN_BE_BUN`) imports the kit. --voice installs Piper and Whisper through
+// binary's Bun (`BUN_BE_BUN`) runs. --voice installs Piper and Whisper through
 // the settings, speaks a sentence in the demo voice (tts.py from the resources) and gives it to
 // Obeya as a voice command; what Whisper heard must match. --demo renders a short demo of the
 // canvas with the skill's director from the resources (Node, a browser, ffmpeg and uv needed).
 // --worker starts a card with a real agent on the Claude Code `OBEYA_CLAUDE` names, else the
-// machine's own, which commits a file and hands over an HTML artifact that is then shared through
-// the repository's share command. The Koordinator's answer to the voice command needs a Claude
+// machine's own, which commits a file and hands over an HTML artifact that is then shared on the
+// repository's demo site (served from the scratch directory). The Koordinator's answer to the voice command needs a Claude
 // login as well; without --worker it is not waited for. Prints one line per check; exits 1 when
 // one failed. --keep leaves the scratch directory and the server running. With CHECK_ARTIFACTS set,
 // a failed render leaves its screenshot and the server's log in that directory.
@@ -80,19 +80,32 @@ const api = async (path: string, init?: RequestInit & { json?: unknown }) => {
 };
 const json = async <T = any>(path: string, init?: RequestInit & { json?: unknown }) => (await (await api(path, init)).json()) as T;
 
-// the scratch repository: a plan doc, its own settings and a share command that imports the kit
+// the scratch repository: a plan doc, its own settings with a demo site, and the site's deploy
+// script, which copies the site to `deployed` under Obeya's home, where the site is served from
 const dir = realpathSync(mkdtempSync(join(tmpdir(), 'obeya-check-')));
 const repo = join(dir, 'repo');
 const home = join(dir, 'home');
+const deployed = join(home, 'deployed');
+const host = Bun.serve({
+  port: 0,
+  hostname: '127.0.0.1',
+  fetch(req) {
+    let path = decodeURIComponent(new URL(req.url).pathname);
+    if (path.endsWith('/')) path += 'index.html';
+    const file = join(deployed, path);
+    return !path.includes('..') && existsSync(file) ? new Response(Bun.file(file)) : new Response('not found', { status: 404 });
+  },
+});
+const siteUrl = `http://127.0.0.1:${host.port}/`;
 const files: Record<string, string> = {
   'README.md': '# Scratch\n',
   'docs/plan/tool.md': '# Tool\n\n## Workstreams\n\n- [ ] **W1:** Configuration.\n',
-  '.obeya/settings.json': '{ "app": { "run": "Nothing to run." } }\n',
-  'share.ts': `const kit = await import(process.env.OBEYA_KIT);
-if (process.argv[2] !== 'publish') process.exit(process.argv[2] === 'version' ? 1 : 0);
-const page = JSON.parse(await Bun.stdin.text());
-await Bun.write(\`\${process.env.OBEYA_HOME}/shared-\${page.slug}.txt\`, kit.esc('<' + page.slug + '>'));
-console.log(\`https://demos.example/\${page.slug}/\`);
+  '.obeya/settings.json': `${JSON.stringify({ app: { run: 'Nothing to run.' }, demo: { site: { title: 'Check demos', url: siteUrl, deploy: 'deploy.ts {dir}' } } }, null, 2)}\n`,
+  'deploy.ts': `import { cpSync, rmSync } from 'node:fs';
+const out = process.env.OBEYA_HOME + '/deployed';
+rmSync(out, { recursive: true, force: true });
+cpSync(process.argv[2], out, { recursive: true });
+console.log('deployed to ' + out);
 `,
 };
 for (const [path, text] of Object.entries(files)) {
@@ -109,7 +122,7 @@ git('add', '-A');
 git('commit', '-qm', 'init');
 mkdirSync(home, { recursive: true });
 const configFile = join(home, 'canvases.json');
-writeFileSync(configFile, JSON.stringify([{ name: 'Check', repos: [{ path: repo, clones: 1, share: 'share.ts' }] }], null, 2));
+writeFileSync(configFile, JSON.stringify([{ name: 'Check', repos: [{ path: repo, clones: 1 }] }], null, 2));
 writeFileSync(join(home, 'settings.json'), JSON.stringify({ language: 'en' }));
 writeFileSync(join(home, 'demo.json'), JSON.stringify({ language: 'en', voice: 'piper' }));
 
@@ -158,16 +171,15 @@ await check('the demo setup finds Playwright among the resources', async () => {
   return (setup.items as { id: string; state: string }[]).map((i) => `${i.id} ${i.state}`).join(', ');
 });
 
-await check("a script on the binary's Bun imports the kit", async () => {
-  const p = Bun.spawnSync([binary, join(repo, 'share.ts'), 'publish'], {
-    cwd: dir,
-    env: { ...env, BUN_BE_BUN: '1', OBEYA_KIT: join(resources, 'kit.js') },
-    stdin: new TextEncoder().encode(JSON.stringify({ slug: 'kit' })),
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
+await check("the site's deploy script runs on the binary's Bun", async () => {
+  const site = join(dir, 'site');
+  mkdirSync(site, { recursive: true });
+  writeFileSync(join(site, 'index.html'), 'Check');
+  const p = Bun.spawnSync([binary, join(repo, 'deploy.ts'), site], { cwd: dir, env: { ...env, BUN_BE_BUN: '1' }, stdout: 'pipe', stderr: 'pipe' });
   expect(p.exitCode === 0, `exit ${p.exitCode}: ${p.stderr.toString()}`);
-  expect(readFileSync(join(home, 'shared-kit.txt'), 'utf8') === '&lt;kit&gt;', 'the kit did not escape');
+  expect(existsSync(join(deployed, 'index.html')), 'nothing deployed');
+  // the site the worker's demo goes to starts empty
+  rmSync(deployed, { recursive: true, force: true });
   return p.stdout.toString().trim();
 });
 
@@ -259,13 +271,15 @@ if (args.includes('--worker')) {
     return `${item.need}; ${branchLog}`;
   });
   if (card)
-    await check("worker: the artifact is shared through the repository's share command", async () => {
+    await check("worker: the artifact is shared on the repository's demo site", async () => {
       await api(`/api/c/${canvas}/cards/${card}/act`, { json: { action: 'share' } });
       const events = await until('the page is shared', 120_000, async () => {
         const ev = (await json(`/api/c/${canvas}/cards/${card}/events`)) as { text?: string }[];
-        return ev.some((e) => /https:\/\/demos\.example\//.test(e.text ?? '')) && ev;
+        return ev.some((e) => (e.text ?? '').includes(siteUrl)) && ev;
       });
-      return events.map((e) => e.text ?? '').find((t) => /demos\.example/.test(t));
+      const url = (await json(`/api/c/${canvas}/canvas`)).items.find((i: { id: string }) => i.id === card)?.share?.url;
+      expect(url && (await fetch(url)).ok, `the page ${url} is not on the site`);
+      return events.map((e) => e.text ?? '').find((t) => t.includes(siteUrl));
     });
 }
 

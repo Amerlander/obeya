@@ -1,14 +1,15 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { KIT_PATH } from '../adapters';
+import type { DemoSite } from '../adapters/types';
 import { BadRequest, Board } from './board';
 import { Store } from './db';
 import { EXPORT_HTML_MAX } from '../core/types';
 import type { Forge } from './forge';
 import { demoPageHtml } from './demo-page';
-import { DEMO_MARKER, parseVersions, SHARE_CWD, type SharePage, Sharing, shareArgv, shareProblem, withDemoLink } from './share';
+import { DEMO_MARKER, SHARE_CWD, Sharing, withDemoLink } from './share';
+import { siteVersions } from './site';
 import { FakeRuntime, gitRepo } from './testing';
 import { git } from './workspaces';
 
@@ -19,40 +20,64 @@ let sharing: Sharing;
 /** The descriptions of the fake forge's pull requests, and each edit Obeya made. */
 let bodies: Map<string, string>;
 let edits: string[];
-/**
- * Each call of the fake share command: its arguments and what it got on stdin. Only whole lines:
- * the one without its newline yet is still being written.
- */
-const calls = () =>
-  existsSync(join(dir, 'calls'))
-    ? readFileSync(join(dir, 'calls'), 'utf8')
-        .split('\n')
-        .slice(0, -1)
-        .map((l) => JSON.parse(l) as { args: string[]; input: SharePage & { shared: string[] }; home: string; kit: string; cwd: string; repo: string })
-    : [];
+/** The site's title: a new one changes what its pages show, so the version of its pages. */
+let title: string;
 
-// prints the page's URL, or fails with some output while the file `fail` exists; `version` is not logged in `calls`.
-// While the file `hold` exists, a call waits after it is logged. Like `wrangler pages deploy`, it
+/** A page in the site's manifest, as far as the tests look at it. */
+interface Entry {
+  rev: number;
+  withdrawn?: true;
+  meta?: { kind?: 'html'; title: string; text: string; chapters: [number, string][]; pr: string | null; language: string };
+}
+/**
+ * Each deploy of the site: the pages of its manifest, those it changed (`wrote`), and where it
+ * ran. Only whole lines: the one without its newline yet is still being written.
+ */
+const calls = () => {
+  if (!existsSync(join(dir, 'calls'))) return [];
+  const all = readFileSync(join(dir, 'calls'), 'utf8')
+    .split('\n')
+    .slice(0, -1)
+    .map((l) => JSON.parse(l) as { pages: Record<string, Entry>; home: string; cwd: string; repo: string });
+  return all.map((c, i) => ({ ...c, wrote: Object.keys(c.pages).filter((slug) => c.pages[slug]!.rev !== all[i - 1]?.pages[slug]?.rev) }));
+};
+
+// the deploy line's stand-in: records the site's manifest, then copies the site's directory to
+// `deployed/` (the host's snapshot), or fails with some output while the file `fail` exists. While
+// the file `hold` exists, a deploy waits after it is recorded. Like `wrangler pages deploy`, it
 // leaves its cache in its working directory.
-const FAKE = `
-const { appendFileSync, existsSync, mkdirSync, writeFileSync } = require('node:fs');
-const dir = ${'process.argv[2]'};
-const args = process.argv.slice(3);
-// the version of its pages while the file \`version\` holds one, else none
-if (args[0] === 'version') { if (existsSync(dir + '/version')) console.log(require('node:fs').readFileSync(dir + '/version', 'utf8')); process.exit(existsSync(dir + '/version') ? 0 : 1); }
-const input = JSON.parse(await Bun.stdin.text());
+const DEPLOY = `
+const { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
+const [site, out] = process.argv.slice(2);
 mkdirSync('.wrangler/cache', { recursive: true });
 writeFileSync('.wrangler/cache/pages.json', '{}');
-appendFileSync(dir + '/calls', JSON.stringify({ args, input, home: process.env.OBEYA_HOME, kit: process.env.OBEYA_KIT, cwd: process.cwd(), repo: process.env.OBEYA_REPO }) + '\\n');
-while (existsSync(dir + '/hold')) await Bun.sleep(10);
-if (existsSync(dir + '/fail')) { console.error('upload refused: token expired'); process.exit(2); }
+const { pages } = JSON.parse(readFileSync(site + '/obeya-site.json', 'utf8'));
+appendFileSync(out + '/calls', JSON.stringify({ pages, home: process.env.OBEYA_HOME, cwd: process.cwd(), repo: process.env.OBEYA_REPO }) + '\\n');
+while (existsSync(out + '/hold')) await Bun.sleep(10);
+if (existsSync(out + '/fail')) { console.error('upload refused: token expired'); process.exit(2); }
 console.error('Uploading 3 files');
-if (args[0] === 'publish') console.log('https://demos.example/' + input.slug + '/');
+rmSync(out + '/deployed', { recursive: true, force: true });
+cpSync(site, out + '/deployed', { recursive: true });
 `;
+
+// the host: serves what was deployed last
+const server = Bun.serve({
+  port: 0,
+  fetch(req) {
+    let path = decodeURIComponent(new URL(req.url).pathname);
+    if (path.endsWith('/')) path += 'index.html';
+    const file = join(dir, 'deployed', path);
+    return !path.includes('..') && existsSync(file) && statSync(file).isFile() ? new Response(Bun.file(file)) : new Response('not found', { status: 404 });
+  },
+});
+afterAll(() => server.stop(true));
+const SITE_URL = `http://localhost:${server.port}/`;
+const site = (): DemoSite => ({ title, url: SITE_URL, deploy: `${join(dir, 'deploy.ts')} {dir} ${dir}`, language: 'de' });
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'obeya-share-'));
-  writeFileSync(join(dir, 'fake-share.ts'), FAKE);
+  writeFileSync(join(dir, 'deploy.ts'), DEPLOY);
+  title = 'Demos';
   board = new Board(new Store(':memory:'), { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: dir, branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
   runtime = new FakeRuntime();
   bodies = new Map();
@@ -69,7 +94,7 @@ function make(repo = dir) {
     runtime,
     home: join(dir, 'home'),
     forge,
-    sourceFor: (card) => (card.title.startsWith('Ohne') ? null : { command: [process.execPath, join(dir, 'fake-share.ts'), dir], repo }),
+    sourceFor: (card) => (card.title.startsWith('Ohne') ? null : { site: site(), repo }),
   });
 }
 
@@ -99,8 +124,8 @@ function openPr(id: string, body = 'Exportiert Zählerstände.') {
 function card(title = 'Zählerstände exportieren', demo: Record<string, unknown> = {}, language: string | null = 'de') {
   const c = board.create({ title, x: 0, y: 0 });
   const d = join(dir, `demo-${c.id}`);
-  mkdirSync(d);
-  if (demo.kind !== 'html') writeFileSync(join(d, 'demo.mp4'), 'video');
+  if (demo.kind !== 'html') videoDir(d);
+  else mkdirSync(d);
   if (demo.kind !== 'html' && language) writeFileSync(join(d, 'index.html'), `<!doctype html>\n<html lang="${language}">\n<head><title>Bericht</title></head></html>`);
   board.work(c.id, {
     state: 'live',
@@ -109,7 +134,19 @@ function card(title = 'Zählerstände exportieren', demo: Record<string, unknown
   return board.item(c.id)!;
 }
 
+/** A video demo's directory: the video and its captions. */
+function videoDir(d: string) {
+  mkdirSync(d, { recursive: true });
+  writeFileSync(join(d, 'demo.mp4'), 'video');
+  writeFileSync(join(d, 'captions.vtt'), 'WEBVTT\n');
+  return d;
+}
+
 const share = (id: string) => board.item(id)!.share;
+/** The card's page on the site, by its slug. */
+const slug = (id: string) => (JSON.parse(board.row(id).share!) as { slug: string }).slug;
+/** What the latest deploy said of the card's page. */
+const meta = (id: string) => calls().at(-1)!.pages[slug(id)]!.meta!;
 async function until(ok: () => boolean) {
   for (let i = 0; i < 400 && !ok(); i++) await new Promise((r) => setTimeout(r, 10));
   expect(ok()).toBe(true);
@@ -117,39 +154,39 @@ async function until(ok: () => boolean) {
 const log = (id: string) => board.events(id).map((e) => e.text);
 
 describe('sharing a demo', () => {
-  test('publishes the page right away, keeps its link, and withdraws it', async () => {
+  test('publishes the page on the site right away, keeps its link, and withdraws it', async () => {
     const c = card();
     sharing.share(c.id);
     expect(share(c.id)).toEqual({ state: 'publishing' });
     expect(log(c.id).at(-1)).toBe('Teilen: Die Seite geht online.');
     await until(() => share(c.id)?.state === 'shared');
     const slug = 'zahlerstande-exportieren-' + c.id.slice(0, 6);
-    expect(share(c.id)).toEqual({ state: 'shared', url: `https://demos.example/${slug}/` });
+    expect(share(c.id)).toEqual({ state: 'shared', url: `${SITE_URL}${slug}/` });
     const [call] = calls();
-    expect(call!.args).toEqual(['publish']);
-    expect(call!.input).toEqual({ slug, kind: 'video', title: 'CSV-Export', text: 'Vermieter laden Zählerstände als CSV.', chapters: [[0, 'Vorher']], pr: null, language: 'de', dir: join(dir, `demo-${c.id}`), shared: [] });
+    expect(call!.wrote).toEqual([slug]);
+    expect(call!.pages[slug]!.meta).toMatchObject({ title: 'CSV-Export', text: 'Vermieter laden Zählerstände als CSV.', chapters: [[0, 'Vorher']], pr: null, language: 'de' });
+    expect(readFileSync(join(dir, 'deployed', slug, 'demo.mp4'), 'utf8')).toBe('video');
+    // the deploy runs under Obeya's home, and learns the checkout from the environment
     expect(call!.home).toBe(join(dir, 'home'));
-    // the helpers a share script imports
-    expect(call!.kit).toBe(KIT_PATH);
-    // it runs under Obeya's home, and learns the checkout from the environment
     expect(call!.cwd).toBe(realpathSync(join(dir, 'home', SHARE_CWD)));
     expect(call!.repo).toBe(dir);
-    // the command's output goes into the card's log
+    // the deploy's output goes into the card's log
     expect(log(c.id)).toContain('Uploading 3 files');
-    expect(log(c.id).at(-1)).toBe(`Geteilt: https://demos.example/${slug}/`);
+    expect(log(c.id).at(-1)).toBe(`Geteilt: ${SITE_URL}${slug}/`);
 
     sharing.unshare(c.id);
     expect(share(c.id)!.state).toBe('withdrawing');
     await until(() => !share(c.id));
-    expect(calls().at(-1)!.args).toEqual(['withdraw', slug]);
+    expect(calls().at(-1)!.pages[slug]!.withdrawn).toBe(true);
+    expect(existsSync(join(dir, 'deployed', slug))).toBe(false);
     expect(log(c.id).at(-1)).toBe('Die Seite ist zurückgezogen.');
     // shared again, under the same link
     sharing.share(c.id);
     await until(() => share(c.id)?.state === 'shared');
-    expect(share(c.id)!.url).toBe(`https://demos.example/${slug}/`);
+    expect(share(c.id)!.url).toBe(`${SITE_URL}${slug}/`);
   });
 
-  test('a command that leaves files in its working directory leaves the checkout clean, so its workspace can still be leased', async () => {
+  test('a deploy that leaves files in its working directory leaves the checkout clean, so its workspace can still be leased', async () => {
     const repo = gitRepo(join(dir, 'checkout'));
     sharing = make(repo);
     const c = card();
@@ -166,20 +203,22 @@ describe('sharing a demo', () => {
     const c = card();
     sharing.share(c.id);
     await until(() => share(c.id)?.state === 'shared');
-    const newer = join(dir, 'newer');
-    mkdirSync(newer);
+    const newer = videoDir(join(dir, 'newer'));
+    writeFileSync(join(newer, 'demo.mp4'), 'newer video');
     board.work(c.id, { demo: JSON.stringify({ kind: 'video', dir: newer, chapters: [], page: { title: 'CSV-Export 2', text: 'T.' } }) });
     expect(share(c.id)).toMatchObject({ state: 'shared', stale: true });
     expect(calls()).toHaveLength(1);
     sharing.share(c.id);
     // the page stays up with its link while the new one is published
-    expect(share(c.id)).toMatchObject({ state: 'publishing', url: expect.stringContaining('demos.example') });
+    expect(share(c.id)).toMatchObject({ state: 'publishing', url: expect.stringContaining(SITE_URL) });
     await until(() => share(c.id)?.state === 'shared');
     expect(share(c.id)!.stale).toBeUndefined();
-    expect(calls().at(-1)!.input).toMatchObject({ slug: calls()[0]!.input.slug, title: 'CSV-Export 2', dir: newer });
+    expect(calls().at(-1)!.wrote).toEqual([slug(c.id)]);
+    expect(meta(c.id).title).toBe('CSV-Export 2');
+    expect(readFileSync(join(dir, 'deployed', slug(c.id), 'demo.mp4'), 'utf8')).toBe('newer video');
   });
 
-  test('a failed command leaves the card as it was, with the output in its log', async () => {
+  test('a failed deploy leaves the card as it was, with the output in its log', async () => {
     const c = card();
     writeFileSync(join(dir, 'fail'), '');
     sharing.share(c.id);
@@ -198,43 +237,49 @@ describe('sharing a demo', () => {
     expect(board.events(c.id).at(-1)!.text).toContain('Nicht zurückgezogen');
   });
 
-  test('tells the command which other pages it has shared, so a lost site is not deployed', async () => {
+  test('a site that lost a page shared from here is not deployed, so the page does not go offline', async () => {
     const a = card('A');
-    const b = card('B');
     sharing.share(a.id);
     await until(() => share(a.id)?.state === 'shared');
+    // the site's directory on this machine and the host both lost it
+    rmSync(join(dir, 'home', 'sites'), { recursive: true });
+    rmSync(join(dir, 'deployed'), { recursive: true });
+    const b = card('B');
     sharing.share(b.id);
-    await until(() => share(b.id)?.state === 'shared');
-    expect(calls().at(-1)!.input.shared).toEqual([calls()[0]!.input.slug]);
+    await until(() => !share(b.id));
+    expect(log(b.id).at(-1)).toContain(`(${slug(a.id)})`);
+    expect(calls()).toHaveLength(1);
   });
 
   test('an HTML artifact goes out as a page too, and the pull request names it as a page', async () => {
     const c = card('Auswertung', { kind: 'html', chapters: [], page: { title: 'Verlust und Zapfung', text: 'Geschätzt aus den Messdaten.' } });
+    writeFileSync(join(dir, `demo-${c.id}`, 'index.html'), '<!doctype html><body>Chart</body>');
     openPr(c.id);
     sharing.share(c.id);
     await until(() => share(c.id)?.state === 'shared');
-    expect(calls()[0]!.input).toMatchObject({ kind: 'html', title: 'Verlust und Zapfung', chapters: [], pr: PR, dir: join(dir, `demo-${c.id}`) });
+    expect(meta(c.id)).toMatchObject({ kind: 'html', title: 'Verlust und Zapfung', chapters: [], pr: PR });
+    expect(readFileSync(join(dir, 'deployed', slug(c.id), 'artifact', 'index.html'), 'utf8')).toContain('Chart');
     expect(bodies.get(PR)).toContain(`Demo-Seite: ${share(c.id)!.url} ${DEMO_MARKER}`);
   });
 
-  test("tells the command the demo's language: its report page's, else the demo settings'", async () => {
+  test("writes the page in the demo's language: its report page's, else the demo settings'", async () => {
     const en = card('English', {}, 'en');
     sharing.share(en.id);
     await until(() => share(en.id)?.state === 'shared');
-    expect(calls().at(-1)!.input.language).toBe('en');
+    expect(meta(en.id).language).toBe('en');
     // an artifact names its own; a demo without a page that names one takes the settings' narration language
     const artifact = card('Artifact', { kind: 'html', chapters: [], page: { title: 'Loss', text: 'From the readings.' } });
     writeFileSync(join(dir, `demo-${artifact.id}`, 'index.html'), '<html lang="en-GB"><body>Chart</body></html>');
     sharing.share(artifact.id);
     await until(() => share(artifact.id)?.state === 'shared');
-    expect(calls().at(-1)!.input.language).toBe('en');
+    expect(meta(artifact.id).language).toBe('en');
     mkdirSync(join(dir, 'home'), { recursive: true });
     for (const language of ['en', 'de'] as const) {
       writeFileSync(join(dir, 'home', 'demo.json'), JSON.stringify({ language }));
       const c = card(`Without ${language}`, {}, null);
       sharing.share(c.id);
       await until(() => share(c.id)?.state === 'shared');
-      expect(calls().at(-1)!.input.language).toBe(language);
+      expect(meta(c.id).language).toBe(language);
     }
   });
 
@@ -258,7 +303,7 @@ describe('sharing a demo', () => {
     s.call('page', { title: 'Zählerstände als CSV', text: 'Vermieter laden Zählerstände als CSV herunter.' });
     s.emit({ type: 'idle' });
     await until(() => share(c.id)?.state === 'shared');
-    expect(calls()[0]!.input).toMatchObject({ title: 'Zählerstände als CSV', text: 'Vermieter laden Zählerstände als CSV herunter.' });
+    expect(meta(c.id)).toMatchObject({ title: 'Zählerstände als CSV', text: 'Vermieter laden Zählerstände als CSV herunter.' });
     // kept with the demo: the next share needs no session
     expect(board.item(c.id)!.demo!.page).toEqual({ title: 'Zählerstände als CSV', text: 'Vermieter laden Zählerstände als CSV herunter.' });
   });
@@ -268,71 +313,64 @@ describe('sharing a demo', () => {
     board.work(a.id, { share: JSON.stringify({ slug: 'a', state: 'publishing' }) });
     sharing.resume();
     await until(() => share(a.id)?.state === 'shared');
-    expect(calls().map((c) => c.input.slug)).toEqual(['a']);
+    expect(calls().map((c) => c.wrote)).toEqual([['a']]);
   });
 });
 
-describe('a page published with an earlier version of the command', () => {
-  const version = (v: string | null) => (v ? writeFileSync(join(dir, 'version'), v) : rmSync(join(dir, 'version'), { force: true }));
+describe("a page published with an earlier version of the site's pages", () => {
   const stored = (id: string) => JSON.parse(board.row(id).share!) as { version?: string; outdated?: true };
+  const versions = () => siteVersions(site());
 
-  test('is offered to share again once the command writes its pages differently, and "Erneut teilen" brings it up to date', async () => {
-    version('v1');
+  test('is offered to share again once the site writes its pages differently, and "Erneut teilen" brings it up to date', async () => {
     const c = card();
     sharing.share(c.id);
     await until(() => share(c.id)?.state === 'shared');
-    expect(stored(c.id).version).toBe('v1');
+    expect(stored(c.id).version).toBe(versions().video);
     await sharing.checkVersions();
     expect(share(c.id)!.outdated).toBeUndefined();
 
-    version('v2');
+    title = 'Demos des Teams';
     await sharing.checkVersions();
-    expect(share(c.id)).toEqual({ state: 'shared', url: expect.stringContaining('demos.example'), outdated: true });
+    expect(share(c.id)).toEqual({ state: 'shared', url: expect.stringContaining(SITE_URL), outdated: true });
     expect(calls()).toHaveLength(1);
     sharing.share(c.id);
     expect(log(c.id).at(-1)).toBe('Erneut teilen: Die Seite wird mit dem neuen Stand erzeugt.');
-    expect(share(c.id)).toMatchObject({ state: 'publishing', url: expect.stringContaining('demos.example') });
+    expect(share(c.id)).toMatchObject({ state: 'publishing', url: expect.stringContaining(SITE_URL) });
     await until(() => share(c.id)?.state === 'shared');
     expect(share(c.id)!.outdated).toBeUndefined();
-    expect(stored(c.id).version).toBe('v2');
-    expect(calls().at(-1)!.input).toMatchObject({ slug: calls()[0]!.input.slug, dir: join(dir, `demo-${c.id}`) });
+    expect(stored(c.id).version).toBe(versions().video);
+    expect(calls().at(-1)!.wrote).toEqual([slug(c.id)]);
   });
 
   test('video and artifact pages each have their version: a change to one marks only its pages', async () => {
-    version('v1 html:h1');
     const v = card();
     const h = card('Auswertung', { kind: 'html', chapters: [] });
     writeFileSync(join(dir, `demo-${h.id}`, 'index.html'), '<!doctype html>');
     sharing.share(v.id);
     sharing.share(h.id);
     await until(() => share(v.id)?.state === 'shared' && share(h.id)?.state === 'shared');
-    expect([stored(v.id).version, stored(h.id).version]).toEqual(['v1', 'h1']);
-    version('v1 html:h2');
+    expect([stored(v.id).version, stored(h.id).version]).toEqual([versions().video, versions().html]);
+    // the artifact page went out before the artifact pages changed
+    board.work(h.id, { share: JSON.stringify({ ...stored(h.id), version: 'earlier' }) });
     await sharing.checkVersions();
     expect([share(v.id)!.outdated, share(h.id)!.outdated]).toEqual([undefined, true]);
   });
 
-  test('a page shared without a version counts as earlier; a command that says none marks nothing', async () => {
+  test('a page shared without a version counts as earlier', async () => {
     const c = card();
     sharing.share(c.id);
     await until(() => share(c.id)?.state === 'shared');
-    expect(stored(c.id).version).toBeUndefined();
-    await sharing.checkVersions();
-    expect(share(c.id)!.outdated).toBeUndefined();
-    version('v1');
+    const { version: _, ...without } = stored(c.id);
+    board.work(c.id, { share: JSON.stringify(without) });
     await sharing.checkVersions();
     expect(share(c.id)!.outdated).toBe(true);
-    // the command no longer says one: nothing to compare with
-    version(null);
-    await sharing.checkVersions();
-    expect(share(c.id)!.outdated).toBeUndefined();
   });
 
   test('a newer demo is "Neu teilen", not "Erneut teilen"', async () => {
     const c = card();
     sharing.share(c.id);
     await until(() => share(c.id)?.state === 'shared');
-    version('v1');
+    title = 'Demos des Teams';
     await sharing.checkVersions();
     board.work(c.id, { demo: JSON.stringify({ kind: 'video', dir: join(dir, 'newer'), chapters: [], page: { title: 'T', text: 'T.' } }) });
     expect(share(c.id)).toMatchObject({ stale: true });
@@ -340,54 +378,49 @@ describe('a page published with an earlier version of the command', () => {
   });
 
   test('each page is brought up to date on its own: sharing one again leaves the others marked', async () => {
-    version('v1');
     const a = card('A');
     const b = card('B');
     for (const c of [a, b]) {
       sharing.share(c.id);
       await until(() => share(c.id)?.state === 'shared');
     }
-    version('v2');
+    const earlier = versions().video;
+    title = 'Demos des Teams';
     await sharing.checkVersions();
     sharing.share(a.id);
     await until(() => share(a.id)?.state === 'shared' && !share(a.id)!.outdated);
     expect(share(b.id)!.outdated).toBe(true);
-    expect(stored(b.id).version).toBe('v1');
+    expect(stored(b.id).version).toBe(earlier);
   });
 
-  test('a version that changes while nobody looks is marked after the next call of the command', async () => {
-    version('v1');
+  test('a version that changes while nobody looks is marked after the next deploy', async () => {
     const a = card('A');
     const b = card('B');
     for (const c of [a, b]) {
       sharing.share(c.id);
       await until(() => share(c.id)?.state === 'shared');
     }
-    version('v2');
+    title = 'Demos des Teams';
     sharing.unshare(b.id);
     await until(() => !share(b.id));
     expect(share(a.id)!.outdated).toBe(true);
   });
 
   test('marked after a restart', async () => {
-    version('v2');
     const c = card();
-    board.work(c.id, { share: JSON.stringify({ slug: 's', url: 'https://demos.example/s/', dir: join(dir, `demo-${c.id}`), shown: { title: 'T', text: '', chapters: [], kind: 'video' }, version: 'v1' }) });
+    board.work(c.id, { share: JSON.stringify({ slug: 's', url: `${SITE_URL}s/`, dir: join(dir, `demo-${c.id}`), shown: { title: 'T', text: '', chapters: [], kind: 'video' }, version: 'v1' }) });
     sharing.resume();
     await until(() => !!share(c.id)?.outdated);
   });
 });
 
 describe('sharing many outdated pages again at once', () => {
-  const version = (v: string) => writeFileSync(join(dir, 'version'), v);
   const reshare = () => board.snapshot().reshare;
-  /** Cards shared with v1 whose demos were rendered `ages` minutes ago, then outdated by v2. */
+  /** Cards shared on the site whose demos were rendered `ages` minutes ago, then outdated by a new title of the site. */
   async function outdated(...ages: number[]) {
-    version('v1');
     const cards = ages.map((age, n) => {
       const c = card(`Demo ${n}`);
       const video = join(dir, `demo-${c.id}`, 'demo.mp4');
-      writeFileSync(video, 'video');
       const t = new Date(Date.now() - age * 60_000);
       utimesSync(video, t, t);
       return c;
@@ -396,10 +429,12 @@ describe('sharing many outdated pages again at once', () => {
       sharing.share(c.id);
       await until(() => share(c.id)?.state === 'shared');
     }
-    version('v2');
+    title = 'Demos des Teams';
     await sharing.checkVersions();
     return cards;
   }
+  /** The pages the deploys since the `before`th wrote. */
+  const wrote = (before: number) => calls().slice(before).flatMap((c) => c.wrote);
 
   test('shares the newest again, one after the other, and says how far it got', async () => {
     const [old, newest, middle] = await outdated(30, 1, 10);
@@ -409,8 +444,7 @@ describe('sharing many outdated pages again at once', () => {
     expect(reshare()).toMatchObject({ outdated: 1, run: { total: 2, done: 0, left: 2, failed: [] } });
     await until(() => reshare()?.run?.left === 0);
     expect(reshare()).toEqual({ outdated: 1, run: { total: 2, done: 2, failed: [], left: 0 } });
-    const slug = (id: string) => (JSON.parse(board.row(id).share!) as { slug: string }).slug;
-    expect(calls().slice(before).map((c) => c.input.slug)).toEqual([slug(newest!.id), slug(middle!.id)]);
+    expect(wrote(before)).toEqual([slug(newest!.id), slug(middle!.id)]);
     for (const c of [newest!, middle!]) {
       expect(share(c.id)!.outdated).toBeUndefined();
       expect(log(c.id)).toContain('Erneut teilen, mit anderen geteilten Demos: Die Seite wird mit dem neuen Stand erzeugt.');
@@ -433,21 +467,23 @@ describe('sharing many outdated pages again at once', () => {
     await until(() => reshare()?.run?.left === 0);
     expect(reshare()!.run).toEqual({ total: 2, done: 0, failed: [b, a].map((c) => ({ id: c!.id, title: c!.title })), left: 0 });
     expect(share(a!.id)).toMatchObject({ state: 'shared', outdated: true });
-    expect(log(a!.id).at(-1)).toStartWith('Nicht erneut geteilt: Der Befehl zum Teilen ist gescheitert (Exit-Code 2).');
+    expect(log(a!.id).at(-1)).toStartWith('Nicht erneut geteilt: Der Deploy der Site ist gescheitert (Exit-Code 2).');
     expect(reshare()!.outdated).toBe(2);
   });
 
   test('a page whose demo files were deleted is neither counted nor offered, and drops out of a run', async () => {
     const [a, b, c] = await outdated(3, 2, 1);
     rmSync(join(dir, `demo-${a!.id}`), { recursive: true });
+    // the canvas shows it with its next change
+    board.changed();
     expect(reshare()).toEqual({ outdated: 2 });
-    expect(share(a!.id)).toEqual({ state: 'shared', url: expect.stringContaining('demos.example') });
+    expect(share(a!.id)).toEqual({ state: 'shared', url: expect.stringContaining(SITE_URL) });
     const before = calls().length;
     sharing.reshareMany(null);
     rmSync(join(dir, `demo-${b!.id}`, 'demo.mp4'));
     await until(() => reshare()?.run?.left === 0);
     expect(reshare()).toEqual({ outdated: 0, run: { total: 1, done: 1, failed: [], left: 0 } });
-    expect(calls().slice(before).map((x) => x.input.dir)).toEqual([join(dir, `demo-${c!.id}`)]);
+    expect(wrote(before)).toEqual([slug(c!.id)]);
     sharing.dismissResharing();
     expect(reshare()).toBeUndefined();
   });
@@ -466,12 +502,13 @@ describe('sharing many outdated pages again at once', () => {
 
   test('a card with a newer demo gets its page as it shows, the newer demo still waits for "Neu teilen"', async () => {
     const [c] = await outdated(1);
-    const shown = join(dir, `demo-${c!.id}`);
     board.work(c!.id, { demo: JSON.stringify({ kind: 'video', dir: join(dir, 'newer'), chapters: [], page: { title: 'Neu', text: 'Neu.' } }) });
     expect(reshare()).toEqual({ outdated: 1 });
+    const before = calls().length;
     sharing.reshareMany(null);
     await until(() => reshare()?.run?.left === 0);
-    expect(calls().at(-1)!.input).toMatchObject({ dir: shown, title: 'CSV-Export' });
+    expect(wrote(before)).toEqual([slug(c!.id)]);
+    expect(meta(c!.id).title).toBe('CSV-Export');
     expect(share(c!.id)).toMatchObject({ stale: true });
   });
 
@@ -512,7 +549,7 @@ describe('sharing many outdated pages again at once', () => {
     sharing.resume();
     // b goes out again once the versions were asked for
     await until(() => calls().length === n + 1);
-    expect(calls().at(-1)!.input.slug).toBe(JSON.parse(stored(b!.id)!).slug);
+    expect(wrote(n)).toEqual([slug(b!.id)]);
     expect([a, c, d].map((x) => stored(x!.id))).toEqual(before);
     expect(reshare()).toEqual({ outdated: 1, run: { total: 2, done: 0, failed: [], left: 2, current: b!.title } });
     rmSync(join(dir, 'hold'));
@@ -527,15 +564,16 @@ describe('the link in the pull request', () => {
     const c = card();
     sharing.share(c.id);
     await until(() => share(c.id)?.state === 'shared');
-    expect(calls()[0]!.input.pr).toBeNull();
+    expect(meta(c.id).pr).toBeNull();
     openPr(c.id);
     sharing.prOpened(c.id);
     // the card goes on showing the page while it goes out again
-    expect(share(c.id)).toMatchObject({ state: 'shared', url: expect.stringContaining('demos.example') });
+    expect(share(c.id)).toMatchObject({ state: 'shared', url: expect.stringContaining(SITE_URL) });
     await until(() => calls().length === 2);
     await until(() => edits.length === 1);
     const url = share(c.id)!.url!;
-    expect(calls()[1]!.input).toMatchObject({ slug: calls()[0]!.input.slug, title: 'CSV-Export', pr: PR });
+    expect(calls()[1]!.wrote).toEqual([slug(c.id)]);
+    expect(meta(c.id)).toMatchObject({ title: 'CSV-Export', pr: PR });
     expect(bodies.get(PR)).toBe(`Exportiert Zählerstände.\n\nDemo-Video: ${url} ${DEMO_MARKER}\n`);
     expect(log(c.id)).toContain(`Die geteilte Seite verlinkt jetzt den Pull Request: ${url}`);
     expect(log(c.id).at(-1)).toBe('Den Link zur Demo in die Beschreibung von Pull Request #42 eingetragen.');
@@ -548,36 +586,37 @@ describe('the link in the pull request', () => {
 
   test('a page shared after the PR links it at once; a description that links the page already stays', async () => {
     const c = card();
-    openPr(c.id, 'Exportiert Zählerstände.\n\nDemo: https://demos.example/zahlerstande-exportieren-' + c.id.slice(0, 6) + '/');
+    openPr(c.id, `Exportiert Zählerstände.\n\nDemo: ${SITE_URL}zahlerstande-exportieren-${c.id.slice(0, 6)}/`);
     sharing.share(c.id);
     await until(() => share(c.id)?.state === 'shared');
     expect(calls()).toHaveLength(1);
-    expect(calls()[0]!.input.pr).toBe(PR);
+    expect(meta(c.id).pr).toBe(PR);
     expect(edits).toEqual([]);
   });
 
   test('a PR opened while the page goes out gets a second round with its link', async () => {
     const c = card();
     sharing.share(c.id);
-    // the command is running
+    // the deploy is running
     await until(() => calls().length === 1);
     openPr(c.id);
     sharing.prOpened(c.id);
     await until(() => calls().length === 2 && edits.length === 1);
-    expect(calls().map((x) => x.input.pr)).toEqual([null, PR]);
+    expect(calls().map((x) => x.pages[slug(c.id)]!.meta!.pr)).toEqual([null, PR]);
   });
 
   test('a newer demo on the card is not put out with the link: the page goes out again as it is', async () => {
     const c = card();
     sharing.share(c.id);
     await until(() => share(c.id)?.state === 'shared');
-    const newer = join(dir, 'newer');
-    mkdirSync(newer);
+    const newer = videoDir(join(dir, 'newer'));
+    writeFileSync(join(newer, 'demo.mp4'), 'newer video');
     board.work(c.id, { demo: JSON.stringify({ kind: 'video', dir: newer, chapters: [[0, 'Neu']], page: { title: 'CSV-Export 2', text: 'T.' } }) });
     openPr(c.id);
     sharing.prOpened(c.id);
     await until(() => calls().length === 2);
-    expect(calls()[1]!.input).toMatchObject({ title: 'CSV-Export', chapters: [[0, 'Vorher']], dir: join(dir, `demo-${c.id}`), pr: PR });
+    expect(meta(c.id)).toMatchObject({ title: 'CSV-Export', chapters: [[0, 'Vorher']], pr: PR });
+    expect(readFileSync(join(dir, 'deployed', slug(c.id), 'demo.mp4'), 'utf8')).toBe('video');
     await until(() => edits.length === 1);
     expect(share(c.id)!.stale).toBe(true);
   });
@@ -591,12 +630,6 @@ describe('the link in the pull request', () => {
     expect(log(c.id).at(-1)).toContain('nicht in Pull Request #42 eingetragen: gh pr view: no pull request');
   });
 
-  test('parseVersions: the video pages\' version first, then the artifact pages\'', () => {
-    expect(parseVersions('abc')).toEqual({ video: 'abc' });
-    expect(parseVersions('noise\nabc html:def\n')).toEqual({ video: 'abc', html: 'def' });
-    expect(parseVersions('')).toBeNull();
-  });
-
   test('withDemoLink adds a line once and replaces its own', () => {
     expect(withDemoLink('', 'https://d/a/')).toBe(`Demo-Video: https://d/a/ ${DEMO_MARKER}\n`);
     expect(withDemoLink('Text\n\n', 'https://d/a/')).toBe(`Text\n\nDemo-Video: https://d/a/ ${DEMO_MARKER}\n`);
@@ -606,7 +639,7 @@ describe('the link in the pull request', () => {
   });
 });
 
-describe('exporting a demo, where the repository has no share target', () => {
+describe('exporting a demo, where the repository has no demo site', () => {
   /** A demo directory as the demo skill leaves it. */
   function files(c: { id: string }, video = 'MP4DATA') {
     const d = join(dir, `demo-${c.id}`);
@@ -675,7 +708,7 @@ describe('exporting a demo, where the repository has no share target', () => {
     expect(html).toContain(`>View pull request</a>`);
     expect(html).toContain(`v.addTextTrack('captions', "English", "en")`);
     for (const german of ['Deutsch', 'Abspielen', 'Demo vom', 'ansehen', 'lang="de"']) expect(html).not.toContain(german);
-    // a share command's page, with the caption file beside it, names the track in English too
+    // a site's page, with the caption file beside it, names the track in English too
     const parts = { title: 'CSV export', text: '', chapters: [], pr: null, when: '', tabTitle: '', video: { src: 'demo.mp4' }, captions: { src: 'captions.vtt' } };
     expect(demoPageHtml({ ...parts, language: 'en' })).toContain('<track kind="captions" src="captions.vtt" srclang="en" label="English">');
     // without a language the page is German
@@ -738,19 +771,5 @@ describe('exporting a demo, where the repository has no share target', () => {
     const gone = card('Weg');
     rmSync(join(dir, `demo-${gone.id}`, 'demo.mp4'));
     await expect(sharing.export(gone.id, 'zip')).rejects.toMatchObject({ code: 'noShare' });
-  });
-});
-
-describe('a share command from the configuration', () => {
-  test('is split into words, its program found in the repository, a script run with Bun', () => {
-    expect(shareArgv('scripts/share.sh --site "Unsere Demos"', '/repo')).toEqual(['/repo/scripts/share.sh', '--site', 'Unsere Demos']);
-    expect(shareArgv('share.ts', '/repo')).toEqual([process.execPath, '/repo/share.ts']);
-    expect(shareArgv('~/bin/share', '/repo')).toEqual([join(homedir(), 'bin/share')]);
-    expect(shareArgv("rclone-share 'a b'", '/repo')).toEqual(['rclone-share', 'a b']);
-    expect(shareArgv('', '/repo')).toEqual([]);
-    expect(shareProblem(['git'])).toBeNull();
-    expect(shareProblem(['/nowhere/share'])).toContain('does not exist');
-    expect(shareProblem([process.execPath, '/nowhere/share.ts'])).toContain('does not exist');
-    expect(shareProblem([])).toContain('empty');
   });
 });

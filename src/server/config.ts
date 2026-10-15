@@ -35,7 +35,7 @@ import { commitShared, proposeShared, pushShared } from './shared-settings';
 import { gitCalls, gitSteps } from './workspaces';
 import { VERSION } from './resources';
 import { agentsView, languageView, pushKeyChoice, saveAgents, saveLanguage, savePushKey, saveTheme, themeView } from './settings';
-import { shareArgv, shareProblem, siteProblem } from './share';
+import { siteProblem } from './share';
 
 export const CONFIG_FILE = 'canvases.json';
 
@@ -115,7 +115,6 @@ const shape = z.array(
             workspaces: z.array(z.string()).optional(),
             clones: z.number().int().min(0).max(20).optional(),
             slots: z.number().int().min(0).max(20).optional(),
-            share: z.string().optional(),
             hosts: z
               .array(
                 z
@@ -152,7 +151,6 @@ function tidy(canvases: z.infer<typeof shape>): CanvasConfig[] {
         ...(workspaces.length ? { workspaces } : {}),
         ...(r.clones ? { clones: r.clones } : {}),
         ...(r.slots !== undefined ? { slots: r.slots } : {}),
-        ...(r.share?.trim() ? { share: r.share.trim() } : {}),
         ...(hosts.length ? { hosts } : {}),
         ...(settings ? { settings } : {}),
       };
@@ -162,7 +160,13 @@ function tidy(canvases: z.infer<typeof shape>): CanvasConfig[] {
 
 /** Reads a configuration file; throws when it is no list of canvases. */
 export function readConfigFile(file: string): CanvasConfig[] {
-  return tidy(shape.parse(JSON.parse(readFileSync(file, 'utf8'))));
+  return tidy(shape.parse(withoutGone(JSON.parse(readFileSync(file, 'utf8')))));
+}
+
+/** A file as read, without the settings Obeya no longer has: a repository's share command (its demo site took its place). */
+function withoutGone(made: unknown): unknown {
+  if (Array.isArray(made)) for (const c of made) for (const r of Array.isArray(c?.repos) ? c.repos : []) if (r && typeof r === 'object') delete r.share;
+  return made;
 }
 
 export interface ConfigOptions {
@@ -460,10 +464,6 @@ export class Config {
         }),
       );
       c.repos.forEach((r, repo) => {
-        const wrong = r.share && shareProblem(shareArgv(r.share, resolve(r.path)));
-        if (wrong) problems.push({ code: 'shareCommand', canvas, repo, detail: wrong });
-      });
-      c.repos.forEach((r, repo) => {
         const branch = r.settings?.branch;
         if (branch && found.get(`${resolve(r.path)}\0${branch}`) === false) problems.push({ code: 'noBranch', canvas, repo, detail: `${r.path} has no branch ${branch}, neither here nor on origin` });
       });
@@ -488,7 +488,7 @@ export class Config {
             if (why) problems.push({ code: 'hostRepo', canvas, repo, detail: `the repository cannot have workers on other machines: ${why}` });
           }
           const site = adapter.demo?.site;
-          const wrong = !r.share?.trim() && site && siteProblem(site, resolve(r.path));
+          const wrong = site && siteProblem(site, resolve(r.path));
           if (wrong) problems.push({ code: 'demoSite', canvas, repo, detail: wrong });
           for (const detail of got[config.repos.indexOf(r)]!.shared.problems) problems.push({ code: 'repoSettings', canvas, repo, detail });
         });

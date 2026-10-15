@@ -32,8 +32,7 @@ Find out, from the files rather than by guessing:
 - **An adapter module from before**: a `.obeya/adapter/index.ts` held what the settings hold now
   (how the app runs, the demo site). Obeya no longer reads it: take its values over, then delete
   `.obeya/adapter/`. What it held that is set on each machine in "Konfiguration" goes into your
-  summary for the owner: the canvas's name, a share command (its script moves elsewhere in the
-  repository).
+  summary for the owner: the canvas's name.
 - **Logging in and test data**: seed scripts, fixtures, test users in the docs or the seed.
 - **Landing**: the `origin` remote (Obeya detects `land`: `pr` on GitHub, else `main`; write it
   only to differ), whether the default branch is protected, which bots comment on pull requests

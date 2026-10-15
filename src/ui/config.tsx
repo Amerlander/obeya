@@ -1232,7 +1232,6 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
           shareTo={resolved.shareTo}
           shareDirect={!!resolved.shareDirect}
           takeover={takeover}
-          onShare={(share) => onChange(without('share', share))}
           onChange={(settings) => onChange(without('settings', settings))}
         />
       )}
@@ -1270,7 +1269,6 @@ function RepoSettingsBlock({
   shareTo,
   shareDirect,
   takeover,
-  onShare,
   onChange,
 }: {
   /** The setting to fold open, scroll to and mark: the dialog was opened from a proposal for it. */
@@ -1280,8 +1278,6 @@ function RepoSettingsBlock({
   shareTo: 'main' | 'pr';
   shareDirect: boolean;
   takeover: Takeover;
-  /** Sets this machine's share command; none shares on the demo site again, where the settings name one. */
-  onShare: (share: string | undefined) => void;
   onChange: (s: RepoSettings | undefined) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -1319,8 +1315,7 @@ function RepoSettingsBlock({
     onChange(Object.keys(next).length ? (next as RepoSettings) : undefined);
   };
   const keys: SettingKey[] = ['branch', 'land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'run', 'stop', 'keep', 'site'];
-  // the share command is this machine's too, though not a value „Für alle“ takes over
-  const setHere = keys.filter((k) => own(k) !== undefined).length + (repo.share ? 1 : 0);
+  const setHere = keys.filter((k) => own(k) !== undefined).length;
   const fromRepo = keys.filter((k) => own(k) === undefined && base[k].source === 'repository').length;
   const lines = (k: SettingKey) => value<string[]>(k).join('\n');
   // a setting: its label with where its value comes from (and „Zurücksetzen“ where it is set here), its control and what to know about it
@@ -1349,7 +1344,6 @@ function RepoSettingsBlock({
   const planDocs = value<{ dir: string; exclude: string[] }>('planDocs');
   const site = value<DemoSite | null>('site') ?? { title: '', url: '', deploy: '' };
   const setSite = (patch: Partial<DemoSite>) => set('site', { ...site, ...patch });
-  const siteUsable = !!site.title.trim() && !!site.url.trim() && !!site.deploy.trim();
   // a part of a setting with several fields: its label above it; a wide one takes the whole row
   const sub = (label: string, control: ReactNode, wide = false) => (
     <label className={wide ? 'wide' : undefined}>
@@ -1469,22 +1463,6 @@ function RepoSettingsBlock({
               )}
             </div>,
             c.siteHint,
-          )}
-          {field(
-            'share',
-            t.config.share,
-            !!repo.share,
-            c.source.default,
-            () => onShare(undefined),
-            <input
-              className="c-path"
-              aria-label={t.config.share}
-              value={repo.share ?? ''}
-              placeholder={siteUsable ? t.config.shareSite(site.url) : t.config.shareNone}
-              spellCheck={false}
-              onChange={(e) => onShare(e.target.value || undefined)}
-            />,
-            t.config.shareHint,
           )}
           <ShareSettings repo={repo} values={values} branch={value<string>('branch')} shareTo={shareTo} shareDirect={shareDirect} takeover={takeover} />
         </div>

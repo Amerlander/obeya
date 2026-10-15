@@ -1,7 +1,5 @@
-import { join } from 'node:path';
 import { defaultBranchCommit } from '../server/read-tree';
 import { onGitHub } from '../server/repo';
-import { COMPILED, resource } from '../server/resources';
 import type { NESTED_SETTINGS, NestedSetting, RepoSettings, RepoValues, SharedSettings } from '../core/types';
 import { detectedBranch, type GitSteps, gitStepsSync } from '../server/workspaces';
 import { generic } from './generic';
@@ -10,12 +8,6 @@ import type { RepoAdapter, RepoInfo } from './types';
 
 /** Where a repository kept an adapter module before its settings said it all (`hasAdapterModule`). */
 export const REPO_ADAPTER_DIR = '.obeya/adapter';
-
-/**
- * The module a share script imports Obeya's helpers from; passed to it as `OBEYA_KIT`. The
- * compiled binary's build bundles it with what it imports into one file among the resources.
- */
-export const KIT_PATH = COMPILED ? resource('kit.js') : join(import.meta.dir, 'kit.ts');
 
 /** Obeya's defaults for the repository: what it runs on where its settings say nothing. */
 export const defaultsFor = (repo: RepoInfo): RepoAdapter => ({ ...generic, land: detectedLand(repo) });

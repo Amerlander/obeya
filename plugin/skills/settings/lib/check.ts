@@ -48,7 +48,7 @@ console.log(
     ...planLines,
     `app.run: ${adapter.app?.run || '(none: each worker finds out from the repository how to run the app)'}`,
     `app.stop: ${show(adapter.app?.stop)}, app.keep: ${show(adapter.app?.keep)}`,
-    `demo site: ${site ? `${site.title} at ${site.url}, deploy ${show(site.deploy)}` : '(none: demos are exported as a file, unless a machine names a share command)'}`,
+    `demo site: ${site ? `${site.title} at ${site.url}, deploy ${show(site.deploy)}` : '(none: demos are exported as a file)'}`,
     ...(adapter.prNoise ? [`prNoise: ${show(adapter.prNoise)}`] : []),
   ].join('\n'),
 );

@@ -474,8 +474,8 @@ const de = {
   },
   share: {
     share: 'Teilen',
-    shareHint: 'Veröffentlicht das Video auf einer Seite für die Kollegen, mit dem Befehl zum Teilen dieses Repositorys',
-    shareHintHtml: 'Veröffentlicht die Seite mit Text und Artefakt für die Kollegen, mit dem Befehl zum Teilen dieses Repositorys',
+    shareHint: 'Veröffentlicht das Video auf einer Seite für die Kollegen, auf der Demo-Site dieses Repositorys',
+    shareHintHtml: 'Veröffentlicht die Seite mit Text und Artefakt für die Kollegen, auf der Demo-Site dieses Repositorys',
     exportHint: 'Die Demo als Datei zum Weitergeben herunterladen',
     exportIntro: 'Für dieses Repository ist kein Ziel zum Teilen eingerichtet (Konfiguration). Die Demo lässt sich als Seite herunterladen und weitergeben.',
     needsEnv: (site: string, file: string) => `Zum Veröffentlichen auf ${site} braucht dieser Rechner ${file}.`,
@@ -670,11 +670,6 @@ const de = {
     hostSlots: 'Slots',
     addHost: '+ Rechner',
     removeHost: 'Rechner entfernen',
-    share: 'Befehl zum Teilen von Demos',
-    shareSite: (url: string) => `leer: Site: ${url}`,
-    shareNone: 'leer: Teilen exportiert eine Datei',
-    shareHint:
-      'Wohin „Teilen“ eine Demo für die Kollegen bringt. Der Befehl läuft im Verzeichnis „share“ unter Obeyas Home, den Checkout des Repositorys in OBEYA_REPO: mit „publish“ und der Seite als JSON auf stdin gibt er die URL der Seite aus; „withdraw <slug>“ nimmt sie herunter. Ein Skript (.ts, .js) läuft mit Obeyas Bun. Er gilt nur auf diesem Rechner, weil er oft Zugangsdaten braucht; „Für alle“ übernimmt ihn nicht.',
     addRepo: '+ Repository',
     settings: {
       open: 'Einstellungen',
@@ -724,7 +719,7 @@ const de = {
       siteLanguageLabel: 'Sprache der Übersicht',
       siteLanguage: { auto: 'wie die Demos', de: 'Deutsch', en: 'Englisch' },
       siteHint:
-        'Eine statische Site, auf die „Teilen“ Demos für die Kollegen bringt: Obeya schreibt die Seiten und ihre Übersicht selbst und veröffentlicht sie mit dem Befehl. Die Zugangsdaten bleiben in der Datei auf jedem Rechner; ein Rechner ohne sie exportiert Demos stattdessen. Ein Befehl zum Teilen auf diesem Rechner geht vor.',
+        'Eine statische Site, auf die „Teilen“ Demos für die Kollegen bringt: Obeya schreibt die Seiten und ihre Übersicht selbst und veröffentlicht sie mit dem Befehl. Die Zugangsdaten bleiben in der Datei auf jedem Rechner; ein Rechner ohne sie exportiert Demos stattdessen. Ohne Site exportiert „Teilen“ eine Datei.',
       share: {
         label: 'Für alle',
         button: (n: number) => (n === 1 ? 'Für alle ins Repository übernehmen (ein Wert) …' : `Für alle ins Repository übernehmen (${n} Werte) …`),
@@ -780,7 +775,6 @@ const de = {
       sameId: 'Gleiche Kennung wie eine andere Leinwand: bitte einen anderen Namen geben.',
       homeMissing: 'Das Repository, mit dem die Leinwand angelegt wurde, fehlt; es muss dabeibleiben.',
       notClone: 'Ein Klon in der Liste ist kein git-Repository.',
-      shareCommand: 'Das Programm des Befehls zum Teilen gibt es nicht.',
       hostRepo: 'Für dieses Repository können Agenten nicht auf anderen Rechnern arbeiten: Das geht nur mit Klonen und Arbeit, die über das Remote landet.',
       hostName: 'Ein Rechner dieses Namens verbindet sich anderswo mit einem anderen ssh-Ziel.',
       noBranch: 'Diesen Hauptbranch hat das Repository nicht, weder hier noch auf origin.',
@@ -1703,8 +1697,8 @@ const en: Strings = {
   },
   share: {
     share: 'Share',
-    shareHint: 'Publishes the video on a page for colleagues, with this repository’s share command',
-    shareHintHtml: 'Publishes the page with text and artifact for colleagues, with this repository’s share command',
+    shareHint: 'Publishes the video on a page for colleagues, on this repository’s demo site',
+    shareHintHtml: 'Publishes the page with text and artifact for colleagues, on this repository’s demo site',
     exportHint: 'Download the demo as a file to pass on',
     exportIntro: 'This repository has no target for sharing set up (configuration). The demo can be downloaded as a page and passed on.',
     needsEnv: (site: string, file: string) => `Publishing to ${site} needs ${file} on this machine.`,
@@ -1897,11 +1891,6 @@ const en: Strings = {
     hostSlots: 'Slots',
     addHost: '+ Machine',
     removeHost: 'Remove machine',
-    share: 'Command to share demos',
-    shareSite: (url: string) => `empty: Site: ${url}`,
-    shareNone: 'empty: sharing exports a file',
-    shareHint:
-      'Where “Share” takes a demo for colleagues. The command runs in the “share” directory under Obeya’s home, with the repository’s checkout in OBEYA_REPO: with “publish” and the page as JSON on stdin it prints the page’s URL; “withdraw <slug>” takes it down. A script (.ts, .js) runs with Obeya’s Bun. It applies on this machine only, since it often needs credentials; “For everyone” does not take it over.',
     addRepo: '+ Repository',
     settings: {
       open: 'Settings',
@@ -1951,7 +1940,7 @@ const en: Strings = {
       siteLanguageLabel: 'Language of the overview',
       siteLanguage: { auto: 'as the demos', de: 'German', en: 'English' },
       siteHint:
-        'A static site “Share” puts demos on for colleagues: Obeya writes the pages and their overview itself and publishes them with the command. The credentials stay in the file on each machine; a machine without it exports demos instead. A share command on this machine goes first.',
+        'A static site “Share” puts demos on for colleagues: Obeya writes the pages and their overview itself and publishes them with the command. The credentials stay in the file on each machine; a machine without it exports demos instead. Without a site, “Share” exports a file.',
       share: {
         label: 'For everyone',
         button: (n: number) => (n === 1 ? 'Take over into the repository for everyone (one value) …' : `Take over into the repository for everyone (${n} values) …`),
@@ -2007,7 +1996,6 @@ const en: Strings = {
       sameId: 'Same id as another canvas: please give it another name.',
       homeMissing: 'The repository the canvas was created with is missing; it has to stay.',
       notClone: 'A clone in the list is not a git repository.',
-      shareCommand: 'The share command’s program does not exist.',
       hostRepo: 'Agents cannot work on other machines for this repository: that needs clones and work that lands through the remote.',
       hostName: 'A machine of this name connects to another ssh target elsewhere.',
       noBranch: 'The repository has no such main branch, neither here nor on origin.',

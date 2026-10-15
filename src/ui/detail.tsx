@@ -1649,7 +1649,7 @@ function PrBox({ pr }: { pr: PullRequest }) {
 /**
  * Sharing the demo with colleagues: "Teilen" publishes it right away, then the page's link with
  * "Nicht mehr teilen"; "Neu teilen" once the card has a newer demo than the page, "Erneut teilen"
- * once the share command writes pages differently than when it published this one.
+ * once the site writes pages differently than when it published this one.
  */
 function ShareBox({ item, act }: { item: Item; act: (a: CardAction, done: ActDone) => Promise<void> }) {
   const [copied, setCopied] = useState(false);

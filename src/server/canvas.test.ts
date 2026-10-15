@@ -62,22 +62,6 @@ describe('a canvas with several repositories', () => {
     expect(() => canvas.act(c.id, { action: 'unshare' })).toThrow('not shared');
   });
 
-  test('a share command in the configuration takes the place of the settings\' demo site, for that repository', async () => {
-    canvas.shutdown();
-    const web = join(dir, 'web');
-    writeFileSync(join(web, 'share.ts'), `await Bun.stdin.text(); console.log('https://pages.example/' + process.argv[2]);`);
-    canvas = new CanvasRuntime(
-      { name: 'Produkt', repos: [{ path: web, clones: 1, share: 'share.ts' }, { path: join(dir, 'api'), clones: 1 }] },
-      { store: new Store(':memory:'), home: dir, runtime, forge: noForge },
-    );
-    expect(canvas.board.canvas.repos.map((r) => r.share)).toEqual([true, undefined]);
-    expect(canvas.repos[0]!.share).toEqual({ command: [process.execPath, join(web, 'share.ts')] });
-    const c = canvas.board.create({ title: 'Home', x: 0, y: 0 });
-    canvas.board.work(c.id, { state: 'live', demo: JSON.stringify({ kind: 'video', dir, chapters: [], page: { title: 'T', text: 'X.' } }) });
-    canvas.act(c.id, { action: 'share' });
-    for (let i = 0; i < 300 && canvas.board.item(c.id)!.share?.state !== 'shared'; i++) await new Promise((r) => setTimeout(r, 10));
-    expect(canvas.board.item(c.id)!.share).toEqual({ state: 'shared', url: 'https://pages.example/publish' });
-  });
 
   test("a card works in its repository's clone", () => {
     const home = canvas.board.create({ title: 'Home', x: 0, y: 0 });
@@ -436,14 +420,14 @@ describe("a repository's settings for everyone (.obeya/settings.json)", () => {
     let settings: RepoSettings | undefined;
     canvas.shutdown();
     canvas = new CanvasRuntime({ repos: [{ path: shop }] }, { store: new Store(':memory:'), home: dir, runtime, forge: noForge, settings: () => settings });
-    expect(canvas.repos[0]!.share).toBeNull();
+    expect(canvas.repos[0]!.site).toBeNull();
     const site = { title: 'Demos', url: 'https://demos.example.dev', deploy: '' };
     settings = { demo: { site } };
     canvas.settingsChanged();
-    expect(canvas.repos[0]!.share).toBeNull();
+    expect(canvas.repos[0]!.site).toBeNull();
     settings = { demo: { site: { ...site, deploy: 'git {dir}' } } };
     canvas.settingsChanged();
-    expect(canvas.repos[0]!.share).toEqual({ site: { ...site, deploy: 'git {dir}' } });
+    expect(canvas.repos[0]!.site).toEqual({ ...site, deploy: 'git {dir}' });
     expect(canvas.board.canvas.repos[0]!.share).toBe(true);
   });
 

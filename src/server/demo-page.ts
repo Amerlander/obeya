@@ -1,6 +1,6 @@
 // The page a demo is shared on, for people who have never seen Obeya, in the demo's language: title, text, the video with
-// its chapters and captions (or an HTML artifact in a frame), the pull request. A repository's share
-// command builds its site from it (through the kit, `OBEYA_KIT`), so does a site Obeya keeps (site.ts), and a repository without a share target exports it (share.ts): as a ZIP
+// its chapters and captions (or an HTML artifact in a frame), the pull request. A repository's demo
+// site is built from it (site.ts), and a repository without one exports it (share.ts): as a ZIP
 // with the video or the artifact beside the page, or as one HTML file with everything inside.
 
 import { type Dirent, existsSync, readdirSync } from 'node:fs';

@@ -2850,61 +2850,45 @@ page, at most 30 steps (an artifact as high as its window would grow on), and "I
 
 #### Where a demo goes
 
-Where it goes depends on the repository's share target: the command line in its configuration for
-this machine (`share`, see The Konfiguration dialog), else the static site its settings name once
-it is complete (`demo.site`, see Static sites; `sharesOf` in `src/server/canvas.ts`). With a
-target, the demo is published on a page. "Teilen" publishes right away, without a hold to take it back: "Nicht mehr
+Where it goes depends on the repository's demo site: the static site its settings name, once it is
+complete (`demo.site`, see Static sites; `siteOf` in `src/server/canvas.ts`). With a site, the demo
+is published on a page there. "Teilen" publishes right away, without a hold to take it back: "Nicht mehr
 teilen" withdraws the page just as easily. Once the page is up, the card shows the link (open, copy)
 and "Nicht mehr teilen". A card that gets a new demo after sharing says the page still shows the
 earlier one and offers "Neu teilen"; nothing is replaced on its own.
 
 The page has a title and two to five sentences for colleagues who have never seen Obeya: where the
-repository has a target, `ready_for_review` takes them with every demo (`demo.page`), and for a demo
+repository has a site, `ready_for_review` takes them with every demo (`demo.page`), and for a demo
 handed over without them a short read-only session writes them from the worker's last summary when
 the owner shares, kept with the demo afterwards.
 
-#### Share commands
+#### Publishing
 
-Obeya runs the command (`src/server/share.ts`) with `OBEYA_HOME` set and the repository's checkout
-in `OBEYA_REPO`, one call at a time, in `share/` under Obeya's home. The calls are:
-
-- `publish` with the page as JSON on stdin (slug, kind `video` or `html`, title, text, chapters, PR
-  URL, the demo's language, demo directory, and the slugs of the other pages it has shared), which
-  prints the page's URL;
-- `withdraw <slug>` (with `{slug, shared}` on stdin);
-- `version`, which prints the version of the pages the command writes (a command that does not know
-  it fails or prints nothing): the video pages' first, then `html:<version>` for artifact pages, so
-  a change to one kind of page marks only those (a command that says one version marks both).
-
-The slug comes from the card's title and id once and stays, so a link keeps working across
-publishing again. The command's stderr goes into the card's log, a failure with its output as an
-error, and the card stays as it was. A share publishing or withdrawing at a restart goes on after
-it.
-
-The command's words are split at spaces outside quotes (`commandWords`), a program given as a path
-and any script are found in the repository (what the command itself needs from there it finds
-through `OBEYA_REPO`), and a script (`.ts`, `.js`) runs with Obeya's own Bun, so the same line works
-on Windows. A share script the repository keeps cannot import Obeya's files by a relative path:
-Obeya runs it with `OBEYA_KIT` beside `OBEYA_HOME`, the path of `src/adapters/kit.ts` (in the
-compiled binary, `kit.js` among its resources), from which it imports the page templates, so its
-pages are the export's.
+Pages go out one change at a time, through one queue for all canvases (`src/server/share.ts`):
+`publish` writes the card's page on its site (slug, kind `video` or `html`, title, text, chapters,
+PR URL, the demo's language, demo directory, and the slugs of the other pages shared there), and
+`withdraw` takes it down. The slug comes from the card's title and id once and stays, so a link
+keeps working across publishing again. What the deploy says goes into the card's log, a failure
+with its output as an error, and the card stays as it was. A share publishing or withdrawing at a
+restart goes on after it.
 
 #### Outdated pages
 
-Inside Obeya a card's pages go to its share target (`ShareTarget` in `src/server/share.ts`: a
-command, or a site): pages whose targets have the same key (a command's is its argv, a site's its
-URL's host and path) are on one site, so versions are asked once per target and a publish names the
-others. Keys are not stored, so a share keeps only the version it was published with.
+Inside Obeya a card's pages go to its share target (`ShareTarget` in `src/server/share.ts`, its
+site): pages whose targets have the same key (the site's URL's host and path) are on one site, so
+versions are asked once per site and a publish names the others. Keys are not stored, so a share
+keeps only the version it was published with.
 
-Obeya keeps with each share the version the command said right after publishing it, and asks each
-command with pages out for its version at startup (Obeya restarts when its own code changes), after
-each of its calls, and when the owner comes back to a page of the canvas (at most once a minute: a
-command from another repository changes without a restart). A page published with another version,
-or before commands said theirs (until 2026-10-05), shows that pages are made differently now and
-offers "Erneut teilen" beside "Nicht mehr teilen": the same demo published again under the same
-link. A card with a newer demo offers only "Neu teilen", which brings both. Each page is brought up
-to date on its own card. A command may print a hash of a sample page as its code writes it: only a
-change that shows on the pages counts. A page whose demo files are gone (demos get deleted to free
+Obeya keeps with each share the version of the site's pages right after publishing it: the video
+pages' and the artifact pages', so a change to one kind of page marks only those. It asks each site
+with pages out for its version at startup (Obeya restarts when its own code changes), after each
+publish or withdrawal, and when the owner comes back to a page of the canvas (at most once a minute;
+then the site is also asked which pages another machine withdrew, see Several machines on one
+site). A page published with another version, or before versions were kept (until 2026-10-05),
+shows that pages are made differently now and offers "Erneut teilen" beside "Nicht mehr teilen":
+the same demo published again under the same link. A card with a newer demo offers only "Neu
+teilen", which brings both. Each page is brought up to date on its own card. Only a change that
+shows on the pages counts (the version is a hash of sample pages, see Static sites). A page whose demo files are gone (demos get deleted to free
 space) is neither offered nor counted: there is nothing to make it from again, and it stays out as
 it is.
 
@@ -2939,9 +2923,9 @@ the link meanwhile; a PR reported while the page is going out gets a second roun
 failure to read or edit the description goes into the card's log; the page stays shared. Withdrawing
 the page leaves the line in the description.
 
-#### Export without a target
+#### Export without a site
 
-Without a target, "Teilen" exports the same page as a file to pass on (`Sharing.export`, `GET
+Without a site, "Teilen" exports the same page as a file to pass on (`Sharing.export`, `GET
 …/cards/<id>/export?as=zip|html`): a ZIP with a folder named by the slug that holds `index.html`
 with the video, poster and captions beside it, or one HTML file with the video in base64, played
 from a blob so it seeks; only for videos up to 15 MiB (`EXPORT_HTML_MAX`, so the file still goes by
@@ -2952,8 +2936,8 @@ is not held; the card's log names the file. Both pages carry their captions as c
 since Chrome does not load a `<track>` for a page opened from disk. The ZIP is written by Obeya
 (`src/server/zip.ts`, stored without compression: the video is compressed already).
 
-The page (`src/server/demo-page.ts`) is the one a share command publishes (the kit,
-`src/adapters/kit.ts`, hands it to the command), without its link to the overview. Its own words
+The page (`src/server/demo-page.ts`) is the one the site publishes, without its link to the
+overview. Its own words
 (the date line, the captions' name, the links, the play button) are in the demo's language: the one
 the demo's `index.html` names (the director writes the report page in the narration language; an
 artifact names its own), else the narration language of the demo settings. A page made without a
@@ -2965,20 +2949,17 @@ not want.
 
 #### Static sites
 
-A command that publishes to a static host keeps its site in a directory of its own under Obeya's
-home and deploys all of it with each call; the first one (2026-10-02, moved into its repository on
-2026-10-05) writes its own page and the overview, refuses files over the host's limit and a site
-that lacks a page Obeya has as shared (a lost directory would take them offline), and puts the
-directory back when a deployment fails. Such a host may serve no byte ranges (Cloudflare Pages
+A static host takes the site as a directory, deployed whole with each change: Obeya keeps it in a
+directory of its own under Obeya's home, writes the page and the overview, refuses files over the
+host's limit and a site that lacks a page Obeya has as shared (a lost directory would take them
+offline), and puts the directory back when a deployment fails. Such a host may serve no byte ranges (Cloudflare Pages
 answers a range request with the whole file and 200), and a browser cannot seek in a video streamed
 that way: the chapters and the progress bar jumped back to the start. The page therefore asks for a
 range first and, getting the whole file, plays the video from memory.
 
-Obeya does that itself for a host that takes a directory, from a few values in the repository's
-settings instead of a command each repository writes and maintains (`src/server/site.ts`):
+It does that from a few values in the repository's settings (`src/server/site.ts`):
 `demo.site` names the site's `title` (the overview's heading, the pages' tab titles), its `url` (a
-page is at `url/<slug>/`), the `deploy` command line (`{dir}` stands for the site's directory; split
-and run like a share command, in `share/`, a script with Obeya's Bun), optionally an `env` file of
+page is at `url/<slug>/`), the `deploy` command line (`{dir}` stands for the site's directory), optionally an `env` file of
 `KEY=value` lines relative to Obeya's home whose values go into the deploy's environment
 (credentials, never in git), `headers` for reading the live site behind a login (`${KEY}` from
 `env`), the largest file the host takes (`maxFile`, 25 MiB without it) and the overview's `language`
@@ -2986,7 +2967,16 @@ and run like a share command, in `share/`, a script with Obeya's Bun), optionall
 „Einstellungen“. A site counts once it has a title, an http(s) URL and a deploy command
 (`siteIncomplete` in `src/server/share.ts`); until then demos are exported, and a site that cannot
 be used (incomplete, or its deploy program not there: `siteProblem`) is the problem `demoSite` at
-the repository, unless this machine names a share command, which goes before it.
+the repository.
+
+The deploy runs in `share/` under Obeya's home, not in the checkout, which is often a workspace of
+the pool too (a file it leaves there, as `wrangler pages deploy` leaves its cache, would keep the
+workspace from being leased), with `OBEYA_HOME` set and the repository's checkout in `OBEYA_REPO`.
+Its words are split at spaces outside quotes (`commandWords`), a program given as a path and any
+script are found in the repository, and a script (`.ts`, `.js`) runs with Obeya's own Bun, so the
+same line works on Windows. Any host that takes a directory fits: Cloudflare Pages, Netlify or
+Vercel through their CLIs, `aws s3 sync`, `rsync`, a push to a Pages branch, or a script of the
+repository's.
 
 The site lives in `sites/<key>/` under Obeya's home, the key made of the URL's host and path, so
 clones and repositories naming the same site share it: `site/` is deployed whole with each publish
@@ -3004,8 +2994,8 @@ Obeya's templates marks the pages outdated with Obeya's next start.
 A machine without the site's `env` file has no target there: "Teilen" exports, with a line under the
 buttons naming the file („Zum Veröffentlichen auf demos.example.dev braucht dieser Rechner
 sites/demos/deploy.env.“); placed later, it counts when the owner next comes back to the page. A
-site without `env` deploys with the machine's own login. A host that needs more than deploying a
-directory gets a share command on each machine instead (see Share commands).
+site without `env` deploys with the machine's own login. A host that cannot take a whole directory
+is not supported (see Decisions).
 
 #### Several machines on one site
 
@@ -3123,7 +3113,7 @@ the microphone; Chrome launched by Playwright needs no audio service moved in-pr
   request as much as a video.
 - **Sharing takes effect at once.** Until 2026-10-02 it held 8 s with "Doch nicht"; withdrawing is
   just as easy.
-- **Share commands run in `share/` under Obeya's home** (2026-10-05). Until then a command ran in
+- **Deploys run in `share/` under Obeya's home** (2026-10-05). Until then a share command ran in
   the checkout, which is often a workspace of the pool too, and the cache `wrangler pages deploy`
   leaves in its working directory kept that workspace from being leased after every share ("jeder
   freie hat nicht committete Änderungen").
@@ -3137,6 +3127,14 @@ the microphone; Chrome launched by Playwright needs no audio service moved in-pr
   considered and dropped (2026-10-08): a kit library each repository's own share script calls, which
   still leaves a script to maintain in every repository, and hosting providers built into Obeya,
   which puts provider code in the core where one deploy line covers them all.
+- **The demo site is the only place "Teilen" publishes to** (2026-10-15). Until then a share command
+  could stand in for it on a machine: a program of the repository's that got each page as JSON
+  (`publish`, `withdraw <slug>`, `version`) and imported Obeya's page templates through `OBEYA_KIT`.
+  It came first (2026-10-02), and once the site was built in, the two sat one below the other in the
+  repository's settings with no visible connection, the command going first. No canvas used it any
+  more, and every host that takes a directory fits the site's `deploy` line; a host that cannot take
+  a whole directory is not supported. Should one be needed, a `deploy` script can upload what
+  changed in `{dir}`.
 - **Several machines on one site pull before they push** (2026-10-09). Two other guards were
   dropped: only refusing a deploy while the live manifest lists pages missing here, which left the
   owner nothing to do but copy files by hand, and a shared storage directory (a synced folder or a
@@ -3210,7 +3208,7 @@ the chosen commit moved, a forced detached checkout and a fresh read of the plan
 fails (offline, a lock held by a lease) goes to the log and is tried again next round; the Lesestand
 keeps its commit. What counts is what is on `origin` (or the local default branch of the checkout,
 where it has all of `origin`'s): a doc committed only in another clone, or only edited, does not
-show in such a repository. Workers, leasing, landing and the share commands stay in the checkout and
+show in such a repository. Workers, leasing and landing stay in the checkout and
 the clones; `repoInfo` and the configuration are unchanged.
 
 ### Plan docs
@@ -3315,9 +3313,8 @@ own (`NESTED_SETTINGS`): this machine may set `app.stop` and leave `app.run` to 
 each comes from where it is set. The reference for every
 field is `docs/settings.md`, linked from the README.
 
-Two things are this machine's alone and never in `.obeya/settings.json`: the command that shares the
-repository's demos (`share` of its entry, shown among its settings in the dialog; see Share
-commands), since it often needs credentials, and the canvas it is on. A canvas
+One thing is this machine's alone and never in `.obeya/settings.json`: the canvas a repository is
+on. A canvas
 without a name in the configuration is named after its first repository (`repoName` in
 `src/adapters/generic.ts`: the name in its `origin` URL, else its directory's), and its id follows.
 
@@ -3341,7 +3338,7 @@ nothing (see Live configuration): the canvases follow what they set up by them (
 the Lesestand moves to the checkout or a worktree when work now lands elsewhere, the plan directory
 is watched afresh, a repository whose work now goes out as pull requests gets its watcher (one that
 has one keeps it for the pull requests still open), where demos are shared is worked out again
-(`sharesOf`: this machine's share command, else the site once it is complete), and the page shows
+(`siteOf`: the site once it is complete), and the page shows
 the main branch and how work lands. `workspaces` is the exception: clones or worktrees are set up
 when a repository's agents start, so changing it restarts that repository's agents, as the dialog
 says at the field; where the configuration names clones it shows that instead. The Koordinator's
@@ -3391,8 +3388,7 @@ Obeya's log names them at start and whenever a new version is read.
 
 A demo site that cannot be used (no title, no http(s) URL or no deploy command: `siteIncomplete`;
 or a deploy program that is not there: `siteProblem`, both in `src/server/share.ts`) is the problem
-`demoSite` at the repository, unless this machine names a share command, which goes before the
-site; until the site is complete, "Teilen" exports demos.
+`demoSite` at the repository; until the site is complete, "Teilen" exports demos.
 
 A repository whose default branch still has `.obeya/adapter/index.ts`, a module that said what its
 settings say now, has the problem `adapterGone` (`hasAdapterModule` in `src/adapters/index.ts`):
@@ -3458,8 +3454,7 @@ rather than centred beside the field and its hint. Renaming a running canvas kee
 the file), so its cards stay.
 
 Problems (no git repository, a repository the canvas has already under this or another path, two
-canvases with one id, a canvas's home repository left out, a share command whose program is not
-there) show at the field while editing and keep it from being saved; where a path without a
+canvases with one id, a canvas's home repository left out) show at the field while editing and keep it from being saved; where a path without a
 repository is a folder, the problem offers to set up git there (see Setting up git in a folder),
 after which it goes. Problems in a repository's settings for everyone (`repoSettings`: a field of
 its `.obeya/settings.json` unknown or of the wrong type; `demoSite`: a demo site that cannot be
@@ -3528,7 +3523,7 @@ cards kept. Within a canvas, a new name and a repository new on it apply at once
 that leave the agents where they work.
 
 What a repository's agents are set up by when they start (its entry but the settings, `repoShape`:
-clones, existing workspaces, slots, other machines, the share command; and where its workers work,
+clones, existing workspaces, slots, other machines; and where its workers work,
 by its settings: restart reason `config` where the owner saved them, `repository` where its
 `.obeya/settings.json` changed) restarts that repository's agents alone, and a repository that left
 the canvas stops: its workers hear of it as of a restart (`DueRestart.repo`) and pause at a safe
@@ -3596,15 +3591,13 @@ of what the owner may say.
   (`.obeya/settings.json`, für Code `.obeya/adapter/index.ts`)“, which read as if the settings lived
   in the adapter. The owner asked why the stack could not be a setting; with nothing left in
   adapters that was code, the module went. Now the stack and the demo site are settings with fields
-  in the dialog, the share command is this machine's alone (`demo.share` for everyone went), and the
+  in the dialog, the share command was this machine's alone (`demo.share` for everyone went), and the
   canvas's name comes from the configuration or the repository: everything a repository says about
   itself is in one place, and the owner sets it without code. A module still on a default branch is
   not read (problem `adapterGone`), with no transition, since Obeya is not released yet and keeps no
   old form working before its release. The skill `obeya:adapter` became `obeya:settings`,
   `docs/adapter.md` became `docs/settings.md`, and Obeya's own repository lost its
   `.obeya/adapter/`, which only named the canvas „Obeya“.
-- **The share command is a setting of its repository, for this machine** (2026-10-15). Until then it
-  stood beside the path, as prominent as the path while the other settings were folded away.
 - **„Von einem Agenten ausfüllen lassen“** (2026-10-15): until then the button read „Adapter
   einrichten lassen“, under a sentence that read as if only an adapter could say how the app starts.
   Until then too „Für alle ins Repository übernehmen“ was always off while the dialog had changes
@@ -3911,8 +3904,7 @@ UI and SQLite in it, that needs neither Bun nor a checkout.
 
 Its modules live in Bun's embedded file system, which no other process can read, so what other
 processes run or import goes beside it as real files, in `resources/` (13 MB): the plugin with its
-skills and the `playwright-core` the demo skill records with, the voice sidecars, the kit share
-scripts import bundled into one module (`kit.js`), the skills' scripts that read a repository's
+skills and the `playwright-core` the demo skill records with, the voice sidecars, the skills' scripts that read a repository's
 settings (`recipe.ts`, `check.ts`) bundled with what they import, and `docs/settings.md` for the
 settings skill. The server finds them
 through one function (`resource()` in `src/server/resources.ts`): `OBEYA_RESOURCES` when set, else
@@ -3921,7 +3913,7 @@ skill's modules the server carries (the setup check, the voices) are told where 
 (`useLib` in the skill's `lib/here.ts`). Nothing is written beside the code: the resources may be
 read-only, what Obeya writes is in its home.
 
-The binary is its own Bun for scripts: a share command's script runs as `obeya <script>` with
+The binary is its own Bun for scripts: a site's deploy script runs as `obeya <script>` with
 `BUN_BE_BUN=1`. It supervises itself as `bun start` does (restarting when canvases given on its
 command line are saved) but has no checkout to follow, so it never restarts for new code. A macOS
 binary is signed ad hoc after its build: as Bun writes it, macOS kills it at start. Bun 1.3.12
@@ -3932,7 +3924,7 @@ serves it (without the define it was the development one).
 
 `package.json` holds Obeya's version, which the settings show, with the checkout's commit beside it
 when Obeya runs from one. `bun scripts/check-binary.ts <obeya> [--voice] [--demo] [--worker]` checks
-a binary on the machine it runs on: a scratch repository with its own `.obeya/settings.json` and share command,
+a binary on the machine it runs on: a scratch repository with its own `.obeya/settings.json` and demo site,
 then the voice installed and a spoken command heard, a demo rendered with the director from the
 resources, and a real worker that commits and hands over an artifact, which is shared, once on the
 machine's Claude Code and once on the SDK's. All of it passed on macOS arm64 and on GitHub's Windows
@@ -4201,7 +4193,7 @@ Persistent (SQLite):
   questions); a project's plan doc as last read and the idea or task it came from; that a card
   becomes a project, and the plan docs its landed work added;
 - the shared demo page: slug, link, the demo directory it shows, what the page shows (title, text,
-  chapters, kind) and the pull request it links, the version of the share command it was published
+  chapters, kind) and the pull request it links, the version of the site's pages it was published
   with and whether that is behind, and whether it is publishing or withdrawing; sharing many
   outdated pages again: the cards still to go, how many are out and which failed;
 - card events (the log, with an error code where the UI words it, the owner's screenshots and an
@@ -4228,8 +4220,8 @@ owner's screenshots (`images/<canvas>/`), the configuration (`canvases.json`), t
 app's server log (`app.log`), voices and models (`voices/`), the workers' clones and worktrees
 (`workspaces/`), the Lesestand's worktrees (`read/`), the files of looked-up answers
 (`answers/<canvas>/<thread>/`), the static sites Obeya keeps (`sites/<key>/`), the env files their
-repositories' settings name (relative to the home, `sites/demos/deploy.env`, say), what a repository's share
-command keeps there, and `share/`, the directory share commands and deploys run in.
+repositories' settings name (relative to the home, `sites/demos/deploy.env`, say), and `share/`,
+the directory deploys run in.
 
 Derived, not stored: git, PR and CI state (read from git and GitHub), plan-doc content (read from
 the repository; the copy on the project is only for the archive).
