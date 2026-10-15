@@ -1550,7 +1550,8 @@ export class Workers {
   private waitsForOwner(cardId: string): boolean {
     const card = this.o.board.item(cardId);
     if (!card || !(card.state === 'waiting' || (card.state === 'inPr' && card.pr) || card.paused)) return false;
-    if (answering(card) || this.live.get(cardId)?.busy) return false;
+    // paused while taking in the owner's words on its handover, nothing of it runs either
+    if ((answering(card) && !card.paused) || this.live.get(cardId)?.busy) return false;
     const row = this.o.board.row(cardId);
     return !!row.workspace && !row.parked;
   }

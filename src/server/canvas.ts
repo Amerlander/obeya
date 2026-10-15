@@ -968,7 +968,8 @@ export class CanvasRuntime {
     const card = this.board.item(cardId);
     if (card?.kind !== 'question') throw new BadRequest('notQuestion', 'the card is no Question card');
     if (card.thread?.thinking) throw new BadRequest('ideaThinking', 'its agent is still reading; discuss it as an idea once the answer is there');
-    this.board.work(cardId, { kind: 'task', state: 'idea', idea: JSON.stringify({ status: 'open', brief: '' }), session_id: null });
+    // a paused agent's question goes into the discussion with the rest of the thread
+    this.board.work(cardId, { kind: 'task', state: 'idea', idea: JSON.stringify({ status: 'open', brief: '' }), session_id: null, paused: null });
     this.board.log(cardId, 'state', 'owner', this.board.t.answer.asIdea);
     this.explorers.tell(cardId, this.answers.opening(cardId));
   }
