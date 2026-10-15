@@ -1,14 +1,21 @@
 // Shapes shared by the server and the UI.
 
 import type { DemoSettings, VoiceKind } from '../../plugin/skills/demo/lib/settings.ts';
-import type { ListenBackend, SetupId, SetupItem } from '../../plugin/skills/demo/lib/setup.ts';
+import type { SetupId, SetupItem } from '../../plugin/skills/demo/lib/setup.ts';
 import type { Language } from './locale';
 import { MESSAGES } from './messages';
 import type { NotAProject } from './plan-doc';
 
 export type { DemoSettings, NarrationLanguage, VoiceKind } from '../../plugin/skills/demo/lib/settings.ts';
 export type { Language } from './locale';
-export type { ListenBackend, SetupCheck, SetupId, SetupItem } from '../../plugin/skills/demo/lib/setup.ts';
+export type { SetupCheck, SetupId, SetupItem } from '../../plugin/skills/demo/lib/setup.ts';
+
+/**
+ * How Obeya hears speech: Parakeet (NVIDIA's Parakeet TDT 0.6B v3, int8, through onnx-asr and ONNX
+ * Runtime on the CPU), on every platform; or Whisper (mlx-whisper on Apple Silicon, faster-whisper
+ * elsewhere).
+ */
+export type ListenBackend = 'parakeet' | 'mlx' | 'faster';
 
 /**
  * `question`: a thread of looked-up answers the owner moved onto a card of its own, with the agent

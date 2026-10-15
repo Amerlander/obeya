@@ -68,7 +68,7 @@ costs more than a restart of one service.
 ## 3. Explore before scripting
 
 First check that this machine can record: `node ${CLAUDE_SKILL_DIR}/lib/setup.ts` lists Node,
-Playwright and a browser, ffmpeg, uv (it brings Python), the voice of the settings and the speech recognition,
+Playwright and a browser, ffmpeg, uv (it brings Python), the voice of the settings,
 and under each missing piece how to install it on this platform (`docs/demo-setup.md` in the
 Obeya repository says more). A render runs the same check and stops at once with that list. A
 voice that is not installed you may install yourself (`node ${CLAUDE_SKILL_DIR}/lib/voices.ts
@@ -147,7 +147,7 @@ is presented without "I" or "we".
   (`DEMO_ELEVENLABS_MODEL=eleven_v4`), which read them. Every other voice speaks the text between
   two pause tags on its own and puts silence where they stand (half a second for a short one, a
   second and a half for a long one, under a second for `[pause]`) and leaves other tags out;
-  captions and listening back leave them out.
+  captions leave them out.
 
 Director helpers (`d`): `goto`, `click`, `type` (clears, then types at reading pace; `''`
 clears), `drag(from, to, ms?)` (onto an element or a point, the pointer moving along),
@@ -196,30 +196,22 @@ is not installed stops the render with how to install it: from the configuration
 `node ${CLAUDE_SKILL_DIR}/lib/voices.ts install`; so does anything else the render needs
 (`lib/setup.ts`, section 3). `DEMO_VOICE=<provider>` renders in another
 voice; `DEMO_VOICE=<path>.wav` clones that clip with Qwen3-TTS (its exact transcript beside it as
-`.txt`). Clips are cached by voice and text, so re-runs after a
-visual fix skip synthesis. Each clip is transcribed back with Parakeet (on the CPU, as Obeya hears
-voice commands) and synthesised again (up to three takes, two with a hosted service) when it does not
-match. Listening back can be off in the settings ("Erzählung gegenhören"), and a
-recognition that cannot be loaded turns it off for that render; then the review table says "not heard
-back" and the report page "nicht gegengehört": name that in the report's `findings`. A voice that
-loads a large model (Qwen3-TTS, the owner's command) takes 7–12 GB with Whisper, so only one such
+`.txt`). Clips are cached by voice and text, so re-runs after a visual fix skip synthesis. A
+voice that loads a large model (Qwen3-TTS, the owner's command) takes several GB, so only one such
 demo loads it at a time (lock `~/.cache/demo-skill/tts.lock`); the others log "waiting for it"
 and wait, which is expected, not a hang. Under Obeya (`OBEYA_URL` set), Obeya holds Qwen3-TTS
 loaded for all demos and for about 5 minutes after the last clip: the narration then logs
-"synthesised by Obeya", parallel demos take turns clip by clip, and only listening back with Whisper waits
-for the lock (Parakeet takes none). Recording uses the local Chrome, else Edge, else
-Playwright's own Chromium (`DEMO_CHROME` names another; headless screencast, 1440×900); it runs
+"synthesised by Obeya", and parallel demos take turns clip by clip without the lock. Recording
+uses the local Chrome, else Edge, else Playwright's own Chromium (`DEMO_CHROME` names another; headless screencast, 1440×900); it runs
 on macOS, Linux and Windows. A failing scene (or `login`, `open`) stops the run with the page's
 `URL:`, a `Screenshot:` of it (`.work/failure.png`) and the `Cause:`, Playwright's message with
 the locator it waited for.
 
 ## 6. Review your own video — before the owner sees it
 
-- The render ends with a review table: per scene its chapter time and how well the heard
-  narration matched what was said (`match`, flagged below 0.93 with what was heard; all of it in
-  `.work/narration-check.json`). Rephrase a flagged sentence and render again.
-  A scene flagged with seconds "without narration" shows a stretch where nothing is said: if it
-  only waits, wrap the wait in `d.skip`; otherwise let the narration say what happens there.
+- The render ends with a review table: per scene its chapter time and title. A scene flagged
+  with seconds "without narration" shows a stretch where nothing is said: if it only waits, wrap
+  the wait in `d.skip`; otherwise let the narration say what happens there.
 - `review/NN-mid.jpg` and `review/NN.jpg`: a still from the middle and from the end of each
   scene. Look at all of them: is the thing being talked about on screen, ringed, legible, and
   does nothing show that the narration leaves out? Pull

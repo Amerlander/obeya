@@ -11,7 +11,7 @@ import path from 'node:path';
 import type { Browser, BrowserContext, Locator, Page } from 'playwright-core';
 import { launchChromium } from '../../../lib/chromium.ts';
 import { type NarrationLanguage, readDemoSettings, withVoice } from './settings.ts';
-import { checkSetup, describeSetup, type ListenBackend, listenKit } from './setup.ts';
+import { checkSetup, describeSetup } from './setup.ts';
 import { CLOCK, type Cut, type Frame, frameDurations, laterLabel, onPaintTime, readClock, untagged, videoTime } from './timeline.ts';
 import { TTS_LOCK, voiceSpec } from './voices.ts';
 
@@ -62,10 +62,6 @@ export interface DemoSpec {
 const LEAD_SECONDS = 0.35;
 /** Silence after a scene's narration before the next one starts. */
 const GAP_SECONDS = 0.6;
-/** Below this word-level match, the spoken clip likely dropped or invented something. */
-const TTS_MATCH_WARN = 0.85;
-/** Below this, the sentence is worth rephrasing: the voice or the speech recognition stumbled over it. */
-const NARRATION_OK = 0.93;
 /** A scene this much longer than its narration and gap has a stretch worth cutting (`Director.skip`). */
 const SILENCE_WARN = 5;
 /** A wait shorter than this stays in the video rather than being cut (`Director.skip`). */
@@ -84,19 +80,6 @@ interface Clip {
   id: string;
   file: string;
   seconds: number;
-  /** `null` when the clip was not heard back. */
-  heard: string | null;
-  match: number | null;
-}
-
-interface Narration {
-  clips: Clip[];
-  /** Why some clips went unheard: listening back off in the settings, or the recognition not loadable. */
-  unchecked: string | null;
-  /** How the clips were heard back, for the report. */
-  heardWith: string;
-  /** Listening back is off in the settings, so `unchecked` is no failure. */
-  turnedOff: boolean;
 }
 
 export class Director {
@@ -372,42 +355,22 @@ function run(cmd: string, args: string[], opts: { cwd?: string } = {}) {
   return r.stdout;
 }
 
-/**
- * The speech recognition for listening back (Parakeet, as for Obeya's voice commands), in a
- * throwaway environment uv makes. Off in the settings, or when uv cannot get it (offline, no wheel
- * for this machine), the clips go unheard and the report says so.
- */
-function listener(): { backend: ListenBackend | 'off'; name?: string; uvArgs: string[]; unchecked?: string } {
-  if (SETTINGS.listenBack === false) return { backend: 'off', uvArgs: [] };
-  const { backend, name, uvArgs, module: probe } = listenKit();
-  const r = spawnSync('uv', ['run', '--quiet', '--no-project', ...uvArgs, 'python', '-c', `import ${probe}`], { encoding: 'utf8' });
-  if (r.status === 0) return { backend, name, uvArgs };
-  const why = (r.error?.message ?? r.stderr ?? '').trim().split('\n').at(-1);
-  return { backend: 'off', uvArgs: [], unchecked: `${probe.replace('_', '-')} could not be loaded: ${why}` };
-}
-
-function synthesize(scenes: Scene[], dir: string): Narration {
+function synthesize(scenes: Scene[], dir: string): Clip[] {
   const jobs = scenes.map((s, i) => ({ id: `s${i + 1}`, text: s.say }));
   const jobsFile = path.join(dir, 'jobs.json');
   fs.writeFileSync(jobsFile, JSON.stringify(jobs));
   const spec = voiceSpec(SETTINGS);
   const specFile = path.join(dir, 'voice.json');
   fs.writeFileSync(specFile, JSON.stringify(spec));
-  const ear = listener();
-  if (ear.unchecked) console.warn(`narration: not listening back, ${ear.unchecked}`);
-  console.log(`narration: ${jobs.length} clips, voice ${SETTINGS.voice}, language ${LANGUAGE}, listening back ${ear.backend === 'off' ? 'off' : `with ${ear.name}`}`);
+  console.log(`narration: ${jobs.length} clips, voice ${SETTINGS.voice}, language ${LANGUAGE}`);
   // A voice that loads a large model takes the machine's turn (TTS_LOCK); a hosted or light one
   // does not, so rate-limit waits never hold up a clone.
   const lock = spec.kind === 'command' && spec.heavy ? ['--lock', TTS_LOCK] : [];
-  const args = ['run', '--quiet', '--no-project', ...ear.uvArgs, 'python', path.join(LIB, 'tts.py'), '--listen', ear.backend, ...lock, specFile, LANGUAGE, jobsFile, dir];
-  // tts.py's progress (takes, matches, waiting for the lock) shows as it happens.
+  const args = ['run', '--quiet', '--no-project', 'python', path.join(LIB, 'tts.py'), ...lock, specFile, LANGUAGE, jobsFile, dir];
+  // tts.py's progress (the voice loading, waiting for the lock) shows as it happens.
   const r = spawnSync('uv', args, { stdio: ['ignore', 'inherit', 'inherit'] });
   if (r.status !== 0) throw new Error(`tts.py failed (${r.error?.message ?? r.status}); its output is above`);
-  const out = JSON.parse(fs.readFileSync(path.join(dir, 'tts.json'), 'utf8')) as Pick<Narration, 'clips' | 'unchecked'>;
-  // tts.py only knows it got `--listen off`; why (settings, or the recognition not loadable) is known here.
-  const unheard = out.clips.some((c) => c.heard === null);
-  const unchecked = unheard ? (ear.unchecked ?? out.unchecked ?? 'not heard back') : null;
-  return { clips: out.clips, unchecked, heardWith: ear.name ?? '', turnedOff: SETTINGS.listenBack === false };
+  return (JSON.parse(fs.readFileSync(path.join(dir, 'tts.json'), 'utf8')) as { clips: Clip[] }).clips;
 }
 
 /**
@@ -620,12 +583,7 @@ export async function runDemo(spec: DemoSpec, demoDir: string) {
   fs.rmSync(framesDir, { recursive: true, force: true });
   fs.mkdirSync(framesDir, { recursive: true });
 
-  const narrated = synthesize(spec.scenes, work);
-  const clips = narrated.clips;
-  for (const c of clips) {
-    if (c.match !== null && c.match < TTS_MATCH_WARN) console.warn(`narration ${c.id} may be off (match ${c.match.toFixed(2)}): heard "${c.heard}"`);
-  }
-  if (narrated.unchecked) console.warn(`narration not heard back: ${narrated.unchecked}`);
+  const clips = synthesize(spec.scenes, work);
   if (process.argv.includes('--narration')) {
     console.log(`narration only: ${clips.length} clips cached, ${clips.reduce((t, c) => t + c.seconds, 0).toFixed(0)} s spoken`);
     return;
@@ -716,24 +674,16 @@ export async function runDemo(spec: DemoSpec, demoDir: string) {
   });
   fs.copyFileSync(path.join(reviewDir, '01.jpg'), path.join(outDir, 'poster.jpg'));
 
-  fs.writeFileSync(path.join(outDir, 'index.html'), reportPage(spec, marks, narrated));
-  fs.writeFileSync(
-    path.join(work, 'narration-check.json'),
-    JSON.stringify(clips.map((c, i) => ({ scene: i + 1, said: untagged(spec.scenes[i]!.say), heard: c.heard, match: c.match })), null, 2),
-  );
+  fs.writeFileSync(path.join(outDir, 'index.html'), reportPage(spec, marks));
   console.log(`\n${Math.round(total)} s video → ${path.join(outDir, 'index.html')}`);
-  console.log('\nreview (narration said vs. heard: .work/narration-check.json):');
+  console.log('\nreview:');
   marks.forEach((m, i) => {
-    const clip = clips[i]!;
-    const flag = clip.match !== null && clip.match < NARRATION_OK ? `  ← heard: "${clip.heard}"` : '';
-    const match = clip.match === null ? 'not heard back' : `match ${clip.match.toFixed(2)}`;
     const end = i + 1 < marks.length ? marks[i + 1]!.start : total;
     const silent = end - m.speechEnd - GAP_SECONDS;
     const idle = silent > SILENCE_WARN ? `  ← ${Math.round(silent)} s without narration: cut it with d.skip where it only waits` : '';
-    console.log(`  ${String(i + 1).padStart(2)}  ${mmss(m.start)}  ${m.title.padEnd(32).slice(0, 32)}  ${match}${flag}${idle}`);
+    console.log(`  ${String(i + 1).padStart(2)}  ${mmss(m.start)}  ${m.title.padEnd(32).slice(0, 32)}${idle}`);
   });
   if (d.cuts.length) console.log(`cut ${d.cuts.length / 2}× (${Math.round(d.cuts.reduce((s, c) => s + c.to - c.from, 0))} s of waiting)`);
-  if (narrated.unchecked) console.log(`narration NOT heard back (${narrated.unchecked}): name that in the report's findings`);
   console.log(`stills → ${reviewDir}: NN-mid.jpg (middle of each scene), NN.jpg (its end)`);
 }
 
@@ -748,7 +698,7 @@ function mmss(s: number) {
 /** The report page's own words, in the narration language. */
 const PAGE_WORDS: Record<
   NarrationLanguage,
-  { captions: string; question: string; shown: string; notShown: string; findings: string; narration: string; heard: (w: string) => string; unheard: string; off: string }
+  { captions: string; question: string; shown: string; notShown: string; findings: string }
 > = {
   de: {
     captions: 'Deutsch',
@@ -756,10 +706,6 @@ const PAGE_WORDS: Record<
     shown: 'Gezeigt',
     notShown: 'Nicht gezeigt',
     findings: 'Auffälligkeiten',
-    narration: 'Erzählung',
-    heard: (w) => `mit ${w} gegengehört`,
-    unheard: 'nicht gegengehört',
-    off: 'in den Demo-Einstellungen abgeschaltet',
   },
   en: {
     captions: 'English',
@@ -767,18 +713,12 @@ const PAGE_WORDS: Record<
     shown: 'Shown',
     notShown: 'Not shown',
     findings: 'Findings',
-    narration: 'Narration',
-    heard: (w) => `heard back with ${w}`,
-    unheard: 'not heard back',
-    off: 'turned off in the demo settings',
   },
 };
 
-function reportPage(spec: DemoSpec, marks: { title: string; start: number }[], narrated: Narration) {
-  const r = { ...spec.report, meta: { ...spec.report.meta } };
+function reportPage(spec: DemoSpec, marks: { title: string; start: number }[]) {
+  const r = spec.report;
   const w = PAGE_WORDS[LANGUAGE];
-  // Whether the voice was checked is part of the provenance, and the owner sees it when it was not.
-  r.meta[w.narration] = narrated.unchecked ? `${w.unheard} (${narrated.turnedOff ? w.off : narrated.unchecked})` : w.heard(narrated.heardWith);
   const list = (items: string[]) => (items.length ? `<ul>${items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>` : '<p class="none">—</p>');
   const chapters = marks
     .map((m) => `<li><button data-t="${m.start.toFixed(2)}"><span class="t">${mmss(m.start)}</span>${esc(m.title)}</button></li>`)

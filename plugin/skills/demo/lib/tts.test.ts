@@ -54,7 +54,7 @@ beforeEach(() => {
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 const narrate = (env: Record<string, string> = {}) =>
-  python([join(LIB, 'tts.py'), '--listen', 'off', join(dir, 'spec.json'), 'de', join(dir, 'jobs.json'), join(dir, 'out')], { FAKE_LOG: join(dir, 'log'), ...env });
+  python([join(LIB, 'tts.py'), join(dir, 'spec.json'), 'de', join(dir, 'jobs.json'), join(dir, 'out')], { FAKE_LOG: join(dir, 'log'), ...env });
 const log = () => readFileSync(join(dir, 'log'), 'utf8').trim().split('\n');
 
 describe('a voice that stays loaded', () => {
@@ -80,8 +80,6 @@ describe('a voice that stays loaded', () => {
     // three parts of 0.1 s with 0.5 s and 1.5 s of silence between them
     const clip = JSON.parse(readFileSync(join(dir, 'out', 'tts.json'), 'utf8')).clips[0];
     expect(clip.seconds).toBeCloseTo(2.3, 2);
-    const r = python(['-c', `import sys; sys.path.insert(0, ${JSON.stringify(LIB)}); from tts import spoken_letters; print(spoken_letters("Then [long pause] it starts.", "en"))`]);
-    expect(r.stdout.trim()).toBe('thenitstarts');
   });
 
   test('a sample starts it once and ends it', () => {
@@ -107,7 +105,7 @@ describe('a voice Obeya holds', () => {
   /** A render while this process serves Obeya: spawned, not spawnSync, which would block the server. */
   const render = (out: string, env: Record<string, string>, extra: string[] = []) =>
     new Promise<{ status: number | null; stderr: string }>((resolve) => {
-      const child = spawn(UV[0]!, [...UV.slice(1), join(LIB, 'tts.py'), ...(extra.includes('--listen') ? [] : ['--listen', 'off']), ...extra, join(dir, 'spec.json'), 'de', join(dir, 'jobs.json'), join(dir, out)], {
+      const child = spawn(UV[0]!, [...UV.slice(1), join(LIB, 'tts.py'), ...extra, join(dir, 'spec.json'), 'de', join(dir, 'jobs.json'), join(dir, out)], {
         env: { ...process.env, ...env },
       });
       let stderr = '';
@@ -144,7 +142,7 @@ describe('a voice Obeya holds', () => {
 
   // the lock is held here with flock, which Windows lacks
   test.skipIf(process.platform === 'win32')('a render does not wait for the machine to synthesise through Obeya, and falls back to its own voice without Obeya', async () => {
-    // another render holds the lock, as one with a model of its own or with Whisper does
+    // another render holds the lock, as one with a model of its own does
     const lock = join(dir, 'tts.lock');
     const holder = spawn(UV[0]!, [...UV.slice(1), '-c', `import fcntl, sys, time\nf = open(${JSON.stringify(lock)}, "a+b")\nfcntl.flock(f, fcntl.LOCK_EX)\nprint("held", flush=True)\ntime.sleep(60)`]);
     await new Promise((resolve) => holder.stdout.once('data', resolve));
@@ -152,16 +150,6 @@ describe('a voice Obeya holds', () => {
       const held = await render('a', { OBEYA_URL: server.url.href }, ['--lock', lock]);
       expect(held.status).toBe(0);
       expect(held.stderr).not.toContain('waiting for it');
-      // listening back, it synthesises every clip first and waits only to load Whisper
-      const listening = render('c', { OBEYA_URL: server.url.href }, ['--lock', lock, '--listen', 'mlx']).then((r) => ({ ...r, finished: performance.now() }));
-      for (let i = 0; i < 200 && log().length < 7; i++) await Bun.sleep(50);
-      expect(log()).toHaveLength(7);
-      await Bun.sleep(300);
-      const released = performance.now();
-      holder.kill();
-      const r = await listening;
-      expect(r.finished).toBeGreaterThan(released);
-      expect(r.stderr).toContain('waiting for it');
     } finally {
       holder.kill();
     }

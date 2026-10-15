@@ -874,7 +874,7 @@ function DemoBlock({ on }: { on: boolean }) {
               aria-label={d.voice}
               value={draft.voice}
               // another voice starts with its own fields, and is nobody's own until ticked
-              onChange={(e) => setDraft({ language: draft.language, voice: e.target.value as VoiceKind, listenBack: draft.listenBack })}
+              onChange={(e) => setDraft({ language: draft.language, voice: e.target.value as VoiceKind })}
             >
               {VOICE_GROUPS.map(({ group, voices }) => (
                 <optgroup key={group} label={d.groups[group]}>
@@ -922,10 +922,6 @@ function DemoBlock({ on }: { on: boolean }) {
             <button className="btn small" disabled={sampling || !shown.install.installed || !!shown.problems.length} onClick={listen}>
               {sampling ? d.sampling : d.listen}
             </button>
-            <label className="c-check">
-              <input type="checkbox" checked={draft.listenBack !== false} onChange={(e) => set('listenBack', e.target.checked ? undefined : false)} />
-              {d.listenBack}
-            </label>
           </Field>
           <div className="cfg-actions">
             <button className="btn primary" disabled={!changed || busy} onClick={save}>
@@ -947,8 +943,7 @@ function DemoBlock({ on }: { on: boolean }) {
 
 /**
  * What a render needs on this machine besides the voice (that has its own lines above), each
- * missing piece with how to install it here. Checked again for the voice's listening back as it
- * is being chosen, after an installation, and on request.
+ * missing piece with how to install it here. Checked again after an installation, and on request.
  */
 function SetupBlock({ draft, installing }: { draft: DemoSettings; installing: boolean }) {
   const [setup, setSetup] = useState<SetupCheck | null>(null);
@@ -963,7 +958,7 @@ function SetupBlock({ draft, installing }: { draft: DemoSettings; installing: bo
   };
   useEffect(() => {
     if (!installing) recheck();
-  }, [draft.listenBack, installing]);
+  }, [installing]);
   if (!setup) return null;
   const items = setup.items.filter((i) => i.id !== 'voice');
   return (

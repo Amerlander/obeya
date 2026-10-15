@@ -1,6 +1,6 @@
 // Renders the hero video (`demo.ts`) in the owner's ElevenLabs voice, without touching Obeya's own
 // demo settings: a home of its own beside the output holds the voice settings, its voices directory
-// is Obeya's (for Whisper to listen back). The key lies in `.voice/elevenlabs.key` of the main
+// is Obeya's (for Qwen3-TTS with `--qwen`). The key lies in `.voice/elevenlabs.key` of the main
 // checkout, gitignored. `--qwen` renders in the owner's voice cloned by Qwen3-TTS instead (the
 // reference `.voice/qwen-reference-en.wav` there), which costs no credits: for trying a change out,
 // into `~/demos/obeya-hero-qwen`. Other arguments go on to the demo (`--narration`, `--dry`).

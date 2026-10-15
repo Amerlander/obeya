@@ -318,8 +318,8 @@ export class MachineSetup {
     });
     const demoItems = demo.items
       .map((i): MachineItem => (i.id === 'voice' && i.state === 'missing' ? { ...i, act: 'install' } : i.state === 'missing' ? ownUv(missing(i)) : i))
-      // what the voice needs too shows once (the same recognition for listening back included), unless demos need more of it (ffmpeg with libx264)
-      .filter((i) => !voiceItems.some((v) => v.id === i.id && v.state === i.state && v.found === (i.id === 'recognition' ? i.found : v.found)));
+      // what the voice needs too shows once, unless demos need more of it (ffmpeg with libx264)
+      .filter((i) => !voiceItems.some((v) => v.id === i.id && v.state === i.state));
     const mb = (items: MachineItem[]) => items.reduce((n, i) => n + (i.state === 'missing' || i.state === 'later' ? (i.mb ?? 0) : 0), 0);
     const sections: MachineSection[] = [
       { id: 'needed', items: needed, mb: 0 },

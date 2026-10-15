@@ -27,15 +27,6 @@ describe('demo settings', () => {
     expect(readDemoSettings(home)).toEqual({ language: 'de', voice: 'piper' });
   });
 
-  test('keep listening back on unless it is turned off', () => {
-    expect(tidyDemoSettings({ language: 'de', voice: 'piper', listenBack: true })).toEqual({ language: 'de', voice: 'piper' });
-    expect(tidyDemoSettings({ language: 'de', voice: 'piper', listenBack: false })).toEqual({ language: 'de', voice: 'piper', listenBack: false });
-    expect(withVoice({ language: 'de', voice: 'piper', listenBack: false }, 'gemini')).toMatchObject({ listenBack: false });
-    expect(withVoice({ language: 'de', voice: 'piper', listenBack: false }, '/tmp/x.wav')).toMatchObject({ listenBack: false });
-    expect(describeDemoSettings({ language: 'de', voice: 'piper' }, undefined)).toContain('listening back: on');
-    expect(describeDemoSettings({ language: 'de', voice: 'piper', listenBack: false }, undefined)).toContain('listening back: off');
-  });
-
   test('are written to and read from the home', () => {
     writeDemoSettings({ language: 'en', voice: 'command', command: 'speak', ownVoice: true }, home);
     expect(readDemoSettings(home)).toEqual({ language: 'en', voice: 'command', command: 'speak', ownVoice: true });

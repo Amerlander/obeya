@@ -7,7 +7,7 @@ The voice comes as a spec from `voices.ts`, one of two kinds:
   writes the WAV to `$DEMO_WAV` (or prints the path of the one it wrote as its last line).
   `$DEMO_LANGUAGE` says the narration language. A voice that loads a large model and can stay
   loaded (the Qwen3-TTS helper `qwen3.py`) has `serve` as well: that command starts once, on the
-  first clip to synthesise, and answers clip by clip and take by take over its stdin and stdout,
+  first clip to synthesise, and answers clip by clip over its stdin and stdout,
   one JSON line each way (the protocol is in `qwen3.py`). If it dies, the render stops with its
   stderr. Such a voice with `host` as well is held by Obeya across renders when `OBEYA_URL` says
   where Obeya runs: each clip goes to `POST $OBEYA_URL/api/narration/clip` and waits its turn
@@ -17,36 +17,26 @@ The voice comes as a spec from `voices.ts`, one of two kinds:
   endpoint (`http`: POST `{"text", "language"}` as JSON, audio back). The key comes from the
   service's environment variable, else from the key file in the spec.
 
-Whatever comes back is made a mono 16-bit WAV with ffmpeg. Listening back takes a speech
-recognition the render brings into a throwaway environment: Parakeet (`--listen parakeet`, the
-default, as Obeya hears voice commands: int8 ONNX on the CPU, a fraction of a second per clip),
-Whisper (`--listen mlx|faster`), or none (`--listen off`, the clips go unchecked):
+Whatever comes back is made a mono 16-bit WAV with ffmpeg:
 
-    uv run --no-project --python 3.12 --with "onnx-asr[cpu,hub]" python tts.py [--lock <file>] \
-        <spec.json> <language> <jobs.json> <out_dir>
+    uv run --no-project python tts.py [--lock <file>] <spec.json> <language> <jobs.json> <out_dir>
 
 `jobs.json` is `[{"id": ..., "text": ...}]`. Each text becomes `<out_dir>/<hash>.wav`, cached by
-voice + text, so re-rendering a demo after a visual fix costs no synthesis. Every clip is
-transcribed back: a voice occasionally swallows or invents a word, and the narration is the one
-part of a demo nobody re-reads. When listening back is off or fails to load, the clips are
-kept unheard and `unchecked` says why. Results land in `<out_dir>/tts.json`:
-`{"clips": [{"id", "file", "seconds", "heard", "match"}], "unchecked": null | reason}`.
+voice + text, so re-rendering a demo after a visual fix costs no synthesis. Results land in
+`<out_dir>/tts.json`: `{"clips": [{"id", "file", "seconds"}]}`.
 
 `--lock <file>` takes that file's lock before this process loads a large model and holds it to
 the end, for voices that load one: one such render at a time on the machine, the others wait. A
-voice it runs itself takes the lock at once; a voice Obeya holds takes it only when Whisper is to
-load, after the first take of every clip: parallel renders then synthesise turn by turn through
-Obeya and listen back one after the other, with one voice model and one Whisper in memory.
-Parakeet is small enough (about 1 GB) to listen back without the lock.
+voice Obeya holds takes no lock: parallel renders synthesise turn by turn through Obeya, with one
+voice model in memory.
 
     python tts.py [--lock <file>] --sample <spec.json> <language> <text> <out.wav>
 
-synthesises one clip without listening back, for hearing a voice in the settings.
+synthesises one clip, for hearing a voice in the settings.
 """
 
 from __future__ import annotations
 
-import difflib
 import hashlib
 import base64
 import json
@@ -63,15 +53,8 @@ from collections import deque
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-#: A take whose transcript matches at least this well is kept without trying another. The
-#: recognition itself splits compounds ("Leuchtturm" → "Leucht Turm"), so a perfect clip rarely scores 1.0.
-GOOD_MATCH = 0.95
-MAX_TAKES = 3
-
 LANGUAGE_NAMES = {"de": "German", "en": "English"}
 LOCALES = {"de": "de-DE", "en": "en-US"}
-#: The recognition's model per backend; `DEMO_STT_MODEL` names another Whisper.
-STT_MODELS = {"parakeet": "nemo-parakeet-tdt-0.6b-v3", "mlx": "mlx-community/whisper-large-v3-turbo", "faster": "large-v3-turbo"}
 
 #: How the hosted voices should sound: a product lead walking a colleague through a finished feature.
 STYLE = (
@@ -119,54 +102,6 @@ def to_wav(source: Path, target: Path) -> None:
         sys.exit(f"cannot read the voice's audio {source}: {done.stderr.strip()[-600:]}")
 
 
-_ONES = [
-    "null", "eins", "zwei", "drei", "vier", "fünf", "sechs", "sieben", "acht", "neun", "zehn",
-    "elf", "zwölf", "dreizehn", "vierzehn", "fünfzehn", "sechzehn", "siebzehn", "achtzehn",
-    "neunzehn",
-]
-_TENS = ["", "", "zwanzig", "dreißig", "vierzig", "fünfzig", "sechzig", "siebzig", "achtzig", "neunzig"]
-
-
-def german_number(n: int) -> str:
-    """0 ≤ n < 1,000,000 as one German word; larger numbers stay digits."""
-    if n < 20:
-        return _ONES[n]
-    if n < 100:
-        tens, ones = divmod(n, 10)
-        return (("ein" if ones == 1 else _ONES[ones]) + "und" if ones else "") + _TENS[tens]
-    if n < 1000:
-        hundreds, rest = divmod(n, 100)
-        return ("ein" if hundreds == 1 else _ONES[hundreds]) + "hundert" + (german_number(rest) if rest else "")
-    if n < 1_000_000:
-        thousands, rest = divmod(n, 1000)
-        return ("ein" if thousands == 1 else german_number(thousands)) + "tausend" + (german_number(rest) if rest else "")
-    return str(n)
-
-
-_EN_ONES = [
-    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
-    "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen",
-    "nineteen",
-]
-_EN_TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
-
-
-def english_number(n: int) -> str:
-    """0 ≤ n < 1,000,000 in English words, the way a narration spells it; larger numbers stay digits."""
-    if n < 20:
-        return _EN_ONES[n]
-    if n < 100:
-        tens, ones = divmod(n, 10)
-        return _EN_TENS[tens] + (_EN_ONES[ones] if ones else "")
-    if n < 1000:
-        hundreds, rest = divmod(n, 100)
-        return _EN_ONES[hundreds] + "hundred" + (("and" + english_number(rest)) if rest else "")
-    if n < 1_000_000:
-        thousands, rest = divmod(n, 1000)
-        return english_number(thousands) + "thousand" + (english_number(rest) if rest else "")
-    return str(n)
-
-
 #: An audio tag in the script ("[short pause]"): read by ElevenLabs v3 and v4, not said.
 AUDIO_TAG = re.compile(r"\[[^\]]*\]")
 #: Models that read audio tags; other voices get the script without them.
@@ -179,27 +114,8 @@ PAUSES = {"short pause": 0.5, "pause": 0.8, "long pause": 1.5}
 
 
 def untagged(text: str) -> str:
-    """The script without its audio tags, for a voice that would say them and for comparing."""
+    """The script without its audio tags, for a voice that would say them."""
     return re.sub(r"\s{2,}", " ", AUDIO_TAG.sub(" ", text)).strip()
-
-
-def spoken_letters(text: str, language: str = "de") -> str:
-    """The letters a listener hears, for comparing a script with its transcript.
-
-    The recognition writes numbers as digits ("15.200") where the script spells them out, and splits
-    compounds ("oder Berg"); neither is a defect of the clip. So digits become words, and spaces
-    and punctuation are dropped before comparing. "and" inside English numbers is said by some
-    and not by others, so it is dropped as well. Audio tags are not said.
-    """
-    text = untagged(text)
-    if language == "de":
-        text = re.sub(r"(?<=\d)\.(?=\d{3}\b)", "", text)
-        text = re.sub(r"\d+", lambda m: german_number(int(m.group())), text)
-        return re.sub(r"[^a-zäöüß]", "", text.lower())
-    text = re.sub(r"(?<=\d),(?=\d{3}\b)", "", text)
-    text = re.sub(r"\d+", lambda m: english_number(int(m.group())), text)
-    text = re.sub(r"\band\b", "", text.lower())
-    return re.sub(r"[^a-z]", "", text)
 
 
 class QuotaExhausted(Exception):
@@ -208,9 +124,6 @@ class QuotaExhausted(Exception):
 
 class CommandVoice:
     """A program run once per clip: Piper, `say`, or the owner's own command."""
-
-    #: Takes cost only time on this machine.
-    max_takes = MAX_TAKES
 
     def __init__(self, spec: dict, language: str) -> None:
         self._argv = spec.get("argv")
@@ -242,9 +155,7 @@ class CommandVoice:
 
 
 class ServedVoice:
-    """A voice that stays loaded for the whole render: started on the first clip, asked per take."""
-
-    max_takes = MAX_TAKES
+    """A voice that stays loaded for the whole render: started on the first clip, asked per clip."""
 
     def __init__(self, spec: dict, language: str) -> None:
         self._argv = spec["serve"]
@@ -320,8 +231,6 @@ class ServedVoice:
 class HeldVoice:
     """A voice Obeya holds loaded across renders (`$OBEYA_URL`), else served by this process."""
 
-    max_takes = MAX_TAKES
-
     def __init__(self, spec: dict, language: str, url: str) -> None:
         self._host = spec["host"]
         self._language = language
@@ -372,9 +281,6 @@ class HeldVoice:
 
 class HttpVoice:
     """A hosted voice. The whole clip in one request, for one continuous prosody."""
-
-    #: Every take costs a request, often of a small quota; one retake at most.
-    max_takes = 2
 
     def __init__(self, spec: dict, language: str) -> None:
         self._service = service = spec["service"]
@@ -478,82 +384,6 @@ def make_voice(spec: dict, language: str):
     return ServedVoice(spec, language) if spec.get("serve") else CommandVoice(spec, language)
 
 
-class Ear:
-    """The speech recognition, hearing each clip back. Off, or failing to load, it hears nothing and says why."""
-
-    def __init__(self, backend: str, language: str) -> None:
-        self._backend = backend
-        self._language = language
-        self._model = None
-        self._device = ""
-        self.unchecked: str | None = None
-        if backend == "off":
-            self.unchecked = "listening back is off in the demo settings"
-        elif backend not in STT_MODELS:
-            sys.exit(f"unknown listening backend {backend!r}; known: {', '.join(STT_MODELS)}, off")
-        self._name = (backend != "parakeet" and os.environ.get("DEMO_STT_MODEL")) or STT_MODELS.get(backend, "")
-
-    def hear(self, wav: Path) -> str | None:
-        if self.unchecked:
-            return None
-        try:
-            if self._backend == "parakeet":
-                return self._parakeet(wav)
-            hold_lock()
-            return self._mlx(wav) if self._backend == "mlx" else self._faster(wav)
-        except Exception as failed:  # not installed, the model not downloadable, out of memory
-            self.unchecked = f"{'Parakeet' if self._backend == 'parakeet' else 'Whisper'} failed: {type(failed).__name__}: {failed}"[:400]
-            print(f"narration: not listening back, {self.unchecked}", file=sys.stderr)
-            return None
-
-    def _parakeet(self, wav: Path) -> str:
-        if self._model is None:
-            import onnx_asr
-            import onnxruntime
-
-            # as Obeya's voice sidecar: more than 4 threads only cost
-            options = onnxruntime.SessionOptions()
-            options.intra_op_num_threads = min(4, os.cpu_count() or 4)
-            self._model = onnx_asr.load_model(self._name, quantization="int8", sess_options=options, providers=["CPUExecutionProvider"])
-        return str(self._model.recognize(self._samples(wav), sample_rate=16000)).strip()
-
-    def _mlx(self, wav: Path) -> str:
-        import mlx_whisper
-
-        heard = mlx_whisper.transcribe(str(wav), path_or_hf_repo=self._name, language=self._language)
-        return str(heard.get("text", "")).strip()
-
-    @staticmethod
-    def _samples(wav: Path):
-        """The clip as 16 kHz mono floats, decoded by ffmpeg: faster-whisper's own decoder (PyAV)
-        broke with newer PyAV releases (`metadata_errors`), and onnx-asr reads WAV files only."""
-        import numpy
-
-        pcm = subprocess.run(
-            ["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", str(wav), "-f", "f32le", "-ac", "1", "-ar", "16000", "-"],
-            capture_output=True,
-            check=True,
-        ).stdout
-        return numpy.frombuffer(pcm, dtype=numpy.float32)
-
-    def _faster(self, wav: Path, device: str | None = None) -> str:
-        if self._model is None or device:
-            import ctranslate2
-            from faster_whisper import WhisperModel
-
-            device = device or ("cuda" if ctranslate2.get_cuda_device_count() > 0 else "cpu")
-            self._model = WhisperModel(self._name, device=device, compute_type="float16" if device == "cuda" else "int8")
-            self._device = device
-        try:
-            segments, _ = self._model.transcribe(self._samples(wav), language=self._language, beam_size=5)
-            return "".join(s.text for s in segments).strip()
-        except Exception:
-            # A GPU without the CUDA libraries faster-whisper needs: the CPU hears as well, slower.
-            if self._device != "cuda":
-                raise
-            return self._faster(wav, device="cpu")
-
-
 _lock_file: str | None = None
 _held_lock = None
 
@@ -642,98 +472,40 @@ def with_pauses(voice, text: str, target: Path) -> None:
         fh.writeframes(b"".join(frames))
 
 
-def narrate(voice, language: str, jobs: list[dict], out: Path, ear: Ear) -> None:
-    voice_tag = voice.tag
+def narrate(voice, jobs: list[dict], out: Path) -> None:
     reads_tags = getattr(voice, "reads_tags", False)
-
-    def synthesize(text: str, target: Path) -> None:
-        if reads_tags:
-            voice.synthesize(text, target)
-        else:
-            with_pauses(voice, text, target)
-
-    def score(text: str, heard: str) -> float:
-        a, b = spoken_letters(text, language), spoken_letters(heard, language)
-        return difflib.SequenceMatcher(None, a, b, autojunk=False).ratio()
 
     def key_of(job: dict) -> str:
         # a clip from before pauses were silence in every voice is not taken for one with them
         pauses = "\npauses" if not reads_tags and PAUSE_TAG.search(job["text"]) else ""
-        return hashlib.sha1(f"{voice_tag}\n{job['text']}{pauses}".encode()).hexdigest()[:16]
-
-    # The first take of every clip comes before any is heard: the recognition loads (and a voice Obeya
-    # holds takes the machine's lock) only once all of them are synthesised.
-    first_takes: set[str] = set()
-    for job in jobs:
-        key = key_of(job)
-        if (out / f"{key}.wav").exists() or key in first_takes:
-            continue
-        try:
-            synthesize(job["text"], out / f"{key}.take1.wav")
-        except QuotaExhausted as exhausted:
-            sys.exit(f"{exhausted}; choose another voice (or DEMO_GEMINI_MODEL) or wait a day")
-        first_takes.add(key)
+        return hashlib.sha1(f"{voice.tag}\n{job['text']}{pauses}".encode()).hexdigest()[:16]
 
     results = []
     for job in jobs:
-        key = key_of(job)
-        wav = out / f"{key}.wav"
-        heard_file = wav.with_suffix(".heard.txt")
+        wav = out / f"{key_of(job)}.wav"
         if not wav.exists():
-            # Sampling differs per run, so a take that swallowed or invented a word is simply
-            # synthesised again; the best of a few takes is kept. Unheard, the first take stays.
-            best: tuple[float, str | None, Path] | None = None
-            for take in range(1, voice.max_takes + 1):
-                candidate = out / f"{key}.take{take}.wav"
-                if take > 1:
-                    try:
-                        synthesize(job["text"], candidate)
-                    except QuotaExhausted as exhausted:
-                        print(f"{job['id']}: {exhausted}, keeping take {take - 1}", file=sys.stderr)
-                        break
-                heard = ear.hear(candidate)
-                if heard is None:
-                    best = best or (0.0, None, candidate)
-                    break
-                match = score(job["text"], heard)
-                print(f"{job['id']} take {take}: match {match:.2f}", file=sys.stderr)
-                if best is None or match > best[0]:
-                    best = (match, heard, candidate)
-                if match >= GOOD_MATCH:
-                    break
-            _, heard, chosen = best
-            chosen.rename(wav)
-            if heard is not None:
-                heard_file.write_text(heard, encoding="utf-8")
-            for leftover in out.glob(f"{key}.take*.wav"):
-                leftover.unlink()
-
-        if not heard_file.exists():
-            heard = ear.hear(wav)
-            if heard is not None:
-                heard_file.write_text(heard, encoding="utf-8")
-        heard_text = heard_file.read_text(encoding="utf-8") if heard_file.exists() else None
-
+            partial = wav.with_suffix(".partial.wav")
+            try:
+                if reads_tags:
+                    voice.synthesize(job["text"], partial)
+                else:
+                    with_pauses(voice, job["text"], partial)
+            except QuotaExhausted as exhausted:
+                sys.exit(f"{exhausted}; choose another voice (or DEMO_GEMINI_MODEL) or wait a day")
+            partial.rename(wav)
         with wave.open(str(wav)) as fh:
             seconds = fh.getnframes() / fh.getframerate()
-        match = score(job["text"], heard_text) if heard_text is not None else None
-        results.append(
-            {"id": job["id"], "file": str(wav), "seconds": seconds, "heard": heard_text, "match": match}
-        )
+        results.append({"id": job["id"], "file": str(wav), "seconds": seconds})
 
-    unchecked = ear.unchecked if any(r["heard"] is None for r in results) else None
-    (out / "tts.json").write_text(
-        json.dumps({"clips": results, "unchecked": unchecked}, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    (out / "tts.json").write_text(json.dumps({"clips": results}, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def main() -> None:
-    # Heard texts carry umlauts; a Windows pipe would otherwise encode stderr in its code page.
+    # A voice's messages carry umlauts; a Windows pipe would otherwise encode stderr in its code page.
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     args = sys.argv[1:]
     global _lock_file
     _lock_file = take_option(args, "--lock")
-    listen = take_option(args, "--listen") or "parakeet"
     if args[0] == "--sample":
         spec_file, language, text, target = args[1:5]
         voice = make_voice(json.loads(Path(spec_file).read_text(encoding="utf-8")), language)
@@ -756,7 +528,7 @@ def main() -> None:
     if isinstance(voice, CommandVoice):
         hold_lock()
     try:
-        narrate(voice, language, jobs, out, Ear(listen, language))
+        narrate(voice, jobs, out)
     finally:
         close(voice)
 

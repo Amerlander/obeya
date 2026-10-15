@@ -30,7 +30,7 @@ function stage() {
     env: { ...process.env, OBEYA_HOME: undefined },
   });
   // the worker's own demo: English, a quick voice (the hero video has no page audio)
-  fs.writeFileSync(`/tmp/obeya-scratch-${PORT}/home/demo.json`, JSON.stringify({ language: 'en', voice: 'say', voiceName: 'Samantha', listenBack: false }));
+  fs.writeFileSync(`/tmp/obeya-scratch-${PORT}/home/demo.json`, JSON.stringify({ language: 'en', voice: 'say', voiceName: 'Samantha' }));
   execFileSync('curl', ['-s', '-X', 'PUT', `${base}/api/language`, '-d', '{"language":"en"}']);
   // Whisper and Obeya loaded before the take, so the spoken command is heard at once
   execFileSync('curl', ['-s', '-X', 'POST', `${base}/api/c/tipjar/voice/warm`]);

@@ -2336,8 +2336,7 @@ languages and may hear a short German command as Dutch).
 mlx-whisper on Apple Silicon, faster-whisper elsewhere (CUDA when there is a GPU, falling back to
 the CPU when its libraries are missing; int8 on the CPU), large-v3-turbo on both. Every backend gets
 the recording decoded by ffmpeg, and its Python from `OBEYA_WHISPER_PYTHON` (a Python with the
-package), else from `uv` with the same kit the demos listen back with (`listenKit` in the demo
-skill's `lib/setup.ts`). On a CPU large-v3-turbo in int8 takes about 4 s for a spoken command on
+package), else from `uv` with the backend's package (`listenKit` in `src/server/voice.ts`). On a CPU large-v3-turbo in int8 takes about 4 s for a spoken command on
 GitHub's 4-core Ubuntu runner and 12 s on its 4-core Windows Server runner (float32 took twice as
 long; `small` 1–2.5 s, but on Windows it heard „rechnen“ for „Rechnungen“; measured 2026-10-06), and
 `OBEYA_WHISPER_MODEL` picks another Whisper model.
@@ -2584,8 +2583,7 @@ the panel.
   would have made every spoken message two steps. Until then spoken words always went out at once,
   without what was typed in the field; and the drafts lived in the page alone, so a canvas switch
   lost them; the picks lived in the card's view, and a restart lost them while the words came back.
-- **Voice in hears with Parakeet everywhere, the Mac included, and the demos listen back with it**
-  (2026-10-14): on a CPU it is about 19× faster than Whisper, and 4× faster than Whisper on the
+- **Voice in hears with Parakeet everywhere, the Mac included** (2026-10-14): on a CPU it is about 19× faster than Whisper, and 4× faster than Whisper on the
   Mac's GPU, and the owner found its recognition good enough in daily use elsewhere. Whisper on a
   CPU had been the reason a small fanless Windows box took about a minute for a short sentence: the
   language pass, the transcription and often a second pass without the card titles. Whisper stays as
@@ -2651,7 +2649,7 @@ instructions (`SKILL.md`, paths through `${CLAUDE_SKILL_DIR}`), the director (`l
 Playwright on the local Chrome, else Edge, else Playwright's own Chromium, as on Linux on ARM where
 there is no Chrome, launched by the plugin's `lib/chromium.ts`, which the browser skill shares; cut
 with ffmpeg, run with plain `node`; on macOS, Linux and Windows, checked 2026-10-05), the overlay
-(`lib/overlay.js`) and the narration (`lib/tts.py`, synthesis and listening back), with Playwright
+(`lib/overlay.js`) and the narration (`lib/tts.py`), with Playwright
 among Obeya's dependencies.
 
 Obeya loads the plugin into every worker session (the Agent SDK's `plugins` option, a local plugin),
@@ -2703,14 +2701,7 @@ voice with the reference clip of the owner's voice project (Stimmzwilling,
 `data/voice/derived/reference4_A.wav` with its transcript), so Obeya holds it across renders; it
 never leaves the machine.
 
-#### Listening back
-
-Parakeet listens back in a throwaway uv environment, the same kit as Obeya's voice commands
-(`--listen parakeet`; Whisper still with `--listen mlx|faster`; the clip decoded by ffmpeg).
-Listening back is optional: off in the settings ("Erzählung gegenhören", `listenBack: false`), or
-off for one render when uv cannot get the recognition or it fails to load; the clips then stay
-unheard and uncached as heard, one take each, the review table says "not heard back", and the report
-page's provenance says "nicht gegengehört" with why (otherwise "mit … gegengehört").
+Each clip is synthesised once and kept as it comes: nothing listens back to it (see Decisions).
 
 #### Installing voices
 
@@ -2725,12 +2716,12 @@ also plays a sentence in the voice being chosen ("Anhören").
 
 A voice that can stay loaded says so in its spec (`serve`, so far only Qwen3-TTS: `qwen3.py
 --serve`): `tts.py` starts it once per render (and once per "Anhören"), on the first clip that is
-not cached, and asks it clip by clip and take by take over its stdin and stdout, one JSON line each
-way (text, WAV, language; a ready line once the model is loaded, then `ok` or `error` per clip).
-Model, reference and transcript load once instead of per clip and take: three clips with a clone, no
-cache, listening back with Whisper, went from 25.8 s to 15.8 s on an Apple Silicon Mac (a warm start
-with the model costs about 2 s, about 4 s beside a loaded Whisper, a cold one 17 s; synthesis about
-2–4 s per clip either way; measured 2026-10-05). The libraries print on stdout too, so the server
+not cached, and asks it clip by clip over its stdin and stdout, one JSON line each way (text, WAV,
+language; a ready line once the model is loaded, then `ok` or `error` per clip). Model, reference
+and transcript load once instead of per clip: three clips with a clone, no cache, went from 25.8 s
+to 15.8 s on an Apple Silicon Mac (a warm start with the model costs about 2 s, a cold one 17 s;
+synthesis about 2–4 s per clip either way; measured 2026-10-05, when renders still listened back
+with Whisper). The libraries print on stdout too, so the server
 moves fd 1 to stderr and keeps a duplicate of it for the protocol alone; a line that is not the
 protocol is shown and skipped. A voice that dies stops the render with the tail of its stderr
 instead of hanging. Piper, `say` and the owner's command still run once per clip.
@@ -2754,28 +2745,22 @@ endpoint), `tts.py` loads the voice itself as before.
 
 #### One large model at a time
 
-One large model per render at a time on the machine (Qwen3-TTS, the owner's command; with Whisper
-7–12 GB each, and parallel demos had swapped the machine to a halt): `tts.py --lock
-~/.cache/demo-skill/tts.lock` takes the file's lock before the process loads such a model itself and
-holds it to its end (`flock`, on Windows a byte-range lock through `msvcrt`; it works beside an
-older `lockf -k` on the same file). A voice it runs itself takes it at once. A voice Obeya holds
-takes it only to load Whisper, and `tts.py` synthesises the first take of every clip before it hears
-any: parallel renders synthesise turn by turn through Obeya, then listen back one after the other,
-with one voice model and one Whisper in memory; retakes go through Obeya while the lock is held.
-Parakeet (about 1 GB) listens back without the lock, so with it, as without listening back, such a
-render takes no lock at all.
+One large model per render at a time on the machine (Qwen3-TTS, the owner's command; parallel
+demos had swapped the machine to a halt): `tts.py --lock ~/.cache/demo-skill/tts.lock` takes the
+file's lock before the process loads such a model itself and holds it to its end (`flock`, on
+Windows a byte-range lock through `msvcrt`; it works beside an older `lockf -k` on the same file).
+A voice Obeya holds takes no lock: parallel renders synthesise turn by turn through Obeya, with one
+voice model in memory.
 
 ### What a render needs
 
 What a render needs on the machine is checked by `lib/setup.ts`: Node 22.18 or newer (TypeScript
 without flags), Playwright and a browser (found where Playwright looks), ffmpeg with libx264, uv
-(which brings Python), the voice, and the speech recognition (in uv's cache and the Hugging Face
-cache, else fetched by the first render, about 710 MB: not missing, only later; the setup assistant
-shows it once, under voice, when it is the same as for voice commands). Each missing piece comes
+(which brings Python) and the voice. Each missing piece comes
 with how to install it on this platform (Homebrew, winget, the Linux family's package manager from
 `/etc/os-release`, else a page). The configuration dialog shows the check below the demo settings
-("Was Demos auf diesem Rechner brauchen", the voice left out since it has its own lines), again when
-listening back is switched, after an installation and on "Erneut prüfen"; the parts a voice still
+("Was Demos auf diesem Rechner brauchen", the voice left out since it has its own lines), again
+after an installation and on "Erneut prüfen"; the parts a voice still
 lacks are named in the narration language ("Piper voice en_US-ryan-high" for an English one); a
 render runs it before anything else and stops with the whole list (`--narration` leaves out the
 browser); `node lib/setup.ts` prints it for an agent, which installs a voice itself but asks the
@@ -3113,11 +3098,12 @@ the microphone; Chrome launched by Playwright needs no audio service moved in-pr
   unless asked.
 - **Every worker gets the plugin** (2026-10-08): until then only workers of a repository with demos
   got it, so a repository without an adapter had no way to the skill that writes one.
-- **Parakeet listens back** (2026-10-14). Until then Whisper listened back, which on a CPU without a
-  GPU took seconds per clip: of 1,034 clips heard back by then none matched below 0.90 and 7 below
-  0.95, and none of the 3 logged retakes came out better, so a slow check was not worth it, a fast
-  one still is. Until 2026-10-07 the parts a voice lacked were named in German whatever the
-  narration language.
+- **Demos do not listen back to their narration** (2026-10-15): until then each clip was transcribed
+  back (Whisper, from 2026-10-14 Parakeet) and synthesised again below a 95 % match, up to three
+  takes, with a setting to turn it off, a line in the setup check, a note in the report and a lock
+  for Whisper. Of 1,034 clips heard back none had matched below 0.90 and 7 below 0.95, and none of
+  the 3 logged retakes came out better; the owner found it overkill. The first take is the clip.
+  Until 2026-10-07 the parts a voice lacked were named in German whatever the narration language.
 - **A dry run before the first render, and clear failures**: twice a scene waited for a state that
   never came and showed it only in the full render, after synthesis and the scenes before it; a
   worker once took the screenshot's path, the only path in the message, for the page's address.

@@ -25,9 +25,8 @@ opened after the installation (on Windows, `winget` changes the PATH only for ne
 | Playwright | drives the browser | `bun install` in the Obeya checkout | same | same |
 | A Chromium browser | the recording | Chrome: `brew install --cask google-chrome` | Chrome on x64 ([google.com/chrome](https://www.google.com/chrome/)); on ARM, where there is no Chrome: `npx playwright-core install --with-deps chromium` in the Obeya checkout | Edge comes with Windows; Chrome (`winget install Google.Chrome`) is used when present |
 | ffmpeg with libx264 | cutting the video, converting the narration | `brew install ffmpeg` | Debian, Ubuntu: `sudo apt install ffmpeg`; Fedora: the `ffmpeg` of [RPM Fusion](https://rpmfusion.org/Configuration) (Fedora's own `ffmpeg-free` has no libx264); Arch: `sudo pacman -S ffmpeg` | `winget install Gyan.FFmpeg` |
-| uv | runs the Python parts (narration, speech recognition) in environments of their own; it fetches Python itself | `brew install uv` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | `winget install --id=astral-sh.uv -e` |
+| uv | runs the Python parts (narration) in environments of their own; it fetches Python itself | `brew install uv` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | `winget install --id=astral-sh.uv -e` |
 | A voice | speaking the narration | see below | see below | see below |
-| Speech recognition (Parakeet) | listening back to every clip | fetched by the first render | same | same |
 | poppler (`pdftoppm`) | only for demos that show a PDF (`d.pdfFrom`) | `brew install poppler` | `sudo apt install poppler-utils` | `winget install oschwartz10612.Poppler` |
 
 The browser is looked for in this order: `DEMO_CHROME` (the path of any Chromium-based browser),
@@ -51,13 +50,6 @@ The voice is chosen in Obeya's settings ("Demos"); "Anhören" plays a sentence i
 - **Your own**: a command (the text on stdin, the WAV written to `$DEMO_WAV`) or an HTTP endpoint
   (POST `{"text", "language"}` as JSON, audio back). Tick "Das ist meine eigene Stimme" when it
   speaks in your voice; the narration is then in the first person.
-
-## Listening back
-
-Each narration clip is transcribed back and synthesised again when the voice dropped or invented
-a word. The first render fetches the speech recognition through uv: Parakeet, the same as Obeya's
-voice commands, on the CPU (a fraction of a second per clip), with its model, about 710 MB in all.
-Turn off "Erzählung gegenhören" to skip it; the clips then go unchecked, and the demo's page says so.
 
 ## Without Obeya
 

@@ -291,12 +291,11 @@ export function sample(s: DemoSettings, out: string, home = obeyaHome(), obeyaUr
 }
 
 /**
- * One large model loaded by a render at a time on the machine: each loaded a voice model (and the
- * render Whisper, 7–12 GB in all), and parallel demos from several agents swapped the machine to a
- * halt. `tts.py --lock` holds it (flock, on Windows a byte-range lock) from the moment it loads a
- * model itself: at once for a voice it runs, but for a voice Obeya holds only once Whisper is to
- * listen back, so parallel renders synthesise turn by turn through Obeya and listen one after the
- * other (Parakeet, which listens back by default, is small enough to take no lock). The system drops the lock when its holder dies, so no stale lock survives a crash.
+ * One large model loaded by a render at a time on the machine: each loaded a voice model, and
+ * parallel demos from several agents swapped the machine to a halt. `tts.py --lock` holds it
+ * (flock, on Windows a byte-range lock) from the moment it loads a model itself; a voice Obeya
+ * holds takes no lock, so parallel renders synthesise turn by turn through Obeya. The system drops
+ * the lock when its holder dies, so no stale lock survives a crash.
  */
 export const TTS_LOCK = path.join(os.homedir(), '.cache', 'demo-skill', 'tts.lock');
 

@@ -142,8 +142,6 @@ describe('what Obeya needs on this machine', () => {
     const recognition = section(await machine.view(), 'voice').items.find((i) => i.id === 'recognition')!;
     expect(recognition).toMatchObject({ state: 'later', act: 'install' });
     expect(recognition.waits).toBeUndefined();
-    // listening back to demos needs the same: it shows once, under voice
-    expect(section(await machine.view(), 'demos').items.find((i) => i.id === 'recognition')).toBeUndefined();
   }, 30_000);
 
   test("sets git's name and e-mail as the owner gives them", async () => {

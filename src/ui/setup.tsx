@@ -208,8 +208,6 @@ export function RecognitionDetail({ item, busy, changed }: { item: VoiceSetupIte
 /** What the demo check's lines say, here and in the settings sheet. */
 export function demoState(i: SetupItem | MachineItem) {
   const s = t.config.setup;
-  if (i.state === 'later') return s.later(megabytes(i.mb ?? 0));
-  if (i.state === 'off') return s.off;
   if (i.state === 'missing') return i.found && i.need ? s.needs(i.found, i.need) : s.missing;
   // a browser by its program's name; the whole path is in the tooltip
   return (i.id === 'browser' ? i.found?.split(/[\\/]/).at(-1) : i.found) ?? s.there;

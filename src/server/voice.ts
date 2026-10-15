@@ -4,8 +4,8 @@
 
 import type { Subprocess } from 'bun';
 import { join } from 'node:path';
-import { type ListenBackend, listenKit } from '../../plugin/skills/demo/lib/setup.ts';
 import { LANGUAGES } from '../core/locale';
+import type { ListenBackend } from '../core/types';
 import { resource } from './resources';
 import { cloudInUse, transcribeInCloud } from './voice-cloud';
 
@@ -51,6 +51,20 @@ export const silence = (text: string) =>
   /^[[(*]?(vielen dank|danke fürs zuschauen|musik|untertitel(ung)? (im auftrag )?des zdf.*|thank you|thanks for watching|music)[.!]?[\])*]?$/i.test(text.trim());
 
 const VOICE = resource('voice');
+
+/**
+ * Speech recognition as uv brings it, for the sidecar (`voice/transcribe_sidecar.py`): Parakeet by
+ * default, Whisper where asked for (CTranslate2 and ONNX Runtime have wheels for released Pythons
+ * only, so 3.12). `model`: its Hugging Face repository; `mb`: about what the package and the model
+ * download.
+ */
+export function listenKit(backend: ListenBackend = 'parakeet') {
+  if (backend === 'parakeet')
+    return { backend, uvArgs: ['--python', '3.12', '--with', 'onnx-asr[cpu,hub]'], module: 'onnx_asr', name: 'Parakeet', model: 'istupakov/parakeet-tdt-0.6b-v3-onnx', mb: { package: 70, model: 640 } };
+  return backend === 'mlx'
+    ? { backend, uvArgs: ['--with', 'mlx-whisper'], module: 'mlx_whisper', name: 'mlx-whisper', model: 'mlx-community/whisper-large-v3-turbo', mb: { package: 150, model: 1600 } }
+    : { backend, uvArgs: ['--python', '3.12', '--with', 'faster-whisper'], module: 'faster_whisper', name: 'faster-whisper', model: 'mobiuslabsgmbh/faster-whisper-large-v3-turbo', mb: { package: 250, model: 1600 } };
+}
 
 /**
  * How Obeya hears on this machine: Parakeet, everywhere. `OBEYA_WHISPER_BACKEND` chooses Whisper
@@ -156,7 +170,7 @@ class Sidecar {
 /**
  * The sidecar keeps the model loaded between recordings. Its Python comes from
  * `OBEYA_WHISPER_PYTHON` (one with the backend's package: `onnx_asr`, `mlx_whisper` or
- * `faster_whisper`), else from `uv` with the backend's package (the same kit the demos listen back with).
+ * `faster_whisper`), else from `uv` with the backend's package (`listenKit`).
  */
 export class LocalTranscriber implements Transcriber {
   private sidecar: Sidecar;

@@ -9,12 +9,12 @@
 // cloud service in use nothing of the above is needed.
 
 import type { CloudVoiceView, VoiceSetupItem, VoiceSetupView, VoiceSpeed } from '../core/types';
-import { installHint, linuxFamily, listenKit, output } from '../../plugin/skills/demo/lib/setup.ts';
+import { installHint, linuxFamily, output } from '../../plugin/skills/demo/lib/setup.ts';
 import { hfModelPresent } from '../../plugin/skills/demo/lib/voices.ts';
 import { BadRequest } from './board';
 import { freshPath } from './path';
 import { resource } from './resources';
-import type { ListenBackend, Transcript } from './voice';
+import { type ListenBackend, listenKit, type Transcript } from './voice';
 import { CloudError, cloudFrom, cloudInUse, cloudView, readVoiceFile, serviceName, transcribeInCloud, writeVoiceFile } from './voice-cloud';
 
 /** The sentence the check transcribes („Starte die Karte Export für Vermieter und sag mir Bescheid, wenn sie fertig ist.“), and how long it lasts. */

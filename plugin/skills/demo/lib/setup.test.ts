@@ -33,7 +33,6 @@ describe('demo setup', () => {
     expect(installHint('browser', 'linux', 'arm64')).toEqual({ commands: [expect.stringContaining('playwright-core install --with-deps chromium')] });
     expect(installHint('browser', 'linux', 'x64')?.url).toContain('google.com/chrome');
     expect(installHint('node', 'linux', 'x64')).toEqual({ commands: [], url: 'https://nodejs.org/en/download' });
-    expect(installHint('recognition', 'darwin', 'arm64')).toBeUndefined();
   });
 
   test('tells the Linux family by /etc/os-release', () => {
@@ -64,8 +63,6 @@ describe('demo setup', () => {
     expect(by.voice?.found).toContain('Piper');
     expect(by.voice?.mb).toBeGreaterThan(0);
     expect(by.playwright?.state).toBe('ok');
-    // without uv, the speech recognition is still to come, not missing: the first render fetches it
-    expect(by.recognition?.state).toBe(by.recognition?.mb ? 'later' : 'ok');
   });
 
   test('a voice Obeya holds on its own machine counts as there for a worker on another one', async () => {
@@ -80,19 +77,18 @@ describe('demo setup', () => {
 
   test.skipIf(process.platform === 'win32')('takes an old Node and an ffmpeg without libx264 as missing', async () => {
     const env = fakePath({ node: 'v20.11.0', ffmpeg: 'ffmpeg version 6.1 Copyright\n V..... libopenh264', uv: 'uv 0.8.0 (abc)' });
-    const check = await checkSetup({ language: 'de', voice: 'say', listenBack: false }, { env, home: dir, narrationOnly: true });
-    expect(check.items.map((i) => i.id)).toEqual(['node', 'ffmpeg', 'uv', 'voice', 'recognition']);
+    const check = await checkSetup({ language: 'de', voice: 'say' }, { env, home: dir, narrationOnly: true });
+    expect(check.items.map((i) => i.id)).toEqual(['node', 'ffmpeg', 'uv', 'voice']);
     const by = Object.fromEntries(check.items.map((i) => [i.id, i]));
     expect(by.node).toMatchObject({ state: 'missing', found: 'v20.11.0', need: '>= 22.18' });
     expect(by.ffmpeg).toMatchObject({ state: 'missing', found: '6.1', need: 'libx264' });
     expect(by.uv).toMatchObject({ state: 'ok', found: '0.8.0' });
     expect(by.voice).toMatchObject({ state: 'ok', found: 'say' });
-    expect(by.recognition).toEqual({ id: 'recognition', state: 'off' });
   });
 
   test.skipIf(process.platform === 'win32')('takes a current Node and an ffmpeg with libx264', async () => {
     const env = fakePath({ node: 'v24.1.0', ffmpeg: 'ffmpeg version 7.1 Copyright\n V....D libx264  H.264', uv: 'uv 0.8.0' });
-    const check = await checkSetup({ language: 'de', voice: 'say', listenBack: false }, { env, home: dir, narrationOnly: true });
+    const check = await checkSetup({ language: 'de', voice: 'say' }, { env, home: dir, narrationOnly: true });
     expect(check.items.filter((i) => i.state === 'missing')).toEqual([]);
   });
 
@@ -103,7 +99,7 @@ describe('demo setup', () => {
       items: [
         { id: 'node', state: 'ok', found: 'v24.1.0' },
         { id: 'ffmpeg', state: 'missing', found: '6.1', need: 'libx264', install: { commands: ['sudo apt install ffmpeg'] } },
-        { id: 'recognition', state: 'later', found: 'Parakeet', mb: 710 },
+        { id: 'uv', state: 'ok', found: '0.8.0' },
       ],
     };
     expect(describeSetup(check)).toBe(
@@ -112,7 +108,7 @@ describe('demo setup', () => {
         '  ✓ node         v24.1.0',
         '  ✗ ffmpeg       6.1, needs libx264 — not usable',
         '      sudo apt install ffmpeg',
-        '  … recognition  Parakeet — fetched on the first render, about 710 MB',
+        '  ✓ uv           0.8.0',
         'Missing: ffmpeg. A render stops until they are installed.',
       ].join('\n'),
     );
