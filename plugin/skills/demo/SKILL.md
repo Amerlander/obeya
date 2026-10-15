@@ -138,12 +138,16 @@ is presented without "I" or "we".
 - Waiting is not shown: where the demo waits for something slow (an agent's answer, a build, a
   sync), put the wait into `d.skip` after the scene's `untilSpoken(1)`. The video cuts it out
   with a white flash that says how much later it is; the next scene's narration starts with the
-  jump ("Etwas später …"). A wait under five seconds stays in the video, without a flash.
+  jump ("Etwas später …"). A wait under five seconds stays in the video, without a flash. A wait
+  that is only the app's latency (a reply that takes a few seconds), not time a viewer will
+  spend waiting, goes into `d.skip(fn, { quiet: true })`: cut whole, without flash or label.
 - Write large numbers as words ("about fifteen thousand two hundred euros"); small ones as digits
   are fine. Avoid abbreviations the voice would spell out.
 - Audio tags in square brackets (`[short pause]`, `[long pause]`) go to ElevenLabs v3 and v4
-  (`DEMO_ELEVENLABS_MODEL=eleven_v4`), which read them; every other voice gets the text without
-  them, and captions and listening back leave them out.
+  (`DEMO_ELEVENLABS_MODEL=eleven_v4`), which read them. Every other voice speaks the text between
+  two pause tags on its own and puts silence where they stand (half a second for a short one, a
+  second and a half for a long one, under a second for `[pause]`) and leaves other tags out;
+  captions and listening back leave them out.
 
 Director helpers (`d`): `goto`, `click`, `type` (clears, then types at reading pace; `''`
 clears), `drag(from, to, ms?)` (onto an element or a point, the pointer moving along),
@@ -152,7 +156,7 @@ at the edge of a scrolling list or the window, that follows scrolling; cleared a
 scene and by `clearHighlights()`; not inside iframes; several in one scene all stay bright, each
 with its own label, and only the rest of the page is dimmed), `untilSpoken(fraction)` to time an action
 to the narration, `pdfFrom(button, name)` (PDF from a new-tab button → PNG pages; needs `pdftoppm` from poppler),
-`showImage(png, top, caption)`, `panImage(top)`, `hideImage`, `skip(fn)` (runs a wait and cuts
+`showImage(png, top, caption)`, `panImage(top)`, `hideImage`, `skip(fn, { quiet? })` (runs a wait and cuts
 it from the video, see above), `wait`, `evaluate(fn, arg?)` (`page.evaluate` that fails
 once the page has not answered for 20 s), and `d.page` for raw Playwright. Keep the recording on the app's own pages: other material (a results page, a report)
 goes on screen with `showImage`, since a `goto` to another origin and back broke the timeline.

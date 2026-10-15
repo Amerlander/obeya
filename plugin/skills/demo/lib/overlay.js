@@ -108,21 +108,23 @@
     return { left, top, width: right - left, height: bottom - top };
   }
 
-  // One layer dims the page for all rings together, with a hole in its mask for each ring: a
-  // dimming shadow on every ring would lay itself over the other rings' elements.
+  // One layer dims the page for all rings together, with a hole in its clip for each ring: a
+  // dimming shadow on every ring would lay itself over the other rings' elements. A clip path, not
+  // an SVG mask: the mask's full-page layer stalled the page for about 0.27 s each time it went
+  // (seen as a jerk in a drag or a card appearing, in every render of the hero video).
   const SVG = 'http://www.w3.org/2000/svg';
   function ensureDim() {
-    if (dim && dim.svg.isConnected) return dim;
-    const svg = document.createElementNS(SVG, 'svg');
-    svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;opacity:0;transition:opacity 300ms ease;';
-    const id = `demo-dim-${Math.random().toString(36).slice(2)}`;
-    svg.innerHTML =
-      `<mask id="${id}"><rect width="100%" height="100%" fill="#fff"/></mask>` +
-      `<rect width="100%" height="100%" fill="rgb(15,23,42)" fill-opacity=".18" mask="url(#${id})"/>`;
-    root.insertBefore(svg, root.firstChild);
-    requestAnimationFrame(() => (svg.style.opacity = '1'));
-    dim = { svg, mask: svg.querySelector('mask') };
+    if (dim && dim.el.isConnected) return dim;
+    const el = document.createElement('div');
+    el.style.cssText = 'position:absolute;inset:0;background:rgba(15,23,42,.18);opacity:0;transition:opacity 300ms ease;';
+    root.insertBefore(el, root.firstChild);
+    requestAnimationFrame(() => (el.style.opacity = '1'));
+    dim = { el, path: '' };
     return dim;
+  }
+  // a rounded rectangle as a path, for the holes in the dimming layer's clip
+  function rounded(x, y, w, h, r) {
+    return `M${x + r} ${y}H${x + w - r}A${r} ${r} 0 0 1 ${x + w} ${y + r}V${y + h - r}A${r} ${r} 0 0 1 ${x + w - r} ${y + h}H${x + r}A${r} ${r} 0 0 1 ${x} ${y + h - r}V${y + r}A${r} ${r} 0 0 1 ${x + r} ${y}Z`;
   }
 
   function track() {
@@ -131,7 +133,7 @@
       // A ring whose elements are gone (a closed dialog) or scrolled out of sight must not linger
       // over whatever is there now.
       ring.box.style.display = r ? '' : 'none';
-      ring.hole.style.display = r ? '' : 'none';
+      ring.hole = null;
       if (!r) continue;
       const pad = 6;
       Object.assign(ring.box.style, {
@@ -142,10 +144,12 @@
       });
       // the hole is the ring as drawn, border included (the page's box-sizing decides its size)
       const drawn = ring.box.getBoundingClientRect();
-      ring.hole.setAttribute('x', drawn.left);
-      ring.hole.setAttribute('y', drawn.top);
-      ring.hole.setAttribute('width', drawn.width);
-      ring.hole.setAttribute('height', drawn.height);
+      ring.hole = drawn;
+    }
+    if (dim) {
+      const holes = rings.filter((x) => x.hole).map((x) => rounded(Math.round(x.hole.left), Math.round(x.hole.top), Math.round(x.hole.width), Math.round(x.hole.height), 12));
+      const path = `path(evenodd, "M0 0H${innerWidth}V${innerHeight}H0Z${holes.join('')}")`;
+      if (path !== dim.path) dim.el.style.clipPath = dim.path = path;
     }
     // A label sits above its ring unless that covers another ring; then it goes below.
     for (const ring of rings) {
@@ -203,21 +207,16 @@
         box.appendChild(tag);
       }
       root.insertBefore(box, cursor);
-      const hole = document.createElementNS(SVG, 'rect');
-      hole.setAttribute('rx', '12');
-      hole.setAttribute('fill', '#000');
-      hole.style.cssText = 'opacity:0;transition:opacity 300ms ease;';
-      ensureDim().mask.appendChild(hole);
-      rings.push({ box, elements, tag, hole });
+      ensureDim();
+      rings.push({ box, elements, tag, hole: null });
       requestAnimationFrame(() => {
         box.style.opacity = '1';
-        hole.style.opacity = '1';
       });
     },
     clearHighlights() {
       for (const ring of rings) ring.box.remove();
       rings = [];
-      if (dim) dim.svg.remove();
+      if (dim) dim.el.remove();
       dim = null;
     },
     showImage(src, top, caption) {

@@ -1,8 +1,13 @@
 # The hero video for obeya.si
 
 A real run, recorded with Obeya's own demo pipeline (`plugin/skills/demo`): a scratch Obeya on a
-small tip calculator, an idea said into the microphone, a real agent building it and recording its
-demo, the approval landing it on main. About two minutes, in English, in the owner's ElevenLabs voice.
+small tip calculator, the wall arranged (a lasso into a group, a card dragged beside another group), an
+idea said into the microphone, a bug report typed, pasted and spoken in Obeya's
+sidebar, a real agent building the idea and recording its demo, two comments said into that video and the
+agent's new demo on them, the approval landing it on main,
+proposals from an agent and from Obeya's work retrospective, an idea discussed with its agent.
+About four minutes, in English, in the owner's ElevenLabs voice, recorded at twice the pixels
+(2880×1800, as the app looks on a Retina screen) with gentle compression (`sharp` in the spec).
 
 - `narration.ts`: what the video says, scene by scene. Review it as text before rendering.
 - `demo.ts`: the scenes, what each shows while its narration plays.
@@ -10,7 +15,8 @@ demo, the approval landing it on main. About two minutes, in English, in the own
 - `tipjar/`: the example app, with its own settings (work lands on main, every change gets a demo)
   and a plan doc.
 - `render.ts`: renders in the owner's ElevenLabs voice (`eleven_v4`, which reads the audio tags in
-  square brackets), with the key from `.voice/elevenlabs.key` of the main checkout (gitignored).
+  square brackets), with the key from `.voice/elevenlabs.key` of the main checkout (gitignored);
+  with `--qwen` in the owner's voice cloned by Qwen3-TTS, which costs no credits.
 
 Every release renders it again and puts it out with the release (`docs/release.md` § "A release",
 which the project skill `.claude/skills/release/` goes through).
@@ -19,9 +25,13 @@ which the project skill `.claude/skills/release/` goes through).
 
 ```sh
 node scripts/hero-video/render.ts --narration   # only the narration: costs ElevenLabs credits for changed sentences
-HERO_SHORT=1 node scripts/hero-video/render.ts  # the first two scenes, without agents: the opening and the microphone, in a minute
-node scripts/hero-video/render.ts               # the whole video, with a real agent: about ten minutes
+HERO_SHORT=1 node scripts/hero-video/render.ts  # the scenes up to Obeya’s sidebar and its preferences, without agents, in a few minutes
+node scripts/hero-video/render.ts               # the whole video, with real agents: about ten minutes
+node scripts/hero-video/render.ts --qwen        # the same in Qwen3-TTS, into ~/demos/obeya-hero-qwen/: to try a change out first
 ```
+
+A change is tried out with `--qwen` (with `HERO_SHORT=1` for the first scenes) and rendered in
+ElevenLabs once it stands.
 
 The output goes to `~/demos/obeya-hero/` (`HERO_OUT` names another): `demo.mp4`, `captions.vtt`,
 `chapters.vtt` (the scenes, which the site lists under the video),

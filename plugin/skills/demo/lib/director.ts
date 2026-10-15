@@ -45,6 +45,11 @@ export interface DemoSpec {
   title: string;
   baseUrl: string;
   viewport?: { width: number; height: number };
+  /**
+   * A video for a public page rather than one to share: the page at twice its pixels, as on a
+   * Retina screen, nearly lossless frames, and gentle compression. About ten times the file size.
+   */
+  sharp?: boolean;
   /** Runs once in an unrecorded context; its cookies and storage carry into the recording. */
   login?: (page: Page) => Promise<void>;
   /** Brings the recorded page to the opening shot. Not part of the video. */
@@ -142,11 +147,21 @@ export class Director {
    * Runs `fn`, a wait in which nothing worth watching happens (an agent at work, a build), and
    * cuts it from the video: the picture fades to white, says how much later it is, and fades back.
    * A wait shorter than `MIN_CUT_SECONDS` stays in the video: the flash would disturb more than
-   * the wait. The narration goes on across the cut, so call it after `untilSpoken(1)`.
+   * the wait. The narration goes on across the cut, so call it after `untilSpoken(1)`. `quiet`: a
+   * latency of the app rather than time passing (a reply that takes a few seconds), cut whole and
+   * without the flash, as a cut in a film; telling the viewer how much later it is would make it
+   * look like a wait they will have.
    */
-  async skip(fn: () => Promise<void>) {
+  async skip(fn: () => Promise<void>, o: { quiet?: boolean } = {}) {
     if (!this.#paced) return fn();
     const from = now();
+    if (o.quiet) {
+      await fn();
+      const to = now();
+      this.cuts.push({ from, to });
+      this.#skippedInScene += to - from;
+      return;
+    }
     const done = fn().then(() => true);
     if (await Promise.race([done, this.wait(MIN_CUT_SECONDS * 1000).then(() => false)])) return;
     // Long enough: what was waited so far goes without a trace, the rest falls into the white.
@@ -472,7 +487,7 @@ function sceneName(i: number, spec: DemoSpec) {
 async function openPage(spec: DemoSpec, viewport: { width: number; height: number }, work: string, paced: boolean) {
   const storageState = await login({ ...spec, viewport }, work);
   const browser = await launch(viewport);
-  const ctx = await browser.newContext({ viewport, storageState, deviceScaleFactor: 1 });
+  const ctx = await browser.newContext({ viewport, storageState, deviceScaleFactor: spec.sharp ? 2 : 1 });
   await ctx.addInitScript({ path: path.join(LIB, 'overlay.js') });
   const page = await ctx.newPage();
   const d = new Director(page, spec.baseUrl, work, paced);
@@ -509,7 +524,7 @@ async function dryRun(spec: DemoSpec, viewport: { width: number; height: number 
   spec.scenes.forEach((s, i) => console.log(`  ${String(i + 1).padStart(2)}  ok  ${took[i]!.toFixed(1).padStart(5)} s  ${s.title}`));
 }
 
-async function startScreencast(ctx: BrowserContext, page: Page, dir: string, size: { width: number; height: number }) {
+async function startScreencast(ctx: BrowserContext, page: Page, dir: string, size: { width: number; height: number }, scale: number) {
   const frames: Frame[] = [];
   const cdp = await ctx.newCDPSession(page);
   let lastFrame = now();
@@ -529,9 +544,9 @@ async function startScreencast(ctx: BrowserContext, page: Page, dir: string, siz
   });
   const start = cdp.send('Page.startScreencast', {
     format: 'jpeg',
-    quality: 92,
-    maxWidth: size.width,
-    maxHeight: size.height,
+    quality: scale > 1 ? 100 : 92,
+    maxWidth: size.width * scale,
+    maxHeight: size.height * scale,
   });
   await answered(start, 'starting the screencast');
   return {
@@ -542,7 +557,7 @@ async function startScreencast(ctx: BrowserContext, page: Page, dir: string, siz
     stop: async () => {
       clearInterval(watch);
       await answered(cdp.send('Page.stopScreencast'), 'stopping the screencast');
-      frames.splice(0, frames.length, ...onPaintTime(frames, paintTimes(frames, dir, size)));
+      frames.splice(0, frames.length, ...onPaintTime(frames, paintTimes(frames, dir, size, scale)));
     },
   };
 }
@@ -552,12 +567,14 @@ async function startScreencast(ctx: BrowserContext, page: Page, dir: string, siz
  * gray row through the strip of every frame, cut out by ffmpeg in one pass. Null for a frame
  * whose strip cannot be read, and for all of them when ffmpeg fails.
  */
-function paintTimes(frames: Frame[], dir: string, size: { width: number; height: number }): (number | null)[] {
+function paintTimes(frames: Frame[], dir: string, size: { width: number; height: number }, scale: number): (number | null)[] {
   const width = CLOCK.bits * CLOCK.cell;
-  const y = size.height - CLOCK.bottom - Math.ceil(CLOCK.cell / 2);
+  const y = (size.height - CLOCK.bottom - Math.ceil(CLOCK.cell / 2)) * scale;
+  // a frame with more pixels than points (`sharp`) is read back at one pixel per point
+  const crop = `crop=${width * scale}:1:${CLOCK.left * scale}:${y}${scale > 1 ? `,scale=${width}:1:flags=neighbor` : ''}`;
   const r = spawnSync(
     'ffmpeg',
-    ['-loglevel', 'error', '-f', 'image2', '-start_number', '0', '-i', path.join(dir, '%06d.jpg'), '-vf', `crop=${width}:1:${CLOCK.left}:${y},format=gray`, '-f', 'rawvideo', 'pipe:1'],
+    ['-loglevel', 'error', '-f', 'image2', '-start_number', '0', '-i', path.join(dir, '%06d.jpg'), '-vf', `${crop},format=gray`, '-f', 'rawvideo', 'pipe:1'],
     { maxBuffer: 1 << 30 },
   );
   if (r.status !== 0 || r.stdout.length !== frames.length * width) return frames.map(() => null);
@@ -615,7 +632,8 @@ export async function runDemo(spec: DemoSpec, demoDir: string) {
   }
 
   const { browser, ctx, page, d } = await openPage(spec, viewport, work, true);
-  const cast = await startScreencast(ctx, page, framesDir, viewport);
+  const scale = spec.sharp ? 2 : 1;
+  const cast = await startScreencast(ctx, page, framesDir, viewport, scale);
   await d.wait(500);
   const t0 = now();
   const marks: { title: string; start: number; speechStart: number; speechEnd: number }[] = [];
@@ -667,10 +685,11 @@ export async function runDemo(spec: DemoSpec, demoDir: string) {
     '-f', 'concat', '-safe', '0', '-i', list,
     '-i', narration,
     // the clock strip, painted over from the pixels around it
-    '-vf', `fps=30,scale=${viewport.width}:${viewport.height},delogo=x=1:y=${viewport.height - CLOCK.bottom - CLOCK.cell - 2}:w=${CLOCK.bits * CLOCK.cell + 2}:h=${CLOCK.cell + 4},format=yuv420p`,
-    // Screen content: CRF 30 keeps text sharp at about 2.5 MB per minute.
-    '-c:v', 'libx264', '-preset', 'slow', '-crf', '30', '-tune', 'stillimage',
-    '-c:a', 'aac', '-b:a', '96k',
+    '-vf', `fps=30,scale=${viewport.width * scale}:${viewport.height * scale},delogo=x=${scale}:y=${(viewport.height - CLOCK.bottom - CLOCK.cell - 2) * scale}:w=${(CLOCK.bits * CLOCK.cell + 2) * scale}:h=${(CLOCK.cell + 4) * scale},format=yuv420p`,
+    // Screen content: CRF 30 keeps text sharp at about 2.5 MB per minute; a public video (`sharp`)
+    // gets CRF 18, where no compression shows on the page's flat colours and fine type.
+    '-c:v', 'libx264', '-preset', 'slow', '-crf', spec.sharp ? '18' : '30', '-tune', 'stillimage',
+    '-c:a', 'aac', '-b:a', spec.sharp ? '160k' : '96k',
     '-movflags', '+faststart', '-shortest',
     video,
   ]);

@@ -2801,6 +2801,23 @@ across it, so a skip belongs after the scene's narration, and the next scene say
 darauf"). A wait under five seconds stays in the video: `skip` fades only once the wait has run five
 seconds; those first seconds are cut without a trace (the picture rarely changes in them), the rest
 falls into the white. The review table flags a scene with more than 5 s without narration.
+A wait that is only the app's latency (a reply that takes a few seconds), not time the viewer would
+spend waiting, is cut whole without flash or label (`skip(fn, { quiet: true })`): the hero video's
+"5 seconds later" over Obeya reading a command made its replies look slow (2026-10-14).
+
+#### Pauses in every voice
+
+Pause tags in the script (`[short pause]`, `[long pause]`) are silence in every voice: ElevenLabs v3
+and v4 read them, any other voice speaks the parts between them one by one and `tts.py` joins them
+with 0.5 s or 1.5 s of silence. Before (2026-10-14) other voices got the text without them, so a
+render in Qwen3 ran sentences together that the ElevenLabs one kept apart.
+
+#### Sharp for a public page
+
+A demo is recorded at one pixel per point and compressed to CRF 30 (about 2.5 MB a minute), small
+enough to share; text stays legible but flat colours go grainy on a large screen. A public video sets
+`sharp` in its spec: the page at twice the pixels, as on a Retina screen, screencast frames at JPEG
+quality 100 and CRF 18, so it looks as the app does live (the hero video, 2026-10-15).
 
 #### Frames on time
 
@@ -2814,6 +2831,10 @@ the strip over in the video.
 A highlight ring goes around what can be seen of its elements: each element's box is cut to every
 ancestor that clips its overflow (a scrolling list, a card's conversation) and to the window, an
 element out of sight does not count, and this holds while the ring follows scrolling.
+One layer dims the rest of the page for all rings together, with a hole for each ring in its CSS
+clip path. Until 2026-10-15 the holes were cut by an SVG mask over the whole page: each time the
+mask's layer went, Chrome stalled for about 0.27 s, a jerk in the video wherever a ring was cleared
+(a card being dragged, a new card appearing), on a quiet machine too.
 
 ### The demo on the card
 
@@ -4121,8 +4142,13 @@ addresses and `www` is a CNAME to `sadilek.github.io`, which Pages redirects to 
 
 The site's film is a real run (`scripts/hero-video/`), recorded with Obeya's own demo pipeline on a
 scratch canvas over a small tip calculator (Tipjar, in `tipjar/` there with its own `.obeya/settings.json`
-and plan doc): an idea by voice, a real worker building it and recording its demo, the approval landing it on
-main; about two minutes, narrated in English in the owner's ElevenLabs voice clone (see CLAUDE.md).
+and plan doc): the wall arranged (a lasso into a group, a card dragged beside another group so their
+territories meet), an idea by voice, a message typed, pasted and spoken in Obeya's sidebar (with a
+preference Obeya proposes), a real worker building the idea and recording its demo, comments said
+into the demo video at two places and sent together at its end, the worker's new demo, the approval
+landing it on main, proposals from an agent and from Obeya's work retrospective, an idea discussed
+with its agent; about four minutes, sharp as the app on a Retina screen, narrated in English in the
+owner's ElevenLabs voice clone (see CLAUDE.md), tried out first in the Qwen3 clone (`render.ts --qwen`).
 The directory holds the narration, the scenes, the stage and the render; its README says how to
 change, re-render and publish it.
 

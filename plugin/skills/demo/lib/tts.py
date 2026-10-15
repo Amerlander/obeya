@@ -173,6 +173,11 @@ AUDIO_TAG = re.compile(r"\[[^\]]*\]")
 TAG_MODELS = ("eleven_v3", "eleven_v4")
 
 
+#: A pause tag and the silence a voice that does not read tags puts in its place, in seconds.
+PAUSE_TAG = re.compile(r"\[(short pause|long pause|pause)\]")
+PAUSES = {"short pause": 0.5, "pause": 0.8, "long pause": 1.5}
+
+
 def untagged(text: str) -> str:
     """The script without its audio tags, for a voice that would say them and for comparing."""
     return re.sub(r"\s{2,}", " ", AUDIO_TAG.sub(" ", text)).strip()
@@ -605,18 +610,56 @@ def close(voice) -> None:
         voice.close()
 
 
+def with_pauses(voice, text: str, target: Path) -> None:
+    """`text` spoken by a voice that does not read tags: the parts between its pause tags one by
+    one, joined by the silence each tag stands for, so the pauses the script asks for are there in
+    every voice, not only in those that read them."""
+    parts = PAUSE_TAG.split(text)
+    spoken = [(untagged(parts[i]), PAUSES[parts[i + 1]] if i + 1 < len(parts) else 0.0) for i in range(0, len(parts), 2)]
+    spoken = [(t, pause) for t, pause in spoken if t]
+    if len(spoken) < 2:
+        voice.synthesize(untagged(text), target)
+        return
+    frames: list[bytes] = []
+    shape = None
+    for n, (part, pause) in enumerate(spoken):
+        piece = target.with_name(f"{target.stem}.part{n}.wav")
+        voice.synthesize(part, piece)
+        with wave.open(str(piece)) as fh:
+            params = (fh.getnchannels(), fh.getsampwidth(), fh.getframerate())
+            if shape is None:
+                shape = params
+            elif params != shape:
+                sys.exit(f"the voice's parts differ in format: {params} and {shape}")
+            frames.append(fh.readframes(fh.getnframes()))
+        piece.unlink()
+        if n < len(spoken) - 1:
+            frames.append(b"\0" * int(shape[2] * pause) * shape[0] * shape[1])
+    with wave.open(str(target), "wb") as fh:
+        fh.setnchannels(shape[0])
+        fh.setsampwidth(shape[1])
+        fh.setframerate(shape[2])
+        fh.writeframes(b"".join(frames))
+
+
 def narrate(voice, language: str, jobs: list[dict], out: Path, ear: Ear) -> None:
     voice_tag = voice.tag
+    reads_tags = getattr(voice, "reads_tags", False)
 
-    def script(text: str) -> str:
-        return text if getattr(voice, "reads_tags", False) else untagged(text)
+    def synthesize(text: str, target: Path) -> None:
+        if reads_tags:
+            voice.synthesize(text, target)
+        else:
+            with_pauses(voice, text, target)
 
     def score(text: str, heard: str) -> float:
         a, b = spoken_letters(text, language), spoken_letters(heard, language)
         return difflib.SequenceMatcher(None, a, b, autojunk=False).ratio()
 
     def key_of(job: dict) -> str:
-        return hashlib.sha1(f"{voice_tag}\n{job['text']}".encode()).hexdigest()[:16]
+        # a clip from before pauses were silence in every voice is not taken for one with them
+        pauses = "\npauses" if not reads_tags and PAUSE_TAG.search(job["text"]) else ""
+        return hashlib.sha1(f"{voice_tag}\n{job['text']}{pauses}".encode()).hexdigest()[:16]
 
     # The first take of every clip comes before any is heard: the recognition loads (and a voice Obeya
     # holds takes the machine's lock) only once all of them are synthesised.
@@ -626,7 +669,7 @@ def narrate(voice, language: str, jobs: list[dict], out: Path, ear: Ear) -> None
         if (out / f"{key}.wav").exists() or key in first_takes:
             continue
         try:
-            voice.synthesize(script(job["text"]), out / f"{key}.take1.wav")
+            synthesize(job["text"], out / f"{key}.take1.wav")
         except QuotaExhausted as exhausted:
             sys.exit(f"{exhausted}; choose another voice (or DEMO_GEMINI_MODEL) or wait a day")
         first_takes.add(key)
@@ -644,7 +687,7 @@ def narrate(voice, language: str, jobs: list[dict], out: Path, ear: Ear) -> None
                 candidate = out / f"{key}.take{take}.wav"
                 if take > 1:
                     try:
-                        voice.synthesize(script(job["text"]), candidate)
+                        synthesize(job["text"], candidate)
                     except QuotaExhausted as exhausted:
                         print(f"{job['id']}: {exhausted}, keeping take {take - 1}", file=sys.stderr)
                         break

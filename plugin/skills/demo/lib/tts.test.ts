@@ -72,10 +72,14 @@ describe('a voice that stays loaded', () => {
     expect(existsSync(join(dir, 'log'))).toBe(false);
   });
 
-  test('gets the script without its audio tags, which only ElevenLabs v3 and v4 read', () => {
-    writeFileSync(join(dir, 'jobs.json'), JSON.stringify([{ id: 's0', text: 'Eins. [short pause] Zwei.' }]));
+  test('gets the script without its audio tags, which only ElevenLabs v3 and v4 read, and a pause tag as silence', () => {
+    writeFileSync(join(dir, 'jobs.json'), JSON.stringify([{ id: 's0', text: 'Eins. [short pause] Zwei [whispers] drei. [long pause] Vier.' }]));
     expect(narrate().status).toBe(0);
-    expect(log()).toEqual(['start', 'de:Eins. Zwei.', 'end']);
+    // the parts between the pauses one by one, other tags left out
+    expect(log()).toEqual(['start', 'de:Eins.', 'de:Zwei drei.', 'de:Vier.', 'end']);
+    // three parts of 0.1 s with 0.5 s and 1.5 s of silence between them
+    const clip = JSON.parse(readFileSync(join(dir, 'out', 'tts.json'), 'utf8')).clips[0];
+    expect(clip.seconds).toBeCloseTo(2.3, 2);
     const r = python(['-c', `import sys; sys.path.insert(0, ${JSON.stringify(LIB)}); from tts import spoken_letters; print(spoken_letters("Then [long pause] it starts.", "en"))`]);
     expect(r.stdout.trim()).toBe('thenitstarts');
   });

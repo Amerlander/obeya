@@ -38,6 +38,19 @@ export function writeStage(file: string) {
         from: 'D',
         row: { proposal: { reason: 'Noticed while working on Dark mode: most people pick the same tip every time.', questions: [] } },
       },
+      // Obeya's own proposal, from its work retrospective over the finished cards' runs
+      {
+        key: 'R',
+        title: 'A script that serves Tipjar for demos',
+        body: 'Agents searched for how to serve the app before recording a demo. A script `bun run serve` starts it on a free port and prints the URL.',
+        state: 'proposal',
+        // archived until the video brings it back while the approved card lands (`unarchive`), so the
+        // opening shows the wall without it
+        archivedAgo: '1m',
+        x: 1340,
+        y: 330,
+        row: { retro: 'On three cards the agent first searched for how to serve the app before it recorded its demo.' },
+      },
       // working without an agent: no workspace, so a scratch Obeya with real workers leaves it be
       { key: 'C', title: 'Run the tests on every push', body: 'A GitHub Actions workflow runs bun test on every push and pull request.', state: 'working', statusLine: 'Writing the workflow', scope: ['.github/workflows/test.yml'], x: -40, y: 520 },
       { key: 'I', title: 'App icon', body: 'An icon for the home screen.', state: 'waiting', need: 'question', question: { text: 'Which of the three drafts should become the icon?', options: ['The jar', 'The coin', 'The receipt'] }, scope: ['icon.svg'], x: 280, y: 560 },
@@ -48,6 +61,17 @@ export function writeStage(file: string) {
         state: 'idea',
         x: 650,
         y: 560,
+        // the discussion so far, which the video shows when it opens the idea
+        events: [
+          { kind: 'talk', author: 'explorer', text: 'Who pays during the trip: does each person pay some of the bills, or does one person pay for everything and the others pay back?', ago: '50m' },
+          { kind: 'talk', author: 'owner', text: 'Everyone pays some of the bills.', ago: '45m' },
+          {
+            kind: 'talk',
+            author: 'explorer',
+            text: 'Then a trip needs a shared list of bills, and at the end the balances: who pays whom, in as few transfers as possible. Those are several parts that build on each other, so I would plan it as a project.',
+            ago: '44m',
+          },
+        ],
         row: {
           idea: {
             status: 'open',
@@ -62,7 +86,17 @@ export function writeStage(file: string) {
         },
       },
     ],
-    groups: [{ name: 'Tipjar 2.0', cards: ['P'] }],
+    // the rules every agent follows, and one Obeya learned from the owner's answers and proposes
+    preferences: [
+      { text: 'Questions to me with at most three options.' },
+      { text: 'Solve rebase conflicts yourself.' },
+      { text: 'Every change to the bill gets a test with cents that do not split evenly.', state: 'proposed', card: 'C', quote: 'Test it with an odd amount, like 100 split three ways.' },
+    ],
+    // Launch's App icon is the card the video drags up beside Look and feel, the group it makes with a lasso
+    groups: [
+      { name: 'Tipjar 2.0', cards: ['P'] },
+      { name: 'Launch', cards: ['C', 'I'] },
+    ],
   };
   writeFileSync(file, JSON.stringify(stage, null, 1));
 }
