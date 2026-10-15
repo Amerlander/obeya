@@ -270,6 +270,9 @@ test('a task an agent works on shows its conversation alone until there is a res
   expect(talkAlone({ state: 'working', branch: 'obeya/x', demo: { chapters: [] } })).toBe(false);
   expect(talkAlone({ state: 'working', branch: 'obeya/x', brief: '' })).toBe(true);
   expect(talkAlone({ state: 'planned' })).toBe(false);
+  // a stopped task lays out as one an agent worked on: the task opens its conversation
+  expect(talkAlone({ state: 'planned', branch: 'obeya/x' })).toBe(true);
+  expect(split({ state: 'planned', branch: 'obeya/x', demo: { chapters: [] } })).toBe(true);
   expect(talkAlone({ state: 'idea' })).toBe(false);
 });
 

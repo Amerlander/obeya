@@ -21,6 +21,15 @@ export type CardState = (typeof STATES)[number];
 
 /** A card whose work is over: `live` once it landed, `done` when it needed no change to the code (a demo, an analysis). */
 export const finished = (s: CardState) => s === 'live' || s === 'done';
+/** A card an agent worked on until the owner stopped it: planned again, its branch stays the card's. */
+export const stopped = (i: Pick<Item, 'state' | 'branch'>) => i.state === 'planned' && !!i.branch;
+/**
+ * A stopped card of the owner's the archive may take: nothing waits to start it, and its workspace
+ * holds no work (a branch with commits or changes keeps it, and archiving would leave that work
+ * unseen in a clone).
+ */
+export const stoppedArchivable = (i: Pick<Item, 'state' | 'branch' | 'source' | 'queue' | 'workspace' | 'prototypeOf' | 'kind'>) =>
+  stopped(i) && i.source === 'manual' && i.kind === 'task' && !i.prototypeOf && !i.queue && !i.workspace;
 /** A finished card whose agent still works: after the landing, or answering a follow-up question. */
 export const finishingUp = (i: Pick<Item, 'state' | 'finishing'>) => !!i.finishing && finished(i.state);
 /**
@@ -858,8 +867,10 @@ export type ErrorCode =
   /** An uploaded screenshot is no image the agents read, or too large. */
   | 'imageType'
   | 'imageTooLarge'
-  /** Only a finished card of the owner's goes into the archive. */
+  /** Only a finished card of the owner's (or a stopped task, a dropped idea) goes into the archive. */
   | 'notDone'
+  /** A stopped card whose workspace holds work stays on the canvas. */
+  | 'holdsWork'
   | 'notArchived'
   | 'notIdea'
   /** The card holds no thread of looked-up answers (it is no Question card). */

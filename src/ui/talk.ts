@@ -280,8 +280,8 @@ export const koordinatorReads = (events: CardEvent[]) => {
   return last?.kind === 'say' && last.author === 'owner';
 };
 
-/** A task an agent has worked on: what came of it stands beside its conversation. */
-export const worked = (i: Pick<Item, 'state' | 'branch'>) => ['working', 'waiting', 'approved', 'inPr', 'live', 'done'].includes(i.state) && !!i.branch;
+/** A task an agent has worked on, stopped ones included: what came of it stands beside its conversation. */
+export const worked = (i: Pick<Item, 'state' | 'branch'>) => ['planned', 'working', 'waiting', 'approved', 'inPr', 'live', 'done'].includes(i.state) && !!i.branch;
 
 /** What decides a card's layout. */
 type Laid = Pick<Item, 'state' | 'branch' | 'prototypeEnd' | 'demo' | 'pr' | 'landedPart' | 'finishing' | 'brief' | 'prototypes'>;

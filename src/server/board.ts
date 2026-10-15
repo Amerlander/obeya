@@ -896,7 +896,7 @@ export class Board {
 
   // ---------------------------------------------------------------- archive
 
-  /** Takes finished cards and dropped ideas of the owner's off the canvas into its archive. */
+  /** Takes finished cards, stopped tasks and dropped ideas of the owner's off the canvas into its archive. */
   archive(ids: string[]) {
     for (const id of ids) {
       const row = this.own(id);
@@ -906,7 +906,13 @@ export class Board {
         if (this.snapshot().items.some((i) => i.prototypeOf === id)) throw new BadRequest('prototypeRunning', 'a prototype for this idea is still running');
         continue;
       }
-      if (!row.state || !finished(row.state)) throw new BadRequest('notDone', 'only a finished card (live or done) can be archived');
+      // a stopped task goes with its conversation, for the owner to come back to; work its workspace holds would be left unseen
+      if (row.state === 'planned' && row.branch && row.kind === 'task' && !row.prototype_of) {
+        if (row.queue) throw new BadRequest('notDone', 'the card waits to be started');
+        if (row.workspace) throw new BadRequest('holdsWork', 'its workspace holds work that has not landed');
+        continue;
+      }
+      if (!row.state || !finished(row.state)) throw new BadRequest('notDone', 'only a finished or stopped card can be archived');
       if (row.landed && row.workspace) throw new BadRequest('notDone', 'its agent still finishes what remains after the landing');
     }
     const at = new Date().toISOString();

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { CLONES, type Item, openPerGroup, type ResolvedCanvas, withClones } from './types';
+import { CLONES, type Item, openPerGroup, type ResolvedCanvas, stoppedArchivable, withClones } from './types';
 
 const card = (over: Partial<Item>): Item => ({ id: 'x', kind: 'task', state: 'planned', title: '', body: '', x: 0, y: 0, source: 'manual', repo: 'r', ...over });
 
@@ -43,4 +43,14 @@ describe('withClones', () => {
     const draft = [{ repos: [{ path: '/w' }, { path: '/n', clones: 0 }, { path: '/l', workspaces: ['/x'] }, { path: '' }] }, { repos: [{ path: '/u' }] }];
     expect(withClones(draft, [], [at('worktrees', 'clones', 'clones', 'clones'), null], new Set())).toBeNull();
   });
+});
+
+test('a stopped task goes into the archive while nothing waits to start it and its workspace holds no work', () => {
+  const stoppedTask = { kind: 'task', state: 'planned', branch: 'obeya/x', source: 'manual' } as const;
+  expect(stoppedArchivable(stoppedTask)).toBe(true);
+  expect(stoppedArchivable({ ...stoppedTask, branch: undefined })).toBe(false);
+  expect(stoppedArchivable({ ...stoppedTask, workspace: '/clones/1' })).toBe(false);
+  expect(stoppedArchivable({ ...stoppedTask, queue: { checking: true, since: '' } })).toBe(false);
+  expect(stoppedArchivable({ ...stoppedTask, source: 'plan' })).toBe(false);
+  expect(stoppedArchivable({ ...stoppedTask, prototypeOf: 'idea' })).toBe(false);
 });

@@ -5,7 +5,7 @@
 import type { DiffFile } from '../core/diff';
 import { type Language, languageOf } from '../core/locale';
 import type { NotAProject } from '../core/plan-doc';
-import { type AgentEffort, type AgentModel, type AgentRole, type CardState, type ConfigProblemCode, type DemoSettingsProblem, type ErrorCode, EXPORT_HTML_MAX, type NarrationLanguage, type Theme, type VoiceKind, type Idea, type Need, type NextStep, type Queue, type OwnerHold, type RestartReason, type SetupId, type VoiceSetupId, type CloudPreset, type MachineSectionId, type NeededId, type PrId } from '../core/types';
+import { type AgentEffort, type AgentModel, type AgentRole, type CardState, type ConfigProblemCode, type DemoSettingsProblem, type ErrorCode, EXPORT_HTML_MAX, type NarrationLanguage, type Theme, type VoiceKind, type Idea, type Need, type NextStep, type Queue, type OwnerHold, type RestartReason, type SetupId, type VoiceSetupId, type CloudPreset, type MachineSectionId, type NeededId, type PrId, stopped } from '../core/types';
 
 const de = {
   kind: { task: 'Aufgabe', question: 'Frage', project: 'Projekt', workstream: 'Workstream', idea: 'Idee', prototype: 'Prototyp', becomesProject: 'Idee → Projekt', taskBecomesProject: 'Aufgabe → Projekt' },
@@ -145,6 +145,10 @@ const de = {
   waitingElsewhere: (n: number) => (n === 1 ? '1 Aufgabe auf einer anderen Leinwand braucht dich' : `${n} Aufgaben auf anderen Leinwänden brauchen dich`),
   start: 'Agent starten',
   startHint: 'Ein Agent beginnt auf eigenem Branch und zeigt am Ende eine Demo.',
+  /** The state of a task the owner stopped, in place of „Geplant“. */
+  stoppedState: 'Gestoppt',
+  startAgain: 'Neu starten',
+  startAgainHint: 'Ein neuer Agent beginnt mit neuer Sitzung auf dem Branch der Aufgabe; committete Arbeit dort bleibt.',
   landedPart: {
     short: 'Teil gelandet',
     long: 'Ein Teil ist schon gelandet, das Plan-Doc hält den Workstream aber offen. Ein neuer Lauf macht den Rest.',
@@ -339,7 +343,8 @@ const de = {
     unknownSetting: 'Über diesen Vorschlag ist schon entschieden.',
     imageType: 'Das ist kein Bild, das der Agent lesen kann (PNG, JPEG, GIF oder WebP).',
     imageTooLarge: 'Das Bild ist zu groß, auch verkleinert.',
-    notDone: 'Archivieren lässt sich nur eine eigene Aufgabe, die live oder erledigt ist, oder eine verworfene Idee.',
+    notDone: 'Archivieren lässt sich nur eine eigene Aufgabe, die live, erledigt oder gestoppt ist, oder eine verworfene Idee.',
+    holdsWork: 'Auf dem Branch liegt Arbeit, die noch nicht gelandet ist. Starte die Aufgabe neu oder lösche sie.',
     notArchived: 'Das liegt nicht mehr im Archiv.',
     notIdea: 'Das ist keine Idee (mehr).',
     notQuestion: 'Diese Karte hält keine nachgeschlagenen Antworten.',
@@ -1108,7 +1113,7 @@ const de = {
   },
   archive: {
     button: 'Archiv',
-    title: 'Erledigte Aufgaben, Projekte, verworfene Ideen und Prototypen',
+    title: 'Erledigte und gestoppte Aufgaben, Projekte, verworfene Ideen und Prototypen',
     empty: 'Noch nichts archiviert.',
     search: 'Im Archiv suchen',
     clearSearch: 'Suche leeren',
@@ -1117,6 +1122,8 @@ const de = {
     archive: 'Archivieren',
     archiveDone: (n: number) => (n === 1 ? '1 erledigte Aufgabe archivieren' : `${n} erledigte Aufgaben archivieren`),
     unarchive: 'Zurück auf die Leinwand',
+    /** Why a stopped task whose workspace holds work cannot go into the archive. */
+    holdsWork: 'Auf dem Branch liegt Arbeit, die noch nicht gelandet ist: neu starten oder löschen.',
     archived: (title: string) => `„${title}“ archiviert.`,
     archivedMany: (n: number) => (n === 1 ? '1 Aufgabe archiviert.' : `${n} Aufgaben archiviert.`),
     unarchived: (title: string) => `„${title}“ ist zurück auf der Leinwand.`,
@@ -1381,6 +1388,9 @@ const en: Strings = {
   waitingElsewhere: (n: number) => (n === 1 ? '1 task on another canvas needs you' : `${n} tasks on other canvases need you`),
   start: 'Start agent',
   startHint: 'An agent starts on a branch of its own and shows a demo at the end.',
+  stoppedState: 'Stopped',
+  startAgain: 'Start again',
+  startAgainHint: 'A new agent starts with a new session on the task’s branch; committed work there stays.',
   landedPart: {
     short: 'Part landed',
     long: 'A part has landed already, but the plan doc keeps the workstream open. A new run does the rest.',
@@ -1560,7 +1570,8 @@ const en: Strings = {
     unknownSetting: 'This proposal has been decided already.',
     imageType: 'This is not an image the agent can read (PNG, JPEG, GIF or WebP).',
     imageTooLarge: 'The image is too large, even scaled down.',
-    notDone: 'Only your own task that is live or done, or a dropped idea, can be archived.',
+    notDone: 'Only your own task that is live, done or stopped, or a dropped idea, can be archived.',
+    holdsWork: 'Its branch holds work that has not landed. Start the task again or delete it.',
     notArchived: 'This is no longer in the archive.',
     notIdea: 'This is not an idea (any more).',
     notQuestion: 'This card holds no looked-up answers.',
@@ -2314,7 +2325,7 @@ const en: Strings = {
   },
   archive: {
     button: 'Archive',
-    title: 'Finished tasks, projects, dropped ideas and prototypes',
+    title: 'Finished and stopped tasks, projects, dropped ideas and prototypes',
     empty: 'Nothing archived yet.',
     search: 'Search the archive',
     clearSearch: 'Clear the search',
@@ -2323,6 +2334,7 @@ const en: Strings = {
     archive: 'Archive',
     archiveDone: (n: number) => (n === 1 ? 'Archive 1 finished task' : `Archive ${n} finished tasks`),
     unarchive: 'Back onto the canvas',
+    holdsWork: 'Its branch holds work that has not landed: start it again or delete it.',
     archived: (title: string) => `“${title}” archived.`,
     archivedMany: (n: number) => (n === 1 ? '1 task archived.' : `${n} tasks archived.`),
     unarchived: (title: string) => `“${title}” is back on the canvas.`,
@@ -2493,7 +2505,7 @@ const longDay = (d: Date, today: Date) =>
 /** A number, with `digits` decimals at most. */
 const number = (n: number, digits = 0) => n.toLocaleString(locale, { maximumFractionDigits: digits, minimumFractionDigits: digits });
 
-export const stateLabel = (i: { kind?: string; thread?: { thinking?: boolean }; state: CardState; need?: Need; pr?: unknown; queue?: Queue; idea?: Idea; question?: unknown; answering?: true; answered?: true; finishing?: boolean; followUp?: boolean; paused?: true; prototypeEnd?: 'discarded' | 'built'; retro?: string }) =>
+export const stateLabel = (i: { kind?: string; thread?: { thinking?: boolean }; state: CardState; need?: Need; pr?: unknown; queue?: Queue; idea?: Idea; question?: unknown; answering?: true; answered?: true; finishing?: boolean; followUp?: boolean; paused?: true; prototypeEnd?: 'discarded' | 'built'; retro?: string; branch?: string }) =>
   i.kind === 'question'
     ? i.paused
       ? t.pause.working
@@ -2538,7 +2550,9 @@ export const stateLabel = (i: { kind?: string; thread?: { thinking?: boolean }; 
         ? t.openingPr
         : i.state === 'proposal' && i.retro
           ? t.proposalByObeya
-          : t.state[i.state];
+          : stopped(i)
+            ? t.stoppedState
+            : t.state[i.state];
 
 /** The owner's text for a refused request or a logged error code; the generic one for anything unknown. */
 /** An idea or a task decided as a project, until the project takes its place; a card that was an idea has the brief it was decided on. */

@@ -1,7 +1,7 @@
 // The unfolded card: what it is, what its worker does, and what the owner decides.
 
 import { Fragment, type ReactNode, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { agentListens, askable, buildableOn, type CardAction, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, EXPORT_HTML_MAX, finished, finishingUp, type Item, type Mock, type NextStep, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, type Spot } from '../core/types';
+import { agentListens, askable, buildableOn, type CardAction, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, EXPORT_HTML_MAX, finished, finishingUp, type Item, type Mock, type NextStep, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, type Spot, stopped, stoppedArchivable } from '../core/types';
 import { mockPage } from '../core/frame';
 import { answerText, toggle } from './answer';
 import { ApiError, api, at, type Field, holdRestart, onCardEvent, onCardEventGone } from './api';
@@ -111,7 +111,8 @@ export function Detail(p: Props) {
     .filter(Boolean)
     .join(' · ');
   // a proposal being reworked takes the agent's title and text: the fields come back with them, rather than keeping a draft
-  const editable = item.source === 'manual' && (item.state === 'planned' || item.state === 'idea' || item.state === 'proposal') && !item.queue && !item.proposal?.revising;
+  // a stopped task keeps what it was started with: the task is its conversation's first message
+  const editable = item.source === 'manual' && (item.state === 'planned' || item.state === 'idea' || item.state === 'proposal') && !item.queue && !item.proposal?.revising && !stopped(item);
   if (item.kind === 'question' && item.thread)
     return (
       <>
@@ -242,6 +243,8 @@ export function Detail(p: Props) {
   // an agent is on the card and can be stopped
   const running = item.state === 'working' || item.state === 'waiting' || !!item.finishing;
   const archivable = finished(item.state) && item.source === 'manual' && !item.finishing;
+  // a stopped task starts again, or goes into the archive with its conversation, from the row below it
+  const halted = stopped(item) && !item.queue;
   const where = (
     <p className="p-src">
       <Branch item={item} />
@@ -347,7 +350,7 @@ export function Detail(p: Props) {
 
       {item.state === 'planned' && !item.queue && <LastFailure cardId={item.id} />}
 
-      {item.state === 'planned' && (
+      {item.state === 'planned' && !worked && (
         <>
           {editable ? (
             <ManualFields item={item} repos={p.repos} onEdit={p.onEdit} />
@@ -395,7 +398,7 @@ export function Detail(p: Props) {
         </>
       )}
 
-      {item.state === 'planned' && <Scope files={item.scope} />}
+      {item.state === 'planned' && !worked && <Scope files={item.scope} />}
 
       {worked && where}
       {worked ? (
@@ -464,15 +467,25 @@ export function Detail(p: Props) {
       )}
 
       {/* the decisions go below both columns, as on an idea or a proposal */}
-      {worked && (running || archivable) && (
+      {worked && (running || archivable || halted) && (
         <div className="actions">
-          {review ? prototypeActions || approveButton : running && prototypeActions}
+          {halted && !item.archivedAt && (
+            <button className="btn primary" title={t.startAgainHint} onClick={() => act({ action: 'start' }, { close: false })}>
+              {t.startAgain}
+            </button>
+          )}
+          {review ? prototypeActions || approveButton : (running || (halted && !item.archivedAt)) && prototypeActions}
           {running && (
             <button className="btn" title={t.stopHint} onClick={() => act({ action: 'stop' }, { close: true, ack: t.stopped })}>
               {t.stop}
             </button>
           )}
-          {archivable && <ArchiveButton item={item} run={run} />}
+          {(archivable || (halted && !item.prototypeOf && item.source === 'manual')) && <ArchiveButton item={item} run={run} />}
+          {halted && !item.archivedAt && item.source === 'manual' && !item.prototypeOf && (
+            <button className="btn danger" onClick={p.onDelete}>
+              {t.delete}
+            </button>
+          )}
         </div>
       )}
       {review && item.noChange && !item.prototypeOf && <p className="hint">{t.noChangeHint}</p>}
@@ -1771,12 +1784,14 @@ function ExportBox({ item, run, needs }: { item: Item; run: Run; needs?: { site:
 /** Takes a finished card or a dropped idea into the archive, or an archived one back onto the canvas. */
 function ArchiveButton({ item, run }: { item: Item; run: Run }) {
   const title = plain(item.title);
+  // a stopped task whose workspace holds work stays on the canvas; the button says why
+  const held = stopped(item) && !stoppedArchivable(item);
   return item.archivedAt ? (
     <button className="btn" onClick={() => run(() => api.unarchive(item.id), { close: true, ack: t.archive.unarchived(title) })}>
       {t.archive.unarchive}
     </button>
   ) : (
-    <button className="btn" onClick={() => run(() => api.archive(item.id), { close: true, ack: t.archive.archived(title), undo: () => api.unarchive(item.id) })}>
+    <button className="btn" disabled={held} title={held ? t.archive.holdsWork : undefined} onClick={() => run(() => api.archive(item.id), { close: true, ack: t.archive.archived(title), undo: () => api.unarchive(item.id) })}>
       {t.archive.archive}
     </button>
   );

@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useRef, useState } from 'react';
 import { type Bounds, shapeOf } from '../core/layout';
-import { answering, type AppUpdate, type CanvasInfo, type ClonePool, finished, finishingUp, type Item, needsYou, type PendingRestart, type PoolHost, type ProjectHistory } from '../core/types';
+import { answering, type AppUpdate, type CanvasInfo, type ClonePool, finished, finishingUp, type Item, needsYou, type PendingRestart, type PoolHost, type ProjectHistory, stoppedArchivable } from '../core/types';
 import { api } from './api';
 import type { Cam } from './camera';
 import type { Shape } from './groups';
@@ -51,11 +51,11 @@ export const CardView = memo(
     const shape = shapeOf(item);
     // a card the Koordinator is checking has nothing to start yet
     const startable = item.state === 'planned' && (!item.queue || 'behind' in item.queue);
-    // as "Archivieren" in the unfolded card: a finished card of the owner's whose agent is done, or
-    // a dropped idea without a prototype on the canvas
+    // as "Archivieren" in the unfolded card: a finished card of the owner's whose agent is done, a
+    // stopped task, or a dropped idea without a prototype on the canvas
     const archivable =
       !item.archivedAt &&
-      ((finished(item.state) && item.source === 'manual' && !item.finishing) || (item.idea?.status === 'dropped' && !prototyped));
+      ((finished(item.state) && item.source === 'manual' && !item.finishing) || stoppedArchivable(item) || (item.idea?.status === 'dropped' && !prototyped));
     const kind =
       item.label ??
       (item.parent ? t.kind.workstream : item.kind === 'question' ? t.kind.question : item.idea || item.proposal?.idea ? t.kind.idea : item.becomesProject ? becomesLabel(item) : item.prototypeOf ? t.kind.prototype : item.kind === 'project' ? t.kind.project : '');
@@ -136,7 +136,7 @@ export const CardView = memo(
         )}
         {archivable && (
           <button
-            className="play archive"
+            className={startable ? 'play archive beside' : 'play archive'}
             title={t.archive.archive}
             aria-label={t.archive.archive}
             onPointerDown={(e) => e.stopPropagation()}

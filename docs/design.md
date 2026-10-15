@@ -390,7 +390,15 @@ An idea is thought through on its card before anything is planned; no worker run
    possible.
 6. Archived, when the owner takes the finished card off the canvas ("Archivieren" on the card or
    its archive button on the canvas, shown while the pointer is on it, or all finished ones at
-   once in the archive), or when a prototype ends (discarded or built; Ideas, 4). The archive
+   once in the archive), or when a prototype ends (discarded or built; Ideas, 4). A task the owner
+   stopped („Gestoppt“: planned again, its branch still the card's) goes the same way, one at a
+   time, with its conversation, for the owner to come back to (a question an agent answered, say);
+   „Neu starten“ and „Löschen“ stand beside it. Not while it waits to start, and not while its
+   workspace holds work that has not landed (the button is greyed and says so): archiving would
+   leave that work unseen in a clone. Until 2026-10-15 a stopped card could only be started again
+   or deleted, and it opened as a planned card nobody had worked on: the task in its edit field,
+   the conversation squeezed below it. It now opens as a card an agent worked on, the task as its
+   conversation's first message. The archive
    (button or `A`) lists archived cards under its button in the bar, as the queue does, by day,
    the most recently archived first, as small cards on a timeline with the time they were
    archived, each labelled with its kind or state („Idee → Projekt“, „Projekt“) unless it is a plain

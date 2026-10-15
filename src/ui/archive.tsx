@@ -1,10 +1,10 @@
-// The archive: finished cards and dropped ideas taken off the canvas and projects whose plan doc is
+// The archive: finished and stopped cards and dropped ideas taken off the canvas and projects whose plan doc is
 // gone, the most recently archived first, listed under the bar's button as the queue is. A project's
 // workstreams belong to it and are not listed on their own. A field over the list filters it as
 // the owner types.
 
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import type { Item } from '../core/types';
+import { type Item, stopped } from '../core/types';
 import { plain } from './markdown';
 import { becomesLabel, stateLabel, t } from './strings';
 
@@ -118,9 +118,9 @@ export function ArchivePill({ on, onToggle, onClose, held, archived, done, onOpe
   );
 }
 
-/** An archived card's kind or state; a plain task, nearly every entry, goes without one, so the others stand out. */
+/** An archived card's kind or state; a plain finished task, nearly every entry, goes without one, so the others stand out. */
 function labelOf(i: Item) {
-  return i.idea || i.prototypeEnd ? stateLabel(i) : i.becomesProject ? becomesLabel(i) : i.kind === 'task' ? '' : t.kind[i.kind];
+  return i.idea || i.prototypeEnd || stopped(i) ? stateLabel(i) : i.becomesProject ? becomesLabel(i) : i.kind === 'task' ? '' : t.kind[i.kind];
 }
 
 /** Lower case without accents, so „uber“ finds „Über“. */

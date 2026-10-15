@@ -403,6 +403,25 @@ describe('archive', () => {
     expect(board.archived()).toEqual([]);
   });
 
+  test('a stopped task goes into the archive with its conversation, unless its workspace holds work or it waits to start', () => {
+    const c = board.create({ title: 'Frage', body: 'Stimmt die Rechnung?', x: 50, y: 60 });
+    board.work(c.id, { branch: 'obeya/frage-1', workspace: '/tmp/clone-1' });
+    board.log(c.id, 'talk', 'worker', 'Sie stimmt.');
+    board.log(c.id, 'state', 'owner', 'Gestoppt.');
+    expect(() => board.archive([c.id])).toThrow(expect.objectContaining({ code: 'holdsWork' }));
+    board.work(c.id, { workspace: null, queue: JSON.stringify({ checking: true, since: new Date().toISOString() }) });
+    expect(() => board.archive([c.id])).toThrow(expect.objectContaining({ code: 'notDone' }));
+    board.work(c.id, { queue: null });
+    // archiving everything finished leaves it alone: it was stopped, not done
+    expect(board.archiveDone()).toEqual([]);
+    board.archive([c.id]);
+    expect(board.snapshot().items.some((i) => i.id === c.id)).toBe(false);
+    expect(board.archived()).toMatchObject([{ id: c.id, state: 'planned', branch: 'obeya/frage-1' }]);
+    expect(board.events(c.id).map((e) => e.text)).toEqual(['Sie stimmt.', 'Gestoppt.']);
+    board.unarchive(c.id);
+    expect(board.snapshot().items.find((i) => i.id === c.id)).toMatchObject({ x: 50, y: 60, state: 'planned' });
+  });
+
   test('a dropped idea goes into the archive with its brief, an open or parked one does not', () => {
     const idea = board.create({ idea: true, title: 'Idee', x: 30, y: 40 });
     expect(() => board.archive([idea.id])).toThrow(expect.objectContaining({ code: 'notDone' }));
