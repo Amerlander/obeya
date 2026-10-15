@@ -76,7 +76,8 @@ export function demoHandover(demo: Demo, shown: Turn[]): Turn | undefined {
 /**
  * A card's events as its conversation, in the order the agent saw them: what the owner says, where
  * the agent read it (`CardEvent.readAfter`), the agents' replies, questions and handovers, each with
- * the steps that led to it (and a worker's closing words after it, which mostly repeat it), and the
+ * the steps that led to it (and a worker's closing words after it, which mostly repeat it, with
+ * the steps it took between the two), and the
  * state changes between them. The agent's steps before it read the owner's words close above them
  * (`closed`). What the owner says to a worker that does not `reply` is answered by the first words
  * it says after it. What the agent has not read yet stands apart (`unread`).
@@ -98,9 +99,13 @@ export function talkTurns(all: CardEvent[], opts: { asking?: Question; over?: bo
       open = false;
     } else if (where === 'step') steps.push(e);
     else if (where === 'after') {
-      // closing words after a reply or handover fold under it, the last of its steps
+      // closing words after a reply or handover fold under it, the last of its steps; so do the
+      // steps the agent took after it in the same turn (a card it proposed, say)
       const last = shown.findLast((x) => !x.line && agentAuthor(x.e));
-      if (last) last.steps.push(e);
+      if (last && last === shown.at(-1)) {
+        last.steps.push(...steps, e);
+        steps = [];
+      } else if (last) last.steps.push(e);
       else steps.push(e);
     }
     else if (where === 'line' || where === 'aside') {

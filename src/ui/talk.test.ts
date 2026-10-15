@@ -118,6 +118,21 @@ test("a worker's closing words after its reply or handover fold under it, also o
     });
 });
 
+test('what the worker did after its reply in the same turn folds under the reply with its closing words, not as a message without words', () => {
+  const note = ev('hint', 'owner', 'Welches Trennzeichen?');
+  const read = ev('activity', 'worker', 'Liest src/export.ts');
+  const reply = ev('talk', 'worker', 'Semikolon. Für die Maskierung schlage ich eine Karte vor.');
+  const proposed = ev('activity', 'worker', 'Aufgabe vorgeschlagen: CSV-Export maskieren');
+  const closing = ev('closing', 'worker', 'Semikolon, wie gesagt.');
+  for (const over of [false, true])
+    expect(talkTurns([note, read, reply, proposed, closing], { over }).shown).toEqual([
+      { e: note, steps: [] },
+      { e: reply, steps: [read, proposed, closing] },
+    ]);
+  // until its turn ends, they stand as the agent at work
+  expect(talkTurns([note, read, reply, proposed]).pending).toEqual([proposed]);
+});
+
 test('a spoken note stands once; the Koordinator confirms in the steps and answers what it looked up in the conversation', () => {
   const said = ev('say', 'owner', 'Sag ihm, er soll auch Excel können.');
   const confirm = ev('say', 'koordinator', 'Geht an den Agenten.');

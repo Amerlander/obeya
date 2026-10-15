@@ -523,7 +523,10 @@ Its words after a reply are its words when a step of its work follows them; the 
 a turn in which it replied or handed over mostly repeat that message (often in English on a German
 canvas), so they fold under it in the conversation, the last of its steps, whatever the card's
 state (event kind `closing`). Until 2026-10-09 they were dropped after a handover or a finished
-card's follow-up and showed as a second message after any other reply.
+card's follow-up and showed as a second message after any other reply. The steps it took between that
+message and its closing words (a card it proposed after replying, say) fold under the message with
+them; until 2026-10-15 they stood below it as a message of their own with nothing but „Verlauf: 1
+Schritt“.
 A note while the card waits on the worker's question takes that question back: the card goes back
 to work (in its pull request, or finishing after the landing, where it was), and the worker hears
 that its question („…“) is withdrawn, goes on if the note settled it and asks anew if not. The
