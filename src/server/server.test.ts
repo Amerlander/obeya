@@ -397,7 +397,8 @@ describe('voice', () => {
       return f;
     };
     expect(await voice('', form(' Siehe Log: '))).toMatchObject({ quiet: true, text: 'Siehe Log: und hier fehlt der zweite Knopf' });
-    await voice('', form('Zwei Dinge.\n- erstens'));
+    // a browser sends the form's line breaks as CRLF
+    await voice('', form('Zwei Dinge.\r\n- erstens'));
     expect(told).toEqual(['Siehe Log: und hier fehlt der zweite Knopf', 'Zwei Dinge.\n- erstens\n\nund hier fehlt der zweite Knopf']);
     expect(heardAudio).toEqual(['AUDIO', 'AUDIO', 'AUDIO']);
     // nothing heard: nothing goes out, and the field keeps its words

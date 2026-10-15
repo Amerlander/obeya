@@ -532,7 +532,9 @@ export function serve(
           const form = req.headers.get('content-type')?.startsWith('multipart/form-data') ? await req.formData() : null;
           const audio = form ? form.get('audio') : await req.blob();
           if (!(audio instanceof Blob)) throw new BadRequest('invalid', 'audio expected');
-          const typed = form?.get('text');
+          // a browser sends a form's line breaks as CRLF: they go on as typed
+          const field = form?.get('text');
+          const typed = typeof field === 'string' ? field.replace(/\r\n/g, '\n') : undefined;
           let text: string | null;
           try {
             text = await transcribe(c, audio);
@@ -548,7 +550,7 @@ export function serve(
             return text ? { confirm: '', quiet: true, text } : { confirm: text === null ? c.board.t.voice.notUnderstood : c.board.t.voice.nothingHeard, unheard: true };
           }
           // what stood in the field goes first; nothing heard sends nothing, the field keeps it
-          const words = text && typeof typed === 'string' && typed.trim() ? `${typed.trim()}${/\n/.test(typed.trim()) ? '\n\n' : ' '}${text}` : text;
+          const words = text && typed?.trim() ? `${typed.trim()}${/\n/.test(typed.trim()) ? '\n\n' : ' '}${text}` : text;
           // `?at=<seconds>&still=<image>`: said about that place in the open card's demo video
           const at = params.get('at');
           const spot = at !== null && at !== '' ? { at: Number(at), ...(params.get('still') ? { still: params.get('still')! } : {}) } : undefined;

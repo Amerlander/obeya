@@ -21,7 +21,7 @@ project is done, what lasts moves into the design doc and the plan doc goes.
 ## Cards
 
 A task is a card. Its agent works in its own clone or worktree on a branch of its own, asks on the
-card when a decision is not its to make, runs `bun test` and `bun run typecheck`, and hands over
+card when a decision is not its to make, runs `bun test --parallel` and `bun run typecheck`, and hands over
 with a demo and a short summary. Approval lands the branch on `main`; feedback sends the card back
 to its agent. Something it notices beyond its task becomes a proposed card, not a wider change.
 

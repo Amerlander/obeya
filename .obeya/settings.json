@@ -1,7 +1,7 @@
 {
   "setup": "bun install",
   "checks": [
-    "bun test",
+    "bun test --parallel",
     "bun run typecheck"
   ],
   "land": "main",

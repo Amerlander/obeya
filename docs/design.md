@@ -3909,6 +3909,19 @@ Python sidecars ignore Ctrl-C instead.
   shim, which looks it up again on every call (10 ms a call instead of 4). Test repositories are
   copies of a template committed once per set of files (`gitRepo` in `src/server/testing.ts`).
   Together they halved the test suite.
+- **A repository's branches are read with one call of git** (2026-10-15): the main branch and its
+  commit come from one `for-each-ref` over the local branches and `origin`'s (`readingBranches` in
+  `workspaces.ts`), where they took four to seven calls (`symbolic-ref`, `for-each-ref`, `config`,
+  two `rev-parse`), read again each time Obeya needs the main branch; a repository starting takes
+  whether it has an adapter module from the read that resolved it. A test run spawned 12,600
+  processes before, 8,400 now (each a few milliseconds of a run that waits for it).
+- **Tests run a file per process** (`bun test --parallel`, the repository's check, 2026-10-15): run
+  one after the other, the suite took 165 s on the owner's Mac, waiting most of that time for git;
+  in parallel 27 s (Bun 1.4 or later; older Bun ignores the flag). The longest file sets how long
+  the run takes, so the workers' tests are split by theme (`workers*.test.ts`), sharing their setup
+  in `workers-fixture.ts`. That module's bindings are read live; a test replaces one through its
+  setter (`setWorkers`), and each file calls `eachTest()`, as files run one after the other in one
+  process share the module evaluated once.
 - **The first canvas is chosen with two cards and radio buttons**: pills read as buttons in a user
   test, not as a choice.
 

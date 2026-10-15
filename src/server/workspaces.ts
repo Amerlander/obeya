@@ -750,18 +750,47 @@ export function defaultBranch(path: string): string {
  */
 export const detectedBranch = (path: string): string => gitStepsSync(path, detectingBranch());
 
-/** `detectedBranch` as git steps. */
-export function* detectingBranch(): GitSteps<string> {
-  const [origin] = yield [['symbolic-ref', '--short', '-q', 'refs/remotes/origin/HEAD']];
-  if (origin) return origin.replace(/^origin\//, '');
-  const [heads, init] = yield [['for-each-ref', '--format=%(refname:short)', 'refs/heads/'], ['config', '--get', 'init.defaultBranch']];
-  const own = (heads ?? '').split('\n').filter((b) => b && !b.startsWith(CARD_BRANCH));
+/** `detectedBranch` as git steps, from `branches` where they were read already. */
+export function* detectingBranch(branches?: Branches | null): GitSteps<string> {
+  const b = branches !== undefined ? branches : yield* readingBranches();
+  if (b?.originHead) return b.originHead;
+  const own = [...(b?.local.keys() ?? [])].filter((name) => !name.startsWith(CARD_BRANCH));
   if (own.length === 1) return own[0]!;
-  const usual = [init, 'main', 'master'].find((b) => b && own.includes(b));
+  const [init] = yield [['config', '--get', 'init.defaultBranch']];
+  const usual = [init, 'main', 'master'].find((name) => name && own.includes(name));
   if (usual) return usual;
   const [current] = yield [['symbolic-ref', '--short', '-q', 'HEAD']];
   if (current && !current.startsWith(CARD_BRANCH)) return current;
   return init || 'main';
+}
+
+/** A repository's branches, what its main branch and that branch's commit are read from. */
+export interface Branches {
+  /** The branch `origin`'s HEAD names, where the checkout knows one. */
+  originHead?: string;
+  /** The local branches and their commits. */
+  local: Map<string, string>;
+  /** `origin`'s branches as the checkout last fetched them, and their commits. */
+  remote: Map<string, string>;
+}
+
+/**
+ * Reads `Branches` as git steps, all with one call: Obeya reads them each time it needs the main
+ * branch, and each call of git takes a few milliseconds. Null where there is no git repository.
+ */
+export function* readingBranches(): GitSteps<Branches | null> {
+  const [refs] = yield [['for-each-ref', '--format=%(refname)%00%(objectname)%00%(symref)', 'refs/heads/', 'refs/remotes/origin/']];
+  if (refs == null) return null;
+  const b: Branches = { local: new Map(), remote: new Map() };
+  const ORIGIN = 'refs/remotes/origin/';
+  for (const line of refs.split('\n')) {
+    const [ref = '', commit = '', symref = ''] = line.split('\0');
+    if (ref === `${ORIGIN}HEAD`) {
+      if (symref.startsWith(ORIGIN)) b.originHead = symref.slice(ORIGIN.length);
+    } else if (ref.startsWith('refs/heads/')) b.local.set(ref.slice('refs/heads/'.length), commit);
+    else if (ref.startsWith(ORIGIN)) b.remote.set(ref.slice(ORIGIN.length), commit);
+  }
+  return b;
 }
 
 /**

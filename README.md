@@ -97,7 +97,7 @@ bun start ~/dev/shop ~/dev/shop-web --name Shop   # one canvas, two repositories
 bun start                       # the canvases in ~/.obeya/canvases.json (see src/server/main.ts)
 bun start --config other.json   # those of another file
 bun run dev ~/dev/shop          # same, with hot reload
-bun test && bun run typecheck
+bun test --parallel && bun run typecheck
 ```
 
 Options: `--port <n>` (or `OBEYA_PORT`), `--workspace <path>`

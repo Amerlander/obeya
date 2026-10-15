@@ -20,12 +20,17 @@ const python = (args: string[], env: Record<string, string> = {}, input?: string
     timeout: 60_000,
   });
 
-/** A voice that serves until its stdin ends, writing a short silent WAV per request. */
+/**
+ * A voice that serves until its stdin ends, writing a short silent WAV per request. Given a second
+ * argument, it is loaded only once that file exists.
+ */
 const FAKE_VOICE = String.raw`
-import json, os, sys, wave
+import json, os, sys, time, wave
 log = os.environ.get("FAKE_LOG") or sys.argv[1]
 open(log, "a").write("start\n")
 print("loading weights ...", flush=True)  # a library talking on stdout: not the protocol
+while len(sys.argv) > 2 and not os.path.exists(sys.argv[2]):
+    time.sleep(0.01)
 answer = lambda reply: (sys.stdout.write(json.dumps(reply) + "\n"), sys.stdout.flush())
 if os.environ.get("FAKE_DIE_AT") == "0":
     sys.exit("cannot load the model")
@@ -112,10 +117,13 @@ describe('a voice Obeya holds', () => {
       child.stderr.on('data', (b: Buffer) => (stderr += b.toString()));
       child.on('close', (status) => resolve({ status, stderr }));
     });
+  const go = () => join(dir, 'go');
   let host: NarrationHost;
   let server: ReturnType<typeof serve>;
   beforeEach(() => {
-    host = new NarrationHost({ argv: () => [...UV, join(dir, 'voice.py'), join(dir, 'log')] });
+    // the voice loads at once; a test that removes `go` holds it
+    writeFileSync(go(), '');
+    host = new NarrationHost({ argv: () => [...UV, join(dir, 'voice.py'), join(dir, 'log'), go()] });
     server = serve([], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, undefined, host);
     const spec = JSON.parse(readFileSync(join(dir, 'spec.json'), 'utf8'));
     writeFileSync(join(dir, 'spec.json'), JSON.stringify({ ...spec, host: { speaker: 'ryan' } }));
@@ -126,6 +134,12 @@ describe('a voice Obeya holds', () => {
   });
 
   test('loads once for parallel renders, which take turns clip by clip, and stays loaded for the next', async () => {
+    // the voice loads once both renders asked for their first clip: on a busy machine the second
+    // render's Python started after the first's three clips were done
+    rmSync(go());
+    const clip = host.clip.bind(host);
+    let asked = 0;
+    host.clip = (request) => (++asked === 2 && writeFileSync(go(), ''), clip(request));
     const env = { OBEYA_URL: server.url.href };
     const [a, b] = await Promise.all([render('a', env), render('b', env)]);
     expect([a.status, b.status]).toEqual([0, 0]);

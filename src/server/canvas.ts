@@ -30,7 +30,7 @@ import { changesCode, RESTART_PATIENCE_MS, whenIdle } from './self-update';
 import { Sharing, siteIncomplete } from './share';
 import { siteMissing, siteName } from './site';
 import { type DueRestart, Workers } from './workers';
-import { branchSetting, defaultBranch, detectingBranch, gitCalls, type GitSteps, gitStepsSync, type Landed, together, useBranchSetting, Workspaces } from './workspaces';
+import { branchSetting, defaultBranch, detectingBranch, gitCalls, type GitSteps, gitStepsSync, type Landed, readingBranches, together, useBranchSetting, Workspaces } from './workspaces';
 import { claudeToken, githubToken, hostName, registerHost } from './hosts';
 
 export type { CanvasConfig, RepoConfig };
@@ -139,6 +139,8 @@ export class CanvasRuntime {
   private branchSettings = new Map<string, () => void>();
   /** By repository's path: its `.obeya/settings.json` as the Lesestand last had it. */
   private shared = new Map<string, SharedRead>();
+  /** By repository's path: whether its main branch had an adapter module as the configuration was last resolved, which a repository starting takes. */
+  private adapterModules = new Map<string, boolean>();
   /** The restart of some repositories' agents that waits, if one does. */
   private pending: RepoRestart | null = null;
   /** The restart of all of Obeya that waits, if one does: it covers the repositories' too. */
@@ -292,6 +294,7 @@ export class CanvasRuntime {
     return resolveCanvas(config, this.deps.store, this.settingsOf, this.sharedOf, (path) => {
       const read = readRepo(path);
       if (read && !this.shared.has(path)) this.shared.set(path, read.shared);
+      if (read) this.adapterModules.set(path, read.adapterModule);
       return read;
     });
   }
@@ -331,7 +334,7 @@ export class CanvasRuntime {
     const stops: (() => void)[] = [];
     // filled in below; what is set up here reaches it once it is
     const repo = { config: rc, stops } as Repo;
-    repo.problemSources = this.problemSources(info.path);
+    repo.problemSources = this.problemSources(info.path, this.adapterModules.get(info.path));
     // where work lands on the local main, the checkout is the Lesestand; otherwise it is a pool clone on a card's branch
     const read = new ReadTree({
       repoPath: info.path,
@@ -696,11 +699,11 @@ export class CanvasRuntime {
   /**
    * What the configuration's problems of the repository are read from on its default branch: its
    * `.obeya/settings.json` as the file has it (a field that does not count included), and whether a
-   * leftover `.obeya/adapter/` is there.
+   * leftover `.obeya/adapter/` is there (`adapterModule`, where it was just read).
    */
-  private problemSources(path: string): string {
+  private problemSources(path: string, adapterModule = hasAdapterModule(path)): string {
     const read = this.shared.get(path);
-    return JSON.stringify([read?.raw, read?.problems, hasAdapterModule(path)]);
+    return JSON.stringify([read?.raw, read?.problems, adapterModule]);
   }
 
   /**
@@ -1601,10 +1604,11 @@ export interface RepoRead {
 
 /** Reads a repository for `resolveCanvas`, as git steps; null where `path` is no git repository. */
 export function* readingRepo(path: string): GitSteps<RepoRead | null> {
-  const [[gitDir, remote], detected] = yield* together(gitCalls(['rev-parse', '--git-dir'], ['remote', 'get-url', 'origin']), detectingBranch());
-  if (gitDir == null) return null;
+  const [[remote], branches] = yield* together(gitCalls(['remote', 'get-url', 'origin']), readingBranches());
+  if (branches == null) return null;
+  const detected = yield* detectingBranch(branches);
   const branch = branchSetting(path) || detected;
-  const commit = yield* branchCommit(branch);
+  const commit = yield* branchCommit(branch, branches);
   const [adapterModule, shared] = yield* together(readingAdapterModule(commit), readingShared(commit));
   return { info: { path, remote: remote ?? null, branch }, detected, adapterModule, shared };
 }

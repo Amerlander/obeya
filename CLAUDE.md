@@ -5,7 +5,8 @@ decisions behind them are in `docs/design.md` — read it before changing anythi
 current in the same change. Work in progress is planned in plan docs under `docs/plan/` (Obeya
 shows them as projects); when one is done, what lasts moves into `docs/design.md` and the doc goes.
 
-- Bun + TypeScript throughout; tests with `bun test`, types with `bun run typecheck`.
+- Bun + TypeScript throughout; tests with `bun test --parallel` (a file per process, from Bun 1.4 on;
+  older Bun ignores the flag and runs them one after the other), types with `bun run typecheck`.
 - `src/core/` is shared by server and UI (types, plan-doc parser, layout); `src/server/` is the
   Bun server with SQLite; `src/ui/` the React canvas; `src/adapters/` what Obeya knows of a repository (its defaults, its settings).
 - Code that drives agents is tested against the fake runtime in `src/server/testing.ts` and real
