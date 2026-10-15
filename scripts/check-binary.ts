@@ -145,8 +145,9 @@ await check('the settings show the version and no checkout; the repository has i
   expect(view.server.version === pkg.version, `version ${view.server.version}`);
   expect(view.server.commit === null, `commit ${view.server.commit}`);
   expect(view.server.restarts, 'not supervised');
-  const howToRun = view.resolved[0]?.repos[0]?.values.demo.howToRun;
-  expect(howToRun?.source === 'repository', `howToRun ${JSON.stringify(howToRun)} (${JSON.stringify(view.problems)})`);
+  const checked = await json('/api/config/check');
+  const howToRun = checked.resolved[0]?.repos[0]?.values.demo.howToRun;
+  expect(howToRun?.source === 'repository', `howToRun ${JSON.stringify(howToRun)} (${JSON.stringify(checked.problems)})`);
   return `version ${view.server.version}, howToRun from the repository`;
 });
 

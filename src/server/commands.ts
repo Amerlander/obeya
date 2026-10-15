@@ -130,7 +130,7 @@ export interface CommanderOptions {
   /** The files of the owner's screenshots, by id; unknown ones are left out. */
   imageFiles?: (ids?: string[]) => string[];
   /** Obeya's configuration: the Koordinator reads it, and changes it on the owner's word. */
-  config?: Pick<Config, 'view' | 'check'>;
+  config?: Pick<Config, 'view' | 'check' | 'checkSaved'>;
   /** The Koordinator's model and effort; another one chosen since takes a new session. */
   agentSetting?: () => AgentSetting;
   /**
@@ -492,7 +492,7 @@ export class Commander {
                   'Call it for any question about the configuration, and before configure.',
                 ].join('\n'),
                 schema: {},
-                run: () => JSON.stringify(config.view(), null, 1),
+                run: async () => JSON.stringify({ ...config.view(), ...(await config.checkSaved()) }, null, 1),
               },
               {
                 name: 'configure',
@@ -521,8 +521,8 @@ export class Commander {
                   ),
                   confirm: z.string(),
                 },
-                run: ({ canvases, confirm }: Record<string, unknown>) => {
-                  const { problems: all, canvases: checked } = config.check(canvases);
+                run: async ({ canvases, confirm }: Record<string, unknown>) => {
+                  const { problems: all, canvases: checked } = await config.check(canvases);
                   const problems = all.filter(blocksSaving);
                   if (problems.length)
                     return `Nothing recorded, the configuration does not work: ${problems.map((p) => p.detail).join('; ')}. Fix it and call configure again, or reply to the owner.`;

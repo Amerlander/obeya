@@ -367,7 +367,11 @@ export function serve(
       },
       // „Für alle ins Repository übernehmen“: a repository's settings for this machine into its .obeya/settings.json
       '/api/config/share-settings': { POST: async (req) => (config ? handle(async () => config.shareSettings(await req.json())) : new Response('Not found', { status: 404 })) },
-      '/api/config/check': { POST: async (req) => (config ? handle(async () => config.check(await req.json())) : new Response('Not found', { status: 404 })) },
+      // what the configuration amounts to and what is wrong with it: as saved, or a draft as the owner edits it
+      '/api/config/check': {
+        GET: () => (config ? handle(() => config.checkSaved()) : new Response('Not found', { status: 404 })),
+        POST: async (req) => (config ? handle(async () => config.check(await req.json())) : new Response('Not found', { status: 404 })),
+      },
       '/api/c/:canvas/canvas': { GET: on((c) => c.board.snapshot()) },
       '/api/c/:canvas/cards': { POST: on(async (c, req) => c.board.create((await req.json()) as NewCard)) },
       // from "Konfiguration", for a repository without settings of its own: the card that writes them
@@ -597,7 +601,7 @@ export function serve(
       '/api/c/:canvas/setting-proposals/:id/take': {
         POST: on(async (c, req) => {
           const { where, value } = (await req.json().catch(() => ({}))) as { where?: unknown; value?: unknown };
-          return click(c, c.takeSetting(Number(req.params.id), where, value) ?? {});
+          return click(c, (await c.takeSetting(Number(req.params.id), where, value)) ?? {});
         }),
       },
       '/api/c/:canvas/setting-proposals/:id/reject': { POST: on((c, req) => click(c, c.rejectSetting(Number(req.params.id)))) },

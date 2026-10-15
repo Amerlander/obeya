@@ -455,8 +455,8 @@ export class MachineSetup {
     const job: MachineJob = (this.job = { kind: 'clone', running: true, line: '' });
     console.log(`Obeya: cloning ${spec} into ${dest}`);
     this.run(argv, (line) => (job.line = line.slice(0, 300)))
-      .then(() => {
-        ({ canvas: job.canvas, branch: job.branch, opens: job.opens } = this.add(dest));
+      .then(async () => {
+        ({ canvas: job.canvas, branch: job.branch, opens: job.opens } = await this.add(dest));
       })
       .catch((e: Error) => {
         job.error = e instanceof BadRequest ? e.message : e.message.split('\n').at(-1)!;
@@ -467,19 +467,19 @@ export class MachineSetup {
   }
 
   /** Adds the repository as a canvas of its own and saves the configuration; Obeya runs it at once. */
-  private add(path: string): FirstCanvas {
+  private async add(path: string): Promise<FirstCanvas> {
     let next = [...this.o.config.current(), { repos: [{ path }] }];
-    let { problems, resolved } = this.o.config.check(next);
+    let { problems, resolved } = await this.o.config.check(next);
     // a repository whose settings say clones gets two, so two cards can be worked on at once
     if (resolved.at(-1)?.repos[0]?.workspaces === 'clones') {
       next = [...next.slice(0, -1), { repos: [{ path, clones: CLONES }] }];
-      ({ problems, resolved } = this.o.config.check(next));
+      ({ problems, resolved } = await this.o.config.check(next));
     }
     const problem = problems.find(blocksSaving);
     if (problem) throw new BadRequest(problem.code === 'notRepo' ? 'notRepo' : 'config', problem.detail);
     const canvas = resolved.at(-1)!.id;
     writeFileSync(join(this.o.home, WELCOME_FILE), canvas);
-    const { restarting, applied } = this.o.config.save(next);
+    const { restarting, applied } = await this.o.config.save(next);
     return { canvas, branch: repoInfo(path).branch, opens: restarting || !!applied };
   }
 }

@@ -3469,6 +3469,14 @@ create a task that fixes it, answered above the microphone. The "Konfiguration" 
 counts the problems of the saved configuration in red; the page reads them when it loads and after
 each save in the dialog.
 
+The dialog shows the configuration at once (`GET /api/config`, the file as saved) and what it
+amounts to after it, once the check is done (`/api/config/check`; „Repositories werden geprüft …“
+until then): the problems, each repository's id and settings with where they come from, and the
+ids of the canvases, which a rename keeps. The check reads each repository with git once, however
+often the configuration names it (a canvas's repository, a workspace, a host's remote), all of them
+at once and without blocking the server (`gitSteps`, `readingRepo`): three canvases with four
+repositories and eight workspaces take 41 git calls in about 60 ms.
+
 A repository with no value from its own `.obeya/settings.json`, or with the problem `adapterGone`,
 offers „Von einem Agenten ausfüllen lassen“ under the words that Obeya does not know yet how its app
 starts, which checks run and how to run it for a demo, and that the owner can set that under
@@ -3656,6 +3664,14 @@ of what the owner may say.
   where it is used. Until then any change but a repository's settings restarted
   all of Obeya, once no worker on any canvas was in the middle of a turn: adding a canvas or a
   repository, a clone more, a renamed canvas, a new version of an adapter landed by a card.
+- **The configuration shows before its check** (2026-10-15). Until then reading it checked it
+  first, with 109 git calls one after the other on the server's thread (each repository resolved up
+  to three times, its main branch and `.obeya/settings.json` read several times, each of eight
+  workspaces resolved in full): the dialog said „Konfiguration wird geladen …“ for seconds, and the
+  whole server stood still meanwhile, every page load included, which read the configuration for its
+  problem count. What Obeya reads of a repository with git is written once as steps
+  (`GitSteps`) that the check runs without blocking, its calls at once, and the running canvases
+  run waiting, as they did.
 - **The configuration is a dialog nearly as large as the window**, its sections listed on the left,
   not a sheet (2026-10-09, the owner's wish): as a sidebar it stacked eight framed blocks, each with
   a heading above its frame and frames inside frames for canvases and repositories, in one narrow

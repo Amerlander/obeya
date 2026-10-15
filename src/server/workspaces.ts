@@ -733,9 +733,12 @@ export function useBranchSetting(repoPath: string, branch: () => string | undefi
   };
 }
 
+/** The main branch the owner set on this machine for the repository at `path`; none where they set none. */
+export const branchSetting = (path: string): string | undefined => branchSettings.get(resolve(path))?.()?.trim() || undefined;
+
 /** The repository's main branch: the one the owner set for it on this machine, else the one detected (`detectedBranch`). */
 export function defaultBranch(path: string): string {
-  return branchSettings.get(resolve(path))?.()?.trim() || detectedBranch(path);
+  return branchSetting(path) || detectedBranch(path);
 }
 
 /**
@@ -745,26 +748,66 @@ export function defaultBranch(path: string): string {
  * while does not take its place; else the branch the checkout is on, unless that is a card's;
  * else `init.defaultBranch`, else `main`.
  */
-export function detectedBranch(path: string): string {
-  const read = (...args: string[]) => {
-    try {
-      return git(path, ...args);
-    } catch {
-      return '';
-    }
-  };
-  const origin = read('symbolic-ref', '--short', '-q', 'refs/remotes/origin/HEAD');
+export const detectedBranch = (path: string): string => gitStepsSync(path, detectingBranch());
+
+/** `detectedBranch` as git steps. */
+export function* detectingBranch(): GitSteps<string> {
+  const [origin] = yield [['symbolic-ref', '--short', '-q', 'refs/remotes/origin/HEAD']];
   if (origin) return origin.replace(/^origin\//, '');
-  const own = read('for-each-ref', '--format=%(refname:short)', 'refs/heads/')
-    .split('\n')
-    .filter((b) => b && !b.startsWith(CARD_BRANCH));
+  const [heads, init] = yield [['for-each-ref', '--format=%(refname:short)', 'refs/heads/'], ['config', '--get', 'init.defaultBranch']];
+  const own = (heads ?? '').split('\n').filter((b) => b && !b.startsWith(CARD_BRANCH));
   if (own.length === 1) return own[0]!;
-  const init = read('config', '--get', 'init.defaultBranch');
   const usual = [init, 'main', 'master'].find((b) => b && own.includes(b));
   if (usual) return usual;
-  const current = read('symbolic-ref', '--short', '-q', 'HEAD');
+  const [current] = yield [['symbolic-ref', '--short', '-q', 'HEAD']];
   if (current && !current.startsWith(CARD_BRANCH)) return current;
   return init || 'main';
+}
+
+/**
+ * What Obeya reads of a repository with git, written once for both ways it runs: batches of git
+ * calls (their arguments) that do not depend on one another, each answered with the calls' output
+ * (trimmed; null where git failed) before the next batch is asked.
+ */
+export type GitSteps<T> = Generator<string[][], T, (string | null)[]>;
+
+/** Runs git steps in `cwd` one call after the other, the server waiting: for code that cannot wait otherwise. */
+export function gitStepsSync<T>(cwd: string, steps: GitSteps<T>): T {
+  const one = (args: string[]) => {
+    try {
+      return git(cwd, ...args);
+    } catch {
+      return null;
+    }
+  };
+  for (let step = steps.next([]); ; step = steps.next(step.value.map(one))) if (step.done) return step.value;
+}
+
+/** Runs git steps in `cwd` without blocking the server, the calls of each batch at once. */
+export async function gitSteps<T>(cwd: string, steps: GitSteps<T>): Promise<T> {
+  const one = async (args: string[]) => {
+    const r = await gitRun(cwd, args).catch(() => null);
+    return r?.code === 0 ? r.stdout.trim() : null;
+  };
+  for (let step = steps.next([]); ; step = steps.next(await Promise.all(step.value.map(one)))) if (step.done) return step.value;
+}
+
+/** Git steps of their own that run beside each other: each batch holds the next calls of both. */
+export function* together<A, B>(a: GitSteps<A>, b: GitSteps<B>): GitSteps<[A, B]> {
+  let x = a.next([]);
+  let y = b.next([]);
+  while (!x.done || !y.done) {
+    const asked = x.done ? 0 : x.value.length;
+    const got = yield [...(x.done ? [] : x.value), ...(y.done ? [] : y.value)];
+    if (!x.done) x = a.next(got.slice(0, asked));
+    if (!y.done) y = b.next(got.slice(asked));
+  }
+  return [x.value, y.value];
+}
+
+/** Git steps of one batch: these calls. */
+export function* gitCalls(...calls: string[][]): GitSteps<(string | null)[]> {
+  return yield calls;
 }
 
 /** What every card's branch begins with. */

@@ -6,7 +6,7 @@
 
 import { existsSync, mkdirSync, realpathSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { defaultBranch, GIT } from './workspaces';
+import { defaultBranch, GIT, type GitSteps, gitStepsSync } from './workspaces';
 
 type Git = (...args: string[]) => string | null;
 
@@ -23,12 +23,19 @@ const gitIn =
  * with neither.
  */
 export function defaultBranchCommit(repoPath: string): { branch: string; commit: string } {
-  const git = gitIn(repoPath);
   const branch = defaultBranch(repoPath);
-  const local = git('rev-parse', '--verify', '--quiet', `refs/heads/${branch}`);
-  const remote = git('rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`);
-  const commit = local && remote ? (git('merge-base', '--is-ancestor', remote, local) !== null ? local : remote) : (local ?? remote ?? 'HEAD');
-  return { branch, commit };
+  return { branch, commit: gitStepsSync(repoPath, branchCommit(branch)) };
+}
+
+/** The commit of the default branch `branch` by `defaultBranchCommit`'s rule, as git steps. */
+export function* branchCommit(branch: string): GitSteps<string> {
+  const [local, remote] = yield [
+    ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`],
+    ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`],
+  ];
+  if (!local || !remote) return local ?? remote ?? 'HEAD';
+  const [ahead] = yield [['merge-base', '--is-ancestor', remote, local]];
+  return ahead != null ? local : remote;
 }
 
 export interface ReadTreeOptions {

@@ -774,6 +774,7 @@ const de = {
       'Gespeichert. Gilt ab sofort. Wo die Agenten eines Repositorys jetzt anders arbeiten oder nicht mehr dabei sind, übernimmt Obeya es für sie, sobald sie an einem sicheren Punkt pausieren; alle anderen arbeiten weiter.',
     json: 'Als JSON',
     loading: 'Konfiguration wird geladen …',
+    checking: 'Repositories werden geprüft …',
     problem: {
       noCanvas: 'Obeya braucht mindestens eine Leinwand.',
       noRepo: 'Eine Leinwand braucht mindestens ein Repository.',
@@ -2003,6 +2004,7 @@ const en: Strings = {
       "Saved. Applies at once. Where a repository's agents now work differently or are no longer part of it, Obeya applies it for them once they pause at a safe point; everyone else works on.",
     json: 'As JSON',
     loading: 'Loading the configuration …',
+    checking: 'Checking the repositories …',
     problem: {
       noCanvas: 'Obeya needs at least one canvas.',
       noRepo: 'A canvas needs at least one repository.',

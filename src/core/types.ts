@@ -1234,7 +1234,10 @@ export type ConfigProblemCode =
   /** Malformed: a bug in whoever wrote it. */
   | 'invalid';
 
-/** Obeya's configuration as the owner sees and edits it. */
+/**
+ * Obeya's configuration as the owner sees and edits it, at once: what it amounts to and what is
+ * wrong with it come after, from its check (`ConfigChecked`), which reads every repository.
+ */
 export interface ConfigView {
   /** The file it is saved in. */
   file: string;
@@ -1242,9 +1245,6 @@ export interface ConfigView {
   source: 'file' | 'args';
   /** As saved (or as given on the command line, before anything is saved). */
   canvases: CanvasConfig[];
-  /** What they amount to, by index; null for a canvas with a problem. */
-  resolved: (ResolvedCanvas | null)[];
-  problems: ConfigProblem[];
   /** The ids of the canvases this server runs. */
   running: string[];
   /**
@@ -1254,6 +1254,15 @@ export interface ConfigView {
   server: { port: number; home: string; permissionMode: string; restarts: boolean; version: string; commit: string | null };
   /** Saved, and Obeya starts again with it once no agent is in the middle of a turn. */
   restarting: boolean;
+}
+
+/** A configuration checked: what it amounts to and what keeps it from working. */
+export interface ConfigChecked {
+  /** As saved, tidied. */
+  canvases: CanvasConfig[];
+  /** What they amount to, by index; null for a canvas with a problem. */
+  resolved: (ResolvedCanvas | null)[];
+  problems: ConfigProblem[];
 }
 
 /** What „Für alle ins Repository übernehmen“ did with a repository's settings for this machine. */

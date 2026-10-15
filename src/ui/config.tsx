@@ -4,7 +4,7 @@
 // own settings come from its command line and show read-only.
 
 import { type CSSProperties, Fragment, type ReactNode, useEffect, useId, useRef, useState } from 'react';
-import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigView, type DemoSettings, type DemoSettingsView, type DemoSite, type DemoVoiceCheck, type Language, type HostConfig, type LanguageView, type NarrationLanguage, restartsAgents, type RepoConfig, type RepoSettings, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, type SetupCheck, type StackSettings, type Theme, THEMES, type ThemeView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
+import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigChecked, type ConfigProblem, type ConfigView, type DemoSettings, type DemoSettingsView, type DemoSite, type DemoVoiceCheck, type Language, type HostConfig, type LanguageView, type NarrationLanguage, restartsAgents, type RepoConfig, type RepoSettings, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, type SetupCheck, type StackSettings, type Theme, THEMES, type ThemeView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
 import { LANGUAGES } from '../core/locale';
 import { pushKeyFromEvent, type PushKeyView } from '../core/push-key';
 import { api, ApiError, reload } from './api';
@@ -21,7 +21,7 @@ declare global {
   }
 }
 
-type Checked = Pick<ConfigView, 'resolved' | 'problems'>;
+type Checked = Pick<ConfigChecked, 'resolved' | 'problems'>;
 
 /** Hands the Koordinator a request; to the one of `canvas` where given, else to this page's. */
 type Ask = (text: string, canvas?: string) => void;
@@ -55,10 +55,31 @@ export const showRepoClones = (f: ConfigFocus) => {
 type KeptCanvases = { draft: CanvasConfig[]; origin: (string | null)[] };
 const ofKept = (k: KeptCanvases) => k.draft;
 
+/**
+ * The draft with the ids of its canvases once the check of the configuration as `loaded` resolved
+ * them: a canvas without one yet gets the id of the loaded canvas with its repositories, and a
+ * running one the owner renamed meanwhile keeps it, as a rename does once the id is known; one they
+ * added has none.
+ */
+function pinned(kept: KeptCanvases, loaded: CanvasConfig[], resolved: Checked['resolved'], running: string[]): KeptCanvases {
+  const taken = new Set<number>();
+  const out = kept.draft.map((c, i) => {
+    if (kept.origin[i]) return { c, id: kept.origin[i]! };
+    const j = loaded.findIndex((l, k) => !taken.has(k) && JSON.stringify(l.repos) === JSON.stringify(c.repos));
+    if (j < 0) return { c, id: null };
+    taken.add(j);
+    const id = resolved[j]?.id ?? null;
+    return { c: id && running.includes(id) && !c.id && c.name !== loaded[j]!.name ? { ...c, id } : c, id };
+  });
+  return { draft: out.map((x) => x.c), origin: out.map((x) => x.id) };
+}
+
 export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }: { on: boolean; onClose: () => void; onSetup: () => void; onAsk: Ask; onTalk: () => void; onProblems: (n: number) => void }) {
   const [view, setView] = useState<ConfigView | null>(null);
   const [draft, setDraft] = useState<CanvasConfig[]>([]);
   const [checked, setChecked] = useState<Checked | null>(null);
+  // the check of the configuration as saved: it reads every repository, so it comes after the configuration
+  const [saved, setSaved] = useState<Checked | null>(null);
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
   const [json, setJson] = useState(false);
@@ -74,10 +95,30 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }
   const [origin, setOrigin] = useState<(string | null)[]>([]);
   // a repository added here whose settings say clones gets as many as the first canvas's, once it is checked
   const filled = useRef(new Set<string>());
-  const load = (v: ConfigView) => {
+  // the canvases as loaded while their ids are unknown yet: those come with the check of the saved configuration
+  const unpinned = useRef<CanvasConfig[] | null>(null);
+  const load = (v: ConfigView, c: Checked | null) => {
     filled.current.clear();
     setDraft(v.canvases);
-    setOrigin(v.resolved.map((r) => r?.id ?? null));
+    setOrigin(c ? c.resolved.map((r) => r?.id ?? null) : v.canvases.map(() => null));
+    unpinned.current = c ? null : v.canvases;
+  };
+  const now = useRef({ draft, origin, running: view?.running ?? [] });
+  now.current = { draft, origin, running: view?.running ?? [] };
+  const savedSeq = useRef(0);
+  const checkSaved = () => {
+    const n = ++savedSeq.current;
+    api.configCheck().then((c) => {
+      if (n !== savedSeq.current) return;
+      setSaved(c);
+      onProblems(c.problems.length);
+      const loaded = unpinned.current;
+      unpinned.current = null;
+      if (!loaded) return;
+      const p = pinned(now.current, loaded, c.resolved, now.current.running);
+      if (p.draft.some((x, i) => x !== now.current.draft[i])) setDraft(p.draft);
+      setOrigin(p.origin);
+    }, console.error);
   };
 
   // the field to show once the canvases are there; a new object each time, so a second jump to the same one still scrolls
@@ -98,16 +139,17 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }
     const f = sessionStorage.getItem(FOCUS_KEY);
     sessionStorage.removeItem(FOCUS_KEY);
     setFocus(f ? (JSON.parse(f) as ConfigFocus) : null);
+    setSaved(null);
     api.config().then((v) => {
       setView(v);
       const kept = !changedRef.current && keptConfigDraft<KeptCanvases>(sessionStorage, 'canvases', v.canvases, ofKept);
       if (kept) {
         setDraft(kept.draft);
         setOrigin(kept.origin);
-      } else if (!changedRef.current) load(v);
-      setChecked(v);
-      onProblems(v.problems.length);
+        unpinned.current = v.canvases;
+      } else if (!changedRef.current) load(v, null);
       setStatus(v.restarting ? t.config.saved : '');
+      checkSaved();
     }, console.error);
   }, [on]);
 
@@ -117,10 +159,13 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }
     if (next) setDraft(next);
   };
 
-  // the draft is checked as it is edited: paths, adapters, ids
+  // the draft is checked as it is edited: paths, settings, ids; as saved, it has the check of the saved configuration
   const seq = useRef(0);
   useEffect(() => {
-    if (!view || !changed) return void (view && setChecked(view));
+    if (!changed) setChecked(saved);
+  }, [changed, saved]);
+  useEffect(() => {
+    if (!view || !changed) return void ++seq.current;
     const n = ++seq.current;
     const h = setTimeout(() => api.checkConfig(draft).then((c) => n === seq.current && take(c, draft), console.error), 300);
     return () => clearTimeout(h);
@@ -197,10 +242,13 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }
                   let applies = false;
                   try {
                     const { restarting, applied } = await api.saveConfig(draft);
-                    // settings applied at once change what the repositories amount to (where „Für alle“ goes, say): read it again
+                    // what is saved now is the draft as last checked; settings applied at once change what the
+                    // repositories amount to (where „Für alle“ goes, say), so it is read and checked again
                     const fresh = applied ? await api.config() : null;
+                    savedSeq.current++;
+                    setSaved(checked);
                     setView({ ...(fresh ?? view), canvases: draft, restarting });
-                    if (fresh) setChecked(fresh);
+                    checkSaved();
                     setStatus(restarting ? c.saved : applied ? (restartsAgents(view.canvases, draft) ? c.savedRestarts : c.savedApplied) : c.savedOnly);
                     applies = !restarting;
                   } catch (e) {
@@ -209,13 +257,12 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }
                   setBusy(false);
                   return applies;
                 }}
-                onReset={() => load(view)}
+                onReset={() => load(view, saved)}
                 onReload={async () => {
                   const v = await api.config();
                   setView(v);
-                  load(v);
-                  setChecked(v);
-                  onProblems(v.problems.length);
+                  load(v, null);
+                  checkSaved();
                 }}
                 status={status}
                 json={json}
@@ -377,6 +424,7 @@ function Canvases({ view, draft, origin, checked, changed, busy, focus, onAsk, o
           )
         }
       />
+      {!checked && <p className="hint">{c.checking}</p>}
       {draft.map((x, i) => (
         <CanvasBlock
           key={i}
@@ -1000,7 +1048,7 @@ function VoiceBlock({ on }: { on: boolean }) {
 interface CanvasProps {
   n: number;
   canvas: CanvasConfig;
-  resolved: ConfigView['resolved'][number];
+  resolved: ConfigChecked['resolved'][number];
   running: string[];
   /** The id of the running canvas this one is: a new name keeps it. */
   pin?: string;

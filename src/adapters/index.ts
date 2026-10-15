@@ -3,7 +3,7 @@ import { defaultBranchCommit } from '../server/read-tree';
 import { onGitHub } from '../server/repo';
 import { COMPILED, resource } from '../server/resources';
 import type { RepoSettings, RepoValues, SharedSettings, StackSettings } from '../core/types';
-import { detectedBranch, GIT } from '../server/workspaces';
+import { detectedBranch, type GitSteps, gitStepsSync } from '../server/workspaces';
 import { generic } from './generic';
 import { checkShared } from './schema';
 import type { RepoAdapter, RepoInfo } from './types';
@@ -59,13 +59,13 @@ export const usableStack = (stack: StackSettings | undefined): StackSettings | u
  * The repository's settings as they stand without this machine's, with where each comes from: its
  * `.obeya/settings.json` (`shared`), the clones the configuration names, detection, the defaults.
  */
-export function repoValues(repo: RepoInfo, clones = false, shared: SharedSettings = {}): RepoValues {
+export function repoValues(repo: RepoInfo, clones = false, shared: SharedSettings = {}, detected = detectedBranch(repo.path)): RepoValues {
   const a = defaultsFor(repo);
   const value = <K extends Exclude<keyof SharedSettings, 'demo'>, T>(v: T, field: K) =>
     shared[field] !== undefined ? { value: shared[field] as T, source: 'repository' as const } : { value: v, source: field === 'land' ? ('detected' as const) : ('default' as const) };
   const { howToRun, site } = shared.demo ?? {};
   return {
-    branch: { value: detectedBranch(repo.path), source: 'detected' },
+    branch: { value: detected, source: 'detected' },
     land: value(a.land, 'land'),
     direct: value(!!a.direct, 'direct'),
     checks: value(a.checks ?? [], 'checks'),
@@ -113,8 +113,13 @@ export function parseShared(text: string): SharedRead {
  * the time; nothing where the default branch has no such file.
  */
 export function readShared(repoPath: string, commit = defaultBranchCommit(repoPath).commit): SharedRead {
-  const r = Bun.spawnSync([GIT, '-C', repoPath, 'cat-file', 'blob', `${commit}:${REPO_SETTINGS_FILE}`], { stderr: 'ignore' });
-  return r.exitCode === 0 ? parseShared(r.stdout.toString()) : { problems: [] };
+  return gitStepsSync(repoPath, readingShared(commit));
+}
+
+/** `readShared` at `commit` as git steps. */
+export function* readingShared(commit: string): GitSteps<SharedRead> {
+  const [text] = yield [['cat-file', 'blob', `${commit}:${REPO_SETTINGS_FILE}`]];
+  return text != null ? parseShared(text) : { problems: [] };
 }
 
 /**
@@ -122,5 +127,11 @@ export function readShared(repoPath: string, commit = defaultBranchCommit(repoPa
  * what its settings say now, which Obeya no longer reads (problem `adapterGone`).
  */
 export function hasAdapterModule(repoPath: string, commit = defaultBranchCommit(repoPath).commit): boolean {
-  return Bun.spawnSync([GIT, '-C', repoPath, 'cat-file', '-e', `${commit}:${REPO_ADAPTER_DIR}/index.ts`], { stderr: 'ignore' }).exitCode === 0;
+  return gitStepsSync(repoPath, readingAdapterModule(commit));
+}
+
+/** `hasAdapterModule` at `commit` as git steps. */
+export function* readingAdapterModule(commit: string): GitSteps<boolean> {
+  const [found] = yield [['cat-file', '-e', `${commit}:${REPO_ADAPTER_DIR}/index.ts`]];
+  return found != null;
 }

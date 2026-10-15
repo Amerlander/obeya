@@ -261,7 +261,7 @@ function Canvas({
   const [setupOn, setSetupOn] = useState(false);
   // what is wrong in the configuration as saved, marked on its button; the page reads it when it loads
   const [configProblems, setConfigProblems] = useState(0);
-  useEffect(() => void api.config().then((v) => setConfigProblems(v.problems.length), console.error), []);
+  useEffect(() => void api.configCheck().then((c) => setConfigProblems(c.problems.length), console.error), []);
   // the archive, read while its list is open; archived cards unfold from their row there
   const [archived, setArchived] = useState<Item[]>([]);
   const archivedRef = useRef(archived);

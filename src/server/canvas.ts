@@ -3,7 +3,7 @@
 
 import { existsSync, mkdirSync, realpathSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
-import { defaultsFor, readShared, repoValues, type SharedRead, withSettings } from '../adapters';
+import { defaultsFor, readingAdapterModule, readingShared, readShared, repoValues, type SharedRead, withSettings } from '../adapters';
 import { Answers, answersDir, answerTag, openWithSystem } from './answers';
 import { repoName } from '../adapters/generic';
 import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
@@ -20,17 +20,17 @@ import type { Forge } from './forge';
 import { Koordinator } from './koordinator';
 import { WorkRetro } from './work-retro';
 import { PrWatcher } from './pr-watcher';
-import { ReadTree } from './read-tree';
+import { branchCommit, ReadTree } from './read-tree';
 import { Revisions } from './revisions';
 import { ProjectAgents } from './project-agents';
-import { readPlanDocs, repoInfo, watchPlanDocs } from './repo';
+import { readPlanDocs, watchPlanDocs } from './repo';
 import { boundsOf, GAP, type Place, unionBounds } from '../core/layout';
 import { type AgentRuntime, withAgentSetting } from './runtime';
 import { changesCode, RESTART_PATIENCE_MS, whenIdle } from './self-update';
 import { Sharing, shareArgv, siteIncomplete } from './share';
 import { siteMissing, siteName } from './site';
 import { type DueRestart, Workers } from './workers';
-import { defaultBranch, type Landed, useBranchSetting, Workspaces } from './workspaces';
+import { branchSetting, defaultBranch, detectingBranch, gitCalls, type GitSteps, gitStepsSync, type Landed, together, useBranchSetting, Workspaces } from './workspaces';
 import { claudeToken, githubToken, hostName, registerHost } from './hosts';
 
 export type { CanvasConfig, RepoConfig };
@@ -282,9 +282,16 @@ export class CanvasRuntime {
     return () => this.shared.get(path)!.settings;
   };
 
-  /** What a configuration of this canvas amounts to, with this machine's settings and the repositories' (`resolveCanvas`). */
+  /**
+   * What a configuration of this canvas amounts to, with this machine's settings and the
+   * repositories' (`resolveCanvas`): those of a repository new here as its read has them.
+   */
   private resolve(config: CanvasConfig) {
-    return resolveCanvas(config, this.deps.store, this.settingsOf, this.sharedOf);
+    return resolveCanvas(config, this.deps.store, this.settingsOf, this.sharedOf, (path) => {
+      const read = readRepo(path);
+      if (read && !this.shared.has(path)) this.shared.set(path, read.shared);
+      return read;
+    });
   }
 
   /** Registers where the main branch the owner set for the repository is read, once per path. */
@@ -778,14 +785,14 @@ export class CanvasRuntime {
    * The owner takes a setting the Arbeitsrückschau proposed, as it is or with their `value`: on
    * this machine, or into the repository's `.obeya/settings.json` for everyone (`Config.takeSetting`).
    */
-  takeSetting(id: number, where: unknown, value?: unknown): SettingsShared | null {
+  async takeSetting(id: number, where: unknown, value?: unknown): Promise<SettingsShared | null> {
     if (where !== 'machine' && where !== 'repository') throw new BadRequest('invalid', 'where is machine or repository');
     const p = this.board.settingProposal(id);
     const v = value === undefined ? p.value : typeof p.value === 'string' ? (typeof value === 'string' && value.trim() ? value.trim() : null) : Array.isArray(value) ? value.map(String).map((x) => x.trim()).filter(Boolean) : null;
     if (v === null || (Array.isArray(v) && !v.length)) throw new BadRequest('invalid', 'the value is missing');
     const r = this.repos.find((x) => x.ref.id === p.repo);
     if (!r || !this.deps.config) throw new BadRequest('invalid', 'no configuration to set it in');
-    const done = this.deps.config.takeSetting(resolve(r.config.path), p.field, v, where);
+    const done = await this.deps.config.takeSetting(resolve(r.config.path), p.field, v, where);
     this.board.decideSetting(id, where, v);
     const m = this.board.t.retro;
     const name = m.settings[p.field];
@@ -1555,35 +1562,65 @@ export class ConfigError extends Error {
 }
 
 /**
+ * What resolving a repository reads of it with git (`readingRepo`): where it is and its main
+ * branch (`info`), that branch as git tells it whatever the owner set (`detected`), whether its
+ * main branch still has an adapter module (`hasAdapterModule`), and its `.obeya/settings.json`
+ * there (`readShared`).
+ */
+export interface RepoRead {
+  info: RepoInfo;
+  detected: string;
+  adapterModule: boolean;
+  shared: SharedRead;
+}
+
+/** Reads a repository for `resolveCanvas`, as git steps; null where `path` is no git repository. */
+export function* readingRepo(path: string): GitSteps<RepoRead | null> {
+  const [[gitDir, remote], detected] = yield* together(gitCalls(['rev-parse', '--git-dir'], ['remote', 'get-url', 'origin']), detectingBranch());
+  if (gitDir == null) return null;
+  const branch = branchSetting(path) || detected;
+  const commit = yield* branchCommit(branch);
+  const [adapterModule, shared] = yield* together(readingAdapterModule(commit), readingShared(commit));
+  return { info: { path, remote: remote ?? null, branch }, detected, adapterModule, shared };
+}
+
+/** Reads a repository for `resolveCanvas`, the server waiting; null where `path` is no git repository. */
+export const readRepo = (path: string): RepoRead | null => gitStepsSync(path, readingRepo(path));
+
+/**
  * What a canvas's configuration amounts to, without touching anything: its repositories (home
  * first), each with Obeya's defaults and in front of them the repository's `.obeya/settings.json`
- * (`shared`: where they are read, by the repository's path; read once from its default branch when
- * left out) and this machine's settings (`settings`: where a repository's are read; its entry's
- * when left out), their ids, their settings without this machine's (`values`), and the canvas's id
- * and name. Throws a ConfigError.
+ * (`shared`: where they are read, by the repository's path; as `read` read them when left out) and
+ * this machine's settings (`settings`: where a repository's are read; its entry's when left out),
+ * their ids, their settings without this machine's (`values`), and the canvas's id and name. `read`
+ * reads each repository, by its absolute path (git, waiting for it, when left out). Throws a
+ * ConfigError.
  */
 export function resolveCanvas(
   config: CanvasConfig,
   store: Store,
   settings: (r: RepoConfig) => () => RepoSettings | undefined = (r) => () => r.settings,
-  shared: (path: string) => () => SharedSettings | undefined = (path) => {
-    const read = readShared(path).settings;
-    return () => read;
-  },
+  shared?: (path: string) => () => SharedSettings | undefined,
+  read: (path: string) => RepoRead | null = readRepo,
 ) {
   if (!config.repos.length) throw new ConfigError('noRepo', 'a canvas needs at least one repository');
-  let infos = config.repos.map((r, i) => {
-    try {
-      return repoInfo(resolve(r.path));
-    } catch {
-      throw new ConfigError('notRepo', `${r.path} is not a git repository`, i);
-    }
+  let reads = config.repos.map((r, i) => {
+    const got = read(resolve(r.path));
+    if (!got) throw new ConfigError('notRepo', `${r.path} is not a git repository`, i);
+    return got;
   });
+  let infos = reads.map((x) => x.info);
   // a repository runs once on a canvas: twice, it would have two of everything, its plan docs' note too
   infos.forEach((info, i) => {
     if (infos.findIndex((x) => x.path === info.path) < i) throw new ConfigError('sameRepo', `${config.repos[i]!.path} is on the canvas already`, i);
   });
-  let adapters = config.repos.map((r, i) => repoAdapter(r, infos[i]!, settings(r), shared(infos[i]!.path)));
+  const sharedOf =
+    shared ??
+    ((path: string) => {
+      const settings = reads.find((x) => x.info.path === path)?.shared.settings;
+      return () => settings;
+    });
+  let adapters = config.repos.map((r, i) => repoAdapter(r, infos[i]!, settings(r), sharedOf(infos[i]!.path)));
   let refs = uniqueRefs(infos, adapters);
   const id = config.id ? slug(config.id) : config.name ? slug(config.name) : slug(repoName(infos[0]!));
   // the home repository is fixed when the canvas is first served: bare plan references, cards
@@ -1594,13 +1631,14 @@ export function resolveCanvas(
     if (at < 0) throw new ConfigError('homeMissing', `canvas ${id}: its home repository "${stored}" is not configured; list it (first or anywhere)`);
     const order = [at, ...refs.map((_, i) => i).filter((i) => i !== at)];
     config = { ...config, repos: order.map((i) => config.repos[i]!) };
+    reads = order.map((i) => reads[i]!);
     infos = order.map((i) => infos[i]!);
     adapters = order.map((i) => adapters[i]!);
     refs = uniqueRefs(infos, adapters);
   }
   const name = config.name ?? repoName(infos[0]!);
-  const values = () => infos.map((info, i) => repoValues(info, namesClones(config.repos[i]!), shared(info.path)() ?? {}));
-  return { config, id, name, infos, adapters, values, refs, stored };
+  const values = () => infos.map((info, i) => repoValues(info, namesClones(config.repos[i]!), sharedOf(info.path)() ?? {}, reads[i]!.detected));
+  return { config, id, name, infos, reads, adapters, values, refs, stored };
 }
 
 /** What `resolveCanvas` resolved. */

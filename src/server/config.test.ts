@@ -52,13 +52,14 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-describe("Obeya's configuration", () => {
-  test('says what each canvas amounts to: its id, name, repositories and where their workers work', () => {
+describe("Obeya's configuration", async () => {
+  test('says what each canvas amounts to: its id, name, repositories and where their workers work', async () => {
     api = gitRepo(join(dir, 'api-own'), { '.obeya/settings.json': '{ "workspaces": "clones" }\n' });
     const c = config('args', [{ name: 'Produkt', repos: [{ path: web }, { path: api }] }], ['produkt']);
-    const v = c.view();
-    expect(v).toMatchObject({ file, source: 'args', running: ['produkt'], problems: [], restarting: false, server: { port: 4417, restarts: true } });
-    expect(v.resolved).toMatchObject([
+    expect(c.view()).toMatchObject({ file, source: 'args', running: ['produkt'], restarting: false, server: { port: 4417, restarts: true } });
+    const checked = await c.checkSaved();
+    expect(checked.problems).toEqual([]);
+    expect(checked.resolved).toMatchObject([
       {
         id: 'produkt',
         name: 'Produkt',
@@ -70,141 +71,141 @@ describe("Obeya's configuration", () => {
     ]);
   });
 
-  test('a repository whose configuration names clones works in clones, whatever its settings say', () => {
+  test('a repository whose configuration names clones works in clones, whatever its settings say', async () => {
     const c = config('file', []);
-    const mode = (r: object) => c.check([{ repos: [{ path: web, ...r }] }]).resolved[0]!.repos[0]!.workspaces;
-    expect(mode({})).toBe('worktrees');
-    expect(mode({ clones: 2 })).toBe('clones');
-    expect(mode({ workspaces: [api] })).toBe('clones');
-    expect(mode({ settings: { workspaces: 'worktrees' }, clones: 1 })).toBe('clones');
+    const mode = async (r: object) => (await c.check([{ repos: [{ path: web, ...r }] }])).resolved[0]!.repos[0]!.workspaces;
+    expect(await mode({})).toBe('worktrees');
+    expect(await mode({ clones: 2 })).toBe('clones');
+    expect(await mode({ workspaces: [api] })).toBe('clones');
+    expect(await mode({ settings: { workspaces: 'worktrees' }, clones: 1 })).toBe('clones');
   });
 
-  test('finds what keeps a configuration from working, by canvas and repository', () => {
+  test('finds what keeps a configuration from working, by canvas and repository', async () => {
     const c = config('file', []);
-    const { problems } = c.check([
+    const { problems } = (await c.check([
       { name: 'A', repos: [{ path: web }, { path: join(dir, 'nowhere') }] },
       { name: 'B', repos: [{ path: api, workspaces: [join(dir, 'nowhere')] }] },
       { name: 'Leer', repos: [] },
-    ]);
+    ]));
     expect(problems.map(({ code, canvas, repo }) => ({ code, canvas, repo }))).toEqual([
       { code: 'notRepo', canvas: 0, repo: 1 },
       { code: 'notClone', canvas: 1, repo: 0 },
       { code: 'noRepo', canvas: 2, repo: undefined },
     ]);
     // the id follows the name, unless it is kept
-    expect(c.check([{ name: 'Neuer Name', id: 'web', repos: [{ path: web }] }]).resolved[0]).toMatchObject({ id: 'web', name: 'Neuer Name' });
-    expect(c.check([{ name: 'Web', repos: [{ path: web }] }, { name: 'web', repos: [{ path: api }] }]).problems).toMatchObject([{ code: 'sameId', canvas: 1 }]);
+    expect((await c.check([{ name: 'Neuer Name', id: 'web', repos: [{ path: web }] }])).resolved[0]).toMatchObject({ id: 'web', name: 'Neuer Name' });
+    expect((await c.check([{ name: 'Web', repos: [{ path: web }] }, { name: 'web', repos: [{ path: api }] }])).problems).toMatchObject([{ code: 'sameId', canvas: 1 }]);
     // a repository once per canvas, by whatever path it is named
-    expect(c.check([{ name: 'Web', repos: [{ path: web }, { path: api }, { path: `${web}/` }] }]).problems).toMatchObject([{ code: 'sameRepo', canvas: 0, repo: 2 }]);
-    expect(c.check([]).problems.map((p) => p.code)).toEqual(['noCanvas']);
-    expect(c.check([{ repos: [{ path: web, color: 'red' }] }]).problems.map((p) => p.code)).toEqual(['invalid']);
-    expect(c.check({}).problems.map((p) => p.code)).toEqual(['invalid']);
+    expect((await c.check([{ name: 'Web', repos: [{ path: web }, { path: api }, { path: `${web}/` }] }])).problems).toMatchObject([{ code: 'sameRepo', canvas: 0, repo: 2 }]);
+    expect((await c.check([])).problems.map((p) => p.code)).toEqual(['noCanvas']);
+    expect((await c.check([{ repos: [{ path: web, color: 'red' }] }])).problems.map((p) => p.code)).toEqual(['invalid']);
+    expect((await c.check({})).problems.map((p) => p.code)).toEqual(['invalid']);
   });
 
-  test("a repository's share command is checked: its program must be there, a script is found in the repository", () => {
+  test("a repository's share command is checked: its program must be there, a script is found in the repository", async () => {
     const c = config('file', []);
     writeFileSync(join(web, 'share.ts'), '');
-    const problems = (share: string) => c.check([{ repos: [{ path: web, share }] }]).problems.map((p) => p.code);
-    expect(problems('share.ts --site demos')).toEqual([]);
-    expect(problems('./share.ts')).toEqual([]);
-    expect(problems('git')).toEqual([]);
-    expect(problems('scripts/nowhere.sh')).toEqual(['shareCommand']);
-    expect(problems('no-such-program-anywhere publish')).toEqual(['shareCommand']);
+    const problems = async (share: string) => (await c.check([{ repos: [{ path: web, share }] }])).problems.map((p) => p.code);
+    expect(await problems('share.ts --site demos')).toEqual([]);
+    expect(await problems('./share.ts')).toEqual([]);
+    expect(await problems('git')).toEqual([]);
+    expect(await problems('scripts/nowhere.sh')).toEqual(['shareCommand']);
+    expect(await problems('no-such-program-anywhere publish')).toEqual(['shareCommand']);
     // an empty one is no command: the demo site of the settings counts, or demos are exported
-    expect(problems('  ')).toEqual([]);
-    expect(c.check([{ repos: [{ path: web, share: ' ' }] }]).canvases).toEqual([{ repos: [{ path: web }] }]);
+    expect(await problems('  ')).toEqual([]);
+    expect((await c.check([{ repos: [{ path: web, share: ' ' }] }])).canvases).toEqual([{ repos: [{ path: web }] }]);
   });
 
-  test('hosts: tidied, only for a repository with clones whose work goes out through its remote, one machine per name', () => {
+  test('hosts: tidied, only for a repository with clones whose work goes out through its remote, one machine per name', async () => {
     const c = config('file', []);
     Bun.spawnSync(['git', '-C', web, 'remote', 'add', 'origin', 'https://github.com/acme/web.git']);
     const host = { name: 'Box', ssh: 'me@box.local', root: '~/obeya/web', clones: 2 };
     const check = (repos: object[]) => c.check([{ repos }]);
-    expect(check([{ path: web, hosts: [host, { name: ' ', ssh: '', root: '', clones: 1 }] }])).toMatchObject({ problems: [], canvases: [{ repos: [{ path: web, hosts: [host] }] }] });
-    expect(check([{ path: web, hosts: [{ ...host, root: ' ' }] }]).canvases[0]!.repos[0]!.hosts).toEqual([{ ...host, root: '~/obeya' }]);
+    expect(await check([{ path: web, hosts: [host, { name: ' ', ssh: '', root: '', clones: 1 }] }])).toMatchObject({ problems: [], canvases: [{ repos: [{ path: web, hosts: [host] }] }] });
+    expect((await check([{ path: web, hosts: [{ ...host, root: ' ' }] }])).canvases[0]!.repos[0]!.hosts).toEqual([{ ...host, root: '~/obeya' }]);
     // slots here and there, 0 included (no new cards there); left out, as many as there are clones
-    expect(check([{ path: web, slots: 0, hosts: [{ ...host, slots: 1 }] }]).canvases[0]!.repos[0]).toMatchObject({ slots: 0, hosts: [{ ...host, slots: 1 }] });
-    expect(check([{ path: web, hosts: [host] }]).canvases[0]!.repos[0]).not.toHaveProperty('slots');
+    expect((await check([{ path: web, slots: 0, hosts: [{ ...host, slots: 1 }] }])).canvases[0]!.repos[0]).toMatchObject({ slots: 0, hosts: [{ ...host, slots: 1 }] });
+    expect((await check([{ path: web, hosts: [host] }])).canvases[0]!.repos[0]).not.toHaveProperty('slots');
     // landing on the main of this checkout, or no remote: the host could not clone it
-    expect(check([{ path: web, settings: { land: 'main' }, hosts: [host] }]).problems.map((p) => p.code)).toEqual(['hostRepo']);
-    expect(check([{ path: api, hosts: [host] }]).problems.map((p) => p.code)).toEqual(['hostRepo']);
+    expect((await check([{ path: web, settings: { land: 'main' }, hosts: [host] }])).problems.map((p) => p.code)).toEqual(['hostRepo']);
+    expect((await check([{ path: api, hosts: [host] }])).problems.map((p) => p.code)).toEqual(['hostRepo']);
     Bun.spawnSync(['git', '-C', api, 'remote', 'add', 'origin', 'https://github.com/acme/api.git']);
-    expect(check([{ path: web, hosts: [host] }, { path: api, hosts: [{ ...host, ssh: 'other@box.local' }] }]).problems).toEqual([{ code: 'hostName', canvas: 0, repo: 1, detail: expect.stringContaining('me@box.local') }]);
-    expect(check([{ path: web, hosts: [{ ...host, name: 'a/b' }] }]).problems.map((p) => p.code)).toEqual(['invalid']);
+    expect((await check([{ path: web, hosts: [host] }, { path: api, hosts: [{ ...host, ssh: 'other@box.local' }] }])).problems).toEqual([{ code: 'hostName', canvas: 0, repo: 1, detail: expect.stringContaining('me@box.local') }]);
+    expect((await check([{ path: web, hosts: [{ ...host, name: 'a/b' }] }])).problems.map((p) => p.code)).toEqual(['invalid']);
   });
 
-  test("a demo site that cannot be used is a problem at the repository, unless this machine shares with a command of its own", () => {
+  test("a demo site that cannot be used is a problem at the repository, unless this machine shares with a command of its own", async () => {
     const site = { title: 'Demos', url: 'https://demos.example.dev', deploy: 'no-such-deploy-anywhere {dir}' };
     const own = gitRepo(join(dir, 'shop'), { '.obeya/settings.json': JSON.stringify({ demo: { site } }) });
     const c = config('args', [{ repos: [{ path: web }] }]);
-    const checked = c.check([{ repos: [{ path: own }] }]);
+    const checked = (await c.check([{ repos: [{ path: own }] }]));
     expect(checked.problems).toEqual([{ code: 'demoSite', canvas: 0, repo: 0, detail: "demo.site.deploy: the deploy command's program no-such-deploy-anywhere is not on the PATH" }]);
     expect(checked.resolved[0]!.repos[0]!.values.demo.site).toEqual({ value: site, source: 'repository' });
-    expect(c.check([{ repos: [{ path: own, share: 'git' }] }]).problems).toEqual([]);
+    expect((await c.check([{ repos: [{ path: own, share: 'git' }] }])).problems).toEqual([]);
     // one this machine sets without a URL
-    expect(c.check([{ repos: [{ path: web, settings: { demo: { site: { ...site, url: 'demos', deploy: 'git {dir}' } } } }] }]).problems.map((p) => p.detail)).toEqual(['demo.site.url: expected an http(s) URL']);
+    expect((await c.check([{ repos: [{ path: web, settings: { demo: { site: { ...site, url: 'demos', deploy: 'git {dir}' } } } }] }])).problems.map((p) => p.detail)).toEqual(['demo.site.url: expected an http(s) URL']);
   });
 
-  test("a repository whose main branch still has an adapter module is a problem there, which keeps nothing from being saved", () => {
+  test("a repository whose main branch still has an adapter module is a problem there, which keeps nothing from being saved", async () => {
     const own = gitRepo(join(dir, 'shop'), { '.obeya/adapter/index.ts': "export default { name: 'shop' };\n", '.obeya/settings.json': '{ "setup": "bun install" }\n' });
     const c = config('args', [{ repos: [{ path: web }] }]);
-    const checked = c.check([{ repos: [{ path: web }, { path: own }] }]);
+    const checked = (await c.check([{ repos: [{ path: web }, { path: own }] }]));
     expect(checked.problems).toEqual([{ code: 'adapterGone', canvas: 0, repo: 1, detail: '.obeya/adapter/ on the main branch is no longer read; what it says belongs in .obeya/settings.json' }]);
     expect(checked.resolved[0]!.repos[1]).toMatchObject({ id: 'shop', adapterGone: true });
     expect(checked.resolved[0]!.repos[0]!.adapterGone).toBeUndefined();
-    expect(c.save([{ repos: [{ path: web }, { path: own }] }])).toEqual({ restarting: true });
+    expect((await c.save([{ repos: [{ path: web }, { path: own }] }]))).toEqual({ restarting: true });
   });
 
-  test("keeps a canvas's home repository: leaving it out is a problem, moving it is not", () => {
+  test("keeps a canvas's home repository: leaving it out is a problem, moving it is not", async () => {
     store.ensureCanvas('produkt', 'Produkt');
     store.setSetting('produkt', 'home_repo', 'web');
     const c = config('file', []);
-    expect(c.check([{ name: 'Produkt', repos: [{ path: api }] }]).problems.map((p) => p.code)).toEqual(['homeMissing']);
-    const moved = c.check([{ name: 'Produkt', repos: [{ path: api }, { path: web }] }]);
+    expect((await c.check([{ name: 'Produkt', repos: [{ path: api }] }])).problems.map((p) => p.code)).toEqual(['homeMissing']);
+    const moved = (await c.check([{ name: 'Produkt', repos: [{ path: api }, { path: web }] }]));
     expect(moved.problems).toEqual([]);
     // listed in the order given, though the home one runs first
     expect(moved.resolved[0]!.repos.map((r) => r.id)).toEqual(['api', 'web']);
   });
 
-  test('saves a configuration that works, tidied, and starts Obeya again; one with problems is refused', () => {
+  test('saves a configuration that works, tidied, and starts Obeya again; one with problems is refused', async () => {
     const c = config('args', [{ repos: [{ path: web }] }]);
-    expect(() => c.save([{ repos: [{ path: join(dir, 'nowhere') }] }])).toThrow();
+    await expect(c.save([{ repos: [{ path: join(dir, 'nowhere') }] }])).rejects.toThrow();
     expect(existsSync(file)).toBe(false);
     expect(restarts).toBe(0);
 
-    expect(c.save([{ name: ' ', repos: [{ path: web, workspaces: [' '], clones: 0 }, { path: api, clones: 2 }] }])).toEqual({ restarting: true });
+    expect((await c.save([{ name: ' ', repos: [{ path: web, workspaces: [' '], clones: 0 }, { path: api, clones: 2 }] }]))).toEqual({ restarting: true });
     expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual([{ repos: [{ path: web }, { path: api, clones: 2 }] }]);
     expect(readConfigFile(file)).toEqual([{ repos: [{ path: web }, { path: api, clones: 2 }] }]);
     expect(restarts).toBe(1);
     expect(c.view().restarting).toBe(true);
     // saved again before the restart: the file has the latest, and the restart is already on its way
-    c.save([{ repos: [{ path: api }] }]);
+    (await c.save([{ repos: [{ path: api }] }]));
     expect(restarts).toBe(1);
   });
 
-  test("saved from the file, the running canvases take it over without a restart: settings tidied, canvases and repositories as they come", () => {
+  test("saved from the file, the running canvases take it over without a restart: settings tidied, canvases and repositories as they come", async () => {
     mkdirSync(join(dir, 'home'));
     writeFileSync(file, JSON.stringify([{ repos: [{ path: web }] }]));
     const c = config('file', [{ repos: [{ path: web }] }]);
-    expect(c.save([{ repos: [{ path: web, settings: { land: 'main', checks: ['bun test', ' '], branch: ' ', setup: '', planDocs: { dir: '', exclude: [] } } }] }])).toEqual({ restarting: false, applied: true });
+    expect((await c.save([{ repos: [{ path: web, settings: { land: 'main', checks: ['bun test', ' '], branch: ' ', setup: '', planDocs: { dir: '', exclude: [] } } }] }]))).toEqual({ restarting: false, applied: true });
     expect(readConfigFile(file)).toEqual([{ repos: [{ path: web, settings: { land: 'main', checks: ['bun test'], setup: '' } }] }]);
     expect(c.repoSettings(web)).toEqual({ land: 'main', checks: ['bun test'], setup: '' });
     expect(c.repoSettings(api)).toBeUndefined();
     // set back to what comes from elsewhere: nothing set
-    c.save([{ repos: [{ path: web, settings: {} }] }]);
+    (await c.save([{ repos: [{ path: web, settings: {} }] }]));
     expect(readConfigFile(file)).toEqual([{ repos: [{ path: web }] }]);
     expect(c.repoSettings(web)).toBeUndefined();
-    expect(c.save([{ repos: [{ path: web, settings: { workspaces: 'clones' } }] }])).toEqual({ restarting: false, applied: true });
-    expect(c.save([{ repos: [{ path: web, clones: 2 }] }, { name: 'API', repos: [{ path: api }] }])).toEqual({ restarting: false, applied: true });
+    expect((await c.save([{ repos: [{ path: web, settings: { workspaces: 'clones' } }] }]))).toEqual({ restarting: false, applied: true });
+    expect((await c.save([{ repos: [{ path: web, clones: 2 }] }, { name: 'API', repos: [{ path: api }] }]))).toEqual({ restarting: false, applied: true });
     expect(taken).toEqual([['web'], ['web'], ['web'], ['web', 'api']]);
     expect(restarts).toBe(0);
     expect(c.view().restarting).toBe(false);
   });
 
-  test("shows each repository's settings without this machine's, with where each comes from", () => {
+  test("shows each repository's settings without this machine's, with where each comes from", async () => {
     const c = config('file', []);
-    const values = (r: object) => c.check([{ repos: [{ path: web, ...r }] }]).resolved[0]!.repos[0]!.values;
-    expect(values({})).toMatchObject({
+    const values = async (r: object) => (await c.check([{ repos: [{ path: web, ...r }] }])).resolved[0]!.repos[0]!.values;
+    expect(await values({})).toMatchObject({
       branch: { value: 'main', source: 'detected' },
       land: { value: 'main', source: 'detected' },
       checks: { value: [], source: 'default' },
@@ -214,51 +215,51 @@ describe("Obeya's configuration", () => {
     });
     // this machine's own come on top, in the draft: the values beside them stay what they would be without
     const own = gitRepo(join(dir, 'own'), { '.obeya/settings.json': '{ "land": "main", "checks": ["bun test"], "demo": { "howToRun": "bun dev" } }\n' });
-    const ownValues = c.check([{ repos: [{ path: own, settings: { land: 'pr' } }] }]).resolved[0]!.repos[0]!.values;
+    const ownValues = (await c.check([{ repos: [{ path: own, settings: { land: 'pr' } }] }])).resolved[0]!.repos[0]!.values;
     expect(ownValues).toMatchObject({ land: { value: 'main', source: 'repository' }, checks: { source: 'repository' }, planDocs: { source: 'default' }, demo: { howToRun: { source: 'repository' } } });
-    expect(values({ clones: 1 }).workspaces).toEqual({ value: 'clones', source: 'clones' });
-    const problems = (branch: string) => c.check([{ repos: [{ path: web, settings: { branch } }] }]).problems.map((p) => p.code);
-    expect(problems('main')).toEqual([]);
-    expect(problems('nope')).toEqual(['noBranch']);
+    expect((await values({ clones: 1 })).workspaces).toEqual({ value: 'clones', source: 'clones' });
+    const problems = async (branch: string) => (await c.check([{ repos: [{ path: web, settings: { branch } }] }])).problems.map((p) => p.code);
+    expect(await problems('main')).toEqual([]);
+    expect(await problems('nope')).toEqual(['noBranch']);
   });
 
-  test("a repository's .obeya/settings.json: its values show as from the repository, what is wrong in it as a problem that blocks nothing", () => {
+  test("a repository's .obeya/settings.json: its values show as from the repository, what is wrong in it as a problem that blocks nothing", async () => {
     const shop = gitRepo(join(dir, 'shop'), { 'README.md': 'hi\n', '.obeya/settings.json': '{ "checks": ["bun test"], "check": [] }\n' });
     const c = config('file', []);
-    const { resolved, problems } = c.check([{ repos: [{ path: shop }] }]);
+    const { resolved, problems } = (await c.check([{ repos: [{ path: shop }] }]));
     expect(resolved[0]!.repos[0]!.values.checks).toEqual({ value: ['bun test'], source: 'repository' });
     expect(problems).toEqual([{ code: 'repoSettings', canvas: 0, repo: 0, detail: '.obeya/settings.json, check: no such field (did you mean checks?)' }]);
     expect(blocksSaving(problems[0]!)).toBe(false);
   });
 
-  test("„Für alle ins Repository übernehmen“ where work lands on main: committed there, and this machine's values then come from the repository", () => {
+  test("„Für alle ins Repository übernehmen“ where work lands on main: committed there, and this machine's values then come from the repository", async () => {
     mkdirSync(join(dir, 'home'));
     const settings = { branch: 'main', checks: ['bun test'], demo: { howToRun: 'bun dev' } };
     writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings }] }]));
     const c = config('file', [{ repos: [{ path: web, settings }] }]);
-    expect(c.view().resolved[0]!.repos[0]!.shareTo).toBe('main');
+    expect((await c.checkSaved()).resolved[0]!.repos[0]!.shareTo).toBe('main');
     // the checkout's own change to the file is not overwritten
     mkdirSync(join(web, '.obeya'));
     writeFileSync(join(web, '.obeya/settings.json'), '{}\n');
-    expect(() => c.shareSettings({ path: web })).toThrow(expect.objectContaining({ code: 'settingsDirty' }));
+    await expect(c.shareSettings({ path: web })).rejects.toMatchObject({ code: 'settingsDirty' });
     rmSync(join(web, '.obeya'), { recursive: true });
     // a change staged for something else stays staged, and out of the commit
     writeFileSync(join(web, 'README.md'), 'staged\n');
     git(web, 'add', 'README.md');
 
-    const done = c.shareSettings({ path: web });
+    const done = (await c.shareSettings({ path: web }));
     expect(done).toMatchObject({ branch: 'main', committed: git(web, 'rev-parse', 'main').trim() });
     expect(JSON.parse(git(web, 'show', 'main:.obeya/settings.json'))).toEqual({ checks: ['bun test'], demo: { howToRun: 'bun dev' } });
     expect(git(web, 'show', '--name-only', '--format=%s', 'main').trim()).toBe('Obeya settings for everyone: checks, demo\n\n.obeya/settings.json');
     expect(git(web, 'status', '--porcelain').trim()).toBe('M  README.md');
     // the main branch stays this machine's; the rest come from the repository now
     expect(readConfigFile(file)).toEqual([{ repos: [{ path: web, settings: { branch: 'main' } }] }]);
-    expect(c.view().resolved[0]!.repos[0]!.values).toMatchObject({ checks: { value: ['bun test'], source: 'repository' }, demo: { howToRun: { source: 'repository' } } });
+    expect((await c.checkSaved()).resolved[0]!.repos[0]!.values).toMatchObject({ checks: { value: ['bun test'], source: 'repository' }, demo: { howToRun: { source: 'repository' } } });
     expect([applied, restarts]).toEqual([1, 0]);
-    expect(() => c.shareSettings({ path: web })).toThrow(expect.objectContaining({ code: 'noSettings' }));
+    await expect(c.shareSettings({ path: web })).rejects.toMatchObject({ code: 'noSettings' });
   });
 
-  test("„Für alle ins Repository übernehmen“ where work goes out as pull requests: one is opened, this machine keeps its values until it is merged", () => {
+  test("„Für alle ins Repository übernehmen“ where work goes out as pull requests: one is opened, this machine keeps its values until it is merged", async () => {
     mkdirSync(join(dir, 'home'));
     const origin = join(dir, 'origin.git');
     git(dir, 'clone', '--quiet', '--bare', web, origin);
@@ -278,7 +279,7 @@ describe("Obeya's configuration", () => {
       onSettings: () => void applied++,
     });
     const before = git(web, 'rev-parse', 'main').trim();
-    expect(c.shareSettings({ path: web })).toEqual({ pr: 'https://github.com/acme/web/pull/7' });
+    expect((await c.shareSettings({ path: web }))).toEqual({ pr: 'https://github.com/acme/web/pull/7' });
     expect(opened).toEqual([expect.objectContaining({ base: 'main', head: expect.stringMatching(/^obeya-settings-\d{8}-\d{6}$/), title: 'Obeya settings for everyone: land, checks' })]);
     expect(JSON.parse(git(origin, 'show', `${opened[0]!.head}:.obeya/settings.json`))).toEqual(settings);
     expect(git(web, 'rev-parse', 'main').trim()).toBe(before);
@@ -289,7 +290,7 @@ describe("Obeya's configuration", () => {
     expect(applied).toBe(0);
   });
 
-  test("„Für alle ins Repository übernehmen“ straight onto origin's main, where work may go there beside pull requests", () => {
+  test("„Für alle ins Repository übernehmen“ straight onto origin's main, where work may go there beside pull requests", async () => {
     mkdirSync(join(dir, 'home'));
     const origin = join(dir, 'origin.git');
     git(dir, 'clone', '--quiet', '--bare', web, origin);
@@ -298,49 +299,49 @@ describe("Obeya's configuration", () => {
     const without = { land: 'pr' as const, checks: ['bun test'] };
     writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings: without }] }]));
     const c = config('file', [{ repos: [{ path: web, settings: without }] }]);
-    expect(c.view().resolved[0]!.repos[0]!.shareDirect).toBeUndefined();
-    expect(() => c.shareSettings({ path: web, direct: true })).toThrow(expect.objectContaining({ code: 'noDirect' }));
+    expect((await c.checkSaved()).resolved[0]!.repos[0]!.shareDirect).toBeUndefined();
+    await expect(c.shareSettings({ path: web, direct: true })).rejects.toMatchObject({ code: 'noDirect' });
 
     const settings = { ...without, direct: true };
     writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings }] }]));
-    expect(c.view().resolved[0]!.repos[0]!.shareDirect).toBe(true);
-    const done = c.shareSettings({ path: web, direct: true });
+    expect((await c.checkSaved()).resolved[0]!.repos[0]!.shareDirect).toBe(true);
+    const done = (await c.shareSettings({ path: web, direct: true }));
     expect(done).toEqual({ committed: git(origin, 'rev-parse', 'main').trim(), branch: 'main' });
     expect(JSON.parse(git(origin, 'show', 'main:.obeya/settings.json'))).toEqual(settings);
     expect(readConfigFile(file)).toEqual([{ repos: [{ path: web }] }]);
     // read from origin's main, which has more than the local one
-    expect(c.view().resolved[0]!.repos[0]!.values.checks).toEqual({ value: ['bun test'], source: 'repository' });
+    expect((await c.checkSaved()).resolved[0]!.repos[0]!.values.checks).toEqual({ value: ['bun test'], source: 'repository' });
     expect(applied).toBe(1);
   });
 
-  test('a setting the Arbeitsrückschau proposed, taken on this machine: it joins the values set there', () => {
+  test('a setting the Arbeitsrückschau proposed, taken on this machine: it joins the values set there', async () => {
     mkdirSync(join(dir, 'home'));
     writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings: { checks: ['bun test'], setup: 'bun install' } }] }]));
     const c = config('file', []);
-    expect(c.takeSetting(web, 'howToRun', 'bun dev --port 4000', 'machine')).toBeNull();
+    expect((await c.takeSetting(web, 'howToRun', 'bun dev --port 4000', 'machine'))).toBeNull();
     expect(readConfigFile(file)).toEqual([{ repos: [{ path: web, settings: { checks: ['bun test'], setup: 'bun install', demo: { howToRun: 'bun dev --port 4000' } } }] }]);
-    expect(c.takeSetting(web, 'checks', ['bun run typecheck'], 'machine')).toBeNull();
+    expect((await c.takeSetting(web, 'checks', ['bun run typecheck'], 'machine'))).toBeNull();
     expect(readConfigFile(file)[0]!.repos[0]!.settings!.checks).toEqual(['bun run typecheck']);
     // nothing went into the repository
     expect(existsSync(join(web, '.obeya/settings.json'))).toBe(false);
     expect(taken).toHaveLength(2);
   });
 
-  test('a setting the Arbeitsrückschau proposed, taken for everyone where work lands on main: that value alone is committed, and applies here too', () => {
+  test('a setting the Arbeitsrückschau proposed, taken for everyone where work lands on main: that value alone is committed, and applies here too', async () => {
     mkdirSync(join(dir, 'home'));
     writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings: { checks: ['bun test'], demo: { howToRun: 'npm start' } } }] }]));
     const c = config('file', []);
-    const done = c.takeSetting(web, 'howToRun', 'bun dev --port 4000', 'repository');
+    const done = (await c.takeSetting(web, 'howToRun', 'bun dev --port 4000', 'repository'));
     expect(done).toMatchObject({ branch: 'main', committed: git(web, 'rev-parse', 'main').trim() });
     expect(JSON.parse(git(web, 'show', 'main:.obeya/settings.json'))).toEqual({ demo: { howToRun: 'bun dev --port 4000' } });
     expect(git(web, 'log', '-1', '--format=%s', 'main').trim()).toBe('Obeya settings for everyone: demo');
     // this machine's other value for it went, so the repository's applies here; its checks stay its own
     expect(readConfigFile(file)).toEqual([{ repos: [{ path: web, settings: { checks: ['bun test'] } }] }]);
-    expect(c.view().resolved[0]!.repos[0]!.values.demo.howToRun).toEqual({ value: 'bun dev --port 4000', source: 'repository' });
+    expect((await c.checkSaved()).resolved[0]!.repos[0]!.values.demo.howToRun).toEqual({ value: 'bun dev --port 4000', source: 'repository' });
     expect(applied).toBe(1);
   });
 
-  test('a setting the Arbeitsrückschau proposed, taken for everyone where work goes out as pull requests: one is opened, and the value applies here meanwhile', () => {
+  test('a setting the Arbeitsrückschau proposed, taken for everyone where work goes out as pull requests: one is opened, and the value applies here meanwhile', async () => {
     mkdirSync(join(dir, 'home'));
     const origin = join(dir, 'origin.git');
     git(dir, 'clone', '--quiet', '--bare', web, origin);
@@ -359,13 +360,13 @@ describe("Obeya's configuration", () => {
       forge: { ...noForge, open: (_cwd, pr) => (opened.push(pr), 'https://github.com/acme/web/pull/8') },
       apply: () => {},
     });
-    expect(c.takeSetting(web, 'setup', 'bun install', 'repository')).toEqual({ pr: 'https://github.com/acme/web/pull/8' });
+    expect((await c.takeSetting(web, 'setup', 'bun install', 'repository'))).toEqual({ pr: 'https://github.com/acme/web/pull/8' });
     expect(opened).toMatchObject([{ title: 'Obeya settings for everyone: setup' }]);
     expect(JSON.parse(git(origin, 'show', `${opened[0]!.head}:.obeya/settings.json`))).toEqual({ setup: 'bun install' });
     expect(readConfigFile(file)).toEqual([{ repos: [{ path: web, settings: { land: 'pr', setup: 'bun install' } }] }]);
   });
 
-  test("a value the file held already stays this machine's when someone else changes the file", () => {
+  test("a value the file held already stays this machine's when someone else changes the file", async () => {
     mkdirSync(join(dir, 'home'));
     writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings: { checks: ['a'], setup: 'x' } }] }]));
     const c = config('file', []);
@@ -373,17 +374,36 @@ describe("Obeya's configuration", () => {
     expect(readConfigFile(file)).toEqual([{ repos: [{ path: web, settings: { checks: ['a'] } }] }]);
   });
 
-  test('shows the file when Obeya runs from it, the command line until something is saved', () => {
+  test('shows the file when Obeya runs from it, the command line until something is saved', async () => {
     mkdirSync(join(dir, 'home'));
     writeFileSync(file, JSON.stringify([{ name: 'Aus Datei', repos: [{ path: web }] }]));
     expect(config('file', []).view().canvases).toEqual([{ name: 'Aus Datei', repos: [{ path: web }] }]);
     expect(config('args', [{ repos: [{ path: api }] }]).view().canvases).toEqual([{ repos: [{ path: api }] }]);
   });
 
-  test('expands ~ in paths', () => {
+  test('a check reads each repository once, all of them at once, and never makes the server wait for git', async () => {
+    const c = config('file', []);
+    const calls: string[] = [];
+    const { spawn, spawnSync } = Bun;
+    const bun = Bun as unknown as Record<'spawn' | 'spawnSync', (cmd: string[], ...rest: unknown[]) => unknown>;
+    bun.spawn = (cmd, ...rest) => (calls.push(cmd.join(' ')), (spawn as (...a: unknown[]) => unknown)(cmd, ...rest));
+    bun.spawnSync = (cmd, ...rest) => (calls.push(`waits: ${cmd.join(' ')}`), (spawnSync as (...a: unknown[]) => unknown)(cmd, ...rest));
+    let checked;
+    try {
+      // web is a repository of two canvases and a workspace of its own
+      checked = await c.check([{ repos: [{ path: web, workspaces: [web, api] }] }, { name: 'Zwei', repos: [{ path: web }, { path: api, settings: { branch: 'main' } }] }]);
+    } finally {
+      Object.assign(Bun, { spawn, spawnSync });
+    }
+    expect(checked.problems).toEqual([]);
+    expect(calls.filter((x) => x.startsWith('waits: '))).toEqual([]);
+    expect(calls.filter((x, i) => calls.indexOf(x) !== i)).toEqual([]);
+  });
+
+  test('expands ~ in paths', async () => {
     const home = process.env.HOME!;
     if (!web.startsWith(`${home}/`)) return;
-    expect(config('file', []).check([{ repos: [{ path: `~${web.slice(home.length)}` }] }]).problems).toEqual([]);
+    expect((await config('file', []).check([{ repos: [{ path: `~${web.slice(home.length)}` }] }])).problems).toEqual([]);
   });
 });
 
@@ -408,6 +428,7 @@ describe('the configuration over HTTP', () => {
     const view = (await call('GET', '/api/config')).body as unknown as ConfigView;
     expect(view.canvases).toEqual([{ repos: [{ path: web }] }]);
     expect(view.running).toEqual(['web']);
+    expect((await call('GET', '/api/config/check')).body).toMatchObject({ resolved: [{ id: 'web', repos: [{ id: 'web' }] }], problems: [] });
 
     const checked = await call('POST', '/api/config/check', [{ name: 'Zwei', repos: [{ path: web }, { path: join(dir, 'nowhere') }] }]);
     expect(checked.body.problems).toMatchObject([{ code: 'notRepo', canvas: 0, repo: 1 }]);
@@ -541,8 +562,8 @@ describe('the configuration over HTTP', () => {
     }
   });
 
-  test('a configuration command of the Koordinator saves it after the undo window', () => {
-    canvas.run({ do: 'configure', canvases: [{ name: 'Neu', repos: [{ path: web }] }] });
+  test('a configuration command of the Koordinator saves it after the undo window', async () => {
+    await canvas.run({ do: 'configure', canvases: [{ name: 'Neu', repos: [{ path: web }] }] });
     expect(readConfigFile(file)).toEqual([{ name: 'Neu', repos: [{ path: web }] }]);
     expect(restarts).toBe(1);
   });

@@ -778,13 +778,14 @@ describe("the Koordinator and Obeya's configuration", () => {
   const view = { file: '/h/canvases.json', source: 'file', canvases: [{ name: 'Obeya', repos: [{ path: '/r' }] }], running: ['obeya'] } as unknown as ConfigView;
   const config = {
     view: () => view,
-    check: (input: unknown) => {
+    check: async (input: unknown) => {
       const canvases = input as CanvasConfig[];
       const problems: ConfigProblem[] = canvases.some((c) => c.repos.some((r) => r.path === '/nirgends'))
         ? [{ code: 'notRepo', canvas: 0, repo: 0, detail: '/nirgends is not a git repository' }]
         : [];
       return { canvases, resolved: [], problems };
     },
+    checkSaved: () => config.check(view.canvases),
   };
   const withConfig = () => new Commander({ board, runtime, cwd: '/r', execute: (c) => void executed.push(c), delayMs: 20, config });
 
@@ -792,7 +793,7 @@ describe("the Koordinator and Obeya's configuration", () => {
     const k = withConfig();
     const heard = k.hear('welche Leinwände gibt es?', {});
     await settle();
-    expect(JSON.parse(runtime.last.call('config', {}) as string)).toMatchObject({ file: '/h/canvases.json', running: ['obeya'] });
+    expect(JSON.parse(await runtime.last.call('config', {}))).toMatchObject({ file: '/h/canvases.json', running: ['obeya'], problems: [] });
     runtime.last.call('reply', { confirm: 'Eine: Obeya.' });
     runtime.last.emit({ type: 'idle' });
     expect(await heard).toEqual({ confirm: 'Eine: Obeya.' });
@@ -804,9 +805,9 @@ describe("the Koordinator and Obeya's configuration", () => {
     await settle();
     const s = runtime.last;
     const bad = [{ name: 'Obeya', repos: [{ path: '/r' }, { path: '/nirgends' }] }];
-    expect(s.call('configure', { canvases: bad, confirm: 'Ok.' })).toContain('/nirgends is not a git repository');
+    expect(await s.call('configure', { canvases: bad, confirm: 'Ok.' })).toContain('/nirgends is not a git repository');
     const good = [{ name: 'Obeya', repos: [{ path: '/r' }, { path: '/r2' }] }];
-    s.call('configure', { canvases: good, confirm: 'Das Repository r2 kommt dazu; Obeya startet danach neu.' });
+    await s.call('configure', { canvases: good, confirm: 'Das Repository r2 kommt dazu; Obeya startet danach neu.' });
     s.emit({ type: 'idle' });
     const h = await heard;
     expect(h.confirm).toBe('Das Repository r2 kommt dazu; Obeya startet danach neu.');
