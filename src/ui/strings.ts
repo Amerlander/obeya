@@ -674,7 +674,7 @@ const de = {
     shareSite: (url: string) => `leer: Site: ${url}`,
     shareNone: 'leer: Teilen exportiert eine Datei',
     shareHint:
-      'Wohin „Teilen“ eine Demo für die Kollegen bringt. Der Befehl läuft im Repository: mit „publish“ und der Seite als JSON auf stdin gibt er die URL der Seite aus; „withdraw <slug>“ nimmt sie herunter. Ein Skript (.ts, .js) läuft mit Obeyas Bun. Er gilt nur auf diesem Rechner, weil er oft Zugangsdaten braucht; „Für alle“ übernimmt ihn nicht.',
+      'Wohin „Teilen“ eine Demo für die Kollegen bringt. Der Befehl läuft im Verzeichnis „share“ unter Obeyas Home, den Checkout des Repositorys in OBEYA_REPO: mit „publish“ und der Seite als JSON auf stdin gibt er die URL der Seite aus; „withdraw <slug>“ nimmt sie herunter. Ein Skript (.ts, .js) läuft mit Obeyas Bun. Er gilt nur auf diesem Rechner, weil er oft Zugangsdaten braucht; „Für alle“ übernimmt ihn nicht.',
     addRepo: '+ Repository',
     settings: {
       open: 'Einstellungen',
@@ -1904,7 +1904,7 @@ const en: Strings = {
     shareSite: (url: string) => `empty: Site: ${url}`,
     shareNone: 'empty: sharing exports a file',
     shareHint:
-      'Where “Share” takes a demo for colleagues. The command runs in the repository: with “publish” and the page as JSON on stdin it prints the page’s URL; “withdraw <slug>” takes it down. A script (.ts, .js) runs with Obeya’s Bun. It applies on this machine only, since it often needs credentials; “For everyone” does not take it over.',
+      'Where “Share” takes a demo for colleagues. The command runs in the “share” directory under Obeya’s home, with the repository’s checkout in OBEYA_REPO: with “publish” and the page as JSON on stdin it prints the page’s URL; “withdraw <slug>” takes it down. A script (.ts, .js) runs with Obeya’s Bun. It applies on this machine only, since it often needs credentials; “For everyone” does not take it over.',
     addRepo: '+ Repository',
     settings: {
       open: 'Settings',

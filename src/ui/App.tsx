@@ -259,9 +259,12 @@ function Canvas({
   const [dblKnown, setDblKnown] = useState(doubleClickKnown);
   const [newHintOn, setNewHintOn] = useState(false);
   const [setupOn, setSetupOn] = useState(false);
-  // what is wrong in the configuration as saved, marked on its button; the page reads it when it loads
+  // what is wrong in the configuration as saved, marked on its button; read when the page loads,
+  // after a save in the dialog, and when a repository's settings change on its default branch,
+  // which the canvas counts in its repositories (`configRev`)
   const [configProblems, setConfigProblems] = useState(0);
-  useEffect(() => void api.configCheck().then((c) => setConfigProblems(c.problems.length), console.error), []);
+  const configRevs = snapshot.canvas.repos.map((r) => `${r.id}:${r.configRev ?? 0}`).join(' ');
+  useEffect(() => void api.configCheck().then((c) => setConfigProblems(c.problems.length), console.error), [configRevs]);
   // the archive, read while its list is open; archived cards unfold from their row there
   const [archived, setArchived] = useState<Item[]>([]);
   const archivedRef = useRef(archived);

@@ -393,6 +393,29 @@ describe("a repository's settings for everyone (.obeya/settings.json)", () => {
     expect([adapter.checks, adapter.planDocs.dir]).toEqual([['bun test', 'bun run lint'], 'docs/plan']);
   });
 
+  test('a change on the default branch to what the problems are read from tells the page to read them again', () => {
+    fresh();
+    const shop = gitRepo(join(dir, 'shop'), { 'README.md': 'Shop\n', '.obeya/settings.json': '{ "land": "main" }\n', '.obeya/adapter/index.ts': 'export default {};\n' });
+    identify(shop);
+    canvas.shutdown();
+    canvas = new CanvasRuntime({ repos: [{ path: shop }] }, { store: new Store(':memory:'), home: dir, runtime, forge: noForge });
+    const rev = () => canvas.board.snapshot().canvas.repos[0]!.configRev;
+    canvas.settingsChanged();
+    expect(rev()).toBeUndefined();
+    // a field that does not count changes the problems alone, not the settings
+    writeFileSync(join(shop, '.obeya/settings.json'), '{ "land": "main", "chekcs": [] }\n');
+    git(shop, 'commit', '--quiet', '-am', 'A typo');
+    canvas.settingsChanged();
+    expect(rev()).toBe(1);
+    // the leftover adapter module goes
+    git(shop, 'rm', '--quiet', '-r', '.obeya/adapter');
+    git(shop, 'commit', '--quiet', '-m', 'No adapter module');
+    canvas.settingsChanged();
+    expect(rev()).toBe(2);
+    canvas.settingsChanged();
+    expect(rev()).toBe(2);
+  });
+
   test("a demo site set in them is shared on once it is complete, without a restart", () => {
     fresh();
     const shop = gitRepo(join(dir, 'shop'), { 'README.md': 'Shop\n' });

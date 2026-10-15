@@ -3466,8 +3466,10 @@ under "Details"; for the configuration
 as saved each problem offers "Aufgabe zum Beheben anlegen", which hands the Koordinator of the
 canvas with the problem (else of the page's) the problem with its detail as a typed request to
 create a task that fixes it, answered above the microphone. The "Konfiguration" button in the bar
-counts the problems of the saved configuration in red; the page reads them when it loads and after
-each save in the dialog.
+counts the problems of the saved configuration in red; the page reads them when it loads, after
+each save in the dialog, and when a repository's `.obeya/settings.json` (a field that does not
+count included) or a leftover `.obeya/adapter/` changes on its default branch while the page is
+open (`configRev` of the snapshot's repositories counts that).
 
 The dialog shows the configuration at once (`GET /api/config`, the file as saved) and what it
 amounts to after it, once the check is done (`/api/config/check`; „Repositories werden geprüft …“

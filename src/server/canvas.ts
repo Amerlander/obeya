@@ -3,7 +3,7 @@
 
 import { existsSync, mkdirSync, realpathSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
-import { defaultsFor, readingAdapterModule, readingShared, readShared, repoValues, type SharedRead, withSettings } from '../adapters';
+import { defaultsFor, hasAdapterModule, readingAdapterModule, readingShared, readShared, repoValues, type SharedRead, withSettings } from '../adapters';
 import { Answers, answersDir, answerTag, openWithSystem } from './answers';
 import { repoName } from '../adapters/generic';
 import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
@@ -96,6 +96,8 @@ interface Repo extends RepoRuntime {
   docs?: () => void;
   /** Watches its pull requests, once its work went out as one; it stays for those still open. */
   prs?: PrWatcher;
+  /** What the configuration's problems of the repository are read from on its default branch, as last seen (`problemSources`). */
+  problemSources?: string;
 }
 
 /**
@@ -329,6 +331,7 @@ export class CanvasRuntime {
     const stops: (() => void)[] = [];
     // filled in below; what is set up here reaches it once it is
     const repo = { config: rc, stops } as Repo;
+    repo.problemSources = this.problemSources(info.path);
     // where work lands on the local main, the checkout is the Lesestand; otherwise it is a pool clone on a card's branch
     const read = new ReadTree({
       repoPath: info.path,
@@ -658,14 +661,22 @@ export class CanvasRuntime {
    * The Lesestand of the repository moved, or its settings were saved: reads its
    * `.obeya/settings.json` again from the default branch; the settings apply where they are read.
    * Where the repository's agents now work elsewhere (clones or worktrees, set up when they start),
-   * they restart once they paused (`due`); where demos are shared may have changed. Says which of
-   * these it came to: `follow` where the canvas follows what changed.
+   * they restart once they paused (`due`); where demos are shared may have changed, and so may the
+   * configuration's problems of the repository (`configRev`). Says which of these it came to:
+   * `follow` where the canvas follows what changed.
    */
   private moved(r: Repo): 'same' | 'follow' | 'due' {
     if (!this.repos.includes(r)) return 'same';
     const path = r.info.path;
     if (this.pending?.paths.has(path)) return 'due';
     const shared = this.reread(r);
+    const sources = this.problemSources(path);
+    const problems = sources !== r.problemSources;
+    if (problems) {
+      // the page reads the configuration's problems again
+      r.problemSources = sources;
+      r.ref.configRev = (r.ref.configRev ?? 0) + 1;
+    }
     const workIn = namesClones(r.config) ? 'clones' : (layerSettings<RepoSettings>(this.sharedOf(path)(), this.settingsOf(r.config)())?.workspaces ?? defaultsFor(r.info).workspaces);
     if (workIn !== r.workspaces.mode) {
       this.due([path], shared ? 'repository' : 'config');
@@ -679,7 +690,17 @@ export class CanvasRuntime {
       Object.assign(r.ref, shareRef(share, this.deps.home));
       return 'follow';
     }
-    return shared ? 'follow' : 'same';
+    return shared || problems ? 'follow' : 'same';
+  }
+
+  /**
+   * What the configuration's problems of the repository are read from on its default branch: its
+   * `.obeya/settings.json` as the file has it (a field that does not count included), and whether a
+   * leftover `.obeya/adapter/` is there.
+   */
+  private problemSources(path: string): string {
+    const read = this.shared.get(path);
+    return JSON.stringify([read?.raw, read?.problems, hasAdapterModule(path)]);
   }
 
   /**
@@ -691,7 +712,11 @@ export class CanvasRuntime {
     const path = r.info.path;
     const before = this.shared.get(path);
     const now = readShared(path);
-    if (JSON.stringify(now.settings) === JSON.stringify(before?.settings)) return false;
+    if (JSON.stringify(now.settings) === JSON.stringify(before?.settings)) {
+      // a field that does not count changed alone: the problems change, the settings do not
+      this.shared.set(path, now);
+      return false;
+    }
     this.shared.set(path, now);
     for (const p of now.problems) console.warn(`Obeya: ${path}: ${p} (ignored)`);
     this.deps.config?.takenOver(path, before?.settings, now.settings);

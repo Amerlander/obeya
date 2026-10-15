@@ -3,6 +3,7 @@
 // module is what resolves Playwright, found up the tree from here (the checkout's node_modules, or
 // the one beside the plugin among Obeya's resources and on a host).
 
+import { join } from 'node:path';
 import { chromium, type Browser, type LaunchOptions } from 'playwright-core';
 
 /**
@@ -23,6 +24,6 @@ export async function launchChromium(options: LaunchOptions = {}): Promise<Brows
     }
   }
   throw new Error(
-    `no browser (tried ${missing.join(', ')}): install Google Chrome, or run \`npx playwright-core install chromium\` in ${import.meta.dirname}, or set DEMO_CHROME to a Chromium-based browser`,
+    `no browser (tried ${missing.join(', ')}): install Google Chrome, or run \`npx playwright-core install --with-deps chromium\` in ${join(import.meta.dirname, '..', '..')}, or set DEMO_CHROME to a Chromium-based browser`,
   );
 }

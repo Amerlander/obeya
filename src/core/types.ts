@@ -576,6 +576,12 @@ export interface RepoRef {
   pullRequests?: boolean;
   /** With `pullRequests`: the owner may have approved work pushed directly onto the default branch instead (`direct` of its settings). */
   direct?: boolean;
+  /**
+   * How many times what the configuration's problems of the repository are read from changed on
+   * its default branch while the canvas runs (its `.obeya/settings.json`, a leftover
+   * `.obeya/adapter/`): the page reads the problems again when it changes.
+   */
+  configRev?: number;
 }
 
 /** A repository's pool of clones, by the machine they are on, in the order new cards go there; or its slots for workers in worktrees. */

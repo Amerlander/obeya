@@ -1,8 +1,9 @@
 // Obeya's configuration: the canvases it serves, saved in `canvases.json` under its home. The owner
-// reads and edits it in its sheet, the Koordinator on their word; a saved change takes effect when
-// Obeya starts again, which it does by itself once no agent is in the middle of a turn. The
-// repositories' settings (`RepoSettings`) are the exception: read where they are used, they apply
-// at once, and saving them alone restarts nothing.
+// reads and edits it in its sheet, the Koordinator on their word. A saved change applies while
+// Obeya runs (`Canvases.apply`, see Live configuration in docs/design.md): what a repository's
+// agents are set up by restarts that repository's agents alone, once they paused. The
+// repositories' settings (`RepoSettings`) are read where they are used, apply at once, and saving
+// them alone restarts nothing but where they change where the workers work.
 
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
