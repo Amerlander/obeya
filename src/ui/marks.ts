@@ -1,8 +1,9 @@
 // Marks the owner puts on a screenshot before sending it (shots.tsx Lightbox): a frame around a
 // region (a drag) and a pin on a spot (a click), numbered together in the order set, in the image's
 // own pixels, so they stay put at any size. A pin shows its number in a circle, a frame in a square
-// badge at its corner, so a small frame does not read as a pin. The page draws them as SVG over the image, `drawMarks` into the image the agent gets; both
-// from the same sizes.
+// badge at its corner, one shape with the frame, so a small frame does not read as a pin. The page
+// draws them as SVG over the image, `drawMarks` into the image the agent gets; both from the same
+// sizes.
 
 export type Mark = { kind: 'frame'; x: number; y: number; w: number; h: number } | { kind: 'pin'; x: number; y: number };
 export type Point = { x: number; y: number };
@@ -17,16 +18,35 @@ export const EDGE = '#fff';
 export const markOf = (a: Point, b: Point, moved: number): Mark =>
   moved < CLICK_PX ? { kind: 'pin', x: a.x, y: a.y } : { kind: 'frame', x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) };
 
+/** The rounding of a rectangle's corners, top left, top right, bottom right, bottom left. */
+export type Corners = [number, number, number, number];
+
 /**
- * Where a frame's number stands: a square of `side` (a pin's width) on its top left corner,
- * outside above it like a tab, or inside where the image ends above the frame.
+ * Where a frame's number stands: a square of `side` (a pin's width) on its top left corner, flush
+ * with the red line's outer edge, so its red runs into the line. Outside above the frame like a tab,
+ * with the frame's corner under it square; inside where the image ends above the frame, its own
+ * corner rounded like the frame's. `corners` the badge's rounding, `frame` the frame's.
  */
 export function badgeOf(m: Extract<Mark, { kind: 'frame' }>, s: ReturnType<typeof markSize>) {
   const side = 2 * s.radius;
-  // flush with the red line's outer edge, the badge's white rim with the frame's
   const out = s.line / 2;
+  // the rounding of the frame's outer edge
+  const r = s.corner + out;
+  const c = s.corner;
   const above = m.y - side + out;
-  return { x: m.x - out, y: above - s.edge >= 0 ? above : m.y - out, side };
+  return above - s.edge >= 0
+    ? { x: m.x - out, y: above, side, corners: [r, r, 0, 0] as Corners, frame: [0, c, c, c] as Corners }
+    : { x: m.x - out, y: m.y - out, side, corners: [r, 0, r, 0] as Corners, frame: [c, c, c, c] as Corners };
+}
+
+/** Corners no rounder than half of a `w`×`h` rectangle allows. */
+export const fit = (w: number, h: number, c: Corners) => c.map((r) => Math.min(r, w / 2, h / 2)) as Corners;
+
+/** A rectangle with the corners `c`, as an SVG path (an SVG rect rounds all four alike). */
+export function roundedRect(x: number, y: number, w: number, h: number, c: Corners) {
+  const [tl, tr, br, bl] = fit(w, h, c);
+  const arc = (r: number, ex: number, ey: number) => `A${r},${r} 0 0 1 ${ex},${ey}`;
+  return `M${x + tl},${y}H${x + w - tr}${arc(tr, x + w, y + tr)}V${y + h - br}${arc(br, x + w - br, y + h)}H${x + bl}${arc(bl, x, y + h - bl)}V${y + tl}${arc(tl, x + tl, y)}Z`;
 }
 
 /**
@@ -49,32 +69,48 @@ type Ctx = Pick<
 /** Draws the marks onto a context of the image's size, as the page shows them. */
 export function drawMarks(ctx: Ctx, marks: Mark[], w: number, h: number) {
   const s = markSize(w, h);
-  marks.forEach((m, i) => {
-    ctx.beginPath();
-    let at: Point = m;
-    if (m.kind === 'frame') {
-      ctx.roundRect(m.x, m.y, m.w, m.h, s.corner);
-      ctx.lineJoin = 'round';
-      ctx.strokeStyle = EDGE;
-      ctx.lineWidth = s.line + 2 * s.edge;
-      ctx.stroke();
-      ctx.strokeStyle = RED;
-      ctx.lineWidth = s.line;
-      ctx.stroke();
-      const b = badgeOf(m, s);
-      ctx.beginPath();
-      ctx.roundRect(b.x, b.y, b.side, b.side, s.corner);
-      at = { x: b.x + b.side / 2, y: b.y + b.side / 2 };
-    } else ctx.arc(m.x, m.y, s.radius, 0, 2 * Math.PI);
-    ctx.fillStyle = RED;
-    ctx.fill();
-    ctx.strokeStyle = EDGE;
-    ctx.lineWidth = s.edge * 2;
-    ctx.stroke();
+  const number = (n: number, x: number, y: number) => {
     ctx.fillStyle = EDGE;
     ctx.font = `700 ${s.font}px system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(String(i + 1), at.x, at.y + s.font * 0.05);
+    ctx.fillText(String(n), x, y + s.font * 0.05);
+  };
+  marks.forEach((m, i) => {
+    ctx.beginPath();
+    if (m.kind === 'pin') {
+      ctx.arc(m.x, m.y, s.radius, 0, 2 * Math.PI);
+      ctx.fillStyle = RED;
+      ctx.fill();
+      ctx.strokeStyle = EDGE;
+      ctx.lineWidth = s.edge * 2;
+      ctx.stroke();
+      return number(i + 1, m.x, m.y);
+    }
+    // the white rim around frame and badge first, then their red over it, so none runs between them
+    const b = badgeOf(m, s);
+    const frame = () => {
+      ctx.beginPath();
+      ctx.roundRect(m.x, m.y, m.w, m.h, fit(m.w, m.h, b.frame));
+    };
+    const badge = () => {
+      ctx.beginPath();
+      ctx.roundRect(b.x, b.y, b.side, b.side, fit(b.side, b.side, b.corners));
+    };
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = EDGE;
+    frame();
+    ctx.lineWidth = s.line + 2 * s.edge;
+    ctx.stroke();
+    badge();
+    ctx.lineWidth = s.edge * 2;
+    ctx.stroke();
+    ctx.fillStyle = RED;
+    ctx.fill();
+    frame();
+    ctx.strokeStyle = RED;
+    ctx.lineWidth = s.line;
+    ctx.stroke();
+    number(i + 1, b.x + b.side / 2, b.y + b.side / 2);
   });
 }

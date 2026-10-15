@@ -6,7 +6,7 @@ import { type ClipboardEvent, type DragEvent, type MouseEvent, type PointerEvent
 import { createPortal } from 'react-dom';
 import { ApiError, api, at } from './api';
 import { draftOf, dropDraft, markupOf, setMarkup, updateDraft, useDraft } from './draft';
-import { badgeOf, CLICK_PX, drawMarks, EDGE, type Mark, markOf, markSize, type Point, RED } from './marks';
+import { badgeOf, CLICK_PX, drawMarks, EDGE, type Mark, markOf, markSize, type Point, RED, roundedRect } from './marks';
 import { errorText, t } from './strings';
 import { behindThumb, type Box, onto, ZOOM_EASE, ZOOM_MS } from './zoomBox';
 
@@ -270,11 +270,15 @@ function MarkLayer({ marks, w, h, drawing }: { marks: Mark[]; w: number; h: numb
             </g>
           );
         const b = badgeOf(m, s);
+        const frame = roundedRect(m.x, m.y, m.w, m.h, b.frame);
+        const badge = roundedRect(b.x, b.y, b.side, b.side, b.corners);
+        // the white rim around frame and badge first, then their red over it, so none runs between them
         return (
           <g key={i} strokeLinejoin="round">
-            <rect x={m.x} y={m.y} width={m.w} height={m.h} rx={s.corner} fill="none" stroke={EDGE} strokeWidth={s.line + 2 * s.edge} />
-            <rect x={m.x} y={m.y} width={m.w} height={m.h} rx={s.corner} fill="none" stroke={RED} strokeWidth={s.line} />
-            <rect x={b.x} y={b.y} width={b.side} height={b.side} rx={s.corner} fill={RED} stroke={EDGE} strokeWidth={s.edge * 2} />
+            <path d={frame} fill="none" stroke={EDGE} strokeWidth={s.line + 2 * s.edge} />
+            <path d={badge} fill="none" stroke={EDGE} strokeWidth={s.edge * 2} />
+            <path d={badge} fill={RED} />
+            <path d={frame} fill="none" stroke={RED} strokeWidth={s.line} />
             {number(i, b.x + b.side / 2, b.y + b.side / 2)}
           </g>
         );

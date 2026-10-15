@@ -618,7 +618,8 @@ region in signal red with a thin white edge (so it reads on light and dark scree
 (a drag shorter than 5 px) sets a red pin. Frames and pins are numbered together, 1, 2, 3 … in the
 order set, for the text to refer to: a pin shows its white number in a red circle, a frame in a red
 square on its top left corner, above it like a tab (inside, where the image ends above the frame),
-so a small frame does not read as a pin (owner, 2026-10-15; until then only pins had numbers). No tool to pick: the gesture decides (owner, 2026-10-14; a free pen came out rough
+so a small frame does not read as a pin. Square and frame are one shape: the white edge runs
+around both, and the red of the square runs into the frame's line (owner, 2026-10-15; until then only pins had numbers). No tool to pick: the gesture decides (owner, 2026-10-14; a free pen came out rough
 with mouse or trackpad, and a switch between pen, frame and number was one more choice each time).
 Line and pin take the same share of the image at any size (`src/ui/marks.ts`). A bar under the
 image has Undo (also ⌘Z / Ctrl+Z), which takes back the last mark, again and again down to the
