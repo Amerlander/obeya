@@ -918,7 +918,7 @@ A task's branch (and its plan doc) stands under its title, with the size of its 
 („+120 −30 in 5 Dateien“, `Branch` in `src/ui/diff.tsx`): before landing, the branch in its
 workspace against the default branch, committed or not, new files included; once landed, what the
 landing put on the default branch (`Shipped.base..commit`: the default branch before a landing on
-main, a merge commit's first parent; a card whose merge commit GitHub did not name has none). A click shows the whole diff over the page, file by file, with
+main, a merge commit's first parent; a card whose merge commit GitHub did not name has none; an archived card keeps its size and diff). A click shows the whole diff over the page, file by file, with
 large files folded; while the card has a workspace, „Pfad kopieren“ copies its directory
 (`host:/dir` on another machine). The owner rarely reads the code, so it stays a quiet line, read
 when the card opens and again as the work moves on (`GET …/cards/:id/diff`, `?full` for the diff

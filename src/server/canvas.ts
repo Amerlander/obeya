@@ -747,9 +747,9 @@ export class CanvasRuntime {
     return this.repos.find((r) => r.ref.id === item.repo) ?? this.repos[0]!;
   }
 
-  /** What the card's work changes (`Workers.diff`). */
+  /** What the card's work changes (`Workers.diff`), for an archived card too. */
   diff(cardId: string, full: boolean): Promise<CardDiff | null> {
-    return this.repoOf(cardId).workers.diff(cardId, full);
+    return this.repoOf(this.board.card(cardId) ?? cardId).workers.diff(cardId, full);
   }
 
   /** The owner edits a card; what they write in it is offered for learning once they have written it. */

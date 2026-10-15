@@ -90,6 +90,20 @@ describe('a canvas with several repositories', () => {
     expect(() => canvas.board.create({ title: 'X', x: 0, y: 0, repo: 'nope' })).toThrow();
   });
 
+  test("an archived card's diff is what its landing put on its repository's main", async () => {
+    const api = join(dir, 'api');
+    const base = git(api, 'rev-parse', 'HEAD').trim();
+    writeFileSync(join(api, 'export.ts'), 'export {}\n');
+    git(api, 'add', '.');
+    git(api, 'commit', '--quiet', '-m', 'Export');
+    const commit = git(api, 'rev-parse', 'HEAD').trim();
+    const c = canvas.board.create({ title: 'Export', x: 0, y: 0, repo: 'api' });
+    canvas.board.work(c.id, { state: 'live', shipped: JSON.stringify({ base, commit }) });
+    canvas.board.archive([c.id]);
+    expect(canvas.board.item(c.id)).toBeUndefined();
+    expect(await canvas.diff(c.id, false)).toMatchObject({ source: 'landed', files: [{ file: 'export.ts', status: 'added', added: 1, removed: 0 }] });
+  });
+
   test("the snapshot counts each repository's clones by machine, the cards that hold one and those at work", () => {
     const here = (cards: string[], busy: string[]) => ({ hosts: [{ name: HERE, here: true, slots: 1, total: 1, cards, busy }] });
     expect(canvas.board.snapshot().workspaces).toEqual([
