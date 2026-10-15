@@ -1277,8 +1277,10 @@ button.link:hover { text-decoration: underline; }
 @keyframes halo-drift { to { stroke-dashoffset: -100; } }
 @media (prefers-reduced-motion: reduce) { .wave, .terr .streak { display: none; } }
 #minimap .mterr { fill: hsl(var(--h) 80% var(--tl) / calc(var(--ta) * 3.5)); }
+/* under a second: a large area that changes every frame for longer makes Chrome's screen capture
+   skip about 0.27 s once it stops */
 .wave { fill: none; stroke: hsl(var(--h) 85% var(--tl)); stroke-width: 3; opacity: 0; r: 0;
-  animation: wave 1.5s cubic-bezier(.2,.7,.3,1) both; }
+  animation: wave .9s cubic-bezier(.2,.7,.3,1) both; }
 @keyframes wave { 0% { r: 20px; opacity: .9; stroke-width: 10px; } 100% { r: 420px; opacity: 0; stroke-width: 1px; } }
 .sel { fill: none; stroke: var(--ink); stroke-width: calc(2px / var(--s)); stroke-dasharray: 6 5; opacity: .55; animation: halo-drift 4s linear infinite; }
 .gname { font-weight: 800; letter-spacing: .14em; text-transform: uppercase; text-anchor: middle; dominant-baseline: central;
@@ -1301,6 +1303,10 @@ button.link:hover { text-decoration: underline; }
   mask-image: radial-gradient(closest-side, #000 62%, transparent); -webkit-mask-image: radial-gradient(closest-side, #000 62%, transparent);
   transform: scale(.3); opacity: 0; transition: transform .25s, opacity .25s; }
 #ringback .ring.open .rhalo { transform: scale(1); opacity: 1; }
+/* while the ring is open the canvas behind it holds still: under the blur every frame of an endless
+   animation there (the selection's drifting dashes, a working card's line) would re-render the whole halo,
+   and Chrome's screen capture (a screencast, a shared tab) skips about 0.27 s once that stops */
+#viewport.still *, #viewport.still *::before, #viewport.still *::after { animation-play-state: paused; }
 .ball { position: absolute; left: -19px; top: -19px; width: 38px; height: 38px; border-radius: 50%;
   display: grid; place-items: center; font: 600 20px/1 var(--cond); color: var(--muted);
   background: radial-gradient(circle at 35% 30%, hsl(var(--h) 90% 78%), hsl(var(--h) 75% 52%) 60%, hsl(var(--h) 70% 38%));

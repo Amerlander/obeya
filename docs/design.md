@@ -1270,7 +1270,7 @@ most), dragging at 60 fps, nothing at rest.
 When cards change group, wherever the change comes from (the colour ring, the Koordinator, another
 page), a wave runs out from where it was assigned (else from the cards' middle), reaches the cards
 one after the other, and their territory springs out a little too far and settles; a light runs once
-along the new edge.
+along the new edge. The wave is over in 0.9 s: see the decision on large animations below.
 
 Assigning: Shift + drag on the canvas draws a lasso (without Shift it pans as before), a right click
 on a card takes that card (a workstream: its project); either opens a ring of colour balls at the
@@ -1278,7 +1278,8 @@ pointer with the groups, "+" (a new group, named in place) and "∅" (none). Eac
 outside its ball, so all show at once, with how many of its cards are still to be done (not
 finished, archived or a dropped idea; a project counts by its workstreams): a group at 0 goes pale,
 a candidate for deleting. Behind the ring and the names the canvas steps back under a frosted halo
-that fades out at its edge, so they read on a busy canvas. Moving towards a ball or onto its name
+that fades out at its edge, so they read on a busy canvas. While the ring is open the canvas behind it holds
+still: its endless animations (the selection's drifting dashes, a working card's line) pause. Moving towards a ball or onto its name
 picks it, a click takes it, Escape closes the ring. The picked group's name carries a ×: it deletes
 the group (its cards, archived ones too, belong to none), and "Rückgängig" brings it back in its
 colour with the same cards.
@@ -1313,6 +1314,14 @@ generic one for anything else.
   chose the contours, which are calm, need no WebGL and cost nothing at rest, over the shaders'
   livelier look, which costs frames all the time. The territories animate only when something
   changes.
+- **Nothing on the canvas animates a large area for a second or longer** (2026-10-15). Chrome's
+  screen capture (a demo's screencast, a shared tab) locks onto a large area that changes every frame
+  for about a second; once it stops, the capture drops every other change for about 0.27 s, while
+  the window itself keeps drawing. On the hero video's canvas that left two gaps of 267 ms in the
+  recording: when the ring closed (the selection's dashes drifting under the halo made its blur
+  render again every frame) and when the wave ended (then 1.5 s). Now the canvas holds still behind
+  the open ring and the wave lasts 0.9 s. Dropping the halo's blur would also have closed the first
+  gap, but left the cards' text readable behind the ring's names.
 - **A group ends with its last card**: it is made by putting cards into it, so there is never an
   empty group to clean up. Deleting one ends it at once by taking its cards out, for a group whose
   last cards sit in the archive, out of reach of the ring (2026-10-06).

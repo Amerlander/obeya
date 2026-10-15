@@ -273,9 +273,6 @@ const scenes: Scene[] = [
       await d.page.locator('.rname').pressSequentially('Look and feel', { delay: 60 });
       await d.wait(300);
       await d.page.locator('.rname').press('Enter');
-      // the colour ring's frosted halo going and the new territory's light settling each hold the
-      // page for about 0.27 s: over by the time the drag starts, they show in no motion
-      await d.wait(2200);
       // App icon, of the group Launch, goes up beside Look and feel, whose territory makes way
       await saying(d, say, 'Drag cards');
       await d.drag(card(d, 'App icon'), { x: 1215, y: 628 }, 2000);

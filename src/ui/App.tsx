@@ -1214,7 +1214,7 @@ function Canvas({
         <div
           id="viewport"
           ref={viewportRef}
-          className={panning ? 'panning' : undefined}
+          className={[panning && 'panning', ring && 'still'].filter(Boolean).join(' ') || undefined}
           style={{ backgroundSize: `${22 * cam.s}px ${22 * cam.s}px`, backgroundPosition: `${cam.x}px ${cam.y}px` }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
