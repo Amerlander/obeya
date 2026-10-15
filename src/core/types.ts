@@ -697,7 +697,24 @@ export interface Talk {
   files?: AnswerFile[];
   /** The thread moved onto a Question card: that card; its answers stand there from then on. */
   movedTo?: string;
+  /** The message of the sheet the owner's words reply to, shown above them as a quote. */
+  replyTo?: TalkQuote;
 }
+
+/** A message of Obeya's sheet: one part of an exchange, what the owner said, the Koordinator's reply or the looked-up answer. */
+export interface TalkRef {
+  talk: number;
+  part: 'said' | 'reply' | 'answer';
+}
+
+/** A message of the sheet as a reply quotes it: who said it and what. */
+export interface TalkQuote extends TalkRef {
+  by: 'owner' | 'koordinator' | 'project';
+  text: string;
+}
+
+export const isTalkRef = (r: unknown): r is TalkRef =>
+  !!r && typeof r === 'object' && Number.isInteger((r as TalkRef).talk) && ['said', 'reply', 'answer'].includes((r as TalkRef).part);
 
 /**
  * A lasting preference of the owner, learned by the Koordinator or written by the owner. A learned

@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { AnswerFile, AnswerRef, CardEvent, CardKind, CardState, Mock, Need, Preference, PreferenceState, ProposedSetting, SettingProposal, SettingProposalState, Spot, Talk } from '../core/types';
+import type { AnswerFile, AnswerRef, CardEvent, CardKind, CardState, Mock, Need, Preference, PreferenceState, ProposedSetting, SettingProposal, SettingProposalState, Spot, Talk, TalkQuote, TalkRef } from '../core/types';
 
 export interface CardRow {
   id: string;
@@ -331,6 +331,8 @@ export const MIGRATIONS = [
    INSERT INTO settings (canvas_id, key, value)
      SELECT canvas_id, 'work_retro_runs:' || substr(key, 18), '3' FROM settings s WHERE key LIKE 'work_retro_since:%'
         AND NOT EXISTS (SELECT 1 FROM settings r WHERE r.canvas_id = s.canvas_id AND r.key = 'work_retro_runs:' || substr(s.key, 18));`,
+  // the message of the sheet the owner's words reply to (JSON `TalkRef`)
+  'ALTER TABLE talk ADD COLUMN reply_to TEXT;',
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter';
@@ -794,11 +796,11 @@ export class Store {
 
   // ---------------------------------------------------------------- the Koordinator's memory
 
-  addTalk(canvasId: string, said: string, reply: string, cardId: string | null, lookUp?: { question: string; about: string | null }, images: string[] = []): number {
+  addTalk(canvasId: string, said: string, reply: string, cardId: string | null, lookUp?: { question: string; about: string | null }, images: string[] = [], replyTo?: TalkRef): number {
     return (
       this.db
         .query(
-          'INSERT INTO talk (canvas_id, at, said, reply, card_id, question, about, images) VALUES ($c, $at, $said, $reply, $cardId, $question, $about, $images) RETURNING id',
+          'INSERT INTO talk (canvas_id, at, said, reply, card_id, question, about, images, reply_to) VALUES ($c, $at, $said, $reply, $cardId, $question, $about, $images, $replyTo) RETURNING id',
         )
         .get({
           c: canvasId,
@@ -809,6 +811,7 @@ export class Store {
           question: lookUp?.question ?? null,
           about: lookUp?.about ?? null,
           images: images.length ? JSON.stringify(images) : null,
+          replyTo: replyTo ? JSON.stringify({ talk: replyTo.talk, part: replyTo.part }) : null,
         }) as { id: number }
     ).id;
   }
@@ -889,6 +892,12 @@ export class Store {
     return (this.db.query(`SELECT * FROM talk WHERE canvas_id = $c${withoutCard ? ' AND card_id IS NULL' : ''} ORDER BY id DESC LIMIT $limit`).all({ c: canvasId, limit }) as TalkRow[])
       .reverse()
       .map((r) => withContinues(this.db, r));
+  }
+
+  /** A message of the canvas's sheet (an exchange with no card open), as a reply quotes it. */
+  sheetQuote(canvasId: string, ref: TalkRef): TalkQuote | undefined {
+    const sheet = this.db.query('SELECT 1 FROM talk WHERE id = $id AND canvas_id = $c AND card_id IS NULL').get({ id: ref.talk, c: canvasId });
+    return sheet ? quotedTalk(this.db, ref) : undefined;
   }
 
   /** One exchange, with the card its question is about. */
@@ -1083,6 +1092,7 @@ interface TalkRow {
   follows: number | null;
   files: string | null;
   card: string | null;
+  reply_to: string | null;
 }
 
 const toTalk = (r: TalkRow): Talk => ({
@@ -1105,8 +1115,20 @@ const toTalk = (r: TalkRow): Talk => ({
   ...(r.card ? { movedTo: r.card } : {}),
 });
 
-/** An exchange with the question of the answer it continues, when it follows up on one. */
+/**
+ * An exchange with the question of the answer it continues, when it follows up on one, and the
+ * message of the sheet it replies to, when it does.
+ */
 function withContinues(db: Database, r: TalkRow): Talk {
   const followed = r.follows ? (db.query('SELECT question FROM talk WHERE id = $id').get({ id: r.follows }) as { question: string | null } | null) : null;
-  return { ...toTalk(r), ...(followed?.question ? { continues: followed.question } : {}) };
+  const replyTo = r.reply_to ? quotedTalk(db, JSON.parse(r.reply_to) as TalkRef) : undefined;
+  return { ...toTalk(r), ...(followed?.question ? { continues: followed.question } : {}), ...(replyTo ? { replyTo } : {}) };
+}
+
+/** A message of the sheet as a reply quotes it; none where the exchange or its part is gone. */
+function quotedTalk(db: Database, ref: TalkRef): TalkQuote | undefined {
+  const r = db.query('SELECT said, reply, answer, answer_by FROM talk WHERE id = $id').get({ id: ref.talk }) as Pick<TalkRow, 'said' | 'reply' | 'answer' | 'answer_by'> | null;
+  const text = r?.[ref.part];
+  if (!r || !text) return;
+  return { talk: ref.talk, part: ref.part, by: ref.part === 'said' ? 'owner' : ref.part === 'answer' ? (r.answer_by ?? 'koordinator') : 'koordinator', text };
 }

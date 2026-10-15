@@ -381,6 +381,19 @@ describe('voice', () => {
     expect(told).toEqual([7, 8, undefined]);
   });
 
+  test('words typed or spoken in reply to a message of the sheet go to the Koordinator with it', async () => {
+    const heard: unknown[] = [];
+    canvas.commander.hear = async (_text, _focus, _images, input = {}) => {
+      heard.push(input.replyTo);
+      return { confirm: 'Ok.' };
+    };
+    await post(api('/command'), JSON.stringify({ text: 'und dann?', replyTo: { talk: 3, part: 'answer' } }));
+    whisper = () => 'und dann';
+    await fetch(new URL(api('/voice?replyTo=4.reply'), server.url), { method: 'POST', body: 'AUDIO' });
+    await post(api('/command'), JSON.stringify({ text: 'so', replyTo: { talk: 3, part: 'other' } }));
+    expect(heard).toEqual([{ talk: 3, part: 'answer' }, { talk: 4, part: 'reply' }, undefined]);
+  });
+
   test('words dictated into a field come back without going anywhere; spoken at once, the field’s words go first', async () => {
     const told: string[] = [];
     canvas.tell = (_cardId, text) => void told.push(text);

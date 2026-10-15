@@ -5,11 +5,11 @@
 // the field, speaking dictates into it: hold its microphone, the one at the bottom, or Space.
 
 import { type ReactNode, useContext, useEffect, useId, useRef, useState } from 'react';
-import type { CardEvent } from '../core/types';
 import { api } from './api';
 import { dropDraft, typeInto, updateDraft, useDraft, useDraftField } from './draft';
 import { useFitHeight } from './fitHeight';
 import { Quote } from './message';
+import { type Reply, replyOn, setReply, useReply } from './reply';
 import { AttachButton, ShotStrip, useShotInput } from './shots';
 import { t } from './strings';
 import { HoldToTalk, MicIcon } from './voice';
@@ -26,8 +26,9 @@ const TAP_MS = 350;
  * What the owner writes to an agent or to Obeya; screenshots are pasted, dropped or picked, unless
  * `noImages`. `draft`: the draft it shows and keeps (`draft.ts`), which the microphone reads; without
  * one the field keeps its own. `label` names what Send does (its tooltip); `action` puts words on the button instead
- * of the arrow, for a button that starts something rather than sends. `quote`: the message the words
- * reply to; `onUnquote` takes it out (its ×; Escape takes it out too, before it closes the card).
+ * of the arrow, for a button that starts something rather than sends. The message the words reply
+ * to stands in the draft (`reply.ts`): quoted above the text, with × to take it out (Escape takes it
+ * out too, before it closes the card or the sidebar), and `onSend` gets it.
  */
 export function Composer({
   placeholder,
@@ -39,14 +40,12 @@ export function Composer({
   obeya,
   onText,
   className,
-  quote,
-  onUnquote,
   draft,
   chip,
 }: {
   draft?: string;
   placeholder: string;
-  onSend: (text: string, images?: string[]) => Promise<void> | void;
+  onSend: (text: string, images?: string[], replyTo?: Reply['to']) => Promise<void> | void;
   label?: string;
   action?: string;
   allowEmpty?: boolean;
@@ -56,8 +55,6 @@ export function Composer({
   /** Hears the text as it is typed. */
   onText?: (text: string) => void;
   className?: string;
-  quote?: CardEvent | null;
-  onUnquote?: () => void;
   /** What else the words go out with, above them beside the quote (a place in the demo video). */
   chip?: ReactNode;
 }) {
@@ -76,10 +73,13 @@ export function Composer({
   const listen = useRef(onText);
   listen.current = onText;
   useEffect(() => listen.current?.(text), [text]);
-  // replying to a message is writing to it: the field takes the focus
+  const reply = useReply(key);
+  // replying to a message is writing to it: the field takes the focus (not for a reply kept from before)
+  const quoted = useRef(reply?.quote.ev);
   useEffect(() => {
-    if (quote) field.current?.focus();
-  }, [quote?.id]);
+    if (reply && reply.quote.ev !== quoted.current) field.current?.focus();
+    quoted.current = reply?.quote.ev;
+  }, [reply?.quote.ev]);
   const talk = useContext(HoldToTalk);
   // Space pressed in the field: typed, or held to speak once it stays down (`held`)
   const space = useRef<number | 'held' | null>(null);
@@ -95,16 +95,18 @@ export function Composer({
   const send = async () => {
     if (!ready) return;
     setBusy(true);
-    await onSend(text.trim(), images.length ? images : undefined);
+    await onSend(text.trim(), images.length ? images : undefined, reply?.to);
     setBusy(false);
     setText('');
     shots.clear();
+    // a reply chosen meanwhile stays for the next words
+    if (reply && replyOn(key) === reply) setReply(key, null);
   };
   return (
     <div className={['composer', className, shots.dropping && 'dropping', dictation && 'dictating'].filter(Boolean).join(' ')} {...shots.drop}>
       <ShotStrip shots={shots} />
       <div className="c-field">
-        {quote && <Quote e={quote} onClear={onUnquote} />}
+        {reply && <Quote q={reply.quote} onClear={() => setReply(key, null)} />}
         {chip}
         <textarea
           ref={field}

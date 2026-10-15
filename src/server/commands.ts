@@ -3,9 +3,9 @@
 
 import { z } from 'zod';
 import { settingsShape } from '../adapters/schema';
-import { type AgentSetting, answering, askable, blocksSaving, type CanvasConfig, finished, type Item, type NextStep, type Notice, pausable, plannableAsProject, prototypeWorkstream, type Queue, type SpotInput } from '../core/types';
+import { type AgentSetting, answering, askable, blocksSaving, type CanvasConfig, finished, type Item, type NextStep, type Notice, pausable, plannableAsProject, prototypeWorkstream, type Queue, type SpotInput, type TalkQuote, type TalkRef } from '../core/types';
 import { answerTag, fromAnswerTag } from './answers';
-import { BadRequest, type Board, replyNote } from './board';
+import { BadRequest, type Board, excerpt, replyNote } from './board';
 import type { Place } from '../core/layout';
 import type { Config } from './config';
 import type { Moment } from './db';
@@ -109,8 +109,8 @@ export interface Input {
   typed?: boolean;
   field?: Field;
   forwarded?: string;
-  /** The message of the open card's conversation the words reply to. */
-  replyTo?: number;
+  /** The message of the open card's conversation the words reply to, or with no card open the message of the sheet (`TalkRef`). */
+  replyTo?: number | TalkRef;
   /** The place in the open card's demo video the words are about; only its agent hears of it. */
   spot?: SpotInput;
 }
@@ -226,8 +226,9 @@ export class Commander {
     // passed on by the card's agent: the owner's words stand in the card's conversation already
     const said = input.forwarded ? undefined : transcript;
     const replyTo = card ? this.o.board.quoted(card, input.replyTo)?.id : undefined;
+    const quoted = card ? undefined : this.o.board.quotedTalk(input.replyTo);
     // the owner's words stand in the conversation at once, the Koordinator's reply follows once it has read them
-    const talk = this.o.board.addTalk(transcript, '', card ?? null, undefined, images);
+    const talk = this.o.board.addTalk(transcript, '', card ?? null, undefined, images, quoted);
     if (card && said) this.o.board.log(card, 'say', 'owner', said, undefined, images, undefined, replyTo);
     const reply = (confirm: string, lookUp?: { question: string; about: string | null }) => {
       this.o.board.replyTalk(talk, confirm, lookUp);
@@ -903,8 +904,8 @@ export class Commander {
             input.typed
               ? `The owner typed${focused && input.field ? ` into ${FIELDS[input.field]}` : ''} (as written, no recognition errors): "${transcript}"`
               : `The owner said (speech recognition, may contain errors): "${transcript}"`,
-            // in reply to a message of the open card's conversation
-            focused ? replyNote(this.o.board.quoted(focused.id, input.replyTo), 'koordinator').trim() : '',
+            // in reply to a message of the open card's conversation, or of the sheet
+            (focused ? replyNote(this.o.board.quoted(focused.id, input.replyTo), 'koordinator') : focus.card ? '' : talkReplyNote(this.o.board.quotedTalk(input.replyTo))).trim(),
           ].filter(Boolean)),
       ...(shots
         ? [
@@ -947,6 +948,21 @@ const STEP: Partial<Record<Moment['kind'], string>> = {
   hint: "the owner's note: ",
   error: 'error: ',
 };
+
+/**
+ * What the Koordinator reads above the owner's words that reply to a message of its sheet: which
+ * one, whole, since it reads each command afresh; a looked-up answer by its tag, to follow up on it.
+ */
+export function talkReplyNote(quoted: TalkQuote | undefined): string {
+  if (!quoted) return '';
+  const whose =
+    quoted.part === 'said'
+      ? 'their own earlier message'
+      : quoted.part === 'reply'
+        ? 'your reply'
+        : `the answer ${answerTag(quoted.talk)}${quoted.by === 'project' ? " the project's agent" : ' you'} looked up`;
+  return `[In reply to ${whose}: „${excerpt(quoted.text.replace(/\s+/g, ' ').trim(), 2000)}“]\n\n`;
+}
 
 /** A queued card's state as the Koordinator reads it. */
 function queued(q: Queue, items: Item[]): string {

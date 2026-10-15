@@ -4,10 +4,11 @@
 // up to date at once.
 
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
-import type { Item, Preference, RepoRef, Reshare, SettingProposal, Talk } from '../core/types';
+import type { Item, Preference, RepoRef, Reshare, SettingProposal, Talk, TalkQuote, TalkRef } from '../core/types';
 import { api, ApiError } from './api';
 import { Inline, plain } from './markdown';
-import { AnswerFiles, Body, Continues, Msg, Reading, ThreadCard } from './message';
+import { AnswerFiles, Body, Continues, Msg, Quote, Reading, ThreadCard } from './message';
+import { type Reply, setReply, talkEv, talkQuote, useReplyKnown } from './reply';
 import { errorText, t } from './strings';
 import { Composer } from './composer';
 import { OBEYA_DRAFT } from './draft';
@@ -19,8 +20,8 @@ interface Props {
   on: boolean;
   /** The canvas, whose sections stay open or closed as the owner left them. */
   canvas: string;
-  /** A command typed in the sheet: read like a spoken one; the conversation shows it at once. */
-  onTell: (text: string, images?: string[]) => void;
+  /** A command typed in the sheet, maybe in reply to a message of it: read like a spoken one; the conversation shows it at once. */
+  onTell: (text: string, images?: string[], replyTo?: Reply['to']) => void;
   items: Item[];
   preferences: Preference[];
   /** Values for repositories' settings the Arbeitsrückschau proposes. */
@@ -159,68 +160,90 @@ function Fold({ kind, head, open, onToggle, children }: { kind?: string; head: s
   );
 }
 
-/** What the owner said to the Koordinator with no card open, and its replies; newest last. */
+/**
+ * What the owner said to the Koordinator with no card open, and its replies; newest last. The owner
+ * can reply to each message, as on a card: it stands quoted above the field, and above the words
+ * that reply to it.
+ */
 function Conversation({ talk, fresh, items, onOpen }: { talk: Talk[]; fresh: number[]; items: Item[]; onOpen: (i: Item) => void }) {
   const box = useRef<HTMLDivElement>(null);
   // every change on the canvas brings a new snapshot: only what the owner just said takes the
   // conversation back to its end, so they can read further up in the meantime
   const onScroll = useStickToEnd(box, talk.at(-1)?.id, talk);
+  const known = useReplyKnown();
   if (!talk.length) return null;
   return (
     <div
-      className="talk conv"
+      className={known ? 'talk conv' : 'talk conv reply-new'}
       ref={box}
       onScroll={onScroll}
     >
-      {talk.map((x) => (
-        <Fragment key={x.id}>
-          <Msg by="owner" who={t.author.owner} at={x.at}>
-            <Body md={x.said} />
-            <Shots ids={x.images} />
-            {x.continues && <Continues question={x.continues} reading={x.answer === undefined && !x.movedTo} />}
-          </Msg>
-          {x.reply === undefined ? (
-            <Reading />
-          ) : (
-            <Msg by="koordinator" className={x.undone ? 'undone' : undefined} who={t.author.koordinator} at={x.at}>
-              <Body md={x.reply} />
-              {x.undone && <div className="hint">{t.koordinator.undone}</div>}
+      {talk.map((x) => {
+        // the owner replies to one of the exchange's messages
+        const reply = (part: TalkRef['part'], by: TalkQuote['by'], text: string) => () => {
+          const q = { talk: x.id, part, by, text };
+          setReply(OBEYA_DRAFT, { to: { talk: x.id, part }, quote: talkQuote(q) });
+        };
+        return (
+          <Fragment key={x.id}>
+            <Msg by="owner" who={t.author.owner} at={x.at} ev={talkEv({ talk: x.id, part: 'said' })} onReply={reply('said', 'owner', x.said)}>
+              {x.replyTo && <Quote q={talkQuote(x.replyTo)} />}
+              <Body md={x.said} />
+              <Shots ids={x.images} />
+              {x.continues && <Continues question={x.continues} reading={x.answer === undefined && !x.movedTo} />}
             </Msg>
-          )}
-          {/* a thread moved onto a Question card goes on there: a line leads to it */}
-          {x.movedTo ? (
-            <div className="moved">
-              <ThreadCard thread={x.thread!} card={items.find((i) => i.id === x.movedTo)} onOpen={onOpen} />
-            </div>
-          ) : (
-            <>
-              {/* a question it looked up: the answer follows the acknowledgement */}
-              {x.question && x.answer === undefined && (
-                <Msg by="koordinator" className="thinking" who={t.author.koordinator}>
-                  <div className="hint">{t.koordinator.lookingUp}</div>
-                </Msg>
-              )}
-              {x.answer !== undefined && (
-                <Msg
-                  by={x.answerBy ?? 'koordinator'}
-                  className={fresh.includes(x.id) ? 'fresh' : undefined}
-                  who={t.author[x.answerBy ?? 'koordinator']}
-                  head={x.thread !== undefined && <ThreadCard thread={x.thread} onOpen={onOpen} />}
-                >
-                  <Body md={x.answer} />
-                  {x.thread !== undefined && <AnswerFiles thread={x.thread} files={x.files} />}
-                </Msg>
-              )}
-            </>
-          )}
-        </Fragment>
-      ))}
+            {x.reply === undefined ? (
+              <Reading />
+            ) : (
+              <Msg
+                by="koordinator"
+                className={x.undone ? 'undone' : undefined}
+                who={t.author.koordinator}
+                at={x.at}
+                ev={talkEv({ talk: x.id, part: 'reply' })}
+                onReply={reply('reply', 'koordinator', x.reply)}
+              >
+                <Body md={x.reply} />
+                {x.undone && <div className="hint">{t.koordinator.undone}</div>}
+              </Msg>
+            )}
+            {/* a thread moved onto a Question card goes on there: a line leads to it */}
+            {x.movedTo ? (
+              <div className="moved">
+                <ThreadCard thread={x.thread!} card={items.find((i) => i.id === x.movedTo)} onOpen={onOpen} />
+              </div>
+            ) : (
+              <>
+                {/* a question it looked up: the answer follows the acknowledgement */}
+                {x.question && x.answer === undefined && (
+                  <Msg by="koordinator" className="thinking" who={t.author.koordinator}>
+                    <div className="hint">{t.koordinator.lookingUp}</div>
+                  </Msg>
+                )}
+                {x.answer !== undefined && (
+                  <Msg
+                    by={x.answerBy ?? 'koordinator'}
+                    className={fresh.includes(x.id) ? 'fresh' : undefined}
+                    who={t.author[x.answerBy ?? 'koordinator']}
+                    ev={talkEv({ talk: x.id, part: 'answer' })}
+                    onReply={reply('answer', x.answerBy ?? 'koordinator', x.answer)}
+                    head={x.thread !== undefined && <ThreadCard thread={x.thread} onOpen={onOpen} />}
+                  >
+                    <Body md={x.answer} />
+                    {x.thread !== undefined && <AnswerFiles thread={x.thread} files={x.files} />}
+                  </Msg>
+                )}
+              </>
+            )}
+          </Fragment>
+        );
+      })}
     </div>
   );
 }
 
 /** A command in writing, for when speaking is not possible; its screenshots go to the cards it creates or concerns. */
-function TellKoordinator({ onTell }: { onTell: (text: string, images?: string[]) => void }) {
+function TellKoordinator({ onTell }: { onTell: Props['onTell'] }) {
   return <Composer className="tell" draft={OBEYA_DRAFT} placeholder={t.voice.typePlaceholder} obeya onSend={onTell} />;
 }
 

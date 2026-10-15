@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { type Bounds, boundsOf, CARD_SIZE, type Place, PROJECT_HEAD, PROJECT_PAD, unionBounds } from '../core/layout';
-import { agentListens, answering, type CanvasInfo, type CanvasSnapshot, type CardPatch, finished, type Group, type Item, nameless, needsYou, openPerGroup, type PendingRestart, type PlanDir, START_ALL_HOLD_MS, titleFrom, type AppUpdate, unreadAnswers } from '../core/types';
+import { agentListens, answering, type CanvasInfo, type CanvasSnapshot, type CardPatch, finished, type Group, type Item, nameless, needsYou, openPerGroup, type PendingRestart, type PlanDir, START_ALL_HOLD_MS, type TalkRef, titleFrom, type AppUpdate, unreadAnswers } from '../core/types';
 import { api, ApiError, beforeReload, onNotice, reportFocus, setCanvas, useCanvas } from './api';
 import { GroupNames, growFrom, inside, Lasso, Ring, TerritoryLayer, useTerritories } from './groups';
 import { besideSheet, BOTTOM, type Cam, camFor, centreOn, chase, dragLimit, edgeScroll, FAR, flying, flyTo, keepInView, MAX_ZOOM, MIN_ZOOM, overviewCam, placeIn, shows, stopFlight, TOP, toWorld } from './camera';
@@ -11,7 +11,7 @@ import { plain } from './markdown';
 import { type ActDone, Detail, type Pending } from './detail';
 import { Cards } from './message';
 import type { Field } from './api';
-import { setReply } from './reply';
+import { replyOn, setReply } from './reply';
 import { ArchivePill } from './archive';
 import { useBarFit } from './barFit';
 import { ConfigDialog, showCanvasesSection, showRepoClones } from './config';
@@ -706,7 +706,7 @@ function Canvas({
    * they go straight to it, else the Koordinator reads them like spoken ones. The conversation shows
    * them at once either way; above the mic only the Koordinator's confirmation shows, with „Rückgängig“.
    */
-  const tellTyped = useCallback(async (text: string, images: string[] | undefined, target: Where, field?: Field, replyTo?: number) => {
+  const tellTyped = useCallback(async (text: string, images: string[] | undefined, target: Where, field?: Field, replyTo?: number | TalkRef) => {
     if (listening(target))
       try {
         // typed while the card's demo video stands at a place: about that place, and the video plays on
@@ -1143,8 +1143,9 @@ function Canvas({
     if (e.key === 'Escape') {
       // a screenshot or demo shown large closes first, a card's diff and the queue's list; the card stays open
       if (document.querySelector('.lightbox, .demo-zoom, .queue-menu, .diff-view')) return;
-      // so does the quote of a message the owner was replying to
-      if (document.querySelector('.composer .quote:not(.place)')) return setReply(null);
+      // so does the quote of a message the owner was replying to: in the field with the cursor, the open card's, the sidebar's
+      const quoting = [focusedDraft(), f?.type === 'card' ? cardDraft(f.id) : null, kOnRef.current ? OBEYA_DRAFT : null].find((k) => k && fieldOn(k) && replyOn(k));
+      if (quoting) return setReply(quoting, null);
       // the archive's list closes after a card unfolded from it
       if (f?.type !== 'card' && aOnRef.current) return setAOn(false);
       if (typing) (e.target as HTMLElement).blur();
@@ -1405,7 +1406,7 @@ function Canvas({
           onAsk={(text, canvas) => void told.tell(t.voice.reading(t.voice.koordinator), undefined, () => (canvas ? api.commandOn(canvas, text) : api.command(text, null, undefined, undefined, undefined, undefined, placeNow())))}
         />
         {setupOn && <Setup onClose={() => setSetupOn(false)} />}
-        <KoordinatorSheet on={kOn} canvas={snapshot.canvas.id} items={items} preferences={snapshot.preferences} settings={snapshot.settingProposals ?? []} repos={snapshot.canvas.repos} talk={snapshot.talk} reshare={snapshot.reshare} onOpen={(i) => void openFresh(i)} onTell={(text, images) => tellTyped(text, images, null)} onConfig={(repo, setting) => {
+        <KoordinatorSheet on={kOn} canvas={snapshot.canvas.id} items={items} preferences={snapshot.preferences} settings={snapshot.settingProposals ?? []} repos={snapshot.canvas.repos} talk={snapshot.talk} reshare={snapshot.reshare} onOpen={(i) => void openFresh(i)} onTell={(text, images, replyTo) => tellTyped(text, images, null, undefined, replyTo)} onConfig={(repo, setting) => {
             showRepoClones({ canvas: snapshot.canvas.id, repo, field: 'settings', setting });
             setCOn(true);
           }} />
@@ -1415,7 +1416,6 @@ function Canvas({
           flat={ptt.flat}
           target={target}
           field={draftFor(focus?.type === 'card' ? { card: focus.id } : focus?.type === 'project' ? { project: focus.id } : null)}
-          card={focus?.type === 'card' ? focus.id : undefined}
           onDown={() => press(false)}
         />
         <Sheet

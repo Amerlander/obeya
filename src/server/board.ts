@@ -42,7 +42,10 @@ import {
   type PlanDir,
   type Reshare,
   type Spot,
+  type TalkQuote,
+  type TalkRef,
   type Thread,
+  isTalkRef,
   STATES,
   finished,
   formatQuestion,
@@ -184,7 +187,7 @@ export function replyNote(quoted: CardEvent | undefined, to: 'worker' | 'explore
 }
 
 /** The start of a text, cut at a word, to point at it. */
-function excerpt(text: string, max: number): string {
+export function excerpt(text: string, max: number): string {
   if (text.length <= max) return text;
   const cut = text.slice(0, max);
   const at = cut.lastIndexOf(' ');
@@ -387,6 +390,11 @@ export class Board {
   /** Whether the line is the owner's words the card's agent has not read yet. */
   unread(cardId: string, id: number): boolean {
     return !!this.store.event(cardId, id)?.unread;
+  }
+
+  /** The message of the sheet `ref` names, if it is one the owner can reply to there. */
+  quotedTalk(ref: unknown): TalkQuote | undefined {
+    return isTalkRef(ref) ? this.store.sheetQuote(this.canvas.id, ref) : undefined;
   }
 
   /** The message of the card's conversation the owner's words reply to, if `id` is one: what someone said, not a step or a state change. */
@@ -704,9 +712,12 @@ export class Board {
 
   // ---------------------------------------------------------------- the Koordinator's memory
 
-  /** Records an exchange with the Koordinator, without its reply (`''`) while it reads the words; returns its id. */
-  addTalk(said: string, reply: string, cardId: string | null = null, lookUp?: { question: string; about: string | null }, images: string[] = []): number {
-    const id = this.store.addTalk(this.canvas.id, said, reply, cardId, lookUp, images);
+  /**
+   * Records an exchange with the Koordinator, without its reply (`''`) while it reads the words;
+   * returns its id. `replyTo`: the message of the sheet the words reply to.
+   */
+  addTalk(said: string, reply: string, cardId: string | null = null, lookUp?: { question: string; about: string | null }, images: string[] = [], replyTo?: TalkRef): number {
+    const id = this.store.addTalk(this.canvas.id, said, reply, cardId, lookUp, images, replyTo);
     this.changed();
     return id;
   }

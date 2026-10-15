@@ -12,7 +12,7 @@ import { useQueueMove } from './queue';
 import { Inline, plain } from './markdown';
 import { Body, Msg, Quote, Reading, useAnswer, useReportedHeight } from './message';
 import { cardDraft, giveBack, questionsKey, updateDraft, useDraft } from './draft';
-import { replyOn, setReply, useReply } from './reply';
+import { eventQuote, type Reply, setReply, useReplyKnown } from './reply';
 import { Composer } from './composer';
 import { useFitHeight } from './fitHeight';
 import { type Box, onto, ZOOM_EASE, ZOOM_MS, zoomBox } from './zoomBox';
@@ -903,6 +903,7 @@ function Conversation({
   const openKey = JSON.stringify(open);
   const turns = useMemo(() => (events ? talkTurns(withoutOpen(events, open), { asking, over: !working && !paused, paused }) : null), [events, asked, working, paused, openKey]);
   const byId = useMemo(() => new Map(events?.map((e) => [e.id, e])), [events]);
+  const known = useReplyKnown();
   if (!events || !turns) return null;
   if (hideEmpty && !turns.shown.length && !turns.pending.length) return null;
   const agent = idea ? t.author.explorer : question ? t.author.koordinator : t.author.worker;
@@ -981,7 +982,7 @@ function Conversation({
   return (
     <>
       <h4 className="p-h">{t.talk.heading}</h4>
-      <div className="talk conv" ref={box} onScroll={onScroll}>
+      <div className={onReply && !known ? 'talk conv reply-new' : 'talk conv'} ref={box} onScroll={onScroll}>
         {turns.shown.length === 0 && !working && !turns.asked && !seed && <div className="hint">{idea ? t.idea.talkEmpty : question ? t.question.empty : proposal ? t.reviseHint : t.talk.empty}</div>}
         {turns.shown.slice(0, seedAt).map(line)}
         {seed}
@@ -1148,7 +1149,7 @@ function Message({
       deleteLabel={unread ? t.talk.withdraw : t.demo.unsay}
       head={answer.head}
     >
-      {quoted && <Quote e={quoted} />}
+      {quoted && <Quote q={eventQuote(quoted)} />}
       {answer.continues}
       {e.spot && <SpotLink cardId={e.cardId} spot={e.spot} />}
       {!turn.quiet && <Body md={q ? q.text : (turn.words ?? e.text)} />}
@@ -1972,30 +1973,32 @@ interface TalkField {
 function Talk({ item, questions = [], heading = t.ask.question, picks, past, field }: { item: Item; questions?: Question[]; heading?: string; picks?: Picks; past?: boolean; field?: TalkField }) {
   const options = questions.some((q) => q.options.length > 0);
   const picked = !!picks?.picked;
-  const reply = useReply(item.id);
+  const draft = cardDraft(item.id);
   // the demo video stands at a place: the words are about it, where the card's agent hears them
   const place = usePlace(item.id);
   const at = field && !field.listener && !options ? place : null;
-  const send = async (words: string, images?: string[]) => {
-    const replyTo = reply?.id;
+  const send = async (words: string, images?: string[], to?: Reply['to']) => {
+    const replyTo = typeof to === 'number' ? to : undefined;
     await (picked ? field!.onPicked(field!.quote ? answerText(questions, picks!.picks, words) : words.trim(), picks!.picks, images, replyTo) : field!.onWords(words, images, replyTo));
     picks?.clear();
-    if (reply && replyOn(item.id) === reply) setReply(null);
   };
   return (
     <>
-      <Conversation item={item} past={past} onReply={field ? setReply : undefined} questions={picks && <Questions questions={questions} heading={heading} {...picks} />} />
+      <Conversation
+        item={item}
+        past={past}
+        onReply={field ? (e) => setReply(draft, { to: e.id, quote: eventQuote(e) }) : undefined}
+        questions={picks && <Questions questions={questions} heading={heading} {...picks} />}
+      />
       {field && (
         <Composer
           key={field.key}
-          draft={cardDraft(item.id)}
+          draft={draft}
           placeholder={options ? t.ask.words : at ? t.demo.commentAt(mmss(at.at)) : field.placeholder}
           label={options ? t.ask.send : t.send}
           allowEmpty={picked}
           obeya={field.listener}
           noImages={field.noImages}
-          quote={reply}
-          onUnquote={() => setReply(null)}
           chip={at && <PlaceChip cardId={item.id} place={at} />}
           onSend={send}
         />

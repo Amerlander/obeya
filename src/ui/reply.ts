@@ -1,30 +1,84 @@
-// The message of the open card's conversation the owner replies to, as in chat apps: the field
-// under the conversation shows it as a quote, and what the owner types or says next goes with it.
+// The message a field's words reply to, as in chat apps: the field under a card's conversation or
+// in Obeya's sheet shows it as a quote, and what the owner types or says next goes with it. It is
+// part of the field's draft (`draft.ts`), so it outlives closing the card and a page load.
 
 import { useSyncExternalStore } from 'react';
-import type { CardEvent } from '../core/types';
+import type { CardEvent, TalkQuote, TalkRef } from '../core/types';
+import { draftOf, updateDraft, useDraft } from './draft';
+import { plain } from './markdown';
+import { parseQuestion } from './talk';
 
-let current: CardEvent | null = null;
-const listeners = new Set<() => void>();
-
-/** Replies to the message, or with null to none. */
-export function setReply(e: CardEvent | null) {
-  if (current === e) return;
-  current = e;
-  for (const fn of listeners) fn();
+/** A message as a quote shows it: who said it, what it was, its text, and where it stands in the conversation (`data-ev`). */
+export interface Quoted {
+  by: CardEvent['author'];
+  what?: 'question' | 'handover';
+  text: string;
+  ev: string;
 }
 
-/** The message the owner replies to on the card, if any. */
-export const replyOn = (cardId: string): CardEvent | null => (current?.cardId === cardId ? current : null);
+/** A reply: the message it goes to, as the server knows it (a card's event, or a message of the sheet), and its quote. */
+export interface Reply {
+  to: number | TalkRef;
+  quote: Quoted;
+}
+
+/** As much of a message as a quote keeps: it shows a few lines. */
+const KEPT = 400;
+const clean = (md: string) => plain(md).replace(/\s+/g, ' ').trim().slice(0, KEPT);
+
+/** A message of a card's conversation as a quote: the owner's also for an answer given in their name. */
+export const eventQuote = (e: CardEvent): Quoted => ({
+  by: e.author === 'owner' || e.kind === 'answer' ? 'owner' : e.author,
+  ...(e.kind === 'question' ? { what: 'question' as const } : e.kind === 'review' ? { what: 'handover' as const } : {}),
+  text: clean(e.kind === 'question' ? parseQuestion(e.text).text : e.text),
+  ev: String(e.id),
+});
+
+/** Where a message of the sheet stands in it (`data-ev`). */
+export const talkEv = (r: TalkRef) => `t${r.talk}.${r.part}`;
+
+/** A message of the sheet as a quote. */
+export const talkQuote = (q: TalkQuote): Quoted => ({ by: q.by, text: clean(q.text), ev: talkEv(q) });
+
+/** Replies with the field's words to the message, or with null to none. */
+export const setReply = (draft: string, r: Reply | null) => {
+  if (r) knowReply();
+  if (draftOf(draft).reply !== (r ?? undefined)) updateDraft(draft, { reply: r ?? undefined });
+};
+
+/** The message the field's words reply to, if any. */
+export const replyOn = (draft: string): Reply | null => draftOf(draft).reply ?? null;
 
 /** The same, live. */
-export function useReply(cardId: string): CardEvent | null {
-  const e = useSyncExternalStore(
-    (fn) => {
-      listeners.add(fn);
-      return () => listeners.delete(fn);
-    },
-    () => current,
-  );
-  return e?.cardId === cardId ? e : null;
+export const useReply = (draft: string): Reply | null => useDraft(draft).reply ?? null;
+
+// Until the owner has replied once, a conversation shows the reply button on the latest message they
+// did not write, not only under the pointer, so they find it (`reply-new` on the conversation).
+const KNOWN = 'obeya-reply-known';
+let known = (() => {
+  try {
+    return localStorage.getItem(KNOWN) === '1';
+  } catch {
+    return false;
+  }
+})();
+const knownListeners = new Set<() => void>();
+
+function knowReply() {
+  if (known) return;
+  known = true;
+  try {
+    localStorage.setItem(KNOWN, '1');
+  } catch {}
+  for (const fn of knownListeners) fn();
 }
+
+/** Whether the owner has replied to a message before, live. */
+export const useReplyKnown = () =>
+  useSyncExternalStore(
+    (fn) => {
+      knownListeners.add(fn);
+      return () => void knownListeners.delete(fn);
+    },
+    () => known,
+  );

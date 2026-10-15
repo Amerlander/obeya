@@ -878,20 +878,30 @@ Words said while the agent is between turns start its next one and are read at o
 
 ### Replying to a message
 
-The owner can reply to one message of a card's conversation, as in chat apps: a button in the corner
-of each message (shown while the pointer is on it; `Msg` and `Quote` in `src/ui/message.tsx`) puts
-the message as a quote above the card's field, with × (or Escape, before it closes the card) to take
-it out; what the owner then types or says with push-to-talk goes out with it (`replyTo`, the
-message's event id, `src/ui/reply.ts`). Their message shows the quote above their words, in the
-colour of who said it, its first lines only; a click on it scrolls to the message and lights it up.
+The owner can reply to one message of a conversation, as in chat apps, on a card and in Obeya's
+sheet alike: a button in the corner of each message (shown while the pointer is on it; `Msg` and
+`Quote` in `src/ui/message.tsx`) puts the message as a quote above the field, with × (or Escape,
+before it closes the card or the sidebar) to take it out; what the owner then types or says with
+push-to-talk goes out with it. Until the owner has replied once, the latest message they did not
+write shows its button without the pointer, so they find it. The quote is part of the field's draft
+(`src/ui/reply.ts`), so it outlives closing the card and a page load like the words beside it. Their
+message shows the quote above their words, in the colour of who said it, its first lines only; a
+click on it scrolls to the message and lights it up.
 
-The agent reads `[In reply to your message: „…“]` above the words (`replyNote` in
-`src/server/board.ts`): the first 160 characters or so of what it has whole in its session anyway
-(its own words, the owner's words to it), else the whole message (Obeya's words in the card's
-conversation, which the worker never got; the Koordinator, which reads the field where no agent
-listens, gets it whole too). A reply works on every card with a conversation and a field, the same
-way; the Koordinator's sheet has none yet. Only messages can be replied to, not steps or state
-lines; a `replyTo` that is not a message of the card is dropped and the words go alone.
+On a card the reply names the message's event id (`replyTo`), and the agent reads `[In reply to your
+message: „…“]` above the words (`replyNote` in `src/server/board.ts`): the first 160 characters or
+so of what it has whole in its session anyway (its own words, the owner's words to it), else the
+whole message (Obeya's words in the card's conversation, which the worker never got; the
+Koordinator, which reads the field where no agent listens, gets it whole too). A reply works on
+every card with a conversation and a field, the same way. Only messages can be replied to, not
+steps or state lines; a `replyTo` that is not a message of the card is dropped and the words go
+alone.
+
+In the sheet a message is one part of an exchange (`TalkRef`: what the owner said, the Koordinator's
+reply, the answer it looked up), kept with the owner's words (`Talk.replyTo`, column `reply_to`).
+The Koordinator reads the message whole (`talkReplyNote` in `src/server/commands.ts`), a looked-up
+answer by its tag (`A12`), so a reply to an answer follows up on it. Only the sheet's own exchanges
+can be replied to there; anything else is dropped.
 
 ### The task as first message
 
@@ -1055,7 +1065,9 @@ show on their cards as before. Owner-facing text from agents is in the owner's l
   learned only at the turn's end which messages a turn had taken (and the SDK cannot take one back
   but by a control request); the conversation showed every step of the turn in one bubble at its
   end, below the note, so the steps from before it stood after it.
-- **Replies to a single message, as in chat apps** (2026-10-09).
+- **Replies to a single message, as in chat apps** (2026-10-09), in Obeya's sheet too (2026-10-15):
+  until then only a card's conversation had them. Since then the quote is part of the field's draft,
+  and survives a reload; before, it lived in the page alone, one for all cards.
 - **The task is the conversation's first message** (2026-10-08). Before, the task stood on the left
   as a section of its own („Auftrag“), open until there was a demo, and tasks were the only cards
   whose starting point was not in their conversation.

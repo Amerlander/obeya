@@ -454,6 +454,37 @@ describe('the Koordinator remembers', () => {
     expect(brief).toContain('(with "Export" open) the owner: "halt ihn an" → you: "„Export“ wird angehalten." (the owner took it back)');
   });
 
+  test('words in reply to a message of the sheet stand with its quote, and the Koordinator reads the message whole', async () => {
+    const k = commander();
+    await say(k, 'wie viele Karten laufen?', 'reply', { confirm: 'Zwei: „Export“ und „Login“.' });
+    const [first] = board.snapshot().talk;
+    const reply = async (text: string, replyTo: unknown) => {
+      const heard = k.hear(text, {}, [], { typed: true, replyTo: replyTo as never });
+      await settle();
+      const brief = runtime.last.inbox.at(-1)!;
+      runtime.last.call('reply', { confirm: 'Ok.' });
+      runtime.last.emit({ type: 'idle' });
+      await heard;
+      return brief;
+    };
+    expect(await reply('und welche davon wartet?', { talk: first!.id, part: 'reply' })).toContain(
+      'The owner typed (as written, no recognition errors): "und welche davon wartet?"\n\n[In reply to your reply: „Zwei: „Export“ und „Login“.“]',
+    );
+    expect(board.snapshot().talk.at(-1)!.replyTo).toEqual({ talk: first!.id, part: 'reply', by: 'koordinator', text: 'Zwei: „Export“ und „Login“.' });
+    expect(await reply('nochmal', { talk: first!.id, part: 'said' })).toContain('[In reply to their own earlier message: „wie viele Karten laufen?“]');
+    // a looked-up answer goes by its tag, to follow up on it
+    store.answerTalk(first!.id, 'Export wartet auf dich.', 'project');
+    expect(await reply('warum?', { talk: first!.id, part: 'answer' })).toContain(`[In reply to the answer A${first!.id} the project's agent looked up: „Export wartet auf dich.“]`);
+    // what is no message of the sheet is dropped, and the words go alone
+    const a = board.create({ title: 'Export', x: 0, y: 0 });
+    await say(k, 'hallo', 'reply', { confirm: 'Hallo.' });
+    const onCard = board.addTalk('starte ihn', 'Startet.', a.id);
+    for (const ref of [{ talk: first!.id + 99, part: 'reply' }, { talk: onCard, part: 'reply' }, { talk: first!.id, part: 'nothing' }, 7]) {
+      expect(await reply('so?', ref)).not.toContain('In reply to');
+      expect(board.snapshot().talk.at(-1)!.replyTo).toBeUndefined();
+    }
+  });
+
   test("the owner's words stand in the conversation at once; the reply follows once the Koordinator has read them", async () => {
     const a = board.create({ title: 'Export', x: 0, y: 0 });
     const k = commander();

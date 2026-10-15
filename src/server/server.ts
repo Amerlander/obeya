@@ -4,7 +4,7 @@ import type { ServerWebSocket } from 'bun';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { agentListens, type CanvasInfo, type CardAction, type ClientMessage, type CardPatch, type NewCard, type PendingRestart, type ServerMessage, type SpotInput, waitingOn } from '../core/types';
+import { agentListens, type CanvasInfo, type CardAction, type ClientMessage, type CardPatch, type NewCard, type PendingRestart, type ServerMessage, type SpotInput, type TalkRef, isTalkRef, waitingOn } from '../core/types';
 import index from '../ui/index.html';
 import panel from '../ui/panel.html';
 import { BadRequest } from './board';
@@ -25,6 +25,13 @@ import { AppUpdates } from './app-update';
 import { oldLinuxBun } from './repo';
 
 type Req = Request & { params: Record<string, string> };
+
+/** `?replyTo=` of a recording: a card's event (`7`), or a message of the sheet (`12.answer`). */
+function replyParam(p: string | null): number | TalkRef | undefined {
+  const m = p?.match(/^(\d+)(?:\.(said|reply|answer))?$/);
+  if (!m) return;
+  return m[2] ? { talk: Number(m[1]), part: m[2] as TalkRef['part'] } : Number(m[1]) || undefined;
+}
 
 export interface Voice {
   transcriber: Transcriber;
@@ -235,7 +242,7 @@ export function serve(
     if (text === null || (!text && !(input.typed && images.length))) return { confirm: text === null ? c.board.t.voice.notUnderstood : c.board.t.voice.nothingHeard, unheard: true };
     const card = focus.card ? c.board.item(focus.card) : undefined;
     if (card && agentListens(card)) {
-      c.tell(card.id, text, images, !input.typed, input.replyTo, input.spot);
+      c.tell(card.id, text, images, !input.typed, typeof input.replyTo === 'number' ? input.replyTo : undefined, input.spot);
       // the card's conversation shows the words; the app's panel shows what was heard
       return { confirm: '', quiet: true, text } satisfies Heard & { text: string };
     }
@@ -527,8 +534,9 @@ export function serve(
           const params = new URL(req.url).searchParams;
           const images = params.getAll('image');
           c.images.resolve(images);
-          // `?replyTo=<event>`: said in reply to that message of the open card's conversation
-          const replyTo = Number(params.get('replyTo')) || undefined;
+          // `?replyTo=<event>`: said in reply to that message of the open card's conversation; with
+          // no card open, `?replyTo=<exchange>.<part>` to that message of the sheet (`TalkRef`)
+          const replyTo = replyParam(params.get('replyTo'));
           const form = req.headers.get('content-type')?.startsWith('multipart/form-data') ? await req.formData() : null;
           const audio = form ? form.get('audio') : await req.blob();
           if (!(audio instanceof Blob)) throw new BadRequest('invalid', 'audio expected');
@@ -567,7 +575,7 @@ export function serve(
       '/api/c/:canvas/command': {
         POST: on(async (c, req) => {
           // `field`: typed into that field of the open card rather than into the Koordinator's sheet
-          // `replyTo`: typed in reply to that message of the open card's conversation
+          // `replyTo`: typed in reply to that message of the open card's conversation, or with no card open of the sheet (`TalkRef`)
           // `spot`: typed about that place in the open card's demo video
           const { text, images, field, replyTo, spot } = (await req.json()) as { text: string; images?: string[]; field?: unknown; replyTo?: unknown; spot?: SpotInput };
           // a screenshot alone may speak for itself to the open card's agent
@@ -576,7 +584,7 @@ export function serve(
           if (typeof text !== 'string' || (!text.trim() && !(listens && images?.length))) throw new BadRequest('emptyText', 'text must be a non-empty string');
           // screenshots pasted into the typed command go to the cards it creates or concerns
           c.images.resolve(images);
-          return heard(c, text.trim(), focusOf(req, c), images ?? [], { typed: true, ...(isField(field) ? { field } : {}), ...(typeof replyTo === 'number' ? { replyTo } : {}), ...(spot ? { spot } : {}) });
+          return heard(c, text.trim(), focusOf(req, c), images ?? [], { typed: true, ...(isField(field) ? { field } : {}), ...(typeof replyTo === 'number' || isTalkRef(replyTo) ? { replyTo } : {}), ...(spot ? { spot } : {}) });
         }),
       },
       '/api/c/:canvas/command/undo': {

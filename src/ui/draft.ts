@@ -3,11 +3,12 @@
 // keep theirs here rather than in the field itself, so the microphone sends what stands in the field
 // and dictates into it, and a draft outlives closing the card. Without a field to speak to, the
 // screenshots for the next recording lie beside the microphone, in a draft of their own (`MIC`).
-// These drafts (text, screenshots, picks) are written down per tab and canvas (`keepDrafts`), so they outlive a page load too:
+// These drafts (text, screenshots, picks, the message replied to) are written down per tab and canvas (`keepDrafts`), so they outlive a page load too:
 // switching to another canvas and back, or a restart. So are the marks on screenshots (`Markup`).
 
 import { useEffect, useSyncExternalStore } from 'react';
 import type { Mark } from './marks';
+import type { Reply } from './reply';
 
 export interface Draft {
   text: string;
@@ -23,6 +24,8 @@ export interface Draft {
   note: string;
   /** The options picked for each of the questions above the field, and which questions they are (`questionsKey`). */
   picks?: Picks;
+  /** The message the words reply to (`reply.ts`). */
+  reply?: Reply;
 }
 
 export interface Picks {
@@ -33,10 +36,10 @@ export interface Picks {
 /** Which questions picks belong to: they count only while the same questions stand. */
 export const questionsKey = (questions: unknown[]) => JSON.stringify(questions);
 
-type Kept = Pick<Draft, 'text' | 'images' | 'picks'>;
-const keptOf = ({ text, images, picks }: Draft): Kept | null => {
+type Kept = Pick<Draft, 'text' | 'images' | 'picks' | 'reply'>;
+const keptOf = ({ text, images, picks, reply }: Draft): Kept | null => {
   const picked = picks?.picks.some((p) => p.length) ? picks : undefined;
-  return text.trim() || images.length || picked ? { text, images, ...(picked ? { picks: picked } : {}) } : null;
+  return text.trim() || images.length || picked || reply ? { text, images, ...(picked ? { picks: picked } : {}), ...(reply ? { reply } : {}) } : null;
 };
 
 const EMPTY: Draft = { text: '', images: [], uploading: 0, error: '', dictation: '', note: '', marking: [] };
@@ -101,7 +104,7 @@ export function setMarkup(id: string, markup: Markup | null) {
 
 /**
  * Takes back the canvas's drafts that `store` kept and writes them down there from now on, text,
- * screenshots and picks, whenever they change, and the marks on the screenshots. Once per page;
+ * screenshots, picks and the message replied to, whenever they change, and the marks on the screenshots. Once per page;
  * later calls change nothing.
  */
 export function keepDrafts(store: Store, canvas: string) {
@@ -109,7 +112,8 @@ export function keepDrafts(store: Store, canvas: string) {
   kept = { store, canvas };
   try {
     const saved = JSON.parse(store.getItem(storeKey(canvas)) ?? '{}') as Record<string, Kept>;
-    for (const [key, { text, images, picks }] of Object.entries(saved)) if (!drafts.has(key)) drafts.set(key, { ...EMPTY, text, images, ...(picks ? { picks } : {}) });
+    for (const [key, { text, images, picks, reply }] of Object.entries(saved))
+      if (!drafts.has(key)) drafts.set(key, { ...EMPTY, text, images, ...(picks ? { picks } : {}), ...(reply ? { reply } : {}) });
   } catch {}
   try {
     const saved = JSON.parse(store.getItem(markupsKey(canvas)) ?? '{}') as Record<string, Markup>;

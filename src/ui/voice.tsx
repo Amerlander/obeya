@@ -166,19 +166,19 @@ export function usePushToTalk(
       const key = field(r.target);
       const { text, images } = draftOf(key);
       updateDraft(key, (d) => ({ text: '', images: d.images.filter((id) => !images.includes(id)) }));
-      // said in reply to the message the open card's field quotes, as typed words are
-      const reply = r.target && 'card' in r.target ? replyOn(r.target.card) : null;
-      if (reply) setReply(null);
+      // said in reply to the message the field quotes, as typed words are
+      const reply = replyOn(key);
+      if (reply) setReply(key, null);
       let failed = false;
       const h = await send(r.target, async () =>
-        api.voice(audio, r.target, { images, replyTo: reply?.id, text, spot: await sent(r.spot), place: at }).catch((e) => {
+        api.voice(audio, r.target, { images, replyTo: reply?.to, text, spot: await sent(r.spot), place: at }).catch((e) => {
           failed = true;
           throw e;
         }),
       );
       if (!h.unheard && (!failed || leaving)) return;
       updateDraft(key, (d) => ({ text: [text, d.text].filter((x) => x.trim()).join(' '), images: [...images, ...d.images.filter((id) => !images.includes(id))] }));
-      if (reply && !(r.target && 'card' in r.target && replyOn(r.target.card))) setReply(reply);
+      if (reply && !replyOn(key)) setReply(key, reply);
     }).finally(() => setWriting((n) => n - 1));
   }
 
@@ -314,12 +314,12 @@ export function ToldList({ told, open, onUndo }: { told: Told[]; open?: string; 
  * recording are picked beside the microphone; dropped on it or pasted (App), they go to the field
  * when there is one.
  */
-export function PushToTalk({ phase, level, flat, target, field, card, onDown }: { phase: Phase; level: number; flat: boolean; target: string; field: string | null; card?: string; onDown: () => void }) {
+export function PushToTalk({ phase, level, flat, target, field, onDown }: { phase: Phase; level: number; flat: boolean; target: string; field: string | null; onDown: () => void }) {
   const on = useFieldOn(field);
   const key = on ? field! : MIC_DRAFT;
   const shots = useShotInput({ draft: key, off: !takesImages(key) });
   const { text } = useDraft(key);
-  const quote = useReply(card ?? '');
+  const quote = useReply(key);
   const into = useFocusedDraft();
   const n = shots.images.length;
   const parts = [...(on && text.trim() ? [t.voice.withText] : []), ...(n ? [t.voice.withShots(n)] : []), ...(on && quote ? [t.voice.withQuote] : [])];
