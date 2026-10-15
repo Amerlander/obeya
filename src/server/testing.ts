@@ -3,6 +3,8 @@
 import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { generic } from '../adapters/generic';
+import type { RepoAdapter } from '../adapters/types';
 import type { Forge } from './forge';
 import type { AgentEvent, AgentRuntime, AgentSession, AgentSpec, PermissionAnswer } from './runtime';
 import { git } from './workspaces';
@@ -155,3 +157,6 @@ exec sh -c "$*"
   );
   return program;
 }
+
+/** The generic adapter of a repository whose settings leave demos to the worker: a handover may be a summary alone. */
+export const noDemos: RepoAdapter = { ...generic, demo: { required: false, howToRun: '' } };

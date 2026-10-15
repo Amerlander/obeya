@@ -10,7 +10,7 @@ import { BadRequest, Board } from './board';
 import { Store } from './db';
 import { DEMO_SKILL_FILE, demoSkillName, OBEYA_PLUGIN } from './demo';
 import { Images } from './images';
-import { FakeRuntime, gitRepo, identify, until } from './testing';
+import { FakeRuntime, gitRepo, identify, noDemos, until } from './testing';
 import { Restarter } from './self-update';
 import { Workers } from './workers';
 import { GIT, git, Workspaces } from './workspaces';
@@ -67,7 +67,7 @@ function setup(adapter: RepoAdapter, withOrigin = false) {
 
 beforeEach(() =>
   setup({
-    ...generic,
+    ...noDemos,
     land: 'main',
     workspaces: 'clones',
     setup: 'bun install',
@@ -129,7 +129,7 @@ describe('workers', () => {
   test('the screenshots of the task go with it when the worker starts', () => {
     const images = new Images(join(dir, 'images'));
     const shot = images.save(new Uint8Array([1, 2, 3]), 'image/png');
-    workers = new Workers({ board, runtime, workspaces: spaces, adapter: generic, imageFiles: (ids = []) => ids.flatMap((i) => images.path(i) ?? []) });
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: noDemos, imageFiles: (ids = []) => ids.flatMap((i) => images.path(i) ?? []) });
     const c = board.create({ title: 'Seite bricht um', x: 0, y: 0, images: [shot] });
     workers.start(c.id);
     expect(runtime.last.images[0]).toEqual([images.path(shot)!]);
@@ -613,7 +613,7 @@ describe('workers', () => {
   });
 
   test('a worker the usage limit stopped goes on by itself once the limit lifts', async () => {
-    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, limitMargin: 30 });
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...noDemos, land: 'main', workspaces: 'clones' }, limitMargin: 30 });
     const c = manual();
     workers.start(c.id);
     runtime.last.call('report', { status: 'Exporter steht' });
@@ -642,7 +642,7 @@ describe('workers', () => {
   });
 
   test('a worker the usage limit stopped is not woken once stopped', async () => {
-    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, limitMargin: 10 });
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...noDemos, land: 'main', workspaces: 'clones' }, limitMargin: 10 });
     const c = manual();
     workers.start(c.id);
     runtime.last.emit({ type: 'error', message: "You've hit your session limit", limit: { resetsAt: Date.now() + 20 } });
@@ -656,7 +656,7 @@ describe('workers', () => {
   });
 
   test('a turn in which the worker did nothing does not use up its nudge', async () => {
-    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, backgroundGrace: 5, backgroundLimit: 5 });
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...noDemos, land: 'main', workspaces: 'clones' }, backgroundGrace: 5, backgroundLimit: 5 });
     const c = manual();
     workers.start(c.id);
     const before = runtime.last.inbox.length;
@@ -674,7 +674,7 @@ describe('workers', () => {
   });
 
   test('a turn in which the worker did nothing counts as ended after a while', async () => {
-    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, backgroundGrace: 5 });
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...noDemos, land: 'main', workspaces: 'clones' }, backgroundGrace: 5 });
     const c = manual();
     workers.start(c.id);
     runtime.last.emit({ type: 'idle' });
@@ -703,17 +703,18 @@ describe('workers', () => {
   });
 
   test('background work that ends without waking the worker counts as an ended turn after a while', async () => {
-    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, backgroundGrace: 5 });
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...noDemos, land: 'main', workspaces: 'clones' }, backgroundGrace: 5 });
     const c = manual();
     workers.start(c.id);
     runtime.last.emit({ type: 'text', text: 'Ich warte auf den Server.' });
     runtime.last.emit({ type: 'idle', background: 1 });
     await Bun.sleep(20);
-    // as long as the work runs, the worker waits for it
-    expect(runtime.last.inbox.at(-1)).not.toContain('ready_for_review');
+    // as long as the work runs, the worker waits for it: nothing comes after its brief
+    const brief = runtime.last.inbox.length;
     expect(workers.busy()).toBe(true);
     runtime.last.emit({ type: 'background', running: 0 });
     await Bun.sleep(20);
+    expect(runtime.last.inbox.length).toBe(brief + 1);
     expect(runtime.last.inbox.at(-1)).toContain('ready_for_review');
     runtime.last.emit({ type: 'idle', background: 1 });
     runtime.last.emit({ type: 'background', running: 0 });
@@ -724,7 +725,7 @@ describe('workers', () => {
   });
 
   test('background work the session never reports as ended counts as an ended turn after a long while', async () => {
-    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, backgroundGrace: 1000, backgroundLimit: 5 });
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...noDemos, land: 'main', workspaces: 'clones' }, backgroundGrace: 1000, backgroundLimit: 5 });
     const c = manual();
     workers.start(c.id);
     runtime.last.emit({ type: 'text', text: 'Ich warte auf den Server.' });
@@ -734,7 +735,7 @@ describe('workers', () => {
   });
 
   test('a worker that asks while its background work runs counts as busy until the work wakes it', async () => {
-    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, backgroundGrace: 5, backgroundLimit: 5 });
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...noDemos, land: 'main', workspaces: 'clones' }, backgroundGrace: 5, backgroundLimit: 5 });
     const c = manual();
     workers.start(c.id);
     runtime.last.call('ask', { question: 'Soll das Video Ton haben?' });
@@ -749,7 +750,7 @@ describe('workers', () => {
   });
 
   test('a note to a worker waiting for its background work starts a turn of its own', async () => {
-    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, backgroundGrace: 5 });
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...noDemos, land: 'main', workspaces: 'clones' }, backgroundGrace: 5 });
     const c = manual();
     workers.start(c.id);
     runtime.last.emit({ type: 'idle', background: 1 });
@@ -762,7 +763,7 @@ describe('workers', () => {
   });
 
   test('a preference learned while a worker runs reaches it once, with its next tool step', () => {
-    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, preferences: () => board.preferencesText() });
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...noDemos, land: 'main', workspaces: 'clones' }, preferences: () => board.preferencesText() });
     board.addPreference('Antworten auf Deutsch.');
     const c = manual();
     workers.start(c.id);
@@ -1012,7 +1013,7 @@ describe('parking: the stack of a card that waits for the owner', () => {
       board,
       runtime,
       workspaces: spaces,
-      adapter: { ...generic, land: 'main', workspaces: 'clones', stack: { ...stack, stop: 'echo stopped >> parked.log', ...more } },
+      adapter: { ...noDemos, land: 'main', workspaces: 'clones', stack: { ...stack, stop: 'echo stopped >> parked.log', ...more } },
       parkGrace: grace,
     });
   };
@@ -1160,7 +1161,7 @@ describe('handing over with a demo', () => {
 
   test('the worker gets the demo skill from the plugin that comes with Obeya, its brief names it, and it knows where Obeya is', () => {
     rmSync(dir, { recursive: true, force: true });
-    setup({ ...generic, land: 'main', workspaces: 'clones', demo: { required: true, howToRun: 'bun start' } });
+    setup({ ...noDemos, land: 'main', workspaces: 'clones', demo: { required: true, howToRun: 'bun start' } });
     const c = manual();
     workers.start(c.id);
     expect(runtime.last.spec.plugins).toEqual([OBEYA_PLUGIN]);
@@ -1169,6 +1170,17 @@ describe('handing over with a demo', () => {
     expect(existsSync(DEMO_SKILL_FILE)).toBe(true);
     // a session that does not know the skill reads its file
     expect(runtime.last.inbox[0]).toContain(`recorded with the demo skill (\`${demoSkillName()}\`; if your session does not know it, read its file ${DEMO_SKILL_FILE} and follow that)`);
+  });
+
+  test('a repository without a recipe of its own (the generic adapter) requires a demo, and its worker finds out how to run the app', () => {
+    rmSync(dir, { recursive: true, force: true });
+    setup({ ...generic, land: 'main', workspaces: 'clones' });
+    const c = manual();
+    workers.start(c.id);
+    expect(runtime.last.inbox[0]).toContain('Then show the owner the result');
+    expect(runtime.last.inbox[0]).toContain("The repository's settings say nothing yet about how to run the app for a demo: find it out from the repository");
+    expect(runtime.last.call('ready_for_review', { summary: 'S' })).toContain('Not handed over: this repository requires a demo.');
+    expect(state(c.id)).toBe('working');
   });
 
   test('the card waits with the demo; its files are found; words under it answer its question and leave the demo', () => {
@@ -1324,7 +1336,7 @@ describe('handing over with a demo', () => {
 
   test('after feedback, the worker may hand over again without a new demo: the one on the card stands', () => {
     rmSync(dir, { recursive: true, force: true });
-    setup({ ...generic, land: 'main', workspaces: 'clones', demo: { required: true, howToRun: 'bun start' } });
+    setup({ ...noDemos, land: 'main', workspaces: 'clones', demo: { required: true, howToRun: 'bun start' } });
     const c = manual();
     workers.start(c.id);
     runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir()) });
@@ -1337,7 +1349,7 @@ describe('handing over with a demo', () => {
 
   test('where demos are shared, a video or an artifact comes with its page for colleagues, kept with the demo', () => {
     rmSync(dir, { recursive: true, force: true });
-    setup({ ...generic, land: 'main', workspaces: 'clones', demo: { required: true, howToRun: 'bun start', share: ['share'] } });
+    setup({ ...noDemos, land: 'main', workspaces: 'clones', demo: { required: true, howToRun: 'bun start', share: ['share'] } });
     const c = manual();
     workers.start(c.id);
     expect(runtime.last.inbox[0]).toContain('share the demo, a video or an HTML artifact, with colleagues');
@@ -1365,7 +1377,7 @@ describe('handing over with a demo', () => {
     expect(runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir(), ['Nur eins']) })).toContain('Not handed over');
     expect(state(c.id)).toBe('working');
     rmSync(dir, { recursive: true, force: true });
-    setup({ ...generic, land: 'main', workspaces: 'clones', demo: { required: true, howToRun: 'bun start' } });
+    setup({ ...noDemos, land: 'main', workspaces: 'clones', demo: { required: true, howToRun: 'bun start' } });
     const d = manual();
     workers.start(d.id);
     expect(runtime.last.inbox[0]).toContain('How to run the app for the demo: bun start');
@@ -1391,7 +1403,7 @@ describe('handing over with a demo', () => {
 
   test('without anything to show, the worker says why: the card waits for review without a demo', () => {
     rmSync(dir, { recursive: true, force: true });
-    setup({ ...generic, land: 'main', workspaces: 'clones', demo: { required: true, howToRun: 'bun start' } });
+    setup({ ...noDemos, land: 'main', workspaces: 'clones', demo: { required: true, howToRun: 'bun start' } });
     const c = manual();
     workers.start(c.id);
     expect(runtime.last.inbox[0]).toContain('no_demo');
@@ -1412,7 +1424,7 @@ describe('comments on places in the demo video', () => {
   /** A card waiting with a demo of two scenes, the second narrated in two sentences. */
   const waiting = (question?: string) => {
     images = new Images(join(dir, 'images'));
-    workers = new Workers({ board, runtime, workspaces: spaces, adapter: generic, imageFiles: (ids = []) => ids.flatMap((i) => images.path(i) ?? []), releaseDelay: 5, holdGrace: 60_000 });
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: noDemos, imageFiles: (ids = []) => ids.flatMap((i) => images.path(i) ?? []), releaseDelay: 5, holdGrace: 60_000 });
     const d = join(dir, 'demo');
     mkdirSync(d, { recursive: true });
     writeFileSync(join(d, 'demo.mp4'), 'x');
@@ -1497,7 +1509,7 @@ describe('comments on places in the demo video', () => {
 
   test('all deleted, nothing goes, also once the wait is over', async () => {
     const c = waiting();
-    workers = new Workers({ board, runtime, workspaces: spaces, adapter: generic, holdGrace: 10 });
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: noDemos, holdGrace: 10 });
     const n = runtime.last.inbox.length;
     workers.message(c.id, 'Doch nicht.', [], false, undefined, { at: 1 });
     workers.unsay(c.id, board.events(c.id).at(-1)!.id);
@@ -1521,7 +1533,7 @@ describe('comments on places in the demo video', () => {
 
   test('go without a sign from the owner once the last one has waited long enough, also after a restart', async () => {
     const c = waiting();
-    workers = new Workers({ board, runtime, workspaces: spaces, adapter: generic, holdGrace: 10 });
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: noDemos, holdGrace: 10 });
     const n = runtime.last.inbox.length;
     workers.message(c.id, 'Hier.', [], false, undefined, { at: 1 });
     workers.shutdown();
@@ -1560,7 +1572,7 @@ describe('comments on places in the demo video', () => {
 describe('landing through a pull request', () => {
   beforeEach(() => {
     rmSync(dir, { recursive: true, force: true });
-    setup({ ...generic, land: 'pr', workspaces: 'clones' });
+    setup({ ...noDemos, land: 'pr', workspaces: 'clones' });
   });
 
   test('approval starts the PR phase: the branch stays in the clone, main is left alone', async () => {
@@ -1641,7 +1653,7 @@ describe('landing through a pull request', () => {
 describe('approving directly onto main where work goes out as a pull request', () => {
   beforeEach(() => {
     rmSync(dir, { recursive: true, force: true });
-    setup({ ...generic, land: 'pr', direct: true, workspaces: 'clones' }, true);
+    setup({ ...noDemos, land: 'pr', direct: true, workspaces: 'clones' }, true);
   });
 
   const commitIn = (path: string, file: string, msg: string) => {
@@ -1749,7 +1761,7 @@ describe('approving directly onto main where work goes out as a pull request', (
   });
 
   test('without `direct` in the adapter the approval is refused; where work lands on main anyway it is a plain approval', async () => {
-    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'pr', workspaces: 'clones' } });
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...noDemos, land: 'pr', workspaces: 'clones' } });
     const { c, session, clone } = handedOver();
     commitIn(clone, 'x.ts', 'X');
     session.call('ready_for_review', { summary: 'S' });
@@ -1759,7 +1771,7 @@ describe('approving directly onto main where work goes out as a pull request', (
     expect(git(origin, 'log', '--format=%s', 'main')).toBe('init');
 
     rmSync(dir, { recursive: true, force: true });
-    setup({ ...generic, land: 'main', workspaces: 'clones' });
+    setup({ ...noDemos, land: 'main', workspaces: 'clones' });
     const d = handedOver('Logo');
     commitIn(d.clone, 'logo.svg', 'Logo');
     d.session.call('ready_for_review', { summary: 'S' });
@@ -1779,7 +1791,7 @@ describe('approving directly onto main where work goes out as a pull request', (
 
 describe('a prototype built on in a clone', () => {
   test('the idea takes over the clone and the branch, renamed; the clone is busy until it is done', () => {
-    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' } });
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...noDemos, land: 'main', workspaces: 'clones' } });
     const idea = board.create({ idea: true, title: 'Logo', x: 0, y: 0 });
     const prototype = board.addPrototype(idea.id, 'Prototyp: Logo', 'zeigen');
     workers.start(prototype.id);
@@ -1805,7 +1817,7 @@ describe('a prototype built on in a clone', () => {
 describe('a worktree per card', () => {
   beforeEach(() => {
     rmSync(dir, { recursive: true, force: true });
-    setup({ ...generic, land: 'main', workspaces: 'worktrees' });
+    setup({ ...noDemos, land: 'main', workspaces: 'worktrees' });
   });
 
   const commitIn = (path: string, file: string, msg: string) => {
@@ -1950,7 +1962,7 @@ describe('a worktree per card', () => {
 
   test('an approval that could not land holds: the worker brings the branch up to date and it lands', async () => {
     rmSync(dir, { recursive: true, force: true });
-    setup({ ...generic, land: 'main', workspaces: 'worktrees', demo: { required: true, howToRun: 'bun start' } });
+    setup({ ...noDemos, land: 'main', workspaces: 'worktrees', demo: { required: true, howToRun: 'bun start' } });
     const demo = join(dir, 'demo');
     mkdirSync(demo);
     writeFileSync(join(demo, 'demo.mp4'), '0');
@@ -2070,7 +2082,7 @@ describe('a worktree per card', () => {
 
   test('asked about a live card, its worker is resumed in a fresh workspace, answers, and ends again', async () => {
     const ended: string[] = [];
-    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, onWorkEnded: (id) => void ended.push(id) });
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...noDemos, land: 'main', workspaces: 'clones' }, onWorkEnded: (id) => void ended.push(id) });
     const c = manual();
     workers.start(c.id);
     commitIn(board.row(c.id).workspace!, 'c.ts', 'C');
@@ -2229,9 +2241,9 @@ describe('a worktree per card', () => {
 
   test('a worker whose remaining work needs the new code waits for the restart and goes on after it', async () => {
     rmSync(dir, { recursive: true, force: true });
-    setup({ ...generic, land: 'main', workspaces: 'worktrees' });
+    setup({ ...noDemos, land: 'main', workspaces: 'worktrees' });
     const restarting = (b: Board) =>
-      new Workers({ board: b, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'worktrees' }, restartsFor: () => 'obeya' });
+      new Workers({ board: b, runtime, workspaces: spaces, adapter: { ...noDemos, land: 'main', workspaces: 'worktrees' }, restartsFor: () => 'obeya' });
     workers = restarting(board);
     const c = manual();
     workers.start(c.id);
@@ -2389,7 +2401,7 @@ describe('a worktree per card', () => {
     expect(board.events(c.id).at(-1)).toMatchObject({ author: 'obeya', kind: 'state' });
 
     workers.shutdown();
-    const after = new Workers({ board: new Board(store, board.canvas, () => ({ docs: [doc], dirs: [] })), runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'worktrees' } });
+    const after = new Workers({ board: new Board(store, board.canvas, () => ({ docs: [doc], dirs: [] })), runtime, workspaces: spaces, adapter: { ...noDemos, land: 'main', workspaces: 'worktrees' } });
     after.resumeAll();
     const resumed = runtime.last;
     expect(resumed).not.toBe(s);
@@ -2402,7 +2414,7 @@ describe('a worktree per card', () => {
   });
 
   test('after the landing, a worker waiting for a deploy in the background keeps its workspace until the watcher wakes it', async () => {
-    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'worktrees' }, backgroundGrace: 5 });
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...noDemos, land: 'main', workspaces: 'worktrees' }, backgroundGrace: 5 });
     const c = manual();
     workers.start(c.id);
     const wc = board.row(c.id).workspace!;
@@ -2448,14 +2460,14 @@ describe('a worktree per card', () => {
     expect(s.closed).toBe(false);
     expect(board.item(c.id)!.finishing).toBe(true);
     workers.shutdown();
-    const after = new Workers({ board: new Board(store, board.canvas, () => ({ docs: [doc], dirs: [] })), runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'worktrees' } });
+    const after = new Workers({ board: new Board(store, board.canvas, () => ({ docs: [doc], dirs: [] })), runtime, workspaces: spaces, adapter: { ...noDemos, land: 'main', workspaces: 'worktrees' } });
     after.resumeAll();
     expect(runtime.last).not.toBe(s);
     expect(runtime.last.spec.resume).toBe('sess-1');
   });
 
   test('a turn after the landing that the usage limit stopped waits for the limit and goes on; the card does not finish', async () => {
-    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'worktrees' }, limitMargin: 30 });
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...noDemos, land: 'main', workspaces: 'worktrees' }, limitMargin: 30 });
     const c = manual();
     workers.start(c.id);
     commitIn(board.row(c.id).workspace!, 'c.ts', 'C');
@@ -2586,7 +2598,7 @@ describe('a workstream whose plan doc keeps it open after its work landed', () =
 describe('a workstream merged as a pull request, its box still empty', () => {
   beforeEach(() => {
     rmSync(dir, { recursive: true, force: true });
-    setup({ ...generic, land: 'pr', workspaces: 'clones' });
+    setup({ ...noDemos, land: 'pr', workspaces: 'clones' });
   });
 
   const w1 = () => board.snapshot().items.find((i) => i.label === 'W1')!;

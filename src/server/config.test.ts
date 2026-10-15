@@ -228,7 +228,7 @@ describe("Obeya's configuration", () => {
       checks: { value: [], source: 'default' },
       planDocs: { value: { dir: 'docs/plan' }, source: 'default' },
       workspaces: { value: 'worktrees', source: 'default' },
-      demo: { required: { value: false, source: 'default' } },
+      demo: { required: { value: true, source: 'default' } },
     });
     // this machine's own come on top, in the draft: the values beside them stay what they would be without
     expect(values({ adapter: 'obeya', settings: { land: 'pr' } })).toMatchObject({ land: { value: 'main', source: 'adapter' }, checks: { source: 'adapter' }, planDocs: { source: 'default' }, demo: { required: { value: true, source: 'adapter' } } });

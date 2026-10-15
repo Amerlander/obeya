@@ -1042,7 +1042,9 @@ function CanvasBlock({ n, canvas, resolved, running, pin, saved, adapters, probl
       {fresh && <p className="hint warn">{t.config.freshHint}</p>}
       <div className="cfg-repos">
         <span className="hint">{t.config.path}</span>
-        <span className="hint">{t.config.adapter}</span>
+        <span className="hint cfg-has-info cfg-adapter">
+          {t.config.adapter} <Info text={t.config.adapterHint} />
+        </span>
         <span className="hint cfg-has-info cfg-share">
           {t.config.share} <Info text={t.config.shareHint} />
         </span>
@@ -1126,7 +1128,7 @@ function RepoRow({ repo, home, resolved, canvasId, adapters, problems, focus, wh
         {resolved && <span className="hint">{`${resolved.id}${home ? ` · ${t.config.home}` : ''} · ${resolved.workspaces === 'clones' ? t.config.clonesMode : t.config.worktrees}`}</span>}
       </div>
       <div className="cfg-cell">
-        <select value={repo.adapter ?? ''} onChange={(e) => onChange(without('adapter', e.target.value || undefined))} aria-label={t.config.adapter}>
+        <select className="c-adapter" value={repo.adapter ?? ''} onChange={(e) => onChange(without('adapter', e.target.value || undefined))} aria-label={t.config.adapter}>
           <option value="">{t.config.adapterAuto(repo.adapter ? undefined : resolved?.adapter)}</option>
           {/* a module's path from the file: kept as it is, the dialog offers only the built-in ones */}
           {(repo.adapter && !adapters.includes(repo.adapter) ? [...adapters, repo.adapter] : adapters).map((a) => (
@@ -1356,6 +1358,7 @@ function RepoSettingsBlock({
               <input type="checkbox" checked={value<boolean>('demoRequired')} onChange={(e) => set('demoRequired', e.target.checked)} />
               {c.demoRequiredLabel}
             </label>,
+            c.demoRequiredHint,
           )}
           {row('howToRun', c.howToRun, <textarea rows={Math.max(3, Math.ceil(value<string>('howToRun').length / 90) + 1)} aria-label={c.howToRun} value={value<string>('howToRun')} onChange={(e) => set('howToRun', e.target.value)} />, c.howToRunHint)}
           <ShareSettings repo={repo} values={values} branch={value<string>('branch')} shareTo={shareTo} shareDirect={shareDirect} {...(onReload ? { onReload } : {})} />

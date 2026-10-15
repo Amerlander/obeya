@@ -9,7 +9,7 @@ canvas's name) in a small TypeScript module at `.obeya/adapter/index.ts`. A repo
 no code has no module.
 
 The quickest way to get one: in "Konfiguration", a repository that runs on the generic adapter has
-"Adapter einrichten lassen" ("Have the adapter set up"). It puts a card on the repository's
+„Von einem Agenten ausfüllen lassen“ ("Have an agent fill them in"). It puts a card on the repository's
 canvas whose worker writes the adapter with the `obeya:adapter` skill: it reads the repository,
 starts the app, records a demo with it to prove the recipe, and asks you what it cannot find out
 (a login, test data). The values you set for a repository in "Konfiguration" go into
@@ -164,15 +164,16 @@ holds the frontend's URL under `frontendKey`. Every worker's brief says so. Gene
 
 ### `demo` — `{ required, howToRun, site?, share? }`
 
-Demos: with `demo`, a worker shows its result as a narrated video (or an HTML page for something
-to look at), recorded with Obeya's demo skill. Without it, a written summary is enough.
+Demos: a worker shows its result as a narrated video (or an HTML page for something to look at),
+recorded with Obeya's demo skill. Generic: `{ required: true, howToRun: '' }`.
 
-- `required`: whether a handover needs a demo. `false` leaves it to the worker where it helps.
+- `required`: whether a handover needs a demo. `false` leaves it to the worker where it helps, and
+  a written summary alone is then enough.
 - `howToRun`: the recipe for running the app for a recording, written for the worker, in a few
   sentences: what to start and how (or "the stack above"), migrations and test data, how to log in
   and as whom, which URL, and what to stop afterwards. Everything a newcomer to the project would
   have to ask about. The worker gets it in its brief word for word; `bun lib/recipe.ts` of the demo
-  skill prints it.
+  skill prints it. Without one, each worker finds out from the repository how to run the app.
 - `site`: a static site Obeya keeps and deploys itself, for a host that takes a directory
   (Cloudflare Pages, Netlify, an S3 bucket, a directory a web server serves):
 

@@ -68,7 +68,8 @@ export interface RepoAdapter {
 
   /**
    * Demos: whether a worker must hand over with one, and how it runs the app to record it (for
-   * the `demo` skill). Without it, a written summary is enough.
+   * the `demo` skill). Without it, the generic adapter's: required, with no recipe, so the worker
+   * finds out from the repository how to run the app.
    */
   demo?: {
     required: boolean;

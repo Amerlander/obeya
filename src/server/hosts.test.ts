@@ -7,12 +7,11 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { SpawnOptions } from '@anthropic-ai/claude-agent-sdk';
-import { generic } from '../adapters/generic';
 import { Board } from './board';
 import { Store } from './db';
 import { hostName, onHost, RECHECK_DOWN_MS, registerHost, remote, sessionFiles, type SshHost } from './hosts';
 import { runStackCommand } from './stack';
-import { FakeRuntime, fakeSsh, gitRepo, identify, until } from './testing';
+import { FakeRuntime, fakeSsh, gitRepo, identify, noDemos, until } from './testing';
 import { Workers } from './workers';
 import { git, gitAsync, HERE, Workspaces } from './workspaces';
 
@@ -204,7 +203,7 @@ describe('clones on a host', () => {
     spaces.ensureClones(origin, 2);
     expect(await spaces.ensureHostClones(host, join(dir, 'far'), origin, 2, () => undefined)).toBeNull();
     const runtime = new FakeRuntime();
-    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, workspaces: 'clones', land: 'pr' } });
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...noDemos, workspaces: 'clones', land: 'pr' } });
     const [a, b, c] = ['A', 'B', 'C'].map((title) => board.create({ title, x: 0, y: 0 }).id) as [string, string, string];
     workers.start(a);
     expect(board.row(a).workspace).toBe(join(dir, 'ws', '1'));
@@ -275,7 +274,7 @@ describe('a worker on a host', () => {
     const spaces = new Workspaces(store, 'c', { mode: 'clones', repoPath: join(dir, 'main'), dir: join(dir, 'ws') });
     expect(await spaces.ensureHostClones(host, join(dir, 'far'), origin, 1, () => undefined)).toBeNull();
     const runtime = new FakeRuntime();
-    const workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, workspaces: 'clones', land: 'pr' }, reconnectMs: 20 });
+    const workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...noDemos, workspaces: 'clones', land: 'pr' }, reconnectMs: 20 });
     const card = board.create({ title: 'Weit weg', x: 0, y: 0 });
     workers.start(card.id);
     const first = runtime.last;

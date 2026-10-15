@@ -98,7 +98,7 @@ export function withSettings(a: RepoAdapter, settings: () => RepoSettings | unde
       get: () => {
         const s = settings();
         if (field !== 'demo') return s?.[field] ?? a[field];
-        if (!s?.demo || (!a.demo && !s.demo.howToRun?.trim())) return a.demo;
+        if (!s?.demo) return a.demo;
         return { required: false, howToRun: '', ...a.demo, ...s.demo };
       },
     });

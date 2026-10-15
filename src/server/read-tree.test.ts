@@ -252,7 +252,7 @@ describe("a repository's own adapter", () => {
       }
       git(ws, 'add', '-A');
       git(ws, 'commit', '--quiet', '-m', title);
-      runtime.last.call('ready_for_review', { summary: title });
+      runtime.last.call('ready_for_review', { summary: title, no_demo: 'Nur der Adapter.' });
       runtime.last.emit({ type: 'idle' });
       await c.repos[0]!.workers.approve(card.id);
       expect(c.board.item(card.id)!.state).toBe('live');
@@ -298,7 +298,7 @@ describe("a repository's own adapter", () => {
       writeFileSync(join(ws, file), text);
       git(ws, 'add', '-A');
       git(ws, 'commit', '--quiet', '-m', title);
-      runtime.last.call('ready_for_review', { summary: title });
+      runtime.last.call('ready_for_review', { summary: title, no_demo: 'Nur der Adapter.' });
       runtime.last.emit({ type: 'idle' });
       await workers.approve(card.id, { direct: true });
       expect(c.board.item(card.id)!.state).toBe('live');

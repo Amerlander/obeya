@@ -7,7 +7,7 @@ import { repoInfo } from '../../../../src/server/repo.ts';
 
 try {
   const adapter = pickAdapter(repoInfo(process.cwd()));
-  console.log(adapter.demo?.howToRun ?? `No recipe for this repository (adapter ${adapter.name}): its own docs say how to start it.`);
+  console.log(adapter.demo?.howToRun || `No recipe for this repository (adapter ${adapter.name}): its own docs say how to start it.`);
 } catch (e) {
   console.log(`No recipe: ${e instanceof Error ? e.message : e}. Run it in the repository whose app the demo shows.`);
 }

@@ -2,10 +2,9 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { generic } from '../adapters/generic';
 import { Board } from './board';
 import { Store } from './db';
-import { FakeRuntime, type FakeSession, gitRepo } from './testing';
+import { FakeRuntime, type FakeSession, gitRepo, noDemos } from './testing';
 import { WorkRetro } from './work-retro';
 import { Workers } from './workers';
 import { Workspaces } from './workspaces';
@@ -30,7 +29,7 @@ beforeEach(() => {
   files = {};
   retro = new WorkRetro({ board, runtime, pathFor: () => main, transcript: (id) => files[id] ?? null, every: 3, ramp: [] });
   const workspaces = new Workspaces(store, 'c', { mode: 'worktrees', repoPath: main, dir: join(dir, 'ws') });
-  workers = new Workers({ board, runtime, workspaces, adapter: { ...generic, land: 'main', workspaces: 'worktrees' }, onWorkEnded: (id, ws) => retro.ended(id, ws) });
+  workers = new Workers({ board, runtime, workspaces, adapter: { ...noDemos, land: 'main', workspaces: 'worktrees' }, onWorkEnded: (id, ws) => retro.ended(id, ws) });
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 

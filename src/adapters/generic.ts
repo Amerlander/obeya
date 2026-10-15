@@ -17,4 +17,6 @@ export const generic: RepoAdapter = {
   land: 'pr',
   workspaces: 'worktrees',
   softPaths: ['docs/plan/'],
+  // every handover shows its result; without a recipe the worker finds out how to run the app
+  demo: { required: true, howToRun: '' },
 };

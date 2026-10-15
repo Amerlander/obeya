@@ -2,13 +2,12 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { generic } from '../adapters/generic';
 import { needsYou } from '../core/types';
 import { Board } from './board';
 import { Store } from './db';
 import type { Forge, PrStatus } from './forge';
 import { PrWatcher } from './pr-watcher';
-import { FakeRuntime, gitRepo } from './testing';
+import { FakeRuntime, gitRepo, noDemos } from './testing';
 import { Workers } from './workers';
 import { git, Workspaces } from './workspaces';
 
@@ -35,7 +34,7 @@ beforeEach(() => {
   workspaces.ensureClones(main, 1);
   runtime = new FakeRuntime();
   opened = [];
-  workers = new Workers({ board, runtime, workspaces, adapter: { ...generic, land: 'pr', workspaces: 'clones' }, onPrOpened: (id) => opened.push(id) });
+  workers = new Workers({ board, runtime, workspaces, adapter: { ...noDemos, land: 'pr', workspaces: 'clones' }, onPrOpened: (id) => opened.push(id) });
   status = { state: 'OPEN', mergeable: 'MERGEABLE', mergeState: 'CLEAN', head: 'aaa', author: 'owner', checks: [], comments: [] };
   merges = [];
   refuse = undefined;

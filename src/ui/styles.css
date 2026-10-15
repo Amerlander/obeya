@@ -996,12 +996,13 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 .cfg-actions .cfg-json { margin: 0 0 0 auto; }
 .cfg-actions .cfg-json.on { background: var(--ink); color: var(--bg); }
 /* what to know about a field: an icon beside its label, shown only while the pointer is on the field or the
-   label (the nearest .cfg-has-info) or the field has the focus; the share command's label heads a column, so
-   any of its fields shows it */
+   label (the nearest .cfg-has-info) or the field has the focus; the adapter's and the share command's labels
+   head a column, so any of its fields shows it */
 .cfg-info { display: inline-flex; vertical-align: -3px; margin-left: 2px; padding: 0 1px; border: 0; background: none; color: var(--muted);
   cursor: help; line-height: 0; opacity: 0; transition: opacity .12s; }
 .cfg-has-info:hover .cfg-info, .cfg-has-info:focus-within .cfg-info,
-  .cfg-repos:has(.c-share:hover, .c-share:focus) > .cfg-share .cfg-info { opacity: 1; }
+  .cfg-repos:has(.c-share:hover, .c-share:focus) > .cfg-share .cfg-info,
+  .cfg-repos:has(.c-adapter:hover, .c-adapter:focus) > .cfg-adapter .cfg-info { opacity: 1; }
 .cfg-has-info:is(:hover, :focus-within) .cfg-has-info:not(:hover, :focus-within) .cfg-info { opacity: 0; }
 .cfg-info:hover, .cfg-info.on, #config .cfg-info:focus-visible { opacity: 1; color: var(--ink); }
 .cfg-info:focus-visible { outline: 1px solid var(--muted); outline-offset: 1px; border-radius: 50%; }

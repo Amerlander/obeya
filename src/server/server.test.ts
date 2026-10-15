@@ -796,7 +796,7 @@ describe('landing approved work', () => {
       writeFileSync(join(clone, `${title}.ts`), title);
       git(clone, 'add', '.');
       git(clone, 'commit', '--quiet', '-m', title);
-      session.call('ready_for_review', { summary: 'S' });
+      session.call('ready_for_review', { summary: 'S', no_demo: 'Nichts zu zeigen.' });
       session.emit({ type: 'idle' });
       return c;
     };

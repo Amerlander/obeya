@@ -56,9 +56,12 @@ visibly on the walls and decisions are made in front of the wall.
   archive; the last card leaving it ends it, and so does deleting it, which takes all its cards out.
 - **States** — `idea` → `planned` → `working` → `waiting` (demo ready | question) →
   `approved` → `in PR` → `live`, or `done` when the work changed no code; an agent's `proposal`
-  is started when accepted. An
-  adapter that does not require demos lets a worker hand over with a written summary alone:
-  `waiting: review`. An idea is `open`, `parked` or `dropped`.
+  is started when accepted. Demos are required unless the repository's settings or adapter say
+  otherwise (the generic adapter requires them, with no recipe for running the app: the worker
+  then finds that out from the repository; until 2026-10-15 it had no demo at all, so a repository
+  without an adapter of its own got no word about demos, and ticking „Ein Agent übergibt nur mit
+  Demo“ there did nothing while the recipe was empty). Where they are not required, a worker may
+  hand over with a written summary alone: `waiting: review`. An idea is `open`, `parked` or `dropped`.
 - **Agents**
   - *Worker*, one per card while it is worked on: implementation, local reviews, demo.
   - *Project agent*, one per project, long-lived: knows the plan doc and the history of every
@@ -1074,7 +1077,11 @@ the owner's language (`src/core/locale.ts`).
   "Konfiguration" button in the bar counts the problems of the saved configuration in red; the
   page reads them once, since only a save or a changed adapter changes them and Obeya starts
   again for either. A repository that runs on the generic adapter (none named, none of its
-  own) offers "Adapter einrichten lassen" while its canvas runs as saved: it puts the card "Obeya
+  own) and without `.obeya/settings.json` offers „Von einem Agenten ausfüllen lassen“ under the
+  words that Obeya does not know yet how its app starts, which checks run and how to run it for a
+  demo, and that the owner can set that under Einstellungen or have an agent do it („Adapter
+  einrichten lassen“ until 2026-10-15, under a sentence that read as if only an adapter could say
+  it), while its canvas runs as saved: it puts the card "Obeya
   für <repo> einrichten" at the top right of that canvas (or finds the one still open) and opens
   it there; its worker writes the adapter with the `obeya:adapter` skill, which settles where
   plan docs go too: it looks for plans the repository already keeps (`docs/`, `rfcs/`, `adr/`,
@@ -1090,8 +1097,14 @@ the owner's language (`src/core/locale.ts`).
   folds its settings under „Einstellungen“ below its row (see Repository settings), with the main
   branch and how work lands in the folded line.
   „Für alle ins Repository übernehmen“ below them takes the values saved for this machine into the
-  repository's `.obeya/settings.json`; a repository that has one counts as set up, so "Adapter
-  einrichten lassen" is not offered there. The server's own
+  repository's `.obeya/settings.json`; a repository that has one counts as set up, so „Von einem
+  Agenten ausfüllen lassen“ is not offered there. While the dialog has changes not saved yet, the
+  button is off and says so: save first with the button at the very bottom (until 2026-10-15
+  „Erst speichern: übernommen wird, was gespeichert ist.“, which read as if saving were the
+  takeover). An ⓘ at the adapter column says what an adapter is for: „generic“ fits any
+  repository and knows nothing of it, „obeya“ is Obeya's own, a repository's own one in
+  `.obeya/adapter/` is picked by „automatisch“, and code is needed there only for what settings
+  cannot say (the stack, sharing on a site, the canvas's name). The server's own
   settings (port, data directory, the agents' permission mode) come from the command line and the
   environment (`OBEYA_PORT`, `OBEYA_HOME`) and show read-only. The Koordinator reads the configuration (`config` tool) to answer questions about it
   and changes it on the owner's word (`configure`, the whole new list, checked like the dialog's),
@@ -2650,7 +2663,7 @@ Claude ist auf diesem Rechner nicht angemeldet: …“), not „nicht verstanden
   with a `name`) is fixed in the repository: meanwhile the repository runs on the built-in adapter
   that matches it (`generic`, for any repository but Obeya's own), with the problem `adapterLoad`
   at the repository in "Konfiguration" (with the error, keeping nothing from being saved) and in
-  Obeya's log; "Adapter einrichten lassen" is not offered there. The canvas keeps the id and name
+  Obeya's log; „Von einem Agenten ausfüllen lassen“ is not offered there. The canvas keeps the id and name
   that adapter gave it (the setting `own_adapter_of` notes which canvas it named), so its address
   and cards stay, and once a fixed adapter reaches the default branch the canvas takes it over. A
   canvas that does not start at all (a repository gone, its home repository left out) is left out
