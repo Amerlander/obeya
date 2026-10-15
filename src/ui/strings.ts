@@ -39,7 +39,7 @@ const de = {
   needsYou: 'brauchen dich',
   newCard: 'Neue Aufgabe',
   /** What the button for a new task says until the owner has double-clicked a task into being once. */
-  newCardHint: { text: 'Eine neue Aufgabe legst du mit einem Doppelklick auf die Fläche an, an der Stelle, wo sie hin soll. Nach dem ersten Mal verschwindet dieser Knopf.', ok: 'Verstanden' },
+  newCardHint: { text: 'Eine neue Aufgabe legst du mit einem Doppelklick auf die Fläche an, an der Stelle, wo sie hin soll. Nach dem ersten Mal verschwindet dieser Button.', ok: 'Verstanden' },
   /** The legend of mouse and keys, shown over the page on `?`. Each row: its alternatives, each a combination. */
   help: {
     button: 'Bedienung (?)',
@@ -1213,8 +1213,8 @@ const de = {
     alt: 'Screenshot',
     uploading: 'lädt …',
   },
-  /** On an empty canvas: speaking first, the double-click second. */
-  empty: { none: 'Noch keine Aufgaben.', speak: 'Halte die Leertaste und sag, was Obeya bauen soll.', click: 'Oder doppelklicke auf die Fläche, um selbst eine anzulegen.' },
+  /** On an empty canvas: speaking first (and where its card lands), the double-click second. */
+  empty: { none: 'Noch keine Aufgaben.', speak: 'Halte die Leertaste und sag, was Obeya bauen soll.', where: 'Die Karte erscheint dort, wo der Mauszeiger beim Loslassen steht.', click: 'Oder doppelklicke auf die Fläche, um selbst eine anzulegen.' },
 };
 
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
@@ -2381,7 +2381,7 @@ const en: Strings = {
     alt: 'Screenshot',
     uploading: 'uploading …',
   },
-  empty: { none: 'No tasks yet.', speak: 'Hold Space and say what Obeya should build.', click: 'Or double-click on the canvas to create one yourself.' },
+  empty: { none: 'No tasks yet.', speak: 'Hold Space and say what Obeya should build.', where: 'The card appears where the pointer is when you let go.', click: 'Or double-click on the canvas to create one yourself.' },
 };
 
 const tables: Record<Language, Strings> = { de, en };

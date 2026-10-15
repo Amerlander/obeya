@@ -329,6 +329,7 @@ button.pill.help:hover, button.pill.help.on { color: var(--ink); }
 .empty p { margin: 0; }
 .empty p + p { margin-top: 4px; }
 .empty .none { margin-bottom: 8px; }
+.empty .where { font-size: 13px; margin-top: 2px; margin-bottom: 10px; }
 .empty.above-note { top: calc(50% - 90px); }
 #splash { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: var(--muted); animation: fade .3s ease-out; }
 

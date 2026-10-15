@@ -1253,6 +1253,7 @@ function Canvas({
           <div className={planDirs ? 'empty above-note' : 'empty'}>
             <p className="none">{t.empty.none}</p>
             <p>{t.empty.speak}</p>
+            <p className="where">{t.empty.where}</p>
             <p>{t.empty.click}</p>
           </div>
         )}
