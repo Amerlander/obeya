@@ -1782,10 +1782,13 @@ the owner's language (`src/core/locale.ts`).
     repository) waits in Obeya's sheet under „Vorschläge“ beside the rules, marked as what it is,
     a change to the configuration: a cog and „Konfiguration ändern · <repo>“ over the setting's
     name, then the value now („Bisher“, „(leer)“ where empty) above the new one („Neu“, a list one
-    entry a line), the sentence it rests on and the cards, each a link; „In der Konfiguration
-    ansehen“ opens the configuration dialog at that setting of the repository, folded open and
-    marked (`ConfigFocus` with `settings`). The Koordinator button counts it. The owner takes it, as it
-    is or changed („Ändern“), with one of two buttons, neither preselected: „Auf diesem Rechner“
+    entry a line), the sentence it rests on and the cards, each a link; „Zur Einstellung ↗“ beside
+    the setting's name opens the configuration dialog at that setting of the repository, folded
+    open and marked (`ConfigFocus` with `settings`). The Koordinator button counts it. The new value
+    stands in a field the owner may change right there (the line under it says so, and once changed
+    offers it „Wie vorgeschlagen“ again; the edit is kept per tab, so it outlives closing the sheet
+    and a reload); until 2026-10-15 an „Ändern“ button opened it, and the owner could not tell what
+    it did. The owner takes what stands in the field with one of two buttons, neither preselected: „Auf diesem Rechner“
     sets it in this machine's settings (`Config.takeSetting` through `Config.save`, applying at once),
     „Für alle ins Repository“ puts this value alone into `.obeya/settings.json` the way „Für alle
     ins Repository übernehmen“ does (see Repository settings): committed on the main branch where

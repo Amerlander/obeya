@@ -13,6 +13,7 @@ import { Composer } from './composer';
 import { OBEYA_DRAFT } from './draft';
 import { Shots } from './shots';
 import { useStickToEnd } from './stickToEnd';
+import { useFitHeight } from './fitHeight';
 
 interface Props {
   on: boolean;
@@ -329,6 +330,25 @@ function GearIcon() {
   );
 }
 
+/**
+ * The value of a setting proposal as the owner edits it, kept per tab while it waits, so an edit
+ * outlives closing the sheet and a page load.
+ */
+function useSettingDraft(id: number, proposed: string): [string, (v: string) => void] {
+  const key = `obeya-setting-draft-${id}`;
+  const [draft, setDraft] = useState(() => sessionStorage.getItem(key) ?? proposed);
+  return [
+    draft,
+    (v) => {
+      setDraft(v);
+      try {
+        if (v === proposed) sessionStorage.removeItem(key);
+        else sessionStorage.setItem(key, v);
+      } catch {}
+    },
+  ];
+}
+
 /** A value as the owner reads and edits it: a list one entry a line. */
 const asText = (v: string | string[]) => (Array.isArray(v) ? v.join('\n') : v);
 
@@ -338,7 +358,9 @@ const asText = (v: string | string[]) => (Array.isArray(v) ? v.join('\n') : v);
  * repository for everyone (neither is the default: they choose each time), or rejects it.
  */
 function SettingRow({ p, items, repo, onOpen, onConfig }: { p: SettingProposal; items: Item[]; repo: RepoRef | undefined; onOpen: (i: Item) => void; onConfig: () => void }) {
-  const [draft, setDraft] = useState<string | null>(null);
+  const [draft, setDraft] = useSettingDraft(p.id, asText(p.value));
+  const field = useRef<HTMLTextAreaElement>(null);
+  useFitHeight(field, draft);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const k = t.koordinator;
@@ -353,7 +375,8 @@ function SettingRow({ p, items, repo, onOpen, onConfig }: { p: SettingProposal; 
     }
     setBusy(false);
   };
-  const edited = draft === null || draft.trim() === asText(p.value) ? undefined : list ? draft.split('\n').map((x) => x.trim()).filter(Boolean) : draft.trim();
+  const changed = draft.trim() !== asText(p.value);
+  const edited = !changed ? undefined : list ? draft.split('\n').map((x) => x.trim()).filter(Boolean) : draft.trim();
   const take = (where: 'machine' | 'repository') => decide(() => api.takeSetting(p.id, where, edited));
   const now = p.now === undefined ? null : asText(p.now).trim();
   const branch = repo?.branch ?? 'main';
@@ -362,11 +385,13 @@ function SettingRow({ p, items, repo, onOpen, onConfig }: { p: SettingProposal; 
       <span className="setting-kind">
         <GearIcon />
         {k.settingKind(repo?.name ?? p.repo)}
-        <a className="from" onClick={onConfig}>
+      </span>
+      <span className="setting-name">
+        <span className="pref-text">{t.config.settings[p.field]}</span>
+        <a className="from" title={k.openConfigHint} onClick={onConfig}>
           {k.openConfig}
         </a>
       </span>
-      <span className="pref-text">{t.config.settings[p.field]}</span>
       <span className="setting-diff">
         {now !== null && (
           <>
@@ -375,11 +400,21 @@ function SettingRow({ p, items, repo, onOpen, onConfig }: { p: SettingProposal; 
           </>
         )}
         <span className="setting-label">{k.settingNew}</span>
-        {draft === null ? (
-          <pre className="setting-value">{asText(p.value)}</pre>
-        ) : (
-          <textarea data-esc autoFocus value={draft} rows={Math.max(3, draft.split('\n').length + 1)} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && (e.stopPropagation(), setDraft(null))} />
-        )}
+        <span className="setting-new">
+          <textarea ref={field} className="setting-value" aria-label={k.settingNew} spellCheck={false} rows={1} value={draft} onChange={(e) => setDraft(e.target.value)} />
+          <span className="setting-edit">
+            {changed ? (
+              <>
+                {k.settingEdited}{' '}
+                <a className="from" onClick={() => setDraft(asText(p.value))}>
+                  {k.settingRestore}
+                </a>
+              </>
+            ) : (
+              k.settingEditable
+            )}
+          </span>
+        </span>
       </span>
       <span className="occasion">
         {k.fromRetro}: <Inline md={p.basis} />{' '}
@@ -401,10 +436,10 @@ function SettingRow({ p, items, repo, onOpen, onConfig }: { p: SettingProposal; 
       </span>
       <span className="pref-actions">
         <span className="take-on">{k.takeOn}</span>
-        <button className="btn primary" disabled={busy || (draft !== null && !draft.trim())} title={k.onMachineHint} onClick={() => take('machine')}>
+        <button className="btn primary" disabled={busy || !draft.trim()} title={k.onMachineHint} onClick={() => take('machine')}>
           {k.onMachine}
         </button>
-        <button className="btn primary" disabled={busy || (draft !== null && !draft.trim())} title={repo?.pullRequests ? k.forEveryonePr(branch) : k.forEveryoneMain(branch)} onClick={() => take('repository')}>
+        <button className="btn primary" disabled={busy || !draft.trim()} title={repo?.pullRequests ? k.forEveryonePr(branch) : k.forEveryoneMain(branch)} onClick={() => take('repository')}>
           {k.forEveryone}
         </button>
       </span>
@@ -412,15 +447,6 @@ function SettingRow({ p, items, repo, onOpen, onConfig }: { p: SettingProposal; 
         {k.onMachine}: {k.onMachineHint} {k.forEveryone}: {repo?.pullRequests ? k.forEveryonePr(branch) : k.forEveryoneMain(branch)}
       </span>
       <span className="pref-actions">
-        {draft === null ? (
-          <button className="btn" disabled={busy} onClick={() => setDraft(asText(p.value))}>
-            {k.change}
-          </button>
-        ) : (
-          <button className="btn" disabled={busy} onClick={() => setDraft(null)}>
-            {k.cancel}
-          </button>
-        )}
         <button className="btn danger" disabled={busy} onClick={() => decide(() => api.rejectSetting(p.id))}>
           {k.reject}
         </button>
