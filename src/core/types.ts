@@ -537,6 +537,9 @@ export interface CardEvent {
   readAfter?: number;
 }
 
+/** Obeya's line that a worker started on the card afresh: what it handed over before belongs to an earlier run. */
+export const started = (e: Pick<CardEvent, 'kind' | 'author' | 'text'>) => e.kind === 'state' && e.author === 'obeya' && /^(Agent gestartet|Agent started)/.test(e.text);
+
 /** The owner's answer as the log holds it: the options picked, then their own words. */
 export const pickedAnswer = (picks: string[], words: string) => [picks.join(', '), words.trim()].filter(Boolean).join('\n\n');
 

@@ -264,7 +264,7 @@ describe('handing over with a demo', () => {
     runtime.last.call('ready_for_review', { summary: 'Jetzt mit Komma.', demo: { dir: demoDir(), chapters: ['Vorher', 'Nachher'] } });
     runtime.last.emit({ type: 'idle' });
     expect(state(c.id)).toBe('waiting:demo');
-    expect(board.item(c.id)!.summary).toBe('Jetzt mit Komma.');
+    expect(board.item(c.id)!.summary).toEndWith('Jetzt mit Komma.');
     expect(board.item(c.id)!.answering).toBeUndefined();
     expect(needsYou(board.item(c.id)!)).toBe(true);
   });
@@ -349,7 +349,7 @@ describe('handing over with a demo', () => {
     workers.message(c.id, 'Nur den Text ändern.');
     expect(runtime.last.call('ready_for_review', { summary: 'Text geändert.' })).toContain('End your turn');
     expect(state(c.id)).toBe('waiting:demo');
-    expect(board.item(c.id)!.summary).toBe('Text geändert.');
+    expect(board.item(c.id)!.summary).toEndWith('Text geändert.');
     expect(board.item(c.id)!.demo!.chapters).toHaveLength(2);
   });
 

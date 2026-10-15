@@ -1,7 +1,7 @@
 // The unfolded card: what it is, what its worker does, and what the owner decides.
 
 import { Fragment, type ReactNode, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { agentListens, askable, buildableOn, type CardAction, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, EXPORT_HTML_MAX, finished, finishingUp, type Item, type Mock, type NextStep, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, type Spot, stopped, stoppedArchivable, titleFrom } from '../core/types';
+import { agentListens, askable, buildableOn, type CardAction, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, EXPORT_HTML_MAX, finished, finishingUp, type Item, type Mock, type NextStep, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, type Spot, started, stopped, stoppedArchivable, titleFrom } from '../core/types';
 import { mockPage } from '../core/frame';
 import { answerText, toggle } from './answer';
 import { ApiError, api, at, type Field, holdRestart, onCardEvent, onCardEventGone } from './api';
@@ -20,7 +20,7 @@ import { AttachButton, imageUrl, ShotStrip, Shots, useShotInput } from './shots'
 import { useStickToEnd } from './stickToEnd';
 import { dismissPlace, type Place, seekTo, usePlace, videoOf, watch } from './spot';
 import { becomesLabel, clock as time, errorText, stateLabel, t } from './strings';
-import { agentWorks, demoHandover, koordinatorReads, ownerField, parseQuestion, started, talkAlone, talkTurns, type Turn, withoutOpen, worked as isWorked } from './talk';
+import { agentWorks, demoHandover, koordinatorReads, ownerField, parseQuestion, talkAlone, talkTurns, type Turn, withoutOpen, worked as isWorked } from './talk';
 
 /**
  * What the panel does after an action: fold the card and confirm (with undo, when it has one), or stay open.
@@ -1115,7 +1115,7 @@ const ownerSide = (e: CardEvent) => e.author === 'owner' || e.kind === 'answer';
 
 /**
  * One message of the conversation; a question with its options and what came of it, a handover with
- * its demo report's question; the owner's reply with the message it replies to (`quoted`) above it.
+ * its demo report's question, a reply with the handover that came next and says what changed; the owner's reply with the message it replies to (`quoted`) above it.
  * `onReply`: the owner can reply to it; `onDelete`: the owner can take it back (a comment not yet
  * sent, words not yet read); `unread`: the agent has not read it yet, and when it will.
  */
@@ -1163,6 +1163,15 @@ function Message({
         </ul>
       )}
       {turn.settled && <div className="hint">{t.talk.settled}</div>}
+      {turn.then && (
+        <div className="then" data-ev={turn.then.e.id}>
+          <span className="then-who">
+            {t.talk.handover}
+            <span className="t">{time(turn.then.e.at)}</span>
+          </span>
+          <Body md={turn.then.e.text} />
+        </div>
+      )}
       {demoQuestion?.question && (
         <div className={`demo-q${demoQuestion.answer === undefined ? '' : ' answered'}`}>
           <b>{t.talk.demoQuestion}</b> {demoQuestion.question}
@@ -1171,7 +1180,7 @@ function Message({
       <Mocks mocks={e.mocks} />
       {answer.files}
       <Shots ids={e.images} />
-      <Steps steps={steps} />
+      <Steps steps={turn.then ? [...steps, ...turn.then.steps] : steps} />
       {unread && <div className="hint unread-mark">{unread}</div>}
     </Msg>
   );

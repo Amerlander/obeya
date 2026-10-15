@@ -433,12 +433,12 @@ describe('workers', () => {
 
   const words = (id: string) => board.events(id).filter((e) => e.author === 'worker' && ['say', 'talk', 'closing'].includes(e.kind)).map((e) => `${e.kind}: ${e.text}`);
 
-  test("after a reply on a card waiting for review, the worker's closing words are logged as such, to fold under the reply", () => {
+  test("after a reply on a card waiting for review, the worker's closing words are logged as such, to fold under the reply; after a handover they are left out", () => {
     const c = manual();
     workers.start(c.id);
     runtime.last.call('ready_for_review', { summary: 'Export gebaut.', demo: artifact() });
-    // so are those after a handover
-    runtime.last.emit({ type: 'text', text: 'Übergeben.' });
+    // those after a handover repeat it
+    runtime.last.emit({ type: 'text', text: 'Übergeben: Export gebaut.' });
     runtime.last.emit({ type: 'idle' });
     workers.message(c.id, 'Die App läuft nicht mehr.');
     runtime.last.emit({ type: 'text', text: 'I will restart the app.' });
@@ -448,7 +448,6 @@ describe('workers', () => {
     runtime.last.emit({ type: 'idle' });
     expect(state(c.id)).toBe('waiting:demo');
     expect(words(c.id)).toEqual([
-      'closing: Übergeben.',
       'say: I will restart the app.',
       'talk: Die App läuft jetzt unter http://127.0.0.1:62582.',
       "closing: I restarted the app; it's at http://127.0.0.1:62582.",
@@ -770,6 +769,33 @@ describe('workers', () => {
     const d = manual();
     workers.start(d.id);
     expect(board.row(d.id).workspace).toBe(clone);
+  });
+
+  test("a handover after feedback says what changed; the card's report keeps the first one with the replies and handovers after it", () => {
+    const c = manual();
+    workers.start(c.id);
+    const clone = board.row(c.id).workspace!;
+    writeFileSync(join(clone, 'export.ts'), 'export {}\n');
+    git(clone, 'add', '.');
+    git(clone, 'commit', '--quiet', '-m', 'Export');
+    expect(runtime.last.spec.tools.find((x) => x.name === 'ready_for_review')!.description).toContain('on a later one, only what is new since your last handover and your replies after it');
+    runtime.last.call('ready_for_review', { summary: 'CSV-Export gebaut.', demo: artifact() });
+    runtime.last.emit({ type: 'idle' });
+    workers.message(c.id, 'Bitte mit Kopfzeile.');
+    runtime.last.call('reply', { text: 'Mache ich: die Spaltennamen kommen in die erste Zeile.' });
+    runtime.last.call('ready_for_review', { summary: 'Kopfzeile ergänzt, im Commit.' });
+    runtime.last.emit({ type: 'idle' });
+    // the conversation shows the change alone
+    expect(board.events(c.id).findLast((e) => e.kind === 'review')!.text).toBe('Kopfzeile ergänzt, im Commit.');
+    const report = 'CSV-Export gebaut.\n\nDanach im Gespräch:\n\nMache ich: die Spaltennamen kommen in die erste Zeile.\n\nKopfzeile ergänzt, im Commit.';
+    expect(board.summary(c.id)).toBe(report);
+    expect(board.item(c.id)!.summary).toBe(report);
+
+    // started afresh, the worker hands over in full again
+    workers.stop(c.id);
+    workers.start(c.id);
+    runtime.last.call('ready_for_review', { summary: 'CSV- und Excel-Export gebaut.', demo: artifact() });
+    expect(board.summary(c.id)).toBe('CSV- und Excel-Export gebaut.');
   });
 
   test('the diff: the branch so far, committed or not, with new files; once landed, what the landing put on main', async () => {
@@ -1185,7 +1211,8 @@ describe('pausing: the owner halts a worker and lets it go on', () => {
     expect(board.item(c.id)!.paused).toBeUndefined();
     runtime.last.call('ready_for_review', { summary: 'Mit Kopfzeile.', demo: artifact() });
     runtime.last.emit({ type: 'idle' });
-    expect(board.item(c.id)).toMatchObject({ state: 'waiting', need: 'demo', summary: 'Mit Kopfzeile.' });
+    expect(board.item(c.id)).toMatchObject({ state: 'waiting', need: 'demo' });
+    expect(board.item(c.id)!.summary).toEndWith('Mit Kopfzeile.');
     expect(board.item(c.id)!.answering).toBeUndefined();
   });
 

@@ -429,8 +429,14 @@ the decision log as such), and a change they also ask for comes as a new handove
 #### The handover report
 
 The worker's summary is its handover in the card's conversation below, not repeated under the demo:
-the whole report, what changed for the user and what the owner needs to know, in a few short
-paragraphs at most. A problem the worker noticed beyond the task is a proposal (`propose_card`), not
+what changed for the user and what the owner needs to know, in a few short paragraphs at most. A
+later handover says only what is new since the one before and the worker's replies after it, often
+a sentence: the owner has the rest in the conversation above it. Until 2026-10-15 the tool and the
+worker's instructions called the summary the whole report, the one thing the owner reads at the end,
+so a handover after feedback repeated the reply just before it nearly word for word. Whoever reads the card's report beyond its conversation (a follow-up's worker, the Koordinator, a
+prototype's idea, a shared page's text) gets the whole of it, as the card's summary: the first
+handover since the worker started, then „Danach im Gespräch:“ with its replies and later handovers
+in order (`report` in `src/server/workers.ts`). A problem the worker noticed beyond the task is a proposal (`propose_card`), not
 a line in the report. A follow-up's worker hears which card it comes from and that card's summary.
 
 A question in the demo report is an open question like a worker's: the owner answers it on the card
@@ -800,9 +806,11 @@ is refused with a pointer to `ask`.
 
 A worker answers a note or feedback with `reply`, saying what it changes or why nothing, and asks
 when the note is unclear. Its words after a reply are its words when a step of its work follows
-them; the closing words of a turn in which it replied or handed over mostly repeat that message
-(often in English on a German canvas), so they fold under it in the conversation, the last of its
-steps, whatever the card's state (event kind `closing`). The steps it took between that message and
+them; the closing words of a turn in which it replied mostly repeat that message (often in English
+on a German canvas), so they fold under it in the conversation, the last of its steps, whatever the
+card's state (event kind `closing`). Those after a handover repeat the handover a third time after
+the reply and the summary, and the log leaves them out (until 2026-10-15 they folded under it as
+well). The steps it took between that message and
 its closing words (a card it proposed after replying, say) fold under the message with them.
 
 A note while the card waits on the worker's question takes that question back: the card goes back to
@@ -822,12 +830,14 @@ Every card shows its exchanges as a conversation („Gespräch“), the way an i
   message under it holds just their own words, and a pick alone is no message of its own);
 - its replies;
 - its handovers (the one a demo came with carries its report's question, muted once answered; a
-  later handover that keeps the demo leaves it there);
+  later handover that keeps the demo leaves it there). A later handover that follows the worker's
+  reply in the same turn stands under that reply, after a dashed line, as „Übergabe“ with its time
+  and what changed, not as a message of its own; its steps and closing words fold with the reply's;
 - what the Koordinator looked up for the owner.
 
 Small lines between them are the state changes (started, pull request opened, approved, landed,
 stopped, errors). Everything else folds away under the agent's next message as „Verlauf“ (a worker's
-closing words after a reply or handover under that message, as its last step): tool calls, thoughts,
+closing words after a reply under that message, as its last step): tool calls, thoughts,
 status lines, the Koordinator's confirmations, Obeya's notes (restarts, sessions, what happens on
 the pull request).
 

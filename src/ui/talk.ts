@@ -2,7 +2,7 @@
 
 import { LANGUAGES } from '../core/locale';
 import { MESSAGES } from '../core/messages';
-import { askable, type CardEvent, type Demo, finishingUp, type Item, ownWords, pausable, type Question } from '../core/types';
+import { askable, type CardEvent, type Demo, finishingUp, type Item, ownWords, pausable, type Question, started } from '../core/types';
 import type { Field } from './api';
 
 /** One entry of the conversation: a message, with how the agent got to it folded under it, or a small line. */
@@ -22,6 +22,11 @@ export interface Turn {
   settled?: true;
   /** Only the agent's steps, without words: a turn it ended silently, in a conversation nobody works on any more. */
   quiet?: true;
+  /**
+   * A worker's reply: the handover that came next in the same turn, after an earlier one, with the
+   * steps that led to it. It says only what changed since that one, so it stands under the reply.
+   */
+  then?: Turn;
 }
 
 export interface Talk {
@@ -69,7 +74,7 @@ const place = (e: CardEvent, prev: CardEvent | undefined): 'owner' | 'agent' | '
 
 /** The handover a demo came with: a later one may keep it. */
 export function demoHandover(demo: Demo, shown: Turn[]): Turn | undefined {
-  return demo.handover === undefined ? undefined : shown.find((x) => x.e.id === demo.handover);
+  return demo.handover === undefined ? undefined : shown.find((x) => x.e.id === demo.handover || x.then?.e.id === demo.handover);
 }
 
 /**
@@ -90,7 +95,10 @@ export function talkTurns(all: CardEvent[], opts: { asking?: Question; over?: bo
   let open = false;
   const events = asRead(all.filter((e) => !e.unread));
   const lastPause = events.findLast(pauseLine);
+  // the worker handed over since it started
+  let handedOver = false;
   events.forEach((e, i) => {
+    if (started(e)) handedOver = false;
     const where = place(e, events[i - 1]);
     if (where === 'step' && open && e.kind === 'say' && e.author === 'worker' && !repliesLater(events, i)) {
       shown.push({ e, steps });
@@ -102,9 +110,9 @@ export function talkTurns(all: CardEvent[], opts: { asking?: Question; over?: bo
       // steps the agent took after it in the same turn (a card it proposed, say)
       const last = shown.findLast((x) => !x.line && agentAuthor(x.e));
       if (last && last === shown.at(-1)) {
-        last.steps.push(...steps, e);
+        (last.then ?? last).steps.push(...steps, e);
         steps = [];
-      } else if (last) last.steps.push(e);
+      } else if (last) (last.then ?? last).steps.push(e);
       else steps.push(e);
     }
     else if (where === 'line' || where === 'aside') {
@@ -120,10 +128,15 @@ export function talkTurns(all: CardEvent[], opts: { asking?: Question; over?: bo
       shown.push({ e, steps: [], ...(where === 'line' ? { line: true as const } : {}) });
     }
     else if (where === 'agent') {
+      const prev = shown.at(-1);
+      // a later handover right after the worker's reply says what changed since the one before: it
+      // stands under the reply
+      if (e.kind === 'review' && handedOver && prev?.e.kind === 'talk' && prev.e.author === 'worker' && !prev.then) prev.then = { e, steps };
       // a turn that ended without a reply took its last words as the reply
-      shown.push({ e, steps: steps.filter((s) => !(s.kind === 'say' && s.text === e.text.trim())) });
+      else shown.push({ e, steps: steps.filter((s) => !(s.kind === 'say' && s.text === e.text.trim())) });
       steps = [];
       open = false;
+      if (e.kind === 'review') handedOver = true;
     } else {
       // a spoken command that became a note or an answer stands once, as that
       if (e.kind === 'say' && duplicate(all, all.indexOf(e))) return;
@@ -306,5 +319,3 @@ export const split = (i: Laid) => i.state === 'idea' || i.state === 'proposal' |
 /** A task an agent works or worked on without a result yet: its conversation stands alone, the card only as wide as it. */
 export const talkAlone = (i: Laid) => (!!i.prototypeEnd || worked(i)) && !result(i);
 
-/** Obeya's line that the agent started: the task stands above it, as the conversation's first message. */
-export const started = (e: CardEvent) => e.kind === 'state' && e.author === 'obeya' && /^(Agent gestartet|Agent started)/.test(e.text);

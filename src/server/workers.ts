@@ -7,7 +7,7 @@ import type { CardDiff } from '../core/diff';
 import { LANGUAGE_NAMES, LANGUAGES } from '../core/locale';
 import { MESSAGES, type Messages, type Pause } from '../core/messages';
 import { basename } from 'node:path';
-import { answering, askable, pausable, type DemoKind, type DemoPage, formatQuestion, type Item, type Mock, ownWords, pickedAnswer, type Question, type RestartReason, type Spot, type SpotInput } from '../core/types';
+import { answering, askable, pausable, type DemoKind, type DemoPage, formatQuestion, type Item, type Mock, ownWords, pickedAnswer, type Question, type RestartReason, type Spot, type SpotInput, started } from '../core/types';
 import { BadRequest, type Board, replyNote } from './board';
 import { type Asked, decisionLog, toQuestion, withPick } from './advisor';
 import { checkArtifact, DEMO_SKILL, DEMO_SKILL_FILE, demoSkillName, OBEYA_PLUGIN, placeIn, readChapters } from './demo';
@@ -1444,11 +1444,11 @@ export class Workers {
       }
       case 'text':
         live.lastText = e.text;
-        // after handing over the worker's closing words repeat what the card already shows: they fold
-        // under the handover; after a reply its words wait to see whether work follows them or they
-        // close the turn, repeating the reply
-        if (live.handedOver) this.o.board.log(cardId, 'closing', 'worker', clip(e.text, 12000));
-        else if (live.answered) live.held = clip(e.text, 12000);
+        // after handing over the worker's closing words repeat the handover the card shows: the
+        // conversation leaves them out; after a reply its words wait to see whether work follows them
+        // or they close the turn, repeating the reply
+        if (live.handedOver) break;
+        if (live.answered) live.held = clip(e.text, 12000);
         else this.o.board.log(cardId, 'say', 'worker', clip(e.text, 12000));
         break;
       case 'tool':
@@ -1914,7 +1914,7 @@ export class Workers {
       },
       {
         name: 'ready_for_review',
-        description: `Hand the finished work to the owner, after committing it, running the checks and making the demo. The summary (in ${language}) is the whole report the owner reads: what changed from the user's point of view and what they really need to know (something left open or not verified, a decision you took for them), in a few short paragraphs at most. A problem you noticed outside the task goes to propose_card, not into the summary. The demo: a video's directory and chapter titles in scene order, or an HTML artifact's directory, with its report (in ${language}); without a new one, the demo already on the card stands. Then end your turn.`,
+        description: `Hand the finished work to the owner, after committing it, running the checks and making the demo. The summary (in ${language}) is what this handover tells the owner beyond what the card's conversation already holds: on your first handover, what changed from the user's point of view and what they really need to know (something left open or not verified, a decision you took for them), in a few short paragraphs at most; on a later one, only what is new since your last handover and your replies after it, often a sentence. Obeya keeps your handovers and replies together as the card's report for whoever reads it later. A problem you noticed outside the task goes to propose_card, not into the summary. The demo: a video's directory and chapter titles in scene order, or an HTML artifact's directory, with its report (in ${language}); without a new one, the demo already on the card stands. Then end your turn.`,
         schema: {
           summary: z.string(),
           demo: z
@@ -1975,6 +1975,7 @@ export class Workers {
               }
             }
             handOver();
+            const report = this.report(cardId, s);
             const e = this.o.board.log(cardId, 'review', 'worker', s);
             // the demo report's question goes with the handover it came with, also once a later one keeps the demo
             if (demoJson) demoJson = JSON.stringify({ ...(JSON.parse(demoJson) as object), handover: e.id });
@@ -1983,11 +1984,11 @@ export class Workers {
               // the worker's last status line is about the work it hands over: it would show again once the card is at work
               ...(approved ? { status_line: this.o.board.t.worker.landing } : { state: 'waiting', need: d || kept ? 'demo' : 'review', status_line: null }),
               // approving work that changes nothing makes the card done, which the owner sees before approving
-              detail: JSON.stringify({ summary: s, ...(this.o.workspaces.hasWork(cardId) ? {} : { noChange: true }), ...(answered && !approved ? { answered: true } : {}) }),
+              detail: JSON.stringify({ summary: report, ...(this.o.workspaces.hasWork(cardId) ? {} : { noChange: true }), ...(answered && !approved ? { answered: true } : {}) }),
               ...(demoJson ? { demo: demoJson } : {}),
             });
             const card = this.o.board.item(cardId);
-            if (card?.prototypeOf) this.o.onPrototype?.(card, s, demoJson);
+            if (card?.prototypeOf) this.o.onPrototype?.(card, report, demoJson);
             if (approved) return 'Recorded. End your turn now; once it has ended, Obeya lands your work on main.';
             return END_TURN;
           };
@@ -2052,6 +2053,20 @@ export class Workers {
   }
 
   /**
+   * The card's report for whoever reads it beyond its conversation (a follow-up's worker, the
+   * Koordinator, a shared page): a later handover holds only what changed, so the first one since
+   * the worker started comes with what it said in the conversation after it, its replies and later
+   * handovers, `latest` last.
+   */
+  private report(cardId: string, latest: string): string {
+    const events = this.o.board.events(cardId);
+    const since = events.slice(events.findLastIndex(started) + 1).filter((e) => e.author === 'worker' && (e.kind === 'review' || e.kind === 'talk'));
+    const first = since.findIndex((e) => e.kind === 'review');
+    if (first < 0) return latest;
+    return [since[first]!.text, this.o.board.t.worker.laterInConversation, ...since.slice(first + 1).map((e) => e.text), latest].join('\n\n');
+  }
+
+  /**
    * A tool call that needs a person's permission becomes the question the card waits on; the call
    * runs or is refused with the owner's answer. Meanwhile the worker waits for the owner as after
    * `ask`: a restart need not wait for it.
@@ -2104,7 +2119,7 @@ export class Workers {
     return `
 You are a worker agent directed through Obeya, a canvas on which the owner directs coding agents like an engineering director directs a team. You work on exactly one card, in a workspace of the repository (a clone or worktree) that belongs to that card, on your own branch. Other workers may work on other cards at the same time in their own workspaces.
 
-The owner does not watch you work and does not read code. They see your card: status lines, questions, and your summary at the end. Talk to them only through the Obeya tools:
+The owner does not watch you work and does not read code. They see your card's conversation: your status lines, questions, replies and handovers. Talk to them only through the Obeya tools:
 - report: a short status line at milestones.
 - reply: your answer to a note or feedback from the owner, in a sentence or two: what you change because of it, or why nothing.
 - ask: a decision that is not yours (product behaviour, trade-offs, anything irreversible or external). Make routine judgement calls yourself. After ask, end your turn; the answer arrives as the next message.

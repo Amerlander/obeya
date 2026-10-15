@@ -670,6 +670,9 @@ textarea.p-body:focus { border-color: var(--muted); }
 .talk .msg .q-opts li { font-size: 12.5px; padding: 2px 9px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); }
 .talk .msg .q-opts li.on { color: var(--ink); border-color: var(--working); background: color-mix(in srgb, var(--working) 10%, var(--card)); font-weight: 600; }
 .talk .msg .q-opts li.on::before { content: "✓ "; color: var(--working); }
+.talk .msg .then { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line); font-size: 13.5px; }
+.talk .msg .then-who { float: left; margin-right: 6px; font-size: 11px; line-height: 20px; font-weight: 600; color: var(--ink); }
+.talk .msg .then-who .t { color: var(--muted); font-weight: 400; margin-left: 4px; }
 .talk .msg .demo-q { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line); font-size: 13.5px; }
 .talk .msg .demo-q b { color: var(--waiting); font-weight: 600; }
 .talk .msg .demo-q.answered b { color: var(--muted); }

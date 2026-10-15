@@ -334,8 +334,31 @@ test("a demo report's question stays with the handover it came with when a later
   const { shown } = talkTurns([first, answer, reply, again], { over: true });
   const demo = { kind: 'video' as const, chapters: [], question: 'Weiter testen oder parken?', answer: 'Erst einmal parken.' };
   expect(demoHandover({ ...demo, handover: first.id }, shown)?.e).toBe(first);
-  // a new demo with a later handover goes with that one
-  expect(demoHandover({ ...demo, handover: again.id }, shown)?.e).toBe(again);
+  // a new demo with a later handover goes with that one, which stands under the reply before it
+  expect(demoHandover({ ...demo, handover: again.id }, shown)?.then?.e).toBe(again);
+});
+
+test('a later handover right after the reply stands under it with what changed; the first, or one after the owner spoke, stands alone', () => {
+  const first = ev('review', 'worker', 'CSV-Export gebaut.');
+  const feedback = ev('hint', 'owner', 'Bitte mit Kopfzeile.');
+  const reply = ev('talk', 'worker', 'Mache ich: die Spaltennamen kommen in die erste Zeile.');
+  const edit = ev('activity', 'worker', 'Bearbeitet src/export.ts');
+  const again = ev('review', 'worker', 'Kopfzeile ergänzt, im Commit.');
+  const closing = ev('closing', 'worker', 'Übergeben.');
+  for (const over of [false, true])
+    expect(talkTurns([first, feedback, reply, edit, again, closing], { over }).shown).toEqual([
+      { e: first, steps: [] },
+      { e: feedback, steps: [] },
+      { e: reply, steps: [], then: { e: again, steps: [edit, closing] } },
+    ]);
+  // words of the owner's in between: the handover answers them, as a message of its own
+  const more = ev('hint', 'owner', 'Und Excel?');
+  expect(talkTurns([first, feedback, reply, more, edit, again]).shown.at(-1)).toEqual({ e: again, steps: [edit] });
+  // the first handover after the worker started stands alone, also right after a reply
+  const note = ev('hint', 'owner', 'Welche Spalten?');
+  const answer = ev('talk', 'worker', 'Sorte und Menge.');
+  const start = ev('state', 'obeya', 'Agent gestartet auf obeya/export.');
+  expect(talkTurns([first, start, note, answer, again]).shown.at(-1)).toEqual({ e: again, steps: [] });
 });
 
 test("the Koordinator reads the owner's words on a card until its confirmation follows them; a revised proposal's picked options are not read", () => {
