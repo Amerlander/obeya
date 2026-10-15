@@ -1019,8 +1019,9 @@ export class CanvasRuntime {
   }
 
   /**
-   * The card whose worker writes a repository's own adapter with the `adapter` skill, for one that
-   * runs on the generic adapter; one still open for it is returned rather than a second made. It
+   * The card whose worker fills in a repository's settings for everyone (and adapter code where a
+   * setting cannot say it) with the `adapter` skill, for one that runs on the generic adapter; one
+   * still open for it is returned rather than a second made. It
    * goes right of everything on the canvas, at the top.
    */
   adapterSetupCard(repo: string): Item {

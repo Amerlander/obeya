@@ -436,7 +436,7 @@ describe('the configuration over HTTP', () => {
     expect(readConfigFile(file)).toEqual([{ repos: [{ path: web }, { path: api }] }]);
   });
 
-  test('makes the card that writes the adapter of a repository on the generic one, once while it is open', async () => {
+  test('makes the card that fills in the settings of a repository on the generic adapter, once while it is open', async () => {
     const made = await call('POST', '/api/c/web/adapter-setup', { repo: 'web' });
     expect(made).toMatchObject({ status: 200, body: { title: 'Obeya für web einrichten', state: 'planned' } });
     expect(made.body.body).toContain('obeya:adapter');

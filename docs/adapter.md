@@ -10,7 +10,8 @@ no code has no module.
 
 The quickest way to get one: in "Konfiguration", a repository that runs on the generic adapter has
 „Von einem Agenten ausfüllen lassen“ ("Have an agent fill them in"). It puts a card on the repository's
-canvas whose worker writes the adapter with the `obeya:adapter` skill: it reads the repository,
+canvas whose worker fills in the repository's settings, and adapter code only where a setting
+cannot say it, with the `obeya:adapter` skill: it reads the repository,
 starts the app, records a demo with it to prove the recipe, and asks you what it cannot find out
 (a login, test data). The values you set for a repository in "Konfiguration" go into
 `.obeya/settings.json` with "Für alle ins Repository übernehmen" (see below). This page is the
