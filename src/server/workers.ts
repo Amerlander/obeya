@@ -633,7 +633,8 @@ export class Workers {
    * for each comment. Ten minutes after the last one without a sign, they go anyway.
    */
   private hold(card: Item, text: string, images: string[], spoken: boolean, replyTo: number | undefined, place: Spot) {
-    const e = this.o.board.log(card.id, 'hint', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo, place);
+    // unread until they go: they stand below whatever the worker does meanwhile, and where they went once sent
+    const e = this.o.board.log(card.id, 'hint', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo, place, true);
     if (text) this.o.onOwnerInput?.(card, 'feedback', text);
     this.o.board.work(card.id, { held: JSON.stringify([...this.held(card.id), { id: e.id, ...(spoken ? { spoken: true } : {}) }]) });
     this.releaseLater(card.id, this.o.holdGrace ?? HOLD_GRACE);
@@ -720,6 +721,8 @@ export class Workers {
     this.holding.delete(cardId);
     const held = this.held(cardId);
     if (!held.length) return null;
+    // read where they go, before they stop being held: never shown meanwhile as words waiting for a step
+    this.o.board.readNow(cardId, held.map((h) => h.id));
     this.o.board.work(cardId, { held: null });
     const events = new Map(this.o.board.events(cardId).map((e) => [e.id, e]));
     const images: string[] = [];

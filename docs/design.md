@@ -330,6 +330,10 @@ An idea is thought through on its card before anything is planned; no worker run
    they go, each stands dashed with a bin in its corner: taking one back takes it out of the log
    (`eventGone` to the pages), and the worker never hears it; its words go back into the card's
    field if that is empty, as with a note not read yet (see Communication); once sent, it can no longer go.
+   Held, they are unread (`CardEvent.unread`): they stand at the end, below whatever the worker does
+   meanwhile (it may still be taking in earlier words on the handover), and once sent they move to
+   where they went (`readAfter`). Until 2026-10-15 each stood where it was said, so the worker's
+   steps after it showed below comments it had not heard yet.
    Before (2026-10-12), a comment once said stayed, and only the end of the video sent them early. The worker gets them in one message,
    each as `[Demo video at 1:23, chapter „…“, narration: „…“]` above the words, with its frame as an
    image, and reworks the demo once instead of for each comment; a comment is no answer to the demo

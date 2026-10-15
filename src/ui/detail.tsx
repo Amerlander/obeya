@@ -999,10 +999,15 @@ function Conversation({
             </div>
           )
         )}
-        {/* what the agent has not read yet stands below its work, until it reads it */}
-        {turns.unread.map((e) => (
-          <Message key={e.id} turn={{ e, steps: [] }} unread={t.talk.unread(!idea && !question && !proposal)} onDelete={() => takeBack(item.id, e)} />
-        ))}
+        {/* what the agent has not read yet stands below its work, until it reads it; comments on the
+            demo video held back, until they are sent */}
+        {turns.unread.map((e) =>
+          held.includes(e.id) ? (
+            line({ e, steps: [] })
+          ) : (
+            <Message key={e.id} turn={{ e, steps: [] }} unread={t.talk.unread(!idea && !question && !proposal)} onDelete={() => takeBack(item.id, e)} />
+          ),
+        )}
         {!working && !past && koordinatorReads(events) && <Reading />}
         {!working && questions}
       </div>

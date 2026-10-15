@@ -1465,6 +1465,19 @@ describe('comments on places in the demo video', () => {
     expect(() => workers.unsay(c.id, second!.id)).toThrow(BadRequest);
   });
 
+  test('stand below what the worker does meanwhile until sent, then where they went', () => {
+    const c = waiting();
+    const comment = (workers.message(c.id, 'Zu schnell.', [], false, undefined, { at: 2 }), board.events(c.id).at(-1)!);
+    expect(comment.unread).toBe(true);
+    // the worker still takes in earlier words on its handover
+    const step = board.log(c.id, 'say', 'worker', 'Editing the adapter code now.');
+    expect(board.events(c.id).find((e) => e.id === comment.id)!.unread).toBe(true);
+    workers.released(c.id, true);
+    const sent = board.events(c.id).find((e) => e.id === comment.id)!;
+    expect(sent.unread).toBeUndefined();
+    expect(sent.readAfter).toBe(step.id);
+  });
+
   test('all deleted, nothing goes, also once the wait is over', async () => {
     const c = waiting();
     workers = new Workers({ board, runtime, workspaces: spaces, adapter: generic, holdGrace: 10 });
