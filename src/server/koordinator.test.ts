@@ -465,7 +465,7 @@ describe('Koordinator waits for a free workspace', () => {
     const f = card('F');
     workers.start(f.id);
     workerOf(f.id).emit({ type: 'session', id: 'sess-f' });
-    workerOf(f.id).call('ready_for_review', { summary: 'S' });
+    workerOf(f.id).call('ready_for_review', { summary: 'S', demo: artifact() });
     workerOf(f.id).emit({ type: 'idle' });
     await workers.approve(f.id);
     workerOf(f.id).emit({ type: 'idle' });

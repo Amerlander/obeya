@@ -2147,7 +2147,7 @@ describe('a worktree per card', () => {
     commitIn(clone, 'c.ts', 'C');
     const s = runtime.last;
     s.emit({ type: 'session', id: 'sess-1' });
-    s.call('ready_for_review', { summary: 'S' });
+    s.call('ready_for_review', { summary: 'S', demo: artifact() });
     s.emit({ type: 'idle' });
     await workers.approve(c.id);
     s.emit({ type: 'idle' });
