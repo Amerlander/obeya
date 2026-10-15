@@ -165,9 +165,8 @@ describe('the first canvas', () => {
     expect(readFileSync(join(home, WELCOME_FILE), 'utf8')).toBe('shop');
   });
 
-  test('a repository whose own adapter works in clones gets clones', async () => {
-    const adapter = `export default { name: 'shop', workspaces: 'clones' };\n`;
-    const repo = gitRepo(join(dir, 'shop'), { 'README.md': 'hi\n', '.obeya/adapter/index.ts': adapter });
+  test('a repository whose settings say clones gets clones', async () => {
+    const repo = gitRepo(join(dir, 'shop'), { 'README.md': 'hi\n', '.obeya/settings.json': '{ "workspaces": "clones" }\n' });
     await setup().canvas({ path: repo });
     expect(JSON.parse(readFileSync(join(home, 'canvases.json'), 'utf8'))).toEqual([{ repos: [{ path: repo, clones: CLONES }] }]);
   });

@@ -3,7 +3,7 @@
 
 import { existsSync, mkdirSync, realpathSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
-import { adapterProblems, genericFor, inClones, pickAdapter, readShared, repoAdapterTree, repoValues, type SharedRead, withSettings } from '../adapters';
+import { defaultsFor, readShared, repoValues, type SharedRead, withSettings } from '../adapters';
 import { Answers, answersDir, answerTag, openWithSystem } from './answers';
 import { repoName } from '../adapters/generic';
 import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
@@ -27,7 +27,7 @@ import { readPlanDocs, repoInfo, watchPlanDocs } from './repo';
 import { boundsOf, GAP, type Place, unionBounds } from '../core/layout';
 import { type AgentRuntime, withAgentSetting } from './runtime';
 import { changesCode, RESTART_PATIENCE_MS, whenIdle } from './self-update';
-import { Sharing, shareArgv } from './share';
+import { Sharing, shareArgv, siteIncomplete } from './share';
 import { siteMissing, siteName } from './site';
 import { type DueRestart, Workers } from './workers';
 import { defaultBranch, type Landed, useBranchSetting, Workspaces } from './workspaces';
@@ -77,7 +77,7 @@ export interface RepoRuntime {
   ref: RepoRef;
   info: RepoInfo;
   adapter: RepoAdapter;
-  /** Where its demos are shared (the configuration's command, else the adapter's site, else its command); null where they are exported. */
+  /** Where its demos are shared (the configuration's command, else the demo site of its settings); null where they are exported. */
   share: Shares | null;
   /** Its Lesestand: the default branch, where plan docs are read and the agents that only read work. */
   read: ReadTree;
@@ -90,10 +90,6 @@ export interface RepoRuntime {
 interface Repo extends RepoRuntime {
   /** Its entry in the configuration. */
   config: RepoConfig;
-  /** The version of its own adapter it runs on (its git tree); null without one. */
-  adapterTree: string | null;
-  /** Where its workers work by its adapter alone, without the settings. */
-  baseWorkspaces: RepoAdapter['workspaces'];
   /** Stops its Lesestand and the retries for clones on other machines. */
   stops: (() => void)[];
   /** Stops watching its plan docs. */
@@ -109,7 +105,7 @@ interface Repo extends RepoRuntime {
  */
 interface RepoRestart {
   paths: Set<string>;
-  reason: 'config' | 'adapter';
+  reason: 'config' | 'repository';
   since: number;
   deadline: number;
   /** The cards it waits for, as the page was last told. */
@@ -163,7 +159,7 @@ export class CanvasRuntime {
     const agents = deps.agents ?? ((role: AgentRole) => AGENT_DEFAULTS[role]);
     deps = { ...deps, runtime: withAgentSetting(deps.runtime, agents), ...(deps.workerRuntime ? { workerRuntime: withAgentSetting(deps.workerRuntime, agents) } : {}) };
     this.deps = deps;
-    // the main branch the owner set counts from the start: the repository's id, its adapter and its Lesestand go by it
+    // the main branch the owner set counts from the start: the repository's id, its settings and its Lesestand go by it
     for (const r of config.repos) this.useBranch(r);
     const resolved = this.resolve(config);
     const { id, name, refs, stored } = resolved;
@@ -179,7 +175,6 @@ export class CanvasRuntime {
     );
     const board = this.board;
     if (!stored) deps.store.setSetting(id, 'home_repo', refs[0]!.id);
-    resolved.keep();
 
     this.workRetro = new WorkRetro({
       board,
@@ -320,16 +315,13 @@ export class CanvasRuntime {
     const adapter = resolved.adapters[index]!;
     const ref = resolved.refs[index]!;
     const isHome = index === 0;
-    if (resolved.broken[index]) console.error(`Obeya: ${resolved.broken[index]}; ${info.path} runs on the ${adapter.name} adapter until it is fixed on its default branch`);
-    for (const p of adapterProblems(adapter)) console.warn(`Obeya: adapter of ${info.path}, ${p} (ignored)`);
     for (const p of this.shared.get(info.path)?.problems ?? []) console.warn(`Obeya: ${info.path}: ${p} (ignored)`);
-    if (adapter.demo?.site && adapter.demo.share) console.warn(`Obeya: adapter of ${info.path} names both demo.site and demo.share; the site is used`);
     const share = sharesOf(rc, info, adapter);
     // whether the repository shares here, which the UI shows
     Object.assign(ref, shareRef(share, deps.home));
     const stops: (() => void)[] = [];
     // filled in below; what is set up here reaches it once it is
-    const repo = { config: rc, adapterTree: resolved.adapterTrees[index], baseWorkspaces: resolved.bases[index]!.workspaces, stops } as Repo;
+    const repo = { config: rc, stops } as Repo;
     // where work lands on the local main, the checkout is the Lesestand; otherwise it is a pool clone on a card's branch
     const read = new ReadTree({
       repoPath: info.path,
@@ -388,7 +380,7 @@ export class CanvasRuntime {
       runtime: deps.workerRuntime ?? deps.runtime,
       workspaces,
       adapter,
-      shares: !!share,
+      shares: () => !!repo.share,
       repo: ref.id,
       preferences: this.preferences,
       onOwnerInput: (card, kind, text, context) => this.koordinator.learn(card, kind, text, context),
@@ -647,7 +639,7 @@ export class CanvasRuntime {
 
   /**
    * The owner saved settings of the repositories (`RepoSettings`), or committed them for everyone
-   * (`.obeya/settings.json`): the adapters read them where they are used; what the canvas set up
+   * (`.obeya/settings.json`): they are read where they are used; what the canvas set up
    * by them follows (`follow`), and a repository whose agents now work elsewhere restarts them.
    */
   settingsChanged() {
@@ -657,35 +649,30 @@ export class CanvasRuntime {
 
   /**
    * The Lesestand of the repository moved, or its settings were saved: reads its
-   * `.obeya/settings.json` and its own adapter again from the default branch. A new version of the
-   * adapter takes the old one's place at once (`Workers.useAdapter`). Where the repository's agents
-   * now work elsewhere (clones or worktrees, set up when they start), they restart once they paused
-   * (`due`). Says which of these it came to: `follow` where the canvas follows what changed.
+   * `.obeya/settings.json` again from the default branch; the settings apply where they are read.
+   * Where the repository's agents now work elsewhere (clones or worktrees, set up when they start),
+   * they restart once they paused (`due`); where demos are shared may have changed. Says which of
+   * these it came to: `follow` where the canvas follows what changed.
    */
   private moved(r: Repo): 'same' | 'follow' | 'due' {
     if (!this.repos.includes(r)) return 'same';
     const path = r.info.path;
     if (this.pending?.paths.has(path)) return 'due';
     const shared = this.reread(r);
-    const tree = repoAdapterTree(path);
-    const next = tree !== r.adapterTree ? repoAdapter(r.config, r.info, this.settingsOf(r.config), this.sharedOf(path)) : null;
-    const base = next ? next.base.workspaces : r.baseWorkspaces;
-    const workIn = namesClones(r.config) ? 'clones' : (layerSettings<RepoSettings>(this.sharedOf(path)(), this.settingsOf(r.config)())?.workspaces ?? base);
+    const workIn = namesClones(r.config) ? 'clones' : (layerSettings<RepoSettings>(this.sharedOf(path)(), this.settingsOf(r.config)())?.workspaces ?? defaultsFor(r.info).workspaces);
     if (workIn !== r.workspaces.mode) {
-      this.due([path], next ? 'adapter' : 'config');
+      this.due([path], shared ? 'repository' : 'config');
       return 'due';
     }
-    if (next) {
-      if (next.broken) console.error(`Obeya: ${next.broken}; ${path} runs on the ${next.adapter.name} adapter until it is fixed on its default branch`);
-      else console.log(`Obeya: ${path} runs on the new version of its adapter`);
-      for (const p of adapterProblems(next.adapter)) console.warn(`Obeya: adapter of ${path}, ${p} (ignored)`);
-      Object.assign(r, { adapter: next.adapter, adapterTree: tree, baseWorkspaces: base, share: sharesOf(r.config, r.info, next.adapter) });
-      r.workers.useAdapter(next.adapter);
+    const share = sharesOf(r.config, r.info, r.adapter);
+    if (JSON.stringify(share) !== JSON.stringify(r.share)) {
+      r.share = share;
       delete r.ref.share;
       delete r.ref.shareNeeds;
-      Object.assign(r.ref, shareRef(r.share, this.deps.home));
+      Object.assign(r.ref, shareRef(share, this.deps.home));
+      return 'follow';
     }
-    return shared || next ? 'follow' : 'same';
+    return shared ? 'follow' : 'same';
   }
 
   /**
@@ -1019,10 +1006,10 @@ export class CanvasRuntime {
   }
 
   /**
-   * The card whose worker fills in a repository's settings for everyone (and adapter code where a
-   * setting cannot say it) with the `adapter` skill, for one that runs on the generic adapter; one
-   * still open for it is returned rather than a second made. It
-   * goes right of everything on the canvas, at the top.
+   * The card whose worker fills in a repository's settings for everyone (`.obeya/settings.json`)
+   * with the `settings` skill, for one that has none yet or still has an adapter module; one still
+   * open for it is returned rather than a second made. It goes right of everything on the canvas,
+   * at the top.
    */
   adapterSetupCard(repo: string): Item {
     const r = this.repos.find((x) => x.ref.id === repo);
@@ -1556,9 +1543,6 @@ export class Canvases {
   }
 }
 
-// the setting that names the repository whose own adapter named the canvas
-const OWN_ADAPTER_OF = 'own_adapter_of';
-
 /** Why a canvas's configuration does not work; `repo` is the index of the repository in question. */
 export class ConfigError extends Error {
   constructor(
@@ -1572,14 +1556,11 @@ export class ConfigError extends Error {
 
 /**
  * What a canvas's configuration amounts to, without touching anything: its repositories (home
- * first), their adapters with the settings of this machine in front (`settings`: where a
- * repository's are read; its entry's when left out), and in front of the adapter's own values
- * those of the repository's `.obeya/settings.json` (`shared`: where they are read, by the
- * repository's path; read once from its default branch when left out), their ids (`broken`: why a
- * repository's own adapter does not load, where it runs on the built-in one instead), their
- * settings without this machine's (`values`), where their workers work without either (`bases`),
- * and the canvas's id and name; `keep` notes which canvas the repository's own adapter named, once
- * the canvas is in the store. Throws a ConfigError.
+ * first), each with Obeya's defaults and in front of them the repository's `.obeya/settings.json`
+ * (`shared`: where they are read, by the repository's path; read once from its default branch when
+ * left out) and this machine's settings (`settings`: where a repository's are read; its entry's
+ * when left out), their ids, their settings without this machine's (`values`), and the canvas's id
+ * and name. Throws a ConfigError.
  */
 export function resolveCanvas(
   config: CanvasConfig,
@@ -1602,20 +1583,9 @@ export function resolveCanvas(
   infos.forEach((info, i) => {
     if (infos.findIndex((x) => x.path === info.path) < i) throw new ConfigError('sameRepo', `${config.repos[i]!.path} is on the canvas already`, i);
   });
-  const each = config.repos.map((r, i) => {
-    return repoAdapter(r, infos[i]!, settings(r), shared(infos[i]!.path));
-  });
-  let adapterTrees = each.map((e) => e.adapterTree);
-  let broken = each.map((e) => e.broken);
-  let bases = each.map((e) => e.base);
-  let adapters = each.map((e) => e.adapter);
+  let adapters = config.repos.map((r, i) => repoAdapter(r, infos[i]!, settings(r), shared(infos[i]!.path)));
   let refs = uniqueRefs(infos, adapters);
-  // the canvas the repository's own adapter named stays the one while that adapter does not load,
-  // with its address, name and cards
-  const named = !config.id && !config.name;
-  const ownPath = named && adapterTrees[0] ? infos[0]!.path : null;
-  const kept = ownPath && broken[0] !== undefined ? store.canvasWith(OWN_ADAPTER_OF, ownPath) : null;
-  const id = config.id ? slug(config.id) : config.name ? slug(config.name) : (kept?.id ?? adapters[0]!.canvasId(infos[0]!));
+  const id = config.id ? slug(config.id) : config.name ? slug(config.name) : slug(repoName(infos[0]!));
   // the home repository is fixed when the canvas is first served: bare plan references, cards
   // without a repository and the home workspace directory are its, whatever the order later
   const stored = store.setting(id, 'home_repo');
@@ -1626,43 +1596,23 @@ export function resolveCanvas(
     config = { ...config, repos: order.map((i) => config.repos[i]!) };
     infos = order.map((i) => infos[i]!);
     adapters = order.map((i) => adapters[i]!);
-    bases = order.map((i) => bases[i]!);
-    adapterTrees = order.map((i) => adapterTrees[i]!);
-    broken = order.map((i) => broken[i]);
     refs = uniqueRefs(infos, adapters);
   }
-  const name = config.name ?? kept?.name ?? adapters[0]!.canvasName(infos[0]!);
-  const keep = () => {
-    if (ownPath && !kept) store.setSetting(id, OWN_ADAPTER_OF, ownPath);
-  };
-  const values = () => bases.map((a, i) => repoValues(a, infos[i]!, namesClones(config.repos[i]!), shared(infos[i]!.path)() ?? {}));
-  return { config, id, name, infos, adapters, bases, values, adapterTrees, broken, refs, stored, keep };
+  const name = config.name ?? repoName(infos[0]!);
+  const values = () => infos.map((info, i) => repoValues(info, namesClones(config.repos[i]!), shared(info.path)() ?? {}));
+  return { config, id, name, infos, adapters, values, refs, stored };
 }
 
 /** What `resolveCanvas` resolved. */
 type Resolved = ReturnType<typeof resolveCanvas>;
 
 /**
- * A repository's adapter as a canvas runs it: its own on its default branch (`adapterTree`: that
- * version's git tree), else the generic one; this machine's `settings` and the repository's
- * `shared` ones in front of its own values (`adapter`), each read when it is asked for; where its
- * workers work by the adapter and the clones the configuration names alone (`base`). A
- * repository's own adapter that does not load is fixed in the repository: meanwhile the repository
- * runs on the generic adapter, with why beside it (`broken`).
+ * How a canvas runs a repository: Obeya's defaults with the repository's `shared` settings and this
+ * machine's `settings` in front, each read when it is asked for; its workers work in clones where
+ * the configuration names some.
  */
-export function repoAdapter(r: RepoConfig, info: RepoInfo, settings: () => RepoSettings | undefined, shared: () => SharedSettings | undefined) {
-  const adapterTree = repoAdapterTree(info.path);
-  let broken: string | undefined;
-  let adapter: RepoAdapter;
-  try {
-    adapter = pickAdapter(info);
-  } catch (e) {
-    broken = e instanceof Error ? e.message : String(e);
-    adapter = genericFor(info);
-  }
-  // clones the configuration names are where the workers work, also where the adapter says worktrees
-  const base = namesClones(r) ? inClones(adapter) : adapter;
-  return { adapterTree, broken, base, adapter: withSettings(base, () => layerSettings<RepoSettings>(shared(), settings()), namesClones(r)) };
+export function repoAdapter(r: RepoConfig, info: RepoInfo, settings: () => RepoSettings | undefined, shared: () => SharedSettings | undefined): RepoAdapter {
+  return withSettings(defaultsFor(info), () => layerSettings<RepoSettings>(shared(), settings()), namesClones(r));
 }
 
 /** Whether a repository's configuration names clones for its workers (to create, existing ones, on other machines). */
@@ -1677,7 +1627,7 @@ function uniqueRefs(infos: RepoInfo[], adapters: RepoAdapter[]): RepoRef[] {
     seen.set(base, n);
     return {
       id: n === 1 ? base : `${base}${n}`,
-      name: i === 0 ? adapters[0]!.canvasName(info) : repoName(info),
+      name: repoName(info),
       path: info.path,
       ...settled(info, adapters[i]!),
     };
@@ -1696,11 +1646,11 @@ function settled(info: RepoInfo, adapter: RepoAdapter): Pick<RepoRef, 'branch' |
 /** Where a repository shares demos, without its checkout. */
 type Shares = { command: string[] } | { site: DemoSite };
 
-/** Where a repository shares demos: the configuration's command, else the adapter's site, else its command; null without any. */
+/** Where a repository shares demos: this machine's share command, else the site its settings name once it is complete; null without either. */
 function sharesOf(config: RepoConfig, info: RepoInfo, adapter: RepoAdapter): Shares | null {
   if (config.share?.trim()) return { command: shareArgv(config.share, info.path) };
-  if (adapter.demo?.site) return { site: adapter.demo.site };
-  return adapter.demo?.share ? { command: adapter.demo.share } : null;
+  const site = adapter.demo?.site;
+  return site && !siteIncomplete(site) ? { site } : null;
 }
 
 /** What the canvas tells the UI about it: a target here, or the env file a site lacks on this machine. */

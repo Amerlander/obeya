@@ -119,7 +119,7 @@ describe('workers', () => {
     expect(runtime.last.inbox[0]).toContain('`bun install`');
     expect(runtime.last.inbox[0]).toContain('To run the app in your workspace: `bun run stack`; after a backend change, `bun run api:restart`');
     expect(runtime.last.inbox[0]).toContain('in `.stack.env` under WEB_URL');
-    // a repository without demos gets Obeya's skills all the same: the one that writes its adapter among them
+    // a repository without demos gets Obeya's skills all the same: the one that writes its settings among them
     expect(runtime.last.spec.plugins).toEqual([OBEYA_PLUGIN]);
     // the only clone is taken
     const d = manual();
@@ -1007,7 +1007,7 @@ describe('workers', () => {
 
 describe('parking: the stack of a card that waits for the owner', () => {
   const stack = { start: 'bun run stack', refresh: 'bun run api:restart', urls: { file: '.stack.env', frontendKey: 'WEB_URL' } };
-  /** Workers whose adapter stops the stack by writing `parked.log` in the workspace, after a grace of `grace` ms. */
+  /** Workers whose settings stop the stack by writing `parked.log` in the workspace, after a grace of `grace` ms. */
   const parking = (more: Partial<NonNullable<RepoAdapter['stack']>> = {}, grace = 10) => {
     workers = new Workers({
       board,
@@ -1142,7 +1142,7 @@ describe('parking: the stack of a card that waits for the owner', () => {
     expect(runtime.last.inbox[0]).toContain('Obeya stopped the app stack');
   });
 
-  test('without a stop in the adapter nothing is stopped', async () => {
+  test('without a stop in the settings nothing is stopped', async () => {
     const c = handOver();
     await Bun.sleep(30);
     expect(board.row(c.id).parked).toBeNull();
@@ -1338,7 +1338,7 @@ describe('handing over with a demo', () => {
 
   test('where demos are shared, a video or an artifact comes with its page for colleagues, kept with the demo', () => {
     rmSync(dir, { recursive: true, force: true });
-    setup({ ...generic, land: 'main', workspaces: 'clones', demo: { howToRun: 'bun start', share: ['share'] } });
+    setup({ ...generic, land: 'main', workspaces: 'clones', demo: { howToRun: 'bun start', site: { title: 'Demos', url: 'https://demos.example.dev', deploy: 'deploy {dir}' } } });
     const c = manual();
     workers.start(c.id);
     expect(runtime.last.inbox[0]).toContain('share the demo, a video or an HTML artifact, with colleagues');
@@ -1751,7 +1751,7 @@ describe('approving directly onto main where work goes out as a pull request', (
     expect(state(c.id)).toBe('inPr');
   });
 
-  test('without `direct` in the adapter the approval is refused; where work lands on main anyway it is a plain approval', async () => {
+  test('without `direct` in the settings the approval is refused; where work lands on main anyway it is a plain approval', async () => {
     workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'pr', workspaces: 'clones' } });
     const { c, session, clone } = handedOver();
     commitIn(clone, 'x.ts', 'X');
@@ -2381,7 +2381,7 @@ describe('a worktree per card', () => {
     s.emit({ type: 'idle' });
     await workers.approve(c.id);
     // a restart Obeya does not start for this landing (another repository's adapter, say) comes while it finishes
-    workers.restartDue({ reason: 'adapter', deadline: Date.now() + 60_000 });
+    workers.restartDue({ reason: 'repository', deadline: Date.now() + 60_000 });
     expect(s.inbox.at(-1)).toContain('Pause at the next safe point');
     s.emit({ type: 'text', text: 'Pausing for the restart.' });
     s.emit({ type: 'idle' });

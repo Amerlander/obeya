@@ -4,7 +4,7 @@
 // own settings come from its command line and show read-only.
 
 import { type CSSProperties, Fragment, type ReactNode, useEffect, useId, useRef, useState } from 'react';
-import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigView, type DemoSettings, type DemoSettingsView, type DemoVoiceCheck, type Language, type HostConfig, type LanguageView, type NarrationLanguage, restartsAgents, type RepoConfig, type RepoSettings, type RepoValues, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, type SetupCheck, type Theme, THEMES, type ThemeView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
+import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigView, type DemoSettings, type DemoSettingsView, type DemoSite, type DemoVoiceCheck, type Language, type HostConfig, type LanguageView, type NarrationLanguage, restartsAgents, type RepoConfig, type RepoSettings, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, type SetupCheck, type StackSettings, type Theme, THEMES, type ThemeView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
 import { LANGUAGES } from '../core/locale';
 import { pushKeyFromEvent, type PushKeyView } from '../core/push-key';
 import { api, ApiError, reload } from './api';
@@ -72,7 +72,7 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }
   };
   // the id each canvas of the draft had when loaded: renaming a running canvas keeps it, and its cards
   const [origin, setOrigin] = useState<(string | null)[]>([]);
-  // a repository added here whose adapter works in clones gets as many as the first canvas's, once it is checked
+  // a repository added here whose settings say clones gets as many as the first canvas's, once it is checked
   const filled = useRef(new Set<string>());
   const load = (v: ConfigView) => {
     filled.current.clear();
@@ -1082,7 +1082,7 @@ function CanvasBlock({ n, canvas, resolved, running, pin, saved, problems, focus
 interface RepoProps {
   repo: RepoConfig;
   home: boolean;
-  resolved?: { id: string; adapter: string; workspaces: 'clones' | 'worktrees'; adapterShares?: boolean; adapterSite?: string; values: RepoValues; shareTo: 'main' | 'pr'; shareDirect?: boolean };
+  resolved?: ResolvedCanvas['repos'][number];
   /** The running canvas the repository is on, as saved; where a card for it can go. */
   canvasId?: string;
   problems: ConfigProblem[];
@@ -1133,7 +1133,7 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
       <div className="cfg-cell">
         <input className="c-path" aria-label={t.config.path} value={repo.path} placeholder={t.config.path} spellCheck={false} onChange={(e) => onChange({ ...repo, path: e.target.value })} />
         {resolved && (
-          <span className="hint">{`${resolved.id}${home ? ` · ${t.config.home}` : ''} · ${resolved.workspaces === 'clones' ? t.config.clonesMode : t.config.worktrees}${resolved.adapter === 'generic' ? '' : ` · ${t.config.ownAdapter}`}`}</span>
+          <span className="hint">{`${resolved.id}${home ? ` · ${t.config.home}` : ''} · ${resolved.workspaces === 'clones' ? t.config.clonesMode : t.config.worktrees}`}</span>
         )}
       </div>
       <button className="c-del" title={t.config.removeRepo} onClick={() => onChange(null)}>
@@ -1181,10 +1181,8 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
           show={focus?.field === 'settings' ? focus : undefined}
           repo={repo}
           values={resolved.values}
-          adapter={resolved.adapter}
           shareTo={resolved.shareTo}
           shareDirect={!!resolved.shareDirect}
-          shareFrom={resolved.adapterSite ? { site: resolved.adapterSite } : resolved.adapterShares ? 'adapter' : null}
           takeover={takeover}
           onShare={(share) => onChange(without('share', share))}
           onChange={(settings) => onChange(without('settings', settings))}
@@ -1196,8 +1194,8 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
           {p.code === 'notRepo' && noGit && <GitSetup key={noGit} path={noGit} confirm={t.setup.git.confirm} onDone={onRecheck} />}
         </div>
       ))}
-      {/* a repository without an adapter or settings of its own (not one whose own adapter does not load): a card on its canvas writes them */}
-      {canvasId && resolved?.adapter === 'generic' && !problems.some((p) => p.code === 'adapterLoad') && !fromRepository(resolved.values) && (
+      {/* a repository without settings of its own, or with an adapter module that said them: a card on its canvas writes them */}
+      {canvasId && resolved && (resolved.adapterGone || !fromRepository(resolved.values)) && (
         <div className="cfg-span">
           <AdapterSetup canvas={canvasId} repo={resolved.id} />
         </div>
@@ -1206,8 +1204,8 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
   );
 }
 
-/** The settings of a repository a value can say, set on this machine (`RepoSettings`). */
-type SettingKey = Exclude<keyof RepoSettings, 'demo'> | 'howToRun';
+/** The settings of a repository, set on this machine (`RepoSettings`); the demo's each on its own. */
+type SettingKey = Exclude<keyof RepoSettings, 'demo'> | 'howToRun' | 'site';
 
 /**
  * A repository's settings for this machine, folded under „Einstellungen“ below its row: each shows
@@ -1218,10 +1216,8 @@ function RepoSettingsBlock({
   show,
   repo,
   values,
-  adapter,
   shareTo,
   shareDirect,
-  shareFrom,
   takeover,
   onShare,
   onChange,
@@ -1230,13 +1226,10 @@ function RepoSettingsBlock({
   show: ConfigFocus | undefined;
   repo: RepoConfig;
   values: RepoValues;
-  adapter: string;
   shareTo: 'main' | 'pr';
   shareDirect: boolean;
-  /** Where demos are shared without this machine's command: the adapter's site, its command, or nowhere (they are exported). */
-  shareFrom: { site: string } | 'adapter' | null;
   takeover: Takeover;
-  /** Sets this machine's share command; none takes the adapter's again. */
+  /** Sets this machine's share command; none shares on the demo site again, where the settings name one. */
   onShare: (share: string | undefined) => void;
   onChange: (s: RepoSettings | undefined) => void;
 }) {
@@ -1255,19 +1248,22 @@ function RepoSettingsBlock({
   }, [shown, open]);
   const c = t.config.settings;
   const s = repo.settings ?? {};
-  const base: Record<SettingKey, SettingValue<unknown>> = { ...values, howToRun: values.demo.howToRun };
-  const own = (k: SettingKey): unknown => (k === 'howToRun' ? s.demo?.howToRun : s[k]);
+  const base: Record<SettingKey, SettingValue<unknown>> = { ...values, howToRun: values.demo.howToRun, site: values.demo.site };
+  const own = (k: SettingKey): unknown => (k === 'howToRun' || k === 'site' ? s.demo?.[k] : s[k]);
   const value = <T,>(k: SettingKey) => (own(k) ?? base[k].value) as T;
   const set = (k: SettingKey, v: unknown) => {
     const next: RepoSettings = { ...s };
-    if (k === 'howToRun') {
-      if (v === undefined) delete next.demo;
-      else next.demo = { howToRun: v as string };
+    if (k === 'howToRun' || k === 'site') {
+      const demo: NonNullable<RepoSettings['demo']> = { ...s.demo };
+      if (v === undefined) delete demo[k];
+      else (demo as Record<string, unknown>)[k] = v;
+      if (Object.keys(demo).length) next.demo = demo;
+      else delete next.demo;
     } else if (v === undefined) delete next[k];
     else (next as Record<string, unknown>)[k] = v;
     onChange(Object.keys(next).length ? next : undefined);
   };
-  const keys: SettingKey[] = ['branch', 'land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'howToRun'];
+  const keys: SettingKey[] = ['branch', 'land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'stack', 'howToRun', 'site'];
   // the share command is this machine's too, though not a value „Für alle“ takes over
   const setHere = keys.filter((k) => own(k) !== undefined).length + (repo.share ? 1 : 0);
   const fromRepo = keys.filter((k) => own(k) === undefined && base[k].source === 'repository').length;
@@ -1292,10 +1288,23 @@ function RepoSettingsBlock({
   );
   const row = (k: SettingKey, label: string, control: ReactNode, hint?: string) => {
     const from = base[k].source;
-    return field(k, label, own(k) !== undefined, from === 'adapter' ? c.source.adapter(adapter) : c.source[from], () => set(k, undefined), control, hint);
+    return field(k, label, own(k) !== undefined, c.source[from], () => set(k, undefined), control, hint);
   };
   const land = value<'main' | 'pr'>('land');
   const planDocs = value<{ dir: string; exclude: string[] }>('planDocs');
+  const stack = value<StackSettings | null>('stack') ?? { start: '' };
+  const setStack = (patch: Partial<StackSettings>) => set('stack', { ...stack, ...patch });
+  const site = value<DemoSite | null>('site') ?? { title: '', url: '', deploy: '' };
+  const setSite = (patch: Partial<DemoSite>) => set('site', { ...site, ...patch });
+  const urls = stack.urls ?? { file: '', frontendKey: '' };
+  const siteUsable = !!site.title.trim() && !!site.url.trim() && !!site.deploy.trim();
+  // a part of a setting with several fields: its label above it; a wide one takes the whole row
+  const sub = (label: string, control: ReactNode, wide = false) => (
+    <label className={wide ? 'wide' : undefined}>
+      <span className="hint">{label}</span>
+      {control}
+    </label>
+  );
   return (
     <div className="cfg-span cfg-settings" ref={box}>
       <button type="button" className={open ? 'cfg-settings-toggle on' : 'cfg-settings-toggle'} aria-expanded={open} onClick={() => setOpen(!open)}>
@@ -1358,18 +1367,78 @@ function RepoSettingsBlock({
             base.workspaces.source === 'clones' ? undefined : c.workspacesHint,
           )}
           {land === 'pr' && row('prNoise', c.prNoise, <textarea rows={2} spellCheck={false} aria-label={c.prNoise} value={lines('prNoise')} onChange={(e) => set('prNoise', e.target.value.split('\n'))} />, c.prNoiseHint)}
+          {row(
+            'stack',
+            c.stack,
+            <div className="cfg-sub">
+              {sub(c.stackStart, <input className="c-path" aria-label={c.stackStart} placeholder="docker compose up -d && pnpm dev" spellCheck={false} value={stack.start} onChange={(e) => setStack({ start: e.target.value })} />, true)}
+              {sub(c.stackRefresh, <input className="c-path" aria-label={c.stackRefresh} spellCheck={false} value={stack.refresh ?? ''} onChange={(e) => setStack({ refresh: e.target.value })} />, true)}
+              {sub(c.stackUrlFile, <input className="c-path" aria-label={c.stackUrlFile} placeholder=".dev-urls" spellCheck={false} value={urls.file} onChange={(e) => setStack({ urls: { ...urls, file: e.target.value } })} />)}
+              {sub(c.stackFrontendKey, <input className="c-path" aria-label={c.stackFrontendKey} placeholder="WEB_URL" spellCheck={false} value={urls.frontendKey} onChange={(e) => setStack({ urls: { ...urls, frontendKey: e.target.value } })} />)}
+              {sub(c.stackStop, <input className="c-path" aria-label={c.stackStop} placeholder="docker compose down" spellCheck={false} value={stack.stop ?? ''} onChange={(e) => setStack({ stop: e.target.value })} />)}
+              {sub(c.stackKeep, <input className="c-path" aria-label={c.stackKeep} spellCheck={false} value={stack.keep ?? ''} onChange={(e) => setStack({ keep: e.target.value })} />)}
+            </div>,
+            c.stackHint,
+          )}
           {row('howToRun', c.howToRun, <textarea rows={Math.max(3, Math.ceil(value<string>('howToRun').length / 90) + 1)} aria-label={c.howToRun} value={value<string>('howToRun')} onChange={(e) => set('howToRun', e.target.value)} />, c.howToRunHint)}
+          {row(
+            'site',
+            c.site,
+            <div className="cfg-sub">
+              {sub(c.siteTitle, <input className="c-path" aria-label={c.siteTitle} spellCheck={false} value={site.title} onChange={(e) => setSite({ title: e.target.value })} />)}
+              {sub(c.siteUrl, <input className="c-path" aria-label={c.siteUrl} placeholder="https://demos.example.com" spellCheck={false} value={site.url} onChange={(e) => setSite({ url: e.target.value })} />)}
+              {sub(c.siteDeploy, <input className="c-path" aria-label={c.siteDeploy} placeholder="bunx wrangler@4 pages deploy {dir} --project-name demos" spellCheck={false} value={site.deploy} onChange={(e) => setSite({ deploy: e.target.value })} />, true)}
+              {sub(c.siteEnv, <input className="c-path" aria-label={c.siteEnv} placeholder="sites/demos/deploy.env" spellCheck={false} value={site.env ?? ''} onChange={(e) => setSite({ env: e.target.value })} />, true)}
+              {sub(
+                c.siteHeaders,
+                <textarea
+                  rows={Math.max(2, Object.keys(site.headers ?? {}).length + 1)}
+                  spellCheck={false}
+                  aria-label={c.siteHeaders}
+                  placeholder={'CF-Access-Client-Id: ${CF_ID}'}
+                  value={Object.entries(site.headers ?? {})
+                    .map(([k, v]) => `${k}: ${v}`)
+                    .join('\n')}
+                  onChange={(e) => setSite({ headers: headerLines(e.target.value) })}
+                />,
+                true,
+              )}
+              {sub(
+                c.siteMaxFile,
+                <input
+                  className="c-path"
+                  type="number"
+                  min={1}
+                  aria-label={c.siteMaxFile}
+                  placeholder="25"
+                  value={site.maxFile ? Math.round(site.maxFile / MIB) : ''}
+                  onChange={(e) => setSite({ maxFile: Number(e.target.value) > 0 ? Math.round(Number(e.target.value) * MIB) : undefined })}
+                />,
+              )}
+              {sub(
+                c.siteLanguageLabel,
+                <div className="seg" role="radiogroup" aria-label={c.siteLanguageLabel}>
+                  {([undefined, 'de', 'en'] as const).map((x) => (
+                    <button key={x ?? 'auto'} type="button" role="radio" aria-checked={site.language === x} className={site.language === x ? 'on' : undefined} onClick={() => setSite({ language: x })}>
+                      {c.siteLanguage[x ?? 'auto']}
+                    </button>
+                  ))}
+                </div>,
+              )}
+            </div>,
+            c.siteHint,
+          )}
           {field(
             'share',
             t.config.share,
             !!repo.share,
-            shareFrom ? c.source.adapter(adapter) : c.source.default,
+            c.source.default,
             () => onShare(undefined),
             <input
               className="c-path"
               aria-label={t.config.share}
               value={repo.share ?? ''}
-              placeholder={shareFrom === null ? t.config.shareNone : shareFrom === 'adapter' ? t.config.shareAdapter(adapter) : t.config.shareSite(shareFrom.site)}
+              placeholder={siteUsable ? t.config.shareSite(site.url) : t.config.shareNone}
               spellCheck={false}
               onChange={(e) => onShare(e.target.value || undefined)}
             />,
@@ -1382,8 +1451,20 @@ function RepoSettingsBlock({
   );
 }
 
-/** Whether the repository has settings for everyone (`.obeya/settings.json`): then it is set up, even on the generic adapter. */
-const fromRepository = (v: RepoValues) => SHARED_FIELDS.some((k) => (k === 'demo' ? v.demo.howToRun.source === 'repository' : v[k].source === 'repository'));
+/** Whether the repository has settings for everyone (`.obeya/settings.json`): then it is set up. */
+const fromRepository = (v: RepoValues) => SHARED_FIELDS.some((k) => (k === 'demo' ? v.demo.howToRun.source === 'repository' || v.demo.site.source === 'repository' : v[k].source === 'repository'));
+
+const MIB = 1024 * 1024;
+
+/** The headers of `Name: value` lines; none for lines without a name. */
+function headerLines(text: string): Record<string, string> | undefined {
+  const pairs = text
+    .split('\n')
+    .map((l) => l.match(/^([^:]+):\s*(.*)$/))
+    .filter((m): m is RegExpMatchArray => !!m && !!m[1]!.trim())
+    .map((m) => [m[1]!.trim(), m[2]!] as const);
+  return pairs.length ? Object.fromEntries(pairs) : undefined;
+}
 
 /** The repository's `.obeya/settings.json` as the dialog shows it: what the file holds now (`values` from the repository) with this machine's settings in front, but the main branch. */
 function sharedPreview(repo: RepoConfig, values: RepoValues): Record<string, unknown> {
@@ -1392,7 +1473,9 @@ function sharedPreview(repo: RepoConfig, values: RepoValues): Record<string, unk
     if (k === 'demo') continue;
     if (values[k].source === 'repository') file[k] = values[k].value;
   }
-  if (values.demo.howToRun.source === 'repository') file.demo = { howToRun: values.demo.howToRun.value };
+  const { howToRun, site } = values.demo;
+  if (howToRun.source === 'repository' || site.source === 'repository')
+    file.demo = { ...(howToRun.source === 'repository' ? { howToRun: howToRun.value } : {}), ...(site.source === 'repository' ? { site: site.value } : {}) };
   const { branch: _, ...mine } = repo.settings ?? {};
   const merged = layerSettings<Record<string, unknown>>(file, mine as Record<string, unknown>) ?? {};
   return Object.fromEntries(SHARED_FIELDS.filter((k) => merged[k] !== undefined).map((k) => [k, merged[k]]));
@@ -1537,8 +1620,8 @@ function Hosts({ hosts, onChange }: { hosts: HostConfig[]; onChange: (hosts: Hos
   );
 }
 
-// problems whose detail says what to fix, in the repository's adapter rather than here
-const DETAILED: ConfigProblem['code'][] = ['adapterField', 'adapterLoad', 'repoSettings', 'hostName'];
+// problems whose detail says what to fix, in the repository's settings rather than here
+const DETAILED: ConfigProblem['code'][] = ['demoSite', 'adapterGone', 'repoSettings', 'hostName'];
 
 /**
  * A problem of the configuration: what is wrong, the technical detail folded away where it says
@@ -1572,7 +1655,7 @@ function Problem({ problem, where, ask }: { problem: ConfigProblem; where: strin
   );
 }
 
-/** Creates the card that writes the repository's adapter, and opens it on its canvas. */
+/** Creates the card that writes the repository's settings for everyone, and opens it on its canvas. */
 function AdapterSetup({ canvas, repo }: { canvas: string; repo: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');

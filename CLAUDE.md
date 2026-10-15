@@ -7,7 +7,7 @@ shows them as projects); when one is done, what lasts moves into `docs/design.md
 
 - Bun + TypeScript throughout; tests with `bun test`, types with `bun run typecheck`.
 - `src/core/` is shared by server and UI (types, plan-doc parser, layout); `src/server/` is the
-  Bun server with SQLite; `src/ui/` the React canvas; `src/adapters/` the repo adapters.
+  Bun server with SQLite; `src/ui/` the React canvas; `src/adapters/` what Obeya knows of a repository (its defaults, its settings).
 - Code that drives agents is tested against the fake runtime in `src/server/testing.ts` and real
   git repositories in a temp directory (`gitRepo` there; git calls are what makes tests slow).
   Live runs go against a scratch git repository with a plan doc and a scratch `OBEYA_HOME` (never
@@ -26,8 +26,8 @@ shows them as projects); when one is done, what lasts moves into `docs/design.md
 - The Obeya instance for this repo runs on port 4417 with `~/.obeya`. It restarts itself once
   `main` moves to commits that change code, a commit of yours included (workers resume, the page
   reloads); docs-only commits leave it running. Keep tests off it.
-- No project-specific logic in the core: it belongs in the repository's own adapter (`.obeya/adapter/`
-  in that repository), not in this repo.
+- No project-specific logic in the core: what a project needs goes into its settings
+  (`.obeya/settings.json` in that repository), not into this repo.
 - UI strings live in one place, `src/ui/strings.ts`, in German and English (two tables of one shape).
   German UI texts and docs call a button "Button" or "Schaltfläche", never "Knopf".
 - An interaction that several kinds of card share (answering questions with comments and one Send

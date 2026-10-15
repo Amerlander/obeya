@@ -128,7 +128,7 @@ export const api = {
   /** Installs the newer version of the app once the workers paused, as a restart waits for them. */
   installUpdate: () => call<{ updating: boolean }>('POST', '/api/app-update/install'),
   create: (c: NewCard) => call<Item>('POST', at('/cards'), c),
-  /** The card that writes a repository's own adapter, on the canvas it belongs to (not necessarily the shown one). */
+  /** The card that writes a repository's settings for everyone, on the canvas it belongs to (not necessarily the shown one). */
   adapterSetup: (canvas: string, repo: string) => call<Item>('POST', `/api/c/${encodeURIComponent(canvas)}/adapter-setup`, { repo }),
   preparePlanDoc: (canvas: string, repo: string, file: string) => call<Item>('POST', `/api/c/${encodeURIComponent(canvas)}/prepare-plan-doc`, { repo, file }),
   /** Downloads a card's demo as a ZIP of its page with the files, or as one HTML file. */

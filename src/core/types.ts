@@ -566,15 +566,15 @@ export interface RepoRef {
   name: string;
   path: string;
   branch: string;
-  /** It has a share target: demos go to a page outside Obeya (the configuration's command, the adapter's `demo.site` or `demo.share`); without one they are exported as a file. */
+  /** It has a share target: demos go to a page outside Obeya (the configuration's command, or the `demo.site` of the repository's settings); without one they are exported as a file. */
   share?: boolean;
-  /** Its adapter's site needs an env file this machine lacks (as the adapter names it, relative to Obeya's home): demos are exported meanwhile. */
+  /** The demo site of its settings needs an env file this machine lacks (as the settings name it, relative to Obeya's home): demos are exported meanwhile. */
   shareNeeds?: { site: string; file: string };
   /** Its workers work in a pool of clones (else a worktree per card, as many as there are cards). */
   clones?: boolean;
   /** Its approved work goes out as a pull request (else it lands on the default branch of the Obeya checkout). */
   pullRequests?: boolean;
-  /** With `pullRequests`: the owner may have approved work pushed directly onto the default branch instead (the adapter's `direct`). */
+  /** With `pullRequests`: the owner may have approved work pushed directly onto the default branch instead (`direct` of its settings). */
   direct?: boolean;
 }
 
@@ -626,7 +626,7 @@ export interface CanvasSnapshot {
  */
 export interface PlanDir {
   repo: string;
-  /** As the adapter names it, `docs/plan`. */
+  /** As the repository's settings name it, `docs/plan`. */
   dir: string;
   empty: boolean;
   others: { file: string; reason: NotAProject; preparing?: string }[];
@@ -980,8 +980,8 @@ export interface RepoConfig {
   slots?: number;
   /**
    * The command that shares a demo on a page outside Obeya (`publish`, `withdraw <slug>`;
-   * `SharePage` in `src/server/share.ts`), as a command line: it takes the place of the adapter's.
-   * Without one, and without the adapter's, "Teilen" exports the demo as a file.
+   * `SharePage` in `src/server/share.ts`), as a command line: it takes the place of the demo site of the repository's settings.
+   * Without either, "Teilen" exports the demo as a file.
    */
   share?: string;
   /**
@@ -990,14 +990,57 @@ export interface RepoConfig {
    * remote.
    */
   hosts?: HostConfig[];
-  /** The values of its adapter the owner set for this machine in the configuration dialog; each goes before the adapter's. */
+  /** The settings the owner set for this machine in the configuration dialog; each goes before the repository's `.obeya/settings.json`. */
   settings?: RepoSettings;
 }
 
+/** How a worker brings the repository's app up in its workspace (`stack` of its settings). */
+export interface StackSettings {
+  /** Starts it all. */
+  start: string;
+  /** Picks up a backend change without starting everything again. */
+  refresh?: string;
+  /** The `KEY=value` file the running stack writes, and the key in it that holds the frontend's URL. */
+  urls?: { file: string; frontendKey: string };
+  /**
+   * Stops the stack in a workspace, and does nothing where none runs. Obeya runs it there when the
+   * card waits for the owner and its worker has nothing running (Parking), and tells the worker with
+   * its next message.
+   */
+  stop?: string;
+  /** Exits 0 when the workspace's stack holds what must not be lost (a restored database, say): Obeya then leaves it running. */
+  keep?: string;
+}
+
 /**
- * The values of a repository's adapter (`RepoAdapter`) and its main branch, as the owner sets them
- * in the configuration dialog for this machine (design: Settings as data). Read where they are used:
- * saving them restarts nothing, but for `workspaces`, which restarts the repository's agents.
+ * A static site the demos are shared on (`demo.site` of a repository's settings): Obeya keeps its
+ * directory (one subdirectory per page, and the overview), writes the pages with its own templates
+ * and runs the deploy command after each change.
+ */
+export interface DemoSite {
+  /** The overview's heading, and the pages' tab titles. */
+  title: string;
+  /** Where the site is served; a page's URL is `url/<slug>/`. */
+  url: string;
+  /** The command line that deploys the site, run in the repository; `{dir}` stands for the site's directory. */
+  deploy: string;
+  /**
+   * A file of `KEY=value` lines, relative to Obeya's home, added to the deploy's environment
+   * (credentials, never in git). A machine without it exports demos instead of sharing them.
+   */
+  env?: string;
+  /** Headers for reading the live site's manifest and pages (behind a login), values `${KEY}` from `env`. */
+  headers?: Record<string, string>;
+  /** The largest file the host takes, in bytes; 25 MiB without it. */
+  maxFile?: number;
+  /** The overview's words; without it the narration language of the demo settings. */
+  language?: 'de' | 'en';
+}
+
+/**
+ * What Obeya needs to know about how a repository works, and its main branch, as the owner sets
+ * them in the configuration dialog for this machine (design: Repository settings). Read where they
+ * are used: saving them restarts nothing, but for `workspaces`, which restarts the repository's agents.
  */
 export interface RepoSettings {
   /** Its main branch, where cards start from and work lands; detected where left out (`defaultBranch`). */
@@ -1010,7 +1053,8 @@ export interface RepoSettings {
   softPaths?: string[];
   workspaces?: 'clones' | 'worktrees';
   prNoise?: string[];
-  demo?: { howToRun?: string };
+  stack?: StackSettings;
+  demo?: { howToRun?: string; site?: DemoSite };
 }
 
 /**
@@ -1021,7 +1065,7 @@ export interface RepoSettings {
 export type SharedSettings = Omit<RepoSettings, 'branch'>;
 
 /** The fields of `SharedSettings`, in the dialog's order. */
-export const SHARED_FIELDS = ['land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'demo'] as const satisfies readonly (keyof SharedSettings)[];
+export const SHARED_FIELDS = ['land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'stack', 'demo'] as const satisfies readonly (keyof SharedSettings)[];
 
 /** `over` in front of `under`, field by field; the demo's fields each on its own. */
 export function layerSettings<T extends RepoSettings>(under: T | undefined, over: T | undefined): T | undefined {
@@ -1033,10 +1077,10 @@ export function layerSettings<T extends RepoSettings>(under: T | undefined, over
 
 /**
  * Where a repository's setting comes from where this machine sets none, highest first: the
- * repository's `.obeya/settings.json`, the adapter's code, the clones the configuration names
- * (`workspaces` only), detection (main branch, landing), the generic adapter.
+ * repository's `.obeya/settings.json`, the clones the configuration names (`workspaces` only),
+ * detection (main branch, landing), Obeya's default.
  */
-export type SettingSource = 'repository' | 'adapter' | 'clones' | 'detected' | 'default';
+export type SettingSource = 'repository' | 'clones' | 'detected' | 'default';
 
 /** A setting's value without this machine's, and where it comes from. */
 export interface SettingValue<T> {
@@ -1055,7 +1099,9 @@ export interface RepoValues {
   softPaths: SettingValue<string[]>;
   workspaces: SettingValue<'clones' | 'worktrees'>;
   prNoise: SettingValue<string[]>;
-  demo: { howToRun: SettingValue<string> };
+  /** None where nothing says how the app starts. */
+  stack: SettingValue<StackSettings | null>;
+  demo: { howToRun: SettingValue<string>; site: SettingValue<DemoSite | null> };
 }
 
 /**
@@ -1073,12 +1119,12 @@ export function restartsAgents(before: CanvasConfig[], after: CanvasConfig[]): b
   return [...shapes(before)].some(([path, shape]) => now.get(path) !== shape);
 }
 
-/** The clones a repository gets whose adapter works in clones, the first canvas's or one added later: two cards run at once. */
+/** The clones a repository gets whose settings say clones, the first canvas's or one added later: two cards run at once. */
 export const CLONES = 2;
 
 /**
  * The draft with `CLONES` filled in for each repository the saved configuration does not have whose
- * adapter works in clones (`resolved`, by index) and that names none, once per path: `filled` keeps the
+ * settings say clones (`resolved`, by index) and that names none, once per path: `filled` keeps the
  * paths, so a count emptied again stays empty. Null when nothing is filled in.
  */
 export function withClones(draft: CanvasConfig[], saved: CanvasConfig[], resolved: (ResolvedCanvas | null)[], filled: Set<string>): CanvasConfig[] | null {
@@ -1114,25 +1160,25 @@ export interface HostConfig {
 
 /** A canvas in Obeya's configuration. */
 export interface CanvasConfig {
-  /** Names the canvas; its id follows. Without it, the first repository's adapter names both. */
+  /** Names the canvas; its id follows. Without it, both are the first repository's name. */
   name?: string;
   /** Keeps the canvas's id, and with it its cards, whatever its name says: set when a canvas is renamed. */
   id?: string;
   repos: RepoConfig[];
 }
 
-/** What a configuration amounts to: each canvas's id and name, and its repositories with their adapters. */
+/** What a configuration amounts to: each canvas's id and name, and its repositories with their settings. */
 export interface ResolvedCanvas {
   id: string;
   name: string;
   repos: {
     id: string;
-    adapter: string;
     workspaces: 'clones' | 'worktrees';
-    /** The adapter names a share command of its own. */
-    adapterShares?: boolean;
-    /** The URL of the site the adapter names (`demo.site`), which goes before its command. */
-    adapterSite?: string;
+    /**
+     * It still has a `.obeya/adapter/` on its main branch, which Obeya no longer reads: its values
+     * belong in `.obeya/settings.json` (problem `adapterGone`).
+     */
+    adapterGone?: boolean;
     /** Its settings without this machine's, with where each comes from. */
     values: RepoValues;
     /**
@@ -1154,8 +1200,8 @@ export interface ConfigProblem {
   detail: string;
 }
 
-/** Whether a problem keeps the configuration from being saved: not one in a repository's own adapter, which is fixed there. */
-export const blocksSaving = (p: ConfigProblem) => p.code !== 'adapterField' && p.code !== 'adapterLoad' && p.code !== 'repoSettings';
+/** Whether a problem keeps the configuration from being saved: not one in the repository, which is fixed there. */
+export const blocksSaving = (p: ConfigProblem) => p.code !== 'demoSite' && p.code !== 'adapterGone' && p.code !== 'repoSettings';
 
 export type ConfigProblemCode =
   /** No canvas at all. */
@@ -1165,8 +1211,8 @@ export type ConfigProblemCode =
   | 'notRepo'
   /** A repository the canvas has already, under this path or another. */
   | 'sameRepo'
-  /** The repository's own adapter does not load; the repository runs on the generic one meanwhile. */
-  | 'adapterLoad'
+  /** The repository still has a `.obeya/adapter/`, which Obeya no longer reads: its values belong in `.obeya/settings.json`. */
+  | 'adapterGone'
   /** Two canvases with the same id. */
   | 'sameId'
   /** The repository the canvas was first served with is missing. */
@@ -1175,8 +1221,8 @@ export type ConfigProblemCode =
   | 'notClone'
   /** A share command whose program is not there. */
   | 'shareCommand'
-  /** A field of the repository's own adapter that is unknown, of the wrong type, or names a program that is not there; it does not count. */
-  | 'adapterField'
+  /** The demo site the repository's settings name cannot be used: a field is missing, or its deploy command names a program that is not there. */
+  | 'demoSite'
   /** A host that cannot work for the repository: its workers use worktrees, or its work does not go out through a remote. */
   | 'hostRepo'
   /** Two hosts of one name that connect to different machines. */
@@ -1478,10 +1524,10 @@ export interface GitSetupPreview {
 
 /**
  * Why Obeya starts again: new code on the checkout it runs from, a configuration the owner saved,
- * a repository's own adapter changed on its default branch, or a new version of the app the owner
- * installs; or why it stops for good (Ctrl-C, SIGTERM).
+ * a repository's `.obeya/settings.json` changed on its default branch where its agents work, or a
+ * new version of the app the owner installs; or why it stops for good (Ctrl-C, SIGTERM).
  */
-export type RestartReason = 'code' | 'config' | 'adapter' | 'update' | 'stop';
+export type RestartReason = 'code' | 'config' | 'repository' | 'update' | 'stop';
 
 /** A newer version of the app that its shell has downloaded (app/src/update.rs), shown in the bar. */
 export interface AppUpdate {

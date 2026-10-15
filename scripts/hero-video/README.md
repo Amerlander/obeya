@@ -7,7 +7,7 @@ demo, the approval landing it on main. About two minutes, in English, in the own
 - `narration.ts`: what the video says, scene by scene. Review it as text before rendering.
 - `demo.ts`: the scenes, what each shows while its narration plays.
 - `stage.ts`: the canvas it starts on (cards, their states and places); the repository is `tipjar/`.
-- `tipjar/`: the example app, with its own adapter (work lands on main, every change gets a demo)
+- `tipjar/`: the example app, with its own settings (work lands on main, every change gets a demo)
   and a plan doc.
 - `render.ts`: renders in the owner's ElevenLabs voice (`eleven_v4`, which reads the audio tags in
   square brackets), with the key from `.voice/elevenlabs.key` of the main checkout (gitignored).

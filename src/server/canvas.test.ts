@@ -54,7 +54,7 @@ describe('a canvas with several repositories', () => {
     expect(ws.map((w) => w.repo).sort()).toEqual(['api', 'web']);
   });
 
-  test('a repository whose adapter shares no demos offers no sharing', () => {
+  test('a repository whose settings share no demos offers no sharing', () => {
     expect(canvas.board.canvas.repos.map((r) => r.share)).toEqual([undefined, undefined]);
     const c = canvas.board.create({ title: 'Home', x: 0, y: 0 });
     canvas.board.work(c.id, { state: 'live', demo: JSON.stringify({ kind: 'video', dir, chapters: [] }) });
@@ -62,7 +62,7 @@ describe('a canvas with several repositories', () => {
     expect(() => canvas.act(c.id, { action: 'unshare' })).toThrow('not shared');
   });
 
-  test('a share command in the configuration takes the place of the adapter\'s, for that repository', async () => {
+  test('a share command in the configuration takes the place of the settings\' demo site, for that repository', async () => {
     canvas.shutdown();
     const web = join(dir, 'web');
     writeFileSync(join(web, 'share.ts'), `await Bun.stdin.text(); console.log('https://pages.example/' + process.argv[2]);`);
@@ -244,37 +244,25 @@ test('the home repository stays home when the configuration lists the repositori
   canvas = new CanvasRuntime({ name: 'Q', repos: [{ path: web }] }, deps);
 });
 
-test("a repository whose own adapter does not load runs on the generic one, under the id its adapter gave; a canvas that does not start leaves the others running", () => {
+test("a canvas without a name is named after its repository; a canvas that does not start leaves the others running", () => {
   canvas.shutdown();
   const store = new Store(':memory:');
   const deps = { store, home: dir, runtime: new FakeRuntime(), forge: noForge };
-  const shop = gitRepo(join(dir, 'shop'), {
-    'docs/plan/plan.md': '# Laden\n\n## Goal\n\nG.\n',
-    '.obeya/adapter/index.ts': "export default { name: 'shop', canvasId: () => 'laden', canvasName: () => 'Laden' };\n",
-  });
-  const first = new CanvasRuntime({ repos: [{ path: shop }] }, deps);
-  const card = first.board.create({ title: 'Im Laden', x: 0, y: 0 });
-  first.shutdown();
-  writeFileSync(join(shop, '.obeya/adapter/index.ts'), "export default () => { throw new Error('kaputt'); };\n");
-  git(shop, 'commit', '--quiet', '-am', 'break the adapter');
+  const shop = gitRepo(join(dir, 'shop'), { 'docs/plan/plan.md': '# Laden\n\n## Goal\n\nG.\n' });
   const errors: string[] = [];
   const error = console.error;
   console.error = (line: string) => errors.push(line);
   try {
     const started = startCanvases([{ repos: [{ path: shop }] }, { name: 'Weg', repos: [{ path: join(dir, 'nowhere') }] }, { name: 'Web', repos: [{ path: join(dir, 'web') }] }], deps);
-    expect(started.map((c) => c.id)).toEqual(['laden', 'web']);
-    const [laden] = started;
-    expect(laden!.board.canvas.name).toBe('Laden');
-    expect(laden!.repos[0]!.adapter.name).toBe('generic');
-    expect(laden!.board.item(card.id)!.title).toBe('Im Laden');
+    expect(started.map((c) => [c.id, c.board.canvas.name])).toEqual([
+      ['shop', 'shop'],
+      ['web', 'Web'],
+    ]);
     for (const c of started) c.shutdown();
   } finally {
     console.error = error;
   }
-  expect(errors).toEqual([
-    expect.stringMatching(/does not load: kaputt; .*shop runs on the generic adapter until it is fixed on its default branch$/),
-    expect.stringMatching(/^Obeya: the canvas Weg does not start, left out: .*nowhere is not a git repository$/),
-  ]);
+  expect(errors).toEqual([expect.stringMatching(/^Obeya: the canvas Weg does not start, left out: .*nowhere is not a git repository$/)]);
   canvas = new CanvasRuntime({ name: 'Q', repos: [{ path: join(dir, 'web') }] }, deps);
 });
 
@@ -292,7 +280,7 @@ test("the cards' workers run on their own runtime when one is given (a scratch O
   expect(runtime.sessions.some((s) => s.spec.cwd === canvas.board.row(a.id).workspace)).toBe(false);
 });
 
-describe('where the adapter does not say how work lands', () => {
+describe('where the settings do not say how work lands', () => {
   test('a repository without a remote gets its approved work on its main branch', async () => {
     fresh();
     const shop = gitRepo(join(dir, 'shop'));
@@ -300,7 +288,7 @@ describe('where the adapter does not say how work lands', () => {
     const workers = new FakeRuntime();
     canvas.shutdown();
     canvas = new CanvasRuntime({ repos: [{ path: shop, clones: 1 }] }, { store: new Store(':memory:'), home: dir, runtime, workerRuntime: workers, forge: noForge });
-    expect(canvas.repos[0]!.adapter).toMatchObject({ name: 'generic', land: 'main' });
+    expect(canvas.repos[0]!.adapter.land).toBe('main');
     expect(canvas.board.snapshot().canvas.repos[0]!.pullRequests).toBeUndefined();
     const card = canvas.board.create({ title: 'Readme', x: 0, y: 0 });
     canvas.repos[0]!.workers.start(card.id);
@@ -322,7 +310,7 @@ describe('where the adapter does not say how work lands', () => {
     git(shop, 'remote', 'add', 'origin', 'git@github.com:acme/shop.git');
     canvas.shutdown();
     canvas = new CanvasRuntime({ repos: [{ path: shop }] }, { store: new Store(':memory:'), home: dir, runtime, forge: noForge });
-    expect(canvas.repos[0]!.adapter).toMatchObject({ name: 'generic', land: 'pr' });
+    expect(canvas.repos[0]!.adapter.land).toBe('pr');
     expect(canvas.board.snapshot().canvas.repos[0]!.pullRequests).toBe(true);
   });
 });
@@ -405,6 +393,23 @@ describe("a repository's settings for everyone (.obeya/settings.json)", () => {
     expect([adapter.checks, adapter.planDocs.dir]).toEqual([['bun test', 'bun run lint'], 'docs/plan']);
   });
 
+  test("a demo site set in them is shared on once it is complete, without a restart", () => {
+    fresh();
+    const shop = gitRepo(join(dir, 'shop'), { 'README.md': 'Shop\n' });
+    let settings: RepoSettings | undefined;
+    canvas.shutdown();
+    canvas = new CanvasRuntime({ repos: [{ path: shop }] }, { store: new Store(':memory:'), home: dir, runtime, forge: noForge, settings: () => settings });
+    expect(canvas.repos[0]!.share).toBeNull();
+    const site = { title: 'Demos', url: 'https://demos.example.dev', deploy: '' };
+    settings = { demo: { site } };
+    canvas.settingsChanged();
+    expect(canvas.repos[0]!.share).toBeNull();
+    settings = { demo: { site: { ...site, deploy: 'git {dir}' } } };
+    canvas.settingsChanged();
+    expect(canvas.repos[0]!.share).toEqual({ site: { ...site, deploy: 'git {dir}' } });
+    expect(canvas.board.canvas.repos[0]!.share).toBe(true);
+  });
+
   test("where its workers work changed in it: its agents restart with it once they paused, Obeya runs on", async () => {
     fresh();
     const shop = gitRepo(join(dir, 'shop'), { 'README.md': 'Shop\n', '.obeya/settings.json': '{ "land": "main" }\n' });
@@ -425,7 +430,7 @@ describe("a repository's settings for everyone (.obeya/settings.json)", () => {
     git(shop, 'commit', '--quiet', '-am', 'Clones');
     canvas.settingsChanged();
     // the worker at work hears of it and pauses; the restart waits for it
-    expect(canvas.pendingRestart()).toMatchObject({ reason: 'config', cards: [card.id], repos: ['shop'] });
+    expect(canvas.pendingRestart()).toMatchObject({ reason: 'repository', cards: [card.id], repos: ['shop'] });
     expect(session.inbox.at(-1)).toContain("restart this repository's agents");
     expect(canvas.repos[0]).toBe(before);
     session.emit({ type: 'idle' });

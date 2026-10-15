@@ -7,11 +7,8 @@ export function repoName(repo: RepoInfo): string {
   return fromRemote || basename(repo.path);
 }
 
-/** Any repository that keeps plan docs under `docs/plan/`. */
+/** Obeya's defaults, for what a repository's settings leave out: plan docs under `docs/plan/`. */
 export const generic: RepoAdapter = {
-  name: 'generic',
-  canvasId: repoName,
-  canvasName: repoName,
   planDocs: { dir: 'docs/plan', exclude: ['TEMPLATE.md'] },
   land: 'pr',
   workspaces: 'worktrees',

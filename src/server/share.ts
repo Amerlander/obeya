@@ -1,6 +1,6 @@
 // Sharing a card's demo with colleagues, a video or an HTML artifact: a page outside Obeya, on a
-// static site Obeya keeps itself (`demo.site` of the repository's adapter, site.ts), or published
-// by a command the repository names (`demo.share`). Obeya writes the page's text when
+// static site Obeya keeps itself (`demo.site` of the repository's settings, site.ts), or published
+// by the share command this machine's configuration names for the repository. Obeya writes the page's text when
 // the worker did not, and runs the command in a directory under Obeya's home (not in the checkout,
 // often a workspace of the pool too), with the checkout in `OBEYA_REPO`:
 // `publish` with the page as JSON on stdin, which prints the page's URL; `withdraw <slug>`; and,
@@ -9,8 +9,8 @@
 // another one is offered to share again ("Erneut teilen"), on its card, or many at once from the
 // Koordinator's sheet.
 // Once the card has a pull request, its description links the page and the page links it. The
-// target is the repository's configuration's command, else its adapter's site, else its adapter's
-// command. A repository with none (or a site whose credentials are not on this machine) exports
+// target is the share command of the repository's configuration, else the site its settings name.
+// A repository with neither (or a site whose credentials are not on this machine) exports
 // the demo instead: the same page as a ZIP with its files, or as one HTML file.
 // Pages of one target are on one site, so they share its version and each publish names the others.
 
@@ -18,12 +18,12 @@ import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import { z } from 'zod';
-import { adapterProblems, KIT_PATH } from '../adapters';
+import { KIT_PATH } from '../adapters';
 import { LANGUAGE_NAMES } from '../core/locale';
 import { MESSAGES, type Messages } from '../core/messages';
 import { type Demo, type DemoKind, type DemoPage, EXPORT_HTML_MAX, type Item } from '../core/types';
 import { BadRequest, type Board, type PrState, reshareable, type StoredReshare, type StoredShare } from './board';
-import type { DemoSite, RepoAdapter } from '../adapters/types';
+import type { DemoSite } from '../adapters/types';
 import { readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
 import { BUN_ENV } from './resources';
 import { type Gone, siteMissing, siteTarget } from './site';
@@ -59,7 +59,7 @@ export interface ShareCommand {
   repo: string;
 }
 
-/** Where a repository's demos go: its share command, or the site its adapter names; with its checkout. */
+/** Where a repository's demos go: its share command, or the site its settings name; with its checkout. */
 export type ShareSource = ShareCommand | { site: DemoSite; repo: string };
 
 /**
@@ -128,8 +128,8 @@ export interface SharingOptions {
   /** Where the card's repository shares demos; null when it shares none. */
   sourceFor: (card: Item) => ShareSource | null;
   /**
-   * Obeya's data directory, passed to the command as `OBEYA_HOME` (with `OBEYA_KIT`, the helpers an
-   * adapter's command imports); the command runs in a directory of it (`SHARE_CWD`).
+   * Obeya's data directory, passed to the command as `OBEYA_HOME` (with `OBEYA_KIT`, the helpers a
+   * share script imports); the command runs in a directory of it (`SHARE_CWD`).
    */
   home: string;
   /** Where the card's pull request is, for the page's link in its description. */
@@ -727,11 +727,11 @@ const slugOf = (card: Item) => branchName(card.title, card.id).slice('obeya/'.le
  * directory); a script (`.ts`, `.js`) runs with Obeya's own Bun, on every platform.
  */
 export function shareArgv(line: string, repoPath: string): string[] {
-  return scriptArgv(
-    [...line.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3]!),
-    repoPath,
-  );
+  return scriptArgv(commandWords(line), repoPath);
 }
+
+/** The words of a command line, as a shell would split it where quotes ("…", '…') keep spaces. */
+export const commandWords = (line: string): string[] => [...line.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3]!);
 
 /** Argv whose program, given as a path, is found in the repository, and a script runs with Obeya's own Bun. */
 export function scriptArgv(words: string[], repoPath: string): string[] {
@@ -751,22 +751,23 @@ export function shareProblem(argv: string[]): string | null {
   return Bun.which(program) ? null : `the share command's program ${program} is not on the PATH`;
 }
 
+/** What the demo site lacks to be shared on (a title, an http(s) URL, a deploy command); null where it has it. */
+export function siteIncomplete(site: DemoSite): string | null {
+  if (!site.title.trim()) return 'demo.site.title: missing';
+  if (!/^https?:\/\/[^\s/]+[^\s]*$/.test(site.url)) return 'demo.site.url: expected an http(s) URL';
+  if (!site.deploy.trim()) return 'demo.site.deploy: missing';
+  return null;
+}
+
 /**
- * What is wrong with a repository's adapter, one line each, as the configuration and the adapter
- * skill's check report it: its fields (`adapterProblems`), a demo that names both a site and a share
- * command, and a share or deploy program that is not there. With `ownShare` the configuration names
- * a share command of its own, so the adapter's are not run and not checked.
+ * Why the demo site a repository's settings name cannot be used, in English, starting with its
+ * field (`demo.site.url: …`); null where it can. The configuration reports it.
  */
-export function adapterRepoProblems(adapter: RepoAdapter, repoPath: string, ownShare = false): string[] {
-  const { site, share } = adapter.demo ?? {};
-  const shareWrong = !ownShare && !site && share && shareProblem(share);
-  const deployWrong = !ownShare && site && shareProblem(scriptArgv(site.deploy, repoPath));
-  return [
-    ...adapterProblems(adapter),
-    ...(site && share ? ['demo: names both site and share; the site is used, so share goes'] : []),
-    ...(shareWrong ? [`demo.share: ${shareWrong}`] : []),
-    ...(deployWrong ? [`demo.site.deploy: ${deployWrong}`] : []),
-  ];
+export function siteProblem(site: DemoSite, repoPath: string): string | null {
+  const incomplete = siteIncomplete(site);
+  if (incomplete) return incomplete;
+  const wrong = shareProblem(scriptArgv(commandWords(site.deploy), repoPath));
+  return wrong ? `demo.site.deploy: ${wrong.replace('the share command', 'the deploy command')}` : null;
 }
 
 /** Runs the share command in `SHARE_CWD` under Obeya's home; never throws. */

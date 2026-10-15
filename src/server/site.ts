@@ -1,4 +1,4 @@
-// A static site Obeya keeps itself, for a repository whose adapter names one (`demo.site`): the
+// A static site Obeya keeps itself, for a repository whose settings name one (`demo.site`): the
 // share target for hosts that take a directory and serve it as it is.
 //
 // The site lives under Obeya's home in `sites/<key>/`, the key made of its URL's host and path, so
@@ -41,7 +41,7 @@ import type { Messages } from '../core/messages';
 import { readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
 import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, day, demoPageHtml, esc, PAGE_STYLE, PAGE_WORDS, type PageLanguage, withHeightReport } from './demo-page';
 import { BUN_ENV } from './resources';
-import { COMMAND_TIMEOUT, SHARE_CWD, type SharePage, type ShareTarget, scriptArgv, tail, type Versions } from './share';
+import { COMMAND_TIMEOUT, commandWords, SHARE_CWD, type SharePage, type ShareTarget, scriptArgv, tail, type Versions } from './share';
 
 /** Where the sites live under Obeya's home. */
 export const SITES_DIR = 'sites';
@@ -86,7 +86,7 @@ export const siteName = (site: DemoSite) => site.url.replace(/^https?:\/\//, '')
 /** The env file the site names, as a path; null when it names none. */
 const envPath = (home: string, site: DemoSite) => (site.env ? (isAbsolute(site.env) ? site.env : resolve(home, site.env)) : null);
 
-/** The env file the site needs on this machine and lacks, as the adapter names it; null when it has it, or needs none. */
+/** The env file the site needs on this machine and lacks, as the settings name it; null when it has it, or needs none. */
 export function siteMissing(home: string, site: DemoSite): string | null {
   const file = envPath(home, site);
   return file && !existsSync(file) ? site.env! : null;
@@ -363,7 +363,7 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
   const deploy = async (env: Record<string, string>): Promise<string> => {
     mkdirSync(dir, { recursive: true });
     const argv = scriptArgv(
-      site.deploy.map((a) => a.replaceAll('{dir}', dir)),
+      commandWords(site.deploy).map((a) => a.replaceAll('{dir}', dir)),
       repo,
     );
     const cwd = join(home, SHARE_CWD);

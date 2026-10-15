@@ -58,13 +58,13 @@
 // into the database:
 // state, need, statusLine, summary, question, demo (`kind` defaults to video), queue (`behind` by key; `since` defaults to
 // now), scope (files), branch, createdAgo, archivedAgo, events ([{ kind, author, text, ago?, mocks? }]; an idea's reply with `mocks` needs code that has them),
-// workspace (true: the card holds the next free clone, for an adapter that works in clones; with
-// `branch` checked out there, holding a commit; for an adapter that works in worktrees, `branch` is
+// workspace (true: the card holds the next free clone, for a repository whose settings say clones; with
+// `branch` checked out there, holding a commit; for one that works in worktrees, `branch` is
 // required and the card gets a worktree of its own on it), prototypeOf (the key of the idea it is a prototype of),
 // and `row` for any other column of `cards` (objects are stored as JSON). Times: "90s", "15m", "2h",
 // "3d" ago. `mainBranch` is the branch the repositories are on (default `main`). `"setup": true` serves no canvas (no configuration, no repository given): the first start,
 // which shows the setup assistant; the repository is still made, for the assistant to pick, and
-// `cards` may be empty. The repository runs on its own adapter where `files` hold one (`.obeya/adapter/index.ts`, `.obeya/settings.json`), else on the generic one. `share` is the repository's share command as the configuration holds it (a script among
+// `cards` may be empty. The repository has settings of its own where `files` hold `.obeya/settings.json`. `share` is the repository's share command as the configuration holds it (a script among
 // `files`, say); `poolCheckout` makes the repository's checkout a workspace of the pool too
 // (`workspaces` in the configuration), as a pool of clones often has it, with a bare origin in
 // <dir>; with either, the server
@@ -135,7 +135,7 @@ interface Stage {
   dir?: string;
   /** The branch the repositories are on (default `main`). */
   mainBranch?: string;
-  /** Clones for the workers, who then work in clones whatever the adapter says: real workers need one each. */
+  /** Clones for the workers, who then work in clones whatever the settings say: real workers need one each. */
   clones?: number;
   /** The repository's share command, as in the configuration. */
   share?: string;
@@ -388,9 +388,9 @@ for (const [i, c] of stage.cards.entries()) {
   if (c.branch !== undefined) row.branch = c.branch;
   if (c.workspace) {
     const free = db.query('SELECT path FROM workspaces WHERE card_id IS NULL ORDER BY path').get() as { path: string } | null;
-    // no clones: the adapter works in worktrees, one per card under Obeya's home
+    // no clones: the repository works in worktrees, one per card under Obeya's home
     const tree = !free && !!c.branch && !stage.clones;
-    if (!free && !tree) fail(`card ${c.key ?? i}: no free clone for it ("clones" in the stage, an adapter that works in clones), nor a branch for a worktree`);
+    if (!free && !tree) fail(`card ${c.key ?? i}: no free clone for it ("clones" in the stage, settings that say clones), nor a branch for a worktree`);
     const path = tree ? join(home, 'workspaces', canvas, id.slice(0, 8)) : free!.path;
     if (tree) {
       mkdirSync(dirname(path), { recursive: true });

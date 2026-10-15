@@ -370,7 +370,7 @@ export function serve(
       '/api/config/check': { POST: async (req) => (config ? handle(async () => config.check(await req.json())) : new Response('Not found', { status: 404 })) },
       '/api/c/:canvas/canvas': { GET: on((c) => c.board.snapshot()) },
       '/api/c/:canvas/cards': { POST: on(async (c, req) => c.board.create((await req.json()) as NewCard)) },
-      // from "Konfiguration", for a repository on the generic adapter: the card that writes its own
+      // from "Konfiguration", for a repository without settings of its own: the card that writes them
       '/api/c/:canvas/adapter-setup': { POST: on(async (c, req) => c.adapterSetupCard(String(((await req.json()) as { repo?: unknown }).repo))) },
       // from the note on a plan directory: the card that prepares one of its docs as a project, started
       '/api/c/:canvas/prepare-plan-doc': {

@@ -56,7 +56,7 @@ describe('a workspace on a host', () => {
     expect(log()).not.toContain('ghp_secret');
   });
 
-  test("runs the adapter's stack commands there", async () => {
+  test("runs the stack commands of the settings there", async () => {
     mkdirSync(join(dir, 'ws'));
     const r = await runStackCommand(onHost(name, join(dir, 'ws')), 'pwd -P && echo stopped > stack.log');
     expect(r.ok).toBe(true);

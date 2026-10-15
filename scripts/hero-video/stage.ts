@@ -22,7 +22,8 @@ export function writeStage(file: string) {
   const stage = {
     port: PORT,
     dir: `/tmp/obeya-scratch-${PORT}`,
-    // the repository's own adapter (.obeya/adapter/) among the files: work lands on main
+    name: 'Tipjar',
+    // the repository's settings (.obeya/settings.json) among the files: work lands on main
     files: rest,
     plans,
     cards: [

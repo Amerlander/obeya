@@ -293,7 +293,7 @@ function ReposRestartPill({ restart, items }: { restart: PendingRestart; items: 
         </span>
       </button>
       <div className="tip why" role="tooltip">
-        <p>{restart.leaving ? r.leaving : r.reason((restart.repos ?? []).join(', '), restart.reason === 'adapter')}</p>
+        <p>{restart.leaving ? r.leaving : r.reason((restart.repos ?? []).join(', '), restart.reason === 'repository')}</p>
         {titles.length > 0 && (
           <>
             <p>{t.restart.waits}</p>

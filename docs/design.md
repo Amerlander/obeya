@@ -40,8 +40,8 @@ Contents:
 - [Demos](#demos) — the demo skill, the demo settings and voices, what a render needs, recording a
   demo, the demo on the card, sharing a demo, UI checks
 - [Repositories and configuration](#repositories-and-configuration) — canvases and repositories,
-  main branch, Lesestand, plan docs, repo adapter, repository settings, the Konfiguration dialog,
-  live configuration, language
+  main branch, Lesestand, plan docs, repository settings, the Konfiguration dialog, live
+  configuration, language
 - [Running Obeya](#running-obeya) — server, setup assistant, setting up git in a folder,
   self-update, stopping
 - [Distribution](#distribution) — one file, app, builds, app updates, site, hero video
@@ -76,8 +76,8 @@ on the walls and decisions are made in front of the wall.
   transcript: what the owner says to an open card's agent shows in its conversation, a command to
   Obeya gets a short written confirmation with undo. What was said and answered stays in the
   conversation of the open card, or in the Koordinator's sheet. Obeya does not speak.
-- **Repo-agnostic core.** Project specifics live in a per-repo adapter, which a repository can carry
-  itself (`.obeya/adapter/`).
+- **Repo-agnostic core.** Project specifics live in the repository's settings: in the repository
+  itself (`.obeya/settings.json`), or set for this machine in the configuration.
 
 ## Concepts
 
@@ -100,7 +100,7 @@ on the walls and decisions are made in front of the wall.
 - **States** — `idea` → `planned` → `working` → `waiting` (demo ready | question) → `approved` → `in
   PR` → `live`, or `done` when the work changed no code; an agent's `proposal` is started when
   accepted. Every handover brings a demo; where the repository has no recipe for running its app
-  (the generic adapter has none), the worker finds that out from the repository. `waiting: review`,
+  (Obeya's defaults have none), the worker finds that out from the repository. `waiting: review`,
   a handover with a written summary alone, is left only on cards from before 2026-10-15 (see the
   decisions under Demos). An idea is `open`, `parked` or `dropped`.
 - **Agents**
@@ -407,7 +407,7 @@ idea's. Said by voice to the Koordinator while the proposal is reworked, accepti
 
 ### At work
 
-`working`: the worker leases a workspace, implements, runs the local reviews the repo adapter names,
+`working`: the worker leases a workspace, implements, runs the checks the repository's settings name,
 and records the demo.
 
 ### Waiting for approval
@@ -513,7 +513,7 @@ a review comment that questions a decision, a conflict with product meaning — 
 owner as a question on the card, and the answer returns it to the PR. A PR closed without a merge
 asks the owner whether to open it again or drop the work.
 
-Where the adapter allows it (`direct`), the owner may instead approve with "Direkt auf main" beside
+Where the repository's settings allow it (`direct`), the owner may instead approve with "Direkt auf main" beside
 "Freigeben (PR)", or by voice ("gib frei ohne PR"): Obeya pushes the work onto the default branch
 itself, without a pull request, review or the PR's CI, and the card is `live`. Where work lands on
 `main` (Obeya), approval lands it at once.
@@ -1403,13 +1403,13 @@ Koordinator's setting changed, as it is for another language.
 
 ### Workspaces
 
-Per adapter, worktrees unless it says clones. A pool of full clones leased by a card while it is
+Per the repository's settings, worktrees unless they say clones. A pool of full clones leased by a card while it is
 worked on (for a repository whose tools break inside a worktree, or that runs its own app stack per
 clone), or a worktree per card (Obeya itself: any number in parallel unless the repository has
 `slots`), kept across stop and restart until the card's work has landed. Clones come from the
 repository's `clones` or `workspaces` in the configuration, or on the command line from `--workspace
 <path>` or `--clones <n>`; a repository whose configuration names clones (these, or `hosts`) works
-in clones whatever its adapter says.
+in clones whatever its settings say.
 
 #### Slots
 
@@ -1463,7 +1463,7 @@ those without slots shows no pill.
 A card that waits for the owner (handed over, asked, its pull request open), its worker without a
 turn or background work, has the app stack in its workspace stopped after a grace of five minutes
 (`OBEYA_PARK_GRACE` in seconds for a demo or a live check; a quick reply should not pay for a
-restart): Obeya runs the adapter's `stack.stop` there through the platform's shell
+restart): Obeya runs the settings' `stack.stop` there through the platform's shell
 (`src/server/stack.ts`), unless `stack.keep` exits 0 (the stack holds data that must stay; the card
 says it keeps running, and the owner who wants it stopped anyway tells the worker). The card's log
 says the stack was stopped (`parked` on the card's row); the next message to the worker carries a
@@ -1487,7 +1487,7 @@ only when that changes or the clones are in place) and registers each clone as t
 #### Running there
 
 A workspace's name says where it is, so every git call in it (`git`, `gitAsync`, `exists`), the
-adapter's stack commands and the worker's session run there through `ssh` without the callers
+stack commands and the worker's session run there through `ssh` without the callers
 knowing: `ssh <target> sh -c '…'` with the installers' directories on its `PATH` (the host's own
 `~/.zshenv` adds the rest), one shared connection where the platform has `ControlMaster` (not
 Windows), `BatchMode` so nothing prompts, and keep-alives that notice a dropped link within 45 s.
@@ -1559,8 +1559,8 @@ Intel Macs, so those went into the user's home there by their own installers.
   with each command. Until 2026-10-10 the clones were the only cap, and a card went to another
   machine only once every clone here was leased; until 2026-10-09 a waiting card's stack ran until
   someone stopped it by hand.
-- **Worktrees by default** (2026-10-14). Until then the generic adapter, and so every new canvas of
-  a repository without its own adapter, used clones; a canvas set up then has `clones` in its
+- **Worktrees by default** (2026-10-14). Until then Obeya's defaults (then the generic adapter),
+  and so every new canvas of a repository that did not say otherwise, used clones; a canvas set up then has `clones` in its
   configuration and keeps them. Until 2026-10-14 nothing capped the workers of a repository in
   worktrees.
 - **A finished card's question takes a temporary worktree when no clone is free** (2026-10-15).
@@ -1575,16 +1575,15 @@ Intel Macs, so those went into the user's home there by their own installers.
 
 ### How work lands
 
-Per adapter, or as the repository's `.obeya/settings.json` or the owner for this machine set it (see
-Repository settings), read at each approval:
+As the repository's `.obeya/settings.json` or the owner for this machine set it (see Repository
+settings), read at each approval:
 
 - `pr`: approval leaves the branch for the PR loop.
 - `main` (Obeya): approval rebases the branch onto `main` and fast-forwards the Obeya checkout; the
   card is `live`.
 
-An adapter that does not say (the generic one, or a repository's own without `land`) gets it by
-detection (`detectedLand` in `src/adapters/index.ts`): `pr` where `origin` is on GitHub, else
-`main`. On GitHub means github.com (or a subdomain of it) or a host the GitHub CLI is logged into,
+Where the settings do not say, it is detected (`detectedLand` in `src/adapters/index.ts`): `pr`
+where `origin` is on GitHub, else `main`. On GitHub means github.com (or a subdomain of it) or a host the GitHub CLI is logged into,
 read from its `hosts.yml` (`ghHosts` in `src/server/repo.ts`, where gh keeps it on each system)
 rather than asked of `gh auth status`, which checks each login over the network. A repository on
 another forge (GitLab, a server of its own) lands on its local main and pushes nothing.
@@ -1594,7 +1593,7 @@ or a real conflict sends the card back to its worker with the approval kept: its
 new demo needed) lands on its own.
 
 `pr` with `direct`: an approval "Direkt auf main" (`approve(card, { direct })`, refused with
-`noDirect` where the adapter lacks `direct`) lands in the card's clone or worktree instead of a PR
+`noDirect` where the settings lack `direct`) lands in the card's clone or worktree instead of a PR
 (`pushToMain`): fetch, rebase onto `origin/<default>` (squash as above), `git push origin
 HEAD:<default>`, never forced. A push turned away because the default branch moved meanwhile is
 fetched, rebased and pushed once more; any other refusal (a protected branch, missing rights) stays
@@ -1602,7 +1601,7 @@ with the owner (`landPush`), the card back in review. Conflicts and uncommitted 
 worker with the approval kept as above; since only a direct approval is held where work goes out as
 a PR, its next handover is pushed directly too. The Obeya checkout is left alone; the read tree is
 refreshed and plan docs the card adds are registered, as after a merge. The worker hears that its
-work is on main, as after a landing. The adapter's checks run before the handover as always; Obeya
+work is on main, as after a landing. The settings' checks run before the handover as always; Obeya
 does not watch the CI on the default branch.
 
 Landing runs git without blocking the server (`gitAsync`): fetch, rebase and push take seconds over
@@ -1641,7 +1640,7 @@ Greptile for a re-review after each push). Whatever the way, each review comment
 own thread (what changed, or why not) and the thread is resolved unless the worker still wants the
 reviewer's answer; one summary comment for all is not enough. The owner's log gets a line for each
 event. Comments by the PR's author (the worker replying in the owner's name) and by accounts the
-adapter names as noise (a deploy preview bot, say) are skipped; an app's inline comments come as
+settings name as noise (`prNoise`) (a deploy preview bot, say) are skipped; an app's inline comments come as
 `<name>[bot]`, its conversation comments as `<name>`, and the watcher reads both as `<name>`. While
 the owner is asked, news waits.
 
@@ -1708,8 +1707,8 @@ state stay until the turn that took the last one ends.
 #### Restarts for landed code
 
 When the landing changed Obeya's own running code, the worker is told Obeya restarts with it; where
-it changed where the repository's agents work (its own adapter or `.obeya/settings.json`, landed on
-the local main), that they restart with it (see Live configuration); a new version of the adapter
+it changed where the repository's agents work (`workspaces` in its `.obeya/settings.json`, landed on
+the local main), that they restart with it (see Live configuration); a new version of the settings
 that leaves them where they work applies at once, and the worker hears nothing of a restart
 (`restartsFor`: `obeya`, `repo`, or none). What needs the new code waits through `after_restart`:
 the worker ends its turn, the restart goes ahead, and the resumed worker hears that Obeya now runs
@@ -1759,14 +1758,14 @@ archived card has no field.
   `--force-with-lease`, while the first repository it opened PRs in merges `main` into a PR branch,
   never force-pushes, and has its own skill for review comments. Obeya says what happened on the PR,
   the repository says how to answer it.
-- **Landing is detected from the remote** (2026-10-14). Until then the generic adapter had `pr`
+- **Landing is detected from the remote** (2026-10-14). Until then Obeya's defaults had `pr`
   whatever the remote, so approving work in a repository without one told the worker to open a pull
   request that could not exist.
 - **A repository whose work goes out as pull requests may let the owner push a card's work straight
   onto its default branch**, chosen per card at the approval, by button or voice (2026-10-06): an
   approval "mit direktem Commit auf main ohne Pull Request" had opened a PR anyway, since approval
   took no parameter and the spoken "ohne PR" was lost. Whether a repository allows it is its
-  adapter's `direct`, off by default; there is no rule by path. Obeya pushes, not the worker, and
+  settings' `direct`, off by default; there is no rule by path. Obeya pushes, not the worker, and
   only fast-forwards. A card already in its PR does not switch.
 - **Landing problems are classified**: uncommitted work, rebase conflicts and branches emptied by
   the rebase (their commits are on main already) go back to the worker; a blocked Obeya checkout or
@@ -1825,7 +1824,7 @@ For each card in progress it sees the estimated files and what the branch has ch
 file with the changed line ranges and git's function context. Sharing a file does not keep a card
 waiting (additions in different places merge cleanly); the same lines or function, or code that one
 card moves, renames or reformats while the other edits it, do. In doubt the card runs: a conflict
-that happens anyway goes back to its worker on landing. Paths the adapter marks as soft (docs) do
+that happens anyway goes back to its worker on landing. Paths the settings mark as soft (`softPaths`, docs) do
 not count.
 
 A card likely to conflict waits, with the reason (one that starts says which files it shares and why
@@ -2023,8 +2022,8 @@ two cards (tags the tool checks):
   „CLAUDE.md von <repo>“, then the card „CLAUDE.md ergänzen“);
 - a value for one of the repository's settings (`PROPOSED_SETTINGS`: `checks`, `setup`, `softPaths`,
   the demo's `howToRun`), for knowledge the workers each worked out themselves; its brief lists
-  those settings as they apply now (the adapter with this machine's and the repository's settings,
-  `settingsNow` in the canvas). Every handover brings a demo, so an empty „App für die Demo starten“
+  those settings as they apply now (this machine's and the repository's settings in front of Obeya's
+  defaults, `settingsNow` in the canvas). Every handover brings a demo, so an empty „App für die Demo starten“
   is the usual case: each worker finds out how to start the app, and the retrospective proposes the
   recipe they arrived at.
 
@@ -2643,8 +2642,8 @@ with ffmpeg, run with plain `node`; on macOS, Linux and Windows, checked 2026-10
 among Obeya's dependencies.
 
 Obeya loads the plugin into every worker session (the Agent SDK's `plugins` option, a local plugin),
-so the worker has the skill as `obeya:demo`, which its brief names, and `obeya:adapter` (see Repo
-adapter). The skill also runs without Obeya: as the plugin, or as a user skill that points to
+so the worker has the skill as `obeya:demo`, which its brief names, and `obeya:settings` (see Repository
+settings). The skill also runs without Obeya: as the plugin, or as a user skill that points to
 `plugin/skills/demo` (the owner's `~/.claude/skills/demo` is a link to it in the Obeya checkout).
 Claude Code lists a skill file once: when the plugin Obeya loads is the very directory such a user
 skill links to (Obeya run from that checkout), the session has the skill as `demo` and knows no
@@ -2773,9 +2772,9 @@ machine with a GPU).
 
 ### Recording a demo
 
-How to run each project's app for a demo is the adapter's `demo.howToRun` (say, the app stack,
+How to run each project's app for a demo is its settings' `demo.howToRun` (say, the app stack,
 login, test data, migrations; Obeya: the scratch instance); without Obeya, `bun lib/recipe.ts` in a
-repository prints it. The worker records once the change is committed and checked, as the adapter
+repository prints it. The worker records once the change is committed and checked, as the recipe
 says how to run the app (Obeya: a scratch instance from the worktree, staged by
 `scripts/scratch-obeya.ts` from a stage file before every take, its workers idle unless the change
 is about agents (`--real-workers`); elsewhere, say, the clone's own app stack), and hands over the
@@ -2850,10 +2849,10 @@ page, at most 30 steps (an artifact as high as its window would grow on), and "I
 
 #### Where a demo goes
 
-Where it goes depends on the repository's share target: the command line in its configuration
-(`share`, see The Konfiguration dialog), else the static site its adapter names (`demo.site`, see
-Static sites), else the command its adapter names (`demo.share`). With a target, the demo is
-published on a page. "Teilen" publishes right away, without a hold to take it back: "Nicht mehr
+Where it goes depends on the repository's share target: the command line in its configuration for
+this machine (`share`, see The Konfiguration dialog), else the static site its settings name once
+it is complete (`demo.site`, see Static sites; `sharesOf` in `src/server/canvas.ts`). With a
+target, the demo is published on a page. "Teilen" publishes right away, without a hold to take it back: "Nicht mehr
 teilen" withdraws the page just as easily. Once the page is up, the card shows the link (open, copy)
 and "Nicht mehr teilen". A card that gets a new demo after sharing says the page still shows the
 earlier one and offers "Neu teilen"; nothing is replaced on its own.
@@ -2881,14 +2880,13 @@ publishing again. The command's stderr goes into the card's log, a failure with 
 error, and the card stays as it was. A share publishing or withdrawing at a restart goes on after
 it.
 
-A share command from the configuration runs like the adapter's; its words are split at spaces
-outside quotes, a program given as a path and any script are found in the repository (what the
-command itself needs from there it finds through `OBEYA_REPO`), and a script (`.ts`, `.js`) runs
-with Obeya's own Bun, so the same line works on Windows. A repository's own share command (in its
-`.obeya/adapter/`, see Repo adapter) cannot import Obeya's files by a relative path: Obeya runs it
-with `OBEYA_KIT` beside `OBEYA_HOME`, the path of `src/adapters/kit.ts` (in the compiled binary,
-`kit.js` among its resources), from which it imports the page templates, so its pages are the
-export's.
+The command's words are split at spaces outside quotes (`commandWords`), a program given as a path
+and any script are found in the repository (what the command itself needs from there it finds
+through `OBEYA_REPO`), and a script (`.ts`, `.js`) runs with Obeya's own Bun, so the same line works
+on Windows. A share script the repository keeps cannot import Obeya's files by a relative path:
+Obeya runs it with `OBEYA_KIT` beside `OBEYA_HOME`, the path of `src/adapters/kit.ts` (in the
+compiled binary, `kit.js` among its resources), from which it imports the page templates, so its
+pages are the export's.
 
 #### Outdated pages
 
@@ -2953,7 +2951,7 @@ is not held; the card's log names the file. Both pages carry their captions as c
 since Chrome does not load a `<track>` for a page opened from disk. The ZIP is written by Obeya
 (`src/server/zip.ts`, stored without compression: the video is compressed already).
 
-The page (`src/server/demo-page.ts`) is the one a share command publishes (the adapter kit,
+The page (`src/server/demo-page.ts`) is the one a share command publishes (the kit,
 `src/adapters/kit.ts`, hands it to the command), without its link to the overview. Its own words
 (the date line, the captions' name, the links, the play button) are in the demo's language: the one
 the demo's `index.html` names (the director writes the report page in the narration language; an
@@ -2975,14 +2973,19 @@ answers a range request with the whole file and 200), and a browser cannot seek 
 that way: the chapters and the progress bar jumped back to the start. The page therefore asks for a
 range first and, getting the whole file, plays the video from memory.
 
-Obeya does that itself for a host that takes a directory, from a few lines in the adapter instead of
-a command each repository writes and maintains (`src/server/site.ts`): `demo.site` names the site's
-`title` (the overview's heading, the pages' tab titles), its `url` (a page is at `url/<slug>/`), the
-`deploy` line (argv; `{dir}` stands for the site's directory; run like a share command, in `share/`,
-a script with Obeya's Bun), optionally an `env` file of `KEY=value` lines relative to Obeya's home
-whose values go into the deploy's environment (credentials, never in git), the largest file the host
-takes (`maxFile`, 25 MiB without it) and the overview's `language` (else the demo settings'
-narration language).
+Obeya does that itself for a host that takes a directory, from a few values in the repository's
+settings instead of a command each repository writes and maintains (`src/server/site.ts`):
+`demo.site` names the site's `title` (the overview's heading, the pages' tab titles), its `url` (a
+page is at `url/<slug>/`), the `deploy` command line (`{dir}` stands for the site's directory; split
+and run like a share command, in `share/`, a script with Obeya's Bun), optionally an `env` file of
+`KEY=value` lines relative to Obeya's home whose values go into the deploy's environment
+(credentials, never in git), `headers` for reading the live site behind a login (`${KEY}` from
+`env`), the largest file the host takes (`maxFile`, 25 MiB without it) and the overview's `language`
+(else the demo settings' narration language). The Konfiguration dialog has a field for each under
+„Einstellungen“. A site counts once it has a title, an http(s) URL and a deploy command
+(`siteIncomplete` in `src/server/share.ts`); until then demos are exported, and a site that cannot
+be used (incomplete, or its deploy program not there: `siteProblem`) is the problem `demoSite` at
+the repository, unless this machine names a share command, which goes before it.
 
 The site lives in `sites/<key>/` under Obeya's home, the key made of the URL's host and path, so
 clones and repositories naming the same site share it: `site/` is deployed whole with each publish
@@ -3000,9 +3003,8 @@ Obeya's templates marks the pages outdated with Obeya's next start.
 A machine without the site's `env` file has no target there: "Teilen" exports, with a line under the
 buttons naming the file („Zum Veröffentlichen auf demos.example.dev braucht dieser Rechner
 sites/demos/deploy.env.“); placed later, it counts when the owner next comes back to the page. A
-site without `env` deploys with the machine's own login. `demo.share` stays for hosts that need more
-than deploying a directory; an adapter naming both uses the site, and the command is a problem at
-the repository.
+site without `env` deploys with the machine's own login. A host that needs more than deploying a
+directory gets a share command on each machine instead (see Share commands).
 
 #### Several machines on one site
 
@@ -3072,8 +3074,8 @@ the microphone; Chrome launched by Playwright needs no audio service moved in-pr
   with `no_demo` and a reason where there was nothing to show (`waiting: review`), and a
   repository's settings could leave demos to the worker („Ein Agent übergibt nur mit Demo“, the
   demo's `required`, off for every repository without an adapter of its own, which then got no word
-  about demos). A file or adapter that still has `required` shows it as a problem: `demo.required:
-  no such field`.
+  about demos). A file that still has `required` shows it as a problem: `demo.required: no such
+  field`.
 - **The demo report has no lists of what was shown, what was not shown and what the worker noticed**
   (2026-10-05): the owner never read the first two, read the findings but rarely made a card of one,
   since most were not for them to act on. What the owner needs to know goes into the summary, kept
@@ -3129,7 +3131,8 @@ the microphone; Chrome launched by Playwright needs no audio service moved in-pr
   hundreds of pages.
 - **A shared page speaks the demo's language** (2026-10-07). Until then the page was German
   throughout, an English demo's too.
-- **Static sites are built into Obeya from a few adapter lines** (2026-10-09). Two other ways were
+- **Static sites are built into Obeya from a few lines of settings** (2026-10-09; in the adapter
+  until 2026-10-15, its `deploy` an argv rather than a command line). Two other ways were
   considered and dropped (2026-10-08): a kit library each repository's own share script calls, which
   still leaves a script to maintain in every repository, and hosting providers built into Obeya,
   which puts provider code in the core where one deploy line covers them all.
@@ -3147,7 +3150,7 @@ the microphone; Chrome launched by Playwright needs no audio service moved in-pr
 
 ### Canvases and repositories
 
-Each repository on a canvas has its adapter, workspaces, workers, project agents and PR watcher; the
+Each repository on a canvas has its settings, workspaces, workers, project agents and PR watcher; the
 canvas has one board and one Koordinator, whose collision checks stay within a repository. The first
 repository is the canvas's home: its plan references and workspace directory are the ones a
 single-repository canvas always had, so canvases keep their data. The others' plan docs are
@@ -3161,8 +3164,8 @@ changes.
 ### Main branch
 
 `defaultBranch` in `src/server/workspaces.ts` gives where cards start from, work lands and plan docs
-and the adapter are read from; one function for all of them, the canvas's label and the first setup.
-It is the one the owner set for the repository on this machine (`branch` in its settings, see
+and the repository's settings are read from; one function for all of them, the canvas's label and
+the first setup. It is the one the owner set for the repository on this machine (`branch` in its settings, see
 Repository settings), read whenever it is asked for; a clone's comes from the same setting. The
 repository's `.obeya/settings.json` does not hold it, since it says where that file is read from.
 
@@ -3191,8 +3194,8 @@ Where work lands on the local main (`land: 'main'`, Obeya), it is the configured
 which is always on its main branch, uncommitted plan docs included. Otherwise the configured
 checkout is often one of the pool's clones and on the branch of the card that leased it last, so the
 Lesestand is a detached worktree of it under Obeya's home (`read/<canvas>/<repo>`), on the commit
-`repoAdapterFile` reads too (`defaultBranchCommit`: the local default branch where it has everything
-`origin`'s has, else `origin`'s). Branch switches, `reset` and `clean` in the clone do not reach it,
+`.obeya/settings.json` is read at too (`defaultBranchCommit`: the local default branch where it has
+everything `origin`'s has, else `origin`'s). Branch switches, `reset` and `clean` in the clone do not reach it,
 and the clone's `git status` stays clean, so leasing is not affected; the clone's `.git/worktrees`
 has one entry more. A worktree there at the start is used again; one missing, broken or of another
 repository is made afresh (`git worktree prune` first), and where none can be made the checkout is
@@ -3211,10 +3214,10 @@ the clones; `repoInfo` and the configuration are unchanged.
 
 ### Plan docs
 
-A doc in the adapter's plan directory is a project when its `## Workstreams` section has a
-checklist; each top-level item is a workstream (`**W3:** Title. Details`). Checked means `live`,
-`(in review)` after the label means `in PR`, anything else `planned`. The goal is the first
-paragraph under `## Goal` / `## Ziel`. Obeya reads plan docs and never writes them; workers tick off
+A doc in the repository's plan directory (`planDocs` in its settings) is a project when its
+`## Workstreams` section has a checklist; each top-level item is a workstream
+(`**W3:** Title. Details`). Checked means `live`, `(in review)` after the label means `in PR`,
+anything else `planned`. The goal is the first paragraph under `## Goal` / `## Ziel`. Obeya reads plan docs and never writes them; workers tick off
 their workstream in the doc as part of their change.
 
 A plan card gets a stored row the first time it is seen, so the owner's placement persists; its
@@ -3232,7 +3235,7 @@ heading into it; the change lands like any other and the doc becomes a project. 
 the doc's row shows "Wird aufbereitet" and opens it. A repository with no plan doc that never had a
 project gets a dashed note in the same place: where Obeya looks and that "Als Projekt planen" on an
 idea or task card writes the first doc there, with "Ordner ändern", which opens the configuration at
-the repositories (the directory is the adapter's `planDocs`).
+the repositories (the directory is the setting `planDocs`).
 
 #### A workstream's state
 
@@ -3291,101 +3294,52 @@ written after each change tell a change the system lost (most of them with fseve
 2026-10-14; Bun, Node and fswatch alike) from one the watches missed, and a lost one is put back and
 made again.
 
-### Repo adapter
-
-How to start and refresh the stack, where the frontend URL comes from, the recipe for running the
-app in a demo (login, test data, migrations: `demo.howToRun`), where plan docs live, which checks
-run and how approved work lands, the site or the command that shares demos (the configuration's
-command takes their place). A repository carries its own adapter in `.obeya/adapter/` (`index.ts`
-and what it needs beside it), like `.vscode/` or `.claude/`: whoever runs Obeya on a clone gets it,
-and it is versioned and reviewed with the code it describes. Its values belong in
-`.obeya/settings.json` beside it (see Repository settings), which goes before the module's values
-whichever adapter runs; the module stays for what is code (`stack`, `demo.site` or `share`,
-`canvasId` and `canvasName`). A repository with the file and no module runs on the generic adapter
-with it.
-
-#### Which adapter
-
-A repository runs on its own adapter, else on the generic one (`pickAdapter` in
-`src/adapters/index.ts`); Obeya's own repository carries its adapter like any other. The generic one
-covers any repo with `docs/plan/`.
-
-The repository's own comes from its default branch, not the checkout: the clones a canvas works in
-are on cards' branches, and one from before the adapter changed (or came) would have another one or
-none. The default branch is the local one where it has all of `origin`'s, else `origin`'s as last
-fetched. Its files are written once per version (the git tree's id) into the repository's git
-directory, `.git/obeya/adapter-<tree>/`, out of reach of checkouts and `git clean`, and an earlier
-version's go. The canvas keeps the tree it was set up with (none for a repository without its own
-adapter); when the Lesestand moves (a fetch after a merged pull request, a landing on the local
-main) to a default branch whose `.obeya/adapter/` tree is another, the new version takes the old
-one's place at once (`Workers.useAdapter`, the canvas following as for saved settings); only where
-it changes where the repository's workers work do its agents restart (reason `adapter`, see Live
-configuration), and a landing that brings that tells its worker so.
-
-The module's default export is the adapter or a function that makes it from Obeya's helpers (`kit`:
-the generic adapter, the demo page templates, `esc`, `day`), so it imports nothing of Obeya's; Obeya
-loads it with `require` and fills what it leaves out from detection (`land`, see How work lands) and
-the generic adapter.
-
-#### Adapter problems
-
-A repository's own adapter that does not load (a syntax error, a failing import, no default export
-with a `name`) is fixed in the repository: meanwhile the repository runs on the generic adapter,
-with the problem `adapterLoad` at the repository in "Konfiguration" (with the error, keeping nothing
-from being saved) and in Obeya's log; „Von einem Agenten ausfüllen lassen“ is not offered there. The
-canvas keeps the id and name that adapter gave it (the setting `own_adapter_of` notes which canvas
-it named), so its address and cards stay, and once a fixed adapter reaches the default branch the
-canvas takes it over. A canvas that does not start at all (a repository gone, its home repository
-left out) is left out with the reason in the log and its problem in "Konfiguration"; the other
-canvases run (`startCanvases`).
-
-What it exports is checked against a schema (`src/adapters/schema.ts`, zod): a field that is unknown
-(with the known one it probably meant: `check` → `checks`), of the wrong type or incomplete does not
-count, the generic adapter's value stands in its place, and the rest works; each is a problem at the
-repository (`adapterProblems`), as is a share command or a site's deploy line whose program is not
-there, or both `demo.site` and `demo.share`, and Obeya's log names them at start. `stack` is in
-every worker's brief; its `stop` and `keep` park a waiting card (see Parking).
-
-#### Writing an adapter
-
-The reference for writing one is `docs/adapter.md`, linked from the README; the plugin's skill
-`adapter` (`plugin/skills/adapter/`) is how a worker writes one: read the repository (scripts, CI,
-README, compose files), ask the owner what it does not tell (login, test data), write the values
-into `.obeya/settings.json` and what is code (`stack`, `demo.site`/`share`, the canvas's name) into
-the module, check both with `lib/check.ts` (it loads the checkout's module and settings as Obeya
-would and lists the problems: the same ones the configuration dialog reports, from one function,
-`adapterRepoProblems`), run setup and checks, and prove `demo.howToRun` by recording a demo with it.
-The compiled binary's resources carry `docs/adapter.md` where the skill finds it up the tree, and
-`check.ts` bundled like `recipe.ts`.
-
 ### Repository settings
 
-`settings` of a repository's entry in `canvases.json` (`RepoSettings`) and, for everyone,
-`.obeya/settings.json` in the repository (`SharedSettings`) hold the adapter's fields that are
-values (`land`, `direct`, `checks`, `setup`, `planDocs`, `softPaths`, `workspaces`, `prNoise`, the
-demo's `howToRun`) and the main branch, set for this machine in the configuration dialog without
-TypeScript.
+What Obeya knows about a repository is in its settings: how to start and refresh its app stack, the
+recipe for running the app in a demo (login, test data, migrations: `demo.howToRun`), where plan
+docs live, which checks run and how approved work lands, the static site demos are shared on. They
+are values, in two layers: `.obeya/settings.json` in the repository (`SharedSettings`), for everyone,
+and `settings` of the repository's entry in `canvases.json` (`RepoSettings`), set for this machine
+in the configuration dialog without a line of code, which holds the main branch too.
 
-Precedence, highest first: this machine's values, the repository's `.obeya/settings.json`, the
-adapter's code, detection (main branch, landing), the generic adapter (`layerSettings` puts the two
-layers of settings together, `withSettings` puts them in front of the adapter). The dialog shows
-each value that applies with where it comes from („auf diesem Rechner“, „aus dem Repository“, „aus
-dem Adapter <name>“, „Klone eingetragen“, „erkannt“, „Standard“), and „Zurücksetzen“ at one set here
-takes it back to that source (`RepoValues`, worked out with the configuration's check). Changing a
-value sets it here; an empty list or command is a value of its own (no checks), an empty main branch
-or plan directory none. A main branch the repository has neither locally nor on `origin` is a
-problem (`noBranch`) that keeps the configuration from being saved.
+The fields: `land`, `direct`, `checks`, `setup`, `planDocs`, `softPaths`, `workspaces`, `prNoise`,
+`stack` and `demo`. `stack` has `start`, `refresh`, `urls` (the `file` of `KEY=value` lines and the
+`frontendKey` in it that holds the frontend's URL), `stop` and `keep`; it is in every worker's
+brief, its `stop` and `keep` park a waiting card (see Parking), and a stack without `start` counts
+as none (`usableStack` in `src/adapters/index.ts`), so the dialog can save one while the owner is
+still filling it in. `demo` has `howToRun` and `site` (see Static sites). The reference for every
+field is `docs/settings.md`, linked from the README.
 
-Read where they are used: the adapter a canvas runs on has the settings in front of its own fields
-as getters (`withSettings` in `src/adapters/index.ts`) that read the repository's entry from the
-file as it is now (`Config.repoSettings`, the file read again once its time or size changed), and
-`defaultBranch` asks the running canvas for the main branch it set (`useBranchSetting`). Saving them
-restarts nothing (see Live configuration): the canvases follow what they set up by them
-(`settingsChanged`): the Lesestand moves to the checkout or a worktree when work now lands
-elsewhere, the plan directory is watched afresh, a repository whose work now goes out as pull
-requests gets its watcher (one that has one keeps it for the pull requests still open), and the page
-shows the main branch and how work lands. `workspaces` is the exception: clones or worktrees are set
-up when a repository's agents start, so changing it restarts that repository's agents, as the dialog
+Two things are this machine's alone and never in `.obeya/settings.json`: the command that shares the
+repository's demos (`share` of its entry, shown among its settings in the dialog; see Share
+commands), since it often needs credentials, and the canvas it is on. A canvas
+without a name in the configuration is named after its first repository (`repoName` in
+`src/adapters/generic.ts`: the name in its `origin` URL, else its directory's), and its id follows.
+
+Precedence, highest first: this machine's values, the repository's `.obeya/settings.json`,
+detection (main branch, landing), Obeya's defaults (`src/adapters/generic.ts`, `defaultsFor` in
+`src/adapters/index.ts`; they cover any repository with `docs/plan/`). `layerSettings` puts the two
+layers of settings together, `withSettings` puts them in front of the defaults; in the code the
+result is the type `RepoAdapter`. The dialog shows each value that applies with where it comes from
+(„auf diesem Rechner“, „aus dem Repository“, „Klone eingetragen“, „erkannt“, „Standard“), and
+„Zurücksetzen“ at one set here takes it back to that source (`RepoValues`, worked out with the
+configuration's check). Changing a value sets it here; an empty list or command is a value of its
+own (no checks), an empty main branch or plan directory none. A main branch the repository has
+neither locally nor on `origin` is a problem (`noBranch`) that keeps the configuration from being
+saved.
+
+Read where they are used: what a canvas runs a repository on has the settings in front of the
+defaults as getters (`withSettings`) that read the repository's entry from the file as it is now
+(`Config.repoSettings`, the file read again once its time or size changed), and `defaultBranch`
+asks the running canvas for the main branch it set (`useBranchSetting`). Saving them restarts
+nothing (see Live configuration): the canvases follow what they set up by them (`settingsChanged`):
+the Lesestand moves to the checkout or a worktree when work now lands elsewhere, the plan directory
+is watched afresh, a repository whose work now goes out as pull requests gets its watcher (one that
+has one keeps it for the pull requests still open), where demos are shared is worked out again
+(`sharesOf`: this machine's share command, else the site once it is complete), and the page shows
+the main branch and how work lands. `workspaces` is the exception: clones or worktrees are set up
+when a repository's agents start, so changing it restarts that repository's agents, as the dialog
 says at the field; where the configuration names clones it shows that instead. The Koordinator's
 `configure` keeps and changes them like the rest of the entry.
 
@@ -3393,14 +3347,16 @@ says at the field; where the configuration names clones it shows that instead. T
 
 `.obeya/settings.json` (like `.vscode/settings.json`) is what a fresh clone brings with it: every
 value field but the main branch, which says where the file is read from (a fresh clone has it from
-`origin`'s HEAD). It is read from the default branch like the repository's own adapter
-(`readShared`, at `defaultBranchCommit`), not from the checkout, once when a canvas starts and again
-whenever the Lesestand moves (a fetch, a landing) and when settings are saved
-(`CanvasRuntime.moved`); a new version takes effect without a restart, the canvas following as for a
-save, but where it changes where the workers work (`workspaces`): then the repository's agents
-restart as for a changed adapter. Its fields are checked like the module's (`checkShared` in
-`src/adapters/schema.ts`): one that is unknown or of the wrong type does not count, and is a problem
-at the repository (`repoSettings`) that keeps nothing from being saved.
+`origin`'s HEAD). It is versioned and reviewed with the code it describes. It is read from the
+default branch, not from the checkout: the clones a canvas works in are on cards' branches, and one
+from before the file changed (or came) would have another one or none. The default branch is the
+local one where it has all of `origin`'s, else `origin`'s as last fetched (`readShared`, at
+`defaultBranchCommit`). It is read once when a canvas starts and again whenever the Lesestand moves
+(a fetch after a merged pull request, a landing on the local main) and when settings are saved
+(`CanvasRuntime.moved`); a new version takes effect without a restart, the canvas following as for
+a save, but where it changes where the workers work (`workspaces`): then the repository's agents
+restart once they paused (reason `repository`, see Live configuration), and a landing that brings
+that tells its worker so.
 
 „Für alle ins Repository übernehmen“ below the form (`Config.shareSettings`,
 `src/server/shared-settings.ts`) takes this machine's saved values but the main branch into the
@@ -3416,10 +3372,46 @@ where work may also go straight to main (`direct`), the dialog offers beside it 
 onto `origin`'s main branch (`pushShared`, never forced, so a protected branch refuses it). Once the
 file holds this machine's values (the commit at once; a pull request when the merge reaches the
 Lesestand), those values go from this machine's settings (`Config.takenOver`: a value the file now
-holds and did not hold before), so the dialog says they come from the repository. The adapter skill
-writes the value fields there, and the module only for what is code. The Arbeitsrückschau proposes
-values for some of them, which the owner takes on this machine or into the file for everyone, one
-value at a time (see Setting proposals).
+holds and did not hold before), so the dialog says they come from the repository. The
+Arbeitsrückschau proposes values for some of them, which the owner takes on this machine or into
+the file for everyone, one value at a time (see Setting proposals).
+
+#### Problems in the settings
+
+The file's fields are checked against a schema (`checkShared` in `src/adapters/schema.ts`, zod;
+this machine's are checked with the rest of the configuration). A field that is unknown (with the
+known one it probably meant: `check` → `checks`) or of the wrong type does not count, a mistake
+inside one taking the whole field along: Obeya's default stands in its place, and the rest works.
+Each is a problem at the repository (`repoSettings`), starting with `.obeya/settings.json`, and
+Obeya's log names them at start and whenever a new version is read.
+
+A demo site that cannot be used (no title, no http(s) URL or no deploy command: `siteIncomplete`;
+or a deploy program that is not there: `siteProblem`, both in `src/server/share.ts`) is the problem
+`demoSite` at the repository, unless this machine names a share command, which goes before the
+site; until the site is complete, "Teilen" exports demos.
+
+A repository whose default branch still has `.obeya/adapter/index.ts`, a module that said what its
+settings say now, has the problem `adapterGone` (`hasAdapterModule` in `src/adapters/index.ts`):
+Obeya does not read the module, and the setup button below offers to move what it says into the
+settings.
+
+These problems are fixed in the repository, so they keep nothing from being saved (`blocksSaving`
+in `src/core/types.ts`). A canvas that does not start at all (a repository gone, its home
+repository left out) is left out with the reason in the log and its problem in "Konfiguration"; the
+other canvases run (`startCanvases`).
+
+#### Writing the settings
+
+The plugin's skill `settings` (`plugin/skills/settings/`) is how a worker writes a repository's
+`.obeya/settings.json`: read the repository (scripts, CI, README, compose files, a `.obeya/adapter/`
+left from before, whose values it takes over before deleting it), ask the owner what it does not
+tell (login, test data), write the file, check it with `lib/check.ts` (it reads the checkout's
+`.obeya/settings.json` as Obeya would read it from the default branch, prints what Obeya makes of
+it, the plan docs among it, and lists the problems: the field problems and the site's, from the
+same functions the configuration dialog uses, and a `.obeya/adapter/` still there), run setup and
+checks, and prove `demo.howToRun` by recording a demo with it. The compiled binary's resources
+carry `docs/settings.md` where the skill finds it up the tree, and `check.ts` bundled like
+`recipe.ts`.
 
 ### The Konfiguration dialog
 
@@ -3443,14 +3435,16 @@ as a browser tooltip with a wait on plain text.
 #### Leinwände
 
 Each canvas is a heading line (number, name, id, whether it runs) over a table of its repositories:
-its path, one row each. Each repository shows its id, whether workers use clones or worktrees (a
-repository added in the dialog whose adapter works in clones gets as many as the first canvas's,
-two, filled in once its path is checked and changeable before saving) and, where it has one, that it
-brings its own adapter („eigener Adapter (.obeya/adapter/)“). The command that shares its demos is a
-row of its settings, for this machine only, since it often needs credentials, so „Für alle“ does not
-take it over (empty: the adapter's site, shown as „Site: <url>“, or its command, or an export; see
-Where a demo goes). Each repository folds its settings under „Einstellungen“ below its row (see
-Repository settings), with the main branch and how work lands in the folded line; „Für alle ins
+its path, one row each. Each repository shows its id and whether workers use clones or worktrees (a
+repository added in the dialog whose settings say clones gets as many as the first canvas's, two,
+filled in once its path is checked and changeable before saving). The command that shares its demos
+is a row of its settings, for this machine only, since it often needs credentials, so „Für alle“
+does not take it over (empty: the demo site of its settings, shown as „Site: <url>“, or an export;
+see Where a demo goes). Each repository folds its settings under „Einstellungen“ below its row (see
+Repository settings), with the main branch and how work lands in the folded line; the app stack
+(„App-Stack“: start, refresh, the URL file and the frontend's key in it, stop, keep) and the demo
+site („Demo-Site“: title, URL, deploy command, env file, headers as `Name: value` lines, the largest
+file in MiB, the overview's language) have their fields there like the other settings; „Für alle ins
 Repository übernehmen“ below them takes the values saved for this machine into the repository's
 `.obeya/settings.json`. What is taken over is what is saved: while the dialog has changes not saved
 yet, the takeover saves them first, all of them like „Speichern“ (the confirmation says so), then
@@ -3463,23 +3457,26 @@ Problems (no git repository, a repository the canvas has already under this or a
 canvases with one id, a canvas's home repository left out, a share command whose program is not
 there) show at the field while editing and keep it from being saved; where a path without a
 repository is a folder, the problem offers to set up git there (see Setting up git in a folder),
-after which it goes. Problems in a repository's own adapter (`adapterField`: a field unknown, of the
-wrong type or incomplete, a share program not there; `adapterLoad`: it does not load, and the
-repository runs on the generic adapter; see Adapter problems) show at the repository with what is
-wrong, and keep nothing from being saved, since they are fixed in the repository. A problem's
-technical detail (the adapter's error, the field) is folded under "Details"; for the configuration
+after which it goes. Problems in a repository's settings for everyone (`repoSettings`: a field of
+its `.obeya/settings.json` unknown or of the wrong type; `demoSite`: a demo site that cannot be
+used; `adapterGone`: a `.obeya/adapter/` left on its default branch; see Problems in the settings)
+show at the repository with what is wrong, and keep nothing from being saved, since they are fixed
+in the repository. A problem's technical detail (the field, why the site cannot be used) is folded
+under "Details"; for the configuration
 as saved each problem offers "Aufgabe zum Beheben anlegen", which hands the Koordinator of the
 canvas with the problem (else of the page's) the problem with its detail as a typed request to
 create a task that fixes it, answered above the microphone. The "Konfiguration" button in the bar
 counts the problems of the saved configuration in red; the page reads them when it loads and after
 each save in the dialog.
 
-A repository that runs on the generic adapter (none of its own) and without `.obeya/settings.json`
+A repository with no value from its own `.obeya/settings.json`, or with the problem `adapterGone`,
 offers „Von einem Agenten ausfüllen lassen“ under the words that Obeya does not know yet how its app
 starts, which checks run and how to run it for a demo, and that the owner can set that under
 Einstellungen or have an agent do it, while its canvas runs as saved: it puts the card "Obeya für
 <repo> einrichten" at the top right of that canvas (or finds the one still open) and opens it there;
-its worker writes the adapter with the `obeya:adapter` skill, which settles where plan docs go too:
+its worker fills in `.obeya/settings.json` with the `obeya:settings` skill (and, where the
+repository still has `.obeya/adapter/`, moves what it says into the settings and deletes it), which
+settles where plan docs go too:
 it looks for plans the repository already keeps (`docs/`, `rfcs/`, `adr/`, `PLAN*.md`, a `TODO.md`),
 asks the owner in its one question whether that directory becomes the plan directory (its docs then
 prepared on the canvas) or a new `docs/plan/`, and its check script lists which docs there are
@@ -3508,17 +3505,18 @@ The other sections are saved on their own: the demo settings (see The demo setti
 ### Live configuration
 
 A configuration saved from the file (the dialog, the Koordinator's `configure`, the setup
-assistant's first canvas) applies while Obeya runs, and so does a new version of a repository's own
-adapter or `.obeya/settings.json`: Obeya does not restart for them, and the page does not reload.
+assistant's first canvas) applies while Obeya runs, and so does a new version of a repository's
+`.obeya/settings.json`: Obeya does not restart for them, and the page does not reload.
 `Config.save` hands the canvases with their ids to `Canvases.apply` (`src/server/canvas.ts`): a
 canvas new in it starts at once (the setup assistant's gets its welcome card then), one that changed
 takes the change (`CanvasRuntime.apply`), one no longer in it stops once its agents paused, its
 cards kept. Within a canvas, a new name and a repository new on it apply at once, and so do settings
-and a new adapter version that leave the agents where they work.
+that leave the agents where they work.
 
 What a repository's agents are set up by when they start (its entry but the settings, `repoShape`:
 clones, existing workspaces, slots, other machines, the share command; and where its workers work,
-by the settings or the adapter) restarts that repository's agents alone, and a repository that left
+by its settings: restart reason `config` where the owner saved them, `repository` where its
+`.obeya/settings.json` changed) restarts that repository's agents alone, and a repository that left
 the canvas stops: its workers hear of it as of a restart (`DueRestart.repo`) and pause at a safe
 point, at most 15 minutes, and then the repository's set-up stops and starts again as the
 configuration has it now (`restartRepos`), its workers resuming in their sessions; the other
@@ -3560,16 +3558,37 @@ of what the owner may say.
 
 - **A canvas may span several repositories, and one Obeya serves several canvases** (at first it was
   one canvas per repository).
-- **A canvas belongs to a repository, not a checkout**: the adapter names it, so the clones share
-  one.
-- **A project's adapter lives in its own repository** (`.obeya/adapter/`, read from the default
-  branch), not in Obeya's, which is open source: until 2026-10-05 adapters lived here and were
-  picked by the `origin` URL; Obeya's own (`src/adapters/obeya.ts`) stayed until 2026-10-15 and is
-  now in this repository's `.obeya/` like any other. Until 2026-10-15 the configuration could name
-  an adapter (`adapter`: a built-in one's name, or the path of a module; `--adapter` on the command
-  line), a column of the dialog let the owner pick one („automatisch“, „generic“ or „obeya“, which
-  only Obeya's own repository could use), and one that did not exist or load was a problem that kept
-  the configuration from being saved.
+- **A canvas belongs to a repository, not a checkout**: without a name in the configuration it is
+  named after the repository (`repoName`, the name in its `origin` URL), so the clones share one.
+  Until 2026-10-15 the repository's adapter named it (`canvasId`, `canvasName`), and while that
+  adapter did not load, the setting `own_adapter_of` kept the canvas's id and name.
+- **What Obeya knows about a project lives in the project's own repository**
+  (`.obeya/settings.json`, read from the default branch), not in Obeya's, which is open source.
+  Until 2026-10-05 adapters for each project lived in Obeya's repository and were picked by the
+  `origin` URL; then a repository carried its own in `.obeya/adapter/`, while Obeya's own
+  (`src/adapters/obeya.ts`) stayed in `src/adapters/` until 2026-10-15. Until 2026-10-15 too the
+  configuration could name an adapter (`adapter`: a built-in one's name, or the path of a module;
+  `--adapter` on the command line), a column of the dialog let the owner pick one („automatisch“,
+  „generic“ or „obeya“, which only Obeya's own repository could use), and one that did not exist or
+  load was a problem that kept the configuration from being saved.
+- **Settings replace the adapter module** (2026-10-15). Until then a repository could carry a
+  TypeScript module beside its settings, `.obeya/adapter/index.ts`. Obeya loaded it from the default
+  branch (a copy per version in `.git/obeya/adapter-<tree>/`), checked its export against a schema
+  (problems `adapterField` and `adapterLoad`), ran the repository on the generic adapter while it
+  did not load, and took a new version over in the running canvas (`Workers.useAdapter`, restart
+  reason `adapter`). Once the settings held the values (2026-10-14), the module was left with
+  `stack`, `demo.site` or `demo.share`, and the canvas's id and name: values too, only written as
+  code. The setup card's task then read „Schreib den Adapter dieses Repositorys
+  (`.obeya/settings.json`, für Code `.obeya/adapter/index.ts`)“, which read as if the settings lived
+  in the adapter. The owner asked why the stack could not be a setting; with nothing left in
+  adapters that was code, the module went. Now the stack and the demo site are settings with fields
+  in the dialog, the share command is this machine's alone (`demo.share` for everyone went), and the
+  canvas's name comes from the configuration or the repository: everything a repository says about
+  itself is in one place, and the owner sets it without code. A module still on a default branch is
+  not read (problem `adapterGone`), with no transition, since Obeya is not released yet and keeps no
+  old form working before its release. The skill `obeya:adapter` became `obeya:settings`,
+  `docs/adapter.md` became `docs/settings.md`, and Obeya's own repository lost its
+  `.obeya/adapter/`, which only named the canvas „Obeya“.
 - **The share command is a setting of its repository, for this machine** (2026-10-15). Until then it
   stood beside the path, as prominent as the path while the other settings were folded away.
 - **„Von einem Agenten ausfüllen lassen“** (2026-10-15): until then the button read „Adapter
@@ -3597,7 +3616,7 @@ of what the owner may say.
   skipped silently and a missing directory said nothing, so a repository with plans of its own
   showed an empty canvas without saying why. Deferred: a more lenient parser (`Tasks`, `Milestones`,
   `Phases` as synonyms), which would turn checklists in design notes into projects while a doc off
-  the format is now converted in one click; and an adapter that reads its own format
+  the format is now converted in one click; and letting a repository read its own format
   (`planDocs.read`, several directories), until a repository needs its docs to stay in a format of
   their own. Rejected: an agent mapping any doc into workstreams kept in Obeya's database, against
   "plan docs are read, never written", with no box for workers to tick.
@@ -3619,11 +3638,13 @@ of what the owner may say.
 - **Repository settings without TypeScript, read where they are used** (2026-10-14). Until then
   these values could only be set in `.obeya/adapter/index.ts`, and saving the dialog always
   restarted Obeya.
-- **The adapter's fields are checked** (2026-10-08): until then a misspelt field was ignored without
-  a word, and nothing read `stack`. Until 2026-10-09 `check.ts` missed the problems of `demo.site`.
-- **A broken adapter or canvas leaves the rest running** (2026-10-09): until then either took all of
-  Obeya down at its next start. Until 2026-10-09 a merged adapter, or a change to it, took effect
-  only when the owner quit and started Obeya again; until 2026-10-14 it restarted all of Obeya.
+- **A repository's settings are checked** (2026-10-08, then the adapter's fields): until then a
+  misspelt field was ignored without a word, and nothing read `stack`. Until 2026-10-09 `check.ts`
+  missed the problems of `demo.site`.
+- **A broken canvas leaves the rest running** (2026-10-09, as did a broken adapter while there were
+  adapters): until then either took all of Obeya down at its next start. Until 2026-10-09 a merged
+  adapter, or a change to it, took effect only when the owner quit and started Obeya again; until
+  2026-10-14 it restarted all of Obeya.
 - **Obeya's configuration is the file `canvases.json`**, edited in the UI or by the Koordinator
   (2026-10-01). Saving the configuration of a command-line start switches Obeya to the file, so what
   was edited is what runs.
@@ -3631,8 +3652,8 @@ of what the owner may say.
   concern** (2026-10-14), rather than through a restart: a restart of all of Obeya waited for every
   worker on every canvas and reloaded the page for a clone added to one repository. A repository's
   set-up is the unit that restarts, since its workspaces and workers are made by what its entry and
-  adapter say when they start; everything else (names, settings, a new adapter that keeps the
-  workspaces) is read where it is used. Until then any change but a repository's settings restarted
+  settings say when they start; everything else (names, settings that keep the workspaces) is read
+  where it is used. Until then any change but a repository's settings restarted
   all of Obeya, once no worker on any canvas was in the middle of a turn: adding a canvas or a
   repository, a clone more, a renamed canvas, a new version of an adapter landed by a card.
 - **The configuration is a dialog nearly as large as the window**, its sections listed on the left,
@@ -3717,8 +3738,8 @@ unless another is given). Below a folder's path it shows the main branch Obeya f
 the offer to set it up there instead (see Setting up git in a folder), whose confirmation also
 creates the canvas.
 
-Obeya writes `canvases.json` with it (its own adapter, else the generic one, which works in
-worktrees; two clones when the adapter works in clones), starts the canvas at once (see Live
+Obeya writes `canvases.json` with it (worktrees, as Obeya's defaults have it; two clones when the
+repository's settings say clones), starts the canvas at once (see Live
 configuration) and the page opens it, on which a first card says what to try (the marker `welcome`
 in Obeya's home, read once when the canvas runs). Later the Konfiguration dialog opens the same list
 over the canvas ("Einrichtung prüfen"), without the first canvas. A scratch Obeya with `"setup":
@@ -3856,9 +3877,10 @@ UI and SQLite in it, that needs neither Bun nor a checkout.
 
 Its modules live in Bun's embedded file system, which no other process can read, so what other
 processes run or import goes beside it as real files, in `resources/` (13 MB): the plugin with its
-skills and the `playwright-core` the demo skill records with, the voice sidecars, the adapter kit
-bundled into one module (`kit.js`), the skills' scripts that read adapters (`recipe.ts`, `check.ts`)
-bundled with the generic one, and `docs/adapter.md` for the adapter skill. The server finds them
+skills and the `playwright-core` the demo skill records with, the voice sidecars, the kit share
+scripts import bundled into one module (`kit.js`), the skills' scripts that read a repository's
+settings (`recipe.ts`, `check.ts`) bundled with what they import, and `docs/settings.md` for the
+settings skill. The server finds them
 through one function (`resource()` in `src/server/resources.ts`): `OBEYA_RESOURCES` when set, else
 `resources` beside the binary (or `Resources` of a macOS app bundle), else the checkout. The demo
 skill's modules the server carries (the setup check, the voices) are told where their files are
@@ -3876,7 +3898,7 @@ serves it (without the define it was the development one).
 
 `package.json` holds Obeya's version, which the settings show, with the checkout's commit beside it
 when Obeya runs from one. `bun scripts/check-binary.ts <obeya> [--voice] [--demo] [--worker]` checks
-a binary on the machine it runs on: a scratch repository with its own adapter and share command,
+a binary on the machine it runs on: a scratch repository with its own `.obeya/settings.json` and share command,
 then the voice installed and a spoken command heard, a demo rendered with the director from the
 resources, and a real worker that commits and hands over an artifact, which is shared, once on the
 machine's Claude Code and once on the SDK's. All of it passed on macOS arm64 and on GitHub's Windows
@@ -4072,8 +4094,8 @@ addresses and `www` is a CNAME to `sadilek.github.io`, which Pages redirects to 
 ### Hero video
 
 The site's film is a real run (`scripts/hero-video/`), recorded with Obeya's own demo pipeline on a
-scratch canvas over a small tip calculator (Tipjar, in `tipjar/` there with its own adapter and plan
-doc): an idea by voice, a real worker building it and recording its demo, the approval landing it on
+scratch canvas over a small tip calculator (Tipjar, in `tipjar/` there with its own `.obeya/settings.json`
+and plan doc): an idea by voice, a real worker building it and recording its demo, the approval landing it on
 main; about two minutes, narrated in English in the owner's ElevenLabs voice clone (see CLAUDE.md).
 The directory holds the narration, the scenes, the stage and the render; its README says how to
 change, re-render and publish it.
@@ -4160,8 +4182,7 @@ Persistent (SQLite):
   message of a card's log is (its thread, files, the question it continues);
 - confirmed commands waiting for their undo window (`commands`);
 - groups (name, colour) and the group of each card;
-- per-canvas settings (the home repository; which canvas a repository's own adapter named; per
-  repository the card collecting its CLAUDE.md rules; the Rückschau's count and when its history
+- per-canvas settings (the home repository; per repository the card collecting its CLAUDE.md rules; the Rückschau's count and when its history
   begins; per repository the Arbeitsrückschau's count and when it last ran);
 - the friction noted on each card's runs (per repository), and on a card the Arbeitsrückschau
   proposed what it rests on, and the settings' values it proposed (`setting_proposals`: repository,
@@ -4173,7 +4194,7 @@ owner's screenshots (`images/<canvas>/`), the configuration (`canvases.json`), t
 app's server log (`app.log`), voices and models (`voices/`), the workers' clones and worktrees
 (`workspaces/`), the Lesestand's worktrees (`read/`), the files of looked-up answers
 (`answers/<canvas>/<thread>/`), the static sites Obeya keeps (`sites/<key>/`), the env files their
-adapters name (relative to the home, `sites/demos/deploy.env`, say), what a repository's share
+repositories' settings name (relative to the home, `sites/demos/deploy.env`, say), what a repository's share
 command keeps there, and `share/`, the directory share commands and deploys run in.
 
 Derived, not stored: git, PR and CI state (read from git and GitHub), plan-doc content (read from

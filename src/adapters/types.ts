@@ -1,4 +1,10 @@
-// A repo adapter holds everything project-specific; the core only talks to this interface.
+// What Obeya knows about how a repository works: its defaults (`generic.ts`) with the repository's
+// settings in front (`.obeya/settings.json`, then this machine's). The core only talks to this
+// interface.
+
+import type { DemoSite, StackSettings } from '../core/types';
+
+export type { DemoSite, StackSettings };
 
 export interface RepoInfo {
   path: string;
@@ -8,35 +14,7 @@ export interface RepoInfo {
   branch: string;
 }
 
-/**
- * A static site the demos are shared on: Obeya keeps its directory (one subdirectory per page, and
- * the overview), writes the pages with its own templates and runs the deploy line after each change.
- */
-export interface DemoSite {
-  /** The overview's heading, and the pages' tab titles. */
-  title: string;
-  /** Where the site is served; a page's URL is `url/<slug>/`. */
-  url: string;
-  /** The command (argv) that deploys the site; `{dir}` stands for its directory. */
-  deploy: string[];
-  /**
-   * A file of `KEY=value` lines, relative to Obeya's home, added to the deploy's environment
-   * (credentials, never in git). A machine without it exports demos instead of sharing them.
-   */
-  env?: string;
-  /** Headers for reading the live site's manifest and pages (behind a login), values `${KEY}` from `env`. */
-  headers?: Record<string, string>;
-  /** The largest file the host takes, in bytes; 25 MiB without it. */
-  maxFile?: number;
-  /** The overview's words; without it the narration language of the demo settings. */
-  language?: 'de' | 'en';
-}
-
 export interface RepoAdapter {
-  name: string;
-  /** One canvas per repository: clones of the same repository share it. */
-  canvasId(repo: RepoInfo): string;
-  canvasName(repo: RepoInfo): string;
   /** Where plan docs live, relative to the repository root. */
   planDocs: { dir: string; exclude: string[] };
 
@@ -66,40 +44,14 @@ export interface RepoAdapter {
 
   /**
    * Demos, which every handover brings: how a worker runs the app to record one (for the `demo`
-   * skill), and where demos are shared. Without it, the generic adapter's: no recipe, so the
-   * worker finds out from the repository how to run the app.
+   * skill), and the static site Obeya keeps and deploys itself to share them (`src/server/site.ts`),
+   * which goes before no share at all but after the share command of this machine's configuration.
    */
-  demo?: {
-    howToRun: string;
-    /**
-     * The command (argv) that shares a demo with colleagues on a page outside Obeya. Obeya runs
-     * it in a directory under its home, not in the repository, with `OBEYA_HOME` set and the
-     * repository's checkout in `OBEYA_REPO`: `publish` with the page as JSON on stdin
-     * (`SharePage` in `src/server/share.ts`), printing the page's URL; `withdraw <slug>` takes it
-     * down; `version`, where it knows it, prints the version of the pages it writes. Without it, demos are not shared.
-     * For a host that takes a directory, `site` does it all instead.
-     */
-    share?: string[];
-    /** A static site Obeya keeps and deploys itself (`src/server/site.ts`); it goes before `share`. */
-    site?: DemoSite;
-  };
+  demo?: { howToRun: string; site?: DemoSite };
 
   /** Accounts whose pull request comments are not review feedback (deploy bots and the like). */
   prNoise?: string[];
 
   /** How a worker brings up the app in its workspace and finds the frontend. */
-  stack?: {
-    start: string;
-    /** After a backend change, without restarting everything. */
-    refresh: string;
-    /** `KEY=value` file the running stack writes, and the key holding the frontend URL. */
-    urls: { file: string; frontendKey: string };
-    /**
-     * Stops the stack in a workspace. Obeya runs it there when the card waits for the owner and its
-     * worker has nothing running (Parking), and tells the worker with its next message.
-     */
-    stop?: string;
-    /** Exits 0 when the workspace's stack holds what must not be lost (a restored database, say): Obeya then leaves it running. */
-    keep?: string;
-  };
+  stack?: StackSettings;
 }

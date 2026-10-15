@@ -288,7 +288,7 @@ const de = {
   },
   adapterSetup: {
     title: (repo: string) => `Obeya für ${repo} einrichten`,
-    body: 'Füll mit dem Skill `obeya:adapter` die Einstellungen dieses Repositorys für alle aus (`.obeya/settings.json`, in der Konfiguration unter „Einstellungen“ als „aus dem Repository“ zu sehen): welche Prüfungen laufen, wie Arbeit landet, wie ein Agent die App für eine Demo startet und wo die Plan-Docs liegen, die Obeya als Projekte zeigt. Nur was keine Einstellung sagen kann, etwa wie der Stack der App startet und stoppt, kommt als Code nach `.obeya/adapter/index.ts`. Was du im Repository nicht herausfindest (Login, Testdaten), frag mich.',
+    body: 'Füll mit dem Skill `obeya:settings` die Einstellungen dieses Repositorys für alle aus (`.obeya/settings.json`, in der Konfiguration unter „Einstellungen“ als „aus dem Repository“ zu sehen): welche Prüfungen laufen, wie Arbeit landet, wie ein Agent die App startet und stoppt und wie er sie für eine Demo startet, und wo die Plan-Docs liegen, die Obeya als Projekte zeigt. Hat das Repository noch ein `.obeya/adapter/`, übernimm, was darin steht, in die Einstellungen und lösch es. Was du im Repository nicht herausfindest (Login, Testdaten), frag mich.',
   },
   /** The card that turns a doc in the plan directory that is not a project into one. */
   preparePlanDoc: {
@@ -565,7 +565,7 @@ const en: Messages = {
   },
   adapterSetup: {
     title: (repo: string) => `Set up Obeya for ${repo}`,
-    body: "With the skill `obeya:adapter`, fill in this repository's settings for everyone (`.obeya/settings.json`, shown in the configuration under “Settings” as “from the repository”): which checks run, how work lands, how an agent starts the app for a demo and where the plan docs are that Obeya shows as projects. Only what no setting can say, such as how the app's stack starts and stops, goes into code in `.obeya/adapter/index.ts`. Ask me what you cannot find out in the repository (login, test data).",
+    body: "With the skill `obeya:settings`, fill in this repository's settings for everyone (`.obeya/settings.json`, shown in the configuration under “Settings” as “from the repository”): which checks run, how work lands, how an agent starts and stops the app and runs it for a demo, and where the plan docs are that Obeya shows as projects. If the repository still has a `.obeya/adapter/`, move what it says into the settings and delete it. Ask me what you cannot find out in the repository (login, test data).",
   },
   preparePlanDoc: {
     title: (file: string) => `Prepare ${file.slice(file.lastIndexOf('/') + 1)} as a project`,

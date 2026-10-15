@@ -1,5 +1,5 @@
 // Other machines that workers run on, reached over SSH (design: Hosts). A workspace on one is
-// named `ssh://<host>/<path there>`: git, the adapter's stack commands and the worker's Claude Code
+// named `ssh://<host>/<path there>`: git, the stack commands of the repository's settings and the worker's Claude Code
 // run there through `ssh`, and files cross at fixed points (the plugin before a session, the owner's
 // screenshots with a message, a demo directory at a handover). Nothing secret is stored there:
 // the Claude login and the repository's GitHub token travel on stdin at each start.

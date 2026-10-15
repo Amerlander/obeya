@@ -259,8 +259,7 @@ function Canvas({
   const [dblKnown, setDblKnown] = useState(doubleClickKnown);
   const [newHintOn, setNewHintOn] = useState(false);
   const [setupOn, setSetupOn] = useState(false);
-  // what is wrong in the configuration as saved, marked on its button; it changes only with a save
-  // or a repository's adapter, and Obeya starts again for either, so the page reads it once
+  // what is wrong in the configuration as saved, marked on its button; the page reads it when it loads
   const [configProblems, setConfigProblems] = useState(0);
   useEffect(() => void api.config().then((v) => setConfigProblems(v.problems.length), console.error), []);
   // the archive, read while its list is open; archived cards unfold from their row there

@@ -1,13 +1,13 @@
 // Checks a compiled Obeya (`bun run build`) on this machine, the way someone without Bun or a
-// checkout would use it: a scratch repository with its own adapter (`.obeya/adapter/`) and share
-// command, the binary started as `obeya` starts (supervised), and then what it hands to other
+// checkout would use it: a scratch repository with its own settings (`.obeya/settings.json`) and
+// share command, the binary started as `obeya` starts (supervised), and then what it hands to other
 // processes. Runs on macOS, Linux and Windows.
 //
 //   bun scripts/check-binary.ts <obeya> [--voice] [--demo] [--worker] [--port <n>] [--keep]
 //
 // Always: the canvas answers, the settings show the version and no checkout, the repository's own
-// adapter loads, the demo setup finds Playwright among the resources, and a script run with the
-// binary's Bun (`BUN_BE_BUN`) imports the adapter kit. --voice installs Piper and Whisper through
+// settings are read, the demo setup finds Playwright among the resources, and a script run with the
+// binary's Bun (`BUN_BE_BUN`) imports the kit. --voice installs Piper and Whisper through
 // the settings, speaks a sentence in the demo voice (tts.py from the resources) and gives it to
 // Obeya as a voice command; what Whisper heard must match. --demo renders a short demo of the
 // canvas with the skill's director from the resources (Node, a browser, ffmpeg and uv needed).
@@ -80,14 +80,14 @@ const api = async (path: string, init?: RequestInit & { json?: unknown }) => {
 };
 const json = async <T = any>(path: string, init?: RequestInit & { json?: unknown }) => (await (await api(path, init)).json()) as T;
 
-// the scratch repository: a plan doc, its own adapter and a share command that imports the kit
+// the scratch repository: a plan doc, its own settings and a share command that imports the kit
 const dir = realpathSync(mkdtempSync(join(tmpdir(), 'obeya-check-')));
 const repo = join(dir, 'repo');
 const home = join(dir, 'home');
 const files: Record<string, string> = {
   'README.md': '# Scratch\n',
   'docs/plan/tool.md': '# Tool\n\n## Workstreams\n\n- [ ] **W1:** Configuration.\n',
-  '.obeya/adapter/index.ts': "export default (kit) => ({ name: 'own', demo: { howToRun: `Nothing to run; ${kit.esc('<generic>')}` } });\n",
+  '.obeya/settings.json': '{ "demo": { "howToRun": "Nothing to run." } }\n',
   'share.ts': `const kit = await import(process.env.OBEYA_KIT);
 if (process.argv[2] !== 'publish') process.exit(process.argv[2] === 'version' ? 1 : 0);
 const page = JSON.parse(await Bun.stdin.text());
@@ -140,14 +140,14 @@ await check(`Obeya ${pkg.version} starts from ${binary}`, async () => {
 });
 const canvas = 'check';
 
-await check('the settings show the version and no checkout; the repository has its own adapter', async () => {
+await check('the settings show the version and no checkout; the repository has its own settings', async () => {
   const view = await json('/api/config');
   expect(view.server.version === pkg.version, `version ${view.server.version}`);
   expect(view.server.commit === null, `commit ${view.server.commit}`);
   expect(view.server.restarts, 'not supervised');
-  const adapter = view.resolved[0]?.repos[0]?.adapter;
-  expect(adapter === 'own', `adapter ${adapter} (${JSON.stringify(view.problems)})`);
-  return `version ${view.server.version}, adapter ${adapter}`;
+  const howToRun = view.resolved[0]?.repos[0]?.values.demo.howToRun;
+  expect(howToRun?.source === 'repository', `howToRun ${JSON.stringify(howToRun)} (${JSON.stringify(view.problems)})`);
+  return `version ${view.server.version}, howToRun from the repository`;
 });
 
 await check('the demo setup finds Playwright among the resources', async () => {
@@ -157,7 +157,7 @@ await check('the demo setup finds Playwright among the resources', async () => {
   return (setup.items as { id: string; state: string }[]).map((i) => `${i.id} ${i.state}`).join(', ');
 });
 
-await check("a script on the binary's Bun imports the adapter kit", async () => {
+await check("a script on the binary's Bun imports the kit", async () => {
   const p = Bun.spawnSync([binary, join(repo, 'share.ts'), 'publish'], {
     cwd: dir,
     env: { ...env, BUN_BE_BUN: '1', OBEYA_KIT: join(resources, 'kit.js') },

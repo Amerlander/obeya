@@ -195,27 +195,27 @@ describe('the Lesestand', () => {
   });
 });
 
-describe("a repository's own adapter", () => {
-  const adapter = (name: string, extra = '') => `export default { name: '${name}'${extra} };\n`;
-  const openWatched = (repo: string, adapterName?: string, runtime = new FakeRuntime(), clones?: number) => {
+describe("a repository's settings for everyone", () => {
+  const settings = (o: object) => `${JSON.stringify(o)}\n`;
+  const openWatched = (repo: string, runtime = new FakeRuntime(), clones?: number) => {
     canvas = new CanvasRuntime(
-      { name: 'Shop', repos: [{ path: repo, ...(adapterName ? { adapter: adapterName } : {}), ...(clones ? { clones } : {}) }] },
+      { name: 'Shop', repos: [{ path: repo, ...(clones ? { clones } : {}) }] },
       { store: new Store(':memory:'), home: join(dir, 'home'), runtime, forge: noForge, restartIntervalMs: 10 },
     );
     return canvas;
   };
 
-  test("a new version on the default branch takes the old one's place without a restart; one that moves where the workers work restarts them", async () => {
-    // its `origin` stands in for one on GitHub: the adapter says that work goes out as pull requests
-    push({ '.obeya/adapter/index.ts': adapter('shop', ", land: 'pr'") });
+  test("a new version on the default branch applies without a restart; one that moves where the workers work restarts them", async () => {
+    // its `origin` stands in for one on GitHub: the settings say that work goes out as pull requests
+    push({ '.obeya/settings.json': settings({ land: 'pr' }) });
     git(checkout, 'pull', '--quiet');
     const c = openWatched(checkout);
     const repo = c.repos[0]!;
-    expect(repo.adapter.name).toBe('shop');
+    expect(repo.adapter.land).toBe('pr');
     push({ 'docs/plan/import.md': doc('Import') });
     await repo.read.refresh();
     expect(c.repos[0]).toBe(repo);
-    push({ '.obeya/adapter/index.ts': adapter('shop', ", land: 'pr', setup: 'bun install'") });
+    push({ '.obeya/settings.json': settings({ land: 'pr', setup: 'bun install' }) });
     await repo.read.refresh();
     // the same repository, its workers on, with the new version
     expect(c.repos[0]).toBe(repo);
@@ -223,24 +223,17 @@ describe("a repository's own adapter", () => {
     expect(c.pendingRestart()).toBeNull();
 
     // where its workers work changes: with none of them at work, they restart at once, in clones
-    push({ '.obeya/adapter/index.ts': adapter('shop', ", land: 'pr', workspaces: 'clones'") });
+    push({ '.obeya/settings.json': settings({ land: 'pr', workspaces: 'clones' }) });
     await repo.read.refresh();
     expect(c.repos[0]).not.toBe(repo);
     expect(c.repos[0]!.workspaces.mode).toBe('clones');
   });
 
-  test('is not watched where the configuration names the adapter', async () => {
-    const c = openWatched(checkout, 'generic');
-    push({ '.obeya/adapter/index.ts': adapter('shop') });
-    await c.repos[0]!.read.refresh();
-    expect(c.repos[0]!.adapter.name).toBe('generic');
-  });
-
   test('changed by work that lands on the local main applies at once; where it moves the workers, its worker hears that they restart', async () => {
-    // a repository without a remote whose adapter lands work on its main
-    const repo = gitRepo(join(dir, 'local'), { '.obeya/adapter/index.ts': adapter('local', ", land: 'main', workspaces: 'worktrees'") });
+    // a repository without a remote whose settings land work on its main
+    const repo = gitRepo(join(dir, 'local'), { '.obeya/settings.json': settings({ land: 'main', workspaces: 'worktrees' }) });
     const runtime = new FakeRuntime();
-    const c = openWatched(repo, undefined, runtime);
+    const c = openWatched(repo, runtime);
     const land = async (title: string, files: Record<string, string>) => {
       const card = c.board.create({ title, x: 0, y: 0 });
       c.repos[0]!.workers.start(card.id);
@@ -260,17 +253,17 @@ describe("a repository's own adapter", () => {
     };
     expect((await land('Readme', { 'README.md': 'Local\n' })).told).not.toContain('after_restart');
     runtime.last.emit({ type: 'idle' });
-    const { told } = await land('Checks', { '.obeya/adapter/index.ts': adapter('local', ", land: 'main', workspaces: 'worktrees', checks: ['bun test']") });
+    const { told } = await land('Checks', { '.obeya/settings.json': settings({ land: 'main', workspaces: 'worktrees', checks: ['bun test'] }) });
     expect(told).not.toContain('after_restart');
     expect(c.repos[0]!.adapter.checks).toEqual(['bun test']);
     runtime.last.emit({ type: 'idle' });
 
     // to clones: the worker in its turn hears of the restart and holds it up until it pauses
     const before = c.repos[0];
-    const clones = await land('Clones', { '.obeya/adapter/index.ts': adapter('local', ", land: 'main', workspaces: 'clones'") });
+    const clones = await land('Clones', { '.obeya/settings.json': settings({ land: 'main', workspaces: 'clones' }) });
     expect(clones.told).toContain('call after_restart');
     expect(clones.told).toContain("restart this repository's agents");
-    expect(c.pendingRestart()).toMatchObject({ reason: 'adapter', repos: ['local'], cards: [clones.card.id] });
+    expect(c.pendingRestart()).toMatchObject({ reason: 'repository', repos: ['local'], cards: [clones.card.id] });
     const landed = runtime.last;
     expect(landed.call('after_restart', {})).toContain('Recorded');
     landed.emit({ type: 'idle' });
@@ -284,10 +277,10 @@ describe("a repository's own adapter", () => {
   });
 
   test('changed by work pushed straight onto the remote main applies once Obeya fetches it, without a restart', async () => {
-    push({ '.obeya/adapter/index.ts': adapter('shop', ", land: 'pr', direct: true, workspaces: 'clones'") });
+    push({ '.obeya/settings.json': settings({ land: 'pr', direct: true, workspaces: 'clones' }) });
     git(checkout, 'pull', '--quiet');
     const runtime = new FakeRuntime();
-    const c = openWatched(checkout, undefined, runtime, 1);
+    const c = openWatched(checkout, runtime, 1);
     for (const w of c.repos[0]!.workspaces.list()) identify(w.path);
     const workers = c.repos[0]!.workers;
     const pushed = async (title: string, file: string, text: string) => {
@@ -307,7 +300,7 @@ describe("a repository's own adapter", () => {
       return told;
     };
     expect(await pushed('Readme', 'README.md', 'Shop\n')).not.toContain('after_restart');
-    expect(await pushed('Checks', '.obeya/adapter/index.ts', adapter('shop', ", land: 'pr', direct: true, workspaces: 'clones', checks: ['bun test']"))).not.toContain('after_restart');
+    expect(await pushed('Checks', '.obeya/settings.json', settings({ land: 'pr', direct: true, workspaces: 'clones', checks: ['bun test'] }))).not.toContain('after_restart');
     await c.repos[0]!.read.refresh();
     expect(c.repos[0]!.workers).toBe(workers);
     expect(c.repos[0]!.adapter.checks).toEqual(['bun test']);

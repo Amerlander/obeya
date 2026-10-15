@@ -1,58 +1,40 @@
-// What a repository's adapter module may export, checked when Obeya loads it: a misspelt field
-// (`check:` for `checks:`) or a wrong type would otherwise be ignored without a word, or break
-// whatever reads it later. Each problem names its field; the field does not count, so the generic
-// adapter's value stands for it, and the rest of the adapter works.
+// What a repository's settings may hold (this machine's in the configuration, everyone's in its
+// `.obeya/settings.json`), checked where they are read: a misspelt field (`check:` for `checks:`)
+// or a wrong type would otherwise be ignored without a word, or break whatever reads it later. Each
+// problem names its field; the field does not count, so Obeya's default stands for it, and the rest
+// of the settings work.
 
 import { z } from 'zod';
 import type { SharedSettings } from '../core/types';
-import type { RepoAdapter } from './types';
 
-const fn = z.custom<(...args: never[]) => unknown>((v) => typeof v === 'function', { message: 'expected a function' });
 const strings = z.array(z.string());
 
 const planDocs = z.object({ dir: z.string(), exclude: strings }).strict();
+// what a site or a stack needs to be used (a title, a URL, commands) is checked where it is used
+// (`siteProblem`, `usableStack`): the dialog saves one while the owner fills it in
 const site = z
   .object({
-    title: z.string().min(1),
-    url: z.string().regex(/^https?:\/\/[^\s/]+[^\s]*$/, 'expected an http(s) URL'),
-    deploy: strings.min(1),
+    title: z.string(),
+    url: z.string(),
+    deploy: z.string(),
     env: z.string().min(1).optional(),
     headers: z.record(z.string(), z.string()).optional(),
     maxFile: z.number().int().positive().optional(),
     language: z.enum(['de', 'en']).optional(),
   })
   .strict();
-const demo = z.object({ howToRun: z.string(), share: strings.min(1).optional(), site: site.optional() }).strict();
+const demo = z.object({ howToRun: z.string().optional(), site: site.optional() }).strict();
 const stack = z
   .object({
     start: z.string(),
-    refresh: z.string(),
-    urls: z.object({ file: z.string(), frontendKey: z.string() }).strict(),
+    refresh: z.string().optional(),
+    urls: z.object({ file: z.string(), frontendKey: z.string() }).strict().optional(),
     stop: z.string().optional(),
     keep: z.string().optional(),
   })
   .strict();
 
-/** `RepoAdapter`, every field but the name optional: what is left out comes from the generic adapter. */
-export const adapterShape = z
-  .object({
-    name: z.string().min(1),
-    canvasId: fn.optional(),
-    canvasName: fn.optional(),
-    planDocs: planDocs.optional(),
-    setup: z.string().optional(),
-    checks: strings.optional(),
-    land: z.enum(['main', 'pr']).optional(),
-    direct: z.boolean().optional(),
-    softPaths: strings.optional(),
-    workspaces: z.enum(['clones', 'worktrees']).optional(),
-    demo: demo.optional(),
-    prNoise: strings.optional(),
-    stack: stack.optional(),
-  })
-  .strict();
-
-/** What a repository's settings for this machine may hold (`RepoSettings`): the adapter's fields that are values, and its main branch. */
+/** What a repository's settings for this machine may hold (`RepoSettings`): how it works, and its main branch. */
 export const settingsShape = z
   .object({
     branch: z.string().optional(),
@@ -64,7 +46,8 @@ export const settingsShape = z
     softPaths: strings.optional(),
     workspaces: z.enum(['clones', 'worktrees']).optional(),
     prNoise: strings.optional(),
-    demo: z.object({ howToRun: z.string().optional() }).strict().optional(),
+    stack: stack.optional(),
+    demo: demo.optional(),
   })
   .strict();
 
@@ -76,7 +59,7 @@ export const sharedShape = settingsShape.omit({ branch: true });
 
 // the fields each object knows, for a guess at what a misspelt one meant
 const KNOWN: Record<string, string[]> = {
-  '': Object.keys(adapterShape.shape),
+  '': Object.keys(sharedShape.shape),
   planDocs: Object.keys(planDocs.shape),
   demo: Object.keys(demo.shape),
   'demo.site': Object.keys(site.shape),
@@ -85,20 +68,11 @@ const KNOWN: Record<string, string[]> = {
 };
 
 /**
- * Checks what a module exported (an object with a `name`): the adapter without the fields that are
- * wrong, and one line per problem, in English, starting with the field (`demo.howToRun: …`).
- */
-export function checkAdapter(made: Record<string, unknown>): { adapter: Partial<RepoAdapter>; problems: string[] } {
-  const { kept, problems } = checkFields(adapterShape, made, KNOWN);
-  return { adapter: kept as Partial<RepoAdapter>, problems };
-}
-
-/**
  * Checks what a repository's `.obeya/settings.json` holds, the same way: the settings without the
  * fields that are wrong, and one line per problem.
  */
 export function checkShared(made: Record<string, unknown>): { settings: SharedSettings; problems: string[] } {
-  const { kept, problems } = checkFields(sharedShape, made, { '': Object.keys(sharedShape.shape), planDocs: ['dir', 'exclude'], demo: ['howToRun'] });
+  const { kept, problems } = checkFields(sharedShape, made, KNOWN);
   // the main branch says where the file is read from, so it is set on each machine
   return { settings: kept as SharedSettings, problems: problems.map((p) => (p.startsWith('branch: ') ? 'branch: the main branch is set on each machine (or detected), not in the repository' : p)) };
 }
@@ -115,13 +89,14 @@ function checkFields(shape: z.ZodType, made: Record<string, unknown>, known: Rec
       for (const key of issue.keys) {
         const guess = closest(key, known[at] ?? []);
         problems.push(`${at ? `${at}.` : ''}${key}: no such field${guess ? ` (did you mean ${guess}?)` : ''}`);
-        if (!at) delete kept[key];
+        // a field misspelt inside one takes the whole top-level field along, as a wrong type does below
+        delete kept[at ? String(issue.path[0]) : key];
       }
       continue;
     }
     const missing = issue.code === 'invalid_type' && issue.message.endsWith('received undefined');
     problems.push(`${at}: ${missing ? 'missing' : issue.message.replace(/^Invalid (input|option): /, '')}`);
-    // the whole top-level field goes: half a `demo` or `planDocs` would be worse than the generic one
+    // the whole top-level field goes: half a `demo` or `planDocs` would be worse than the default
     delete kept[String(issue.path[0])];
   }
   return { kept, problems };

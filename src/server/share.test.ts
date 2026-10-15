@@ -129,7 +129,7 @@ describe('sharing a demo', () => {
     expect(call!.args).toEqual(['publish']);
     expect(call!.input).toEqual({ slug, kind: 'video', title: 'CSV-Export', text: 'Vermieter laden Zählerstände als CSV.', chapters: [[0, 'Vorher']], pr: null, language: 'de', dir: join(dir, `demo-${c.id}`), shared: [] });
     expect(call!.home).toBe(join(dir, 'home'));
-    // the helpers an adapter's command imports
+    // the helpers a share script imports
     expect(call!.kit).toBe(KIT_PATH);
     // it runs under Obeya's home, and learns the checkout from the environment
     expect(call!.cwd).toBe(realpathSync(join(dir, 'home', SHARE_CWD)));

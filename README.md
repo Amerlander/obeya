@@ -136,11 +136,10 @@ narrated by its voice. How it works is under "Hosts" in [`docs/design.md`](docs/
 ### Setting up a repository
 
 Obeya works on any git repository. How a project's app starts, which checks a change must pass,
-how approved work lands and how a demo is recorded, the repository says in its adapter: the values
-in `.obeya/settings.json`, what is code in `.obeya/adapter/index.ts`; [`docs/adapter.md`](docs/adapter.md)
-describes it. "Configuration" shows the values, changes them for one machine and takes them over
-into the repository for everyone, and offers a card whose agent writes the adapter for a
-repository that has none.
+how approved work lands and how a demo is recorded, the repository says in its settings,
+`.obeya/settings.json`; [`docs/settings.md`](docs/settings.md) describes them. "Configuration" shows
+them, changes them for one machine and takes them over into the repository for everyone, and offers
+a card whose agent writes them for a repository that has none.
 
 ## Contributing
 

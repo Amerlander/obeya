@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { repoInfo } from '../server/repo';
 import { gitRepo } from '../server/testing';
 import { git } from '../server/workspaces';
 import { layerSettings, type RepoSettings } from '../core/types';
-import { adapterProblems, loadAdapter, parseShared, pickAdapter, readShared, repoValues, withSettings } from '.';
+import { defaultsFor, hasAdapterModule, parseShared, readShared, repoValues, withSettings } from '.';
 import { generic } from './generic';
 
 let dir: string;
@@ -15,61 +15,17 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-// an adapter as a repository carries it: Obeya's helpers come as the argument
-const OWN = (name: string) => `export default (kit) => ({ name: '${name}', canvasId: () => 'shop', canvasName: () => kit.esc('Shop & Co'), land: 'main' });\n`;
-
-describe('pickAdapter', () => {
-  test("takes the repository's own adapter, filled from the generic one", () => {
-    const repo = gitRepo(join(dir, 'shop'), { 'README.md': 'hi\n', '.obeya/adapter/index.ts': OWN('shop') });
-    const a = pickAdapter(repoInfo(repo));
-    expect(a.name).toBe('shop');
-    expect(a.canvasName(repoInfo(repo))).toBe('Shop &amp; Co');
-    expect(a.land).toBe('main');
-    // what it leaves out comes from the generic adapter
-    expect(a.planDocs.dir).toBe('docs/plan');
-    expect(a.workspaces).toBe('worktrees');
-  });
-
-  test('reads it from the default branch, whatever the checkout is on', () => {
-    const repo = gitRepo(join(dir, 'shop'), { 'README.md': 'hi\n', '.obeya/adapter/index.ts': OWN('first') });
-    // a card's branch from before the adapter changed, and an edit not committed
-    git(repo, 'checkout', '--quiet', '-b', 'card');
-    git(repo, 'rm', '--quiet', '-r', '.obeya');
-    git(repo, 'commit', '--quiet', '-m', 'no adapter on this branch');
-    mkdirSync(join(repo, '.obeya/adapter'), { recursive: true });
-    writeFileSync(join(repo, '.obeya/adapter/index.ts'), OWN('uncommitted'));
-    expect(pickAdapter(repoInfo(repo)).name).toBe('first');
-
-    // a new version on main: its files are written anew, the earlier version's go
-    rmSync(join(repo, '.obeya'), { recursive: true });
-    git(repo, 'checkout', '--quiet', 'main');
-    writeFileSync(join(repo, '.obeya/adapter/index.ts'), OWN('second'));
-    git(repo, 'commit', '--quiet', '-am', 'second adapter');
-    expect(pickAdapter(repoInfo(repo)).name).toBe('second');
-    expect(readdirSync(join(repo, '.git/obeya')).length).toBe(1);
-    // the checkout stays as it was
-    expect(git(repo, 'status', '--porcelain')).toBe('');
-  });
-
-  test("Obeya's own repository brings its adapter like any other: no problems in it, and its canvas is Obeya's", () => {
+describe('defaultsFor', () => {
+  test("Obeya's own repository brings its settings like any other, with no problems in them", () => {
     const root = join(import.meta.dir, '../..');
     const read = parseShared(readFileSync(join(root, '.obeya/settings.json'), 'utf8'));
     expect(read.problems).toEqual([]);
     expect(read.settings).toMatchObject({ land: 'main', workspaces: 'worktrees', checks: ['bun test', 'bun run typecheck'] });
-    const own = loadAdapter(join(root, '.obeya/adapter/index.ts'), repoInfo(root));
-    expect(adapterProblems(own)).toEqual([]);
-    expect([own.canvasId(repoInfo(root)), own.canvasName(repoInfo(root))]).toEqual(['obeya', 'Obeya']);
   });
 
-  test('a repository without its own adapter gets the generic one', () => {
-    const plain = gitRepo(join(dir, 'plain'));
-    expect(pickAdapter(repoInfo(plain)).name).toBe('generic');
-    expect(existsSync(join(plain, '.git/obeya'))).toBe(false);
-  });
-
-  test('lands through pull requests where origin is on GitHub, else on the main branch, unless the adapter says otherwise', () => {
+  test('lands through pull requests where origin is on GitHub, else on the main branch', () => {
     const repo = gitRepo(join(dir, 'shop'));
-    const land = () => pickAdapter(repoInfo(repo)).land;
+    const land = () => defaultsFor(repoInfo(repo)).land;
     expect(land()).toBe('main');
     git(repo, 'remote', 'add', 'origin', 'git@github.com:acme/shop.git');
     expect(land()).toBe('pr');
@@ -88,72 +44,37 @@ describe('pickAdapter', () => {
       if (was === undefined) delete process.env.GH_CONFIG_DIR;
       else process.env.GH_CONFIG_DIR = was;
     }
-
-    // the repository's own adapter: what it says wins, what it leaves out comes from detection
-    const own = gitRepo(join(dir, 'own'), { '.obeya/adapter/index.ts': "export default { name: 'own', land: 'pr' };\n" });
-    expect(pickAdapter(repoInfo(own)).land).toBe('pr');
-    const silent = gitRepo(join(dir, 'silent'), { '.obeya/adapter/index.ts': "export default { name: 'silent' };\n" });
-    expect(pickAdapter(repoInfo(silent)).land).toBe('main');
-    git(silent, 'remote', 'add', 'origin', 'https://github.com/acme/silent.git');
-    expect(pickAdapter(repoInfo(silent)).land).toBe('pr');
-  });
-
-  test('a field that is misspelt, of the wrong type or incomplete is named and does not count; the rest of the adapter works', () => {
-    const adapter = `export default {
-      name: 'shop',
-      check: ['bun test'],
-      Setup: 'bun install',
-      land: 'merge',
-      softPaths: 'docs/',
-      canvasName: 'Shop',
-      demo: { howtorun: 'bun dev' },
-      stack: { start: 'bun dev', refresh: 'bun dev', urls: { file: '.env', frontend: 'URL' } },
-      workspaces: 'worktrees',
-    };\n`;
-    const repo = gitRepo(join(dir, 'shop'), { '.obeya/adapter/index.ts': adapter });
-    const a = pickAdapter(repoInfo(repo));
-    expect(adapterProblems(a)).toEqual([
-      'canvasName: expected a function',
-      'land: expected one of "main"|"pr"',
-      'softPaths: expected array, received string',
-      'demo.howToRun: missing',
-      'demo.howtorun: no such field (did you mean howToRun?)',
-      'stack.urls.frontendKey: missing',
-      'stack.urls.frontend: no such field (did you mean frontendKey?)',
-      'check: no such field (did you mean checks?)',
-      'Setup: no such field (did you mean setup?)',
-    ]);
-    // what is wrong goes, detection's or the generic adapter's stands in its place: without a remote, work lands on main
-    expect(a).toMatchObject({ name: 'shop', land: 'main', softPaths: ['docs/plan/'], workspaces: 'worktrees' });
-    expect(a.canvasName(repoInfo(repo))).toBe('shop');
-    expect(a.demo).toEqual({ howToRun: '' });
-    expect(a.stack).toBeUndefined();
-    expect('check' in a).toBe(false);
-    // one without mistakes has none, the generic one neither
-    expect(adapterProblems(pickAdapter(repoInfo(gitRepo(join(dir, 'ok'), { '.obeya/adapter/index.ts': OWN('ok') }))))).toEqual([]);
-    expect(adapterProblems(pickAdapter(repoInfo(gitRepo(join(dir, 'plain')))))).toEqual([]);
   });
 });
 
 describe('withSettings', () => {
-  test("reads this machine's settings whenever a field is asked for; clones or worktrees once", () => {
+  test("reads the settings whenever a field is asked for; clones or worktrees once", () => {
     let s: RepoSettings | undefined = { land: 'main', workspaces: 'clones' };
     const a = withSettings({ ...generic, checks: ['bun test'] }, () => s);
     expect([a.land, a.checks, a.workspaces]).toEqual(['main', ['bun test'], 'clones']);
     s = { checks: [], workspaces: 'worktrees' };
     expect([a.land, a.checks, a.workspaces]).toEqual(['pr', [], 'clones']);
-    // the generic adapter has no recipe for a demo; one set here goes in front of it, beside the adapter's own fields
+    // the defaults have no recipe for a demo; one set goes in front of it, the demo site beside it
     expect(a.demo).toEqual({ howToRun: '' });
     s = { demo: { howToRun: 'bun dev' } };
     expect(a.demo).toEqual({ howToRun: 'bun dev' });
-    const b = withSettings({ ...generic, demo: { howToRun: 'bun dev', share: ['x'] } }, () => ({ demo: { howToRun: 'bun start' } }));
-    expect(b.demo).toEqual({ howToRun: 'bun start', share: ['x'] });
+    const site = { title: 'Demos', url: 'https://demos.example.dev', deploy: 'git {dir}' };
+    s = { demo: { site } };
+    expect(a.demo).toEqual({ howToRun: '', site });
     // the configuration's clones go before the setting
     expect(withSettings(generic, () => ({ workspaces: 'worktrees' }), true).workspaces).toBe('clones');
   });
+
+  test('a stack counts once it says how the app starts', () => {
+    let s: RepoSettings | undefined = { stack: { start: ' ', stop: 'docker compose down' } };
+    const a = withSettings(generic, () => s);
+    expect(a.stack).toBeUndefined();
+    s = { stack: { start: 'docker compose up -d', stop: 'docker compose down' } };
+    expect(a.stack).toEqual({ start: 'docker compose up -d', stop: 'docker compose down' });
+  });
 });
 
-describe(".obeya/settings.json", () => {
+describe('.obeya/settings.json', () => {
   test('is read from the default branch, not the checkout; a field that is wrong does not count, the rest does', () => {
     const repo = gitRepo(join(dir, 'shop'), { 'README.md': 'hi\n', '.obeya/settings.json': '{ "land": "main", "checks": ["bun test"] }\n' });
     expect(readShared(repo)).toEqual({ settings: { land: 'main', checks: ['bun test'] }, raw: { land: 'main', checks: ['bun test'] }, problems: [] });
@@ -173,18 +94,47 @@ describe(".obeya/settings.json", () => {
     expect(parseShared('[]').problems).toEqual(['.obeya/settings.json holds no JSON object']);
   });
 
-  test("its values come after this machine's and before the adapter's code, and say they come from the repository", () => {
-    const repo = gitRepo(join(dir, 'shop'), { 'README.md': 'hi\n', '.obeya/adapter/index.ts': OWN('shop').replace("land: 'main'", "land: 'main', checks: ['npm test']") });
-    const own = pickAdapter(repoInfo(repo));
-    const shared = { checks: ['bun test'], setup: 'bun install', demo: { howToRun: 'bun dev' } };
+  test('holds the stack and the demo site; a field misspelt in them is named and the whole field does not count', () => {
+    const stack = { start: 'bun dev', refresh: 'bun dev', urls: { file: '.env', frontendKey: 'URL' }, stop: 'pkill -F .pid' };
+    const site = { title: 'Demos', url: 'https://demos.example.dev', deploy: 'bunx wrangler pages deploy {dir}', env: 'sites/demos.env', headers: { 'X-Key': '${KEY}' }, language: 'de' };
+    expect(parseShared(JSON.stringify({ stack, demo: { site } }))).toMatchObject({ settings: { stack, demo: { site } }, problems: [] });
+    const read = parseShared(JSON.stringify({ stack: { ...stack, urls: { file: '.env', frontend: 'URL' } }, demo: { howtorun: 'bun dev' } }));
+    expect(read.settings).toEqual({});
+    expect(read.problems).toEqual([
+      '.obeya/settings.json, stack.urls.frontendKey: missing',
+      '.obeya/settings.json, stack.urls.frontend: no such field (did you mean frontendKey?)',
+      '.obeya/settings.json, demo.howtorun: no such field (did you mean howToRun?)',
+    ]);
+  });
+
+  test("its values come after this machine's and before the defaults, and say they come from the repository", () => {
+    const repo = gitRepo(join(dir, 'shop'), { 'README.md': 'hi\n' });
+    const shared = { checks: ['bun test'], setup: 'bun install', stack: { start: 'bun dev' }, demo: { howToRun: 'bun dev' } };
     const mine: RepoSettings = { setup: '' };
-    const a = withSettings(own, () => layerSettings<RepoSettings>(shared, mine));
-    expect([a.checks, a.setup, a.land, a.demo?.howToRun]).toEqual([['bun test'], '', 'main', 'bun dev']);
-    expect(repoValues(own, repoInfo(repo), false, shared)).toMatchObject({
+    const a = withSettings(defaultsFor(repoInfo(repo)), () => layerSettings<RepoSettings>(shared, mine));
+    expect([a.checks, a.setup, a.land, a.stack, a.demo?.howToRun]).toEqual([['bun test'], '', 'main', { start: 'bun dev' }, 'bun dev']);
+    expect(repoValues(repoInfo(repo), false, shared)).toMatchObject({
       checks: { value: ['bun test'], source: 'repository' },
       setup: { value: 'bun install', source: 'repository' },
-      land: { value: 'main', source: 'adapter' },
-      demo: { howToRun: { value: 'bun dev', source: 'repository' } },
+      land: { value: 'main', source: 'detected' },
+      planDocs: { value: { dir: 'docs/plan' }, source: 'default' },
+      stack: { value: { start: 'bun dev' }, source: 'repository' },
+      demo: { howToRun: { value: 'bun dev', source: 'repository' }, site: { value: null, source: 'default' } },
     });
+  });
+});
+
+describe('hasAdapterModule', () => {
+  test('finds an adapter module from before on the default branch, not in the checkout', () => {
+    const repo = gitRepo(join(dir, 'shop'), { 'README.md': 'hi\n', '.obeya/adapter/index.ts': "export default { name: 'shop' };\n" });
+    expect(hasAdapterModule(repo)).toBe(true);
+    git(repo, 'checkout', '--quiet', '-b', 'card');
+    git(repo, 'rm', '--quiet', '-r', '.obeya');
+    git(repo, 'commit', '--quiet', '-m', 'no module on this branch');
+    expect(hasAdapterModule(repo)).toBe(true);
+    git(repo, 'checkout', '--quiet', 'main');
+    git(repo, 'merge', '--quiet', 'card');
+    expect(hasAdapterModule(repo)).toBe(false);
+    expect(hasAdapterModule(gitRepo(join(dir, 'plain')))).toBe(false);
   });
 });

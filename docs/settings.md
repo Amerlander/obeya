@@ -1,0 +1,262 @@
+# Setting up a repository: its settings
+
+Obeya runs on any git repository as it is. What it cannot know by itself is how *this* project
+works: how its app starts and stops, which checks a change must pass, how approved work lands, how
+a worker records a demo and where demos are shared. A repository says that in its settings,
+`.obeya/settings.json`, versioned with the code it describes (like `.vscode/settings.json`).
+"Konfiguration" shows them under a repository's „Einstellungen“ and changes them without a line of
+code, for one machine or, with „Für alle ins Repository übernehmen“, for everyone.
+
+The quickest way to get them: in "Konfiguration", a repository without settings of its own has
+„Von einem Agenten ausfüllen lassen“ ("Have an agent fill them in"). It puts a card on the
+repository's canvas whose worker writes them with the `obeya:settings` skill: it reads the
+repository, starts the app, records a demo with it to prove the recipe, and asks you what it
+cannot find out (a login, test data). This page is the reference for what it writes, and for
+writing or changing them yourself.
+
+## A complete example
+
+A typical web app: a Node API and a Vite frontend, PostgreSQL in Docker Compose, tests and lint
+in `package.json`, work landing through pull requests on GitHub, demos shared on Cloudflare Pages.
+
+```json
+{
+  "land": "pr",
+  "direct": false,
+  "checks": ["pnpm lint", "pnpm typecheck", "pnpm test"],
+  "setup": "pnpm install",
+  "planDocs": { "dir": "docs/plan", "exclude": ["TEMPLATE.md"] },
+  "softPaths": ["docs/"],
+  "workspaces": "clones",
+  "prNoise": ["vercel[bot]", "codecov[bot]"],
+  "stack": {
+    "start": "docker compose up -d db && pnpm dev",
+    "refresh": "pnpm --filter api restart",
+    "urls": { "file": ".dev-urls", "frontendKey": "WEB_URL" },
+    "stop": "docker compose down && pkill -F .dev.pid"
+  },
+  "demo": {
+    "howToRun": "Start the stack in your clone (see stack), then `pnpm db:migrate && pnpm db:seed`. The frontend runs on the port in `.dev-urls` (WEB_URL), the API on API_URL. Log in as demo@shop.test with the password `demo` (created by the seed); the seed also makes three orders to show.",
+    "site": {
+      "title": "Team demos",
+      "url": "https://demos.example.dev",
+      "deploy": "bunx wrangler@4 pages deploy {dir} --project-name demos --branch main --commit-dirty=true",
+      "env": "sites/demos/deploy.env"
+    }
+  }
+}
+```
+
+Every field is optional. What the file leaves out comes from Obeya's defaults, given with each
+field below (`land` is the one Obeya tells from the repository).
+
+## The fields
+
+### `planDocs` — `{ dir, exclude }`
+
+Where plan docs live (relative to the repository root), and file names in that directory that are
+none (a template). Obeya reads the `*.md` directly in that directory (not below it) from the
+default branch. One with a checklist under `## Workstreams` (or `## Arbeitspakete`) is a project:
+each top-level item is a workstream (`- [ ] **W1:** Title. Details`), a ticked one has landed,
+and once every one is ticked the project goes into the archive. Its goal is the first paragraph
+under `## Goal` (or `## Ziel`). Any other file there shows on the canvas in a note, with the
+reason it is not a project and "Als Projekt aufbereiten", which has an agent add the checklist; a
+file that is meant to stay as it is (a template, an index) goes into `exclude`. Default:
+`{ "dir": "docs/plan", "exclude": ["TEMPLATE.md"] }`. The skill's check script
+(`plugin/skills/settings/lib/check.ts`) lists which docs in the directory are projects and why the
+others are not.
+
+### `setup` — a command
+
+What a worker runs first in a fresh workspace, typically installing dependencies. Default: none.
+
+### `checks` — commands
+
+What a worker runs before it hands its work over (lint, types, tests). Each must pass; the worker
+fixes what fails. Keep them to what runs in minutes on one machine, without services the clone
+does not have. Default: none.
+
+### `land` — `"pr"` or `"main"`
+
+How approved work lands. `pr`: the card's branch is pushed and goes out as a pull request; Obeya
+watches it, brings review comments and failing CI back to the worker and marks the card live once
+it is merged (this needs the GitHub CLI, `gh`, logged in). `main`: Obeya rebases the branch onto
+the local `main` and fast-forwards the checkout Obeya runs on, no pull request, nothing pushed.
+Default: `pr` where `origin` is on GitHub (github.com, or a host the GitHub CLI is logged into),
+else `main`, since a pull request needs somewhere to go.
+
+### `direct` — boolean
+
+With `land: "pr"`: the owner may approve a card "Direkt auf main" instead, without a pull request.
+Obeya rebases onto `origin`'s default branch and pushes there (never forced); a protected branch
+refuses it and the card stays in review. Default: `false`.
+
+### `softPaths` — paths
+
+Paths whose edits never count as a conflict between two cards' branches (a trailing `/` covers a
+directory): Obeya resolves them itself when it rebases. Use it for docs that many cards touch.
+Default: `["docs/plan/"]`.
+
+### `workspaces` — `"clones"` or `"worktrees"`
+
+Where workers work. `clones`: a pool of full clones per repository, leased by one card at a time;
+the number comes from "Konfiguration" (clones to create, or existing ones to use). Use it when
+every workspace runs its own app stack (ports, a database, Docker) or the tools break in a git
+worktree. `worktrees`: a git worktree of the configured checkout per card, any number in parallel
+unless "Konfiguration" gives the repository slots. Default: `worktrees`. A repository whose
+configuration names clones (clones to create, existing ones, or other machines) works in clones
+whatever the settings say.
+
+### `prNoise` — account names
+
+Accounts whose pull request comments are not review feedback (deploy previews, coverage bots):
+their comments do not go to the worker. Default: none.
+
+### `stack` — `{ start, refresh?, urls?: { file, frontendKey }, stop?, keep? }`
+
+How a worker brings the app up in its workspace: `start` starts it all, `refresh` picks up a
+backend change without starting everything again, and once it runs, the `KEY=value` file `file`
+holds the frontend's URL under `frontendKey`. Every worker's brief says so. Default: none; a stack
+without `start` counts as none.
+
+- `stop`: stops the stack in a workspace, and does nothing where none runs. With it, Obeya parks a
+  card that waits for the owner (handed over, asked, its pull request open) once its worker has
+  nothing running and five minutes have passed: it runs `stop` in the workspace (through `sh -c`,
+  `cmd /c` on Windows), so a waiting card costs disk, not memory. The worker's next message tells
+  it the stack was stopped; it starts it again with `start` when it needs it. A stop that fails is
+  an error on the card.
+- `keep`: run before `stop`; exiting 0 means the stack holds what must not be lost (a restored
+  database, say), and Obeya leaves it running and says so on the card. The owner who wants it
+  stopped anyway tells the worker.
+
+### `demo` — `{ howToRun?, site? }`
+
+Demos: every handover brings one, a narrated video recorded with Obeya's demo skill or an HTML
+page for something to look at; the worker picks which.
+
+- `howToRun`: the recipe for running the app for a recording, written for the worker, in a few
+  sentences: what to start and how (or "the stack"), migrations and test data, how to log in and
+  as whom, which URL, and what to stop afterwards. Everything a newcomer to the project would have
+  to ask about. The worker gets it in its brief word for word; `bun lib/recipe.ts` of the demo
+  skill prints it. Without one, each worker finds out from the repository how to run the app.
+- `site`: a static site Obeya keeps and deploys itself, so that "Teilen" puts a demo on a page for
+  colleagues, for a host that takes a directory (Cloudflare Pages, Netlify, an S3 bucket, a
+  directory a web server serves):
+
+  ```json
+  "site": {
+    "title": "Team demos",
+    "url": "https://demos.example.dev",
+    "deploy": "bunx wrangler@4 pages deploy {dir} --project-name demos --branch main --commit-dirty=true",
+    "env": "sites/demos/deploy.env",
+    "headers": { "CF-Access-Client-Id": "${CF_ID}", "CF-Access-Client-Secret": "${CF_SECRET}" },
+    "maxFile": 26214400,
+    "language": "en"
+  }
+  ```
+
+  `title` is the overview's heading and the pages' tab titles; a page is at `url/<slug>/`.
+  `deploy` is a command line, run in the repository (a program given as a path is found there; a
+  script runs with Obeya's Bun), with `{dir}` for the site's directory. Optional: `env`, a file of
+  `KEY=value` lines relative to Obeya's home; `headers`, for reading the live site behind a login,
+  `${KEY}` from `env`; `maxFile`, the largest file the host takes in bytes (25 MiB without it);
+  `language`, the overview's words (else the demo settings' language).
+
+  Obeya keeps the site in `sites/<host and path of url>/site/` under its home, writes each page
+  (in its demo's language) and the overview with its own templates, and after each share or
+  withdrawal runs `deploy` with the `env` file's values in its environment. Credentials go into
+  the `env` file on each publishing machine, never into git; a machine without it exports demos
+  instead, and "Teilen" names the file it lacks. Without `env`, the deploy uses the machine's own
+  login.
+
+  Several machines may publish to one site. Before each change Obeya reads the live site's
+  manifest (`obeya-site.json`), takes over the pages other machines published or withdrew, and
+  only then deploys; a manifest it cannot read (a login without `headers`, the host down) refuses
+  the deploy, since deploying blind could take other machines' pages offline. Pages shared from
+  here that a later deploy from elsewhere took offline are deployed again.
+
+Default: no recipe, no site.
+
+### Not in the file: the share command and the canvas
+
+A host that needs more than deploying a directory gets a share command instead of a site: a
+setting of each machine ("Befehl zum Teilen von Demos" in „Einstellungen“), since it often needs
+credentials. Obeya runs it in a directory under its home with `OBEYA_HOME`, `OBEYA_REPO` (the
+repository's checkout) and `OBEYA_KIT` (the module with Obeya's page templates) set: `publish`
+with the page as JSON on stdin (`SharePage` in `src/server/share.ts`) prints the page's URL;
+`withdraw <slug>` takes it down; `version` may print the version of the pages it writes. It goes
+before the site. Without either, "Teilen" exports a demo as a file.
+
+The canvas a repository is on, its name and id, are in "Konfiguration" too. Without a name, a
+canvas is named after its first repository (the name in its `origin` URL, else its directory's).
+
+## Which value applies
+
+Every machine that runs Obeya on the repository reads `.obeya/settings.json`, a fresh clone
+included. Which value applies, highest first:
+
+1. The one set for this machine in "Konfiguration" (a repository's „Einstellungen“; kept in
+   `canvases.json` in Obeya's home, never in the repository).
+2. `.obeya/settings.json` **as the default branch has it**.
+3. What Obeya detects (`land`, the main branch).
+4. Obeya's default.
+
+"Konfiguration" shows each value with where it comes from („aus dem Repository“ for the file).
+The file is read from the default branch (the local one when it has all of `origin`'s commits,
+else `origin`'s as last fetched), not from the checkout: the clones a canvas works in are on
+cards' branches most of the time. So **a change committed on a branch does nothing yet**; it
+counts once it is on the default branch, and then without a restart (Obeya reads it again whenever
+it reads the default branch anew: a landing, a merged pull request, a fetch). The one exception is
+`workspaces`: clones or worktrees are set up when a repository's agents start, so a change to it
+restarts that repository's agents once they paused; Obeya and the other repositories work on.
+
+The main branch is not in the file, since it says where the file is read from: a fresh clone has
+it from `origin`'s HEAD, and a machine that needs another sets it in "Konfiguration".
+
+**From "Konfiguration".** Below a repository's „Einstellungen“, „Für alle ins Repository
+übernehmen“ takes the values set for this machine (all but the main branch) into the file. It
+shows the file as it will be and where it goes; where work lands on the main branch, Obeya commits
+it there (beside the checkout, which keeps everything else as it is; a change of its own to the
+file is refused), and the values then come from the repository on this machine too. Where work
+goes out as pull requests, Obeya pushes the commit to a branch of its own (`obeya-settings-…`) and
+opens a pull request against the main branch; this machine keeps its values until the pull
+request is merged, then they come from the repository. Where work may also go straight to main
+(`direct`), it offers to push the commit straight onto `origin`'s main branch instead (never
+forced; a protected branch refuses it). What the file holds beside them stays.
+
+## Mistakes
+
+Obeya checks every field of the file. A field it does not know (`check:` for `checks:`) or of the
+wrong type (`"checks": "pnpm test"` instead of a list) does not count, and a mistake inside one
+(`stack.urls.frontend` for `frontendKey`) takes the whole field along: Obeya's default stands in
+its place, and the rest of the settings work. Each one shows as a problem at the repository in
+"Konfiguration", starting with `.obeya/settings.json`, with the field and, for a misspelt one,
+what it probably meant (`check: no such field (did you mean checks?)` under "Details").
+
+A demo site without a title, an http(s) URL or a deploy command, or whose deploy program is not
+there, shows the same way; until it is complete, "Teilen" exports demos. A `.obeya/adapter/` on the
+main branch, from before Obeya read everything from the settings, shows as a problem with „Von
+einem Agenten ausfüllen lassen“ beside it, whose worker moves what it says into the settings and
+deletes it. These problems keep nothing from being saved, since they are fixed in the repository;
+Obeya's log names them when it starts. "Aufgabe zum Beheben anlegen" beside a problem has Obeya
+create a task that fixes it.
+
+## Testing the settings
+
+1. **Every field counts.** In the repository, with the settings in the checkout (committed or
+   not), run the settings skill's check from an Obeya checkout:
+
+   ```bash
+   bun ~/dev/obeya/plugin/skills/settings/lib/check.ts
+   ```
+
+   It prints what Obeya makes of them (setup, checks, landing, workspaces, the plan docs, the
+   stack, the demo site and recipe) and every problem "Konfiguration" would report for them, and
+   exits with 1 when there is one. A worker runs it as `bun ${CLAUDE_SKILL_DIR}/lib/check.ts`.
+2. **The commands work.** Run `setup` and each of `checks` in a fresh clone; start the stack as
+   `stack` and `howToRun` say, and open the frontend.
+3. **A demo comes out of `howToRun`.** Record one with the demo skill, following the recipe and
+   nothing else. This is what the settings skill does before it hands over.
+4. **On a canvas, once it is merged.** A canvas reads the settings from the default branch only,
+   so steps 1–3 are what can be tried before the merge. Once they are on the default branch, the
+   next card started gets its brief from them.

@@ -67,14 +67,14 @@ const URL_ = `http://localhost:${server.port}/`;
 const SITE = (extra: Partial<DemoSite> = {}): DemoSite => ({
   title: 'Team demos',
   url: URL_,
-  deploy: ['deploy.ts', '{dir}', '__OUT__'],
+  deploy: 'deploy.ts {dir} __OUT__',
   env: 'sites/demos/deploy.env',
   language: 'de',
   ...extra,
 });
 
 const make = (site: DemoSite, at = home, machine = 'a') =>
-  siteTarget({ ...site, deploy: site.deploy.map((a) => a.replace('__OUT__', dir)) }, repo, at, MESSAGES.en.share, { machine, checkWaits: [0, 10, 10] });
+  siteTarget({ ...site, deploy: site.deploy.replace('__OUT__', dir) }, repo, at, MESSAGES.en.share, { machine, checkWaits: [0, 10, 10] });
 const siteDir = (at = home) => join(at, 'sites', siteKey(URL_), 'site');
 const deployed = () => join(dir, 'deployed');
 const deploys = () => readFileSync(join(dir, 'deploys'), 'utf8').trim().split('\n');
@@ -458,7 +458,7 @@ describe('sharing to a site', () => {
       runtime: new FakeRuntime(),
       home,
       forge: noForge,
-      sourceFor: () => ({ site: { ...SITE(), deploy: ['deploy.ts', '{dir}', dir] }, repo }),
+      sourceFor: () => ({ site: { ...SITE(), deploy: `deploy.ts {dir} ${dir}` }, repo }),
     });
   });
 
@@ -535,10 +535,10 @@ describe('sharing to a site', () => {
   });
 });
 
-test("a repository whose adapter names a site: the canvas says the env file it lacks, until it is there", () => {
+test("a repository whose settings name a site: the canvas says the env file it lacks, until it is there", () => {
   const shop = gitRepo(join(dir, 'shop'), {
     'docs/plan/plan.md': '# Laden\n\n## Goal\n\nG.\n',
-    '.obeya/adapter/index.ts': `export default { name: 'shop', demo: { howToRun: 'bun dev', site: ${JSON.stringify(SITE())} } };\n`,
+    '.obeya/settings.json': JSON.stringify({ demo: { howToRun: 'bun dev', site: SITE() } }),
   });
   rmSync(join(home, 'sites/demos/deploy.env'));
   const canvas = new CanvasRuntime({ repos: [{ path: shop }] }, { store: new Store(':memory:'), home, runtime: new FakeRuntime(), forge: noForge });

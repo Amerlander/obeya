@@ -1,19 +1,19 @@
 ---
-name: adapter
-description: Write a repository's Obeya adapter (`.obeya/settings.json` for its values, `.obeya/adapter/index.ts` for what is code) — how its app starts, which checks run, how work lands, how a demo is recorded, where its plan docs are — from what the repository shows, prove the demo recipe by recording a demo with it, and ask the owner what the repository does not tell. Use when a task asks to set up Obeya for a repository, to write or fix its adapter, or names this skill.
+name: settings
+description: Write a repository's Obeya settings (`.obeya/settings.json`) — how its app starts and stops, which checks run, how work lands, how a demo is recorded, where demos are shared, where its plan docs are — from what the repository shows, prove the demo recipe by recording a demo with it, and ask the owner what the repository does not tell. Use when a task asks to set up Obeya for a repository, to write or fix its settings, or names this skill.
 ---
 
-# Writing a repository's adapter
+# Writing a repository's settings
 
-Obeya learns how a project works from its adapter: the values (setup, checks, landing, plan docs,
-the demo recipe …) in `.obeya/settings.json` in the repository, what is code (the stack, a share
-script, the canvas's name) in `.obeya/adapter/index.ts`. The reference for every field, how Obeya
-picks the adapter and when a change takes effect is `${CLAUDE_SKILL_DIR}/../../../docs/adapter.md`.
-Read it first; this skill is the way to fill it in.
+Obeya learns how a project works from the repository's settings for everyone, in
+`.obeya/settings.json`: setup, checks, landing, plan docs, the app stack, the demo recipe, the
+demo site. The owner sees and changes them in "Konfiguration". The reference for every field and
+when a change takes effect is `${CLAUDE_SKILL_DIR}/../../../docs/settings.md`. Read it first; this
+skill is the way to fill it in.
 
-The result is an adapter whose every field holds for this repository: a worker who knows nothing
-of the project gets its brief from it, installs, checks, starts the app and records a demo without
-asking anyone.
+The result is a settings file whose every field holds for this repository: a worker who knows
+nothing of the project gets its brief from it, installs, checks, starts the app and records a demo
+without asking anyone.
 
 ## 1. Read the repository
 
@@ -28,6 +28,11 @@ Find out, from the files rather than by guessing:
   it takes (fixed ones mean one stack per clone: `workspaces: 'clones'`), migrations, seed data,
   where the frontend's URL comes from, and how to stop the stack of one workspace (`stack.stop`;
   `stack.keep` where some stacks hold data that must stay).
+- **An adapter module from before**: a `.obeya/adapter/index.ts` held what the settings hold now
+  (the stack, the demo site). Obeya no longer reads it: take its values over, then delete
+  `.obeya/adapter/`. What it held that is set on each machine in "Konfiguration" goes into your
+  summary for the owner: the canvas's name, a share command (its script moves elsewhere in the
+  repository).
 - **Logging in and test data**: seed scripts, fixtures, test users in the docs or the seed.
 - **Landing**: the `origin` remote (Obeya detects `land`: `pr` on GitHub, else `main`; write it
   only to differ), whether the default branch is protected, which bots comment on pull requests
@@ -53,17 +58,11 @@ aufbereiten" on the canvas), or a new `docs/plan/`. Collect them and ask in one 
 (a real password, an API key) goes into `howToRun` only as where to find it (a file outside git,
 an environment variable), never itself.
 
-## 3. Write `.obeya/settings.json`, and `.obeya/adapter/index.ts` where code is needed
+## 3. Write `.obeya/settings.json`
 
-Start from the example in the reference and keep only the fields that differ from the generic
-adapter's values. The values go into `.obeya/settings.json`: `setup`, `checks`, `land`, `direct`,
-`planDocs`, `softPaths`, `workspaces`, `prNoise`, and `demo` with `howToRun`. The
-owner sees and changes them in "Konfiguration" without a line of TypeScript. The module is only
-for the rest: `stack`, `demo.site` or `demo.share`, `canvasId` and `canvasName`; a repository that
-needs none of them has no module. A module's `demo` needs a `howToRun` of its own (`''` where the
-recipe is in the settings file, which goes before it). The module imports nothing of Obeya's; its default export is
-the adapter, or `(kit) => adapter` when it needs Obeya's helpers. Files it needs beside it (a
-share script) go into `.obeya/adapter/` too.
+Start from the example in the reference and keep only the fields that differ from Obeya's
+defaults: `setup`, `checks`, `land`, `direct`, `planDocs`, `softPaths`, `workspaces`, `prNoise`,
+`stack`, and `demo` with `howToRun` and `site`.
 
 `demo.howToRun` is the part that decides whether workers can show their work. Write it for a
 newcomer, as a few sentences: what to start, in which order and how (in the background, which
@@ -77,10 +76,11 @@ Then check it:
 bun ${CLAUDE_SKILL_DIR}/lib/check.ts
 ```
 
-run in the repository. It loads both files from the checkout the way Obeya will, prints what
-Obeya makes of it (also which docs in the plan directory are projects and which are not, and why)
-and every problem (an unknown field, a wrong type, a share program that is not
-there), and exits with 1 while there is one. Go on once it says "No problems."
+run in the repository. It reads the file from the checkout the way Obeya will, prints what Obeya
+makes of it (also which docs in the plan directory are projects and which are not, and why) and
+every problem (an unknown field, a wrong type, a site's deploy program that is not there, an
+adapter module still there), and exits with 1 while there is one. Go on once it says "No
+problems."
 
 ## 4. Prove it
 
@@ -94,7 +94,7 @@ there), and exits with 1 while there is one. Go on once it says "No problems."
 
 ## 5. Hand over
 
-Commit `.obeya/` alone. In the summary say what the settings and the module set and why where it
-was a judgement call (the checks you left out, clones or worktrees), what the owner answered, and
+Commit `.obeya/` alone. In the summary say what the settings set and why where it was a judgement
+call (the checks you left out, clones or worktrees), what the owner answered, and
 that they count once they are on the default branch (at once; where they move the workers between
 clones and worktrees, Obeya restarts the repository's agents by itself).

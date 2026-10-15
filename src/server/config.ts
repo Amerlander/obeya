@@ -8,9 +8,9 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, wri
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
-import { readShared, REPO_SETTINGS_FILE, type SharedRead } from '../adapters';
+import { hasAdapterModule, readShared, REPO_ADAPTER_DIR, REPO_SETTINGS_FILE, type SharedRead } from '../adapters';
 import { settingsShape } from '../adapters/schema';
-import { type AgentsView, blocksSaving, type CanvasConfig, type ConfigProblem, type ConfigSaved, type ConfigView, type RepoSettings, SHARED_FIELDS, type SettingsShared, type SharedSettings, type DemoSettingsProblem, type DemoSettingsView, type DemoVoiceCheck, type LanguageView, type ResolvedCanvas, type ThemeView, type VoiceInstallJob, layerSettings, type ProposedSetting, settingPatch } from '../core/types';
+import { type AgentsView, blocksSaving, type CanvasConfig, type DemoSite, type ConfigProblem, type ConfigSaved, type ConfigView, type RepoSettings, SHARED_FIELDS, type SettingsShared, type SharedSettings, type DemoSettingsProblem, type DemoSettingsView, type DemoVoiceCheck, type LanguageView, type ResolvedCanvas, type ThemeView, type VoiceInstallJob, layerSettings, type ProposedSetting, settingPatch } from '../core/types';
 import {
   DEMO_SETTINGS_FILE,
   type DemoSettings,
@@ -35,7 +35,7 @@ import { commitShared, proposeShared, pushShared } from './shared-settings';
 import { GIT } from './workspaces';
 import { VERSION } from './resources';
 import { agentsView, languageView, pushKeyChoice, saveAgents, saveLanguage, savePushKey, saveTheme, themeView } from './settings';
-import { adapterRepoProblems, shareArgv, shareProblem } from './share';
+import { shareArgv, shareProblem, siteProblem } from './share';
 
 export const CONFIG_FILE = 'canvases.json';
 
@@ -59,7 +59,9 @@ function tidySettings(s: z.infer<typeof settingsShape> | undefined): RepoSetting
   if (!s) return undefined;
   const list = (l?: string[]) => l?.map((x) => x.trim()).filter(Boolean);
   const dir = s.planDocs?.dir.trim().replace(/\/+$/, '');
-  const demo = s.demo?.howToRun !== undefined ? { howToRun: s.demo.howToRun.trim() } : undefined;
+  const site = tidySite(s.demo?.site);
+  const demo = s.demo?.howToRun !== undefined || site ? { ...(s.demo?.howToRun !== undefined ? { howToRun: s.demo.howToRun.trim() } : {}), ...(site ? { site } : {}) } : undefined;
+  const stack = tidyStack(s.stack);
   const out: RepoSettings = {
     ...(s.branch?.trim() ? { branch: s.branch.trim() } : {}),
     ...(s.land ? { land: s.land } : {}),
@@ -70,9 +72,35 @@ function tidySettings(s: z.infer<typeof settingsShape> | undefined): RepoSetting
     ...(s.softPaths ? { softPaths: list(s.softPaths)! } : {}),
     ...(s.workspaces ? { workspaces: s.workspaces } : {}),
     ...(s.prNoise ? { prNoise: list(s.prNoise)! } : {}),
+    ...(stack ? { stack } : {}),
     ...(demo && Object.keys(demo).length ? { demo } : {}),
   };
   return Object.keys(out).length ? out : undefined;
+}
+
+/** A stack as it is saved: its commands trimmed, those left empty out; none where nothing is filled in. */
+function tidyStack(s: RepoSettings['stack']): RepoSettings['stack'] {
+  if (!s) return undefined;
+  const opt = (v?: string) => (v?.trim() ? v.trim() : undefined);
+  const urls = s.urls && (s.urls.file.trim() || s.urls.frontendKey.trim()) ? { file: s.urls.file.trim(), frontendKey: s.urls.frontendKey.trim() } : undefined;
+  const out = { start: s.start.trim(), ...(opt(s.refresh) ? { refresh: opt(s.refresh) } : {}), ...(urls ? { urls } : {}), ...(opt(s.stop) ? { stop: opt(s.stop) } : {}), ...(opt(s.keep) ? { keep: opt(s.keep) } : {}) };
+  return out.start || Object.keys(out).length > 1 ? out : undefined;
+}
+
+/** A demo site as it is saved: its fields trimmed, those left empty out; none where nothing is filled in. */
+function tidySite(s: DemoSite | undefined): DemoSite | undefined {
+  if (!s) return undefined;
+  const headers = Object.entries(s.headers ?? {}).filter(([k]) => k.trim());
+  const out: DemoSite = {
+    title: s.title.trim(),
+    url: s.url.trim(),
+    deploy: s.deploy.trim(),
+    ...(s.env?.trim() ? { env: s.env.trim() } : {}),
+    ...(headers.length ? { headers: Object.fromEntries(headers.map(([k, v]) => [k.trim(), v.trim()])) } : {}),
+    ...(s.maxFile ? { maxFile: s.maxFile } : {}),
+    ...(s.language ? { language: s.language } : {}),
+  };
+  return out.title || out.url || out.deploy || Object.keys(out).length > 3 ? out : undefined;
 }
 
 const shape = z.array(
@@ -275,7 +303,7 @@ export class Config {
         if (k === 'demo') continue;
         if (s[k] !== undefined && same(s[k], after[k]) && !same(before?.[k], after[k])) delete s[k];
       }
-      for (const k of ['howToRun'] as const)
+      for (const k of ['howToRun', 'site'] as const)
         if (s.demo?.[k] !== undefined && same(s.demo[k], after.demo?.[k]) && !same(before?.demo?.[k], after.demo?.[k])) delete s.demo[k];
     });
     if (changed) console.log(`Obeya: settings of ${path} now come from its ${REPO_SETTINGS_FILE}; removed from this machine's`);
@@ -441,19 +469,21 @@ export class Config {
           if (!shared.has(path)) shared.set(path, readShared(path));
           return () => shared.get(path)!.settings;
         };
-        const { id, name, adapters, infos, values, broken, refs, config } = resolveCanvas(c, this.o.store, undefined, sharedOf);
+        const { id, name, adapters, infos, values, refs, config } = resolveCanvas(c, this.o.store, undefined, sharedOf);
         const without = values();
-        // what is wrong in a repository's own adapter is fixed there, not here: it keeps nothing from being saved
+        // what is wrong in a repository's settings for everyone is fixed there, not here: it keeps nothing from being saved
+        const leftover = c.repos.map((r) => hasAdapterModule(infos[config.repos.indexOf(r)]!.path));
         c.repos.forEach((r, repo) => {
           const adapter = adapters[config.repos.indexOf(r)]!;
-          const error = broken[config.repos.indexOf(r)];
-          if (error) problems.push({ code: 'adapterLoad', canvas, repo, detail: error });
+          if (leftover[repo])
+            problems.push({ code: 'adapterGone', canvas, repo, detail: `${REPO_ADAPTER_DIR}/ on the main branch is no longer read; what it says belongs in ${REPO_SETTINGS_FILE}` });
           if (r.hosts?.length) {
             const why = adapter.land === 'main' ? 'its work lands on the main of this checkout' : !remoteOf(r.path) ? 'it has no remote to clone from' : null;
             if (why) problems.push({ code: 'hostRepo', canvas, repo, detail: `the repository cannot have workers on other machines: ${why}` });
           }
-          for (const detail of adapterRepoProblems(adapter, resolve(r.path), !!r.share))
-            problems.push({ code: 'adapterField', canvas, repo, detail });
+          const site = adapter.demo?.site;
+          const wrong = !r.share?.trim() && site && siteProblem(site, resolve(r.path));
+          if (wrong) problems.push({ code: 'demoSite', canvas, repo, detail: wrong });
           for (const detail of shared.get(infos[config.repos.indexOf(r)]!.path)?.problems ?? []) problems.push({ code: 'repoSettings', canvas, repo, detail });
         });
         // the repositories in the order given, though the home one runs first
@@ -462,15 +492,13 @@ export class Config {
           name,
           repos: c.repos.map((r) => {
             const i = config.repos.indexOf(r);
-            const demo = adapters[i]!.demo;
             return {
               id: refs[i]!.id,
-              adapter: adapters[i]!.name,
               workspaces: adapters[i]!.workspaces,
+              ...(leftover[c.repos.indexOf(r)] ? { adapterGone: true } : {}),
               values: without[i]!,
               shareTo: adapters[i]!.land === 'main' ? 'main' : 'pr',
               ...(adapters[i]!.land === 'pr' && adapters[i]!.direct ? { shareDirect: true } : {}),
-              ...(demo?.site ? { adapterSite: demo.site.url } : demo?.share ? { adapterShares: true } : {}),
             };
           }),
         };

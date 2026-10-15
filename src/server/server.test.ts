@@ -31,8 +31,8 @@ const DELAY_MS = 200;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'obeya-server-'));
   const main = join(dir, 'main');
-  // an adapter of its own that works in clones, none registered; the canvas is named after the directory
-  gitRepo(main, { 'README.md': 'hi\n', '.obeya/adapter/index.ts': "export default { name: 'shop', workspaces: 'clones' };\n" });
+  // settings of its own that work in clones, none registered; the canvas is named after the directory
+  gitRepo(main, { 'README.md': 'hi\n', '.obeya/settings.json': '{ "workspaces": "clones" }\n' });
   runtime = new FakeRuntime();
   canvas = new CanvasRuntime({ repos: [{ path: main }] }, { store: new Store(':memory:'), home: dir, runtime, forge: noForge, commandDelayMs: DELAY_MS });
   board = canvas.board;

@@ -53,8 +53,8 @@ beforeEach(() => {
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 describe("Obeya's configuration", () => {
-  test('says what each canvas amounts to: its id, name, repositories and their adapters', () => {
-    api = gitRepo(join(dir, 'api-own'), { '.obeya/adapter/index.ts': "export default { name: 'api' };\n" });
+  test('says what each canvas amounts to: its id, name, repositories and where their workers work', () => {
+    api = gitRepo(join(dir, 'api-own'), { '.obeya/settings.json': '{ "workspaces": "clones" }\n' });
     const c = config('args', [{ name: 'Produkt', repos: [{ path: web }, { path: api }] }], ['produkt']);
     const v = c.view();
     expect(v).toMatchObject({ file, source: 'args', running: ['produkt'], problems: [], restarting: false, server: { port: 4417, restarts: true } });
@@ -63,14 +63,14 @@ describe("Obeya's configuration", () => {
         id: 'produkt',
         name: 'Produkt',
         repos: [
-          { id: 'web', adapter: 'generic', workspaces: 'worktrees' },
-          { id: 'api-own', adapter: 'api', workspaces: 'worktrees' },
+          { id: 'web', workspaces: 'worktrees' },
+          { id: 'api-own', workspaces: 'clones' },
         ],
       },
     ]);
   });
 
-  test('a repository whose configuration names clones works in clones, whatever its adapter says', () => {
+  test('a repository whose configuration names clones works in clones, whatever its settings say', () => {
     const c = config('file', []);
     const mode = (r: object) => c.check([{ repos: [{ path: web, ...r }] }]).resolved[0]!.repos[0]!.workspaces;
     expect(mode({})).toBe('worktrees');
@@ -110,7 +110,7 @@ describe("Obeya's configuration", () => {
     expect(problems('git')).toEqual([]);
     expect(problems('scripts/nowhere.sh')).toEqual(['shareCommand']);
     expect(problems('no-such-program-anywhere publish')).toEqual(['shareCommand']);
-    // an empty one is no command: the adapter's counts, or demos are exported
+    // an empty one is no command: the demo site of the settings counts, or demos are exported
     expect(problems('  ')).toEqual([]);
     expect(c.check([{ repos: [{ path: web, share: ' ' }] }]).canvases).toEqual([{ repos: [{ path: web }] }]);
   });
@@ -133,42 +133,25 @@ describe("Obeya's configuration", () => {
     expect(check([{ path: web, hosts: [{ ...host, name: 'a/b' }] }]).problems.map((p) => p.code)).toEqual(['invalid']);
   });
 
-  test("a misspelt field in a repository's own adapter is a problem at the repository, which keeps nothing from being saved", () => {
-    const own = gitRepo(join(dir, 'shop'), {
-      '.obeya/adapter/index.ts': "export default { name: 'shop', check: ['bun test'], demo: { howToRun: 'bun dev', share: ['no-such-program-anywhere'] } };\n",
-    });
-    const c = config('args', [{ repos: [{ path: web }] }]);
-    const checked = c.check([{ repos: [{ path: web }, { path: own }] }]);
-    expect(checked.problems).toEqual([
-      { code: 'adapterField', canvas: 0, repo: 1, detail: 'check: no such field (did you mean checks?)' },
-      { code: 'adapterField', canvas: 0, repo: 1, detail: "demo.share: the share command's program no-such-program-anywhere is not on the PATH" },
-    ]);
-    // the configuration's own share command takes the adapter's place, so its program is not asked for
-    expect(c.check([{ repos: [{ path: own, share: 'git' }] }]).problems.map((p) => p.detail)).toEqual(['check: no such field (did you mean checks?)']);
-    expect(c.save([{ repos: [{ path: web }, { path: own }] }])).toEqual({ restarting: true });
-  });
-
-  test("an adapter naming both a site and a share command: the site is used, and the command is a problem", () => {
-    const site = { title: 'Demos', url: 'https://demos.example.dev', deploy: ['no-such-deploy-anywhere', '{dir}'] };
-    const own = gitRepo(join(dir, 'shop'), {
-      '.obeya/adapter/index.ts': `export default { name: 'shop', demo: { howToRun: 'bun dev', share: ['git'], site: ${JSON.stringify(site)} } };\n`,
-    });
+  test("a demo site that cannot be used is a problem at the repository, unless this machine shares with a command of its own", () => {
+    const site = { title: 'Demos', url: 'https://demos.example.dev', deploy: 'no-such-deploy-anywhere {dir}' };
+    const own = gitRepo(join(dir, 'shop'), { '.obeya/settings.json': JSON.stringify({ demo: { site } }) });
     const c = config('args', [{ repos: [{ path: web }] }]);
     const checked = c.check([{ repos: [{ path: own }] }]);
-    expect(checked.problems.map((p) => p.detail)).toEqual([
-      'demo: names both site and share; the site is used, so share goes',
-      "demo.site.deploy: the share command's program no-such-deploy-anywhere is not on the PATH",
-    ]);
-    expect(checked.resolved[0]!.repos[0]).toMatchObject({ adapterSite: 'https://demos.example.dev' });
-    expect(checked.resolved[0]!.repos[0]!.adapterShares).toBeUndefined();
+    expect(checked.problems).toEqual([{ code: 'demoSite', canvas: 0, repo: 0, detail: "demo.site.deploy: the deploy command's program no-such-deploy-anywhere is not on the PATH" }]);
+    expect(checked.resolved[0]!.repos[0]!.values.demo.site).toEqual({ value: site, source: 'repository' });
+    expect(c.check([{ repos: [{ path: own, share: 'git' }] }]).problems).toEqual([]);
+    // one this machine sets without a URL
+    expect(c.check([{ repos: [{ path: web, settings: { demo: { site: { ...site, url: 'demos', deploy: 'git {dir}' } } } }] }]).problems.map((p) => p.detail)).toEqual(['demo.site.url: expected an http(s) URL']);
   });
 
-  test("a repository's own adapter that does not load is a problem at the repository, which keeps nothing from being saved", () => {
-    const own = gitRepo(join(dir, 'shop'), { '.obeya/adapter/index.ts': "export default () => { throw new Error('kaputt'); };\n" });
+  test("a repository whose main branch still has an adapter module is a problem there, which keeps nothing from being saved", () => {
+    const own = gitRepo(join(dir, 'shop'), { '.obeya/adapter/index.ts': "export default { name: 'shop' };\n", '.obeya/settings.json': '{ "setup": "bun install" }\n' });
     const c = config('args', [{ repos: [{ path: web }] }]);
     const checked = c.check([{ repos: [{ path: web }, { path: own }] }]);
-    expect(checked.problems).toEqual([{ code: 'adapterLoad', canvas: 0, repo: 1, detail: expect.stringMatching(/does not load: kaputt$/) }]);
-    expect(checked.resolved[0]!.repos[1]).toMatchObject({ id: 'shop', adapter: 'generic' });
+    expect(checked.problems).toEqual([{ code: 'adapterGone', canvas: 0, repo: 1, detail: '.obeya/adapter/ on the main branch is no longer read; what it says belongs in .obeya/settings.json' }]);
+    expect(checked.resolved[0]!.repos[1]).toMatchObject({ id: 'shop', adapterGone: true });
+    expect(checked.resolved[0]!.repos[0]!.adapterGone).toBeUndefined();
     expect(c.save([{ repos: [{ path: web }, { path: own }] }])).toEqual({ restarting: true });
   });
 
@@ -230,9 +213,9 @@ describe("Obeya's configuration", () => {
       demo: { howToRun: { value: '', source: 'default' } },
     });
     // this machine's own come on top, in the draft: the values beside them stay what they would be without
-    const own = gitRepo(join(dir, 'own'), { '.obeya/adapter/index.ts': "export default { name: 'own', land: 'main', checks: ['bun test'], demo: { howToRun: 'bun dev' } };\n" });
+    const own = gitRepo(join(dir, 'own'), { '.obeya/settings.json': '{ "land": "main", "checks": ["bun test"], "demo": { "howToRun": "bun dev" } }\n' });
     const ownValues = c.check([{ repos: [{ path: own, settings: { land: 'pr' } }] }]).resolved[0]!.repos[0]!.values;
-    expect(ownValues).toMatchObject({ land: { value: 'main', source: 'adapter' }, checks: { source: 'adapter' }, planDocs: { source: 'default' }, demo: { howToRun: { source: 'adapter' } } });
+    expect(ownValues).toMatchObject({ land: { value: 'main', source: 'repository' }, checks: { source: 'repository' }, planDocs: { source: 'default' }, demo: { howToRun: { source: 'repository' } } });
     expect(values({ clones: 1 }).workspaces).toEqual({ value: 'clones', source: 'clones' });
     const problems = (branch: string) => c.check([{ repos: [{ path: web, settings: { branch } }] }]).problems.map((p) => p.code);
     expect(problems('main')).toEqual([]);
@@ -436,10 +419,10 @@ describe('the configuration over HTTP', () => {
     expect(readConfigFile(file)).toEqual([{ repos: [{ path: web }, { path: api }] }]);
   });
 
-  test('makes the card that fills in the settings of a repository on the generic adapter, once while it is open', async () => {
+  test('makes the card that fills in the settings of a repository, once while it is open', async () => {
     const made = await call('POST', '/api/c/web/adapter-setup', { repo: 'web' });
     expect(made).toMatchObject({ status: 200, body: { title: 'Obeya für web einrichten', state: 'planned' } });
-    expect(made.body.body).toContain('obeya:adapter');
+    expect(made.body.body).toContain('obeya:settings');
     expect((await call('POST', '/api/c/web/adapter-setup', { repo: 'web' })).body.id).toBe(made.body.id);
     expect((await call('POST', '/api/c/web/adapter-setup', { repo: 'nope' })).status).toBe(400);
   });

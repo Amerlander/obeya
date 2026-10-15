@@ -1,4 +1,4 @@
-// A command of the adapter's `stack`, run in a workspace by Obeya itself (design: Parking).
+// A command of the `stack` of a repository's settings, run in a workspace by Obeya itself (design: Parking).
 
 import { remote } from './hosts';
 

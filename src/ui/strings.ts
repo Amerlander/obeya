@@ -125,7 +125,7 @@ const de = {
     started: (card: string) => `„${card}“ gestartet.`,
     empty: (dir: string) => `Noch keine Plan-Docs in ${dir}/. „Als Projekt planen“ auf einer Ideen- oder Aufgabenkarte schreibt das erste dorthin.`,
     change: 'Ordner ändern',
-    changeHint: 'Wo die Plan-Docs liegen, legt der Adapter des Repositorys fest (planDocs). In der Konfiguration richtet ein Agent ihn ein.',
+    changeHint: 'Wo die Plan-Docs liegen, legen die Einstellungen des Repositorys in der Konfiguration fest (Plan-Dokumente).',
   },
   archivedProject: 'Projekt · Archiv',
   fromIdea: 'Entstanden aus der Idee',
@@ -642,7 +642,6 @@ const de = {
     gone: (names: string) => `Nicht mehr dabei: ${names}. Ihre Aufgaben und Projekte bleiben gespeichert und kommen mit der Leinwand zurück.`,
     path: 'Pfad zum Repository',
     home: 'Heimat',
-    ownAdapter: 'eigener Adapter (.obeya/adapter/)',
     adapterSetupHint:
       'Obeya weiß noch nicht, wie diese App startet, welche Prüfungen laufen und wie ein Agent sie für eine Demo startet. Trag es in den Einstellungen selbst ein, oder lass einen Agenten das Repository lesen, die Einstellungen für alle ausfüllen und eine Demo damit ausprobieren.',
     adapterSetup: 'Von einem Agenten ausfüllen lassen',
@@ -672,7 +671,6 @@ const de = {
     addHost: '+ Rechner',
     removeHost: 'Rechner entfernen',
     share: 'Befehl zum Teilen von Demos',
-    shareAdapter: (adapter: string) => `leer: der des Adapters ${adapter}`,
     shareSite: (url: string) => `leer: Site: ${url}`,
     shareNone: 'leer: Teilen exportiert eine Datei',
     shareHint:
@@ -680,10 +678,10 @@ const de = {
     addRepo: '+ Repository',
     settings: {
       open: 'Einstellungen',
-      hint: 'Was Obeya über das Repository wissen muss. Gilt sofort auf diesem Rechner, ohne Neustart; was du hier nicht setzt, kommt aus dem Repository (.obeya/settings.json), aus dem Adapter, aus dem, was Obeya erkennt, oder ist der Standard.',
+      hint: 'Was Obeya über das Repository wissen muss. Gilt sofort auf diesem Rechner, ohne Neustart; was du hier nicht setzt, kommt aus dem Repository (.obeya/settings.json), aus dem, was Obeya erkennt, oder ist der Standard.',
       setHere: (n: number) => (n === 1 ? 'eine auf diesem Rechner gesetzt' : `${n} auf diesem Rechner gesetzt`),
       fromRepo: (n: number) => (n === 1 ? 'eine aus dem Repository' : `${n} aus dem Repository`),
-      source: { machine: 'auf diesem Rechner', repository: 'aus dem Repository', adapter: (name: string) => `aus dem Adapter ${name}`, clones: 'Klone eingetragen', detected: 'erkannt', default: 'Standard' },
+      source: { machine: 'auf diesem Rechner', repository: 'aus dem Repository', clones: 'Klone eingetragen', detected: 'erkannt', default: 'Standard' },
       reset: 'Zurücksetzen',
       resetHint: 'Den Wert dieses Rechners entfernen: dann gilt wieder der aus der Quelle darunter.',
       branch: 'Hauptbranch',
@@ -710,6 +708,26 @@ const de = {
       prNoiseHint: 'Konten, deren Kommentare an Pull Requests kein Review sind (Deploy-Bots), eines pro Zeile.',
       howToRun: 'App für die Demo starten',
       howToRunHint: 'Freitext für den Agenten, kein Befehl: wie er die App für eine Demo startet, mit Befehlen, Login, Testdaten und Migrationen, so wie man es einem neuen Kollegen erklärt. Bleibt es leer, findet jeder Agent es selbst im Repository heraus.',
+      stack: 'App-Stack',
+      stackStart: 'Starten',
+      stackRefresh: 'Nach einer Backend-Änderung',
+      stackUrlFile: 'Datei mit den URLs (SCHLÜSSEL=Wert)',
+      stackFrontendKey: 'Schlüssel der Frontend-URL',
+      stackStop: 'Stoppen',
+      stackKeep: 'Laufen lassen, wenn dies mit 0 endet',
+      stackHint:
+        'Befehle, mit denen ein Agent die App in seinem Arbeitsverzeichnis startet. Mit „Stoppen“ hält Obeya den Stack einer Karte an, die auf dich wartet, damit sie nur Platte und keinen Speicher kostet; der Agent startet ihn wieder, wenn er ihn braucht. „Laufen lassen“ schützt einen Stack, der etwas hält, das nicht verloren gehen darf (eine wiederhergestellte Datenbank). Bleibt „Starten“ leer, findet jeder Agent es selbst heraus.',
+      site: 'Demo-Site',
+      siteTitle: 'Titel der Übersicht',
+      siteUrl: 'URL',
+      siteDeploy: 'Befehl zum Veröffentlichen ({dir}: das Verzeichnis der Site)',
+      siteEnv: 'Datei mit Zugangsdaten (SCHLÜSSEL=Wert), relativ zu Obeyas Verzeichnis',
+      siteHeaders: 'Header zum Lesen hinter einem Login, einer pro Zeile',
+      siteMaxFile: 'Größte Datei (MiB)',
+      siteLanguageLabel: 'Sprache der Übersicht',
+      siteLanguage: { auto: 'wie die Demos', de: 'Deutsch', en: 'Englisch' },
+      siteHint:
+        'Eine statische Site, auf die „Teilen“ Demos für die Kollegen bringt: Obeya schreibt die Seiten und ihre Übersicht selbst und veröffentlicht sie mit dem Befehl. Die Zugangsdaten bleiben in der Datei auf jedem Rechner; ein Rechner ohne sie exportiert Demos stattdessen. Ein Befehl zum Teilen auf diesem Rechner geht vor.',
       share: {
         label: 'Für alle',
         button: (n: number) => (n === 1 ? 'Für alle ins Repository übernehmen (ein Wert) …' : `Für alle ins Repository übernehmen (${n} Werte) …`),
@@ -769,8 +787,8 @@ const de = {
       hostName: 'Ein Rechner dieses Namens verbindet sich anderswo mit einem anderen ssh-Ziel.',
       noBranch: 'Diesen Hauptbranch hat das Repository nicht, weder hier noch auf origin.',
       repoSettings: 'Ein Wert in .obeya/settings.json des Repositorys gilt nicht; an seiner Stelle steht, was ohne ihn gilt:',
-      adapterField: 'Ein Feld im Adapter des Repositorys gilt nicht, an seiner Stelle steht das des allgemeinen Adapters:',
-      adapterLoad: 'Der Adapter des Repositorys lädt nicht; bis er repariert ist, läuft das Repository mit dem allgemeinen Adapter:',
+      demoSite: 'Die Demo-Site in den Einstellungen des Repositorys ist so nicht nutzbar; bis sie es ist, exportiert „Teilen“ Demos als Datei:',
+      adapterGone: 'Das Repository hat auf dem Hauptbranch noch ein .obeya/adapter/, das Obeya nicht mehr liest. Was darin steht, gehört in seine Einstellungen (.obeya/settings.json); „Von einem Agenten ausfüllen lassen“ übernimmt es:',
       invalid: 'Die Konfiguration ist fehlerhaft.',
     } satisfies Record<ConfigProblemCode, string>,
     voice: {
@@ -952,7 +970,7 @@ const de = {
     open: (n: number) => (n === 1 ? '1 fehlt' : `${n} fehlen`),
     sections: {
       needed: { title: 'Agenten', hint: 'Ohne Claude Code und git arbeitet kein Agent. Claude Code läuft auf deinem Claude-Abo; die Agenten committen unter deinem Namen.' },
-      pr: { title: 'Pull Requests', hint: 'Freigegebene Arbeit geht als Pull Request auf GitHub, außer der eigene Obeya-Adapter eines Repositories sagt etwas anderes. Nötig erst bei der ersten Freigabe.' },
+      pr: { title: 'Pull Requests', hint: 'Freigegebene Arbeit geht als Pull Request auf GitHub, außer die Einstellungen eines Repositorys sagen etwas anderes. Nötig erst bei der ersten Freigabe.' },
       voice: { title: 'Sprachbefehle', hint: 'Leertaste halten und sagen, was zu tun ist; in der App auch, während ein anderes Programm vorne ist, mit der rechten Wahltaste (Mac) oder rechten Strg-Taste, in den Einstellungen änderbar. Obeya bestätigt schriftlich: auf der Karte oder in Obeyas Fenster (Schaltfläche oben rechts, Taste C).' },
       demos: { title: 'Demos', hint: 'Agenten zeigen ihre Arbeit als vertontes Video. Ohne das schicken sie eine Zusammenfassung.' },
     } satisfies Record<MachineSectionId, { title: string; hint: string }>,
@@ -1040,7 +1058,7 @@ const de = {
     reason: {
       code: 'Auf main liegt neuer Code, mit dem Obeya neu startet.',
       config: 'Die Konfiguration wurde gespeichert; Obeya startet mit ihr neu.',
-      adapter: 'Der Adapter eines Repositorys hat sich auf main geändert; Obeya startet mit ihm neu.',
+      repository: 'Die Einstellungen eines Repositorys haben sich auf seinem Hauptbranch geändert; Obeya startet seine Agenten damit neu.',
       update: 'Die neue Version der App wird installiert; danach startet Obeya neu.',
       stop: 'Obeya wird beendet (Strg-C oder SIGTERM). Ein zweites Strg-C im Terminal beendet es sofort.',
     } satisfies Record<RestartReason, string>,
@@ -1071,8 +1089,8 @@ const de = {
     /** Only some repositories' agents restart, for a change to their configuration; Obeya runs on. */
     repos: {
       pill: (n: number) => `Konfiguration wartet auf ${n === 1 ? '1 Agenten' : `${n} Agenten`}`,
-      reason: (names: string, adapter: boolean) =>
-        adapter
+      reason: (names: string, repository: boolean) =>
+        repository
           ? `Auf dem Hauptzweig von ${names} hat sich geändert, wo seine Agenten arbeiten. Obeya startet sie damit neu, sobald sie an einem sicheren Punkt pausieren; alle anderen arbeiten weiter.`
           : `Die Konfiguration von ${names} hat sich geändert. Obeya übernimmt sie für dessen Agenten, sobald sie an einem sicheren Punkt pausieren; alle anderen arbeiten weiter.`,
       leaving: 'Die Leinwand ist nicht mehr in der Konfiguration. Obeya nimmt sie heraus, sobald ihre Agenten an einem sicheren Punkt pausieren; ihre Karten bleiben erhalten.',
@@ -1364,7 +1382,7 @@ const en: Strings = {
     started: (card: string) => `“${card}” started.`,
     empty: (dir: string) => `No plan docs in ${dir}/ yet. “Plan as a project” on an idea or task card writes the first one there.`,
     change: 'Change directory',
-    changeHint: 'The repository’s adapter says where plan docs are (planDocs). In the configuration an agent sets it up.',
+    changeHint: 'The repository’s settings in the configuration say where plan docs are (Plan docs).',
   },
 
   archivedProject: 'Project · Archive',
@@ -1853,7 +1871,6 @@ const en: Strings = {
     gone: (names: string) => `No longer included: ${names}. Their tasks and projects stay saved and come back with the canvas.`,
     path: 'Path to the repository',
     home: 'Home',
-    ownAdapter: 'own adapter (.obeya/adapter/)',
     adapterSetupHint:
       'Obeya does not know yet how this app starts, which checks run or how an agent runs it for a demo. Fill it in under Settings yourself, or let an agent read the repository, fill in the settings for everyone and try a demo with them.',
     adapterSetup: 'Have an agent fill them in',
@@ -1883,7 +1900,6 @@ const en: Strings = {
     addHost: '+ Machine',
     removeHost: 'Remove machine',
     share: 'Command to share demos',
-    shareAdapter: (adapter: string) => `empty: the one of the adapter ${adapter}`,
     shareSite: (url: string) => `empty: Site: ${url}`,
     shareNone: 'empty: sharing exports a file',
     shareHint:
@@ -1891,10 +1907,10 @@ const en: Strings = {
     addRepo: '+ Repository',
     settings: {
       open: 'Settings',
-      hint: 'What Obeya needs to know about the repository. Applies at once on this machine, without a restart; what you leave unset here comes from the repository (.obeya/settings.json), from the adapter, from what Obeya detects, or is the default.',
+      hint: 'What Obeya needs to know about the repository. Applies at once on this machine, without a restart; what you leave unset here comes from the repository (.obeya/settings.json), from what Obeya detects, or is the default.',
       setHere: (n: number) => (n === 1 ? 'one set on this machine' : `${n} set on this machine`),
       fromRepo: (n: number) => (n === 1 ? 'one from the repository' : `${n} from the repository`),
-      source: { machine: 'on this machine', repository: 'from the repository', adapter: (name: string) => `from the adapter ${name}`, clones: 'clones listed', detected: 'detected', default: 'default' },
+      source: { machine: 'on this machine', repository: 'from the repository', clones: 'clones listed', detected: 'detected', default: 'default' },
       reset: 'Reset',
       resetHint: 'Remove this machine’s value: the one from the source below applies again.',
       branch: 'Main branch',
@@ -1921,6 +1937,26 @@ const en: Strings = {
       prNoiseHint: 'Accounts whose pull request comments are not review feedback (deploy bots), one per line.',
       howToRun: 'Run the app for a demo',
       howToRunHint: 'Free text for the agent, not a command: how it runs the app for a demo, with the commands, login, test data and migrations, as you would explain it to a new colleague. Left empty, each agent finds it out from the repository itself.',
+      stack: 'App stack',
+      stackStart: 'Start',
+      stackRefresh: 'After a backend change',
+      stackUrlFile: 'File with the URLs (KEY=value)',
+      stackFrontendKey: 'Key of the frontend URL',
+      stackStop: 'Stop',
+      stackKeep: 'Keep running when this exits 0',
+      stackHint:
+        'Commands an agent starts the app with in its workspace. With “Stop”, Obeya stops the stack of a card that waits for you, so that it costs disk, not memory; the agent starts it again when it needs it. “Keep running” protects a stack that holds what must not be lost (a restored database). Left without “Start”, each agent finds it out itself.',
+      site: 'Demo site',
+      siteTitle: 'Title of the overview',
+      siteUrl: 'URL',
+      siteDeploy: 'Command that publishes it ({dir}: the site’s directory)',
+      siteEnv: 'File with credentials (KEY=value), relative to Obeya’s directory',
+      siteHeaders: 'Headers for reading behind a login, one per line',
+      siteMaxFile: 'Largest file (MiB)',
+      siteLanguageLabel: 'Language of the overview',
+      siteLanguage: { auto: 'as the demos', de: 'German', en: 'English' },
+      siteHint:
+        'A static site “Share” puts demos on for colleagues: Obeya writes the pages and their overview itself and publishes them with the command. The credentials stay in the file on each machine; a machine without it exports demos instead. A share command on this machine goes first.',
       share: {
         label: 'For everyone',
         button: (n: number) => (n === 1 ? 'Take over into the repository for everyone (one value) …' : `Take over into the repository for everyone (${n} values) …`),
@@ -1980,8 +2016,8 @@ const en: Strings = {
       hostName: 'A machine of this name connects to another ssh target elsewhere.',
       noBranch: 'The repository has no such main branch, neither here nor on origin.',
       repoSettings: 'A value in the repository’s .obeya/settings.json does not count; what applies without it stands in its place:',
-      adapterField: 'A field of the repository’s adapter does not count; the generic adapter’s stands in its place:',
-      adapterLoad: 'The repository’s adapter does not load; until it is fixed, the repository runs on the generic adapter:',
+      demoSite: 'The demo site in the repository’s settings cannot be used like this; until it can, “Share” exports demos as a file:',
+      adapterGone: 'The repository still has a .obeya/adapter/ on its main branch, which Obeya no longer reads. What it says belongs in its settings (.obeya/settings.json); “Have an agent fill them in” moves it there:',
       invalid: 'The configuration is invalid.',
     },
     voice: {
@@ -2162,7 +2198,7 @@ const en: Strings = {
     open: (n: number) => `${n} missing`,
     sections: {
       needed: { title: 'Agents', hint: 'Without Claude Code and git no agent works. Claude Code runs on your Claude subscription; the agents commit under your name.' },
-      pr: { title: 'Pull requests', hint: 'Approved work goes out as a pull request on GitHub, unless a repository’s own Obeya adapter says otherwise. Needed only at the first approval.' },
+      pr: { title: 'Pull requests', hint: 'Approved work goes out as a pull request on GitHub, unless a repository’s settings say otherwise. Needed only at the first approval.' },
       voice: { title: 'Voice commands', hint: 'Hold Space and say what to do; in the app also while another app is in front, with the right Option key (Mac) or right Ctrl key, changeable in the settings. Obeya confirms in writing: on the card or in Obeya’s panel (button at the top right, key C).' },
       demos: { title: 'Demos', hint: 'Agents show their work as a narrated video. Without it they send a summary.' },
     },
@@ -2250,7 +2286,7 @@ const en: Strings = {
     reason: {
       code: 'There is new code on main that Obeya restarts with.',
       config: 'The configuration was saved; Obeya restarts with it.',
-      adapter: "A repository's adapter changed on its default branch; Obeya restarts with it.",
+      repository: "A repository's settings changed on its main branch; Obeya restarts its agents with them.",
       update: 'The new version of the app is being installed; Obeya then restarts.',
       stop: 'Obeya is shutting down (Ctrl-C or SIGTERM). A second Ctrl-C in the terminal ends it at once.',
     },
@@ -2280,8 +2316,8 @@ const en: Strings = {
     goingUpdate: 'Obeya is updating …',
     repos: {
       pill: (n: number) => `Configuration waits for ${n === 1 ? '1 agent' : `${n} agents`}`,
-      reason: (names: string, adapter: boolean) =>
-        adapter
+      reason: (names: string, repository: boolean) =>
+        repository
           ? `Where the agents of ${names} work changed on its default branch. Obeya restarts them with it once they pause at a safe point; everyone else works on.`
           : `The configuration of ${names} changed. Obeya applies it for its agents once they pause at a safe point; everyone else works on.`,
       leaving: 'The canvas is no longer in the configuration. Obeya takes it out once its agents pause at a safe point; its cards are kept.',

@@ -27,8 +27,8 @@ export interface WorkerOptions {
   runtime: AgentRuntime;
   workspaces: Workspaces;
   adapter: RepoAdapter;
-  /** The repository shares demos on a page (the configuration's command, the adapter's site or command); the adapter's alone when left out. */
-  shares?: boolean;
+  /** Whether the repository shares demos on a page now (the configuration's command, the site its settings name); its settings' site alone when left out. */
+  shares?: () => boolean;
   permissionMode?: 'auto' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk' | 'default';
   /** The owner's preferences, added to every worker's instructions. */
   preferences?: () => string;
@@ -245,7 +245,7 @@ const REPO_RESTARTED =
 const DUE_WHY: Record<RestartReason, string> = {
   code: 'restart (new code landed on main)',
   config: 'restart (the owner saved a new configuration)',
-  adapter: "restart (a repository's adapter changed on its default branch)",
+  repository: "restart (a repository's settings changed on its default branch)",
   stop: 'stop (the owner is shutting it down)',
   update: 'restart (the owner installs a new version of the app)',
 };
@@ -253,7 +253,7 @@ const DUE_WHY: Record<RestartReason, string> = {
 /** Why Obeya restarts the agents of one repository alone: where they work changed, which they start again with. */
 const REPO_WHY: Partial<Record<RestartReason, string>> = {
   config: 'the owner changed its configuration',
-  adapter: 'its adapter or settings changed on its default branch',
+  repository: 'its settings changed on its default branch',
 };
 
 /** What is about to happen, who it stops, and when the worker goes on, for the messages below. */
@@ -327,14 +327,9 @@ export class Workers {
     o.board.showTurns(() => this.inTurn());
   }
 
-  /** A new version of the repository's adapter, which works in the same kind of workspaces: it applies from the next time one is asked. */
-  useAdapter(adapter: RepoAdapter) {
-    this.o.adapter = adapter;
-  }
-
   /** Whether a video demo here may go to a page for colleagues, which the worker then writes. */
   private get shares(): boolean {
-    return this.o.shares ?? !!(this.o.adapter.demo?.site || this.o.adapter.demo?.share);
+    return this.o.shares ? this.o.shares() : !!this.o.adapter.demo?.site;
   }
 
   // ---------------------------------------------------------------- owner actions
@@ -760,13 +755,13 @@ export class Workers {
     };
   }
 
-  /** `direct`: the work goes onto the default branch at once instead of into a pull request, where the adapter allows it. */
+  /** `direct`: the work goes onto the default branch at once instead of into a pull request, where the repository's settings allow it. */
   async approve(cardId: string, { direct = false }: { direct?: boolean } = {}) {
     const card = this.card(cardId);
     if (!(card.state === 'waiting' && (card.need === 'review' || card.need === 'demo')) || this.landing.has(cardId)) throw new BadRequest('notReady', 'the card is not ready for review');
     // where work lands on main anyway, approving it directly is approving it
     if (direct && this.o.adapter.land === 'pr' && !this.o.adapter.direct)
-      throw new BadRequest('noDirect', 'this repository lands approved work only through a pull request; its adapter does not allow pushing it directly');
+      throw new BadRequest('noDirect', 'this repository lands approved work only through a pull request; its settings do not allow pushing it directly');
     if (direct && card.prototypeOf) throw new BadRequest('noDirect', 'a prototype never lands');
     // comments on places in the demo video the owner made before approving go with the approval
     const held = this.takeHeld(cardId);
@@ -2197,7 +2192,7 @@ ${idea.idea.brief}` : '',
     const stack = this.o.adapter.stack;
     if (stack)
       parts.push(
-        `To run the app in your workspace: \`${stack.start}\`; after a backend change, \`${stack.refresh}\` rather than starting it all again. Once it runs, the frontend's URL is in \`${stack.urls.file}\` under ${stack.urls.frontendKey}.${stack.stop ? ' While the card waits for the owner, Obeya stops the stack; your next message then says so.' : ''}`,
+        `To run the app in your workspace: \`${stack.start}\`${stack.refresh?.trim() ? `; after a backend change, \`${stack.refresh}\` rather than starting it all again` : ''}.${stack.urls?.file && stack.urls.frontendKey ? ` Once it runs, the frontend's URL is in \`${stack.urls.file}\` under ${stack.urls.frontendKey}.` : ''}${stack.stop?.trim() ? ' While the card waits for the owner, Obeya stops the stack; your next message then says so.' : ''}`,
       );
     if (this.o.adapter.checks?.length && !card.prototypeOf) parts.push(`Before ready_for_review, run: ${this.o.adapter.checks.map((c) => `\`${c}\``).join(', ')}.`);
     const howToRun = this.o.adapter.demo?.howToRun.trim();

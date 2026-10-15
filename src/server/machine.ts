@@ -470,7 +470,7 @@ export class MachineSetup {
   private add(path: string): FirstCanvas {
     let next = [...this.o.config.current(), { repos: [{ path }] }];
     let { problems, resolved } = this.o.config.check(next);
-    // an adapter that works in clones gets two, so two cards can be worked on at once
+    // a repository whose settings say clones gets two, so two cards can be worked on at once
     if (resolved.at(-1)?.repos[0]?.workspaces === 'clones') {
       next = [...next.slice(0, -1), { repos: [{ path, clones: CLONES }] }];
       ({ problems, resolved } = this.o.config.check(next));
