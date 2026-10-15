@@ -79,6 +79,9 @@ h1, h2, .cfg-head h3, .p-title, .project > .head .ttl, .timeline .a-ttl { font-f
   background: var(--container); border: 1.5px solid var(--container-line); color: var(--ink); cursor: default; }
 .plan-dir.empty-dir { border-style: dashed; color: var(--muted); }
 .plan-dir p { margin: 0; }
+.plan-dir.empty-dir p { padding-right: 14px; }
+.plan-dir .x { position: absolute; top: 4px; right: 4px; padding: 2px 7px; font-size: 17px; line-height: 1; color: var(--muted); background: none; border: 0; cursor: pointer; }
+.plan-dir .x:hover { color: var(--ink); }
 .plan-dir .pd-head { font-weight: 600; }
 .plan-dir .pd-why { display: block; color: var(--muted); font-size: 12px; }
 .plan-dir > .pd-why { margin: 2px 0 4px; }

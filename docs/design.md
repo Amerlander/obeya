@@ -3275,7 +3275,11 @@ heading into it; the change lands like any other and the doc becomes a project. 
 the doc's row shows "Wird aufbereitet" and opens it. A repository with no plan doc that never had a
 project gets a dashed note in the same place: where Obeya looks and that "Als Projekt planen" on an
 idea or task card writes the first doc there, with "Ordner ändern", which opens the configuration at
-the repositories (the directory is the setting `planDocs`).
+the repositories (the directory is the setting `planDocs`). Its × ("Ausblenden") hides it for that
+repository and directory on the canvas, in this browser (localStorage): a canvas without projects is
+a normal state, and the note has said what it has to say once read. Another directory in the
+settings brings it back; the note on docs that are no projects has no ×, since each of its rows is
+something to do.
 
 #### A workstream's state
 

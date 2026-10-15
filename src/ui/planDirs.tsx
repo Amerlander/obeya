@@ -1,7 +1,8 @@
 // The note on a repository's plan directory, beside the projects on the canvas: the docs there
 // that are not projects, each with its reason and "Als Projekt aufbereiten", or, while the
-// repository has no plan doc yet, where the first one goes.
+// repository has no plan doc yet, where the first one goes (which the owner can hide).
 
+import { useCallback, useMemo, useState } from 'react';
 import { type Bounds, unionBounds } from '../core/layout';
 import type { Item, PlanDir } from '../core/types';
 import { t } from './strings';
@@ -28,6 +29,37 @@ export function planDirBoxes(dirs: PlanDir[], placed: { item: Item; b: Bounds }[
   return dirs.map((_, n) => ({ x: at.x + n * (NOTE_W + NOTE_GAP), y: at.y - NOTE_GAP - h, w: NOTE_W, h }));
 }
 
+/**
+ * The empty notes the owner has hidden, per canvas in this browser: a hidden note stays away while
+ * its repository has no plan doc; a directory changed in the settings brings it back.
+ */
+export function useHiddenEmptyNotes(canvas: string): [(d: PlanDir) => boolean, (d: PlanDir) => void] {
+  const key = `obeya-plan-dir-hidden-${canvas}`;
+  const [hidden, setHidden] = useState<{ key: string; ids: string[] }>({ key: '', ids: [] });
+  const ids = useMemo(() => {
+    if (hidden.key === key) return hidden.ids;
+    try {
+      return (JSON.parse(localStorage.getItem(key) ?? '[]') ?? []) as string[];
+    } catch {
+      return [];
+    }
+  }, [hidden, key]);
+  const isHidden = useCallback((d: PlanDir) => d.empty && ids.includes(noteId(d)), [ids]);
+  const hide = useCallback(
+    (d: PlanDir) => {
+      const next = [...ids, noteId(d)];
+      setHidden({ key, ids: next });
+      try {
+        localStorage.setItem(key, JSON.stringify(next));
+      } catch {}
+    },
+    [ids, key],
+  );
+  return [isHidden, hide];
+}
+
+const noteId = (d: PlanDir) => `${d.repo}:${d.dir}`;
+
 export function PlanDirNote({
   dir,
   b,
@@ -35,6 +67,7 @@ export function PlanDirNote({
   onPrepare,
   onOpen,
   onChange,
+  onHide,
 }: {
   dir: PlanDir;
   b: Bounds;
@@ -43,6 +76,7 @@ export function PlanDirNote({
   onPrepare: (dir: PlanDir, file: string) => void;
   onOpen: (cardId: string) => void;
   onChange: () => void;
+  onHide: () => void;
 }) {
   const where = repo ? `${repo}: ${dir.dir}` : dir.dir;
   const reasons = new Set(dir.others.map((o) => o.reason));
@@ -52,6 +86,9 @@ export function PlanDirNote({
     <div className={dir.empty ? 'plan-dir empty-dir' : 'plan-dir'} style={{ left: b.x, top: b.y + b.h, width: b.w }} onPointerDown={(e) => e.stopPropagation()}>
       {dir.empty ? (
         <p>
+          <button className="x" title={t.planDir.hide} aria-label={t.planDir.hide} onClick={onHide}>
+            ×
+          </button>
           {t.planDir.empty(where)}{' '}
           <button className="link" title={t.planDir.changeHint} onClick={onChange}>
             {t.planDir.change}

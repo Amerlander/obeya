@@ -22,7 +22,7 @@ import { depsOf } from './deps';
 import { collect, keep, type Kept, restore, type SideSheet, takeKept } from './keep';
 import { Sign, Wordmark } from './logo';
 import { doubleClickKnown, Help, HelpButton, helpKeyKnown, knowDoubleClick, knowHelpKey, NewCardHint } from './help';
-import { PlanDirNote, planDirBoxes } from './planDirs';
+import { PlanDirNote, planDirBoxes, useHiddenEmptyNotes } from './planDirs';
 import { attachTo, imageFiles } from './shots';
 import { cardDraft, fieldOn, focusedDraft, keepDrafts, MIC_DRAFT, OBEYA_DRAFT, takesImages } from './draft';
 import { type Heard, HoldToTalk, PushToTalk, SPACE_SHOWS_MS, ToldList, usePushToTalk, useTold, type Where } from './voice';
@@ -149,7 +149,12 @@ function Canvas({
   }, [items]);
   // ideas with a prototype on the canvas, which stay out of the archive until it ends
   const prototyped = useMemo(() => new Set(items.flatMap((i) => (i.prototypeOf ? [i.prototypeOf] : []))), [items]);
-  const planDirs = snapshot.planDirs;
+  const [noteHidden, hideNote] = useHiddenEmptyNotes(snapshot.canvas.id);
+  // a fresh array only when what is shown changes: the camera keeps the notes in sight
+  const planDirs = useMemo(() => {
+    const shown = snapshot.planDirs?.filter((d) => !noteHidden(d));
+    return shown?.length ? shown : undefined;
+  }, [snapshot.planDirs, noteHidden]);
   const notes = useMemo(() => (planDirs ? planDirBoxes(planDirs, placed) : []), [planDirs, placed]);
   const all: Bounds = useMemo(() => unionBounds([...placed.map((p) => p.b), ...notes]) ?? { x: 0, y: 0, w: 1000, h: 600 }, [placed, notes]);
   // what the view keeps in sight: the cards, a project only while it holds none, and the notes on plan directories
@@ -1265,6 +1270,7 @@ function Canvas({
                   showCanvasesSection();
                   setCOn(true);
                 }}
+                onHide={() => hideNote(d)}
               />
             ))}
             <GroupNames shapes={territories.shapes} />

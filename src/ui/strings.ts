@@ -125,6 +125,7 @@ const de = {
     started: (card: string) => `„${card}“ gestartet.`,
     empty: (dir: string) => `Noch keine Plan-Docs in ${dir}/. „Als Projekt planen“ auf einer Ideen- oder Aufgabenkarte schreibt das erste dorthin.`,
     change: 'Ordner ändern',
+    hide: 'Ausblenden',
     changeHint: 'Wo die Plan-Docs liegen, legen die Einstellungen des Repositorys in der Konfiguration fest (Plan-Dokumente).',
   },
   archivedProject: 'Projekt · Archiv',
@@ -1370,6 +1371,7 @@ const en: Strings = {
     started: (card: string) => `“${card}” started.`,
     empty: (dir: string) => `No plan docs in ${dir}/ yet. “Plan as a project” on an idea or task card writes the first one there.`,
     change: 'Change directory',
+    hide: 'Hide',
     changeHint: 'The repository’s settings in the configuration say where plan docs are (Plan docs).',
   },
 
