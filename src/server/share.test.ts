@@ -614,10 +614,10 @@ describe('the link in the pull request', () => {
     board.work(c.id, { demo: JSON.stringify({ kind: 'video', dir: newer, chapters: [[0, 'Neu']], page: { title: 'CSV-Export 2', text: 'T.' } }) });
     openPr(c.id);
     sharing.prOpened(c.id);
-    await until(() => calls().length === 2);
+    // the link goes in once the deploy is done: recorded, it is still copying the site
+    await until(() => calls().length === 2 && edits.length === 1);
     expect(meta(c.id)).toMatchObject({ title: 'CSV-Export', chapters: [[0, 'Vorher']], pr: PR });
     expect(readFileSync(join(dir, 'deployed', slug(c.id), 'demo.mp4'), 'utf8')).toBe('video');
-    await until(() => edits.length === 1);
     expect(share(c.id)!.stale).toBe(true);
   });
 
