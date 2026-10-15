@@ -1008,8 +1008,8 @@ the owner's language (`src/core/locale.ts`).
   without the chapters file there is no list.
 - **Configuration** — the canvases with their repositories (path, adapter, clones), seen and edited
   in the "Konfiguration" dialog. It covers the page but for a margin of the dim (a press there or Esc
-  closes it; what was open behind it stays as it was, and a draft not saved yet stays until the page
-  reloads) and lists its sections on the left: Leinwände, Modelle und Effort, Spracheingabe (with the
+  closes it; what was open behind it stays as it was, and a draft not saved yet stays, written down
+  per tab as it changes, so a reload, Obeya's restart included, brings it back) and lists its sections on the left: Leinwände, Modelle und Effort, Spracheingabe (with the
   push-to-talk key), Demos (the narration beside what demos need on this machine) and Allgemein
   (language, light or dark, the server). One section shows at a time, the last one chosen per tab, so a save's
   restart or a new language comes back to it; Leinwände marks a draft not saved yet and counts its

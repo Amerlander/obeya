@@ -78,7 +78,8 @@ export function collect(): Pick<Kept, 'scroll' | 'drafts' | 'video'> {
     const root = document.getElementById(id);
     if (!root) continue;
     for (const el of [root, ...root.querySelectorAll('*')]) if (el.scrollTop > 0) scroll.push([place(root, el), el.scrollTop]);
-    for (const el of root.querySelectorAll('textarea')) if (el.value.trim()) drafts.push([place(root, el), el.value]);
+    // the configuration's dialog writes down its own drafts (configDraft.ts)
+    if (id !== 'config') for (const el of root.querySelectorAll('textarea')) if (el.value.trim()) drafts.push([place(root, el), el.value]);
   }
   const v = document.querySelector<HTMLVideoElement>('#panel video');
   return { scroll, drafts, ...(v && v.currentTime > 0 && !v.ended ? { video: { time: v.currentTime, playing: !v.paused } } : {}) };

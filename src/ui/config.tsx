@@ -8,6 +8,7 @@ import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentM
 import { LANGUAGES } from '../core/locale';
 import { pushKeyFromEvent, type PushKeyView } from '../core/push-key';
 import { api, ApiError, reload } from './api';
+import { keepConfigDraft, keptConfigDraft } from './configDraft';
 import { keep } from './keep';
 import { demoState, GitSetup, megabytes, PLATFORMS, RecognitionDetail, SetupList, useFolderWithoutGit, voiceState } from './setup';
 import { errorText, pushKeyLabel, t } from './strings';
@@ -48,6 +49,10 @@ export const showRepoClones = (f: ConfigFocus) => {
   sessionStorage.setItem(FOCUS_KEY, JSON.stringify(f));
 };
 
+/** The canvases' draft as written down, with the id each canvas had when loaded. */
+type KeptCanvases = { draft: CanvasConfig[]; origin: (string | null)[] };
+const ofKept = (k: KeptCanvases) => k.draft;
+
 export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }: { on: boolean; onClose: () => void; onSetup: () => void; onAsk: Ask; onTalk: () => void; onProblems: (n: number) => void }) {
   const [view, setView] = useState<ConfigView | null>(null);
   const [draft, setDraft] = useState<CanvasConfig[]>([]);
@@ -79,7 +84,11 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }
   const changed = !!view && JSON.stringify(draft) !== JSON.stringify(view.canvases);
   const changedRef = useRef(changed);
   changedRef.current = changed;
-  // read afresh whenever the dialog opens: the Koordinator or the file may have changed it; a draft not saved yet stays
+  // a draft not saved yet is written down as it changes: a reload (Obeya's restart) brings it back
+  useEffect(() => {
+    if (view) keepConfigDraft<KeptCanvases>(sessionStorage, 'canvases', { draft, origin }, view.canvases, ofKept);
+  }, [draft, origin, view]);
+  // read afresh whenever the dialog opens: the Koordinator or the file may have changed it; a draft not saved yet stays, after a reload too
   useEffect(() => {
     if (!on) return;
     const s = sessionStorage.getItem(SECTION_KEY) as Section | null;
@@ -89,7 +98,11 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }
     setFocus(f ? (JSON.parse(f) as ConfigFocus) : null);
     api.config().then((v) => {
       setView(v);
-      if (!changedRef.current) load(v);
+      const kept = !changedRef.current && keptConfigDraft<KeptCanvases>(sessionStorage, 'canvases', v.canvases, ofKept);
+      if (kept) {
+        setDraft(kept.draft);
+        setOrigin(kept.origin);
+      } else if (!changedRef.current) load(v);
       setChecked(v);
       onProblems(v.problems.length);
       setStatus(v.restarting ? t.config.saved : '');
@@ -709,10 +722,14 @@ function DemoBlock({ on }: { on: boolean }) {
     if (!on) return;
     api.demoSettings().then((v) => {
       setView(v);
-      setDraft(v.settings);
+      setDraft(keptConfigDraft<DemoSettings>(sessionStorage, 'demo', v.settings) ?? v.settings);
       setStatus('');
     }, console.error);
   }, [on]);
+  // a draft not saved yet is written down as it changes: closing the dialog or a reload brings it back
+  useEffect(() => {
+    if (view && draft) keepConfigDraft(sessionStorage, 'demo', draft, view.settings);
+  }, [draft, view]);
   const installing = !!view?.job?.running;
   // the voice as it is being chosen: its problems, what it still needs installed
   useEffect(() => {
