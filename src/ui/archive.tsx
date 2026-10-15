@@ -1,4 +1,4 @@
-// The archive: finished and stopped cards and dropped ideas taken off the canvas and projects whose plan doc is
+// The archive: finished and stopped cards and parked or dropped ideas taken off the canvas and projects whose plan doc is
 // gone, the most recently archived first, listed under the bar's button as the queue is. A project's
 // workstreams belong to it and are not listed on their own. A field over the list filters it as
 // the owner types.

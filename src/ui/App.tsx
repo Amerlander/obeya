@@ -600,7 +600,7 @@ function Canvas({
     }
   }, []);
 
-  /** The archive button on a finished card or a dropped idea: takes it off the canvas, with a moment to undo. */
+  /** The archive button on a finished card or a parked or dropped idea: takes it off the canvas, with a moment to undo. */
   const archiveCard = useCallback(async (i: Item) => {
     try {
       await api.archive(i.id);

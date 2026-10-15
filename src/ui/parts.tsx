@@ -34,7 +34,7 @@ interface CardProps {
   els: Map<string, HTMLElement>;
   /** Starts a planned card, or one queued behind others despite the likely conflict. */
   onStart: (item: Item) => void;
-  /** Takes a finished card or a dropped idea off the canvas into the archive. */
+  /** Takes a finished card or a parked or dropped idea off the canvas into the archive. */
   onArchive: (item: Item) => void;
   /** While the pointer is on a card with waits: this one is it, comes before it, or waits for it. */
   dep?: 'self' | 'before' | 'after';
@@ -52,10 +52,10 @@ export const CardView = memo(
     // a card the Koordinator is checking has nothing to start yet
     const startable = item.state === 'planned' && (!item.queue || 'behind' in item.queue);
     // as "Archivieren" in the unfolded card: a finished card of the owner's whose agent is done, a
-    // stopped task, or a dropped idea without a prototype on the canvas
+    // stopped task, or a parked or dropped idea without a prototype on the canvas
     const archivable =
       !item.archivedAt &&
-      ((finished(item.state) && item.source === 'manual' && !item.finishing) || stoppedArchivable(item) || (item.idea?.status === 'dropped' && !prototyped));
+      ((finished(item.state) && item.source === 'manual' && !item.finishing) || stoppedArchivable(item) || (!!item.idea && item.idea.status !== 'open' && !prototyped));
     const kind =
       item.label ??
       (item.parent ? t.kind.workstream : item.kind === 'question' ? t.kind.question : item.idea || item.proposal?.idea ? t.kind.idea : item.becomesProject ? becomesLabel(item) : item.prototypeOf ? t.kind.prototype : item.kind === 'project' ? t.kind.project : '');

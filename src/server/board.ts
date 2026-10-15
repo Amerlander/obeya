@@ -895,13 +895,13 @@ export class Board {
 
   // ---------------------------------------------------------------- archive
 
-  /** Takes finished cards, stopped tasks and dropped ideas of the owner's off the canvas into its archive. */
+  /** Takes finished cards, stopped tasks and parked or dropped ideas of the owner's off the canvas into its archive. */
   archive(ids: string[]) {
     for (const id of ids) {
       const row = this.own(id);
       if (row.plan_ref) throw new BadRequest('planCard', 'a workstream stays with its project');
       if (row.state === 'idea') {
-        if (this.idea(id).status !== 'dropped') throw new BadRequest('notDone', 'only a dropped idea can be archived');
+        if (this.idea(id).status === 'open') throw new BadRequest('notDone', 'an idea under discussion cannot be archived');
         if (this.snapshot().items.some((i) => i.prototypeOf === id)) throw new BadRequest('prototypeRunning', 'a prototype for this idea is still running');
         continue;
       }

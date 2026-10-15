@@ -607,7 +607,8 @@ function IdeaView({ item, act, run, onDelete, onTell }: { item: Item; act: (a: C
                 {t.idea.drop}
               </button>
             )}
-            {idea.status === 'dropped' && <ArchiveButton item={item} run={run} />}
+            {/* not while a prototype of it is on the canvas */}
+            {idea.status !== 'open' && !item.prototypes?.some((p) => !p.archivedAt) && <ArchiveButton item={item} run={run} />}
             <button className="btn danger" onClick={onDelete}>
               {t.delete}
             </button>
@@ -1772,7 +1773,7 @@ function ExportBox({ item, run, needs }: { item: Item; run: Run; needs?: { site:
   );
 }
 
-/** Takes a finished card or a dropped idea into the archive, or an archived one back onto the canvas. */
+/** Takes a finished card or a parked or dropped idea into the archive, or an archived one back onto the canvas. */
 function ArchiveButton({ item, run }: { item: Item; run: Run }) {
   const title = plain(item.title);
   // a stopped task whose workspace holds work stays on the canvas; the button says why

@@ -275,8 +275,8 @@ prototypes; the owner picks another, or picks one where the doc names none or se
 built on the prototype's branch as an idea would be ("Auf Prototyp „…“" in the project's decisions),
 its worker told to take the workstream from the plan doc; the idea's other prototypes are discarded.
 
-"Parken" and "Verwerfen" leave the card with its brief; talking to it opens it again. A dropped idea
-can be archived ("Archivieren" in it or its archive button on the canvas, as on a finished card; not
+"Parken" and "Verwerfen" leave the card with its brief; talking to it opens it again. A parked or
+dropped idea can be archived ("Archivieren" in it or its archive button on the canvas, as on a finished card; not
 while a prototype of it is on the canvas, and then the button is not shown): in the archive it shows
 its brief and conversation read-only and can go back to its place, where talking to it opens it
 again. Decisions from the conversation go into the decision log; lasting preferences are learned by
@@ -644,9 +644,12 @@ Projekt“) is linked the same way.
 - **A finished card keeps a field for questions to its agent** (2026-10-08). Until then a live card
   had no field, and asking its agent was no longer possible.
 - **What the owner archives**: only their own cards, and only once `live` or `done`, or an idea once
-  dropped (a parked one is meant to come back, so it stays in sight); "all finished ones at once"
-  leaves dropped ideas alone. A workstream stays with its project, where a delivered one is already
+  parked or dropped; "all finished ones at once" leaves ideas alone. A workstream stays with its project, where a delivered one is already
   a chip, and goes into the archive with it. Archiving keeps the card's position, demo and log.
+- **A parked idea can be archived too** (2026-10-15). Until then only a dropped one could: a parked
+  idea was meant to come back, so it stayed in sight. But an idea whose result the owner used outside
+  Obeya (a post written with its agent) is done, neither dropped nor to come back, and stayed on the
+  canvas for good.
 - **A stopped task can be archived and opens like a card an agent worked on** (2026-10-15). Until
   then a stopped card could only be started again or deleted, and it opened as a planned card nobody
   had worked on: the task in its edit field, the conversation squeezed below it.

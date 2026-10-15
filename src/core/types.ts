@@ -897,7 +897,7 @@ export type ErrorCode =
   /** An uploaded screenshot is no image the agents read, or too large. */
   | 'imageType'
   | 'imageTooLarge'
-  /** Only a finished card of the owner's (or a stopped task, a dropped idea) goes into the archive. */
+  /** Only a finished card of the owner's (or a stopped task, a parked or dropped idea) goes into the archive. */
   | 'notDone'
   /** A stopped card whose workspace holds work stays on the canvas. */
   | 'holdsWork'
