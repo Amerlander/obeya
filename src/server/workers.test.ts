@@ -2622,7 +2622,7 @@ describe('pausing: the owner halts a worker and lets it go on', () => {
     expect(workers.busy()).toBe(false);
     expect(board.item(c.id)).toMatchObject({ state: 'working', paused: true });
     expect(board.row(c.id)).toMatchObject({ workspace, branch, session_id: 'sess-1' });
-    expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', author: 'owner', text: 'Pausiert. Der Agent macht weiter, wenn du „Weitermachen“ klickst oder ihm schreibst.' });
+    expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', author: 'owner', text: 'Pausiert.' });
     expect(() => workers.pause(c.id)).toThrow(BadRequest);
 
     const n = runtime.sessions.length;

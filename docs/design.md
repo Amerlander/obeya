@@ -462,8 +462,11 @@ card's state and the session (`paused` on the card's row). A worker keeps its wo
 its slot is free, and its app stack is parked after the grace like a waiting card's; one paused on
 its handover leaves the card waiting for approval („Demo bereit · Agent pausiert“), Freigeben
 included. An idea's agent keeps the messages it had not answered (as when the idea is parked), a
-Question card's agent what it was asked (the thread's pending words). The bubble stays where it was,
-standing still in pencil grey: „Agent pausiert · ▶ Weitermachen“, and so does the card on the canvas,
+Question card's agent what it was asked (the thread's pending words). The bubble stays where the
+agent stopped, standing still in pencil grey: „Agent pausiert · ▶ Weitermachen“, with the line
+„Pausiert.“ under it (the bubble and the field say how it goes on, so the line does not, and still
+reads right once it went on); going on, like a message, brings the bubble at work to the end again,
+below that line, the owner's words and „Weiter.“. The card on the canvas reads paused too,
 without the moving line; a restart of Obeya leaves every paused agent paused. „Weitermachen“ (by voice
 „mach weiter“) resumes the same session, and the agent hears that it was paused and that what ran
 was stopped (exit code 137); what the owner writes to a paused agent resumes it the same way and goes

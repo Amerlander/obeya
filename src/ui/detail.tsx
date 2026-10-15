@@ -940,6 +940,39 @@ function Conversation({
       )}
     </Fragment>
   );
+  // the agent at work, with a pause beside its name; paused, it stands still with Resume
+  const bubble = (
+    <Msg
+      by={idea ? 'explorer' : question ? 'koordinator' : 'worker'}
+      className={paused ? 'paused' : 'thinking'}
+      who={proposal ? t.revising : `${agent} ${paused ? t.pause.paused : idea ? t.idea.thinking : question ? t.answer.reading : t.talk.working}`}
+      head={
+        paused ? (
+          <button className="turn-resume" title={t.pause.resumeHint} onClick={() => turn(item.id, 'resume')}>
+            <PlayMark /> {t.pause.resume}
+          </button>
+        ) : (
+          pausable(item) && (
+            <button className="turn-pause" title={t.pause.hint} aria-label={t.pause.button} onClick={() => turn(item.id, 'pause')}>
+              <PauseMark />
+            </button>
+          )
+        )
+      }
+    >
+      {pending.at(-1) && <Gist text={pending.at(-1)!.text} />}
+      <Steps steps={pending} />
+    </Msg>
+  );
+  // paused, it stands where the agent stopped, above what came after (the line that it paused, the
+  // owner's words); going on again, it is at work at the end, as after a message
+  const stopped = pending.at(-1)?.id;
+  const after = !paused
+    ? -1
+    : stopped !== undefined
+      ? turns.shown.findIndex((x, i) => i >= seedAt && x.e.id > stopped)
+      : turns.shown.findLastIndex((x) => x.e.kind === 'state' && x.e.author === 'owner');
+  const stillAt = after >= seedAt ? after : turns.shown.length;
   return (
     <>
       <h4 className="p-h">{t.talk.heading}</h4>
@@ -947,31 +980,13 @@ function Conversation({
         {turns.shown.length === 0 && !working && !turns.asked && !seed && <div className="hint">{idea ? t.idea.talkEmpty : question ? t.question.empty : proposal ? t.reviseHint : t.talk.empty}</div>}
         {turns.shown.slice(0, seedAt).map(line)}
         {seed}
-        {turns.shown.slice(seedAt).map(line)}
-        {working || paused ? (
-          // the agent at work, with a pause beside its name; paused, it stands still with Resume
-          <Msg
-            by={idea ? 'explorer' : question ? 'koordinator' : 'worker'}
-            className={paused ? 'paused' : 'thinking'}
-            who={proposal ? t.revising : `${agent} ${paused ? t.pause.paused : idea ? t.idea.thinking : question ? t.answer.reading : t.talk.working}`}
-            head={
-              paused ? (
-                <button className="turn-resume" title={t.pause.resumeHint} onClick={() => turn(item.id, 'resume')}>
-                  <PlayMark /> {t.pause.resume}
-                </button>
-              ) : (
-                pausable(item) && (
-                  <button className="turn-pause" title={t.pause.hint} aria-label={t.pause.button} onClick={() => turn(item.id, 'pause')}>
-                    <PauseMark />
-                  </button>
-                )
-              )
-            }
-          >
-            {pending.at(-1) && <Gist text={pending.at(-1)!.text} />}
-            <Steps steps={pending} />
-          </Msg>
+        {turns.shown.slice(seedAt, stillAt).map(line)}
+        {paused && bubble}
+        {turns.shown.slice(stillAt).map(line)}
+        {working ? (
+          bubble
         ) : (
+          !paused &&
           (turns.pending.length > 0 || (turns.asked?.steps.length ?? 0) > 0) && (
             <div className={`msg by-${idea ? 'explorer' : 'worker'}`}>
               {/* how the worker came to the question it waits on */}

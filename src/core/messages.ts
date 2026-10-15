@@ -72,7 +72,7 @@ const de = {
     discardWork: 'Die Arbeit verwerfen',
     stopped: 'Gestoppt.',
     /** The owner paused the worker, and let it go on again. */
-    pausedByOwner: 'Pausiert. Der Agent macht weiter, wenn du „Weitermachen“ klickst oder ihm schreibst.',
+    pausedByOwner: 'Pausiert.',
     resumedByOwner: 'Weiter.',
     parked: 'App-Stack im Workspace gestoppt, solange die Karte wartet. Der Agent startet ihn wieder, wenn er ihn braucht.',
     parkKept: 'Der App-Stack im Workspace läuft weiter, während die Karte wartet: Er hält Daten, die bleiben sollen. Soll er trotzdem gestoppt werden, sag es dem Agenten.',
@@ -353,7 +353,7 @@ const en: Messages = {
     reopen: 'Reopen it',
     discardWork: 'Discard the work',
     stopped: 'Stopped.',
-    pausedByOwner: 'Paused. The agent goes on when you click “Resume” or write to it.',
+    pausedByOwner: 'Paused.',
     resumedByOwner: 'Resumed.',
     parked: 'Stopped the app stack in the workspace while the card waits. The agent starts it again when it needs it.',
     parkKept: 'The app stack in the workspace keeps running while the card waits: it holds data that should stay. To have it stopped anyway, tell the agent.',
