@@ -615,12 +615,14 @@ thumbnail, and the card stays open. Until 2026-10-12 the thumbnails in the field
 A screenshot still in a field (any `ShotStrip`: a card's field, the sidebar's, the microphone's, a
 planned card's task) opens ready to be marked, to point the agent at a spot: a drag on it frames a
 region in signal red with a thin white edge (so it reads on light and dark screenshots), a click
-(a drag shorter than 5 px) sets a red pin with a white number, 1, 2, 3 … in the order set, for the
-text to refer to. No tool to pick: the gesture decides (owner, 2026-10-14; a free pen came out rough
+(a drag shorter than 5 px) sets a red pin. Frames and pins are numbered together, 1, 2, 3 … in the
+order set, for the text to refer to: a pin shows its white number in a red circle, a frame in a red
+square on its top left corner, above it like a tab (inside, where the image ends above the frame),
+so a small frame does not read as a pin (owner, 2026-10-15; until then only pins had numbers). No tool to pick: the gesture decides (owner, 2026-10-14; a free pen came out rough
 with mouse or trackpad, and a switch between pen, frame and number was one more choice each time).
 Line and pin take the same share of the image at any size (`src/ui/marks.ts`). A bar under the
 image has Undo (also ⌘Z / Ctrl+Z), which takes back the last mark, again and again down to the
-unmarked screenshot (an undone pin's number goes to the next one; there is no "clear all"), and
+unmarked screenshot (an undone mark's number goes to the next one; there is no "clear all"), and
 Done; a hint in it says how to mark until the owner has marked once. A click on the image marks
 instead of closing; Esc, Done or a click beside the image closes it. On closing, the browser draws
 the marks into the original (through the same size limits as a pasted screenshot), uploads the

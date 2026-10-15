@@ -6,7 +6,7 @@ import { type ClipboardEvent, type DragEvent, type MouseEvent, type PointerEvent
 import { createPortal } from 'react-dom';
 import { ApiError, api, at } from './api';
 import { draftOf, dropDraft, markupOf, setMarkup, updateDraft, useDraft } from './draft';
-import { CLICK_PX, drawMarks, EDGE, type Mark, markOf, markSize, type Point, pinNumbers, RED } from './marks';
+import { badgeOf, CLICK_PX, drawMarks, EDGE, type Mark, markOf, markSize, type Point, RED } from './marks';
 import { errorText, t } from './strings';
 import { behindThumb, type Box, onto, ZOOM_EASE, ZOOM_MS } from './zoomBox';
 
@@ -253,28 +253,35 @@ const MARKS_KNOWN = 'obeya-marks-known';
 /** The marks over the image, in its pixels (`w`×`h`), and the frame being drawn (`drawing`). */
 function MarkLayer({ marks, w, h, drawing }: { marks: Mark[]; w: number; h: number; drawing?: Mark | null }) {
   const s = markSize(w, h);
-  const numbers = pinNumbers(marks);
+  const all = [...marks, ...(drawing ? [drawing] : [])];
+  const number = (i: number, x: number, y: number) => (
+    <text x={x} y={y + s.font * 0.05} fill={EDGE} fontSize={s.font} fontWeight={700} fontFamily="system-ui, sans-serif" textAnchor="middle" dominantBaseline="central">
+      {i + 1}
+    </text>
+  );
   return (
     <>
-      {[...marks, ...(drawing ? [drawing] : [])].map((m, i) =>
-        m.kind === 'frame' ? (
-          <g key={i} fill="none" strokeLinejoin="round">
-            <rect x={m.x} y={m.y} width={m.w} height={m.h} rx={s.corner} stroke={EDGE} strokeWidth={s.line + 2 * s.edge} />
-            <rect x={m.x} y={m.y} width={m.w} height={m.h} rx={s.corner} stroke={RED} strokeWidth={s.line} />
+      {all.map((m, i) => {
+        if (m.kind === 'pin')
+          return (
+            <g key={i}>
+              <circle cx={m.x} cy={m.y} r={s.radius} fill={RED} stroke={EDGE} strokeWidth={s.edge * 2} />
+              {number(i, m.x, m.y)}
+            </g>
+          );
+        const b = badgeOf(m, s);
+        return (
+          <g key={i} strokeLinejoin="round">
+            <rect x={m.x} y={m.y} width={m.w} height={m.h} rx={s.corner} fill="none" stroke={EDGE} strokeWidth={s.line + 2 * s.edge} />
+            <rect x={m.x} y={m.y} width={m.w} height={m.h} rx={s.corner} fill="none" stroke={RED} strokeWidth={s.line} />
+            <rect x={b.x} y={b.y} width={b.side} height={b.side} rx={s.corner} fill={RED} stroke={EDGE} strokeWidth={s.edge * 2} />
+            {number(i, b.x + b.side / 2, b.y + b.side / 2)}
           </g>
-        ) : (
-          <g key={i}>
-            <circle cx={m.x} cy={m.y} r={s.radius} fill={RED} stroke={EDGE} strokeWidth={s.edge * 2} />
-            <text x={m.x} y={m.y + s.font * 0.05} fill={EDGE} fontSize={s.font} fontWeight={700} fontFamily="system-ui, sans-serif" textAnchor="middle" dominantBaseline="central">
-              {numbers[i]}
-            </text>
-          </g>
-        ),
-      )}
+        );
+      })}
     </>
   );
 }
-
 
 /**
  * One image over the whole page, outside the panel, which the camera transforms. Like the demo
