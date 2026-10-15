@@ -95,6 +95,8 @@ describe("Obeya's configuration", () => {
     // the id follows the name, unless it is kept
     expect(c.check([{ name: 'Neuer Name', id: 'web', repos: [{ path: web }] }]).resolved[0]).toMatchObject({ id: 'web', name: 'Neuer Name' });
     expect(c.check([{ name: 'Web', repos: [{ path: web }] }, { name: 'web', repos: [{ path: api }] }]).problems).toMatchObject([{ code: 'sameId', canvas: 1 }]);
+    // a repository once per canvas, by whatever path it is named
+    expect(c.check([{ name: 'Web', repos: [{ path: web }, { path: api }, { path: `${web}/` }] }]).problems).toMatchObject([{ code: 'sameRepo', canvas: 0, repo: 2 }]);
     expect(c.check([]).problems.map((p) => p.code)).toEqual(['noCanvas']);
     expect(c.check([{ repos: [{ path: web, color: 'red' }] }]).problems.map((p) => p.code)).toEqual(['invalid']);
     expect(c.check({}).problems.map((p) => p.code)).toEqual(['invalid']);

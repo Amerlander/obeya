@@ -1028,8 +1028,8 @@ the owner's language (`src/core/locale.ts`).
   adapter, whether workers use clones or worktrees (a repository added in the dialog whose adapter works
   in clones gets as many as the first canvas's, two, filled in once its path is checked and changeable before
   saving), and the command that shares its demos (empty:
-  the adapter's site, shown as „Site: <url>“, or its command, or an export; see Sharing a demo); problems (no git repository, an unknown
-  adapter, two canvases with one id, a canvas's home repository left out, a share command whose program is not there) show at the field while
+  the adapter's site, shown as „Site: <url>“, or its command, or an export; see Sharing a demo); problems (no git repository, a repository the canvas
+  has already under this or another path, an unknown adapter, two canvases with one id, a canvas's home repository left out, a share command whose program is not there) show at the field while
   editing and keep it from being saved; where a path without a repository is a folder, the
   problem offers to set up git there (see Setting up git in a folder), after which it goes.
   Problems in a repository's own adapter (`adapterField`:

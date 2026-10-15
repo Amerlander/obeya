@@ -1566,6 +1566,10 @@ export function resolveCanvas(
       throw new ConfigError('notRepo', `${r.path} is not a git repository`, i);
     }
   });
+  // a repository runs once on a canvas: twice, it would have two of everything, its plan docs' note too
+  infos.forEach((info, i) => {
+    if (infos.findIndex((x) => x.path === info.path) < i) throw new ConfigError('sameRepo', `${config.repos[i]!.path} is on the canvas already`, i);
+  });
   const each = config.repos.map((r, i) => {
     try {
       return repoAdapter(r, infos[i]!, settings(r), shared(infos[i]!.path));

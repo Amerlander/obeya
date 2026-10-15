@@ -1094,6 +1094,8 @@ export type ConfigProblemCode =
   | 'noRepo'
   /** A path that is no git repository. */
   | 'notRepo'
+  /** A repository the canvas has already, under this path or another. */
+  | 'sameRepo'
   /** An adapter the configuration names that does not exist or does not load. */
   | 'unknownAdapter'
   /** The repository's own adapter does not load; the repository runs on the built-in one meanwhile. */
