@@ -373,7 +373,7 @@ export function OldBunPill({ version }: { version: string }) {
 export function WorkspacesPill({ pools, canvas, items }: { pools: ClonePool[]; canvas: CanvasInfo; items: Item[] }) {
   const several = pools.length > 1;
   const name = (repo: string) => canvas.repos.find((r) => r.id === repo)?.name ?? repo;
-  const forWorkspace = items.filter((i) => i.queue && 'workspace' in i.queue && i.queue.workspace !== 'slots').length;
+  const forWorkspace = items.filter((i) => (i.queue && 'workspace' in i.queue && i.queue.workspace !== 'slots') || i.waitsForClone).length;
   const forSlot = items.filter((i) => i.queue && 'workspace' in i.queue && i.queue.workspace === 'slots').length;
   // a new card takes a free clone on a machine whose busy workers leave it a slot
   const room = (h: PoolHost) => Math.max(0, Math.min(h.slots - h.busy.length, h.total - h.cards.length));

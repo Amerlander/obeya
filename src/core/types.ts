@@ -217,6 +217,8 @@ export interface Item {
   finishing?: boolean;
   /** While `finishing`: nothing just landed, the owner asked about the finished card and its agent answers. */
   followUp?: boolean;
+  /** While `followUp`: its agent needs a full clone to answer and waits, without a workspace, for the next free one. */
+  waitsForClone?: true;
   /** Its worker is in a turn right now, its background work included (a render, a watcher): what it does shows, and the owner can pause it. */
   inTurn?: true;
   /**

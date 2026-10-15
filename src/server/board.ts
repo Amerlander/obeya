@@ -1632,6 +1632,7 @@ function work(r: CardRow): Partial<Item> {
   const scope = r.scope ? (JSON.parse(r.scope) as { files: string[] }).files : undefined;
   const pr = r.pr ? (JSON.parse(r.pr) as PrState) : undefined;
   const share = shareOf(r);
+  const landed = r.landed ? (JSON.parse(r.landed) as { followUp?: boolean; needsClone?: boolean }) : null;
   return {
     ...(scope?.length ? { scope } : {}),
     ...(r.queue && (r.state ?? 'planned') === 'planned' ? { queue: JSON.parse(r.queue) as Item['queue'] } : {}),
@@ -1653,7 +1654,7 @@ function work(r: CardRow): Partial<Item> {
     ...(r.branch ? { branch: r.branch } : {}),
     // a workspace on another machine as ssh and scp write it
     ...(r.workspace ? { workspace: r.workspace.replace(/^ssh:\/\/([^/]+)/, '$1:') } : {}),
-    ...(r.landed && r.workspace ? { finishing: true, ...((JSON.parse(r.landed) as { followUp?: boolean }).followUp ? { followUp: true } : {}) } : {}),
+    ...(landed && (r.workspace || landed.needsClone) ? { finishing: true, ...(landed.followUp ? { followUp: true } : {}), ...(landed.needsClone && !r.workspace ? { waitsForClone: true } : {}) } : {}),
     ...(detail.noChange && (r.need === 'review' || r.need === 'demo') ? { noChange: true } : {}),
     ...(r.paused ? { paused: true } : {}),
   };

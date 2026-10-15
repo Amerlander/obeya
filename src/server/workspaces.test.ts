@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Store } from './db';
 import { gitRepo } from './testing';
-import { defaultBranch, git } from './workspaces';
+import { defaultBranch, git, Workspaces } from './workspaces';
 
 let dir: string;
 beforeEach(() => (dir = mkdtempSync(join(tmpdir(), 'obeya-branch-'))));
@@ -45,5 +46,29 @@ describe('the main branch', () => {
     git(repo, 'checkout', '--quiet', '--detach');
     git(repo, 'config', 'init.defaultBranch', 'trunk');
     expect(defaultBranch(repo)).toBe('trunk');
+  });
+});
+
+describe("a follow-up's temporary worktree", () => {
+  test("is at origin's copy of the card's branch where no clone here holds it, else at the default branch, and goes without a trace", () => {
+    const origin = gitRepo(join(dir, 'origin'));
+    git(origin, 'checkout', '--quiet', '-b', 'obeya/pushed-abc123');
+    git(origin, 'commit', '--quiet', '--allow-empty', '-m', 'pushed');
+    const pushed = git(origin, 'rev-parse', 'HEAD');
+    git(origin, 'checkout', '--quiet', 'main');
+    const checkout = join(dir, 'checkout');
+    git(dir, 'clone', '--quiet', origin, checkout);
+    const spaces = new Workspaces(new Store(':memory:'), 'c', { mode: 'clones', repoPath: checkout, dir: join(dir, 'ws') });
+    const tree = spaces.followUpTree('card-1234567', 'obeya/pushed-abc123');
+    expect(tree).toBe(join(dir, 'ws', 'follow-up', 'card-123'));
+    expect(git(tree, 'rev-parse', 'HEAD')).toBe(pushed);
+    // the checkout stays as it was: clean, on its branch
+    expect(git(checkout, 'status', '--porcelain')).toBe('');
+    expect(git(checkout, 'branch', '--show-current')).toBe('main');
+    spaces.removeFollowUpTree(tree);
+    expect(existsSync(tree)).toBe(false);
+    expect(git(checkout, 'worktree', 'list').split('\n')).toHaveLength(1);
+    const fresh = spaces.followUpTree('card-1234567', 'obeya/gone-def456');
+    expect(git(fresh, 'rev-parse', 'HEAD')).toBe(git(checkout, 'rev-parse', 'origin/main'));
   });
 });

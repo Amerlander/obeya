@@ -102,7 +102,17 @@ interface LandedState {
   waits?: boolean;
   /** Not a landing: the owner asked about the finished card, and its worker was resumed to answer. */
   followUp?: boolean;
+  /** The follow-up runs in a temporary worktree (`followUpTree`), no clone being free: it goes once the follow-up ends. */
+  worktree?: boolean;
+  /** The follow-up's worker needs a full clone: without a workspace, it waits for the next free one (`takeClone`). */
+  needsClone?: boolean;
 }
+
+/** Landed work's state once what it waited for (the restart) has happened. */
+const settled = ({ restarts: _, waits: __, ...l }: LandedState): LandedState => l;
+
+/** Why `lease` found no workspace: then a follow-up goes into a temporary worktree, or waits on. */
+const SHORTAGES = new Set(['noWorkspace', 'dirtyWorkspaces', 'noSlot']);
 
 /**
  * The owner's words Obeya holds for the worker while it is in a turn (`CardRow.unheard`), each with
@@ -283,6 +293,9 @@ const AFTER_LANDING =
 const FOLLOW_UP =
   "Answer with reply (ask, for a decision that is the owner's). Commits you make here do not land: a change to the code the owner's words call for becomes a card of its own (propose_card). Workspace and session end once you end a turn with nothing left to wait for.";
 
+const IN_WORKTREE =
+  "No clone of the repository was free, so this is a temporary worktree, where the repository's app stack and tooling may not run. If answering needs a full clone, call need_clone and end your turn: Obeya resumes you in the next free clone.";
+
 export class Workers {
   private live = new Map<string, Live>();
   /** Cards whose approved work is landing: the server answers meanwhile, but approving again is refused, and a restart waits. */
@@ -400,6 +413,11 @@ export class Workers {
         true,
         said,
       );
+    } else if (this.waitsForClone(cardId)) {
+      // no session to take them in now: they go with the message that resumes it in the clone
+      const said = [this.o.board.log(cardId, 'hint', 'owner', text, undefined, shots, undefined, replyTo, place, true).id];
+      if (text) this.o.onOwnerInput?.(card, 'note', text);
+      this.o.board.work(cardId, { unheard: JSON.stringify([...this.unheard(cardId), { said, text: `A note from the owner while you waited for the clone${spoken ? ` (${SPOKEN})` : ''}:\n\n${words}`, images }] satisfies Unheard[]) });
     } else if (card.state === 'working' || card.state === 'inPr' || card.finishing) {
       const said = log(true);
       if (text) this.o.onOwnerInput?.(card, 'note', text);
@@ -417,28 +435,97 @@ export class Workers {
   private followUp(card: Item, text: string, images: string[], spoken: boolean, replyTo?: number, place?: Spot) {
     const row = this.o.board.row(card.id);
     let path: string;
+    let worktree = false;
     try {
       // the owner's question does not wait for a slot
       path = this.o.workspaces.lease(card.id, row.branch!, { overSlots: true });
     } catch (e) {
-      if (e instanceof WorkspaceError) throw new BadRequest(e.code, e.message);
-      throw e;
+      if (!(e instanceof WorkspaceError)) throw e;
+      if (!SHORTAGES.has(e.code)) throw new BadRequest(e.code, e.message);
+      // nor for a clone: a worktree takes none
+      try {
+        path = this.o.workspaces.followUpTree(card.id, row.branch!);
+      } catch (e) {
+        if (e instanceof WorkspaceError) throw new BadRequest(e.code, e.message);
+        throw e;
+      }
+      worktree = true;
     }
     this.bump(card.id);
     const commit = row.shipped ? (JSON.parse(row.shipped) as Shipped).commit : undefined;
-    const landed: LandedState = { ...(card.state === 'done' ? { unchanged: true } : commit ? { commit } : {}), followUp: true };
+    const landed: LandedState = { ...(card.state === 'done' ? { unchanged: true } : commit ? { commit } : {}), followUp: true, ...(worktree ? { worktree } : {}) };
     this.o.board.work(card.id, { workspace: path, landed: JSON.stringify(landed), status_line: null });
     const stills = this.stills(place);
     this.o.board.log(card.id, 'hint', 'owner', text, undefined, images.slice(stills.length).map((f) => basename(f)), undefined, replyTo, place);
     if (text) this.o.onOwnerInput?.(card, 'note', text);
     const message = [
-      `The owner asks about this card${spoken ? ` (${SPOKEN})` : ''}. ${card.state === 'done' ? 'It was closed without a change to the repository' : `Its work is on main${commit ? ` (${commit.slice(0, 7)})` : ''}`}, and your session had ended; it goes on in a fresh workspace on the branch ${row.branch}, where main may have moved on since.`,
+      `The owner asks about this card${spoken ? ` (${SPOKEN})` : ''}. ${card.state === 'done' ? 'It was closed without a change to the repository' : `Its work is on main${commit ? ` (${commit.slice(0, 7)})` : ''}`}, and your session had ended; it goes on in a fresh workspace ${worktree ? 'at the head of' : 'on'} the branch ${row.branch}, where main may have moved on since.`,
       this.words(card.id, text, images.slice(stills.length), replyTo, place),
       FOLLOW_UP,
+      ...(worktree ? [IN_WORKTREE] : []),
     ].join('\n\n');
     // a card that never reported a session: a new one needs the card first
     if (row.session_id) this.launch(card.id, message, row.session_id, images);
     else this.launch(card.id, `You worked on the card „${card.title}“:\n\n${card.body}\n\n${message}`, undefined, [...this.taskImages(card), ...images]);
+  }
+
+  /** Whether the card's follow-up waits for a full clone, its worker without a workspace. */
+  private waitsForClone(cardId: string): boolean {
+    const row = this.o.board.row(cardId);
+    return !row.workspace && !!row.landed && !!(JSON.parse(row.landed) as LandedState).needsClone;
+  }
+
+  /**
+   * The follow-up's worker asked for a full clone (`need_clone`) and ended its turn: its session and
+   * temporary worktree end, and the card waits for the next free clone, which resumes the session.
+   */
+  private awaitClone(cardId: string) {
+    this.end(cardId);
+    this.bump(cardId);
+    const row = this.o.board.row(cardId);
+    const { worktree: _, ...landed } = JSON.parse(row.landed!) as LandedState;
+    this.removeTree(row.workspace);
+    this.o.board.work(cardId, { workspace: null, landed: JSON.stringify(landed), status_line: this.o.board.t.worker.waitsForWorkspace });
+    this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.waitsForClone);
+    this.takeClone(cardId);
+  }
+
+  /**
+   * A follow-up waiting for a full clone takes the next clean free one, on any machine whatever its
+   * slots, and its worker goes on there. Returns whether it did; the Koordinator asks again as the board changes.
+   */
+  takeClone(cardId: string): boolean {
+    if (!this.waitsForClone(cardId)) return false;
+    const row = this.o.board.row(cardId);
+    let path: string;
+    try {
+      path = this.o.workspaces.lease(cardId, row.branch!, { overSlots: true });
+    } catch (e) {
+      if (!(e instanceof WorkspaceError && SHORTAGES.has(e.code))) console.error(`a clone for the follow-up on ${cardId}:`, e);
+      return false;
+    }
+    const { needsClone: _, ...landed } = JSON.parse(row.landed!) as LandedState;
+    this.bump(cardId);
+    this.o.board.work(cardId, { workspace: path, landed: JSON.stringify(landed), status_line: null });
+    this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.cloneFree);
+    this.deliver(cardId, `A clone is free now: you go on in it, a full clone on the branch ${row.branch}. Answer the owner's question there.\n\n${FOLLOW_UP}`);
+    return true;
+  }
+
+  /** Whether the card's follow-up runs in a temporary worktree. */
+  private inWorktree(cardId: string): boolean {
+    const landed = this.o.board.row(cardId).landed;
+    return !!landed && !!(JSON.parse(landed) as LandedState).worktree;
+  }
+
+  /** Removes a follow-up's temporary worktree; one left behind does no harm. */
+  private removeTree(path: string | null) {
+    if (!path) return;
+    try {
+      this.o.workspaces.removeFollowUpTree(path);
+    } catch (e) {
+      console.error(`removing the follow-up worktree ${path}:`, e);
+    }
   }
 
   answer(cardId: string, text: string, images: string[] = [], spoken = false, replyTo?: number) {
@@ -815,12 +902,14 @@ export class Workers {
     this.end(cardId);
     this.bump(cardId);
     const row = this.o.board.row(cardId);
-    try {
-      this.o.workspaces.removeLanded(cardId, row.branch ?? '');
-    } catch (e) {
-      // the card is done either way; a leftover worktree does no harm
-      console.error('freeing a landed workspace:', e);
-    }
+    if (this.inWorktree(cardId)) this.removeTree(row.workspace);
+    else
+      try {
+        this.o.workspaces.removeLanded(cardId, row.branch ?? '');
+      } catch (e) {
+        // the card is done either way; a leftover worktree does no harm
+        console.error('freeing a landed workspace:', e);
+      }
     this.o.board.work(cardId, { landed: null, workspace: null, status_line: null, parked: null, paused: null, ...(row.state === 'waiting' ? { state: row.landed ? landedState(row.landed) : 'live', need: null, detail: null } : {}) });
     this.o.board.workDone(cardId);
     // the Arbeitsrückschau read the card's runs when its work ended
@@ -1029,7 +1118,7 @@ export class Workers {
     this.parkLater(cardId);
     const l = stored ? (JSON.parse(stored) as LandedState) : null;
     if (!l?.restarts) return;
-    this.o.board.work(cardId, { landed: JSON.stringify({ ...(l.commit ? { commit: l.commit } : {}), ...(l.unchanged ? { unchanged: true } : {}), ...(l.followUp ? { followUp: true } : {}) } satisfies LandedState) });
+    this.o.board.work(cardId, { landed: JSON.stringify(settled(l)) });
     this.deliver(cardId, 'Obeya has started again and runs main with your change now.');
   }
 
@@ -1037,7 +1126,7 @@ export class Workers {
   private resumeLanded(card: Item, stored: string, session: string | null, restarted: string) {
     const l = JSON.parse(stored) as LandedState;
     if (!session) return this.finish(card.id);
-    this.o.board.work(card.id, { landed: JSON.stringify({ ...(l.commit ? { commit: l.commit } : {}), ...(l.unchanged ? { unchanged: true } : {}), ...(l.followUp ? { followUp: true } : {}) } satisfies LandedState) });
+    this.o.board.work(card.id, { landed: JSON.stringify(settled(l)) });
     // an open question waits for its answer, which resumes the session
     if (card.state === 'waiting') return this.parkLater(card.id);
     this.launch(card.id, l.restarts ? `${restarted === REPO_RESTARTED ? 'Obeya runs' : 'Obeya has started again and runs'} main with your change now. ${restarted}` : restarted, session);
@@ -1441,6 +1530,7 @@ export class Workers {
     if (landed) {
       // what remained after the landing is done, unless the worker waits for its question, the restart or the usage limit
       if (card.state === 'waiting' || landed.waits) return;
+      if (landed.needsClone) return this.awaitClone(cardId);
       // it paused for the restart, which resumes it with its workspace
       if (this.restart && live.toldRestart && !live.failed) return this.pausedForRestart(cardId, live);
       if (live.limited) return this.waitForLimit(cardId, live, live.limited);
@@ -1938,6 +2028,23 @@ export class Workers {
           return 'Recorded. End your turn now.';
         },
       },
+      ...(this.inWorktree(cardId)
+        ? [
+            {
+              name: 'need_clone',
+              description: "Only in a follow-up in a temporary worktree: answering the owner needs a full clone (the repository's app stack or tooling, which may not run here). Then end your turn; Obeya resumes you in the next free clone.",
+              schema: {},
+              run: () => {
+                const row = this.o.board.row(cardId);
+                const l = row.landed ? (JSON.parse(row.landed) as LandedState) : null;
+                if (!l?.worktree) return 'Not recorded: you work in a full clone already.';
+                this.o.board.work(cardId, { landed: JSON.stringify({ ...l, needsClone: true } satisfies LandedState) });
+                this.o.board.log(cardId, 'activity', 'worker', this.o.board.t.worker.needsClone);
+                return 'Recorded. End your turn now: Obeya resumes you in the next free clone.';
+              },
+            } satisfies AgentTool,
+          ]
+        : []),
       ...(this.o.toObeya ? [toObeyaTool((request) => this.o.toObeya!(cardId, request))] : []),
     ]);
   }

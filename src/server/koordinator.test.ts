@@ -408,6 +408,38 @@ describe('Koordinator waits for a free workspace', () => {
     expect(board.events(b.id).some((e) => e.text.includes('Ein Workspace ist frei'))).toBe(true);
   });
 
+  test("a follow-up whose agent needs a full clone takes the next free one, before a queued card", async () => {
+    pool(1);
+    const f = card('F');
+    workers.start(f.id);
+    workerOf(f.id).emit({ type: 'session', id: 'sess-f' });
+    workerOf(f.id).call('ready_for_review', { summary: 'S' });
+    workerOf(f.id).emit({ type: 'idle' });
+    await workers.approve(f.id);
+    workerOf(f.id).emit({ type: 'idle' });
+    expect(item(f.id).state).toBe('done');
+    const a = card('A');
+    k.request(a.id);
+    await scope(['src/a.ts']);
+    const b = card('B');
+    k.request(b.id);
+    await scope(['src/b.ts']);
+    expect(item(b.id)).toMatchObject({ state: 'planned', queue: { workspace: 'none' } });
+
+    workers.message(f.id, 'Läuft die Demo?');
+    expect(board.row(f.id).workspace).not.toBe(clones[0]!);
+    workerOf(f.id).call('need_clone', {});
+    workerOf(f.id).emit({ type: 'idle' });
+    await settle();
+    expect(item(f.id).waitsForClone).toBe(true);
+
+    workers.stop(a.id);
+    await settle();
+    expect(board.row(f.id).workspace).toBe(clones[0]!);
+    expect(runtime.last.spec).toMatchObject({ cwd: clones[0]!, resume: 'sess-f' });
+    expect(item(b.id)).toMatchObject({ state: 'planned', queue: { workspace: 'none' } });
+  });
+
   test('a card waits for a slot while the busy workers fill them, and starts once a turn ends', async () => {
     pool(3, 1);
     const a = card('A');

@@ -584,6 +584,11 @@ export class Koordinator {
       .sort((a, b) => (a.queue!.since ?? '').localeCompare(b.queue!.since ?? ''));
     // a repository whose workspaces are taken by a card waiting longer is not asked again
     const full = new Set<string | undefined>();
+    // the owner's question to a finished card whose agent needs a full clone goes before queued cards
+    for (const f of items.filter((i) => i.waitsForClone)) {
+      const hands = this.o.repoFor(f);
+      if (full.has(f.repo) || !hands.workspaces.leasable(true) || !hands.workers.takeClone(f.id)) full.add(f.repo);
+    }
     for (const w of waiting) {
       if ('workspace' in w.queue!) {
         if (full.has(w.repo) || !this.o.repoFor(w).workspaces.leasable()) {

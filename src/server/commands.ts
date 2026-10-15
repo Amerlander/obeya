@@ -819,7 +819,7 @@ export class Commander {
               ? `question card: a thread of answers you looked up, moved onto a card; its agent ${i.thread?.thinking ? 'is reading' : 'answers what the owner asks on it (note)'}`
             : i.finishing
               ? i.followUp
-                ? `${i.state}, its agent answers the owner's follow-up`
+                ? `${i.state}, its agent answers the owner's follow-up${i.waitsForClone ? '; it needs a full clone for that and waits for the next free one, then goes on by itself' : ''}`
                 : `${i.state}, its agent finishes what remains${i.state === 'done' ? ' (nothing to land: the work changed no code)' : ' after the landing'}`
               : askable(i)
                 ? `${i.state}, its agent's session has ended; a note resumes it to answer`

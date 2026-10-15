@@ -6,9 +6,9 @@
 // created on start, as many in parallel as there are cards unless the repository has slots; kept
 // across stop and restart until the card's work has landed.
 
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { hostname } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { type CardDiff, cardDiff } from '../core/diff';
 import type { PoolHost, WorkspaceShortage } from '../core/types';
 import type { Store } from './db';
@@ -198,8 +198,8 @@ const SHORT_CODE = { none: 'noWorkspace', dirty: 'dirtyWorkspaces', slots: 'noSl
 const SHORT_TEXT = { none: 'no workspace registered or all are leased', dirty: 'every free workspace has uncommitted changes', slots: 'every machine with a free workspace has as many busy workers as it has slots' };
 
 export class Workspaces {
-  /** What `leasable` last looked at (the free clones on machines with room) when it found them all dirty, and when. */
-  private dirty?: { key: string; at: number };
+  /** What `leasable` last looked at (the free clones on machines with room, or on any with `overSlots`) when it found them all dirty, and when. */
+  private dirty = new Map<boolean, { key: string; at: number }>();
 
   constructor(
     private store: Store,
@@ -294,15 +294,17 @@ export class Workspaces {
    * Whether `lease` would find a workspace for a new card now. A worktree can always be made, while
    * there is a slot for its worker; a clone must be free and clean, on a machine with a free slot.
    * Free clones that were dirty at the last look within RECHECK_MS are not asked again, since cards
-   * waiting for one ask on every change of the board.
+   * waiting for one ask on every change of the board. `overSlots`: whether `lease` with it would.
    */
-  leasable(): boolean {
-    if (this.o.mode === 'worktrees') return this.room(null);
+  leasable(overSlots = false): boolean {
+    if (this.o.mode === 'worktrees') return overSlots || this.room(null);
     const free = this.list().filter((w) => !w.card_id);
-    const key = [...free.map((w) => w.path), ...this.machines().filter((m) => this.room(m))].join('\n');
-    if (this.dirty?.key === key && Date.now() - this.dirty.at < RECHECK_MS) return false;
-    const found = this.place(false);
-    this.dirty = 'short' in found && found.short === 'dirty' ? { key, at: Date.now() } : undefined;
+    const key = [...free.map((w) => w.path), ...(overSlots ? [] : this.machines().filter((m) => this.room(m)))].join('\n');
+    const dirty = this.dirty.get(overSlots);
+    if (dirty?.key === key && Date.now() - dirty.at < RECHECK_MS) return false;
+    const found = this.place(overSlots);
+    if ('short' in found && found.short === 'dirty') this.dirty.set(overSlots, { key, at: Date.now() });
+    else this.dirty.delete(overSlots);
     return 'path' in found;
   }
 
@@ -626,6 +628,45 @@ export class Workspaces {
     else git(path, 'checkout', '--quiet', '-b', branch, `origin/${base}`);
     this.store.setLease(path, cardId);
     return path;
+  }
+
+  /**
+   * A temporary worktree for the owner's question to a finished card while no clone is free and
+   * clean: detached at the head of the card's branch, made from the
+   * clone on this machine that holds the branch (else from the configured checkout, at `origin`'s
+   * copy of the branch or the default branch), as the Lesestand is made. It takes no clone and is
+   * not in the pool; `removeFollowUpTree` removes it once the follow-up ends.
+   */
+  followUpTree(cardId: string, branch: string): string {
+    const path = join(this.o.dir, 'follow-up', cardId.slice(0, 8));
+    const commit = (repo: string, ref: string) => {
+      try {
+        return git(repo, 'rev-parse', '--verify', '--quiet', `${ref}^{commit}`) || null;
+      } catch {
+        return null;
+      }
+    };
+    const clones = [...this.list().map((w) => w.path), this.o.repoPath].filter((p) => hostName(p) === null && existsSync(p));
+    const own = clones.find((p) => commit(p, `refs/heads/${branch}`));
+    const [repo, ref] = own
+      ? [own, `refs/heads/${branch}`]
+      : [this.o.repoPath, [`refs/remotes/origin/${branch}`, `origin/${this.main(this.o.repoPath)}`, 'HEAD'].find((r) => commit(this.o.repoPath, r))!];
+    this.removeFollowUpTree(path);
+    mkdirSync(dirname(path), { recursive: true });
+    // the hooks are the clone's (a post-checkout installing dependencies, say), not the worktree's
+    git(repo, '-c', 'core.hooksPath=/dev/null', 'worktree', 'add', '--quiet', '--detach', '--force', path, commit(repo, ref) ?? ref);
+    return path;
+  }
+
+  /** Removes a follow-up's temporary worktree (`followUpTree`) and its entry in the clone it was made from. */
+  removeFollowUpTree(path: string) {
+    if (!existsSync(path)) return;
+    let common: string | null = null;
+    try {
+      common = git(path, 'rev-parse', '--path-format=absolute', '--git-common-dir');
+    } catch {}
+    rmSync(path, { recursive: true, force: true });
+    if (common) git(common, 'worktree', 'prune');
   }
 
   private leaseWorktree(cardId: string, branch: string): string {

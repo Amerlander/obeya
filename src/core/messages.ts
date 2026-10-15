@@ -118,6 +118,10 @@ const de = {
     landing: 'Landet auf main',
     noDemo: (why: string) => `Ohne Demo: ${why}`,
     waitsForRestart: 'Wartet auf den Neustart von Obeya mit der neuen Version',
+    needsClone: 'Braucht für die Antwort einen vollen Klon',
+    waitsForWorkspace: 'Wartet auf Workspace',
+    waitsForClone: 'Die Nachfrage wartet auf den nächsten freien Klon und geht dann von selbst weiter.',
+    cloneFree: 'Ein Klon ist frei: Der Agent antwortet dort weiter.',
   },
   pr: {
     checkFailed: (names: string) => `Check fehlgeschlagen: ${names}. Der Agent sieht nach.`,
@@ -396,6 +400,10 @@ const en: Messages = {
     landing: 'Landing on main',
     noDemo: (why: string) => `No demo: ${why}`,
     waitsForRestart: 'Waits for Obeya to restart with the new version',
+    needsClone: 'Needs a full clone to answer',
+    waitsForWorkspace: 'Waiting for a workspace',
+    waitsForClone: 'The follow-up waits for the next free clone and then goes on by itself.',
+    cloneFree: 'A clone is free: the agent goes on answering there.',
   },
   pr: {
     checkFailed: (names: string) => `Check failed: ${names}. The agent looks into it.`,

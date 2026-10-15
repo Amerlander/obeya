@@ -1303,6 +1303,22 @@ the owner's language (`src/core/locale.ts`).
   slot, so a machine may go over its slots for a while when the owner answers several cards in a
   row; the owner's question to a finished card takes a clone on a busy machine when no machine has
   a slot. Slots count per repository: two repositories on one machine each have their own.
+  Nor does that question wait for a clone. A clean free clone is its first choice (full tooling);
+  with every clone leased or the free ones dirty, it runs in a temporary worktree
+  (`followUpTree`): detached at the head of the card's branch, made the way the Lesestand is (hooks
+  off) from the clone on this machine that holds the branch, else from the configured checkout at
+  `origin`'s copy of the branch or at the default branch; under `follow-up/<card>` in the
+  repository's workspaces directory, in no pool and taking no clone, and removed (with `git
+  worktree prune` in its clone) once the follow-up ends. Its worker is told the repository's app
+  stack and tooling may not run there; if answering needs them, it calls `need_clone` and ends its
+  turn: session and worktree end, and the card waits without a workspace for the next clean free
+  clone, its status line „Wartet auf Workspace“ (it counts in the pill with the cards waiting for a
+  workspace). The Koordinator's drain gives it the next one, before the queued cards
+  (`leasable(true)`, then `takeClone`), and its session resumes there by itself; what the owner says
+  meanwhile waits for that message. Before (until 2026-10-15), the question failed with an error
+  when no clean clone was free, and nothing waited. Rejected: queuing every such question at once
+  (clones are often held for days by cards in review or in a pull request), and answering in the
+  Lesestand (other agents read there at the same time).
   Until 2026-10-10 the clones were the only cap, and a card went to another machine only once
   every clone here was leased.
   A repository in worktrees can have slots too (`slots`, in the Konfiguration dialog under its
@@ -1522,10 +1538,13 @@ the owner's language (`src/core/locale.ts`).
   its own).
   A follow-up on a finished card whose worker has ended goes the same way: what the owner says on
   the card (typed in its field, or spoken with it open: straight to that agent, as on a card at
-  work) resumes the worker's session in a fresh workspace on the card's branch, where main may have
+  work) resumes the worker's session in a fresh workspace on the card's branch (a free clone, else a
+  temporary worktree; see Workspaces), where main may have
   moved on since (resuming finds the session from any directory). The card stays `live` or `done`,
   "Agent antwortet"; the worker answers with `reply` (its closing words after that fold under
-  it, as after any reply), and its turn's end frees the workspace again.
+  it, as after any reply), and its turn's end frees the workspace again (a temporary worktree is
+  removed). One that asked for a full clone (`need_clone`) stays "Agent antwortet" with the status
+  line „Wartet auf Workspace“ until a clone is free, and "Stoppen" ends the wait.
   Commits there do not land: a change the follow-up calls for becomes a card of its own
   (`propose_card`). The Arbeitsrückschau read the card's runs when its work ended and does not count
   it again. A card no agent worked on (no branch), a prototype or an archived card has no field.

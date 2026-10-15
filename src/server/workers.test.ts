@@ -2103,6 +2103,94 @@ describe('a worktree per card', () => {
     expect(board.item(c.id)!.finishing).toBeUndefined();
   });
 
+  /** A card whose work landed from the only clone, which another card holds now. */
+  async function landedWithoutClone() {
+    rmSync(dir, { recursive: true, force: true });
+    setup({ ...generic, land: 'main', workspaces: 'clones' });
+    const c = manual();
+    workers.start(c.id);
+    const clone = board.row(c.id).workspace!;
+    const branch = board.row(c.id).branch!;
+    commitIn(clone, 'c.ts', 'C');
+    const s = runtime.last;
+    s.emit({ type: 'session', id: 'sess-1' });
+    s.call('ready_for_review', { summary: 'S' });
+    s.emit({ type: 'idle' });
+    await workers.approve(c.id);
+    s.emit({ type: 'idle' });
+    const d = board.create({ title: 'Andere Karte', x: 0, y: 200 });
+    workers.start(d.id);
+    expect(board.row(d.id).workspace).toBe(clone);
+    return { c, d, clone, branch };
+  }
+
+  test('asked about a finished card while no clone is free, its worker answers in a temporary worktree at its branch', async () => {
+    const { c, clone, branch } = await landedWithoutClone();
+    workers.message(c.id, 'Wie lade ich das Video hoch?');
+    const f = runtime.last;
+    expect(f.spec.resume).toBe('sess-1');
+    const tree = board.row(c.id).workspace!;
+    expect(f.spec.cwd).toBe(tree);
+    expect(tree).toBe(join(dir, 'ws', 'follow-up', c.id.slice(0, 8)));
+    expect(git(tree, 'rev-parse', 'HEAD')).toBe(git(clone, 'rev-parse', branch));
+    // it took no clone
+    expect(spaces.list().map((w) => w.card_id)).not.toContain(c.id);
+    expect(f.inbox[0]).toContain('temporary worktree');
+    expect(f.inbox[0]).toContain('need_clone');
+    expect(f.spec.tools.map((t) => t.name)).toContain('need_clone');
+    expect(board.item(c.id)).toMatchObject({ state: 'live', finishing: true, followUp: true });
+    f.call('reply', { text: 'Mit gh release upload.' });
+    f.emit({ type: 'idle' });
+    expect(f.closed).toBe(true);
+    expect(board.item(c.id)!.finishing).toBeUndefined();
+    expect(board.row(c.id).workspace).toBeNull();
+    expect(existsSync(tree)).toBe(false);
+    expect(git(clone, 'worktree', 'list').split('\n')).toHaveLength(1);
+  });
+
+  test('a follow-up whose agent needs a full clone waits for the next free one and goes on there by itself', async () => {
+    const { c, d, clone } = await landedWithoutClone();
+    workers.message(c.id, 'Läuft die Demo noch?');
+    const f = runtime.last;
+    const tree = board.row(c.id).workspace!;
+    expect(f.call('need_clone', {})).toContain('Recorded');
+    f.emit({ type: 'idle' });
+    expect(f.closed).toBe(true);
+    expect(existsSync(tree)).toBe(false);
+    expect(board.row(c.id).workspace).toBeNull();
+    expect(board.item(c.id)).toMatchObject({ state: 'live', finishing: true, followUp: true, waitsForClone: true, statusLine: 'Wartet auf Workspace' });
+    // the owner's words meanwhile wait for it
+    workers.message(c.id, 'Und die Untertitel?');
+    expect(runtime.last).toBe(f);
+    expect(workers.takeClone(c.id)).toBe(false);
+    workers.stop(d.id);
+    expect(workers.takeClone(c.id)).toBe(true);
+    const g = runtime.last;
+    expect(g).not.toBe(f);
+    expect(g.spec.resume).toBe('sess-1');
+    expect(g.spec.cwd).toBe(clone);
+    expect(g.spec.tools.map((t) => t.name)).not.toContain('need_clone');
+    expect(g.inbox[0]).toContain('A clone is free now');
+    expect(g.inbox[0]).toContain('Und die Untertitel?');
+    expect(board.item(c.id)!.waitsForClone).toBeUndefined();
+    expect(board.item(c.id)!.statusLine).toBeUndefined();
+    g.call('reply', { text: 'Ja.' });
+    g.emit({ type: 'idle' });
+    expect(g.closed).toBe(true);
+    expect(board.item(c.id)!.finishing).toBeUndefined();
+    expect(spaces.list().map((w) => w.card_id)).toEqual([null]);
+  });
+
+  test('a follow-up waiting for a clone ends when the owner stops it', async () => {
+    const { c } = await landedWithoutClone();
+    workers.message(c.id, 'Läuft die Demo noch?');
+    runtime.last.call('need_clone', {});
+    runtime.last.emit({ type: 'idle' });
+    workers.stop(c.id);
+    expect(board.item(c.id)!.finishing).toBeUndefined();
+    expect(workers.takeClone(c.id)).toBe(false);
+  });
+
   test('a finished card no agent worked on cannot be asked about', () => {
     const c = manual();
     board.work(c.id, { state: 'live' });
