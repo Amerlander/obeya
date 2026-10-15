@@ -1929,7 +1929,7 @@ function TaskTalk({
               placeholder: { note: item.paused ? t.pause.compose : askable(item) || item.followUp ? t.compose.followUp : agentWorks(item) ? t.compose.working : t.compose.idle, answer: t.compose.question, feedback: t.compose.review, demo: t.compose.demo, discuss: '', revise: t.compose.revise }[field],
               listener,
               onWords: tell(field),
-              onPicked: (text, [picks = []], images, replyTo) => act({ action: 'answer', text, picks, images, ...(replyTo ? { replyTo } : {}) }, { close: true, ack: t.answered }),
+              onPicked: (text, [picks = []], images, replyTo) => act({ action: 'answer', text, picks, images, ...(replyTo ? { replyTo } : {}) }, { close: false }),
             }
           : undefined
       }

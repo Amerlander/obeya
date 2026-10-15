@@ -440,7 +440,9 @@ its agent's pick). The options picked go apart from the owner's words (`picks` o
 worker reads `They picked „…“.` and, below it, what they `added in their own words`; the log keeps
 both as one text, picks first, for whoever reads it later (decision log, Koordinator). Until
 2026-10-15 the pick went out as the first line of the owner's words, so the worker could not tell
-it from them; `propose_card(title, task, reason, idea?, questions?)` (Card lifecycle, 1);
+it from them. An answer leaves the card open, picked or written, and stands in its conversation at
+once; until 2026-10-15 an answer with a pick folded the card („Antwort ist beim Agenten.“), one
+without kept it open; `propose_card(title, task, reason, idea?, questions?)` (Card lifecycle, 1);
 `ready_for_review(summary, demo | no_demo)`, whose summary is the report the owner reads; and
 `to_obeya(request)`, for what the owner's words to it ask of Obeya rather than of the worker
 (Voice in). A turn that ends without `ask` or `ready_for_review` gets one nudge,
