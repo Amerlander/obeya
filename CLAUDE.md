@@ -27,6 +27,7 @@ shows them as projects); when one is done, what lasts moves into `docs/design.md
 - No project-specific logic in the core: it belongs in the repository's own adapter (`.obeya/adapter/`
   in that repository), not in this repo.
 - UI strings live in one place, `src/ui/strings.ts`, in German and English (two tables of one shape).
+  German UI texts and docs call a button "Button" or "Schaltfläche", never "Knopf".
 - An interaction that several kinds of card share (answering questions with comments and one Send
   button, the conversation history, "Los geht's" while the agent is still working) is built once in
   shared code and works the same on each of them; no card kind gets its own variant.
