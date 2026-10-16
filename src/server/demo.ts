@@ -67,9 +67,7 @@ const NARRATION_LEAD = 0.35;
  */
 export function readChapters(dir: string, titles: string[]): [number, string][] | string {
   for (const f of ['demo.mp4', 'captions.vtt']) if (!existsSync(join(dir, f))) return `${f} is missing in ${dir}`;
-  const starts = [...readFileSync(join(dir, 'captions.vtt'), 'utf8').matchAll(/^(\d+):(\d{2}):(\d{2})\.(\d{3}) -->/gm)].map(
-    ([, h, m, s, ms]) => Number(h) * 3600 + Number(m) * 60 + Number(s) + Number(ms) / 1000,
-  );
+  const starts = cues(dir).map((c) => c.start);
   if (starts.length !== titles.length) return `captions.vtt has ${starts.length} cues but ${titles.length} chapter titles were given`;
   return titles.map((t, i) => [Math.max(0, Math.round((starts[i]! - NARRATION_LEAD) * 100) / 100), t]);
 }
@@ -111,11 +109,11 @@ export function placeIn(dir: string, chapters: [number, string][], at: number): 
 
 /** Serves one demo file: a video's with byte ranges so the player can seek, any file of an HTML artifact's directory. */
 export function serveDemoFile(demo: { dir: string; kind: DemoKind }, name: string, req: Request): Response {
-  if (demo.kind === 'html') return serveArtifactFile(demo.dir, name, req);
+  if (demo.kind === 'html') return serveSandboxed(demo.dir, name, req, '/demo/', (path) => path === demoFile(demo.dir, ARTIFACT_PAGE));
   const dir = demo.dir;
-  if (!(DEMO_FILES as readonly string[]).includes(name)) return new Response('Not found', { status: 404 });
+  if (!(DEMO_FILES as readonly string[]).includes(name)) return notFound();
   const path = demoFile(dir, name);
-  if (!path) return new Response('Not found', { status: 404 });
+  if (!path) return notFound();
   const size = statSync(path).size;
   const file = Bun.file(path);
   const type = name.endsWith('.mp4') ? 'video/mp4' : name.endsWith('.jpg') ? 'image/jpeg' : 'text/vtt; charset=utf-8';
@@ -156,7 +154,7 @@ const FILES_SECRET = crypto.getRandomValues(new Uint8Array(32));
 function keyed(req: Request, route: '/demo/' | '/files/', name: string): string | Response {
   const url = new URL(req.url);
   const at = url.pathname.indexOf(route);
-  if (at < 0) return new Response('Not found', { status: 404 });
+  if (at < 0) return notFound();
   const base = url.pathname.slice(0, at + route.length);
   const key = new Bun.CryptoHasher('sha256', FILES_SECRET).update(base).digest('hex').slice(0, 32);
   const given = /^~([0-9a-f]{32})\/(.*)$/s.exec(name);
@@ -166,33 +164,29 @@ function keyed(req: Request, route: '/demo/' | '/files/', name: string): string 
 }
 
 /**
- * A file of an HTML artifact, never one outside its directory. The page is the worker's, so it runs
- * sandboxed: scripts yes, but in an origin of its own, without Obeya's API or the canvas's storage.
- * Its page tells the card its height, so the frame grows to it instead of scrolling inside.
- */
-function serveArtifactFile(dir: string, asked: string, req: Request): Response {
-  const name = keyed(req, '/demo/', asked);
-  if (name instanceof Response) return name;
-  const path = demoFile(dir, name);
-  if (!path) return new Response('Not found', { status: 404 });
-  const file = Bun.file(path);
-  const headers = { 'content-type': file.type, 'content-security-policy': 'sandbox allow-scripts', 'cache-control': 'no-cache', 'access-control-allow-origin': 'null' };
-  if (path === demoFile(dir, ARTIFACT_PAGE)) return new Response(withHeightReport(readFileSync(path, 'utf8')), { headers });
-  return new Response(file, { headers });
-}
-
-/**
  * A file a looked-up answer comes with, never one outside its thread's output directory. A page runs
  * sandboxed as an HTML artifact does, and tells its frame its height; `download`: as a file to save.
  */
 export function serveAnswerFile(dir: string, asked: string, download: boolean, req: Request): Response {
-  const name = keyed(req, '/files/', asked);
+  return serveSandboxed(dir, asked, req, '/files/', (path) => /\.html?$/i.test(path), download);
+}
+
+/**
+ * A file of a worker's directory (an HTML artifact's, a looked-up answer's), never one outside it.
+ * It is the worker's, so it runs sandboxed: scripts yes, but in an origin of its own, without
+ * Obeya's API or the canvas's storage. A `page` tells its frame its height, so the frame grows to it
+ * instead of scrolling inside.
+ */
+function serveSandboxed(dir: string, asked: string, req: Request, route: '/demo/' | '/files/', page: (path: string) => boolean, download = false): Response {
+  const name = keyed(req, route, asked);
   if (name instanceof Response) return name;
   const path = demoFile(dir, name);
-  if (!path) return new Response('Not found', { status: 404 });
+  if (!path) return notFound();
   const file = Bun.file(path);
-  const headers: Record<string, string> = { 'content-type': file.type, 'content-security-policy': 'sandbox allow-scripts', 'cache-control': 'no-cache', 'access-control-allow-origin': 'null' };
+  const headers = { 'content-type': file.type, 'content-security-policy': 'sandbox allow-scripts', 'cache-control': 'no-cache', 'access-control-allow-origin': 'null' };
   if (download) return new Response(file, { headers: { ...headers, 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(basename(path))}` } });
-  if (/\.html?$/i.test(path)) return new Response(withHeightReport(readFileSync(path, 'utf8')), { headers });
+  if (page(path)) return new Response(withHeightReport(readFileSync(path, 'utf8')), { headers });
   return new Response(file, { headers });
 }
+
+const notFound = () => new Response('Not found', { status: 404 });

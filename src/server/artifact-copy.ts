@@ -11,7 +11,7 @@
 
 import { readFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
-import { withHeightReport } from './demo-page';
+import { withHeightReport } from '../core/frame';
 
 const FONTS = /\.(?:woff2?|ttf|otf|eot)$/i;
 /** What a page loads without CORS (or the copy inlines), so it stays out of the page. */

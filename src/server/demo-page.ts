@@ -7,8 +7,6 @@ import { type Dirent, existsSync, readdirSync, realpathSync, statSync } from 'no
 import { join, resolve, sep } from 'node:path';
 import { withHeightReport } from '../core/frame';
 
-export { withHeightReport };
-
 /** The languages a page speaks: those a demo is narrated in. */
 export type PageLanguage = 'de' | 'en';
 
@@ -55,11 +53,11 @@ export const PAGE_WORDS: Record<
   },
 };
 
-export interface DemoPageParts {
+/** What a page shows of every demo, a video or an HTML artifact. */
+interface PageParts {
   title: string;
   /** Paragraphs separated by blank lines. */
   text: string;
-  chapters: [number, string][];
   pr: string | null;
   /** The line under the title (when it was shared). */
   when: string;
@@ -69,6 +67,10 @@ export interface DemoPageParts {
   language?: PageLanguage;
   /** A link above the title (say, to all demos). */
   top?: { href: string; text: string };
+}
+
+export interface DemoPageParts extends PageParts {
+  chapters: [number, string][];
   /** The video's URL, or its bytes in base64 for a page that holds everything. */
   video: { src: string } | { base64: string };
   poster?: string;
@@ -168,15 +170,7 @@ const BLOB = `
 `;
 
 /** The page of an HTML artifact: title and text above it, the artifact in a frame below. */
-export interface ArtifactPageParts {
-  title: string;
-  /** Paragraphs separated by blank lines. */
-  text: string;
-  pr: string | null;
-  when: string;
-  tabTitle: string;
-  language?: PageLanguage;
-  top?: { href: string; text: string };
+export interface ArtifactPageParts extends PageParts {
   /** The artifact's page beside this one, or its HTML for a page that holds everything. */
   artifact: { src: string } | { html: string };
   /** A page passed on as a file (the ZIP), opened from disk. */
@@ -203,14 +197,7 @@ export function artifactPageHtml(p: ArtifactPageParts): string {
     'src' in p.artifact ? `<a href="?alone" target="_blank" rel="noopener">${w.ownWindow}</a>` : '',
     p.pr ? `<a href="${esc(p.pr)}">${w.pr}</a>` : '',
   ].filter(Boolean);
-  return `<!doctype html>
-<html lang="${language}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(p.tabTitle)}</title><style>${PAGE_STYLE}</style></head>
-<body><main>
-${p.top ? `<div class="top"><a href="${esc(p.top.href)}">${esc(p.top.text)}</a></div>\n` : ''}<h1>${esc(p.title)}</h1>
-<div class="when">${esc(p.when)}</div>
-<div class="text">${paragraphs(p.text)}</div>
-${links.length ? `<div class="links">${links.join('')}</div>\n` : ''}<div class="artifact">${frame}</div>
+  return `${pageStart(p, language)}${links.length ? `<div class="links">${links.join('')}</div>\n` : ''}<div class="artifact">${frame}</div>
 </main>
 <script>
   // an artifact as high as its window (100vh plus a margin) would grow with each step: it stops after a few
@@ -233,6 +220,18 @@ ${links.length ? `<div class="links">${links.join('')}</div>\n` : ''}<div class=
 `;
 }
 
+/** A page's start, down to the demo's text: its head, the link above the title, the title, when it was shared. */
+function pageStart(p: PageParts, language: PageLanguage): string {
+  return `<!doctype html>
+<html lang="${language}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(p.tabTitle)}</title><style>${PAGE_STYLE}</style></head>
+<body><main>
+${p.top ? `<div class="top"><a href="${esc(p.top.href)}">${esc(p.top.text)}</a></div>\n` : ''}<h1>${esc(p.title)}</h1>
+<div class="when">${esc(p.when)}</div>
+<div class="text">${paragraphs(p.text)}</div>
+`;
+}
+
 export function demoPageHtml(p: DemoPageParts): string {
   const language = p.language ?? 'de';
   const w = PAGE_WORDS[language];
@@ -241,14 +240,7 @@ export function demoPageHtml(p: DemoPageParts): string {
     : '';
   const src = 'src' in p.video ? ` src="${esc(p.video.src)}"` : '';
   const track = 'src' in p.captions ? `<track kind="captions" src="${esc(p.captions.src)}" srclang="${language}" label="${w.captions}">` : '';
-  return `<!doctype html>
-<html lang="${language}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(p.tabTitle)}</title><style>${PAGE_STYLE}</style></head>
-<body><main>
-${p.top ? `<div class="top"><a href="${esc(p.top.href)}">${esc(p.top.text)}</a></div>\n` : ''}<h1>${esc(p.title)}</h1>
-<div class="when">${esc(p.when)}</div>
-<div class="text">${paragraphs(p.text)}</div>
-<div class="grid">
+  return `${pageStart(p, language)}<div class="grid">
   <div class="player"><video controls preload="metadata"${src}${p.poster ? ` poster="${esc(p.poster)}"` : ''}>${track}</video><button class="start" aria-label="${w.play}"><span><svg viewBox="0 0 24 24"><path d="M6 4l15 8-15 8z"/></svg></span></button></div>
   <div>${chapters}${p.pr ? `<div class="pr"><a href="${esc(p.pr)}">${w.pr}</a></div>` : ''}</div>
 </div>

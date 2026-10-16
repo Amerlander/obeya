@@ -38,8 +38,10 @@ import { dirname, join, resolve, sep } from 'node:path';
 import type { DemoSite } from '../adapters/types';
 import type { Messages } from '../core/messages';
 import { readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
-import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, day, demoFile, demoPageHtml, esc, PAGE_STYLE, PAGE_WORDS, type PageLanguage, withHeightReport } from './demo-page';
+import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, day, demoFile, demoPageHtml, esc, PAGE_STYLE, PAGE_WORDS, type PageLanguage } from './demo-page';
 import { artifactCopy } from './artifact-copy';
+import { withHeightReport } from '../core/frame';
+import { DEMO_FILES } from './demo';
 import { BUN_ENV } from './resources';
 import { spawnOutput } from './spawn';
 import { HERE } from './workspaces';
@@ -50,7 +52,6 @@ import { messageOf } from '../core/text';
 export const SITES_DIR = 'sites';
 /** The largest file a site takes without `maxFile` (Cloudflare Pages' limit). */
 export const MAX_FILE = 25 * 1024 * 1024;
-const VIDEO_FILES = ['demo.mp4', 'poster.jpg', 'captions.vtt'];
 
 /** What a page's directory on the site keeps besides its files, for the overview. */
 interface Meta {
@@ -278,7 +279,7 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
     const files: Entry['files'] = {};
     for (const f of filesUnder(join(dir, slug))) {
       const bytes = readFileSync(join(dir, slug, f));
-      files[f] = { size: bytes.length, hash: createHash('sha256').update(bytes).digest('hex') };
+      files[f] = { size: bytes.length, hash: hashOf(bytes) };
     }
     const meta = JSON.parse(readFileSync(join(dir, slug, 'meta.json'), 'utf8')) as Meta;
     return { rev: 1, machine, at: new Date().toISOString(), meta, files };
@@ -497,7 +498,7 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
         const slug = checkSlug(p.slug);
         if (!p.title?.trim() || !p.text?.trim() || !p.dir) throw new Refused(t.pageIncomplete);
         const html = p.kind === 'html';
-        const files = html ? artifactFiles(p.dir) : VIDEO_FILES.filter((f) => demoFile(p.dir, f));
+        const files = html ? artifactFiles(p.dir) : DEMO_FILES.filter((f) => demoFile(p.dir, f));
         for (const f of html ? ['index.html'] : ['demo.mp4', 'captions.vtt']) if (!files.includes(f)) throw new Refused(t.fileMissing(f, p.dir));
         // what the artifact loads in CORS mode goes into its copy (artifact-copy.ts)
         const copy = html ? await artifactCopy(p.dir, files) : new Map<string, string>();
@@ -585,7 +586,7 @@ function filesUnder(root: string, at = ''): string[] {
 }
 
 function checkSlug(slug: unknown): string {
-  if (typeof slug !== 'string' || !/^[a-z0-9][a-z0-9-]{0,80}$/.test(slug)) throw new Refused(`not a slug: ${String(slug)}`);
+  if (typeof slug !== 'string' || !isSlug(slug)) throw new Refused(`not a slug: ${String(slug)}`);
   return slug;
 }
 
