@@ -4009,8 +4009,11 @@ same way, with what the network lacks, each with its one step: Tailscale missing
 per platform), not running, logged out, HTTPS off in the tailnet (a link to the DNS page of the
 admin console; `CertDomains` empty in its status), on Linux the operator right `tailscale serve`
 needs (`sudo tailscale set --operator=$USER`, recognised by its "Access denied"), all three ports
-taken. They look at Tailscale again every few seconds while open, so logging in or turning HTTPS on
-shows (and serves Obeya) without a click. The section also says that other devices reach Obeya
+taken. With Tailscale ready they name the account it is logged in as, which the phone logs in with
+too, and while the tailnet has no other device (no `Peer` in its status) they say that the phone
+is not in it yet and cannot find the address (it gets NXDOMAIN): install Tailscale on the phone and
+log in as that account. They look at Tailscale again every few seconds while open, so logging in,
+turning HTTPS on or the phone joining the tailnet shows (and serves Obeya) without a click. The section also says that other devices reach Obeya
 only while it runs here.
 
 A request is *local* when it comes from loopback under one of this machine's names and no proxy

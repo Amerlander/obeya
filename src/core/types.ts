@@ -1463,7 +1463,11 @@ export type TailscaleState =
   | { state: 'loggedOut' }
   /** Logged in, but HTTPS certificates are off in the tailnet: `tailscale serve` cannot give an HTTPS address. */
   | { state: 'noHttps'; name: string; enable?: string }
-  | { state: 'ready'; name: string };
+  /**
+   * `account`: the login it runs as, which the phone logs in with too; `others`: how many other
+   * devices the tailnet has, none while the phone is not in it yet.
+   */
+  | { state: 'ready'; name: string; account?: string; others: number };
 
 /** Why the address does not answer for other devices, though the setting is on. */
 export type RemoteProblem =

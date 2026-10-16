@@ -650,8 +650,10 @@ const de = {
       stopped: 'Tailscale läuft nicht.',
       loggedOut: 'Tailscale ist abgemeldet.',
       noHttps: 'In deinem Tailnet ist HTTPS aus.',
-      ready: (name: string) => `Tailscale läuft; dieser Rechner heißt im Tailnet ${name}.`,
+      ready: (name: string, account?: string) => `Tailscale läuft${account ? `, angemeldet als ${account}` : ''}; dieser Rechner heißt im Tailnet ${name}.`,
     },
+    alone: (account?: string) =>
+      `In diesem Tailnet ist noch kein anderes Gerät, also findet dein Telefon die Adresse nicht. Installiere Tailscale auf dem Telefon (App Store oder Google Play) und melde dich ${account ? `als ${account}` : 'mit demselben Konto wie hier'} an.`,
     step: {
       missing: {
         darwin: 'Installiere Tailscale aus dem Mac App Store oder von tailscale.com/download und melde dich an.',
@@ -682,7 +684,8 @@ const de = {
     seenAt: (when: string) => `zuletzt ${when}`,
     remove: 'Entfernen',
     // the dialog „Telefon verbinden“
-    scan: 'Scanne den Code mit der Kamera deines Telefons; es muss im selben Tailnet oder VPN sein.',
+    scan: 'Scanne den Code mit der Kamera deines Telefons; es muss im selben VPN sein.',
+    scanTailscale: (account?: string) => `Scanne den Code mit der Kamera deines Telefons; es braucht Tailscale, angemeldet ${account ? `als ${account}` : 'mit demselben Konto wie hier'}.`,
     orType: 'Oder öffne auf dem Telefon die Adresse und gib diesen Code ein:',
     validUntil: (time: string) => `gültig bis ${time}`,
     connected: (name: string) => `${name} ist verbunden.`,
@@ -1957,8 +1960,10 @@ const en: Strings = {
       stopped: 'Tailscale is not running.',
       loggedOut: 'Tailscale is logged out.',
       noHttps: 'HTTPS is off in your tailnet.',
-      ready: (name: string) => `Tailscale runs; in the tailnet this computer is ${name}.`,
+      ready: (name: string, account?: string) => `Tailscale runs${account ? `, logged in as ${account}` : ''}; in the tailnet this computer is ${name}.`,
     },
+    alone: (account?: string) =>
+      `No other device is in this tailnet yet, so your phone cannot find the address. Install Tailscale on the phone (App Store or Google Play) and log in ${account ? `as ${account}` : 'with the same account as here'}.`,
     step: {
       missing: {
         darwin: 'Install Tailscale from the Mac App Store or from tailscale.com/download and log in.',
@@ -1988,7 +1993,8 @@ const en: Strings = {
     pairedAt: (when: string) => `connected ${when}`,
     seenAt: (when: string) => `last ${when}`,
     remove: 'Remove',
-    scan: "Scan the code with your phone's camera; it has to be in the same tailnet or VPN.",
+    scan: "Scan the code with your phone's camera; it has to be in the same VPN.",
+    scanTailscale: (account?: string) => `Scan the code with your phone's camera; it needs Tailscale, logged in ${account ? `as ${account}` : 'with the same account as here'}.`,
     orType: 'Or open the address on the phone and type this code:',
     validUntil: (time: string) => `valid until ${time}`,
     connected: (name: string) => `${name} is connected.`,

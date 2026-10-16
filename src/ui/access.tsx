@@ -104,7 +104,8 @@ function Reach({ view, onView }: { view: AccessView; onView: (v: AccessView) => 
       )}
       {via === 'tailscale' && (
         <Field label={a.network}>
-          <div className={ts.state === 'ready' ? 'acc-state ok' : 'acc-state'}>{ts.state === 'ready' ? a.state.ready(ts.name) : a.state[ts.state]}</div>
+          <div className={ts.state === 'ready' ? 'acc-state ok' : 'acc-state'}>{ts.state === 'ready' ? a.state.ready(ts.name, ts.account) : a.state[ts.state]}</div>
+          {ts.state === 'ready' && !ts.others && <p className="hint acc-step acc-alone">{a.alone(ts.account)}</p>}
           {step && (
             <p className="hint acc-step">
               <Coded text={step} />
@@ -239,12 +240,14 @@ export function PhoneDialog({ onClose, onSection }: { onClose: () => void; onSec
         </button>
       </div>
     );
-  else if (pairing)
+  else if (pairing) {
+    const ts = view.remote?.via === 'tailscale' && view.tailscale.state === 'ready' ? view.tailscale : null;
     body = (
       <div className="acc-pair">
         <Qr text={pairing.url} />
         <div>
-          <p>{a.scan}</p>
+          {ts && !ts.others && <p className="acc-alone">{a.alone(ts.account)}</p>}
+          <p>{ts ? a.scanTailscale(ts.account) : a.scan}</p>
           <p className="hint">{a.orType}</p>
           <p>
             <code className="acc-address">{view.address}</code>
@@ -256,6 +259,7 @@ export function PhoneDialog({ onClose, onSection }: { onClose: () => void; onSec
         </div>
       </div>
     );
+  }
   return (
     <div id="phone" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="box" role="dialog" aria-modal="true" aria-label={a.connect}>

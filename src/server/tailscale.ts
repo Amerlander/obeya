@@ -27,7 +27,9 @@ export function findTailscale(platform = process.platform): string | null {
 interface Status {
   BackendState?: string;
   CertDomains?: string[] | null;
-  Self?: { DNSName?: string };
+  Self?: { DNSName?: string; UserID?: number };
+  Peer?: Record<string, unknown> | null;
+  User?: Record<string, { LoginName?: string }> | null;
 }
 
 interface ServeConfig {
@@ -63,7 +65,9 @@ export class Tailscale {
     const name = status.Self?.DNSName?.replace(/\.$/, '').toLowerCase();
     if (status.BackendState === 'NeedsLogin' || status.BackendState === 'NeedsMachineAuth' || status.BackendState === 'NoState') return { state: 'loggedOut' };
     if (status.BackendState !== 'Running' || !name) return { state: 'stopped' };
-    return status.CertDomains?.length ? { state: 'ready', name } : { state: 'noHttps', name };
+    if (!status.CertDomains?.length) return { state: 'noHttps', name };
+    const account = status.User?.[String(status.Self?.UserID)]?.LoginName;
+    return { state: 'ready', name, ...(account ? { account } : {}), others: Object.keys(status.Peer ?? {}).length };
   }
 
   private async config(): Promise<ServeConfig> {

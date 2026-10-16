@@ -63,7 +63,7 @@ describe('through Tailscale', () => {
     // something else serves on 443 already: Obeya takes the next port and leaves it be
     writeFileSync(join(ts, 'serve.json'), JSON.stringify({ TCP: { 443: { HTTPS: true } }, Web: { [`${NAME}:443`]: { Handlers: { '/': { Proxy: 'http://127.0.0.1:3000' } } } } }));
     const on = await turnOn();
-    expect(on.tailscale).toEqual({ state: 'ready', name: NAME });
+    expect(on.tailscale).toEqual({ state: 'ready', name: NAME, account: 'owner@example.com', others: 1 });
     expect(on.address).toBe(`https://${NAME}:8443`);
     const config = () => JSON.parse(readFileSync(join(ts, 'serve.json'), 'utf8'));
     expect(config().Web[`${NAME}:8443`].Handlers['/'].Proxy).toBe(`http://127.0.0.1:${server.port}`);
@@ -94,6 +94,17 @@ describe('through Tailscale', () => {
     expect((await view()).address).toBe(`https://${NAME}`);
     const missing = new Access({ store, tailscale: new Tailscale(null) });
     expect((await missing.view()).tailscale).toEqual({ state: 'missing' });
+  });
+
+  test('says the account and that no other device is in the tailnet yet, until the phone joins it', async () => {
+    tailscaleStatus(ts, { state: 'Running', name: NAME, https: true, account: 'me@example.com', others: 0 });
+    const alone = await turnOn();
+    expect(alone.tailscale).toEqual({ state: 'ready', name: NAME, account: 'me@example.com', others: 0 });
+    expect(alone.address).toBe(`https://${NAME}`);
+    tailscaleStatus(ts, { state: 'Running', name: NAME, https: true, account: 'me@example.com', others: 1 });
+    const joined = await view();
+    expect(joined.tailscale).toMatchObject({ others: 1 });
+    expect(joined.address).toBe(`https://${NAME}`);
   });
 
   test('on Linux without the operator right, the section says so', async () => {

@@ -208,13 +208,28 @@ else if (args[0] === 'serve') {
   return program;
 }
 
-/** What the fake `tailscale status --json` says: its backend's state, the machine's tailnet name, whether HTTPS is on. */
+/**
+ * What the fake `tailscale status --json` says: its backend's state, the machine's tailnet name,
+ * whether HTTPS is on, the account it runs as and how many other devices the tailnet has (one).
+ */
 export interface TailscaleStatus {
   state: 'Running' | 'NeedsLogin' | 'Stopped';
   name: string;
   https: boolean;
+  account?: string;
+  others?: number;
 }
 
 export function tailscaleStatus(dir: string, s: TailscaleStatus) {
-  writeFileSync(join(dir, 'status.json'), JSON.stringify({ BackendState: s.state, Self: { DNSName: `${s.name}.` }, CertDomains: s.https ? [s.name] : null }));
+  const peers = Object.fromEntries(Array.from({ length: s.others ?? 1 }, (_, i) => [`nodekey:${i}`, { HostName: `phone-${i}` }]));
+  writeFileSync(
+    join(dir, 'status.json'),
+    JSON.stringify({
+      BackendState: s.state,
+      Self: { DNSName: `${s.name}.`, UserID: 1 },
+      CertDomains: s.https ? [s.name] : null,
+      Peer: peers,
+      User: { 1: { LoginName: s.account ?? 'owner@example.com' } },
+    }),
+  );
 }
