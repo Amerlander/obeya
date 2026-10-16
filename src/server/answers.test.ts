@@ -285,12 +285,19 @@ describe('a looked-up answer goes on', () => {
       { name: 'credits.csv', caption: 'Die Gutschriften je Monat' },
       { name: 'charts/price.html', caption: 'Preis je Stunde' },
     ]);
-    // served from the directory, a page sandboxed and reporting its height; nothing outside it
-    const page = serveAnswerFile(out, 'charts/price.html', false);
+    // served from the directory, a page sandboxed and reporting its height and allowed to read the
+    // files beside it (under its directory's key, see demo.test.ts); nothing outside it
+    const files = 'http://127.0.0.1:4417/api/c/c1/threads/7/files/';
+    const sentOn = serveAnswerFile(out, 'credits.csv', false, new Request(`${files}credits.csv`));
+    expect(sentOn.status).toBe(302);
+    const key = /\/(~[0-9a-f]{32})\//.exec(sentOn.headers.get('location')!)![1];
+    const serve = (name: string, download = false) => serveAnswerFile(out, `${key}/${name}`, download, new Request(`${files}${key}/${name}`));
+    const page = serve('charts/price.html');
     expect(page.headers.get('content-security-policy')).toBe('sandbox allow-scripts');
+    expect(page.headers.get('access-control-allow-origin')).toBe('null');
     expect(await page.text()).toContain('obeyaHeight');
-    expect(serveAnswerFile(out, 'credits.csv', true).headers.get('content-disposition')).toContain('credits.csv');
-    expect(serveAnswerFile(out, '../secret.txt', false).status).toBe(404);
+    expect(serve('credits.csv', true).headers.get('content-disposition')).toContain('credits.csv');
+    expect(serve('../secret.txt').status).toBe(404);
     expect(() => canvas.answerDir(thread + 100)).toThrow();
   });
 

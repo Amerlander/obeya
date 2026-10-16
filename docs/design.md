@@ -2203,7 +2203,7 @@ the numbers, a chart or page, the queries and scripts behind them, a draft as a 
 types), and `answer_owner` passes them with `files` (path and a one-line caption). A path outside
 the directory, or no file, is refused and the agent asked again. Under its text the answer shows
 them, in the sheet, a card's log and a Question card alike (`AnswerFiles` in `src/ui/message.tsx`):
-a page in the sandboxed frame of an HTML artifact (same CSP, height report), an image inline, any
+a page in the sandboxed frame of an HTML artifact (same CSP, key, height report), an image inline, any
 other file as a chip that opens it with the system's app (`open`, `explorer.exe`, `xdg-open` on the
 machine Obeya runs on; where that fails the browser downloads it), with ↓ to download, and „Im
 Ordner zeigen“ for the directory. A follow-up writes into the same directory, so it builds on the
@@ -2922,7 +2922,13 @@ When the result is something to look at rather than something that happens, the 
 artifact instead (`kind: 'html'`): a directory with an `index.html` and the files it loads, handed
 over the same way. The card shows the page in a frame where the video would be (no chapters); Obeya
 serves any file of that directory, none outside it, with a CSP sandbox and the frame's `sandbox`, so
-the page's scripts run in an origin of their own, away from Obeya's API. Its `index.html` comes with
+the page's scripts run in an origin of their own, away from Obeya's API. That origin is `null`, so
+what the page loads in CORS mode (a module script, `fetch()` of a file beside it, a font) needs
+`Access-Control-Allow-Origin: null`, which would let any sandboxed page on any site read the files
+too. So the page's address is sent on to `<directory>/~<key>/index.html` (`keyed` in
+`src/server/demo.ts`), the key an HMAC of the directory's address with a secret new at every start,
+and only an address with the key gets the header; what the page loads relative to itself carries
+it, and nobody learns it without Obeya's API. Its `index.html` comes with
 the height report a shared artifact's page has (see Sharing a demo), so the frame grows to the page
 and only the card's left column scrolls. The frame's height is the reported one, rounded up, plus
 its border (and the report counts a scrollbar across the page's foot), and once the page has
@@ -3207,6 +3213,12 @@ the microphone; Chrome launched by Playwright needs no audio service moved in-pr
 - **"Teilen" sits on the demo's own line** (2026-10-14). Until then sharing came under the chapters
   and a dividing line, a button as wide as the column: with many chapters, or under a tall artifact,
   it was out of sight on opening, and it sat right on top of what followed.
+- **An artifact's files are read under a key in their address** (2026-10-16). Until then a module
+  script or a `fetch()` of a file beside the page was blocked (no `Access-Control-Allow-Origin` for
+  the sandboxed frame's origin `null`); the header alone would let any sandboxed page on any site
+  read the files of a card whose id it knows, and an answer's files sit under a thread's plain
+  number. The frame's requests carry no `Referer` in Chrome, so only their address can tell them
+  apart.
 - **HTML artifacts are shared too** (2026-10-05): an analysis with charts is background for a pull
   request as much as a video.
 - **Sharing takes effect at once.** Until 2026-10-02 it held 8 s with "Doch nicht"; withdrawing is

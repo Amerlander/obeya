@@ -471,7 +471,7 @@ export function serve(
             const c = byId.get(req.params.canvas);
             const url = new URL(req.url);
             const file = decodeURIComponent(url.pathname.split('/files/').slice(1).join('/files/'));
-            return c ? serveAnswerFile(c.answerDir(Number(req.params.thread)), file, url.searchParams.has('download')) : new Response('Not found', { status: 404 });
+            return c ? serveAnswerFile(c.answerDir(Number(req.params.thread)), file, url.searchParams.has('download'), req) : new Response('Not found', { status: 404 });
           } catch {
             return new Response('Not found', { status: 404 });
           }

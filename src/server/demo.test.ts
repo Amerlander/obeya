@@ -49,7 +49,14 @@ describe('serveDemoFile for an HTML artifact', () => {
   mkdirSync(join(html, 'img'), { recursive: true });
   writeFileSync(join(html, 'index.html'), '<img src="img/a.svg">');
   writeFileSync(join(html, 'img', 'a.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
-  const get = (name: string) => serveDemoFile({ dir: html, kind: 'html' }, name, new Request('http://x/'));
+  const base = 'http://127.0.0.1:4417/api/c/c1/cards/12/demo/';
+  const ask = (url: string, headers: Record<string, string> = {}) =>
+    serveDemoFile({ dir: html, kind: 'html' }, decodeURIComponent(url.slice(base.length)), new Request(url, { headers }));
+  // as the browser does: on to the address with the directory's key
+  const get = (name: string) => {
+    const first = ask(base + name);
+    return first.status === 302 ? ask(new URL(first.headers.get('location')!, base).href) : first;
+  };
 
   test('the page and the files beside it, sandboxed; nothing outside its directory', async () => {
     const page = get('index.html');
@@ -60,6 +67,21 @@ describe('serveDemoFile for an HTML artifact', () => {
     expect(get('../demo.mp4').status).toBe(404);
     expect(get('img').status).toBe(404);
     expect(get('nope.html').status).toBe(404);
+  });
+
+  test('its page and what that loads relative to itself may be read in CORS mode; without the key, nothing is', () => {
+    // the frame's requests carry `Origin: null`, and any sandboxed page on any site sends the same
+    const first = ask(`${base}index.html`, { origin: 'null' });
+    expect(first.status).toBe(302);
+    expect(first.headers.get('access-control-allow-origin')).toBeNull();
+    const page = first.headers.get('location')!;
+    expect(page).toMatch(/^\/api\/c\/c1\/cards\/12\/demo\/~[0-9a-f]{32}\/index\.html$/);
+    const module = new URL('img/a.svg', new URL(page, base)).href;
+    expect(ask(module, { origin: 'null' }).headers.get('access-control-allow-origin')).toBe('null');
+    // another directory has another key; a wrong or old key is sent on to the right one
+    const other = 'http://127.0.0.1:4417/api/c/c1/cards/13/demo/';
+    expect(ask(module.replace(base, other)).status).toBe(302);
+    expect(ask(`${base}~${'0'.repeat(32)}/img/a.svg`).headers.get('location')).toBe(new URL(module).pathname);
   });
 });
 

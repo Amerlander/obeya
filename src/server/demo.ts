@@ -110,7 +110,7 @@ export function placeIn(dir: string, chapters: [number, string][], at: number): 
 
 /** Serves one demo file: a video's with byte ranges so the player can seek, any file of an HTML artifact's directory. */
 export function serveDemoFile(demo: { dir: string; kind: DemoKind }, name: string, req: Request): Response {
-  if (demo.kind === 'html') return serveArtifactFile(demo.dir, name);
+  if (demo.kind === 'html') return serveArtifactFile(demo.dir, name, req);
   const dir = demo.dir;
   if (!(DEMO_FILES as readonly string[]).includes(name)) return new Response('Not found', { status: 404 });
   const path = join(dir, name);
@@ -138,17 +138,45 @@ export function serveDemoFile(demo: { dir: string; kind: DemoKind }, name: strin
   });
 }
 
+/** Keys the workers' files' addresses with; new at every start, so an address with an old key is sent on to the new one. */
+const FILES_SECRET = crypto.getRandomValues(new Uint8Array(32));
+
+/**
+ * Lets a worker's page read the files beside it, and no other page. Its sandboxed frame's origin is
+ * `null`, so what its page loads in CORS mode (a module script, `fetch()`, a font) needs
+ * `Access-Control-Allow-Origin: null`, which any sandboxed page on any site matches; a request from
+ * that frame carries neither a referrer nor anything else of its own. Its address does: the page is
+ * sent on to `<directory>/~<key>/index.html`, so whatever it loads relative to itself carries the
+ * key, which nobody can know without Obeya's API. Only an address with the key gets the header.
+ *
+ * `route`: where the route's file path begins (`/demo/`); `name`: the file path after it, decoded.
+ * Returns the file path without the key, or the redirect to the address with it.
+ */
+function keyed(req: Request, route: '/demo/' | '/files/', name: string): string | Response {
+  const url = new URL(req.url);
+  const at = url.pathname.indexOf(route);
+  if (at < 0) return new Response('Not found', { status: 404 });
+  const base = url.pathname.slice(0, at + route.length);
+  const key = new Bun.CryptoHasher('sha256', FILES_SECRET).update(base).digest('hex').slice(0, 32);
+  const given = /^~([0-9a-f]{32})\/(.*)$/s.exec(name);
+  if (given?.[1] === key) return given[2]!;
+  const file = (given ? given[2]! : name).split('/').map(encodeURIComponent).join('/');
+  return new Response(null, { status: 302, headers: { location: `${base}~${key}/${file}${url.search}`, 'cache-control': 'no-store' } });
+}
+
 /**
  * A file of an HTML artifact, never one outside its directory. The page is the worker's, so it runs
  * sandboxed: scripts yes, but in an origin of its own, without Obeya's API or the canvas's storage.
  * Its page tells the card its height, so the frame grows to it instead of scrolling inside.
  */
-function serveArtifactFile(dir: string, name: string): Response {
+function serveArtifactFile(dir: string, asked: string, req: Request): Response {
+  const name = keyed(req, '/demo/', asked);
+  if (name instanceof Response) return name;
   const root = resolve(dir);
   const path = resolve(root, name);
   if (!path.startsWith(root + sep) || !existsSync(path) || !statSync(path).isFile()) return new Response('Not found', { status: 404 });
   const file = Bun.file(path);
-  const headers = { 'content-type': file.type, 'content-security-policy': 'sandbox allow-scripts', 'cache-control': 'no-cache' };
+  const headers = { 'content-type': file.type, 'content-security-policy': 'sandbox allow-scripts', 'cache-control': 'no-cache', 'access-control-allow-origin': 'null' };
   if (path === join(root, ARTIFACT_PAGE)) return new Response(withHeightReport(readFileSync(path, 'utf8')), { headers });
   return new Response(file, { headers });
 }
@@ -157,12 +185,14 @@ function serveArtifactFile(dir: string, name: string): Response {
  * A file a looked-up answer comes with, never one outside its thread's output directory. A page runs
  * sandboxed as an HTML artifact does, and tells its frame its height; `download`: as a file to save.
  */
-export function serveAnswerFile(dir: string, name: string, download: boolean): Response {
+export function serveAnswerFile(dir: string, asked: string, download: boolean, req: Request): Response {
+  const name = keyed(req, '/files/', asked);
+  if (name instanceof Response) return name;
   const root = resolve(dir);
   const path = resolve(root, name);
   if (!path.startsWith(root + sep) || !existsSync(path) || !statSync(path).isFile()) return new Response('Not found', { status: 404 });
   const file = Bun.file(path);
-  const headers: Record<string, string> = { 'content-type': file.type, 'content-security-policy': 'sandbox allow-scripts', 'cache-control': 'no-cache' };
+  const headers: Record<string, string> = { 'content-type': file.type, 'content-security-policy': 'sandbox allow-scripts', 'cache-control': 'no-cache', 'access-control-allow-origin': 'null' };
   if (download) return new Response(file, { headers: { ...headers, 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(basename(path))}` } });
   if (/\.html?$/i.test(path)) return new Response(withHeightReport(readFileSync(path, 'utf8')), { headers });
   return new Response(file, { headers });
