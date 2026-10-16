@@ -5,6 +5,7 @@
 // installing a new version of the app, after which the app's shell starts it again (UPDATE).
 
 import { dirname } from 'node:path';
+import { inert } from '../core/inert';
 import type { OwnerHold, RestartReason } from '../core/types';
 import { COMPILED } from './resources';
 import { gitOrNull } from './workspaces';
@@ -173,13 +174,10 @@ export class Restarter {
 
 const key = (b: Busy[]) => b.map((x) => `${x.canvas}/${x.card}`).join(' ');
 
-/** Paths whose change leaves the running code as it is: docs, the site for obeya.si and its workflow. */
-const INERT = /(^docs\/|^design\/|^site\/|^\.github\/|\.md$)/;
-
 /** Whether the commits from `from` to `to` change code, not only docs (unknown counts as code). */
 export function changesCode(checkout: string, from: string, to: string): boolean {
   const changed = gitOrNull(checkout, 'diff', '--name-only', from, to);
-  return changed === null || changed.split('\n').some((f) => f && !INERT.test(f));
+  return changed === null || changed.split('\n').some((f) => f && !inert(f));
 }
 
 /** The commit `checkout` stands at, if it is a git checkout. */

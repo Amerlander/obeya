@@ -18,6 +18,7 @@
 
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { INERT } from '../src/core/inert';
 
 type Asset = { from: string; ends: string; name: string };
 type Release = { platform: string; installers: Asset[]; update: Asset };
@@ -95,8 +96,8 @@ const git = (cwd: string, ...args: string[]) => {
   return r.exitCode === 0 ? r.stdout.toString().trim() : null;
 };
 
-/** The paths of the commits that change what runs, as `git log -- <these>` takes them: not docs or the site (as INERT in src/server/self-update.ts). */
-export const RUNS = ['.', ':!docs', ':!design', ':!site', ':!.github', ':!*.md'];
+/** The paths of the commits that change what runs, as `git log -- <these>` takes them: all but the inert ones. */
+export const RUNS = ['.', ...INERT.dirs.map((d) => `:!${d}`), `:!*${INERT.ending}`];
 
 /**
  * The release's notes: one line per commit since the version tag before `tag` that changes what

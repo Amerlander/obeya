@@ -4264,7 +4264,7 @@ on hover what may happen and `bun upgrade`), which the server's `hello` brings t
 #### When the build runs
 
 The build runs on a push to `main` that changes code (docs, design, the site, Markdown files and the
-Pages workflow left out, as in `INERT` of the self-update, except that a change to the build
+Pages workflow left out, as in `src/core/inert.ts`, which the self-update follows too, except that a change to the build
 workflow itself builds), the installers kept a week as the run's artifacts, and on a tag
 `v<version>`, which must be `package.json`'s: then a draft GitHub Release gets every installer, the
 updater's archives with their signatures, `SHA256SUMS` and `latest.json` (`scripts/release.ts`), its
