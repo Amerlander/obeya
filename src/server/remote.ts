@@ -20,7 +20,8 @@ import type { AccessView, DeviceView, Pairing, RemoteProblem, RemoteSetting, Tai
 import { LOCAL_HOSTS, hostname, type Gate } from './access';
 import { BadRequest } from './board';
 import type { Store } from './db';
-import { remoteOf, remoteSetting, saveRemote, SETTINGS_FILE } from './settings';
+import { OWNER_SETTINGS_FILE as SETTINGS_FILE } from '../../plugin/skills/demo/lib/language.ts';
+import { remoteOf, remoteSetting, saveRemote } from './settings';
 import { type ServeEntry, Tailscale } from './tailscale';
 
 export const DEVICE_COOKIE = 'obeya-device';

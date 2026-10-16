@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { languageOf } from '../core/locale';
 import { AGENT_DEFAULTS, type AgentSetting } from '../core/types';
 import { withAgentSetting } from './runtime';
-import { agentSetting, agentsView, pushKeyChoice, saveAgents, saveLanguage, savePushKey, saveTheme, SETTINGS_FILE, systemLanguage, themeView } from './settings';
+import { OWNER_SETTINGS_FILE as SETTINGS_FILE, systemLanguage } from '../../plugin/skills/demo/lib/language.ts';
+import { agentSetting, agentsView, pushKeyChoice, saveAgents, saveLanguage, savePushKey, saveTheme, themeView } from './settings';
 import { FakeRuntime } from './testing';
 
 const homes: string[] = [];

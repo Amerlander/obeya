@@ -7,17 +7,13 @@
 // language, takes the new look at once, and the server reads the file whenever it needs the
 // language or starts an agent.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { OWNER_SETTINGS_FILE, systemLanguage } from '../../plugin/skills/demo/lib/language.ts';
+import { chosenLanguage, OWNER_SETTINGS_FILE as SETTINGS_FILE, ownerLanguageIn, systemLanguage } from '../../plugin/skills/demo/lib/language.ts';
 import { type Language, LANGUAGES } from '../core/locale';
 import { AGENT_DEFAULTS, AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentRole, type AgentSetting, type AgentsView, type LanguageView, type RemoteSetting, type Theme, THEMES, type ThemeView } from '../core/types';
 import { defaultPushKey, parsePushKey } from '../core/push-key';
 import { BadRequest } from './board';
-
-export { systemLanguage };
-
-export const SETTINGS_FILE = OWNER_SETTINGS_FILE;
 
 interface Settings {
   language?: Language;
@@ -37,27 +33,25 @@ function read(home: string): Settings {
     const language = LANGUAGES.find((l) => l === o.language);
     const theme = THEMES.find((x) => x === o.theme);
     const pushKey = parsePushKey(o.pushKey) ?? undefined;
-    return { ...o, ...(language ? { language } : { language: undefined }), theme, agents: agentsOf(o.agents), pushKey, remote: remoteOf(o.remote) ?? undefined };
+    return { ...o, language, theme, agents: agentsOf(o.agents), pushKey, remote: remoteOf(o.remote) ?? undefined };
   } catch {
     return {};
   }
 }
 
 export function languageView(home: string, system = systemLanguage()): LanguageView {
-  const chosen = read(home).language ?? null;
+  const chosen = chosenLanguage(home) ?? null;
   return { file: join(home, SETTINGS_FILE), chosen, system, language: chosen ?? system };
 }
 
 /** The language that applies: the owner's choice, else the system's. */
-export const ownerLanguage = (home: string) => languageView(home).language;
+export const ownerLanguage = ownerLanguageIn;
 
 /** Saves the owner's choice; `null` follows the system again. Other settings in the file stay. */
 export function saveLanguage(home: string, input: unknown): LanguageView {
   const language = (input as { language?: unknown } | null)?.language;
   if (language !== null && !LANGUAGES.some((l) => l === language)) throw new BadRequest('invalid', `language must be one of ${LANGUAGES.join(', ')} or null`);
-  const { language: _, ...rest } = existsSync(join(home, SETTINGS_FILE)) ? read(home) : {};
-  write(home, language ? { ...rest, language: language as Language } : rest);
-  console.log(`Obeya: language ${language ?? 'of the system'} saved to ${join(home, SETTINGS_FILE)}`);
+  save(home, 'language', language as Language | null, `language ${language ?? 'of the system'}`);
   return languageView(home);
 }
 
@@ -67,10 +61,14 @@ export const themeView = (home: string): ThemeView => ({ file: join(home, SETTIN
 export function saveTheme(home: string, input: unknown): ThemeView {
   const theme = (input as { theme?: unknown } | null)?.theme;
   if (theme !== null && !THEMES.some((x) => x === theme)) throw new BadRequest('invalid', `theme must be one of ${THEMES.join(', ')} or null`);
-  const { theme: _, ...rest } = existsSync(join(home, SETTINGS_FILE)) ? read(home) : {};
-  write(home, theme ? { ...rest, theme: theme as Theme } : rest);
-  console.log(`Obeya: ${theme ?? 'the system\'s'} look saved to ${join(home, SETTINGS_FILE)}`);
+  save(home, 'theme', theme as Theme | null, `${theme ?? "the system's"} look`);
   return themeView(home);
+}
+
+/** Saves one of the owner's choices, or with `null` takes it out; the other settings in the file stay. */
+function save<K extends 'language' | 'theme' | 'pushKey' | 'remote'>(home: string, key: K, value: Settings[K] | null, what: string) {
+  write(home, { ...read(home), [key]: value ?? undefined });
+  console.log(`Obeya: ${what} saved to ${join(home, SETTINGS_FILE)}`);
 }
 
 function write(home: string, settings: Settings) {
@@ -101,7 +99,7 @@ export function agentsView(home: string): AgentsView {
 /** Saves the choices for the groups given (`{ worker: { model: 'opus' } }`). Other groups and settings in the file stay. */
 export function saveAgents(home: string, input: unknown): AgentsView {
   const given = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
-  const settings = existsSync(join(home, SETTINGS_FILE)) ? read(home) : {};
+  const settings = read(home);
   const agents: Record<string, unknown> = { ...settings.agents };
   for (const [role, choice] of Object.entries(given)) {
     if (!AGENT_ROLES.some((r) => r === role)) throw new BadRequest('invalid', `agents are one of ${AGENT_ROLES.join(', ')}`);
@@ -127,9 +125,7 @@ export function savePushKey(home: string, input: unknown, platform: string = pro
   const given = (input as { key?: unknown } | null)?.key;
   const key = given === null ? null : parsePushKey(given);
   if (given !== null && !key) throw new BadRequest('invalid', 'key must be a key held alone (a modifier, an F key …) or modifiers and a key, such as Control+Shift+Space');
-  const { pushKey: _, ...rest } = existsSync(join(home, SETTINGS_FILE)) ? read(home) : {};
-  write(home, key && key !== defaultPushKey(platform) ? { ...rest, pushKey: key } : rest);
-  console.log(`Obeya: push-to-talk key ${key ?? 'by default'} saved to ${join(home, SETTINGS_FILE)}`);
+  save(home, 'pushKey', key !== defaultPushKey(platform) ? key : null, `push-to-talk key ${key ?? 'by default'}`);
   return pushKeyChoice(home, platform);
 }
 
@@ -149,8 +145,6 @@ export function saveRemote(home: string, input: unknown): RemoteSetting | null {
   const given = (input as { remote?: unknown } | null)?.remote;
   const remote = given === null ? null : remoteOf(given);
   if (given !== null && !remote) throw new BadRequest('invalid', 'remote must be null, { via: "tailscale" } or { via: "address", address }');
-  const { remote: _, ...rest } = existsSync(join(home, SETTINGS_FILE)) ? read(home) : {};
-  write(home, remote ? { ...rest, remote } : rest);
-  console.log(`Obeya: other devices ${remote ? `reach it ${remote.via === 'tailscale' ? 'through Tailscale' : `at ${remote.address}`}` : 'do not reach it'}, saved to ${join(home, SETTINGS_FILE)}`);
+  save(home, 'remote', remote, `other devices ${remote ? `reach it ${remote.via === 'tailscale' ? 'through Tailscale' : `at ${remote.address}`}` : 'do not reach it'},`);
   return remote;
 }
