@@ -518,6 +518,11 @@ export interface Share {
 }
 
 /** One line in a card's log. */
+/** The kinds of screenshot the owner can attach, with the extension each is stored under. */
+export const IMAGE_TYPES: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' };
+/** What the model takes per image (5 MB base64); the browser scales screenshots down to fit. */
+export const MAX_IMAGE_BYTES = 3_750_000;
+
 export interface CardEvent {
   id: number;
   cardId: string;

@@ -3,11 +3,9 @@
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { IMAGE_TYPES, MAX_IMAGE_BYTES } from '../core/types';
 import { BadRequest } from './board';
 
-const TYPES: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' };
-/** What the model takes per image (5 MB base64); the browser scales screenshots down to fit. */
-export const MAX_IMAGE_BYTES = 3_750_000;
 /** Per message: enough to show a flow, few enough to keep the agent's context small. */
 export const MAX_IMAGES = 6;
 const NAME = /^[0-9a-f-]{36}\.(png|jpg|gif|webp)$/;
@@ -17,7 +15,7 @@ export class Images {
 
   /** Stores an uploaded image and returns its id (the file name). */
   save(bytes: Uint8Array, type: string): string {
-    const ext = TYPES[type.split(';')[0]!.trim().toLowerCase()];
+    const ext = IMAGE_TYPES[type.split(';')[0]!.trim().toLowerCase()];
     if (!ext) throw new BadRequest('imageType', 'only PNG, JPEG, GIF or WebP images');
     if (!bytes.length) throw new BadRequest('imageType', 'empty image');
     if (bytes.length > MAX_IMAGE_BYTES) throw new BadRequest('imageTooLarge', `an image may have at most ${MAX_IMAGE_BYTES} bytes`);

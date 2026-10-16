@@ -4,17 +4,15 @@
 
 import { type ClipboardEvent, type DragEvent, type MouseEvent, type PointerEvent, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { IMAGE_TYPES, MAX_IMAGE_BYTES } from '../core/types';
 import { api, at } from './api';
 import { draftOf, dropDraft, markupOf, setMarkup, updateDraft, useDraft } from './draft';
 import { badgeOf, CLICK_PX, drawMarks, EDGE, type Mark, markOf, markSize, type Point, RED, roundedRect } from './marks';
 import { failText, t } from './strings';
 import { behindThumb, type Box, onto, ZOOM_EASE, ZOOM_MS } from './zoomBox';
 
-const TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 /** The longest side the model looks at in detail; larger screenshots only cost upload and context. */
 const MAX_SIDE = 2000;
-/** What the server takes per image (the model's limit). */
-const MAX_BYTES = 3_750_000;
 
 /** The images among pasted or dropped files. */
 export const imageFiles = (files: FileList | null | undefined) => [...(files ?? [])].filter((f) => f.type.startsWith('image/'));
@@ -25,12 +23,12 @@ export async function prepareImage(file: Blob): Promise<Blob> {
   // not an image the browser can read: the server says so
   if (!bmp) return file;
   const scale = Math.min(1, MAX_SIDE / Math.max(bmp.width, bmp.height));
-  if (scale === 1 && TYPES.includes(file.type) && file.size <= MAX_BYTES) return file;
+  if (scale === 1 && IMAGE_TYPES[file.type] && file.size <= MAX_IMAGE_BYTES) return file;
   const canvas = new OffscreenCanvas(Math.round(bmp.width * scale), Math.round(bmp.height * scale));
   canvas.getContext('2d')!.drawImage(bmp, 0, 0, canvas.width, canvas.height);
   let blob = await canvas.convertToBlob({ type: 'image/png' });
   for (const quality of [0.9, 0.8, 0.65]) {
-    if (blob.size <= MAX_BYTES) break;
+    if (blob.size <= MAX_IMAGE_BYTES) break;
     blob = await canvas.convertToBlob({ type: 'image/jpeg', quality });
   }
   return blob;
