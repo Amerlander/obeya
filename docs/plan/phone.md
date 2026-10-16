@@ -189,7 +189,7 @@ view says that it does not answer. A closed MacBook lid on battery sleeps regard
   the home-screen hint, what is pushed and when, tapping a push (see Push). Done when the owner's
   iPhone, with Obeya on its home screen and the desk idle, gets a push for a demo waiting and
   opens that card from it, and gets none while the canvas is in view at the desk. Needs W2 and W3.
-- [ ] **W5:** Keeping the machine awake. The sleep assertion per platform while remote access is on
+- [x] **W5:** Keeping the machine awake. The sleep assertion per platform while remote access is on
   and a worker works, and the note about the lid (see Keeping the machine awake). Done when, on the
   Mac, `pmset -g assertions` shows Obeya's assertion while a worker is in a turn and not after, and
   the same is checked on Windows and Linux. Independent of W3 and W4; it can run beside them.

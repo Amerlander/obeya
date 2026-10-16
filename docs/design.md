@@ -4212,7 +4212,9 @@ often follows soon); it looks every five seconds. Per platform: `caffeinate -i -
 (`pmset -g assertions` shows it, "on behalf of" Obeya's process), `systemd-inhibit
 --what=idle:sleep --who=Obeya` around `tail --pid=<pid>` on Linux (`systemd-inhibit --list`), both
 ending by themselves when Obeya does; `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)`
-through `bun:ffi` on Windows (`powercfg /requests`), which holds as long as the process. The
+through `bun:ffi` on Windows (`powercfg /requests` as an admin; without admin rights
+`CallNtPowerInformation(SystemExecutionState)` shows `ES_SYSTEM_REQUIRED`), which holds as long as
+the process. The
 display may still sleep. With no worker at work the machine sleeps as it is set to, and a phone no
 longer reaches Obeya; a closed laptop lid puts it to sleep regardless, which the section says
 beside the note that Obeya answers only while it runs. Workers on SSH hosts keep the machine Obeya
