@@ -103,9 +103,11 @@ export interface Question {
 export const formatQuestion = (q: Question, language: Language): string =>
   q.options.length ? `${q.text}${q.multiple ? ` (${MESSAGES[language].multiple})` : ''}\n${q.options.map((o) => `– ${o}`).join('\n')}` : q.text;
 
-/** One item on the canvas as the UI sees it: a stored card merged with what its plan doc says. */
+/** Its worker handed the work over: the card waits for the owner's approval or feedback. */
+export const handedOver = (i: Pick<Item, 'state' | 'need'>) => i.state === 'waiting' && (i.need === 'demo' || i.need === 'review');
+
 /** Its worker takes in the owner's words on its handover: meanwhile the card is at work, and still waits for approval. */
-export const answering = (i: Pick<Item, 'state' | 'need' | 'answering'>) => i.state === 'waiting' && (i.need === 'demo' || i.need === 'review') && !!i.answering;
+export const answering = (i: Pick<Item, 'state' | 'need' | 'answering'>) => handedOver(i) && !!i.answering;
 
 /**
  * Whether an agent hears what the owner says or types on the card when it is open: its worker (at
@@ -145,6 +147,7 @@ export const unreadAnswers = (talk: Talk[]) => talk.filter((x) => x.unread).leng
 /** What on a canvas waits for the owner: the cards that need them, and the Koordinator while an answer waits unread. */
 export const waitingOn = (s: Pick<CanvasSnapshot, 'items' | 'talk'>) => s.items.filter(needsYou).length + (unreadAnswers(s.talk) ? 1 : 0);
 
+/** One item on the canvas as the UI sees it: a stored card merged with what its plan doc says. */
 export interface Item {
   id: string;
   kind: CardKind;

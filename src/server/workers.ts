@@ -7,7 +7,7 @@ import type { CardDiff } from '../core/diff';
 import { LANGUAGE_NAMES, LANGUAGES } from '../core/locale';
 import { MESSAGES, type Messages, type Pause } from '../core/messages';
 import { basename } from 'node:path';
-import { answering, askable, pausable, type CardLanding, type DemoKind, type DemoPage, formatQuestion, type Item, type Mock, ownWords, pickedAnswer, type Question, type RepoSettings, type RestartReason, type Spot, type SpotInput, started } from '../core/types';
+import { answering, askable, pausable, type CardLanding, type DemoKind, type DemoPage, formatQuestion, handedOver, type Item, type Mock, ownWords, pickedAnswer, type Question, type RepoSettings, type RestartReason, type Spot, type SpotInput, started } from '../core/types';
 import { BadRequest, type Board, replyNote } from './board';
 import { type Asked, decisionLog, toQuestion, withPick } from './advisor';
 import { checkArtifact, DEMO_SKILL, DEMO_SKILL_FILE, demoSkillName, OBEYA_PLUGIN, placeIn, readChapters } from './demo';
@@ -22,6 +22,7 @@ import { readingShared } from '../adapters';
 import { branchName, gitStepsSync, type Landed, together, WorkspaceError, type Workspaces } from './workspaces';
 import type { PrState, Shipped } from './board';
 import { parsePrUrl } from './forge';
+import { clip } from '../core/text';
 
 export interface WorkerOptions {
   board: Board;
@@ -391,7 +392,7 @@ export class Workers {
   message(cardId: string, text: string, images: string[] = [], spoken = false, replyTo?: number, spot?: SpotInput) {
     const card = this.card(cardId);
     const place = spot ? this.place(cardId, spot) : undefined;
-    const handover = card.state === 'waiting' && (card.need === 'review' || card.need === 'demo');
+    const handover = handedOver(card);
     if (place && handover) return this.hold(card, text, images, spoken, replyTo, place);
     const words = this.words(cardId, text, images, replyTo, place);
     const shots = images.map((f) => basename(f));
@@ -736,7 +737,7 @@ export class Workers {
   /** The comments held back go to the worker as one message, the card still waiting for approval. */
   private release(cardId: string) {
     const card = this.o.board.item(cardId);
-    if (!card || !(card.state === 'waiting' && (card.need === 'review' || card.need === 'demo'))) return void this.takeHeld(cardId);
+    if (!card || !handedOver(card)) return void this.takeHeld(cardId);
     const held = this.takeHeld(cardId);
     if (!held) return;
     this.takingIn(cardId);
@@ -781,7 +782,7 @@ export class Workers {
   /** `direct`: the work goes onto the default branch at once instead of into a pull request, where the repository's settings allow it. */
   async approve(cardId: string, { direct = false }: { direct?: boolean } = {}) {
     const card = this.card(cardId);
-    if (!(card.state === 'waiting' && (card.need === 'review' || card.need === 'demo')) || this.landing.has(cardId)) throw new BadRequest('notReady', 'the card is not ready for review');
+    if (!handedOver(card) || this.landing.has(cardId)) throw new BadRequest('notReady', 'the card is not ready for review');
     const lands = this.landingOf(cardId);
     // where work lands on main anyway, approving it directly is approving it
     if (direct && lands.land === 'pr' && !lands.direct)
@@ -2433,4 +2434,3 @@ const permissionKey = (p: AskedPermission) => JSON.stringify([p.name, p.input]);
 /** The state a finished card goes back to after a question: `done` when nothing landed, else `live`. */
 const landedState = (landed: string) => ((JSON.parse(landed) as LandedState).unchanged ? 'done' : 'live');
 
-const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s);

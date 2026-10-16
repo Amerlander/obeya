@@ -20,6 +20,7 @@ import { imageNote } from './images';
 import type { AgentRuntime } from './runtime';
 import { TO_OBEYA, toObeyaTool } from './to-obeya';
 import { describeTool, SPOKEN } from './workers';
+import { clip } from '../core/text';
 
 export interface AnswerOptions {
   board: Board;
@@ -498,4 +499,3 @@ export const fromAnswerTag = (tag: string): number | undefined => {
 /** A thread's output directory under Obeya's home: never in a repository, like demos. */
 export const answersDir = (home: string, canvas: string, thread: number) => join(home, 'answers', canvas, String(thread));
 
-const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s);

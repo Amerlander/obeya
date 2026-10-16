@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { settingsShape } from '../adapters/schema';
-import { type AgentSetting, answering, askable, blocksSaving, type CanvasConfig, finished, type Item, type NextStep, type Notice, pausable, plannableAsProject, prototypeWorkstream, type Queue, type SpotInput, type TalkQuote, type TalkRef } from '../core/types';
+import { type AgentSetting, answering, askable, blocksSaving, type CanvasConfig, finished, handedOver, type Item, type NextStep, type Notice, pausable, plannableAsProject, prototypeWorkstream, type Queue, type SpotInput, type TalkQuote, type TalkRef } from '../core/types';
 import { answerTag, fromAnswerTag } from './answers';
 import { BadRequest, type Board, excerpt, replyNote } from './board';
 import type { Place } from '../core/layout';
@@ -12,6 +12,7 @@ import type { Moment } from './db';
 import { type AgentRuntime, type AgentSession, failureReason } from './runtime';
 import { type Language, LANGUAGE_NAMES } from '../core/locale';
 import { MESSAGES } from '../core/messages';
+import { clip, oneLine } from '../core/text';
 
 export type Command = (
   /** `from`: the card it follows up on; `place`: where the owner was on the canvas, for one without. */
@@ -63,7 +64,7 @@ const NEXT_ACTION: Record<NextStep['step'], string> = {
 
 /** The answers an idea's agent would give to its own open questions. */
 const picks = (i: Item) => {
-  const picked = (i.idea?.questions ?? []).filter((q) => q.pick).map((q) => `"${clip(q.text, 120)}" → ${q.pick!.options.join(', ')}`);
+  const picked = (i.idea?.questions ?? []).filter((q) => q.pick).map((q) => `"${clip(oneLine(q.text), 120)}" → ${q.pick!.options.join(', ')}`);
   return picked.length ? ` (its own answers: ${picked.join('; ')})` : '';
 };
 
@@ -552,7 +553,7 @@ export class Commander {
             if (card && (!about || !this.o.board.item(about))) return `Unknown tag ${String(card)}; call look_up again with a tag from the list, or without card.`;
             const agent = about ? this.o.board.item(about)! : undefined;
             if (agent && hasAgent(agent) && agent.id !== s.reading?.from)
-              return `An agent is on ${String(card)} (${agent.need ?? agent.state}): it answers what is asked about its work, which is on its branch and not in the checkout look_up reads. Pass the owner's words to it with act (${agent.state === 'waiting' && (agent.need === 'demo' || agent.need === 'review') ? 'feedback' : 'note'}).`;
+              return `An agent is on ${String(card)} (${agent.need ?? agent.state}): it answers what is asked about its work, which is on its branch and not in the checkout look_up reads. Pass the owner's words to it with act (${handedOver(agent) ? 'feedback' : 'note'}).`;
             return finish([], String(confirm), { question: q, ...(about ? { about } : {}), ...(followed ? { follows: followed } : {}) });
           },
         },
@@ -656,7 +657,7 @@ export class Commander {
     const id = a.card ? s.tags.get(a.card) : undefined;
     const card = id ? this.o.board.item(id) : undefined;
     if (!card) return `unknown tag ${a.card ?? '(none)'}`;
-    const reviewable = card.state === 'waiting' && (card.need === 'review' || card.need === 'demo');
+    const reviewable = handedOver(card);
     const is = `it is ${card.need ? `${card.state}: ${card.need}` : card.state}`;
     if (card.prototypeOf && a.do === 'drop') return { do: 'discard', card: card.id };
     if (card.prototypeOf && a.do === 'build') {
@@ -834,7 +835,7 @@ export class Commander {
       const became = i.prototypeOf ? items.find((x) => x.kind === 'project' && x.origin === i.prototypeOf) : undefined;
       const builds = became && prototypeWorkstream(items, became.id);
       const group = i.group ? groups.get(i.group) : undefined;
-      return `${tag(i.id)} [${state}${paused}] "${i.title}"${repo}${project ? ` (project "${project.title}")` : ''}${group ? ` (group "${group}")` : ''}${became ? ` (prototype of the idea "${i.ideaTitle ?? ''}", which became the project ${tag(became.id)} "${became.title}"${builds ? `; build starts its workstream ${tag(builds.id)} "${builds.title}" on it` : ''}${i.buildProposal ? '; its worker proposes to build on it' : ''})` : idea ? ` (prototype of ${tag(idea.id)} "${idea.title}"${i.buildProposal ? '; its worker proposes to build the idea on it' : ''})` : ''}${i.proposal ? ` — proposed ${i.proposal.idea ? 'idea' : 'task'}${i.proposal.revising ? `, being reworked by what the owner said${i.proposal.acceptAfterRevision ? '; accepted once the new text is there, unless it asks questions' : ''}` : ''}${i.proposal.questions.length ? `, open questions: ${i.proposal.questions.map((q) => q.text).join(' | ')}` : ''}` : ''}${i.statusLine ? ` — status: ${clip(i.statusLine, 160)}` : ''}${i.question ? ` — open question${i.need === 'demo' ? ' in its demo report' : ''}: ${i.question.text}${i.question.pick ? ` (its worker would pick: ${i.question.pick.options.join(', ')})` : ''}` : ''}${i.idea?.next ? ` — its agent would ${NEXT_ACTION[i.idea.next.step]} next: ${clip(i.idea.next.why, 200)}${picks(i)}` : ''}${i.idea?.variants.length ? ` — prototypes its agent planned: ${i.idea.variants.map((v) => v.approach).join(', ')}` : ''}`;
+      return `${tag(i.id)} [${state}${paused}] "${i.title}"${repo}${project ? ` (project "${project.title}")` : ''}${group ? ` (group "${group}")` : ''}${became ? ` (prototype of the idea "${i.ideaTitle ?? ''}", which became the project ${tag(became.id)} "${became.title}"${builds ? `; build starts its workstream ${tag(builds.id)} "${builds.title}" on it` : ''}${i.buildProposal ? '; its worker proposes to build on it' : ''})` : idea ? ` (prototype of ${tag(idea.id)} "${idea.title}"${i.buildProposal ? '; its worker proposes to build the idea on it' : ''})` : ''}${i.proposal ? ` — proposed ${i.proposal.idea ? 'idea' : 'task'}${i.proposal.revising ? `, being reworked by what the owner said${i.proposal.acceptAfterRevision ? '; accepted once the new text is there, unless it asks questions' : ''}` : ''}${i.proposal.questions.length ? `, open questions: ${i.proposal.questions.map((q) => q.text).join(' | ')}` : ''}` : ''}${i.statusLine ? ` — status: ${clip(oneLine(i.statusLine), 160)}` : ''}${i.question ? ` — open question${i.need === 'demo' ? ' in its demo report' : ''}: ${i.question.text}${i.question.pick ? ` (its worker would pick: ${i.question.pick.options.join(', ')})` : ''}` : ''}${i.idea?.next ? ` — its agent would ${NEXT_ACTION[i.idea.next.step]} next: ${clip(oneLine(i.idea.next.why), 200)}${picks(i)}` : ''}${i.idea?.variants.length ? ` — prototypes its agent planned: ${i.idea.variants.map((v) => v.approach).join(', ')}` : ''}`;
     };
     const step = (m: Moment) => {
       const card = items.find((i) => i.id === m.cardId);
@@ -845,7 +846,7 @@ export class Commander {
           ? m.author === 'owner'
             ? 'new card'
             : 'proposed by an agent'
-          : `${STEP[m.kind] ?? ''}${clip(m.text, 200)}`;
+          : `${STEP[m.kind] ?? ''}${clip(oneLine(m.text), 200)}`;
       return [`- ${when(m.at)} ${tag(m.cardId)} "${card.title}": ${what}`];
     };
     const now = new Date().toISOString();
@@ -863,7 +864,7 @@ export class Commander {
                 const open = t.cardId ? items.find((i) => i.id === t.cardId) : undefined;
                 const later =
                   t.answer !== undefined
-                    ? ` → the answer ${answerTag(t.id)} you looked up${t.follows ? ` (following up on ${answerTag(t.follows)})` : ''}: "${full.has(t) ? t.answer : clip(t.answer, 400)}"`
+                    ? ` → the answer ${answerTag(t.id)} you looked up${t.follows ? ` (following up on ${answerTag(t.follows)})` : ''}: "${full.has(t) ? t.answer : clip(oneLine(t.answer), 400)}"`
                     : t.question
                       ? ' (you were looking it up; no answer came)'
                       : '';
@@ -973,10 +974,6 @@ function queued(q: Queue, items: Item[]): string {
   return `queued behind ${titles}`;
 }
 
-const clip = (text: string, n: number) => {
-  const flat = text.replace(/\s+/g, ' ').trim();
-  return flat.length > n ? `${flat.slice(0, n - 1)}…` : flat;
-};
 
 /** A time as the Koordinator reads it: local, to the minute, with the weekday. */
 function when(iso: string): string {

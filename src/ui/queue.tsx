@@ -5,9 +5,9 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { move, movable, queueOrder } from '../core/queue';
 import type { Item } from '../core/types';
-import { api, ApiError } from './api';
+import { api } from './api';
 import { plain } from './markdown';
-import { errorText, stateLabel, t } from './strings';
+import { failText, stateLabel, t } from './strings';
 
 /** The bar's queue button: how many cards wait; a click lists them under it, in turn, to open or move. */
 export function QueuePill({ items, onOpen }: { items: Item[]; onOpen: (i: Item) => void }) {
@@ -103,7 +103,7 @@ export function useQueueMove(item: Item, items: Item[], labelled = false): { but
           e.stopPropagation();
           if (blocked) return setWhy({ id: item.id, text: blocked });
           setWhy(undefined);
-          api.act(item.id, { action: 'reorder', earlier }).catch((err) => setWhy({ id: item.id, text: err instanceof ApiError ? errorText(err.code) : t.offlineError, error: true }));
+          api.act(item.id, { action: 'reorder', earlier }).catch((err) => setWhy({ id: item.id, text: failText(err), error: true }));
         }}
       >
         {earlier ? '↑' : '↓'}

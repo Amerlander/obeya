@@ -1,7 +1,7 @@
 // The unfolded card: what it is, what its worker does, and what the owner decides.
 
 import { Fragment, type ReactNode, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { agentListens, askable, buildableOn, type CardAction, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, EXPORT_HTML_MAX, finished, finishingUp, type Item, type Mock, type NextStep, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, type Spot, started, stopped, stoppedArchivable, titleFrom } from '../core/types';
+import { agentListens, askable, buildableOn, type CardAction, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, EXPORT_HTML_MAX, finished, finishingUp, handedOver, type Item, type Mock, type NextStep, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, type Spot, started, stopped, stoppedArchivable, titleFrom } from '../core/types';
 import { mockPage } from '../core/frame';
 import { answerText, toggle } from './answer';
 import { ApiError, api, at, type Field, holdRestart, onCardEvent, onCardEventGone } from './api';
@@ -19,7 +19,7 @@ import { type Box, onto, ZOOM_EASE, ZOOM_MS, zoomBox } from './zoomBox';
 import { AttachButton, imageUrl, ShotStrip, Shots, useShotInput } from './shots';
 import { useStickToEnd } from './stickToEnd';
 import { dismissPlace, type Place, seekTo, usePlace, videoOf, watch } from './spot';
-import { becomesLabel, clock as time, errorText, stateLabel, t } from './strings';
+import { becomesLabel, clock as time, errorText, failText, stateLabel, t } from './strings';
 import { agentWorks, demoHandover, koordinatorReads, ownerField, parseQuestion, talkAlone, talkTurns, type Turn, withoutOpen, worked as isWorked } from './talk';
 
 /**
@@ -85,7 +85,7 @@ export function Detail(p: Props) {
       p.onDone(done);
     } catch (e) {
       if (!(e instanceof ApiError)) console.error(e);
-      setError(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+      setError(failText(e));
     }
   };
   const act = (a: CardAction, done: ActDone) => run(() => api.act(item.id, a), done);
@@ -241,7 +241,7 @@ export function Detail(p: Props) {
   );
 
   // work waiting for the owner's verdict, with a demo or a summary
-  const review = item.state === 'waiting' && (item.need === 'demo' || item.need === 'review');
+  const review = handedOver(item);
   const demoWaits = item.state === 'waiting' && item.need === 'demo';
   // an agent is on the card and can be stopped
   const running = item.state === 'working' || item.state === 'waiting' || !!item.finishing;

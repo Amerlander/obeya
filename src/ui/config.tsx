@@ -8,11 +8,11 @@ import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentM
 import { LANGUAGES } from '../core/locale';
 import { pushKeyFromEvent, type PushKeyView } from '../core/push-key';
 import { AccessSection } from './access';
-import { api, ApiError, reload } from './api';
+import { api, reload } from './api';
 import { keepConfigDraft, keptConfigDraft } from './configDraft';
 import { keep } from './keep';
 import { demoState, GitSetup, megabytes, PLATFORMS, RecognitionDetail, SetupList, useFolderWithoutGit, voiceState } from './setup';
-import { errorText, pushKeyLabel, t } from './strings';
+import { failText, pushKeyLabel, t } from './strings';
 import { applyTheme } from './theme';
 
 declare global {
@@ -256,7 +256,7 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems, 
                     setStatus(restarting ? c.saved : applied ? (restartsAgents(view.canvases, draft) ? c.savedRestarts : c.savedApplied) : c.savedOnly);
                     applies = !restarting;
                   } catch (e) {
-                    setStatus(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+                    setStatus(failText(e));
                   }
                   setBusy(false);
                   return applies;
@@ -547,7 +547,7 @@ function LanguageBlock({ on }: { on: boolean }) {
       // the strings are set before the first render: the page loads again, keeping what is open
       reload();
     } catch (e) {
-      setStatus(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+      setStatus(failText(e));
       setBusy(false);
     }
   };
@@ -588,7 +588,7 @@ function ThemeBlock({ on }: { on: boolean }) {
     } catch (e) {
       setView(before);
       applyTheme(before.chosen);
-      setStatus(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+      setStatus(failText(e));
     }
   };
   return (
@@ -630,7 +630,7 @@ function PushKeyBlock({ on }: { on: boolean }) {
     try {
       setView(await api.savePushKey(key));
     } catch (e) {
-      setStatus(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+      setStatus(failText(e));
     }
   };
   useEffect(() => {
@@ -730,7 +730,7 @@ function AgentsBlock({ on }: { on: boolean }) {
     try {
       setView(await api.saveAgents(role, choice));
     } catch (e) {
-      setStatus(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+      setStatus(failText(e));
     }
     setBusy(false);
   };
@@ -816,7 +816,7 @@ function DemoBlock({ on }: { on: boolean }) {
   const set = <K extends keyof DemoSettings>(k: K, v: DemoSettings[K]) => setDraft({ ...draft, [k]: v });
   const shown = check ?? view.check;
   const job = view.job?.voice === draft.voice ? view.job : undefined;
-  const failed = (e: unknown) => setStatus(e instanceof ApiError ? errorText(e.code) + (e.code === 'voiceSample' ? ` ${e.message}` : '') : t.offlineError);
+  const failed = (e: unknown) => setStatus(failText(e, { detail: ['voiceSample'] }));
   const save = async () => {
     setBusy(true);
     try {
@@ -1016,7 +1016,7 @@ function VoiceBlock({ on }: { on: boolean }) {
     try {
       setView(await api.installVoice());
     } catch (e) {
-      setStatus(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+      setStatus(failText(e));
     }
   };
   const blocked = view.items.some((i) => i.state === 'missing');
@@ -1528,7 +1528,7 @@ function ShareSettings({ repo, values, branch, shareTo, shareDirect, takeover }:
       setConfirming(false);
       if ('committed' in r) await onReload();
     } catch (e) {
-      setError(e instanceof ApiError ? `${errorText(e.code)}${e.code === 'settingsShare' ? ` ${e.message}` : ''}` : t.offlineError);
+      setError(failText(e, { detail: ['settingsShare'] }));
     }
     setBusy(false);
   };
@@ -1688,7 +1688,7 @@ function AdapterSetup({ canvas, repo }: { canvas: string; repo: string }) {
       keep(sessionStorage, canvas, { at: Date.now(), card: card.id, scroll: [], drafts: [] });
       location.assign(`?c=${encodeURIComponent(canvas)}`);
     } catch (e) {
-      setError(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+      setError(failText(e));
       setBusy(false);
     }
   };

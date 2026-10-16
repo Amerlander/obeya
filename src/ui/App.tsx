@@ -30,7 +30,7 @@ import { type Heard, HoldToTalk, PushToTalk, SPACE_SHOWS_MS, ToldList, usePushTo
 import { sent, take, videoOf } from './spot';
 import { CanvasPill, CardView, DepLinks, Edges, Links, Minimap, OldBunPill, ProjectView, RestartPill, Sheet, UpdatePill, WorkspacesPill } from './parts';
 import { clampWidth, loadWidths, saveWidths, SHEET_W, type SheetWidths, widthsIn } from './sheetWidth';
-import { errorText, t } from './strings';
+import { failText, t } from './strings';
 import { split, talkAlone } from './talk';
 
 export function App() {
@@ -422,7 +422,7 @@ function Canvas({
       (e) => {
         if (!(e instanceof ApiError)) console.error(e);
         setUnderway(({ [p.card]: _, ...rest }) => rest);
-        showAck(t.cardError(p.title, e instanceof ApiError ? errorText(e.code) : t.offlineError));
+        showAck(t.cardError(p.title, failText(e)));
       },
     );
   }
@@ -605,7 +605,7 @@ function Canvas({
       if (i.queue) showAck(t.queue.forced);
     } catch (e) {
       if (!(e instanceof ApiError)) console.error(e);
-      showAck(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+      showAck(failText(e));
     }
   }, []);
 
@@ -616,7 +616,7 @@ function Canvas({
       showAck(t.archive.archived(plain(i.title)), () => api.unarchive(i.id));
     } catch (e) {
       if (!(e instanceof ApiError)) console.error(e);
-      showAck(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+      showAck(failText(e));
     }
   }, []);
 
@@ -641,7 +641,7 @@ function Canvas({
       );
     } catch (e) {
       if (!(e instanceof ApiError)) console.error(e);
-      showAck(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+      showAck(failText(e));
     }
   }, []);
 
@@ -652,7 +652,7 @@ function Canvas({
       showAck(t.planDir.started(plain(card.title)));
     } catch (e) {
       if (!(e instanceof ApiError)) console.error(e);
-      showAck(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+      showAck(failText(e));
     }
   }, []);
 
@@ -724,7 +724,7 @@ function Canvas({
         await api.command(text, target, images, field, replyTo, await sent(taken));
       } catch (e) {
         if (!(e instanceof ApiError)) console.error(e);
-        showAck(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+        showAck(failText(e));
       }
     else {
       const place = placeNow();
@@ -857,7 +857,7 @@ function Canvas({
       else await api.assign(r.ids, to.group);
     } catch (e) {
       if (!(e instanceof ApiError)) console.error(e);
-      showAck(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+      showAck(failText(e));
     }
   }
   /** The × on a group's name in the colour ring: its cards belong to none, with a moment to undo. */
@@ -869,7 +869,7 @@ function Canvas({
       showAck(t.groups.removed(g.name), () => api.createGroup(gone.group.name, gone.cards, gone.group.hue));
     } catch (e) {
       if (!(e instanceof ApiError)) console.error(e);
-      showAck(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+      showAck(failText(e));
     }
   }
   /** A right click on a card opens the colour ring for it; a workstream's is its project's. */

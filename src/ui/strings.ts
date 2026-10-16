@@ -2,6 +2,7 @@
 // effect, set once before the first render (`setLanguage`); choosing another language loads the
 // page again. Dates and numbers follow the language, in the browser's own variant of it.
 
+import { ApiError } from './api';
 import type { DiffFile } from '../core/diff';
 import { type Language, languageOf } from '../core/locale';
 import type { NotAProject } from '../core/plan-doc';
@@ -2686,8 +2687,15 @@ export const stateLabel = (i: { kind?: string; thread?: { thinking?: boolean }; 
             ? t.stoppedState
             : t.state[i.state];
 
-/** The owner's text for a refused request or a logged error code; the generic one for anything unknown. */
 /** An idea or a task decided as a project, until the project takes its place; a card that was an idea has the brief it was decided on. */
 export const becomesLabel = (i: { brief?: string }) => (i.brief !== undefined ? t.kind.becomesProject : t.kind.taskBecomesProject);
 
+/** The owner's text for a refused request or a logged error code; the generic one for anything unknown. */
 export const errorText = (code: string | undefined) => (code && Object.hasOwn(t.error, code) ? t.error[code as ErrorCode] : t.error.invalid);
+
+/**
+ * The owner's text for a call that failed: the server's refusal, else `offline` (Obeya could not be
+ * reached). For the codes in `detail`, the refusal's own message follows, which names the particulars.
+ */
+export const failText = (e: unknown, { detail = [], offline = t.offlineError }: { detail?: string[]; offline?: string } = {}) =>
+  e instanceof ApiError ? errorText(e.code) + (e.code && detail.includes(e.code) ? ` ${e.message}` : '') : offline;

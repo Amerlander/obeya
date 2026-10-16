@@ -53,6 +53,7 @@ import {
 } from '../core/types';
 import type { CardRow, DecisionRow, Friction, FrictionNote, GroupRow, NewRow, RowUpdate, Store } from './db';
 import type { Images } from './images';
+import { clip, oneLine } from '../core/text';
 
 /** What Obeya keeps about a card's pull request; `url` is null until the worker opened it. */
 export interface PrState {
@@ -659,7 +660,7 @@ export class Board {
   addQuestion(title: string, thread: StoredThread, session: string | undefined, repo: string | undefined, near?: string): Item {
     const at = near && this.item(near) ? this.followUpSpot(near) : this.freeSpot();
     const [row] = this.store.insert([
-      { canvas_id: this.canvas.id, kind: 'question', state: 'done', title: clipTitle(title), body: '', ...at, repo: repo && repo !== this.home ? repo : null, ...(near && this.item(near) ? { group_id: this.groupOf(this.own(near)) } : {}) },
+      { canvas_id: this.canvas.id, kind: 'question', state: 'done', title: clip(oneLine(title), 160), body: '', ...at, repo: repo && repo !== this.home ? repo : null, ...(near && this.item(near) ? { group_id: this.groupOf(this.own(near)) } : {}) },
     ]);
     this.store.update(row!.id, { thread: JSON.stringify(thread), ...(session ? { session_id: session } : {}) });
     this.changed();
@@ -1832,10 +1833,6 @@ function threadOf(r: CardRow): Thread {
   return { talk: t.talk, ...(t.thinking ? { thinking: true } : {}), answers: t.answers, files: t.files };
 }
 
-const clipTitle = (s: string) => {
-  const line = s.replace(/\s+/g, ' ').trim();
-  return line.length > 160 ? `${line.slice(0, 159)}…` : line;
-};
 
 function ideaOf(r: CardRow): Idea {
   const i = r.idea ? (JSON.parse(r.idea) as StoredIdea) : { status: 'open' as const, brief: '' };

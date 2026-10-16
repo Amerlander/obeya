@@ -8,6 +8,7 @@ import { answerFile, api } from './api';
 import { type Block, blocks, Inline, ListTree, plain, Table } from './markdown';
 import { clock as time, t } from './strings';
 import type { Quoted } from './reply';
+import { clip } from '../core/text';
 
 /**
  * A message's frame: `by` places and colours it (the owner's on the right), `who` heads it with its
@@ -308,9 +309,8 @@ export function useAnswer(e: CardEvent): { head?: ReactNode; files?: ReactNode; 
 /** Under a follow-up: which answer it continues, and while it is looked up, that its agent reads. */
 export const Continues = ({ question, reading }: { question: string; reading?: boolean }) => (
   <div className="continues">
-    {t.answer.continues(clipped(plain(question), 90))}
+    {t.answer.continues(clip(plain(question), 90))}
     {reading && ` · ${t.answer.reading}`}
   </div>
 );
 
-const clipped = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);

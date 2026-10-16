@@ -4,10 +4,10 @@
 
 import { type ClipboardEvent, type DragEvent, type MouseEvent, type PointerEvent, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ApiError, api, at } from './api';
+import { api, at } from './api';
 import { draftOf, dropDraft, markupOf, setMarkup, updateDraft, useDraft } from './draft';
 import { badgeOf, CLICK_PX, drawMarks, EDGE, type Mark, markOf, markSize, type Point, RED, roundedRect } from './marks';
-import { errorText, t } from './strings';
+import { failText, t } from './strings';
 import { behindThumb, type Box, onto, ZOOM_EASE, ZOOM_MS } from './zoomBox';
 
 const TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
@@ -60,7 +60,7 @@ export async function attachTo(key: string, files: File[], added?: () => void) {
       updateDraft(key, (d) => ({ images: [...d.images, id] }));
       added?.();
     } catch (e) {
-      updateDraft(key, { error: e instanceof ApiError ? errorText(e.code) : t.offlineError });
+      updateDraft(key, { error: failText(e) });
     } finally {
       updateDraft(key, (d) => ({ uploading: d.uploading - 1 }));
     }
@@ -88,7 +88,7 @@ export function useShotInput({ draft, initial = [], onChange, off = false }: { d
     change.current?.(draftOf(key).images);
   };
   const attach = (files: File[]) => (off ? Promise.resolve() : attachTo(key, files, () => change.current?.(draftOf(key).images)));
-  const failed = (e: unknown) => updateDraft(key, { error: e instanceof ApiError ? errorText(e.code) : t.offlineError });
+  const failed = (e: unknown) => updateDraft(key, { error: failText(e) });
   return {
     off,
     images,

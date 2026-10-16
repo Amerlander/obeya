@@ -9,13 +9,13 @@
 
 import { createContext, useEffect, useRef, useState } from 'react';
 import type { Place } from '../core/layout';
-import { ApiError, api, holdRestart } from './api';
+import { api, holdRestart } from './api';
 import { beginDictation, dictate, draftOf, focusedDraft, MIC_DRAFT, takesImages, updateDraft, useDraft, useFieldOn, useFocusedDraft } from './draft';
 import { type Recording, record } from './recorder';
 import { AttachButton, ShotStrip, useShotInput } from './shots';
 import { replyOn, setReply, useReply } from './reply';
 import { sent, take, type Taken } from './spot';
-import { errorText, t } from './strings';
+import { failText, t } from './strings';
 
 /** Starts a recording, for a text field's microphone and Space held in it; null where nobody listens. */
 export const HoldToTalk = createContext<(() => void) | null>(null);
@@ -190,7 +190,7 @@ export function usePushToTalk(
     try {
       h = await api.voice(audio, target, { listen: true });
     } catch (e) {
-      h = { confirm: e instanceof ApiError ? errorText(e.code) : t.voice.failed, unheard: true };
+      h = { confirm: failText(e, { offline: t.voice.failed }), unheard: true };
     }
     if (!h.unheard && h.text) dictate(key, h.text);
     const note = h.unheard ? h.confirm : '';
@@ -250,7 +250,7 @@ export function useTold(onHeard: (h: Heard) => void) {
     try {
       h = await request();
     } catch (e) {
-      h = { confirm: e instanceof ApiError ? errorText(e.code) : t.voice.failed };
+      h = { confirm: failText(e, { offline: t.voice.failed }) };
     }
     settle(id, h);
     onHeard(h);

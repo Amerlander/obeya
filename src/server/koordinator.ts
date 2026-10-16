@@ -12,6 +12,7 @@ import type { AgentRuntime, AgentTool } from './runtime';
 import type { Workers } from './workers';
 import { type Change, RECHECK_MS, type Workspaces } from './workspaces';
 import { LANGUAGE_NAMES } from '../core/locale';
+import { clip } from '../core/text';
 
 /** A workstream as the Koordinator scheduled it, in its turn's order. */
 interface Planned {
@@ -986,7 +987,6 @@ const UTTERED: Record<Utterance['kind'], string> = {
   say: 'to you',
 };
 
-const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
 /** How the learner hears each kind of input. */
 const INPUTS: Record<OwnerInput, string> = {

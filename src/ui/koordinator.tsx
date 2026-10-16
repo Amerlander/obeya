@@ -5,11 +5,11 @@
 
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
 import type { Item, Preference, RepoRef, Reshare, SettingProposal, Talk, TalkQuote, TalkRef } from '../core/types';
-import { api, ApiError } from './api';
+import { api } from './api';
 import { Inline, plain } from './markdown';
 import { AnswerFiles, Body, Continues, Msg, Quote, Reading, ThreadCard } from './message';
 import { type Reply, setReply, talkEv, talkQuote, useReplyKnown } from './reply';
-import { errorText, t } from './strings';
+import { failText, t } from './strings';
 import { Composer } from './composer';
 import { OBEYA_DRAFT } from './draft';
 import { Shots } from './shots';
@@ -263,7 +263,7 @@ function ProposalRow({ p, items, rules, repos, onOpen }: { p: Preference; items:
       await act();
       setError('');
     } catch (e) {
-      setError(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+      setError(failText(e));
     }
   };
   const accept = () =>
@@ -394,7 +394,7 @@ function SettingRow({ p, items, repo, onOpen, onConfig }: { p: SettingProposal; 
       await act();
       setError('');
     } catch (e) {
-      setError(e instanceof ApiError ? `${errorText(e.code)}${e.code === 'settingsShare' ? ` ${e.message}` : ''}` : t.offlineError);
+      setError(failText(e, { detail: ['settingsShare'] }));
     }
     setBusy(false);
   };
@@ -499,7 +499,7 @@ function ReshareBox({ r, items, onOpen }: { r: Reshare; items: Item[]; onOpen: (
       await fn();
       setError('');
     } catch (e) {
-      setError(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+      setError(failText(e));
     }
   };
   const s = t.koordinator.reshare;
@@ -583,7 +583,7 @@ function PreferenceRow({ p }: { p: Preference }) {
       setDraft(null);
       setError('');
     } catch (e) {
-      setError(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+      setError(failText(e));
     }
   };
   return (
@@ -633,7 +633,7 @@ function NewPreference({ repos }: { repos: RepoRef[] }) {
       setError('');
       setFiled(target ? t.koordinator.filed(repos.find((r) => r.id === target)?.name ?? target) : '');
     } catch (e) {
-      setError(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+      setError(failText(e));
     }
   };
   return (

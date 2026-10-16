@@ -7,9 +7,9 @@
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
 import { CLOUD_PRESETS, CLOUD_VOICES, type CloudPreset, type GitSetupPreview, LARGE_FILE, type Language, type MachineItem, type MachineSection, type MachineView, type SetupItem, type VoiceSetupItem } from '../core/types';
 import { LANGUAGES } from '../core/locale';
-import { api, ApiError, reload } from './api';
+import { api, reload } from './api';
 import { Sign } from './logo';
-import { errorText, fileSize, pushKeyLabel, t } from './strings';
+import { failText, fileSize, pushKeyLabel, t } from './strings';
 
 export const megabytes = (mb: number) => (mb >= 1000 ? `${(mb / 1000).toFixed(1).replace('.', ',')} GB` : `${mb} MB`);
 export const PLATFORMS: Record<string, string> = { darwin: 'macOS', win32: 'Windows', linux: 'Linux' };
@@ -130,7 +130,7 @@ export function RecognitionDetail({ item, busy, changed }: { item: VoiceSetupIte
       clearTimeout(timer);
     };
   }, [measuring]);
-  const failed = (e: unknown) => setStatus(e instanceof ApiError ? `${errorText(e.code)}${e.code === 'voiceCloud' || e.code === 'invalid' ? ` ${e.message}` : ''}` : t.offlineError);
+  const failed = (e: unknown) => setStatus(failText(e, { detail: ['voiceCloud', 'invalid'] }));
   const act = async (call: () => Promise<unknown>) => {
     setStatus('');
     try {
@@ -222,7 +222,7 @@ export function Setup({ first, onClose }: { first?: boolean; onClose?: () => voi
   const [terminal, setTerminal] = useState<string | null>(null);
   const shown = useRef(false);
   shown.current = !!view;
-  const failed = (e: unknown) => setStatus(e instanceof ApiError ? `${errorText(e.code)}${e.code === 'invalid' || e.code === 'config' ? ` ${e.message}` : ''}` : t.offlineError);
+  const failed = (e: unknown) => setStatus(failText(e, { detail: ['invalid', 'config'] }));
   const recheck = () => {
     setChecking(true);
     return api
@@ -431,7 +431,7 @@ function FirstCanvas({ view, ready, onView }: { view: MachineView; ready: boolea
   // the main branch of the folder named, once Obeya looked at it; or that it is a folder without git
   const [found, setFound] = useState<{ path: string; branch?: string; noGit?: boolean } | null>(null);
   const s = t.setup;
-  const failed = (e: unknown) => setStatus(e instanceof ApiError ? `${errorText(e.code)}${e.code === 'invalid' || e.code === 'config' ? ` ${e.message}` : ''}` : t.offlineError);
+  const failed = (e: unknown) => setStatus(failText(e, { detail: ['invalid', 'config'] }));
   const job = view.job?.kind === 'clone' ? view.job : undefined;
   // a clone that ended as the first canvas
   useEffect(() => {
@@ -578,7 +578,7 @@ export function GitSetup({ path, confirm, onDone }: { path: string; confirm: str
   const [busy, setBusy] = useState<'looking' | 'working' | null>(null);
   const [error, setError] = useState('');
   const s = t.setup.git;
-  const failed = (e: unknown) => setError(e instanceof ApiError ? `${errorText(e.code)}${e.code === 'gitSetup' || e.code === 'invalid' ? ` ${e.message}` : ''}` : t.offlineError);
+  const failed = (e: unknown) => setError(failText(e, { detail: ['gitSetup', 'invalid'] }));
   const look = async () => {
     setBusy('looking');
     setError('');

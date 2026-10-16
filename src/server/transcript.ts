@@ -6,6 +6,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { clip } from '../core/text';
 
 /** One tool call of the run, with what came of it and the agent's words around it. */
 export interface Call {
@@ -241,7 +242,6 @@ function shorten(s: string): string {
 
 const isObject = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
 const str = (x: unknown) => (typeof x === 'string' ? x : '');
-const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 /** Results that end a call without the agent having done anything wrong. */
 const CUT_OFF = [/^(Error: )?Exit code 137\b/, /^\[Request interrupted/, /doesn't want to proceed/];

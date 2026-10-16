@@ -16,6 +16,7 @@ import { remote } from './hosts';
 import { type Excerpt, excerptOf, excerptText, findTranscript } from './transcript';
 import { type Language, LANGUAGE_NAMES } from '../core/locale';
 import { MESSAGES } from '../core/messages';
+import { clip } from '../core/text';
 
 export interface WorkRetroOptions {
   board: Board;
@@ -309,7 +310,6 @@ const countKey = (repo: string) => `work_retro_cards:${repo}`;
 const sinceKey = (repo: string) => `work_retro_since:${repo}`;
 const runsKey = (repo: string) => `work_retro_runs:${repo}`;
 
-const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 /** What each setting a retrospective may propose is for, as the sessions read it. */
 const SETTING_MEANING: Record<ProposedSetting, string> = {

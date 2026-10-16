@@ -16,6 +16,7 @@ import type { AgentEvent, AgentRuntime, AgentSession, AgentTool } from './runtim
 import { imageNote } from './images';
 import { describeTool, SPOKEN } from './workers';
 import { TO_OBEYA, toObeyaTool } from './to-obeya';
+import { clip } from '../core/text';
 
 export interface ExplorerOptions {
   board: Board;
@@ -501,4 +502,3 @@ function nextStep(next: unknown, asked: Question[]): NextStep | undefined {
   return { step: n.step as NextStep['step'], why: clip(String(n.why ?? '').trim(), 400) };
 }
 
-const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s);

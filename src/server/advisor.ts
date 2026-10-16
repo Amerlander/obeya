@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { type Language, LANGUAGE_NAMES } from '../core/locale';
 import type { AnswerFile, Question } from '../core/types';
 import type { AgentRuntime, AgentTool } from './runtime';
+import { clip } from '../core/text';
 
 /** An answer to a question the owner asked, for the card or the sheet, with the files it comes with. */
 export interface OwnerAnswer {
@@ -168,7 +169,6 @@ export function withPick(a: Asked): Question {
   return options.length ? { ...q, pick: { options, why: clip(String(a.pick_why ?? '').trim(), 400) } } : q;
 }
 
-const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 
 /** The decisions so far, as an agent reads them. */
 export function decisionLog(decisions: { question: string; answer: string; by: string }[]): string {
