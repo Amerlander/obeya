@@ -220,7 +220,8 @@ brief, which open question is next).
 A variant that is something to look at (a layout, a dialog) comes with a mock: a few lines of HTML
 the agent passes with the brief (`update_brief`'s `mocks`, one per variant, with its title; left
 out, the mocks stay) or, for something the brief has no place for, with its reply. The card shows
-each in the frame of a worker's HTML artifact (sandboxed, scripts in an origin of their own), sized
+each in the frame of a worker's HTML artifact (sandboxed, scripts in an origin of their own, nothing
+loaded from the internet; see The demo on the card), sized
 to its content, the brief's side by side under it. A worker who builds the idea or a prototype of it
 gets the brief's mocks as HTML after the brief.
 
@@ -3026,7 +3027,36 @@ what the page loads in CORS mode (a module script, `fetch()` of a file beside it
 too. So the page's address is sent on to `<directory>/~<key>/index.html` (`keyed` in
 `src/server/demo.ts`), the key an HMAC of the directory's address with a secret new at every start,
 and only an address with the key gets the header; what the page loads relative to itself carries
-it, and nobody learns it without Obeya's API. Its `index.html` comes with
+it, and nobody learns it without Obeya's API.
+
+Nor does the page send anything to the internet. An agent steered by text it read (a comment on a
+pull request, a file) could write a page that sends what it read to another server the moment the
+owner opens the card, and writing an HTML file passes the checks a `curl` to that server would not.
+So the CSP of each of the worker's files (`pagePolicy` in `src/core/frame.ts`) lets it load the
+files beside it, inline styles and scripts (`eval` too), `data:` and `blob:`, and nothing else: no
+CDN, no font host, no other server, by `fetch`, an image, a font, a script, a form or a frame alike.
+A page has to bring what it needs along. The files are named by `'self'` and by the address the
+request was sent to (`ownOrigin` in `src/server/access.ts`, the one behind `tailscale serve` too):
+in the sandbox Safari matches `'self'` against the page's own origin, `null`. What a CSP does not
+reach, a connection opened ahead (`preconnect`, whose host name alone carries data to a DNS server)
+and WebRTC, `Connection-Allowlist: (response-origin)` stops (Chrome 152 on); Firefox and Safari
+know no such header, and there those two stay open. DNS prefetching is off as well
+(`X-DNS-Prefetch-Control`).
+
+A page could also leave by navigating its own frame elsewhere (`location`, a meta refresh), which
+its own CSP cannot stop; Obeya's page allows its frames nothing but its own addresses (`frame-src`,
+a meta tag in `src/ui/index.html`, `FRAMES_POLICY`), and that stops it. Opened in a window of its
+own (an answer's page from its link), a file that may run scripts (HTML, SVG; an image comes as it
+is) comes in a sandboxed frame of a page around it with the same rule (`Sec-Fetch-Dest: document`,
+`framed` in `src/server/demo.ts`, which hands the frame the address's `#` part too; a browser that
+sends no `Sec-Fetch-Dest`, older than about 2023, gets the file as it is). An idea's mock
+has no response of its own to carry these headers, so it is written into one: the card's frame
+loads an empty page Obeya serves with them (`/api/mock-frame`, connecting to nothing) and sends it
+the mock's page, which it writes into itself; the policies stay with the document. The mock's page
+starts with the same CSP as a meta tag, ahead of the mock's own HTML, so no comment or `<head>` of
+the mock can push it out of the head (`mockPage`).
+
+Its `index.html` comes with
 the height report a shared artifact's page has (see Sharing a demo), so the frame grows to the page
 and only the card's left column scrolls. The frame's height is the reported one, rounded up, plus
 its border (and the report counts a scrollbar across the page's foot), and once the page has

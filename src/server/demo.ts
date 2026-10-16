@@ -4,9 +4,10 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
-import { withHeightReport } from '../core/frame';
+import { pagePolicy, withHeightReport } from '../core/frame';
 import { chapterAt, type DemoKind } from '../core/types';
-import { demoFile } from './demo-page';
+import { ownOrigin } from './access';
+import { demoFile, esc } from './demo-page';
 import { resource } from './resources';
 
 /**
@@ -172,10 +173,35 @@ export function serveAnswerFile(dir: string, asked: string, download: boolean, r
 }
 
 /**
+ * What a worker's page may connect to beyond what its CSP covers (`Connection-Allowlist`, Chrome 152
+ * on): only the address it was served from, so neither a `preconnect` nor WebRTC reaches another
+ * server. It holds for the document, also once the page writes another into it.
+ */
+const OWN_CONNECTIONS = '(response-origin)';
+
+/** The headers of a page that loads nothing from the internet, nor files of its own where `own` (the address they are served from) is missing; see `pagePolicy`. */
+function sealedHeaders(own?: string): Record<string, string> {
+  return {
+    'content-security-policy': `sandbox allow-scripts; ${pagePolicy(own)}`,
+    'connection-allowlist': own ? OWN_CONNECTIONS : '()',
+    'x-dns-prefetch-control': 'off',
+  };
+}
+
+/** The address a request was sent to, for a policy: only as plain a scheme and host as `refusal` lets through. */
+function servedFrom(req: Request): string | undefined {
+  const origin = ownOrigin(req);
+  return /^https?:\/\/[a-z0-9.\-[\]:]+$/.test(origin) ? origin : undefined;
+}
+
+/**
  * A file of a worker's directory (an HTML artifact's, a looked-up answer's), never one outside it.
  * It is the worker's, so it runs sandboxed: scripts yes, but in an origin of its own, without
- * Obeya's API or the canvas's storage. A `page` tells its frame its height, so the frame grows to it
- * instead of scrolling inside.
+ * Obeya's API or the canvas's storage, and connecting to nothing but the address of the files beside
+ * it (`pagePolicy`, `OWN_CONNECTIONS`). A `page` tells its frame its height, so the frame grows to it
+ * instead of scrolling inside. Opened in a window of its own (a link on the card), a file that may run
+ * scripts (HTML, SVG) comes in a frame of a page around it (`framed`): alone in its window a page
+ * could navigate itself to another server, in the frame the page around it keeps it from that.
  */
 function serveSandboxed(dir: string, asked: string, req: Request, route: '/demo/' | '/files/', page: (path: string) => boolean, download = false): Response {
   const name = keyed(req, route, asked);
@@ -183,10 +209,41 @@ function serveSandboxed(dir: string, asked: string, req: Request, route: '/demo/
   const path = demoFile(dir, name);
   if (!path) return notFound();
   const file = Bun.file(path);
-  const headers = { 'content-type': file.type, 'content-security-policy': 'sandbox allow-scripts', 'cache-control': 'no-cache', 'access-control-allow-origin': 'null' };
+  if (!download && req.headers.get('sec-fetch-dest') === 'document' && /html|svg|xml/.test(file.type)) return framed(basename(path));
+  // without an address to name, the page gets no files beside it rather than a policy that names something else
+  const headers = { 'content-type': file.type, ...sealedHeaders(servedFrom(req)), 'cache-control': 'no-cache', 'access-control-allow-origin': 'null' };
   if (download) return new Response(file, { headers: { ...headers, 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(basename(path))}` } });
   if (page(path)) return new Response(withHeightReport(readFileSync(path, 'utf8')), { headers });
   return new Response(file, { headers });
+}
+
+/** Points the frame at the page's own address, the part after `#` included, which never reaches the server. */
+const FRAMED_SCRIPT = "document.querySelector('iframe').src = location.pathname + location.search + location.hash;";
+const FRAMED_HASH = `'sha256-${new Bun.CryptoHasher('sha256').update(FRAMED_SCRIPT).digest('base64')}'`;
+
+/** A page that holds the file at its own address in a sandboxed frame filling the window, and frames nothing from elsewhere. */
+function framed(title: string): Response {
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>html,body,iframe{margin:0;border:0;width:100%;height:100%;display:block}</style></head><body><iframe sandbox="allow-scripts"></iframe><script>${FRAMED_SCRIPT}</script></body></html>`;
+  const headers = { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': `default-src 'none'; style-src 'unsafe-inline'; script-src ${FRAMED_HASH}; frame-src 'self'`, 'cache-control': 'no-cache' };
+  return new Response(html, { headers });
+}
+
+/**
+ * The frame an idea's mock is shown in (`MockFrame` in src/ui/detail.tsx): empty, sandboxed and
+ * connecting to nothing, until the page around it sends the mock's page (`{ obeyaPage }`), which it
+ * writes into itself; the policy stays with the document. A mock given as `srcdoc` would get no
+ * `Connection-Allowlist`, which only a response can carry.
+ */
+const MOCK_FRAME = `<!doctype html><script>addEventListener('message', function once(e) {
+  if (e.source !== parent || typeof (e.data && e.data.obeyaPage) !== 'string') return;
+  removeEventListener('message', once);
+  document.open();
+  document.write(e.data.obeyaPage);
+  document.close();
+});</script>`;
+
+export function serveMockFrame(): Response {
+  return new Response(MOCK_FRAME, { headers: { 'content-type': 'text/html; charset=utf-8', ...sealedHeaders(), 'cache-control': 'no-cache' } });
 }
 
 const notFound = () => new Response('Not found', { status: 404 });

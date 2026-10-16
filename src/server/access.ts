@@ -42,15 +42,20 @@ export function refusal(req: Request, hosts: readonly string[], files = false): 
   }
   if (files && (req.method === 'GET' || req.method === 'HEAD')) return null;
   const origin = req.headers.get('origin');
-  const proto = req.headers.get('x-forwarded-proto');
-  const own = `${proto ? `${proto}:` : new URL(req.url).protocol}//${(forwarded ?? host).toLowerCase()}`;
   const opened =
     (req.method === 'GET' || req.method === 'HEAD') &&
     req.headers.get('sec-fetch-mode') === 'navigate' &&
     req.headers.get('sec-fetch-dest') === 'document' &&
     !new URL(req.url).pathname.startsWith('/api/');
-  if ((origin !== null && origin.toLowerCase() !== own) || (req.headers.get('sec-fetch-site') === 'cross-site' && !opened)) return new Response("Obeya answers its own page, not another site's.\n", { status: 403, headers: PLAIN });
+  if ((origin !== null && origin.toLowerCase() !== ownOrigin(req)) || (req.headers.get('sec-fetch-site') === 'cross-site' && !opened)) return new Response("Obeya answers its own page, not another site's.\n", { status: 403, headers: PLAIN });
   return null;
+}
+
+/** The address a request was sent to, as the browser sees it (`tailscale serve` forwards it: `X-Forwarded-Proto` and `-Host`); its host is one `refusal` has checked. */
+export function ownOrigin(req: Request): string {
+  const proto = req.headers.get('x-forwarded-proto');
+  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? new URL(req.url).host;
+  return `${proto ? `${proto}:` : new URL(req.url).protocol}//${host.toLowerCase()}`;
 }
 
 /** Who may come in beyond what `refusal` checks: other devices (remote.ts). */

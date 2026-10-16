@@ -2,8 +2,9 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pagePolicy } from '../core/frame';
 import { artifactFiles } from './demo-page';
-import { checkPlugin, DEMO_SKILL, DEMO_SKILL_FILE, demoSkillName, OBEYA_PLUGIN, readChapters, serveDemoFile } from './demo';
+import { checkPlugin, DEMO_SKILL, DEMO_SKILL_FILE, demoSkillName, OBEYA_PLUGIN, readChapters, serveDemoFile, serveMockFrame } from './demo';
 
 const dir = mkdtempSync(join(tmpdir(), 'obeya-demo-'));
 writeFileSync(join(dir, 'demo.mp4'), '0123456789');
@@ -54,20 +55,46 @@ describe('serveDemoFile for an HTML artifact', () => {
   const ask = (url: string, headers: Record<string, string> = {}) =>
     serveDemoFile({ dir: html, kind: 'html' }, decodeURIComponent(url.slice(base.length)), new Request(url, { headers }));
   // as the browser does: on to the address with the directory's key
-  const get = (name: string) => {
-    const first = ask(base + name);
-    return first.status === 302 ? ask(new URL(first.headers.get('location')!, base).href) : first;
+  const get = (name: string, headers: Record<string, string> = {}) => {
+    const first = ask(base + name, headers);
+    return first.status === 302 ? ask(new URL(first.headers.get('location')!, base).href, headers) : first;
   };
 
-  test('the page and the files beside it, sandboxed; nothing outside its directory', async () => {
-    const page = get('index.html');
+  test('the page and the files beside it, sandboxed and loading nothing from elsewhere; nothing outside its directory', async () => {
+    const page = get('index.html', { 'sec-fetch-dest': 'iframe' });
     expect(page.headers.get('content-type')).toContain('text/html');
-    expect(page.headers.get('content-security-policy')).toBe('sandbox allow-scripts');
+    expect(page.headers.get('content-security-policy')).toBe(`sandbox allow-scripts; ${pagePolicy('http://127.0.0.1:4417')}`);
+    expect(page.headers.get('connection-allowlist')).toBe('(response-origin)');
+    expect(page.headers.get('x-dns-prefetch-control')).toBe('off');
+    // behind `tailscale serve` the files are named by the address the browser sent the request to
+    const proxied = get('index.html', { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'mac.tail1.ts.net' });
+    expect(proxied.headers.get('content-security-policy')).toContain("default-src 'self' https://mac.tail1.ts.net data: blob:;");
+    // an address no policy can name gives no files beside the page
+    expect(get('index.html', { 'x-forwarded-proto': 'https; default-src *' }).headers.get('content-security-policy')).toBe(`sandbox allow-scripts; ${pagePolicy()}`);
     expect(await page.text()).toMatch(/^<img src="img\/a.svg"><script>[\s\S]*obeyaHeight/);
     expect(await get('img/a.svg').text()).toContain('<svg');
     expect(get('../demo.mp4').status).toBe(404);
     expect(get('img').status).toBe(404);
     expect(get('nope.html').status).toBe(404);
+  });
+
+  test('opened in a window of its own, a page or an SVG comes in a sandboxed frame of a page around it; an image as it is', async () => {
+    const top = { 'sec-fetch-dest': 'document' };
+    const page = get('index.html', top);
+    expect(page.headers.get('content-security-policy')).toMatch(/^default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-[A-Za-z0-9+\/=]+'; frame-src 'self'$/);
+    // the frame gets the page's own address, the part after # too, which never reaches the server
+    expect(await page.text()).toContain(`<iframe sandbox="allow-scripts"></iframe><script>document.querySelector('iframe').src = location.pathname + location.search + location.hash;</script>`);
+    expect(await get('img/a.svg', top).text()).toContain('<iframe sandbox="allow-scripts"');
+    writeFileSync(join(html, 'a.png'), 'png');
+    expect(await get('a.png', top).text()).toBe('png');
+    rmSync(join(html, 'a.png'));
+  });
+
+  test("an idea's mock is written into an empty frame that connects to nothing", async () => {
+    const frame = serveMockFrame();
+    expect(frame.headers.get('content-security-policy')).toBe(`sandbox allow-scripts; ${pagePolicy()}`);
+    expect(frame.headers.get('connection-allowlist')).toBe('()');
+    expect(await frame.text()).toContain('document.write(e.data.obeyaPage)');
   });
 
   test('a link to a file outside the directory is no file of it, for the video or the artifact', async () => {

@@ -1211,7 +1211,8 @@ function Mocks({ mocks }: { mocks?: Mock[] }) {
 
 /**
  * One mock in the frame a worker's HTML artifact gets: its scripts run, but in an origin of its own,
- * away from Obeya's API. It grows to the height the mock reports, up to a limit, then scrolls.
+ * away from Obeya's API, and connect to nothing (the empty frame Obeya serves for it, which writes
+ * the page it is sent into itself). It grows to the height the mock reports, up to a limit, then scrolls.
  */
 function MockFrame({ mock }: { mock: Mock }) {
   const frame = useRef<HTMLIFrameElement>(null);
@@ -1220,7 +1221,15 @@ function MockFrame({ mock }: { mock: Mock }) {
   return (
     <figure className="mock">
       {mock.title && <figcaption>{mock.title}</figcaption>}
-      <iframe ref={frame} sandbox="allow-scripts" srcDoc={page} title={mock.title || t.idea.mock} style={{ height }} />
+      <iframe
+        key={page}
+        ref={frame}
+        sandbox="allow-scripts"
+        src="/api/mock-frame"
+        onLoad={(e) => e.currentTarget.contentWindow?.postMessage({ obeyaPage: page }, '*')}
+        title={mock.title || t.idea.mock}
+        style={{ height }}
+      />
     </figure>
   );
 }

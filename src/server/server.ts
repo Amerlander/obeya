@@ -14,7 +14,7 @@ import { defaultPushKey, type PageFocus, type PushKeyView } from '../core/push-k
 import { parsePlace } from '../core/layout';
 import { type Focus, type Heard, type Input, isField } from './commands';
 import type { Config } from './config';
-import { serveAnswerFile, serveDemoFile } from './demo';
+import { serveAnswerFile, serveDemoFile, serveMockFrame } from './demo';
 import { type NarrationHost, parseClipRequest } from './narration';
 import type { Restarter } from './self-update';
 import { looping, silence, type Transcriber } from './voice';
@@ -523,6 +523,8 @@ export function serve(
       '/api/c/:canvas/cards/:id/plan': { GET: on((c, req) => c.board.planDoc(req.params.id!)) },
       // a project's decisions and the idea it came from
       '/api/c/:canvas/cards/:id/history': { GET: on((c, req) => c.board.projectHistory(req.params.id!)) },
+      // the frame an idea's mock is written into
+      '/api/mock-frame': { GET: () => serveMockFrame() },
       // an HTML artifact's page may load files from folders beside it
       '/api/c/:canvas/cards/:id/demo/*': {
         GET: (req) => {

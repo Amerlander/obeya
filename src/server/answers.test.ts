@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pagePolicy } from '../core/frame';
 import { waitingOn } from '../core/types';
 import { answersDir } from './answers';
 import { CanvasRuntime } from './canvas';
@@ -293,7 +294,8 @@ describe('a looked-up answer goes on', () => {
     const key = /\/(~[0-9a-f]{32})\//.exec(sentOn.headers.get('location')!)![1];
     const serve = (name: string, download = false) => serveAnswerFile(out, `${key}/${name}`, download, new Request(`${files}${key}/${name}`));
     const page = serve('charts/price.html');
-    expect(page.headers.get('content-security-policy')).toBe('sandbox allow-scripts');
+    expect(page.headers.get('content-security-policy')).toBe(`sandbox allow-scripts; ${pagePolicy('http://127.0.0.1:4417')}`);
+    expect(page.headers.get('connection-allowlist')).toBe('(response-origin)');
     expect(page.headers.get('access-control-allow-origin')).toBe('null');
     expect(await page.text()).toContain('obeyaHeight');
     expect(serve('credits.csv', true).headers.get('content-disposition')).toContain('credits.csv');
