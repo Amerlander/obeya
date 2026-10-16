@@ -228,8 +228,10 @@ const further = (stage.canvases ?? []).map((name, i) => {
 for (const h of stage.hosts ?? []) {
   if (h.gone) continue;
   const ssh = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', h.ssh];
-  run('ssh', [...ssh, `rm -rf '${dir}' && mkdir -p '${dir}'`], dir);
-  run('scp', ['-q', '-r', '-o', 'BatchMode=yes', join(dir, 'scratch.git'), `${h.ssh}:${dir}/`], dir);
+  // through ssh rather than scp, which takes no ssh://user@host:port target
+  const tar = spawnSync('tar', ['-C', dir, '-cf', '-', 'scratch.git'], { maxBuffer: 1 << 30 });
+  const r = spawnSync('ssh', [...ssh, `rm -rf '${dir}' && mkdir -p '${dir}' && tar --no-same-owner -xf - -C '${dir}'`], { input: tar.stdout, encoding: 'utf8' });
+  if (tar.status !== 0 || r.status !== 0) fail(`copying the origin to ${h.name}: ${r.stderr || tar.stderr}`);
 }
 
 // the code it runs

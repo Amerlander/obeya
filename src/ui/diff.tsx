@@ -79,6 +79,9 @@ function AppLink({ item }: { item: Item }) {
   try {
     where = new URL(item.app).host;
   } catch {}
+  // on another machine, reached here through a forward of that port
+  const host = /^([^/:\\]{2,}):\//.exec(item.workspace ?? '')?.[1];
+  if (host) where = `${host}, ${where}`;
   return (
     <>
       {' · '}
