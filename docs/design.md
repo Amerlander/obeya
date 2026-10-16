@@ -3125,31 +3125,40 @@ restart goes on after it.
 #### Outdated pages
 
 Inside Obeya a card's pages go to its share target (`ShareTarget` in `src/server/share.ts`, its
-site): pages whose targets have the same key (the site's URL's host and path) are on one site, so
-versions are asked once per site and a publish names the others. Keys are not stored, so a share
-keeps only the version it was published with.
+site): pages whose targets have the same key (the site's URL's host and path) are on one site, so a
+publish names the others. Keys are not stored.
 
-Obeya keeps with each share the version of the site's pages right after publishing it: the video
-pages' and the artifact pages', so a change to one kind of page marks only those. It asks each site
-with pages out for its version at startup (Obeya restarts when its own code changes), after each
-publish or withdrawal, and when the owner comes back to a page of the canvas (at most once a minute;
-then the site is also asked which pages another machine withdrew, see Several machines on one
-site). A page published with another version, or before versions were kept (until 2026-10-05),
-shows that pages are made differently now and offers "Erneut teilen" beside "Nicht mehr teilen":
-the same demo published again under the same link. A card with a newer demo offers only "Neu
-teilen", which brings both. Each page is brought up to date on its own card. Only a change that
-shows on the pages counts (the version is a hash of sample pages, see Static sites). A page whose demo files are gone (demos get deleted to free
-space) is neither offered nor counted: there is nothing to make it from again, and it stays out as
-it is.
+What changes on the pages is written down as it changes: `PAGE_CHANGES` (`src/core/page-changes.ts`)
+lists each change a viewer of the pages sees, oldest first, with the kinds of page it shows on
+(video pages, artifact pages, or both), its words in the UI's strings (`pageChanges`, by id). A
+share keeps the newest change when it was published (`version`, '' before any). The changes after
+it that show on its kind of page are what sharing it again brings; a page that lacks one is
+outdated and shows them on its card, each with its day ("Seit diese Seite geteilt wurde, haben sich
+die Seiten geändert: …"), beside "Erneut teilen" and "Nicht mehr teilen": the same demo published
+again under the same link. A card with a newer demo offers only "Neu teilen", which brings both.
+Each page is brought up to date on its own card. A change that shows nowhere (a refactoring, a style
+only the other kind of page uses) gets no entry and marks no page. That the list misses no change
+is a test's: `PAGES_HASH` pins a hash of sample pages in both languages with everything a page can
+have (`pagesHash` in `site.ts`), and the test fails once the pages come out different, saying to add
+an entry where a viewer sees the difference and to take the new hash either way. The site's title
+is not part of it: a new title shows on the overview with the next publish and on each page once it
+is published again. Pages published before the list (until 2026-10-16) kept a hash instead; at
+startup their change is read off the page in the site's directory, once. A page whose demo files
+are gone (demos get deleted to free space) is neither offered nor counted: there is nothing to make
+it from again, and it stays out as it is.
 
 Many at once go from the Koordinator's sheet: while pages are outdated, a purple entry says how many
-(„N geteilte Demos sind veraltet“, archived cards' included) and shares again the newest 20 of them
+(„N geteilte Demos sind veraltet“, archived cards' included), lists what changed since, each change
+with its day and how many of them lack it, and shares again the newest 20 of them
 (or 10, 50, 100, all), newest by the demo's video file. They go out one after the other through the
 same queue as every share, each published as it shows (what the share kept, so a newer demo on the
 card still waits for "Neu teilen"), and a share the owner starts meanwhile goes out between two of
 them. The entry shows how many are out, the one going now, and the failed ones with their cards (the
 reason is in each card's log, the page stays outdated); "Anhalten" lets the page going out finish
-and leaves the rest. The result stays until "Ausblenden". The run is kept (setting `reshare`), so it
+and leaves the rest. "Ausblenden" puts the entry away, with the result of a finished run: the owner
+has shared as many again as were worth it. It comes back for the pages a newer change leaves
+outdated (setting `reshare_dismissed`, the newest change when it was put away); the cards go on
+offering "Erneut teilen". The run is kept (setting `reshare`), so it
 goes on after a restart; a page shared again on its own meanwhile, withdrawn or deleted drops out of
 it. It is not counted on the Koordinator button: the cards offer "Erneut teilen" each, and nothing
 is lost by leaving them.
@@ -3239,9 +3248,8 @@ aside while a deploy runs, put back when it fails. Pages are written
 with Obeya's templates, each in its demo's language ("Geteilt am", "Alle Demos"), the overview in
 the site's; a page keeps its date while its demo's own files stay the same (not the copies on the
 site, which carry what Obeya adds to an artifact). The guard against a directory lacking pages
-Obeya has as shared, and the file limit, refuse before anything is deployed. The version is computed
-in the process, a hash of sample pages in both languages with the site's title, so a change to
-Obeya's templates marks the pages outdated with Obeya's next start.
+Obeya has as shared, and the file limit, refuse before anything is deployed. Which pages a change to
+Obeya's templates leaves outdated says the list of page changes (see Outdated pages).
 
 A machine without the site's `env` file has no target there: "Teilen" exports, with a line under the
 buttons naming the file („Zum Veröffentlichen auf demos.example.dev braucht dieser Rechner
@@ -3384,6 +3392,11 @@ the microphone; Chrome launched by Playwright needs no audio service moved in-pr
   the checkout, which is often a workspace of the pool too, and the cache `wrangler pages deploy`
   leaves in its working directory kept that workspace from being leased after every share ("jeder
   freie hat nicht committete Änderungen").
+- **A page is outdated by a change written down for its viewers, not by any difference in its
+  bytes** (2026-10-16). Until then the version was a hash of sample pages: every template change
+  marked pages outdated without saying what changed, also where nothing showed (a style the security
+  fix added for artifact pages alone marked every video page), so the owner could not tell whether
+  sharing 70 pages again was worth it, nor put the notice away.
 - **Each outdated page is brought up to date on its own card** (2026-10-05): the first share command
   wrote every page afresh with each call, which updated all of them unseen and would take long with
   hundreds of pages.
@@ -4585,9 +4598,9 @@ Persistent (SQLite):
   questions); a project's plan doc as last read and the idea or task it came from; that a card
   becomes a project, and the plan docs its landed work added;
 - the shared demo page: slug, link, the demo directory it shows, what the page shows (title, text,
-  chapters, kind) and the pull request it links, the version of the site's pages it was published
-  with and whether that is behind, and whether it is publishing or withdrawing; sharing many
-  outdated pages again: the cards still to go, how many are out and which failed;
+  chapters, kind) and the pull request it links, the newest page change it was published after, and
+  whether it is publishing or withdrawing; sharing many outdated pages again: the cards still to go,
+  how many are out and which failed, and the newest change when the owner put the notice away;
 - card events (the log, with an error code where the UI words it, the owner's screenshots, an idea
   agent's mocks, and on Obeya's reply what a draft for its makers starts from), a card's own screenshots, workspaces and their leases;
 - decision log, preferences;

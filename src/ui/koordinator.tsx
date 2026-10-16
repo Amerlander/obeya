@@ -15,6 +15,7 @@ import { OBEYA_DRAFT } from './draft';
 import { Shots } from './shots';
 import { useStickToEnd } from './stickToEnd';
 import { useFitHeight } from './fitHeight';
+import { PageChangeList } from './page-changes';
 import { useStoredState } from './stored';
 import { WishLink, WishReplyLink } from './wish';
 
@@ -515,23 +516,27 @@ function ReshareBox({ r, items, onOpen }: { r: Reshare; items: Item[]; onOpen: (
                 })}
               </span>
             )}
-            <span className="pref-actions">
-              {going ? (
-                <button className="btn" title={s.stopHint} disabled={!!run.stopped} onClick={() => act(api.stopReshare)}>
-                  {s.stop}
-                </button>
-              ) : (
-                <button className="btn" onClick={() => act(api.dismissReshare)}>
-                  {s.dismiss}
-                </button>
-              )}
-            </span>
+            {/* beside the notice of outdated pages, its "Ausblenden" puts both away */}
+            {(going || !r.outdated) && (
+              <span className="pref-actions">
+                {going ? (
+                  <button className="btn" title={s.stopHint} disabled={!!run.stopped} onClick={() => act(api.stopReshare)}>
+                    {s.stop}
+                  </button>
+                ) : (
+                  <button className="btn" onClick={() => act(api.dismissReshare)}>
+                    {s.dismiss}
+                  </button>
+                )}
+              </span>
+            )}
           </li>
         )}
         {r.outdated > 0 && !going && (
           <li>
             <span className="pref-text">{s.outdated(r.outdated)}</span>
             <span className="occasion">{s.outdatedHint}</span>
+            {r.changes && <PageChangeList changes={r.changes} />}
             <span className="pref-actions">
               {counts.length > 0 && (
                 <select value={chosen ?? ''} onChange={(e) => setPick(e.target.value ? Number(e.target.value) : 'all')}>
@@ -545,6 +550,9 @@ function ReshareBox({ r, items, onOpen }: { r: Reshare; items: Item[]; onOpen: (
               )}
               <button className="btn primary" onClick={() => act(() => api.reshare(chosen))}>
                 {s.go}
+              </button>
+              <button className="btn" title={s.dismissOutdatedHint} onClick={() => act(api.dismissReshare)}>
+                {s.dismiss}
               </button>
             </span>
           </li>

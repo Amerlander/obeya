@@ -9,7 +9,8 @@ import { CanvasRuntime } from './canvas';
 import { Store } from './db';
 import type { SharePage, ShareTarget } from './share';
 import { Sharing } from './share';
-import { MANIFEST, parseEnv, siteKey, siteMissing, siteName, siteTarget, siteVersions } from './site';
+import { MANIFEST, parseEnv, siteKey, siteMissing, pagesHash, siteName, siteTarget } from './site';
+import { PAGES_HASH } from '../core/page-changes';
 import { FakeRuntime, gitRepo, noForge } from './testing';
 
 let dir: string;
@@ -279,12 +280,11 @@ describe('a site Obeya keeps', () => {
     expect(deploys()).toEqual(['d-444444 index.html obeya-site.json token=']);
   });
 
-  test('computes the version of the pages it writes, which changes with what shows on them', async () => {
-    const v = await target.version();
-    expect(v).toEqual({ video: expect.stringMatching(/^[0-9a-f]{12}$/), html: expect.stringMatching(/^[0-9a-f]{12}$/) });
-    await target.publish(page('d-555555'));
-    expect(await target.version()).toEqual(v);
-    expect(siteVersions(SITE({ title: 'Other demos' })).video).not.toBe(v!.video);
+  test('its pages are the ones the page changes account for', () => {
+    // a different hash: the pages come out different. Where a viewer sees the difference, add an
+    // entry to PAGE_CHANGES (src/core/page-changes.ts) with its words in the UI's strings
+    // (`pageChanges`); where nobody does, none. Then PAGES_HASH takes the new hash.
+    expect(pagesHash()).toEqual(PAGES_HASH);
   });
 
   test('a site is named by its URL', () => {
@@ -500,7 +500,7 @@ describe('sharing to a site', () => {
       await settled(id, 'shared');
     }
     await elsewhere.withdraw(slugOf(one), []);
-    await sharing.checkVersions();
+    await sharing.checkSites();
     expect(board.item(one)!.share).toBeUndefined();
     expect(board.events(one).map((e) => e.text)).toContain('Die Seite wurde auf einem anderen Rechner (laptop) zurückgezogen; der Link ist weg.');
     await elsewhere.withdraw(slugOf(two), []);
@@ -523,7 +523,7 @@ describe('sharing to a site', () => {
     delete m.pages[slug];
     rmSync(join(deployed(), slug), { recursive: true });
     writeFileSync(join(deployed(), MANIFEST), JSON.stringify({ ...m, deploy: 'theirs' }));
-    await sharing.checkVersions();
+    await sharing.checkSites();
     expect(board.events(two).map((e) => e.text)).toContain('Die Seite fehlte auf der Site: Der Deploy eines anderen Rechners hatte sie offline genommen. Obeya hat sie wieder deployt.');
     expect(board.events(one).map((e) => e.text)).not.toContain('Die Seite fehlte auf der Site: Der Deploy eines anderen Rechners hatte sie offline genommen. Obeya hat sie wieder deployt.');
     expect(existsSync(join(deployed(), slug, 'demo.mp4'))).toBe(true);

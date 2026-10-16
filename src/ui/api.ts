@@ -267,7 +267,7 @@ export const api = {
   /** Shares outdated pages again, the newest demos first: `count` of them, or all with null. */
   reshare: (count: number | null) => call<void>('POST', at('/reshare'), { count }),
   stopReshare: () => call<void>('POST', at('/reshare/stop')),
-  /** Puts away what the finished run says. */
+  /** "Ausblenden": puts away what the finished run says, and the notice of outdated pages until a newer change. */
   dismissReshare: () => call<void>('DELETE', at('/reshare')),
   /** The owner has the Koordinator's sheet in view: the answers waiting there are read. */
   readTalk: () => call<void>('POST', at('/talk/read')),

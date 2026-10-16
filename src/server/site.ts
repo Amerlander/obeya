@@ -23,8 +23,8 @@
 //
 // The pages come from Obeya's own templates (`demo-page.ts`), each in its demo's language, the
 // overview in the site's. A call writes only its own page and the overview: a page shared earlier
-// keeps the template it was written with until it is published again (`version` says when that
-// would make a difference). A page published again with the same video, or the same artifact
+// keeps the template it was written with until it is published again (the page changes since,
+// page-changes.ts, say what that would bring). A page published again with the same video, or the same artifact
 // files, keeps its date, so the overview keeps its order when pages are brought up to date or get
 // their pull request's link. What counts is the demo's own files (`source` in meta.json), not the
 // copies on the site, which carry what Obeya adds to an artifact (artifact-copy.ts).
@@ -45,7 +45,7 @@ import { DEMO_FILES } from './demo';
 import { BUN_ENV } from './resources';
 import { spawnOutput } from './spawn';
 import { HERE } from './workspaces';
-import { COMMAND_TIMEOUT, commandWords, SHARE_CWD, type SharePage, type ShareTarget, scriptArgv, tail, type Versions } from './share';
+import { COMMAND_TIMEOUT, commandWords, SHARE_CWD, type SharePage, type ShareTarget, scriptArgv, tail } from './share';
 import { messageOf } from '../core/text';
 
 /** Where the sites live under Obeya's home. */
@@ -550,7 +550,6 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
       });
       return 'why' in r ? { ...r, why: t.notWithdrawn(r.why) } : r;
     },
-    version: async () => siteVersions(site),
     audit: async (shared) => {
       try {
         const live = await readLive(deployEnv());
@@ -601,11 +600,12 @@ function sourceHash(dir: string, files: string[]): string {
 }
 
 /**
- * The versions of the pages the site gets now: a hash of a sample page in each language, with
- * everything a page can have, the video pages', then the artifact pages'. Only a change that shows
- * on the pages gives a new one: of Obeya's templates, or of the site's title (in the tab titles).
+ * A hash of a sample page in each language, with everything a page can have, the video pages',
+ * then the artifact pages': it changes with every change to Obeya's templates, and `PAGES_HASH`
+ * (page-changes.ts) pins it, so a change is described for the viewers, or found to show nowhere.
  */
-export function siteVersions(site: DemoSite): Versions {
+export function pagesHash(): { video: string; html: string } {
+  const site = { title: 'Demos', url: 'https://demos.example.dev/', deploy: 'true' };
   const at = '2026-01-15T12:00:00.000Z';
   const sample: Meta = {
     title: 'Title',

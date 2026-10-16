@@ -11,6 +11,7 @@ import { basename, join } from 'node:path';
 import { type Bounds, boundsOf, CARD_SIZE, freeSpotNear, GAP, type Place, PROJECT_HEAD, placeProjects, placeWorkstreams, projectSize, sizeOf, unionBounds } from '../core/layout';
 import type { Language } from '../core/locale';
 import { MESSAGES, type Messages } from '../core/messages';
+import { type KnownChange, missedChanges, PAGE_CHANGES, pagesVersion } from '../core/page-changes';
 import { allTicked, type OtherDoc, type PlanDoc } from '../core/plan-doc';
 import {
   type AnswerFile,
@@ -109,10 +110,8 @@ export interface StoredShare {
   pr?: string;
   /** While `publishing`: the page goes out again as it is, now with the PR's link; the card shows it as shared meanwhile. */
   refresh?: true;
-  /** The version of the pages the site wrote when it published this one; none for a page shared before versions were kept. */
+  /** The newest page change (page-changes.ts) when it was published, '' before any: the changes after it are what sharing again brings. */
   version?: string;
-  /** The site writes its pages differently now: sharing again would make a difference. */
-  outdated?: true;
   /** While `publishing` (with `refresh`): the page goes out again as it is, one of many the owner shares again at once. */
   again?: true;
 }
@@ -128,16 +127,24 @@ export interface StoredReshare {
 }
 
 const RESHARE_SETTING = 'reshare';
+/** The newest page change when the owner put the notice of outdated pages away: it shows again for pages a newer one leaves outdated. */
+const RESHARE_DISMISSED = 'reshare_dismissed';
+
+/** The changes since a stored page was published that show on its kind of page; none while it is not at rest. */
+export function missedBy(s: StoredShare): KnownChange[] {
+  return s.url && !s.state ? missedChanges(s.version, s.shown?.kind ?? 'video', PAGE_CHANGES) : [];
+}
 
 /**
- * A page at rest the site now writes differently, whose demo is still at hand: the one on
+ * The changes a page at rest lacks, where its demo is still at hand to share it again: the one on
  * the card, or the one it showed, kept with the share, and its files still on disk (demos are
  * deleted to free space; a page whose files are gone stays as it is, with nothing to offer).
  */
-export function reshareable(r: CardRow): boolean {
+export function reshareable(r: CardRow): KnownChange[] {
   const s = r.share ? (JSON.parse(r.share) as StoredShare) : null;
-  if (!s?.url || !s.outdated || s.state || !s.dir) return false;
-  return !!s.shown && existsSync(join(s.dir, s.shown.kind === 'html' ? 'index.html' : 'demo.mp4'));
+  const missed = s ? missedBy(s) : [];
+  if (!missed.length || !s?.dir || !s.shown || !existsSync(join(s.dir, s.shown.kind === 'html' ? 'index.html' : 'demo.mp4'))) return [];
+  return missed;
 }
 
 /** States a worker or the owner's decision is still part of. */
@@ -612,6 +619,25 @@ export class Board {
   setReshareRun(run: StoredReshare | null) {
     this.setSetting(RESHARE_SETTING, run ? JSON.stringify(run) : '');
     this.changed();
+  }
+
+  /**
+   * The outdated pages the Koordinator's sheet offers to share again, archived cards' included,
+   * with the changes each lacks: after the owner put the notice away, only those a newer change
+   * left outdated.
+   */
+  outdatedRows(): { r: CardRow; missed: KnownChange[] }[] {
+    const at = (id: string | null) => PAGE_CHANGES.findIndex((c) => c.id === id);
+    const dismissed = at(this.setting(RESHARE_DISMISSED));
+    return this.sharedRows()
+      .map((r) => ({ r, missed: reshareable(r) }))
+      .filter(({ missed }) => missed.some((c) => at(c.id) > dismissed));
+  }
+
+  /** "Ausblenden": the notice of outdated pages goes until a newer change, and the result of a run that finished with it. */
+  dismissOutdated() {
+    this.setSetting(RESHARE_DISMISSED, pagesVersion());
+    this.setReshareRun(null);
   }
 
   /** An idea's stored status and brief. */
@@ -1110,13 +1136,19 @@ export class Board {
     const rows = this.sharedRows();
     const run = this.reshareRun();
     const queued = new Set(run?.queue);
-    const outdated = rows.filter((r) => !queued.has(r.id) && reshareable(r)).length;
-    if (!outdated && !run) return null;
+    const left = this.outdatedRows().filter(({ r }) => !queued.has(r.id));
+    if (!left.length && !run) return null;
+    // what sharing them again brings, and to how many of them
+    const changes = PAGE_CHANGES.flatMap(({ id }) => {
+      const pages = left.filter(({ missed }) => missed.some((c) => c.id === id)).length;
+      return pages ? [{ id, pages }] : [];
+    });
     const title = (id: string) => rows.find((r) => r.id === id)?.title ?? '';
     const first = run?.queue[0] ? rows.find((r) => r.id === run.queue[0]) : undefined;
     const current = first?.share && (JSON.parse(first.share) as StoredShare).state === 'publishing' ? first.title : undefined;
     return {
-      outdated,
+      outdated: left.length,
+      ...(changes.length ? { changes } : {}),
       ...(run
         ? {
             run: {
@@ -1719,11 +1751,12 @@ function shareOf(r: CardRow): Item['share'] {
   if (!s || (!s.state && !s.url)) return undefined;
   const demoDir = r.demo ? (JSON.parse(r.demo) as { dir: string }).dir : undefined;
   const stale = !!s.url && !!demoDir && s.dir !== demoDir;
+  const outdated = reshareable(r);
   return {
     state: s.refresh ? 'shared' : (s.state ?? 'shared'),
     ...(s.url ? { url: s.url } : {}),
     ...(stale ? { stale: true } : {}),
-    ...(!stale && reshareable(r) ? { outdated: true } : {}),
+    ...(!stale && outdated.length ? { outdated: outdated.map((c) => c.id) } : {}),
   };
 }
 

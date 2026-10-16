@@ -5,8 +5,9 @@
 import { ApiError } from './api';
 import type { DiffFile } from '../core/diff';
 import { type Language, languageOf } from '../core/locale';
+import type { PageChangeId } from '../core/page-changes';
 import type { NotAProject } from '../core/plan-doc';
-import { type AgentEffort, type AgentModel, type AgentRole, type CardState, type ConfigProblemCode, type DemoSettingsProblem, type ErrorCode, EXPORT_HTML_MAX, type NarrationLanguage, type Theme, type VoiceKind, type Idea, type Need, type NextStep, type Queue, type OwnerHold, type RestartReason, type SetupId, type VoiceSetupId, type CloudPreset, type MachineSectionId, type NeededId, type PrId, stopped } from '../core/types';
+import { type AgentEffort, type AgentModel, type AgentRole, type CardState, type ConfigProblemCode, type DemoKind, type DemoSettingsProblem, type ErrorCode, EXPORT_HTML_MAX, type NarrationLanguage, type Theme, type VoiceKind, type Idea, type Need, type NextStep, type Queue, type OwnerHold, type RestartReason, type SetupId, type VoiceSetupId, type CloudPreset, type MachineSectionId, type NeededId, type PrId, stopped } from '../core/types';
 
 const de = {
   kind: { task: 'Aufgabe', question: 'Frage', project: 'Projekt', workstream: 'Workstream', idea: 'Idee', prototype: 'Prototyp', becomesProject: 'Idee → Projekt', taskBecomesProject: 'Aufgabe → Projekt' },
@@ -543,9 +544,20 @@ const de = {
     publishing: 'Wird veröffentlicht …',
     withdrawing: 'Wird zurückgezogen …',
     stale: 'Die geteilte Seite zeigt noch die frühere Demo.',
-    outdated: 'Seiten werden inzwischen anders erzeugt; diese zeigt noch die frühere Fassung.',
+    outdated: 'Seit diese Seite geteilt wurde, haben sich die Seiten geändert:',
     reshare: 'Erneut teilen',
     reshareHint: 'Erzeugt die Seite neu, mit derselben Demo; der Link bleibt.',
+  },
+  /** What changed on shared demo pages (src/core/page-changes.ts), as their viewers see it. */
+  pageChanges: {
+    /** Before a change that shows on one kind of page only. */
+    only: { video: 'Videoseiten', html: 'Artefaktseiten' } satisfies Record<DemoKind, string>,
+    text: {
+      '2026-10-10-look': 'Obeyas eigenes Aussehen: Titel in Newsreader, Text in IBM Plex Sans Condensed, wärmere Farben, fast eckige Ecken.',
+      '2026-10-16-alone':
+        'Sicherheitskorrektur: „In eigenem Fenster öffnen“ zeigt das Artefakt allein auf seiner Seite statt seiner eigenen Datei, die dort ohne Sandbox lief, mit den Rechten der Demo-Site; Fenster, die das Artefakt öffnet, bleiben in seiner Sandbox.',
+    } satisfies Record<PageChangeId, string>,
+    pages: (n: number) => (n === 1 ? 'eine Seite' : `${n} Seiten`),
   },
   answer: {
     makeCard: 'Als Karte',
@@ -620,7 +632,7 @@ const de = {
     lookingUp: 'schlägt nach …',
     reshare: {
       outdated: (n: number) => (n === 1 ? 'Eine geteilte Demo ist veraltet' : `${n} geteilte Demos sind veraltet`),
-      outdatedHint: 'Seiten werden inzwischen anders erzeugt. Erneut teilen erzeugt sie neu, mit derselben Demo und demselben Link; eine nach der anderen.',
+      outdatedHint: 'Erneut teilen erzeugt sie neu, mit derselben Demo und demselben Link; eine nach der anderen. Seit sie geteilt wurden, hat sich an den Seiten geändert:',
       newest: (n: number) => `Die neuesten ${n}`,
       all: (n: number) => (n === 1 ? 'Die eine' : `Alle ${n}`),
       go: 'Erneut teilen',
@@ -632,6 +644,7 @@ const de = {
       stop: 'Anhalten',
       stopHint: 'Die Seite, die gerade hinausgeht, wird fertig; die übrigen bleiben, wie sie sind.',
       dismiss: 'Ausblenden',
+      dismissOutdatedHint: 'Blendet den Hinweis aus, bis sich die Seiten wieder ändern. Jede Aufgabe bietet „Erneut teilen“ weiter an.',
     },
   },
   /** Other devices reaching Obeya: „Telefon verbinden“ and the section „Von anderen Geräten“ (src/ui/access.tsx). */
@@ -1855,9 +1868,18 @@ const en: Strings = {
     publishing: 'Publishing …',
     withdrawing: 'Withdrawing …',
     stale: 'The shared page still shows the earlier demo.',
-    outdated: 'Pages are made differently by now; this one still shows the earlier version.',
+    outdated: 'Since this page was shared, the pages changed:',
     reshare: 'Share again',
     reshareHint: 'Makes the page afresh, with the same demo; the link stays.',
+  },
+  pageChanges: {
+    only: { video: 'Video pages', html: 'Artifact pages' },
+    text: {
+      '2026-10-10-look': 'Obeya’s own look: titles in Newsreader, text in IBM Plex Sans Condensed, warmer colours, nearly square corners.',
+      '2026-10-16-alone':
+        'Security fix: “Open in its own window” shows the artifact alone on its page instead of its own file, which ran there outside the sandbox, with the demo site’s rights; windows the artifact opens stay in its sandbox.',
+    },
+    pages: (n: number) => (n === 1 ? 'one page' : `${n} pages`),
   },
   answer: {
     makeCard: 'Make it a card',
@@ -1931,7 +1953,7 @@ const en: Strings = {
     lookingUp: 'looking it up …',
     reshare: {
       outdated: (n: number) => (n === 1 ? 'One shared demo is outdated' : `${n} shared demos are outdated`),
-      outdatedHint: 'Pages are made differently by now. Sharing again makes them afresh, with the same demo and the same link; one after the other.',
+      outdatedHint: 'Sharing again makes them afresh, with the same demo and the same link; one after the other. Since they were shared, the pages changed:',
       newest: (n: number) => `The newest ${n}`,
       all: (n: number) => (n === 1 ? 'That one' : `All ${n}`),
       go: 'Share again',
@@ -1943,6 +1965,7 @@ const en: Strings = {
       stop: 'Stop',
       stopHint: 'The page going out right now is finished; the others stay as they are.',
       dismiss: 'Hide',
+      dismissOutdatedHint: 'Hides the notice until the pages change again. Each card still offers “Share again”.',
     },
   },
   access: {

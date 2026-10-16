@@ -1,12 +1,12 @@
 // Sharing a card's demo with colleagues, a video or an HTML artifact: a page outside Obeya, on the
 // static site Obeya keeps itself (`demo.site` of the repository's settings, site.ts). Obeya writes
-// the page's text when the worker did not. The site says the version of the pages it writes (the
-// video pages', the artifact pages'): a page published with another one is offered to share again
-// ("Erneut teilen"), on its card, or many at once from the Koordinator's sheet.
+// the page's text when the worker did not. A page keeps the newest page change (page-changes.ts) it
+// was published after: one that lacks a change since is offered to share again ("Erneut teilen"),
+// with what that brings, on its card, or many at once from the Koordinator's sheet.
 // Once the card has a pull request, its description links the page and the page links it. A
 // repository without a site (or with a site whose credentials are not on this machine) exports
 // the demo instead: the same page as a ZIP with its files, or as one HTML file.
-// Pages of one target are on one site, so they share its version and each publish names the others.
+// Pages of one target are on one site, so each publish names the others.
 
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
@@ -14,10 +14,11 @@ import { z } from 'zod';
 import { LANGUAGE_NAMES } from '../core/locale';
 import { MESSAGES, type Messages } from '../core/messages';
 import { type Demo, type DemoKind, type DemoPage, EXPORT_HTML_MAX, type Item } from '../core/types';
-import { BadRequest, type Board, type PrState, reshareable, type StoredReshare, type StoredShare } from './board';
+import { BadRequest, type Board, missedBy, type PrState, reshareable, type StoredReshare, type StoredShare } from './board';
+import { PAGE_CHANGES, pagesVersion } from '../core/page-changes';
 import type { DemoSite } from '../adapters/types';
 import { expandHome, readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
-import { type Gone, siteMissing, siteTarget } from './site';
+import { type Gone, siteBase, siteMissing, siteTarget } from './site';
 import { artifactCopy } from './artifact-copy';
 import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, type DemoPageParts, day, demoFile, demoPageHtml, PAGE_WORDS, type PageLanguage } from './demo-page';
 import { type Forge, parsePrUrl } from './forge';
@@ -55,9 +56,8 @@ export interface ShareSource {
 }
 
 /**
- * Where a card's pages go. Pages whose targets have the same key are on one site: the target's
- * version applies to all of them, and a publish or withdrawal names the others as shared. Keys
- * are not stored (a stored share keeps the version only), so they only need to stay the same
+ * Where a card's pages go. Pages whose targets have the same key are on one site: a publish or
+ * withdrawal names the others as shared. Keys are not stored, so they only need to stay the same
  * across a restart.
  */
 export interface ShareTarget {
@@ -79,8 +79,6 @@ export interface ShareTarget {
   audit(shared: string[]): Promise<{ gone: Gone[]; missing: string[] }>;
   /** Deploys again what this machine has, for the pages `audit` found missing. */
   repair(shared: string[], log?: (text: string) => void): Promise<{ why?: string; said: string; gone?: Gone[] }>;
-  /** The version of the pages the target writes, which changes whenever its pages would come out different. */
-  version(): Promise<Versions>;
 }
 
 /**
@@ -132,7 +130,7 @@ export class Sharing {
     if (s?.state) throw new BadRequest('shareBusy', 'the page is being shared or withdrawn');
     this.set(cardId, { ...(s ? atRest(s) : { slug: slugOf(card) }), state: 'publishing' });
     const t = this.o.board.t.share;
-    const again = !s?.url ? t.share : s.dir === demo.dir && s.outdated ? t.again : t.newDemo;
+    const again = !s?.url ? t.share : s.dir === demo.dir && missedBy(s).length ? t.again : t.newDemo;
     this.o.board.log(cardId, 'state', 'owner', again);
     void serial(() => this.publish(cardId));
   }
@@ -157,16 +155,39 @@ export class Sharing {
     if (pr && s?.url && !s.state && s.pr !== pr) this.refresh(cardId);
   }
 
-  /** After a restart: a share under way goes on, a withdrawal too; pages published with an earlier version are marked. */
+  /** After a restart: a share under way goes on, a withdrawal too. */
   resume() {
+    this.convert();
     for (const { r, s } of this.shares()) {
       // one of many shared again goes on with the rest of them
       if (s.state === 'publishing' && s.again && this.o.board.reshareRun()?.queue[0] === r.id) continue;
       if (s.state === 'publishing') void serial(() => this.publish(r.id));
       else if (s.state === 'withdrawing') void serial(() => this.withdraw(r.id));
     }
-    void serial(() => this.checkVersions());
+    void serial(() => this.checkSites());
     this.nextAgain();
+  }
+
+  /**
+   * Pages published before Obeya kept the page changes (until 2026-10-16) kept a hash of sample
+   * pages instead, which says nothing about what changed: their change is read off the page as the
+   * site has it (the style for an artifact alone came with the security fix, Newsreader with the
+   * look), and one whose page is not there counts as published before both.
+   */
+  private convert() {
+    const known = new Set<string>(['', ...PAGE_CHANGES.map((c) => c.id)]);
+    for (const { r, s } of this.shares()) {
+      if (!s.url || (s.version !== undefined && known.has(s.version))) continue;
+      const card = this.find(r.id);
+      const source = card && this.o.sourceFor(card);
+      let page = '';
+      try {
+        if (source) page = readFileSync(join(siteBase(this.o.home, source.site), 'site', s.slug, 'index.html'), 'utf8');
+      } catch {}
+      const version = page.includes('body.alone') ? '2026-10-16-alone' : page.includes('Newsreader') ? '2026-10-10-look' : '';
+      const { outdated: _, ...rest } = s as StoredShare & { outdated?: true };
+      this.set(r.id, { ...rest, version });
+    }
   }
 
   /**
@@ -178,7 +199,10 @@ export class Sharing {
   reshareMany(count: number | null) {
     const run = this.o.board.reshareRun();
     if (run?.queue.length) throw new BadRequest('reshareBusy', 'pages are being shared again already');
-    const rows = this.shares().filter(({ r }) => reshareable(r) && this.find(r.id) && this.target(this.find(r.id)!));
+    const rows = this.o.board
+      .outdatedRows()
+      .filter(({ r }) => this.find(r.id) && this.target(this.find(r.id)!))
+      .map(({ r }) => ({ r, s: JSON.parse(r.share!) as StoredShare }));
     if (!rows.length) throw new BadRequest('nothingOutdated', 'no shared page is outdated');
     const made = (dir?: string) => (dir ? (statOr(join(dir, 'demo.mp4')) ?? statOr(join(dir, 'index.html')) ?? statOr(dir) ?? 0) : 0);
     const queue = rows
@@ -198,10 +222,10 @@ export class Sharing {
     this.o.board.setReshareRun({ ...run, queue: going, stopped: true });
   }
 
-  /** Puts away what the finished run says. */
+  /** "Ausblenden": puts away what the finished run says, and the notice of outdated pages until a newer change. */
   dismissResharing() {
     if (this.o.board.reshareRun()?.queue.length) throw new BadRequest('reshareBusy', 'pages are being shared again');
-    this.o.board.setReshareRun(null);
+    this.o.board.dismissOutdated();
   }
 
   /** The next page of the run sharing many again, once the site is free. */
@@ -222,7 +246,7 @@ export class Sharing {
     if (s?.state === 'publishing' && s.again) ok = await this.publish(id);
     else {
       const row = this.find(id) && this.o.board.row(id);
-      if (s && row && reshareable(row)) {
+      if (s && row && reshareable(row).length) {
         this.set(id, { ...s, state: 'publishing', refresh: true, again: true });
         this.o.board.log(id, 'state', 'owner', this.o.board.t.share.againWithOthers);
         ok = await this.publish(id);
@@ -245,15 +269,14 @@ export class Sharing {
   soon() {
     if (Date.now() - this.checked < 60_000) return;
     this.checked = Date.now();
-    void serial(() => this.checkVersions());
+    void serial(() => this.checkSites());
   }
 
   /**
-   * Asks each site with pages out for the version of the pages it writes, and marks the pages
-   * published with another one: sharing them again would make a difference. A card whose page
-   * another machine withdrew loses its link.
+   * Asks each site with pages out which of them another machine withdrew (their cards lose their
+   * link), or took offline (deployed again).
    */
-  async checkVersions() {
+  async checkSites() {
     const targets = new Map<string, ShareTarget>();
     for (const { r, s } of this.shares()) {
       const card = this.find(r.id);
@@ -261,7 +284,6 @@ export class Sharing {
       if (target) targets.set(target.key, target);
     }
     for (const target of targets.values()) {
-      this.mark(target.key, await target.version());
       const shared = this.others('', target.key);
       const { gone, missing } = await target.audit(shared);
       this.lost(target.key, gone);
@@ -291,20 +313,6 @@ export class Sharing {
       if (!r || !s?.url || s.state || !card || this.target(card)?.key !== key) continue;
       this.set(r.id, { slug: s.slug });
       this.o.board.log(r.id, 'state', 'obeya', this.o.board.t.share.withdrawnElsewhere(g.machine));
-    }
-  }
-
-  /** Marks each page at rest shared through the target as published with another version than its current one, or not. */
-  private mark(key: string, versions: Versions) {
-    for (const { r, s } of this.shares()) {
-      const card = this.find(r.id);
-      if (!s.url || s.state || !card || this.target(card)?.key !== key) continue;
-      const current = versionOf(versions, s.shown?.kind);
-      const outdated = !!current && s.version !== current;
-      if (outdated !== !!s.outdated) {
-        const { outdated: _, ...rest } = s;
-        this.set(r.id, { ...rest, ...(outdated ? { outdated: true as const } : {}) });
-      }
     }
   }
 
@@ -355,10 +363,7 @@ export class Sharing {
     this.lost(target.key, r.gone);
     if ('why' in r) return back(r.why, r.said);
     const { url } = r;
-    const versions = await target.version();
-    const current = versionOf(versions, shown.kind);
-    this.set(cardId, { slug: s.slug, url, dir, shown, ...(pr ? { pr } : {}), ...(current ? { version: current } : {}) });
-    this.mark(target.key, versions);
+    this.set(cardId, { slug: s.slug, url, dir, shown, ...(pr ? { pr } : {}), version: pagesVersion() });
     if (r.said) this.o.board.log(cardId, 'activity', 'obeya', r.said);
     this.o.board.log(cardId, 'state', 'obeya', s.again ? t.sharedAgain(url) : s.refresh ? t.linksPr(url) : t.shared(url));
     if (pr) this.linkPr(cardId, pr, url, target.repo, shown.kind);
@@ -398,9 +403,7 @@ export class Sharing {
     const r = await target.withdraw(s.slug, this.others(cardId, target.key), (text) => this.o.board.log(cardId, 'activity', 'obeya', text));
     this.lost(target.key, r.gone);
     if (r.why) return back(r.why, r.said);
-    const versions = await target.version();
     this.set(cardId, { slug: s.slug });
-    this.mark(target.key, versions);
     if (r.said) this.o.board.log(cardId, 'activity', 'obeya', r.said);
     this.o.board.log(cardId, 'state', 'obeya', t.withdrawn);
   }
@@ -646,15 +649,6 @@ export function withDemoLink(body: string, url: string, kind: DemoKind = 'video'
   }
   return body.trim() ? `${body.trimEnd()}\n\n${line}\n` : `${line}\n`;
 }
-
-/** The versions a site writes its pages in: video pages', and artifact pages' where those differ. */
-export interface Versions {
-  video: string;
-  html?: string;
-}
-
-/** The version a page of the kind is written in now. */
-const versionOf = (v: Versions, kind: DemoKind = 'video') => (kind === 'html' ? (v.html ?? v.video) : v.video);
 
 /** A card's page keeps this slug for good: a shared link stays the same, and an export is named by it. */
 const slugOf = (card: Item) => branchName(card.title, card.id).slice('obeya/'.length);

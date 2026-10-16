@@ -9,7 +9,8 @@ import { EXPORT_HTML_MAX } from '../core/types';
 import type { Forge } from './forge';
 import { demoPageHtml } from './demo-page';
 import { DEMO_MARKER, SHARE_CWD, Sharing, withDemoLink } from './share';
-import { siteVersions } from './site';
+import { siteKey } from './site';
+import { missedChanges, PAGE_CHANGES, pagesVersion } from '../core/page-changes';
 import { FakeRuntime, gitRepo } from './testing';
 import { git } from './workspaces';
 
@@ -20,8 +21,6 @@ let sharing: Sharing;
 /** The descriptions of the fake forge's pull requests, and each edit Obeya made. */
 let bodies: Map<string, string>;
 let edits: string[];
-/** The site's title: a new one changes what its pages show, so the version of its pages. */
-let title: string;
 
 /** A page in the site's manifest, as far as the tests look at it. */
 interface Entry {
@@ -72,12 +71,11 @@ const server = Bun.serve({
 });
 afterAll(() => server.stop(true));
 const SITE_URL = `http://localhost:${server.port}/`;
-const site = (): DemoSite => ({ title, url: SITE_URL, deploy: `${join(dir, 'deploy.ts')} {dir} ${dir}`, language: 'de' });
+const site = (): DemoSite => ({ title: 'Demos', url: SITE_URL, deploy: `${join(dir, 'deploy.ts')} {dir} ${dir}`, language: 'de' });
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'obeya-share-'));
   writeFileSync(join(dir, 'deploy.ts'), DEPLOY);
-  title = 'Demos';
   board = new Board(new Store(':memory:'), { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: dir, branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
   runtime = new FakeRuntime();
   bodies = new Map();
@@ -317,106 +315,95 @@ describe('sharing a demo', () => {
   });
 });
 
-describe("a page published with an earlier version of the site's pages", () => {
-  const stored = (id: string) => JSON.parse(board.row(id).share!) as { version?: string; outdated?: true };
-  const versions = () => siteVersions(site());
+/** The changes a page of the kind lacks when published before them all. */
+const lacking = (kind: 'video' | 'html' = 'video') => missedChanges('', kind, PAGE_CHANGES).map((c) => c.id);
+/** The page went out before the changes since `version` ('': before them all). */
+const backdate = (id: string, version = '') => board.work(id, { share: JSON.stringify({ ...JSON.parse(board.row(id).share!), version }) });
 
-  test('is offered to share again once the site writes its pages differently, and "Erneut teilen" brings it up to date', async () => {
+describe('a page published before a change to the pages', () => {
+  const stored = (id: string) => JSON.parse(board.row(id).share!) as { version?: string; outdated?: true };
+
+  test('is offered to share again with what changed since, and "Erneut teilen" brings it up to date', async () => {
     const c = card();
     sharing.share(c.id);
     await until(() => share(c.id)?.state === 'shared');
-    expect(stored(c.id).version).toBe(versions().video);
-    await sharing.checkVersions();
+    expect(stored(c.id).version).toBe(pagesVersion());
     expect(share(c.id)!.outdated).toBeUndefined();
 
-    title = 'Demos des Teams';
-    await sharing.checkVersions();
-    expect(share(c.id)).toEqual({ state: 'shared', url: expect.stringContaining(SITE_URL), outdated: true });
-    expect(calls()).toHaveLength(1);
+    backdate(c.id);
+    expect(lacking().length).toBeGreaterThan(0);
+    expect(share(c.id)).toEqual({ state: 'shared', url: expect.stringContaining(SITE_URL), outdated: lacking() });
     sharing.share(c.id);
     expect(log(c.id).at(-1)).toBe('Erneut teilen: Die Seite wird mit dem neuen Stand erzeugt.');
     expect(share(c.id)).toMatchObject({ state: 'publishing', url: expect.stringContaining(SITE_URL) });
     await until(() => share(c.id)?.state === 'shared');
     expect(share(c.id)!.outdated).toBeUndefined();
-    expect(stored(c.id).version).toBe(versions().video);
+    expect(stored(c.id).version).toBe(pagesVersion());
     expect(calls().at(-1)!.wrote).toEqual([slug(c.id)]);
   });
 
-  test('video and artifact pages each have their version: a change to one marks only its pages', async () => {
+  test('a change counts for the kinds of page it shows on', async () => {
     const v = card();
     const h = card('Auswertung', { kind: 'html', chapters: [] });
     writeFileSync(join(dir, `demo-${h.id}`, 'index.html'), '<!doctype html>');
     sharing.share(v.id);
     sharing.share(h.id);
     await until(() => share(v.id)?.state === 'shared' && share(h.id)?.state === 'shared');
-    expect([stored(v.id).version, stored(h.id).version]).toEqual([versions().video, versions().html]);
-    // the artifact page went out before the artifact pages changed
-    board.work(h.id, { share: JSON.stringify({ ...stored(h.id), version: 'earlier' }) });
-    await sharing.checkVersions();
-    expect([share(v.id)!.outdated, share(h.id)!.outdated]).toEqual([undefined, true]);
-  });
-
-  test('a page shared without a version counts as earlier', async () => {
-    const c = card();
-    sharing.share(c.id);
-    await until(() => share(c.id)?.state === 'shared');
-    const { version: _, ...without } = stored(c.id);
-    board.work(c.id, { share: JSON.stringify(without) });
-    await sharing.checkVersions();
-    expect(share(c.id)!.outdated).toBe(true);
+    const first = PAGE_CHANGES[0].id;
+    backdate(v.id, first);
+    backdate(h.id, first);
+    const ids = (kind: 'video' | 'html') => missedChanges(first, kind, PAGE_CHANGES).map((c) => c.id);
+    expect([share(v.id)!.outdated, share(h.id)!.outdated]).toEqual([ids('video').length ? ids('video') : undefined, ids('html').length ? ids('html') : undefined]);
   });
 
   test('a newer demo is "Neu teilen", not "Erneut teilen"', async () => {
     const c = card();
     sharing.share(c.id);
     await until(() => share(c.id)?.state === 'shared');
-    title = 'Demos des Teams';
-    await sharing.checkVersions();
+    backdate(c.id);
     board.work(c.id, { demo: JSON.stringify({ kind: 'video', dir: join(dir, 'newer'), chapters: [], page: { title: 'T', text: 'T.' } }) });
     expect(share(c.id)).toMatchObject({ stale: true });
     expect(share(c.id)!.outdated).toBeUndefined();
   });
 
-  test('each page is brought up to date on its own: sharing one again leaves the others marked', async () => {
+  test('each page is brought up to date on its own: sharing one again leaves the others outdated', async () => {
     const a = card('A');
     const b = card('B');
     for (const c of [a, b]) {
       sharing.share(c.id);
       await until(() => share(c.id)?.state === 'shared');
+      backdate(c.id);
     }
-    const earlier = versions().video;
-    title = 'Demos des Teams';
-    await sharing.checkVersions();
     sharing.share(a.id);
     await until(() => share(a.id)?.state === 'shared' && !share(a.id)!.outdated);
-    expect(share(b.id)!.outdated).toBe(true);
-    expect(stored(b.id).version).toBe(earlier);
+    expect(share(b.id)!.outdated).toEqual(lacking());
+    expect(stored(b.id).version).toBe('');
   });
 
-  test('a version that changes while nobody looks is marked after the next deploy', async () => {
-    const a = card('A');
-    const b = card('B');
+  test('a page from before Obeya kept the page changes gets its change from the page as the site has it', async () => {
+    const [a, b] = [card('A'), card('B')];
     for (const c of [a, b]) {
       sharing.share(c.id);
       await until(() => share(c.id)?.state === 'shared');
+      board.work(c.id, { share: JSON.stringify({ ...stored(c.id), version: '9aef9b8395b7', outdated: true }) });
     }
-    title = 'Demos des Teams';
-    sharing.unshare(b.id);
-    await until(() => !share(b.id));
-    expect(share(a.id)!.outdated).toBe(true);
-  });
-
-  test('marked after a restart', async () => {
-    const c = card();
-    board.work(c.id, { share: JSON.stringify({ slug: 's', url: `${SITE_URL}s/`, dir: join(dir, `demo-${c.id}`), shown: { title: 'T', text: '', chapters: [], kind: 'video' }, version: 'v1' }) });
+    // b's page on the site is one from before the look of 2026-10-10
+    const page = join(dir, 'home/sites', siteKey(SITE_URL), 'site', slug(b.id), 'index.html');
+    writeFileSync(page, '<!doctype html><style>h1 { font-size: 28px; }</style>');
     sharing.resume();
-    await until(() => !!share(c.id)?.outdated);
+    expect([stored(a.id), stored(b.id)].map((s) => [s.version, s.outdated])).toEqual([
+      ['2026-10-16-alone', undefined],
+      ['', undefined],
+    ]);
+    expect(share(b.id)!.outdated).toEqual(lacking());
   });
 });
 
 describe('sharing many outdated pages again at once', () => {
   const reshare = () => board.snapshot().reshare;
-  /** Cards shared on the site whose demos were rendered `ages` minutes ago, then outdated by a new title of the site. */
+  /** What the outdated pages lack, for `n` of them. */
+  const changes = (n: number) => lacking().map((id) => ({ id, pages: n }));
+  /** Cards shared on the site whose demos were rendered `ages` minutes ago, published before every change to the pages. */
   async function outdated(...ages: number[]) {
     const cards = ages.map((age, n) => {
       const c = card(`Demo ${n}`);
@@ -428,9 +415,8 @@ describe('sharing many outdated pages again at once', () => {
     for (const c of cards) {
       sharing.share(c.id);
       await until(() => share(c.id)?.state === 'shared');
+      backdate(c.id);
     }
-    title = 'Demos des Teams';
-    await sharing.checkVersions();
     return cards;
   }
   /** The pages the deploys since the `before`th wrote. */
@@ -438,26 +424,46 @@ describe('sharing many outdated pages again at once', () => {
 
   test('shares the newest again, one after the other, and says how far it got', async () => {
     const [old, newest, middle] = await outdated(30, 1, 10);
-    expect(reshare()).toEqual({ outdated: 3 });
+    expect(reshare()).toEqual({ outdated: 3, changes: changes(3) });
     const before = calls().length;
     sharing.reshareMany(2);
-    expect(reshare()).toMatchObject({ outdated: 1, run: { total: 2, done: 0, left: 2, failed: [] } });
+    expect(reshare()).toMatchObject({ outdated: 1, changes: changes(1), run: { total: 2, done: 0, left: 2, failed: [] } });
     await until(() => reshare()?.run?.left === 0);
-    expect(reshare()).toEqual({ outdated: 1, run: { total: 2, done: 2, failed: [], left: 0 } });
+    expect(reshare()).toEqual({ outdated: 1, changes: changes(1), run: { total: 2, done: 2, failed: [], left: 0 } });
     expect(wrote(before)).toEqual([slug(newest!.id), slug(middle!.id)]);
     for (const c of [newest!, middle!]) {
       expect(share(c.id)!.outdated).toBeUndefined();
       expect(log(c.id)).toContain('Erneut teilen, mit anderen geteilten Demos: Die Seite wird mit dem neuen Stand erzeugt.');
       expect(log(c.id).at(-1)).toBe(`Erneut geteilt: ${share(c.id)!.url}`);
     }
-    expect(share(old!.id)!.outdated).toBe(true);
-    // the result stays until the owner puts it away
-    sharing.dismissResharing();
-    expect(reshare()).toEqual({ outdated: 1 });
+    expect(share(old!.id)!.outdated).toEqual(lacking());
+    // the result stays until the owner shares the rest again too
     sharing.reshareMany(null);
     await until(() => reshare()?.run?.left === 0);
     expect(reshare()).toEqual({ outdated: 0, run: { total: 1, done: 1, failed: [], left: 0 } });
     expect(() => sharing.reshareMany(null)).toThrow(BadRequest);
+  });
+
+  test('"Ausblenden" puts the notice and the run away until a newer change leaves pages outdated', async () => {
+    const [, video] = await outdated(1, 2);
+    const html = card('Auswertung', { kind: 'html', chapters: [] });
+    writeFileSync(join(dir, `demo-${html.id}`, 'index.html'), '<!doctype html>');
+    sharing.share(html.id);
+    await until(() => share(html.id)?.state === 'shared');
+    sharing.reshareMany(1);
+    await until(() => reshare()?.run?.left === 0);
+    sharing.dismissResharing();
+    expect(reshare()).toBeUndefined();
+    // the card still offers it
+    expect(share(video!.id)!.outdated).toEqual(lacking());
+    expect(() => sharing.reshareMany(null)).toThrow(BadRequest);
+    // put away before the newest change came: the pages lacking that one show again, with all they lack
+    const before = PAGE_CHANGES.at(-2)!.id;
+    board.setSetting('reshare_dismissed', before);
+    backdate(html.id);
+    const lacksNewer = (kind: 'video' | 'html') => missedChanges(before, kind, PAGE_CHANGES).length > 0;
+    const shown = [lacksNewer('video') && video, lacksNewer('html') && html].filter(Boolean);
+    expect(reshare()!.outdated).toBe(shown.length);
   });
 
   test('a page that fails stays outdated, with the reason in its log, and the rest go on', async () => {
@@ -466,7 +472,7 @@ describe('sharing many outdated pages again at once', () => {
     sharing.reshareMany(null);
     await until(() => reshare()?.run?.left === 0);
     expect(reshare()!.run).toEqual({ total: 2, done: 0, failed: [b, a].map((c) => ({ id: c!.id, title: c!.title })), left: 0 });
-    expect(share(a!.id)).toMatchObject({ state: 'shared', outdated: true });
+    expect(share(a!.id)).toMatchObject({ state: 'shared', outdated: lacking() });
     expect(log(a!.id).at(-1)).toStartWith('Nicht erneut geteilt: Der Deploy der Site ist gescheitert (Exit-Code 2).');
     expect(reshare()!.outdated).toBe(2);
   });
@@ -476,7 +482,7 @@ describe('sharing many outdated pages again at once', () => {
     rmSync(join(dir, `demo-${a!.id}`), { recursive: true });
     // the canvas shows it with its next change
     board.changed();
-    expect(reshare()).toEqual({ outdated: 2 });
+    expect(reshare()).toEqual({ outdated: 2, changes: changes(2) });
     expect(share(a!.id)).toEqual({ state: 'shared', url: expect.stringContaining(SITE_URL) });
     const before = calls().length;
     sharing.reshareMany(null);
@@ -496,14 +502,14 @@ describe('sharing many outdated pages again at once', () => {
     expect(() => sharing.dismissResharing()).toThrow(BadRequest);
     sharing.stopResharing();
     await new Promise((r) => setTimeout(r, 50));
-    expect(reshare()).toEqual({ outdated: 2, run: { total: 2, done: 0, failed: [], left: 0, stopped: true } });
+    expect(reshare()).toEqual({ outdated: 2, changes: changes(2), run: { total: 2, done: 0, failed: [], left: 0, stopped: true } });
     expect(calls()).toHaveLength(before);
   });
 
   test('a card with a newer demo gets its page as it shows, the newer demo still waits for "Neu teilen"', async () => {
     const [c] = await outdated(1);
     board.work(c!.id, { demo: JSON.stringify({ kind: 'video', dir: join(dir, 'newer'), chapters: [], page: { title: 'Neu', text: 'Neu.' } }) });
-    expect(reshare()).toEqual({ outdated: 1 });
+    expect(reshare()).toEqual({ outdated: 1, changes: changes(1) });
     const before = calls().length;
     sharing.reshareMany(null);
     await until(() => reshare()?.run?.left === 0);
@@ -551,10 +557,10 @@ describe('sharing many outdated pages again at once', () => {
     await until(() => calls().length === n + 1);
     expect(wrote(n)).toEqual([slug(b!.id)]);
     expect([a, c, d].map((x) => stored(x!.id))).toEqual(before);
-    expect(reshare()).toEqual({ outdated: 1, run: { total: 2, done: 0, failed: [], left: 2, current: b!.title } });
+    expect(reshare()).toEqual({ outdated: 1, changes: changes(1), run: { total: 2, done: 0, failed: [], left: 2, current: b!.title } });
     rmSync(join(dir, 'hold'));
     await until(() => reshare()?.run?.left === 0);
-    expect(reshare()).toEqual({ outdated: 1, run: { total: 2, done: 2, failed: [], left: 0 } });
+    expect(reshare()).toEqual({ outdated: 1, changes: changes(1), run: { total: 2, done: 2, failed: [], left: 0 } });
     expect([a, b, c, d].map((x) => !!share(x!.id)!.outdated)).toEqual([false, false, true, false]);
   });
 });

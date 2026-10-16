@@ -24,6 +24,7 @@ import { useStickToEnd } from './stickToEnd';
 import { dismissPlace, type Place, seekTo, usePlace, videoOf, watch } from './spot';
 import { becomesLabel, clock as time, errorText, failText, stateLabel, t } from './strings';
 import { agentWorks, demoHandover, koordinatorReads, ownerField, parseQuestion, talkAlone, talkTurns, type Turn, withoutOpen, worked as isWorked } from './talk';
+import { PageChangeList } from './page-changes';
 import { WishReplyLink } from './wish';
 
 /**
@@ -1724,6 +1725,7 @@ function ShareBox({ item, act }: { item: Item; act: (a: CardAction, done: ActDon
           {s.outdated && (
             <div className="share-row">
               <p className="hint">{t.share.outdated}</p>
+              <PageChangeList changes={s.outdated.map((id) => ({ id }))} />
               <button className="btn" title={t.share.reshareHint} onClick={() => go('share')}>
                 {t.share.reshare}
               </button>

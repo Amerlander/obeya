@@ -706,7 +706,7 @@ export function serve(
           if (count != null && !(Number.isInteger(count) && count > 0)) throw new BadRequest('invalid', 'count must be a positive integer or null');
           c.sharing.reshareMany(count ?? null);
         }),
-        // puts away what the finished run says
+        // "Ausblenden": puts away what the finished run says, and the notice of outdated pages until a newer change
         DELETE: on((c) => c.sharing.dismissResharing()),
       },
       '/api/c/:canvas/reshare/stop': { POST: on((c) => c.sharing.stopResharing()) },

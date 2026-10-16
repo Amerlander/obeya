@@ -4,6 +4,7 @@ import type { DemoSettings, VoiceKind } from '../../plugin/skills/demo/lib/setti
 import type { SetupId, SetupItem } from '../../plugin/skills/demo/lib/setup.ts';
 import type { Language } from './locale';
 import { MESSAGES } from './messages';
+import type { PageChangeId } from './page-changes';
 import type { NotAProject } from './plan-doc';
 import type { Wish } from './wish';
 
@@ -527,8 +528,8 @@ export interface Share {
   url?: string;
   /** The card has a newer demo than the one on the page. */
   stale?: boolean;
-  /** The page shows the card's demo, but the site writes pages differently now ("Erneut teilen"). */
-  outdated?: boolean;
+  /** The page shows the card's demo, but pages changed since it was published ("Erneut teilen"): those changes, oldest first. */
+  outdated?: PageChangeId[];
 }
 
 /** One line in a card's log. */
@@ -686,8 +687,10 @@ export interface PlanDir {
  * outdated, and the run that shares them again one after the other.
  */
 export interface Reshare {
-  /** Pages that could be shared again and are not queued. */
+  /** Pages that could be shared again and are not queued (after "Ausblenden", those a newer change left outdated). */
   outdated: number;
+  /** What sharing them again brings: each change they lack, oldest first, with how many of them lack it. */
+  changes?: { id: PageChangeId; pages: number }[];
   run?: {
     total: number;
     /** Shared again. */
