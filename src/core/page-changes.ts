@@ -20,13 +20,14 @@ export interface PageChange {
 export const PAGE_CHANGES = [
   { id: '2026-10-10-look', kinds: ['video', 'html'] },
   { id: '2026-10-16-alone', kinds: ['html'] },
+  { id: '2026-10-16-offline', kinds: ['html'] },
 ] as const satisfies readonly PageChange[];
 
 export type KnownChange = (typeof PAGE_CHANGES)[number];
 export type PageChangeId = KnownChange['id'];
 
 /** The sample pages' hash (`pagesHash` in site.ts) the changes above account for. */
-export const PAGES_HASH = { video: '52e575d32a1e', html: '5ee307e18063' };
+export const PAGES_HASH = { video: '52e575d32a1e', html: '4ee75bb5e7cc' };
 
 /** The version a page published now gets: the newest change; '' while there is none. */
 export const pagesVersion = (changes: readonly PageChange[] = PAGE_CHANGES): string => changes.at(-1)?.id ?? '';

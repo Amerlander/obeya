@@ -3102,8 +3102,8 @@ tells the page its height (`postMessage`), so the frame grows to it instead of s
 page, at most 30 steps (an artifact as high as its window would grow on), and "In eigenem Fenster
 öffnen" shows it alone: the same page with the frame filling the window (`?alone`). The artifact's
 own file opened directly would run in the site's origin, as would a window the artifact opens if
-the frame let it leave the sandbox (`allow-popups-to-escape-sandbox`, until 2026-10-16); its windows
-stay sandboxed.
+the frame let it leave the sandbox (`allow-popups-to-escape-sandbox`, until 2026-10-16). It opens
+no window at all now: a window may go to any server (`allow-popups`, until 2026-10-16).
 
 The frame's origin is `null` there too, and a static site cannot answer the way Obeya does (a keyed
 address, see The demo on the card): Cloudflare Pages sends `Access-Control-Allow-Origin: *`, other
@@ -3126,6 +3126,29 @@ where its bundle took in a module whose real path lies outside (a path out of it
 what it read could put a file of the owner's into a page that goes public with „Teilen“. What still
 cannot load in the frame: a Web Worker's script, an `import()` of a path computed at run time, a
 font set from a script.
+
+A shared page sends nothing to the internet either, under the rule a worker's page has inside Obeya
+(see The demo on the card): until 2026-10-16 its artifact could still load from and send to any
+server once a colleague opened the page. The copy of each of the artifact's HTML pages (its
+`index.html`, and any other the artifact may open in its frame) starts with the CSP as a meta tag (`sealed` in `src/core/frame.ts`, `pagePolicy` there): its own files, inline
+styles and scripts, `data:` and `blob:`, nothing else, so an import from a CDN stays an import but
+does not load. Its files are named by `'self'` and by the site's address (for Safari, as inside
+Obeya); in the ZIP by `file:`, since `'self'` need not match a page opened from disk, where the
+frame keeps the page's origin. The artifact in the one HTML file has no files of its own and gets
+the policy without any (`srcdoc`, which also keeps the policy of the page around it). The page
+around the artifact has a policy of its own (`artifactPageHtml` in `src/server/demo-page.ts`): it
+shows nothing in its frame but its own files, so the artifact cannot navigate the frame to another
+server (a link, `location`); the copy turns DNS prefetching off. A host that reads a `_headers`
+file (Cloudflare Pages, Netlify) gets one at the site's root (`artifactHeaders` in
+`src/server/site.ts`): the artifact's files come with the same CSP, with the sandbox, so a file
+opened directly does not run in the site's origin, and with `Connection-Allowlist:
+(response-origin)`, which keeps a `preconnect` and WebRTC to the site (Chrome 152 on). Without
+those headers, on another host or in an export, those two stay open, as they do in Firefox and
+Safari (a meta tag cannot carry `Connection-Allowlist`, and `webrtc 'block'` is heeded by neither
+Chrome nor WebKit), and so does a file that runs scripts without being an HTML page (an SVG the
+artifact opens in its frame), which no meta tag reaches. Under `file:` the policy lets the artifact
+load any file of the disk, not only its own; `'self'` matches them all as well, in Chrome and
+WebKit alike.
 
 #### Where a demo goes
 

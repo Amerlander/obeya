@@ -739,9 +739,13 @@ describe('exporting a demo, where the repository has no demo site', () => {
     const one = new TextDecoder().decode((await sharing.export(c.id, 'html')).data);
     expect(one).toContain('<h1>Auswertung</h1>');
     // the artifact in a sandboxed frame, telling the page its height
-    expect(one).toContain('srcdoc="&lt;html lang=&quot;de&quot;&gt;&lt;body&gt;&lt;h2&gt;Graph&lt;/h2&gt;');
+    expect(one).toContain('srcdoc="&lt;!doctype html&gt;&lt;html&gt;&lt;head&gt;&lt;meta charset=&quot;utf-8&quot;&gt;&lt;meta http-equiv=&quot;Content-Security-Policy&quot;');
+    expect(one).toContain('&lt;html lang=&quot;de&quot;&gt;&lt;body&gt;&lt;h2&gt;Graph&lt;/h2&gt;');
     expect(one).toContain('obeyaHeight');
-    expect(one).toContain('sandbox="allow-scripts');
+    expect(one).toContain('sandbox="allow-scripts" ');
+    // with no files beside it, it loads nothing but what it holds; the page around shows no frame from elsewhere
+    expect(one).toContain(`content=&quot;default-src data: blob:; script-src 'unsafe-inline'`);
+    expect(one).toContain(`<meta http-equiv="Content-Security-Policy" content="default-src 'self' file: data: blob:;`);
 
     mkdirSync(join(d, 'data'));
     writeFileSync(join(d, 'data', 'chart.js'), 'draw()');
@@ -757,6 +761,8 @@ describe('exporting a demo, where the repository has no demo site', () => {
     expect(readFileSync(join(at, 'index.html'), 'utf8')).toContain('>In eigenem Fenster öffnen</a>');
     expect(readFileSync(join(at, 'artifact/data/chart.js'), 'utf8')).toBe('draw()');
     expect(readFileSync(join(at, 'artifact/index.html'), 'utf8')).toMatch(/<h2>Graph<\/h2><script>[\s\S]*obeyaHeight[\s\S]*<\/script><\/body>/);
+    // from disk, `'self'` may not match its files: `file:` does
+    expect(readFileSync(join(at, 'artifact/index.html'), 'utf8')).toContain(`content="default-src 'self' file: data: blob:;`);
     expect(existsSync(join(at, 'artifact/.DS_Store'))).toBe(false);
   });
 

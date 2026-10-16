@@ -5,7 +5,7 @@
 
 import { type Dirent, existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
-import { withHeightReport } from '../core/frame';
+import { pagePolicy, sealed, withHeightReport } from '../core/frame';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
 
 /** The languages a page speaks: those a demo is narrated in. */
@@ -177,27 +177,33 @@ export interface ArtifactPageParts extends PageParts {
   disk?: boolean;
 }
 
+/** Where the files beside a page opened from disk (the ZIP) are: `'self'` need not match `file:`. */
+export const ON_DISK = 'file:';
+
 /**
  * The artifact runs in a sandboxed frame, an origin of its own, so its scripts reach neither the
- * page nor the site; a window it opens stays sandboxed too, and "In eigenem Fenster öffnen" is this
- * page with the frame alone (`?alone`), not the artifact's own file, which would run in the site's
- * origin. The frame grows to the artifact's height where the artifact says it (`withHeightReport`);
- * without that it stays at 80 % of the window and scrolls. Opened from disk (`disk`), the frame
- * keeps the page's origin: there is no site to keep it from, and Chrome loads nothing beside a
- * sandboxed page from disk, not even its stylesheets and images.
+ * page nor the site; it opens no window, and "In eigenem Fenster öffnen" is this page with the
+ * frame alone (`?alone`), not the artifact's own file, which would run in the site's origin. The
+ * frame grows to the artifact's height where the artifact says it (`withHeightReport`); without
+ * that it stays at 80 % of the window and scrolls. Opened from disk (`disk`), the frame keeps the
+ * page's origin: there is no site to keep it from, and Chrome loads nothing beside a sandboxed page
+ * from disk, not even its stylesheets and images. The artifact sends nothing elsewhere: its copy
+ * starts with its policy (`sealed` in src/core/frame.ts, `pagePolicy` there), and the page's own policy lets the frame show nothing but
+ * the page's own files, so the artifact cannot navigate it to another server either (a frame given
+ * as `srcdoc` has the page's policy as well as its own).
  */
 export function artifactPageHtml(p: ArtifactPageParts): string {
   const language = p.language ?? 'de';
   const w = PAGE_WORDS[language];
   const frame =
     'src' in p.artifact
-      ? `<iframe ${p.disk ? '' : `src="${esc(p.artifact.src)}" `}sandbox="allow-scripts allow-popups" title="${esc(p.title)}"></iframe>`
-      : `<iframe srcdoc="${esc(withHeightReport(p.artifact.html))}" sandbox="allow-scripts allow-popups" title="${esc(p.title)}"></iframe>`;
+      ? `<iframe ${p.disk ? '' : `src="${esc(p.artifact.src)}" `}sandbox="allow-scripts" title="${esc(p.title)}"></iframe>`
+      : `<iframe srcdoc="${esc(sealed(withHeightReport(p.artifact.html)))}" sandbox="allow-scripts" title="${esc(p.title)}"></iframe>`;
   const links = [
     'src' in p.artifact ? `<a href="?alone" target="_blank" rel="noopener">${w.ownWindow}</a>` : '',
     p.pr ? `<a href="${esc(p.pr)}">${w.pr}</a>` : '',
   ].filter(Boolean);
-  return `${pageStart(p, language)}${links.length ? `<div class="links">${links.join('')}</div>\n` : ''}<div class="artifact">${frame}</div>
+  return `${pageStart(p, language, pagePolicy(ON_DISK))}${links.length ? `<div class="links">${links.join('')}</div>\n` : ''}<div class="artifact">${frame}</div>
 </main>
 <script>
   // an artifact as high as its window (100vh plus a margin) would grow with each step: it stops after a few
@@ -220,10 +226,10 @@ export function artifactPageHtml(p: ArtifactPageParts): string {
 `;
 }
 
-/** A page's start, down to the demo's text: its head, the link above the title, the title, when it was shared. */
-function pageStart(p: PageParts, language: PageLanguage): string {
+/** A page's start, down to the demo's text: its head (with its `policy`, if it has one), the link above the title, the title, when it was shared. */
+function pageStart(p: PageParts, language: PageLanguage, policy?: string): string {
   return `<!doctype html>
-<html lang="${language}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="${language}"><head><meta charset="utf-8">${policy ? `<meta http-equiv="Content-Security-Policy" content="${policy}">` : ''}<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(p.tabTitle)}</title><style>${PAGE_STYLE}</style></head>
 <body><main>
 ${p.top ? `<div class="top"><a href="${esc(p.top.href)}">${esc(p.top.text)}</a></div>\n` : ''}<h1>${esc(p.title)}</h1>

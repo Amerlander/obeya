@@ -562,6 +562,8 @@ const de = {
       '2026-10-10-look': 'Obeyas eigenes Aussehen: Titel in Newsreader, Text in IBM Plex Sans Condensed, wärmere Farben, fast eckige Ecken.',
       '2026-10-16-alone':
         'Sicherheitskorrektur: „In eigenem Fenster öffnen“ zeigt das Artefakt allein auf seiner Seite statt seiner eigenen Datei, die dort ohne Sandbox lief, mit den Rechten der Demo-Site; Fenster, die das Artefakt öffnet, bleiben in seiner Sandbox.',
+      '2026-10-16-offline':
+        'Sicherheitskorrektur: Das Artefakt lädt nur noch seine eigenen Dateien und sendet nichts an andere Server, weder per fetch noch als Bild, Formular oder Link; Fenster öffnet es keine mehr.',
     } satisfies Record<PageChangeId, string>,
     pages: (n: number) => (n === 1 ? 'eine Seite' : `${n} Seiten`),
   },
@@ -1889,6 +1891,8 @@ const en: Strings = {
       '2026-10-10-look': 'Obeya’s own look: titles in Newsreader, text in IBM Plex Sans Condensed, warmer colours, nearly square corners.',
       '2026-10-16-alone':
         'Security fix: “Open in its own window” shows the artifact alone on its page instead of its own file, which ran there outside the sandbox, with the demo site’s rights; windows the artifact opens stay in its sandbox.',
+      '2026-10-16-offline':
+        'Security fix: the artifact loads only its own files and sends nothing to other servers, by fetch, an image, a form or a link alike; it opens no windows any more.',
     },
     pages: (n: number) => (n === 1 ? 'one page' : `${n} pages`),
   },

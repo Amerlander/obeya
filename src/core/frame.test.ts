@@ -8,11 +8,11 @@ test('a page reports its height at the end of its body, or of the page without o
   expect(withHeightReport('<h2>Graph</h2>')).toMatch(/^<h2>Graph<\/h2><script>[\s\S]*obeyaHeight/);
 });
 
-const SEALED = /^<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="([^"]*)"><meta http-equiv="x-dns-prefetch-control" content="off">/;
+const SEALED = /^<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="([^"]*)"><meta http-equiv="x-dns-prefetch-control" content="off">/;
 
 test('a mock of a few lines becomes a page of its own; a whole page stays as it is', () => {
   const few = mockPage('<button>Export</button>');
-  expect(few).toMatch(new RegExp(SEALED.source + /<meta charset="utf-8"><style>body\{[^}]*\}<\/style><\/head><body><button>Export<\/button><script>/.source));
+  expect(few).toMatch(new RegExp(SEALED.source + /<style>body\{[^}]*\}<\/style><\/head><body><button>Export<\/button><script>/.source));
   expect(few).toContain('obeyaHeight');
   const whole = '<!doctype html><html lang="de"><body style="margin:0"><p>Ganz</p></body></html>';
   expect(mockPage(whole)).toMatch(new RegExp(SEALED.source + /<!doctype html><html lang="de"><body style="margin:0"><p>Ganz<\/p><script>[\s\S]*<\/script><\/body><\/html>$/.source));

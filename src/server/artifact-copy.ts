@@ -7,14 +7,15 @@
 // such request: its module scripts are bundled into the page, its stylesheets carry their fonts,
 // and the files its scripts may fetch go into the page, answered by `fetch` and `XMLHttpRequest`
 // without asking the site. Images, media, classic scripts and stylesheets load without CORS and stay
-// files beside it.
+// files beside it. Nor does the copy load anything from elsewhere or send anything there: it starts
+// with the policy of a shared artifact (`sealed` in src/core/frame.ts).
 //
 // What goes into the copy comes from the artifact's directory only: a file there that is a link to
 // elsewhere, or a module import that leads out of it, would publish a file of this machine.
 
 import { readFileSync, realpathSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
-import { withHeightReport } from '../core/frame';
+import { sealed, withHeightReport } from '../core/frame';
 import { demoFile } from './demo-page';
 
 const FONTS = /\.(?:woff2?|ttf|otf|eot)$/i;
@@ -29,9 +30,11 @@ function read(dir: string, f: string): Buffer | null {
 
 /**
  * The artifact's files whose copy differs from the artifact's own: its `index.html` always (with
- * the height report, see `withHeightReport`), and stylesheets that load fonts.
+ * the height report, see `withHeightReport`, and the policy that lets it load its own files alone,
+ * those at `own`), its other pages (with that policy too: the artifact may open one in its frame),
+ * and stylesheets that load fonts.
  */
-export async function artifactCopy(dir: string, files: string[]): Promise<Map<string, string>> {
+export async function artifactCopy(dir: string, files: string[], own: string): Promise<Map<string, string>> {
   const copy = new Map<string, string>();
   for (const f of files) if (f.endsWith('.css')) {
     const css = read(dir, f)?.toString('utf8');
@@ -39,12 +42,16 @@ export async function artifactCopy(dir: string, files: string[]): Promise<Map<st
     const inlined = withFonts(css, dir, dirname(f));
     if (inlined !== css) copy.set(f, inlined);
   }
+  for (const f of files) if (f !== 'index.html' && /\.html?$/i.test(f)) {
+    const page = read(dir, f);
+    if (page) copy.set(f, sealed(page.toString('utf8'), own));
+  }
   const embedded = files.filter((f) => f !== 'index.html' && !LOADED.test(f));
   const index = read(dir, 'index.html');
   if (!index) throw new Error(`${join(dir, 'index.html')} is no file of the artifact`);
   let html = withFonts(await withModules(index.toString('utf8'), dir), dir, '.');
   if (embedded.length) html = withFiles(html, dir, embedded);
-  copy.set('index.html', withHeightReport(html));
+  copy.set('index.html', sealed(withHeightReport(html), own));
   return copy;
 }
 

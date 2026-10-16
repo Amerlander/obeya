@@ -31,6 +31,9 @@
 //
 // A host may serve no byte ranges (Cloudflare Pages does not): the video page then loads the video
 // whole, so a browser can seek in it (`demo-page.ts`).
+//
+// A host that reads a `_headers` file (Cloudflare Pages, Netlify) sends an artifact's files with the
+// headers that keep it from the internet beyond what its CSP covers (`artifactHeaders`).
 
 import { createHash, randomUUID } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -40,8 +43,8 @@ import type { Messages } from '../core/messages';
 import { readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
 import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, day, demoFile, demoPageHtml, esc, PAGE_STYLE, PAGE_WORDS, type PageLanguage } from './demo-page';
 import { artifactCopy } from './artifact-copy';
-import { withHeightReport } from '../core/frame';
-import { DEMO_FILES } from './demo';
+import { pagePolicy, sealed, withHeightReport } from '../core/frame';
+import { DEMO_FILES, OWN_CONNECTIONS } from './demo';
 import { BUN_ENV } from './resources';
 import { spawnOutput } from './spawn';
 import { HERE } from './workspaces';
@@ -368,10 +371,11 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
     return null;
   };
 
-  /** Writes the overview from the pages in the directory. */
+  /** Writes the overview from the pages in the directory, and the headers of the artifacts' files. */
   const writeOverview = () => {
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, 'index.html'), overviewHtml(site, readPages(dir), overviewLanguage()));
+    writeFileSync(join(dir, HEADERS), artifactHeaders(site));
   };
 
   /** Runs the deploy line on the directory; what it said, for the card's log. */
@@ -501,7 +505,7 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
         const files = html ? artifactFiles(p.dir) : DEMO_FILES.filter((f) => demoFile(p.dir, f));
         for (const f of html ? ['index.html'] : ['demo.mp4', 'captions.vtt']) if (!files.includes(f)) throw new Refused(t.fileMissing(f, p.dir));
         // what the artifact loads in CORS mode goes into its copy (artifact-copy.ts)
-        const copy = html ? await artifactCopy(p.dir, files) : new Map<string, string>();
+        const copy = html ? await artifactCopy(p.dir, files, new URL(site.url).origin) : new Map<string, string>();
         const max = site.maxFile ?? MAX_FILE;
         for (const f of files) {
           const size = copy.has(f) ? Buffer.byteLength(copy.get(f)!) : statSync(join(p.dir, f)).size;
@@ -623,8 +627,26 @@ export function pagesHash(): { video: string; html: string } {
   const hash = (pages: string[]) => createHash('sha256').update(pages.join('\0')).digest('hex').slice(0, 12);
   const languages: PageLanguage[] = ['de', 'en'];
   const video = hash(languages.map((language) => pageHtml(site, { ...sample, language }, true)));
-  const html = hash(languages.map((language) => pageHtml(site, { ...sample, kind: 'html', chapters: [], language }, false) + withHeightReport('<body></body>')));
+  const html = hash(languages.map((language) => pageHtml(site, { ...sample, kind: 'html', chapters: [], language }, false) + sealed(withHeightReport('<body></body>'), new URL(site.url).origin)));
   return { video, html };
+}
+
+/** The file a host such as Cloudflare Pages or Netlify reads the headers of the site's files from; on another host it is a file nobody asks for. */
+export const HEADERS = '_headers';
+
+/**
+ * The headers of an artifact's files on the site, for a host that sends them: its policy again, now
+ * with the sandbox, so a file opened directly does not run in the site's origin, and what no CSP
+ * reaches, a connection opened ahead (`preconnect`) or WebRTC, kept to the site
+ * (`Connection-Allowlist`, Chrome 152 on).
+ */
+export function artifactHeaders(site: DemoSite): string {
+  const u = new URL(site.url);
+  return `${u.pathname.replace(/\/+$/, '')}/:slug/${ARTIFACT_DIR}/*
+  Content-Security-Policy: sandbox allow-scripts; ${pagePolicy(u.origin)}
+  Connection-Allowlist: ${OWN_CONNECTIONS}
+  X-DNS-Prefetch-Control: off
+`;
 }
 
 /** A page of the site, in its language. */

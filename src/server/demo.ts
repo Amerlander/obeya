@@ -177,7 +177,7 @@ export function serveAnswerFile(dir: string, asked: string, download: boolean, r
  * on): only the address it was served from, so neither a `preconnect` nor WebRTC reaches another
  * server. It holds for the document, also once the page writes another into it.
  */
-const OWN_CONNECTIONS = '(response-origin)';
+export const OWN_CONNECTIONS = '(response-origin)';
 
 /** The headers of a page that loads nothing from the internet, nor files of its own where `own` (the address they are served from) is missing; see `pagePolicy`. */
 function sealedHeaders(own?: string): Record<string, string> {

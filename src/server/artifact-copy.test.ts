@@ -17,7 +17,7 @@ async function copyOf(files: Record<string, string>, links: Record<string, strin
     writeFileSync(join(dir, f), data);
   }
   for (const [f, to] of Object.entries(links)) symlinkSync(to, join(dir, f));
-  return { dir, copy: await artifactCopy(dir, artifactFiles(dir)) };
+  return { dir, copy: await artifactCopy(dir, artifactFiles(dir), 'https://demos.example.com') };
 }
 
 /** The page's first script, the one answering requests for its files, run with this page address. */
@@ -36,6 +36,21 @@ function answering(index: string, href: string) {
 }
 
 describe('artifactCopy', () => {
+  test('gives its other pages the same policy, which it may open in its frame', async () => {
+    const { copy } = await copyOf({ 'index.html': '<a href="more/second.html">more</a>', 'more/second.html': '<script>fetch("https://elsewhere.example/")</script>' });
+    expect(copy.get('more/second.html')).toStartWith(`<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self' https://demos.example.com data: blob:;`);
+    expect(copy.get('more/second.html')).toEndWith('<script>fetch("https://elsewhere.example/")</script>');
+    expect(copy.get('more/second.html')).not.toContain('obeyaHeight');
+  });
+
+  test('starts with the policy that lets the page load its own files alone, ahead of anything of its own', async () => {
+    const { copy } = await copyOf({ 'index.html': '<!-- a comment --><html><head><meta http-equiv="Content-Security-Policy" content="default-src *"></head><body></body></html>' });
+    const index = copy.get('index.html')!;
+    expect(index).toStartWith(
+      `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self' https://demos.example.com data: blob:; script-src 'self' https://demos.example.com 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' data: blob:; style-src 'self' https://demos.example.com 'unsafe-inline' data: blob:; form-action 'none'"><meta http-equiv="x-dns-prefetch-control" content="off"><!-- a comment -->`,
+    );
+  });
+
   test('bundles module scripts into the page, without the paths of this machine', async () => {
     const { dir, copy } = await copyOf({
       'index.html': `<html><body><script type="module" src="app.js"></script>
@@ -112,7 +127,7 @@ describe('artifactCopy', () => {
     const index = copy.get('index.html')!;
     // before any script of the page
     expect(index.indexOf('const files')).toBeLessThan(index.indexOf('first()'));
-    expect(index).toStartWith('<!doctype html><html lang="en"><head><script>');
+    expect(index).toContain('<!doctype html><html lang="en"><head><script>');
     expect(index).not.toContain('chart.png');
     const page = answering(index, 'https://demos.example/page-1/artifact/index.html');
     expect(await (await page.fetch('data.json')).json()).toEqual({ rows: [1, 2, 3], end: '</script>' });
@@ -213,7 +228,7 @@ describe('artifactCopy', () => {
       expect(copy.has('css/site.css')).toBe(false);
       // a list of files that names a link anyway
       symlinkSync(secret, join(dir, 'secret.json'));
-      const index = (await artifactCopy(dir, [...artifactFiles(dir), 'secret.json'])).get('index.html')!;
+      const index = (await artifactCopy(dir, [...artifactFiles(dir), 'secret.json'], 'https://demos.example.com')).get('index.html')!;
       expect(index).toContain('"data.json"');
       expect(index).not.toContain('secret.json');
       expect(index).not.toContain(Buffer.from('the owner').toString('base64'));

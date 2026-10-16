@@ -20,7 +20,7 @@ import type { DemoSite } from '../adapters/types';
 import { expandHome, readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
 import { type Gone, siteBase, siteMissing, siteTarget } from './site';
 import { artifactCopy } from './artifact-copy';
-import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, type DemoPageParts, day, demoFile, demoPageHtml, PAGE_WORDS, type PageLanguage } from './demo-page';
+import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, type DemoPageParts, day, demoFile, demoPageHtml, ON_DISK, PAGE_WORDS, type PageLanguage } from './demo-page';
 import { type Forge, parsePrUrl } from './forge';
 import type { AgentRuntime } from './runtime';
 import { readSession } from './koordinator';
@@ -479,7 +479,7 @@ export class Sharing {
     if (as === 'html') {
       out = { name: `${slug}.html`, type: 'text/html; charset=utf-8', data: new TextEncoder().encode(artifactPageHtml({ ...parts, artifact: { html: index } })) };
     } else {
-      const copy = await artifactCopy(demo.dir, files);
+      const copy = await artifactCopy(demo.dir, files, ON_DISK);
       const entries = [
         { name: `${slug}/index.html`, data: new TextEncoder().encode(artifactPageHtml({ ...parts, artifact: { src: `${ARTIFACT_DIR}/index.html` }, disk: true })) },
         ...files.map((f) => ({

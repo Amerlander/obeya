@@ -23,13 +23,15 @@ export function pagePolicy(own?: string): string {
 export const FRAMES_POLICY = "frame-src 'self' data: blob:";
 
 /**
- * The start of a mock's page, with the policy of a page without files of its own. It comes first,
- * so nothing in the page (a comment, a `<head>` of its own) can push it out of the head, where alone
- * the browser heeds it; the page's own doctype, `<html>` and `<head>` after it only add their
- * attributes. The frame the page is written into has the same policy already (`/api/mock-frame`);
- * this one holds where the page is shown otherwise.
+ * A page that loads its own files alone, those at `own` (none: a page without files of its own): the
+ * policy comes first, so nothing in the page (a comment, a `<head>` of its own) can push it out of
+ * the head, where alone the browser heeds it; the page's own doctype, `<html>` and `<head>` after it
+ * only add their attributes. It says UTF-8 ahead of the page too, for a page opened from disk, whose
+ * own `<meta charset>` may come too late after the policy.
  */
-const SEALED = `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="${pagePolicy()}"><meta http-equiv="x-dns-prefetch-control" content="off">`;
+export function sealed(html: string, own?: string): string {
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${pagePolicy(own)}"><meta http-equiv="x-dns-prefetch-control" content="off">${html}`;
+}
 
 /**
  * The page's height, sent to the page around it whenever it changes, by a pixel too: there the
@@ -67,8 +69,13 @@ const CONTENT_HEIGHT_REPORT = `<script>(() => {
   new ResizeObserver(say).observe(document.body);
 })();</script>`;
 
-/** A mock's few lines of HTML as a page of their own, in a plain sans-serif on white; a mock that is a whole page itself stays as it is. Either loads nothing from the internet. */
+/**
+ * A mock's few lines of HTML as a page of their own, in a plain sans-serif on white; a mock that is a
+ * whole page itself stays as it is. Either loads nothing from the internet (`sealed`). The frame the
+ * page is written into has the same policy already (`/api/mock-frame`); this one holds where the
+ * page is shown otherwise.
+ */
 export function mockPage(html: string): string {
-  if (/<html[\s>]/i.test(html)) return SEALED + withHeightReport(html);
-  return `${SEALED}<meta charset="utf-8"><style>body{margin:8px;display:flow-root;font:14px/1.4 system-ui,sans-serif;color:#222;background:#fff}</style></head><body>${html}${CONTENT_HEIGHT_REPORT}</body></html>`;
+  if (/<html[\s>]/i.test(html)) return sealed(withHeightReport(html));
+  return sealed(`<style>body{margin:8px;display:flow-root;font:14px/1.4 system-ui,sans-serif;color:#222;background:#fff}</style></head><body>${html}${CONTENT_HEIGHT_REPORT}</body></html>`);
 }
