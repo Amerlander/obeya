@@ -341,12 +341,13 @@ export class Access implements Gate {
   }
 
   /** Pairs the device that brings the current code; its cookie, or `null` for a wrong or expired code. */
-  redeem(code: string, userAgent: string): { token: string; device: DeviceView } | null {
+  /** `counts`: a wrong code spends one of the tries; one another site sent the browser here with spends none. */
+  redeem(code: string, userAgent: string, counts = true): { token: string; device: DeviceView } | null {
     const p = this.pairing;
     if (!p || p.paired || p.expires <= this.now()) return null;
     if (code.replace(/\D/g, '') !== p.code) {
       // guessing gets five tries at a code, then it is spent
-      if (++p.tries >= PAIRING_TRIES) this.pairing = null;
+      if (counts && ++p.tries >= PAIRING_TRIES) this.pairing = null;
       return null;
     }
     const token = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url');
@@ -365,7 +366,8 @@ export class Access implements Gate {
   async pairRoute(req: Request, server: Bun.Server<unknown>): Promise<Response> {
     if (this.isLocal(req, server) || this.device(req)) return new Response(null, { status: 303, headers: { location: '/' } });
     const code = req.method === 'POST' ? String((await req.formData().catch(() => null))?.get('code') ?? '') : (new URL(req.url).searchParams.get('code') ?? '');
-    const paired = this.redeem(code, req.headers.get('user-agent') ?? '');
+    // another site may send a browser in the tailnet here as often as it likes, to spend the code's tries
+    const paired = this.redeem(code, req.headers.get('user-agent') ?? '', req.headers.get('sec-fetch-site') !== 'cross-site');
     if (!paired) return this.notPairedPage(true);
     // over HTTPS the cookie goes with what a worker's HTML artifact loads in its sandboxed frame too, which counts as another site
     const https = (req.headers.get('x-forwarded-proto') ?? new URL(req.url).protocol.replace(':', '')) === 'https';

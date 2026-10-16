@@ -4030,7 +4030,8 @@ the API answers 401 `notPaired`, and a WebSocket opens not at all.
 *Pairing.* The phone icon in the bar opens „Telefon verbinden“: while other devices reach Obeya, a
 QR code of `<address>/pair?code=<code>` beside the address and the code in large digits. The code
 has six digits, holds five minutes (a new one comes when it ran out with the dialog open) and pairs
-one device; five wrong tries spend it. The phone opens the address (the camera reads the code), and
+one device; five wrong tries spend it (only those from Obeya's own page or without `Sec-Fetch-Site:
+cross-site`, so another site cannot spend them by sending a browser in the tailnet to `/pair`). The phone opens the address (the camera reads the code), and
 the server sets the device cookie `obeya-device` (32 random bytes; the database keeps only its
 SHA-256 with a name from the user agent, „iPhone · Safari“, and when it was paired and last seen)
 and sends it to the canvas; the dialog then says „iPhone · Safari ist verbunden.“. The cookie is

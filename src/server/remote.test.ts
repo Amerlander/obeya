@@ -173,8 +173,15 @@ describe('pairing', () => {
     expect(await wrong.text()).toContain('Dieser Code stimmt nicht');
     expect((await typed(`${p.code.slice(0, 3)} ${p.code.slice(3)}`)).status).toBe(303);
     const q = await pairing();
-    for (let i = 0; i < 5; i++) await typed(q.code === '999999' ? '888888' : '999999');
-    expect((await typed(q.code)).status).toBe(401);
+    const other = q.code === '999999' ? '888888' : '999999';
+    // another site sending the browser here with wrong codes spends none of the tries
+    const link = { 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document' };
+    for (let i = 0; i < 5; i++) expect((await viaTailnet(`/pair?code=${other}`, link)).status).toBe(401);
+    for (let i = 0; i < 4; i++) await typed(other);
+    expect((await typed(q.code)).status).toBe(303);
+    const s = await pairing();
+    for (let i = 0; i < 5; i++) await typed(s.code === '999999' ? '888888' : '999999');
+    expect((await typed(s.code)).status).toBe(401);
   });
 
   test('a code holds five minutes; a device unused for 90 days is no longer paired', async () => {
