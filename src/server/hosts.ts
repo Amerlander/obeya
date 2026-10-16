@@ -14,6 +14,7 @@ import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { PassThrough } from 'node:stream';
 import type { SpawnedProcess, SpawnOptions } from '@anthropic-ai/claude-agent-sdk';
 import { resource } from './resources';
+import { spawnOutput } from './spawn';
 
 /** Where a workspace on another machine says which machine it is on. */
 const PREFIX = 'ssh://';
@@ -23,13 +24,11 @@ export const onHost = (name: string, path: string) => `${PREFIX}${name}${path.st
 
 /** The host a workspace is on and its path there; null for a workspace on this machine. */
 export function remote(path: string | null | undefined): { host: SshHost; path: string } | null {
-  if (!path?.startsWith(PREFIX)) return null;
-  const rest = path.slice(PREFIX.length);
-  const slash = rest.indexOf('/');
-  const name = slash < 0 ? rest : rest.slice(0, slash);
+  const name = hostName(path);
+  if (name === null) return null;
   const host = hosts.get(name);
   if (!host) throw new HostError(`no host ${name} in the configuration`);
-  return { host, path: slash < 0 ? '/' : rest.slice(slash) };
+  return { host, path: path!.slice(PREFIX.length + name.length) || '/' };
 }
 
 /** The name of the host a workspace is on, null for this machine; also for a host no longer configured. */
@@ -200,18 +199,15 @@ export class SshHost {
     return { code, stdout: r.stdout.toString(), stderr: r.stderr.toString() };
   }
 
-  /** Runs a program (or a shell line) there without blocking the server. */
-  async run(command: string[] | string, o: { cwd?: string; timeout?: number } = {}): Promise<{ code: number; stdout: string; stderr: string }> {
-    const p = Bun.spawn(this.argv(command, { cwd: o.cwd, env: true }), {
-      stdin: new Blob([this.envLine(o.cwd)]),
-      stdout: 'pipe',
-      stderr: 'pipe',
+  /** Runs a program (or a shell line) there without blocking the server; `input` is its stdin, after the environment line. */
+  async run(command: string[] | string, o: { cwd?: string; timeout?: number; input?: string } = {}): Promise<{ code: number; stdout: string; stderr: string }> {
+    const r = await spawnOutput(this.argv(command, { cwd: o.cwd, env: true }), {
+      stdin: new Blob([this.envLine(o.cwd), o.input ?? '']),
       ...(o.timeout ? { timeout: o.timeout } : {}),
     });
-    const [stdout, stderr, exited] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
-    const code = p.signalCode ? LOST : exited;
+    const code = r.signal ? LOST : r.code;
     this.heard(code);
-    return { code, stdout, stderr };
+    return { code, stdout: r.stdout, stderr: r.stderr };
   }
 
   /** Whether `path` exists there. */
@@ -233,11 +229,16 @@ export class SshHost {
   }
 
   /** Copies the directory `from` here into `to` there, replacing what was there. */
-  async copyTo(from: string, to: string): Promise<void> {
-    const tar = Bun.spawn(['tar', '-C', from, '-cf', '-', '.'], { stdout: 'pipe', stderr: 'pipe' });
-    const p = Bun.spawn(this.argv(`rm -rf ${sh(to)} && mkdir -p ${sh(to)} && tar -xf - -C ${sh(to)}`), { stdin: tar.stdout, stdout: 'pipe', stderr: 'pipe' });
+  copyTo(from: string, to: string): Promise<void> {
+    return this.send(['-C', from, '.'], to, true, `copying ${from} to ${this.name}:${to}`);
+  }
+
+  /** Sends what tar packs here (`pack`: its arguments) into the directory `to` there, emptied first when `fresh`; `what` names the copy where it fails. */
+  private async send(pack: string[], to: string, fresh: boolean, what: string): Promise<void> {
+    const tar = Bun.spawn(['tar', '-cf', '-', ...pack], { stdout: 'pipe', stderr: 'pipe' });
+    const p = Bun.spawn(this.argv(`${fresh ? `rm -rf ${sh(to)} && ` : ''}mkdir -p ${sh(to)} && tar -xf - -C ${sh(to)}`), { stdin: tar.stdout, stdout: 'pipe', stderr: 'pipe' });
     const [err, code] = await Promise.all([new Response(p.stderr).text(), p.exited, tar.exited]);
-    if (code !== 0) throw new HostError(`copying ${from} to ${this.name}:${to}: ${err.trim() || `exit code ${code}`}`);
+    if (code !== 0) throw new HostError(`${what}: ${err.trim() || `exit code ${code}`}`);
   }
 
   /** Copies the directory `from` there into `to` here, replacing what was here. */
@@ -253,11 +254,13 @@ export class SshHost {
   }
 
   /** Copies files from here into a directory there, keeping their names. */
-  async copyFiles(files: string[], to: string): Promise<void> {
-    const tar = Bun.spawn(['tar', '-cf', '-', ...files.flatMap((f) => ['-C', dirname(f), basename(f)])], { stdout: 'pipe', stderr: 'pipe' });
-    const p = Bun.spawn(this.argv(`mkdir -p ${sh(to)} && tar -xf - -C ${sh(to)}`), { stdin: tar.stdout, stdout: 'pipe', stderr: 'pipe' });
-    const [err, code] = await Promise.all([new Response(p.stderr).text(), p.exited, tar.exited]);
-    if (code !== 0) throw new HostError(`copying files to ${this.name}:${to}: ${err.trim() || `exit code ${code}`}`);
+  copyFiles(files: string[], to: string): Promise<void> {
+    return this.send(
+      files.flatMap((f) => ['-C', dirname(f), basename(f)]),
+      to,
+      false,
+      `copying files to ${this.name}:${to}`,
+    );
   }
 
   /**
@@ -279,13 +282,8 @@ export class SshHost {
     if (projects[dir]?.hasTrustDialogAccepted) return;
     projects[dir] = { ...projects[dir], hasTrustDialogAccepted: true };
     // written whole and moved into place, so a session reading it meanwhile sees the old or the new file
-    const p = Bun.spawn(this.argv('cat > "$HOME/.claude.json.obeya" && mv "$HOME/.claude.json.obeya" "$HOME/.claude.json"'), {
-      stdin: new Blob([JSON.stringify(config, null, 2)]),
-      stdout: 'ignore',
-      stderr: 'pipe',
-    });
-    const [err, code] = await Promise.all([new Response(p.stderr).text(), p.exited]);
-    if (code !== 0) throw new HostError(`${this.name}: ${err.trim()}`);
+    const w = await this.run('cat > "$HOME/.claude.json.obeya" && mv "$HOME/.claude.json.obeya" "$HOME/.claude.json"', { input: JSON.stringify(config, null, 2) });
+    if (w.code !== 0) throw new HostError(`${this.name}: ${w.stderr.trim()}`);
   }
 
   /**
@@ -344,13 +342,8 @@ export class SshHost {
     }
     for (const [name, content] of Object.entries(files.files ?? {})) {
       const text = content();
-      const p = Bun.spawn(this.argv(text === undefined ? `rm -f ${sh(`${dir}/${name}`)}` : `cat > ${sh(`${dir}/${name}`)}`), {
-        stdin: new Blob([text ?? '']),
-        stdout: 'ignore',
-        stderr: 'pipe',
-      });
-      const [err, code] = await Promise.all([new Response(p.stderr).text(), p.exited]);
-      if (code !== 0) throw new HostError(`copying ${name} to ${this.name}: ${err.trim()}`);
+      const w = await this.run(text === undefined ? `rm -f ${sh(`${dir}/${name}`)}` : `cat > ${sh(`${dir}/${name}`)}`, { input: text });
+      if (w.code !== 0) throw new HostError(`copying ${name} to ${this.name}: ${w.stderr.trim()}`);
     }
     return dir;
   }
@@ -610,7 +603,7 @@ export function claudeToken(home: string): string | undefined {
 export const TOKEN_HELPER = ['', '!f() { test "$1" = get && test -n "$GH_TOKEN" && echo username=x-access-token && echo "password=$GH_TOKEN"; }; f'];
 
 /** git's options that make a command there use `TOKEN_HELPER`. */
-export const tokenHelperArgs = (): string[] => TOKEN_HELPER.flatMap((h) => ['-c', `credential.helper=${h}`]);
+export const TOKEN_HELPER_ARGS = TOKEN_HELPER.flatMap((h) => ['-c', `credential.helper=${h}`]);
 
 /** How long a repository's GitHub login is asked again after it was read. */
 const TOKEN_TTL = 10 * 60_000;

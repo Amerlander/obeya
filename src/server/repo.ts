@@ -3,15 +3,11 @@ import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import type { RepoAdapter, RepoInfo } from '../adapters/types';
 import { notAProject, type OtherDoc, type PlanDoc, parsePlanDoc } from '../core/plan-doc';
-import { defaultBranch, GIT } from './workspaces';
+import { defaultBranch, gitOrNull } from './workspaces';
 
 export function repoInfo(path: string): RepoInfo {
-  const git = (...args: string[]) => {
-    const r = Bun.spawnSync([GIT, '-C', path, ...args], { stderr: 'ignore' });
-    return r.exitCode === 0 ? r.stdout.toString().trim() : null;
-  };
-  if (git('rev-parse', '--git-dir') === null) throw new Error(`${path} is not a git repository`);
-  return { path, remote: git('remote', 'get-url', 'origin'), branch: defaultBranch(path) };
+  if (gitOrNull(path, 'rev-parse', '--git-dir') === null) throw new Error(`${path} is not a git repository`);
+  return { path, remote: gitOrNull(path, 'remote', 'get-url', 'origin'), branch: defaultBranch(path) };
 }
 
 /**

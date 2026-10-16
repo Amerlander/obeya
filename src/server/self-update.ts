@@ -7,7 +7,7 @@
 import { dirname } from 'node:path';
 import type { OwnerHold, RestartReason } from '../core/types';
 import { COMPILED } from './resources';
-import { GIT } from './workspaces';
+import { gitOrNull } from './workspaces';
 
 /** The exit code that asks the supervisor for a fresh server. */
 export const RESTART = 75;
@@ -176,20 +176,15 @@ const key = (b: Busy[]) => b.map((x) => `${x.canvas}/${x.card}`).join(' ');
 /** Paths whose change leaves the running code as it is: docs, the site for obeya.si and its workflow. */
 const INERT = /(^docs\/|^design\/|^site\/|^\.github\/|\.md$)/;
 
-const git = (cwd: string, ...args: string[]): string | null => {
-  const r = Bun.spawnSync([GIT, '-C', cwd, ...args], { stderr: 'ignore' });
-  return r.exitCode === 0 ? r.stdout.toString().trim() : null;
-};
-
 /** Whether the commits from `from` to `to` change code, not only docs (unknown counts as code). */
 export function changesCode(checkout: string, from: string, to: string): boolean {
-  const changed = git(checkout, 'diff', '--name-only', from, to);
+  const changed = gitOrNull(checkout, 'diff', '--name-only', from, to);
   return changed === null || changed.split('\n').some((f) => f && !INERT.test(f));
 }
 
 /** The commit `checkout` stands at, if it is a git checkout. */
 export function headOf(checkout: string): string | null {
-  return git(checkout, 'rev-parse', 'HEAD');
+  return gitOrNull(checkout, 'rev-parse', 'HEAD');
 }
 
 /** What installing the dependencies before a restart came to. */
@@ -203,7 +198,7 @@ const INSTALL = [process.execPath, 'install', '--frozen-lockfile'];
  * Never throws: a failed install is for the log, and the restart goes ahead anyway.
  */
 export function installDependencies(checkout: string, from: string, command = INSTALL): Install {
-  const changed = git(checkout, 'diff', '--name-only', from, 'HEAD', '--', 'package.json', 'bun.lock');
+  const changed = gitOrNull(checkout, 'diff', '--name-only', from, 'HEAD', '--', 'package.json', 'bun.lock');
   if (changed === '') return { ran: false };
   try {
     const r = Bun.spawnSync(command, { cwd: checkout, stdout: 'pipe', stderr: 'pipe' });
@@ -216,7 +211,7 @@ export function installDependencies(checkout: string, from: string, command = IN
 /** The git checkout this process's code comes from, if it is one; the compiled binary comes from none. */
 export function ownCheckout(): string | null {
   if (COMPILED) return null;
-  return git(dirname(import.meta.path), 'rev-parse', '--show-toplevel');
+  return gitOrNull(dirname(import.meta.path), 'rev-parse', '--show-toplevel');
 }
 
 /**
@@ -229,7 +224,7 @@ export function watchOwnCode(checkout: string, fn: (from: string, to: string) =>
   let seen = start;
   let base = start;
   const timer = setInterval(() => {
-    const head = git(checkout, 'rev-parse', 'HEAD');
+    const head = headOf(checkout);
     if (!head) return;
     if (head !== seen) {
       seen = head;

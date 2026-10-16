@@ -4,18 +4,13 @@
 // whatever card's branch leased it last, and the Lesestand is a detached worktree of it under
 // Obeya's home, kept on the default branch as `origin` has it.
 
-import { existsSync, mkdirSync, realpathSync, rmSync } from 'node:fs';
-import { dirname } from 'node:path';
-import { branchSetting, type Branches, detectingBranch, GIT, type GitSteps, gitStepsSync, readingBranches } from './workspaces';
-
-type Git = (...args: string[]) => string | null;
+import { existsSync, realpathSync, rmSync } from 'node:fs';
+import { addDetachedTree, branchSetting, type Branches, detectingBranch, GIT, type GitSteps, gitOrNull, gitStepsSync, readingBranches } from './workspaces';
 
 const gitIn =
-  (path: string): Git =>
-  (...args) => {
-    const r = Bun.spawnSync([GIT, '-C', path, ...args], { stderr: 'ignore' });
-    return r.exitCode === 0 ? r.stdout.toString().trim() : null;
-  };
+  (path: string) =>
+  (...args: string[]) =>
+    gitOrNull(path, ...args);
 
 /**
  * The default branch (`defaultBranch`) and its commit as Obeya reads it: the local branch where it
@@ -132,15 +127,14 @@ export class ReadTree {
     const { commit } = defaultBranchCommit(this.o.repoPath);
     const target = repo('rev-parse', '--verify', '--quiet', `${commit}^{commit}`);
     if (!target) return false;
-    // the hooks are the checkout's (a post-checkout installing dependencies, say), not the Lesestand's
-    const quiet = ['-c', 'core.hooksPath=/dev/null'];
     if (this.valid(dir)) {
       const tree = gitIn(dir);
       if (tree('rev-parse', 'HEAD') === target) {
         this.path = dir;
         return false;
       }
-      if (tree(...quiet, 'checkout', '--quiet', '--detach', '--force', target) !== null) {
+      // the hooks are the checkout's (a post-checkout installing dependencies, say), not the Lesestand's
+      if (tree('-c', 'core.hooksPath=/dev/null', 'checkout', '--quiet', '--detach', '--force', target) !== null) {
         this.path = dir;
         return true;
       }
@@ -151,20 +145,24 @@ export class ReadTree {
       // on Windows a process working in it (an agent reading there) keeps it: the server died of
       // that EBUSY; this time the checkout is read, and the next refresh tries again
       console.error(`Lesestand: ${dir} cannot be made afresh now (${(e as NodeJS.ErrnoException).code ?? e}); reading the checkout`);
-      const moved = this.path !== this.o.repoPath;
-      this.path = this.o.repoPath;
-      return moved;
+      return this.readCheckout();
     }
     repo('worktree', 'prune');
-    mkdirSync(dirname(dir), { recursive: true });
-    if (repo(...quiet, 'worktree', 'add', '--quiet', '--detach', '--force', dir, target) === null) {
+    try {
+      addDetachedTree(this.o.repoPath, dir, target);
+    } catch {
       console.error(`Lesestand: no worktree of ${this.o.repoPath} at ${dir}; reading the checkout`);
-      const moved = this.path !== this.o.repoPath;
-      this.path = this.o.repoPath;
-      return moved;
+      return this.readCheckout();
     }
     this.path = dir;
     return true;
+  }
+
+  /** The checkout is read where no worktree can be made; returns whether that moved the Lesestand. */
+  private readCheckout(): boolean {
+    const moved = this.path !== this.o.repoPath;
+    this.path = this.o.repoPath;
+    return moved;
   }
 
   /** Whether `dir` is a worktree of the checkout's repository, at its top. */

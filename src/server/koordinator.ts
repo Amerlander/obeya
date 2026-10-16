@@ -5,12 +5,12 @@
 import { z } from 'zod';
 import type { RepoAdapter } from '../adapters/types';
 import { inQueue, move, movable } from '../core/queue';
-import { type AgentRole, type CardEvent, type Item, nameless, type Preference, START_ALL_HOLD_MS, titleFrom, type Wait, type WorkspaceShortage } from '../core/types';
+import { type AgentRole, type CardEvent, type Item, nameless, type Preference, START_ALL_HOLD_MS, titleFrom, type Wait } from '../core/types';
 import { BadRequest, type Board } from './board';
 import type { Utterance } from './db';
 import type { AgentRuntime, AgentTool } from './runtime';
 import type { Workers } from './workers';
-import { type Change, RECHECK_MS, type Workspaces } from './workspaces';
+import { type Change, RECHECK_MS, shortageOf, type Workspaces } from './workspaces';
 import { LANGUAGE_NAMES } from '../core/locale';
 import { clip, messageOf } from '../core/text';
 
@@ -552,7 +552,7 @@ export class Koordinator {
     try {
       this.o.repoFor(card).workers.start(cardId);
     } catch (e) {
-      const shortage = e instanceof BadRequest ? SHORTAGE[e.code] : undefined;
+      const shortage = e instanceof BadRequest ? shortageOf(e.code) : undefined;
       if (!shortage) return this.o.board.log(cardId, 'error', 'obeya', messageOf(e), e instanceof BadRequest ? e.code : undefined);
       this.setQueue(cardId, { workspace: shortage }, since);
       this.o.board.log(cardId, 'state', 'obeya', { none: this.o.board.t.koordinator.noWorkspace, dirty: this.o.board.t.koordinator.dirtyWorkspaces, slots: this.o.board.t.koordinator.noSlot }[shortage]);
@@ -1034,10 +1034,6 @@ export function readSession(
     );
   });
 }
-
-/** A card the Koordinator holds back or is judging, before it starts. */
-/** The refusals of a start for want of a workspace, and what the card then waits for. */
-const SHORTAGE: Record<string, WorkspaceShortage> = { noWorkspace: 'none', dirtyWorkspaces: 'dirty', noSlot: 'slots' };
 
 /** A changed file with the places changed in it: "src/a.ts (lines 12-20 in function f; 40)", or "(new)". */
 const describe = (c: Change) =>

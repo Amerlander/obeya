@@ -12,8 +12,10 @@ import { dirname, join, resolve } from 'node:path';
 import { type CardDiff, cardDiff } from '../core/diff';
 import type { PoolHost, WorkspaceShortage } from '../core/types';
 import type { Store } from './db';
-import { HostError, hostName, onHost, remote, sh as shWord, type SshHost, TOKEN_HELPER, tokenHelperArgs } from './hosts';
+import { HostError, hostName, onHost, remote, sh as shWord, type SshHost, TOKEN_HELPER, TOKEN_HELPER_ARGS } from './hosts';
 import { messageOf } from '../core/text';
+import { oneAtATime } from '../core/one-at-a-time';
+import { spawnOutput } from './spawn';
 
 export class WorkspaceError extends Error {
   constructor(
@@ -64,13 +66,22 @@ function remoteWorkspace(path: string) {
 export function git(cwd: string, ...args: string[]): string {
   const there = remoteWorkspace(cwd);
   if (there) {
-    const r = there.host.runSync(['git', ...tokenHelperArgs(), '-C', there.path, ...args], there.path);
+    const r = there.host.runSync(['git', ...TOKEN_HELPER_ARGS, '-C', there.path, ...args], there.path);
     if (r.code !== 0) throw new WorkspaceError(`git ${args.join(' ')} in ${cwd}: ${(r.stderr || r.stdout).trim() || `exit code ${r.code}`}`);
     return r.stdout.trim();
   }
   const r = Bun.spawnSync([GIT, '-C', cwd, ...args], { stderr: 'pipe' });
   if (r.exitCode !== 0) throw new WorkspaceError(`git ${args.join(' ')} in ${cwd}: ${r.stderr.toString().trim()}`);
   return r.stdout.toString().trim();
+}
+
+/** `git` in `cwd`, or null where it fails (no repository there, a ref that does not exist). */
+export function gitOrNull(cwd: string, ...args: string[]): string | null {
+  try {
+    return git(cwd, ...args);
+  } catch {
+    return null;
+  }
 }
 
 /** Whether a workspace's directory exists, here or on its host (where an unreachable host counts as no). */
@@ -92,10 +103,8 @@ export async function gitAsync(cwd: string, ...args: string[]): Promise<string> 
 /** `git` in `cwd` without blocking, with its exit code: for commands whose exit code is an answer (`diff --no-index`). */
 async function gitRun(cwd: string, args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
   const there = remoteWorkspace(cwd);
-  if (there) return there.host.run(['git', ...tokenHelperArgs(), '-C', there.path, ...args], { cwd: there.path });
-  const p = Bun.spawn([GIT, '-C', cwd, ...args], { stdout: 'pipe', stderr: 'pipe' });
-  const [stdout, stderr, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
-  return { code, stdout, stderr };
+  if (there) return there.host.run(['git', ...TOKEN_HELPER_ARGS, '-C', there.path, ...args], { cwd: there.path });
+  return spawnOutput([GIT, '-C', cwd, ...args]);
 }
 
 /** `git diff` as Obeya shows it to the owner: plain, with renames found and file names unquoted. */
@@ -111,14 +120,6 @@ export function gitDiff(cwd: string, base: string, to?: string): Promise<string>
 
 /** The landing under way per Obeya checkout: landings of one repository run one after the other. */
 const landings = new Map<string, Promise<unknown>>();
-
-function oneAtATime<T>(key: string, f: () => Promise<T>): Promise<T> {
-  const next = (landings.get(key) ?? Promise.resolve()).then(f);
-  const done = next.catch(() => {});
-  landings.set(key, done);
-  void done.then(() => landings.get(key) === done && landings.delete(key));
-  return next;
-}
 
 /**
  * Puts the branch's whole change onto `upstream` as one commit, if it merges cleanly there; the
@@ -171,6 +172,19 @@ async function rebaseOnto(ws: string, upstream: string, base: string): Promise<L
   }
 }
 
+/**
+ * Brings the workspace's committed branch onto `upstream` (`base`, or `origin`'s copy of it, fetched
+ * first) as `rebaseOnto` does: what stands in the way of landing it, or null once it is ready.
+ */
+async function rebased(ws: string, base: string, upstream: string): Promise<LandProblem | null> {
+  if (await gitAsync(ws, 'status', '--porcelain')) return { code: 'landDirty', worker: true, detail: 'uncommitted changes in the workspace' };
+  if (upstream !== base) await gitAsync(ws, 'fetch', '--quiet', 'origin');
+  const conflict = await rebaseOnto(ws, upstream, base);
+  if (conflict) return conflict;
+  if ((await gitAsync(ws, 'rev-list', '--count', `${upstream}..HEAD`)) === '0') return { code: 'landEmpty', worker: true, detail: 'the branch has no commits' };
+  return null;
+}
+
 /** How long free clones found dirty count as dirty before `leasable` looks again. */
 export const RECHECK_MS = 60_000;
 
@@ -195,7 +209,10 @@ export interface WorkspaceOptions {
 /** The name of the machine Obeya runs on, as the Workspaces pill shows it. */
 export const HERE = hostname().split('.')[0] || 'localhost';
 
+/** The code `lease` refuses with for each reason it finds no workspace. */
 const SHORT_CODE = { none: 'noWorkspace', dirty: 'dirtyWorkspaces', slots: 'noSlot' } as const;
+/** Why `lease` found no workspace, by the code it refused with; none for any other refusal. */
+export const shortageOf = (code: string) => (Object.keys(SHORT_CODE) as WorkspaceShortage[]).find((s) => SHORT_CODE[s] === code);
 const SHORT_TEXT = { none: 'no workspace registered or all are leased', dirty: 'every free workspace has uncommitted changes', slots: 'every machine with a free workspace has as many busy workers as it has slots' };
 
 export class Workspaces {
@@ -249,7 +266,7 @@ export class Workspaces {
       for (let i = 1; i <= n; i++) {
         const path = `${dir}/${i}`;
         if ((await host.run(['test', '-d', `${path}/.git`])).code !== 0) {
-          const r = await host.run(['git', ...tokenHelperArgs(), 'clone', '--quiet', source, path], { cwd: dir });
+          const r = await host.run(['git', ...TOKEN_HELPER_ARGS, 'clone', '--quiet', source, path], { cwd: dir });
           if (r.code !== 0) throw new HostError(`cloning ${source} on ${host.name}: ${(r.stderr || r.stdout).trim()}`);
         }
         // the worker's own push and gh go through the same login
@@ -393,8 +410,7 @@ export class Workspaces {
     if (!ws || !exists(ws)) return false;
     try {
       if (git(ws, 'status', '--porcelain')) return true;
-      const base = this.o.mode === 'worktrees' ? this.main(ws) : `origin/${this.main(ws)}`;
-      return git(ws, 'rev-list', '--count', `${base}..HEAD`) !== '0';
+      return git(ws, 'rev-list', '--count', `${this.upstream(ws)}..HEAD`) !== '0';
     } catch {
       return true;
     }
@@ -414,8 +430,7 @@ export class Workspaces {
     const ws = this.leasedBy(cardId);
     if (!ws) return null;
     try {
-      const main = this.main(ws);
-      return { ws, base: git(ws, 'merge-base', 'HEAD', this.o.mode === 'worktrees' ? main : `origin/${main}`) };
+      return { ws, base: git(ws, 'merge-base', 'HEAD', this.upstream(ws)) };
     } catch {
       return null;
     }
@@ -426,9 +441,7 @@ export class Workspaces {
     const ws = this.leasedBy(cardId);
     if (!ws) return [];
     try {
-      const base = this.main(ws);
-      const upstream = this.o.mode === 'worktrees' ? base : `origin/${base}`;
-      return git(ws, 'diff', '--name-only', '--diff-filter=A', `${upstream}...HEAD`, '--', dir).split('\n').filter(Boolean);
+      return git(ws, 'diff', '--name-only', '--diff-filter=A', `${this.upstream(ws)}...HEAD`, '--', dir).split('\n').filter(Boolean);
     } catch {
       return [];
     }
@@ -442,20 +455,16 @@ export class Workspaces {
    * the default branch moved.
    */
   landOnMain(cardId: string, branch: string): Promise<LandProblem | Landed> {
-    return oneAtATime(this.o.repoPath, () => this.land(cardId, branch));
+    return oneAtATime(landings, this.o.repoPath, () => this.land(cardId, branch));
   }
 
   private async land(cardId: string, branch: string): Promise<LandProblem | Landed> {
     const ws = this.leasedBy(cardId);
     if (!ws) return { code: 'land', worker: false, detail: 'the card has no workspace' };
     try {
-      if (await gitAsync(ws, 'status', '--porcelain')) return { code: 'landDirty', worker: true, detail: 'uncommitted changes in the workspace' };
       const base = this.main(ws);
-      const upstream = this.o.mode === 'worktrees' ? base : `origin/${base}`;
-      if (this.o.mode === 'clones') await gitAsync(ws, 'fetch', '--quiet', 'origin');
-      const conflict = await rebaseOnto(ws, upstream, base);
-      if (conflict) return conflict;
-      if ((await gitAsync(ws, 'rev-list', '--count', `${upstream}..HEAD`)) === '0') return { code: 'landEmpty', worker: true, detail: 'the branch has no commits' };
+      const problem = await rebased(ws, base, this.upstream(ws, base));
+      if (problem) return problem;
       if ((await gitAsync(this.o.repoPath, 'branch', '--show-current')) !== base) return { code: 'landCheckout', worker: false, detail: `the Obeya checkout is not on ${base}` };
     } catch (e) {
       return { code: 'land', worker: false, detail: messageOf(e) };
@@ -481,7 +490,7 @@ export class Workspaces {
    * once more. The Obeya checkout is left as it is; the workspace stays with the card.
    */
   pushToMain(cardId: string): Promise<LandProblem | Landed> {
-    return oneAtATime(this.o.repoPath, () => this.push(cardId));
+    return oneAtATime(landings, this.o.repoPath, () => this.push(cardId));
   }
 
   private async push(cardId: string): Promise<LandProblem | Landed> {
@@ -491,13 +500,10 @@ export class Workspaces {
       let base: string;
       let from: string;
       try {
-        if (await gitAsync(ws, 'status', '--porcelain')) return { code: 'landDirty', worker: true, detail: 'uncommitted changes in the workspace' };
         base = this.main(ws);
         const upstream = `origin/${base}`;
-        await gitAsync(ws, 'fetch', '--quiet', 'origin');
-        const conflict = await rebaseOnto(ws, upstream, base);
-        if (conflict) return conflict;
-        if ((await gitAsync(ws, 'rev-list', '--count', `${upstream}..HEAD`)) === '0') return { code: 'landEmpty', worker: true, detail: 'the branch has no commits' };
+        const problem = await rebased(ws, base, upstream);
+        if (problem) return problem;
         from = await gitAsync(ws, 'rev-parse', upstream);
       } catch (e) {
         return { code: 'landPush', worker: false, detail: messageOf(e) };
@@ -582,8 +588,7 @@ export class Workspaces {
     const ws = this.leasedBy(cardId);
     if (!ws || !exists(ws)) return [];
     try {
-      const base = this.o.mode === 'worktrees' ? this.main(ws) : `origin/${this.main(ws)}`;
-      const diff = git(ws, 'diff', '-U0', '--no-color', '--no-ext-diff', git(ws, 'merge-base', 'HEAD', base));
+      const diff = git(ws, 'diff', '-U0', '--no-color', '--no-ext-diff', git(ws, 'merge-base', 'HEAD', this.upstream(ws)));
       const untracked = git(ws, 'ls-files', '--others', '--exclude-standard');
       return [...parseChanges(diff), ...untracked.split('\n').filter(Boolean).map((file) => ({ file, regions: [] }))];
     } catch {
@@ -599,8 +604,7 @@ export class Workspaces {
     const ws = this.leasedBy(cardId);
     if (!ws || !exists(ws)) return null;
     try {
-      const main = this.o.mode === 'worktrees' ? this.main(ws) : `origin/${this.main(ws)}`;
-      const base = await gitAsync(ws, 'merge-base', 'HEAD', main);
+      const base = await gitAsync(ws, 'merge-base', 'HEAD', this.upstream(ws));
       const tracked = await gitDiff(ws, base);
       const untracked = (await gitAsync(ws, 'ls-files', '-z', '--others', '--exclude-standard')).split('\0').filter(Boolean);
       const added: string[] = [];
@@ -629,8 +633,12 @@ export class Workspaces {
    * owner set for the repository, else the one its `origin` has.
    */
   private main(ws: string): string {
-    if (this.o.mode === 'worktrees') return defaultBranch(this.o.repoPath);
-    return branchSettings.get(resolve(this.o.repoPath))?.()?.trim() || defaultBranch(ws);
+    return branchSetting(this.o.repoPath) || defaultBranch(this.o.mode === 'worktrees' ? this.o.repoPath : ws);
+  }
+
+  /** The branch the workspace's work goes onto as the workspace has it: the main branch itself in a worktree, `origin`'s copy in a clone. */
+  private upstream(ws: string, main = this.main(ws)): string {
+    return this.o.mode === 'worktrees' ? main : `origin/${main}`;
   }
 
   private leaseClone(cardId: string, branch: string, overSlots: boolean): string {
@@ -655,32 +663,21 @@ export class Workspaces {
    */
   followUpTree(cardId: string, branch: string): string {
     const path = join(this.o.dir, 'follow-up', cardId.slice(0, 8));
-    const commit = (repo: string, ref: string) => {
-      try {
-        return git(repo, 'rev-parse', '--verify', '--quiet', `${ref}^{commit}`) || null;
-      } catch {
-        return null;
-      }
-    };
+    const commit = (repo: string, ref: string) => gitOrNull(repo, 'rev-parse', '--verify', '--quiet', `${ref}^{commit}`) || null;
     const clones = [...this.list().map((w) => w.path), this.o.repoPath].filter((p) => hostName(p) === null && existsSync(p));
     const own = clones.find((p) => commit(p, `refs/heads/${branch}`));
     const [repo, ref] = own
       ? [own, `refs/heads/${branch}`]
       : [this.o.repoPath, [`refs/remotes/origin/${branch}`, `origin/${this.main(this.o.repoPath)}`, 'HEAD'].find((r) => commit(this.o.repoPath, r))!];
     this.removeFollowUpTree(path);
-    mkdirSync(dirname(path), { recursive: true });
-    // the hooks are the clone's (a post-checkout installing dependencies, say), not the worktree's
-    git(repo, '-c', 'core.hooksPath=/dev/null', 'worktree', 'add', '--quiet', '--detach', '--force', path, commit(repo, ref) ?? ref);
+    addDetachedTree(repo, path, commit(repo, ref) ?? ref);
     return path;
   }
 
   /** Removes a follow-up's temporary worktree (`followUpTree`) and its entry in the clone it was made from. */
   removeFollowUpTree(path: string) {
     if (!existsSync(path)) return;
-    let common: string | null = null;
-    try {
-      common = git(path, 'rev-parse', '--path-format=absolute', '--git-common-dir');
-    } catch {}
+    const common = gitOrNull(path, 'rev-parse', '--path-format=absolute', '--git-common-dir');
     rmSync(path, { recursive: true, force: true });
     if (common) git(common, 'worktree', 'prune');
   }
@@ -698,6 +695,15 @@ export class Workspaces {
     return path;
   }
 
+}
+
+/**
+ * Adds a worktree of `repo` at `path`, detached at `commit`. The hooks are the repository's (a
+ * post-checkout installing dependencies, say), not the worktree's: none run.
+ */
+export function addDetachedTree(repo: string, path: string, commit: string) {
+  mkdirSync(dirname(path), { recursive: true });
+  git(repo, '-c', 'core.hooksPath=/dev/null', 'worktree', 'add', '--quiet', '--detach', '--force', path, commit);
 }
 
 export interface Change {
@@ -818,14 +824,7 @@ export type GitSteps<T> = Generator<string[][], T, (string | null)[]>;
 
 /** Runs git steps in `cwd` one call after the other, the server waiting: for code that cannot wait otherwise. */
 export function gitStepsSync<T>(cwd: string, steps: GitSteps<T>): T {
-  const one = (args: string[]) => {
-    try {
-      return git(cwd, ...args);
-    } catch {
-      return null;
-    }
-  };
-  for (let step = steps.next([]); ; step = steps.next(step.value.map(one))) if (step.done) return step.value;
+  for (let step = steps.next([]); ; step = steps.next(step.value.map((args) => gitOrNull(cwd, ...args)))) if (step.done) return step.value;
 }
 
 /** Runs git steps in `cwd` without blocking the server, the calls of each batch at once. */
