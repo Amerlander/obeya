@@ -169,7 +169,7 @@ view says that it does not answer. A closed MacBook lid on battery sleeps regard
   from localhost too. Done when the cross-site `text/plain` POST and the foreign `Host` from Where it
   stands are refused, the canvas, the app (its stop included), the scratch Obeya and the scripts
   still work, and a worker's HTML artifact still shows.
-- [ ] **W2:** Access. Local or remote, pairing with the QR code and the device cookie, the device
+- [x] **W2:** Access. Local or remote, pairing with the QR code and the device cookie, the device
   list with „Entfernen“, the setting „Von anderen Geräten erreichbar“ with `tailscale serve` and
   what the network needs, another VPN's address, the phone icon in the bar and the section in the
   configuration (see Who may, Reaching the machine). Settles how long a device stays paired. Done
