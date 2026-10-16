@@ -56,6 +56,8 @@ export interface WorkerOptions {
   backgroundLimit?: number;
   /** How long a card waits for the owner, its worker idle, before Obeya stops its workspace's app (`app.stop`). */
   parkGrace?: number;
+  /** How long after the owner last opened the card's app Obeya leaves it running at the least, for them to try it by hand. */
+  tryGrace?: number;
   /** How long the owner's comments on places in the demo video wait at most for them to finish watching. */
   holdGrace?: number;
   /** How long comments the owner finished watching with wait for an approval clicked at the same time, which takes them. */
@@ -216,6 +218,10 @@ const HOLD_GRACE = 10 * 60_000;
 const RELEASE_DELAY = 1500;
 /** A quick reply from the owner should not pay for starting the stack again. */
 const PARK_GRACE = 5 * 60_000;
+/** An app the owner opened to try by hand runs at least this long after, waiting card or not. */
+const TRY_GRACE = 30 * 60_000;
+/** How long Obeya waits for the app to answer when it looks whether it runs. */
+const PROBE_MS = 1500;
 /** A usage limit that does not say when it lifts is tried again after this. */
 const LIMIT_RETRY = 15 * 60_000;
 /** A usage limit that should have lifted already is tried again after this. */
@@ -319,6 +325,8 @@ export class Workers {
   private restart: DueRestart | null = null;
   /** Cards that wait for the owner, until their grace runs out and Obeya stops their app. */
   private parking = new Map<string, ReturnType<typeof setTimeout>>();
+  /** When the owner last opened a card's app to try it by hand, by card. */
+  private tried = new Map<string, number>();
   /** Cards whose stack is being stopped: a message to their worker waits until it is. */
   private stopping = new Map<string, Promise<void>>();
   /** Cards whose session on another machine was cut off, waiting for that machine to answer again. */
@@ -360,7 +368,7 @@ export class Workers {
     // the run before is not resumed, but the Arbeitsrückschau still reads it
     if (row.session_id) this.o.board.log(card.id, 'state', 'obeya', this.o.board.t.worker.restarted(this.o.board.t.worker.earlierRun(row.session_id)));
     // a fresh session knows of no app that was stopped
-    this.o.board.work(card.id, { state: 'working', need: null, detail: null, status_line: null, workspace: path, branch, session_id: null, pr: null, approved_at: null, parked: null, paused: null });
+    this.o.board.work(card.id, { state: 'working', need: null, detail: null, status_line: null, workspace: path, branch, session_id: null, pr: null, approved_at: null, parked: null, paused: null, app: null });
     this.o.board.log(card.id, 'state', 'obeya', this.o.board.t.worker.started(branch));
     this.launch(card.id, this.briefing(card, branch, !!row.branch), undefined, this.taskImages(card));
   }
@@ -462,7 +470,7 @@ export class Workers {
     this.bump(card.id);
     const commit = row.shipped ? (JSON.parse(row.shipped) as Shipped).commit : undefined;
     const landed: LandedState = { ...(card.state === 'done' ? { unchanged: true } : commit ? { commit } : {}), followUp: true, ...(worktree ? { worktree } : {}) };
-    this.o.board.work(card.id, { workspace: path, landed: JSON.stringify(landed), status_line: null });
+    this.o.board.work(card.id, { workspace: path, landed: JSON.stringify(landed), status_line: null, app: null });
     const stills = this.stills(place);
     this.o.board.log(card.id, 'hint', 'owner', text, undefined, images.slice(stills.length).map((f) => basename(f)), undefined, replyTo, place);
     if (text) this.o.onOwnerInput?.(card, 'note', text);
@@ -514,13 +522,18 @@ export class Workers {
     }
     const { needsClone: _, ...landed } = JSON.parse(row.landed!) as LandedState;
     this.bump(cardId);
-    this.o.board.work(cardId, { workspace: path, landed: JSON.stringify(landed), status_line: null });
+    this.o.board.work(cardId, { workspace: path, landed: JSON.stringify(landed), status_line: null, app: null });
     this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.cloneFree);
     this.deliver(cardId, `A clone is free now: you go on in it, a full clone on the branch ${row.branch}. Answer the owner's question there.\n\n${FOLLOW_UP}`);
     return true;
   }
 
   /** Whether the card's follow-up runs in a temporary worktree. */
+  /** Whether the card's workspace is on this machine, where the owner's browser reaches what runs in it. */
+  private local(cardId: string): boolean {
+    return !hostName(this.o.board.row(cardId).workspace);
+  }
+
   private inWorktree(cardId: string): boolean {
     const landed = this.o.board.row(cardId).landed;
     return !!landed && !!(JSON.parse(landed) as LandedState).worktree;
@@ -952,7 +965,7 @@ export class Workers {
         // the card is done either way; a leftover worktree does no harm
         console.error('freeing a landed workspace:', e);
       }
-    this.o.board.work(cardId, { landed: null, workspace: null, status_line: null, parked: null, paused: null, ...(row.state === 'waiting' ? { state: row.landed ? landedState(row.landed) : 'live', need: null, detail: null } : {}) });
+    this.o.board.work(cardId, { landed: null, workspace: null, status_line: null, parked: null, paused: null, app: null, ...(row.state === 'waiting' ? { state: row.landed ? landedState(row.landed) : 'live', need: null, detail: null } : {}) });
     this.o.board.workDone(cardId);
     // the Arbeitsrückschau read the card's runs when its work ended
     if (!(row.landed && (JSON.parse(row.landed) as LandedState).followUp)) this.o.onWorkEnded?.(cardId, row.workspace);
@@ -1078,7 +1091,7 @@ export class Workers {
     // work on the branch keeps its workspace, so starting again goes on from there
     const keep = this.o.workspaces.hasWork(cardId);
     if (!keep) this.o.workspaces.release(cardId);
-    this.o.board.work(cardId, { state: 'planned', need: null, detail: null, pr: null, approved_at: null, paused: null, ...(keep ? {} : { workspace: null }) });
+    this.o.board.work(cardId, { state: 'planned', need: null, detail: null, pr: null, approved_at: null, paused: null, app: null, ...(keep ? {} : { workspace: null }) });
     this.o.board.log(cardId, 'state', 'owner', card.pr ? this.o.board.t.worker.stoppedPrOpen(card.pr.number) : this.o.board.t.worker.stopped);
   }
 
@@ -1697,8 +1710,32 @@ export class Workers {
         if (!this.waitsForOwner(cardId) || this.stopping.has(cardId)) return;
         const stopping = this.park(cardId).finally(() => this.stopping.delete(cardId));
         this.stopping.set(cardId, stopping);
-      }, this.o.parkGrace ?? PARK_GRACE),
+      }, Math.max(this.o.parkGrace ?? PARK_GRACE, (this.tried.get(cardId) ?? 0) + (this.o.tryGrace ?? TRY_GRACE) - Date.now())),
     );
+  }
+
+  /** Whether the app the card's worker said runs answers at its address now: any HTTP answer counts, an error page too. */
+  async appUp(cardId: string): Promise<boolean> {
+    const url = this.o.board.item(cardId)?.app;
+    if (!url) return false;
+    try {
+      await fetch(url, { method: 'HEAD', redirect: 'manual', signal: AbortSignal.timeout(PROBE_MS), tls: { rejectUnauthorized: false } });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * The owner opens the card's app to try it by hand: its address. Obeya leaves it running for a
+   * while after (`TRY_GRACE`), so it does not stop under them once the card waits. None once it no longer runs.
+   */
+  openApp(cardId: string): string | null {
+    const url = this.o.board.item(cardId)?.app;
+    if (!url) return null;
+    this.tried.set(cardId, Date.now());
+    if (this.parking.has(cardId)) this.parkLater(cardId);
+    return url;
   }
 
   /** A card that is no longer left waiting keeps its app. */
@@ -1777,7 +1814,7 @@ export class Workers {
       this.o.board.log(cardId, 'error', 'obeya', this.o.board.t.worker.parkFailed(clip(result.output, 600)));
       return;
     }
-    this.o.board.work(cardId, { parked: new Date().toISOString() });
+    this.o.board.work(cardId, { parked: new Date().toISOString(), app: null });
     this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.parked);
   }
 
@@ -2062,6 +2099,25 @@ export class Workers {
           return 'Recorded. End your turn now.';
         },
       },
+      ...(this.local(cardId)
+        ? [
+            {
+              name: 'app_running',
+              description: `The app runs in your workspace and opens in a browser: its address as you open it (http://localhost:5173, say), so the owner can open it from the card to try it by hand while it runs. Again when the address changes; an empty url once you stop it.`,
+              schema: { url: z.string() },
+              run: ({ url }) => {
+                const u = String(url).trim();
+                if (!u) {
+                  this.o.board.work(cardId, { app: null });
+                  return 'Recorded: the card no longer offers the app.';
+                }
+                if (!/^https?:\/\/[^\s/]+/i.test(u)) return 'Not recorded: give the address as http(s)://host:port/….';
+                this.o.board.work(cardId, { app: u });
+                return 'Recorded: the card offers the app to the owner while it answers there.';
+              },
+            } satisfies AgentTool,
+          ]
+        : []),
       ...(this.inWorktree(cardId)
         ? [
             {
@@ -2239,8 +2295,9 @@ ${idea.idea.brief}` : '',
     if (this.o.adapter.setup) parts.push(`First run \`${this.o.adapter.setup}\` in the clone.`);
     const { run, stop } = this.o.adapter.app ?? {};
     const parking = stop ? ' While the card waits for the owner, Obeya stops the app in your workspace; your next message then says so.' : '';
-    if (run?.trim()) parts.push(`How to run the app: ${run.trim()}${parking}`);
-    else if (parking) parts.push(parking.trim());
+    const tryIt = this.local(card.id) ? ' Once it runs and opens in a browser, give its address with app_running, so the owner can try it by hand from the card.' : '';
+    if (run?.trim()) parts.push(`How to run the app: ${run.trim()}${parking}${tryIt}`);
+    else if (parking || tryIt) parts.push(`${parking}${tryIt}`.trim());
     if (this.o.adapter.checks?.length && !card.prototypeOf) parts.push(`Before ready_for_review, run: ${this.o.adapter.checks.map((c) => `\`${c}\``).join(', ')}.`);
     parts.push(
       [

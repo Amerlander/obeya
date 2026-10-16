@@ -63,6 +63,7 @@ test('what an Obeya before the release kept in earlier shapes is in today’s', 
     s.setSetting('c', 'work_retro_since:app', '2026-10-01T00:00:00Z');
     // the schema as released: without the columns later migrations add
     s.db.run('ALTER TABLE talk DROP COLUMN reply_to');
+    s.db.run('ALTER TABLE cards DROP COLUMN app');
     s.db.run(`PRAGMA user_version = ${RELEASED}`);
     s.db.close();
 

@@ -172,6 +172,10 @@ export const api = {
   },
   events: (id: string) => call<CardEvent[]>('GET', at(`/cards/${id}/events`)),
   /** What the card's work changes (null: nothing to read, no workspace and not landed); `full`: with the diff itself. */
+  /** Whether the app in the card's workspace answers now. */
+  appUp: async (id: string) => (await call<{ up: boolean }>('GET', at(`/cards/${id}/app`))).up,
+  /** Where the owner's browser opens the card's app: through Obeya, which keeps it running a while after. */
+  appOpen: (id: string) => at(`/cards/${id}/app/open`),
   diff: async (id: string, full = false) => (await call<CardDiff | undefined>('GET', at(`/cards/${id}/diff${full ? '?full' : ''}`))) ?? null,
   /** A project's plan doc as written. */
   planDoc: (id: string) => call<{ file: string; markdown: string }>('GET', at(`/cards/${id}/plan`)),

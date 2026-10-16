@@ -15,13 +15,14 @@ eachTest();
 
 describe('parking: the app of a card that waits for the owner', () => {
   /** Workers whose settings stop the app by writing `parked.log` in the workspace, after a grace of `grace` ms. */
-  const parking = (more: Partial<NonNullable<RepoAdapter['app']>> = {}, grace = 10) => {
+  const parking = (more: Partial<NonNullable<RepoAdapter['app']>> = {}, grace = 10, tryGrace?: number) => {
     setWorkers(new Workers({
       board,
       runtime,
       workspaces: spaces,
       adapter: { ...generic, land: 'main', workspaces: 'clones', app: { run: 'Start it with `bun run stack`.', stop: 'echo stopped >> parked.log', ...more } },
       parkGrace: grace,
+      ...(tryGrace !== undefined ? { tryGrace } : {}),
     }));
   };
   const stopped = (id: string) => existsSync(join(board.row(id).workspace!, 'parked.log'));
@@ -157,6 +158,50 @@ describe('parking: the app of a card that waits for the owner', () => {
     workers.answer(c.id, 'Datum.');
     expect(runtime.last.spec.resume).toBe('sess-1');
     expect(runtime.last.inbox[0]).toContain('Obeya stopped the app');
+  });
+
+  test('the app the worker says runs is offered on the card until Obeya stops it', async () => {
+    parking({}, 40);
+    const c = manual();
+    workers.start(c.id);
+    expect(runtime.last.inbox[0]).toContain('give its address with app_running');
+    expect(runtime.last.call('app_running', { url: 'localhost:5173' })).toContain('Not recorded');
+    runtime.last.call('app_running', { url: 'http://localhost:5173/' });
+    expect(board.item(c.id)!.app).toBe('http://localhost:5173/');
+    runtime.last.call('app_running', { url: '' });
+    expect(board.item(c.id)!.app).toBeUndefined();
+    runtime.last.call('app_running', { url: 'http://localhost:5174/' });
+    runtime.last.call('ready_for_review', { summary: 'Fertig.', demo: artifact() });
+    runtime.last.emit({ type: 'idle' });
+    await until(() => board.row(c.id).parked);
+    expect(board.item(c.id)!.app).toBeUndefined();
+    expect(workers.openApp(c.id)).toBeNull();
+  });
+
+  test('the owner opening the app keeps it running past the grace', async () => {
+    parking({}, 10, 150);
+    const c = manual();
+    workers.start(c.id);
+    runtime.last.call('app_running', { url: 'http://localhost:5173/' });
+    runtime.last.call('ready_for_review', { summary: 'Fertig.', demo: artifact() });
+    runtime.last.emit({ type: 'idle' });
+    expect(workers.openApp(c.id)).toBe('http://localhost:5173/');
+    await Bun.sleep(80);
+    expect(stopped(c.id)).toBe(false);
+    await until(() => board.row(c.id).parked);
+    expect(stopped(c.id)).toBe(true);
+  });
+
+  test('the app counts as running while it answers at its address', async () => {
+    parking();
+    const c = manual();
+    workers.start(c.id);
+    expect(await workers.appUp(c.id)).toBe(false);
+    const app = Bun.serve({ port: 0, fetch: () => new Response('nicht gefunden', { status: 404 }) });
+    runtime.last.call('app_running', { url: `http://localhost:${app.port}/` });
+    expect(await workers.appUp(c.id)).toBe(true);
+    await app.stop(true);
+    expect(await workers.appUp(c.id)).toBe(false);
   });
 
   test('without a stop in the settings nothing is stopped', async () => {

@@ -90,6 +90,8 @@ export interface CardRow {
   paused: string | null;
   /** JSON: the owner's words Obeya holds for the card's worker until it takes them in, at its next tool step or turn (`Unheard` in workers.ts). */
   unheard: string | null;
+  /** The address its worker opens the app in the card's workspace at, while it runs (`app_running`); gone once Obeya stops the app or the workspace goes. */
+  app: string | null;
 }
 
 export interface GroupRow {
@@ -333,6 +335,8 @@ export const MIGRATIONS = [
         AND NOT EXISTS (SELECT 1 FROM settings r WHERE r.canvas_id = s.canvas_id AND r.key = 'work_retro_runs:' || substr(s.key, 18));`,
   // the message of the sheet the owner's words reply to (JSON `TalkRef`)
   'ALTER TABLE talk ADD COLUMN reply_to TEXT;',
+  // where the app in a card's workspace runs, for the owner to try it by hand
+  'ALTER TABLE cards ADD COLUMN app TEXT;',
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter';
@@ -403,6 +407,7 @@ export type RowUpdate = Partial<
     | 'thread'
     | 'paused'
     | 'unheard'
+    | 'app'
   >
 >;
 

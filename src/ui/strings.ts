@@ -430,6 +430,10 @@ const de = {
     withShots: (n: number) => (n === 1 ? '1 Screenshot' : `${n} Screenshots`),
     withQuote: 'Zitat',
   },
+  app: {
+    open: 'App öffnen',
+    hint: (where: string) => `Die App dieser Karte läuft gerade im Workspace (${where}): zum Ausprobieren von Hand. Obeya lässt sie danach noch mindestens 30 Minuten laufen.`,
+  },
   pr: {
     title: (n: number) => `Pull Request #${n}`,
     conflict: 'Konflikt mit dem Zielbranch; der Agent bringt den Branch auf Stand.',
@@ -1650,6 +1654,10 @@ const en: Strings = {
     withText: 'text',
     withShots: (n: number) => (n === 1 ? '1 screenshot' : `${n} screenshots`),
     withQuote: 'quote',
+  },
+  app: {
+    open: 'Open app',
+    hint: (where: string) => `This card's app is running in its workspace (${where}): to try it by hand. Obeya keeps it running for at least 30 minutes after.`,
   },
   pr: {
     title: (n: number) => `Pull request #${n}`,

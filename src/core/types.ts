@@ -255,6 +255,12 @@ export interface Item {
    * the owner's next words to it.
    */
   paused?: true;
+  /**
+   * Where the app in the card's workspace runs, as its worker opens it (`http://localhost:5173`):
+   * while the worker says it runs and Obeya has not stopped it. The card offers it to the owner to
+   * try by hand, once it answers.
+   */
+  app?: string;
   /** Waiting for approval, its branch holds no change (checked at the handover): approving makes the card `done`. */
   noChange?: boolean;
   /**

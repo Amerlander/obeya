@@ -78,6 +78,8 @@ const de = {
     parked: 'App im Workspace gestoppt, solange die Karte wartet. Der Agent startet sie wieder, wenn er sie braucht.',
     parkKept: 'Die App im Workspace läuft weiter, während die Karte wartet: Sie hält Daten, die bleiben sollen. Soll sie trotzdem gestoppt werden, sag es dem Agenten.',
     parkFailed: (output: string) => `Die App im Workspace zu stoppen, ist fehlgeschlagen: ${output}`,
+    /** The page the owner's browser gets for a card whose app no longer runs. */
+    appGone: 'Die App dieser Karte läuft nicht mehr. Soll der Agent sie wieder starten, sag es ihm auf der Karte.',
     stoppedPrOpen: (n: number) => `Gestoppt. Pull Request #${n} bleibt auf GitHub offen.`,
     restartDue: (pause: Pause) =>
       `${pause === 'stop' ? 'Beenden von Obeya' : pause === 'repo' ? 'Neustart der Agenten dieses Repositorys' : 'Neustart von Obeya'} angekündigt; der Agent pausiert beim nächsten sicheren Punkt.`,
@@ -362,6 +364,8 @@ const en: Messages = {
     parked: 'Stopped the app in the workspace while the card waits. The agent starts it again when it needs it.',
     parkKept: 'The app in the workspace keeps running while the card waits: it holds data that should stay. To have it stopped anyway, tell the agent.',
     parkFailed: (output: string) => `Stopping the app in the workspace failed: ${output}`,
+    /** The page the owner's browser gets for a card whose app no longer runs. */
+    appGone: 'The app of this card no longer runs. To have the agent start it again, tell it on the card.',
     stoppedPrOpen: (n: number) => `Stopped. Pull request #${n} stays open on GitHub.`,
     restartDue: (pause: Pause) => `Obeya is about to ${pause === 'stop' ? 'stop' : pause === 'repo' ? "restart this repository's agents" : 'restart'}; the agent pauses at the next safe point.`,
     restartWaits: (pause: Pause) =>

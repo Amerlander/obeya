@@ -1717,6 +1717,7 @@ function work(r: CardRow): Partial<Item> {
     ...(detail.noChange && (r.need === 'review' || r.need === 'demo') ? { noChange: true } : {}),
     ...(detail.lands && (r.need === 'review' || r.need === 'demo') ? { lands: detail.lands } : {}),
     ...(r.paused ? { paused: true } : {}),
+    ...(r.app && r.workspace && !r.parked ? { app: r.app } : {}),
   };
 }
 

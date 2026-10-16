@@ -1,6 +1,6 @@
 // A card's branch, with the size of its change beside it: a click shows the whole diff over the
-// page. Where the branch is checked out is copied with another click. Both stay quiet: the owner
-// rarely reads the code.
+// page. Where the branch is checked out is copied with another click, and the app running there
+// opens with a third. All stay quiet: the owner rarely reads the code or tries the app by hand.
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -13,7 +13,7 @@ import { t } from './strings';
 /** A file with more lines than this starts folded, so a generated file does not bury the rest. */
 const FOLD_LINES = 1500;
 
-/** The branch line of a card: its name, the size of its change, and its directory to copy. */
+/** The branch line of a card: its name, the size of its change, its directory to copy, and its running app to open. */
 export function Branch({ item }: { item: Item }) {
   const [diff, setDiff] = useState<CardDiff | null>(null);
   const [open, setOpen] = useState(false);
@@ -47,7 +47,44 @@ export function Branch({ item }: { item: Item }) {
           <CopyPath path={item.workspace} />
         </>
       )}
+      <AppLink item={item} />
       {open && <DiffView item={item} onClose={() => setOpen(false)} onRead={setDiff} />}
+    </>
+  );
+}
+
+/** How often an open card looks whether its app answers, while its worker says it runs. */
+const APP_LOOK_MS = 10_000;
+
+/**
+ * The app running in the card's workspace, while it answers: a link beside the workspace's path for
+ * the owner to try it by hand, opened through Obeya, which keeps it running a while after.
+ */
+function AppLink({ item }: { item: Item }) {
+  const [up, setUp] = useState(false);
+  useEffect(() => {
+    setUp(false);
+    if (!item.app) return;
+    let alive = true;
+    const look = () => api.appUp(item.id).then((u) => alive && setUp(u), () => {});
+    void look();
+    const timer = setInterval(look, APP_LOOK_MS);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [item.id, item.app]);
+  if (!item.app || !up) return null;
+  let where = item.app;
+  try {
+    where = new URL(item.app).host;
+  } catch {}
+  return (
+    <>
+      {' · '}
+      <a className="app-link" href={api.appOpen(item.id)} target="_blank" rel="noreferrer" title={t.app.hint(where)}>
+        {t.app.open} ↗
+      </a>
     </>
   );
 }

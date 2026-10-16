@@ -127,7 +127,8 @@ them itself; how the app starts and where it is, the workers find from the recip
   nothing running and five minutes have passed: it runs `stop` in the workspace (through `sh -c`,
   `cmd /c` on Windows), so a waiting card costs disk, not memory. The worker's next message tells
   it the app was stopped; it starts it again as the recipe says when it needs it. A stop that
-  fails is an error on the card.
+  fails is an error on the card. An app the owner opened from the card to try it by hand („App
+  öffnen“, offered while it runs) is stopped no sooner than 30 minutes after.
 - `keep`: run before `stop`; exiting 0 means the app holds what must not be lost (a restored
   database, say), and Obeya leaves it running and says so on the card. The owner who wants it
   stopped anyway tells the worker.

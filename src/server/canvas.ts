@@ -764,6 +764,16 @@ export class CanvasRuntime {
     return this.repoOf(this.board.card(cardId) ?? cardId).workers.diff(cardId, full);
   }
 
+  /** Whether the app in the card's workspace answers, for the owner to try it by hand (`Workers.appUp`). */
+  async appUp(cardId: string): Promise<{ up: boolean }> {
+    return { up: await this.repoOf(cardId).workers.appUp(cardId) };
+  }
+
+  /** The address of the card's app as the owner opens it, which keeps it running a while (`Workers.openApp`); none once it no longer runs. */
+  openApp(cardId: string): string | null {
+    return this.repoOf(cardId).workers.openApp(cardId);
+  }
+
   /** The owner edits a card; what they write in it is offered for learning once they have written it. */
   patch(cardId: string, p: CardPatch) {
     const { body: before, state } = this.board.row(cardId);

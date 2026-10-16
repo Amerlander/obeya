@@ -115,6 +115,27 @@ describe('archive', () => {
   });
 });
 
+describe("a card's app", () => {
+  test('opens at its address while its worker says it runs; after that the browser hears it no longer does', async () => {
+    const c = card();
+    const open = () => fetch(new URL(api(`/cards/${c.id}/app/open`), server.url), { redirect: 'manual' });
+    const app = Bun.serve({ port: 0, fetch: () => new Response('Shop') });
+    try {
+      board.work(c.id, { state: 'waiting', need: 'review', workspace: join(dir, 'ws'), app: `http://localhost:${app.port}/` });
+      expect(await (await fetch(new URL(api(`/cards/${c.id}/app`), server.url))).json()).toEqual({ up: true });
+      const there = await open();
+      expect(there.status).toBe(302);
+      expect(there.headers.get('location')).toBe(`http://localhost:${app.port}/`);
+      board.work(c.id, { parked: new Date().toISOString() });
+      const gone = await open();
+      expect(gone.status).toBe(404);
+      expect(await gone.text()).toBe(board.t.worker.appGone);
+    } finally {
+      await app.stop(true);
+    }
+  });
+});
+
 describe('the log', () => {
   test('a line taken out of it leaves every page', async () => {
     const c = card();

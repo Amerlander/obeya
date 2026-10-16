@@ -431,6 +431,21 @@ export function serve(
       },
       // what the card's work changes: its files with lines added and removed, with `?full` the diff too
       '/api/c/:canvas/cards/:id/diff': { GET: on((c, req) => c.diff(req.params.id!, new URL(req.url).searchParams.has('full'))) },
+      // the app running in the card's workspace: whether it answers, and the owner opening it to try it by hand
+      '/api/c/:canvas/cards/:id/app': { GET: on((c, req) => c.appUp(req.params.id!)) },
+      '/api/c/:canvas/cards/:id/app/open': {
+        GET: (req) => {
+          const c = byId.get(req.params.canvas);
+          if (!c) return new Response('Not found', { status: 404 });
+          let url: string | null = null;
+          try {
+            url = c.openApp(req.params.id);
+          } catch (e) {
+            if (!(e instanceof BadRequest)) throw e;
+          }
+          return url ? Response.redirect(url, 302) : new Response(c.board.t.worker.appGone, { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+        },
+      },
       '/api/c/:canvas/cards/:id/plan': { GET: on((c, req) => c.board.planDoc(req.params.id!)) },
       // a project's decisions and the idea it came from
       '/api/c/:canvas/cards/:id/history': { GET: on((c, req) => c.board.projectHistory(req.params.id!)) },

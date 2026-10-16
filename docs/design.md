@@ -686,6 +686,8 @@ A worker has its tools served in-process:
   conversation at once.
 - `propose_card(title, task, reason, idea?, questions?)` (see Proposals).
 - `ready_for_review(summary, demo)`, whose summary is the report the owner reads.
+- `app_running(url)`, where the app in its workspace opens in a browser, for the owner to try it by
+  hand (see Trying the app by hand); only in a workspace on this machine.
 - `to_obeya(request)`, for what the owner's words to it ask of Obeya rather than of the worker (see
   Voice in).
 
@@ -947,6 +949,22 @@ large files folded; while the card has a workspace, „Pfad kopieren“ copies i
 when the card opens and again as the work moves on (`GET …/cards/:id/diff`, `?full` for the diff
 itself, cut off past 2 MB).
 
+#### Trying the app by hand
+
+While the app runs in the card's workspace, „App öffnen ↗“ at the end of that line opens it in a new
+tab, for the owner to try the work by hand. Rarely wanted, so it is a link among the line's others,
+nothing more. Obeya neither starts the app nor finds its address: the worker gives it with
+`app_running(url)` once the app runs (its brief asks for that beside the recipe; an empty url when
+it stops it), and the card holds it (`app` on the card's row, `Item.app`) until the worker clears
+it, Obeya parks the card, or the workspace goes. The link shows only while the app answers there:
+the open card asks every ten seconds (`GET …/cards/:id/app`, a `HEAD` request with a 1.5 s limit;
+any HTTP answer counts, an error page too), so an app the worker stopped without saying so, or one
+that died with a restart, shows none. The link goes through Obeya (`GET …/cards/:id/app/open`,
+redirecting to the address): opening it keeps the app running for at least 30 minutes after
+(`TRY_GRACE`), so parking does not stop it under the owner; an app no longer recorded gets a line
+saying so instead. Only workspaces on this machine have the tool: an address on another machine is
+not one the owner's browser reaches (see Decisions).
+
 ### Screenshots
 
 What the owner writes on a card (a note, feedback, an answer, talk to an idea) may carry
@@ -1095,6 +1113,14 @@ show on their cards as before. Owner-facing text from agents is in the owner's l
 - **Marking without tools: the gesture decides** (owner, 2026-10-14): a free pen came out rough with
   mouse or trackpad, and a switch between pen, frame and number was one more choice each time.
   Frames got numbers like pins on 2026-10-15 (owner); until then only pins had them.
+- **The worker gives the app's address; the link shows only while the app answers** (2026-10-16).
+  Before, a card offered no way into its running app, and the owner who wanted to try the work by
+  hand had to find the port. Rejected: Obeya finding the address itself from the ports the
+  workspace's processes listen on (a stack in Docker listens elsewhere, and only the worker knows
+  which port is the page); a mark on the card on the canvas (it is wanted rarely); starting a parked
+  app from the link (that is the worker's, from the recipe, and the owner can ask it to). Not yet:
+  workspaces on other machines, which would need Obeya to forward the app's ports (all of them,
+  where a page talks to an API on another port) over SSH.
 
 ## The canvas
 
@@ -1499,8 +1525,9 @@ turn or background work, has the app in its workspace stopped after a grace of f
 (`OBEYA_PARK_GRACE` in seconds for a demo or a live check; a quick reply should not pay for a
 restart): Obeya runs the settings' `app.stop` there through the platform's shell
 (`src/server/app-command.ts`), unless `app.keep` exits 0 (the app holds data that must stay; the
-card says it keeps running, and the owner who wants it stopped anyway tells the worker). The card's
-log says the app was stopped (`parked` on the card's row); the next message to the worker carries a
+card says it keeps running, and the owner who wants it stopped anyway tells the worker). An app the
+owner opened from the card is stopped no sooner than 30 minutes after (see Trying the app by hand).
+The card's log says the app was stopped (`parked` on the card's row); the next message to the worker carries a
 line that it was, telling it to start it again as the recipe says, and clears it. A message that
 arrives while the stop runs waits for it, so the worker cannot start the app only to have it
 stopped. A stop that fails is an
@@ -3369,7 +3396,9 @@ The fields: `land`, `direct`, `checks`, `setup`, `planDocs`, `softPaths`, `works
 `stop` and `keep` park a waiting card (see Parking). `run` is prose, for any kind of app (a web app
 with or without hot reload, a frontend that needs a reload, a CLI, a desktop or mobile app, a URL
 printed to the console): every worker's brief has it word for word, and its demo paragraph points
-back to it. Obeya neither starts the app nor looks for its address; the agents do, from the recipe.
+back to it. Obeya neither starts the app nor looks for its address; the agents do, from the recipe,
+and a worker tells Obeya the address once the app runs, for the owner to open it from the card
+(see Trying the app by hand).
 `demo` has `site` (see Static sites). The fields of `app` and `demo` are each a setting of their
 own (`NESTED_SETTINGS`): this machine may set `app.stop` and leave `app.run` to the repository, and
 each comes from where it is set. The reference for every

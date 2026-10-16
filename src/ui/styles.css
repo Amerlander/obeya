@@ -1174,6 +1174,8 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 .doc th { font-weight: 600; }
 button.link { border: 0; background: none; padding: 0; color: var(--working); cursor: pointer; font-size: inherit; }
 button.link:hover { text-decoration: underline; }
+.app-link { color: var(--working); text-decoration: none; }
+.app-link:hover { text-decoration: underline; }
 .sheet .origin { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; margin-top: 14px; padding: 9px 12px; border: 1px dashed var(--idea);
   border-radius: 3px; background: none; color: var(--ink); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
 .sheet .origin:hover { background: var(--chip); }
