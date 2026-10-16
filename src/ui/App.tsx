@@ -478,7 +478,7 @@ function Canvas({
     setSheetOn(true);
     setKOn(false);
     setAOn(false);
-    if (inView) await flyOrJump(camFor(bounds(p), 40, sideNow(), 60), 700, quick);
+    if (inView) await flyOrJump(camFor(bounds(p), sideNow()), 700, quick);
   }
 
   /** Closes the open project; `toArchive`: back to the archive an archived one was opened from. */

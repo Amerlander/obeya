@@ -97,6 +97,14 @@ export function talkTurns(all: CardEvent[], opts: { asking?: Question; over?: bo
   const lastPause = events.findLast(pauseLine);
   // the worker handed over since it started
   let handedOver = false;
+  // the agent's steps so far, closed above what comes next
+  const close = () => {
+    const run = closed(steps);
+    if (run) {
+      shown.push(run);
+      steps = [];
+    }
+  };
   events.forEach((e, i) => {
     if (started(e)) handedOver = false;
     const where = place(e, events[i - 1]);
@@ -118,13 +126,7 @@ export function talkTurns(all: CardEvent[], opts: { asking?: Question; over?: bo
     else if (where === 'line' || where === 'aside') {
       // what the agent did until the owner paused it stays above that line once it went on; while it
       // is paused there, its bubble shows it
-      if (pauseLine(e) && !(opts.paused && e === lastPause)) {
-        const run = closed(steps);
-        if (run) {
-          shown.push(run);
-          steps = [];
-        }
-      }
+      if (pauseLine(e) && !(opts.paused && e === lastPause)) close();
       shown.push({ e, steps: [], ...(where === 'line' ? { line: true as const } : {}) });
     }
     else if (where === 'agent') {
@@ -140,13 +142,7 @@ export function talkTurns(all: CardEvent[], opts: { asking?: Question; over?: bo
     } else {
       // a spoken command that became a note or an answer stands once, as that
       if (e.kind === 'say' && duplicate(all, all.indexOf(e))) return;
-      if (toAgent(e)) {
-        const run = closed(steps);
-        if (run) {
-          shown.push(run);
-          steps = [];
-        }
-      }
+      if (toAgent(e)) close();
       shown.push({ e, steps: [] });
       if (toAgent(e)) open = true;
     }
@@ -301,7 +297,7 @@ export const koordinatorReads = (events: CardEvent[]) => {
 };
 
 /** A task an agent has worked on, stopped ones included: what came of it stands beside its conversation. */
-export const worked = (i: Pick<Item, 'state' | 'branch'>) => ['planned', 'working', 'waiting', 'approved', 'inPr', 'live', 'done'].includes(i.state) && !!i.branch;
+export const worked = (i: Pick<Item, 'state' | 'branch'>) => i.state !== 'idea' && i.state !== 'proposal' && !!i.branch;
 
 /** What decides a card's layout. */
 type Laid = Pick<Item, 'state' | 'branch' | 'prototypeEnd' | 'demo' | 'pr' | 'landedPart' | 'finishing' | 'brief' | 'prototypes'>;

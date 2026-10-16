@@ -2,30 +2,36 @@
 // or later, with the same two buttons on the card and in that list. A button whose way is blocked by a
 // wait says why when clicked (and on hover); at the head or the end of the queue it is greyed out.
 
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, type RefObject, useEffect, useRef, useState } from 'react';
 import { move, movable, queueOrder } from '../core/queue';
 import type { Item } from '../core/types';
 import { api } from './api';
 import { plain } from './markdown';
 import { failText, stateLabel, t } from './strings';
 
+/** A list under a bar's button: while it is `on`, a click anywhere beside `box` closes it, and Esc does with `esc`. */
+export function useMenuClose(on: boolean, box: RefObject<HTMLElement | null>, close: () => void, esc = false) {
+  const latest = useRef(close);
+  latest.current = close;
+  useEffect(() => {
+    if (!on) return;
+    const away = (e: PointerEvent) => box.current?.contains(e.target as Node) || latest.current();
+    const key = (e: KeyboardEvent) => esc && e.key === 'Escape' && latest.current();
+    addEventListener('pointerdown', away, true);
+    addEventListener('keydown', key);
+    return () => {
+      removeEventListener('pointerdown', away, true);
+      removeEventListener('keydown', key);
+    };
+  }, [on]);
+}
+
 /** The bar's queue button: how many cards wait; a click lists them under it, in turn, to open or move. */
 export function QueuePill({ items, onOpen }: { items: Item[]; onOpen: (i: Item) => void }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const queued = queueOrder(items);
-  useEffect(() => {
-    if (!open) return;
-    // a click anywhere else or Esc closes the list
-    const away = (e: PointerEvent) => box.current?.contains(e.target as Node) || setOpen(false);
-    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
-    addEventListener('pointerdown', away, true);
-    addEventListener('keydown', esc);
-    return () => {
-      removeEventListener('pointerdown', away, true);
-      removeEventListener('keydown', esc);
-    };
-  }, [open]);
+  useMenuClose(open, box, () => setOpen(false), true);
   return (
     <div className="menu-pill queue" ref={box}>
       <button className={open ? 'pill kpill on' : 'pill kpill'} title={t.queue.count(queued.length)} aria-expanded={open} onClick={() => setOpen(!open)}>

@@ -18,19 +18,18 @@ export const TOP = 70;
 
 export const toWorld = (cam: Cam, sx: number, sy: number) => ({ x: (sx - cam.x) / cam.s, y: (sy - cam.y) / cam.s });
 
-/** Fits `b` into the viewport minus the reserved right and bottom strips. */
-export function camFor(b: Bounds, pad = 60, reserveRight = 0, reserveBottom = 60): Cam {
-  const vw = innerWidth - reserveRight;
-  const vh = innerHeight - TOP - reserveBottom;
+/** Fits `b`, with a margin, into the viewport left of a sheet `side` wide and above a strip at the bottom. */
+export function camFor(b: Bounds, side = 0): Cam {
+  const pad = 40;
+  const vw = innerWidth - side;
+  const vh = innerHeight - TOP - 60;
   const s = Math.min(1.6, (vw - 2 * pad) / b.w, (vh - 2 * pad) / b.h);
   return { s, x: (vw - b.w * s) / 2 - b.x * s, y: TOP + (vh - b.h * s) / 2 - b.y * s };
 }
 
 /** Everything if it fits at a readable size; otherwise the middle of it at that size; beside a sheet `side` wide. */
 export function overviewCam(all: Bounds, side = 0): Cam {
-  const fit = camFor(all, 40, side, 60);
-  const s = Math.min(1.6, Math.max(MIN_ZOOM, fit.s));
-  return centreOn(all, s, side);
+  return centreOn(all, Math.max(MIN_ZOOM, camFor(all, side).s), side);
 }
 
 /** `b` in the middle of the canvas left of a sheet `side` wide, at scale `s`. */

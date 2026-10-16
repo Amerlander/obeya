@@ -6,6 +6,7 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { type Item, stopped } from '../core/types';
 import { plain } from './markdown';
+import { useMenuClose } from './queue';
 import { becomesLabel, stateLabel, t } from './strings';
 
 interface Props {
@@ -28,14 +29,7 @@ interface Props {
 /** The bar's archive button; a click lists the archive under it. A click beside the list or Esc (in App) closes it. */
 export function ArchivePill({ on, onToggle, onClose, held, archived, done, onOpen, onArchiveDone, els, icon }: Props) {
   const box = useRef<HTMLDivElement>(null);
-  const heldRef = useRef(held);
-  heldRef.current = held;
-  useEffect(() => {
-    if (!on) return;
-    const away = (e: PointerEvent) => heldRef.current || box.current?.contains(e.target as Node) || onClose();
-    addEventListener('pointerdown', away, true);
-    return () => removeEventListener('pointerdown', away, true);
-  }, [on]);
+  useMenuClose(on, box, () => held || onClose());
   // one heading per day, in the server's order
   const [query, setQuery] = useState('');
   const field = useRef<HTMLInputElement>(null);

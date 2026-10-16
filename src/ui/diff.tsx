@@ -35,7 +35,7 @@ export function Branch({ item }: { item: Item }) {
           {' · '}
           {diff.files.length ? (
             <button className="link diff-size" title={t.diff.show} onClick={() => setOpen(true)}>
-              <span className="d-add">+{size.added}</span> <span className="d-del">−{size.removed}</span> {t.diff.size(diff.files.length)}
+              <Lines n={size} /> {t.diff.size(diff.files.length)}
             </button>
           ) : (
             t.diff.none
@@ -124,8 +124,9 @@ function DiffView({ item, onClose, onRead }: { item: Item; onClose: () => void; 
     addEventListener('keydown', h);
     return () => removeEventListener('keydown', h);
   }, [onClose]);
-  const parts = diff && diff !== 'failed' ? splitDiff(diff.patch ?? '') : [];
-  const size = diff && diff !== 'failed' ? diffSize(diff.files) : null;
+  const got = diff === 'failed' ? null : diff;
+  const parts = got ? splitDiff(got.patch ?? '') : [];
+  const size = got && diffSize(got.files);
   const go = (file: string) => document.getElementById(anchor(file))?.scrollIntoView({ block: 'start' });
   return createPortal(
     <div className="diff-view" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -134,11 +135,11 @@ function DiffView({ item, onClose, onRead }: { item: Item; onClose: () => void; 
           <h2>{t.diff.title(plain(item.title))}</h2>
           <span className="hint">
             <code>{item.branch}</code>
-            {diff && diff !== 'failed' && diff.source === 'landed' && ` · ${t.diff.landed}`}
+            {got?.source === 'landed' && ` · ${t.diff.landed}`}
             {size && (
               <>
                 {' · '}
-                <span className="d-add">+{size.added}</span> <span className="d-del">−{size.removed}</span>
+                <Lines n={size} />
               </>
             )}
           </span>
@@ -149,11 +150,11 @@ function DiffView({ item, onClose, onRead }: { item: Item; onClose: () => void; 
         <div className="d-body">
           {diff === null && <p className="hint">{t.diff.loading}</p>}
           {diff === 'failed' && <p className="hint">{t.diff.failed}</p>}
-          {diff && diff !== 'failed' && (
+          {got && (
             <>
               <table className="d-files">
                 <tbody>
-                  {diff.files.map((f) => (
+                  {got.files.map((f) => (
                     <tr key={f.file}>
                       <td>
                         <button className="link" onClick={() => go(f.file)}>
@@ -170,7 +171,7 @@ function DiffView({ item, onClose, onRead }: { item: Item; onClose: () => void; 
               {parts.map((p) => (
                 <FileDiff key={p.file} part={p} />
               ))}
-              {diff.truncated && <p className="hint d-cut">{t.diff.truncated}</p>}
+              {got.truncated && <p className="hint d-cut">{t.diff.truncated}</p>}
             </>
           )}
         </div>
@@ -181,6 +182,15 @@ function DiffView({ item, onClose, onRead }: { item: Item; onClose: () => void; 
 }
 
 const anchor = (file: string) => `diff-${file}`;
+
+/** Lines added and removed, green and red. */
+function Lines({ n }: { n: { added: number; removed: number } }) {
+  return (
+    <>
+      <span className="d-add">+{n.added}</span> <span className="d-del">−{n.removed}</span>
+    </>
+  );
+}
 
 function FileDiff({ part }: { part: DiffPart }) {
   const lines = numbered(part.lines);
@@ -193,7 +203,7 @@ function FileDiff({ part }: { part: DiffPart }) {
         <span className="hint">{t.diff.status[part.status]}</span>
         {!part.binary && (
           <span>
-            <span className="d-add">+{part.added}</span> <span className="d-del">−{part.removed}</span>
+            <Lines n={part} />
           </span>
         )}
       </h3>

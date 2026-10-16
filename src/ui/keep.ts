@@ -85,13 +85,16 @@ export function collect(): Pick<Kept, 'scroll' | 'drafts' | 'video'> {
   return { scroll, drafts, ...(v && v.currentTime > 0 && !v.ended ? { video: { time: v.currentTime, playing: !v.paused } } : {}) };
 }
 
+/** How long content arriving after the reload may still move the boxes. */
+const SETTLE_MS = 2500;
+
 /**
  * Puts back what `collect` found, in the page as it loads: content that arrives later (a log, a
  * plan doc) moves boxes, so the positions are put back again until the content has settled, unless
  * the owner scrolls or types first.
  */
-export function restore(k: Pick<Kept, 'scroll' | 'drafts' | 'video'>, settleMs = 2500) {
-  const until = performance.now() + settleMs;
+export function restore(k: Pick<Kept, 'scroll' | 'drafts' | 'video'>) {
+  const until = performance.now() + SETTLE_MS;
   const drafts = new Map(k.drafts);
   let stop = false;
   const owner = () => void (stop = true);
