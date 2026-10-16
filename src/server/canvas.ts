@@ -1052,7 +1052,7 @@ export class CanvasRuntime {
       case 'approve':
         return this.repoOf(cardId).workers.approve(cardId, { direct: !!a.direct });
       case 'accept':
-        return this.accept(cardId, a.picks, a.start !== false);
+        return this.accept(cardId, a.picks, a.start !== false, a.idea);
       case 'unaccept':
         return this.unaccept(cardId);
       case 'dismiss':
@@ -1178,19 +1178,22 @@ export class CanvasRuntime {
 
   /**
    * Accepting a proposal is the owner's go unless they keep it to edit first (`start` false): the
-   * card goes to the Koordinator like a started one, a proposed idea to its exploration agent.
-   * Clicked while the proposal is reworked, it is accepted once the new text is there, unless that
-   * asks questions.
+   * card goes to the Koordinator like a started one, a proposed idea, or a task the owner takes as
+   * one (`asIdea`), to its exploration agent. Clicked while the proposal is reworked, it is accepted
+   * once the new text is there, unless that asks questions.
    */
-  private accept(cardId: string, picks: string[][] | undefined, start: boolean) {
+  private accept(cardId: string, picks: string[][] | undefined, start: boolean, asIdea?: boolean) {
     const proposal = this.board.item(cardId)?.proposal;
-    if (start && proposal?.revising) {
+    if (!proposal) throw new BadRequest('notProposal', 'not a proposal');
+    if ((start || asIdea) && proposal.revising) {
       // the owner knows what comes; the new text still may ask what must be settled first
-      if (this.board.acceptAfterRevision(cardId, true))
-        this.board.log(cardId, 'state', 'owner', this.board.t.proposal.acceptAfterRevision(!!proposal.idea));
+      if (this.board.acceptAfterRevision(cardId, asIdea ? 'idea' : true))
+        this.board.log(cardId, 'state', 'owner', this.board.t.proposal.acceptAfterRevision(asIdea ? 'asIdea' : proposal.idea ? 'discuss' : 'start'));
       return;
     }
-    if (this.board.accept(cardId, picks, start)) this.explorers.open(cardId, true);
+    const idea = !!asIdea || (start && !!proposal.idea);
+    this.board.accept(cardId, picks, idea);
+    if (idea) this.explorers.open(cardId, proposal.idea ? 'idea' : 'task');
     else if (start) this.koordinator.request(cardId);
   }
 
@@ -1203,10 +1206,11 @@ export class CanvasRuntime {
   private revised(cardId: string, revised: boolean) {
     const card = this.board.item(cardId);
     // words the owner said meanwhile are reworked in first
-    if (card?.state !== 'proposal' || !card.proposal?.acceptAfterRevision || card.proposal.revising) return;
+    const armed = card?.proposal?.acceptAfterRevision;
+    if (card?.state !== 'proposal' || !armed || card.proposal!.revising) return;
     this.board.acceptAfterRevision(cardId, false);
-    const asks = card.proposal.questions.length;
-    if (revised && !asks) return this.accept(cardId, [], true);
+    const asks = card.proposal!.questions.length;
+    if (revised && !asks) return this.accept(cardId, [], true, armed === 'idea');
     const t = this.board.t.proposal;
     this.board.log(cardId, 'state', 'obeya', !revised ? t.notAcceptedNoRevision : asks > 1 ? t.notAcceptedQuestions : t.notAcceptedQuestion);
   }
@@ -1516,6 +1520,7 @@ export class CanvasRuntime {
       case 'approve':
         return this.act(c.card, { action: 'approve', ...(c.direct ? { direct: true } : {}) });
       case 'accept':
+        return this.act(c.card, { action: 'accept', ...(c.idea ? { idea: true } : {}) });
       case 'dismiss':
       case 'dequeue':
       case 'stop':

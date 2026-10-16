@@ -895,7 +895,7 @@ export class Board {
   }
 
   /**
-   * The owner takes a proposal: as an idea when it was proposed as one and `asIdea`, else as a
+   * The owner takes a proposal: as an idea (`asIdea`, whatever it was proposed as), else as a
    * planned task. Its questions join the text, with the options picked (`picks`) as decided.
    */
   accept(id: string, picks: string[][] = [], asIdea = false) {
@@ -903,12 +903,10 @@ export class Board {
     if (row.state !== 'proposal') throw new BadRequest('notProposal', 'not a proposal');
     const proposal = storedProposal(row);
     if (proposal?.revising) throw new BadRequest('revising', 'the proposal is being reworked');
-    const idea = asIdea && !!proposal?.idea;
     // an agent's proposal keeps that it was one: its task is not the owner's words
     const kept = proposal && JSON.stringify({ ...(proposal.idea ? { idea: true } : {}), questions: [] } satisfies Proposal);
-    this.store.update(id, { state: idea ? 'idea' : 'planned', body: withQuestions(row.body ?? '', proposal?.questions ?? [], picks, this.t), proposal: kept ?? null });
+    this.store.update(id, { state: asIdea ? 'idea' : 'planned', body: withQuestions(row.body ?? '', proposal?.questions ?? [], picks, this.t), proposal: kept ?? null });
     this.changed();
-    return idea;
   }
 
   /**
@@ -939,13 +937,13 @@ export class Board {
     return true;
   }
 
-  /** "Übernehmen und starten" during a revision (`on`), or taken back; false when that was so already. */
-  acceptAfterRevision(id: string, on: boolean): boolean {
+  /** "Übernehmen und starten" during a revision (`on`; `idea`: "Als Idee besprechen"), or taken back; false when that was so already. */
+  acceptAfterRevision(id: string, on: boolean | 'idea'): boolean {
     const row = this.own(id);
     if (row.state !== 'proposal') throw new BadRequest('notProposal', 'not a proposal');
     const { acceptAfterRevision: was, ...proposal } = storedProposal(row) ?? { questions: [] };
-    if (!!was === on) return false;
-    this.store.update(id, { proposal: JSON.stringify({ ...proposal, ...(on ? { acceptAfterRevision: true } : {}) } satisfies Proposal) });
+    if ((was ?? false) === on) return false;
+    this.store.update(id, { proposal: JSON.stringify({ ...proposal, ...(on ? { acceptAfterRevision: on } : {}) } satisfies Proposal) });
     this.changed();
     return true;
   }
@@ -961,7 +959,7 @@ export class Board {
     const { revising: done, ...was } = storedProposal(row) ?? { questions: [] };
     // what the owner said meanwhile is the next rework's
     const next = done?.next?.length ? { revising: merged(done.next) } : {};
-    const proposal: Proposal = p ? { ...proposalOf(p), ...(was.acceptAfterRevision ? { acceptAfterRevision: true } : {}) } : was;
+    const proposal: Proposal = p ? { ...proposalOf(p), ...(was.acceptAfterRevision ? { acceptAfterRevision: was.acceptAfterRevision } : {}) } : was;
     this.store.update(id, { ...(p ? { title: p.title.slice(0, 200), body: p.task.slice(0, 20000) } : {}), proposal: JSON.stringify({ ...proposal, ...next } satisfies Proposal) });
     this.changed();
     return true;

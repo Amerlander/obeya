@@ -120,8 +120,8 @@ export class Explorers {
    * A planned card became an idea, or the owner took up an idea a worker proposed (`proposed`): its
    * agent opens the discussion with what the card says, before the owner writes.
    */
-  open(cardId: string, proposed = false) {
-    this.tell(cardId, proposed ? OPENING_PROPOSED : OPENING);
+  open(cardId: string, proposed?: 'idea' | 'task') {
+    this.tell(cardId, proposed === 'idea' ? OPENING_PROPOSED : proposed === 'task' ? OPENING_PROPOSED_TASK : OPENING);
   }
 
   /**
@@ -450,6 +450,9 @@ const OPENING =
 
 const OPENING_PROPOSED =
   "A worker proposed this idea while on another card, and the owner took it up to discuss it. They have not said more yet: what the card says above is where the conversation starts, with what the owner decided on the proposal and the questions still open. Look into it and open the discussion.";
+
+const OPENING_PROPOSED_TASK =
+  "A worker proposed this as a task to build while on another card, and the owner chose to discuss it as an idea first. They have not said more yet: what the card says above is where the conversation starts, with what the owner decided on the proposal and the questions still open. Look into it and open the discussion.";
 
 /** The owner let the paused agent go on after it had replied already. */
 const RESUMED =

@@ -720,12 +720,12 @@ function ProposalView({
   const revising = item.proposal?.revising;
   const answer = usePicks(item.id, questions);
   const idea = !!item.proposal?.idea;
-  const armed = !!item.proposal?.acceptAfterRevision;
+  const armed = item.proposal?.acceptAfterRevision;
   // while it is reworked, the click waits for the new text in view; else the panel closes on the accepted card
-  const accept = (start: boolean) =>
+  const accept = (start: boolean, asIdea = false) =>
     act(
-      { action: 'accept', ...(start ? {} : { start: false }), ...(answer.picked ? { picks: answer.picks } : {}) },
-      start && !revising ? { close: true, ack: idea ? t.acceptedIdea : t.accepted } : { close: false },
+      { action: 'accept', ...(start ? {} : { start: false }), ...(asIdea ? { idea: true } : {}), ...(answer.picked ? { picks: answer.picks } : {}) },
+      (start || asIdea) && !revising ? { close: true, ack: idea || asIdea ? t.acceptedIdea : t.accepted } : { close: false },
     );
   return (
     <>
@@ -760,7 +760,7 @@ function ProposalView({
       {revising && <p className={armed ? 'hint go-waits' : 'hint'}>{armed ? t.acceptWaitsHint : t.acceptWaitsFor(idea ? t.acceptIdea : t.accept)}</p>}
       <div className="actions">
         {armed ? (
-          <Armed label={t.acceptWaits(idea)} undo={t.unaccept} onUndo={() => act({ action: 'unaccept' }, { close: false })} />
+          <Armed label={t.acceptWaits(idea || armed === 'idea')} undo={t.unaccept} onUndo={() => act({ action: 'unaccept' }, { close: false })} />
         ) : (
           <button className="btn primary" onClick={() => accept(true)}>
             {idea ? t.acceptIdea : t.accept}
@@ -769,6 +769,12 @@ function ProposalView({
         <button className="btn" disabled={!!revising} onClick={() => accept(false)}>
           {idea ? t.acceptAsTask : t.acceptOnly}
         </button>
+        {/* a task the owner would rather think through first */}
+        {!idea && (
+          <button className="btn" disabled={!!armed} title={t.acceptAsIdeaHint} onClick={() => accept(false, true)}>
+            {t.acceptAsIdea}
+          </button>
+        )}
         <button className="btn" onClick={() => act({ action: 'dismiss' }, { close: true, ack: t.dismissed })}>
           {t.dismiss}
         </button>

@@ -181,7 +181,9 @@ const de = {
     prototypeButton: 'Prototyp bauen lassen',
   },
   proposal: {
-    acceptAfterRevision: (idea: boolean) => `${idea ? 'Übernehmen und besprechen' : 'Übernehmen und starten'}, sobald der Vorschlag überarbeitet ist; hat er noch Fragen, bleibt er Vorschlag.`,
+    /** `how`: the button clicked, "Übernehmen und starten", "Übernehmen und besprechen" (a proposed idea) or "Als Idee besprechen". */
+    acceptAfterRevision: (how: 'start' | 'discuss' | 'asIdea') =>
+      `${{ start: 'Übernehmen und starten', discuss: 'Übernehmen und besprechen', asIdea: 'Als Idee besprechen' }[how]}, sobald der Vorschlag überarbeitet ist; hat er noch Fragen, bleibt er Vorschlag.`,
     notAccepting: 'Doch nicht übernehmen.',
     notAcceptedNoRevision: 'Nicht übernommen: Die Überarbeitung kam nicht zustande.',
     notAcceptedQuestions: 'Nicht übernommen: Der Vorschlag hat noch Fragen.',
@@ -492,7 +494,8 @@ const en: Messages = {
     prototypeButton: 'Have a prototype built',
   },
   proposal: {
-    acceptAfterRevision: (idea: boolean) => `${idea ? 'Accept and discuss' : 'Accept and start'} once the proposal is revised; if it still has questions, it stays a proposal.`,
+    acceptAfterRevision: (how: 'start' | 'discuss' | 'asIdea') =>
+      `${{ start: 'Accept and start', discuss: 'Accept and discuss', asIdea: 'Discuss as an idea' }[how]} once the proposal is revised; if it still has questions, it stays a proposal.`,
     notAccepting: 'Not accepting it after all.',
     notAcceptedNoRevision: 'Not accepted: the revision did not come.',
     notAcceptedQuestions: 'Not accepted: the proposal still has questions.',

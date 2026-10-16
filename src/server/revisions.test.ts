@@ -282,6 +282,33 @@ describe('a proposal reworked by what the owner says', () => {
     expect(board().item(p.id)).toMatchObject({ state: 'idea', body: 'Welche Formate, auch Excel?' });
   });
 
+  test('a proposed task taken as an idea while it is reworked opens its discussion once the new text is there', async () => {
+    const from = board().create({ title: 'Export', x: 0, y: 0 });
+    const p = board().propose(from.id, { title: 'Exportformate', task: 'PDF-Export bauen.', questions: [] });
+    canvas.revisions.revise(p.id, 'Auch an Excel denken', false);
+    canvas.act(p.id, { action: 'accept', start: false, idea: true });
+    expect(board().item(p.id)!.proposal?.acceptAfterRevision).toBe('idea');
+    expect(board().events(p.id).at(-1)!.text).toStartWith('Als Idee besprechen, sobald');
+    reviser()!.call('revise_proposal', { title: 'Exportformate', task: 'PDF- und Excel-Export bauen.', questions: [] });
+    reviser()!.emit({ type: 'idle' });
+    await settle();
+    expect(board().item(p.id)).toMatchObject({ state: 'idea', body: 'PDF- und Excel-Export bauen.' });
+  });
+
+  test('said to the Koordinator, a proposed task is taken as an idea', async () => {
+    const from = board().create({ title: 'Export', x: 0, y: 0 });
+    const p = board().propose(from.id, { title: 'Exportformate', task: 'PDF-Export bauen.' });
+    const heard = canvas.commander.hear('Das will ich erst als Idee besprechen', {});
+    await settle();
+    const k = runtime.sessions.filter(isKoordinator).at(-1)!;
+    const tag = k.inbox.at(-1)!.match(/(K\d+) \[proposal\] "Exportformate"/)![1]!;
+    k.call('act', { actions: [{ do: 'accept', card: tag, idea: true }], confirm: 'Ich übernehme ihn als Idee.' });
+    k.emit({ type: 'idle' });
+    canvas.commander.arm((await heard).token!);
+    await settle(30);
+    expect(board().item(p.id)!.state).toBe('idea');
+  });
+
   test('a reviser that ends without a text leaves the proposal as it was', async () => {
     const p = proposal();
     canvas.revisions.revise(p.id, 'Excel auch', false);

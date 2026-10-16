@@ -217,6 +217,8 @@ const de = {
   acceptOnly: 'Übernehmen',
   acceptIdea: 'Übernehmen und besprechen',
   acceptAsTask: 'Als Aufgabe übernehmen',
+  acceptAsIdea: 'Als Idee besprechen',
+  acceptAsIdeaHint: 'Erst mit einem Agenten durchdenken, als Idee, statt es gleich zu bauen',
   dismiss: 'Verwerfen',
   send: 'Senden',
   compose: {
@@ -1631,6 +1633,8 @@ const en: Strings = {
   acceptOnly: 'Accept',
   acceptIdea: 'Accept and discuss',
   acceptAsTask: 'Accept as a task',
+  acceptAsIdea: 'Discuss as an idea',
+  acceptAsIdeaHint: 'Think it through with an agent first, as an idea, instead of building it right away',
   dismiss: 'Dismiss',
   send: 'Send',
   compose: {

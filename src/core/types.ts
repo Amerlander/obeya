@@ -332,8 +332,11 @@ export interface Proposal {
    * `next`: what they said meanwhile, which the rework after it takes in.
    */
   revising?: Revising & { next?: Revising[] };
-  /** "Übernehmen und starten" was clicked while it was reworked: it is accepted once the new text is there, unless that asks questions. */
-  acceptAfterRevision?: true;
+  /**
+   * "Übernehmen und starten" was clicked while it was reworked (`idea`: "Als Idee besprechen"): it
+   * is accepted once the new text is there, unless that asks questions.
+   */
+  acceptAfterRevision?: true | 'idea';
 }
 
 /** The owner's words a proposal is reworked by. */
@@ -904,10 +907,11 @@ export type CardAction =
   | { action: 'reorder'; earlier: boolean }
   /**
    * A proposal becomes the owner's card and starts (a proposed idea: its discussion opens); with
-   * `start: false` it is only planned. `picks`: the options the owner chose for each of its questions.
-   * While the proposal is reworked, it is accepted and started once the new text is there, unless that asks questions.
+   * `start: false` it is only planned. `idea`: a proposed task becomes an idea to discuss first.
+   * `picks`: the options the owner chose for each of its questions. While the proposal is reworked,
+   * it is accepted and started once the new text is there, unless that asks questions.
    */
-  | { action: 'accept'; start?: boolean; picks?: string[][] }
+  | { action: 'accept'; start?: boolean; idea?: boolean; picks?: string[][] }
   /** A proposal: accepting it after its revision is taken back. */
   | { action: 'unaccept' }
   | { action: 'dismiss' }

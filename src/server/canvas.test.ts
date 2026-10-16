@@ -187,6 +187,16 @@ describe('a canvas with several repositories', () => {
     expect(item(q.id).state).toBe('planned');
   });
 
+  test('a proposed task taken as an idea opens its discussion, with the options picked on it as decided', () => {
+    const b = canvas.board.create({ title: 'B', x: 0, y: 0 });
+    const p = canvas.board.propose(b.id, { title: 'Export', task: 'Exporte als PDF.', reason: 'R', questions: [{ text: 'Auch CSV?', options: ['Ja', 'Nein'] }] });
+    canvas.act(p.id, { action: 'accept', start: false, idea: true, picks: [['Ja']] });
+    expect(item(p.id)).toMatchObject({ state: 'idea', body: 'Exporte als PDF.\n\nEntschieden:\n- Auch CSV? → Ja', idea: { status: 'open', thinking: true } });
+    expect(item(p.id).queue).toBeFalsy();
+    const s = runtime.sessions.filter((x) => x.spec.tools.some((t) => t.name === 'update_brief')).at(-1)!;
+    expect(s.inbox[0]).toContain('A worker proposed this as a task to build');
+  });
+
   test('a proposal from a workstream goes to a free spot beside its project, not onto it', () => {
     const items = canvas.board.snapshot().items;
     const project = items.find((i) => i.kind === 'project' && i.repo === 'web')!;

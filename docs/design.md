@@ -367,6 +367,9 @@ worker reads what is settled and asks the rest.
 A worker may also propose an idea, for something to think through first: it shows as "✦ Vorschlag ·
 Idee", and "Übernehmen und besprechen" makes it an open idea whose exploration agent opens the
 discussion with the text and its questions; "Als Aufgabe übernehmen" plans it as a task instead.
+The other way round, „Als Idee besprechen“ on a proposed task makes it an open idea the same way,
+whose agent hears that it was proposed to be built and the owner wants to think it through first;
+said to the Koordinator („erst als Idee besprechen“), it is `accept` with `idea`.
 
 #### Reworking a proposal by words
 
@@ -398,8 +401,8 @@ meanwhile wait, unread, for the rework after it, which takes them in together
 reads otherwise now, and the questions it asks anew. An agent that ends without a text leaves the
 proposal as it was, with the error. A revision still running at a restart starts again.
 
-„Übernehmen und starten“ (on a proposed idea „Übernehmen und besprechen“) does not wait, as "So
-bauen" on an idea does not: clicked during a revision, the proposal is accepted and started once the
+„Übernehmen und starten“ (on a proposed idea „Übernehmen und besprechen“, on a proposed task also
+„Als Idee besprechen“) does not wait, as "So bauen" on an idea does not: clicked during a revision, the proposal is accepted and started once the
 new text is there, unless it still has questions; then it stays a proposal, and the conversation
 says why, as it does when the reviser ends without a text. The panel stays open while it waits: the
 button reads „Startet nach der Überarbeitung …“ with „Doch nicht übernehmen“ beside it, and the
@@ -642,6 +645,9 @@ Projekt“) is linked the same way.
 - **Accepting a proposal does not wait for its rework** (2026-10-06: the owner who answered the last
   question knows that starting comes next). Before, the button was disabled until the new text was
   there.
+- **A proposed task can be taken as an idea** (2026-10-16). Before, a proposal could become an idea
+  only when its worker had proposed one: the owner who wanted to discuss and prototype a proposed
+  task first had to ask the Koordinator to make an idea of it.
 - **Feedback keeps the approval** (2026-10-08). Before, feedback sent the card back to `working` and
   took the approval away until the next handover, so it waited for "Rückgängig" like a command.
 - **Earlier demos stay on the card** (2026-10-16). Until then a new demo replaced the one before for
