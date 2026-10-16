@@ -3092,8 +3092,14 @@ package stay imports, a script that does not bundle stays as it is, and the comm
 modules' paths on this machine go), its stylesheets carry their fonts as `data:` URLs, and the files
 its scripts may fetch (all but images, media, scripts, stylesheets and fonts, which load without
 CORS) go into the page, where `fetch` and `XMLHttpRequest` get a GET for them answered without
-asking the site. What still cannot load in the frame: a Web Worker's script, an `import()` of a path
-computed at run time, a font set from a script.
+asking the site. All of it comes from the artifact's directory: a file goes in only where its real
+path lies there (`demoFile`), so a link to elsewhere stays out, and a module script stays as it is
+where its bundle took in a module whose real path lies outside (a path out of it, a link, a path a
+`tsconfig.json` maps a package to; the build's metafile names them); macros (`import … with
+{ type: 'macro' }`, code of the artifact run at the build) are off. Otherwise a worker steered by
+what it read could put a file of the owner's into a page that goes public with „Teilen“. What still
+cannot load in the frame: a Web Worker's script, an `import()` of a path computed at run time, a
+font set from a script.
 
 #### Where a demo goes
 

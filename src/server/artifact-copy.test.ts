@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { artifactCopy } from './artifact-copy';
@@ -9,13 +9,14 @@ const root = mkdtempSync(join(tmpdir(), 'obeya-artifact-copy-'));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 let n = 0;
-/** An artifact's directory with these files, and its copy. */
-async function copyOf(files: Record<string, string>) {
+/** An artifact's directory with these files (and these links to files elsewhere), and its copy. */
+async function copyOf(files: Record<string, string>, links: Record<string, string> = {}) {
   const dir = join(root, `a${n++}`);
   for (const [f, data] of Object.entries(files)) {
     mkdirSync(join(dir, f, '..'), { recursive: true });
     writeFileSync(join(dir, f), data);
   }
+  for (const [f, to] of Object.entries(links)) symlinkSync(to, join(dir, f));
   return { dir, copy: await artifactCopy(dir, artifactFiles(dir)) };
 }
 
@@ -65,6 +66,30 @@ describe('artifactCopy', () => {
     expect(copy.get('index.html')).toContain('<script type="module" src="app.js"></script>');
   });
 
+  test('a module script that loads an image or a stylesheet stays as it is', async () => {
+    const { copy } = await copyOf({
+      'index.html': '<script type="module" src="app.js"></script><script type="module" src="style.js"></script>',
+      'app.js': "import logo from './logo.png'; document.body.append(logo);",
+      'style.js': "import './site.css';",
+      'logo.png': 'png',
+      'site.css': 'body { margin: 0; }',
+    });
+    expect(copy.get('index.html')).toContain('<script type="module" src="app.js"></script><script type="module" src="style.js"></script>');
+  });
+
+  test('a module script that imports a file as a type keeps the type', async () => {
+    const { copy } = await copyOf({
+      'index.html': '<script type="module" src="app.js"></script>',
+      'app.js': "import text from './data.json' with { type: 'text' };\nimport json from './data.txt' with { type: 'json' };\ndocument.title = text.trim() + json.title;",
+      'data.json': '{"title":"from the file"}',
+      'data.txt': '{"title":"from the file"}',
+    });
+    const index = copy.get('index.html')!;
+    expect(index).toContain(`var data_default = '{"title":"from the file"}';`);
+    expect(index).toContain('title: "from the file"');
+    expect(index).not.toMatch(/^\/\/ /m);
+  });
+
   test('fonts go into the stylesheets that load them, images stay files', async () => {
     const { copy } = await copyOf({
       'index.html': '<style>@font-face { font-family: T; src: url("fonts/t.woff2") format("woff2"); } body { background: url(bg.png); }</style><link rel="stylesheet" href="css/site.css">',
@@ -101,5 +126,97 @@ describe('artifactCopy', () => {
     expect(page.asked).toEqual(['chart.png', '../index.html', 'https://other.example/page-1/artifact/data.json', 'data.json']);
     page.xhr().open('POST', 'data.json');
     expect(page.opened[1]).toBe('data.json');
+  });
+
+  describe('takes in no file from outside its directory', () => {
+    const secret = join(root, 'secret.json');
+    writeFileSync(secret, '{"token":"of the owner"}');
+    writeFileSync(join(root, 'secret.woff2'), 'the owner');
+
+    test('a module script that imports one stays as it is', async () => {
+      const { copy } = await copyOf({
+        'index.html': `<script type="module" src="app.js"></script>
+<script type="module">import { label } from './label.js'; import s from '${secret}'; document.title = label + s.token;</script>`,
+        'app.js': "import { label } from './label.js';\nimport s from '../secret.json';\ndocument.title = label + s.token;",
+        'label.js': "export const label = 'from the module';",
+      });
+      const index = copy.get('index.html')!;
+      expect(index).toContain('<script type="module" src="app.js"></script>');
+      expect(index).toContain(`import s from '${secret}';`);
+      expect(index).not.toContain('of the owner');
+    });
+
+    test('nor one that leads out through a link', async () => {
+      const outside = join(root, 'outside.js');
+      writeFileSync(outside, "export const token = 'of the owner';");
+      const { copy } = await copyOf(
+        {
+          'index.html': '<script type="module" src="app.js"></script><script type="module" src="linked.js"></script>',
+          'app.js': "import { token } from './lib.js'; document.title = token;",
+        },
+        { 'lib.js': outside, 'linked.js': outside },
+      );
+      expect(copy.get('index.html')).toContain('<script type="module" src="app.js"></script><script type="module" src="linked.js"></script>');
+      expect(copy.get('index.html')).not.toContain('of the owner');
+    });
+
+    test('nor one with a macro, which would run at the build', async () => {
+      const ran = join(root, 'macro-ran');
+      const { copy } = await copyOf({
+        'index.html': '<script type="module" src="app.js"></script>',
+        'app.js': "import { steal } from './macro.js' with { type: 'macro' };\ndocument.title = steal();",
+        'macro.js': `import { readFileSync, writeFileSync } from 'node:fs';\nexport const steal = () => (writeFileSync(${JSON.stringify(ran)}, ''), readFileSync(${JSON.stringify(secret)}, 'utf8'));`,
+      });
+      expect(copy.get('index.html')).toContain('<script type="module" src="app.js"></script>');
+      expect(copy.get('index.html')).not.toContain('of the owner');
+      expect(existsSync(ran)).toBe(false);
+    });
+
+    test('nor one that imports a package a tsconfig.json maps there', async () => {
+      const { copy } = await copyOf({
+        'index.html': '<script type="module" src="app.js"></script>',
+        'app.js': "import { label } from './label.js'; import s from 'secret'; document.title = label + s.token;",
+        'label.js': "export const label = 'from the module';",
+        'tsconfig.json': JSON.stringify({ compilerOptions: { paths: { secret: [secret] } } }),
+      });
+      expect(copy.get('index.html')).toContain('<script type="module" src="app.js"></script>');
+      expect(copy.get('index.html')).not.toContain('of the owner');
+    });
+
+    test("a package.json's paths for browsers hold inside it, and fail the bundle where they lead out", async () => {
+      const { copy } = await copyOf({
+        'index.html': '<script type="module" src="app.js"></script><script type="module" src="out.js"></script>',
+        'app.js': "import { label } from './lib'; document.title = label;",
+        'lib/package.json': JSON.stringify({ main: './node.js', browser: './browser.js' }),
+        'lib/node.js': "export const label = 'for node';",
+        'lib/browser.js': "export const label = 'for browsers';",
+        'out.js': "import * as label from './label.js'; document.title = JSON.stringify(label);",
+        'label.js': "export const label = 'from the module';",
+        'package.json': JSON.stringify({ browser: { './label.js': '../secret.json' } }),
+      });
+      const index = copy.get('index.html')!;
+      expect(index).toContain('var label = "for browsers"');
+      expect(index).toContain('<script type="module" src="out.js"></script>');
+      expect(index).not.toContain('of the owner');
+    });
+
+    test('a font that is a link to elsewhere stays a URL, a file to fetch that is one stays out', async () => {
+      const { dir, copy } = await copyOf(
+        {
+          'index.html': '<style>@font-face { font-family: T; src: url("t.woff2"); }</style>',
+          'css/site.css': "@font-face { font-family: U; src: url('../t.woff2'); }",
+          'data.json': '{}',
+        },
+        { 't.woff2': join(root, 'secret.woff2') },
+      );
+      expect(copy.get('index.html')).toContain('src: url("t.woff2")');
+      expect(copy.has('css/site.css')).toBe(false);
+      // a list of files that names a link anyway
+      symlinkSync(secret, join(dir, 'secret.json'));
+      const index = (await artifactCopy(dir, [...artifactFiles(dir), 'secret.json'])).get('index.html')!;
+      expect(index).toContain('"data.json"');
+      expect(index).not.toContain('secret.json');
+      expect(index).not.toContain(Buffer.from('the owner').toString('base64'));
+    });
   });
 });

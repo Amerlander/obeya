@@ -8,14 +8,24 @@
 // and the files its scripts may fetch go into the page, answered by `fetch` and `XMLHttpRequest`
 // without asking the site. Images, media, classic scripts and stylesheets load without CORS and stay
 // files beside it.
+//
+// What goes into the copy comes from the artifact's directory only: a file there that is a link to
+// elsewhere, or a module import that leads out of it, would publish a file of this machine.
 
-import { readFileSync } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import { readFileSync, realpathSync } from 'node:fs';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { withHeightReport } from '../core/frame';
+import { demoFile } from './demo-page';
 
 const FONTS = /\.(?:woff2?|ttf|otf|eot)$/i;
 /** What a page loads without CORS (or the copy inlines), so it stays out of the page. */
 const LOADED = /\.(?:[cm]?js|css|woff2?|ttf|otf|eot|png|jpe?g|gif|webp|avif|bmp|ico|mp4|webm|mov|m4v|mp3|wav|ogg|oga|m4a|flac)$/i;
+
+/** A file of the artifact's directory, read where its real path lies inside it, else null. */
+function read(dir: string, f: string): Buffer | null {
+  const path = demoFile(dir, f);
+  return path ? readFileSync(path) : null;
+}
 
 /**
  * The artifact's files whose copy differs from the artifact's own: its `index.html` always (with
@@ -24,12 +34,15 @@ const LOADED = /\.(?:[cm]?js|css|woff2?|ttf|otf|eot|png|jpe?g|gif|webp|avif|bmp|
 export async function artifactCopy(dir: string, files: string[]): Promise<Map<string, string>> {
   const copy = new Map<string, string>();
   for (const f of files) if (f.endsWith('.css')) {
-    const css = readFileSync(join(dir, f), 'utf8');
+    const css = read(dir, f)?.toString('utf8');
+    if (css === undefined) continue;
     const inlined = withFonts(css, dir, dirname(f));
     if (inlined !== css) copy.set(f, inlined);
   }
   const embedded = files.filter((f) => f !== 'index.html' && !LOADED.test(f));
-  let html = withFonts(await withModules(readFileSync(join(dir, 'index.html'), 'utf8'), dir), dir, '.');
+  const index = read(dir, 'index.html');
+  if (!index) throw new Error(`${join(dir, 'index.html')} is no file of the artifact`);
+  let html = withFonts(await withModules(index.toString('utf8'), dir), dir, '.');
   if (embedded.length) html = withFiles(html, dir, embedded);
   copy.set('index.html', withHeightReport(html));
   return copy;
@@ -51,13 +64,8 @@ function inside(dir: string, from: string, ref: string): string | null {
 function withFonts(css: string, dir: string, from: string): string {
   return css.replace(/url\(\s*(['"]?)([^'")\s]+)\1\s*\)/g, (all, _q, ref: string) => {
     const path = FONTS.test(ref.replace(/[?#].*$/, '')) && inside(dir, from, ref);
-    if (!path) return all;
-    try {
-      const file = Bun.file(join(dir, path));
-      return `url("data:${file.type.split(';')[0]};base64,${readFileSync(join(dir, path)).toString('base64')}")`;
-    } catch {
-      return all;
-    }
+    const data = path && read(dir, path);
+    return data ? `url("data:${Bun.file(path).type.split(';')[0]};base64,${data.toString('base64')}")` : all;
   });
 }
 
@@ -111,6 +119,11 @@ async function withModules(html: string, dir: string): Promise<string> {
     .transform(html);
 }
 
+/**
+ * The bundle of a module script, built as Bun builds it for a browser; none where it took in a
+ * module whose real path lies outside the artifact's directory (a path out of it, a link, a path a
+ * `tsconfig.json` maps a package to). Bun reads those while it builds, but nothing of it leaves.
+ */
 async function bundle(dir: string, entry: string, files?: Record<string, string>): Promise<string | null> {
   try {
     const r = await Bun.build({
@@ -121,12 +134,27 @@ async function bundle(dir: string, entry: string, files?: Record<string, string>
       format: 'esm',
       packages: 'external',
       external: ['http://*', 'https://*'],
+      // a macro (`import … with { type: 'macro' }`) would run code of the artifact here, at the build
+      macros: false,
+      metafile: true,
       throw: false,
-    });
+    } as Bun.BuildConfig);
     // a module that loads a stylesheet or splits into chunks needs files the copy does not have
-    if (!r.success || r.outputs.length !== 1) return null;
+    if (!r.success || r.outputs.length !== 1 || !r.metafile) return null;
+    // the modules it read, relative to the working directory
+    const root = realpathSync(dir) + sep;
+    for (const input of Object.keys(r.metafile.inputs)) {
+      const path = resolve(input);
+      if (files && path === resolve(entry)) continue;
+      if (!realpathSync(path).startsWith(root)) return null;
+    }
     // the comments naming each module's path, which would tell where the artifact lay on this machine
-    return (await r.outputs[0]!.text()).replace(/^\/\/ \S+\.(?:[cm]?[jt]sx?|json)\n/gm, '');
+    const slashes = (path: string) => path.split('\\').join('/');
+    const inputs = new Set(Object.keys(r.metafile.inputs).map((input) => `// ${slashes(input)}`));
+    return (await r.outputs[0]!.text())
+      .split('\n')
+      .filter((line) => !inputs.has(slashes(line)))
+      .join('\n');
   } catch {
     return null;
   }
@@ -137,7 +165,12 @@ async function bundle(dir: string, entry: string, files?: Record<string, string>
  * requests through `fetch` and `XMLHttpRequest` for a file of the directory are answered from there.
  */
 function withFiles(html: string, dir: string, files: string[]): string {
-  const table = Object.fromEntries(files.map((f) => [f, [Bun.file(join(dir, f)).type, readFileSync(join(dir, f)).toString('base64')]]));
+  const table = Object.fromEntries(
+    files.flatMap((f) => {
+      const data = read(dir, f);
+      return data ? [[f, [Bun.file(f).type, data.toString('base64')]]] : [];
+    }),
+  );
   const script = `<script>(() => {
   const files = ${inScript(JSON.stringify(table))};
   const base = new URL('.', location.href);
