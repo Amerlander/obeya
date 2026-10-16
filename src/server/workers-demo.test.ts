@@ -346,6 +346,32 @@ describe('handing over with a demo', () => {
     expect(board.item(c.id)!.answered).toBeUndefined();
   });
 
+  test('a worker that a background command wakes after it answered is at work again until its turn ends', () => {
+    const c = manual();
+    workers.start(c.id);
+    runtime.last.call('ready_for_review', { summary: 'S', demo: { dir: demoDir(), chapters: ['Vorher', 'Nachher'] } });
+    runtime.last.emit({ type: 'idle' });
+    workers.message(c.id, 'Auf dem Telefon geht es nicht.');
+    runtime.last.emit({ type: 'tool', name: 'Bash', input: { command: 'bun test', run_in_background: true } });
+    runtime.last.call('reply', { text: 'Nachgestellt und behoben; Tests laufen, eine neue Übergabe folgt.' });
+    // the test run ended before the turn did: the turn ends with nothing in the background
+    runtime.last.emit({ type: 'idle' });
+    expect(board.item(c.id)!.answered).toBe(true);
+    // its notification wakes the worker, which reruns what failed
+    runtime.last.emit({ type: 'tool', name: 'Bash', input: { command: 'bun test' } });
+    expect(board.item(c.id)).toMatchObject({ state: 'waiting', need: 'demo', answering: true });
+    expect(board.item(c.id)!.answered).toBeUndefined();
+    expect(needsYou(board.item(c.id)!)).toBe(false);
+    // more steps in the same turn change nothing
+    runtime.last.emit({ type: 'text', text: 'Läuft.' });
+    expect(board.item(c.id)!.answering).toBe(true);
+    // the new handover keeps the demo: the card is the owner's again
+    runtime.last.call('ready_for_review', { summary: 'Behoben.' });
+    runtime.last.emit({ type: 'idle' });
+    expect(board.item(c.id)!.answered).toBe(true);
+    expect(needsYou(board.item(c.id)!)).toBe(true);
+  });
+
   test('a worker taking in an answer resumes after a restart; a session that ends gives the demo back to the owner', async () => {
     const c = manual();
     workers.start(c.id);

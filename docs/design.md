@@ -422,7 +422,10 @@ words call for comes as a new handover. A worker whose words asked Obeya for som
 frei, a follow-up) passes them on (`to_obeya`), and once its turn ends the card is the owner's
 again. A turn that ends without a new demo (a reply, a handover that keeps the demo) leaves the card
 reading „Agent hat geantwortet, wartet auf dich“ (`answered`) instead of „Demo bereit“, whether or
-not the owner had watched the demo; a new demo reads „Demo bereit“ again.
+not the owner had watched the demo; a new demo reads „Demo bereit“ again. A worker that a background
+command wakes after such a turn (a test run it said a new handover waits for) works on towards what
+it told the owner: from its first step the card is at work again, as while it took the words in,
+until its turn ends.
 
 A card has one field for the owner's words with one Send (`ownerField` in `src/ui/talk.ts`): under
 such a demo it takes the answer and feedback together. The words go to the worker as the answer (in

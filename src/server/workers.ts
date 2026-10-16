@@ -1507,6 +1507,9 @@ export class Workers {
     clearTimeout(live.waiting);
     live.waiting = undefined;
     if (e.type === 'text' || e.type === 'tool') {
+      // a turn of its own (a finished background command woke it) after it answered the owner's
+      // words on its handover: it works on towards what it told them, so the card is at work again
+      if (!live.acted && this.o.board.item(cardId)?.answered) this.takingIn(cardId);
       this.resumed(cardId, live);
       this.unlimited(cardId, live);
       live.failed = undefined;
