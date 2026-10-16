@@ -22,17 +22,13 @@ export class PrWatcher {
     private forge: Forge,
     /** Where `gh` runs for a card (its workspace, else the Obeya checkout). */
     private cwd: (cardId: string) => string,
-    /** Accounts whose comments are not review feedback; a function where they may change while the watcher runs. */
-    private noiseOf: string[] | (() => string[]) = [],
+    /** Accounts whose comments are not review feedback, asked each round: they may change while the watcher runs. */
+    private noiseOf: () => string[] = () => [],
     /** On a canvas with several repositories: the one whose pull requests this watches. */
     private repo?: string,
     /** Called at the end of every round (the Lesestand fetches then). */
     private onRound?: () => void,
   ) {}
-
-  private get noise(): string[] {
-    return typeof this.noiseOf === 'function' ? this.noiseOf() : this.noiseOf;
-  }
 
   start(everyMs = 120_000) {
     this.timer = setInterval(() => this.poll(), everyMs);
@@ -81,14 +77,15 @@ export class PrWatcher {
 
   private react(cardId: string, state: string, pr: PrState, s: PrStatus) {
     if (s.state === 'MERGED') return this.workers.merged(cardId, s.mergeCommit);
-    const next: PrState = { ...pr, checks: s.checks, review: reviewOf(s, this.noise) };
+    const noise = this.noiseOf();
+    const next: PrState = { ...pr, checks: s.checks, review: reviewOf(s, noise) };
     // while the owner is being asked, news waits: it is passed on once the card is back in the PR
     if (state === 'inPr') {
       if (s.state === 'CLOSED') {
         this.save(cardId, next);
         return this.workers.prClosed(cardId);
       }
-      const comments = s.comments.filter((c) => !pr.seen.includes(c.id) && c.author !== s.author && !this.noise.includes(c.author));
+      const comments = s.comments.filter((c) => !pr.seen.includes(c.id) && c.author !== s.author && !noise.includes(c.author));
       if (comments.length) {
         next.seen = [...pr.seen, ...comments.map((c) => c.id)];
         this.workers.prEvent(
@@ -120,7 +117,7 @@ export class PrWatcher {
       // ready only while the worker has nothing in hand: what it was told may still change the PR
       const idle = !comments.length && !failed.length && !this.workers.busyCards().includes(cardId);
       // a push the reviewer has not seen, and nobody asked for another look: the worker asks, once per commit
-      if (idle && reviewStale(s, this.noise) && lastAsked(s) < s.changedAt! && pr.staleHead !== s.head) {
+      if (idle && reviewStale(s, noise) && lastAsked(s) < s.changedAt! && pr.staleHead !== s.head) {
         next.staleHead = s.head;
         this.workers.prEvent(
           cardId,
@@ -128,8 +125,9 @@ export class PrWatcher {
           'Your pull request has commits its reviewers have not seen: their last word is older than the head commit, and nobody asked for another look since. Their verdict is about an older state, so Obeya does not merge on it. Ask them for a new review the way the repository does it (its own skill or script for this, if it has one; otherwise a comment mentioning the review bot), and end your turn.',
         );
       }
-      const low = confidence(s, this.noise);
-      if (idle && readyToMerge(s, this.noise) && low && low.score / low.of < MIN_CONFIDENCE) {
+      const low = confidence(s, noise);
+      const ready = idle && readyToMerge(s, noise);
+      if (ready && low && low.score / low.of < MIN_CONFIDENCE) {
         // the reviewer doubts it: the owner decides, and merges on GitHub or tells the worker what is missing
         const held = { score: `${low.score}/${low.of}`, by: low.by };
         if (pr.readyHead !== s.head || pr.held?.score !== held.score)
@@ -137,7 +135,7 @@ export class PrWatcher {
         next.readyHead = s.head;
         next.held = held;
         delete next.mergeError;
-      } else if (idle && readyToMerge(s, this.noise)) {
+      } else if (ready) {
         if (pr.readyHead !== s.head || pr.held) this.board.log(cardId, 'state', 'obeya', this.board.t.pr.ready);
         next.readyHead = s.head;
         delete next.held;

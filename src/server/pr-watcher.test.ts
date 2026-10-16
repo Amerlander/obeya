@@ -50,7 +50,7 @@ beforeEach(() => {
       status.state = 'MERGED';
     },
   };
-  watcher = new PrWatcher(board, workers, forge, () => main, ['deploy-bot']);
+  watcher = new PrWatcher(board, workers, forge, () => main, () => ['deploy-bot']);
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 

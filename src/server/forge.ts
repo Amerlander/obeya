@@ -124,6 +124,25 @@ const atPr = (cwd: string, url: string): GhAt => {
   return owner ? { cwd, owner } : { cwd };
 };
 
+/** The pull request at `url`; throws for a URL that is no GitHub pull request's. */
+function prRef(url: string) {
+  const ref = parsePrUrl(url);
+  if (!ref) throw new Error(`not a GitHub pull request URL: ${url}`);
+  return ref;
+}
+
+/** Runs `f` with `body` in a file: a long description as an argument would pass Windows' limit on a command line. */
+function withBodyFile<T>(body: string, f: (file: string) => T): T {
+  const dir = mkdtempSync(join(tmpdir(), 'obeya-pr-body-'));
+  try {
+    const file = join(dir, 'body.md');
+    writeFileSync(file, body);
+    return f(file);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 interface GhPr {
   state: PrStatus['state'];
   mergeable: PrStatus['mergeable'];
@@ -139,10 +158,10 @@ interface GhPr {
 /** GitHub through a `gh` runner (the real CLI, or canned output in tests). */
 export const makeGhForge = (run: (at: GhAt, ...args: string[]) => string, ownerOf: (cwd: string) => string | undefined = originOwner): Forge => ({
   status(cwd, url) {
-    const ref = parsePrUrl(url);
-    if (!ref) throw new Error(`not a GitHub pull request URL: ${url}`);
-    const pr = JSON.parse(run(atPr(cwd, url), 'pr', 'view', url, '--json', 'state,mergeable,mergeStateStatus,headRefOid,mergeCommit,author,statusCheckRollup,comments,reviews')) as GhPr;
-    const inline = JSON.parse(run(atPr(cwd, url), 'api', `repos/${ref.owner}/${ref.repo}/pulls/${ref.number}/comments`, '--paginate')) as {
+    const ref = prRef(url);
+    const at: GhAt = { cwd, owner: ref.owner };
+    const pr = JSON.parse(run(at, 'pr', 'view', url, '--json', 'state,mergeable,mergeStateStatus,headRefOid,mergeCommit,author,statusCheckRollup,comments,reviews')) as GhPr;
+    const inline = JSON.parse(run(at, 'api', `repos/${ref.owner}/${ref.repo}/pulls/${ref.number}/comments`, '--paginate')) as {
       id: number;
       user: { login: string };
       body: string;
@@ -157,7 +176,7 @@ export const makeGhForge = (run: (at: GhAt, ...args: string[]) => string, ownerO
     // is known by its first comment
     const threads = JSON.parse(
       run(
-        atPr(cwd, url),
+        at,
         'api',
         'graphql',
         '-F',
@@ -241,35 +260,22 @@ export const makeGhForge = (run: (at: GhAt, ...args: string[]) => string, ownerO
     return (JSON.parse(run(atPr(cwd, url), 'pr', 'view', url, '--json', 'body')) as { body: string }).body;
   },
   setBody(cwd, url, body) {
-    // a file, not an argument: a long description would pass Windows' limit on a command line
-    const dir = mkdtempSync(join(tmpdir(), 'obeya-pr-body-'));
-    try {
-      writeFileSync(join(dir, 'body.md'), body);
-      run(atPr(cwd, url), 'pr', 'edit', url, '--body-file', join(dir, 'body.md'));
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+    withBodyFile(body, (file) => run(atPr(cwd, url), 'pr', 'edit', url, '--body-file', file));
   },
   open(cwd, pr) {
-    const dir = mkdtempSync(join(tmpdir(), 'obeya-pr-body-'));
-    try {
-      writeFileSync(join(dir, 'body.md'), pr.body);
-      // gh prints the new pull request's URL last
-      return run({ cwd, owner: ownerOf(cwd) }, 'pr', 'create', '--base', pr.base, '--head', pr.head, '--title', pr.title, '--body-file', join(dir, 'body.md')).trim().split('\n').at(-1)!.trim();
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+    // gh prints the new pull request's URL last
+    return withBodyFile(pr.body, (file) => run({ cwd, owner: ownerOf(cwd) }, 'pr', 'create', '--base', pr.base, '--head', pr.head, '--title', pr.title, '--body-file', file)).trim().split('\n').at(-1)!.trim();
   },
   merge(cwd, url, head) {
-    const ref = parsePrUrl(url);
-    if (!ref) throw new Error(`not a GitHub pull request URL: ${url}`);
+    const ref = prRef(url);
+    const at: GhAt = { cwd, owner: ref.owner };
     // the repository's own merge methods (some allow squash only); squash first where it allows several
-    const allows = JSON.parse(run(atPr(cwd, url), 'api', `repos/${ref.owner}/${ref.repo}`, '--jq', '{squash: .allow_squash_merge, merge: .allow_merge_commit, rebase: .allow_rebase_merge}')) as Record<string, boolean>;
+    const allows = JSON.parse(run(at, 'api', `repos/${ref.owner}/${ref.repo}`, '--jq', '{squash: .allow_squash_merge, merge: .allow_merge_commit, rebase: .allow_rebase_merge}')) as Record<string, boolean>;
     const method = (['squash', 'merge', 'rebase'] as const).find((m) => allows[m] !== false) ?? 'squash';
     // no --delete-branch: that also switches branches in the workspace; the repository deletes merged branches or not
-    run(atPr(cwd, url), 'pr', 'merge', url, `--${method}`, '--match-head-commit', head);
+    run(at, 'pr', 'merge', url, `--${method}`, '--match-head-commit', head);
     try {
-      return run(atPr(cwd, url), 'pr', 'view', url, '--json', 'mergeCommit', '--jq', '.mergeCommit.oid').trim() || undefined;
+      return run(at, 'pr', 'view', url, '--json', 'mergeCommit', '--jq', '.mergeCommit.oid').trim() || undefined;
     } catch {
       // merged all the same: the first fetch after it stands in for the commit (Workers.merged)
       return undefined;
