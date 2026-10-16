@@ -13,9 +13,9 @@ import {
 } from '@anthropic-ai/claude-agent-sdk';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { LOST, remote, sessionFiles, type SshHost } from './hosts';
+import { localBin, which } from './path';
 import type { z } from 'zod';
 import { mediaType } from './images';
 import { COMPILED } from './resources';
@@ -155,8 +155,8 @@ const READ_ONLY_TOOLS = ['Read', 'Grep', 'Glob'];
 export function claudeExecutable(env: Record<string, string | undefined> = process.env, compiled = COMPILED, platform: string = process.platform): string | undefined {
   if (env.OBEYA_CLAUDE) return env.OBEYA_CLAUDE;
   if (!compiled) return undefined;
-  const installed = join(homedir(), '.local', 'bin', platform === 'win32' ? 'claude.exe' : 'claude');
-  const onPath = Bun.which('claude', { PATH: env.PATH ?? '' });
+  const installed = join(localBin(), platform === 'win32' ? 'claude.exe' : 'claude');
+  const onPath = which('claude', env);
   // npm's `claude.cmd` on Windows is no program to start; the installer's binary is
   return onPath && !/\.(cmd|bat|ps1)$/i.test(onPath) ? onPath : installed;
 }
@@ -168,8 +168,9 @@ export const sdkRuntime: AgentRuntime = {
     const there = remote(spec.cwd);
     // a session on another machine: whether its connection was lost, rather than the session failing
     let lost = false;
-    if (there) {
-      const dir = there.host.prepare(sessionFiles(there.host.o.home, spec.plugins ?? []));
+    const files = there ? sessionFiles(there.host.o.home, spec.plugins ?? []) : undefined;
+    if (there && files) {
+      const dir = there.host.prepare(files);
       inbox.carry = (text, images) => carryImages(there.host, dir, text, images);
     }
     if (firstMessage !== undefined) inbox.push(firstMessage, images);
@@ -191,11 +192,11 @@ export const sdkRuntime: AgentRuntime = {
         cwd: there ? there.path : spec.cwd,
         abortController: abort,
         ...(claude ? { pathToClaudeCodeExecutable: claude } : {}),
-        ...(there
+        ...(there && files
           ? {
               spawnClaudeCodeProcess: there.host.session({
                 cwd: there.path,
-                files: sessionFiles(there.host.o.home, spec.plugins ?? []),
+                files,
                 onExit: (code) => (lost = code === LOST && !abort.signal.aborted),
               }),
             }

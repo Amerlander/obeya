@@ -2,6 +2,7 @@
 
 import { remote } from './hosts';
 import { messageOf } from '../core/text';
+import { spawnOutput } from './spawn';
 
 /** An app's stop takes seconds; one that hangs this long counts as failed. */
 const APP_TIMEOUT = 2 * 60_000;
@@ -15,9 +16,8 @@ export async function runAppCommand(cwd: string, command: string, timeout = APP_
   }
   const shell = process.platform === 'win32' ? ['cmd.exe', '/d', '/s', '/c', command] : ['sh', '-c', command];
   try {
-    const p = Bun.spawn(shell, { cwd, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', timeout });
-    const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
-    return { ok: code === 0, output: `${out}${err}`.trim() || (code === 0 ? '' : p.signalCode ? `stopped (${p.signalCode})` : `exit code ${code}`) };
+    const r = await spawnOutput(shell, { cwd, stdin: 'ignore', timeout });
+    return { ok: r.code === 0, output: `${r.stdout}${r.stderr}`.trim() || (r.code === 0 ? '' : r.signal ? `stopped (${r.signal})` : `exit code ${r.code}`) };
   } catch (e) {
     return { ok: false, output: messageOf(e) };
   }

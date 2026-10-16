@@ -12,25 +12,29 @@ type Env = Record<string, string | undefined>;
 /** Where the official installers of Claude Code and uv put their programs. */
 export const localBin = () => join(homedir(), '.local', 'bin');
 
+/** Where `program` is on the PATH of `env`; null where it is on none. */
+export const which = (program: string, env: Env = process.env) => Bun.which(program, { PATH: env.PATH ?? '' });
+
+/** Adds the directories to the PATH of `env` that it lacks, after those it has. */
+function addToPath(env: Env, dirs: string[]) {
+  const parts = (env.PATH ?? '').split(delimiter).filter(Boolean);
+  for (const d of dirs) if (d && !parts.includes(d)) parts.push(d);
+  env.PATH = parts.join(delimiter);
+}
+
 /**
  * Puts the directories on the PATH that the programs Obeya checks and starts are installed in but
  * a process started from the desktop may lack: the official installers' `~/.local/bin`, and
  * Homebrew's on a Mac.
  */
 export function extendPath(env: Env = process.env, platform: string = process.platform) {
-  const dirs = [localBin(), ...(platform === 'darwin' ? ['/opt/homebrew/bin', '/usr/local/bin'] : [])];
-  const parts = (env.PATH ?? '').split(delimiter).filter(Boolean);
-  for (const d of dirs) if (existsSync(d) && !parts.includes(d)) parts.push(d);
-  env.PATH = parts.join(delimiter);
+  addToPath(env, [localBin(), ...(platform === 'darwin' ? ['/opt/homebrew/bin', '/usr/local/bin'] : [])].filter((d) => existsSync(d)));
 }
 
 /** On Windows, what installers added to the user's and the machine's PATH since Obeya started. */
 async function windowsPath(env: Env) {
   const out = await output('powershell', ['-NoProfile', '-Command', "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')"], env);
-  if (!out) return;
-  const parts = (env.PATH ?? '').split(delimiter).filter(Boolean);
-  for (const d of out.trim().split(';')) if (d && !parts.includes(d)) parts.push(d);
-  env.PATH = parts.join(delimiter);
+  if (out) addToPath(env, out.trim().split(';'));
 }
 
 /** The reading of the registry under way, which a check that starts meanwhile waits for too. */

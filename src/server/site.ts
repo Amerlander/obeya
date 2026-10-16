@@ -34,7 +34,6 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { hostname } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import type { DemoSite } from '../adapters/types';
 import type { Messages } from '../core/messages';
@@ -42,6 +41,8 @@ import { readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
 import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, day, demoFile, demoPageHtml, esc, PAGE_STYLE, PAGE_WORDS, type PageLanguage, withHeightReport } from './demo-page';
 import { artifactCopy } from './artifact-copy';
 import { BUN_ENV } from './resources';
+import { spawnOutput } from './spawn';
+import { HERE } from './workspaces';
 import { COMMAND_TIMEOUT, commandWords, SHARE_CWD, type SharePage, type ShareTarget, scriptArgv, tail, type Versions } from './share';
 import { messageOf } from '../core/text';
 
@@ -172,7 +173,7 @@ const DOWNLOAD_TIMEOUT = 5 * 60_000;
 export function siteTarget(site: DemoSite, repo: string, home: string, t: Messages['share'], opts: SiteOptions = {}): ShareTarget {
   const base = siteBase(home, site);
   const dir = join(base, 'site');
-  const machine = opts.machine ?? hostname().split('.')[0]!;
+  const machine = opts.machine ?? HERE;
   const overviewLanguage = (): PageLanguage => site.language ?? readDemoSettings(home).language;
   const root = site.url.replace(/\/+$/, '');
 
@@ -384,17 +385,14 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
     let out: string;
     let code: number;
     try {
-      const p = Bun.spawn(argv, {
+      const r = await spawnOutput(argv, {
         cwd,
         stdin: 'ignore',
-        stdout: 'pipe',
-        stderr: 'pipe',
         env: { ...process.env, ...(argv[0] === process.execPath ? BUN_ENV : {}), OBEYA_HOME: home, OBEYA_REPO: repo, ...env },
         timeout: COMMAND_TIMEOUT,
       });
-      const [o, e, c] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
-      out = `${o}\n${e}`.trim();
-      code = c;
+      out = `${r.stdout}\n${r.stderr}`.trim();
+      code = r.code;
     } catch (e) {
       out = messageOf(e);
       code = -1;

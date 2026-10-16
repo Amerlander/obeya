@@ -3,6 +3,7 @@
 
 import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import type { Item } from '../core/types';
+import { oneAtATime } from '../core/one-at-a-time';
 import { decisionLog, INFORM_RULES, inform, type OwnerAnswer } from './advisor';
 import type { Board } from './board';
 import type { AgentRuntime } from './runtime';
@@ -43,8 +44,6 @@ export class ProjectAgents {
 
   /** One question at a time per project, in one session. */
   private queued<T>(project: Item, fn: () => Promise<T>): Promise<T> {
-    const next = (this.queues.get(project.id) ?? Promise.resolve()).catch(() => {}).then(fn);
-    this.queues.set(project.id, next);
-    return next;
+    return oneAtATime(this.queues, project.id, fn);
   }
 }

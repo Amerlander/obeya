@@ -12,7 +12,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 // by its path: the package exports no package.json, which Bun imports all the same but TypeScript does not
 import sdk from '../../node_modules/@anthropic-ai/claude-agent-sdk/package.json';
 import { blocksSaving, CLONES, type FirstCanvas, type MachineItem, type MachineJob, type MachineSection, type MachineSectionId, type MachineView, type SetupFolder, type GitSetupPreview } from '../core/types';
@@ -27,7 +27,7 @@ import { repoInfo } from './repo';
 import { COMPILED } from './resources';
 import { claudeExecutable } from './runtime';
 import type { ShellReports } from './push-key';
-import { extendPath, freshPath } from './path';
+import { extendPath, freshPath, which } from './path';
 import { ownerLanguage, pushKeyChoice } from './settings';
 import type { VoiceSetup } from './voice-setup';
 
@@ -73,7 +73,7 @@ export function runnable(command: string, env: Env, platform: string = process.p
   if (/^curl -\S+ https:\/\/\S+ \| (ba)?sh$/.test(command)) return platform === 'win32' ? null : ['sh', '-c', command];
   if (command.startsWith('irm ')) return platform === 'win32' ? ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command] : null;
   const [program, ...args] = command.split(' ');
-  const at = Bun.which(program!, { PATH: env.PATH ?? '' });
+  const at = which(program!, env);
   if (!at) return null;
   if (program === 'brew') return [at, ...args];
   if (program === 'winget') return [at, ...args, '--accept-source-agreements', '--accept-package-agreements'];
@@ -98,25 +98,50 @@ function sdkClaude(platform: string, arch: string): string | null {
 /** A command as a shell shows it, its program quoted when its path has spaces. */
 const shown = (argv: string[]) => argv.map((a) => (/[\s"]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a)).join(' ');
 
+/** Starts a program that goes on by itself, Obeya waiting for nothing of it; false where it does not start. */
+function detached(cmd: string, args: string[], o: { env?: Env; windowsVerbatimArguments?: boolean } = {}): Promise<boolean> {
+  return new Promise((done) => {
+    const p = spawn(cmd, args, { detached: true, stdio: 'ignore', ...o });
+    p.on('error', () => done(false));
+    p.on('spawn', () => (p.unref(), done(true)));
+  });
+}
+
+/**
+ * Files that open in an app to look at them. Anything else an agent wrote (a `.command`, `.app`,
+ * `.bat`, `.desktop`, a script) would run when opened, so it is shown in its folder instead.
+ */
+const DOCUMENT = /\.(pdf|png|jpe?g|gif|webp|svg|html?|md|txt|csv|tsv|json|ya?ml|xml|log|xlsx?|docx?|pptx?|od[tsp]|rtf|mp4|mov|webm|mp3|wav|m4a|ogg)$/i;
+
+/**
+ * Opens a file (or a directory) with the system's app for it, on the machine Obeya runs on, which
+ * the owner sits at: Finder or Explorer for a directory. A file that is no document (`DOCUMENT`)
+ * is shown in its folder, selected, where the platform can (Linux opens the folder).
+ */
+export function openWithSystem(path: string, file = false): Promise<boolean> {
+  const reveal = file && !DOCUMENT.test(path);
+  const [cmd, ...args] =
+    process.platform === 'darwin'
+      ? ['open', ...(reveal ? ['-R'] : []), path]
+      : process.platform === 'win32'
+        ? ['explorer.exe', ...(reveal ? [`/select,${path}`] : [path])]
+        : ['xdg-open', reveal ? dirname(path) : path];
+  return detached(cmd!, args);
+}
+
 /** Opens a terminal that runs `argv`; false where Obeya finds none to open (Linux without one it knows). */
 export async function openTerminal(argv: string[], platform: string = process.platform, env: Env = process.env): Promise<boolean> {
   const line = shown(argv);
-  const detached = (cmd: string, args: string[], o: { windowsVerbatimArguments?: boolean } = {}) =>
-    new Promise<boolean>((done) => {
-      const p = spawn(cmd, args, { detached: true, stdio: 'ignore', env, ...o });
-      p.on('error', () => done(false));
-      p.on('spawn', () => (p.unref(), done(true)));
-    });
   if (platform === 'darwin') {
     const script = line.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     return (await output('osascript', ['-e', 'tell application "Terminal"', '-e', 'activate', '-e', `do script "${script}"`, '-e', 'end tell'], env)) !== null;
   }
-  if (platform === 'win32') return detached('cmd.exe', ['/c', `start "Obeya" cmd /k "${line}"`], { windowsVerbatimArguments: true });
+  if (platform === 'win32') return detached('cmd.exe', ['/c', `start "Obeya" cmd /k "${line}"`], { env, windowsVerbatimArguments: true });
   // the window stays open once the login ends, so what it said can be read
   const keep = ['sh', '-c', `${line}; printf '\\n'; read -r _`];
   for (const [program, ...flag] of [['x-terminal-emulator', '-e'], ['gnome-terminal', '--'], ['konsole', '-e'], ['xfce4-terminal', '-x'], ['kitty'], ['alacritty', '-e'], ['xterm', '-e']] as const) {
-    const at = Bun.which(program, { PATH: env.PATH ?? '' });
-    if (at) return detached(at, [...flag, ...keep]);
+    const at = which(program, env);
+    if (at) return detached(at, [...flag, ...keep], { env });
   }
   return false;
 }
@@ -132,8 +157,8 @@ function folderDialog(platform: string, env: Env, prompt: string): string[] | nu
       '-Command',
       "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.ShowNewFolderButton = $false; if ($d.ShowDialog() -eq 'OK') { $d.SelectedPath }",
     ];
-  if (Bun.which('zenity', { PATH: env.PATH ?? '' })) return ['zenity', '--file-selection', '--directory', `--title=${prompt}`];
-  if (Bun.which('kdialog', { PATH: env.PATH ?? '' })) return ['kdialog', '--getexistingdirectory', homedir(), '--title', prompt];
+  if (which('zenity', env)) return ['zenity', '--file-selection', '--directory', `--title=${prompt}`];
+  if (which('kdialog', env)) return ['kdialog', '--getexistingdirectory', homedir(), '--title', prompt];
   return null;
 }
 
@@ -240,7 +265,7 @@ export class MachineSetup {
     await freshPath(env, platform);
     const arch = this.o.arch ?? process.arch;
     const family = platform === 'linux' ? linuxFamily() : null;
-    const brew = platform === 'darwin' && !!Bun.which('brew', { PATH: env.PATH ?? '' });
+    const brew = platform === 'darwin' && !!which('brew', env);
     const hint = (id: 'claude' | 'uv' | 'git' | 'gh') => machineHint(id, platform, family, brew);
     /** A missing piece, offered at a click where its first command runs without a password. */
     const missing = (item: Omit<MachineItem, 'state'>): MachineItem => {
@@ -252,7 +277,7 @@ export class MachineSetup {
     const agentsPart = async (): Promise<MachineItem[]> => {
       // Claude Code: the checkout's agents run on the SDK's own binary, the compiled one's on the machine's
       const agents = claudeExecutable(env, this.o.compiled ?? COMPILED, platform);
-      const own = Bun.which('claude', { PATH: env.PATH ?? '' });
+      const own = which('claude', env);
       const items: MachineItem[] = [];
       let claude: string | null;
       if (!agents) {
@@ -340,32 +365,44 @@ export class MachineSetup {
   /** Installs one piece in the background; the view says how far it got. */
   async install(input: unknown): Promise<MachineView> {
     const { section, id } = (input ?? {}) as { section?: MachineSectionId; id?: MachineItem['id'] };
-    if (this.job?.running) throw new BadRequest('setupBusy', 'an installation or a clone is running');
+    this.idle();
     const { item } = await this.item(section!, id!);
     if (item.act !== 'install') throw new BadRequest('invalid', `Obeya does not install ${id}`);
-    const job: MachineJob = (this.job = { kind: 'install', section, id, running: true, line: '' });
-    const log = (line: string) => (job.line = line.slice(0, 300));
-    let work: Promise<void>;
-    if (section === 'voice' && id === 'recognition') {
-      const voice = this.o.voice!;
-      work = voice.install().then(() => voice.finished());
-    } else if (section === 'demos' && id === 'voice') work = installVoice(readDemoSettings(this.o.home), log, this.o.home);
-    else {
-      const argv = runnable(item.install!.commands[0]!, this.env, this.platform)!;
-      work = this.run(argv, log);
-    }
     console.log(`Obeya: installing ${id} (${section})`);
-    work
-      .then(async () => {
+    return this.startJob(
+      { kind: 'install', section, id },
+      async (log) => {
+        if (section === 'voice' && id === 'recognition') {
+          await this.o.voice!.install();
+          await this.o.voice!.finished();
+        } else if (section === 'demos' && id === 'voice') await installVoice(readDemoSettings(this.o.home), log, this.o.home);
+        else await this.run(runnable(item.install!.commands[0]!, this.env, this.platform)!, log);
         // the official installers' directory, which the first of them creates, and Windows' PATH
         extendPath(this.env, this.platform);
         await freshPath(this.env, this.platform);
         console.log(`Obeya: ${id} installed`);
-      })
-      .catch((e: Error) => {
-        job.error = e.message;
+      },
+      (e) => {
         console.error(`Obeya: installing ${id} failed: ${e.message}`);
-      })
+        return e.message;
+      },
+    );
+  }
+
+  /** Refuses a job while one runs: one installation or clone at a time. */
+  private idle() {
+    if (this.job?.running) throw new BadRequest('setupBusy', 'an installation or a clone is running');
+  }
+
+  /**
+   * Runs `work` in the background as the job the view follows, the last line of its output on the
+   * job as it goes (`log`); `failed` says what went wrong, for the job's error.
+   */
+  private startJob(kind: Pick<MachineJob, 'kind' | 'section' | 'id'>, work: (log: (line: string) => void, job: MachineJob) => Promise<void>, failed: (e: Error) => string): Promise<MachineView> {
+    this.idle();
+    const job: MachineJob = (this.job = { ...kind, running: true, line: '' });
+    work((line) => (job.line = line.slice(0, 300)), job)
+      .catch((e: Error) => void (job.error = failed(e)))
       .finally(() => (job.running = false));
     return this.view();
   }
@@ -442,7 +479,7 @@ export class MachineSetup {
     const { path, clone, into } = (input ?? {}) as { path?: unknown; clone?: unknown; into?: unknown };
     if (typeof path === 'string' && path.trim()) return this.add(resolve(expand(path.trim())));
     if (typeof clone !== 'string' || !clone.trim()) throw new BadRequest('invalid', 'a folder or a repository to clone');
-    if (this.job?.running) throw new BadRequest('setupBusy', 'an installation or a clone is running');
+    this.idle();
     const spec = clone.trim();
     const name = cloneName(spec);
     if (!name) throw new BadRequest('invalid', `no repository in ${spec}`);
@@ -452,18 +489,18 @@ export class MachineSetup {
     const short = /^[\w.-]+\/[\w.-]+$/.test(spec);
     const gh = short && (await output('gh', ['auth', 'status'], this.env)) !== null;
     const argv = gh ? ['gh', 'repo', 'clone', spec, dest, '--', '--progress'] : ['git', 'clone', '--progress', short ? `https://github.com/${spec}.git` : spec, dest];
-    const job: MachineJob = (this.job = { kind: 'clone', running: true, line: '' });
     console.log(`Obeya: cloning ${spec} into ${dest}`);
-    this.run(argv, (line) => (job.line = line.slice(0, 300)))
-      .then(async () => {
+    return this.startJob(
+      { kind: 'clone' },
+      async (log, job) => {
+        await this.run(argv, log);
         ({ canvas: job.canvas, branch: job.branch, opens: job.opens } = await this.add(dest));
-      })
-      .catch((e: Error) => {
-        job.error = e instanceof BadRequest ? e.message : e.message.split('\n').at(-1)!;
+      },
+      (e) => {
         console.error(`Obeya: cloning ${spec} failed: ${e.message}`);
-      })
-      .finally(() => (job.running = false));
-    return this.view();
+        return e instanceof BadRequest ? e.message : e.message.split('\n').at(-1)!;
+      },
+    );
   }
 
   /** Adds the repository as a canvas of its own and saves the configuration; Obeya runs it at once. */

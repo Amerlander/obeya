@@ -10,9 +10,9 @@
 // that agent.
 
 import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
-import { spawn } from 'node:child_process';
+import { oneAtATime } from '../core/one-at-a-time';
 import { mkdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { type AnswerFile, type AnswerRef, type CardEvent, type Item, pausable, type Talk } from '../core/types';
 import { INFORM_RULES, inform, Interrupted, type OwnerAnswer } from './advisor';
 import { BadRequest, type Board, replyNote } from './board';
@@ -349,13 +349,7 @@ export class Answers {
 
   /** One turn after the other in each thread; with none running, it starts at once. */
   private queue(thread: number, fn: () => Promise<unknown>): Promise<unknown> {
-    const running = this.turns.get(thread);
-    const next = running ? running.catch(() => {}).then(fn) : fn();
-    this.turns.set(thread, next);
-    void next.finally(() => {
-      if (this.turns.get(thread) === next) this.turns.delete(thread);
-    });
-    return next;
+    return oneAtATime(this.turns, thread, fn);
   }
 
   private deliver(talkId: number, thread: number, by: By, question: string, a: OwnerAnswer, card: string | undefined) {
@@ -462,32 +456,6 @@ const fileList = (files?: AnswerFile[]) => (files?.length ? `\n(files: ${files.m
 
 /** A message of a Question card's conversation, as an agent that starts afresh reads it. */
 const said = (e: CardEvent) => (e.author === 'owner' ? `The owner: "${e.text}"` : `You: ${e.text}${fileList(e.answer?.files)}`);
-
-/**
- * Files that open in an app to look at them. Anything else an agent wrote (a `.command`, `.app`,
- * `.bat`, `.desktop`, a script) would run when opened, so it is shown in its folder instead.
- */
-const DOCUMENT = /\.(pdf|png|jpe?g|gif|webp|svg|html?|md|txt|csv|tsv|json|ya?ml|xml|log|xlsx?|docx?|pptx?|od[tsp]|rtf|mp4|mov|webm|mp3|wav|m4a|ogg)$/i;
-
-/**
- * Opens a file (or a directory) with the system's app for it, on the machine Obeya runs on, which
- * the owner sits at: Finder or Explorer for a directory. A file that is no document (`DOCUMENT`)
- * is shown in its folder, selected, where the platform can (Linux opens the folder).
- */
-export function openWithSystem(path: string, file = false): Promise<boolean> {
-  const reveal = file && !DOCUMENT.test(path);
-  const [cmd, ...args] =
-    process.platform === 'darwin'
-      ? ['open', ...(reveal ? ['-R'] : []), path]
-      : process.platform === 'win32'
-        ? ['explorer.exe', ...(reveal ? [`/select,${path}`] : [path])]
-        : ['xdg-open', reveal ? dirname(path) : path];
-  return new Promise((done) => {
-    const p = spawn(cmd!, args, { detached: true, stdio: 'ignore' });
-    p.on('error', () => done(false));
-    p.on('spawn', () => (p.unref(), done(true)));
-  });
-}
 
 /** How the Koordinator names an answer it looked up, to say which one the owner's words follow up on. */
 export const answerTag = (talk: number) => `A${talk}`;

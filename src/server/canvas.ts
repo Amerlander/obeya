@@ -1,11 +1,13 @@
 // One canvas and everything that works on it: its repositories (each with adapter, workspaces,
 // workers, project agents and PR watcher), the board, the Koordinator and the voice commands.
 
-import { existsSync, mkdirSync, realpathSync } from 'node:fs';
+import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
+import { mkdirSync, realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { defaultsFor, hasAdapterModule, readingAdapterModule, readingShared, readShared, repoValues, type SharedRead, withSettings } from '../adapters';
-import { Answers, answersDir, answerTag, openWithSystem } from './answers';
+import { Answers, answersDir, answerTag } from './answers';
 import { demoFile } from './demo-page';
+import { openWithSystem } from './machine';
 import { repoName } from '../adapters/generic';
 import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
@@ -45,7 +47,7 @@ export interface CanvasDeps {
   /** Runs the cards' workers; `runtime` when left out. */
   workerRuntime?: AgentRuntime;
   forge: Forge;
-  permissionMode?: 'auto' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk' | 'default';
+  permissionMode?: PermissionMode;
   /** Watch plan docs and pull requests; off in tests. */
   watch?: boolean;
   /** How long a voice command waits for undo. */
