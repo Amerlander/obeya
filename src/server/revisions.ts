@@ -6,11 +6,11 @@
 import { z } from 'zod';
 import { LANGUAGE_NAMES } from '../core/locale';
 import { formatQuestion, type Item, type Question } from '../core/types';
-import { toQuestion } from './advisor';
 import { BadRequest, type Board } from './board';
 import type { AgentRuntime } from './runtime';
 import { toObeyaTool } from './to-obeya';
 import { messageOf } from '../core/text';
+import { PROPOSAL_QUESTIONS, proposalQuestions, proposalTask } from './workers';
 
 export interface RevisionOptions {
   board: Board;
@@ -72,7 +72,7 @@ export class Revisions {
         (r) => {
           // the words only asked Obeya for something: the proposal stays as it was, and what Obeya did stands in its conversation
           if (!r) return this.o.board.revised(cardId) || undefined;
-          const questions = r.questions.map((q) => toQuestion(q.question, q.options, q.multiple));
+          const questions = proposalQuestions(r.questions);
           const p = { title: r.title, task: r.task, ...(r.reason?.trim() ? { reason: r.reason.trim() } : {}), idea: !!r.idea, questions };
           if (!this.o.board.revised(cardId, p)) return;
           const reply = r.reply?.trim();
@@ -115,7 +115,7 @@ export class Revisions {
               name: 'revise_proposal',
               description: [
                 `The whole proposal as it is to stand now, in ${LANGUAGE_NAMES[this.o.board.language()]}.`,
-                `title: short and precise. task: the card's text, written for the agent who will take it on, which has seen neither the card it came from nor this conversation: what is wrong or wanted, where (files, names), what done looks like; as the owner would write a card: no "I", no "my question"; other cards named by their title.`,
+                `title: short and precise. ${proposalTask('the card it came from nor this conversation')}`,
                 `reason: for the owner only, why it is proposed, a sentence or two (keep it unless what the owner said changes it). idea: true for something to think through with the owner before anyone builds it.`,
                 `questions: what the owner still has to decide, each with up to four short options; keep them out of task. A question the owner's words settle goes, and its decision goes into task.`,
                 `reply: your turn in the conversation beside the proposal, a sentence or two for the owner: the answer to what they asked (asked which option you would take: your pick and why), and what you changed, without repeating the text.`,
@@ -125,7 +125,7 @@ export class Revisions {
                 task: z.string(),
                 reason: z.string().optional(),
                 idea: z.boolean().optional(),
-                questions: z.array(z.object({ question: z.string(), options: z.array(z.string()).max(4).optional(), multiple: z.boolean().optional() })).max(5),
+                questions: PROPOSAL_QUESTIONS,
                 reply: z.string(),
               },
               run: (r) => {

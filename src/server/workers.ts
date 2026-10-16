@@ -1,6 +1,7 @@
 // Workers: one agent session per card, in a leased clone. Obeya is the mailbox between the
 // worker and the owner; every exchange lands in the card's conversation.
 
+import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import type { RepoAdapter } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
@@ -19,7 +20,7 @@ import { TO_OBEYA, toObeyaTool } from './to-obeya';
 import { type Forward, HOST_DIR, hostName, remote } from './hosts';
 import { runAppCommand } from './app-command';
 import { readingShared } from '../adapters';
-import { branchName, gitStepsSync, type Landed, together, WorkspaceError, type Workspaces } from './workspaces';
+import { branchName, gitStepsSync, type Landed, shortageOf, together, WorkspaceError, type Workspaces } from './workspaces';
 import type { PrState, Shipped } from './board';
 import { parsePrUrl } from './forge';
 import { clip, messageOf } from '../core/text';
@@ -36,7 +37,7 @@ export interface WorkerOptions {
   machineSettings?: () => RepoSettings | undefined;
   /** Whether the repository shares demos on a page now (the configuration's command, the site its settings name); its settings' site alone when left out. */
   shares?: () => boolean;
-  permissionMode?: 'auto' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk' | 'default';
+  permissionMode?: PermissionMode;
   /** The owner's preferences, added to every worker's instructions. */
   preferences?: () => string;
   /** Called with everything the owner tells a worker, so lasting preferences can be learned. */
@@ -84,7 +85,7 @@ export interface WorkerOptions {
   toObeya?: (cardId: string, request: string) => Promise<string>;
 }
 
-/** The owner's comments on places in the demo video that go with their approval. */
+/** The owner's comments on places in the demo video that go with their approval, as the worker reads them. */
 type Comments = { text: string; images: string[] };
 
 /** A comment on a place in the demo video held back while the owner watches (`CardRow.held`). */
@@ -120,8 +121,28 @@ interface LandedState {
 /** Landed work's state once what it waited for (the restart) has happened. */
 const settled = ({ restarts: _, waits: __, ...l }: LandedState): LandedState => l;
 
-/** Why `lease` found no workspace: then a follow-up goes into a temporary worktree, or waits on. */
-const SHORTAGES = new Set(['noWorkspace', 'dirtyWorkspaces', 'noSlot']);
+/** What the card's row stores while landed work's worker finishes; null while nothing has landed. */
+const landedOf = (row: { landed: string | null }): LandedState | null => (row.landed ? (JSON.parse(row.landed) as LandedState) : null);
+
+/** What `f` returns; a workspace it cannot have is the request's error. */
+function asBadRequest<T>(f: () => T): T {
+  try {
+    return f();
+  } catch (e) {
+    if (e instanceof WorkspaceError) throw new BadRequest(e.code, e.message);
+    throw e;
+  }
+}
+
+/** The questions of a proposal (`propose_card`, `revise_proposal`) as the agent gives them. */
+export const PROPOSAL_QUESTIONS = z.array(z.object({ question: z.string(), options: z.array(z.string()).max(4).optional(), multiple: z.boolean().optional() })).max(5);
+
+/** The questions of a proposal as the card holds them. */
+export const proposalQuestions = (questions: z.infer<typeof PROPOSAL_QUESTIONS> = []) => questions.map((q) => toQuestion(q.question, q.options, q.multiple));
+
+/** How an agent writes a proposal's task, for the agent who takes it on and has not seen `unseen`. */
+export const proposalTask = (unseen: string) =>
+  `task: the card's text, written for the agent who will take it on, which has seen neither ${unseen}: what is wrong or wanted, where (files, names), what done looks like. Write it as the owner would write a card: no "I", no "my question", no "your card"; name other cards by their title.`;
 
 /**
  * The owner's words Obeya holds for the worker while it is in a turn (`CardRow.unheard`), each with
@@ -280,32 +301,38 @@ const dueText = (due: DueRestart) =>
       }
     : { what: `${DUE_WHY[due.reason]} and stops whatever its workers run at that moment.`, whom: 'no worker', thing: DUE_WHY[due.reason], back: 'once it runs again' };
 
-/** Tells a worker that Obeya is about to restart or stop, so that it pauses at a safe point instead of being cut off. */
-const restartNotice = (due: DueRestart) => {
+/** How long Obeya waits for the restart at most, as the messages below say it. */
+const minutesLeft = (due: DueRestart) => {
   const minutes = Math.max(1, Math.round((due.deadline - Date.now()) / 60_000));
-  const d = dueText(due);
-  return `Obeya is about to ${due.repo ? `${d.what} which stops whatever you run at that moment.` : d.what} It waits until ${d.whom} is in the middle of a turn, at most ${minutes} more minute${minutes === 1 ? '' : 's'}. Pause at the next safe point: finish the step you are in, start nothing long (a test run, a demo render, a measurement), and end your turn, without handing over if you are not done. Background commands still running keep Obeya waiting: let those you need finish, stop the others (a scratch server you can start again). One that finishes before the restart wakes you for a turn that keeps Obeya waiting too: take in its result and end that turn as well. Obeya resumes you ${d.back}, and you go on from there.`;
+  return `at most ${minutes} more minute${minutes === 1 ? '' : 's'}`;
 };
+
+/** What is about to happen and how long Obeya waits for it, as the messages to a worker in a turn begin. */
+const dueOpening = (due: DueRestart) => {
+  const d = dueText(due);
+  return `Obeya is about to ${due.repo ? `${d.what} which stops whatever you run at that moment.` : d.what} It waits until ${d.whom} is in the middle of a turn, ${minutesLeft(due)}`;
+};
+
+/** Tells a worker that Obeya is about to restart or stop, so that it pauses at a safe point instead of being cut off. */
+const restartNotice = (due: DueRestart) =>
+  `${dueOpening(due)}. Pause at the next safe point: finish the step you are in, start nothing long (a test run, a demo render, a measurement), and end your turn, without handing over if you are not done. Background commands still running keep Obeya waiting: let those you need finish, stop the others (a scratch server you can start again). One that finishes before the restart wakes you for a turn that keeps Obeya waiting too: take in its result and end that turn as well. Obeya resumes you ${dueText(due).back}, and you go on from there.`;
 
 /**
  * Tells a worker whose turn a message starts while a restart is due (a conflict after an approval,
  * an answer, a card started) that the turn keeps Obeya waiting: it takes the message in and leaves
  * what it asks for until Obeya resumes it, instead of judging a step short enough to do first.
  */
-const restartWaits = (due: DueRestart) => {
-  const minutes = Math.max(1, Math.round((due.deadline - Date.now()) / 60_000));
-  const d = dueText(due);
-  return `Obeya is about to ${due.repo ? `${d.what} which stops whatever you run at that moment.` : d.what} It waits until ${d.whom} is in the middle of a turn, at most ${minutes} more minute${minutes === 1 ? '' : 's'}, and this turn keeps it waiting. Take in this message, leave the work it asks for until Obeya resumes you, and end your turn, without handing over. Obeya resumes you ${d.back}, and you do that work then.`;
-};
+const restartWaits = (due: DueRestart) =>
+  `${dueOpening(due)}, and this turn keeps it waiting. Take in this message, leave the work it asks for until Obeya resumes you, and end your turn, without handing over. Obeya resumes you ${dueText(due).back}, and you do that work then.`;
 
 /** Tells a worker that paused for the restart, and was woken before it (by its background work, a message), that Obeya still waits for it. */
-const stillDue = (due: DueRestart) => {
-  const minutes = Math.max(1, Math.round((due.deadline - Date.now()) / 60_000));
-  return `Obeya still waits for the ${dueText(due).thing} you paused for, at most ${minutes} more minute${minutes === 1 ? '' : 's'}, and this turn keeps it waiting. Take in what started it (a background command that finished, a message), leave the work it leads to until Obeya resumes you, and end your turn.`;
-};
+const stillDue = (due: DueRestart) =>
+  `Obeya still waits for the ${dueText(due).thing} you paused for, ${minutesLeft(due)}, and this turn keeps it waiting. Take in what started it (a background command that finished, a message), leave the work it leads to until Obeya resumes you, and end your turn.`;
 
 const RESUMED =
   'The owner paused you and has now let you go on. Pausing ended your session at once: whatever you had running was stopped with it, background commands, servers you started, and a command still running in your turn (its result shows exit code 137). Run again what you still need, and go on where you stopped.';
+
+const AFTER_RESTART = 'If something that remains needs Obeya to run your change, call after_restart and end your turn: Obeya tells you once it runs it.';
 
 const AFTER_LANDING =
   'Your workspace and this session stay until you end a turn with nothing left to wait for (a question, the restart); then both end. Commits you make here no longer land.';
@@ -367,13 +394,7 @@ export class Workers {
     // a workstream planned again after a part landed: the branch of that part may still be in a clone
     const shipped = row.shipped ? (JSON.parse(row.shipped) as Shipped) : null;
     const branch = row.branch ?? `${branchName(card.title, card.id)}${shipped ? `-${shipped.commit?.slice(0, 7) ?? 'rest'}` : ''}`;
-    let path: string;
-    try {
-      path = this.o.workspaces.lease(card.id, branch);
-    } catch (e) {
-      if (e instanceof WorkspaceError) throw new BadRequest(e.code, e.message);
-      throw e;
-    }
+    const path = asBadRequest(() => this.o.workspaces.lease(card.id, branch));
     this.bump(card.id);
     // the run before is not resumed, but the Arbeitsrückschau still reads it
     if (row.session_id) this.o.board.log(card.id, 'state', 'obeya', this.o.board.t.worker.restarted(this.o.board.t.worker.earlierRun(row.session_id)));
@@ -418,18 +439,16 @@ export class Workers {
       );
     } else if (card.state === 'waiting' && card.need === 'question') {
       // a note instead of an answer takes the question back: it may have settled it, else the worker asks anew
-      const row = this.o.board.row(cardId);
       const waiting = this.live.get(cardId)?.permission;
+      this.backToWork(cardId);
       if (waiting) {
         // the tool call waits for the owner, so the worker reads nothing else meanwhile: the note refuses it
-        this.o.board.work(cardId, { state: row.landed ? landedState(row.landed) : row.pr ? 'inPr' : 'working', need: null, detail: null });
         log();
         if (text) this.o.onOwnerInput?.(card, 'note', text);
         waiting({ allow: false, message: `Not run: the owner wrote a note instead of allowing it${spoken ? ` (${SPOKEN})` : ''}. If the note settles it, go on; if not, ask again.\n\n${words}` });
         if (images.length) this.live.get(cardId)!.session.send('The screenshots of the owner’s note.', images);
         return;
       }
-      this.o.board.work(cardId, { state: row.landed ? landedState(row.landed) : row.pr ? 'inPr' : 'working', need: null, detail: null });
       const said = log(true);
       if (text) this.o.onOwnerInput?.(card, 'note', text);
       this.deliver(
@@ -467,14 +486,9 @@ export class Workers {
       path = this.o.workspaces.lease(card.id, row.branch!, { overSlots: true });
     } catch (e) {
       if (!(e instanceof WorkspaceError)) throw e;
-      if (!SHORTAGES.has(e.code)) throw new BadRequest(e.code, e.message);
+      if (!shortageOf(e.code)) throw new BadRequest(e.code, e.message);
       // nor for a clone: a worktree takes none
-      try {
-        path = this.o.workspaces.followUpTree(card.id, row.branch!);
-      } catch (e) {
-        if (e instanceof WorkspaceError) throw new BadRequest(e.code, e.message);
-        throw e;
-      }
+      path = asBadRequest(() => this.o.workspaces.followUpTree(card.id, row.branch!));
       worktree = true;
     }
     this.bump(card.id);
@@ -498,7 +512,7 @@ export class Workers {
   /** Whether the card's follow-up waits for a full clone, its worker without a workspace. */
   private waitsForClone(cardId: string): boolean {
     const row = this.o.board.row(cardId);
-    return !row.workspace && !!row.landed && !!(JSON.parse(row.landed) as LandedState).needsClone;
+    return !row.workspace && !!landedOf(row)?.needsClone;
   }
 
   /**
@@ -509,7 +523,7 @@ export class Workers {
     this.end(cardId);
     this.bump(cardId);
     const row = this.o.board.row(cardId);
-    const { worktree: _, ...landed } = JSON.parse(row.landed!) as LandedState;
+    const { worktree: _, ...landed } = landedOf(row)!;
     this.removeTree(row.workspace);
     this.o.board.work(cardId, { workspace: null, landed: JSON.stringify(landed), status_line: this.o.board.t.worker.waitsForWorkspace });
     this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.waitsForClone);
@@ -527,10 +541,10 @@ export class Workers {
     try {
       path = this.o.workspaces.lease(cardId, row.branch!, { overSlots: true });
     } catch (e) {
-      if (!(e instanceof WorkspaceError && SHORTAGES.has(e.code))) console.error(`a clone for the follow-up on ${cardId}:`, e);
+      if (!(e instanceof WorkspaceError && shortageOf(e.code))) console.error(`a clone for the follow-up on ${cardId}:`, e);
       return false;
     }
-    const { needsClone: _, ...landed } = JSON.parse(row.landed!) as LandedState;
+    const { needsClone: _, ...landed } = landedOf(row)!;
     this.bump(cardId);
     this.o.board.work(cardId, { workspace: path, landed: JSON.stringify(landed), status_line: null, app: null });
     this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.cloneFree);
@@ -540,8 +554,7 @@ export class Workers {
 
   /** Whether the card's follow-up runs in a temporary worktree. */
   private inWorktree(cardId: string): boolean {
-    const landed = this.o.board.row(cardId).landed;
-    return !!landed && !!(JSON.parse(landed) as LandedState).worktree;
+    return !!landedOf(this.o.board.row(cardId))?.worktree;
   }
 
   /** Removes a follow-up's temporary worktree; one left behind does no harm. */
@@ -571,11 +584,8 @@ export class Workers {
     if (detail.permission) return this.answerPermission(card, detail.permission, text, images, spoken, replyTo);
     const question = detail.question;
     const q = question?.text ?? this.pendingQuestion(cardId) ?? '';
-    this.o.board.work(cardId, { state: row.landed ? landedState(row.landed) : row.pr ? 'inPr' : 'working', need: null, detail: null });
-    this.o.board.log(cardId, 'answer', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo, undefined, undefined, picked);
-    this.recordDecision(card, q, text || '(Screenshot)');
-    if (text) this.o.onOwnerInput?.(card, 'answer', text, { question: q });
-    if (card.prototypeOf) this.o.onPrototypeAnswer?.(card, q, text || '(Screenshot)');
+    this.backToWork(cardId);
+    this.recordAnswer(card, q, text, images, replyTo, picked);
     this.deliver(cardId, `Answer to your question (from the owner${spoken ? `; ${SPOKEN}` : ''}):\n\n${this.words(cardId, answerNote(picked, text), images, replyTo)}`, images, true);
   }
 
@@ -585,12 +595,11 @@ export class Workers {
    * makes it again. No decision for the log: it is about one call, not the work.
    */
   private answerPermission(card: Item, asked: AskedPermission, text: string, images: string[], spoken: boolean, replyTo?: number) {
-    const row = this.o.board.row(card.id);
     const [first = '', ...rest] = text.split('\n\n');
     const is = (option: (t: Messages) => string) => LANGUAGES.some((l) => option(MESSAGES[l]).toLowerCase() === first.trim().toLowerCase());
     const allowed = is((t) => t.worker.allow);
     const words = (allowed || is((t) => t.worker.deny) ? rest.join('\n\n') : text).trim();
-    this.o.board.work(card.id, { state: row.landed ? landedState(row.landed) : row.pr ? 'inPr' : 'working', need: null, detail: null });
+    this.backToWork(card.id);
     this.o.board.log(card.id, 'answer', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo);
     if (words) this.o.onOwnerInput?.(card, 'answer', words, { question: card.question?.text ?? '' });
     const said = words ? `${spoken ? ` (${SPOKEN})` : ''}:\n\n${this.words(card.id, words, images, replyTo)}` : images.length ? `, with screenshots:${imageNote(images)}` : '.';
@@ -626,10 +635,7 @@ export class Workers {
     const demo = JSON.parse(this.o.board.row(card.id).demo!) as Record<string, unknown>;
     this.o.board.work(card.id, { demo: JSON.stringify({ ...demo, answer: text || '(Screenshot)' }) });
     this.takingIn(card.id);
-    this.o.board.log(card.id, 'answer', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo, undefined, undefined, picks);
-    this.recordDecision(card, q, text || '(Screenshot)');
-    if (text) this.o.onOwnerInput?.(card, 'answer', text, { question: q });
-    if (card.prototypeOf) this.o.onPrototypeAnswer?.(card, q, text || '(Screenshot)');
+    this.recordAnswer(card, q, text, images, replyTo, picks);
     this.deliver(
       card.id,
       `The owner answered the question in your demo report („${q}“)${spoken ? ` (${SPOKEN})` : ''}. The card still waits for their approval of what you handed over; a change their words call for goes into a new handover:\n\n${held ? `${held.text}\n\nThen they answered:\n\n` : ''}${this.words(card.id, answerNote(picks, text), images, replyTo)}`,
@@ -790,7 +796,9 @@ export class Workers {
     if (direct && card.prototypeOf) throw new BadRequest('noDirect', 'a prototype never lands');
     // comments on places in the demo video the owner made before approving go with the approval
     const held = this.takeHeld(cardId);
-    const comments = held ? { text: `${held.text}\n\nThey approved the work as it is all the same: what still matters of these comments, propose as a card of its own (propose_card).`, images: held.images } : undefined;
+    const comments = held
+      ? { text: `Before approving, the owner watched your demo video. ${held.text}\n\nThey approved the work as it is all the same: what still matters of these comments, propose as a card of its own (propose_card).`, images: held.images }
+      : undefined;
     // a prototype never lands: approving it is having seen enough
     if (card.prototypeOf) return this.endPrototype(cardId, 'discarded');
     // work that changed nothing (a demo, an analysis) has nothing to land and no pull request to open
@@ -813,7 +821,7 @@ export class Workers {
         'The owner approved your work. In this repository it goes out as a pull request, opened the way the repository does it (its own skills and conventions): from now on you may push this branch. Whoever reads the pull request has not seen Obeya, the card or the plan doc. Do not merge it: Obeya merges it once its checks have passed and its review is through.',
         shared ? `Your demo video is shared with the team on a page of its own: ${shared}. Link it in the pull request's description.` : '',
         'Once you report its URL with pr_opened, Obeya watches it and passes you review comments, failed checks and conflicts; you handle them the way the repository does (its skill for review comments, if it has one). A comment that questions a decision, or a conflict that needs a product call, is the owner’s (ask).',
-        comments ? `Before approving, the owner watched your demo video. ${comments.text}` : '',
+        comments?.text ?? '',
       ]
         .filter(Boolean)
         .join('\n\n'),
@@ -884,7 +892,7 @@ export class Workers {
         [
           `The owner approved your work, but it could not land on main: ${result.detail}`,
           'The approval holds for what it takes to land the work: once you hand over again, Obeya lands it without asking the owner again, with the demo already on the card. A change to what the owner approved is theirs to decide.',
-          ...(comments ? [`Before approving, the owner watched your demo video. ${comments.text}`] : []),
+          ...(comments ? [comments.text] : []),
         ].join('\n\n'),
         comments?.images,
         by === 'owner',
@@ -915,11 +923,11 @@ export class Workers {
           ? `${by === 'owner' ? 'The owner approved your work to go directly onto main, and Obeya' : 'Obeya'} pushed it there without a pull request (${result.to.slice(0, 7)}); the card is live.`
           : `${by === 'owner' ? 'The owner approved your work, and it' : 'Your work'} is on main now (${result.to.slice(0, 7)}); the card is live.`,
         restartFor === 'obeya'
-          ? 'Obeya runs from that checkout and starts again with your change as soon as no worker is in the middle of a turn, which stops whatever you run then. If something that remains needs Obeya to run your change, call after_restart and end your turn: Obeya tells you once it runs it.'
+          ? `Obeya runs from that checkout and starts again with your change as soon as no worker is in the middle of a turn, which stops whatever you run then. ${AFTER_RESTART}`
           : restartFor === 'repo'
-            ? "Your change moves where this repository's agents work: Obeya restarts them with it as soon as none of them is in the middle of a turn, you among them, which stops whatever you run then. If something that remains needs Obeya to run your change, call after_restart and end your turn: Obeya tells you once it runs it."
+            ? `Your change moves where this repository's agents work: Obeya restarts them with it as soon as none of them is in the middle of a turn, you among them, which stops whatever you run then. ${AFTER_RESTART}`
             : '',
-        comments ? `Before approving, the owner watched your demo video. ${comments.text}` : '',
+        comments?.text ?? '',
         AFTER_LANDING,
       ]
         .filter(Boolean)
@@ -941,7 +949,7 @@ export class Workers {
     if (by === 'owner')
       this.afterLanding(
         cardId,
-        `The owner approved your work. It changed nothing in the repository, so nothing lands and there is no pull request: the card is done.${comments ? `\n\nBefore approving, the owner watched your demo video. ${comments.text}` : ''}\n\n${AFTER_LANDING}`,
+        `The owner approved your work. It changed nothing in the repository, so nothing lands and there is no pull request: the card is done.${comments ? `\n\n${comments.text}` : ''}\n\n${AFTER_LANDING}`,
         comments?.images,
         true,
       );
@@ -970,10 +978,11 @@ export class Workers {
         // the card is done either way; a leftover worktree does no harm
         console.error('freeing a landed workspace:', e);
       }
-    this.o.board.work(cardId, { landed: null, workspace: null, status_line: null, parked: null, paused: null, app: null, ...(row.state === 'waiting' ? { state: row.landed ? landedState(row.landed) : 'live', need: null, detail: null } : {}) });
+    const landed = landedOf(row);
+    this.o.board.work(cardId, { landed: null, workspace: null, status_line: null, parked: null, paused: null, app: null, ...(row.state === 'waiting' ? { state: landed?.unchanged ? 'done' : 'live', need: null, detail: null } : {}) });
     this.o.board.workDone(cardId);
     // the Arbeitsrückschau read the card's runs when its work ended
-    if (!(row.landed && (JSON.parse(row.landed) as LandedState).followUp)) this.o.onWorkEnded?.(cardId, row.workspace);
+    if (!landed?.followUp) this.o.onWorkEnded?.(cardId, row.workspace);
   }
 
   /** The plan docs the card's branch adds, as plan references of the canvas. */
@@ -1017,15 +1026,9 @@ export class Workers {
    * built. Returns the workspace and branch the card has now.
    */
   buildOn(prototypeId: string, idea: Item, into?: string): { path: string; branch: string } {
-    const row = this.o.board.row(prototypeId);
-    if (!row.workspace || !row.branch) throw new BadRequest('noWorkspace', 'the prototype has no workspace to build on');
-    let moved: { path: string; branch: string };
-    try {
-      moved = this.o.workspaces.transfer(prototypeId, idea.id, row.branch, branchName(idea.title, idea.id));
-    } catch (e) {
-      if (e instanceof WorkspaceError) throw new BadRequest(e.code, e.message);
-      throw e;
-    }
+    const { workspace, branch } = this.o.board.row(prototypeId);
+    if (!workspace || !branch) throw new BadRequest('noWorkspace', 'the prototype has no workspace to build on');
+    const moved = asBadRequest(() => this.o.workspaces.transfer(prototypeId, idea.id, branch, branchName(idea.title, idea.id)));
     this.endPrototype(prototypeId, 'built', 'owner', into);
     return moved;
   }
@@ -1144,13 +1147,14 @@ export class Workers {
       // the page reloaded: the owner may watch on, or have gone
       if (i.held?.length) this.releaseLater(i.id, this.o.holdGrace ?? HOLD_GRACE);
       const row = this.o.board.row(i.id);
+      const landed = landedOf(row);
       // the owner's pause holds across the restart
       if (row.paused) {
-        this.pausedOverRestart(i.id, row.landed);
+        this.pausedOverRestart(i.id, landed);
         continue;
       }
-      if (row.landed && row.workspace) {
-        this.resumeLanded(i, row.landed, row.session_id, restarted);
+      if (landed && row.workspace) {
+        this.resumeLanded(i, landed, row.session_id, repo);
         continue;
       }
       // a worker taking in the owner's words on its handover was in the middle of a turn too
@@ -1174,27 +1178,21 @@ export class Workers {
   }
 
   /** After a restart, a paused worker stays paused: a restart it waited for has happened, which it hears once it goes on. */
-  private pausedOverRestart(cardId: string, stored: string | null) {
+  private pausedOverRestart(cardId: string, l: LandedState | null) {
     this.parkLater(cardId);
-    const l = stored ? (JSON.parse(stored) as LandedState) : null;
     if (!l?.restarts) return;
     this.o.board.work(cardId, { landed: JSON.stringify(settled(l)) });
     this.deliver(cardId, 'Obeya has started again and runs main with your change now.');
   }
 
-  /** After a restart: landed work's worker goes on with what remains; the restart it waited for has happened. */
-  private resumeLanded(card: Item, stored: string, session: string | null, restarted: string) {
-    const l = JSON.parse(stored) as LandedState;
+  /** After a restart (`repo`: of this repository's agents alone): landed work's worker goes on with what remains; the restart it waited for has happened. */
+  private resumeLanded(card: Item, l: LandedState, session: string | null, repo: boolean) {
     if (!session) return this.finish(card.id);
     this.o.board.work(card.id, { landed: JSON.stringify(settled(l)) });
     // an open question waits for its answer, which resumes the session
     if (card.state === 'waiting') return this.parkLater(card.id);
-    this.launch(card.id, l.restarts ? `${restarted === REPO_RESTARTED ? 'Obeya runs' : 'Obeya has started again and runs'} main with your change now. ${restarted}` : restarted, session);
-  }
-
-  /** Whether a worker is in the middle of a turn, or its ended turn waits for its background work. */
-  busy(): boolean {
-    return this.busyCards().length > 0;
+    const restarted = repo ? REPO_RESTARTED : RESTARTED;
+    this.launch(card.id, l.restarts ? `${repo ? 'Obeya runs' : 'Obeya has started again and runs'} main with your change now. ${restarted}` : restarted, session);
   }
 
   /** The cards whose worker is in a turn, each holding a slot on its machine. */
@@ -1207,9 +1205,12 @@ export class Workers {
     return [...this.live.values()].filter((l) => l.busy && l.host === host).length;
   }
 
-  /** The cards whose worker is busy, as `busy` means it, and those whose work is landing: a restart would cut off git midway. */
+  /**
+   * The cards whose worker is in the middle of a turn (or whose ended turn waits for its background
+   * work), and those whose work is landing: a restart would cut off git midway.
+   */
   busyCards(): string[] {
-    return [...new Set([...[...this.live].filter(([, l]) => l.busy).map(([id]) => id), ...this.landing])];
+    return [...new Set([...this.inTurn(), ...this.landing])];
   }
 
   /**
@@ -1584,7 +1585,7 @@ export class Workers {
       if (card.state === 'working' && row.approved_at) void this.landApproved(cardId);
       return;
     }
-    const landed = row.landed ? (JSON.parse(row.landed) as LandedState) : null;
+    const landed = landedOf(row);
     // in the PR phase a turn ends normally once the PR is open
     if (card.state === 'inPr' && card.pr) return;
     if (card.state !== 'working' && card.state !== 'inPr' && !landed) return;
@@ -1915,8 +1916,7 @@ export class Workers {
     live.stalled = false;
     const card = this.o.board.item(cardId);
     if (card?.state !== 'waiting' || card.need !== 'question') return;
-    const landed = this.o.board.row(cardId).landed;
-    this.o.board.work(cardId, { state: landed ? landedState(landed) : card.pr ? 'inPr' : 'working', need: null, detail: null });
+    this.backToWork(cardId);
   }
 
   // ---------------------------------------------------------------- the worker's tools
@@ -1989,7 +1989,7 @@ export class Workers {
             description: [
               `Propose a separate card for something you noticed that is outside your task, instead of doing it here; the owner decides on it.`,
               `idea: true for something to think through with the owner before anyone builds it (it becomes an idea, discussed with an agent of its own); leave it out for a task that is clear enough to build.`,
-              `task: the card's text, written for the agent who will take it on, which has seen neither your card nor your session: what is wrong or wanted, where (files, names), what done looks like. Write it as the owner would write a card: no "I", no "my question", no "your card"; name other cards by their title.`,
+              proposalTask('your card nor your session'),
               `reason: for the owner only, why you propose it, a sentence or two; it does not go to that agent.`,
               `questions: what the owner has to decide first (product behaviour, a trade-off), each with up to four short options; keep them out of task. The owner may answer them on the proposal; what they decided and what stays open go to the agent with the task.`,
               `Everything in ${language}.`,
@@ -1999,7 +1999,7 @@ export class Workers {
               task: z.string(),
               reason: z.string(),
               idea: z.boolean().optional(),
-              questions: z.array(z.object({ question: z.string(), options: z.array(z.string()).max(4).optional(), multiple: z.boolean().optional() })).max(5).optional(),
+              questions: PROPOSAL_QUESTIONS.optional(),
             },
             run: ({ title, task, reason, idea, questions }) => {
               const p = this.o.board.propose(cardId, {
@@ -2007,7 +2007,7 @@ export class Workers {
                 task: String(task),
                 reason: String(reason),
                 idea: !!idea,
-                questions: ((questions ?? []) as { question: string; options?: string[]; multiple?: boolean }[]).map((q) => toQuestion(q.question, q.options, q.multiple)),
+                questions: proposalQuestions(questions as z.infer<typeof PROPOSAL_QUESTIONS> | undefined),
               });
               this.o.board.log(cardId, 'activity', 'worker', idea ? this.o.board.t.worker.proposedIdea(p.title) : this.o.board.t.worker.proposedCard(p.title));
               return 'Proposed; the owner decides. Continue with your task.';
@@ -2142,9 +2142,8 @@ export class Workers {
         description: 'Only after your work has landed and Obeya said it starts again for it: what remains needs Obeya to run your change. Then end your turn; Obeya tells you once it runs your change.',
         schema: {},
         run: () => {
-          const row = this.o.board.row(cardId);
-          if (!row.landed) return 'Not recorded: your work has not landed.';
-          const l = JSON.parse(row.landed) as LandedState;
+          const l = landedOf(this.o.board.row(cardId));
+          if (!l) return 'Not recorded: your work has not landed.';
           if (!l.restarts) return 'Not recorded: Obeya does not start again for this landing; what runs now is what you get.';
           this.o.board.work(cardId, { landed: JSON.stringify({ ...l, waits: true } satisfies LandedState) });
           this.o.board.log(cardId, 'activity', 'worker', this.o.board.t.worker.waitsForRestart);
@@ -2173,8 +2172,7 @@ export class Workers {
               description: "Only in a follow-up in a temporary worktree: answering the owner needs a full clone (the repository's app or tooling, which may not run here). Then end your turn; Obeya resumes you in the next free clone.",
               schema: {},
               run: () => {
-                const row = this.o.board.row(cardId);
-                const l = row.landed ? (JSON.parse(row.landed) as LandedState) : null;
+                const l = landedOf(this.o.board.row(cardId));
                 if (!l?.worktree) return 'Not recorded: you work in a full clone already.';
                 this.o.board.work(cardId, { landed: JSON.stringify({ ...l, needsClone: true } satisfies LandedState) });
                 this.o.board.log(cardId, 'activity', 'worker', this.o.board.t.worker.needsClone);
@@ -2243,8 +2241,19 @@ export class Workers {
       .at(-1)?.text;
   }
 
-  private recordDecision(card: Item, question: string, answer: string) {
-    this.o.board.decide({ project_id: card.parent ?? null, card_id: card.id, question, answer, by: 'owner' });
+  /** The owner's answer to the question `q`: in the card's log, as a decision, and for whoever learns from it. */
+  private recordAnswer(card: Item, q: string, text: string, images: string[], replyTo: number | undefined, picks: string[]) {
+    this.o.board.log(card.id, 'answer', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo, undefined, undefined, picks);
+    this.o.board.decide({ project_id: card.parent ?? null, card_id: card.id, question: q, answer: text || '(Screenshot)', by: 'owner' });
+    if (text) this.o.onOwnerInput?.(card, 'answer', text, { question: q });
+    if (card.prototypeOf) this.o.onPrototypeAnswer?.(card, q, text || '(Screenshot)');
+  }
+
+  /** The card's question is settled: it goes back to its work, in its pull request, or finished (`done` when nothing landed, else `live`). */
+  private backToWork(cardId: string) {
+    const row = this.o.board.row(cardId);
+    const landed = landedOf(row);
+    this.o.board.work(cardId, { state: landed ? (landed.unchanged ? 'done' : 'live') : row.pr ? 'inPr' : 'working', need: null, detail: null });
   }
 
   // ---------------------------------------------------------------- prompts
@@ -2430,7 +2439,4 @@ const code = (text: string) =>
     .join('\n');
 
 const permissionKey = (p: AskedPermission) => JSON.stringify([p.name, p.input]);
-
-/** The state a finished card goes back to after a question: `done` when nothing landed, else `live`. */
-const landedState = (landed: string) => ((JSON.parse(landed) as LandedState).unchanged ? 'done' : 'live');
 

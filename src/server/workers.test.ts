@@ -69,23 +69,23 @@ describe('workers', () => {
   test('a worker is busy from a message to the end of the turn it starts', () => {
     const c = manual();
     workers.start(c.id);
-    expect(workers.busy()).toBe(true);
+    expect(workers.busyCards().length).toBeGreaterThan(0);
     expect(workers.busyCards()).toEqual([c.id]);
     runtime.last.call('ask', { question: 'CSV oder Excel?' });
     runtime.last.emit({ type: 'idle' });
-    expect(workers.busy()).toBe(false);
+    expect(workers.busyCards()).toEqual([]);
     expect(workers.busyCards()).toEqual([]);
     workers.answer(c.id, 'CSV');
-    expect(workers.busy()).toBe(true);
+    expect(workers.busyCards().length).toBeGreaterThan(0);
     runtime.last.emit({ type: 'text', text: 'Dann CSV.' });
     runtime.last.emit({ type: 'idle' });
     // the nudge starts a turn as well
-    expect(workers.busy()).toBe(true);
+    expect(workers.busyCards().length).toBeGreaterThan(0);
     runtime.last.emit({ type: 'idle' });
-    expect(workers.busy()).toBe(false);
+    expect(workers.busyCards()).toEqual([]);
     // a turn Obeya did not start, e.g. after a background command finished
     runtime.last.emit({ type: 'text', text: 'Fertig gerendert.' });
-    expect(workers.busy()).toBe(true);
+    expect(workers.busyCards().length).toBeGreaterThan(0);
   });
 
   test("the worker's words stand whole in the log: the last of a turn may be its answer to the owner", () => {
@@ -110,7 +110,7 @@ describe('workers', () => {
     expect(busy.inbox.length).toBe(told);
     // the worker ends its turn without handing over: it paused, the owner is not asked
     busy.emit({ type: 'idle' });
-    expect(workers.busy()).toBe(false);
+    expect(workers.busyCards()).toEqual([]);
     expect(busy.inbox.length).toBe(told);
     expect(state(c.id)).toBe('working');
     expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', text: 'Pausiert bis zum Neustart von Obeya.' });
@@ -127,7 +127,7 @@ describe('workers', () => {
     expect(busy.toolStep()).toBeUndefined();
     busy.emit({ type: 'text', text: 'Pausiert; das Rendern läuft weiter.' });
     busy.emit({ type: 'idle', background: 1 });
-    expect(workers.busy()).toBe(true);
+    expect(workers.busyCards().length).toBeGreaterThan(0);
     // the render finishes and wakes the worker, which would go on from there
     const told = busy.inbox.length;
     busy.emit({ type: 'tool', name: 'Bash', input: { command: 'tail -2 render.log' } });
@@ -137,7 +137,7 @@ describe('workers', () => {
     expect(busy.toolStep()).toBeUndefined();
     expect(busy.inbox.length).toBe(told);
     busy.emit({ type: 'idle' });
-    expect(workers.busy()).toBe(false);
+    expect(workers.busyCards()).toEqual([]);
     expect(state(c.id)).toBe('working');
     expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', text: 'Pausiert bis zum Neustart von Obeya.' });
     // a note from the owner before the restart says so with the note
@@ -167,7 +167,7 @@ describe('workers', () => {
     expect(busy.inbox.at(-1)).toContain('Obeya resumes you once it runs again');
     expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', text: 'Beenden von Obeya angekündigt; der Agent pausiert beim nächsten sicheren Punkt.' });
     busy.emit({ type: 'idle' });
-    expect(workers.busy()).toBe(false);
+    expect(workers.busyCards()).toEqual([]);
     expect(state(c.id)).toBe('working');
     expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', text: 'Pausiert, bis Obeya wieder läuft.' });
   });
@@ -553,14 +553,14 @@ describe('workers', () => {
     const sent = runtime.last.inbox.length;
     // no nudge, no question to the owner: the card waits for the limit, and a restart need not wait for it
     expect(state(c.id)).toBe('working');
-    expect(workers.busy()).toBe(false);
+    expect(workers.busyCards()).toEqual([]);
     expect(board.item(c.id)!.statusLine).toStartWith('Nutzungslimit · weiter um ');
     expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', author: 'obeya' });
     expect(board.events(c.id).at(-1)!.text).toContain('automatisch weiter');
     await Bun.sleep(60);
     expect(runtime.last.inbox.length).toBe(sent + 1);
     expect(runtime.last.inbox.at(-1)).toContain('usage limit');
-    expect(workers.busy()).toBe(true);
+    expect(workers.busyCards().length).toBeGreaterThan(0);
     // the limit still holds: it waits again, and its status line stays what it was before
     runtime.last.emit({ type: 'error', message: hit, limit: { resetsAt: Date.now() + 10_000 } });
     runtime.last.emit({ type: 'idle' });
@@ -592,7 +592,7 @@ describe('workers', () => {
     // a resumed session first ends a turn over what the previous one left, before the worker's own
     runtime.last.emit({ type: 'idle' });
     expect(runtime.last.inbox.length).toBe(before);
-    expect(workers.busy()).toBe(true);
+    expect(workers.busyCards().length).toBeGreaterThan(0);
     runtime.last.emit({ type: 'tool', name: 'Bash', input: { command: 'node demo.ts' } });
     runtime.last.emit({ type: 'text', text: 'Die Demo wird neu gerendert.' });
     runtime.last.emit({ type: 'idle', background: 1 });
@@ -623,7 +623,7 @@ describe('workers', () => {
     expect(state(c.id)).toBe('working');
     expect(runtime.last.inbox.length).toBe(before);
     // a restart now would cut the render off
-    expect(workers.busy()).toBe(true);
+    expect(workers.busyCards().length).toBeGreaterThan(0);
     // the render ends and wakes the worker, which hands over
     runtime.last.emit({ type: 'text', text: 'Video fertig.' });
     runtime.last.call('ready_for_review', { summary: 'Fertig.', demo: artifact() });
@@ -640,7 +640,7 @@ describe('workers', () => {
     await Bun.sleep(20);
     // as long as the work runs, the worker waits for it: nothing comes after its brief
     const brief = runtime.last.inbox.length;
-    expect(workers.busy()).toBe(true);
+    expect(workers.busyCards().length).toBeGreaterThan(0);
     runtime.last.emit({ type: 'background', running: 0 });
     await Bun.sleep(20);
     expect(runtime.last.inbox.length).toBe(brief + 1);
@@ -649,7 +649,7 @@ describe('workers', () => {
     runtime.last.emit({ type: 'background', running: 0 });
     await Bun.sleep(20);
     expect(state(c.id)).toBe('waiting:question');
-    expect(workers.busy()).toBe(false);
+    expect(workers.busyCards()).toEqual([]);
     expect(board.item(c.id)!.question!.text).toBe('Ich warte auf den Server.');
   });
 
@@ -671,10 +671,10 @@ describe('workers', () => {
     runtime.last.emit({ type: 'idle', background: 1 });
     // the question reaches the owner at once, but a restart now would cut the render off
     expect(state(c.id)).toBe('waiting:question');
-    expect(workers.busy()).toBe(true);
+    expect(workers.busyCards().length).toBeGreaterThan(0);
     await Bun.sleep(20);
     // a watcher nobody stopped does not keep a restart away for good
-    expect(workers.busy()).toBe(false);
+    expect(workers.busyCards()).toEqual([]);
     expect(state(c.id)).toBe('waiting:question');
   });
 
@@ -688,7 +688,7 @@ describe('workers', () => {
     await Bun.sleep(20);
     // the wait ended with the note, not with a nudge in the middle of the note's turn
     expect(runtime.last.inbox.length).toBe(before + 1);
-    expect(workers.busy()).toBe(true);
+    expect(workers.busyCards().length).toBeGreaterThan(0);
   });
 
   test('a preference learned while a worker runs reaches it once, with its next tool step', () => {
@@ -988,11 +988,11 @@ describe('tool calls the settings refuse or want confirmed', () => {
     expect(q.text).toContain('Grund der Rückfrage: Schreibzugriff');
     expect(board.events(c.id).at(-1)!.kind).toBe('question');
     // the worker waits for the owner, as after a question: a restart need not wait for it
-    expect(workers.busy()).toBe(false);
+    expect(workers.busyCards()).toEqual([]);
     workers.answer(c.id, 'Erlauben');
     expect(await answer).toEqual({ allow: true });
     expect(state(c.id)).toBe('working');
-    expect(workers.busy()).toBe(true);
+    expect(workers.busyCards().length).toBeGreaterThan(0);
     // one call, not a decision of the project's
     expect(board.decisionsOn(c.id)).toEqual([]);
   });
@@ -1089,7 +1089,7 @@ describe('pausing: the owner halts a worker and lets it go on', () => {
     const session = runtime.last;
     workers.pause(c.id);
     expect(session.closed).toBe(true);
-    expect(workers.busy()).toBe(false);
+    expect(workers.busyCards()).toEqual([]);
     expect(board.item(c.id)).toMatchObject({ state: 'working', paused: true });
     expect(board.row(c.id)).toMatchObject({ workspace, branch, session_id: 'sess-1' });
     expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', author: 'owner', text: 'Pausiert.' });
@@ -1103,7 +1103,7 @@ describe('pausing: the owner halts a worker and lets it go on', () => {
     expect(runtime.last.inbox[0]).toContain('exit code 137');
     expect(board.item(c.id)!.paused).toBeUndefined();
     expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', author: 'owner', text: 'Weiter.' });
-    expect(workers.busy()).toBe(true);
+    expect(workers.busyCards().length).toBeGreaterThan(0);
     expect(() => workers.resume(c.id)).toThrow(BadRequest);
   });
 
@@ -1152,7 +1152,7 @@ describe('pausing: the owner halts a worker and lets it go on', () => {
     expect(board.item(c.id)!.paused).toBeUndefined();
     workers.start(c.id);
     expect(board.item(c.id)!.paused).toBeUndefined();
-    expect(workers.busy()).toBe(true);
+    expect(workers.busyCards().length).toBeGreaterThan(0);
   });
 
   test('only a worker in a turn can be paused: one that asked and ended its turn has nothing running', () => {

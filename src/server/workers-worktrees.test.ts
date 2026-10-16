@@ -455,7 +455,7 @@ describe('a worktree per card', () => {
     s.emit({ type: 'idle' });
     // it waits, and is no reason to put off the restart
     expect(s.closed).toBe(false);
-    expect(workers.busy()).toBe(false);
+    expect(workers.busyCards()).toEqual([]);
     expect(board.item(c.id)!.finishing).toBe(true);
 
     // Obeya starts again: the worker resumes its session in the worktree it had
@@ -539,7 +539,7 @@ describe('a worktree per card', () => {
     s.emit({ type: 'error', message: 'API Error: 529 Overloaded' });
     s.emit({ type: 'idle' });
     expect(s.closed).toBe(false);
-    expect(workers.busy()).toBe(true);
+    expect(workers.busyCards().length).toBeGreaterThan(0);
     expect(s.inbox.at(-1)).toContain('go on with what remained after the landing');
     s.emit({ type: 'error', message: 'API Error: 529 Overloaded' });
     s.emit({ type: 'idle' });
@@ -548,7 +548,7 @@ describe('a worktree per card', () => {
     expect(board.item(c.id)!.finishing).toBe(true);
     expect(s.closed).toBe(false);
     // the question is no reason to put off a restart
-    expect(workers.busy()).toBe(false);
+    expect(workers.busyCards()).toEqual([]);
     // the owner's answer has the worker try again; once it gets through, the card finishes
     workers.answer(c.id, 'Nochmal versuchen');
     expect(state(c.id)).toBe('live');
@@ -591,7 +591,7 @@ describe('a worktree per card', () => {
     s.emit({ type: 'text', text: 'Pausing for the restart.' });
     s.emit({ type: 'idle' });
     expect(s.closed).toBe(false);
-    expect(workers.busy()).toBe(false);
+    expect(workers.busyCards()).toEqual([]);
     expect(board.item(c.id)!.finishing).toBe(true);
     expect(board.row(c.id).workspace).toBe(wc);
     expect(board.events(c.id).at(-1)).toMatchObject({ author: 'obeya', kind: 'state' });
@@ -626,7 +626,7 @@ describe('a worktree per card', () => {
     // the deploy takes longer than a sign of life would: the watcher still runs
     await Bun.sleep(40);
     expect(s.closed).toBe(false);
-    expect(workers.busy()).toBe(true);
+    expect(workers.busyCards().length).toBeGreaterThan(0);
     expect(board.item(c.id)!.finishing).toBe(true);
     expect(board.row(c.id).workspace).toBe(wc);
     // the deploy is done: the watcher ends and wakes the worker, which does what remained
@@ -652,7 +652,7 @@ describe('a worktree per card', () => {
     s.emit({ type: 'idle' });
     // no second try that holds off the restart, and no end of the card either
     expect(s.inbox).toHaveLength(sent);
-    expect(workers.busy()).toBe(false);
+    expect(workers.busyCards()).toEqual([]);
     expect(s.closed).toBe(false);
     expect(board.item(c.id)!.finishing).toBe(true);
     workers.shutdown();
@@ -678,13 +678,13 @@ describe('a worktree per card', () => {
     // no try that runs into the limit again, no question to the owner, and no end of the card either
     expect(state(c.id)).toBe('live');
     expect(s.closed).toBe(false);
-    expect(workers.busy()).toBe(false);
+    expect(workers.busyCards()).toEqual([]);
     expect(board.item(c.id)!.finishing).toBe(true);
     expect(board.item(c.id)!.statusLine).toStartWith('Nutzungslimit · weiter um ');
     await Bun.sleep(60);
     expect(s.inbox).toHaveLength(sent + 1);
     expect(s.inbox.at(-1)).toContain('usage limit');
-    expect(workers.busy()).toBe(true);
+    expect(workers.busyCards().length).toBeGreaterThan(0);
     // once it has done what remained, the card finishes
     s.emit({ type: 'tool', name: 'Bash', input: { command: 'bun scripts/backfill.ts' } });
     expect(board.item(c.id)!.statusLine).toBeUndefined();
