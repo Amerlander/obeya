@@ -133,7 +133,8 @@ describe('pairing', () => {
     const p = await pairing();
     expect(p.code).toMatch(/^\d{6}$/);
     expect(p.url).toBe(`https://${NAME}/pair?code=${p.code}`);
-    const paired = await viaTailnet(`/pair?code=${p.code}`);
+    // the scanner app opens the address from a page of its own: a navigation from another site
+    const paired = await viaTailnet(`/pair?code=${p.code}`, { 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document' });
     expect(paired.status).toBe(303);
     expect(paired.headers.get('location')).toBe('/');
     expect(paired.headers.get('set-cookie')).toContain('HttpOnly');

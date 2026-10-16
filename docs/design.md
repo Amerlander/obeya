@@ -3974,7 +3974,11 @@ Obeya's own names (`localhost`, `127.0.0.1`, `[::1]`, and while other devices re
 tailnet name or the address it listens on; the port is not checked), else 421; an `Origin`, where
 it has one, is Obeya's own (scheme, host and port of the address it was sent to, as
 `X-Forwarded-Proto` and `-Host` say behind `tailscale serve`), and it carries no
-`Sec-Fetch-Site: cross-site`, else 403.
+`Sec-Fetch-Site: cross-site`, else 403. A link from another site that opens one of Obeya's pages in
+the browser's window passes all the same (a GET outside `/api/` with `Sec-Fetch-Mode: navigate` and
+`Sec-Fetch-Dest: document`): it only shows the page, as typing the address would, and a phone
+scanning the QR code often arrives that way, from the scanner app's page. In another site's frame
+the page still gets nothing.
 Requests with neither header (the app's shell sending `POST /api/stop`, scripts, curl, the workers'
 narration) pass. The page and the push-to-talk panel are checked too: Bun serves an HTML bundle
 past any handler, so each moves to a path made up at every start and its own path fetches it from

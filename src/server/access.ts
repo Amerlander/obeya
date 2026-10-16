@@ -25,6 +25,10 @@ export function hostname(host: string): string {
  *   `X-Forwarded-Proto` and `-Host`), or `Sec-Fetch-Site: cross-site`: 403. A request with neither
  *   (the app's shell, scripts, curl) passes. A page elsewhere cannot set the forwarded headers
  *   without a preflight, which Obeya does not answer.
+ * - A link from another site opening one of Obeya's pages in the browser's window (a GET outside
+ *   `/api/`, `Sec-Fetch-Mode: navigate` to a `document`) passes despite `cross-site`: it only shows
+ *   the page, as typing the address would. Scanning the QR code on a phone often arrives this way
+ *   (from the scanner app's page); in a frame of another site the page still gets nothing.
  * - `files`: a GET of one of the workers' files (an HTML artifact's page and what it loads). Its
  *   sandboxed frame has an origin of its own (`null`), so the browser marks what it loads as
  *   cross-site; what it loads is read only by that frame and changes nothing.
@@ -40,7 +44,12 @@ export function refusal(req: Request, hosts: readonly string[], files = false): 
   const origin = req.headers.get('origin');
   const proto = req.headers.get('x-forwarded-proto');
   const own = `${proto ? `${proto}:` : new URL(req.url).protocol}//${(forwarded ?? host).toLowerCase()}`;
-  if ((origin !== null && origin.toLowerCase() !== own) || req.headers.get('sec-fetch-site') === 'cross-site') return new Response("Obeya answers its own page, not another site's.\n", { status: 403, headers: PLAIN });
+  const opened =
+    (req.method === 'GET' || req.method === 'HEAD') &&
+    req.headers.get('sec-fetch-mode') === 'navigate' &&
+    req.headers.get('sec-fetch-dest') === 'document' &&
+    !new URL(req.url).pathname.startsWith('/api/');
+  if ((origin !== null && origin.toLowerCase() !== own) || (req.headers.get('sec-fetch-site') === 'cross-site' && !opened)) return new Response("Obeya answers its own page, not another site's.\n", { status: 403, headers: PLAIN });
   return null;
 }
 

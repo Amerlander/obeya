@@ -142,6 +142,11 @@ describe('who may', () => {
     expect(page.status).toBe(200);
     expect(await page.text()).toContain('<html');
     expect((await at('/', { 'sec-fetch-site': 'cross-site', 'sec-fetch-dest': 'iframe' })).status).toBe(403);
+    // a link on another site opens the page in the window, but not the API
+    const link = { 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document' };
+    expect((await at('/', link)).status).toBe(200);
+    expect((await at(api('/cards'), link)).status).toBe(403);
+    expect((await at('/', link, { method: 'POST' })).status).toBe(403);
     expect((await at('/panel', { host: 'rebound.evil.example' })).status).toBe(421);
     expect((await at('/nothing', { host: 'rebound.evil.example' })).status).toBe(421);
     expect(await opens({ origin: own() })).toBe(true);
