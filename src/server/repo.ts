@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync, watch } from 'node:fs'
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import type { RepoAdapter, RepoInfo } from '../adapters/types';
-import { notAProject, type OtherDoc, type PlanDoc, parsePlanDoc } from '../core/plan-doc';
+import { type OtherDoc, type PlanDoc, parsePlanDoc } from '../core/plan-doc';
 import { defaultBranch, gitOrNull } from './workspaces';
 
 export function repoInfo(path: string): RepoInfo {
@@ -59,8 +59,8 @@ export function readPlanDocs(repoPath: string, adapter: RepoAdapter): { docs: Pl
       continue; // a directory named *.md, or gone since
     }
     const doc = parsePlanDoc(file, markdown);
-    if (doc) docs.push(doc);
-    else others.push({ file, reason: notAProject(markdown)! });
+    if ('reason' in doc) others.push(doc);
+    else docs.push(doc);
   }
   return { docs, others };
 }

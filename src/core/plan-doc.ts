@@ -2,8 +2,8 @@
 //
 // The shape follows the common template: a `# Title`, a `## Goal` section and a `## Workstreams`
 // checklist whose top-level items are the workstreams (`- [x] **W3:** Title. Details …`).
-// A doc without a workstream checklist is not a project (design notes, templates); `notAProject`
-// says why, for the owner to see.
+// A doc without a workstream checklist is not a project (design notes, templates); the parse says
+// why, for the owner to see.
 
 export interface PlanDoc {
   file: string;
@@ -40,26 +40,20 @@ export interface OtherDoc {
   reason: NotAProject;
 }
 
-/** Why the doc is not a project; null when it is one. */
-export function notAProject(markdown: string): NotAProject | null {
-  const wsSection = splitSections(markdown.replace(/\r\n/g, '\n').split('\n')).find((s) => WORKSTREAMS_HEADING.test(s.heading));
-  if (!wsSection) return 'noWorkstreams';
-  return parseWorkstreams(wsSection.lines).length ? null : 'noChecklist';
-}
-
 /** Every workstream is ticked: the project's work is done, and it ends. */
 export const allTicked = (doc: PlanDoc): boolean => doc.workstreams.every((w) => w.done);
 
-export function parsePlanDoc(file: string, markdown: string): PlanDoc | null {
+/** The project the doc describes, or why it is none. */
+export function parsePlanDoc(file: string, markdown: string): PlanDoc | OtherDoc {
   const lines = markdown.replace(/\r\n/g, '\n').split('\n');
   const titleLine = lines.find((l) => l.startsWith('# '));
   const title = titleLine ? titleLine.slice(2).replace(/`/g, '').trim() : file;
   const sections = splitSections(lines);
   const goalSection = sections.find((s) => GOAL_HEADING.test(s.heading));
   const wsSection = sections.find((s) => WORKSTREAMS_HEADING.test(s.heading));
-  if (!wsSection) return null;
+  if (!wsSection) return { file, reason: 'noWorkstreams' };
   const workstreams = parseWorkstreams(wsSection.lines);
-  if (!workstreams.length) return null;
+  if (!workstreams.length) return { file, reason: 'noChecklist' };
   return { file, title, goal: goalSection ? firstParagraph(goalSection.lines) : '', workstreams, markdown };
 }
 
