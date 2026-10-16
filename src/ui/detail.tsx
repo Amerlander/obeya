@@ -422,10 +422,10 @@ export function Detail(p: Props) {
                     comments={agentListens(item)}
                     top={
                       (!demoWaits || shareBox) && (
-                        <div className="demo-top">
+                        <>
                           {!demoWaits && <p className="hint">{item.state === 'working' || item.state === 'waiting' ? t.demo.again : t.demo.kept}</p>}
                           {shareBox}
-                        </div>
+                        </>
                       )
                     }
                   />
@@ -1319,7 +1319,7 @@ function DemoView({
   summary?: string;
   demo: Demo;
   children?: ReactNode;
-  /** above the video or artifact, where it is seen on opening however long the chapters or the artifact: sharing */
+  /** above the video or artifact, where it is seen on opening however long the chapters or the artifact: sharing; it is about the latest demo, so an earlier one goes without it */
   top?: ReactNode;
   autoplay?: boolean;
   comments?: boolean;
@@ -1393,24 +1393,29 @@ function DemoView({
   return (
     <>
       <div className="demo-view">
-        {top}
-        {earlier.length > 0 && (
-          <div className={demo === latest ? 'demo-versions' : 'demo-versions earlier'} title={demo === latest ? undefined : t.demo.earlierHint}>
-            <button className="step" disabled={shownAt === 0} title={t.demo.older} aria-label={t.demo.older} onClick={() => show(all[shownAt - 1]!)}>
-              ‹
-            </button>
-            <span>
-              {t.demo.version(shownAt + 1, all.length, demo === latest)}
-              {demo.at && ` · ${handedAt(demo.at)}`}
-            </span>
-            <button className="step" disabled={demo === latest} title={t.demo.newer} aria-label={t.demo.newer} onClick={() => show(all[shownAt + 1]!)}>
-              ›
-            </button>
-            {shownAt < all.length - 2 && (
-              <button className="link" onClick={() => show(latest)}>
-                {t.demo.toLatest}
-              </button>
+        {/* which of the card's demos is shown, in the line with sharing */}
+        {(earlier.length > 0 || (top && demo === latest)) && (
+          <div className="demo-top">
+            {earlier.length > 0 && (
+              <div className={demo === latest ? 'demo-versions' : 'demo-versions earlier'} title={demo === latest ? undefined : t.demo.earlierHint}>
+                <button className="step" disabled={shownAt === 0} title={t.demo.older} aria-label={t.demo.older} onClick={() => show(all[shownAt - 1]!)}>
+                  ‹
+                </button>
+                <span>
+                  {t.demo.version(shownAt + 1, all.length, demo === latest)}
+                  {demo.at && ` · ${handedAt(demo.at)}`}
+                </span>
+                <button className="step" disabled={demo === latest} title={t.demo.newer} aria-label={t.demo.newer} onClick={() => show(all[shownAt + 1]!)}>
+                  ›
+                </button>
+                {shownAt < all.length - 2 && (
+                  <button className="link" onClick={() => show(latest)}>
+                    {t.demo.toLatest}
+                  </button>
+                )}
+              </div>
             )}
+            {demo === latest && top}
           </div>
         )}
         {demo.kind === 'html' ? (

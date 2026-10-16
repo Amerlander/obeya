@@ -515,9 +515,12 @@ a place goes at once, with its place and frame.
 
 A new demo replaces the one on the card, but the card keeps the one before (`CardRow.demos`, served
 under `/api/cards/:id/demos/:n/`): a demo after feedback often shows only what changed. Once there
-is one, a line above the video says which is shown („Neueste Demo 2 von 2 · 13:37“), with ‹ and ›
-to step back and forth, and „Zur neuesten“ two or more steps back; an earlier one stands out in the
-line („Frühere Demo 1 von 2“), so it is not taken for the latest. Stepping is no sign the owner has
+is one, plain text above the video, left of „Teilen“ in the same line, says which is shown
+(„Neueste Demo 2 von 2 · 13:37“), with ‹ and › to step back and forth, and „Zur neuesten“ two or
+more steps back; an earlier one's text is in colour („Frühere Demo 1 von 2“), so it is not taken
+for the latest. Sharing is about the latest demo, so an earlier one shows without it (whether
+several versions may be shared at once is open). Until the owner's feedback on 2026-10-16 the line
+was a bar of its own below sharing, coloured for an earlier demo. Stepping is no sign the owner has
 finished watching (see above), and a new handover leaves them on the demo they look at. An earlier
 demo whose directory a later one was rendered into, or whose files are gone (demos are deleted to
 free space), is not offered.
