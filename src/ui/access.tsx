@@ -36,15 +36,6 @@ function useAccess(on: boolean): [AccessView | null, (v: AccessView) => void] {
   return [view, setView];
 }
 
-/** Whether this page is on the machine Obeya runs on: only there are devices paired. */
-export function useLocalPage(): boolean {
-  const [local, setLocal] = useState(false);
-  useEffect(() => {
-    api.access().then((v) => setLocal(v.local), () => {});
-  }, []);
-  return local;
-}
-
 /** A moment as the device list says it: the time today, else the day. */
 const when = (iso: string) => (new Date(iso).toDateString() === new Date().toDateString() ? clock(iso) : shortDay(iso));
 

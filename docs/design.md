@@ -1180,12 +1180,9 @@ what it waits for and the buttons that move it, and a row opens its card; a clic
 Esc closes it. The archive's button lists the archive under it the same way (`src/ui/archive.tsx`).
 The bar's buttons are all one height.
 
-Right in the bar, before „Konfiguration“, a phone icon opens „Telefon verbinden“ (see Other
-devices); it shows only on a page on the machine Obeya runs on.
-
 The bar's buttons always fit into it (`src/ui/barFit.ts`): narrower than its contents, beside a wide
 sheet or in a narrow window, it gives up in steps the wordmark for the sign and the branch, then the
-labels for icons a few at a time, then the pool, `?` and the phone icon, then all but the sheets'
+labels for icons a few at a time, then the pool and `?`, then all but the sheets'
 buttons. Which
 step is measured (the bar's right end within its padding) whenever its width or contents change,
 because the same width holds a short branch or a long one and one machine's clones or three.
@@ -4070,8 +4067,8 @@ anything on the other address. A remote request needs a paired device; without o
 „Dieses Gerät ist nicht mit Obeya verbunden“ with how to connect and a field for the code (401),
 the API answers 401 `notPaired`, and a WebSocket opens not at all.
 
-*Pairing.* The phone icon in the bar opens „Telefon verbinden“: while other devices reach Obeya, a
-QR code of `<address>/pair?code=<code>` beside the address and the code in large digits. The code
+*Pairing.* The section's button „Telefon verbinden“ opens a dialog of that name: while other
+devices reach Obeya, a QR code of `<address>/pair?code=<code>` beside the address and the code in large digits. The code
 has six digits, holds five minutes (a new one comes when it ran out with the dialog open) and pairs
 one device; five wrong tries spend it (only those from Obeya's own page or without `Sec-Fetch-Site:
 cross-site`, so another site cannot spend them by sending a browser in the tailnet to `/pair`). The phone opens the address (the camera reads the code), and
@@ -4089,7 +4086,7 @@ and its open pages lose their WebSocket and reload to the page that says how to 
 stays paired until it is removed or has gone unused for 90 days (a phone given away or lost and
 forgotten); the cookie itself lives 400 days, the longest browsers keep one. Pairing, the devices
 and the setting are managed only on this machine (`/api/access…` answers another device 403
-`onlyHere`, and its page shows no phone icon): a phone that is lost cannot pair others or keep
+`onlyHere`, and the section shows it only its heading and hint): a phone that is lost cannot pair others or keep
 itself in.
 
 ### Setup assistant
@@ -4237,6 +4234,9 @@ Python sidecars ignore Ctrl-C instead.
   again, and one forgotten drops by itself. Managing devices only on the machine itself, so a lost
   phone cannot keep itself in. The cookie is `SameSite=None` over HTTPS rather than `Strict`, which
   the plan said: with `Strict` a worker's HTML artifact on the phone could not load its own files.
+- **„Telefon verbinden“ only in the configuration** (2026-10-16): a phone is connected once, and
+  again only for a new phone or a closed tab, so it takes no place in the bar. Before, a phone icon
+  stood in the bar beside „Konfiguration“.
 - **Obeya restarts itself for new code on its own checkout instead of hot reloading**: a restart is
   a path that already exists (workers resume by session id), hot reloading keeps old state alive
   next to new code. It also restarts for commits made outside Obeya.

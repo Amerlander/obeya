@@ -269,7 +269,7 @@ button.pill:hover { box-shadow: var(--lift); }
   #bar[data-fit~="4"] :is(.queue, #attention) .lbl { display: none; }
 #bar[data-fit~="2"] .config .bar-icon, #bar[data-fit~="3"] .archive .bar-icon, #bar[data-fit~="4"] .queue .bar-icon { display: block; }
 #bar[data-fit~="2"] .config, #bar[data-fit~="3"] :is(.archive .kpill, .new-card), #bar[data-fit~="4"] .queue .kpill { padding-inline: 10px; }
-#bar[data-fit~="5"] #workspaces, #bar[data-fit~="5"] .help, #bar[data-fit~="5"] .phone { display: none; }
+#bar[data-fit~="5"] #workspaces, #bar[data-fit~="5"] .help { display: none; }
 #bar[data-fit~="6"] .canvas-pill, #bar[data-fit~="6"] .new-card, #bar[data-fit~="6"] .pill.restart .say { display: none; }
 /* the bar's buttons are one height, whatever they hold: text, an icon, a count */
 #bar .pill, .pill.talk-pill { height: 34px; box-sizing: border-box; padding-block: 0; }
@@ -1473,8 +1473,6 @@ button.link:hover { text-decoration: underline; }
 .setup .c-how code { padding: 2px 6px; border-radius: 2px; background: var(--card); border: 1px solid var(--line); user-select: all; }
 
 /* „Telefon verbinden“ (access.tsx): the QR code beside the address and the code to type */
-#bar .pill.phone { padding-inline: 10px; }
-#bar .pill.phone svg { display: block; }
 #phone { position: fixed; inset: 0; z-index: 60; background: var(--dim); display: flex; align-items: center; justify-content: center; padding: 24px; animation: fade .15s ease-out; }
 #phone .box { position: relative; background: var(--panel); border-radius: 3px; box-shadow: var(--lift); padding: 22px 26px 20px; width: 680px; max-width: 100%; max-height: 100%; overflow: auto; font-size: 14px; }
 #phone h2 { margin: 0 0 16px; font-size: 23px; }
