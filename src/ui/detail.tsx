@@ -11,6 +11,7 @@ import { firstOpening } from './demoSeen';
 import { know, known } from './known';
 import { Branch } from './diff';
 import { landedRef, shownTitle } from './parts';
+import { inQueue } from '../core/queue';
 import { useQueueMove } from './queue';
 import { Inline, plain } from './markdown';
 import { Body, Msg, Quote, Reading, useAnswer, useReportedHeight } from './message';
@@ -23,7 +24,7 @@ import { AttachButton, imageUrl, ShotStrip, Shots, useShotInput } from './shots'
 import { useStickToEnd } from './stickToEnd';
 import { dismissPlace, type Place, seekTo, showsVersions, usePlace, videoOf, watch } from './spot';
 import { becomesLabel, clock as time, errorText, failText, shortDay, stateLabel, t } from './strings';
-import { agentWorks, demoHandover, koordinatorReads, ownerField, parseQuestion, talkAlone, talkTurns, type Turn, withoutOpen, worked as isWorked } from './talk';
+import { agentWorks, demoHandover, koordinatorReads, ownerField, parseQuestion, talkAlone, talkTurns, type Turn, waitsFirstStart, withoutOpen, worked as isWorked } from './talk';
 import { PageChangeList } from './page-changes';
 import { WishReplyLink } from './wish';
 
@@ -162,6 +163,8 @@ export function Detail(p: Props) {
       </>
     );
   const worked = isWorked(item);
+  // a task waiting for its first start keeps its text in full beside its conversation, where notes wait for its agent
+  const waits = waitsFirstStart(item);
   // a demo, video or HTML artifact, goes to a page where the repository has a share target, else it is exported as a file; prototypes stay here
   const shares = p.repos.find((r) => r.id === item.repo);
   const shareBox = !!item.demo && !item.prototypeOf ? shares?.share || item.share ? <ShareBox item={item} act={act} /> : <ExportBox item={item} run={run} needs={shares?.shareNeeds} /> : null;
@@ -268,6 +271,46 @@ export function Detail(p: Props) {
       )}
     </p>
   );
+  // what a card in the queue waits for, with the buttons that start it anyway or take it out of the queue
+  const queueBox = item.state === 'planned' && item.queue && (
+    <div className="question queue">
+      {'checking' in item.queue ? (
+        <div className="q-text">{t.queue.checkingLong}</div>
+      ) : 'workspace' in item.queue ? (
+        <>
+          <div className="q-text">
+            {t.queue.workspaceLong[item.queue.workspace]}{' '}
+            {p.onClones && (
+              <button className="link" onClick={() => p.onClones?.(item.repo, item.queue && 'workspace' in item.queue && item.queue.workspace === 'slots' ? 'slots' : 'clones')}>
+                {t.queue.workspaceConfig[item.queue.workspace]}
+              </button>
+            )}
+          </div>
+          <QueuePlace item={item} items={all} />
+          <div className="actions">
+            <button className="btn" onClick={() => act({ action: 'dequeue' }, { close: false })}>
+              {t.queue.dequeue}
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="q-text">
+            {t.queue.behind(item.queue.behind.map((id) => plain(all.find((x) => x.id === id)?.title ?? id)))} {item.queue.reason}
+          </div>
+          <QueuePlace item={item} items={all} />
+          <div className="actions">
+            <button className="btn" onClick={() => act({ action: 'force' }, { close: true, ack: t.queue.forced })}>
+              {t.queue.force}
+            </button>
+            <button className="btn" onClick={() => act({ action: 'dequeue' }, { close: false })}>
+              {t.queue.dequeue}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
   // a decided idea keeps what it was decided on, and how
   const brief = item.brief !== undefined && (
     <>
@@ -298,45 +341,7 @@ export function Detail(p: Props) {
         </ProposalView>
       )}
 
-      {item.state === 'planned' && item.queue && (
-        <div className="question queue">
-          {'checking' in item.queue ? (
-            <div className="q-text">{t.queue.checkingLong}</div>
-          ) : 'workspace' in item.queue ? (
-            <>
-              <div className="q-text">
-                {t.queue.workspaceLong[item.queue.workspace]}{' '}
-                {p.onClones && (
-                  <button className="link" onClick={() => p.onClones?.(item.repo, item.queue && 'workspace' in item.queue && item.queue.workspace === 'slots' ? 'slots' : 'clones')}>
-                    {t.queue.workspaceConfig[item.queue.workspace]}
-                  </button>
-                )}
-              </div>
-              <QueuePlace item={item} items={all} />
-              <div className="actions">
-                <button className="btn" onClick={() => act({ action: 'dequeue' }, { close: false })}>
-                  {t.queue.dequeue}
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="q-text">
-                {t.queue.behind(item.queue.behind.map((id) => plain(all.find((x) => x.id === id)?.title ?? id)))} {item.queue.reason}
-              </div>
-              <QueuePlace item={item} items={all} />
-              <div className="actions">
-                <button className="btn" onClick={() => act({ action: 'force' }, { close: true, ack: t.queue.forced })}>
-                  {t.queue.force}
-                </button>
-                <button className="btn" onClick={() => act({ action: 'dequeue' }, { close: false })}>
-                  {t.queue.dequeue}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
+      {!waits && queueBox}
 
       {item.prototypeOf && (
         <p className="hint">{project ? t.idea.prototypeOfProject(ideaTitle, plain(project.title)) : planning ? t.idea.prototypeOfPlanning(ideaTitle) : t.idea.prototypeOf(ideaTitle)}</p>
@@ -358,7 +363,7 @@ export function Detail(p: Props) {
 
       {item.state === 'planned' && !item.queue && <LastFailure cardId={item.id} />}
 
-      {item.state === 'planned' && !worked && (
+      {item.state === 'planned' && !worked && !waits && (
         <>
           {editable ? (
             <ManualFields item={item} repos={p.repos} onEdit={p.onEdit} />
@@ -406,10 +411,23 @@ export function Detail(p: Props) {
         </>
       )}
 
-      {item.state === 'planned' && !worked && <Scope files={item.scope} />}
+      {item.state === 'planned' && !worked && !waits && <Scope files={item.scope} />}
 
       {worked && where}
-      {worked ? (
+      {waits ? (
+        <Split
+          main={
+            <>
+              {queueBox}
+              <Body md={item.body} />
+              <Shots ids={item.images} />
+              {planSource}
+              <Scope files={item.scope} />
+            </>
+          }
+          talk={<TaskTalk item={item} act={act} tell={tell} />}
+        />
+      ) : worked ? (
         // what came of the work on the left, once there is something, the conversation with the owner's one field on the right;
         // the task is the conversation's first message, and the summary its handover
         <Split
@@ -452,7 +470,8 @@ export function Detail(p: Props) {
               </>
             )
           }
-          talk={<TaskTalk item={item} listener={listener} act={act} tell={tell} />}
+          // what is typed into a card waiting to start waits for its agent, not for Obeya
+          talk={<TaskTalk item={item} listener={inQueue(item) ? undefined : listener} act={act} tell={tell} />}
         />
       ) : (
         <>
@@ -999,7 +1018,7 @@ function Conversation({
     <>
       <h4 className="p-h">{t.talk.heading}</h4>
       <div className={onReply && !replyKnown ? 'talk conv reply-new' : 'talk conv'} ref={box} onScroll={onScroll}>
-        {turns.shown.length === 0 && !working && !turns.asked && !seed && <div className="hint">{idea ? t.idea.talkEmpty : question ? t.question.empty : proposal ? t.reviseHint : t.talk.empty}</div>}
+        {turns.shown.length === 0 && !turns.unread.length && !working && !turns.asked && !seed && <div className="hint">{idea ? t.idea.talkEmpty : question ? t.question.empty : proposal ? t.reviseHint : t.talk.empty}</div>}
         {turns.shown.slice(0, seedAt).map(line)}
         {seed}
         {turns.shown.slice(seedAt, stillAt).map(line)}
@@ -1025,7 +1044,7 @@ function Conversation({
           held.includes(e.id) ? (
             line({ e, steps: [] })
           ) : (
-            <Message key={e.id} turn={{ e, steps: [] }} unread={t.talk.unread(!idea && !question && !proposal)} onDelete={() => takeBack(item.id, e)} />
+            <Message key={e.id} turn={{ e, steps: [] }} unread={t.talk.unread(idea || question || proposal ? 'reply' : inQueue(item) ? 'start' : 'step')} onDelete={() => takeBack(item.id, e)} />
           ),
         )}
         {!working && !past && koordinatorReads(events) && <Reading />}
@@ -2025,7 +2044,7 @@ function TaskTalk({
         field
           ? {
               key: `${item.state}:${item.need ?? ''}:${field}:${key}`,
-              placeholder: { note: item.paused ? t.pause.compose : askable(item) || item.followUp ? t.compose.followUp : agentWorks(item) ? t.compose.working : t.compose.idle, answer: t.compose.question, feedback: t.compose.review, demo: t.compose.demo, discuss: '', revise: t.compose.revise }[field],
+              placeholder: { note: item.paused ? t.pause.compose : askable(item) || item.followUp ? t.compose.followUp : agentWorks(item) ? t.compose.working : inQueue(item) ? t.compose.queued : t.compose.idle, answer: t.compose.question, feedback: t.compose.review, demo: t.compose.demo, discuss: '', revise: t.compose.revise }[field],
               listener,
               onWords: tell(field),
               onPicked: (text, [picks = []], images, replyTo) => act({ action: 'answer', text, picks, images, ...(replyTo ? { replyTo } : {}) }, { close: false }),

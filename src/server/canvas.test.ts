@@ -148,6 +148,20 @@ describe('a canvas with several repositories', () => {
     expect(() => canvas.act(p.id, { action: 'accept' })).toThrow();
   });
 
+  test('a note typed while Obeya checks the card waits for its worker and goes with the task', async () => {
+    const b = canvas.board.create({ title: 'B', x: 0, y: 0 });
+    const p = canvas.board.propose(b.id, { title: 'Folgefehler', task: 'S', reason: 'R' });
+    canvas.act(p.id, { action: 'accept' });
+    expect(item(p.id).queue).toMatchObject({ checking: true });
+    canvas.tell(p.id, 'Auch die alten Karten nachtragen.', [], false);
+    expect(canvas.board.events(p.id).at(-1)).toMatchObject({ kind: 'hint', author: 'owner', text: 'Auch die alten Karten nachtragen.', unread: true });
+    await settle();
+    expect(item(p.id).state).toBe('working');
+    const worker = runtime.sessions.find((s) => s.spec.role === 'worker')!;
+    expect(worker.inbox[0]).toContain('A note from the owner while your card waited to start:\n\nAuch die alten Karten nachtragen.');
+    expect(canvas.board.events(p.id).find((e) => e.text === 'Auch die alten Karten nachtragen.')!.unread).toBeUndefined();
+  });
+
   test("the options picked on a proposal go into its text as decided, the others as open", () => {
     const b = canvas.board.create({ title: 'B', x: 0, y: 0 });
     const questions = [

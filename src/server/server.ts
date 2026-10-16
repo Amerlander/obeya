@@ -13,6 +13,7 @@ import type { CanvasRuntime } from './canvas';
 import { defaultPushKey, type PageFocus, type PushKeyView } from '../core/push-key';
 import { parsePlace } from '../core/layout';
 import { type Focus, type Heard, type Input, isField } from './commands';
+import { inQueue } from '../core/queue';
 import type { Config } from './config';
 import { serveAnswerFile, serveDemoFile, serveMockFrame } from './demo';
 import { type NarrationHost, parseClipRequest } from './narration';
@@ -327,6 +328,9 @@ export function serve(
       rmSync(dir, { recursive: true, force: true });
     }
   };
+  // a card waiting to start takes what is typed into its field for the agent that will take it on;
+  // spoken words go to the Koordinator, which starts it anyway or takes it out of the queue
+  const listens = (card: Item, input: Input) => agentListens(card) || (input.field === 'note' && inQueue(card));
   /**
    * What the owner said or typed: with an agent on the open card, straight to that agent (which
    * passes on what asks Obeya for something); else the Koordinator reads it. `null`: Whisper heard
@@ -338,7 +342,7 @@ export function serve(
     // nothing heard or understood: screenshots shown with it stay in the browser for the next try
     if (text === null || (!text && !(input.typed && images.length))) return unheard(c, text);
     const card = focus.card ? c.board.item(focus.card) : undefined;
-    if (card && agentListens(card)) {
+    if (card && listens(card, input)) {
       c.tell(card.id, text, images, !input.typed, typeof input.replyTo === 'number' ? input.replyTo : undefined, input.spot);
       // the card's conversation shows the words; the app's panel shows what was heard
       return { confirm: '', quiet: true, text } satisfies Heard & { text: string };
@@ -693,8 +697,9 @@ export function serve(
           const { text, images, field, replyTo, spot } = (await req.json()) as { text: string; images?: string[]; field?: unknown; replyTo?: unknown; spot?: SpotInput };
           // a screenshot alone may speak for itself to the open card's agent
           const card = focusOf(req).card;
-          const listens = !!card && !!c.board.item(card) && agentListens(c.board.item(card)!);
-          if (typeof text !== 'string' || (!text.trim() && !(listens && images?.length))) throw new BadRequest('emptyText', 'text must be a non-empty string');
+          const open = card ? c.board.item(card) : undefined;
+          const toAgent = !!open && listens(open, isField(field) ? { field } : {});
+          if (typeof text !== 'string' || (!text.trim() && !(toAgent && images?.length))) throw new BadRequest('emptyText', 'text must be a non-empty string');
           // screenshots pasted into the typed command go to the cards it creates or concerns
           c.images.resolve(images);
           return heard(c, text.trim(), focusOf(req, c), images ?? [], { typed: true, ...(isField(field) ? { field } : {}), ...(typeof replyTo === 'number' || isTalkRef(replyTo) ? { replyTo } : {}), ...(spot ? { spot } : {}) });

@@ -274,6 +274,9 @@ test('a card has one field for the owner, and under a demo with a question it ta
   expect(ownerField({ state: 'done', branch: 'obeya/x' })).toBe('note');
   expect(ownerField({ state: 'live', branch: 'obeya/x', archivedAt: '2026-10-08T10:00:00Z' })).toBeNull();
   expect(ownerField({ state: 'live', branch: 'obeya/x', prototypeOf: 'idea' })).toBeNull();
+  // a card waiting to start holds the note for the agent that takes it on
+  expect(ownerField({ state: 'planned', queue: { checking: true, since: '2026-10-16T10:00:00Z' } })).toBe('note');
+  expect(ownerField({ state: 'planned' })).toBeNull();
 });
 
 test('ideas, proposals and tasks an agent worked on with a result share the layout with the conversation beside', () => {
@@ -286,6 +289,9 @@ test('ideas, proposals and tasks an agent worked on with a result share the layo
   expect(split({ state: 'inPr', branch: 'obeya/x' })).toBe(true);
   expect(split({ state: 'working', branch: 'obeya/x', brief: 'Kurz' })).toBe(true);
   expect(split({ state: 'planned' })).toBe(false);
+  // waiting for its first start, a task keeps its text beside the conversation
+  expect(split({ state: 'planned', queue: { checking: true, since: '2026-10-16T10:00:00Z' } })).toBe(true);
+  expect(split({ state: 'planned', branch: 'obeya/x', queue: { checking: true, since: '2026-10-16T10:00:00Z' } })).toBe(false);
   expect(split({ state: 'done' })).toBe(false);
 });
 

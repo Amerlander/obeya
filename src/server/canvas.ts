@@ -13,6 +13,7 @@ import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
 import type { Language } from '../core/locale';
 import { AGENT_DEFAULTS, agentListens, type AgentRole, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, type PendingRestart, plannableAsProject, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, type SharedSettings, type SpotInput, type TrustGroup } from '../core/types';
+import { inQueue } from '../core/queue';
 import { BadRequest, Board, replyNote } from './board';
 import { type Command, Commander } from './commands';
 import type { Config } from './config';
@@ -931,14 +932,16 @@ export class CanvasRuntime {
    * What the owner says or types with a card open that an agent listens on (`agentListens`) goes
    * straight to that agent, by the card's state: talk to an idea, words a proposal is reworked by,
    * the answer to its worker's question, or else words the worker takes in (a note while it works,
-   * words on its handover, a question once its work is done). The agent passes on what asks Obeya for something (`to_obeya`).
+   * words on its handover, a question once its work is done, a note held for the worker of a card
+   * waiting to start). The agent passes on what asks Obeya for something (`to_obeya`).
    * `replyTo`: the message of the card's conversation the words reply to; `spot`: the place in the
    * card's demo video they are about.
    */
   tell(cardId: string, text: string, images: string[], spoken: boolean, replyTo?: number, spot?: SpotInput) {
     const card = this.board.item(cardId);
     if (!card) throw new BadRequest('unknownCard', 'unknown card');
-    if (!agentListens(card)) throw new BadRequest('noAgent', 'no agent works on this card');
+    // a card waiting to start holds the words for the agent that takes it on
+    if (!agentListens(card) && !inQueue(card)) throw new BadRequest('noAgent', 'no agent works on this card');
     const said = { text, spoken, ...(images.length ? { images } : {}), ...(replyTo ? { replyTo } : {}) };
     // the agent passes a request on in its words; the Koordinator reads the owner's own beside them
     this.said.set(cardId, { text, spoken });

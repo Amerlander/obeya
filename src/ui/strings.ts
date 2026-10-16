@@ -224,6 +224,8 @@ const de = {
     /** While nothing of the agent runs (its pull request waits for review, say): the note starts it. */
     idle: 'Hinweis an den Agenten – er macht sich daran',
     followUp: 'Nachfrage an den Agenten – er antwortet hier',
+    /** On a card waiting to start: the note waits for the agent that takes it on. */
+    queued: 'Hinweis an den Agenten – er bekommt ihn, sobald er startet',
     question: 'Eigene Antwort',
     review: 'Feedback – der Agent arbeitet daran weiter',
     demo: 'Antwort oder Feedback an den Agenten',
@@ -268,8 +270,8 @@ const de = {
     question: 'Frage',
     handover: 'Übergabe',
     settled: 'Durch deinen Hinweis erledigt.',
-    // under the owner's words the agent has not read yet: when it will (`step`: a worker, at its next tool step)
-    unread: (step: boolean) => `Noch nicht gelesen · ${step ? 'beim nächsten Schritt' : 'nach der laufenden Antwort'}`,
+    // under the owner's words the agent has not read yet: when it will (a worker at its next tool step, or once it starts on a card waiting to; other agents after their reply)
+    unread: (when: 'step' | 'start' | 'reply') => `Noch nicht gelesen · ${{ step: 'beim nächsten Schritt', start: 'sobald der Agent startet', reply: 'nach der laufenden Antwort' }[when]}`,
     withdraw: 'Zurücknehmen: Der Agent bekommt es nicht; ist dein Feld leer, steht der Text wieder darin',
     demoQuestion: 'Frage im Demo-Bericht:',
     // who the task an agent started on comes from, at the top of its conversation
@@ -1616,6 +1618,7 @@ const en: Strings = {
     working: 'A note to the agent – it keeps working',
     idle: 'A note to the agent – it gets to work on it',
     followUp: 'A follow-up question to the agent – it answers here',
+    queued: 'A note to the agent – it gets it once it starts',
     question: 'Your own answer',
     review: 'Feedback – the agent goes on working on it',
     demo: 'Answer or feedback to the agent',
@@ -1656,7 +1659,7 @@ const en: Strings = {
     question: 'Question',
     handover: 'Handover',
     settled: 'Settled by your note.',
-    unread: (step: boolean) => `Not read yet · ${step ? 'at its next step' : 'after its current reply'}`,
+    unread: (when: 'step' | 'start' | 'reply') => `Not read yet · ${{ step: 'at its next step', start: 'once the agent starts', reply: 'after its current reply' }[when]}`,
     withdraw: 'Take back: the agent does not get it; if your field is empty, the text goes back into it',
     demoQuestion: 'Question in the demo report:',
     opening: { owner: 'You', plan: 'Plan doc', koordinator: 'Obeya', idea: 'Idea', proposal: 'Proposal' },

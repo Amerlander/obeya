@@ -5,7 +5,7 @@
 import type { Item } from './types';
 
 /** Waiting to start: being judged, behind others, or for a workspace. */
-export const inQueue = (i: Item) => i.state === 'planned' && !!i.queue;
+export const inQueue = (i: Pick<Item, 'state' | 'queue'>) => i.state === 'planned' && !!i.queue;
 
 /** A card the Koordinator has decided on and that waits: the owner may move it. One being judged stays where it is. */
 export const movable = (i: Item) => inQueue(i) && !('checking' in i.queue!);

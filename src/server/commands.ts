@@ -4,6 +4,7 @@
 import { z } from 'zod';
 import { settingsShape } from '../adapters/schema';
 import { type AgentSetting, agentListens, answering, askable, blocksSaving, type CanvasConfig, finished, handedOver, type Item, type NextStep, type Notice, pausable, plannableAsProject, prototypeWorkstream, type Queue, type SpotInput, type TalkQuote, type TalkRef } from '../core/types';
+import { inQueue } from '../core/queue';
 import { answerTag, fromAnswerTag } from './answers';
 import { BadRequest, type Board, excerpt, replyNote } from './board';
 import type { Place } from '../core/layout';
@@ -449,7 +450,7 @@ export class Commander {
             `- new_card: a new card. title short and precise, body what the owner asked for in their words, start false only when the owner says it should wait („nur notieren“, „für später“, „noch nicht starten“), else true: work on it begins right away, as with a click on "Agent starten" (checked for conflicts with work in progress, queued if need be)${repos.length > 1 ? ', repo the repository it belongs to (an id from the list)' : ''}. A follow-up of a card (for one of its findings, or something from its summary): card the tag of that card, and body the finding or passage in full, then what the owner added.`,
             "- start: start work on a planned card. On a queued card (waiting behind cards in progress or queued ahead of it) it starts it now, despite the likely merge conflict; a card Obeya is still checking starts by itself unless its changes likely conflict with work in progress. On a project: all its planned workstreams go to Obeya together, which decides their order and which of them wait (for a dependency or a likely conflict); use it when the owner wants a project's workstreams started (\"starte das Projekt\", \"alle Workstreams\") rather than starting them one by one.",
             '- dequeue: take a card out of the queue (waiting behind other cards, for a free workspace, or still being checked by Obeya); it goes back to planned and does not start until started again („nimm … aus der Warteschlange“, „lass … doch noch nicht starten“).',
-            "- note: text to the agent working on a card (working, in PR, waiting, or live or done while its agent finishes after the landing); it doesn't stop it. Whatever the owner says to the agent: an instruction, a remark on its work, a question to it; never a question the owner asks you about the canvas.",
+            "- note: text to the agent working on a card (working, in PR, waiting, or live or done while its agent finishes after the landing), or for the agent that will take on a card waiting in the queue, which gets it with the task; it doesn't stop it. Whatever the owner says to the agent: an instruction, a remark on its work, a question to it; never a question the owner asks you about the canvas.",
             "- answer: text as the answer to the card's open question: the agent's, or the one in its demo report (the demo then still waits for approval). A bare „ja“ or „nein“ to a card with an open question is an answer, not an approval.",
             '- feedback: text as feedback on work waiting for review (demo or summary), a question about that work included; its agent takes it in while the work still waits for approval, and hands over anew when it changes something.',
             '- approve: approve work waiting for review; direct: true when the owner wants it straight onto main without a pull request („ohne PR“, „direkt auf main“), which a repository whose work goes out as a pull request allows only where the list of repositories says so. accept: take a proposed card and start it (a proposed idea: its discussion opens; the open questions on it go along). dismiss: discard a proposed card. revise: text what the owner wants changed in a proposed card, or their thoughts on it (added, dropped, decided, put differently); an agent rewrites its text and questions by it in a minute or so, and accepting it waits for that (by a click once it is there).',
@@ -717,7 +718,8 @@ export class Commander {
       case 'answer':
       case 'feedback': {
         if (!a.text?.trim()) return 'the text is missing';
-        if (a.do === 'note' && !['working', 'inPr', 'waiting'].includes(card.state) && !card.finishing && !askable(card)) return `no agent works on this card (${is}), a note cannot reach it`;
+        // a card waiting to start holds the note for the worker that takes it on
+        if (a.do === 'note' && !['working', 'inPr', 'waiting'].includes(card.state) && !card.finishing && !askable(card) && !inQueue(card)) return `no agent works on this card (${is}), a note cannot reach it`;
         if (a.do === 'answer' && !card.question) return `the card has no open question (${is})`;
         if (a.do === 'feedback' && !reviewable) return `the card does not wait for review (${is})`;
         return { do: a.do, card: card.id, text: a.text.trim() };

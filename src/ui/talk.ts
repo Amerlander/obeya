@@ -2,6 +2,7 @@
 
 import { LANGUAGES } from '../core/locale';
 import { MESSAGES } from '../core/messages';
+import { inQueue } from '../core/queue';
 import { askable, type CardEvent, type Demo, finishingUp, type Item, ownWords, pausable, type Question, started } from '../core/types';
 import type { Field } from './api';
 
@@ -275,10 +276,10 @@ export function parseQuestion(text: string): { text: string; options: string[] }
  * a question, the answer and feedback together, sorted out by the Koordinator as spoken words are.
  * Null where no agent hears it. Ideas and proposals have fields of their own.
  */
-export function ownerField(item: Pick<Item, 'state' | 'need' | 'question' | 'finishing' | 'branch' | 'prototypeOf' | 'archivedAt'>): Field | null {
+export function ownerField(item: Pick<Item, 'state' | 'need' | 'question' | 'finishing' | 'branch' | 'prototypeOf' | 'archivedAt' | 'queue'>): Field | null {
   if (item.state === 'waiting') return item.need === 'question' ? 'answer' : item.need === 'demo' && item.question ? 'demo' : 'feedback';
-  // a finished card's agent is resumed for what the owner asks about it
-  return item.state === 'working' || item.state === 'inPr' || item.finishing || askable(item) ? 'note' : null;
+  // a finished card's agent is resumed for what the owner asks about it; a card waiting to start holds the note for the agent that takes it on
+  return item.state === 'working' || item.state === 'inPr' || item.finishing || askable(item) || inQueue(item) ? 'note' : null;
 }
 
 /**
@@ -302,7 +303,7 @@ export const koordinatorReads = (events: CardEvent[]) => {
 export const worked = (i: Pick<Item, 'state' | 'branch'>) => i.state !== 'idea' && i.state !== 'proposal' && !!i.branch;
 
 /** What decides a card's layout. */
-type Laid = Pick<Item, 'state' | 'branch' | 'prototypeEnd' | 'demo' | 'pr' | 'landedPart' | 'finishing' | 'brief' | 'prototypes'>;
+type Laid = Pick<Item, 'state' | 'branch' | 'prototypeEnd' | 'demo' | 'pr' | 'landedPart' | 'finishing' | 'brief' | 'prototypes' | 'queue'>;
 
 /**
  * What a task an agent worked on shows beside its conversation: a demo, a pull request, what landed,
@@ -311,8 +312,15 @@ type Laid = Pick<Item, 'state' | 'branch' | 'prototypeEnd' | 'demo' | 'pr' | 'la
 export const result = (i: Laid) =>
   !!i.demo || i.state === 'inPr' || (!!i.pr && i.state === 'waiting') || !!i.landedPart || finishingUp(i) || (i.brief !== undefined && (!!i.brief.trim() || !!i.prototypes?.length));
 
-/** A card laid out with its conversation beside what it is about (`Split` in detail.tsx): an idea, a proposal, a task an agent worked on once there is a result. */
-export const split = (i: Laid) => i.state === 'idea' || i.state === 'proposal' || ((!!i.prototypeEnd || worked(i)) && result(i));
+/**
+ * A card laid out with its conversation beside what it is about (`Split` in detail.tsx): an idea, a
+ * proposal, a task waiting for its first start (its text beside the conversation, where notes wait
+ * for its agent), a task an agent worked on once there is a result.
+ */
+export const split = (i: Laid) => i.state === 'idea' || i.state === 'proposal' || waitsFirstStart(i) || ((!!i.prototypeEnd || worked(i)) && result(i));
+
+/** A task waiting in the queue for its first start: no agent has worked on it yet. */
+export const waitsFirstStart = (i: Pick<Item, 'state' | 'branch' | 'queue'>) => inQueue(i) && !worked(i);
 
 /** A task an agent works or worked on without a result yet: its conversation stands alone, the card only as wide as it. */
 export const talkAlone = (i: Laid) => (!!i.prototypeEnd || worked(i)) && !result(i);

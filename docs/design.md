@@ -985,7 +985,12 @@ landed, a decided idea's brief), the conversation on the right with the question
 end and the owner's one field with one Send under it, and the decisions (build, accept, approve,
 stop, archive) in a row below both. A task that has nothing for the left yet (the agent at work, a
 question before the first demo) is its conversation alone, the card only as wide as it (`talkAlone`
-in `src/ui/talk.ts`), and widens to the split once there is a result.
+in `src/ui/talk.ts`), and widens to the split once there is a result. A task waiting in the queue
+for its first start (Obeya checking it, behind other cards, waiting for a workspace) is a split as
+well, as wide as a proposal's: its text in full on the left under what it waits for, its conversation on the
+right (`waitsFirstStart`). What the owner types into its field waits there unread, and goes to the
+worker with the task once it starts (`unheard`, as for words in the middle of a turn); spoken words
+go to the Koordinator as on any card without an agent, which passes a note on the same way.
 
 A task's branch (and its plan doc) stands under its title, with the size of its change beside it
 („+120 −30 in 5 Dateien“, `Branch` in `src/ui/diff.tsx`): before landing, the branch in its
@@ -2382,6 +2387,11 @@ of the line.
 - **A new card does not overtake a queued one it likely conflicts with**: it queues behind it, also
   when that one waits for something far from done. Fairness over parallelism; the owner can still
   start it anyway.
+- **A card waiting to start stays full size and takes notes** (2026-10-16). Before, an accepted
+  proposal shrank to a planned card's panel (900 px wide, scrolling past 480 px) while Obeya checked
+  it, with its text alone and no field: what the owner thought of meanwhile waited until the agent
+  ran. Spoken words still go to the Koordinator there, since „trotzdem starten“ and „aus der
+  Warteschlange“ are what is said to a waiting card, and no agent is there yet to pass them on.
 - **A start that finds no workspace is a wait, not a failure** (2026-10-05): before, such a card
   stood as "Geplant" with "Kein Workspace frei" as its last failure and never started by itself,
   though the owner had started it.

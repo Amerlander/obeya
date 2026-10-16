@@ -26,6 +26,7 @@ import type { PrState, Shipped } from './board';
 import type { CardRow } from './db';
 import { parsePrUrl } from './forge';
 import { clip, messageOf } from '../core/text';
+import { inQueue } from '../core/queue';
 
 export interface WorkerOptions {
   board: Board;
@@ -461,6 +462,11 @@ export class Workers {
         true,
         said,
       );
+    } else if (inQueue(card)) {
+      // the card waits to start: the words go with the task to the worker that takes it on
+      const said = [this.o.board.log(cardId, 'hint', 'owner', text, { images: shots, replyTo, spot: place, unread: true }).id];
+      if (text) this.o.onOwnerInput?.(card, 'note', text);
+      this.o.board.work(cardId, { unheard: JSON.stringify([...this.unheard(cardId), { said, text: `A note from the owner while your card waited to start${spoken ? ` (${SPOKEN})` : ''}:\n\n${words}`, images }] satisfies Unheard[]) });
     } else if (this.waitsForClone(cardId)) {
       // no session to take them in now: they go with the message that resumes it in the clone
       const said = [this.o.board.log(cardId, 'hint', 'owner', text, { images: shots, replyTo, spot: place, unread: true }).id];
