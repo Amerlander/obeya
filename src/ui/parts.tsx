@@ -18,6 +18,9 @@ const firstLine = (md: string) =>
     .find(Boolean) ?? '';
 
 /** What of a workstream planned again has landed: its pull request, else its commit. */
+/** The state whose colour an open card wears: a demo whose worker takes in the owner's answer is at work. */
+export const shownState = (i: Item) => (i.kind === 'question' ? 'question' : answering(i) ? 'working' : i.state);
+
 export const landedRef = (l: NonNullable<Item['landedPart']>) => (l.pr ? `PR #${l.pr.number}` : (l.commit?.slice(0, 7) ?? ''));
 
 // ------------------------------------------------------------------ cards

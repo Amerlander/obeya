@@ -68,7 +68,7 @@ export function usePushToTalk(
   field: (target: Where) => string,
   send: (target: Where, request: () => Promise<Heard>) => Promise<Heard>,
   onHeard: (h: Heard) => void,
-  place: () => Place,
+  place: () => Place | undefined,
 ) {
   const [phase, setPhase] = useState<Phase>('idle');
   /** The microphone shows it listens: `shownAfter` into the recording. */
@@ -339,6 +339,8 @@ export function PushToTalk({ phase, level, flat, target, field, onDown }: { phas
             e.preventDefault();
             onDown();
           }}
+          // held by a finger, it shows no menu
+          onContextMenu={(e) => e.preventDefault()}
         >
           <span className="ring" />
           <MicIcon />

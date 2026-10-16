@@ -28,10 +28,12 @@ service of its own, and none of this is macOS-only: it works on Windows and Linu
   the card, and so did one with `Host: rebound.evil.example` (DNS rebinding); both get 403 and 421
   now. The names it answers to are `LOCAL_HOSTS` there, and the tailnet name or the other address
   while other devices reach Obeya.
-- The UI is the canvas, built for a large screen. A window up to 760 px wide only lays the sheets
-  over the canvas (`NARROW` in `src/ui/App.tsx`, `styles.css`); there is no touch handling.
-- The page holds one WebSocket per canvas (`/ws`, `src/ui/api.ts`) and tells the server when it
-  comes back into view (`{ type: 'back' }`, `ownerBack()` in `src/server/canvas.ts`), nothing when
+- On a phone the page is the phone view (W3, `src/ui/phone.tsx`, design: The phone view): „Für
+  dich“ across all canvases with since when each card waits, „Läuft“, Obeya's conversation, a card
+  full screen with the canvas's detail view, the microphone held by touch, the machine not
+  answering. It holds one WebSocket per canvas.
+- A canvas page holds one WebSocket (`/ws`, `src/ui/api.ts`), the phone view one per canvas; each
+  tells the server when the page comes back into view (`{ type: 'back' }`, `ownerBack()` in `src/server/canvas.ts`), nothing when
   it goes hidden.
 - What waits for the owner is `needsYou` in `src/core/types.ts` (a handover, a question, a proposal,
   a PR ready, an idea's turn, a refused landing given back), counted per canvas with Obeya's unread
@@ -39,7 +41,7 @@ service of its own, and none of this is macOS-only: it works on Windows and Linu
 - Voice uploads a recording that ffmpeg decodes, so Safari's recordings (MP4/AAC) would work. But
   browsers allow the microphone only on HTTPS or localhost.
 - Screenshots are pasted, dropped or picked in a field (`src/ui/shots.tsx`) and scaled down in the
-  browser; a phone has nothing to paste or drop from.
+  browser; on a phone the picker offers the photo library and the camera.
 - The installed app is a Tauri shell around the server (design: App), which it starts on 4417 or a
   free port and stops when it quits.
 - Obeya sends no notifications of any kind and does nothing to keep the machine awake.
@@ -98,15 +100,15 @@ service of its own, and none of this is macOS-only: it works on Windows and Linu
 ### The phone view
 
 - **Same address, same app.** On a phone the page shows the phone view instead of the canvas
-  (`src/ui/phone.tsx`, its strings in `src/ui/strings.ts`). The rule (a narrow screen with a coarse
-  pointer, say, so a narrow desk window keeps its canvas) is settled in the workstream.
+  (`src/ui/phone.tsx`, its strings in `src/ui/strings.ts`). It shows on a coarse pointer with a
+  screen whose short side is under 600 px, so a tablet and a narrow desk window keep the canvas;
+  `?view=phone|canvas` decides instead.
 - **„Für dich“** lists what waits for the owner across all canvases (`needsYou`, and Obeya when an
   answer waits unread), canvas by canvas in the switcher's order and within a canvas in Tab order,
   each row with what it waits for (demo, question, proposal, failed landing, an idea's turn), its
   title, its canvas and since when. **„Läuft“** lists the working cards with their status line.
   Obeya's conversation is at the bottom, with the microphone (hold to talk), a text field and
-  screenshots. The page needs every canvas's snapshot, not only one: whether it holds a WebSocket
-  per canvas or the server gets one stream for all is settled in the workstream.
+  screenshots. The page needs every canvas's snapshot: it holds one WebSocket per canvas.
 - **A card opened** fills the screen: its conversation, the answer options and Send, the demo video
   full width (and full screen), the approve buttons with the usual undo, accepting or rejecting a
   proposal, an idea's discussion with „So bauen“. Back returns to the list. It uses the shared
@@ -175,7 +177,7 @@ view says that it does not answer. A closed MacBook lid on battery sleeps regard
   configuration (see Who may, Reaching the machine). Settles how long a device stays paired. Done
   when the owner's phone, paired by the QR code over the tailnet, opens the canvas at the HTTPS
   address, and a removed phone no longer does. Needs W1.
-- [ ] **W3:** The phone view. „Für dich“, „Läuft“ and Obeya's conversation, a card opened full
+- [x] **W3:** The phone view. „Für dich“, „Läuft“ and Obeya's conversation, a card opened full
   screen with the shared components, touch for the microphone and screenshots, the machine not
   answering (see The phone view). Settles the rule for when it shows. Done when, on a phone over
   the tailnet, the owner answers a question, approves a demo, accepts a proposal, gives Obeya a
@@ -203,4 +205,4 @@ view says that it does not answer. A closed MacBook lid on battery sleeps regard
 
 ## Open questions
 
-None. W3 settles the rule for when the phone view shows.
+None. The phone view shows on a coarse pointer with a screen's short side under 600 px (W3).

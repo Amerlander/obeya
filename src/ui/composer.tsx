@@ -167,6 +167,7 @@ export function Composer({
                 field.current?.focus();
                 talk();
               }}
+              onContextMenu={(e) => e.preventDefault()}
             >
               <MicIcon size={18} />
             </button>

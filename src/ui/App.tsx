@@ -3,20 +3,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { type Bounds, boundsOf, CARD_SIZE, centre, type Place, PROJECT_HEAD, PROJECT_PAD, unionBounds } from '../core/layout';
-import { agentListens, answering, type CanvasInfo, type CanvasSnapshot, type CardPatch, finished, type Group, type Item, nameless, needsYou, openPerGroup, type PendingRestart, type PlanDir, START_ALL_HOLD_MS, type TalkRef, titleFrom, type AppUpdate, unreadAnswers } from '../core/types';
+import { type CanvasInfo, type CanvasSnapshot, type CardPatch, finished, type Group, type Item, nameless, needsYou, openPerGroup, type PendingRestart, type PlanDir, START_ALL_HOLD_MS, titleFrom, type AppUpdate, unreadAnswers } from '../core/types';
 import { api, ApiError, beforeReload, onNotice, reportFocus, setCanvas, useCanvas } from './api';
 import { GroupNames, growFrom, inside, Lasso, Ring, TerritoryLayer, useTerritories } from './groups';
 import { besideSheet, BOTTOM, type Cam, camFor, centreOn, chase, dragLimit, edgeScroll, FAR, flying, flyTo, keepInView, MAX_ZOOM, MIN_ZOOM, overviewCam, placeIn, shows, stopFlight, TOP, toWorld } from './camera';
 import { plain } from './markdown';
 import { type ActDone, Detail, type Pending } from './detail';
 import { Cards } from './message';
-import type { Field, Heard, Where } from './api';
+import type { Heard, Where } from './api';
 import { replyOn, setReply } from './reply';
 import { ArchivePill } from './archive';
 import { useBarFit } from './barFit';
 import { ConfigDialog, showCanvasesSection, showDevicesSection, showRepoClones } from './config';
 import { PhoneDialog } from './access';
 import { Setup } from './setup';
+import { Phone, phoneView } from './phone';
 import { KoordinatorSheet } from './koordinator';
 import { QueuePill } from './queue';
 import { depsOf } from './deps';
@@ -29,13 +30,15 @@ import { PlanDirNote, planDirBoxes, useHiddenEmptyNotes } from './planDirs';
 import { attachTo, imageFiles } from './shots';
 import { cardDraft, fieldOn, focusedDraft, keepDrafts, MIC_DRAFT, OBEYA_DRAFT, takesImages } from './draft';
 import { HoldToTalk, PushToTalk, SPACE_SHOWS_MS, TAP_MS, ToldList, usePushToTalk, useTold } from './voice';
-import { sent, take, videoOf } from './spot';
-import { CanvasPill, CardView, DepLinks, Edges, Links, Minimap, OldBunPill, ProjectView, RestartPill, Sheet, UpdatePill, WorkspacesPill } from './parts';
+import { videoOf } from './spot';
+import { CanvasPill, CardView, shownState, DepLinks, Edges, Links, Minimap, OldBunPill, ProjectView, RestartPill, Sheet, UpdatePill, WorkspacesPill } from './parts';
 import { clampWidth, loadWidths, saveWidths, SHEET_W, type SheetWidths, widthsIn } from './sheetWidth';
 import { failText, t } from './strings';
 import { split, talkAlone } from './talk';
+import { tellers, useAck, voiceTarget } from './tell';
 
 export function App() {
+  const [phone] = useState(phoneView);
   const [canvases, setCanvases] = useState<CanvasInfo[] | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -47,6 +50,8 @@ export function App() {
   const current = canvases.find((c) => c.id === wanted) ?? canvases[0];
   // the first start: no canvas yet, so the setup assistant fills the page and creates one
   if (!current) return <Setup first />;
+  // a phone gets every canvas's waits and work, and the cards full screen, instead of the canvas
+  if (phone) return <Phone canvases={canvases} />;
   setCanvas(current.id);
   keepDrafts(sessionStorage, current.id);
   keepWish(sessionStorage, current.id);
@@ -86,8 +91,6 @@ async function soon<T>(get: () => T | undefined, ms = 3000): Promise<T | undefin
   }
   return get();
 }
-/** The state whose colour an open card wears: a demo whose worker takes in the owner's answer is at work. */
-const shownState = (i: Item) => (i.kind === 'question' ? 'question' : answering(i) ? 'working' : i.state);
 
 const camKey = (canvasId: string) => `obeya-cam-${canvasId}`;
 
@@ -563,31 +566,7 @@ function Canvas({
   }
 
   // ---------------------------------------------------------------- acknowledgement with undo
-  const [ack, setAck] = useState<{ text: string; undo?: () => unknown; wait?: boolean } | null>(null);
-  const [ackOn, setAckOn] = useState(false);
-  const ackTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const undoTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  /** A confirmation; with `undo`, "Rückgängig" shows for `undoMs` (while the server still waits). */
-  function showAck(text: string, undo?: () => unknown, undoMs = 7000) {
-    setAck({ text, undo });
-    setAckOn(true);
-    clearTimeout(ackTimer.current);
-    clearTimeout(undoTimer.current);
-    if (undo) undoTimer.current = setTimeout(() => setAck((a) => (a && a.text === text ? { text } : a)), Math.max(0, undoMs - 400));
-    ackTimer.current = setTimeout(() => setAckOn(false), 7000);
-  }
-  /** What went wrong, in place of the confirmation; what the server did not refuse also goes to the console. */
-  function fail(e: unknown) {
-    if (!(e instanceof ApiError)) console.error(e);
-    showAck(failText(e));
-  }
-  /** What the server is still at: stays, turning, until a confirmation takes its place. */
-  function showWait(text: string) {
-    setAck({ text, wait: true });
-    setAckOn(true);
-    clearTimeout(ackTimer.current);
-    clearTimeout(undoTimer.current);
-  }
+  const { showAck, showWait, fail, line: ackLine } = useAck();
 
   /** The play button on a card: starts it, or one queued behind others despite the likely conflict. */
   const startCard = useCallback(async (i: Item) => {
@@ -680,47 +659,7 @@ function Canvas({
     if (h.token && !focusRef.current) newCardWatch.current = { known: new Set(itemsRef.current.map((i) => i.id)), until: Date.now() + 20_000 };
   }
   const told = useTold(onHeard);
-  /** The card `target` names, if any. */
-  const cardIn = (target: Where) => (target && 'card' in target ? byId(target.card) : undefined);
-  /** The card in `target` when an agent listens on it: what the owner says there goes straight to that agent. */
-  const listening = (target: Where) => {
-    const i = cardIn(target);
-    return i && agentListens(i) ? i : undefined;
-  };
-  /** The card a command for `target` is about, named in its confirmation when another card is open by then. */
-  const toldCard = (target: Where) => {
-    const i = cardIn(target);
-    return i ? { id: i.id, title: plain(i.title) } : undefined;
-  };
-  /**
-   * Hands a spoken command for `target` on, with its line above the microphone: while Whisper writes
-   * it down for the open card's agent, or while the Koordinator reads it.
-   */
-  const tellAbout = (target: Where, request: () => Promise<Heard>) => {
-    const i = target ? byId('card' in target ? target.card : target.project) : undefined;
-    const what = i ? `„${plain(i.title)}“` : t.voice.koordinator;
-    return told.tell(listening(target) ? t.voice.transcribing(what) : t.voice.reading(what), toldCard(target), request);
-  };
-  /**
-   * Words typed on a card, in its idea or in the Koordinator's sheet: on a card an agent listens on
-   * they go straight to it, else the Koordinator reads them like spoken ones. The conversation shows
-   * them at once either way; above the mic only the Koordinator's confirmation shows, with „Rückgängig“.
-   */
-  const tellTyped = useCallback(async (text: string, images: string[] | undefined, target: Where, field?: Field, replyTo?: number | TalkRef) => {
-    if (listening(target))
-      try {
-        // typed while the card's demo video stands at a place: about that place, and the video plays on
-        const taken = target && 'card' in target ? take(target.card) : null;
-        if (taken) videoOf((target as { card: string }).card)?.play().catch(() => {});
-        await api.command(text, target, { images, field, replyTo, spot: await sent(taken) });
-      } catch (e) {
-        fail(e);
-      }
-    else {
-      const place = placeNow();
-      void told.tell(null, toldCard(target), () => api.command(text, target, { images, field, replyTo, place }));
-    }
-  }, []);
+  const { tellAbout, tellTyped } = tellers(byId, told, fail, placeNow);
   useEffect(() => {
     const w = newCardWatch.current;
     if (!w) return;
@@ -808,12 +747,7 @@ function Canvas({
     };
   }, []);
   const focusItem = focus ? itemOrArchived(focus.id) : undefined;
-  const target =
-    focus?.type === 'card'
-      ? (focusItem && agentListens(focusItem) ? (focusItem.kind === 'question' ? t.voice.question : focusItem.state === 'idea' ? t.voice.idea : focusItem.state === 'proposal' ? t.voice.proposal : t.voice.agent) : t.voice.card)(plain(focusItem?.title ?? ''))
-      : focus?.type === 'project'
-        ? t.voice.project(plain(focusItem?.title ?? ''))
-        : t.voice.koordinator;
+  const target = voiceTarget(focus && { type: focus.type, item: focusItem });
   // the app's push-to-talk key in another app speaks to what is in view here
   const focusTitle = focusItem && plain(focusItem.title);
   // and a card it makes goes into what is in view, reported once the view rests
@@ -1383,7 +1317,7 @@ function Canvas({
           <button className="close" title={t.close} onClick={() => closeCard()}>
             ✕
           </button>
-          <div className="inner" ref={innerRef}>
+          <div className="inner card-sheet" ref={innerRef}>
             <div className="content">
               {openItem && (
                 <Cards.Provider value={{ items, open: (i) => void openFresh(i) }}>
@@ -1476,19 +1410,7 @@ function Canvas({
         {/* commands on their way and confirmations, stacked above the microphone */}
         <div id="acks">
           <ToldList told={told.told} open={focus?.type === 'card' ? focus.id : undefined} onUndo={told.undo} />
-          <div id="ack" className={`ack${ackOn ? ' on' : ''}${ack?.wait ? ' wait' : ''}`}>
-            <span>{ack?.text}</span>
-            {ack?.undo && (
-              <button
-                onClick={() => {
-                  ack.undo?.();
-                  setAckOn(false);
-                }}
-              >
-                {t.undo}
-              </button>
-            )}
-          </div>
+          {ackLine}
         </div>
       </div>
     </HoldToTalk.Provider>

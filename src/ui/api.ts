@@ -308,10 +308,10 @@ function notice(n: Notice) {
 // What the owner does in this page that a restart would cut off, by who holds it (the demo video,
 // push-to-talk); the server hears every change, and again after a reconnect.
 const holds = new Map<string, OwnerHold>();
-let socket: WebSocket | null = null;
+/** The page's open WebSockets: one for the canvas it shows, one per canvas in the phone view. */
+const sockets = new Map<string, WebSocket>();
 const sendHolds = () => {
-  if (socket?.readyState !== WebSocket.OPEN) return;
-  socket.send(JSON.stringify({ type: 'hold', hold: [...new Set(holds.values())] } satisfies ClientMessage));
+  for (const ws of sockets.values()) if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'hold', hold: [...new Set(holds.values())] } satisfies ClientMessage));
 };
 /** Holds a due restart off while the owner watches (`video`) or dictates (`voice`); `null` lets go. */
 export function holdRestart(by: string, what: OwnerHold | null) {
@@ -326,7 +326,8 @@ export function holdRestart(by: string, what: OwnerHold | null) {
 // the page the owner looked at last wins.
 let focusMessage: Extract<ClientMessage, { type: 'focus' }> | null = null;
 const sendFocus = () => {
-  if (focusMessage && socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(focusMessage));
+  const ws = sockets.get(canvasId);
+  if (focusMessage && ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(focusMessage));
 };
 export function reportFocus(where: Where, target: string, title: string | undefined, place: Place) {
   focusMessage = { type: 'focus', ...(where ?? {}), target, ...(title ? { title } : {}), place: placeParam(place) };
@@ -347,13 +348,17 @@ export function reload() {
 }
 
 /**
- * The live canvas: the server pushes a snapshot on connect and after every change, the restart that
- * waits, the newer version of the app there is, how many cards on each canvas need the owner, and
- * the Bun it runs on when that is too old.
+ * The live canvas `id` (the shown one by default): the server pushes a snapshot on connect and after
+ * every change, the restart that waits, the newer version of the app there is, how many cards on
+ * each canvas need the owner, and the Bun it runs on when that is too old. A lost connection is
+ * tried again with a growing pause, and at once when the page comes back into view (a phone that
+ * was locked).
  */
-export function useCanvas(): {
+export function useCanvas(id = canvasId): {
   snapshot: CanvasSnapshot | null;
   online: boolean;
+  /** Since when the server does not answer; null while it does. */
+  offlineSince: number | null;
   restart: PendingRestart | null;
   update: AppUpdate | null;
   waiting: Record<string, number>;
@@ -363,6 +368,7 @@ export function useCanvas(): {
 } {
   const [snapshot, setSnapshot] = useState<CanvasSnapshot | null>(null);
   const [online, setOnline] = useState(true);
+  const [offlineSince, setOfflineSince] = useState<number | null>(null);
   const [restart, setRestart] = useState<PendingRestart | null>(null);
   const [update, setUpdate] = useState<AppUpdate | null>(null);
   const [waiting, setWaiting] = useState<Record<string, number>>({});
@@ -375,9 +381,11 @@ export function useCanvas(): {
     let closed = false;
     let server: string | undefined;
     const connect = () => {
-      ws = socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${at('/ws')}`);
+      ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/c/${encodeURIComponent(id)}/ws`);
+      sockets.set(id, ws);
       ws.onopen = () => {
         setOnline(true);
+        setOfflineSince(null);
         delay = 500;
         sendHolds();
         sendFocus();
@@ -401,10 +409,11 @@ export function useCanvas(): {
       ws.onclose = () => {
         if (closed) return;
         setOnline(false);
+        setOfflineSince((t) => t ?? Date.now());
         // a canvas the configuration no longer has: the page goes to the first one there is; a
         // device removed from Obeya's devices gets the page that says how to connect again
         api.canvases().then(
-          (list) => list.some((c) => c.id === canvasId) || location.replace(location.pathname),
+          (list) => list.some((c) => c.id === id) || location.replace(location.pathname),
           (e) => e instanceof ApiError && e.code === 'notPaired' && location.reload(),
         );
         retry = setTimeout(connect, delay);
@@ -415,6 +424,12 @@ export function useCanvas(): {
     // back from GitHub, say: the server looks at the pull requests now instead of at its next round
     const back = () => {
       if (document.visibilityState === 'visible' && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'back' } satisfies ClientMessage));
+      // a connection lost meanwhile is tried again now, not after the pause it waits
+      if (document.visibilityState === 'visible' && ws.readyState === WebSocket.CLOSED && !closed) {
+        clearTimeout(retry);
+        delay = 500;
+        connect();
+      }
       sendFocus();
     };
     document.addEventListener('visibilitychange', back);
@@ -424,8 +439,9 @@ export function useCanvas(): {
       clearTimeout(retry);
       document.removeEventListener('visibilitychange', back);
       window.removeEventListener('focus', back);
+      if (sockets.get(id) === ws) sockets.delete(id);
       ws.close();
     };
-  }, []);
-  return { snapshot, online, restart, update, waiting, oldBun, canvases };
+  }, [id]);
+  return { snapshot, online, offlineSince, restart, update, waiting, oldBun, canvases };
 }

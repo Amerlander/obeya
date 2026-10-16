@@ -79,7 +79,7 @@
 // removes <dir> there first. A host with `"gone": true` held its clones once and does not answer
 // now (an `ssh` target nobody resolves, say): nothing goes there, and its clones are registered as if
 // Obeya had made them. `name` names the canvas the cards go on; `canvases` adds further ones by
-// name, each over a repository of its own (<dir>/repo-2, …) and without cards. Preferences are active unless `state` says otherwise; `card` and `replaces` name keys;
+// name, each over a repository of its own (<dir>/repo-2, …); a card goes on one of them by its `canvas` (the name). Preferences are active unless `state` says otherwise; `card` and `replaces` name keys;
 // `target` is the repository whose CLAUDE.md a rule is for (the canvas id names the home one).
 // What a learned rule's occasion is (card, quote, review), `replaces` and `target` need code that has them.
 // Groups are created through the API with their cards (keys; a workstream stands for its project),
@@ -114,6 +114,8 @@ interface StageCard {
   from?: string;
   project?: string;
   workstream?: string;
+  /** The name of one of `canvases` the card goes on, instead of the first canvas. */
+  canvas?: string;
   state?: string;
   need?: string | null;
   statusLine?: string;
@@ -314,9 +316,10 @@ if (stage.setup) {
   console.log(JSON.stringify(staged));
   process.exit(0);
 }
-const canvas = ((await (await fetch(`${base}/api/canvases`)).json()) as { id: string }[])[0]!.id;
-const api = async (method: string, path: string, body?: unknown) => {
-  const r = await fetch(`${base}/api/c/${canvas}${path}`, {
+const allCanvases = (await (await fetch(`${base}/api/canvases`)).json()) as { id: string; name: string }[];
+const canvas = allCanvases[0]!.id;
+const api = async (method: string, path: string, body?: unknown, on = canvas) => {
+  const r = await fetch(`${base}/api/c/${on}${path}`, {
     method,
     headers: { 'content-type': 'application/json' },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
@@ -343,6 +346,7 @@ for (const [i, c] of stage.cards.entries()) {
     if (c.from && !ids[c.from]) fail(`card ${c.key ?? i}: "from" names ${c.from}, which comes later or does not exist`);
     // without a place: in rows of four below the plan docs (a follow-up goes below its card)
     const at = c.from || (c.x !== undefined && c.y !== undefined) ? {} : { x: 40 + 360 * (placed % 4), y: below + 220 * Math.floor(placed++ / 4) };
+    const on = c.canvas ? (allCanvases.find((x) => x.name === c.canvas)?.id ?? fail(`card ${c.key ?? i}: no canvas named ${c.canvas}`)) : canvas;
     const created = await api('POST', '/cards', {
       // code before cards lost their kind (--code) still asks for one; later code ignores it
       kind: 'feature',
@@ -354,7 +358,7 @@ for (const [i, c] of stage.cards.entries()) {
       ...(c.idea ? { idea: true } : {}),
       ...(c.repo ? { repo: c.repo } : {}),
       ...(c.from ? { from: ids[c.from] } : {}),
-    });
+    }, on);
     id = created.id;
   }
   if (!id) fail(`card ${c.key ?? i}: no ${c.project ? `project for ${c.project}` : `workstream ${c.workstream}`} on the canvas`);
@@ -517,10 +521,11 @@ for (const [i, p] of (stage.settingProposals ?? []).entries())
   });
 db.close();
 // the server keeps a snapshot of the canvas: a change through the API makes it read the database anew
-const first = stage.cards.find((c) => !c.project && !c.workstream);
-if (first) {
-  const c = ((await api('GET', '/canvas')) as CanvasSnapshot).items.find((x: Item) => x.id === idOf(first, stage.cards.indexOf(first)))!;
-  await api('PATCH', `/cards/${c.id}`, { x: c.x, y: c.y });
+for (const on of allCanvases) {
+  const first = stage.cards.find((c) => !c.project && !c.workstream && (c.canvas ? c.canvas === on.name : on.id === canvas));
+  if (!first) continue;
+  const c = ((await api('GET', '/canvas', undefined, on.id)) as CanvasSnapshot).items.find((x: Item) => x.id === idOf(first, stage.cards.indexOf(first)))!;
+  await api('PATCH', `/cards/${c.id}`, { x: c.x, y: c.y }, on.id);
 }
 
 for (const g of stage.groups ?? [])

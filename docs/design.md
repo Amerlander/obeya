@@ -4144,6 +4144,52 @@ and the setting are managed only on this machine (`/api/access…` answers anoth
 `onlyHere`, and the section shows it only its heading and hint): a phone that is lost cannot pair others or keep
 itself in.
 
+#### The phone view
+
+On a phone the page shows the phone view instead of the canvas (`src/ui/phone.tsx`): at the same
+address, from the same bundle. A phone is a device whose pointer is coarse and whose screen's
+shorter side is under 600 px, whichever way it is held; a tablet and a narrow window at the desk
+keep the canvas. `?view=phone` or `?view=canvas` in the address decides instead (to try the view at
+the desk). The rule is settled when the page loads; turning the phone does not switch views.
+
+It holds one WebSocket per canvas (the canvas's own `/ws`, so the server sends it what it sends a
+canvas page, nothing new), and shows, under the sign and the word Obeya:
+
+- **„Für dich“**: what waits for the owner across every canvas (`needsYou`), canvas by canvas in the
+  switcher's order and within a canvas in Tab's order, then „Obeya hat geantwortet“ where an
+  answer waits unread there. Each row says what it waits for (its state line: „Demo bereit“,
+  „Frage an dich“, „Vorschlag eines Agenten“ …), since when, its title and, with several canvases,
+  its canvas. Since when a card waits the server notes when `needsYou` turns true for it
+  (`waiting_since` on the card, kept across restarts while it waits, `waitingSince` in the snapshot).
+- **„Läuft“**: the cards an agent or Obeya is at and that wait for nobody (working, finishing,
+  landing, in the queue, in a PR, an idea's or a Question card's agent thinking), with their status
+  line.
+- **Obeya**: its conversation with the field under it, the sheet's own (`KoordinatorTalk`), with a
+  picker of the canvas whose Obeya it is when there are several. Its unread answers count as read
+  once the conversation is scrolled into view, not when the page opens.
+
+A tap opens a card full screen: Back (the button, the browser's back, Esc) returns to the list where
+it was scrolled. The card's address is `?card=<id>`, so a reload or a restart opens it again. It is
+the canvas's detail view (`Detail`) with the same conversation, answer options, demo, approve
+buttons and undo, its columns one below the other; a demo video plays full width and full screen
+from its own controls. Plan docs are not read there and the configuration is not opened from there:
+the links to them do not show. Every call goes to the API of the canvas in view (the open card's,
+else Obeya's), and the list is not on the page while a card is open, so nothing in it loads from
+another canvas's API.
+
+The microphone at the bottom is held by a finger (pointer events, no long-press menu, no text
+selected; lifting the finger or the browser taking the gesture ends the recording) and speaks to the
+open card's agent, else to Obeya. While a text field has the focus, and the keyboard is up, it
+hides: the field has its own microphone. The texts that name the space bar name the microphone
+there (`forTouch`). A field's screenshot button offers the photo library and the camera
+(`accept="image/*"`), and marking a screenshot works with a finger. Drafts are kept per tab under a
+name of the phone view's own (`obeya-drafts-@phone`), with the field under Obeya's conversation one
+per canvas (`obeya:<canvas>`).
+
+When the server does not answer for 3 s (a phone back from its lock screen reconnects within that),
+a line at the top says „Obeya antwortet nicht · seit 14:02“ and why that may be; the page connects
+again by itself, at once when it comes back into view rather than after the pause it waits.
+
 ### Setup assistant
 
 One list of what Obeya needs on this machine (`src/server/machine.ts`, `src/ui/setup.tsx`), in four
@@ -4292,6 +4338,13 @@ Python sidecars ignore Ctrl-C instead.
 - **„Telefon verbinden“ only in the configuration** (2026-10-16): a phone is connected once, and
   again only for a new phone or a closed tab, so it takes no place in the bar. Before, a phone icon
   stood in the bar beside „Konfiguration“.
+- **The phone view is a view of its own in the same page, not the canvas made touch-capable**
+  (2026-10-16, from the plan „Obeya from the phone“): readable card sizes on 390 px mean mostly
+  panning. It shows at the same address on a coarse pointer with a short side under 600 px rather
+  than on a narrow window, so a narrow window at the desk keeps its canvas. It reuses the canvas's
+  detail view, conversation, drafts and confirmations rather than phone copies of them. One
+  WebSocket per canvas rather than one stream for all: the server's canvas messages stay as they
+  are, and an owner has a handful of canvases.
 - **Obeya restarts itself for new code on its own checkout instead of hot reloading**: a restart is
   a path that already exists (workers resume by session id), hot reloading keeps old state alive
   next to new code. It also restarts for commits made outside Obeya.

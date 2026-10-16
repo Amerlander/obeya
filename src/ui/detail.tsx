@@ -53,10 +53,10 @@ interface Props {
   flush: () => Promise<void>;
   onDelete: () => void;
   onDone: (d: ActDone, pending?: Pending) => void;
-  /** Reads the plan doc of a workstream's project, at the workstream. */
-  onReadPlan: (project: Item, mark?: string) => void;
-  /** Opens the configuration at the clone count (or the slots) of a repository: the card waits for a free clone or slot. */
-  onClones: (repo: string, field: 'clones' | 'slots') => void;
+  /** Reads the plan doc of a workstream's project, at the workstream; the phone view reads no plan docs. */
+  onReadPlan?: (project: Item, mark?: string) => void;
+  /** Opens the configuration at the clone count (or the slots) of a repository: the card waits for a free clone or slot. Not in the phone view. */
+  onClones?: (repo: string, field: 'clones' | 'slots') => void;
   onTell: Tell;
 }
 
@@ -249,7 +249,9 @@ export function Detail(p: Props) {
   const archivable = finishedArchivable(item);
   // a stopped task starts again, or goes into the archive with its conversation, from the row below it
   const halted = stopped(item) && !item.queue;
-  const planSource = parent?.plan && <PlanSource file={parent.plan.file} onRead={parent.archivedAt ? undefined : () => p.onReadPlan(parent, item.label)} />;
+  // an archived project's doc is gone
+  const readPlan = parent && !parent.archivedAt && p.onReadPlan;
+  const planSource = parent?.plan && <PlanSource file={parent.plan.file} onRead={readPlan ? () => readPlan(parent, item.label) : undefined} />;
   const where = (
     <p className="p-src">
       <Branch item={item} />
@@ -257,9 +259,8 @@ export function Detail(p: Props) {
         <>
           {' · '}
           <code>{parent.plan.file}</code>{' '}
-          {/* an archived project's doc is gone */}
-          {!parent.archivedAt && (
-            <button className="link" onClick={() => p.onReadPlan(parent, item.label)}>
+          {readPlan && (
+            <button className="link" onClick={() => readPlan(parent, item.label)}>
               {t.plan.readAt}
             </button>
           )}
@@ -305,9 +306,11 @@ export function Detail(p: Props) {
             <>
               <div className="q-text">
                 {t.queue.workspaceLong[item.queue.workspace]}{' '}
-                <button className="link" onClick={() => p.onClones(item.repo, item.queue && 'workspace' in item.queue && item.queue.workspace === 'slots' ? 'slots' : 'clones')}>
-                  {t.queue.workspaceConfig[item.queue.workspace]}
-                </button>
+                {p.onClones && (
+                  <button className="link" onClick={() => p.onClones?.(item.repo, item.queue && 'workspace' in item.queue && item.queue.workspace === 'slots' ? 'slots' : 'clones')}>
+                    {t.queue.workspaceConfig[item.queue.workspace]}
+                  </button>
+                )}
               </div>
               <QueuePlace item={item} items={all} />
               <div className="actions">
@@ -1482,7 +1485,7 @@ function DemoView({
                   onClick={() => {
                     video.current?.pause();
                     if (zoom.box) zoom.toggle();
-                    document.querySelector<HTMLTextAreaElement>('#panel .split-talk .composer textarea')?.focus();
+                    document.querySelector<HTMLTextAreaElement>('.card-sheet .split-talk .composer textarea')?.focus();
                   }}
                 >
                   <svg viewBox="0 0 24 24">
@@ -1564,7 +1567,7 @@ function useWatching(cardId: string, video: RefObject<HTMLVideoElement | null>, 
     const v = video.current;
     if (!on || !v) return;
     const typed = (e: Event) => {
-      if (!v.paused && e.target instanceof HTMLTextAreaElement && e.target.closest('#panel .split-talk .composer')) v.pause();
+      if (!v.paused && e.target instanceof HTMLTextAreaElement && e.target.closest('.card-sheet .split-talk .composer')) v.pause();
     };
     let stood: ReturnType<typeof setTimeout> | undefined;
     const paused = () => {
@@ -1595,7 +1598,7 @@ function forTheVideo(e: KeyboardEvent) {
 
 /** The demo video the keys are for, with several on a card: the zoomed one, else the one playing, else the first. */
 function keyedVideo() {
-  const videos = [...document.querySelectorAll<HTMLVideoElement>('#panel .demo-view video')];
+  const videos = [...document.querySelectorAll<HTMLVideoElement>('.card-sheet .demo-view video')];
   return document.querySelector<HTMLVideoElement>('.screen.zoomed video') ?? videos.find((v) => !v.paused) ?? videos[0];
 }
 

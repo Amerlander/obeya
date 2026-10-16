@@ -714,6 +714,26 @@ const de = {
     first: 'Damit dein Telefon Obeya erreicht:',
     toSection: 'Geräte und Einstellungen',
   },
+  /** The phone view (src/ui/phone.tsx). */
+  phone: {
+    forYou: 'Für dich',
+    running: 'Läuft',
+    nothingWaits: 'Nichts wartet auf dich.',
+    nothingRuns: 'Gerade arbeitet kein Agent.',
+    obeyaAnswered: 'Obeya hat geantwortet',
+    since: (when: string) => `seit ${when}`,
+    back: 'Zurück',
+    canvas: 'Leinwand',
+    notAnswering: (since: string) => `Obeya antwortet nicht · seit ${since}`,
+    notAnsweringWhy: 'Vielleicht schläft der Rechner, oder Obeya läuft dort nicht. Sobald es wieder antwortet, ist die Seite wieder verbunden.',
+    gone: 'Diese Karte gibt es nicht mehr.',
+    /** In place of the texts that name the space bar, which a phone has none of. */
+    touch: {
+      revise: 'Was soll anders werden? – oder halte das Mikrofon',
+      compose: 'Frag nach, widersprich, entscheide – oder halte das Mikrofon',
+      commentAt: (time: string) => `Etwas zu ${time} schreiben oder das Mikrofon halten`,
+    },
+  },
   config: {
     button: 'Konfiguration',
     kind: 'Obeya',
@@ -2040,6 +2060,24 @@ const en: Strings = {
     first: 'For your phone to reach Obeya:',
     toSection: 'Devices and settings',
   },
+  phone: {
+    forYou: 'For you',
+    running: 'Running',
+    nothingWaits: 'Nothing waits for you.',
+    nothingRuns: 'No agent is at work right now.',
+    obeyaAnswered: 'Obeya answered',
+    since: (when: string) => `since ${when}`,
+    back: 'Back',
+    canvas: 'Canvas',
+    notAnswering: (since: string) => `Obeya is not answering · since ${since}`,
+    notAnsweringWhy: 'The computer may be asleep, or Obeya is not running there. The page connects again as soon as it answers.',
+    gone: 'This card no longer exists.',
+    touch: {
+      revise: 'What should change? – or hold the microphone',
+      compose: 'Ask, object, decide – or hold the microphone',
+      commentAt: (time: string) => `Write about ${time} or hold the microphone`,
+    },
+  },
   config: {
     button: 'Configuration',
     kind: 'Obeya',
@@ -2798,3 +2836,10 @@ export const errorText = (code: string | undefined) => (code && Object.hasOwn(t.
  */
 export const failText = (e: unknown, { detail = [], offline = t.offlineError }: { detail?: string[]; offline?: string } = {}) =>
   e instanceof ApiError ? errorText(e.code) + (e.code && detail.includes(e.code) ? ` ${e.message}` : '') : offline;
+
+/** On a phone, which has no space bar: the texts that name it name the microphone instead. */
+export function forTouch() {
+  t.compose.revise = t.phone.touch.revise;
+  t.idea.compose = t.phone.touch.compose;
+  t.demo.commentAt = t.phone.touch.commentAt;
+}

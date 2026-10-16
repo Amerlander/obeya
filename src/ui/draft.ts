@@ -48,6 +48,8 @@ const EMPTY: Draft = { text: '', images: [], uploading: 0, error: '', dictation:
 export const cardDraft = (id: string) => `card:${id}`;
 /** The draft of the field in Obeya's sidebar. */
 export const OBEYA_DRAFT = 'obeya';
+/** The draft of the field under Obeya's conversation of a canvas, in the phone view, which shows every canvas. */
+export const obeyaDraft = (canvas: string) => `${OBEYA_DRAFT}:${canvas}`;
 /** The screenshots beside the microphone, where no field is spoken to. */
 export const MIC_DRAFT = 'mic';
 /** The field of the draft for Obeya's makers (`wish.tsx`). */
@@ -70,8 +72,8 @@ const subscribe = (fn: () => void) => {
 };
 
 type Store = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
-/** The drafts that last beyond their field: the cards', the sidebar's and the microphone's, not those of a field of its own. */
-const lasting = (key: string) => key.startsWith('card:') || key === OBEYA_DRAFT || key === MIC_DRAFT || key === WISH_DRAFT;
+/** The drafts that last beyond their field: the cards', the sidebar's (the phone view's per canvas) and the microphone's, not those of a field of its own. */
+const lasting = (key: string) => key.startsWith('card:') || key === OBEYA_DRAFT || key.startsWith(`${OBEYA_DRAFT}:`) || key === MIC_DRAFT || key === WISH_DRAFT;
 const storeKey = (canvas: string) => `obeya-drafts-${canvas}`;
 const markupsKey = (canvas: string) => `obeya-markups-${canvas}`;
 let kept: { store: Store; canvas: string } | null = null;
@@ -105,7 +107,8 @@ export function setMarkup(id: string, markup: Markup | null) {
 }
 
 /**
- * Takes back the canvas's drafts that `store` kept and writes them down there from now on, text,
+ * Takes back the canvas's drafts that `store` kept (the phone view's, which shows every canvas, under
+ * a name of its own) and writes them down there from now on, text,
  * screenshots, picks and the message replied to, whenever they change, and the marks on the screenshots. Once per page;
  * later calls change nothing.
  */

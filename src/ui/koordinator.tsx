@@ -42,16 +42,13 @@ export function KoordinatorSheet({ on, canvas, items, preferences, settings, rep
   const proposals = preferences.filter((p) => p.state === 'proposed');
   const rules = preferences.filter((p) => p.state === 'active');
   const [folds, setFolds] = useStoredState<Folds>(`obeya-ksheet-${canvas}`, {});
-  const fresh = useRead(on, talk);
   // the proposals stay closed only as long as no proposal came after the owner closed them; a setting's id counts negative beside the rules'
   const ids = [...proposals.map((p) => p.id), ...settings.map((p) => -p.id)];
   const proposalsOpen = !folds.proposalsClosed || ids.some((id) => !folds.proposalsClosed!.includes(id));
   return (
     <aside id="ksheet" className={on ? 'sheet on' : 'sheet'}>
       <h2>{t.koordinator.title}</h2>
-      <Conversation talk={talk} fresh={fresh} items={items} onOpen={onOpen} />
-      {/* a command in writing, for when speaking is not possible; its screenshots go to the cards it creates or concerns */}
-      <Composer className="tell" draft={OBEYA_DRAFT} placeholder={t.voice.typePlaceholder} obeya onSend={onTell} />
+      <KoordinatorTalk on={on} talk={talk} items={items} onOpen={onOpen} onTell={onTell} />
 
       <div className="k-rest">
         {ids.length > 0 && (
@@ -103,6 +100,22 @@ export function KoordinatorSheet({ on, canvas, items, preferences, settings, rep
 }
 
 /**
+ * Obeya's conversation with the field under it, in the sheet and in the phone view; `draft` is the
+ * field's (the sidebar's, or the phone view's for this canvas). `on`: the conversation is in view,
+ * so the answers waiting in it are read.
+ */
+export function KoordinatorTalk({ on, talk, items, onOpen, onTell, draft = OBEYA_DRAFT }: Pick<Props, 'on' | 'talk' | 'items' | 'onOpen' | 'onTell'> & { draft?: string }) {
+  const fresh = useRead(on, talk);
+  return (
+    <>
+      <Conversation talk={talk} fresh={fresh} items={items} onOpen={onOpen} draft={draft} />
+      {/* a command in writing, for when speaking is not possible; its screenshots go to the cards it creates or concerns */}
+      <Composer className="tell" draft={draft} placeholder={t.voice.typePlaceholder} obeya onSend={onTell} />
+    </>
+  );
+}
+
+/**
  * Answers that came while the owner was elsewhere are read once the sheet is in view (open, and the
  * page not hidden); those that were waiting stay marked until it closes, so the owner sees which.
  */
@@ -148,7 +161,7 @@ function Fold({ kind, head, open, onToggle, children }: { kind?: string; head: s
  * can reply to each message, as on a card: it stands quoted above the field, and above the words
  * that reply to it.
  */
-function Conversation({ talk, fresh, items, onOpen }: { talk: Talk[]; fresh: number[]; items: Item[]; onOpen: (i: Item) => void }) {
+function Conversation({ talk, fresh, items, onOpen, draft }: { talk: Talk[]; fresh: number[]; items: Item[]; onOpen: (i: Item) => void; draft: string }) {
   const box = useRef<HTMLDivElement>(null);
   // every change on the canvas brings a new snapshot: only what the owner just said takes the
   // conversation back to its end, so they can read further up in the meantime
@@ -165,7 +178,7 @@ function Conversation({ talk, fresh, items, onOpen }: { talk: Talk[]; fresh: num
         // the owner replies to one of the exchange's messages
         const reply = (part: TalkRef['part'], by: TalkQuote['by'], text: string) => () => {
           const q = { talk: x.id, part, by, text };
-          setReply(OBEYA_DRAFT, { to: { talk: x.id, part }, quote: talkQuote(q) });
+          setReply(draft, { to: { talk: x.id, part }, quote: talkQuote(q) });
         };
         return (
           <Fragment key={x.id}>

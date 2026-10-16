@@ -1504,3 +1504,63 @@ button.link:hover { text-decoration: underline; }
 .acc-devices .btn.small { margin-top: 0; }
 .acc-name { font-weight: 600; }
 .acc-note { margin-top: 18px; max-width: 76ch; }
+
+/* ---------------------------------------------------------------- the phone view (phone.tsx) */
+.ph-view { position: fixed; inset: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  padding: env(safe-area-inset-top) max(14px, env(safe-area-inset-right)) calc(190px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); }
+.ph-bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px; min-height: 52px; margin: 0 -14px; padding: 6px 14px;
+  background: var(--bg); border-bottom: 1px solid var(--line); }
+.ph-home .ph-word { font: 600 22px/1 var(--serif); }
+.ph-back { display: inline-flex; align-items: center; gap: 2px; min-height: 40px; padding: 0 12px 0 6px; border: 0; border-radius: 3px;
+  background: var(--chip); font-size: 16px; cursor: pointer; }
+.ph-canvas { margin-left: auto; color: var(--muted); font-size: 13px; }
+.ph-quiet { position: sticky; top: 60px; z-index: 5; margin: 12px 0 0; padding: 10px 12px; border-radius: 3px; background: var(--ink); color: var(--bg); display: flex; flex-direction: column; gap: 2px; font-size: 13.5px; }
+.ph-quiet b { font-weight: 600; font-size: 14.5px; }
+.ph-section { margin-top: 22px; }
+.ph-section h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font: 600 21px/1.15 var(--serif); }
+.ph-section h2 select { margin-left: auto; font: 15px var(--cond); padding: 4px 6px; border: 1px solid var(--line); border-radius: 3px; background: var(--card); color: var(--ink); }
+.ph-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ph-row { width: 100%; display: flex; flex-direction: column; align-items: stretch; text-align: left;
+  padding: 11px 12px; border: 0; border-left: 4px solid var(--c, var(--line)); border-radius: 3px; background: var(--card); box-shadow: var(--shadow); cursor: pointer; }
+.ph-row:active { box-shadow: none; transform: translateY(1px); }
+.ph-row.obeya { --c: var(--working); }
+.ph-what { font-size: 12.5px; color: var(--muted); }
+.ph-title { font-size: 16.5px; line-height: 1.3; margin-top: 2px; overflow-wrap: anywhere; }
+.ph-where { font-size: 12.5px; color: var(--muted); margin-top: 3px; overflow-wrap: anywhere; }
+.ph-none { margin: 0; color: var(--muted); font-size: 14.5px; }
+.ph-talk { display: flex; flex-direction: column; }
+.ph-talk > .talk { max-height: 62vh; min-height: 0; }
+.ph-talk > .composer { max-width: none; margin-top: 10px; }
+/* a card opened: full screen, in its state's colour along the top */
+/* the list fades out under the microphone */
+.ph-view::after { content: ""; position: fixed; left: 0; right: 0; bottom: 0; height: calc(120px + env(safe-area-inset-bottom)); z-index: 4;
+  background: linear-gradient(transparent, var(--bg) 65%); pointer-events: none; }
+#ph-card::before { content: ""; position: fixed; left: 0; right: 0; top: 0; height: 4px; background: var(--c); z-index: 6; }
+.ph-sheet { padding-top: 14px; }
+.ph-sheet .p-title { font-size: 26px; }
+/* the columns of a split stand one below the other, the conversation a box of its own height */
+.ph-view .split { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; max-height: none; gap: 18px; }
+.ph-view .split-main { overflow: visible; padding-right: 0; }
+.ph-view .split .split-talk .talk { min-height: 120px; max-height: 62vh; flex: none; }
+.ph-view .proposal-grid { grid-template-rows: none; }
+.ph-view .proposal-grid .split-main { max-height: none; }
+.ph-view .proposal-grid .split-talk { contain: none; }
+.ph-view .proposal-grid textarea.p-body { min-height: 160px; max-height: 50vh; }
+.ph-view .actions { flex-wrap: wrap; }
+.ph-view .actions .btn { min-height: 42px; }
+/* the video plays full width, and full screen from its own controls; zooming within the page adds nothing on a phone */
+.ph-view .demo-view .zoom, .ph-view .seek-hint { display: none; }
+/* a phone's browser zooms into a text field written smaller than 16 px */
+.ph-view textarea, .ph-view select, .ph-view input { font-size: 16px; }
+/* no pointer hovers on a phone: the reply button shows on every message */
+.ph-view .talk .msg > .msg-reply { opacity: .75; }
+.ph-view ~ #ptt, .ph-view ~ #acks { left: 50%; }
+.ph-view ~ #ptt { bottom: calc(18px + env(safe-area-inset-bottom)); }
+.ph-view ~ #acks { bottom: calc(124px + env(safe-area-inset-bottom)); width: calc(100vw - 24px); }
+.ph-view ~ #acks .ack { max-width: 100%; }
+.ph-view ~ #ptt #mic { width: 68px; height: 68px; }
+/* the microphone is held by a finger: no long-press menu, no text selected */
+#mic, .c-mic { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: none; }
+@media (pointer: coarse) { .lb-bar { flex-wrap: wrap; max-width: 100%; } }
+/* while the keyboard is up the field has its own microphone: the big one would stand over the field */
+.ph-view:has(textarea:focus, input:focus) ~ #ptt, .ph-view:has(textarea:focus, input:focus)::after { display: none; }
