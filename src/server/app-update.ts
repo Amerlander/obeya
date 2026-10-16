@@ -3,6 +3,7 @@
 // restart (the Restarter's `update`), and the shell installs it once the server has ended.
 
 import type { AppUpdate } from '../core/types';
+import { BadRequest } from './board';
 
 /** Where the app's releases are, as its shell names them (`RELEASES` in app/src/update.rs). */
 const RELEASES = 'https://github.com/sadilek/obeya/releases/';
@@ -19,7 +20,7 @@ export class AppUpdates {
     const u = (input ?? {}) as Partial<Record<keyof AppUpdate, unknown>>;
     const text = (x: unknown) => (typeof x === 'string' && x.trim() ? x.trim() : undefined);
     const version = text(u.version);
-    if (!version) throw new TypeError('version expected');
+    if (!version) throw new BadRequest('invalid', 'version expected');
     const update: AppUpdate = { version };
     const notes = text(u.notes);
     if (notes) update.notes = notes;

@@ -3,6 +3,8 @@
 
 import type { PushKeyShell } from '../core/push-key';
 import type { MachineItem } from '../core/types';
+import { nonEmpty } from '../core/text';
+import { BadRequest } from './board';
 
 /** The macOS settings page where Obeya gets "Input Monitoring". */
 export const INPUT_MONITORING = 'x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent';
@@ -14,9 +16,8 @@ export class ShellReports {
 
   report(input: unknown): PushKeyShell {
     const s = (input ?? {}) as Partial<Record<keyof PushKeyShell, unknown>>;
-    const text = (x: unknown) => (typeof x === 'string' && x ? x : undefined);
-    if (!text(s.state) || !text(s.platform)) throw new TypeError('state and platform expected');
-    const shell = { state: text(s.state), platform: text(s.platform), session: text(s.session), detail: text(s.detail) } as PushKeyShell;
+    if (!nonEmpty(s.state) || !nonEmpty(s.platform)) throw new BadRequest('invalid', 'state and platform expected');
+    const shell = { state: nonEmpty(s.state), platform: nonEmpty(s.platform), session: nonEmpty(s.session), detail: nonEmpty(s.detail) } as PushKeyShell;
     for (const k of Object.keys(shell) as (keyof PushKeyShell)[]) if (shell[k] === undefined) delete shell[k];
     this.last = { shell, at: this.now() };
     return shell;

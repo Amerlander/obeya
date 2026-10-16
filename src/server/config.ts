@@ -11,7 +11,7 @@ import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
 import { REPO_ADAPTER_DIR, REPO_SETTINGS_FILE } from '../adapters';
 import { settingsShape } from '../adapters/schema';
-import { type AgentsView, blocksSaving, type CanvasConfig, type DemoSite, type ConfigChecked, type ConfigProblem, type ConfigSaved, type ConfigView, type RepoSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type SettingsShared, type SharedSettings, type DemoSettingsProblem, type DemoSettingsView, type DemoVoiceCheck, type LanguageView, type ResolvedCanvas, type ThemeView, type VoiceInstallJob, layerSettings, type ProposedSetting, settingPatch } from '../core/types';
+import { blocksSaving, type CanvasConfig, type DemoSite, type ConfigChecked, type ConfigProblem, type ConfigSaved, type ConfigView, type RepoSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type SettingsShared, type SharedSettings, type DemoSettingsProblem, type DemoSettingsView, type DemoVoiceCheck, type ResolvedCanvas, type VoiceInstallJob, layerSettings, type ProposedSetting, settingPatch } from '../core/types';
 import {
   DEMO_SETTINGS_FILE,
   type DemoSettings,
@@ -34,7 +34,6 @@ import type { Forge } from './forge';
 import { commitShared, proposeShared, pushShared } from './shared-settings';
 import { gitCalls, gitSteps } from './workspaces';
 import { VERSION } from './resources';
-import { agentsView, languageView, pushKeyChoice, saveAgents, saveLanguage, savePushKey, saveTheme, themeView } from './settings';
 import { siteProblem } from './share';
 
 export const CONFIG_FILE = 'canvases.json';
@@ -542,40 +541,12 @@ export class Config {
     };
   }
 
-  /** The language Obeya speaks to the owner, in `settings.json` in Obeya's home; saving it restarts nothing. */
-  language(): LanguageView {
-    return languageView(this.o.server.home);
-  }
-
-  saveLanguage(input: unknown): LanguageView {
-    return saveLanguage(this.o.server.home, input);
-  }
-
-  /** Light or dark, in `settings.json` too; the page takes it at once. */
-  theme(): ThemeView {
-    return themeView(this.o.server.home);
-  }
-
-  saveTheme(input: unknown): ThemeView {
-    return saveTheme(this.o.server.home, input);
-  }
-
-  /** The model and effort of each group of agents, in `settings.json` too; read whenever an agent starts. */
-  agents(): AgentsView {
-    return agentsView(this.o.server.home);
-  }
-
-  saveAgents(input: unknown): AgentsView {
-    return saveAgents(this.o.server.home, input);
-  }
-
-  /** The push-to-talk key anywhere on the machine, in `settings.json` too; the app's shell reads it every few seconds. */
-  pushKey() {
-    return pushKeyChoice(this.o.server.home);
-  }
-
-  savePushKey(input: unknown) {
-    return savePushKey(this.o.server.home, input);
+  /**
+   * Obeya's home, whose `settings.json` holds the owner's own settings (settings.ts): the language,
+   * light or dark, the agents' models, the push-to-talk key.
+   */
+  get home(): string {
+    return this.o.server.home;
   }
 
   saveDemo(input: unknown): DemoSettingsView {

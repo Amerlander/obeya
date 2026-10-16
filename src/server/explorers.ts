@@ -444,7 +444,7 @@ const mocks = (language: Language) =>
   `each with a title (the variant in a few words, in ${LANGUAGE_NAMES[language]}) and html: a few lines of self-contained HTML with inline styles (no files, no network), shown in a sandboxed frame that may leave it only 240 px of width, so nothing in it is wider`;
 const MOCK_SCHEMA = z.array(z.object({ title: z.string(), html: z.string() })).max(MAX_VARIANTS).optional();
 
-/** How the agent hears the messages an interrupted turn left unanswered. */
+/** How the agent opens the discussion of an idea the owner wrote, or one a worker proposed. */
 const OPENING =
   'The owner wrote this as a card to be built, then chose to discuss it first. They have not said more yet: what the card says above is where the conversation starts. Look into it and open the discussion.';
 
@@ -459,6 +459,7 @@ const RESUMED =
 const BUILD_AFTER_REPLY =
   'The owner clicked "So bauen" while you worked on this reply: once it is there, a worker builds the idea from the brief as you leave it, unless your reply asks questions; then nothing is built, and the owner decides again after answering them.';
 
+/** How the agent hears the messages an interrupted turn left unanswered. */
 const UNREAD_NOTE: Record<Unread['why'], string> = {
   parked: 'The owner parked the idea while you were working on a reply, which ended that turn. These messages are still unanswered; take them in with the one after them:',
   dropped: 'The owner dropped the idea while you were working on a reply, which ended that turn. These messages are still unanswered; take them in with the one after them:',

@@ -27,8 +27,12 @@ import { oldLinuxBun } from './repo';
 import { Store } from './db';
 import { Access } from './remote';
 import { Tailscale } from './tailscale';
+import { agentsView, languageView, pushKeyChoice, saveAgents, saveLanguage, savePushKey, saveTheme, themeView } from './settings';
+import { nonEmpty } from '../core/text';
 
 type Req = Request & { params: Record<string, string> };
+
+const notFound = () => new Response('Not found', { status: 404 });
 
 /** `?replyTo=` of a recording: a card's event (`7`), or a message of the sheet (`12.answer`). */
 function replyParam(p: string | null): number | TalkRef | undefined {
@@ -89,7 +93,7 @@ export function serveNarration(narration: NarrationHost) {
     hostname: '127.0.0.1',
     idleTimeout: 120,
     fetch: (req, srv) =>
-      refusal(req, LOCAL_HOSTS) ?? (req.method === 'POST' && new URL(req.url).pathname === '/api/narration/clip' ? clip(req, srv) : new Response('Not found', { status: 404 })),
+      refusal(req, LOCAL_HOSTS) ?? (req.method === 'POST' && new URL(req.url).pathname === '/api/narration/clip' ? clip(req, srv) : notFound()),
   });
 }
 
@@ -204,7 +208,7 @@ export function serve(
   /** What each open page last reported as its focus, and when; the newest is where the owner was. */
   const focused = new Map<string, PageFocus & { at: number }>();
   const pushKeyView = (): PushKeyView => ({
-    ...(config?.pushKey() ?? { key: defaultPushKey(process.platform), chosen: null, default: defaultPushKey(process.platform) }),
+    ...(config ? pushKeyChoice(config.home) : { key: defaultPushKey(process.platform), chosen: null, default: defaultPushKey(process.platform) }),
     shell: shells.current(),
   });
   const lastFocus = (): PageFocus | null => {
@@ -223,6 +227,7 @@ export function serve(
   const handle = async (fn: () => unknown | Promise<unknown>) => {
     try {
       const out = await fn();
+      if (out instanceof Response) return out;
       return out === undefined || out === null ? new Response(null, { status: 204 }) : Response.json(out);
     } catch (e) {
       if (e instanceof BadRequest) return Response.json({ code: e.code, error: e.message }, { status: 400 });
@@ -237,6 +242,13 @@ export function serve(
       const c = byId.get(req.params.canvas!);
       return c ? handle(() => fn(c, req)) : Response.json({ code: 'invalid', error: 'unknown canvas' }, { status: 404 });
     };
+  /** A route that needs what this server may run without (its configuration, voice setup, the setup assistant); a 404 without it. */
+  const needs =
+    <T,>(x: T | undefined, fn: (x: T, req: Request) => unknown | Promise<unknown>) =>
+    (req: Request): Response | Promise<Response> =>
+      x ? handle(() => fn(x, req)) : notFound();
+  /** Nothing the owner said came through: Whisper understood nothing (`null`), or heard nothing. */
+  const unheard = (c: CanvasRuntime, text: string | null) => ({ confirm: text === null ? c.board.t.voice.notUnderstood : c.board.t.voice.nothingHeard, unheard: true });
 
   /**
    * A restart waits for what the owner said on the server's own count too, until its answer is
@@ -293,7 +305,7 @@ export function serve(
     // the owner sees only the confirmation; the transcript is for whoever reads the server's log
     console.log(`heard on ${c.id}: ${text === null ? '(not understood)' : text || '(nothing)'}`);
     // nothing heard or understood: screenshots shown with it stay in the browser for the next try
-    if (text === null || (!text && !(input.typed && images.length))) return { confirm: text === null ? c.board.t.voice.notUnderstood : c.board.t.voice.nothingHeard, unheard: true };
+    if (text === null || (!text && !(input.typed && images.length))) return unheard(c, text);
     const card = focus.card ? c.board.item(focus.card) : undefined;
     if (card && agentListens(card)) {
       c.tell(card.id, text, images, !input.typed, typeof input.replyTo === 'number' ? input.replyTo : undefined, input.spot);
@@ -329,8 +341,8 @@ export function serve(
       '/api/canvases': { GET: () => Response.json(canvases.all().map((c) => c.board.canvas) satisfies CanvasInfo[]) },
       // Obeya's configuration: read, checked while the owner edits it, and saved (Obeya then starts again)
       '/api/config': {
-        GET: () => (config ? Response.json(config.view()) : new Response('Not found', { status: 404 })),
-        PUT: async (req) => (config ? handle(async () => config.save(await req.json())) : new Response('Not found', { status: 404 })),
+        GET: needs(config, (c) => c.view()),
+        PUT: needs(config, async (c, req) => c.save(await req.json())),
       },
       // the owner has the restart of a repository's agents that waits for them go ahead at once
       '/api/c/:canvas/restart': { POST: on((c) => ({ restarting: c.restartNow() })) },
@@ -356,42 +368,42 @@ export function serve(
       },
       // the language Obeya speaks to the owner: chosen in the settings, else the system's
       '/api/language': {
-        GET: () => (config ? Response.json(config.language()) : new Response('Not found', { status: 404 })),
-        PUT: async (req) => (config ? handle(async () => config.saveLanguage(await req.json())) : new Response('Not found', { status: 404 })),
+        GET: needs(config, (c) => languageView(c.home)),
+        PUT: needs(config, async (c, req) => saveLanguage(c.home, await req.json())),
       },
       // light or dark: chosen in the settings, else as the system
       '/api/theme': {
-        GET: () => (config ? Response.json(config.theme()) : new Response('Not found', { status: 404 })),
-        PUT: async (req) => (config ? handle(async () => config.saveTheme(await req.json())) : new Response('Not found', { status: 404 })),
+        GET: needs(config, (c) => themeView(c.home)),
+        PUT: needs(config, async (c, req) => saveTheme(c.home, await req.json())),
       },
       // the model and effort of each group of agents, read whenever one starts
       '/api/agents': {
-        GET: () => (config ? Response.json(config.agents()) : new Response('Not found', { status: 404 })),
-        PUT: async (req) => (config ? handle(async () => config.saveAgents(await req.json())) : new Response('Not found', { status: 404 })),
+        GET: needs(config, (c) => agentsView(c.home)),
+        PUT: needs(config, async (c, req) => saveAgents(c.home, await req.json())),
       },
       // what Obeya's own voice in needs here, and installing it
-      '/api/voice-setup': { GET: () => (setup ? handle(() => setup.view()) : new Response('Not found', { status: 404 })) },
-      '/api/voice-setup/install': { POST: () => (setup ? handle(() => setup.install()) : new Response('Not found', { status: 404 })) },
-      '/api/voice-setup/measure': { POST: () => (setup ? handle(() => setup.measure()) : new Response('Not found', { status: 404 })) },
+      '/api/voice-setup': { GET: needs(setup, (s) => s.view()) },
+      '/api/voice-setup/install': { POST: needs(setup, (s) => s.install()) },
+      '/api/voice-setup/measure': { POST: needs(setup, (s) => s.measure()) },
       // a cloud service for voice in: tested and used (PUT), or back to this machine (DELETE)
       '/api/voice-setup/cloud': {
-        PUT: async (req) => (setup ? handle(async () => setup.useCloud(await req.json())) : new Response('Not found', { status: 404 })),
-        DELETE: () => (setup ? handle(() => setup.useLocal()) : new Response('Not found', { status: 404 })),
+        PUT: needs(setup, async (s, req) => s.useCloud(await req.json())),
+        DELETE: needs(setup, (s) => s.useLocal()),
       },
       // the setup assistant: what Obeya needs on this machine, installed, logged in; then the first canvas
-      '/api/setup': { GET: () => (machine ? handle(() => machine.view()) : new Response('Not found', { status: 404 })) },
-      '/api/setup/install': { POST: async (req) => (machine ? handle(async () => machine.install(await req.json())) : new Response('Not found', { status: 404 })) },
-      '/api/setup/login': { POST: async (req) => (machine ? handle(async () => machine.login(await req.json())) : new Response('Not found', { status: 404 })) },
-      '/api/setup/identity': { POST: async (req) => (machine ? handle(async () => machine.identity(await req.json())) : new Response('Not found', { status: 404 })) },
-      '/api/setup/folder': { POST: async (req) => (machine ? handle(async () => machine.folder(await req.json())) : new Response('Not found', { status: 404 })) },
+      '/api/setup': { GET: needs(machine, (m) => m.view()) },
+      '/api/setup/install': { POST: needs(machine, async (m, req) => m.install(await req.json())) },
+      '/api/setup/login': { POST: needs(machine, async (m, req) => m.login(await req.json())) },
+      '/api/setup/identity': { POST: needs(machine, async (m, req) => m.identity(await req.json())) },
+      '/api/setup/folder': { POST: needs(machine, async (m, req) => m.folder(await req.json())) },
       // setting up git in a folder that has none: what the first commit holds, then the commit
-      '/api/setup/git-preview': { POST: async (req) => (machine ? handle(async () => machine.gitPreview(await req.json())) : new Response('Not found', { status: 404 })) },
-      '/api/setup/git': { POST: async (req) => (machine ? handle(async () => machine.gitSetup(await req.json())) : new Response('Not found', { status: 404 })) },
-      '/api/setup/canvas': { POST: async (req) => (machine ? handle(async () => machine.canvas(await req.json())) : new Response('Not found', { status: 404 })) },
+      '/api/setup/git-preview': { POST: needs(machine, async (m, req) => m.gitPreview(await req.json())) },
+      '/api/setup/git': { POST: needs(machine, async (m, req) => m.gitSetup(await req.json())) },
+      '/api/setup/canvas': { POST: needs(machine, async (m, req) => m.canvas(await req.json())) },
       // the system's folder dialog, open as long as the owner takes
       '/api/setup/pick': {
         POST: async (req, srv) => {
-          if (!machine) return new Response('Not found', { status: 404 });
+          if (!machine) return notFound();
           srv.timeout(req, 0);
           const { prompt } = ((await req.json().catch(() => ({}))) ?? {}) as { prompt?: unknown };
           return handle(() => machine.pick(typeof prompt === 'string' ? prompt : ''));
@@ -399,17 +411,17 @@ export function serve(
       },
       // the demo settings: narration language and voice, read by every render
       '/api/demo-settings': {
-        GET: () => (config ? Response.json(config.demo()) : new Response('Not found', { status: 404 })),
-        PUT: async (req) => (config ? handle(async () => config.saveDemo(await req.json())) : new Response('Not found', { status: 404 })),
+        GET: needs(config, (c) => c.demo()),
+        PUT: needs(config, async (c, req) => c.saveDemo(await req.json())),
       },
       // a voice as the owner chooses it: checked, installed (in the background), heard in a sample;
       // and what else a render needs on this machine
-      '/api/demo-settings/check': { POST: async (req) => (config ? handle(async () => config.checkDemo(await req.json())) : new Response('Not found', { status: 404 })) },
-      '/api/demo-settings/setup': { POST: async (req) => (config ? handle(async () => config.demoSetup(await req.json())) : new Response('Not found', { status: 404 })) },
-      '/api/demo-settings/install': { POST: async (req) => (config ? handle(async () => config.installDemoVoice(await req.json())) : new Response('Not found', { status: 404 })) },
+      '/api/demo-settings/check': { POST: needs(config, async (c, req) => c.checkDemo(await req.json())) },
+      '/api/demo-settings/setup': { POST: needs(config, async (c, req) => c.demoSetup(await req.json())) },
+      '/api/demo-settings/install': { POST: needs(config, async (c, req) => c.installDemoVoice(await req.json())) },
       '/api/demo-settings/sample': {
         POST: async (req) => {
-          if (!config) return new Response('Not found', { status: 404 });
+          if (!config) return notFound();
           const input = await req.json().catch(() => null);
           return config.sampleDemoVoice(input).then(
             (wav) => new Response(wav, { headers: { 'Content-Type': 'audio/wav', 'Cache-Control': 'no-store' } }),
@@ -418,13 +430,13 @@ export function serve(
         },
       },
       // a demo's narration clip, in the voice Obeya holds loaded across renders (narration.ts)
-      '/api/narration/clip': { POST: narration ? clipRoute(narration) : () => new Response('Not found', { status: 404 }) },
+      '/api/narration/clip': { POST: narration ? clipRoute(narration) : notFound },
       // „Für alle ins Repository übernehmen“: a repository's settings for this machine into its .obeya/settings.json
-      '/api/config/share-settings': { POST: async (req) => (config ? handle(async () => config.shareSettings(await req.json())) : new Response('Not found', { status: 404 })) },
+      '/api/config/share-settings': { POST: needs(config, async (c, req) => c.shareSettings(await req.json())) },
       // what the configuration amounts to and what is wrong with it: as saved, or a draft as the owner edits it
       '/api/config/check': {
-        GET: () => (config ? handle(() => config.checkSaved()) : new Response('Not found', { status: 404 })),
-        POST: async (req) => (config ? handle(async () => config.check(await req.json())) : new Response('Not found', { status: 404 })),
+        GET: needs(config, (c) => c.checkSaved()),
+        POST: needs(config, async (c, req) => c.check(await req.json())),
       },
       '/api/c/:canvas/canvas': { GET: on((c) => c.board.snapshot()) },
       '/api/c/:canvas/cards': { POST: on(async (c, req) => c.board.create((await req.json()) as NewCard)) },
@@ -473,7 +485,7 @@ export function serve(
       '/api/c/:canvas/images/:file': {
         GET: (req) => {
           const file = byId.get(req.params.canvas)?.images.path(req.params.file);
-          return file ? new Response(Bun.file(file), { headers: { 'cache-control': 'private, max-age=31536000, immutable' } }) : new Response('Not found', { status: 404 });
+          return file ? new Response(Bun.file(file), { headers: { 'cache-control': 'private, max-age=31536000, immutable' } }) : notFound();
         },
       },
       // what the card's work changes: its files with lines added and removed, with `?full` the diff too
@@ -483,7 +495,7 @@ export function serve(
       '/api/c/:canvas/cards/:id/app/open': {
         GET: async (req) => {
           const c = byId.get(req.params.canvas);
-          if (!c) return new Response('Not found', { status: 404 });
+          if (!c) return notFound();
           let url: string | null = null;
           try {
             url = await c.openApp(req.params.id);
@@ -502,9 +514,9 @@ export function serve(
           try {
             const demo = byId.get(req.params.canvas)?.board.demoFiles(req.params.id);
             const file = decodeURIComponent(new URL(req.url).pathname.split('/demo/').slice(1).join('/demo/'));
-            return demo ? serveDemoFile(demo, file, req) : new Response('Not found', { status: 404 });
+            return demo ? serveDemoFile(demo, file, req) : notFound();
           } catch {
-            return new Response('Not found', { status: 404 });
+            return notFound();
           }
         },
       },
@@ -517,9 +529,9 @@ export function serve(
             const c = byId.get(req.params.canvas);
             const url = new URL(req.url);
             const file = decodeURIComponent(url.pathname.split('/files/').slice(1).join('/files/'));
-            return c ? serveAnswerFile(c.answerDir(Number(req.params.thread)), file, url.searchParams.has('download'), req) : new Response('Not found', { status: 404 });
+            return c ? serveAnswerFile(c.answerDir(Number(req.params.thread)), file, url.searchParams.has('download'), req) : notFound();
           } catch {
-            return new Response('Not found', { status: 404 });
+            return notFound();
           }
         },
       },
@@ -530,35 +542,17 @@ export function serve(
           await c.openAnswerFile(Number(req.params.thread), file);
         }),
       },
-      // a video demo as a file to pass on, where the repository has no share target (`?as=zip|html`)
       // the push-to-talk key anywhere on the machine, chosen in the settings, and the shell that hears it
       '/api/push-to-talk': {
         GET: () => Response.json(pushKeyView()),
-        PUT: async (req) => (config ? handle(async () => (config.savePushKey(await req.json()), pushKeyView())) : new Response('Not found', { status: 404 })),
+        PUT: needs(config, async (c, req) => (savePushKey(c.home, await req.json()), pushKeyView())),
       },
       // the app's shell, every few seconds: what it hears; it gets the key that applies
-      '/api/push-to-talk/shell': {
-        POST: async (req) =>
-          handle(async () => {
-            try {
-              shells.report(await req.json());
-            } catch (e) {
-              throw e instanceof TypeError ? new BadRequest('invalid', e.message) : e;
-            }
-            return pushKeyView();
-          }),
-      },
+      '/api/push-to-talk/shell': { POST: async (req) => handle(async () => (shells.report(await req.json()), pushKeyView())) },
       // the app's shell, every few seconds while it has a newer version of the app ready
       '/api/app-update': {
         GET: () => Response.json(updates.current()),
-        POST: async (req) =>
-          handle(async () => {
-            try {
-              return updates.report(await req.json());
-            } catch (e) {
-              throw e instanceof TypeError ? new BadRequest('invalid', e.message) : e;
-            }
-          }),
+        POST: async (req) => handle(async () => updates.report(await req.json())),
       },
       // the owner installs it: once the workers paused, Obeya ends for the shell to install it and start again
       '/api/app-update/install': {
@@ -573,20 +567,14 @@ export function serve(
       },
       // where the owner was last in a page: the shell's command goes there
       '/api/focus': { GET: () => Response.json(lastFocus()) },
+      // a video demo as a file to pass on, where the repository has no share target (`?as=zip|html`)
       '/api/c/:canvas/cards/:id/export': {
-        GET: async (req) => {
-          const c = byId.get(req.params.canvas);
-          if (!c) return Response.json({ code: 'invalid', error: 'unknown canvas' }, { status: 404 });
+        GET: on(async (c, req) => {
           const as = new URL(req.url).searchParams.get('as');
-          if (as !== 'zip' && as !== 'html') return Response.json({ code: 'invalid', error: 'as must be zip or html' }, { status: 400 });
-          try {
-            const f = await c.sharing.export(req.params.id, as);
-            return new Response(f.data, { headers: { 'content-type': f.type, 'content-disposition': `attachment; filename="${f.name}"`, 'cache-control': 'no-store' } });
-          } catch (e) {
-            if (e instanceof BadRequest) return Response.json({ code: e.code, error: e.message }, { status: 400 });
-            throw e;
-          }
-        },
+          if (as !== 'zip' && as !== 'html') throw new BadRequest('invalid', 'as must be zip or html');
+          const f = await c.sharing.export(req.params.id!, as);
+          return new Response(f.data, { headers: { 'content-type': f.type, 'content-disposition': `attachment; filename="${f.name}"`, 'cache-control': 'no-store' } });
+        }),
       },
       // what the owner said (audio), for the open card's agent or the Koordinator; the body is the
       // recording, or a form with it (`audio`) and the words typed in the field before it (`text`)
@@ -617,7 +605,7 @@ export function serve(
           // `?listen`: dictated into a field, the words go back to it and nowhere else
           if (params.has('listen')) {
             console.log(`dictated on ${c.id}: ${text === null ? '(not understood)' : text || '(nothing)'}`);
-            return text ? { confirm: '', quiet: true, text } : { confirm: text === null ? c.board.t.voice.notUnderstood : c.board.t.voice.nothingHeard, unheard: true };
+            return text ? { confirm: '', quiet: true, text } : unheard(c, text);
           }
           // what stood in the field goes first; nothing heard sends nothing, the field keeps it
           const words = text && typed?.trim() ? `${typed.trim()}${/\n/.test(typed.trim()) ? '\n\n' : ' '}${text}` : text;
@@ -695,7 +683,7 @@ export function serve(
           ? undefined
           : new Response('WebSocket expected', { status: 400 }),
     }, access),
-    fetch: (req: Request, srv: Bun.Server<Socket>) => refusal(req, access.hosts()) ?? access.admit(req, srv, '') ?? new Response('Not found', { status: 404 }),
+    fetch: (req: Request, srv: Bun.Server<Socket>) => refusal(req, access.hosts()) ?? access.admit(req, srv, '') ?? notFound(),
     websocket: {
       data: {} as Socket,
       open: (ws: ServerWebSocket<Socket>) => {
@@ -722,8 +710,7 @@ export function serve(
           if (msg.type === 'hold' && Array.isArray(msg.hold)) restarter?.hold(ws.data.page, msg.hold.filter((h) => h === 'video' || h === 'voice'));
           if (msg.type === 'back') byId.get(ws.data.canvas)?.ownerBack();
           if (msg.type === 'focus') {
-            const text = (x: unknown) => (typeof x === 'string' && x ? x : undefined);
-            const f = { card: text(msg.card), project: text(msg.project), target: text(msg.target), title: text(msg.title) };
+            const f = { card: nonEmpty(msg.card), project: nonEmpty(msg.project), target: nonEmpty(msg.target), title: nonEmpty(msg.title) };
             focused.set(ws.data.page, { canvas: ws.data.canvas, ...Object.fromEntries(Object.entries(f).filter(([, v]) => v)), at: Date.now() });
             const seen = parsePlace(typeof msg.place === 'string' ? msg.place : undefined);
             const c = byId.get(ws.data.canvas);
