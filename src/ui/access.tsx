@@ -193,13 +193,6 @@ export function AccessSection({ on, onConnect }: { on: boolean; onConnect: () =>
     <>
       <Head title={t.config.sections.devices} hint={a.hint} file={view.file} />
       <Reach view={view} onView={setView} />
-      {view.address && (
-        <Field label="">
-          <button className="btn small primary" onClick={onConnect}>
-            {a.connect}
-          </button>
-        </Field>
-      )}
       <Head sub title={a.devices} hint={a.devicesHint} />
       {view.devices.length ? (
         <ul className="acc-devices">
@@ -216,6 +209,11 @@ export function AccessSection({ on, onConnect }: { on: boolean; onConnect: () =>
         </ul>
       ) : (
         <p className="hint">{a.noDevices}</p>
+      )}
+      {view.address && (
+        <button className="btn small primary acc-connect" onClick={onConnect}>
+          {a.connect}
+        </button>
       )}
       {status && <p className="hint c-status">{status}</p>}
       <p className="hint acc-note">{a.whileRunning}</p>

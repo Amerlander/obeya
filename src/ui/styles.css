@@ -1508,6 +1508,7 @@ button.link:hover { text-decoration: underline; }
 .acc-devices li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 18px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
 .acc-devices .btn.small { margin-top: 0; }
 .acc-name { font-weight: 600; }
+.acc-connect { margin-top: 12px; }
 .acc-note { margin-top: 18px; max-width: 76ch; }
 
 /* ---------------------------------------------------------------- the phone view (phone.tsx) */
