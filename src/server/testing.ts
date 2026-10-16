@@ -83,6 +83,9 @@ export function gitRepo(path: string, files: Record<string, string> = { 'README.
     identify(template);
     // a copy keeps mtime and size but not inode and ctime: git is to trust what the copy keeps
     appendFileSync(join(template, '.git/config'), '[core]\n\tcheckStat = minimal\n\ttrustctime = false\n');
+    // git's automatic maintenance after a commit would run in the background and could add or
+    // remove files (objects/maintenance.lock) while another test copies the template
+    appendFileSync(join(template, '.git/config'), '[maintenance]\n\tauto = false\n[gc]\n\tauto = 0\n');
     for (const [file, text] of Object.entries(files)) {
       mkdirSync(dirname(join(template, file)), { recursive: true });
       writeFileSync(join(template, file), text);
