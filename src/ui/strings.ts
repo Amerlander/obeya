@@ -655,6 +655,8 @@ const de = {
     filed: (repo: string) => `In die Aufgabe „CLAUDE.md ergänzen“ für ${repo} aufgenommen.`,
     undone: 'zurückgenommen',
     lookingUp: 'schlägt nach …',
+    /** Under words the usage limit keeps Obeya from reading: when it reads them by itself. */
+    held: (time: string) => `Nutzungslimit · liest das um ${time} von selbst`,
     reshare: {
       outdated: (n: number) => (n === 1 ? 'Eine geteilte Demo ist veraltet' : `${n} geteilte Demos sind veraltet`),
       outdatedHint: 'Erneut teilen erzeugt sie neu, mit derselben Demo und demselben Link; eine nach der anderen. Seit sie geteilt wurden, hat sich an den Seiten geändert:',
@@ -2039,6 +2041,7 @@ const en: Strings = {
     filed: (repo: string) => `Added to the task “Add to CLAUDE.md” for ${repo}.`,
     undone: 'taken back',
     lookingUp: 'looking it up …',
+    held: (time: string) => `Usage limit · reads this by itself at ${time}`,
     reshare: {
       outdated: (n: number) => (n === 1 ? 'One shared demo is outdated' : `${n} shared demos are outdated`),
       outdatedHint: 'Sharing again makes them afresh, with the same demo and the same link; one after the other. Since they were shared, the pages changed:',

@@ -325,11 +325,71 @@ export function resultFailure(m: SDKResultMessage): string | undefined {
  * for it, the limits last reported say so, or (from a CLI that reports neither) the message does
  * („You've hit your session limit · resets 2:40pm“).
  */
-export function usageLimit(failure: string, refused: boolean, limits: SDKRateLimitInfo | undefined): { resetsAt?: number } | undefined {
+export function usageLimit(failure: string, refused: boolean, limits: SDKRateLimitInfo | undefined, now = Date.now()): { resetsAt?: number } | undefined {
   const rejected = limits?.status === 'rejected';
   if (!refused && !rejected && !/\bhit your .*limit\b/i.test(failure)) return undefined;
   // the API gives seconds
-  return rejected && limits.resetsAt ? { resetsAt: limits.resetsAt * 1000 } : {};
+  if (rejected && limits.resetsAt) return { resetsAt: limits.resetsAt * 1000 };
+  const said = resetIn(failure, now);
+  return said ? { resetsAt: said } : {};
+}
+
+/**
+ * When the message says the limit resets, as the CLI words it („resets 7:20pm (Europe/Berlin)“):
+ * the next such time in that zone, or one that passed within the hour. Nothing for a message that
+ * names no time, or a day as well (a weekly limit).
+ */
+export function resetIn(message: string, now = Date.now()): number | undefined {
+  const m = /\bresets (\d{1,2})(?::(\d{2}))?\s*([ap]m)\b(?:\s*\(([^)]+)\))?/i.exec(message);
+  if (!m) return undefined;
+  const hour = (Number(m[1]) % 12) + (m[3]!.toLowerCase() === 'pm' ? 12 : 0);
+  const minute = Number(m[2] ?? 0);
+  let zone = m[4]?.trim();
+  try {
+    if (zone) new Intl.DateTimeFormat('en-US', { timeZone: zone });
+  } catch {
+    zone = undefined;
+  }
+  // the date there now, and that time on it or the next day
+  const day = wallClock(now, zone);
+  for (const add of [0, 1]) {
+    const at = fromWallClock(day.year, day.month, day.day + add, hour, minute, zone);
+    if (at > now - 3_600_000) return at;
+  }
+  return undefined;
+}
+
+/** The date and time a clock in `zone` (the machine's own without one) shows at `at`, as UTC fields. */
+function wallClock(at: number, zone: string | undefined) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', { timeZone: zone, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' })
+      .formatToParts(at)
+      .map((p) => [p.type, Number(p.value)]),
+  ) as Record<'year' | 'month' | 'day' | 'hour' | 'minute' | 'second', number>;
+  return parts;
+}
+
+/** The moment a clock in `zone` shows that date and time. */
+function fromWallClock(year: number, month: number, day: number, hour: number, minute: number, zone: string | undefined): number {
+  const wanted = Date.UTC(year, month - 1, day, hour, minute);
+  const offset = (at: number) => {
+    const w = wallClock(at, zone);
+    return Date.UTC(w.year, w.month - 1, w.day, w.hour, w.minute, w.second) - Math.floor(at / 1000) * 1000;
+  };
+  // once more with the offset at the result, across a change of summer time
+  const guess = wanted - offset(wanted);
+  return wanted - offset(guess);
+}
+
+/** A usage limit that does not say when it lifts is tried again after this. */
+const LIMIT_RETRY = 15 * 60_000;
+/** A usage limit that should have lifted already is tried again after this. */
+const LIMIT_AGAIN = 60_000;
+
+/** When to go on after the usage limit stopped a turn: `margin` after it lifts, so that clocks a little apart do not matter. */
+export function limitLifts(limit: { resetsAt?: number }, margin: number, now = Date.now()): number {
+  const reset = limit.resetsAt;
+  return !reset ? now + LIMIT_RETRY : reset > now ? reset + margin : now + LIMIT_AGAIN;
 }
 
 /** Sorts the SDK's `decision_reason_type` of a denial. */

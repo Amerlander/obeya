@@ -30,6 +30,8 @@ const de = {
     couldNotRead: (why: string) => `Ich konnte das nicht lesen. ${why}`,
     cloudFailed: (service: string, why: string) => `${service} hat die Aufnahme nicht erkannt (${why}).`,
     interrupted: 'Obeya startete neu, bevor ich das gelesen hatte. Bitte noch einmal.',
+    /** The usage limit keeps the Koordinator from reading the words: it reads them by itself once it lifts. */
+    held: (when: string) => `Das Nutzungslimit ist erreicht. Ich lese das ${when} von selbst.`,
     undone: 'Zurückgenommen.',
     created: 'Per Sprache angelegt.',
   },
@@ -349,6 +351,7 @@ const en: Messages = {
     couldNotRead: (why: string) => `I could not read that. ${why}`,
     cloudFailed: (service: string, why: string) => `${service} did not transcribe the recording (${why}).`,
     interrupted: 'Obeya restarted before I had read that. Please say it again.',
+    held: (when: string) => `The usage limit is reached. I will read this by myself ${when}.`,
     undone: 'Taken back.',
     created: 'Created by voice.',
   },

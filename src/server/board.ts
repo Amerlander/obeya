@@ -54,7 +54,7 @@ import {
   type Notice,
   type BackgroundTask,
 } from '../core/types';
-import type { CardRow, DecisionRow, Friction, FrictionNote, GroupRow, NewRow, RowUpdate, Store } from './db';
+import type { CardRow, DecisionRow, Friction, FrictionNote, GroupRow, HeldTalk, NewRow, RowUpdate, Store } from './db';
 import type { Images } from './images';
 import { clip, oneLine } from '../core/text';
 import type { Wish } from '../core/wish';
@@ -806,6 +806,17 @@ export class Board {
     const lost = this.store.interruptTalk(this.canvas.id, this.t.voice.interrupted);
     for (const x of lost) if (x.cardId && this.item(x.cardId)) this.log(x.cardId, 'say', 'koordinator', this.t.voice.interrupted);
     if (lost.length) this.changed();
+  }
+
+  /** Words the usage limit keeps the Koordinator from reading, until it lifts; `null` once it reads them. */
+  holdTalk(id: number, held: HeldTalk | null) {
+    this.store.holdTalk(id, held);
+    this.changed();
+  }
+
+  /** The words the usage limit holds, oldest first: after a restart, the Koordinator reads them once it lifts. */
+  heldTalk() {
+    return this.store.heldTalk(this.canvas.id);
   }
 
   undoTalk(id: number) {

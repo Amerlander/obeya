@@ -9,7 +9,7 @@ import { api } from './api';
 import { Inline, plain } from './markdown';
 import { AnswerFiles, Body, Continues, Msg, Quote, Reading, ThreadCard } from './message';
 import { type Reply, setReply, talkEv, talkQuote, useReplyKnown } from './reply';
-import { failText, t } from './strings';
+import { clock, failText, t } from './strings';
 import { Composer } from './composer';
 import { OBEYA_DRAFT } from './draft';
 import { Shots } from './shots';
@@ -191,7 +191,11 @@ function Conversation({ talk, fresh, items, onOpen, draft }: { talk: Talk[]; fre
               <Shots ids={x.images} />
               {x.continues && <Continues question={x.continues} reading={x.answer === undefined && !card} />}
             </Msg>
-            {x.reply === undefined ? (
+            {x.heldUntil ? (
+              <Msg by="koordinator" className="thinking" who={t.author.koordinator}>
+                <div className="hint">{t.koordinator.held(clock(x.heldUntil))}</div>
+              </Msg>
+            ) : x.reply === undefined ? (
               <Reading />
             ) : (
               <Msg

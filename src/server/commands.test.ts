@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
-import type { AgentSetting, CanvasConfig, ConfigProblem, ConfigView } from '../core/types';
+import type { AgentSetting, CanvasConfig, ConfigProblem, ConfigView, Notice } from '../core/types';
 import { Board } from './board';
 import { type Command, Commander } from './commands';
 import { Store } from './db';
-import { FakeRuntime, type FakeSession } from './testing';
+import { FakeRuntime, type FakeSession, until } from './testing';
 
 let store: Store;
 let board: Board;
@@ -568,6 +568,99 @@ describe('the Koordinator remembers', () => {
     s.call('reply', { confirm: 'Zwei.' });
     s.emit({ type: 'idle' });
     expect(await second).toEqual({ confirm: 'Zwei.' });
+  });
+});
+
+describe('the usage limit', () => {
+  const hit = "You've hit your session limit · resets 7:20pm (Europe/Berlin)";
+  const limited = () => new Commander({ board, runtime, cwd: '/r', execute: (c) => void executed.push(c), delayMs: 20, limitMargin: 10 });
+  const lifts = (ms: number) => runtime.last.emit({ type: 'error', message: hit, limit: { resetsAt: Date.now() + ms } });
+
+  test('words the limit kept the Koordinator from reading wait and are read by themselves once it lifts; the reply comes with „Rückgängig“', async () => {
+    board.create({ title: 'Export', x: 0, y: 0 });
+    const notices: Notice[] = [];
+    board.onNotice((n) => void notices.push(n));
+    const k = limited();
+    const heard = k.hear('starte Export', {});
+    await settle();
+    lifts(60);
+    const { confirm } = await heard;
+    expect(confirm).toStartWith('Das Nutzungslimit ist erreicht. Ich lese das um ');
+    const [x] = board.snapshot().talk;
+    // the sheet says when it reads them, not that it reads them now
+    expect(x).toMatchObject({ said: 'starte Export' });
+    expect(x!.reply).toBeUndefined();
+    expect(Date.parse(x!.heldUntil!)).toBeGreaterThan(Date.now());
+    expect(runtime.sessions).toHaveLength(1);
+
+    await until(() => runtime.sessions.length === 2);
+    // read now: „liest …“ under them again
+    expect(board.snapshot().talk[0]!.heldUntil).toBeUndefined();
+    expect(runtime.last.inbox.at(-1)).toContain("the account's usage limit kept you from reading it until now");
+    runtime.last.call('act', { actions: [{ do: 'start', card: 'K1' }], confirm: '„Export“ startet.' });
+    runtime.last.emit({ type: 'idle' });
+    await until(() => notices.length);
+    expect(notices[0]).toMatchObject({ text: '„Export“ startet.', undoMs: 20 });
+    expect(notices[0]!.token).toBeString();
+    expect(board.snapshot().talk[0]!.reply).toBe('„Export“ startet.');
+    await until(() => executed.length);
+    expect(executed).toEqual([{ do: 'start', card: board.snapshot().items[0]!.id }]);
+  });
+
+  test('later words try the held ones first and, while the limit holds, wait behind them; on a card the wait is said once', async () => {
+    const a = board.create({ title: 'Export', x: 0, y: 0 });
+    const k = limited();
+    const first = k.hear('hallo', {});
+    await settle();
+    lifts(10_000);
+    await first;
+    // the owner says more before the limit lifts: the held words are tried at once, and the limit still holds
+    const second = k.hear('starte ihn', { card: a.id });
+    await settle();
+    expect(runtime.sessions).toHaveLength(2);
+    expect(runtime.last.inbox.at(-1)).toContain('"hallo"');
+    lifts(80);
+    expect((await second).confirm).toStartWith('Das Nutzungslimit ist erreicht.');
+    // not tried itself: the limit held the words before it
+    expect(runtime.sessions).toHaveLength(2);
+    expect(board.snapshot().talk.map((t) => !!t.heldUntil)).toEqual([true]);
+    expect(store.heldTalk('c').map((t) => t.said)).toEqual(['hallo', 'starte ihn']);
+    expect(board.events(a.id).map((e) => [e.author, e.text.slice(0, 30)])).toEqual([
+      ['owner', 'starte ihn'],
+      ['koordinator', 'Das Nutzungslimit ist erreicht'],
+    ]);
+
+    // it lifts: read in the order they were said
+    await until(() => runtime.sessions.length === 3);
+    expect(runtime.last.inbox.at(-1)).toContain('"hallo"');
+    runtime.last.call('reply', { confirm: 'Hallo!' });
+    runtime.last.emit({ type: 'idle' });
+    await until(() => runtime.last.inbox.length === 2);
+    expect(runtime.last.inbox.at(-1)).toContain('"starte ihn"');
+    runtime.last.call('act', { actions: [{ do: 'start', card: 'K1' }], confirm: '„Export“ startet.' });
+    runtime.last.emit({ type: 'idle' });
+    await until(() => board.events(a.id).length === 3);
+    expect(board.events(a.id).at(-1)).toMatchObject({ author: 'koordinator', text: '„Export“ startet.' });
+    expect(store.heldTalk('c')).toEqual([]);
+  });
+
+  test('held words survive a restart and are read once the limit lifts', async () => {
+    const k = limited();
+    const heard = k.hear('was läuft?', {});
+    await settle();
+    lifts(10_000);
+    await heard;
+    // Obeya restarts, shortly before the limit lifts: the words are not cut off, and a new Commander reads them
+    const [x] = store.heldTalk('c');
+    store.holdTalk(x!.id, { ...x!.held, until: new Date(Date.now() + 30).toISOString() });
+    board.interruptTalk();
+    expect(board.snapshot().talk[0]!.reply).toBeUndefined();
+    limited().resume();
+    await until(() => runtime.sessions.length === 2);
+    runtime.last.call('reply', { confirm: 'Nichts.' });
+    runtime.last.emit({ type: 'idle' });
+    await until(() => board.snapshot().talk[0]!.reply === 'Nichts.');
+    expect(store.heldTalk('c')).toEqual([]);
   });
 });
 

@@ -99,6 +99,12 @@ export interface CardRow {
   waiting_since: string | null;
 }
 
+/** Words the usage limit keeps the Koordinator from reading (`talk.held`): until when, and how it reads them then (`Commander`'s). */
+export interface HeldTalk {
+  until: string;
+  reading: unknown;
+}
+
 export interface GroupRow {
   id: string;
   canvas_id: string;
@@ -364,6 +370,8 @@ export const MIGRATIONS = [
   );`,
   // a paired device's push subscription (JSON `Subscription`), where it turned notifications on
   'ALTER TABLE devices ADD COLUMN push TEXT;',
+  // words the usage limit kept the Koordinator from reading, until it lifts (JSON `HeldTalk`)
+  'ALTER TABLE talk ADD COLUMN held TEXT;',
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter, wish';
@@ -829,11 +837,21 @@ export class Store {
       .run({ id, reply, question: lookUp?.question ?? null, about: lookUp?.about ?? null, wish: wish ? JSON.stringify(wish) : null });
   }
 
-  /** Words the Koordinator was reading when Obeya stopped: they get `reply`; returns them. */
+  /** Words the Koordinator was reading when Obeya stopped: they get `reply`; returns them. Words the usage limit holds wait on. */
   interruptTalk(canvasId: string, reply: string): Talk[] {
-    const rows = this.db.query("SELECT * FROM talk WHERE canvas_id = $c AND reply = '' ORDER BY id").all({ c: canvasId }) as TalkRow[];
-    this.db.query("UPDATE talk SET reply = $reply WHERE canvas_id = $c AND reply = ''").run({ c: canvasId, reply });
+    const rows = this.db.query("SELECT * FROM talk WHERE canvas_id = $c AND reply = '' AND held IS NULL ORDER BY id").all({ c: canvasId }) as TalkRow[];
+    this.db.query("UPDATE talk SET reply = $reply WHERE canvas_id = $c AND reply = '' AND held IS NULL").run({ c: canvasId, reply });
     return rows.map(toTalk);
+  }
+
+  /** Words the usage limit keeps the Koordinator from reading until `held.until`; `null` once it reads them. */
+  holdTalk(id: number, held: HeldTalk | null) {
+    this.db.query('UPDATE talk SET held = $held WHERE id = $id').run({ id, held: held ? JSON.stringify(held) : null });
+  }
+
+  /** The words the usage limit holds, oldest first. */
+  heldTalk(canvasId: string): (Talk & { held: HeldTalk })[] {
+    return (this.db.query('SELECT * FROM talk WHERE canvas_id = $c AND held IS NOT NULL ORDER BY id').all({ c: canvasId }) as TalkRow[]).map((r) => ({ ...toTalk(r), held: JSON.parse(r.held!) as HeldTalk }));
   }
 
   undoTalk(id: number) {
@@ -1140,6 +1158,7 @@ interface TalkRow {
   card: string | null;
   reply_to: string | null;
   wish: string | null;
+  held: string | null;
 }
 
 const toTalk = (r: TalkRow): Talk => ({
@@ -1161,6 +1180,7 @@ const toTalk = (r: TalkRow): Talk => ({
   ...(r.files ? { files: JSON.parse(r.files) as AnswerFile[] } : {}),
   ...(r.card ? { movedTo: r.card } : {}),
   ...(r.wish ? { wish: JSON.parse(r.wish) as Wish } : {}),
+  ...(r.held ? { heldUntil: (JSON.parse(r.held) as HeldTalk).until } : {}),
 });
 
 /**

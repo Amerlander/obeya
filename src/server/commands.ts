@@ -10,7 +10,7 @@ import { BadRequest, type Board, excerpt, replyNote } from './board';
 import type { Place } from '../core/layout';
 import type { Config } from './config';
 import type { Moment } from './db';
-import { type AgentRuntime, type AgentSession, failureReason } from './runtime';
+import { type AgentRuntime, type AgentSession, failureReason, limitLifts } from './runtime';
 import { type Language, LANGUAGE_NAMES } from '../core/locale';
 import { MESSAGES } from '../core/messages';
 import { clip, oneLine, messageOf } from '../core/text';
@@ -122,6 +122,8 @@ export interface Input {
   replyTo?: number | TalkRef;
   /** The place in the open card's demo video the words are about; only its agent hears of it. */
   spot?: SpotInput;
+  /** When the owner said the words, read only now since the usage limit held them (ISO time). */
+  heldSince?: string;
 }
 
 export interface CommanderOptions {
@@ -140,6 +142,8 @@ export interface CommanderOptions {
   imageFiles?: (ids?: string[]) => string[];
   /** Obeya's configuration: the Koordinator reads it, and changes it on the owner's word. */
   config?: Pick<Config, 'view' | 'check' | 'checkSaved'>;
+  /** How long after the usage limit lifts the Koordinator reads the words it held, so that clocks a little apart do not matter. */
+  limitMargin?: number;
   /** The Koordinator's model and effort; another one chosen since takes a new session. */
   agentSetting?: () => AgentSetting;
   /**
@@ -229,6 +233,26 @@ interface Waiting {
 /** A command whose undo window ends sooner than this is not offered for undo again. */
 const UNDO_SHOWN_MS = 1000;
 
+/** Words the usage limit kept the Koordinator from reading, and how it reads them once the limit lifts. */
+interface Held {
+  transcript: string;
+  images: string[];
+  focus: Focus;
+  input: Input;
+  /** When the owner said them (ISO time). */
+  at: string;
+}
+
+/** The Koordinator's turn failed on the account's usage limit, which lifts at `resetsAt` when the API said when. */
+class LimitError extends Error {
+  constructor(
+    message: string,
+    readonly limit: { resetsAt?: number },
+  ) {
+    super(message);
+  }
+}
+
 export class Commander {
   /**
    * Commands between being understood and having run; the timer is set once the owner has the
@@ -241,6 +265,12 @@ export class Commander {
   private turns: Promise<unknown> = Promise.resolve();
   /** What the Koordinator hears with the next command: actions the owner took back. */
   private news: string[] = [];
+  /** Words the usage limit holds, by their exchange, in the order the owner said them; read once it lifts. */
+  private held = new Map<number, Held>();
+  /** When the Koordinator tries again to read what the usage limit holds. */
+  private heldUntil = 0;
+  private heldTimer?: ReturnType<typeof setTimeout>;
+  private draining?: Promise<void>;
 
   constructor(private o: CommanderOptions) {}
 
@@ -258,6 +288,18 @@ export class Commander {
     // the owner's words stand in the conversation at once, the Koordinator's reply follows once it has read them
     const talk = this.o.board.addTalk(transcript, '', card ?? null, undefined, images, quoted);
     if (card && said) this.o.board.log(card, 'say', 'owner', said, { images, replyTo });
+    const held: Held = { transcript, images, focus, input, at: new Date().toISOString() };
+    // what the usage limit held is read first, in the order it was said; while the limit holds, these words wait with it
+    await this.drain();
+    if (this.held.size) return this.hold(talk, held);
+    return (await this.answer(talk, held)) ?? this.hold(talk, held);
+  }
+
+  /** Reads the words of exchange `talk` and acts on them; nothing when the usage limit kept the Koordinator from reading them. */
+  private async answer(talk: number, { transcript, focus, images, input }: Held): Promise<Heard | undefined> {
+    const card = focus.card && this.o.board.item(focus.card) ? focus.card : undefined;
+    const said = input.forwarded ? undefined : transcript;
+    const replyTo = card ? this.o.board.quoted(card, input.replyTo)?.id : undefined;
     const reply = (confirm: string, lookUp?: { question: string; about: string | null }, wish?: Wish) => {
       this.o.board.replyTalk(talk, confirm, lookUp, wish);
       if (card) this.o.board.log(card, 'say', 'koordinator', confirm, wish ? { wish } : {});
@@ -266,6 +308,10 @@ export class Commander {
     try {
       decision = await this.interpret(transcript, focus, images, input);
     } catch (e) {
+      if (e instanceof LimitError) {
+        this.heldUntil = limitLifts(e.limit, this.o.limitMargin ?? 10_000);
+        return undefined;
+      }
       // the Koordinator's session failed (not logged in, say): the owner hears why, not that they went unheard
       const t = this.o.board.t;
       const confirm = t.voice.couldNotRead(failureReason(messageOf(e), t));
@@ -313,6 +359,53 @@ export class Commander {
   }
 
   /**
+   * The usage limit keeps the Koordinator from reading the words of exchange `talk`: they wait, with
+   * those it holds already, and are read by themselves once it lifts. Meanwhile the sheet says so
+   * under them, and the open card's conversation once.
+   */
+  private hold(talk: number, h: Held): Heard {
+    const t = this.o.board.t;
+    const confirm = t.voice.held(t.when(this.heldUntil));
+    const card = h.focus.card && this.o.board.item(h.focus.card) ? h.focus.card : undefined;
+    if (!this.held.has(talk) && card) this.o.board.log(card, 'say', 'koordinator', confirm);
+    this.held.set(talk, h);
+    const until = new Date(this.heldUntil).toISOString();
+    for (const [id, { focus, input }] of this.held) this.o.board.holdTalk(id, { until, reading: { focus, input } });
+    this.waitForLimit();
+    return { confirm };
+  }
+
+  private waitForLimit() {
+    clearTimeout(this.heldTimer);
+    // a timer runs at most about 24 days
+    this.heldTimer = setTimeout(() => void this.drain(), Math.min(Math.max(0, this.heldUntil - Date.now()), 2 ** 31 - 1));
+  }
+
+  /**
+   * Reads what the usage limit held, in order, until it holds again; each reply reaches the owner as
+   * a notice, with „Rückgängig“ where it has actions. One drain at a time.
+   */
+  private drain(): Promise<void> {
+    if (!this.held.size) return Promise.resolve();
+    return (this.draining ??= (async () => {
+      clearTimeout(this.heldTimer);
+      for (const [talk, h] of [...this.held]) {
+        // read now: „liest …“ under the words
+        this.o.board.holdTalk(talk, null);
+        const heard = await this.answer(talk, { ...h, input: { ...h.input, heldSince: h.at } });
+        if (!heard) {
+          this.hold(talk, h);
+          return;
+        }
+        this.held.delete(talk);
+        if (heard.token) this.arm(heard.token);
+        const card = h.focus.card && this.o.board.item(h.focus.card) ? h.focus.card : undefined;
+        this.o.board.notify({ ...(card ? { cardId: card } : {}), text: heard.confirm, ...(heard.token ? { token: heard.token, undoMs: this.delayMs } : {}), ...(heard.wish ? { wish: heard.wish } : {}) });
+      }
+    })().finally(() => (this.draining = undefined)));
+  }
+
+  /**
    * A request the agent of `card` passes on from the owner's words to it (`to_obeya`): read like a
    * command, with the card in focus and the owner's own words beside the agent's, as they were said or typed.
    */
@@ -345,6 +438,13 @@ export class Commander {
       this.waiting.set(token, w);
       this.schedule(token, w, due);
     }
+    // and the words the usage limit held are read once it lifts
+    for (const x of this.o.board.heldTalk()) {
+      const { focus, input } = x.held.reading as Pick<Held, 'focus' | 'input'>;
+      this.held.set(x.id, { transcript: x.said, images: x.images ?? [], focus, input, at: x.at });
+      this.heldUntil = Math.max(this.heldUntil, Date.parse(x.held.until));
+    }
+    if (this.held.size) this.waitForLimit();
   }
 
   private schedule(token: string, w: Waiting & { due?: number; timer?: ReturnType<typeof setTimeout>; running?: boolean }, due: number) {
@@ -585,7 +685,7 @@ export class Commander {
         if (e.type === 'error') {
           s.ended = true;
           s.agent.close();
-          s.reading?.end(new Error(e.message));
+          s.reading?.end(e.limit ? new LimitError(e.message, e.limit) : new Error(e.message));
         } else if (e.type === 'idle') s.reading?.end();
       },
     });
@@ -807,7 +907,7 @@ export class Commander {
     s.reading = undefined;
     if (error && !decided) {
       // a session that waited or talked before may have gone stale: read the command once more in a fresh one
-      if (warmed && retry) return this.read(transcript, focus, images, input, decide, false);
+      if (warmed && retry && !(error instanceof LimitError)) return this.read(transcript, focus, images, input, decide, false);
       throw error;
     }
     if (!decided) decide({ commands: [], confirm: MESSAGES[s.language].voice.notUnderstood });
@@ -942,6 +1042,9 @@ export class Commander {
             // in reply to a message of the open card's conversation, or of the sheet
             (focused ? replyNote(this.o.board.quoted(focused.id, input.replyTo), 'koordinator') : focus.card ? '' : talkReplyNote(this.o.board.quotedTalk(input.replyTo))).trim(),
           ].filter(Boolean)),
+      ...(input.heldSince
+        ? [`The owner said this ${when(input.heldSince)}, but the account's usage limit kept you from reading it until now; the canvas may have changed since. Obeya told them it would read it once the limit lifted.`]
+        : []),
       ...(shots
         ? [
             `The owner attached ${shots === 1 ? 'a screenshot' : `${shots} screenshots`} (shown below). Obeya gives ${shots === 1 ? 'it' : 'them'} to every new_card, new_idea, start, note, answer, feedback and discuss action you take for this message; a title for a new card may say what ${shots === 1 ? 'it shows' : 'they show'}.`,

@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import type { HookInput, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { askOwner, BOUNDED_WAITS, Inbox, backgroundWork, deniedBy, claudeExecutable, cleanEnv, FOREGROUND_SLEEP_LIMIT, failureReason, foregroundSleep, refuseForegroundWait, resultFailure, usageLimit } from './runtime';
+import { askOwner, BOUNDED_WAITS, Inbox, backgroundWork, deniedBy, claudeExecutable, cleanEnv, FOREGROUND_SLEEP_LIMIT, failureReason, foregroundSleep, refuseForegroundWait, resetIn, resultFailure, usageLimit } from './runtime';
 import { MESSAGES } from '../core/messages';
 
 test('background work counts renders, test runs and watchers, not housekeeping', () => {
@@ -103,12 +103,30 @@ test('a turn the usage limit stopped says when the limit lifts', () => {
   const hit = "You've hit your session limit · resets 2:40pm (Europe/Berlin)";
   const rejected = { status: 'rejected', resetsAt: 1_791_211_200, rateLimitType: 'five_hour' } as const;
   expect(usageLimit(hit, true, rejected)).toEqual({ resetsAt: 1_791_211_200_000 });
-  // refused, but the limits reported say nothing of when
-  expect(usageLimit(hit, true, undefined)).toEqual({});
+  // refused, but the limits reported say nothing of when: the message does
+  const now = Date.parse('2026-10-16T12:05:00Z');
+  expect(usageLimit(hit, true, undefined, now)).toEqual({ resetsAt: Date.parse('2026-10-16T12:40:00Z') });
   // a CLI that reports neither: the message alone
-  expect(usageLimit(hit, false, undefined)).toEqual({});
+  expect(usageLimit(hit, false, undefined, now)).toEqual({ resetsAt: Date.parse('2026-10-16T12:40:00Z') });
+  expect(usageLimit("You've hit your weekly limit", false, undefined, now)).toEqual({});
   expect(usageLimit('overloaded', false, { status: 'allowed' })).toBeUndefined();
   expect(usageLimit('Not logged in · Please run /login', false, undefined)).toBeUndefined();
+});
+
+test('the reset time a limit message names is the next such time in its zone', () => {
+  const at = (iso: string) => Date.parse(iso);
+  // 19:18 in Berlin (summer time, UTC+2): later the same day
+  expect(resetIn('resets 7:20pm (Europe/Berlin)', at('2026-10-16T17:18:00Z'))).toBe(at('2026-10-16T17:20:00Z'));
+  // past midnight there, and in winter time (UTC+1)
+  expect(resetIn('resets 1am (Europe/Berlin)', at('2026-12-01T21:00:00Z'))).toBe(at('2026-12-02T00:00:00Z'));
+  // a few minutes past: it should have lifted, not tomorrow
+  expect(resetIn('resets 7:20pm (Europe/Berlin)', at('2026-10-16T17:25:00Z'))).toBe(at('2026-10-16T17:20:00Z'));
+  expect(resetIn('resets 12pm (America/New_York)', at('2026-10-16T13:00:00Z'))).toBe(at('2026-10-16T16:00:00Z'));
+  // a day named too, or no time: unknown
+  expect(resetIn('resets Oct 20, 3pm (Europe/Berlin)')).toBeUndefined();
+  expect(resetIn("You've hit your session limit")).toBeUndefined();
+  // a zone the machine does not know: its own
+  expect(resetIn('resets 3pm (Nowhere/Else)')).toBeNumber();
 });
 
 test("agents run the Agent SDK's Claude Code from the checkout, the machine's own from the binary", () => {

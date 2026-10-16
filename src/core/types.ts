@@ -771,6 +771,8 @@ export interface Talk {
    * something: what a draft for them starts from, under a link on the reply.
    */
   wish?: Wish;
+  /** The usage limit keeps the Koordinator from reading the words: it reads them by itself then (ISO time), the reply follows. */
+  heldUntil?: string;
 }
 
 /** A message of Obeya's sheet: one part of an exchange, what the owner said, the Koordinator's reply or the looked-up answer. */

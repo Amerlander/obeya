@@ -16,7 +16,7 @@ import { checkArtifact, DEMO_SKILL, DEMO_SKILL_FILE, demoSkillName, OBEYA_PLUGIN
 import { artifactFiles } from './demo-page';
 import { imageNote } from './images';
 import type { InputContext } from './koordinator';
-import { type AgentEvent, type AgentRuntime, type AgentSession, type AgentTool, failureReason, type PermissionAnswer, type PermissionRequest } from './runtime';
+import { type AgentEvent, type AgentRuntime, type AgentSession, type AgentTool, failureReason, limitLifts, type PermissionAnswer, type PermissionRequest } from './runtime';
 import { TO_OBEYA, toObeyaTool } from './to-obeya';
 import { type Forward, HOST_DIR, hostName, remote } from './hosts';
 import { runAppCommand } from './app-command';
@@ -249,10 +249,6 @@ const PARK_GRACE = 5 * 60_000;
 const TRY_GRACE = 30 * 60_000;
 /** How long Obeya waits for the app to answer when it looks whether it runs. */
 const PROBE_MS = 1500;
-/** A usage limit that does not say when it lifts is tried again after this. */
-const LIMIT_RETRY = 15 * 60_000;
-/** A usage limit that should have lifted already is tried again after this. */
-const LIMIT_AGAIN = 60_000;
 /** Whether the card's status line is the one it shows while its worker waits for a usage limit, in either language. */
 const limitLine = (line: string | null | undefined) => !!line && LANGUAGES.some((l) => line.startsWith(MESSAGES[l].worker.limitStatus));
 /** Said of the owner's words when they came through speech recognition. */
@@ -1558,9 +1554,7 @@ export class Workers {
       }
       case 'error':
         if (e.limit) {
-          const now = Date.now();
-          const reset = e.limit.resetsAt;
-          live.limited = !reset ? now + LIMIT_RETRY : reset > now ? reset + (this.o.limitMargin ?? 10_000) : now + LIMIT_AGAIN;
+          live.limited = limitLifts(e.limit, this.o.limitMargin ?? 10_000);
           const t = this.o.board.t;
           this.o.board.log(cardId, 'state', 'obeya', `${e.message}. ${e.limit.resetsAt ? t.worker.limitResumes(t.when(live.limited)) : t.worker.limitRetries(t.when(live.limited))}`);
           break;

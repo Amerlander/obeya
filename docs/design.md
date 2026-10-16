@@ -751,7 +751,8 @@ worker that went to the owner for having stopped and then works on by itself tak
 back.
 
 A turn the account's usage limit stopped (the five-hour session limit, a weekly one: the SDK's
-`rate_limit_event` says `rejected` and when it resets, the API error is `rate_limit`) is neither
+`rate_limit_event` says `rejected` and when it resets, the API error is `rate_limit`; without the
+event, the message's „resets 7:20pm (Europe/Berlin)“ says when, `resetIn`) is neither
 nudged nor a question: the card's log says when the worker goes on, its status line reads
 „Nutzungslimit · weiter um 14:40“, and ten seconds after the reset Obeya tells the worker to go on
 where it stopped (a limit that holds past its reset time is tried again after a minute, one without
@@ -2734,6 +2735,14 @@ none open into the sheet, at once (spoken words once the recognition has written
 „Obeya liest …“ under it until its confirmation follows (on a card folded away), and
 "Zurückgenommen." when taken back. Words the Koordinator was reading when Obeya stopped get a reply
 that says so (`Board.interruptTalk`).
+
+Words the usage limit keeps the Koordinator from reading wait for it, as a worker does: the reply
+says when they are read („Das Nutzungslimit ist erreicht. Ich lese das um 19:20 von selbst.“), in the
+sheet as „Nutzungslimit · liest das um 19:20 von selbst“ under them, and ten seconds after the reset
+the Koordinator reads them by itself (the same retries as a worker's when the time is unknown or
+passes), knowing when they were said; the reply reaches the owner as a notice, with „Rückgängig“
+where it has actions. Words said meanwhile try the held ones first, in order, and wait behind them
+while the limit holds. Held words survive a restart (`talk.held`).
 
 `commands.live.test.ts` checks against the real model (`OBEYA_LIVE=1`) that requests passed on from
 each state an agent is on become Obeya's actions, that commands on cards without an agent are read
