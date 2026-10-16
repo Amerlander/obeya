@@ -6,6 +6,7 @@ import { mockPage } from '../core/frame';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
 import { answerText, toggle } from './answer';
 import { ApiError, api, at, type Field, holdRestart, onCardEvent, onCardEventGone } from './api';
+import { useCopy } from './copy';
 import { firstOpening } from './demoSeen';
 import { know, known } from './known';
 import { Branch } from './diff';
@@ -1647,7 +1648,7 @@ function PrBox({ pr }: { pr: PullRequest }) {
  * once the site writes pages differently than when it published this one.
  */
 function ShareBox({ item, act }: { item: Item; act: (a: CardAction, done: ActDone) => Promise<void> }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, copy] = useCopy(2000);
   const s = item.share;
   const go = (action: 'share' | 'unshare') => act({ action }, { close: false });
   const busy = s?.state === 'publishing' || s?.state === 'withdrawing';
@@ -1668,15 +1669,7 @@ function ShareBox({ item, act }: { item: Item; act: (a: CardAction, done: ActDon
             <a className="share-link" href={s.url} target="_blank" rel="noreferrer" title={t.share.open}>
               {s.url!.replace(/^https?:\/\//, '')}
             </a>
-            <button
-              className="btn"
-              onClick={() =>
-                navigator.clipboard.writeText(s.url!).then(() => {
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 2000);
-                }, console.error)
-              }
-            >
+            <button className="btn" onClick={() => copy(s.url!)}>
               {copied ? t.share.copied : t.share.copy}
             </button>
             <button className="btn" title={t.share.stopHint} onClick={() => go('unshare')}>

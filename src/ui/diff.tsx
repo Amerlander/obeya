@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom';
 import { type CardDiff, type DiffPart, diffSize, splitDiff } from '../core/diff';
 import type { Item } from '../core/types';
 import { api } from './api';
+import { useCopy } from './copy';
 import { plain } from './markdown';
 import { t } from './strings';
 
@@ -93,14 +94,9 @@ function AppLink({ item }: { item: Item }) {
 }
 
 function CopyPath({ path }: { path: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = () =>
-    navigator.clipboard.writeText(path).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 3000);
-    }, console.error);
+  const [copied, copy] = useCopy(3000);
   return (
-    <button className={copied ? 'link copied' : 'link'} title={path} onClick={copy}>
+    <button className={copied ? 'link copied' : 'link'} title={path} onClick={() => copy(path)}>
       {copied ? t.diff.copied : t.diff.copyPath}
     </button>
   );
