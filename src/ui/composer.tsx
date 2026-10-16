@@ -84,11 +84,17 @@ export function Composer({
   // Space pressed in the field: typed, or held to speak once it stays down (`held`)
   const space = useRef<number | 'held' | null>(null);
   const spaceDown = useRef(0);
+  // While Space is down the field is read-only: the browser on the Mac hides the pointer at every key
+  // pressed into a text field, so the key repeating while held made it flicker as the mouse moved.
+  const spaceUp = () => {
+    space.current = null;
+    if (field.current) field.current.readOnly = false;
+  };
   const typeSpace = () => {
     const s = space.current;
     if (s === null || s === 'held') return;
     clearTimeout(s);
-    space.current = null;
+    spaceUp();
     if (field.current) typeInto(field.current, ' ');
   };
   const ready = (!!text.trim() || images.length > 0 || allowEmpty) && !busy && !shots.uploading && !shots.marking.length;
@@ -118,13 +124,13 @@ export function Composer({
           onPaste={shots.onPaste}
           onBlur={() => {
             if (typeof space.current === 'number') clearTimeout(space.current);
-            space.current = null;
+            spaceUp();
           }}
           onKeyUp={(e) => {
             if (e.code !== 'Space') return;
             // a held Space ends the recording wherever it is let go (App); too short for one, it was typed
             if (space.current !== 'held') return typeSpace();
-            space.current = null;
+            spaceUp();
             if (e.timeStamp - spaceDown.current < HOLD_MS + TAP_MS && field.current) typeInto(field.current, ' ');
           }}
           onKeyDown={(e) => {
@@ -133,6 +139,7 @@ export function Composer({
               if (space.current !== null) return e.preventDefault();
               if (!e.repeat) {
                 e.preventDefault();
+                e.currentTarget.readOnly = true;
                 spaceDown.current = e.timeStamp;
                 space.current = window.setTimeout(() => {
                   space.current = 'held';

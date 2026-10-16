@@ -2366,6 +2366,9 @@ microphone at the bottom (pressing it keeps the cursor where it is), or Space he
 Space pressed in the field is held back: let go within 250 ms, or another key pressed meanwhile
 (fast typing overlaps keys), and it is typed as a keystroke (⌘Z takes it back); held longer, the
 recording starts, and let go before a recording would count (600 ms in all) it is typed after all.
+While Space is down the field is read-only: Chrome on the Mac
+hides the pointer at every key pressed into an editable field, and the key repeating while held made
+the pointer flicker wildly as the mouse moved.
 While the owner speaks into a field it is framed in blue, and the line under it and under the
 microphone says „→ ins Feld · abschicken mit Enter“; while the recognition writes, „Wird
 aufgeschrieben …“; nothing heard leaves the field as it was and says so under it. Otherwise the line
