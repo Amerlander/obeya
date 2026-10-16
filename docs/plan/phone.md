@@ -18,12 +18,12 @@ service of its own, and none of this is macOS-only: it works on Windows and Linu
 
 - The server listens on `127.0.0.1` only (`Bun.serve` in `src/server/server.ts`), with no login.
   Nothing outside the machine reaches it.
-- It checks neither `Origin` nor `Host`. Tried on a scratch Obeya (2026-10-16): a POST to
-  `/api/c/<canvas>/cards` with `Origin: https://evil.example`, `Sec-Fetch-Site: cross-site` and a
-  `text/plain` body (what any web page may send without a preflight) created the card, and so did
-  one with `Host: rebound.evil.example` (DNS rebinding). `req.json()` parses a `text/plain` body all
-  the same. Any page open in the owner's browser can create cards, start them, approve them or give
-  Obeya a command.
+- Every request and WebSocket upgrade is checked for `Host`, `Origin` and `Sec-Fetch-Site` (W1,
+  `src/server/access.ts`, design: Who may talk to it). Before, a POST to `/api/c/<canvas>/cards`
+  with `Origin: https://evil.example`, `Sec-Fetch-Site: cross-site` and a `text/plain` body created
+  the card, and so did one with `Host: rebound.evil.example` (DNS rebinding); both get 403 and 421
+  now. The names it answers to are `LOCAL_HOSTS` there; W2 adds the tailnet name and the address
+  it listens on.
 - The UI is the canvas, built for a large screen. A window up to 760 px wide only lays the sheets
   over the canvas (`NARROW` in `src/ui/App.tsx`, `styles.css`); there is no touch handling.
 - The page holds one WebSocket per canvas (`/ws`, `src/ui/api.ts`) and tells the server when it
@@ -53,7 +53,8 @@ service of its own, and none of this is macOS-only: it works on Windows and Linu
   must carry Obeya's own (scheme, host and port of the address it was reached at), and one with
   `Sec-Fetch-Site: cross-site` is refused. Requests without either header (the app's shell sending
   `POST /api/stop`, scripts, curl) pass from loopback. The workers' HTML artifacts run in a
-  sandboxed frame (origin `null`) and lose nothing: they had no business with the API.
+  sandboxed frame (origin `null`): what their page loads arrives as cross-site, so a GET of the
+  workers' files passes from any origin, and nothing else does.
 - **Local or remote.** A request is local when it comes from loopback with a local `Host` and no
   forwarding header. Through `tailscale serve` requests arrive from `127.0.0.1` too, but with the
   tailnet `Host` and `X-Forwarded-For`; they count as remote.
@@ -160,7 +161,7 @@ view says that it does not answer. A closed MacBook lid on battery sleeps regard
 
 ## Workstreams
 
-- [ ] **W1:** Origin and Host check. Every request and WebSocket upgrade checked as under Who may,
+- [x] **W1:** Origin and Host check. Every request and WebSocket upgrade checked as under Who may,
   from localhost too. Done when the cross-site `text/plain` POST and the foreign `Host` from Where it
   stands are refused, the canvas, the app (its stop included), the scratch Obeya and the scripts
   still work, and a worker's HTML artifact still shows.

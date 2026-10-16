@@ -100,6 +100,68 @@ describe('refused requests', () => {
   });
 });
 
+describe('who may', () => {
+  const at = (path: string, headers: Record<string, string>, init: RequestInit = {}) => fetch(new URL(path, server.url), { ...init, headers });
+  // what any web page may send without a preflight
+  const newCard = (headers: Record<string, string>) =>
+    at(api('/cards'), { 'content-type': 'text/plain', ...headers }, { method: 'POST', body: JSON.stringify({ title: 'Fremd', x: 0, y: 0 }) });
+  const own = () => server.url.origin;
+  const opens = (headers: Record<string, string>) =>
+    new Promise<boolean>((done) => {
+      const ws = new WebSocket(new URL(api('/ws'), server.url.href.replace('http', 'ws')), { headers } as unknown as string[]);
+      ws.onopen = () => (ws.close(), done(true));
+      ws.onerror = () => done(false);
+    });
+
+  test("another site's page in the owner's browser creates no card, nor does a DNS name rebound to this machine", async () => {
+    expect((await newCard({ origin: 'https://evil.example', 'sec-fetch-site': 'cross-site' })).status).toBe(403);
+    expect((await newCard({ host: 'rebound.evil.example', origin: 'http://rebound.evil.example', 'sec-fetch-site': 'same-origin' })).status).toBe(421);
+    expect((await newCard({ host: `rebound.evil.example:${server.port}` })).status).toBe(421);
+    // a foreign origin without Sec-Fetch-Site (an older browser), and one of another port on this machine
+    expect((await newCard({ origin: 'https://evil.example' })).status).toBe(403);
+    expect((await newCard({ origin: `http://127.0.0.1:${server.port! + 1}` })).status).toBe(403);
+    expect((await newCard({ origin: 'null', 'sec-fetch-site': 'cross-site' })).status).toBe(403);
+    expect(board.snapshot().items).toEqual([]);
+  });
+
+  test("Obeya's own page, the app's shell and scripts are answered, under each name of this machine", async () => {
+    expect((await newCard({ origin: own(), 'sec-fetch-site': 'same-origin' })).status).toBe(200);
+    expect((await newCard({ host: `localhost:${server.port}`, origin: `http://localhost:${server.port}` })).status).toBe(200);
+    expect((await newCard({ host: `[::1]:${server.port}` })).status).toBe(200);
+    // a worker on another machine, through a forwarded port of its own
+    expect((await newCard({ host: '127.0.0.1:41234' })).status).toBe(200);
+    // the app quitting: no Origin, no Sec-Fetch-Site
+    expect(await (await at('/api/stop', {}, { method: 'POST' })).json()).toEqual({ stopping: false });
+    expect((await at('/api/stop', { origin: 'https://evil.example' }, { method: 'POST' })).status).toBe(403);
+    expect(board.snapshot().items.length).toBe(4);
+  });
+
+  test('the page and its WebSocket only for Obeya itself', async () => {
+    const page = await at('/', { 'sec-fetch-site': 'none' });
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain('<html');
+    expect((await at('/', { 'sec-fetch-site': 'cross-site', 'sec-fetch-dest': 'iframe' })).status).toBe(403);
+    expect((await at('/panel', { host: 'rebound.evil.example' })).status).toBe(421);
+    expect((await at('/nothing', { host: 'rebound.evil.example' })).status).toBe(421);
+    expect(await opens({ origin: own() })).toBe(true);
+    expect(await opens({ origin: 'https://evil.example' })).toBe(false);
+    expect(await opens({ host: 'rebound.evil.example', origin: 'http://rebound.evil.example' })).toBe(false);
+  });
+
+  test("a worker's HTML artifact loads its own files in its sandboxed frame", async () => {
+    const c = card();
+    const demo = artifact();
+    writeFileSync(join(demo.dir, 'chart.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
+    board.work(c.id, { state: 'waiting', need: 'review', demo: JSON.stringify(demo) });
+    // the frame itself, from the canvas
+    expect((await at(api(`/cards/${c.id}/demo/index.html`), { 'sec-fetch-site': 'same-origin', 'sec-fetch-dest': 'iframe' })).status).toBe(200);
+    // what the page in it loads: from an origin of its own
+    expect((await at(api(`/cards/${c.id}/demo/chart.svg`), { origin: 'null', 'sec-fetch-site': 'cross-site' })).status).toBe(200);
+    expect((await at(api(`/cards/${c.id}/demo/chart.svg`), { host: 'rebound.evil.example' })).status).toBe(421);
+    rmSync(demo.dir, { recursive: true, force: true });
+  });
+});
+
 describe('archive', () => {
   test('a finished card goes into the archive and back', async () => {
     const c = card();

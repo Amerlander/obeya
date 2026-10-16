@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { agentListens, type CanvasInfo, type CardAction, type ClientMessage, type CardPatch, type NewCard, type PendingRestart, type ServerMessage, type SpotInput, type TalkRef, isTalkRef, waitingOn } from '../core/types';
 import index from '../ui/index.html';
 import panel from '../ui/panel.html';
+import { guarded, LOCAL_HOSTS, refusal } from './access';
 import { BadRequest } from './board';
 import type { CanvasRuntime } from './canvas';
 import { defaultPushKey, type PageFocus, type PushKeyView } from '../core/push-key';
@@ -259,7 +260,7 @@ export function serve(
     // a voice command answers once transcribed and read: with Whisper on a CPU that can take longer than Bun's 10 s
     idleTimeout: 120,
     development: development && { hmr: true, console: true },
-    routes: {
+    routes: guarded({
       '/': index,
       // the app's floating panel for the push-to-talk key in another app
       '/panel': panel,
@@ -647,8 +648,8 @@ export function serve(
         byId.has(req.params.canvas) && server.upgrade(req, { data: { canvas: req.params.canvas, page: crypto.randomUUID() } })
           ? undefined
           : new Response('WebSocket expected', { status: 400 }),
-    },
-    fetch: () => new Response('Not found', { status: 404 }),
+    }),
+    fetch: (req) => refusal(req, LOCAL_HOSTS) ?? new Response('Not found', { status: 404 }),
     websocket: {
       data: {} as { canvas: string; page: string },
       open: (ws) => {

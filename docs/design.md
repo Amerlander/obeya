@@ -3823,6 +3823,23 @@ kept in shapes that changed since, so no code reads those shapes. A database an 
 release left below that schema is left alone too, with the commit to start once to bring it up to
 date (`OlderDatabase`).
 
+#### Who may talk to it
+
+The server listens on `127.0.0.1` only, with no login, and still answers no other site: any page
+open in the owner's browser may send requests there (a `text/plain` POST needs no preflight, and
+`req.json()` parses it all the same), and a DNS name rebound to `127.0.0.1` reaches it under that
+name. So every request and every WebSocket upgrade, from this machine too, passes a check first
+(`src/server/access.ts`): its `Host` names one of Obeya's own names (`localhost`, `127.0.0.1`,
+`[::1]`; the port is not checked, since a worker on another machine reaches Obeya through a
+forwarded port of its own), else 421; an `Origin`, where it has one, is Obeya's own (scheme, host
+and port of the address it was sent to), and it carries no `Sec-Fetch-Site: cross-site`, else 403.
+Requests with neither header (the app's shell sending `POST /api/stop`, scripts, curl, the workers'
+narration) pass. The page and the push-to-talk panel are checked too: Bun serves an HTML bundle
+past any handler, so each moves to a path made up at every start and its own path fetches it from
+there once the request passed. A GET of the workers' files (an HTML artifact's, an answer's) passes
+from another origin: their sandboxed frame has the origin `null`, so the browser sends what its page
+loads (its stylesheet, its images, its scripts) as cross-site.
+
 ### Setup assistant
 
 One list of what Obeya needs on this machine (`src/server/machine.ts`, `src/ui/setup.tsx`), in four
@@ -4008,6 +4025,11 @@ Python sidecars ignore Ctrl-C instead.
   in `workers-fixture.ts`. That module's bindings are read live; a test replaces one through its
   setter (`setWorkers`), and each file calls `eachTest()`, as files run one after the other in one
   process share the module evaluated once.
+- **Every request is checked for its `Host` and `Origin`, from this machine too** (2026-10-16):
+  until then a page on any site in the owner's browser could create, start and approve cards with a
+  `text/plain` POST to `127.0.0.1`, and a DNS name rebound to it could read and do everything. No
+  token in the page is needed beside it: what a foreign page may send without a preflight carries
+  its `Origin`, and a preflight gets no CORS headers from Obeya, so nothing follows it.
 - **The first canvas is chosen with two cards and radio buttons**: pills read as buttons in a user
   test, not as a choice.
 
