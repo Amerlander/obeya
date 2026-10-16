@@ -75,13 +75,6 @@ DEFAULT_VOICES = {
     "elevenlabs": {"de": "JBFqnCBsd6RMkjVDRZzb", "en": "JBFqnCBsd6RMkjVDRZzb"},
     "azure": {"de": "de-DE-ConradNeural", "en": "en-US-AndrewNeural"},
 }
-KEY_ENV = {
-    "gemini": "GEMINI_API_KEY",
-    "openai": "OPENAI_API_KEY",
-    "elevenlabs": "ELEVENLABS_API_KEY",
-    "azure": "AZURE_SPEECH_KEY",
-    "http": "DEMO_TTS_API_KEY",
-}
 
 
 def write_pcm(path: Path, pcm: bytes, rate: int) -> None:
@@ -288,14 +281,15 @@ class HttpVoice:
         self._url = spec.get("url") or ""
         self._voice = spec.get("voiceName") or DEFAULT_VOICES.get(service, {}).get(language, "")
         self._style = STYLE.format(language=LANGUAGE_NAMES[language])
-        key = os.environ.get(KEY_ENV[service], "").strip()
+        key_env = spec["keyEnv"]
+        key = os.environ.get(key_env, "").strip()
         key_file = spec.get("keyFile")
         if not key and key_file:
             if not Path(key_file).exists():
                 sys.exit(f"no API key at {key_file}")
             key = Path(key_file).read_text(encoding="utf-8").strip()
         if not key and service != "http":
-            sys.exit(f"no {service} API key: set {KEY_ENV[service]}, or the key file in the demo settings")
+            sys.exit(f"no {service} API key: set {key_env}, or the key file in the demo settings")
         if service in ("http", "azure") and not self._url:
             sys.exit(f"no {'endpoint' if service == 'http' else 'region'} for the {service} voice in the demo settings")
         self._key = key

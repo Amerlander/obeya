@@ -68,6 +68,8 @@ export type VoiceSpec =
       service: (typeof SERVICES)[number] | 'http';
       url?: string;
       voiceName?: string;
+      /** The environment variable `tts.py` reads the key from before `keyFile` (`KEY_ENV`). */
+      keyEnv: string;
       keyFile?: string;
     };
 
@@ -254,9 +256,9 @@ export function voiceSpec(s: DemoSettings, home = obeyaHome()): VoiceSpec {
       // The owner's command may load a large model (a clone does), so it takes the machine's turn.
       return { kind: 'command', shell: s.command ?? '', tag: `command|${s.command ?? ''}`, heavy: true };
     case 'http':
-      return { kind: 'http', service: 'http', url: s.url, keyFile };
+      return { kind: 'http', service: 'http', url: s.url, keyEnv: KEY_ENV.http, keyFile };
     default:
-      return { kind: 'http', service: s.voice, url: s.url, voiceName: s.voiceName, keyFile };
+      return { kind: 'http', service: s.voice, url: s.url, voiceName: s.voiceName, keyEnv: KEY_ENV[s.voice], keyFile };
   }
 }
 
@@ -285,9 +287,18 @@ export function sample(s: DemoSettings, out: string, home = obeyaHome(), obeyaUr
   const spec = voiceSpec(s, home);
   const specFile = `${out}.spec.json`;
   fs.writeFileSync(specFile, JSON.stringify(spec));
-  const lock = spec.kind === 'command' && spec.heavy ? ['--lock', lockFile] : [];
-  const args = ['run', '--quiet', '--no-project', 'python', lib('tts.py'), ...lock, '--sample', specFile, s.language, SAMPLE_TEXT[s.language], out];
+  const args = [...ttsArgs(spec, lockFile), '--sample', specFile, s.language, SAMPLE_TEXT[s.language], out];
   return exec('uv', args, () => {}, obeyaUrl ? { OBEYA_URL: obeyaUrl } : undefined).finally(() => fs.rmSync(specFile, { force: true }));
+}
+
+/**
+ * `uv`'s arguments that run `tts.py` for `spec`, before its own. A voice that loads a large model
+ * takes the machine's turn (`lockFile`); a hosted or light one does not, so rate-limit waits never
+ * hold up a clone.
+ */
+export function ttsArgs(spec: VoiceSpec, lockFile = TTS_LOCK) {
+  const lock = spec.kind === 'command' && spec.heavy ? ['--lock', lockFile] : [];
+  return ['run', '--quiet', '--no-project', 'python', lib('tts.py'), ...lock];
 }
 
 /**

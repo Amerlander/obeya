@@ -13,7 +13,7 @@ import { launchChromium } from '../../../lib/chromium.ts';
 import { type NarrationLanguage, readDemoSettings, withVoice } from './settings.ts';
 import { checkSetup, describeSetup } from './setup.ts';
 import { CLOCK, type Cut, type Frame, frameDurations, laterLabel, mmss, onPaintTime, readClock, untagged, videoTime } from './timeline.ts';
-import { TTS_LOCK, voiceSpec } from './voices.ts';
+import { ttsArgs, voiceSpec } from './voices.ts';
 
 export interface Scene {
   /** Chapter title in the player. */
@@ -363,10 +363,7 @@ function synthesize(scenes: Scene[], dir: string): Clip[] {
   const specFile = path.join(dir, 'voice.json');
   fs.writeFileSync(specFile, JSON.stringify(spec));
   console.log(`narration: ${jobs.length} clips, voice ${SETTINGS.voice}, language ${LANGUAGE}`);
-  // A voice that loads a large model takes the machine's turn (TTS_LOCK); a hosted or light one
-  // does not, so rate-limit waits never hold up a clone.
-  const lock = spec.kind === 'command' && spec.heavy ? ['--lock', TTS_LOCK] : [];
-  const args = ['run', '--quiet', '--no-project', 'python', path.join(LIB, 'tts.py'), ...lock, specFile, LANGUAGE, jobsFile, dir];
+  const args = [...ttsArgs(spec), specFile, LANGUAGE, jobsFile, dir];
   // tts.py's progress (the voice loading, waiting for the lock) shows as it happens.
   const r = spawnSync('uv', args, { stdio: ['ignore', 'inherit', 'inherit'] });
   if (r.status !== 0) throw new Error(`tts.py failed (${r.error?.message ?? r.status}); its output is above`);
