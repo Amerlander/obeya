@@ -1,6 +1,6 @@
 import { defaultBranchCommit } from '../server/read-tree';
 import { onGitHub } from '../server/repo';
-import type { NESTED_SETTINGS, NestedSetting, RepoSettings, RepoValues, SharedSettings } from '../core/types';
+import { isNested, SHARED_FIELDS, type NESTED_SETTINGS, type NestedSetting, type RepoSettings, type RepoValues, type SharedSettings } from '../core/types';
 import { detectedBranch, type GitSteps, gitStepsSync } from '../server/workspaces';
 import { generic } from './generic';
 import { checkShared } from './schema';
@@ -19,8 +19,8 @@ export const defaultsFor = (repo: RepoInfo): RepoAdapter => ({ ...generic, land:
  */
 export const detectedLand = (repo: RepoInfo): RepoAdapter['land'] => (repo.remote && onGitHub(repo.remote) ? 'pr' : 'main');
 
-/** The fields the settings may set, as `RepoAdapter` names them, read each time they are asked for. */
-const LIVE = ['land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'prNoise', 'app', 'demo'] as const;
+/** The fields of the settings read each time they are asked for: all but `workspaces`. */
+const LIVE = SHARED_FIELDS.filter((f) => f !== 'workspaces');
 
 /**
  * The repository's settings (`RepoSettings`: its `.obeya/settings.json` with this machine's in
@@ -36,7 +36,7 @@ export function withSettings(a: RepoAdapter, settings: () => RepoSettings | unde
       enumerable: true,
       get: () => {
         const s = settings();
-        if (field === 'app' || field === 'demo') return s?.[field] || a[field] ? { ...a[field], ...s?.[field] } : undefined;
+        if (isNested(field)) return s?.[field] || a[field] ? { ...a[field], ...s?.[field] } : undefined;
         return s?.[field] ?? a[field];
       },
     });
