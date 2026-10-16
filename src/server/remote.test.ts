@@ -74,6 +74,13 @@ describe('through Tailscale', () => {
     expect(config().Web[`${NAME}:443`].Handlers['/'].Proxy).toBe('http://127.0.0.1:3000');
   });
 
+  test('stopping, Obeya removes its entry: what takes the port next is not served to the tailnet', async () => {
+    await turnOn();
+    access.release();
+    expect(JSON.parse(readFileSync(join(ts, 'serve.json'), 'utf8')).Web[`${NAME}:443`]).toBeUndefined();
+    expect(existsSync(join(dir, 'tailscale-serve.json'))).toBe(false);
+  });
+
   test('says what the network lacks: Tailscale logged out, HTTPS off in the tailnet, missing', async () => {
     tailscaleStatus(ts, { state: 'NeedsLogin', name: NAME, https: false });
     expect((await turnOn()).tailscale).toEqual({ state: 'loggedOut' });

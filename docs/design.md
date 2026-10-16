@@ -3920,7 +3920,10 @@ is off by default, and off Obeya answers only on this machine. On, it is one of 
   else 8443, else 10000, whichever no entry serves yet, and touches no other entry; the one it made
   it notes in `tailscale-serve.json` in its home, so it moves that entry to a new port of its own
   (the app may pick another) and turning the setting off removes it, and only it, after a restart
-  too. The entry stays while Obeya is stopped, so the address stays the same.
+  too. Stopping, Obeya removes the entry, so a program that takes its port afterwards is not served
+  to the tailnet; it serves again at its next start, at the same address while 443 is free. Bun's
+  dev server (`--dev`) answers for the page's scripts and styles only under the name it listens on,
+  so through `tailscale serve` an Obeya started with `--dev` shows a blank page.
 - *Über eine Adresse*: Obeya also listens on an address of this machine the owner picks from its
   interfaces (another VPN's), with the same routes, in plain HTTP. The section says that a phone's
   browser allows the microphone and push only over HTTPS.

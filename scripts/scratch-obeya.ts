@@ -17,6 +17,9 @@
 // this checkout's node_modules) in <dir>/code; that starts cold and on a busy machine takes well
 // over half a minute, so the script waits up to 5 minutes for the server while its process lives.
 // --binary <obeya> runs a compiled Obeya instead (`bun run build`), with the resources beside it.
+// Bun's dev server answers for the page's scripts and styles only under the name it listens on: a
+// phone reaching the scratch Obeya through `tailscale serve` gets a blank page from one with --dev,
+// so stage with --restarts for that. Stopping a scratch Obeya removes its `tailscale serve` entry.
 //
 // The stage file (JSON; every field but `cards` optional):
 //   {
@@ -92,6 +95,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, openSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import type { CanvasSnapshot, Item } from '../src/core/types';
+import { findTailscale, type ServeEntry, Tailscale } from '../src/server/tailscale';
 import { answers, waitUp } from './wait-up';
 
 interface StageCard {
@@ -519,6 +523,18 @@ function run(cmd: string, a: string[], cwd: string) {
 
 /** Ends the scratch Obeya that `dir` belongs to, and what it started, if it still runs. */
 function stop(d: string) {
+  stopServer(d);
+  // one that was killed left its `tailscale serve` entry, which would serve whatever takes the port next
+  const served = join(d, 'home', 'tailscale-serve.json');
+  if (existsSync(served)) {
+    const tailscale = findTailscale();
+    const entry = JSON.parse(readFileSync(served, 'utf8')) as ServeEntry & { name: string };
+    if (tailscale) new Tailscale(tailscale).unserveSync(entry.name, entry);
+    rmSync(served, { force: true });
+  }
+}
+
+function stopServer(d: string) {
   const pidFile = join(d, 'server.pid');
   if (!existsSync(pidFile)) return;
   const pid = Number(readFileSync(pidFile, 'utf8'));

@@ -262,6 +262,7 @@ const machine = new MachineSetup({ home, config, voice: voiceSetup, shells });
 welcome(home, canvases.all());
 const shutdown = (code: number) => {
   canvases?.shutdown();
+  access.release();
   transcriber.stop();
   narration.stop();
   // the supervisor stays across a restart, and gives the entry up when it ends

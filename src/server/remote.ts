@@ -116,10 +116,21 @@ export class Access implements Gate {
     return this.apply(true);
   }
 
-  /** Stops answering on the other address; the `tailscale serve` entry stays, so the address stays the same. */
+  /** Stops answering on the other address. */
   stop() {
     if (this.listening) this.listen(null);
     this.listening = null;
+  }
+
+  /**
+   * Obeya stops: the `tailscale serve` entry goes with it, so whatever takes its port afterwards is
+   * not served to the tailnet. The next start serves Obeya again, at the same address while 443 is free.
+   */
+  release() {
+    this.stop();
+    if (!this.served) return;
+    this.tailscale.unserveSync(this.served.name, this.served);
+    this.keepServed(null);
   }
 
   /** Makes the network as the setting says; `check`: asks Tailscale even where it was asked before. */

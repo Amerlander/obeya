@@ -102,6 +102,17 @@ export class Tailscale {
     await this.run(['serve', `--https=${entry.https}`, 'off']);
   }
 
+  /** As `unserve`, waiting for it: Obeya stopping, which ends the process right after. */
+  unserveSync(name: string, entry: ServeEntry) {
+    const run = (args: string[]) => Bun.spawnSync([this.bin!, ...args], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', timeout: 5000 });
+    const status = run(['serve', 'status', '--json']);
+    try {
+      const out = status.stdout.toString();
+      const config = (out.includes('{') ? JSON.parse(out.slice(out.indexOf('{'))) : {}) as ServeConfig;
+      if (config.Web?.[`${name}:${entry.https}`]?.Handlers?.['/']?.Proxy === entry.target) run(['serve', `--https=${entry.https}`, 'off']);
+    } catch {}
+  }
+
   private problemOf(output: string): RemoteProblem {
     if (this.platform === 'linux' && /access denied/i.test(output)) return { code: 'operator' };
     return { code: 'failed', detail: output.trim().split('\n').filter((l) => !/client version .* != tailscaled/.test(l)).join('\n') || 'tailscale serve failed' };
