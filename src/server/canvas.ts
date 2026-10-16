@@ -770,7 +770,7 @@ export class CanvasRuntime {
   }
 
   /** The address of the card's app as the owner opens it, which keeps it running a while (`Workers.openApp`); none once it no longer runs. */
-  openApp(cardId: string): string | null {
+  openApp(cardId: string): Promise<string | null> {
     return this.repoOf(cardId).workers.openApp(cardId);
   }
 

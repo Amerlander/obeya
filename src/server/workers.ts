@@ -16,7 +16,7 @@ import { imageNote } from './images';
 import type { InputContext } from './koordinator';
 import { type AgentEvent, type AgentRuntime, type AgentSession, type AgentTool, failureReason, type PermissionAnswer, type PermissionRequest } from './runtime';
 import { TO_OBEYA, toObeyaTool } from './to-obeya';
-import { HOST_DIR, hostName, remote } from './hosts';
+import { type Forward, HOST_DIR, hostName, remote } from './hosts';
 import { runAppCommand } from './app-command';
 import { readingShared } from '../adapters';
 import { branchName, gitStepsSync, type Landed, together, WorkspaceError, type Workspaces } from './workspaces';
@@ -327,6 +327,8 @@ export class Workers {
   private parking = new Map<string, ReturnType<typeof setTimeout>>();
   /** When the owner last opened a card's app to try it by hand, by card. */
   private tried = new Map<string, number>();
+  /** The forwards to the apps of cards whose workspace is on another machine, by card: the address forwarded, from which workspace, and the port here it had last. */
+  private forwards = new Map<string, { app: string; workspace: string; forward: Forward; port?: number }>();
   /** Cards whose stack is being stopped: a message to their worker waits until it is. */
   private stopping = new Map<string, Promise<void>>();
   /** Cards whose session on another machine was cut off, waiting for that machine to answer again. */
@@ -339,6 +341,10 @@ export class Workers {
   constructor(private o: WorkerOptions) {
     // what a worker does shows on its card while it is in a turn, and only then can it be paused
     o.board.showTurns(() => this.inTurn());
+    // a forward to a card's app ends once the card no longer offers it: cleared, parked, its workspace gone
+    o.board.onChange(() => {
+      for (const [id, f] of this.forwards) if (this.o.board.item(id)?.app !== f.app || this.o.board.row(id).workspace !== f.workspace) this.unforward(id);
+    });
   }
 
   /** Whether a video demo here may go to a page for colleagues, which the worker then writes. */
@@ -529,11 +535,6 @@ export class Workers {
   }
 
   /** Whether the card's follow-up runs in a temporary worktree. */
-  /** Whether the card's workspace is on this machine, where the owner's browser reaches what runs in it. */
-  private local(cardId: string): boolean {
-    return !hostName(this.o.board.row(cardId).workspace);
-  }
-
   private inWorktree(cardId: string): boolean {
     const landed = this.o.board.row(cardId).landed;
     return !!landed && !!(JSON.parse(landed) as LandedState).worktree;
@@ -1232,6 +1233,7 @@ export class Workers {
     this.reconnecting.clear();
     for (const timer of this.parking.values()) clearTimeout(timer);
     this.parking.clear();
+    for (const id of [...this.forwards.keys()]) this.unforward(id);
   }
 
   // ---------------------------------------------------------------- sessions
@@ -1714,9 +1716,50 @@ export class Workers {
     );
   }
 
+  /**
+   * Where the owner's browser reaches the app the card's worker said runs: its address, or for a
+   * workspace on another machine that address's port forwarded here (only that port: a page that
+   * talks to another port there finds nothing here). The forward is made when first asked for and
+   * made again when its connection dropped, on the port it had if that is still free.
+   */
+  private async appAt(cardId: string): Promise<string | null> {
+    const app = this.o.board.item(cardId)?.app;
+    const workspace = this.o.board.row(cardId).workspace;
+    if (!app || !workspace) return null;
+    const there = remote(workspace);
+    if (!there) return app;
+    const url = new URL(app);
+    let f = this.forwards.get(cardId);
+    let prefer: number | undefined;
+    if (f && !f.forward.alive) {
+      prefer = f.port;
+      this.unforward(cardId);
+      f = undefined;
+    }
+    if (!f) {
+      const host = url.hostname.replace(/^\[(.*)\]$/, '$1');
+      const port = Number(url.port) || (url.protocol === 'https:' ? 443 : 80);
+      f = { app, workspace, forward: there.host.forward(host === '0.0.0.0' || host === '::' ? 'localhost' : host, port, prefer), port: prefer };
+      this.forwards.set(cardId, f);
+    }
+    const local = await f.forward.ready;
+    if (!local || this.forwards.get(cardId) !== f) return null;
+    f.port = local;
+    // the browser here names it as the worker did where it can, so the page's own origin stays
+    url.hostname = url.hostname === '127.0.0.1' ? '127.0.0.1' : 'localhost';
+    url.port = String(local);
+    return url.href;
+  }
+
+  /** Ends the forward to the card's app, if it has one. */
+  private unforward(cardId: string) {
+    this.forwards.get(cardId)?.forward.close();
+    this.forwards.delete(cardId);
+  }
+
   /** Whether the app the card's worker said runs answers at its address now: any HTTP answer counts, an error page too. */
   async appUp(cardId: string): Promise<boolean> {
-    const url = this.o.board.item(cardId)?.app;
+    const url = await this.appAt(cardId);
     if (!url) return false;
     try {
       await fetch(url, { method: 'HEAD', redirect: 'manual', signal: AbortSignal.timeout(PROBE_MS), tls: { rejectUnauthorized: false } });
@@ -1730,8 +1773,8 @@ export class Workers {
    * The owner opens the card's app to try it by hand: its address. Obeya leaves it running for a
    * while after (`TRY_GRACE`), so it does not stop under them once the card waits. None once it no longer runs.
    */
-  openApp(cardId: string): string | null {
-    const url = this.o.board.item(cardId)?.app;
+  async openApp(cardId: string): Promise<string | null> {
+    const url = await this.appAt(cardId);
     if (!url) return null;
     this.tried.set(cardId, Date.now());
     if (this.parking.has(cardId)) this.parkLater(cardId);
@@ -2099,25 +2142,21 @@ export class Workers {
           return 'Recorded. End your turn now.';
         },
       },
-      ...(this.local(cardId)
-        ? [
-            {
-              name: 'app_running',
-              description: `The app runs in your workspace and opens in a browser: its address as you open it (http://localhost:5173, say), so the owner can open it from the card to try it by hand while it runs. Again when the address changes; an empty url once you stop it.`,
-              schema: { url: z.string() },
-              run: ({ url }) => {
-                const u = String(url).trim();
-                if (!u) {
-                  this.o.board.work(cardId, { app: null });
-                  return 'Recorded: the card no longer offers the app.';
-                }
-                if (!/^https?:\/\/[^\s/]+/i.test(u)) return 'Not recorded: give the address as http(s)://host:port/….';
-                this.o.board.work(cardId, { app: u });
-                return 'Recorded: the card offers the app to the owner while it answers there.';
-              },
-            } satisfies AgentTool,
-          ]
-        : []),
+      {
+        name: 'app_running',
+        description: `The app runs in your workspace and opens in a browser: its address as you open it (http://localhost:5173, say), so the owner can open it from the card to try it by hand while it runs. Again when the address changes; an empty url once you stop it.`,
+        schema: { url: z.string() },
+        run: ({ url }) => {
+          const u = String(url).trim();
+          if (!u) {
+            this.o.board.work(cardId, { app: null });
+            return 'Recorded: the card no longer offers the app.';
+          }
+          if (!/^https?:\/\/[^\s/]+/i.test(u)) return 'Not recorded: give the address as http(s)://host:port/….';
+          this.o.board.work(cardId, { app: u });
+          return 'Recorded: the card offers the app to the owner while it answers there.';
+        },
+      },
       ...(this.inWorktree(cardId)
         ? [
             {
@@ -2295,9 +2334,10 @@ ${idea.idea.brief}` : '',
     if (this.o.adapter.setup) parts.push(`First run \`${this.o.adapter.setup}\` in the clone.`);
     const { run, stop } = this.o.adapter.app ?? {};
     const parking = stop ? ' While the card waits for the owner, Obeya stops the app in your workspace; your next message then says so.' : '';
-    const tryIt = this.local(card.id) ? ' Once it runs and opens in a browser, give its address with app_running, so the owner can try it by hand from the card.' : '';
+    const far = hostName(this.o.board.row(card.id).workspace) ? " (this workspace is on another machine: Obeya forwards that address's port, and only that one, to the owner's)" : '';
+    const tryIt = ` Once it runs and opens in a browser, give its address with app_running, so the owner can try it by hand from the card${far}.`;
     if (run?.trim()) parts.push(`How to run the app: ${run.trim()}${parking}${tryIt}`);
-    else if (parking || tryIt) parts.push(`${parking}${tryIt}`.trim());
+    else parts.push(`${parking}${tryIt}`.trim());
     if (this.o.adapter.checks?.length && !card.prototypeOf) parts.push(`Before ready_for_review, run: ${this.o.adapter.checks.map((c) => `\`${c}\``).join(', ')}.`);
     parts.push(
       [

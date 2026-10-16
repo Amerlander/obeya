@@ -687,7 +687,7 @@ A worker has its tools served in-process:
 - `propose_card(title, task, reason, idea?, questions?)` (see Proposals).
 - `ready_for_review(summary, demo)`, whose summary is the report the owner reads.
 - `app_running(url)`, where the app in its workspace opens in a browser, for the owner to try it by
-  hand (see Trying the app by hand); only in a workspace on this machine.
+  hand (see Trying the app by hand); in a workspace on another machine, Obeya forwards its port.
 - `to_obeya(request)`, for what the owner's words to it ask of Obeya rather than of the worker (see
   Voice in).
 
@@ -962,8 +962,19 @@ any HTTP answer counts, an error page too), so an app the worker stopped without
 that died with a restart, shows none. The link goes through Obeya (`GET …/cards/:id/app/open`,
 redirecting to the address): opening it keeps the app running for at least 30 minutes after
 (`TRY_GRACE`), so parking does not stop it under the owner; an app no longer recorded gets a line
-saying so instead. Only workspaces on this machine have the tool: an address on another machine is
-not one the owner's browser reaches (see Decisions).
+saying so instead.
+
+A workspace on another machine (see Hosts) reports an address that only that machine reaches. There
+the probe and the link go through a forward of that address's port to a free port here (`ssh -L`
+on a connection of its own, `SshHost.forward`), and the link redirects to `localhost` at that port,
+with the address's path. Obeya makes the forward when the card first asks whether the app answers,
+and ends it once the card no longer offers the app (the worker cleared or changed it, Obeya parked
+the card, its workspace went) or Obeya stops; its command there waits for stdin, so it ends with
+Obeya even when Obeya dies. A forward gone with a dropped connection is made again at the next
+probe, on the same port while that is free, so an open tab goes on working. Only that one port is
+forwarded: a page that talks to an API on another port of that machine finds nothing here (the
+worker's brief says so). The port here is one the system picks, never the address's own number,
+which a stack in a clone here may need when it starts again.
 
 ### Screenshots
 
@@ -1118,9 +1129,11 @@ show on their cards as before. Owner-facing text from agents is in the owner's l
   hand had to find the port. Rejected: Obeya finding the address itself from the ports the
   workspace's processes listen on (a stack in Docker listens elsewhere, and only the worker knows
   which port is the page); a mark on the card on the canvas (it is wanted rarely); starting a parked
-  app from the link (that is the worker's, from the recipe, and the owner can ask it to). Not yet:
-  workspaces on other machines, which would need Obeya to forward the app's ports (all of them,
-  where a page talks to an API on another port) over SSH.
+  app from the link (that is the worker's, from the recipe, and the owner can ask it to). For a
+  workspace on another machine only the reported address's port is forwarded (2026-10-16, owner):
+  forwarding more ports would need the worker to name them, and would only help a page that names
+  them if each kept its number here, where the stacks of clones here need them. Until 2026-10-16
+  those workspaces had no `app_running` and no link.
 
 ## The canvas
 

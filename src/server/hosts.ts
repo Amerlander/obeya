@@ -7,6 +7,7 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
+import { type AddressInfo, createServer } from 'node:net';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, relative } from 'node:path';
@@ -93,9 +94,9 @@ export class SshHost {
     return this.o.name;
   }
 
-  /** `ssh`'s options: no prompts, a connection that fails fast and notices a drop, one connection shared where the platform can. */
-  private options(): string[] {
-    const shared = process.platform === 'win32' ? [] : ['-o', 'ControlMaster=auto', '-o', `ControlPath=/tmp/obeya-ssh-%C`, '-o', 'ControlPersist=300'];
+  /** `ssh`'s options: no prompts, a connection that fails fast and notices a drop, one connection shared where the platform can (`own`: a connection of its own). */
+  private options(own = false): string[] {
+    const shared = own || process.platform === 'win32' ? [] : ['-o', 'ControlMaster=auto', '-o', `ControlPath=/tmp/obeya-ssh-%C`, '-o', 'ControlPersist=300'];
     return ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=3', ...shared, '-T'];
   }
 
@@ -114,7 +115,7 @@ export class SshHost {
    * the installers' directories on its PATH; with `env`, read as the first line of stdin, so that
    * no secret shows in a process list.
    */
-  argv(command: string[] | string, o: { cwd?: string; env?: boolean; forward?: string } = {}): string[] {
+  argv(command: string[] | string, o: { cwd?: string; env?: boolean; forward?: string; local?: string } = {}): string[] {
     const line = typeof command === 'string' ? command : `exec ${command.map(sh).join(' ')}`;
     const script = [
       o.env ? 'IFS= read -r obeya_env; eval "$obeya_env"; unset obeya_env;' : '',
@@ -124,7 +125,9 @@ export class SshHost {
     ]
       .filter(Boolean)
       .join(' ');
-    return [this.o.program ?? 'ssh', ...this.options(), ...(o.forward ? ['-R', o.forward] : []), this.o.ssh, `sh -c ${sh(script)}`];
+    // a forward from here goes on a connection of its own, which ends with it rather than with the shared one
+    const forwards = [...(o.forward ? ['-R', o.forward] : []), ...(o.local ? ['-o', 'ExitOnForwardFailure=yes', '-L', o.local] : [])];
+    return [this.o.program ?? 'ssh', ...this.options(!!o.local), ...forwards, this.o.ssh, `sh -c ${sh(script)}`];
   }
 
   /** The environment line for a command in `cwd`: the GitHub login of the repository it is in. */
@@ -320,6 +323,46 @@ export class SshHost {
   }
 
   /**
+   * Forwards a free port here to `port` at `target` as the host reaches it (the address of an app
+   * running there, for the owner's browser), on a connection of its own, until `close`. `prefer`
+   * is the port tried first (the one a forward had before it went with a dropped connection).
+   * The forward ends with Obeya too: its command there waits for stdin, which closes then.
+   */
+  forward(target: string, port: number, prefer?: number): Forward {
+    let child: ReturnType<typeof Bun.spawn> | undefined;
+    let closed = false;
+    let alive = true;
+    const listen = async (): Promise<number | null> => {
+      const local = (prefer && (await freePort(prefer))) || (await freePort(0));
+      if (closed || !local) return null;
+      child = Bun.spawn(this.argv('cat >/dev/null', { local: `localhost:${local}:${target.includes(':') ? `[${target}]` : target}:${port}` }), {
+        stdin: 'pipe',
+        stdout: 'ignore',
+        stderr: 'pipe',
+      });
+      void child.exited.then(() => (alive = false));
+      void new Response(child.stderr as ReadableStream).text().then((text) => text.trim() && console.error(`${this.name}: ${text.trim()}`));
+      // the port takes connections once ssh logged in and listens; ssh gives up on its own (ConnectTimeout)
+      while (alive && !closed) {
+        if (await accepts(local)) return local;
+        await Bun.sleep(50);
+      }
+      return null;
+    };
+    const forward: Forward = {
+      ready: listen(),
+      get alive() {
+        return alive && !closed;
+      },
+      close: () => {
+        closed = true;
+        child?.kill();
+      },
+    };
+    return forward;
+  }
+
+  /**
    * A worker's session there: the SDK's `spawnClaudeCodeProcess`, which starts Claude Code through
    * `ssh` in `cwd` once the host has `files` (paths of those directories among its arguments
    * become their copies there), its environment (the SDK's and the session's, Obeya's directory
@@ -361,6 +404,38 @@ export class SshHost {
         child.on('exit', (code) => o.onExit?.(code));
         return child;
       });
+  }
+}
+
+/** A port here forwarded to one a host reaches (`SshHost.forward`). */
+export interface Forward {
+  /** The port here once it takes connections; null when the forward failed or was closed first. */
+  ready: Promise<number | null>;
+  /** False once the forward ended: closed, failed, or gone with its connection. */
+  readonly alive: boolean;
+  close(): void;
+}
+
+/** `port` here if it is free on the loopback, else (or for 0) one the system picks; null if none. */
+function freePort(port: number): Promise<number | null> {
+  return new Promise((done) => {
+    const server = createServer();
+    server.once('error', () => done(null));
+    server.listen(port, '127.0.0.1', () => {
+      const { port: got } = server.address() as AddressInfo;
+      server.close(() => done(got));
+    });
+  });
+}
+
+/** Whether something here takes connections on `port`. */
+async function accepts(port: number): Promise<boolean> {
+  try {
+    const socket = await Bun.connect({ hostname: '127.0.0.1', port, socket: { data() {} } });
+    socket.end();
+    return true;
+  } catch {
+    return false;
   }
 }
 

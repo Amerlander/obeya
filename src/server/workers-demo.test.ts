@@ -175,7 +175,7 @@ describe('parking: the app of a card that waits for the owner', () => {
     runtime.last.emit({ type: 'idle' });
     await until(() => board.row(c.id).parked);
     expect(board.item(c.id)!.app).toBeUndefined();
-    expect(workers.openApp(c.id)).toBeNull();
+    expect(await workers.openApp(c.id)).toBeNull();
   });
 
   test('the owner opening the app keeps it running past the grace', async () => {
@@ -185,7 +185,7 @@ describe('parking: the app of a card that waits for the owner', () => {
     runtime.last.call('app_running', { url: 'http://localhost:5173/' });
     runtime.last.call('ready_for_review', { summary: 'Fertig.', demo: artifact() });
     runtime.last.emit({ type: 'idle' });
-    expect(workers.openApp(c.id)).toBe('http://localhost:5173/');
+    expect(await workers.openApp(c.id)).toBe('http://localhost:5173/');
     await Bun.sleep(80);
     expect(stopped(c.id)).toBe(false);
     await until(() => board.row(c.id).parked);

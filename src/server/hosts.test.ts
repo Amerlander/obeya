@@ -326,3 +326,101 @@ describe('a worker on a host', () => {
     workers.shutdown();
   }, 20_000);
 });
+
+describe('the app of a card on a host', () => {
+  let board: Board;
+  let runtime: FakeRuntime;
+  let workers: Workers;
+  let spaces: Workspaces;
+  let apps: ReturnType<typeof Bun.serve>[];
+  /** An app running there (the stand-in's host is this machine), answering with its name. */
+  const app = (name: string) => {
+    const a = Bun.serve({ port: 0, fetch: () => new Response(name) });
+    apps.push(a);
+    return `http://localhost:${a.port}/`;
+  };
+  const forwards = () => (existsSync(join(dir, 'net', 'forwards')) ? readFileSync(join(dir, 'net', 'forwards'), 'utf8').trim().split('\n').map(Number) : []);
+  const answers = (url: string) => fetch(url, { signal: AbortSignal.timeout(1000) }).then((r) => r.text(), () => null);
+  const closed = (url: string) => until(async () => (await answers(url)) === null);
+
+  beforeEach(async () => {
+    apps = [];
+    gitRepo(join(dir, 'main'));
+    const origin = join(dir, 'origin.git');
+    git(dir, 'clone', '--quiet', '--bare', join(dir, 'main'), origin);
+    const store = new Store(':memory:');
+    board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: join(dir, 'main'), branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
+    spaces = new Workspaces(store, 'c', { mode: 'clones', repoPath: join(dir, 'main'), dir: join(dir, 'ws') });
+    expect(await spaces.ensureHostClones(host, join(dir, 'far'), origin, 1, () => undefined)).toBeNull();
+    runtime = new FakeRuntime();
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, workspaces: 'clones', land: 'pr' } });
+  });
+  afterEach(() => {
+    workers.shutdown();
+    for (const a of apps) a.stop(true);
+  });
+
+  test('opens through a forward of its port, which ends once the card no longer offers it', async () => {
+    const card = board.create({ title: 'Weit weg', x: 0, y: 0 });
+    workers.start(card.id);
+    expect(runtime.last.inbox[0]).toContain("Obeya forwards that address's port, and only that one");
+    const first = app('erste');
+    runtime.last.call('app_running', { url: `${first}seite?x=1` });
+    expect(await workers.appUp(card.id)).toBe(true);
+    const opened = (await workers.openApp(card.id))!;
+    expect(opened).toMatch(/^http:\/\/localhost:\d+\/seite\?x=1$/);
+    expect(new URL(opened).port).not.toBe(new URL(first).port);
+    expect(await answers(opened)).toBe('erste');
+    // asked again, the same forward
+    expect(await workers.openApp(card.id)).toBe(opened);
+    expect(forwards()).toHaveLength(1);
+    // a new address: the forward goes there instead
+    runtime.last.call('app_running', { url: app('zweite') });
+    await closed(opened);
+    const second = (await workers.openApp(card.id))!;
+    expect(await answers(second)).toBe('zweite');
+    // the worker stops the app
+    runtime.last.call('app_running', { url: '' });
+    await closed(second);
+    expect(await workers.appUp(card.id)).toBe(false);
+    expect(await workers.openApp(card.id)).toBeNull();
+    // the workspace goes with the card's work
+    runtime.last.call('app_running', { url: app('dritte') });
+    const third = (await workers.openApp(card.id))!;
+    expect(await answers(third)).toBe('dritte');
+    workers.stop(card.id);
+    await closed(third);
+    expect(forwards()).toHaveLength(3);
+  }, 20_000);
+
+  test('is forwarded again after its connection dropped, on the same port, and not while the host does not answer', async () => {
+    const card = board.create({ title: 'Weit weg', x: 0, y: 0 });
+    workers.start(card.id);
+    runtime.last.call('app_running', { url: app('da') });
+    const opened = (await workers.openApp(card.id))!;
+    process.kill(forwards()[0]!, 'SIGTERM');
+    await closed(opened);
+    writeFileSync(join(dir, 'net', 'down'), '');
+    expect(await workers.appUp(card.id)).toBe(false);
+    rmSync(join(dir, 'net', 'down'));
+    expect(await workers.openApp(card.id)).toBe(opened);
+    expect(await answers(opened)).toBe('da');
+    // Obeya stops, and the forward with it
+    workers.shutdown();
+    await closed(opened);
+  }, 20_000);
+
+  test('ends when the card is parked', async () => {
+    workers.shutdown();
+    workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, workspaces: 'clones', land: 'pr', app: { run: 'true', stop: 'true' } }, parkGrace: 10, tryGrace: 0 });
+    const card = board.create({ title: 'Weit weg', x: 0, y: 0 });
+    workers.start(card.id);
+    runtime.last.call('app_running', { url: app('da') });
+    const opened = (await workers.openApp(card.id))!;
+    expect(await answers(opened)).toBe('da');
+    runtime.last.call('ask', { question: 'Welche Farbe?' });
+    runtime.last.emit({ type: 'idle' });
+    await until(() => board.row(card.id).parked, 10_000);
+    await closed(opened);
+  }, 20_000);
+});

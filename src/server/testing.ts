@@ -119,23 +119,44 @@ export const until = async (done: () => unknown, ms = 3000) => {
  * A stand-in for `ssh` that runs the command on this machine, as a host's login shell would; the
  * host counts as unreachable (exit 255, as ssh's own) while `<dir>/down` exists. Its home is
  * `<dir>/home`. Each command it ran is appended to `<dir>/log`, with the target first; each
- * connection it tried, reachable or not, adds a line to `<dir>/tries`.
+ * connection it tried, reachable or not, adds a line to `<dir>/tries`. A forward from here (`-L`)
+ * is a proxy on this machine for as long as the command runs; its pid goes to `<dir>/forwards`.
  */
 export function fakeSsh(dir: string): string {
   mkdirSync(dir, { recursive: true });
   const program = join(dir, 'ssh');
+  const proxy = join(dir, 'forward.ts');
+  writeFileSync(
+    proxy,
+    `import { connect, createServer } from 'node:net';
+const [, port, host, to] = /^(?:.*?:)?(\\d+):(\\[[^\\]]*\\]|[^:]*):(\\d+)$/.exec(process.argv[2]!)!;
+createServer((c) => {
+  const t = connect(Number(to), host!.replace(/^\\[|\\]$/g, ''));
+  c.pipe(t).pipe(c);
+  t.on('error', () => c.destroy());
+  c.on('error', () => t.destroy());
+}).listen(Number(port), '127.0.0.1');
+`,
+  );
   writeFileSync(
     program,
     `#!/bin/sh
+fwd=
 while [ $# -gt 1 ]; do
-  case "$1" in -o|-R) shift 2 ;; -T|-n) shift ;; *) break ;; esac
+  case "$1" in -L) fwd="$2"; shift 2 ;; -o|-R) shift 2 ;; -T|-n) shift ;; *) break ;; esac
 done
 target="$1"; shift
 echo x >> ${JSON.stringify(join(dir, 'tries'))}
 [ -e ${JSON.stringify(join(dir, 'down'))} ] && { echo "ssh: connect to host $target: Connection refused" >&2; exit 255; }
 printf '%s %s\\n' "$target" "$*" >> ${JSON.stringify(join(dir, 'log'))}
 HOME=${JSON.stringify(join(dir, 'home'))}; export HOME; mkdir -p "$HOME"
-exec sh -c "$*"
+[ -z "$fwd" ] && exec sh -c "$*"
+echo $$ >> ${JSON.stringify(join(dir, 'forwards'))}
+${JSON.stringify(process.execPath)} ${JSON.stringify(proxy)} "$fwd" & proxy=$!
+sh -c "$*" <&0 & command=$!
+trap 'kill $proxy $command 2>/dev/null; exit 255' TERM INT
+wait $command
+kill $proxy 2>/dev/null
 `,
     { mode: 0o755 },
   );

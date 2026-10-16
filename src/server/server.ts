@@ -434,12 +434,12 @@ export function serve(
       // the app running in the card's workspace: whether it answers, and the owner opening it to try it by hand
       '/api/c/:canvas/cards/:id/app': { GET: on((c, req) => c.appUp(req.params.id!)) },
       '/api/c/:canvas/cards/:id/app/open': {
-        GET: (req) => {
+        GET: async (req) => {
           const c = byId.get(req.params.canvas);
           if (!c) return new Response('Not found', { status: 404 });
           let url: string | null = null;
           try {
-            url = c.openApp(req.params.id);
+            url = await c.openApp(req.params.id);
           } catch (e) {
             if (!(e instanceof BadRequest)) throw e;
           }
