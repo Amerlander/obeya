@@ -4,7 +4,8 @@
 // own settings come from its command line and show read-only.
 
 import { type CSSProperties, Fragment, type ReactNode, useEffect, useId, useRef, useState } from 'react';
-import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigChecked, type ConfigProblem, type ConfigView, type DemoSettings, type DemoSettingsView, type DemoSite, type DemoVoiceCheck, type Language, type HostConfig, type LanguageView, type NarrationLanguage, restartsAgents, type RepoConfig, type RepoSettings, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type SetupCheck, type Theme, THEMES, type ThemeView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
+import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigChecked, type ConfigProblem, type ConfigView, commandLines, type DemoSettings, type DemoSettingsView, type DemoSite, type DemoVoiceCheck, type Language, type HostConfig, type LanguageView, type NarrationLanguage, restartsAgents, type RepoConfig, type RepoSettings, type RepoTrust, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type SetupCheck, type Theme, THEMES, type ThemeView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
+import { lineDiff } from '../core/diff';
 import { LANGUAGES } from '../core/locale';
 import { pushKeyFromEvent, type PushKeyView } from '../core/push-key';
 import { AccessSection } from './access';
@@ -1244,6 +1245,7 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
         <div key={k} className="cfg-span">
           <Problem problem={p} where={where} ask={ask} />
           {p.code === 'notRepo' && noGit && <GitSetup key={noGit} path={noGit} confirm={t.setup.git.confirm} onDone={onRecheck} />}
+          {p.code === 'untrusted' && resolved?.trust && <TrustCommands path={repo.path} trust={resolved.trust} onDone={onRecheck} />}
         </div>
       ))}
       {/* a repository without settings of its own, or with an adapter module that said them: a card on its canvas writes them */}
@@ -1343,7 +1345,7 @@ function RepoSettingsBlock({
   );
   const row = (k: SettingKey, label: string, control: ReactNode, hint?: string) => {
     const from = base[k].source;
-    return field(k, label, own(k) !== undefined, c.source[from], () => set(k, undefined), control, hint);
+    return field(k, label, own(k) !== undefined, base[k].held ? c.held : c.source[from], () => set(k, undefined), control, hint);
   };
   const land = value<'main' | 'pr'>('land');
   const planDocs = value<{ dir: string; exclude: string[] }>('planDocs');
@@ -1663,7 +1665,8 @@ function Problem({ problem, where, ask }: { problem: ConfigProblem; where: strin
           <code>{problem.detail}</code>
         </details>
       )}
-      {ask && (
+      {/* commands to trust are the owner's to look at, not a task's to fix */}
+      {ask && problem.code !== 'untrusted' && (
         <button
           className="btn small"
           disabled={asked}
@@ -1675,6 +1678,50 @@ function Problem({ problem, where, ask }: { problem: ConfigProblem; where: strin
           {t.config.askFix}
         </button>
       )}
+    </div>
+  );
+}
+
+/**
+ * The commands of a repository that wait for the owner's trust (problem `untrusted`): each group
+ * with what it does and its lines as last trusted against those on the main branch now, and the
+ * button that trusts them; the dialog checks again after it.
+ */
+function TrustCommands({ path, trust, onDone }: { path: string; trust: RepoTrust; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const c = t.config.trust;
+  const go = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      await api.trustCommands(path, trust.now);
+      onDone();
+    } catch (e) {
+      setError(failText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="c-trust">
+      {trust.held.map((g) => (
+        <div key={g} className="c-trust-group">
+          <p className="hint">{c[g]}</p>
+          <div className="d-lines">
+            {lineDiff(commandLines(trust.before, g), commandLines(trust.now, g)).map((d, i) => (
+              <div key={i} className={d.kind === '+' ? 'd-add' : d.kind === '-' ? 'd-del' : undefined}>
+                <span className="d-no">{d.kind === ' ' ? '' : d.kind === '+' ? '+' : '−'}</span>
+                <span className="d-text">{d.line}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+      <button className="btn small" disabled={busy} onClick={go}>
+        {c.trust}
+      </button>
+      {error && <p className="p-error">{error}</p>}
     </div>
   );
 }

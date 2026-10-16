@@ -79,3 +79,24 @@ export function cardDiff(source: CardDiff['source'], patch: string, full: boolea
   const cut = patch.lastIndexOf('\ndiff --git ', PATCH_LIMIT);
   return { source, files, patch: patch.slice(0, cut > 0 ? cut : PATCH_LIMIT), truncated: true };
 }
+
+/** The lines of `before` and `after` as a diff: each kept (` `), gone (`-`) or new (`+`), in order (longest common subsequence). */
+export function lineDiff(before: string[], after: string[]): { kind: ' ' | '-' | '+'; line: string }[] {
+  const n = before.length;
+  const m = after.length;
+  // common[i][j]: the longest common subsequence of before[i..] and after[j..]
+  const common = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) common[i]![j] = before[i] === after[j] ? common[i + 1]![j + 1]! + 1 : Math.max(common[i + 1]![j]!, common[i]![j + 1]!);
+  const out: { kind: ' ' | '-' | '+'; line: string }[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < n || j < m) {
+    if (i < n && j < m && before[i] === after[j]) {
+      out.push({ kind: ' ', line: before[i]! });
+      i++;
+      j++;
+    } else if (i < n && (j === m || common[i + 1]![j]! >= common[i]![j + 1]!)) out.push({ kind: '-', line: before[i++]! });
+    else out.push({ kind: '+', line: after[j++]! });
+  }
+  return out;
+}

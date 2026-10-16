@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { cardDiff, diffFiles, diffSize, PATCH_LIMIT, splitDiff } from './diff';
+import { cardDiff, diffFiles, diffSize, lineDiff, PATCH_LIMIT, splitDiff } from './diff';
 
 const patch = [
   'diff --git a/src/a.ts b/src/a.ts',
@@ -62,4 +62,16 @@ describe('a card’s diff', () => {
     // the list still names every file
     expect(cut.files.map((f) => f.file)).toContain('big.txt');
   });
+});
+
+test('two lists of lines as a diff: kept, gone and new in their order', () => {
+  expect(lineDiff(['a', 'b', 'c'], ['a', 'x', 'c', 'd'])).toEqual([
+    { kind: ' ', line: 'a' },
+    { kind: '-', line: 'b' },
+    { kind: '+', line: 'x' },
+    { kind: ' ', line: 'c' },
+    { kind: '+', line: 'd' },
+  ]);
+  expect(lineDiff([], ['a'])).toEqual([{ kind: '+', line: 'a' }]);
+  expect(lineDiff(['a'], [])).toEqual([{ kind: '-', line: 'a' }]);
 });

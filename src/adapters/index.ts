@@ -80,7 +80,15 @@ export interface SharedRead {
   /** The object the file holds, every field as it is; none where there is no file or it is no JSON object. */
   raw?: Record<string, unknown>;
   problems: string[];
+  /** The repository's own Claude Code settings on the default branch, by file (`CLAUDE_FILES`); none where it has none. */
+  claude?: Record<string, string>;
 }
+
+/**
+ * The files of a repository's own Claude Code settings: an agent's session working in it reads
+ * them, and runs their hooks, MCP servers and helpers outside the permission checks.
+ */
+export const CLAUDE_FILES = ['.claude/settings.json', '.claude/settings.local.json', '.mcp.json'];
 
 /** Reads the text of a `.obeya/settings.json`: a field that is unknown or of the wrong type does not count, the rest does. */
 export function parseShared(text: string): SharedRead {
@@ -105,10 +113,12 @@ export function readShared(repoPath: string, commit = defaultBranchCommit(repoPa
   return gitStepsSync(repoPath, readingShared(commit));
 }
 
-/** `readShared` at `commit` as git steps. */
+/** `readShared` at `commit` as git steps, with the repository's Claude Code settings beside it. */
 export function* readingShared(commit: string): GitSteps<SharedRead> {
-  const [text] = yield [['cat-file', 'blob', `${commit}:${REPO_SETTINGS_FILE}`]];
-  return text != null ? parseShared(text) : { problems: [] };
+  const [text, ...files] = yield [REPO_SETTINGS_FILE, ...CLAUDE_FILES].map((f) => ['cat-file', 'blob', `${commit}:${f}`]);
+  const read: SharedRead = text != null ? parseShared(text) : { problems: [] };
+  const claude = Object.fromEntries(CLAUDE_FILES.flatMap((f, i) => (files[i] != null ? [[f, files[i]!]] : [])));
+  return Object.keys(claude).length ? { ...read, claude } : read;
 }
 
 /**

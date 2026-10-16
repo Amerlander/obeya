@@ -1487,7 +1487,9 @@ marks of a Claude Code session that may have started it (`CLAUDE_CODE_*`, `CLAUD
 `CLAUDE_PID`) and of Obeya's own supervisor (`OBEYA_SUPERVISED`, `BUN_BE_BUN`), but with
 `CLAUDE_CODE_OAUTH_TOKEN`, the login of a machine without a keychain.
 
-A worker is one SDK session per card with streaming input, the repo's own settings and CLAUDE.md,
+A worker is one SDK session per card with streaming input, the repo's own settings and CLAUDE.md
+(Claude Code's settings sources left as they are; a repository whose own Claude Code settings the
+owner has not trusted yet gets none of them, see Trusting a repository's commands),
 and permission mode `auto` (`--permission-mode`); after a restart it resumes by session id. A
 project agent is one session per project on the repository's Lesestand, resumed for each question,
 answering the owner's questions about the project and its workstreams one at a time. It, ideas'
@@ -1589,7 +1591,8 @@ A card that waits for the owner (handed over, asked, its pull request open), its
 turn or background work, has the app in its workspace stopped after a grace of five minutes
 (`OBEYA_PARK_GRACE` in seconds for a demo or a live check; a quick reply should not pay for a
 restart): Obeya runs the settings' `app.stop` there through the platform's shell
-(`src/server/app-command.ts`), unless `app.keep` exits 0 (the app holds data that must stay; the
+(`src/server/app-command.ts`; one from the repository only once the owner trusted it, see Trusting
+a repository's commands), unless `app.keep` exits 0 (the app holds data that must stay; the
 card says it keeps running, and the owner who wants it stopped anyway tells the worker). An app the
 owner opened from the card is stopped no sooner than 30 minutes after (see Trying the app by hand).
 The card's log says the app was stopped (`parked` on the card's row); the next message to the worker carries a
@@ -3268,7 +3271,8 @@ answers a range request with the whole file and 200), and a browser cannot seek 
 that way: the chapters and the progress bar jumped back to the start. The page therefore asks for a
 range first and, getting the whole file, plays the video from memory.
 
-It does that from a few values in the repository's settings (`src/server/site.ts`):
+It does that from a few values in the repository's settings (`src/server/site.ts`; a site from
+`.obeya/settings.json` once the owner trusted it, see Trusting a repository's commands):
 `demo.site` names the site's `title` (the overview's heading, the pages' tab titles), its `url` (a
 page is at `url/<slug>/`), the `deploy` command line (`{dir}` stands for the site's directory), optionally an `env` file of
 `KEY=value` lines relative to Obeya's home whose values go into the deploy's environment
@@ -3733,10 +3737,59 @@ settings say now, has the problem `adapterGone` (`hasAdapterModule` in `src/adap
 Obeya does not read the module, and the setup button below offers to move what it says into the
 settings.
 
-These problems are fixed in the repository, so they keep nothing from being saved (`blocksSaving`
-in `src/core/types.ts`). A canvas that does not start at all (a repository gone, its home
+Commands of the repository the owner has not trusted yet are the problem `untrusted` (see
+Trusting a repository's commands).
+
+These problems are fixed in the repository (or, for `untrusted`, trusted), so they keep nothing
+from being saved (`blocksSaving` in `src/core/types.ts`). A canvas that does not start at all (a repository gone, its home
 repository left out) is left out with the reason in the log and its problem in "Konfiguration"; the
 other canvases run (`startCanvases`).
+
+#### Trusting a repository's commands
+
+Some of what a repository brings Obeya runs on this machine itself, outside Claude Code's
+permission checks, or contacts without a click: `app.stop` and `app.keep` (run when a card is
+parked), `demo.site`'s `deploy` with its `env` file, and its `url` and `headers` (read whenever the
+owner comes back to the page, `Sharing.checkVersions`). The agents' sessions read the repository's
+own Claude Code settings (`.claude/settings.json`, `.claude/settings.local.json` and `.mcp.json`;
+`CLAUDE_FILES`) and run what they name without asking, read-only agents included: tried on
+2026-10-16 with the SDK 0.3.285 and no `settingSources`, a `SessionStart` hook of the repository's
+ran in a session with only Read, Grep and Glob, and so did an MCP server of its `.mcp.json` that
+the repository's own `enableAllProjectMcpServers` approved. Turning off hooks (`disableAllHooks`)
+and the repository's MCP servers (`strictMcpConfig`) is not enough: its `apiKeyHelper` still ran,
+and an `ANTHROPIC_BASE_URL` in its `env` took the session's requests elsewhere. A repository cloned
+from someone else, or a merged change of a collaborator's, changes any of these without the owner
+noticing (VS Code puts the same kind of settings behind Workspace Trust).
+
+So these count only as the owner last trusted them. Obeya keeps, per repository (by its path, the
+table `trusted_commands`), the commands as the owner last trusted them (`RepoCommands`, in three
+groups: `app` for stop and keep together, since a stop without its keep could stop what it keeps;
+`site`; `claude`, the files' text). The values themselves, not a hash: the dialog shows what changed. A group that the default
+branch has otherwise (`heldGroups` in `src/server/trust.ts`: new, or changed since) is held:
+the canvas reads the repository's settings without it (`withoutHeld`), so no stop or keep runs and
+no site is deployed to or read (demos are exported); an agent working in the repository (its
+checkout, Lesestand or a workspace of it; `withRepoTrust` in `runtime.ts`) starts with
+`settingSources: ['user']`, none of the repository's Claude Code settings, and since Claude Code
+then reads its CLAUDE.md neither, the agent gets the CLAUDE.md of its directory in its
+instructions instead (not in a workspace on another machine). What this machine sets needs no
+trust: where its values stand in for all of a group (`app.stop` and `app.keep`, or `demo.site`),
+the repository's are not held; and values taken over from this machine into the file („Für alle
+ins Repository übernehmen“, a setting proposal) are the owner's own (`trustTakenOver`, in
+`Config.takenOver`). A repository with commands on the canvas before this came in (2026-10-16)
+was trusted with none, so its commands wait once.
+
+Held commands are the problem `untrusted` at the repository in "Konfiguration", counted in the
+bar's button like the others: what each group does and that it waits, its lines as last trusted
+against those on the default branch now as a diff, and „Diesen Befehlen vertrauen“, which trusts
+what the dialog showed (`POST /api/config/trust` with them; ones that changed on the default branch
+meanwhile are refused, `trustChanged`) and has the canvases follow at once (`settingsChanged`). The
+values held show „aus dem Repository, noch nicht vertraut“ as their source. Whenever the canvas
+reads the settings again (`moved`), it works out what is held again; a change there counts in
+`configRev`, so the page reads the problems again.
+
+A worker's own workspace may hold Claude Code settings the default branch does not (its own edit,
+or a branch from before a change): those count as long as the default branch's are trusted, as
+the worker's other edits do; what it changed there waits for trust once it lands.
 
 #### Writing the settings
 

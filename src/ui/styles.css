@@ -1020,6 +1020,11 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 #config code, #phone code { font: 12px var(--mono); overflow-wrap: anywhere; }
 #config .warn { color: var(--warn); }
 #config .p-error { margin: 6px 0 0; font-size: 13px; }
+/* a repository's commands that wait for the owner's trust: each group's lines as a diff, the button below */
+.c-trust { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; margin-top: 8px; }
+.c-trust-group { align-self: stretch; }
+.c-trust-group > .hint { margin: 0 0 4px; }
+.c-trust .d-lines { border-top: 1px solid var(--line); }
 /* fields sunk a little into the sheet, a shade darker than it with a firmer edge, so the page's structure
    reads at a glance; the one being typed in comes up to the sheet's own colour */
 #config input, #config select, #config textarea { font: inherit; font-size: 13px; padding: 6px 9px; border-radius: 2px;

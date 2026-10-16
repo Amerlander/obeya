@@ -12,7 +12,7 @@ import {
   tool,
 } from '@anthropic-ai/claude-agent-sdk';
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { LOST, remote, sessionFiles, type SshHost } from './hosts';
 import { localBin, which } from './path';
@@ -90,6 +90,11 @@ export interface AgentSpec {
   dirs?: string[];
   /** Read-only agents get no tools that change files or run commands. */
   readOnly?: boolean;
+  /**
+   * The repository's own Claude Code settings in `cwd` wait for the owner to confirm them
+   * (`withRepoTrust`): the session reads the user's settings alone, none of the repository's.
+   */
+  untrusted?: boolean;
   /** Directories of local Claude Code plugins loaded into the session (skills, mainly). */
   plugins?: string[];
   permissionMode?: PermissionMode;
@@ -161,6 +166,24 @@ export function claudeExecutable(env: Record<string, string | undefined> = proce
   return onPath && !/\.(cmd|bat|ps1)$/i.test(onPath) ? onPath : installed;
 }
 
+/**
+ * A runtime that starts each agent working in a repository whose own Claude Code settings wait for
+ * the owner's confirmation (`untrusted`, by the agent's `cwd`) without them: their hooks, MCP
+ * servers and helpers would run outside the permission checks. Claude Code then reads none of the
+ * repository's files, its CLAUDE.md neither, so the agent gets that in its instructions instead.
+ */
+export function withRepoTrust(runtime: AgentRuntime, untrusted: (cwd: string) => boolean): AgentRuntime {
+  return {
+    start(spec, firstMessage, images) {
+      if (!untrusted(spec.cwd)) return runtime.start(spec, firstMessage, images);
+      const file = join(spec.cwd, 'CLAUDE.md');
+      const notes = !remote(spec.cwd) && existsSync(file) ? readFileSync(file, 'utf8').trim() : '';
+      const system = notes ? `${spec.system}\n\nThe repository's CLAUDE.md:\n\n${notes}` : spec.system;
+      return runtime.start({ ...spec, untrusted: true, system }, firstMessage, images);
+    },
+  };
+}
+
 /** Runs agents through the Claude Agent SDK, on the Claude Code login of the machine. */
 export const sdkRuntime: AgentRuntime = {
   start(spec, firstMessage, images) {
@@ -208,6 +231,8 @@ export const sdkRuntime: AgentRuntime = {
           ? { tools: READ_ONLY_TOOLS, allowedTools: [...READ_ONLY_TOOLS, ...ownTools], permissionMode: 'dontAsk' as const }
           : // a worker's own tools are allowed by the hook below: as allowedTools they would have the SDK warn that they pass by canUseTool
             { ...(spec.askOwner ? {} : { allowedTools: ownTools }), permissionMode: spec.permissionMode ?? 'auto' }),
+        // without the repository's settings, which Claude Code reads with its CLAUDE.md
+        ...(spec.untrusted ? { settingSources: ['user' as const] } : {}),
         ...(spec.resume ? { resume: spec.resume } : {}),
         ...(spec.dirs?.length ? { additionalDirectories: spec.dirs } : {}),
         ...(spec.effort ? { effort: spec.effort } : {}),

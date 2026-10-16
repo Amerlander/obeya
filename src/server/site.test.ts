@@ -7,6 +7,8 @@ import { MESSAGES } from '../core/messages';
 import { Board } from './board';
 import { CanvasRuntime } from './canvas';
 import { Store } from './db';
+import { readShared } from '../adapters';
+import { commandsOf } from './trust';
 import type { SharePage, ShareTarget } from './share';
 import { Sharing } from './share';
 import { MANIFEST, parseEnv, siteKey, siteMissing, pagesHash, siteName, siteTarget } from './site';
@@ -555,7 +557,10 @@ test("a repository whose settings name a site: the canvas says the env file it l
     '.obeya/settings.json': JSON.stringify({ app: { run: 'bun dev' }, demo: { site: SITE() } }),
   });
   rmSync(join(home, 'sites/demos/deploy.env'));
-  const canvas = new CanvasRuntime({ repos: [{ path: shop }] }, { store: new Store(':memory:'), home, runtime: new FakeRuntime(), forge: noForge });
+  // the owner trusted the site
+  const store = new Store(':memory:');
+  store.trustCommands(shop, commandsOf(readShared(shop)));
+  const canvas = new CanvasRuntime({ repos: [{ path: shop }] }, { store, home, runtime: new FakeRuntime(), forge: noForge });
   try {
     expect(canvas.repos[0]!.site).toEqual(SITE());
     expect(canvas.board.canvas.repos[0]).toMatchObject({ shareNeeds: { site: siteName(SITE()), file: 'sites/demos/deploy.env' } });

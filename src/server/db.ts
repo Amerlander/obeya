@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { AnswerFile, AnswerRef, CardEvent, DeviceView, CardKind, CardState, Mock, Need, Preference, PreferenceState, ProposedSetting, SettingProposal, SettingProposalState, Spot, Talk, TalkQuote, TalkRef } from '../core/types';
+import type { AnswerFile, AnswerRef, CardEvent, DeviceView, CardKind, CardState, Mock, Need, Preference, PreferenceState, ProposedSetting, RepoCommands, SettingProposal, SettingProposalState, Spot, Talk, TalkQuote, TalkRef } from '../core/types';
 import type { Wish } from '../core/wish';
 
 export interface CardRow {
@@ -356,6 +356,12 @@ export const MIGRATIONS = [
   'ALTER TABLE cards ADD COLUMN demos TEXT;',
   // since when a card waits for the owner, for the phone view's „Für dich“
   'ALTER TABLE cards ADD COLUMN waiting_since TEXT;',
+  // a repository's commands as the owner last confirmed them, by its path (JSON `RepoCommands`)
+  `CREATE TABLE trusted_commands (
+    repo TEXT PRIMARY KEY,
+    commands TEXT NOT NULL,
+    at TEXT NOT NULL
+  );`,
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter, wish';
@@ -1047,6 +1053,20 @@ export class Store {
     this.db
       .query('INSERT INTO settings (canvas_id, key, value) VALUES ($c, $key, $value) ON CONFLICT(canvas_id, key) DO UPDATE SET value = $value')
       .run({ c: canvasId, key, value });
+  }
+
+  // ---------------------------------------------------------------- trusted commands
+
+  /** The commands of the repository at `path` as the owner last confirmed them; null where they confirmed none. */
+  trustedCommands(path: string): RepoCommands | null {
+    const row = this.db.query('SELECT commands FROM trusted_commands WHERE repo = $repo').get({ repo: path }) as { commands: string } | null;
+    return row ? (JSON.parse(row.commands) as RepoCommands) : null;
+  }
+
+  trustCommands(path: string, commands: RepoCommands) {
+    this.db
+      .query('INSERT INTO trusted_commands (repo, commands, at) VALUES ($repo, $commands, $at) ON CONFLICT(repo) DO UPDATE SET commands = $commands, at = $at')
+      .run({ repo: path, commands: JSON.stringify(commands), at: now() });
   }
 
   // ---------------------------------------------------------------- devices

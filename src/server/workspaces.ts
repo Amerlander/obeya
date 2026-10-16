@@ -229,6 +229,11 @@ export class Workspaces {
     return this.o.mode;
   }
 
+  /** The directory its clones or worktrees are made in (and follow-ups' temporary worktrees). */
+  get dir() {
+    return this.o.dir;
+  }
+
   /** Registers a clone; with `origins`, only when its `origin` is one of them. */
   register(path: string, origins?: string[]) {
     git(path, 'rev-parse', '--git-dir');

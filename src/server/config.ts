@@ -9,10 +9,10 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, wri
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
-import { REPO_ADAPTER_DIR, REPO_SETTINGS_FILE } from '../adapters';
+import { readShared, REPO_ADAPTER_DIR, REPO_SETTINGS_FILE } from '../adapters';
 import { settingsShape } from '../adapters/schema';
 import { LANGUAGES } from '../core/locale';
-import { blocksSaving, type CanvasConfig, type DemoSite, type ConfigChecked, type ConfigProblem, type ConfigSaved, type ConfigView, type RepoSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type SettingsShared, type SharedSettings, type DemoSettingsProblem, type DemoSettingsView, type DemoVoiceCheck, type ResolvedCanvas, type VoiceInstallJob, layerSettings, type ProposedSetting, settingPatch } from '../core/types';
+import { blocksSaving, type CanvasConfig, type DemoSite, type ConfigChecked, type ConfigProblem, type ConfigSaved, type ConfigView, type RepoSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type SettingsShared, type SharedSettings, type DemoSettingsProblem, type DemoSettingsView, type DemoVoiceCheck, type ResolvedCanvas, type VoiceInstallJob, layerSettings, type ProposedSetting, type RepoTrust, type RepoValues, settingPatch, commandLines } from '../core/types';
 import {
   DEMO_SETTINGS_FILE,
   type DemoSettings,
@@ -35,6 +35,7 @@ import { commitShared, proposeShared, pushShared } from './shared-settings';
 import { gitCalls, gitSteps } from './workspaces';
 import { VERSION } from './resources';
 import { siteProblem } from './share';
+import { canonical, commandsOf, heldGroups, trustTakenOver } from './trust';
 
 export const CONFIG_FILE = 'canvases.json';
 
@@ -229,6 +230,25 @@ const demoShape = z
   })
   .strict();
 
+/** The repository's commands that wait for the owner's confirmation (`heldGroups`), with what they were when last confirmed; none where none do. */
+function trustOf(path: string, read: Parameters<typeof commandsOf>[0], mine: RepoSettings | undefined, store: Store): RepoTrust | undefined {
+  const now = commandsOf(read);
+  const before = store.trustedCommands(path);
+  const held = heldGroups(now, before, mine);
+  return held.length ? { held, now, ...(before ? { before } : {}) } : undefined;
+}
+
+/** The repository's values with those of the commands it holds marked (`SettingValue.held`). */
+function markHeld(values: RepoValues, trust: RepoTrust | undefined): RepoValues {
+  if (!trust) return values;
+  const mark = <T>(v: { value: T; source: string }) => (v.source === 'repository' ? { ...v, held: true as const } : v);
+  return {
+    ...values,
+    app: trust.held.includes('app') ? { ...values.app, stop: mark(values.app.stop), keep: mark(values.app.keep) } : values.app,
+    demo: trust.held.includes('site') ? { site: mark(values.demo.site) } : values.demo,
+  } as RepoValues;
+}
+
 function parseDemo(input: unknown): DemoSettings {
   const parsed = demoShape.safeParse(input);
   if (!parsed.success) throw new BadRequest('config', z.prettifyError(parsed.error));
@@ -293,6 +313,9 @@ export class Config {
    */
   takenOver(path: string, before: SharedSettings | undefined, after: SharedSettings | undefined) {
     if (!after) return;
+    // commands the owner set here are theirs in the file too: they need no confirming
+    const trusted = trustTakenOver(this.o.store.trustedCommands(path), after, this.repoSettings(path));
+    if (trusted) this.o.store.trustCommands(path, trusted);
     const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
     const changed = this.dropSettings(path, (s) => {
       for (const k of SHARED_FIELDS) {
@@ -416,6 +439,24 @@ export class Config {
     return done;
   }
 
+  /**
+   * The owner confirmed the commands of the repository at `path` (as the configuration names it)
+   * that the dialog showed them (`seen`, `RepoTrust.now`): they count from now on, as long as its
+   * default branch has them so. Commands that changed there since are refused (`trustChanged`).
+   */
+  trust(input: unknown) {
+    const parsed = z.object({ path: z.string(), seen: z.unknown() }).safeParse(input);
+    if (!parsed.success) throw new BadRequest('invalid', 'expected { path, seen }');
+    const at = locate(this.current(), (r) => r.path === parsed.data.path);
+    if (!at) throw new BadRequest('invalid', `no repository ${parsed.data.path} in the configuration`);
+    const repoPath = resolve(expandHome(at.r.path));
+    const now = commandsOf(readShared(repoPath));
+    if (canonical(now) !== canonical(parsed.data.seen)) throw new BadRequest('trustChanged', `${repoPath}: its commands changed on the default branch since they were shown`);
+    this.o.store.trustCommands(repoPath, now);
+    console.log(`Obeya: the owner confirmed the commands of ${repoPath}`);
+    this.o.onSettings?.();
+  }
+
   /** The configuration as saved, at once: what it amounts to and what is wrong with it come from `check`, which takes longer. */
   view(): ConfigView {
     return {
@@ -503,18 +544,25 @@ export class Config {
           const wrong = site && siteProblem(site, resolve(r.path));
           if (wrong) problems.push({ code: 'demoSite', canvas, repo, detail: wrong });
           for (const detail of got.shared.problems) problems.push({ code: 'repoSettings', canvas, repo, detail });
+          const trust = trustOf(got.info.path, got.shared, r.settings, this.o.store);
+          if (trust)
+            problems.push({ code: 'untrusted', canvas, repo, detail: `held until the owner confirms them: ${trust.held.flatMap((g) => commandLines(trust.now, g)).join('; ')}` });
         });
         return {
           id,
           name,
-          repos: given.map(({ ref, adapter, read: got, values }) => ({
+          repos: given.map(({ config: r, ref, adapter, read: got, values }) => {
+            const trust = trustOf(got.info.path, got.shared, r.settings, this.o.store);
+            return {
             id: ref.id,
             workspaces: adapter.workspaces,
             ...(got.adapterModule ? { adapterGone: true } : {}),
-            values: values(),
+            values: markHeld(values(), trust),
+            ...(trust ? { trust } : {}),
             shareTo: adapter.land === 'main' ? 'main' : 'pr',
             ...(adapter.land === 'pr' && adapter.direct ? { shareDirect: true } : {}),
-          })),
+            };
+          }),
         };
       } catch (e) {
         if (!(e instanceof ConfigError)) throw e;

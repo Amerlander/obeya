@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { CardDiff } from '../core/diff';
 import type { PushKeyView } from '../core/push-key';
 import { type Place, placeParam } from '../core/layout';
-import type { AccessView, Pairing, RemoteSetting, AgentRole, AgentSetting, CloudPreset, AgentsView, CanvasConfig, CanvasInfo, CanvasSnapshot, ClientMessage, ConfigSaved, ConfigView, CardAction, ConfigChecked, DemoSettings, Group, DemoSettingsView, DemoVoiceCheck, FirstCanvas, GitSetupPreview, MachineItem, MachineSectionId, MachineView, SetupCheck, SetupFolder, VoiceSetupView, CardEvent, CardPatch, Item, Language, LanguageView, NewCard, Notice, OwnerHold, PendingRestart, ProjectHistory, ServerMessage, SettingsShared, SpotInput, TalkRef, AppUpdate, Theme, ThemeView } from '../core/types';
+import type { AccessView, Pairing, RemoteSetting, AgentRole, AgentSetting, CloudPreset, AgentsView, CanvasConfig, CanvasInfo, CanvasSnapshot, ClientMessage, ConfigSaved, ConfigView, CardAction, ConfigChecked, DemoSettings, Group, DemoSettingsView, DemoVoiceCheck, FirstCanvas, GitSetupPreview, MachineItem, MachineSectionId, MachineView, SetupCheck, SetupFolder, VoiceSetupView, CardEvent, CardPatch, Item, Language, LanguageView, NewCard, Notice, OwnerHold, PendingRestart, ProjectHistory, RepoCommands, ServerMessage, SettingsShared, SpotInput, TalkRef, AppUpdate, Theme, ThemeView } from '../core/types';
 import type { Wish } from '../core/wish';
 
 /** A request the server refused; `code` picks the owner's text, the message is the server's detail. */
@@ -106,6 +106,8 @@ export const api = {
   saveConfig: (canvases: CanvasConfig[]) => call<ConfigSaved>('PUT', '/api/config', canvases),
   /** „Für alle ins Repository übernehmen“: the repository's settings for this machine into its `.obeya/settings.json`. */
   shareSettings: (path: string, direct = false) => call<SettingsShared>('POST', '/api/config/share-settings', { path, direct }),
+  /** The owner confirms the repository's commands the dialog showed them (`RepoTrust.now`): they count from now on. */
+  trustCommands: (path: string, seen: RepoCommands) => call<object>('POST', '/api/config/trust', { path, seen }),
   /** The language Obeya speaks to the owner: chosen, or the system's. */
   language: () => call<LanguageView>('GET', '/api/language'),
   /** The push-to-talk key in another app, and the app's shell that hears it. */

@@ -134,7 +134,8 @@ them itself; how the app starts and where it is, the workers find from the recip
   stopped anyway tells the worker.
 
 Each of the three is a setting of its own: this machine may set one and leave the others to the
-repository. Default: none.
+repository. `stop` and `keep` from the file run only once you trusted them (see Commands you trust).
+Default: none.
 
 ### `demo` — `{ site? }`
 
@@ -177,6 +178,8 @@ page for something to look at; the worker picks which, and runs the app for it a
   only then deploys; a manifest it cannot read (a login without `headers`, the host down) refuses
   the deploy, since deploying blind could take other machines' pages offline. Pages shared from
   here that a later deploy from elsewhere took offline are deployed again.
+
+A site from the file is deployed to and read only once you trusted it (see Commands you trust).
 
 Default: no recipe, no site.
 
@@ -236,6 +239,27 @@ deletes it. These problems keep nothing from being saved, since they are fixed i
 Obeya's log names them when it starts. "Aufgabe zum Beheben anlegen" beside a problem has Obeya
 create a task that fixes it.
 
+## Commands you trust
+
+Some fields are commands Obeya runs on your machine itself, or addresses it contacts without a
+click: `app.stop` and `app.keep`, and the demo site's `deploy`, `env`, `url` and `headers`. Beside
+them, the agents' sessions run what the repository's own Claude Code settings name
+(`.claude/settings.json`, `.claude/settings.local.json`, `.mcp.json`: hooks, MCP servers, helpers)
+without asking. A repository cloned from someone else, or a change a colleague merged, can change
+them without you noticing, so Obeya holds each of them that is new on the default branch, or
+changed there, until you trust it:
+
+- a held `stop` or `keep` does not run: a waiting card's app keeps running;
+- a held demo site is neither deployed to nor read: "Teilen" exports demos;
+- held Claude Code settings are not read: the agents work in the repository without them (and get
+  its CLAUDE.md in their instructions, since Claude Code reads that with the settings).
+
+"Konfiguration" shows them as a problem at the repository, counted on its button in the bar: what
+each does, a diff against what you trusted last, and „Diesen Befehlen vertrauen“ („Trust these
+commands“), which lets them run from then on, as long as the default branch has them so. What you
+set for this machine needs no trust, and neither do values you take into the file with „Für alle
+ins Repository übernehmen“.
+
 ## Testing the settings
 
 1. **Every field counts.** In the repository, with the settings in the checkout (committed or
@@ -254,4 +278,5 @@ create a task that fixes it.
    nothing else. This is what the settings skill does before it hands over.
 4. **On a canvas, once it is merged.** A canvas reads the settings from the default branch only,
    so steps 1–3 are what can be tried before the merge. Once they are on the default branch, the
-   next card started gets its brief from them.
+   next card started gets its brief from them; new or changed commands wait in "Konfiguration"
+   until you trust them.

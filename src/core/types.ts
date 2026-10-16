@@ -1041,6 +1041,8 @@ export type ErrorCode =
   | 'noSettings'
   /** „Für alle ins Repository übernehmen“: the checkout on the main branch has changes of its own in `.obeya/settings.json`. */
   | 'settingsDirty'
+  /** The commands to confirm changed on the default branch since the dialog showed them. */
+  | 'trustChanged'
   /** „Für alle ins Repository übernehmen“: the commit, the push or the pull request failed; why comes with it. */
   | 'settingsShare'
   /** Export: the video is too large for one HTML file. */
@@ -1209,6 +1211,39 @@ export type SettingSource = 'repository' | 'clones' | 'detected' | 'default';
 export interface SettingValue<T> {
   value: T;
   source: SettingSource;
+  /** A command of the repository's that does not count until the owner confirms it (`RepoCommands`). */
+  held?: true;
+}
+
+/**
+ * What of a repository's own files Obeya runs or contacts on this machine without a click, or its
+ * agents' sessions run outside Claude Code's permission checks, by group: one confirmed by the
+ * owner counts as long as the default branch has it so (design: Trusting a repository's commands).
+ */
+export interface RepoCommands {
+  /** `app.stop` and `app.keep` of `.obeya/settings.json`, which park a waiting card: one without the other could stop what `keep` keeps. */
+  app?: { stop?: string; keep?: string };
+  /** What of `demo.site` the deploy runs with and the live site is read from. */
+  site?: Pick<DemoSite, 'url' | 'deploy' | 'env' | 'headers'>;
+  /** The repository's own Claude Code settings by file (`.claude/settings.json`, `.mcp.json`): hooks, MCP servers, helpers. */
+  claude?: Record<string, string>;
+}
+
+export type TrustGroup = keyof RepoCommands;
+
+/** The commands of a repository that do not count yet (`held`), as its default branch has them and as the owner last confirmed them. */
+export interface RepoTrust {
+  held: TrustGroup[];
+  now: RepoCommands;
+  before?: RepoCommands;
+}
+
+/** The lines of a group of commands, for the owner to read and compare: each field with its value, each file under its name. */
+export function commandLines(c: RepoCommands | undefined, g: TrustGroup): string[] {
+  const v = c?.[g];
+  if (!v) return [];
+  if (g === 'claude') return Object.entries(v as Record<string, string>).flatMap(([file, text]) => [`${file}:`, ...text.split('\n').map((l) => `  ${l}`)]);
+  return Object.entries(v).map(([k, x]) => `${g === 'app' ? 'app' : 'demo.site'}.${k}: ${typeof x === 'string' ? x : JSON.stringify(x)}`);
 }
 
 /** A repository's settings as they stand without this machine's: what the dialog shows where the owner set nothing. */
@@ -1303,6 +1338,8 @@ export interface ResolvedCanvas {
     adapterGone?: boolean;
     /** Its settings without this machine's, with where each comes from. */
     values: RepoValues;
+    /** Its commands that wait for the owner to confirm them (problem `untrusted`). */
+    trust?: RepoTrust;
     /**
      * Where „Für alle ins Repository übernehmen“ puts `.obeya/settings.json`: a commit on the main
      * branch where work lands there, else a pull request.
@@ -1323,7 +1360,7 @@ export interface ConfigProblem {
 }
 
 /** Whether a problem keeps the configuration from being saved: not one in the repository, which is fixed there. */
-export const blocksSaving = (p: ConfigProblem) => p.code !== 'demoSite' && p.code !== 'adapterGone' && p.code !== 'repoSettings';
+export const blocksSaving = (p: ConfigProblem) => p.code !== 'demoSite' && p.code !== 'adapterGone' && p.code !== 'repoSettings' && p.code !== 'untrusted';
 
 export type ConfigProblemCode =
   /** No canvas at all. */
@@ -1351,6 +1388,8 @@ export type ConfigProblemCode =
   | 'noBranch'
   /** Something in the repository's `.obeya/settings.json` that does not count (fixed there, so it keeps nothing from being saved). */
   | 'repoSettings'
+  /** Commands of the repository, new or changed on its default branch, that wait for the owner to confirm them (`RepoTrust`). */
+  | 'untrusted'
   /** Malformed: a bug in whoever wrote it. */
   | 'invalid';
 

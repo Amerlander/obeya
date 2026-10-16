@@ -3,7 +3,7 @@
 
 import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { mkdirSync, realpathSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { defaultsFor, hasAdapterModule, readingAdapterModule, readingShared, readShared, repoValues, type SharedRead, withSettings } from '../adapters';
 import { Answers, answersDir, answerTag } from './answers';
 import { demoFile } from './demo-page';
@@ -12,7 +12,7 @@ import { repoName } from '../adapters/generic';
 import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
 import type { Language } from '../core/locale';
-import { AGENT_DEFAULTS, agentListens, type AgentRole, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, type PendingRestart, plannableAsProject, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, type SharedSettings, type SpotInput } from '../core/types';
+import { AGENT_DEFAULTS, agentListens, type AgentRole, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, type PendingRestart, plannableAsProject, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, type SharedSettings, type SpotInput, type TrustGroup } from '../core/types';
 import { BadRequest, Board, replyNote } from './board';
 import { type Command, Commander } from './commands';
 import type { Config } from './config';
@@ -28,7 +28,8 @@ import { Revisions } from './revisions';
 import { ProjectAgents } from './project-agents';
 import { readPlanDocs, watchPlanDocs } from './repo';
 import { boundsOf, GAP, type Place, unionBounds } from '../core/layout';
-import { type AgentRuntime, withAgentSetting } from './runtime';
+import { type AgentRuntime, withAgentSetting, withRepoTrust } from './runtime';
+import { commandsOf, heldGroups, withoutHeld } from './trust';
 import { changesCode, RESTART_PATIENCE_MS, whenIdle } from './self-update';
 import { Sharing, siteIncomplete } from './share';
 import { siteMissing, siteName } from './site';
@@ -143,6 +144,8 @@ export class CanvasRuntime {
   private branchSettings = new Map<string, () => void>();
   /** By repository's path: its `.obeya/settings.json` as the Lesestand last had it. */
   private shared = new Map<string, SharedRead>();
+  /** By repository's path: its commands that do not count until the owner confirms them, as last worked out (`heldOf`). */
+  private held = new Map<string, TrustGroup[]>();
   /** By repository's path: whether its main branch had an adapter module as the configuration was last resolved, which a repository starting takes. */
   private adapterModules = new Map<string, boolean>();
   /** The restart of some repositories' agents that waits, if one does. */
@@ -165,10 +168,12 @@ export class CanvasRuntime {
 
   constructor(config: CanvasConfig, private deps: CanvasDeps) {
     const agents = deps.agents ?? ((role: AgentRole) => AGENT_DEFAULTS[role]);
-    deps = { ...deps, runtime: withAgentSetting(deps.runtime, agents), ...(deps.workerRuntime ? { workerRuntime: withAgentSetting(deps.workerRuntime, agents) } : {}) };
+    const runtime = (r: AgentRuntime) => withRepoTrust(withAgentSetting(r, agents), this.claudeHeld);
+    deps = { ...deps, runtime: runtime(deps.runtime), ...(deps.workerRuntime ? { workerRuntime: runtime(deps.workerRuntime) } : {}) };
     this.deps = deps;
     // the main branch the owner set counts from the start: the repository's id, its settings and its Lesestand go by it
     for (const r of config.repos) this.useBranch(r);
+    this.config = config;
     const resolved = this.resolve(config);
     const { id, name, repos, stored } = resolved;
     this.config = resolved.config;
@@ -286,10 +291,40 @@ export class CanvasRuntime {
   /** The settings the owner set for a repository on this machine, read whenever they are used. */
   private settingsOf = (r: RepoConfig): (() => RepoSettings | undefined) => (this.deps.settings ? () => this.deps.settings!(resolve(r.path)) : () => r.settings);
 
-  /** The repository's settings for everyone, as its Lesestand last had them (read again whenever it moves, `reread`). */
+  /**
+   * The repository's settings for everyone, as its Lesestand last had them (read again whenever it
+   * moves, `reread`), without the commands that wait for the owner's confirmation (`heldOf`).
+   */
   private sharedOf = (path: string): (() => SharedSettings | undefined) => {
     if (!this.shared.has(path)) this.shared.set(path, readShared(path));
-    return () => this.shared.get(path)!.settings;
+    return () => withoutHeld(this.shared.get(path)!.settings, this.heldOf(path));
+  };
+
+  /**
+   * The groups of the repository's commands that do not count until the owner confirms them: new
+   * or changed on its default branch since (`heldGroups`). Worked out again whenever it moves or
+   * its settings are saved (`moved`).
+   */
+  private heldOf(path: string): TrustGroup[] {
+    let held = this.held.get(path);
+    if (!held) {
+      // the configuration as it runs may not have a repository new on the canvas yet; the file has it
+      const mine = this.deps.settings ? this.deps.settings(path) : this.config?.repos.find((r) => resolve(r.path) === path)?.settings;
+      held = heldGroups(commandsOf(this.shared.get(path)), this.deps.store.trustedCommands(path), mine);
+      this.held.set(path, held);
+      if (held.length) console.warn(`Obeya: ${path}: ${held.join(', ')} of its settings wait for the owner's confirmation in Konfiguration (held)`);
+    }
+    return held;
+  }
+
+  /**
+   * Whether an agent working in `cwd` works in a repository of the canvas (its checkout, its
+   * Lesestand, a workspace of it) whose own Claude Code settings wait for the owner's confirmation.
+   */
+  private claudeHeld = (cwd: string): boolean => {
+    const within = (dir: string) => cwd === dir || cwd.startsWith(dir.endsWith(sep) || dir.endsWith('/') ? dir : `${dir}${dir.includes('://') ? '/' : sep}`);
+    const r = this.repos.find((r) => [r.info.path, r.read.path, r.workspaces.dir, ...r.workspaces.list().map((w) => w.path)].some(within));
+    return !!r && this.heldOf(r.info.path).includes('claude');
   };
 
   /**
@@ -687,6 +722,9 @@ export class CanvasRuntime {
     const path = r.info.path;
     if (this.pending?.paths.has(path)) return 'due';
     const shared = this.reread(r);
+    const was = this.held.get(path);
+    this.held.delete(path);
+    const held = JSON.stringify(this.heldOf(path)) !== JSON.stringify(was ?? []);
     const sources = this.problemSources(path);
     const problems = sources !== r.problemSources;
     if (problems) {
@@ -705,7 +743,7 @@ export class CanvasRuntime {
       setShare(r.ref, shareRef(site, this.deps.home));
       return 'follow';
     }
-    return shared || problems ? 'follow' : 'same';
+    return shared || problems || held ? 'follow' : 'same';
   }
 
   /**
@@ -715,7 +753,7 @@ export class CanvasRuntime {
    */
   private problemSources(path: string, adapterModule = hasAdapterModule(path)): string {
     const read = this.shared.get(path);
-    return JSON.stringify([read?.raw, read?.problems, adapterModule]);
+    return JSON.stringify([read?.raw, read?.problems, read?.claude, this.heldOf(path), adapterModule]);
   }
 
   /**
@@ -727,7 +765,7 @@ export class CanvasRuntime {
     const path = r.info.path;
     const before = this.shared.get(path);
     const now = readShared(path);
-    if (JSON.stringify(now.settings) === JSON.stringify(before?.settings)) {
+    if (JSON.stringify([now.settings, now.claude]) === JSON.stringify([before?.settings, before?.claude])) {
       // a field that does not count changed alone: the problems change, the settings do not
       this.shared.set(path, now);
       return false;

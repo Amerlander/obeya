@@ -448,6 +448,8 @@ export function serve(
       '/api/narration/clip': { POST: narration ? clipRoute(narration) : notFound },
       // „Für alle ins Repository übernehmen“: a repository's settings for this machine into its .obeya/settings.json
       '/api/config/share-settings': { POST: needs(config, async (c, req) => c.shareSettings(await req.json())) },
+      // a repository's commands, new or changed on its default branch, confirmed by the owner: they count from now on
+      '/api/config/trust': { POST: needs(config, async (c, req) => (c.trust(await req.json()), {})) },
       // what the configuration amounts to and what is wrong with it: as saved, or a draft as the owner edits it
       '/api/config/check': {
         GET: needs(config, (c) => c.checkSaved()),
