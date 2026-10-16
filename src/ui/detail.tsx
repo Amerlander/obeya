@@ -415,8 +415,6 @@ export function Detail(p: Props) {
                 {item.demo && (
                   <DemoView
                     item={item}
-                    all={all}
-                    run={run}
                     summary=""
                     demo={item.demo}
                     autoplay={demoWaits}
@@ -1272,13 +1270,11 @@ function Gist({ text }: { text: string }) {
 type Run = (fn: () => Promise<void>, done: ActDone) => Promise<void>;
 
 /**
- * The narrated demo with its chapters and the report beside it; with `run`, each finding can become a
- * card. `comments`: the card's agent hears the owner, whose words may be about a place in the video.
+ * The narrated demo with its chapters and the report beside it. `comments`: the card's agent hears the
+ * owner, whose words may be about a place in the video.
  */
 function DemoView({
   item,
-  all = [],
-  run,
   summary,
   demo,
   children,
@@ -1287,8 +1283,6 @@ function DemoView({
   comments = false,
 }: {
   item: Item;
-  all?: Item[];
-  run?: Run;
   summary: string;
   demo: Demo;
   children: ReactNode;

@@ -17,7 +17,7 @@ import { join, resolve } from 'node:path';
 import sdk from '../../node_modules/@anthropic-ai/claude-agent-sdk/package.json';
 import { blocksSaving, CLONES, type FirstCanvas, type MachineItem, type MachineJob, type MachineSection, type MachineSectionId, type MachineView, type SetupFolder, type GitSetupPreview } from '../core/types';
 import { readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
-import { checkSetup, installHint, type LinuxFamily, linuxFamily, output } from '../../plugin/skills/demo/lib/setup.ts';
+import { checkSetup, type LinuxFamily, linuxFamily, output } from '../../plugin/skills/demo/lib/setup.ts';
 import { installVoice } from '../../plugin/skills/demo/lib/voices.ts';
 import { BadRequest } from './board';
 import type { CanvasRuntime } from './canvas';

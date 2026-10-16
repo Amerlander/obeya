@@ -7,9 +7,9 @@ import { BadRequest } from './board';
 import { OBEYA_PLUGIN } from './demo';
 import { Images } from './images';
 import { Restarter } from './self-update';
-import { artifact, until } from './testing';
+import { artifact } from './testing';
 import { Workers } from './workers';
-import { board, dir, eachTest, flush, main, manual, origin, runtime, setLanguage, setWorkers, spaces, state, workers } from './workers-fixture';
+import { board, dir, eachTest, flush, main, manual, runtime, setLanguage, setWorkers, spaces, state, workers } from './workers-fixture';
 import { git } from './workspaces';
 
 eachTest();

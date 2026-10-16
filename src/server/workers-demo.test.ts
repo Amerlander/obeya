@@ -9,7 +9,7 @@ import { DEMO_SKILL_FILE, demoSkillName, OBEYA_PLUGIN } from './demo';
 import { Images } from './images';
 import { artifact, until } from './testing';
 import { Workers } from './workers';
-import { board, dir, eachTest, main, manual, runtime, setup, setWorkers, spaces, state, workers } from './workers-fixture';
+import { board, dir, eachTest, manual, runtime, setup, setWorkers, spaces, state, workers } from './workers-fixture';
 
 eachTest();
 

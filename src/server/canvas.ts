@@ -11,7 +11,7 @@ import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
 import type { Language } from '../core/locale';
 import { AGENT_DEFAULTS, agentListens, type AgentRole, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, type PendingRestart, plannableAsProject, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, type SharedSettings, type SpotInput } from '../core/types';
-import { BadRequest, Board, replyNote, type StoredIdea } from './board';
+import { BadRequest, Board, replyNote } from './board';
 import { type Command, Commander } from './commands';
 import type { Config } from './config';
 import type { Store } from './db';

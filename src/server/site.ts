@@ -176,7 +176,7 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
   const root = site.url.replace(/\/+$/, '');
 
   /** The site lives only in its directory: one that lost pages Obeya has as shared would drop them with the next deployment. */
-  const checkSite = (shared: string[], self: string, live: Live) => {
+  const checkSite = (shared: string[], self: string) => {
     const missing = shared.filter((s) => s !== self && !existsSync(join(dir, s, 'meta.json')));
     if (missing.length) throw new Refused(t.siteLacks(dir, missing));
   };
@@ -426,7 +426,7 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
       gone.push(...lost.filter((g) => g.slug !== slug));
       const away = new Set(gone.map((g) => g.slug));
       const kept = shared.filter((s) => !away.has(s));
-      checkSite(kept, slug ?? '', live);
+      checkSite(kept, slug ?? '');
       const before = slug ? local.pages[slug] : undefined;
       const rev = slug ? Math.max(before?.rev ?? 0, live.pages[slug]?.rev ?? 0) + 1 : 0;
       const backup = slug ? setAside(slug) : null;

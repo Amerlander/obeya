@@ -35,7 +35,7 @@ describe("the owner's language", () => {
   test('the Koordinator confirms in the language Obeya speaks, in a new session once it changed', async () => {
     let language: 'de' | 'en' = 'en';
     board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => ({ docs: [], dirs: [] }), undefined, undefined, () => language);
-    const a = board.create({ title: 'Export', x: 0, y: 0 });
+    board.create({ title: 'Export', x: 0, y: 0 });
     const k = commander();
     const first = await say(k, 'start the export', 'act', { actions: [{ do: 'start', card: 'K1' }], confirm: 'Starting “Export”.' });
     expect(first.session.spec.system).toContain('one short English sentence');

@@ -5,7 +5,7 @@ import { generic } from '../adapters/generic';
 import { BadRequest, Board } from './board';
 import { artifact, until } from './testing';
 import { Workers } from './workers';
-import { board, dir, doc, docs, eachTest, main, manual, origin, runtime, setDocs, setup, setWorkers, spaces, state, store, workers, ws } from './workers-fixture';
+import { board, dir, doc, eachTest, main, manual, runtime, setDocs, setup, setWorkers, spaces, state, store, workers, ws } from './workers-fixture';
 import { GIT, git } from './workspaces';
 
 eachTest();

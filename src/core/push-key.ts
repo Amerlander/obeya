@@ -5,7 +5,6 @@
 // reaches the app in front; a combination the shell takes for itself.
 
 export const PUSH_MODIFIERS = ['Control', 'Alt', 'Shift', 'Meta'] as const;
-export type PushModifier = (typeof PUSH_MODIFIERS)[number];
 
 const F_KEYS = Array.from({ length: 24 }, (_, i) => `F${i + 1}`);
 

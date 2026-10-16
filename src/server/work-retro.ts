@@ -168,7 +168,6 @@ export class WorkRetro {
     // the cards as tags, in the order their notes came
     const tags = new Map<string, string>();
     for (const n of notes) if (![...tags.values()].includes(n.cardId)) tags.set(`K${tags.size + 1}`, n.cardId);
-    const tagOf = (id: string) => [...tags].find(([, c]) => c === id)![0];
     const titles = new Map(notes.map((n) => [n.cardId, n.title]));
     const byCard = [...tags].map(([tag, id]) => {
       const mine = notes.filter((n) => n.cardId === id);
