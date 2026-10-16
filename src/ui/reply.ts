@@ -5,6 +5,7 @@
 import { useSyncExternalStore } from 'react';
 import type { CardEvent, TalkQuote, TalkRef } from '../core/types';
 import { draftOf, updateDraft, useDraft } from './draft';
+import { know, known } from './known';
 import { plain } from './markdown';
 import { parseQuestion } from './talk';
 
@@ -55,21 +56,13 @@ export const useReply = (draft: string): Reply | null => useDraft(draft).reply ?
 // Until the owner has replied once, a conversation shows the reply button on the latest message they
 // did not write, not only under the pointer, so they find it (`reply-new` on the conversation).
 const KNOWN = 'obeya-reply-known';
-let known = (() => {
-  try {
-    return localStorage.getItem(KNOWN) === '1';
-  } catch {
-    return false;
-  }
-})();
+let replied = known(KNOWN);
 const knownListeners = new Set<() => void>();
 
 function knowReply() {
-  if (known) return;
-  known = true;
-  try {
-    localStorage.setItem(KNOWN, '1');
-  } catch {}
+  if (replied) return;
+  replied = true;
+  know(KNOWN);
   for (const fn of knownListeners) fn();
 }
 
@@ -80,5 +73,5 @@ export const useReplyKnown = () =>
       knownListeners.add(fn);
       return () => void knownListeners.delete(fn);
     },
-    () => known,
+    () => replied,
   );

@@ -7,6 +7,7 @@ import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
 import { answerText, toggle } from './answer';
 import { ApiError, api, at, type Field, holdRestart, onCardEvent, onCardEventGone } from './api';
 import { firstOpening } from './demoSeen';
+import { know, known } from './known';
 import { Branch } from './diff';
 import { landedRef } from './parts';
 import { useQueueMove } from './queue';
@@ -117,7 +118,7 @@ export function Detail(p: Props) {
   if (item.kind === 'question' && item.thread)
     return (
       <>
-        <div className="p-kind">{[repo, t.question.kind].filter(Boolean).join(' · ')}</div>
+        <div className="p-kind">{[repo, t.kind.question].filter(Boolean).join(' · ')}</div>
         <div className="p-title">
           <Inline md={item.title} />
         </div>
@@ -908,7 +909,7 @@ function Conversation({
   const openKey = JSON.stringify(open);
   const turns = useMemo(() => (events ? talkTurns(withoutOpen(events, open), { asking, over: !working && !paused, paused }) : null), [events, asked, working, paused, openKey]);
   const byId = useMemo(() => new Map(events?.map((e) => [e.id, e])), [events]);
-  const known = useReplyKnown();
+  const replyKnown = useReplyKnown();
   if (!events || !turns) return null;
   if (hideEmpty && !turns.shown.length && !turns.pending.length) return null;
   const agent = idea ? t.author.explorer : question ? t.author.koordinator : t.author.worker;
@@ -999,7 +1000,7 @@ function Conversation({
   return (
     <>
       <h4 className="p-h">{t.talk.heading}</h4>
-      <div className={onReply && !known ? 'talk conv reply-new' : 'talk conv'} ref={box} onScroll={onScroll}>
+      <div className={onReply && !replyKnown ? 'talk conv reply-new' : 'talk conv'} ref={box} onScroll={onScroll}>
         {turns.shown.length === 0 && !working && !turns.asked && !seed && <div className="hint">{idea ? t.idea.talkEmpty : question ? t.question.empty : proposal ? t.reviseHint : t.talk.empty}</div>}
         {turns.shown.slice(0, seedAt).map(line)}
         {seed}
@@ -1505,14 +1506,6 @@ const SEEK_KEYS_KNOWN = 'obeya-seek-keys-known';
  */
 function useSeekKeys(video: RefObject<HTMLVideoElement | null>) {
   const [hint, setHint] = useState(false);
-  const known = useRef<boolean>(null);
-  if (known.current === null) {
-    try {
-      known.current = localStorage.getItem(SEEK_KEYS_KNOWN) === '1';
-    } catch {
-      known.current = false;
-    }
-  }
   const hide = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
@@ -1523,10 +1516,7 @@ function useSeekKeys(video: RefObject<HTMLVideoElement | null>) {
       const to = v.currentTime + (e.key === 'ArrowLeft' ? -SEEK_S : SEEK_S);
       v.currentTime = Math.max(0, Number.isFinite(v.duration) ? Math.min(v.duration, to) : to);
       setHint(false);
-      known.current = true;
-      try {
-        localStorage.setItem(SEEK_KEYS_KNOWN, '1');
-      } catch {}
+      know(SEEK_KEYS_KNOWN);
     };
     addEventListener('keydown', key);
     return () => {
@@ -1536,7 +1526,7 @@ function useSeekKeys(video: RefObject<HTMLVideoElement | null>) {
   }, []);
   const focused = (v: HTMLVideoElement) => {
     v.blur();
-    if (known.current) return;
+    if (known(SEEK_KEYS_KNOWN)) return;
     setHint(true);
     clearTimeout(hide.current);
     hide.current = setTimeout(() => setHint(false), 4000);
@@ -1559,13 +1549,7 @@ function useZoom(video: RefObject<HTMLVideoElement | null>) {
   const screen = useRef<HTMLDivElement>(null);
   const backdrop = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState<{ from: Box; to: Box; closing?: boolean } | null>(null);
-  const [keyKnown, setKeyKnown] = useState(() => {
-    try {
-      return localStorage.getItem(ZOOM_KEY_KNOWN) === '1';
-    } catch {
-      return false;
-    }
-  });
+  const [keyKnown, setKeyKnown] = useState(() => known(ZOOM_KEY_KNOWN));
   const boxRef = useRef(box);
   boxRef.current = box;
   const toggle = () => {
@@ -1608,9 +1592,7 @@ function useZoom(video: RefObject<HTMLVideoElement | null>) {
       e.preventDefault();
       toggleRef.current();
       setKeyKnown(true);
-      try {
-        localStorage.setItem(ZOOM_KEY_KNOWN, '1');
-      } catch {}
+      know(ZOOM_KEY_KNOWN);
     };
     addEventListener('keydown', key);
     return () => removeEventListener('keydown', key);

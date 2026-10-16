@@ -22,7 +22,8 @@ import { QueuePill } from './queue';
 import { depsOf } from './deps';
 import { collect, keep, type Kept, restore, type SideSheet, takeKept } from './keep';
 import { Sign, Wordmark } from './logo';
-import { doubleClickKnown, Help, HelpButton, helpKeyKnown, knowDoubleClick, knowHelpKey, NewCardHint } from './help';
+import { DOUBLE_CLICK_KNOWN, Help, HelpButton, HELP_KEY_KNOWN, NewCardHint } from './help';
+import { know, known } from './known';
 import { PlanDirNote, planDirBoxes, useHiddenEmptyNotes } from './planDirs';
 import { attachTo, imageFiles } from './shots';
 import { cardDraft, fieldOn, focusedDraft, keepDrafts, MIC_DRAFT, OBEYA_DRAFT, takesImages } from './draft';
@@ -262,10 +263,10 @@ function Canvas({
   const [phoneOn, setPhoneOn] = useState(false);
   const localPage = useLocalPage();
   // the bar's `?` button stays until the owner opened the legend with the key; the legend's foot says so
-  const [helpKnown, setHelpKnown] = useState(helpKeyKnown);
+  const [helpKnown, setHelpKnown] = useState(() => known(HELP_KEY_KNOWN));
   const [helpNote, setHelpNote] = useState<'button' | 'gone'>();
   // the bar's button for a new task stays until the owner created one by double-click; it only says how
-  const [dblKnown, setDblKnown] = useState(doubleClickKnown);
+  const [dblKnown, setDblKnown] = useState(() => known(DOUBLE_CLICK_KNOWN));
   const [newHintOn, setNewHintOn] = useState(false);
   const [setupOn, setSetupOn] = useState(false);
   // what is wrong in the configuration as saved, marked on its button; read when the page loads,
@@ -1052,7 +1053,7 @@ function Canvas({
     if (focusRef.current || document.elementFromPoint(e.clientX, e.clientY)?.closest('.item')) return;
     createAt(toWorld(camRef.current, e.clientX, e.clientY));
     if (!dblKnown) {
-      knowDoubleClick();
+      know(DOUBLE_CLICK_KNOWN);
       setDblKnown(true);
       setNewHintOn(false);
     }
@@ -1143,7 +1144,7 @@ function Canvas({
       setHelpNote(helpKnown ? undefined : 'gone');
       setHelpOn(true);
       if (!helpKnown) {
-        knowHelpKey();
+        know(HELP_KEY_KNOWN);
         setHelpKnown(true);
       }
       return;

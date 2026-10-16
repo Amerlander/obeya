@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom';
 import { IMAGE_TYPES, MAX_IMAGE_BYTES } from '../core/types';
 import { api, at } from './api';
 import { draftOf, dropDraft, markupOf, setMarkup, updateDraft, useDraft } from './draft';
+import { know, known } from './known';
 import { badgeOf, CLICK_PX, drawMarks, EDGE, type Mark, markOf, markSize, type Point, RED, roundedRect } from './marks';
 import { failText, t } from './strings';
 import { behindThumb, type Box, onto, ZOOM_EASE, ZOOM_MS } from './zoomBox';
@@ -302,20 +303,12 @@ function Lightbox({ src, thumb, marking, onClose }: { src: string; thumb: HTMLIm
   marksRef.current = marks;
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const [drag, setDrag] = useState<{ a: Point; b: Point; from: Point; moved: number } | null>(null);
-  const [known, setKnown] = useState(() => {
-    try {
-      return localStorage.getItem(MARKS_KNOWN) === '1';
-    } catch {
-      return false;
-    }
-  });
+  const [marksKnown, setMarksKnown] = useState(() => known(MARKS_KNOWN));
   const add = (m: Mark) => {
     setMarks((cur) => [...cur, m]);
-    if (known) return;
-    setKnown(true);
-    try {
-      localStorage.setItem(MARKS_KNOWN, '1');
-    } catch {}
+    if (marksKnown) return;
+    setMarksKnown(true);
+    know(MARKS_KNOWN);
   };
   const undo = () => setMarks((cur) => cur.slice(0, -1));
   /** Where the pointer is on the image, in its pixels. */
@@ -434,7 +427,7 @@ function Lightbox({ src, thumb, marking, onClose }: { src: string; thumb: HTMLIm
             {size && <MarkLayer marks={marks} w={size.w} h={size.h} drawing={drawing} />}
           </svg>
           <div className="lb-bar" onClick={(e) => e.stopPropagation()}>
-            {!known && <span className="lb-hint">{t.shots.markHint}</span>}
+            {!marksKnown && <span className="lb-hint">{t.shots.markHint}</span>}
             <button className="btn" title={t.shots.undoTitle} disabled={!marks.length} onClick={undo}>
               <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
                 <path d="M5.5 3 2.5 6l3 3" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />

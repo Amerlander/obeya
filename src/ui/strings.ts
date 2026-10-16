@@ -207,7 +207,6 @@ const de = {
     pick: 'Würde ich nehmen',
     pickWhy: (why: string) => `Der Agent würde so entscheiden: ${why}`,
   },
-  proposal: 'Vorschlag',
   proposedBy: (title: string) => `Vorgeschlagen vom Agenten der Aufgabe „${title}“.`,
   proposalQuestions: 'Offene Fragen',
   proposalQuestionsHint: 'Mit „Antworten“ schreibt ein Agent den Vorschlag nach deiner Wahl neu. Übernimmst du gleich, steht deine Wahl als entschieden im Text; der Rest geht als offene Frage mit.',
@@ -268,7 +267,6 @@ const de = {
     copyPath: 'Pfad kopieren',
     copied: '✓ Pfad kopiert',
   },
-  started: (title: string) => `Agent arbeitet an „${title}“.`,
   approved: 'Freigegeben.',
   approvedDirect: 'Freigegeben; geht direkt auf main.',
   approving: 'wird freigegeben …',
@@ -301,7 +299,6 @@ const de = {
     force: 'Trotzdem starten',
     dequeue: 'Aus der Warteschlange nehmen',
     forced: 'Gestartet, trotz möglicher Merge-Konflikte.',
-    dequeued: 'Aus der Warteschlange genommen.',
     earlier: 'Früher',
     later: 'Später',
     place: (n: number, of: number) => `Platz ${n} von ${of} in der Warteschlange.`,
@@ -461,7 +458,7 @@ const de = {
         .filter(Boolean)
         .join(' · '),
   },
-  demo: { question: 'Offene Frage', yourAnswer: 'Deine Antwort', kept: 'Die Demo bleibt hier abrufbar.', again: 'Die Demo der letzten Übergabe. Der Agent arbeitet wieder an der Aufgabe.',
+  demo: { question: 'Offene Frage', kept: 'Die Demo bleibt hier abrufbar.', again: 'Die Demo der letzten Übergabe. Der Agent arbeitet wieder an der Aufgabe.',
     artifact: 'HTML-Artefakt des Agenten',
     play: 'Abspielen',
     zoom: 'Größer zeigen (Z)',
@@ -524,10 +521,8 @@ const de = {
     showFolderHint: 'Öffnet den Ordner mit allen Dateien dieser Antworten',
     open: (caption: string) => (caption ? `${caption} – öffnen` : 'Öffnen'),
     download: 'Herunterladen',
-    page: 'Seite',
   },
   question: {
-    kind: 'Frage',
     reading: 'Agent liest …',
     ready: 'Agent bereit',
     count: (answers: number, files: number) =>
@@ -539,8 +534,6 @@ const de = {
     asIdeaWaits: 'Erst wenn die Antwort da ist',
     done: 'Erledigt',
     doneHint: 'Legt die Karte ins Archiv; von dort kommt sie zurück.',
-    asIdeaAck: 'Wird als Idee besprochen.',
-    doneAck: 'Ins Archiv gelegt.',
   },
   koordinator: {
     button: 'Obeya',
@@ -1098,7 +1091,6 @@ const de = {
       confirmCanvas: 'Einrichten, committen und Leinwand anlegen',
       cancel: 'Abbrechen',
       working: 'Wird eingerichtet …',
-      done: (branch: string) => `git ist eingerichtet, auf dem Branch ${branch}.`,
     },
   },
   restart: {
@@ -1512,7 +1504,6 @@ const en: Strings = {
     pick: 'I would take this',
     pickWhy: (why: string) => `The agent would decide this way: ${why}`,
   },
-  proposal: 'Proposal',
   proposedBy: (title: string) => `Proposed by the agent of the task “${title}”.`,
   proposalQuestions: 'Open questions',
   proposalQuestionsHint: 'With “Answer” an agent rewrites the proposal by your choice. If you accept it right away, your choice goes into the text as decided; the rest goes along as an open question.',
@@ -1567,7 +1558,6 @@ const en: Strings = {
     copyPath: 'Copy path',
     copied: '✓ Path copied',
   },
-  started: (title: string) => `An agent is working on “${title}”.`,
   approved: 'Approved.',
   approvedDirect: 'Approved; goes straight to main.',
   approving: 'being approved …',
@@ -1598,7 +1588,6 @@ const en: Strings = {
     force: 'Start anyway',
     dequeue: 'Take out of the queue',
     forced: 'Started, despite possible merge conflicts.',
-    dequeued: 'Taken out of the queue.',
     earlier: 'Earlier',
     later: 'Later',
     place: (n: number, of: number) => `Place ${n} of ${of} in the queue.`,
@@ -1745,7 +1734,7 @@ const en: Strings = {
         .filter(Boolean)
         .join(' · '),
   },
-  demo: { question: 'Open question', yourAnswer: 'Your answer', kept: 'The demo stays available here.', again: 'The demo of the last handover. The agent is working on the task again.',
+  demo: { question: 'Open question', kept: 'The demo stays available here.', again: 'The demo of the last handover. The agent is working on the task again.',
     artifact: 'The agent’s HTML artifact',
     play: 'Play',
     zoom: 'Show larger (Z)',
@@ -1807,10 +1796,8 @@ const en: Strings = {
     showFolderHint: 'Opens the folder with all the files of these answers',
     open: (caption: string) => (caption ? `${caption} – open` : 'Open'),
     download: 'Download',
-    page: 'Page',
   },
   question: {
-    kind: 'Question',
     reading: 'agent reading …',
     ready: 'agent ready',
     count: (answers: number, files: number) =>
@@ -1822,8 +1809,6 @@ const en: Strings = {
     asIdeaWaits: 'Once the answer is in',
     done: 'Done',
     doneHint: 'Puts the card into the archive; it can come back from there.',
-    asIdeaAck: 'Discussed as an idea.',
-    doneAck: 'Archived.',
   },
   koordinator: {
     button: 'Obeya',
@@ -2376,7 +2361,6 @@ const en: Strings = {
       confirmCanvas: 'Set up, commit and create canvas',
       cancel: 'Cancel',
       working: 'Setting up …',
-      done: (branch: string) => `git is set up, on the branch ${branch}.`,
     },
   },
   restart: {
