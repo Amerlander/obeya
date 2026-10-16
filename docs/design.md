@@ -607,7 +607,8 @@ dim while that card is open, so the card folds back into it; a click beside it o
 A project ends when every workstream in its plan doc is ticked on the default branch, or when the
 doc goes (deleted): it moves into the archive with its workstreams, which are not listed on their
 own. A workstream card still at work then (in progress, or its worker finishing after the landing)
-keeps the project on the canvas until it is done. Opened from the archive, its sheet shows,
+keeps the project on the canvas, as its doc last stood if the doc is gone, until it is done: the
+project goes into the archive once that worker is done, not at the landing. Opened from the archive, its sheet shows,
 read-only, the goal and the workstreams as the doc last stood; each workstream unfolds with its
 conversation and demo. When the same file comes back, or an open workstream is added to it, the
 project returns to its place.
@@ -690,6 +691,12 @@ Projekt“) is linked the same way.
   then a stopped card could only be started again or deleted, and it opened as a planned card nobody
   had worked on: the task in its edit field, the conversation squeezed below it.
 - **The archive drops down from the bar** (2026-10-09): until then it was a sheet on the right.
+- **No card goes into the archive while its worker finishes after the landing** (2026-10-16). Until
+  then a project whose doc went with its last workstream's landing (as docs go in Obeya's own
+  repository) went into the archive at once, its workstreams with it. Its worker, looked up only
+  among the cards on the canvas, never ended its turn: the clone stayed taken, by "a card that is
+  not on the canvas" in the Workspaces popover, and the owner could neither see nor answer it. Such
+  projects come back on the next start, their workers finish, and they go into the archive again.
 
 ## Communication
 
@@ -1536,7 +1543,8 @@ Koordinator's setting changed, as it is for another language.
 Per the repository's settings, worktrees unless they say clones. A pool of full clones leased by a card while it is
 worked on (for a repository whose tools break inside a worktree, or that runs its own app stack per
 clone), or a worktree per card (Obeya itself: any number in parallel unless the repository has
-`slots`), kept across stop and restart until the card's work has landed. Clones come from the
+`slots`), kept across stop and restart until the card's work has landed and its worker has finished
+what remains after it. Clones come from the
 repository's `clones` or `workspaces` in the configuration, or on the command line from `--workspace
 <path>` or `--clones <n>`; a repository whose configuration names clones (these, or `hosts`) works
 in clones whatever its settings say.
@@ -3614,7 +3622,9 @@ In Obeya's own repository docs still go once done, usually shortly after their p
 the archive.
 
 A plan doc that disappears ends its project: the project goes into the archive with that last state,
-and returns with its placement when the same file comes back. Known edges: a renamed doc makes a new
+and returns with its placement when the same file comes back. A workstream still at work holds it on
+the canvas as the doc last stood (`openDocs` takes the stored doc), and the end of that worker's turn
+reads the docs again, which archives it. Known edges: a renamed doc makes a new
 project and leaves the old one archived.
 
 #### Watching the plan directory

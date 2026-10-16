@@ -121,6 +121,20 @@ describe('plan docs', () => {
     expect(board.archived()[0]!.title).toBe('A');
   });
 
+  test('a workstream whose worker finishes after the landing keeps its project, as its doc last stood, once the doc is gone', () => {
+    const w2 = board.snapshot().items.find((i) => i.label === 'W2')!;
+    board.work(w2.id, { state: 'live', landed: JSON.stringify({ commit: 'abc' }), workspace: '/ws/1' });
+    docs = [];
+    board.docsChanged();
+    expect(board.snapshot().items.map((i) => i.label ?? i.title)).toEqual(['A', 'W1', 'W2', 'W3']);
+    expect(board.archived()).toEqual([]);
+    // its worker done, the docs read again
+    board.work(w2.id, { landed: null, workspace: null });
+    board.docsChanged();
+    expect(board.snapshot().items).toEqual([]);
+    expect(board.archived()[0]!.title).toBe('A');
+  });
+
   test('a doc whose work was done before Obeya first read it goes straight into the archive', () => {
     docs = [docA, { ...docB, workstreams: [ws('W1', true)] }];
     board.docsChanged();

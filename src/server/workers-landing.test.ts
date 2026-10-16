@@ -4,8 +4,9 @@ import { join } from 'node:path';
 import { generic } from '../adapters/generic';
 import { needsYou } from '../core/types';
 import { artifact, identify, until } from './testing';
+import { Board } from './board';
 import { Workers } from './workers';
-import { board, dir, doc, eachTest, main, manual, merged, origin, runtime, setDocs, setup, setWorkers, spaces, state, workers, ws } from './workers-fixture';
+import { board, dir, doc, eachTest, main, manual, merged, origin, runtime, setDocs, setup, setWorkers, spaces, state, store, workers, ws } from './workers-fixture';
 import { git } from './workspaces';
 
 eachTest();
@@ -334,6 +335,72 @@ describe('a workstream whose plan doc keeps it open after its work landed', () =
     runtime.last.emit({ type: 'idle' });
     expect(board.item(project.id)).toBeUndefined();
     expect(board.archived().map((i) => i.id)).toEqual([project.id, w.id]);
+  });
+
+  test('the last workstream lands and its doc goes: the project stays while its worker finishes, then goes into the archive', async () => {
+    const w = handOver();
+    const project = board.snapshot().items.find((i) => i.kind === 'project')!;
+    // the landing takes the done doc away
+    setDocs([]);
+    await workers.approve(w.id);
+    board.docsChanged();
+    expect(board.item(project.id)).toBeDefined();
+    expect(board.item(w.id)!.finishing).toBe(true);
+    runtime.last.emit({ type: 'idle' });
+    expect(spaces.leasedBy(w.id)).toBeNull();
+    expect(board.item(project.id)).toBeUndefined();
+    expect(board.archived().map((i) => i.id)).toEqual([project.id, w.id]);
+  });
+
+  describe('awaiting a restart', () => {
+    const restarting = (b: Board) => new Workers({ board: b, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, restartsFor: () => 'obeya' });
+    /** Lands W1 with its doc gone; its worker waits for the restart. */
+    const landWaiting = async () => {
+      setWorkers(restarting(board));
+      const w = handOver();
+      runtime.last.emit({ type: 'session', id: 'sess-1' });
+      setDocs([]);
+      await workers.approve(w.id);
+      runtime.last.call('after_restart', {});
+      runtime.last.emit({ type: 'idle' });
+      return w;
+    };
+    /** Obeya starts again, the doc still gone, and the worker resumes. */
+    const restart = () => {
+      workers.shutdown();
+      const b = new Board(store, board.canvas, () => ({ docs: [], dirs: [] }));
+      setWorkers(restarting(b));
+      workers.resumeAll();
+      return b;
+    };
+
+    test('the project stays over the restart and goes into the archive once its worker is done', async () => {
+      const w = await landWaiting();
+      const project = board.snapshot().items.find((i) => i.kind === 'project')!;
+      board.docsChanged();
+      expect(board.item(w.id)!.finishing).toBe(true);
+      const after = restart();
+      expect(after.item(project.id)).toBeDefined();
+      expect(runtime.last.spec.resume).toBe('sess-1');
+      runtime.last.emit({ type: 'idle' });
+      expect(spaces.leasedBy(w.id)).toBeNull();
+      expect(after.item(project.id)).toBeUndefined();
+      expect(after.archived().map((i) => i.id)).toEqual([project.id, w.id]);
+    });
+
+    test('a project archived while its workstream finished comes back, and goes once its worker is done', async () => {
+      const w = await landWaiting();
+      const project = board.snapshot().items.find((i) => i.kind === 'project')!;
+      // as Obeya did before: archived at the landing, its worker unseen
+      store.update(project.id, { archived_at: new Date().toISOString() });
+      const after = restart();
+      expect(after.item(project.id)).toBeDefined();
+      expect(after.item(w.id)!.finishing).toBe(true);
+      runtime.last.emit({ type: 'idle' });
+      expect(spaces.leasedBy(w.id)).toBeNull();
+      expect(after.item(project.id)).toBeUndefined();
+      expect(after.archived().map((i) => i.id)).toEqual([project.id, w.id]);
+    });
   });
 
   test('landed on main, the box still empty: once its worker is done, the card is planned again and starts for the rest', async () => {

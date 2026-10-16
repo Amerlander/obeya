@@ -1098,8 +1098,9 @@ export class Board {
 
   /**
    * The docs whose projects stand on the canvas: those with a workstream still open, and those
-   * whose every workstream is ticked while one of their cards is still at work (in progress, or its
-   * worker finishing after the landing). The others' projects have ended.
+   * whose every workstream is ticked, or whose doc is gone (as it last stood), while one of their
+   * cards is still at work (in progress, or its worker finishing after the landing). The others'
+   * projects have ended.
    */
   private openDocs(all: PlanDoc[]): PlanDoc[] {
     const busy = new Set(
@@ -1108,7 +1109,12 @@ export class Board {
         .filter((r) => r.plan_ref?.includes('#') && ((r.state && ACTIVE.includes(r.state)) || (r.landed && r.workspace)))
         .map((r) => r.plan_ref!.slice(0, r.plan_ref!.indexOf('#'))),
     );
-    return all.filter((d) => !allTicked(d) || busy.has(d.file));
+    const files = new Set(all.map((d) => d.file));
+    const gone = this.store
+      .projects(this.canvas.id)
+      .filter((r) => r.plan && busy.has(r.plan_ref!) && !files.has(r.plan_ref!))
+      .map((r) => JSON.parse(r.plan!) as PlanDoc);
+    return [...all.filter((d) => !allTicked(d) || busy.has(d.file)), ...gone];
   }
 
   /**
@@ -1518,7 +1524,8 @@ export class Board {
 
   /**
    * Keeps each doc's last state on its project. A project whose doc is gone, or whose work is done
-   * (not among the `open` docs), goes into the archive; one whose doc is back, or open again, returns to the canvas.
+   * (not among the `open` docs, which keep it while a workstream's worker finishes after its landing),
+   * goes into the archive; one whose doc is back, or open again, returns to the canvas.
    */
   private keepDocs(all: PlanDoc[], open: PlanDoc[]) {
     const byFile = new Map(all.map((d) => [d.file, d]));
@@ -1528,7 +1535,7 @@ export class Board {
       for (const r of this.store.projects(this.canvas.id)) {
         const doc = byFile.get(r.plan_ref!);
         const plan = doc ? JSON.stringify(doc) : r.plan;
-        const archived_at = doc && shown.has(doc.file) ? null : (r.archived_at ?? at);
+        const archived_at = shown.has(r.plan_ref!) ? null : (r.archived_at ?? at);
         if (r.plan !== plan || r.archived_at !== archived_at) this.store.update(r.id, { plan, archived_at });
       }
     })();
