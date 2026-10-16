@@ -511,6 +511,21 @@ above the words, with its frame as an image, and reworks the demo once instead o
 a comment is no answer to the demo report's question. On a card at work or finished, a comment with
 a place goes at once, with its place and frame.
 
+#### Earlier demos
+
+A new demo replaces the one on the card, but the card keeps the one before (`CardRow.demos`, served
+under `/api/cards/:id/demos/:n/`): a demo after feedback often shows only what changed. Once there
+is one, a line above the video says which is shown („Neueste Demo 2 von 2 · 13:37“), with ‹ and ›
+to step back and forth, and „Zur neuesten“ two or more steps back; an earlier one stands out in the
+line („Frühere Demo 1 von 2“), so it is not taken for the latest. Stepping is no sign the owner has
+finished watching (see above), and a new handover leaves them on the demo they look at. An earlier
+demo whose directory a later one was rendered into, or whose files are gone (demos are deleted to
+free space), is not offered.
+
+A comment on a place keeps the demo it is in (`Spot.demo`, the handover it came with): a click on
+it shows that demo and plays it from there, and words on a place in an earlier demo reach the
+worker as about the earlier demo video, one a later handover of its replaced.
+
 ### Approval and landing
 
 Where work lands through pull requests, the approve button reads "Freigeben (PR)", and approval
@@ -618,6 +633,9 @@ Projekt“) is linked the same way.
   there.
 - **Feedback keeps the approval** (2026-10-08). Before, feedback sent the card back to `working` and
   took the approval away until the next handover, so it waited for "Rückgängig" like a command.
+- **Earlier demos stay on the card** (2026-10-16). Until then a new demo replaced the one before for
+  good: a demo after feedback that showed only the corrected part left the owner without the
+  original, and a comment on a place in it played the new video from that time.
 - **A turn without a new demo reads „Agent hat geantwortet“** (2026-10-15). Until then the card read
   „Demo bereit“ after any answer.
 - **The demo zooms within the window** (2026-10-12): full screen was too much on a large monitor and

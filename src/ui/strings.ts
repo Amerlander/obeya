@@ -515,6 +515,12 @@ const de = {
     sendNow: 'Jetzt senden',
     sendNowHint: 'Schickt sie gleich an den Agenten, ohne das Video zu Ende zu schauen',
     unsay: 'Zurücknehmen: Der Kommentar geht nicht an den Agenten; ist dein Feld leer, steht er wieder darin',
+    /** Above the demo, once a later handover replaced one: which of the card's demos is shown. */
+    version: (i: number, n: number, latest: boolean) => `${latest ? 'Neueste Demo' : 'Frühere Demo'} ${i} von ${n}`,
+    older: 'Frühere Demo zeigen',
+    newer: 'Spätere Demo zeigen',
+    toLatest: 'Zur neuesten',
+    earlierHint: 'Diese Demo hat eine spätere Übergabe ersetzt.',
   },
   share: {
     share: 'Teilen',
@@ -1839,6 +1845,11 @@ const en: Strings = {
     sendNow: 'Send now',
     sendNowHint: 'Sends them to the agent right away, without watching the video to its end',
     unsay: 'Take back: the comment does not go to the agent; if your field is empty, it goes back into it',
+    version: (i: number, n: number, latest: boolean) => `${latest ? 'Latest demo' : 'Earlier demo'} ${i} of ${n}`,
+    older: 'Show the earlier demo',
+    newer: 'Show the later demo',
+    toLatest: 'To the latest',
+    earlierHint: 'A later handover replaced this demo.',
   },
   share: {
     share: 'Share',

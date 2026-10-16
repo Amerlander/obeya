@@ -529,6 +529,14 @@ textarea.p-body:focus { border-color: var(--muted); }
 /* the demo's own line above it: the hint where it is an earlier one, sharing on the right */
 .demo-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 16px; margin-bottom: 10px; }
 .demo-top > .hint { flex: 1 1 260px; margin: 0; }
+/* which of the card's demos is shown, once a later handover replaced one; an earlier one stands out, so it is not taken for the latest */
+.demo-versions { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; padding: 4px 6px; border-radius: 3px; background: var(--chip); font-size: 13px; }
+.demo-versions > span { font-variant-numeric: tabular-nums; }
+.demo-versions.earlier { background: color-mix(in srgb, var(--waiting) 16%, var(--chip)); }
+.demo-versions.earlier > span { font-weight: 600; }
+.demo-versions .step { border: 0; background: var(--card); color: var(--ink); width: 28px; height: 26px; border-radius: 2px; font-size: 18px; line-height: 1; cursor: pointer; box-shadow: var(--shadow); }
+.demo-versions .step:disabled { opacity: .35; cursor: default; box-shadow: none; }
+.demo-versions .link { margin-left: auto; }
 .share { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; font-size: 13px; }
 .share.wide { flex: 1 1 100%; align-items: stretch; }
 .share .btn { padding: 7px 14px; }

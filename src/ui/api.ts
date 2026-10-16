@@ -227,7 +227,7 @@ export const api = {
       ...(place ? [`place=${placeParam(place)}`] : []),
       ...(replyTo ? [`replyTo=${typeof replyTo === 'number' ? replyTo : `${replyTo.talk}.${replyTo.part}`}`] : []),
       ...(listen ? ['listen'] : []),
-      ...(spot ? [`at=${spot.at}`, ...(spot.still ? [`still=${encodeURIComponent(spot.still)}`] : [])] : []),
+      ...(spot ? [`at=${spot.at}`, ...(spot.still ? [`still=${encodeURIComponent(spot.still)}`] : []), ...(spot.demo !== undefined ? [`demo=${spot.demo}`] : [])] : []),
     ].join('&');
     let body: Blob | FormData = audio;
     if (text?.trim()) {

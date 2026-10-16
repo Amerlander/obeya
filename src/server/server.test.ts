@@ -166,6 +166,21 @@ describe('who may', () => {
     expect((await at(api(`/cards/${c.id}/demo/chart.svg`), { host: 'rebound.evil.example' })).status).toBe(421);
     rmSync(demo.dir, { recursive: true, force: true });
   });
+
+  test('a demo a later handover replaced is served beside the latest, each from its own directory', async () => {
+    const c = card();
+    const [earlier, latest] = [artifact(), artifact()];
+    writeFileSync(join(earlier.dir, 'index.html'), '<p>Vorher</p>');
+    board.work(c.id, { state: 'waiting', need: 'review', demo: JSON.stringify(latest), demos: JSON.stringify([earlier]) });
+    const page = async (path: string) => {
+      const first = await at(api(path), { 'sec-fetch-site': 'same-origin', 'sec-fetch-dest': 'iframe' }, { redirect: 'manual' });
+      return first.status === 302 ? at(first.headers.get('location')!, { 'sec-fetch-site': 'same-origin', 'sec-fetch-dest': 'iframe' }) : first;
+    };
+    expect(await (await page(`/cards/${c.id}/demos/0/index.html`)).text()).toStartWith('<p>Vorher</p>');
+    expect(await (await page(`/cards/${c.id}/demo/index.html`)).text()).toStartWith('<p>Ergebnis</p>');
+    expect((await at(api(`/cards/${c.id}/demos/1/index.html`), {})).status).toBe(404);
+    for (const d of [earlier, latest]) rmSync(d.dir, { recursive: true, force: true });
+  });
 });
 
 describe('archive', () => {
@@ -531,7 +546,9 @@ describe('voice', () => {
     whisper = () => 'und hier';
     await fetch(new URL(api(`/voice?card=${c.id}&at=12.5&still=x.jpg`), server.url), { method: 'POST', body: 'AUDIO' });
     await fetch(new URL(api(`/voice?card=${c.id}`), server.url), { method: 'POST', body: 'AUDIO' });
-    expect(told).toEqual([{ at: 83.2 }, { at: 12.5, still: 'x.jpg' }, undefined]);
+    // in an earlier demo, named by the handover it came with
+    await fetch(new URL(api(`/voice?card=${c.id}&at=3&demo=7`), server.url), { method: 'POST', body: 'AUDIO' });
+    expect(told).toEqual([{ at: 83.2 }, { at: 12.5, still: 'x.jpg' }, undefined, { at: 3, demo: 7 }]);
   });
 
   test('nothing to do is just said', async () => {

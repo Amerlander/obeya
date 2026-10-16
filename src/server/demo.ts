@@ -109,8 +109,8 @@ export function placeIn(dir: string, chapters: [number, string][], at: number): 
 }
 
 /** Serves one demo file: a video's with byte ranges so the player can seek, any file of an HTML artifact's directory. */
-export function serveDemoFile(demo: { dir: string; kind: DemoKind }, name: string, req: Request): Response {
-  if (demo.kind === 'html') return serveSandboxed(demo.dir, name, req, '/demo/', (path) => path === demoFile(demo.dir, ARTIFACT_PAGE));
+export function serveDemoFile(demo: { dir: string; kind: DemoKind }, name: string, req: Request, route = '/demo/'): Response {
+  if (demo.kind === 'html') return serveSandboxed(demo.dir, name, req, route, (path) => path === demoFile(demo.dir, ARTIFACT_PAGE));
   const dir = demo.dir;
   if (!(DEMO_FILES as readonly string[]).includes(name)) return notFound();
   const path = demoFile(dir, name);
@@ -149,10 +149,10 @@ const FILES_SECRET = crypto.getRandomValues(new Uint8Array(32));
  * sent on to `<directory>/~<key>/index.html`, so whatever it loads relative to itself carries the
  * key, which nobody can know without Obeya's API. Only an address with the key gets the header.
  *
- * `route`: where the route's file path begins (`/demo/`); `name`: the file path after it, decoded.
+ * `route`: where the route's file path begins (`/demo/`, `/demos/2/` for an earlier demo); `name`: the file path after it, decoded.
  * Returns the file path without the key, or the redirect to the address with it.
  */
-function keyed(req: Request, route: '/demo/' | '/files/', name: string): string | Response {
+function keyed(req: Request, route: string, name: string): string | Response {
   const url = new URL(req.url);
   const at = url.pathname.indexOf(route);
   if (at < 0) return notFound();
@@ -203,7 +203,7 @@ function servedFrom(req: Request): string | undefined {
  * scripts (HTML, SVG) comes in a frame of a page around it (`framed`): alone in its window a page
  * could navigate itself to another server, in the frame the page around it keeps it from that.
  */
-function serveSandboxed(dir: string, asked: string, req: Request, route: '/demo/' | '/files/', page: (path: string) => boolean, download = false): Response {
+function serveSandboxed(dir: string, asked: string, req: Request, route: string, page: (path: string) => boolean, download = false): Response {
   const name = keyed(req, route, asked);
   if (name instanceof Response) return name;
   const path = demoFile(dir, name);

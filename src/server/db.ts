@@ -42,6 +42,8 @@ export interface CardRow {
   repo: string | null;
   /** JSON: the card's latest demo (`{ kind, dir, chapters, question? }`; no `kind` is a video). */
   demo: string | null;
+  /** JSON: the demos of earlier handovers a later one replaced, the oldest first, each as `demo` was; append only. */
+  demos: string | null;
   /** When the owner took the finished card off the canvas into the archive. */
   archived_at: string | null;
   /** JSON: an idea's status and brief (`{ status, brief }`). */
@@ -348,6 +350,8 @@ export const MIGRATIONS = [
   );`,
   // Obeya's reply says it cannot do what the owner asked, or the owner asked to tell its makers: what a draft for them starts from (JSON `Wish`)
   'ALTER TABLE talk ADD COLUMN wish TEXT; ALTER TABLE events ADD COLUMN wish TEXT;',
+  // the demos of earlier handovers a later one replaced
+  'ALTER TABLE cards ADD COLUMN demos TEXT;',
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter, wish';

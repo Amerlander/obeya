@@ -21,7 +21,9 @@ import {
   type CardPatch,
   type ClonePool,
   type Decision,
+  type Demo,
   type DemoKind,
+  type EarlierDemo,
   type ErrorCode,
   type Group,
   type Idea,
@@ -133,6 +135,21 @@ const RESHARE_DISMISSED = 'reshare_dismissed';
 /** The changes since a stored page was published that show on its kind of page; none while it is not at rest. */
 export function missedBy(s: StoredShare): KnownChange[] {
   return s.url && !s.state ? missedChanges(s.version, s.shown?.kind ?? 'video', PAGE_CHANGES) : [];
+}
+
+/** A demo as a card keeps it (`CardRow.demo`, and each of `CardRow.demos`). */
+export type StoredDemo = Demo & { dir: string };
+
+const storedDemos = (r: CardRow): StoredDemo[] => (r.demos ? (JSON.parse(r.demos) as StoredDemo[]) : []);
+
+/**
+ * The card's earlier demos the owner can still go back to: their files are on disk (demos are
+ * deleted to free space) and no later demo was rendered into the same directory over them.
+ */
+function earlierDemos(r: CardRow): EarlierDemo[] {
+  const all = storedDemos(r);
+  const later = (i: number) => [...all.slice(i + 1).map((d) => d.dir), ...(r.demo ? [(JSON.parse(r.demo) as StoredDemo).dir] : [])];
+  return all.flatMap(({ dir, ...d }, n) => (!later(n).includes(dir) && existsSync(join(dir, d.kind === 'html' ? 'index.html' : 'demo.mp4')) ? [{ ...d, n }] : []));
 }
 
 /**
@@ -414,11 +431,12 @@ export class Board {
     return this.own(id);
   }
 
-  /** The directory and kind of the card's latest demo; it stays with the card after approval. */
-  demoFiles(id: string): { dir: string; kind: DemoKind } | null {
+  /** The directory and kind of the card's latest demo, or of the `n`th of its earlier ones; it stays with the card after approval. */
+  demoFiles(id: string, n?: number): { dir: string; kind: DemoKind } | null {
     const r = this.own(id);
-    if (!r.demo) return null;
-    const { dir, kind } = JSON.parse(r.demo) as { dir: string; kind: DemoKind };
+    const stored = n === undefined ? r.demo : storedDemos(r)[n];
+    if (!stored) return null;
+    const { dir, kind } = (typeof stored === 'string' ? JSON.parse(stored) : stored) as StoredDemo;
     return { dir, kind };
   }
 
@@ -1710,7 +1728,8 @@ const below = (b: Bounds, n = 0) => ({ x: b.x + 35 + n * (CARD_SIZE.task[0] + GA
 /** The fields a worker adds to a card. */
 function work(r: CardRow): Partial<Item> {
   const detail = r.detail ? (JSON.parse(r.detail) as { question?: Item['question']; summary?: string; noChange?: boolean; lands?: Item['lands']; answering?: boolean; answered?: boolean }) : {};
-  const demo = r.demo ? (({ dir: _, ...d }) => d)(JSON.parse(r.demo) as Item['demo'] & { dir: string }) : undefined;
+  const demo = r.demo ? (({ dir: _, ...d }) => d)(JSON.parse(r.demo) as StoredDemo) : undefined;
+  const earlier = demo ? earlierDemos(r) : [];
   const handed = r.need === 'review' || r.need === 'demo';
   const answering = detail.answering && handed;
   const scope = r.scope ? (JSON.parse(r.scope) as { files: string[] }).files : undefined;
@@ -1732,6 +1751,7 @@ function work(r: CardRow): Partial<Item> {
     // approved work is held for its next handover while the card is at work; on a waiting card it is landing
     ...(r.approved_at && r.state === 'waiting' ? { landing: true } : {}),
     ...(demo ? { demo } : {}),
+    ...(earlier.length ? { demos: earlier } : {}),
     ...(share ? { share } : {}),
     ...(r.from_id ? { from: r.from_id } : {}),
     ...(r.branch ? { branch: r.branch } : {}),

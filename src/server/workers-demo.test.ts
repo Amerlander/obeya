@@ -240,8 +240,8 @@ describe('handing over with a demo', () => {
     const d = demoDir();
     expect(runtime.last.call('ready_for_review', { summary: 'S', demo: demo(d) })).toContain('End your turn');
     expect(state(c.id)).toBe('waiting:demo');
-    const handover = board.events(c.id).findLast((e) => e.kind === 'review')!.id;
-    expect(board.item(c.id)!.demo).toEqual({ kind: 'video', chapters: [[0, 'Vorher'], [6, 'Nachher']], question: 'Semikolon oder Komma?', handover });
+    const { id: handover, at } = board.events(c.id).findLast((e) => e.kind === 'review')!;
+    expect(board.item(c.id)!.demo).toEqual({ kind: 'video', chapters: [[0, 'Vorher'], [6, 'Nachher']], question: 'Semikolon oder Komma?', handover, at });
     expect(board.item(c.id)!.summary).toBe('S');
     expect(board.demoFiles(c.id)).toEqual({ dir: d, kind: 'video' });
     workers.message(c.id, 'Semikolon, und bitte mit Kopfzeile.');
@@ -398,6 +398,31 @@ describe('handing over with a demo', () => {
     expect(board.item(c.id)!.demo!.chapters).toHaveLength(2);
   });
 
+  test('a new demo keeps the one it replaces for the owner to go back to, while its files are on disk', () => {
+    const c = manual();
+    workers.start(c.id);
+    const first = artifact();
+    runtime.last.call('ready_for_review', { summary: 'S', demo: first });
+    const handover = board.events(c.id).findLast((e) => e.kind === 'review')!;
+    workers.message(c.id, 'Den Button ausrichten.');
+    const second = demoDir();
+    runtime.last.call('ready_for_review', { summary: 'Ausgerichtet.', demo: demo(second, ['Nachher', 'Danach']) });
+    expect(board.item(c.id)!.demo!.chapters).toEqual([[0, 'Nachher'], [6, 'Danach']]);
+    expect(board.item(c.id)!.demos).toEqual([{ kind: 'html', chapters: [], single: true, handover: handover.id, at: handover.at, n: 0 }]);
+    expect(board.demoFiles(c.id, 0)).toEqual({ dir: first.dir, kind: 'html' });
+    expect(board.demoFiles(c.id)).toEqual({ dir: second, kind: 'video' });
+    // a handover without a new demo keeps both as they are
+    runtime.last.call('ready_for_review', { summary: 'Text geändert.' });
+    expect(board.item(c.id)!.demos).toHaveLength(1);
+    // a demo rendered again into the same directory replaced the files of the one before: nothing to go back to
+    runtime.last.call('ready_for_review', { summary: 'Neu aufgenommen.', demo: demo(second) });
+    expect(board.item(c.id)!.demos!.map((d) => d.n)).toEqual([0]);
+    // demos are deleted to free space: one whose files are gone is no longer offered, from the canvas's next change on
+    rmSync(first.dir, { recursive: true, force: true });
+    board.work(c.id, { status_line: 'Liest' });
+    expect(board.item(c.id)!.demos).toBeUndefined();
+  });
+
   test('where demos are shared, a video or an artifact comes with its page for colleagues, kept with the demo', () => {
     rmSync(dir, { recursive: true, force: true });
     setup({ ...generic, land: 'main', workspaces: 'clones', app: { run: 'bun start' }, demo: { site: { title: 'Demos', url: 'https://demos.example.dev', deploy: 'deploy {dir}' } } });
@@ -498,9 +523,10 @@ describe('comments on places in the demo video', () => {
     workers.message(c.id, 'Hier fehlt die Kopfzeile.', [], false, undefined, { at: 7.24, still: frame });
     workers.message(c.id, 'Zu schnell.', [], true, undefined, { at: 14 });
     const said = board.events(c.id).filter((e) => e.author === 'owner');
+    const demo = board.item(c.id)!.demo!.handover;
     expect(said.map((e) => e.spot)).toEqual([
-      { at: 7.2, chapter: 'Export', narration: 'Jetzt der Export.', still: frame },
-      { at: 14, chapter: 'Export', narration: 'Die Datei hat eine Kopfzeile.' },
+      { at: 7.2, chapter: 'Export', narration: 'Jetzt der Export.', still: frame, demo },
+      { at: 14, chapter: 'Export', narration: 'Die Datei hat eine Kopfzeile.', demo },
     ]);
     // the worker hears nothing yet, and the card is still the owner's
     expect(runtime.last.inbox).toHaveLength(n);
@@ -608,6 +634,27 @@ describe('comments on places in the demo video', () => {
     expect(told.filter((m) => m.includes('Etwas kleiner.'))).toHaveLength(1);
     expect(told.at(-1)).toContain('The owner approved your work.');
     expect(told.at(-1)).toContain('Before approving, the owner watched your demo video. A comment on places in your demo video:\n\n[Demo video at 0:01, chapter „Liste“, narration: „Die Liste.“]\nEtwas kleiner.\n\nThey approved the work as it is all the same');
+  });
+
+  test('one on a demo a later handover replaced is placed in that demo, and the worker hears which', () => {
+    const c = waiting();
+    const first = board.events(c.id).findLast((e) => e.kind === 'review')!.id;
+    const d = join(dir, 'demo-2');
+    mkdirSync(d, { recursive: true });
+    writeFileSync(join(d, 'demo.mp4'), 'x');
+    writeFileSync(join(d, 'captions.vtt'), 'WEBVTT\n\n00:00:00.350 --> 00:00:04.000\nNur die Zeile.\n');
+    runtime.last.call('ready_for_review', { summary: 'Nur die Zeile.', demo: { dir: d, chapters: ['Zeile'] } });
+    const second = board.events(c.id).findLast((e) => e.kind === 'review')!.id;
+    board.work(c.id, { state: 'working', need: null });
+    workers.message(c.id, 'Hier war es noch falsch.', [], false, undefined, { at: 7, demo: first });
+    expect(board.events(c.id).at(-1)!.spot).toEqual({ at: 7, chapter: 'Export', narration: 'Jetzt der Export.', demo: first, earlier: true });
+    expect(runtime.last.inbox.at(-1)).toContain('[Earlier demo video, one a later handover of yours replaced, at 0:07, chapter „Export“, narration: „Jetzt der Export.“]\nHier war es noch falsch.');
+    // one on the card's demo names it too, for a click on it once a later handover replaced that one as well
+    runtime.last.emit({ type: 'idle' });
+    board.work(c.id, { state: 'working', need: null });
+    workers.message(c.id, 'Gut so.', [], false, undefined, { at: 1 });
+    expect(board.events(c.id).at(-1)!.spot).toEqual({ at: 1, chapter: 'Zeile', narration: 'Nur die Zeile.', demo: second });
+    expect(runtime.last.inbox.at(-1)).toContain('[Demo video at 0:01, chapter „Zeile“');
   });
 
   test('while the worker works, one goes to it at once, with its place and frame', () => {

@@ -206,6 +206,11 @@ export interface Item {
   landing?: true;
   /** The demo, when `need` is `demo`; its files are served under `/api/cards/:id/demo/`. */
   demo?: Demo;
+  /**
+   * The demos of earlier handovers a later one replaced, the oldest first, as long as their files
+   * are still on disk; each one's files are served under `/api/cards/:id/demos/:n/`.
+   */
+  demos?: EarlierDemo[];
   /** The demo's page for colleagues, once the owner shared it (or is about to). */
   share?: Share;
   /** The card it comes from: a proposal's source, a prototype's idea, or the card a follow-up follows up on. */
@@ -497,11 +502,16 @@ export interface Demo {
   answer?: string;
   /** The handover event it came with: a later handover may keep the demo, and its question stays with the first. */
   handover?: number;
+  /** When that handover was. */
+  at?: string;
   /** The page it is shared on, for colleagues who have never seen Obeya: written by the worker at handover, or later from its summary. */
   page?: DemoPage;
   /** An HTML artifact that is its `index.html` alone: it also goes out as one HTML file. */
   single?: true;
 }
+
+/** A demo a later handover replaced: `n` is its place among the card's earlier demos, for its files. */
+export type EarlierDemo = Demo & { n: number };
 
 /** Which of the demo's chapters plays at `at` seconds (the first before any starts); a seek lands a little before a chapter's start. */
 export const chapterAt = (chapters: Demo['chapters'], at: number) => chapters.reduce((cur, [start], i) => (start <= at + 0.05 ? i : cur), 0);
@@ -595,10 +605,14 @@ export interface Spot {
   narration?: string;
   /** The frame there, taken in the browser (an image id like a screenshot's). */
   still?: string;
+  /** The demo it is in, by the handover it came with (`Demo.handover`): the card's demo then, or an earlier one the owner went back to. */
+  demo?: number;
+  /** It is in a demo a later handover replaced. */
+  earlier?: true;
 }
 
 /** A place in the demo video as the browser sends it with the owner's words: Obeya adds chapter and narration. */
-export type SpotInput = Pick<Spot, 'at' | 'still'>;
+export type SpotInput = Pick<Spot, 'at' | 'still' | 'demo'>;
 
 export interface CanvasInfo {
   id: string;

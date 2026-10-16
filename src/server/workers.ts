@@ -10,7 +10,7 @@ import { MESSAGES, type Messages, type Pause } from '../core/messages';
 import { basename } from 'node:path';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
 import { answering, askable, type BackgroundTask, pausable, type CardLanding, type DemoKind, type DemoPage, formatQuestion, handedOver, type Item, type Mock, ownWords, pickedAnswer, type Question, type RepoSettings, type RestartReason, type Spot, type SpotInput, started } from '../core/types';
-import { BadRequest, type Board, replyNote } from './board';
+import { BadRequest, type Board, replyNote, type StoredDemo } from './board';
 import { type Asked, decisionLog, toQuestion, withPick } from './advisor';
 import { checkArtifact, DEMO_SKILL, DEMO_SKILL_FILE, demoSkillName, OBEYA_PLUGIN, placeIn, readChapters } from './demo';
 import { artifactFiles } from './demo-page';
@@ -23,6 +23,7 @@ import { runAppCommand } from './app-command';
 import { readingShared } from '../adapters';
 import { branchName, gitStepsSync, type Landed, shortageOf, together, WorkspaceError, type Workspaces } from './workspaces';
 import type { PrState, Shipped } from './board';
+import type { CardRow } from './db';
 import { parsePrUrl } from './forge';
 import { clip, messageOf } from '../core/text';
 
@@ -97,7 +98,7 @@ interface HeldComment {
 
 /** Where in the demo video the owner's words are, as the worker reads it above them. */
 export const spotNote = (spot: Spot) => {
-  return `[Demo video at ${mmss(spot.at)}${spot.chapter ? `, chapter „${spot.chapter}“` : ''}${spot.narration ? `, narration: „${spot.narration}“` : ''}]`;
+  return `[${spot.earlier ? 'Earlier demo video, one a later handover of yours replaced,' : 'Demo video'} at ${mmss(spot.at)}${spot.chapter ? `, chapter „${spot.chapter}“` : ''}${spot.narration ? `, narration: „${spot.narration}“` : ''}]`;
 };
 
 /** What is stored while landed work's worker finishes (`CardRow.landed`). */
@@ -655,12 +656,34 @@ export class Workers {
     return `${place ? `${spotNote(place)}\n` : ''}${replyNote(replyTo ? this.o.board.quoted(cardId, replyTo) : undefined, 'worker')}${text}${still.length ? `\n\nThe frame at that place in the video is shown below (file: ${still[0]}).` : ''}${imageNote(images)}`;
   }
 
-  /** A place in the card's demo video, with the chapter there and what the narration says. */
+  /**
+   * A place in the card's demo video, with the chapter there and what the narration says: in the
+   * card's demo, or in an earlier one the owner went back to (`spot.demo`).
+   */
   private place(cardId: string, spot: SpotInput): Spot {
     const at = Math.max(0, Math.round(spot.at * 10) / 10);
-    const demo = this.o.board.row(cardId).demo;
-    const d = demo ? (JSON.parse(demo) as { dir: string; kind: DemoKind; chapters: [number, string][] }) : undefined;
-    return { at, ...(d && d.kind !== 'html' ? placeIn(d.dir, d.chapters, at) : {}), ...(spot.still ? { still: spot.still } : {}) };
+    const row = this.o.board.row(cardId);
+    const current = row.demo ? (JSON.parse(row.demo) as StoredDemo) : undefined;
+    const earlier = spot.demo !== undefined && spot.demo !== current?.handover ? (JSON.parse(row.demos ?? '[]') as StoredDemo[]).findLast((d) => d.handover === spot.demo) : undefined;
+    const d = earlier ?? current;
+    return {
+      at,
+      ...(d && d.kind !== 'html' ? placeIn(d.dir, d.chapters, at) : {}),
+      ...(spot.still ? { still: spot.still } : {}),
+      ...(d?.handover !== undefined ? { demo: d.handover } : {}),
+      ...(earlier ? { earlier: true as const } : {}),
+    };
+  }
+
+  /**
+   * The card's earlier demos with the one a new handover replaces added, as `CardRow.demos` keeps
+   * them. A demo from before handovers named theirs gets the last one before now: its time, and the
+   * places in it the owner's comments are about.
+   */
+  private earlier(cardId: string, row: CardRow): string {
+    const replaced = JSON.parse(row.demo!) as StoredDemo;
+    const e = replaced.handover === undefined ? this.o.board.events(cardId).findLast((e) => e.kind === 'review') : undefined;
+    return JSON.stringify([...(JSON.parse(row.demos ?? '[]') as StoredDemo[]), { ...replaced, ...(e ? { handover: e.id, at: e.at } : {}) }]);
   }
 
   /** The file of the frame at a place in the video, if it has one. */
@@ -2110,7 +2133,9 @@ export class Workers {
             const own = this.landingOf(cardId).own;
             const e = this.o.board.log(cardId, 'review', 'worker', s);
             // the demo report's question goes with the handover it came with, also once a later one keeps the demo
-            if (demoJson) demoJson = JSON.stringify({ ...(JSON.parse(demoJson) as object), handover: e.id });
+            if (demoJson) demoJson = JSON.stringify({ ...(JSON.parse(demoJson) as object), handover: e.id, at: e.at });
+            // the demo it replaces stays with the card, for the owner to go back to
+            const demos = demoJson && row.demo ? this.earlier(cardId, row) : undefined;
             // approved work does not wait for the owner again: it stays with Obeya until its turn has ended
             this.o.board.work(cardId, {
               // the worker's last status line is about the work it hands over: it would show again once the card is at work
@@ -2118,6 +2143,7 @@ export class Workers {
               // approving work that changes nothing makes the card done, which the owner sees before approving
               detail: JSON.stringify({ summary: report, ...(this.o.workspaces.hasWork(cardId) ? (own ? { lands: own } : {}) : { noChange: true }), ...(answered && !approved ? { answered: true } : {}) }),
               ...(demoJson ? { demo: demoJson } : {}),
+              ...(demos ? { demos } : {}),
             });
             const card = this.o.board.item(cardId);
             if (card?.prototypeOf) this.o.onPrototype?.(card, report, demoJson);

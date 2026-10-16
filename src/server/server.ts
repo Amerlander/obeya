@@ -537,6 +537,20 @@ export function serve(
           }
         },
       },
+      // a demo a later handover replaced, which the owner went back to
+      '/api/c/:canvas/cards/:id/demos/:n/*': {
+        GET: (req) => {
+          try {
+            const n = Number(req.params.n);
+            const demo = Number.isInteger(n) && n >= 0 ? byId.get(req.params.canvas)?.board.demoFiles(req.params.id, n) : null;
+            const route = `/demos/${n}/`;
+            const file = decodeURIComponent(new URL(req.url).pathname.split(route).slice(1).join(route));
+            return demo ? serveDemoFile(demo, file, req, route) : notFound();
+          } catch {
+            return notFound();
+          }
+        },
+      },
       // "Make it a card": a looked-up thread moves onto a Question card
       '/api/c/:canvas/threads/:thread/card': { POST: on((c, req) => c.answers.toCard(Number(req.params.thread))) },
       // a file a looked-up answer comes with; `?download` to save it
@@ -627,9 +641,10 @@ export function serve(
           }
           // what stood in the field goes first; nothing heard sends nothing, the field keeps it
           const words = text && typed?.trim() ? `${typed.trim()}${/\n/.test(typed.trim()) ? '\n\n' : ' '}${text}` : text;
-          // `?at=<seconds>&still=<image>`: said about that place in the open card's demo video
+          // `?at=<seconds>&still=<image>&demo=<handover>`: said about that place in the open card's demo video (`demo`: an earlier one)
           const at = params.get('at');
-          const spot = at !== null && at !== '' ? { at: Number(at), ...(params.get('still') ? { still: params.get('still')! } : {}) } : undefined;
+          const demo = Number(params.get('demo') || NaN);
+          const spot = at !== null && at !== '' ? { at: Number(at), ...(params.get('still') ? { still: params.get('still')! } : {}), ...(Number.isInteger(demo) ? { demo } : {}) } : undefined;
           return heard(c, words, focusOf(req, c), images, { ...(replyTo ? { replyTo } : {}), ...(spot ? { spot } : {}) });
         })),
       },

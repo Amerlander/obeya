@@ -60,7 +60,9 @@
 // several plan docs "docs/plan/x.md#W1"), which exist already. Then its fields are written straight
 // into the database:
 // state, need, statusLine, summary, question, demo (`kind` defaults to video), queue (`behind` by key; `since` defaults to
-// now), scope (files), branch, createdAgo, archivedAgo, events ([{ kind, author, text, ago?, mocks? }]; an idea's reply with `mocks` needs code that has them),
+// now), scope (files), branch, createdAgo, archivedAgo, events ([{ kind, author, text, ago?, mocks?, spot? }]; an idea's reply with `mocks` needs code that has them;
+// with events of kind `review`, the demos in `row.demos` and then `demo` go with those handovers in order, and a `spot` (a comment's
+// place in a demo video, `{ at, chapter?, demo? }`) names its demo by its place in that order; earlier demos need code that has them),
 // workspace (true: the card holds the next free clone, for a repository whose settings say clones; with
 // `branch` checked out there, holding a commit; for one that works in worktrees, `branch` is
 // required and the card gets a worktree of its own on it), prototypeOf (the key of the idea it is a prototype of),
@@ -99,6 +101,8 @@ import { findTailscale, type ServeEntry, Tailscale } from '../src/server/tailsca
 import { opt } from './common';
 import { answers, waitUp } from './wait-up';
 
+type StageEvent = NonNullable<StageCard['events']>[number];
+
 interface StageCard {
   key?: string;
   title?: string;
@@ -124,7 +128,7 @@ interface StageCard {
   prototypeOf?: string;
   createdAgo?: string;
   archivedAgo?: string;
-  events?: { kind: string; author: string; text: string; ago?: string; mocks?: { title: string; html: string }[] }[];
+  events?: { kind: string; author: string; text: string; ago?: string; mocks?: { title: string; html: string }[]; spot?: { at: number; chapter?: string; demo?: number } }[];
   row?: Record<string, unknown>;
 }
 
@@ -414,16 +418,34 @@ for (const [i, c] of stage.cards.entries()) {
       id,
       ...Object.fromEntries(keys.map((k) => [k, typeof row[k] === 'object' && row[k] !== null ? JSON.stringify(row[k]) : (row[k] as string | number | null)])),
     } as Record<string, string | number | null>);
-  for (const e of c.events ?? [])
+  const reviews: { id: number; at: string }[] = [];
+  const spots: [number, NonNullable<StageEvent['spot']>][] = [];
+  for (const e of c.events ?? []) {
     // only code that has mocks has their column
-    db.query(`INSERT INTO events (card_id, at, kind, author, text${e.mocks ? ', mocks' : ''}) VALUES ($c, $at, $kind, $author, $text${e.mocks ? ', $mocks' : ''})`).run({
+    const at = ago(e.ago ?? '0s');
+    const { lastInsertRowid } = db.query(`INSERT INTO events (card_id, at, kind, author, text${e.mocks ? ', mocks' : ''}) VALUES ($c, $at, $kind, $author, $text${e.mocks ? ', $mocks' : ''})`).run({
       c: id,
-      at: ago(e.ago ?? '0s'),
+      at,
       kind: e.kind,
       author: e.author,
       text: e.text,
       ...(e.mocks ? { mocks: JSON.stringify(e.mocks) } : {}),
     });
+    if (e.kind === 'review') reviews.push({ id: Number(lastInsertRowid), at });
+    if (e.spot) spots.push([Number(lastInsertRowid), e.spot]);
+  }
+  // the earlier demos (`row.demos`) and then the demo go with the handovers among the events, in order; a spot's `demo` names one of them by its place in that order
+  if (reviews.length && (c.demo || c.row?.demos)) {
+    const earlier = (c.row?.demos ?? []) as Record<string, unknown>[];
+    const handed = (d: Record<string, unknown>, i: number) => (reviews[i] ? { ...d, kind: d.kind ?? 'video', handover: reviews[i].id, at: reviews[i].at } : d);
+    db.query('UPDATE cards SET demos = $demos, demo = $demo WHERE id = $id').run({
+      id,
+      demos: earlier.length ? JSON.stringify(earlier.map(handed)) : null,
+      demo: c.demo ? JSON.stringify(handed({ kind: 'video', ...c.demo }, earlier.length)) : null,
+    });
+  }
+  for (const [event, { demo, ...spot }] of spots)
+    db.query('UPDATE events SET spot = $spot WHERE id = $id').run({ id: event, spot: JSON.stringify({ ...spot, ...(demo !== undefined && reviews[demo] ? { demo: reviews[demo].id } : {}) }) });
 }
 const prefIds: Record<string, number> = {};
 for (const [i, p] of (stage.preferences ?? []).entries()) {

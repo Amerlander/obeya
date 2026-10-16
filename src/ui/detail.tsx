@@ -1,7 +1,7 @@
 // The unfolded card: what it is, what its worker does, and what the owner decides.
 
 import { Fragment, type ReactNode, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { agentListens, askable, type BackgroundTask, buildableOn, type CardAction, chapterAt, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, EXPORT_HTML_MAX, finished, finishedArchivable, finishingUp, handedOver, type Item, type Mock, type NextStep, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, type Spot, started, stopped, stoppedArchivable } from '../core/types';
+import { agentListens, askable, type BackgroundTask, buildableOn, type CardAction, chapterAt, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, type EarlierDemo, EXPORT_HTML_MAX, finished, finishedArchivable, finishingUp, handedOver, type Item, type Mock, type NextStep, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, type Spot, started, stopped, stoppedArchivable } from '../core/types';
 import { mockPage } from '../core/frame';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
 import { answerText, toggle } from './answer';
@@ -21,8 +21,8 @@ import { useFitHeight } from './fitHeight';
 import { type Box, onto, ZOOM_EASE, ZOOM_MS, zoomBox } from './zoomBox';
 import { AttachButton, imageUrl, ShotStrip, Shots, useShotInput } from './shots';
 import { useStickToEnd } from './stickToEnd';
-import { dismissPlace, type Place, seekTo, usePlace, videoOf, watch } from './spot';
-import { becomesLabel, clock as time, errorText, failText, stateLabel, t } from './strings';
+import { dismissPlace, type Place, seekTo, showsVersions, usePlace, videoOf, watch } from './spot';
+import { becomesLabel, clock as time, errorText, failText, shortDay, stateLabel, t } from './strings';
 import { agentWorks, demoHandover, koordinatorReads, ownerField, parseQuestion, talkAlone, talkTurns, type Turn, withoutOpen, worked as isWorked } from './talk';
 import { PageChangeList } from './page-changes';
 import { WishReplyLink } from './wish';
@@ -1303,12 +1303,13 @@ type Run = (fn: () => Promise<void>, done: ActDone) => Promise<void>;
 
 /**
  * The narrated demo with its chapters and the report beside it. `comments`: the card's agent hears the
- * owner, whose words may be about a place in the video.
+ * owner, whose words may be about a place in the video. Once a later handover replaced a demo, the
+ * owner may step back to it and forth again; a comment on a place in it takes them there too.
  */
 function DemoView({
   item,
   summary = '',
-  demo,
+  demo: latest,
   children,
   top,
   autoplay = true,
@@ -1328,7 +1329,16 @@ function DemoView({
   const artifact = useRef<HTMLIFrameElement>(null);
   const artifactHeight = useReportedHeight(artifact, ARTIFACT_CAP);
   const [now, setNow] = useState(0);
-  const src = (f: string) => at(`/cards/${cardId}/demo/${f}`);
+  // the earlier demo shown (its `n`), or the latest; a new handover leaves the owner where they are
+  const [shownN, setShownN] = useState<number | null>(null);
+  const earlier = item.demos ?? [];
+  const demo = earlier.find((d) => d.n === shownN) ?? latest;
+  const all = [...earlier, latest];
+  const shownAt = all.indexOf(demo);
+  const src = (f: string) => at(demo === latest ? `/cards/${cardId}/demo/${f}` : `/cards/${cardId}/demos/${(demo as EarlierDemo).n}/${f}`);
+  // where the demo shown next plays from, when a comment on a place in it took the owner there
+  const playFrom = useRef<number | null>(null);
+  const show = (d: Demo) => setShownN(d === latest ? null : (d as EarlierDemo).n);
   // start once the card has unfolded, like the mock, the first time only; a demo kept on a finished card waits to be played.
   // A page out of sight (a tab in the background, an agent's browser) does not start it: nobody would see it, only hear it
   const [autostart] = useState(() => autoplay && demo.kind !== 'html' && !document.hidden && firstOpening(localStorage, cardId, demo));
@@ -1342,12 +1352,64 @@ function DemoView({
   useEffect(() => () => holdRestart('video', null), []);
   const zoom = useZoom(video);
   const seek = useSeekKeys(video);
-  const watching = useWatching(cardId, video, comments && demo.kind !== 'html' ? demo.chapters : null);
+  const watching = useWatching(cardId, video, comments && demo.kind !== 'html' ? demo.chapters : null, demo.handover);
   const current = chapterAt(demo.chapters, now);
+  useEffect(() => {
+    if (!earlier.length) return;
+    return showsVersions({
+      cardId,
+      shown: demo.handover,
+      show: (handover, from) => {
+        const d = all.find((d) => d.handover === handover);
+        if (!d) return false;
+        playFrom.current = from;
+        show(d);
+        return true;
+      },
+    });
+  }, [demo, latest, item.demos]);
+  // another demo shown: it starts from the beginning, or from the place a comment took the owner to
+  const firstShown = useRef(true);
+  useEffect(() => {
+    if (firstShown.current) return void (firstShown.current = false);
+    setNow(0);
+    const v = video.current;
+    const from = playFrom.current;
+    playFrom.current = null;
+    if (!v) return;
+    if (from === null) return setStarted(false);
+    const go = () => {
+      v.currentTime = from;
+      v.play().catch(() => setStarted(false));
+    };
+    if (v.readyState >= 1) go();
+    else v.addEventListener('loadedmetadata', go, { once: true });
+    v.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    return () => v.removeEventListener('loadedmetadata', go);
+  }, [shownN]);
   return (
     <>
       <div className="demo-view">
         {top}
+        {earlier.length > 0 && (
+          <div className={demo === latest ? 'demo-versions' : 'demo-versions earlier'} title={demo === latest ? undefined : t.demo.earlierHint}>
+            <button className="step" disabled={shownAt === 0} title={t.demo.older} aria-label={t.demo.older} onClick={() => show(all[shownAt - 1]!)}>
+              ‹
+            </button>
+            <span>
+              {t.demo.version(shownAt + 1, all.length, demo === latest)}
+              {demo.at && ` · ${handedAt(demo.at)}`}
+            </span>
+            <button className="step" disabled={demo === latest} title={t.demo.newer} aria-label={t.demo.newer} onClick={() => show(all[shownAt + 1]!)}>
+              ›
+            </button>
+            {shownAt < all.length - 2 && (
+              <button className="link" onClick={() => show(latest)}>
+                {t.demo.toLatest}
+              </button>
+            )}
+          </div>
+        )}
         {demo.kind === 'html' ? (
           // the worker's page: scripts run, but in an origin of its own, away from Obeya's API. Once
           // the frame has the page's height it does not scroll: a page whose images grow with its
@@ -1469,6 +1531,9 @@ function DemoView({
   );
 }
 
+/** When a demo was handed over: the time of day, with the day when it was not today. */
+const handedAt = (at: string) => (new Date(at).toDateString() === new Date().toDateString() ? time(at) : `${shortDay(at)}, ${time(at)}`);
+
 /** A video standing this long has been watched to its end, as far as the comments on it are concerned. */
 const STOOD_MS = 3 * 60_000;
 
@@ -1478,13 +1543,18 @@ const STOOD_MS = 3 * 60_000;
  * they watch, go to the agent once they have finished: the video ended, stood for a few minutes, or
  * the card closed. Words without a place, and an approval, take them too (on the server).
  */
-function useWatching(cardId: string, video: RefObject<HTMLVideoElement | null>, chapters: [number, string][] | null) {
+function useWatching(cardId: string, video: RefObject<HTMLVideoElement | null>, chapters: [number, string][] | null, demo?: number) {
   const on = !!chapters;
   const release = () => void api.act(cardId, { action: 'release' }).catch(() => {});
+  // going to another of the card's demos is no sign the owner has finished watching
   useEffect(() => {
     const v = video.current;
     if (!on || !v) return;
-    const unwatch = watch(cardId, v, chapters);
+    return watch(cardId, v, chapters, demo);
+  }, [on, demo]);
+  useEffect(() => {
+    const v = video.current;
+    if (!on || !v) return;
     const typed = (e: Event) => {
       if (!v.paused && e.target instanceof HTMLTextAreaElement && e.target.closest('#panel .split-talk .composer')) v.pause();
     };
@@ -1498,7 +1568,6 @@ function useWatching(cardId: string, video: RefObject<HTMLVideoElement | null>, 
     v.addEventListener('play', played);
     addEventListener('input', typed, true);
     return () => {
-      unwatch();
       clearTimeout(stood);
       v.removeEventListener('pause', paused);
       v.removeEventListener('play', played);
@@ -2063,7 +2132,7 @@ function PlaceChip({ cardId, place }: { cardId: string; place: Place }) {
 /** Above the owner's words in the conversation: the place in the demo video they are about; a click plays the video from there. */
 function SpotLink({ cardId, spot }: { cardId: string; spot: Spot }) {
   return (
-    <button className="spot" title={t.demo.toPlace} onClick={() => seekTo(cardId, spot.at)}>
+    <button className="spot" title={t.demo.toPlace} onClick={() => seekTo(cardId, spot.at, spot.demo)}>
       {spot.still && <img src={imageUrl(spot.still)} alt="" loading="lazy" />}
       <span>
         ▶ {mmss(spot.at)}
