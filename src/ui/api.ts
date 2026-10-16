@@ -69,10 +69,28 @@ export const at = (path: string) => `/api/c/${encodeURIComponent(canvasId)}${pat
 export const answerFile = (thread: number, name: string, download = false) =>
   at(`/threads/${thread}/files/${name.split('/').map(encodeURIComponent).join('/')}${download ? '?download' : ''}`);
 
-type Where = { card: string } | { project: string } | null;
+/** What a command is said about: the open card, the open project, or neither. */
+export type Where = { card: string } | { project: string } | null;
 /** The field on a card words were typed into, which tells the Koordinator what they were meant as. */
 export type Field = 'note' | 'answer' | 'feedback' | 'demo' | 'discuss' | 'revise';
-type HeardReply = { confirm: string; token?: string; undoMs?: number; quiet?: boolean; unheard?: boolean; text?: string };
+
+/** What Obeya made of a command. */
+export interface Heard {
+  confirm: string;
+  token?: string;
+  /** How long the command still waits for "Rückgängig". */
+  undoMs?: number;
+  /** Said to the open card's agent: the card shows it, so there is nothing to confirm. */
+  quiet?: boolean;
+  /** Nothing was heard: the screenshots shown with it wait for the next recording. */
+  unheard?: boolean;
+  /** The words heard. */
+  text?: string;
+}
+/** How long "Rückgängig" shows: until shortly before the command stops waiting. */
+export const undoShownMs = (undoMs: number) => Math.max(0, undoMs - 400);
+/** How long a confirmation stays: 7 s, unless its undo window is longer (above the microphone and in the app's panel alike). */
+export const confirmShownMs = (undoMs = 0) => Math.max(7000, undoMs + 1500);
 
 export const api = {
   canvases: () => call<CanvasInfo[]>('GET', '/api/canvases'),
@@ -213,15 +231,15 @@ export const api = {
     }
     const res = await fetch(at(`/voice${query(where)}${q && (where ? '&' : '?')}${q}`), { method: 'POST', body });
     if (!res.ok) throw new Error(`voice: ${res.status}`);
-    return (await res.json()) as HeardReply;
+    return (await res.json()) as Heard;
   },
   /** The owner started speaking (or typing a command): Obeya gets ready to read it. */
   warmVoice: () => fetch(at('/voice/warm'), { method: 'POST' }).catch(() => {}),
   /** The same, typed; `field`: the field of the open card it was typed into. */
   command: (text: string, where: Where, { images, field, replyTo, spot, place }: { images?: string[]; field?: Field; replyTo?: number | TalkRef; spot?: SpotInput; place?: Place } = {}) =>
-    call<HeardReply>('POST', at(`/command${query(where)}${place ? `${where ? '&' : '?'}place=${placeParam(place)}` : ''}`), { text, ...(images?.length ? { images } : {}), ...(field ? { field } : {}), ...(replyTo ? { replyTo } : {}), ...(spot ? { spot } : {}) }),
+    call<Heard>('POST', at(`/command${query(where)}${place ? `${where ? '&' : '?'}place=${placeParam(place)}` : ''}`), { text, ...(images?.length ? { images } : {}), ...(field ? { field } : {}), ...(replyTo ? { replyTo } : {}), ...(spot ? { spot } : {}) }),
   /** A typed request to the Koordinator of another canvas, about nothing in view there. */
-  commandOn: (canvas: string, text: string) => call<HeardReply>('POST', `/api/c/${encodeURIComponent(canvas)}/command`, { text }),
+  commandOn: (canvas: string, text: string) => call<Heard>('POST', `/api/c/${encodeURIComponent(canvas)}/command`, { text }),
   undo: (token: string) => call<{ undone: boolean }>('POST', at('/command/undo'), { token }),
   /** A rule of the owner's, active at once, or with `target` one for that repository's CLAUDE.md. */
   addPreference: (text: string, target?: string) => call<void>('POST', at('/preferences'), { text, ...(target ? { target } : {}) }),

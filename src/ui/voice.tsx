@@ -9,7 +9,7 @@
 
 import { createContext, useEffect, useRef, useState } from 'react';
 import type { Place } from '../core/layout';
-import { api, holdRestart } from './api';
+import { api, confirmShownMs, type Heard, holdRestart, undoShownMs, type Where } from './api';
 import { beginDictation, dictate, draftOf, focusedDraft, MIC_DRAFT, takesImages, updateDraft, useDraft, useFieldOn, useFocusedDraft } from './draft';
 import { type Recording, record } from './recorder';
 import { AttachButton, ShotStrip, useShotInput } from './shots';
@@ -20,20 +20,10 @@ import { failText, t } from './strings';
 /** Starts a recording, for a text field's microphone and Space held in it; null where nobody listens. */
 export const HoldToTalk = createContext<(() => void) | null>(null);
 
-export interface Heard {
-  confirm: string;
-  token?: string;
-  /** How long the command still waits for "Rückgängig". */
-  undoMs?: number;
-  /** Said to the open card's agent: the card shows it, so there is nothing to confirm. */
-  quiet?: boolean;
-  /** Nothing was heard: the screenshots shown with it wait for the next recording. */
-  unheard?: boolean;
-}
-
-export type Where = { card: string } | { project: string } | null;
-
 type Phase = 'idle' | 'listening';
+
+/** Space let go sooner is a tap, which plays or pauses the demo video: push-to-talk takes no shorter recording. */
+export const TAP_MS = 350;
 
 /** Below this peak a working microphone delivers nothing, not even room noise (the sidecar's threshold too). */
 const QUIET_DBFS = -60;
@@ -114,7 +104,7 @@ export function usePushToTalk(
     }
     if (held.current !== pressed) {
       // let go before the microphone was open: nothing was recorded, and a recording started now would run on unheld
-      if (held.current === null && performance.now() - pressed >= 350) onHeard({ confirm: t.voice.notReady });
+      if (held.current === null && performance.now() - pressed >= TAP_MS) onHeard({ confirm: t.voice.notReady });
       return;
     }
     void m.ctx.resume();
@@ -159,9 +149,9 @@ export function usePushToTalk(
     setPhase('idle');
     setWriting((n) => n + 1);
     void r.recording.stop().then(async (audio) => {
-      if (r.into) return into(r.into, r.target, length < 350 ? null : audio);
+      if (r.into) return into(r.into, r.target, length < TAP_MS ? null : audio);
       // a tap is not a command
-      if (length < 350) return;
+      if (length < TAP_MS) return;
       // what stands in the field goes out with the words and leaves it; nothing heard, it comes back
       const key = field(r.target);
       const { text, images } = draftOf(key);
@@ -186,7 +176,7 @@ export function usePushToTalk(
   async function into(key: string, target: Where, audio: Blob | null) {
     if (!audio) return updateDraft(key, { dictation: '' });
     updateDraft(key, { dictation: 'writing' });
-    let h: Heard & { text?: string };
+    let h: Heard;
     try {
       h = await api.voice(audio, target, { listen: true });
     } catch (e) {
@@ -220,9 +210,6 @@ export interface Told {
   undo?: boolean;
 }
 
-/** How long a confirmation stays, unless its undo window is longer. */
-const SHOWN_MS = 7000;
-
 /**
  * Commands spoken or typed, each with its own line from sending to its confirmation; one that went
  * out quietly (to the open card's agent) leaves no line. The server reads them one after the other.
@@ -239,8 +226,8 @@ export function useTold(onHeard: (h: Heard) => void) {
     if (h.quiet) return update(id, () => null);
     const undo = !!(h.token && h.undoMs);
     update(id, (x) => ({ ...x, heard: h, undo }));
-    if (undo) setTimeout(() => update(id, (x) => ({ ...x, undo: false })), Math.max(0, h.undoMs! - 400));
-    setTimeout(() => update(id, () => null), Math.max(SHOWN_MS, (h.undoMs ?? 0) + 1500));
+    if (undo) setTimeout(() => update(id, (x) => ({ ...x, undo: false })), undoShownMs(h.undoMs!));
+    setTimeout(() => update(id, () => null), confirmShownMs(h.undoMs));
   }
 
   async function tell(pending: string | null, card: Told['card'], request: () => Promise<Heard>): Promise<Heard> {

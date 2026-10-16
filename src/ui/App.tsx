@@ -10,7 +10,7 @@ import { besideSheet, BOTTOM, type Cam, camFor, centreOn, chase, dragLimit, edge
 import { plain } from './markdown';
 import { type ActDone, Detail, type Pending } from './detail';
 import { Cards } from './message';
-import type { Field } from './api';
+import type { Field, Heard, Where } from './api';
 import { replyOn, setReply } from './reply';
 import { ArchivePill } from './archive';
 import { useBarFit } from './barFit';
@@ -27,7 +27,7 @@ import { know, known } from './known';
 import { PlanDirNote, planDirBoxes, useHiddenEmptyNotes } from './planDirs';
 import { attachTo, imageFiles } from './shots';
 import { cardDraft, fieldOn, focusedDraft, keepDrafts, MIC_DRAFT, OBEYA_DRAFT, takesImages } from './draft';
-import { type Heard, HoldToTalk, PushToTalk, SPACE_SHOWS_MS, ToldList, usePushToTalk, useTold, type Where } from './voice';
+import { HoldToTalk, PushToTalk, SPACE_SHOWS_MS, TAP_MS, ToldList, usePushToTalk, useTold } from './voice';
 import { sent, take, videoOf } from './spot';
 import { CanvasPill, CardView, DepLinks, Edges, Links, Minimap, OldBunPill, ProjectView, RestartPill, Sheet, UpdatePill, WorkspacesPill } from './parts';
 import { clampWidth, loadWidths, saveWidths, SHEET_W, type SheetWidths, widthsIn } from './sheetWidth';
@@ -75,8 +75,6 @@ type Pos = { x: number; y: number };
 // opening a card takes FLY_MS + UNFOLD_MS (300 ms) and closing the same: fast, yet still a visible move
 const FLY_MS = 130;
 const UNFOLD_MS = 170;
-/** Space let go sooner is a tap, which plays or pauses the demo video; push-to-talk takes no shorter recording either. */
-const TAP_MS = 350;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** What `get` returns once it returns something, within `ms`. */
 async function soon<T>(get: () => T | undefined, ms = 3000): Promise<T | undefined> {

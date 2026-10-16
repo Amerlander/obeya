@@ -4,23 +4,11 @@
 // (app/src/ptt.rs) records and sends and calls `window.obeyaPanel`; the panel has the shell fit
 // the window to its lines (`panel_fit`), hiding it when none are left.
 
-import { FALLBACK_LANGUAGE, languageOf } from '../core/locale';
-import { api } from './api';
-import { setLanguage, t } from './strings';
-import { loadTheme } from './theme';
-import type { Heard } from './voice';
+import { confirmShownMs, type Heard, undoShownMs } from './api';
+import { t } from './strings';
+import { loadLanguageAndTheme, loadTheme } from './theme';
 
-const [language] = await Promise.all([
-  api.language().then(
-    (l) => l.language,
-    () => languageOf(navigator.language) ?? FALLBACK_LANGUAGE,
-  ),
-  loadTheme(),
-]);
-setLanguage(language);
-
-/** How long a confirmation stays, unless its undo window is longer (as above the microphone). */
-const SHOWN_MS = 7000;
+await loadLanguageAndTheme();
 
 interface Line {
   el: HTMLDivElement;
@@ -96,7 +84,7 @@ const panel = {
     put(id, 'reading', span('what', t.voice.reading(title ? `„${title}“` : t.voice.koordinator)));
   },
   /** What Obeya made of recording `id` on `canvas`. */
-  heard(id: number, canvas: string, h: Heard & { text?: string }) {
+  heard(id: number, canvas: string, h: Heard) {
     const what = document.createElement('span');
     what.className = 'what';
     if (h.text) what.append(span('heard', `„${h.text}“`));
@@ -114,15 +102,15 @@ const panel = {
         else what.lastChild!.textContent = res ? t.voice.tooLate : t.offlineError;
         fit();
       };
-      l.timers.push(setTimeout(() => (button.remove(), fit()), Math.max(0, h.undoMs - 400)));
+      l.timers.push(setTimeout(() => (button.remove(), fit()), undoShownMs(h.undoMs)));
       return l;
     })();
-    line.timers.push(setTimeout(() => drop(id), Math.max(SHOWN_MS, (h.undoMs ?? 0) + 1500)));
+    line.timers.push(setTimeout(() => drop(id), confirmShownMs(h.undoMs)));
   },
   /** Recording `id` did not reach Obeya. */
   failed(id: number) {
     const line = put(id, '', span('what', t.voice.failed));
-    line.timers.push(setTimeout(() => drop(id), SHOWN_MS));
+    line.timers.push(setTimeout(() => drop(id), confirmShownMs()));
   },
 };
 

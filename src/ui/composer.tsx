@@ -12,15 +12,13 @@ import { Quote } from './message';
 import { type Reply, replyOn, setReply, useReply } from './reply';
 import { AttachButton, ShotStrip, useShotInput } from './shots';
 import { t } from './strings';
-import { HoldToTalk, MicIcon } from './voice';
+import { HoldToTalk, MicIcon, TAP_MS } from './voice';
 
 /**
  * How long Space stays down before it is held to speak rather than typed. Typing presses it for
  * well under this, and a key pressed meanwhile (fast typing overlaps keys) makes it a typed space at once.
  */
 const HOLD_MS = 250;
-/** A recording shorter than this is a tap, not a command (`voice.tsx`): Space held only that long was typed after all. */
-const TAP_MS = 350;
 
 /**
  * What the owner writes to an agent or to Obeya; screenshots are pasted, dropped or picked, unless
