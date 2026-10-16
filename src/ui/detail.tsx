@@ -897,6 +897,9 @@ function Conversation({
   const proposal = item.state === 'proposal';
   const asking = item.state === 'waiting' && item.need === 'question' ? item.question : undefined;
   const working = !past && agentWorks(item);
+  // the card waits on the owner's answer (its worker's question, its demo report's): the question
+  // stands, also while the worker's background work keeps its turn open
+  const waits = item.state === 'waiting' && !!item.question;
   // a paused agent's steps stay where they were, in its bubble standing still
   const paused = !past && !!item.paused;
   const asked = JSON.stringify(item.idea?.questions ?? asking ?? []);
@@ -982,6 +985,18 @@ function Conversation({
       ? turns.shown.findIndex((x, i) => i >= seedAt && x.e.id > stopped)
       : turns.shown.findLastIndex((x) => x.e.kind === 'state' && x.e.author === 'owner');
   const stillAt = after >= seedAt ? after : turns.shown.length;
+  // how the worker came to the question it waits on, or the steps no message came after
+  const askedSteps = (steps: CardEvent[]) =>
+    steps.length > 0 && (
+      <div className={`msg by-${idea ? 'explorer' : 'worker'}`}>
+        {turns.asked && (
+          <div className="who">
+            {agent} · {t.talk.question} <span className="t">{time(turns.asked.e.at)}</span>
+          </div>
+        )}
+        <Steps steps={steps} />
+      </div>
+    );
   return (
     <>
       <h4 className="p-h">{t.talk.heading}</h4>
@@ -993,20 +1008,18 @@ function Conversation({
         {paused && bubble}
         {turns.shown.slice(stillAt).map(line)}
         {working ? (
-          bubble
+          <>
+            {/* the question it waits on, and below it the background work the worker still runs */}
+            {waits && (
+              <>
+                {turns.asked && askedSteps(turns.asked.steps)}
+                {questions}
+              </>
+            )}
+            {bubble}
+          </>
         ) : (
-          !paused &&
-          (turns.pending.length > 0 || (turns.asked?.steps.length ?? 0) > 0) && (
-            <div className={`msg by-${idea ? 'explorer' : 'worker'}`}>
-              {/* how the worker came to the question it waits on */}
-              {turns.asked && (
-                <div className="who">
-                  {agent} · {t.talk.question} <span className="t">{time(turns.asked.e.at)}</span>
-                </div>
-              )}
-              <Steps steps={[...(turns.asked?.steps ?? []), ...turns.pending]} />
-            </div>
-          )
+          !paused && (turns.pending.length > 0 || (turns.asked?.steps.length ?? 0) > 0) && askedSteps([...(turns.asked?.steps ?? []), ...turns.pending])
         )}
         {/* what the agent has not read yet stands below its work, until it reads it; comments on the
             demo video held back, until they are sent */}

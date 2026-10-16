@@ -855,7 +855,9 @@ The agent's words are kept whole up to 12 000 characters, as an idea agent's rep
 `reply` is cut at 2000). While the worker works, also while it takes in the owner's words on its
 handover, the conversation ends with it at work and its latest step, cut to its first line and 140
 characters, whole while the mouse is over it; the question the card waits on (its own, or the one in
-its demo report) stands at the end with its options, and the card's one field under it; a question a
+its demo report) stands at the end with its options, and the card's one field under it. A worker
+that asks while its background work runs (a test suite, a review it started) is still in its turn:
+its question stands with its options, and the bubble at work below it; a question a
 note took back stays, without options, „Durch deinen Hinweis erledigt“. A card that was an idea
 continues the idea's conversation in the same list.
 
@@ -1088,6 +1090,10 @@ show on their cards as before. Owner-facing text from agents is in the owner's l
   like a pause, and was the only way to halt an agent, losing its session. Rejected: pausing at the
   next safe point, as for a restart: the owner pauses an agent that goes the wrong way, and waiting
   for its step to end lets it go on doing so.
+- **A question stands while background work keeps the turn open** (2026-10-16). Until then a card
+  whose worker asked while its background work ran read „Frage an dich“ in its header, but the
+  conversation showed only the agent at work: the question and its options stood only once nothing
+  ran.
 - **Refused and confirmed tool calls reach the card** (2026-10-09). Before, Obeya dropped the SDK's
   denials, and an `ask` rule refused the call silently, as there was nobody to ask.
 - **Closing words fold under the message they repeat** (2026-10-09). Until then they were dropped
