@@ -46,6 +46,43 @@ export interface Served {
   onChange?(fn: () => void): () => void;
 }
 
+/**
+ * A demo's narration clip, in the voice Obeya holds loaded across renders (narration.ts). It writes a
+ * file, so only as JSON, which a page elsewhere cannot send without asking first. `remote`: for a
+ * render on another machine, whose clip comes back in the reply and is written nowhere here.
+ */
+function clipRoute(narration: NarrationHost, remote = false) {
+  return async (req: Request, srv: Bun.Server<unknown>) => {
+    if (!req.headers.get('content-type')?.startsWith('application/json')) return Response.json({ code: 'invalid', error: 'JSON only' }, { status: 415 });
+    const request = parseClipRequest(await req.json().catch(() => null));
+    if (typeof request === 'string') return Response.json({ code: 'invalid', error: request }, { status: 400 });
+    if (remote && !request.inline) return Response.json({ code: 'invalid', error: 'inline must be true from another machine' }, { status: 400 });
+    // the clip waits its turn behind other renders' clips, maybe behind loading the model
+    srv.timeout(req, 0);
+    const reply = await narration.clip(request);
+    if (!request.inline || !('ok' in reply)) return Response.json(reply);
+    const file = Bun.file(request.out);
+    const wav = Buffer.from(await file.arrayBuffer()).toString('base64');
+    await file.delete();
+    return Response.json({ ...reply, wav });
+  };
+}
+
+/**
+ * What a worker on another machine reaches through the port forwarded to it (design: Hosts): the
+ * narration clips and nothing else of Obeya's, as whoever is on that machine reaches the port too.
+ */
+export function serveNarration(narration: NarrationHost) {
+  const clip = clipRoute(narration, true);
+  return Bun.serve({
+    port: 0,
+    hostname: '127.0.0.1',
+    idleTimeout: 120,
+    fetch: (req, srv) =>
+      refusal(req, LOCAL_HOSTS) ?? (req.method === 'POST' && new URL(req.url).pathname === '/api/narration/clip' ? clip(req, srv) : new Response('Not found', { status: 404 })),
+  });
+}
+
 export function serve(
   served: Served | CanvasRuntime[],
   { transcriber, setup }: Voice,
@@ -355,24 +392,8 @@ export function serve(
           );
         },
       },
-      // a demo's narration clip, in the voice Obeya holds loaded across renders (narration.ts); it
-      // writes a file, so only as JSON, which a page elsewhere cannot send without asking first
-      '/api/narration/clip': {
-        POST: async (req, srv) => {
-          if (!narration) return new Response('Not found', { status: 404 });
-          if (!req.headers.get('content-type')?.startsWith('application/json')) return Response.json({ code: 'invalid', error: 'JSON only' }, { status: 415 });
-          const request = parseClipRequest(await req.json().catch(() => null));
-          if (typeof request === 'string') return Response.json({ code: 'invalid', error: request }, { status: 400 });
-          // the clip waits its turn behind other renders' clips, maybe behind loading the model
-          srv.timeout(req, 0);
-          const reply = await narration.clip(request);
-          if (!request.inline || !('ok' in reply)) return Response.json(reply);
-          const file = Bun.file(request.out);
-          const wav = Buffer.from(await file.arrayBuffer()).toString('base64');
-          await file.delete();
-          return Response.json({ ...reply, wav });
-        },
-      },
+      // a demo's narration clip, in the voice Obeya holds loaded across renders (narration.ts)
+      '/api/narration/clip': { POST: narration ? clipRoute(narration) : () => new Response('Not found', { status: 404 }) },
       // „Für alle ins Repository übernehmen“: a repository's settings for this machine into its .obeya/settings.json
       '/api/config/share-settings': { POST: async (req) => (config ? handle(async () => config.shareSettings(await req.json())) : new Response('Not found', { status: 404 })) },
       // what the configuration amounts to and what is wrong with it: as saved, or a draft as the owner edits it

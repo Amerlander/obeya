@@ -186,7 +186,10 @@ describe('a site Obeya keeps', () => {
     expect(readFileSync(join(at, 'artifact/data/chart.js'), 'utf8')).toBe('draw()');
     expect(readFileSync(join(at, 'artifact/index.html'), 'utf8')).toContain('obeyaHeight');
     const html = readFileSync(join(at, 'index.html'), 'utf8');
-    expect(html).toContain('<iframe src="artifact/index.html" sandbox="allow-scripts');
+    expect(html).toContain('<iframe src="artifact/index.html" sandbox="allow-scripts allow-popups"');
+    // alone in its window it stays in the frame: its own file would run in the site's origin
+    expect(html).toContain('<a href="?alone" target="_blank"');
+    expect(html).not.toContain('escape-sandbox');
     expect(html).not.toContain('<video');
     expect(overview()).toContain('Titel auswertung-abc123');
     // published again unchanged it keeps its date; an artifact without its page is refused

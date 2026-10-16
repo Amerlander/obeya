@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { artifactFiles } from './demo-page';
 import { checkPlugin, DEMO_SKILL, DEMO_SKILL_FILE, demoSkillName, OBEYA_PLUGIN, readChapters, serveDemoFile } from './demo';
 
 const dir = mkdtempSync(join(tmpdir(), 'obeya-demo-'));
@@ -67,6 +68,23 @@ describe('serveDemoFile for an HTML artifact', () => {
     expect(get('../demo.mp4').status).toBe(404);
     expect(get('img').status).toBe(404);
     expect(get('nope.html').status).toBe(404);
+  });
+
+  test('a link to a file outside the directory is no file of it, for the video or the artifact', async () => {
+    const outside = join(dir, 'secret.txt');
+    writeFileSync(outside, 'secret');
+    symlinkSync(outside, join(html, 'k'));
+    symlinkSync(dir, join(html, 'up'));
+    symlinkSync(join(html, 'img', 'a.svg'), join(html, 'logo.svg'));
+    expect(get('k').status).toBe(404);
+    expect(get('up/secret.txt').status).toBe(404);
+    // a link within the directory is one of its files
+    expect(await get('logo.svg').text()).toContain('<svg');
+    expect(artifactFiles(html)).toEqual(['img/a.svg', 'index.html', 'logo.svg']);
+    const video = join(dir, 'linked');
+    mkdirSync(video);
+    symlinkSync(outside, join(video, 'demo.mp4'));
+    expect(serveDemoFile({ dir: video, kind: 'video' }, 'demo.mp4', new Request('http://x/')).status).toBe(404);
   });
 
   test('its page and what that loads relative to itself may be read in CORS mode; without the key, nothing is', () => {

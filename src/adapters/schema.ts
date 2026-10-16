@@ -17,7 +17,12 @@ const site = z
     title: z.string(),
     url: z.string(),
     deploy: z.string(),
-    env: z.string().min(1).optional(),
+    // under Obeya's home: the settings may come from the repository, and the file's values go to `url`
+    env: z
+      .string()
+      .min(1)
+      .refine((f) => !/^([\\/~]|[A-Za-z]:)/.test(f) && !f.split(/[\\/]/).includes('..'), 'a path relative to Obeya’s home, without ..')
+      .optional(),
     headers: z.record(z.string(), z.string()).optional(),
     maxFile: z.number().int().positive().optional(),
     language: z.enum(['de', 'en']).optional(),

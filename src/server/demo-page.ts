@@ -3,8 +3,8 @@
 // site is built from it (site.ts), and a repository without one exports it (share.ts): as a ZIP
 // with the video or the artifact beside the page, or as one HTML file with everything inside.
 
-import { type Dirent, existsSync, readdirSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { type Dirent, existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
+import { join, resolve, sep } from 'node:path';
 import { withHeightReport } from '../core/frame';
 
 export { withHeightReport };
@@ -126,6 +126,10 @@ export const PAGE_STYLE = `
   ul.demos span { color: var(--muted); font-size: 14px; }
   .artifact { margin-top: 22px; background: #fff; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
   .artifact iframe { display: block; width: 100%; height: 80vh; border: 0; }
+  body.alone main { max-width: none; padding: 0; }
+  body.alone main > :not(.artifact) { display: none; }
+  body.alone .artifact { margin: 0; border: 0; border-radius: 0; }
+  body.alone .artifact iframe { height: 100vh; }
   .links { margin-top: 10px; font-size: 14px; display: flex; gap: 18px; }
 `;
 
@@ -181,20 +185,22 @@ export interface ArtifactPageParts {
 
 /**
  * The artifact runs in a sandboxed frame, an origin of its own, so its scripts reach neither the
- * page nor the site. The frame grows to the artifact's height where the artifact says it
- * (`withHeightReport`); without that it stays at 80 % of the window and scrolls. Opened from disk
- * (`disk`), the frame keeps the page's origin: there is no site to keep it from, and Chrome loads
- * nothing beside a sandboxed page from disk, not even its stylesheets and images.
+ * page nor the site; a window it opens stays sandboxed too, and "In eigenem Fenster öffnen" is this
+ * page with the frame alone (`?alone`), not the artifact's own file, which would run in the site's
+ * origin. The frame grows to the artifact's height where the artifact says it (`withHeightReport`);
+ * without that it stays at 80 % of the window and scrolls. Opened from disk (`disk`), the frame
+ * keeps the page's origin: there is no site to keep it from, and Chrome loads nothing beside a
+ * sandboxed page from disk, not even its stylesheets and images.
  */
 export function artifactPageHtml(p: ArtifactPageParts): string {
   const language = p.language ?? 'de';
   const w = PAGE_WORDS[language];
   const frame =
     'src' in p.artifact
-      ? `<iframe ${p.disk ? '' : `src="${esc(p.artifact.src)}" `}sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" title="${esc(p.title)}"></iframe>`
-      : `<iframe srcdoc="${esc(withHeightReport(p.artifact.html))}" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" title="${esc(p.title)}"></iframe>`;
+      ? `<iframe ${p.disk ? '' : `src="${esc(p.artifact.src)}" `}sandbox="allow-scripts allow-popups" title="${esc(p.title)}"></iframe>`
+      : `<iframe srcdoc="${esc(withHeightReport(p.artifact.html))}" sandbox="allow-scripts allow-popups" title="${esc(p.title)}"></iframe>`;
   const links = [
-    'src' in p.artifact ? `<a href="${esc(p.artifact.src)}" target="_blank" rel="noopener">${w.ownWindow}</a>` : '',
+    'src' in p.artifact ? `<a href="?alone" target="_blank" rel="noopener">${w.ownWindow}</a>` : '',
     p.pr ? `<a href="${esc(p.pr)}">${w.pr}</a>` : '',
   ].filter(Boolean);
   return `<!doctype html>
@@ -215,7 +221,9 @@ ${links.length ? `<div class="links">${links.join('')}</div>\n` : ''}<div class=
   f.src = ${JSON.stringify(p.artifact.src)};`
       : ''
   }
-  let steps = 0;
+  const alone = new URLSearchParams(location.search).has('alone');
+  if (alone) document.body.classList.add('alone');
+  let steps = alone ? 30 : 0;
   addEventListener('message', (e) => {
     const h = e.source === f.contentWindow && e.data && e.data.obeyaHeight;
     if (typeof h === 'number' && h > 0 && steps++ < 30) f.style.height = Math.min(Math.ceil(h), 30000) + 'px';
@@ -265,12 +273,34 @@ ${'vtt' in p.captions ? `<script type="text/vtt" id="captions">${inScript(p.capt
 /** An HTML artifact's directory on a page, beside the page's `index.html`. */
 export const ARTIFACT_DIR = 'artifact';
 
-/** The files of an HTML artifact's directory, relative to it, without hidden ones. */
+/**
+ * A file of a demo's directory by its path there: the file itself where it is one and lies inside the
+ * directory, else null. A link to a file outside counts as outside: the worker made the directory,
+ * and what is in it is served, published and passed on.
+ */
+export function demoFile(dir: string, name: string): string | null {
+  try {
+    const root = realpathSync(dir);
+    const path = realpathSync(resolve(root, name));
+    return path.startsWith(root + sep) && statSync(path).isFile() ? path : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The files of an HTML artifact's directory, relative to it, without hidden ones; links only to a file inside it. */
 export function artifactFiles(dir: string): string[] {
   if (!existsSync(dir)) return [];
-  return (readdirSync(dir, { recursive: true, withFileTypes: true }) as Dirent[])
-    .filter((e) => e.isFile())
-    .map((e) => relative(dir, join(e.parentPath, e.name)).split('\\').join('/'))
-    .filter((f) => !f.split('/').some((p) => p.startsWith('.')))
-    .sort();
+  const out: string[] = [];
+  // its own walk: one that follows a link to a directory may walk the whole disk
+  const walk = (sub: string) => {
+    for (const e of readdirSync(join(dir, sub), { withFileTypes: true }) as Dirent[]) {
+      if (e.name.startsWith('.')) continue;
+      const f = sub ? `${sub}/${e.name}` : e.name;
+      if (e.isDirectory()) walk(f);
+      else if (e.isFile() || (e.isSymbolicLink() && demoFile(dir, f))) out.push(f);
+    }
+  };
+  walk('');
+  return out.sort();
 }

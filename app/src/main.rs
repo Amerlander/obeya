@@ -153,8 +153,13 @@ fn show(app: &AppHandle) {
   }
 }
 
+/// A link out of Obeya, in the system's browser. Other schemes stay closed: the system would hand
+/// `file:`, `smb:` or an app's own scheme to whatever program claims it, and a worker's page may link anywhere.
 fn open_in_browser(url: &str) {
-  let _ = tauri_plugin_opener::open_url(url, None::<&str>);
+  let scheme = url.split(':').next().unwrap_or("").to_ascii_lowercase();
+  if matches!(scheme.as_str(), "http" | "https" | "mailto") {
+    let _ = tauri_plugin_opener::open_url(url, None::<&str>);
+  }
 }
 
 /// The server's log: what it printed this run, beside the one before.

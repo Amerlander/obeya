@@ -175,6 +175,9 @@ test('a cloud service is tested with the sentence, then hears every recording; a
     await setup.useCloud({ preset: 'openai', key: 'k', baseUrl: 'http://gpu.local:8000/v1/', model: 'large-v3' });
     expect(sent.at(-1)!.url).toBe('http://gpu.local:8000/v1/audio/transcriptions');
     expect((await setup.view()).items[0]!.found).toBe('gpu.local:8000');
+    // the stored key goes to no other endpoint unless typed for it
+    await expect(setup.useCloud({ preset: 'openai', baseUrl: 'https://elsewhere.example/v1', model: 'large-v3' })).rejects.toThrow('an API key');
+    expect(sent.at(-1)!.url).toBe('http://gpu.local:8000/v1/audio/transcriptions');
 
     // back to this machine; the service stays set up
     const back = await setup.useLocal();

@@ -10,7 +10,7 @@ import type { SpawnOptions } from '@anthropic-ai/claude-agent-sdk';
 import { generic } from '../adapters/generic';
 import { Board } from './board';
 import { Store } from './db';
-import { hostName, onHost, RECHECK_DOWN_MS, registerHost, remote, sessionFiles, type SshHost } from './hosts';
+import { HostError, hostName, onHost, RECHECK_DOWN_MS, registerHost, remote, sessionFiles, type SshHost } from './hosts';
 import { runAppCommand } from './app-command';
 import { FakeRuntime, fakeSsh, gitRepo, identify, until } from './testing';
 import { Workers } from './workers';
@@ -76,6 +76,11 @@ describe('a workspace on a host', () => {
     await host.copyFrom(join(dir, 'there', 'demo'), copy);
     expect(readFileSync(join(copy, 'demo.mp4'), 'utf8')).toBe('video');
     await expect(host.copyFrom(join(dir, 'nothing'), copy)).rejects.toThrow();
+    // the worker names the directory: none leads out of the copies, whose place a copy takes
+    expect(() => host.localCopy('/../../..')).toThrow(HostError);
+    expect(() => host.localCopy('/tmp/./x')).toThrow(HostError);
+    await expect(host.copyFrom(join(dir, 'there', 'demo'), join(dir, 'home'))).rejects.toThrow(HostError);
+    expect(existsSync(join(dir, 'home'))).toBe(true);
   });
 });
 
@@ -99,7 +104,7 @@ describe('a session on a host', () => {
     const s = spawnSession({
       command: 'sh',
       args: ['-c', 'echo "$PWD|$FOO|$OBEYA_HOME|$CLAUDE_CODE_OAUTH_TOKEN|$OBEYA_URL|$1|$OBEYA_HOLDS_VOICE"; cat "$1/skills/SKILL.md"; echo; read line; echo "got $line"', 'x', join(dir, 'plugin')],
-      env: { FOO: "it's", OBEYA_URL: 'http://localhost:4417' },
+      env: { FOO: "it's", OBEYA_URL: 'http://localhost:4417', OBEYA_NARRATION_URL: 'http://127.0.0.1:4418' },
     });
     s.p.stdin.write('ping\n');
     expect(await s.exited).toBe(0);

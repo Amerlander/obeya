@@ -8,9 +8,9 @@ import { type ChildProcess, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { type AddressInfo, createServer } from 'node:net';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, dirname, join, relative } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { PassThrough } from 'node:stream';
 import type { SpawnedProcess, SpawnOptions } from '@anthropic-ai/claude-agent-sdk';
 import { resource } from './resources';
@@ -66,6 +66,25 @@ function exports(env: Record<string, string | undefined>): string {
     .join(' ');
 }
 
+/**
+ * The directory of the shared connections' sockets: this user's alone, as whoever reaches a socket
+ * uses its connection (and gets what goes over it, the tokens on stdin). Short, under `/tmp`, as a
+ * socket's path has a limit of about 100 bytes; null when another user holds it, and each command
+ * then connects on its own.
+ */
+function socketDir(): string | null {
+  const dir = `/tmp/obeya-ssh-${process.getuid?.() ?? 0}`;
+  try {
+    mkdirSync(dir, { mode: 0o700 });
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'EEXIST') return null;
+  }
+  const st = lstatSync(dir);
+  if (!st.isDirectory() || st.uid !== process.getuid?.()) return null;
+  if ((st.mode & 0o077) !== 0) chmodSync(dir, 0o700);
+  return dir;
+}
+
 export interface HostOptions {
   name: string;
   /** What `ssh` connects to: `user@machine`, or a name from `~/.ssh/config`. */
@@ -96,7 +115,8 @@ export class SshHost {
 
   /** `ssh`'s options: no prompts, a connection that fails fast and notices a drop, one connection shared where the platform can (`own`: a connection of its own). */
   private options(own = false): string[] {
-    const shared = own || process.platform === 'win32' ? [] : ['-o', 'ControlMaster=auto', '-o', `ControlPath=/tmp/obeya-ssh-%C`, '-o', 'ControlPersist=300'];
+    const sockets = own || process.platform === 'win32' ? null : socketDir();
+    const shared = sockets ? ['-o', 'ControlMaster=auto', '-o', `ControlPath=${sockets}/%C`, '-o', 'ControlPersist=300'] : [];
     return ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=3', ...shared, '-T'];
   }
 
@@ -222,6 +242,8 @@ export class SshHost {
 
   /** Copies the directory `from` there into `to` here, replacing what was here. */
   async copyFrom(from: string, to: string): Promise<void> {
+    // it replaces what is at `to`: only ever a copy of this host's
+    if (!resolve(to).startsWith(resolve(this.copies()) + sep)) throw new HostError(`${to} is no place for a copy of ${this.name}'s files`);
     rmSync(to, { recursive: true, force: true });
     mkdirSync(to, { recursive: true });
     const p = Bun.spawn(this.argv(['tar', '-C', from, '-cf', '-', '.']), { stdout: 'pipe', stderr: 'pipe' });
@@ -280,9 +302,20 @@ export class SshHost {
     return file;
   }
 
-  /** A host directory's copy here, where the server serves and shares it from: under Obeya's home, by host and path. */
+  /**
+   * A host directory's copy here, where the server serves and shares it from: under Obeya's home, by
+   * host and path. A path with `.` or `..` in it has none: the worker names it, and the copy replaces
+   * whatever is at its place here.
+   */
   localCopy(path: string): string {
-    return join(this.o.home, 'hosts', this.name, ...path.split('/').filter(Boolean));
+    const parts = path.split('/').filter(Boolean);
+    if (!parts.length || parts.some((p) => p === '.' || p === '..')) throw new HostError(`${path} is no directory path without . and ..`);
+    return join(this.copies(), ...parts);
+  }
+
+  /** Where the copies of the host's directories are here. */
+  private copies(): string {
+    return join(this.o.home, 'hosts', this.name);
   }
 
   /**
@@ -367,8 +400,8 @@ export class SshHost {
    * `ssh` in `cwd` once the host has `files` (paths of those directories among its arguments
    * become their copies there), its environment (the SDK's and the session's, Obeya's directory
    * there as `OBEYA_HOME`, the logins) read from stdin first. A host that cannot be made ready
-   * ends the process as a lost connection would. With `OBEYA_URL` in the environment, a port
-   * there is forwarded to Obeya's here, for a demo's narration. `onExit` hears the exit code of
+   * ends the process as a lost connection would. With `OBEYA_NARRATION_URL` in the environment, a
+   * port there is forwarded to it, Obeya's narration alone, as `OBEYA_URL` there. `onExit` hears the exit code of
    * `ssh` (`LOST`: the connection failed or dropped).
    */
   session(o: { cwd: string; files: HostFiles; onExit?: (code: number | null) => void }): (s: SpawnOptions) => SpawnedProcess {
@@ -381,7 +414,8 @@ export class SshHost {
           const hit = local.find(([, from]) => a === from);
           return hit ? `${dir}/${hit[0]}` : a;
         });
-        const here = s.env.OBEYA_URL ? Number(new URL(s.env.OBEYA_URL).port) : 0;
+        // only the narration's port: whoever is on that machine reaches the forward too
+        const here = s.env.OBEYA_NARRATION_URL ? Number(new URL(s.env.OBEYA_NARRATION_URL).port) : 0;
         // a port of its own per session, so that sessions ending do not take another's forward along
         const there = here ? 30_000 + Math.floor(Math.random() * 30_000) : 0;
         // a session cut off by a dropped connection may still run there: the one that resumes it ends it first
@@ -394,7 +428,8 @@ export class SshHost {
         });
         const child = spawn(argv[0]!, argv.slice(1), { stdio: ['pipe', 'pipe', 'pipe'] });
         // with Obeya reachable, a voice it holds loaded narrates from Obeya's machine (OBEYA_HOLDS_VOICE: no need to install it here)
-        const env = { ...s.env, OBEYA_HOME: dir, ...(here ? { OBEYA_URL: `http://127.0.0.1:${there}`, OBEYA_HOLDS_VOICE: '1' } : {}), ...(token ? { CLAUDE_CODE_OAUTH_TOKEN: token } : {}) };
+        const { OBEYA_URL: _, OBEYA_NARRATION_URL: __, ...own } = s.env;
+        const env = { ...own, OBEYA_HOME: dir, ...(here ? { OBEYA_URL: `http://127.0.0.1:${there}`, OBEYA_HOLDS_VOICE: '1' } : {}), ...(token ? { CLAUDE_CODE_OAUTH_TOKEN: token } : {}) };
         child.stdin!.write(this.envLine(o.cwd, env));
         // ssh's own complaints (a forward refused, the connection dropped) are no session output
         child.stderr!.on('data', (d: Buffer) => {

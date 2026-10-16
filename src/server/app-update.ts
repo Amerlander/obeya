@@ -4,6 +4,9 @@
 
 import type { AppUpdate } from '../core/types';
 
+/** Where the app's releases are, as its shell names them (`RELEASES` in app/src/update.rs). */
+const RELEASES = 'https://github.com/sadilek/obeya/releases/';
+
 /** A shell that reported nothing for this long has gone (the app quit), and its update with it. */
 const FRESH_MS = 10_000;
 
@@ -22,7 +25,8 @@ export class AppUpdates {
     if (notes) update.notes = notes;
     if (typeof u.date === 'number' && Number.isFinite(u.date)) update.date = u.date;
     const download = text(u.download);
-    if (download?.startsWith('https://')) update.download = download;
+    // the shell names a release of Obeya's (update.rs); another address in the bar would lead elsewhere
+    if (download?.startsWith(RELEASES)) update.download = download;
     clearTimeout(this.expiry);
     this.expiry = setTimeout(() => this.set(null), FRESH_MS);
     this.expiry.unref?.();

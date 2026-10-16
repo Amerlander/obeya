@@ -119,8 +119,13 @@ const shape = z.array(
               .array(
                 z
                   .object({
-                    name: z.string().regex(/^\s*[\w.-]*\s*$/, 'a host name is letters, digits, dots, dashes and underscores'),
-                    ssh: z.string(),
+                    name: z
+                      .string()
+                      .regex(/^\s*[\w.-]*\s*$/, 'a host name is letters, digits, dots, dashes and underscores')
+                      // a directory of its own under Obeya's home holds the host's copies
+                      .refine((n) => !/^\.{1,2}$/.test(n.trim()), 'a host name is more than dots'),
+                    // read by ssh as an option when it starts with a dash
+                    ssh: z.string().refine((s) => !s.trim().startsWith('-'), 'an ssh target does not start with a dash'),
                     root: z.string(),
                     clones: z.number().int().min(0).max(20),
                     slots: z.number().int().min(0).max(20).optional(),

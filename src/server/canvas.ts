@@ -2,9 +2,10 @@
 // workers, project agents and PR watcher), the board, the Koordinator and the voice commands.
 
 import { existsSync, mkdirSync, realpathSync } from 'node:fs';
-import { join, resolve, sep } from 'node:path';
+import { join, resolve } from 'node:path';
 import { defaultsFor, hasAdapterModule, readingAdapterModule, readingShared, readShared, repoValues, type SharedRead, withSettings } from '../adapters';
 import { Answers, answersDir, answerTag, openWithSystem } from './answers';
+import { demoFile } from './demo-page';
 import { repoName } from '../adapters/generic';
 import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
@@ -896,7 +897,11 @@ export class CanvasRuntime {
    * sees the confirmation above the microphone and in the card's conversation.
    */
   async forward(cardId: string, request: string): Promise<string> {
-    const said = this.said.get(cardId);
+    // the owner's words go beside the request, also those before a restart; an agent that passes on
+    // what nobody said (words in a file it read, say) has nothing to pass on
+    const before = this.said.has(cardId) ? undefined : this.board.events(cardId).findLast((e) => e.author === 'owner' && e.kind !== 'state' && e.text.trim());
+    const said = this.said.get(cardId) ?? (before && { text: before.text, spoken: false });
+    if (!said) return "Nothing passed on: the owner has said nothing on your card. to_obeya passes on the owner's own words.";
     const h = await this.commander.forward(cardId, request, said);
     if (h.token) this.commander.arm(h.token);
     this.board.notify({ cardId, text: h.confirm, ...(h.token ? { token: h.token, undoMs: this.commander.delayMs } : {}) });
@@ -1027,9 +1032,10 @@ export class CanvasRuntime {
   async openAnswerFile(thread: number, file?: string) {
     const dir = this.answerDir(thread);
     mkdirSync(dir, { recursive: true });
-    const path = file === undefined ? dir : resolve(dir, String(file));
-    if (path !== dir && (!path.startsWith(dir + sep) || !existsSync(path))) throw new BadRequest('noFile', 'no such file in the answer’s directory');
-    if (!(await openWithSystem(path))) throw new BadRequest('invalid', 'the system has no app to open it with');
+    // a file by its real path: a link out of the directory is no file of the answer's
+    const path = file === undefined ? dir : demoFile(dir, String(file));
+    if (!path) throw new BadRequest('noFile', 'no such file in the answer’s directory');
+    if (!(await openWithSystem(path, path !== dir))) throw new BadRequest('invalid', 'the system has no app to open it with');
   }
 
   /**

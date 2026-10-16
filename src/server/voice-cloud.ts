@@ -57,7 +57,7 @@ export function cloudView(home: string): CloudVoiceView | undefined {
   return { preset, baseUrl, model, key: !!key, used: f.use === 'cloud', ...(tested ? { tested } : {}) };
 }
 
-/** The service a request names, its key the stored one when it brings none. */
+/** The service a request names, its key the stored one when it brings none for the same endpoint. */
 export function cloudFrom(input: unknown, stored?: CloudVoice): CloudVoice {
   const o = (input ?? {}) as Partial<Record<keyof CloudVoice, unknown>>;
   const preset = CLOUD_PRESETS.find((p) => p === o.preset);
@@ -68,7 +68,8 @@ export function cloudFrom(input: unknown, stored?: CloudVoice): CloudVoice {
   const baseUrl = own(o.baseUrl, fixed.baseUrl).replace(/\/+$/, '');
   if (!/^https?:\/\/\S+$/.test(baseUrl)) throw new BadRequest('invalid', 'the base URL must start with http:// or https://');
   const typed = typeof o.key === 'string' ? o.key.trim() : '';
-  const key = typed || (stored?.preset === preset ? stored.key : '');
+  // the stored key goes only where it went before: to another endpoint only once typed for it
+  const key = typed || (stored?.preset === preset && stored.baseUrl === baseUrl ? stored.key : '');
   if (!key) throw new BadRequest('invalid', 'an API key');
   return { preset, baseUrl, model: own(o.model, fixed.model), key };
 }

@@ -12,7 +12,7 @@
 import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { type AnswerFile, type AnswerRef, type CardEvent, type Item, pausable, type Talk } from '../core/types';
 import { INFORM_RULES, inform, Interrupted, type OwnerAnswer } from './advisor';
 import { BadRequest, type Board, replyNote } from './board';
@@ -463,12 +463,24 @@ const fileList = (files?: AnswerFile[]) => (files?.length ? `\n(files: ${files.m
 const said = (e: CardEvent) => (e.author === 'owner' ? `The owner: "${e.text}"` : `You: ${e.text}${fileList(e.answer?.files)}`);
 
 /**
- * Opens a file (or a directory) with the system's app for it, on the machine Obeya runs on, which
- * the owner sits at: Finder or Explorer for a directory.
+ * Files that open in an app to look at them. Anything else an agent wrote (a `.command`, `.app`,
+ * `.bat`, `.desktop`, a script) would run when opened, so it is shown in its folder instead.
  */
-export function openWithSystem(path: string): Promise<boolean> {
+const DOCUMENT = /\.(pdf|png|jpe?g|gif|webp|svg|html?|md|txt|csv|tsv|json|ya?ml|xml|log|xlsx?|docx?|pptx?|od[tsp]|rtf|mp4|mov|webm|mp3|wav|m4a|ogg)$/i;
+
+/**
+ * Opens a file (or a directory) with the system's app for it, on the machine Obeya runs on, which
+ * the owner sits at: Finder or Explorer for a directory. A file that is no document (`DOCUMENT`)
+ * is shown in its folder, selected, where the platform can (Linux opens the folder).
+ */
+export function openWithSystem(path: string, file = false): Promise<boolean> {
+  const reveal = file && !DOCUMENT.test(path);
   const [cmd, ...args] =
-    process.platform === 'darwin' ? ['open', path] : process.platform === 'win32' ? ['explorer.exe', path] : ['xdg-open', path];
+    process.platform === 'darwin'
+      ? ['open', ...(reveal ? ['-R'] : []), path]
+      : process.platform === 'win32'
+        ? ['explorer.exe', ...(reveal ? [`/select,${path}`] : [path])]
+        : ['xdg-open', reveal ? dirname(path) : path];
   return new Promise((done) => {
     const p = spawn(cmd!, args, { detached: true, stdio: 'ignore' });
     p.on('error', () => done(false));

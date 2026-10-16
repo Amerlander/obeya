@@ -9,7 +9,8 @@ import type { Command } from './commands';
 import { Store } from './db';
 import { AppUpdates } from './app-update';
 import { Restarter } from './self-update';
-import { serve } from './server';
+import type { NarrationHost } from './narration';
+import { serve, serveNarration } from './server';
 import { artifact, FakeRuntime, gitRepo, identify, noForge, until } from './testing';
 import { git } from './workspaces';
 import type { Transcript } from './voice';
@@ -720,6 +721,9 @@ describe('a newer version of the app', () => {
     expect(updates.current()).toEqual({ version: '0.2.0', download: 'https://github.com/sadilek/obeya/releases/tag/v0.2.0' });
     expect(await codeOf(post('/api/app-update/install', ''))).toBe('invalid');
     expect(restarter.due()).toBeNull();
+    // the bar leads to Obeya's releases only, whoever reports another address
+    await post('/api/app-update', JSON.stringify({ version: '9.9.9', download: 'https://example.com/obeya.deb' }));
+    expect(updates.current()).toEqual({ version: '9.9.9' });
   });
 });
 
@@ -961,4 +965,29 @@ describe("the app's push-to-talk key in another app", () => {
     expect(res.status).toBe(200);
     expect(await res.text()).toContain('lines');
   });
+});
+
+test("what a worker on another machine reaches: Obeya's narration clips, inline, and nothing else", async () => {
+  const asked: unknown[] = [];
+  const narration = {
+    clip: async (r: { out: string }) => {
+      asked.push(r);
+      writeFileSync(r.out, 'RIFF');
+      return { ok: true as const, seconds: 1 };
+    },
+  } as unknown as NarrationHost;
+  const s = serveNarration(narration);
+  try {
+    const post = (path: string, body: unknown) => fetch(`http://127.0.0.1:${s.port}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const clip = { voice: { speaker: 'ryan' }, text: 'Hallo.', language: 'de' };
+    expect((await post('/api/demo-settings/sample', { language: 'en', voice: 'command', command: 'touch /tmp/x' })).status).toBe(404);
+    expect((await post('/api/config', {})).status).toBe(404);
+    // a WAV written to a path on this machine: not from there
+    expect((await post('/api/narration/clip', { ...clip, out: '/tmp/x.wav' })).status).toBe(400);
+    expect(asked).toEqual([]);
+    expect((await post('/api/narration/clip', { ...clip, inline: true })).status).toBe(200);
+    expect(asked).toHaveLength(1);
+  } finally {
+    s.stop(true);
+  }
 });

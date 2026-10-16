@@ -20,7 +20,7 @@ import type { DemoSite } from '../adapters/types';
 import { readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
 import { type Gone, siteMissing, siteTarget } from './site';
 import { artifactCopy } from './artifact-copy';
-import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, type DemoPageParts, day, demoPageHtml, PAGE_WORDS, type PageLanguage } from './demo-page';
+import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, type DemoPageParts, day, demoFile, demoPageHtml, PAGE_WORDS, type PageLanguage } from './demo-page';
 import { type Forge, parsePrUrl } from './forge';
 import type { AgentRuntime } from './runtime';
 import { branchName } from './workspaces';
@@ -422,14 +422,17 @@ export class Sharing {
     const card = this.card(cardId);
     const demo = this.demo(cardId);
     if (demo?.kind === 'html' && !card.prototypeOf) return this.exportArtifact(card, demo, as);
-    const video = demo && join(demo.dir, 'demo.mp4');
+    const video = demo && demoFile(demo.dir, 'demo.mp4');
     if (card.prototypeOf || !demo || !video || !existsSync(video)) throw new BadRequest('noShare', 'the card has no demo');
     const size = statSync(video).size;
     if (as === 'html' && size > EXPORT_HTML_MAX)
       throw new BadRequest('exportTooLarge', `the video is ${(size / 1024 / 1024).toFixed(1)} MiB; one HTML file takes at most ${EXPORT_HTML_MAX / 1024 / 1024} MiB`);
     const page = await this.page(card, demo);
     const slug = this.stored(cardId)?.slug ?? slugOf(card);
-    const file = (f: string) => (existsSync(join(demo.dir, f)) ? new Uint8Array(readFileSync(join(demo.dir, f))) : null);
+    const file = (f: string) => {
+      const path = demoFile(demo.dir, f);
+      return path ? new Uint8Array(readFileSync(path)) : null;
+    };
     const poster = file('poster.jpg');
     const captions = file('captions.vtt');
     const language = this.languageOf(demo.dir);

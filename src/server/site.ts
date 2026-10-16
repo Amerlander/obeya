@@ -35,11 +35,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import type { DemoSite } from '../adapters/types';
 import type { Messages } from '../core/messages';
 import { readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
-import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, day, demoPageHtml, esc, PAGE_STYLE, PAGE_WORDS, type PageLanguage, withHeightReport } from './demo-page';
+import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, day, demoFile, demoPageHtml, esc, PAGE_STYLE, PAGE_WORDS, type PageLanguage, withHeightReport } from './demo-page';
 import { artifactCopy } from './artifact-copy';
 import { BUN_ENV } from './resources';
 import { COMMAND_TIMEOUT, commandWords, SHARE_CWD, type SharePage, type ShareTarget, scriptArgv, tail, type Versions } from './share';
@@ -85,11 +85,22 @@ export const pageUrl = (site: DemoSite, slug: string) => `${site.url.replace(/\/
 export const siteName = (site: DemoSite) => site.url.replace(/^https?:\/\//, '').replace(/\/+$/, '');
 
 /** The env file the site names, as a path; null when it names none. */
-const envPath = (home: string, site: DemoSite) => (site.env ? (isAbsolute(site.env) ? site.env : resolve(home, site.env)) : null);
+const envPath = (home: string, site: DemoSite) => {
+  if (!site.env) return null;
+  const file = resolve(home, site.env);
+  // under the home alone (the settings' check says so): what is in it goes to the site's URL
+  if (!file.startsWith(resolve(home) + sep)) throw new Refused(`the site's env file ${site.env} is not under Obeya's home`);
+  return file;
+};
 
 /** The env file the site needs on this machine and lacks, as the settings name it; null when it has it, or needs none. */
 export function siteMissing(home: string, site: DemoSite): string | null {
-  const file = envPath(home, site);
+  let file: string | null;
+  try {
+    file = envPath(home, site);
+  } catch {
+    return site.env!;
+  }
   return file && !existsSync(file) ? site.env! : null;
 }
 
@@ -177,13 +188,13 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
     return parseEnv(readFileSync(file, 'utf8'));
   };
 
-  /** The headers for reading the live site, `${KEY}` taken from the env file (else Obeya's environment). */
+  /** The headers for reading the live site, `${KEY}` taken from the env file (not Obeya's environment, whose secrets the settings may not send anywhere). */
   const headers = (env: Record<string, string>): Record<string, string> =>
     Object.fromEntries(
       Object.entries(site.headers ?? {}).map(([name, value]) => [
         name,
         value.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, key: string) => {
-          const v = env[key] ?? process.env[key];
+          const v = env[key];
           if (v === undefined) throw new Refused(t.headerKey(key, name));
           return v;
         }),
@@ -487,7 +498,7 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
         const slug = checkSlug(p.slug);
         if (!p.title?.trim() || !p.text?.trim() || !p.dir) throw new Refused(t.pageIncomplete);
         const html = p.kind === 'html';
-        const files = html ? artifactFiles(p.dir) : VIDEO_FILES.filter((f) => existsSync(join(p.dir, f)));
+        const files = html ? artifactFiles(p.dir) : VIDEO_FILES.filter((f) => demoFile(p.dir, f));
         for (const f of html ? ['index.html'] : ['demo.mp4', 'captions.vtt']) if (!files.includes(f)) throw new Refused(t.fileMissing(f, p.dir));
         // what the artifact loads in CORS mode goes into its copy (artifact-copy.ts)
         const copy = html ? await artifactCopy(p.dir, files) : new Map<string, string>();

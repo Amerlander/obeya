@@ -3,9 +3,10 @@
 
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, join, resolve, sep } from 'node:path';
+import { basename, join } from 'node:path';
 import { withHeightReport } from '../core/frame';
 import type { DemoKind } from '../core/types';
+import { demoFile } from './demo-page';
 import { resource } from './resources';
 
 /**
@@ -113,8 +114,8 @@ export function serveDemoFile(demo: { dir: string; kind: DemoKind }, name: strin
   if (demo.kind === 'html') return serveArtifactFile(demo.dir, name, req);
   const dir = demo.dir;
   if (!(DEMO_FILES as readonly string[]).includes(name)) return new Response('Not found', { status: 404 });
-  const path = join(dir, name);
-  if (!existsSync(path)) return new Response('Not found', { status: 404 });
+  const path = demoFile(dir, name);
+  if (!path) return new Response('Not found', { status: 404 });
   const size = statSync(path).size;
   const file = Bun.file(path);
   const type = name.endsWith('.mp4') ? 'video/mp4' : name.endsWith('.jpg') ? 'image/jpeg' : 'text/vtt; charset=utf-8';
@@ -172,12 +173,11 @@ function keyed(req: Request, route: '/demo/' | '/files/', name: string): string 
 function serveArtifactFile(dir: string, asked: string, req: Request): Response {
   const name = keyed(req, '/demo/', asked);
   if (name instanceof Response) return name;
-  const root = resolve(dir);
-  const path = resolve(root, name);
-  if (!path.startsWith(root + sep) || !existsSync(path) || !statSync(path).isFile()) return new Response('Not found', { status: 404 });
+  const path = demoFile(dir, name);
+  if (!path) return new Response('Not found', { status: 404 });
   const file = Bun.file(path);
   const headers = { 'content-type': file.type, 'content-security-policy': 'sandbox allow-scripts', 'cache-control': 'no-cache', 'access-control-allow-origin': 'null' };
-  if (path === join(root, ARTIFACT_PAGE)) return new Response(withHeightReport(readFileSync(path, 'utf8')), { headers });
+  if (path === demoFile(dir, ARTIFACT_PAGE)) return new Response(withHeightReport(readFileSync(path, 'utf8')), { headers });
   return new Response(file, { headers });
 }
 
@@ -188,9 +188,8 @@ function serveArtifactFile(dir: string, asked: string, req: Request): Response {
 export function serveAnswerFile(dir: string, asked: string, download: boolean, req: Request): Response {
   const name = keyed(req, '/files/', asked);
   if (name instanceof Response) return name;
-  const root = resolve(dir);
-  const path = resolve(root, name);
-  if (!path.startsWith(root + sep) || !existsSync(path) || !statSync(path).isFile()) return new Response('Not found', { status: 404 });
+  const path = demoFile(dir, name);
+  if (!path) return new Response('Not found', { status: 404 });
   const file = Bun.file(path);
   const headers: Record<string, string> = { 'content-type': file.type, 'content-security-policy': 'sandbox allow-scripts', 'cache-control': 'no-cache', 'access-control-allow-origin': 'null' };
   if (download) return new Response(file, { headers: { ...headers, 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(basename(path))}` } });

@@ -29,7 +29,7 @@
 // OBEYA_PARK_GRACE=<seconds>: how long a waiting card's app runs on before Obeya stops it
 // (Parking; 300 by default), shorter for a demo or a live check.
 
-import { existsSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -49,7 +49,7 @@ import { headOf, installDependencies, ownCheckout, RESTART, RESTART_FROM_FILE, R
 import { AppUpdates } from './app-update';
 import { COMPILED, resource, SELF, VERSION } from './resources';
 import { oldLinuxBun } from './repo';
-import { serve } from './server';
+import { serve, serveNarration } from './server';
 import { LocalTranscriber, VoiceIn, voiceBackends } from './voice';
 import { VoiceSetup } from './voice-setup';
 import { useLib } from '../../plugin/skills/demo/lib/here.ts';
@@ -72,6 +72,9 @@ const { values, positionals } = parseArgs({
 });
 
 const home = process.env.OBEYA_HOME ?? join(homedir(), '.obeya');
+// the home holds the logins, the cards and the agents' transcripts: the owner's alone
+mkdirSync(home, { recursive: true, mode: 0o700 });
+if (process.platform !== 'win32' && (statSync(home).mode & 0o077) !== 0 && statSync(home).uid === process.getuid?.()) chmodSync(home, 0o700);
 // what the official installers and Homebrew install is found from a process the desktop started too
 extendPath();
 // the demo skill's modules this server carries inside the binary find their files among the resources
@@ -196,6 +199,8 @@ const commitOf = () => {
 // where this Obeya answers: a demo's narration asks it for the voice it holds loaded (narration.ts)
 const url = `http://127.0.0.1:${values.port}`;
 const narration = new NarrationHost({ argv: (voice, language) => qwen3Serve(voice, language, home), log: (line) => console.log(line) });
+// what a worker on another machine reaches of Obeya: the narration and nothing else (design: Hosts)
+const narrationServer = serveNarration(narration);
 const config = new Config({
   file: configFile,
   source,
@@ -232,7 +237,7 @@ canvases = new Canvases(
     watch: true,
     ownCheckout: own,
     config,
-    workerEnv: { OBEYA_URL: url },
+    workerEnv: { OBEYA_URL: url, OBEYA_NARRATION_URL: `http://127.0.0.1:${narrationServer.port}` },
     ...(process.env.OBEYA_PARK_GRACE ? { parkGrace: Number(process.env.OBEYA_PARK_GRACE) * 1000 } : {}),
     language: () => ownerLanguage(home),
     agents: (role) => agentSetting(home, role),

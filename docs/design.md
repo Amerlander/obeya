@@ -1571,7 +1571,8 @@ A workspace's name says where it is, so every git call in it (`git`, `gitAsync`,
 stack commands and the worker's session run there through `ssh` without the callers
 knowing: `ssh <target> sh -c '…'` with the installers' directories on its `PATH` (the host's own
 `~/.zshenv` adds the rest), one shared connection where the platform has `ControlMaster` (not
-Windows), `BatchMode` so nothing prompts, and keep-alives that notice a dropped link within 45 s.
+Windows; its sockets in `/tmp/obeya-ssh-<uid>`, the owner's alone, since whoever reaches a socket
+uses its connection), `BatchMode` so nothing prompts, and keep-alives that notice a dropped link within 45 s.
 
 The calls the server waits for (`git`, `exists`: looking for a clean free clone, a card's changes)
 block it, and ssh gives up on a host that does not answer only after seconds (5 s for a `.local`
@@ -1596,14 +1597,18 @@ second MacBook, macOS x86_64, 2026-10-09). Before a host's first session in a ru
 plugin and the `playwright-core` its demo skill imports go to `~/.obeya/remote` there (again only
 when they changed), with the owner's demo settings (the voice reference as a path here, without a
 key file), and the session gets that directory as `OBEYA_HOME`. `OBEYA_URL` is a port there
-forwarded to Obeya here (`-R`, one per session), and a narration clip comes back in the reply
-(`inline`, base64) instead of a file on Obeya's machine: the owner's own voice, which only this Mac
-can run, narrates demos rendered there.
+forwarded (`-R`, one per session) to a server of Obeya's that answers narration clips and nothing
+else (`serveNarration`, its address the workers' `OBEYA_NARRATION_URL`), since everyone on that
+machine reaches the port: forwarded to Obeya itself, the port let anyone there run commands here
+through its settings until 2026-10-16. A narration clip comes back in the reply (`inline`, base64,
+the only kind that server takes) instead of a file on Obeya's machine: the owner's own voice, which
+only this Mac can run, narrates demos rendered there.
 
 Files cross at fixed points: the owner's screenshots are copied to `~/.obeya/remote/images` there
 with the message that carries them, and the message names them by their paths there; a demo named in
 a handover is copied here (`<home>/hosts/<host>/<path>`), afresh at each handover, and served and
-shared from that copy; the Arbeitsrückschau reads a session's transcript from there. gh on a pull
+shared from that copy (a path with `.` or `..` in it is refused: the copy replaces what is at its
+place, and `/../../..` was the owner's home); the Arbeitsrückschau reads a session's transcript from there. gh on a pull
 request runs here, on its URL.
 
 #### A dropped connection
@@ -2211,7 +2216,9 @@ the directory, or no file, is refused and the agent asked again. Under its text 
 them, in the sheet, a card's log and a Question card alike (`AnswerFiles` in `src/ui/message.tsx`):
 a page in the sandboxed frame of an HTML artifact (same CSP, key, height report), an image inline, any
 other file as a chip that opens it with the system's app (`open`, `explorer.exe`, `xdg-open` on the
-machine Obeya runs on; where that fails the browser downloads it), with ↓ to download, and „Im
+machine Obeya runs on; where that fails the browser downloads it; a file that is no document, a
+`.command` or `.bat` the agent wrote, say, is shown selected in its folder instead, as opening it
+would run it), with ↓ to download, and „Im
 Ordner zeigen“ for the directory. A follow-up writes into the same directory, so it builds on the
 files already there.
 
@@ -2497,8 +2504,10 @@ or new card, "Merk dir", grouping cards, an action on another card, a question a
 another card) the agent passes on with `to_obeya(request)`, one tool built once for workers,
 prototypes' workers and exploration agents (`src/server/to-obeya.ts`), whose instructions say in one
 paragraph what Obeya does for them through it. The Koordinator reads the request with the owner's
-own words beside it, spoken or typed, and the card in focus, as it reads any command
-(`Commander.forward`): actions with a confirmation and „Rückgängig“ (above the mic, as a notice that
+own words beside it, spoken or typed (the newest on the card when Obeya restarted since), and the
+card in focus, as it reads any command (`Commander.forward`). Where the owner has said nothing on
+the card, nothing is passed on: words an agent read in a file or a pull request comment are no
+request of the owner's, and the Koordinator would have taken them for one. Otherwise: actions with a confirmation and „Rückgängig“ (above the mic, as a notice that
 reaches every open page, and in the card's conversation), a reply, or a look-up. Its confirmation or
 reply is the tool's result. It passes nothing back to that agent as a note, an answer, feedback or
 talk: the agent has the words already (refused if it tries). An agent at work probably sees the
@@ -2929,7 +2938,8 @@ feedback beside it and approve below both; feedback asks for a new render.
 When the result is something to look at rather than something that happens, the worker makes an HTML
 artifact instead (`kind: 'html'`): a directory with an `index.html` and the files it loads, handed
 over the same way. The card shows the page in a frame where the video would be (no chapters); Obeya
-serves any file of that directory, none outside it, with a CSP sandbox and the frame's `sandbox`, so
+serves any file of that directory, none outside it (by its real path: a link to a file elsewhere is
+not served, published or exported, `demoFile` in `src/server/demo-page.ts`), with a CSP sandbox and the frame's `sandbox`, so
 the page's scripts run in an origin of their own, away from Obeya's API. That origin is `null`, so
 what the page loads in CORS mode (a module script, `fetch()` of a file beside it, a font) needs
 `Access-Control-Allow-Origin: null`, which would let any sandboxed page on any site read the files
@@ -2957,7 +2967,10 @@ An artifact's page has the same title and text above the artifact, which sits in
 (its scripts reach neither the page nor the site); the copy of its `index.html` beside the page
 tells the page its height (`postMessage`), so the frame grows to it instead of scrolling inside the
 page, at most 30 steps (an artifact as high as its window would grow on), and "In eigenem Fenster
-öffnen" shows it alone.
+öffnen" shows it alone: the same page with the frame filling the window (`?alone`). The artifact's
+own file opened directly would run in the site's origin, as would a window the artifact opens if
+the frame let it leave the sandbox (`allow-popups-to-escape-sandbox`, until 2026-10-16); its windows
+stay sandboxed.
 
 The frame's origin is `null` there too, and a static site cannot answer the way Obeya does (a keyed
 address, see The demo on the card): Cloudflare Pages sends `Access-Control-Allow-Origin: *`, other
@@ -3088,7 +3101,9 @@ It does that from a few values in the repository's settings (`src/server/site.ts
 `demo.site` names the site's `title` (the overview's heading, the pages' tab titles), its `url` (a
 page is at `url/<slug>/`), the `deploy` command line (`{dir}` stands for the site's directory), optionally an `env` file of
 `KEY=value` lines relative to Obeya's home whose values go into the deploy's environment
-(credentials, never in git), `headers` for reading the live site behind a login (`${KEY}` from
+(credentials, never in git; a path outside the home is refused, and `${KEY}` comes from that file
+alone, not Obeya's environment, as settings from the repository could otherwise send any secret of
+the machine to a URL of their choosing), `headers` for reading the live site behind a login (`${KEY}` from
 `env`), the largest file the host takes (`maxFile`, 25 MiB without it) and the overview's `language`
 (else the demo settings' narration language). The Konfiguration dialog has a field for each under
 „Einstellungen“. A site counts once it has a title, an http(s) URL and a deploy command
@@ -3874,8 +3889,7 @@ open in the owner's browser may send requests there (a `text/plain` POST needs n
 `req.json()` parses it all the same), and a DNS name rebound to `127.0.0.1` reaches it under that
 name. So every request and every WebSocket upgrade, from this machine too, passes a check first
 (`src/server/access.ts`): its `Host` names one of Obeya's own names (`localhost`, `127.0.0.1`,
-`[::1]`; the port is not checked, since a worker on another machine reaches Obeya through a
-forwarded port of its own), else 421; an `Origin`, where it has one, is Obeya's own (scheme, host
+`[::1]`; the port is not checked), else 421; an `Origin`, where it has one, is Obeya's own (scheme, host
 and port of the address it was sent to), and it carries no `Sec-Fetch-Site: cross-site`, else 403.
 Requests with neither header (the app's shell sending `POST /api/stop`, scripts, curl, the workers'
 narration) pass. The page and the push-to-talk panel are checked too: Bun serves an HTML bundle
