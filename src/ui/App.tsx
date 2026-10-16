@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { type Bounds, boundsOf, CARD_SIZE, centre, type Place, PROJECT_HEAD, PROJECT_PAD, unionBounds } from '../core/layout';
 import { type CanvasInfo, type CanvasSnapshot, type CardPatch, finished, type Group, type Item, nameless, needsYou, openPerGroup, type PendingRestart, type PlanDir, START_ALL_HOLD_MS, titleFrom, type AppUpdate, unreadAnswers } from '../core/types';
-import { api, ApiError, beforeReload, onNotice, reportFocus, setCanvas, useCanvas } from './api';
+import { api, ApiError, beforeReload, onNotice, quietAtStart, reportFocus, setCanvas, useCanvas } from './api';
 import { GroupNames, growFrom, inside, Lasso, Ring, TerritoryLayer, useTerritories } from './groups';
 import { besideSheet, BOTTOM, type Cam, camFor, centreOn, chase, dragLimit, edgeScroll, FAR, flying, flyTo, keepInView, MAX_ZOOM, MIN_ZOOM, overviewCam, placeIn, shows, stopFlight, TOP, toWorld } from './camera';
 import { plain } from './markdown';
@@ -42,7 +42,20 @@ export function App() {
   const [canvases, setCanvases] = useState<CanvasInfo[] | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
-    api.canvases().then(setCanvases, () => setFailed(true));
+    api.canvases().then(
+      (list) => {
+        setCanvases(list);
+        if (phone) keepCanvases(list);
+      },
+      () => {
+        setFailed(true);
+        if (phone) setCanvases((c) => c ?? keptCanvases());
+      },
+    );
+    // the app from the home screen while the machine sleeps: the phone view with the canvases it had, which says that Obeya does not answer
+    if (!phone) return;
+    const h = setTimeout(() => setCanvases((c) => c ?? keptCanvases()), quietAtStart ? 0 : 3000);
+    return () => clearTimeout(h);
   }, []);
   if (!canvases) return <Splash offline={failed} />;
   // the canvas in the address, else the first
@@ -59,6 +72,22 @@ export function App() {
 }
 
 /** While the page loads, and after a restart until the canvas is back: the sign in the middle, above "offline" when the server cannot be reached. */
+/** The canvases the phone view last had, for when the machine does not answer. */
+const KEPT_CANVASES = 'obeya-phone-canvases';
+function keepCanvases(list: CanvasInfo[]) {
+  try {
+    localStorage.setItem(KEPT_CANVASES, JSON.stringify(list));
+  } catch {}
+}
+function keptCanvases(): CanvasInfo[] | null {
+  try {
+    const list = JSON.parse(localStorage.getItem(KEPT_CANVASES) ?? 'null') as CanvasInfo[] | null;
+    return list?.length ? list : null;
+  } catch {
+    return null;
+  }
+}
+
 function Splash({ offline }: { offline: boolean }) {
   return (
     <div id="splash">

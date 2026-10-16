@@ -39,6 +39,9 @@ const COOKIE_MAX_AGE = 400 * 24 * 3600;
 /** The `tailscale serve` entry Obeya made, in its home, so turning the setting off removes it after a restart too. */
 const SERVE_FILE = 'tailscale-serve.json';
 
+/** The icons of the web app's manifest and its service worker: the same for everyone, and nothing in them the owner's. */
+export const PUBLIC = new Set(['/sw.js', '/icons/180.png', '/icons/512.png']);
+
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const FORWARDED = ['x-forwarded-for', 'x-forwarded-host', 'forwarded'];
 
@@ -80,7 +83,7 @@ export type Listen = (address: string | null) => void;
 export class Access implements Gate {
   /** The owner's key: what a request from this machine names. */
   readonly owner: Owner;
-  private readonly store: Store;
+  readonly store: Store;
   private readonly home?: string;
   private readonly tailscale: Tailscale;
   private readonly language: () => Language;
@@ -281,6 +284,8 @@ export class Access implements Gate {
    * another gets the page that says how to sign in or connect, or a 401 for the API.
    */
   admit(req: Request, server: Bun.Server<unknown>, route: string): Response | null {
+    // what a browser fetches to make the home-screen app, maybe without its cookies: nothing in them is the owner's
+    if (PUBLIC.has(route)) return null;
     if (this.isLocal(req, server)) return route === '/login' ? null : this.owner.refusal(req, server.port!, route);
     if (route === '/pair') return null;
     const device = this.device(req);

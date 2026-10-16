@@ -427,6 +427,7 @@ const de = {
     notPaired: 'Dieses Gerät ist nicht mehr mit Obeya verbunden.',
     notOwner: 'Dieser Browser ist nicht mehr bei Obeya angemeldet.',
     onlyHere: 'Das geht nur am Rechner, auf dem Obeya läuft.',
+    onlyDevices: 'Benachrichtigungen gehen nur an verbundene Geräte, nicht an diesen Rechner.',
     invalid: 'Das hat nicht geklappt. Der Server hat die Aktion abgelehnt.',
   } satisfies Record<ErrorCode, string>,
   offlineError: 'Der Server ist nicht erreichbar.',
@@ -719,7 +720,8 @@ const de = {
     awakeAlwaysHint: 'Solange Obeya läuft, schläft dieser Rechner nicht (der Bildschirm darf ausgehen), auch wenn kein Agent arbeitet: Das Telefon erreicht Obeya jederzeit und kann ihm jederzeit Aufgaben geben. Ein Laptop braucht so mehr Strom.',
     lid: 'Ein zugeklappter Laptop schläft so oder so.',
     devices: 'Verbundene Geräte',
-    devicesHint: 'Ein Gerät bleibt verbunden, bis du es hier entfernst oder es 90 Tage lang nicht benutzt wurde.',
+    devicesHint: 'Ein Gerät bleibt verbunden, bis du es hier entfernst oder es 90 Tage lang nicht benutzt wurde. Benachrichtigungen schaltest du auf dem Telefon ein, in Obeya, geöffnet vom Home-Bildschirm.',
+    pushOn: 'Benachrichtigungen an',
     noDevices: 'Noch keins.',
     pairedAt: (when: string) => `verbunden ${when}`,
     seenAt: (when: string) => `zuletzt ${when}`,
@@ -747,6 +749,13 @@ const de = {
     notAnswering: (since: string) => `Obeya antwortet nicht · seit ${since}`,
     notAnsweringWhy: 'Vielleicht schläft der Rechner, oder Obeya läuft dort nicht. Sobald es wieder antwortet, ist die Seite wieder verbunden.',
     gone: 'Diese Karte gibt es nicht mehr.',
+    /** Pushes: how to put Obeya on the home screen (iOS allows them only there), and turning them on. */
+    notify: {
+      install: 'Damit Obeya dir Bescheid gibt, wenn etwas auf dich wartet: unten „Teilen“ antippen, dann „Zum Home-Bildschirm“, und Obeya von dort öffnen.',
+      why: 'Obeya gibt dir Bescheid, wenn etwas auf dich wartet und du nicht am Rechner bist.',
+      turnOn: 'Benachrichtigungen einschalten',
+      failed: (why: string) => `Benachrichtigungen ließen sich nicht einschalten: ${why}`,
+    },
     /** In place of the texts that name the space bar, which a phone has none of. */
     touch: {
       revise: 'Was soll anders werden? – oder halte das Mikrofon',
@@ -1817,6 +1826,7 @@ const en: Strings = {
     notPaired: 'This device is no longer connected to Obeya.',
     notOwner: 'This browser is no longer signed in to Obeya.',
     onlyHere: 'Only on the computer Obeya runs on.',
+    onlyDevices: 'Notifications go only to connected devices, not to this computer.',
     invalid: 'That did not work. The server refused the action.',
   },
   offlineError: 'The server cannot be reached.',
@@ -2091,7 +2101,8 @@ const en: Strings = {
     awakeAlwaysHint: 'While Obeya runs, this computer does not sleep (the display may turn off), even with no agent at work: the phone reaches Obeya and can give it tasks at any time. A laptop uses more power this way.',
     lid: 'A laptop with its lid closed sleeps either way.',
     devices: 'Connected devices',
-    devicesHint: 'A device stays connected until you remove it here or it goes unused for 90 days.',
+    devicesHint: 'A device stays connected until you remove it here or it goes unused for 90 days. Notifications are turned on on the phone, in Obeya opened from its home screen.',
+    pushOn: 'notifications on',
     noDevices: 'None yet.',
     pairedAt: (when: string) => `connected ${when}`,
     seenAt: (when: string) => `last ${when}`,
@@ -2117,6 +2128,12 @@ const en: Strings = {
     notAnswering: (since: string) => `Obeya is not answering · since ${since}`,
     notAnsweringWhy: 'The computer may be asleep, or Obeya is not running there. The page connects again as soon as it answers.',
     gone: 'This card no longer exists.',
+    notify: {
+      install: 'For Obeya to tell you when something waits for you: tap “Share” below, then “Add to Home Screen”, and open Obeya from there.',
+      why: 'Obeya tells you when something waits for you and you are away from the computer.',
+      turnOn: 'Turn on notifications',
+      failed: (why: string) => `Notifications could not be turned on: ${why}`,
+    },
     touch: {
       revise: 'What should change? – or hold the microphone',
       compose: 'Ask, object, decide – or hold the microphone',

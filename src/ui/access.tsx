@@ -198,7 +198,10 @@ export function AccessSection({ on, onConnect }: { on: boolean; onConnect: () =>
         <ul className="acc-devices">
           {view.devices.map((d) => (
             <li key={d.id}>
-              <span className="acc-name">{d.name}</span>
+              <span>
+                <span className="acc-name">{d.name}</span>
+                {d.push && <span className="hint"> · {a.pushOn}</span>}
+              </span>
               <span className="hint">{a.pairedAt(when(d.pairedAt))}</span>
               <span className="hint">{a.seenAt(when(d.lastSeen))}</span>
               <button className="btn small" onClick={() => void remove(d.id)}>

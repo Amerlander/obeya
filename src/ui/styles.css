@@ -1525,6 +1525,8 @@ button.link:hover { text-decoration: underline; }
 .ph-canvas { margin-left: auto; color: var(--muted); font-size: 13px; }
 .ph-quiet { position: sticky; top: 60px; z-index: 5; margin: 12px 0 0; padding: 10px 12px; border-radius: 3px; background: var(--ink); color: var(--bg); display: flex; flex-direction: column; gap: 2px; font-size: 13.5px; }
 .ph-quiet b { font-weight: 600; font-size: 14.5px; }
+.ph-notify { margin: 14px 0 0; padding: 10px 12px; border-radius: 3px; border: 1px solid var(--line); background: var(--card); font-size: 14.5px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.ph-notify .btn { margin-top: 0; }
 .ph-section { margin-top: 22px; }
 .ph-section h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font: 600 21px/1.15 var(--serif); }
 .ph-section h2 select { margin-left: auto; font: 15px var(--cond); padding: 4px 6px; border: 1px solid var(--line); border-radius: 3px; background: var(--card); color: var(--ink); }

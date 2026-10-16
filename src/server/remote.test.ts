@@ -8,7 +8,9 @@ import { Store } from './db';
 import { Access, deviceName, machineAddresses, PAIRING_MS, UNUSED_MS } from './remote';
 import { serve } from './server';
 import { Tailscale } from './tailscale';
-import { asOwner, fakeTailscale, gitRepo, noForge, tailscaleStatus } from './testing';
+import { Push } from './push';
+import { asOwner, fakeTailscale, gitRepo, noForge, tailscaleStatus, until } from './testing';
+import { b64u } from './webpush';
 
 const NAME = 'mac.tail1234.ts.net';
 const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
@@ -19,6 +21,10 @@ let store: Store;
 let access: Access;
 let server: ReturnType<typeof serve>;
 let clock: number;
+let canvas: CanvasRuntime;
+let push: Push;
+/** What went to the push service: to where. */
+let pushed: string[];
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'obeya-remote-'));
@@ -27,8 +33,16 @@ beforeEach(() => {
   store = new Store(':memory:');
   clock = Date.now();
   access = new Access({ store, home: dir, tailscale: new Tailscale(fakeTailscale(ts)), now: () => clock });
-  const canvas = new CanvasRuntime({ repos: [{ path: main }] }, { store, home: dir, runtime: undefined as never, forge: noForge });
-  server = serve([canvas], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, undefined, undefined, undefined, undefined, undefined, undefined, access);
+  canvas = new CanvasRuntime({ repos: [{ path: main }] }, { store, home: dir, runtime: undefined as never, forge: noForge });
+  pushed = [];
+  push = new Push({
+    store,
+    post: async (url) => {
+      pushed.push(url);
+      return { status: 201, text: async () => '' };
+    },
+  });
+  server = serve([canvas], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, undefined, undefined, undefined, undefined, undefined, undefined, access, push);
 });
 afterEach(() => {
   access.stop();
@@ -229,6 +243,71 @@ describe('pairing', () => {
     expect((await viaTailnet('/api/c/main/cards', { ...own, origin: 'https://evil.example', 'sec-fetch-site': 'cross-site' }, { method: 'POST', body: '{}' })).status).toBe(403);
     // nor does the page over plain HTTP under the same name
     expect((await viaTailnet('/api/c/main/cards', { ...own, origin: `http://${NAME}` }, { method: 'POST', body: '{}' })).status).toBe(403);
+  });
+});
+
+describe('push', () => {
+  /** A subscription as a phone's browser makes it. */
+  const subscription = async () => {
+    const keys = (await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits'])) as CryptoKeyPair;
+    return { endpoint: 'https://web.push.apple.com/QGx', keys: { p256dh: b64u(await crypto.subtle.exportKey('raw', keys.publicKey)), auth: b64u(crypto.getRandomValues(new Uint8Array(16))) } };
+  };
+
+  test("the manifest's icons and the service worker need no pairing and no key", async () => {
+    await turnOn();
+    for (const path of ['/icons/180.png', '/icons/512.png', '/sw.js']) {
+      expect((await viaTailnet(path)).status).toBe(200);
+      expect((await fetch(new URL(path, server.url))).status).toBe(200);
+    }
+    expect(await (await viaTailnet('/sw.js')).text()).toContain("addEventListener(\"push\"");
+    // the rest still does
+    expect((await viaTailnet('/api/push')).status).toBe(401);
+  });
+
+  test('a paired phone turns notifications on; a card that starts waiting is pushed to it, but not while the owner uses a page here', async () => {
+    await turnOn();
+    const cookie = cookieOf(await viaTailnet(`/pair?code=${(await pairing()).code}`));
+    const own = { cookie, origin: `https://${NAME}`, 'content-type': 'application/json' };
+    const before = (await (await viaTailnet('/api/push', { cookie })).json()) as { key: string; on: boolean };
+    expect(before.on).toBe(false);
+    expect(Buffer.from(before.key, 'base64url')).toHaveLength(65);
+    expect((await viaTailnet('/api/push', own, { method: 'PUT', body: JSON.stringify(await subscription()) })).status).toBe(204);
+    expect(await (await viaTailnet('/api/push', { cookie })).json()).toEqual({ key: before.key, on: true });
+    expect((await view()).devices[0]!.push).toBe(true);
+    // this machine gets none
+    expect(await (await local('/api/push', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(await subscription()) })).json()).toMatchObject({ code: 'onlyDevices' });
+
+    const card = (title: string) => canvas.board.create({ title, body: '', x: 0, y: 0 }).id;
+    const a = card('Login');
+    canvas.board.work(a, { state: 'waiting', need: 'demo' });
+    await until(async () => (await push.settled(), pushed.length === 1));
+    expect(pushed).toEqual(['https://web.push.apple.com/QGx']);
+
+    // the owner at a page here: what starts waiting meanwhile stays on the canvas
+    const page = new (asOwner(() => server).WebSocket)(new URL('/api/c/main/ws', server.url.href.replace('http', 'ws')));
+    await new Promise((r) => (page.onopen = r));
+    page.send(JSON.stringify({ type: 'here' }));
+    await until(() => push.atDesk());
+    canvas.board.work(card('Export'), { state: 'waiting', need: 'question', detail: JSON.stringify({ question: { text: 'CSV?', options: [] } }) });
+    await push.settled();
+    expect(pushed).toHaveLength(1);
+    page.close();
+
+    // „Entfernen“ takes the subscription with it
+    expect(push.subscribed((await view()).devices[0]!.id)).toBe(true);
+    await local(`/api/access/devices/${(await view()).devices[0]!.id}`, { method: 'DELETE' });
+    expect(store.pushes()).toEqual([]);
+  });
+
+  test("the phone's page saying it is in use holds nothing off", async () => {
+    await turnOn();
+    const cookie = cookieOf(await viaTailnet(`/pair?code=${(await pairing()).code}`));
+    const ws = (await opens({ host: NAME, 'x-forwarded-for': '100.64.0.7', 'x-forwarded-proto': 'https', origin: `https://${NAME}`, cookie }))!;
+    ws.send(JSON.stringify({ type: 'here' }));
+    ws.send(JSON.stringify({ type: 'back' }));
+    await Bun.sleep(50);
+    expect(push.atDesk()).toBe(false);
+    ws.close();
   });
 });
 

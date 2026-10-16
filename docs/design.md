@@ -4382,7 +4382,62 @@ per canvas (`obeya:<canvas>`).
 
 When the server does not answer for 3 s (a phone back from its lock screen reconnects within that),
 a line at the top says „Obeya antwortet nicht · seit 14:02“ and why that may be; the page connects
-again by itself, at once when it comes back into view rather than after the pause it waits.
+again by itself, at once when it comes back into view rather than after the pause it waits. A
+sleeping machine answers nothing at all, not even a refusal: a connection that has not opened within
+3 s counts as not answering, and one not open after 10 s is tried anew.
+
+#### Notifications on the phone
+
+Obeya tells the owner's phone when something starts to wait for them (`src/server/push.ts`), by Web
+Push to the browser's own push service (Apple's, Google's, Mozilla's): no account and no service of
+Obeya's. A message is encrypted for the device (RFC 8291) and the request signed with Obeya's VAPID
+key (RFC 8292), both with WebCrypto (`src/server/webpush.ts`); the push service sees neither title
+nor text. The key is made at the first start and kept in `vapid.json` in Obeya's home (readable by
+the owner alone), as every subscription holds its public half.
+
+*Turning them on.* A paired device holds at most one subscription (`push` on its row in `devices`);
+removing the device removes it, and one its push service answers with 404 or 410 goes. On an iPhone
+a page gets pushes only from the home screen (iOS 16.4 and later): in Safari the phone view says how
+(„Teilen“, „Zum Home-Bildschirm“, then open Obeya from there) until it runs that way. There, and in
+a phone's Chrome without that step, a box at the top asks „Benachrichtigungen einschalten“; its
+button asks for the permission (iOS asks only after a tap) and the box stays until the permission is
+given or refused. With it given, the page subscribes with Obeya's key and hands the subscription to
+the server (`PUT /api/push`) at every load, so a renewed subscription or a new key reaches it. Over
+another VPN's address (plain HTTP) there are no pushes, and nothing says so on the phone: the section
+„Von anderen Geräten“ does. The section's device list says which devices have them on.
+
+*What is pushed:* a card whose `needsYou` turns true (a demo or a handover, a question, an agent's
+proposal, a PR to merge, an idea's turn), with what it waits for as the text („Demo bereit“, „Frage
+an dich“ …) and its title (and its canvas where there are several); a landing that failed (a card that
+was landing and needs the owner again: „Landen fehlgeschlagen“); a worker that is stuck (its turn
+failed or ended twice without a handover and Obeya made a question of it, `stuck` on the question:
+„Agent kommt nicht weiter“). Obeya's answers in its conversation are not pushed: the owner asked from
+where they are. Cards waiting already when Obeya starts are not pushed.
+
+*Not while the owner is at the machine:* nothing is pushed while a page on this machine was in use in
+the last three minutes. A page in use is one in view in which the owner moved, typed or scrolled, or a
+video plays, within the last half minute: it says so every 30 s then (`{ type: 'here' }`), and when it
+comes back into view. A canvas left in view with nobody at it holds nothing off. What starts waiting
+while the owner is there is not pushed later either: it is on the canvas in front of them.
+
+*Several at once:* the first goes out at once; what starts waiting within the minute after goes out as
+one push at its end, without what no longer waits by then („3 Karten warten auf dich“, the titles as
+the text), and a further minute starts; a minute without anything ends it.
+
+*Tapping a push* opens its card in the phone view (`/?card=<id>`), one for several „Für dich“: in the
+app that is open already (the service worker tells the page), else in a new one. A later push for the
+same card replaces the earlier one in the phone's notifications.
+
+*The web app.* The page names its manifest (`src/ui/manifest.webmanifest`, which the page's bundle
+carries: standalone, the icons `/icons/180.png` and `/icons/512.png`), and the phone view registers a
+service worker at `/sw.js` (`src/ui/sw.ts`, served as the source of its function, so the binary needs
+no file for it). The manifest's icons and the worker need no pairing: nothing in them is the owner's.
+The worker shows the pushes and keeps the page's shell: the page and its scripts come from the network
+and are kept, and when the network fails or takes more than 3 s, from what was kept. So the app opened
+from the home screen while the machine sleeps shows the phone view saying that Obeya does not answer,
+within about 7 s, instead of the browser's error or a blank page that waits: the page waits 3 s for
+its language and the canvases, then goes on with the browser's language and the canvases it last
+had (their cards come once Obeya answers). The canvas page at the machine registers no worker.
 
 ### Setup assistant
 
@@ -4530,11 +4585,18 @@ Python sidecars ignore Ctrl-C instead.
   other way, and a switch does it without leaving Obeya.
 - **Other devices over the owner's private network, paired by a QR code** (2026-10-16, from the
   plan „Obeya from the phone“): a public tunnel puts agents with shell rights on the open internet,
-  and a relay of Obeya's own is a cloud service. A paired device stays paired until removed or
+  a relay of Obeya's own is a cloud service, and a messenger bot passes everything through a third
+  party and holds only a chat. A paired device stays paired until removed or
   unused for 90 days, rather than for a fixed time: a phone in daily use should not have to pair
   again, and one forgotten drops by itself. Managing devices only on the machine itself, so a lost
   phone cannot keep itself in. The cookie is `SameSite=None` over HTTPS rather than `Strict`, which
   the plan said: with `Strict` a worker's HTML artifact on the phone could not load its own files.
+- **Pushes by Web Push to the web app on the home screen** (2026-10-16, from the plan „Obeya from the
+  phone“): ntfy or a messenger would put a third party between Obeya and the phone and do nothing Web
+  Push does not; a native app nothing a home-screen web app cannot do here. Encrypted and signed with
+  WebCrypto rather than a library: the two RFCs are a few dozen lines, checked against RFC 8291's own
+  example. The owner counts as at the machine while a page there is in use, not merely in view, which
+  the plan said: a canvas left in view would otherwise hold every push off until the screen locks.
 - **„Telefon verbinden“ only in the configuration** (2026-10-16): a phone is connected once, and
   again only for a new phone or a closed tab, so it takes no place in the bar. Before, a phone icon
   stood in the bar beside „Konfiguration“.
@@ -4925,7 +4987,7 @@ or the owner asked to tell them something), a Question card's thread (the exchan
 - per-canvas settings (the home repository; per repository the card collecting its CLAUDE.md rules; the Rückschau's count and when its history
   begins; per repository the Arbeitsrückschau's count and when it last ran);
 - the devices paired to reach Obeya from elsewhere (`devices`: the hash of the cookie, name, when
-  paired and last seen);
+  paired and last seen, its push subscription);
 - the friction noted on each card's runs (per repository), and on a card the Arbeitsrückschau
   proposed what it rests on, and the settings' values it proposed (`setting_proposals`: repository,
   setting, value, basis, cards, and where the owner took it).
@@ -4933,8 +4995,8 @@ or the owner asked to tell them something), a Question card's thread (the exchan
 Files under `~/.obeya/` (the same for the app and a checkout): the database (`obeya.db`), the
 owner's screenshots (`images/<canvas>/`), the configuration (`canvases.json`), the settings
 (`settings.json`, `demo.json`, `voice.json`), where the running Obeya answers (`server.json`), the
-`tailscale serve` entry Obeya made (`tailscale-serve.json`), the
-app's server log (`app.log`), voices and models (`voices/`), the workers' clones and worktrees
+`tailscale serve` entry Obeya made (`tailscale-serve.json`), the key it signs pushes with
+(`vapid.json`), the app's server log (`app.log`), voices and models (`voices/`), the workers' clones and worktrees
 (`workspaces/`), the Lesestand's worktrees (`read/`), the files of looked-up answers
 (`answers/<canvas>/<thread>/`), the static sites Obeya keeps (`sites/<key>/`), the env files their
 repositories' settings name (relative to the home, `sites/demos/deploy.env`, say), and `share/`,

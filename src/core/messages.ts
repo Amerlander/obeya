@@ -313,6 +313,19 @@ const de = {
     pair: 'Verbinden',
     wrong: 'Dieser Code stimmt nicht oder ist abgelaufen. „Telefon verbinden“ am Rechner zeigt einen neuen.',
   },
+  /** A push to the owner's phone: what the card waits for, or how many cards a push of several stands for. */
+  push: {
+    demo: 'Demo bereit',
+    review: 'Bereit zur Abnahme',
+    answered: 'Agent hat geantwortet',
+    question: 'Frage an dich',
+    stuck: 'Agent kommt nicht weiter',
+    landing: 'Landen fehlgeschlagen',
+    proposal: 'Vorschlag eines Agenten',
+    pr: 'PR wartet auf dich',
+    idea: 'Idee · du bist dran',
+    several: (n: number) => `${n} Karten warten auf dich`,
+  },
 };
 
 export type Messages = typeof de;
@@ -604,6 +617,18 @@ const en: Messages = {
     code: 'Code',
     pair: 'Connect',
     wrong: 'This code is wrong or has expired. “Connect a phone” on the computer shows a new one.',
+  },
+  push: {
+    demo: 'Demo ready',
+    review: 'Ready for review',
+    answered: 'The agent answered',
+    question: 'A question for you',
+    stuck: 'The agent is stuck',
+    landing: 'Landing failed',
+    proposal: 'Proposal from an agent',
+    pr: 'A PR waits for you',
+    idea: 'Idea · your turn',
+    several: (n: number) => `${n} cards wait for you`,
   },
 };
 

@@ -51,6 +51,7 @@ import { AppUpdates } from './app-update';
 import { COMPILED, resource, SELF, VERSION } from './resources';
 import { oldLinuxBun } from './repo';
 import { Access } from './remote';
+import { Push } from './push';
 import { Awake } from './awake';
 import { serve, serveNarration } from './server';
 import { LocalTranscriber, VoiceIn } from './voice';
@@ -295,9 +296,11 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, stop);
 
 // other devices, when the owner lets them: the phone over the owner's own network
 const access = new Access({ store, home, language: () => ownerLanguage(home) });
+// and what starts waiting for the owner, pushed to the phones that turned notifications on
+const push = new Push({ store, home, language: () => ownerLanguage(home) });
 // while other devices may reach Obeya, the machine stays awake as long as a worker works, or the whole time
 const awake = new Awake({ wanted: () => access.awake() === 'always' || (access.awake() === 'works' && busy().length > 0) }).start();
-server = serve(canvases, { transcriber, setup: voiceSetup }, Number(values.port), values.dev, config, restarter, narration, machine, stop, shells, updates, access);
+server = serve(canvases, { transcriber, setup: voiceSetup }, Number(values.port), values.dev, config, restarter, narration, machine, stop, shells, updates, access, push);
 claim(home, { pid: process.env.OBEYA_SUPERVISED ? process.ppid : process.pid, port: server.port!, url: `http://127.0.0.1:${server.port}`, version: VERSION, app: !!process.env.OBEYA_APP });
 // the address as a one-time link that signs a browser in (owner.ts)
 const link = access.owner.link(`http://127.0.0.1:${server.port}`);

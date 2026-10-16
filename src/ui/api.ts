@@ -122,6 +122,9 @@ export const api = {
   saveAccess: (remote: RemoteSetting | null) => call<AccessView>('PUT', '/api/access', { remote }),
   pair: () => call<Pairing>('POST', '/api/access/pair'),
   removeDevice: (id: string) => call<{ removed: boolean }>('DELETE', `/api/access/devices/${encodeURIComponent(id)}`),
+  /** Obeya's key for pushes, and whether this device gets them. */
+  push: () => call<{ key: string; on: boolean }>('GET', '/api/push'),
+  subscribe: (subscription: PushSubscriptionJSON) => call<void>('PUT', '/api/push', subscription),
   saveTheme: (theme: Theme | null) => call<ThemeView>('PUT', '/api/theme', { theme }),
   /** The model and effort of each group of agents. */
   agents: () => call<AgentsView>('GET', '/api/agents'),
@@ -336,6 +339,25 @@ export function reportFocus(where: Where, target: string, title: string | undefi
   sendFocus();
 }
 
+// The owner uses this page: in view, and they moved, typed or scrolled in it, or a video plays, within
+// the last half minute. While they do at the machine (and three minutes after), nothing that starts
+// waiting is pushed to their phone; a page left in view with nobody at it does not hold pushes off.
+const HERE_MS = 30_000;
+let used = true;
+const sendHere = () => {
+  const ws = sockets.get(canvasId);
+  if (document.visibilityState === 'visible' && ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'here' } satisfies ClientMessage));
+};
+if (typeof document !== 'undefined') {
+  for (const type of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart']) addEventListener(type, () => void (used = true), { capture: true, passive: true });
+  setInterval(() => {
+    const playing = [...document.querySelectorAll('video')].some((v) => !v.paused && !v.ended);
+    if (!used && !playing) return;
+    used = false;
+    sendHere();
+  }, HERE_MS);
+}
+
 // Whoever has something to keep across the reload a restart brings writes it down here first.
 const reloadListeners = new Set<() => void>();
 export function beforeReload(fn: () => void): () => void {
@@ -356,6 +378,15 @@ export function reload() {
  * tried again with a growing pause, and at once when the page comes back into view (a phone that
  * was locked).
  */
+/** The server answered nothing while the page loaded (the app from the home screen, the machine asleep). */
+export let quietAtStart = false;
+export const markQuiet = () => void (quietAtStart = true);
+
+/** How long a connection may take to open before the page counts the server as not answering. */
+const QUIET_MS = 3000;
+/** How long before it is given up and tried anew. */
+const GIVE_UP_MS = 10_000;
+
 export function useCanvas(id = canvasId): {
   snapshot: CanvasSnapshot | null;
   online: boolean;
@@ -369,8 +400,9 @@ export function useCanvas(id = canvasId): {
   canvases: CanvasInfo[] | null;
 } {
   const [snapshot, setSnapshot] = useState<CanvasSnapshot | null>(null);
-  const [online, setOnline] = useState(true);
-  const [offlineSince, setOfflineSince] = useState<number | null>(null);
+  // a page that loaded while the server answered nothing says so at once
+  const [online, setOnline] = useState(!quietAtStart);
+  const [offlineSince, setOfflineSince] = useState<number | null>(() => (quietAtStart ? Date.now() - QUIET_MS : null));
   const [restart, setRestart] = useState<PendingRestart | null>(null);
   const [update, setUpdate] = useState<AppUpdate | null>(null);
   const [waiting, setWaiting] = useState<Record<string, number>>({});
@@ -385,7 +417,17 @@ export function useCanvas(id = canvasId): {
     const connect = () => {
       ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/c/${encodeURIComponent(id)}/ws`);
       sockets.set(id, ws);
+      // a sleeping machine answers nothing, not even a refusal: the page says so meanwhile, and tries anew
+      const since = Date.now();
+      const opening = ws;
+      setTimeout(() => {
+        if (opening.readyState !== WebSocket.CONNECTING || closed) return;
+        setOnline(false);
+        setOfflineSince((t) => t ?? since);
+      }, QUIET_MS);
+      setTimeout(() => opening.readyState === WebSocket.CONNECTING && opening.close(), GIVE_UP_MS);
       ws.onopen = () => {
+        if (document.visibilityState === 'visible') sendHere();
         setOnline(true);
         setOfflineSince(null);
         delay = 500;

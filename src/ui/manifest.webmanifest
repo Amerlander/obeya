@@ -1,0 +1,14 @@
+{
+  "id": "/",
+  "name": "Obeya",
+  "short_name": "Obeya",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fdfbf5",
+  "theme_color": "#fdfbf5",
+  "icons": [
+    { "src": "/icons/180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/icons/512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

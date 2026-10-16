@@ -1663,7 +1663,7 @@ export class Workers {
     live.stalled = true;
     // a session that fails again after the nudge cannot go on by itself: the owner hears why, not its last words
     const text = live.failed ? failureReason(clip(live.failed, 1200), this.o.board.t) : live.lastText ? clip(live.lastText, 1200) : this.o.board.t.worker.stalled;
-    this.toOwner(cardId, { text, options: [] });
+    this.toOwner(cardId, { text, options: [], stuck: true });
   }
 
   /**
@@ -1686,7 +1686,7 @@ export class Workers {
     live.stalled = true;
     const t = this.o.board.t;
     const reason = failureReason(clip(live.failed!, 1200), t);
-    this.toOwner(cardId, { text: t.worker.remainsUndone(`${reason}${/[.!?]$/.test(reason) ? '' : '.'}`), options: [t.worker.tryAgain] });
+    this.toOwner(cardId, { text: t.worker.remainsUndone(`${reason}${/[.!?]$/.test(reason) ? '' : '.'}`), options: [t.worker.tryAgain], stuck: true });
   }
 
   /** The worker takes in the owner's words on its handover: the card is at work meanwhile, and still waits for approval. */

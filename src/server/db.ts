@@ -362,6 +362,8 @@ export const MIGRATIONS = [
     commands TEXT NOT NULL,
     at TEXT NOT NULL
   );`,
+  // a paired device's push subscription (JSON `Subscription`), where it turned notifications on
+  'ALTER TABLE devices ADD COLUMN push TEXT;',
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter, wish';
@@ -1072,7 +1074,18 @@ export class Store {
   // ---------------------------------------------------------------- devices
 
   devices(): DeviceView[] {
-    return this.db.query('SELECT id, name, paired_at AS pairedAt, last_seen AS lastSeen FROM devices ORDER BY paired_at').all() as DeviceView[];
+    const rows = this.db.query('SELECT id, name, paired_at AS pairedAt, last_seen AS lastSeen, push IS NOT NULL AS push FROM devices ORDER BY paired_at').all() as (Omit<DeviceView, 'push'> & { push: number })[];
+    return rows.map(({ push, ...d }) => (push ? { ...d, push: true } : d));
+  }
+
+  /** The devices that get pushes, each with its subscription (JSON). */
+  pushes(): { id: string; name: string; push: string; lastSeen: string }[] {
+    return this.db.query('SELECT id, name, push, last_seen AS lastSeen FROM devices WHERE push IS NOT NULL').all() as { id: string; name: string; push: string; lastSeen: string }[];
+  }
+
+  /** A device's push subscription (JSON), or none any more. */
+  setPush(id: string, push: string | null) {
+    this.db.query('UPDATE devices SET push = $push WHERE id = $id').run({ id, push });
   }
 
   deviceByToken(hash: string): DeviceView | null {

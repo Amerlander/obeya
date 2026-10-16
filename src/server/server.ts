@@ -4,7 +4,7 @@ import type { ServerWebSocket } from 'bun';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { agentListens, type CanvasInfo, type CardAction, type ClientMessage, type CardPatch, type Item, type NewCard, type PendingRestart, type ServerMessage, type SpotInput, type TalkRef, isTalkRef, waitingOn } from '../core/types';
+import { agentListens, type CanvasInfo, type CardAction, type ClientMessage, type CardPatch, type Item, type NewCard, type PendingRestart, type ServerMessage, type SpotInput, type TalkRef, isTalkRef, needsYou, waitingOn } from '../core/types';
 import index from '../ui/index.html';
 import panel from '../ui/panel.html';
 import { guarded, LOCAL_HOSTS, refusal } from './access';
@@ -27,6 +27,10 @@ import { AppUpdates } from './app-update';
 import { oldLinuxBun } from './repo';
 import { Store } from './db';
 import { Access } from './remote';
+import { Push, startedWaiting } from './push';
+import { worker } from '../ui/sw';
+import icon180 from '../ui/logo/apple-touch-icon.png' with { type: 'file' };
+import icon512 from '../ui/logo/icon-512.png' with { type: 'file' };
 import { Tailscale } from './tailscale';
 import { agentsView, languageView, pushKeyChoice, saveAgents, saveLanguage, savePushKey, saveTheme, themeView } from './settings';
 import { nonEmpty } from '../core/text';
@@ -118,6 +122,8 @@ export function serve(
   updates = new AppUpdates(),
   /** Who reaches Obeya from other devices; by default no one. */
   access = new Access({ store: new Store(':memory:'), tailscale: new Tailscale(null) }),
+  /** What goes to the devices that turned notifications on. */
+  push = new Push({ store: access.store }),
 ) {
   const canvases = Array.isArray(served) ? { all: () => served } : served;
   const byId = new Map<string, CanvasRuntime>();
@@ -171,8 +177,26 @@ export function serve(
     if (!sockets.has(c.id)) sockets.set(c.id, new Set());
     waiting[c.id] = counted(c);
     const send = (msg: ServerMessage) => sendTo(c.id, msg);
+    /** The cards as last sent: what starts to wait for the owner after is pushed to their phone. */
+    let seen = new Map(c.board.snapshot().items.map((i) => [i.id, i]));
     const offs = [
       c.board.onChange(() => {
+        const items = c.board.snapshot().items;
+        const started = startedWaiting(seen, items);
+        seen = new Map(items.map((i) => [i.id, i]));
+        const several = canvases.all().length > 1;
+        push.waits(
+          started.map(({ item, kind }) => ({
+            card: item.id,
+            title: item.title,
+            kind,
+            ...(several ? { canvas: c.board.canvas.name } : {}),
+            still: () => {
+              const now = c.board.item(item.id);
+              return !!now && needsYou(now);
+            },
+          })),
+        );
         send({ type: 'snapshot', snapshot: c.board.snapshot() });
         const n = counted(c);
         if (n === waiting[c.id]) return;
@@ -381,6 +405,27 @@ export function serve(
       },
       '/api/access/pair': { POST: (req, srv) => (access.isLocal(req, srv) ? handle(() => access.pair()) : onlyHere()) },
       '/api/access/devices/:id': { DELETE: (req, srv) => (access.isLocal(req, srv) ? handle(() => ({ removed: access.remove(req.params.id) })) : onlyHere()) },
+      // the web app on a phone's home screen: the icons of its manifest (manifest.webmanifest, which the
+      // page's bundle carries), its service worker (sw.ts), and the device's push subscription (`on`:
+      // Obeya has one for this device); pushes go only to paired devices
+      '/icons/180.png': { GET: () => new Response(Bun.file(icon180), { headers: { 'cache-control': 'max-age=86400' } }) },
+      '/icons/512.png': { GET: () => new Response(Bun.file(icon512), { headers: { 'cache-control': 'max-age=86400' } }) },
+      '/sw.js': { GET: () => new Response(`(${worker.toString()})();\n`, { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-cache' } }) },
+      '/api/push': {
+        GET: (req) => handle(async () => {
+          const device = access.deviceOf(req);
+          return { key: await push.key(), on: !!device && push.subscribed(device) };
+        }),
+        PUT: async (req) => {
+          const device = access.deviceOf(req);
+          if (!device) return onlyDevices();
+          return handle(async () => push.subscribe(device, await req.json()));
+        },
+        DELETE: (req) => {
+          const device = access.deviceOf(req);
+          return device ? handle(() => push.unsubscribe(device)) : onlyDevices();
+        },
+      },
       // the app's floating panel for the push-to-talk key in another app
       '/panel': panel,
       '/api/canvases': { GET: () => Response.json(canvases.all().map((c) => c.board.canvas) satisfies CanvasInfo[]) },
@@ -793,6 +838,8 @@ export function serve(
           const msg = JSON.parse(String(text)) as ClientMessage;
           if (msg.type === 'hold' && Array.isArray(msg.hold)) restarter?.hold(ws.data.page, msg.hold.filter((h) => h === 'video' || h === 'voice'));
           if (msg.type === 'back') byId.get(ws.data.canvas)?.ownerBack();
+          // the owner uses a page at the machine: what starts waiting meanwhile is not pushed to their phone
+          if ((msg.type === 'back' || msg.type === 'here') && !ws.data.device) push.here();
           if (msg.type === 'focus') {
             const f = { card: nonEmpty(msg.card), project: nonEmpty(msg.project), target: nonEmpty(msg.target), title: nonEmpty(msg.title) };
             focused.set(ws.data.page, { canvas: ws.data.canvas, ...Object.fromEntries(Object.entries(f).filter(([, v]) => v)), at: Date.now() });
@@ -819,5 +866,8 @@ export function serve(
     });
   return server;
 }
+
+/** Pushes go to a paired device: the machine Obeya runs on gets none. */
+const onlyDevices = () => Response.json({ code: 'onlyDevices', error: 'only a paired device gets pushes' }, { status: 403 });
 
 const onlyHere = () => Response.json({ code: 'onlyHere', error: 'only on the machine Obeya runs on' }, { status: 403 });

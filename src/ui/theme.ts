@@ -4,7 +4,7 @@
 
 import { FALLBACK_LANGUAGE, languageOf } from '../core/locale';
 import type { Theme } from '../core/types';
-import { api } from './api';
+import { api, markQuiet } from './api';
 import { setLanguage } from './strings';
 
 export function applyTheme(theme: Theme | null) {
@@ -17,15 +17,19 @@ export const loadTheme = () => api.theme().then((v) => applyTheme(v.chosen), () 
 
 /**
  * The language and the look first, from the server (the owner's choice, else the system's), so a
- * page's first render is in them; a server that does not answer leaves the browser's.
+ * page's first render is in them; a server that does not answer leaves the browser's, also one that
+ * answers nothing within 3 s (a machine asleep, reached from the phone's home screen).
  */
 export async function loadLanguageAndTheme() {
-  const [language] = await Promise.all([
-    api.language().then(
-      (l) => l.language,
-      () => languageOf(navigator.language) ?? FALLBACK_LANGUAGE,
+  const browser = languageOf(navigator.language) ?? FALLBACK_LANGUAGE;
+  const [language] = await Promise.race([
+    Promise.all([api.language().then((l) => l.language, () => browser), loadTheme()]),
+    new Promise<[typeof browser]>((done) =>
+      setTimeout(() => {
+        markQuiet();
+        done([browser]);
+      }, 3000),
     ),
-    loadTheme(),
   ]);
   setLanguage(language);
 }

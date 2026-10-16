@@ -12,6 +12,7 @@ import { type ActDone, Detail, type Pending } from './detail';
 import { cardDraft, fieldOn, focusedDraft, keepDrafts, MIC_DRAFT, obeyaDraft } from './draft';
 import { KoordinatorTalk } from './koordinator';
 import { Sign } from './logo';
+import { Notify, registerWorker } from './notify';
 import { Inline, plain } from './markdown';
 import { Cards } from './message';
 import type { Reply } from './reply';
@@ -59,6 +60,8 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
     enterBreaksLines();
   });
   const [canvases, setCanvases] = useState(loaded);
+  // the canvases it last had, while the server did not answer: the list the server sends once it does
+  useEffect(() => setCanvases(loaded), [loaded]);
   const [snaps, setSnaps] = useState<Record<string, CanvasSnapshot>>({});
   const [offline, setOffline] = useState<Record<string, number | null>>({});
   const feed = (id: string, live: ReturnType<typeof useCanvas>) => {
@@ -73,13 +76,14 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
   openRef.current = open;
   // opening a card is a step in the browser's history: its Back (or the swipe) closes it again
   const pushed = useRef(false);
-  const openCard = (i: Item) => {
-    if (openRef.current === i.id) return;
-    homeScroll.current = homeRef.current?.scrollTop ?? 0;
-    history[openRef.current ? 'replaceState' : 'pushState'](null, '', addressWith(i.id));
+  const openId = (id: string) => {
+    if (openRef.current === id) return;
+    if (!openRef.current) homeScroll.current = homeRef.current?.scrollTop ?? 0;
+    history[openRef.current ? 'replaceState' : 'pushState'](null, '', addressWith(id));
     if (!openRef.current) pushed.current = true;
-    setOpenState(i.id);
+    setOpenState(id);
   };
+  const openCard = (i: Item) => openId(i.id);
   const back = () => {
     if (!openRef.current) return;
     flushEdit().catch(console.error);
@@ -91,6 +95,20 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
       setOpenState(null);
     }
   };
+  // a tapped push: its card (or „Für dich“ for several) in the app that is open already
+  useEffect(() => {
+    registerWorker();
+    const sw = navigator.serviceWorker;
+    if (!sw) return;
+    const tapped = (e: MessageEvent) => {
+      if (e.data?.type !== 'open' || typeof e.data.url !== 'string') return;
+      const card = new URL(e.data.url, location.href).searchParams.get('card');
+      if (card) openId(card);
+      else back();
+    };
+    sw.addEventListener('message', tapped);
+    return () => sw.removeEventListener('message', tapped);
+  }, []);
   useEffect(() => {
     const pop = () => {
       flushEdit().catch(console.error);
@@ -331,6 +349,7 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
           <span className="ph-word">Obeya</span>
         </header>
         {banner}
+        <Notify />
         <section className="ph-section">
           <h2>{t.phone.forYou}</h2>
           <ForYou canvases={ordered} snaps={snaps} several={several} underway={isUnderway} onOpen={openCard} onObeya={(id) => {
@@ -340,7 +359,8 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
         </section>
         <section className="ph-section">
           <h2>{t.phone.running}</h2>
-          <Running entries={all.filter(({ item }) => runs(item))} several={several} onOpen={openCard} />
+          {/* nothing known yet (the server has not answered since the page loaded): no claim that nothing runs */}
+          {ordered.length > 0 && <Running entries={all.filter(({ item }) => runs(item))} several={several} onOpen={openCard} />}
         </section>
         <section className="ph-section ph-obeya">
           <h2>

@@ -107,6 +107,8 @@ export interface Question {
   multiple?: boolean;
   /** What the asking agent would pick if it had to decide: some of the options, and why. */
   pick?: { options: string[]; why: string };
+  /** Obeya asks for a worker that is stuck (its turn failed, or ended twice without a handover), not the worker. */
+  stuck?: true;
 }
 
 /** A question as its card's log holds it: the text, then one line per option. */
@@ -964,6 +966,8 @@ export type ErrorCode =
   | 'notOwner'
   /** Managing who reaches Obeya, from another device (status 403). */
   | 'onlyHere'
+  /** Turning push on at the machine Obeya runs on, which gets none (status 403). */
+  | 'onlyDevices'
   /** A group that no card belongs to any more, so it is gone. */
   | 'unknownGroup'
   | 'project'
@@ -1567,6 +1571,8 @@ export interface DeviceView {
   name: string;
   pairedAt: string;
   lastSeen: string;
+  /** It turned notifications on: Obeya pushes to it. */
+  push?: true;
 }
 
 /** A one-time code that pairs a device: in the QR code with the address, and to type in. */
@@ -1823,6 +1829,8 @@ export type ClientMessage =
   | { type: 'hold'; hold: OwnerHold[] }
   /** The owner came back to this page (from GitHub, say): what Obeya polls is looked at now. */
   | { type: 'back' }
+  /** The owner uses this page: it is in view and they moved, typed or scrolled in it (or a video plays) within the last half minute. */
+  | { type: 'here' }
   /**
    * What the owner has in view (sent on every change and when the page gets the focus back): a
    * command from the app's push-to-talk key in another app goes there. `target` and `title` as the
