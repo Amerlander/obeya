@@ -6,9 +6,9 @@
 import { Fragment, type ReactNode, useEffect, useState } from 'react';
 import { encode } from 'uqr';
 import type { AccessView, RemoteSetting } from '../core/types';
-import { api, ApiError } from './api';
+import { api } from './api';
 import { Field, Head } from './config';
-import { clock, errorText, shortDay, t } from './strings';
+import { clock, failText, shortDay, t } from './strings';
 
 /** Text with `code` in backticks, as the strings write commands. */
 function Coded({ text }: { text: string }) {
@@ -59,7 +59,7 @@ function Reach({ view, onView }: { view: AccessView; onView: (v: AccessView) => 
     try {
       onView(await api.saveAccess(remote));
     } catch (e) {
-      setStatus(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+      setStatus(failText(e));
     } finally {
       setBusy(false);
     }
@@ -165,7 +165,7 @@ export function AccessSection({ on, onConnect }: { on: boolean; onConnect: () =>
       await api.removeDevice(id);
       setView({ ...view, devices: view.devices.filter((d) => d.id !== id) });
     } catch (e) {
-      setStatus(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+      setStatus(failText(e));
     }
   };
   return (
