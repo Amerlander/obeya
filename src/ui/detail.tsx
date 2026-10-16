@@ -1384,7 +1384,10 @@ function DemoView({
     };
     if (v.readyState >= 1) go();
     else v.addEventListener('loadedmetadata', go, { once: true });
-    v.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    // into view with the line above it, unless its top is in view already
+    const column = v.closest('.split-main')?.getBoundingClientRect();
+    const top = v.getBoundingClientRect().top;
+    if (column && (top < column.top || top > column.bottom - 80)) v.closest('.demo-view')?.querySelector('.demo-versions')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
     return () => v.removeEventListener('loadedmetadata', go);
   }, [shownN]);
   return (
