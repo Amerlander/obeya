@@ -72,8 +72,8 @@ function commitBeside(repoPath: string, parent: string, text: string, message: s
   }
 }
 
-/** The fields a change of settings names, for its commit message: `checks, land`. */
-const fieldsOf = (mine: SharedSettings) => Object.keys(mine).join(', ');
+/** The subject of a change of settings' commit and pull request, which names its fields: `…: checks, land`. */
+const subjectOf = (mine: SharedSettings) => `Obeya settings for everyone: ${Object.keys(mine).join(', ')}`;
 
 /**
  * Commits `mine` into the repository's `.obeya/settings.json` on its main branch (the local one,
@@ -88,7 +88,7 @@ export function commitShared(repoPath: string, mine: SharedSettings): SettingsSh
   if (onIt && gitRun(repoPath, ['status', '--porcelain', '--', REPO_SETTINGS_FILE]).out)
     throw new BadRequest('settingsDirty', `${REPO_SETTINGS_FILE} has changes of its own in ${repoPath}; commit or discard them first`);
   const { text, before, after } = sharedText(repoPath, parent, mine);
-  const commit = commitBeside(repoPath, parent, text, `Obeya settings for everyone: ${fieldsOf(mine)}`);
+  const commit = commitBeside(repoPath, parent, text, subjectOf(mine));
   must(repoPath, ['update-ref', '-m', 'obeya: settings for everyone', `refs/heads/${branch}`, commit, parent]);
   // the checkout on the branch gets the file as committed, in its index and among its files
   if (onIt) must(repoPath, ['checkout', commit, '--', REPO_SETTINGS_FILE]);
@@ -101,7 +101,7 @@ function onOrigin(repoPath: string, mine: SharedSettings) {
   must(repoPath, ['fetch', '--quiet', '--no-write-fetch-head', 'origin', `+refs/heads/${branch}:refs/remotes/origin/${branch}`]);
   const parent = must(repoPath, ['rev-parse', '--verify', `refs/remotes/origin/${branch}^{commit}`]);
   const { text, after } = sharedText(repoPath, parent, mine);
-  return { branch, text, after, commit: commitBeside(repoPath, parent, text, `Obeya settings for everyone: ${fieldsOf(mine)}`) };
+  return { branch, text, after, commit: commitBeside(repoPath, parent, text, subjectOf(mine)) };
 }
 
 /**
@@ -128,7 +128,7 @@ export function proposeShared(repoPath: string, mine: SharedSettings, forge: For
     const pr = forge.open(repoPath, {
       base: branch,
       head,
-      title: `Obeya settings for everyone: ${fieldsOf(mine)}`,
+      title: subjectOf(mine),
       body: `Takes the Obeya settings set on one machine over into \`${REPO_SETTINGS_FILE}\`, so that everyone who runs Obeya on this repository gets them (a fresh clone too):\n\n\`\`\`json\n${text}\`\`\``,
     });
     return { pr };

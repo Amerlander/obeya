@@ -17,6 +17,7 @@ import { type AnswerFile, type AnswerRef, type CardEvent, type Item, pausable, t
 import { INFORM_RULES, inform, Interrupted, type OwnerAnswer } from './advisor';
 import { BadRequest, type Board, replyNote } from './board';
 import { imageNote } from './images';
+import type { ProjectAgents } from './project-agents';
 import type { AgentRuntime } from './runtime';
 import { TO_OBEYA, toObeyaTool } from './to-obeya';
 import { describeTool, SPOKEN } from './workers';
@@ -30,9 +31,7 @@ export interface AnswerOptions {
   /** The task the card's worker gets at its start. */
   startBrief: (card: Item) => string | undefined;
   /** The project agent of a project answers what is asked about it and its workstreams. */
-  projectAgent: (project: Item) => {
-    inform: (project: Item, message: string, onTool?: (name: string, input: Record<string, unknown>) => void, dir?: string, signal?: AbortSignal) => Promise<OwnerAnswer>;
-  };
+  projectAgent: (project: Item) => Pick<ProjectAgents, 'inform'>;
   /** A thread's output directory, outside every repository. */
   dirOf: (thread: number) => string;
   /** The files of the owner's screenshots, by id; unknown ones are left out. */
@@ -223,7 +222,7 @@ export class Answers {
       'The owner looked a question up with Obeya and asked on, then chose to discuss it as an idea. The conversation so far, oldest first, is where this discussion starts:',
       this.o.board
         .events(cardId)
-        .filter((e) => e.kind === 'talk' || (e.kind === 'say' && e.answer))
+        .filter(inConversation)
         .map((e) => (e.author === 'owner' ? `The owner: "${e.text}"` : `Obeya: ${e.text}${fileList(e.answer?.files)}`))
         .join('\n\n'),
       `The files of its answers are in ${this.o.dirOf(talk)}. They have not said more yet. Look into it and open the discussion.`,
@@ -381,7 +380,7 @@ export class Answers {
     const lines = cardId
       ? this.o.board
           .events(cardId)
-          .filter((e) => e.kind === 'talk' || (e.kind === 'say' && e.answer))
+          .filter(inConversation)
           .map((e) => said(e))
       : this.o.board
           .threadTalk(thread)
@@ -453,6 +452,9 @@ const answerRef = (thread: number, files?: AnswerFile[], continues?: string): An
 });
 
 const fileList = (files?: AnswerFile[]) => (files?.length ? `\n(files: ${files.map((f) => `${f.name} – ${f.caption}`).join('; ')})` : '');
+
+/** Whether a line of a Question card's log is a message of its conversation: the owner's words or an answer. */
+const inConversation = (e: CardEvent) => e.kind === 'talk' || (e.kind === 'say' && !!e.answer);
 
 /** A message of a Question card's conversation, as an agent that starts afresh reads it. */
 const said = (e: CardEvent) => (e.author === 'owner' ? `The owner: "${e.text}"` : `You: ${e.text}${fileList(e.answer?.files)}`);

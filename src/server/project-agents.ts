@@ -22,8 +22,11 @@ export class ProjectAgents {
     private permissionMode?: PermissionMode,
   ) {}
 
-  /** Answers a question the owner asked about the project or one of its workstreams, in the project's session. */
-  /** `dir`: the output directory of the looked-up thread, which the answer's files are in; `signal` ends the turn at once. */
+  /**
+   * Answers a question the owner asked about the project or one of its workstreams, in the project's
+   * session. `dir`: the output directory of the looked-up thread, which the answer's files are in;
+   * `signal` ends the turn at once.
+   */
   inform(project: Item, message: string, onTool?: (name: string, input: Record<string, unknown>) => void, dir?: string, signal?: AbortSignal): Promise<OwnerAnswer> {
     return this.queued(project, () =>
       inform({
