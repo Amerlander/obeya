@@ -1,7 +1,7 @@
 // The unfolded card: what it is, what its worker does, and what the owner decides.
 
 import { Fragment, type ReactNode, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { agentListens, askable, buildableOn, type CardAction, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, EXPORT_HTML_MAX, finished, finishingUp, handedOver, type Item, type Mock, type NextStep, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, type Spot, started, stopped, stoppedArchivable, titleFrom } from '../core/types';
+import { agentListens, askable, buildableOn, type CardAction, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, EXPORT_HTML_MAX, finished, finishedArchivable, finishingUp, handedOver, type Item, type Mock, type NextStep, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, type Spot, started, stopped, stoppedArchivable } from '../core/types';
 import { mockPage } from '../core/frame';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
 import { answerText, toggle } from './answer';
@@ -9,7 +9,7 @@ import { ApiError, api, at, type Field, holdRestart, onCardEvent, onCardEventGon
 import { firstOpening } from './demoSeen';
 import { know, known } from './known';
 import { Branch } from './diff';
-import { landedRef } from './parts';
+import { landedRef, shownTitle } from './parts';
 import { useQueueMove } from './queue';
 import { Inline, plain } from './markdown';
 import { Body, Msg, Quote, Reading, useAnswer, useReportedHeight } from './message';
@@ -130,8 +130,8 @@ export function Detail(p: Props) {
     return (
       <>
         {kind && <div className="p-kind">{kind}</div>}
-        {item.archivedAt ? <div className="p-title">{item.title ? <Inline md={item.title} /> : titleFrom(item.body) || t.titlePlaceholder}</div> : <ManualTitle item={item} onEdit={p.onEdit} />}
-        <IdeaView item={item} act={act} run={run} onDelete={p.onDelete} onTell={p.onTell} />
+        {item.archivedAt ? <div className="p-title">{shownTitle(item)}</div> : <ManualTitle item={item} onEdit={p.onEdit} />}
+        <IdeaView item={item} act={act} run={run} listener={listener} onDelete={p.onDelete} onTell={p.onTell} />
         {error && <p className="p-error">{error}</p>}
       </>
     );
@@ -144,7 +144,7 @@ export function Detail(p: Props) {
         </div>
         <div className="p-state">
           ● {stateLabel(item)}
-          {item.archivedAt && <span className="p-status"> · {t.archive.when(new Date(item.archivedAt))}</span>}
+          {archivedOn(item)}
         </div>
         <p className="hint ended">
           {item.builtInto ? t.idea.builtInto(plain(item.ideaTitle ?? ''), plain(item.builtInto)) : t.idea.endedLong[item.prototypeEnd](plain(item.ideaTitle ?? p.from?.title ?? ''))}
@@ -152,11 +152,7 @@ export function Detail(p: Props) {
         <Split
           main={
             // the summary is the handover in the conversation, the task its first message
-            item.demo && (
-              <DemoView item={item} summary="" demo={item.demo} autoplay={false}>
-                {null}
-              </DemoView>
-            )
+            item.demo && <DemoView item={item} demo={item.demo} autoplay={false} />
           }
           talk={<Talk item={item} past />}
         />
@@ -247,9 +243,10 @@ export function Detail(p: Props) {
   const demoWaits = item.state === 'waiting' && item.need === 'demo';
   // an agent is on the card and can be stopped
   const running = item.state === 'working' || item.state === 'waiting' || !!item.finishing;
-  const archivable = finished(item.state) && item.source === 'manual' && !item.finishing;
+  const archivable = finishedArchivable(item);
   // a stopped task starts again, or goes into the archive with its conversation, from the row below it
   const halted = stopped(item) && !item.queue;
+  const planSource = parent?.plan && <PlanSource file={parent.plan.file} onRead={parent.archivedAt ? undefined : () => p.onReadPlan(parent, item.label)} />;
   const where = (
     <p className="p-src">
       <Branch item={item} />
@@ -284,11 +281,11 @@ export function Detail(p: Props) {
   return (
     <>
       {kind && <div className="p-kind">{kind}</div>}
-      {editable ? <ManualTitle item={item} onEdit={p.onEdit} /> : <div className="p-title">{item.title ? <Inline md={item.title} /> : titleFrom(item.body) || t.titlePlaceholder}</div>}
+      {editable ? <ManualTitle item={item} onEdit={p.onEdit} /> : <div className="p-title">{shownTitle(item)}</div>}
       <div className={['p-state', finishingUp(item) && 'finishing', item.paused && 'paused'].filter(Boolean).join(' ')}>
         ● {stateLabel(item)}
         {item.statusLine && (item.state === 'working' || item.state === 'inPr' || item.finishing) && <span className="p-status"> · {item.statusLine}</span>}
-        {item.archivedAt && <span className="p-status"> · {t.archive.when(new Date(item.archivedAt))}</span>}
+        {archivedOn(item)}
       </div>
 
       {item.state === 'proposal' && (
@@ -365,7 +362,7 @@ export function Detail(p: Props) {
               <Shots ids={item.images} />
             </>
           )}
-          {parent?.plan && <PlanSource file={parent.plan.file} onRead={parent.archivedAt ? undefined : () => p.onReadPlan(parent, item.label)} />}
+          {planSource}
           {!item.queue && (
             <div className="actions">
               <button className="btn primary" title={t.startHint} onClick={() => act({ action: 'start' }, { close: false })}>
@@ -417,7 +414,6 @@ export function Detail(p: Props) {
                 {item.demo && (
                   <DemoView
                     item={item}
-                    summary=""
                     demo={item.demo}
                     autoplay={demoWaits}
                     comments={agentListens(item)}
@@ -429,9 +425,7 @@ export function Detail(p: Props) {
                         </div>
                       )
                     }
-                  >
-                    {null}
-                  </DemoView>
+                  />
                 )}
                 {item.pr && (item.state === 'inPr' || item.state === 'waiting') && <PrBox pr={item.pr} />}
                 {item.state === 'inPr' && !item.pr && <p className="hint">{t.pr.opening}</p>}
@@ -461,7 +455,7 @@ export function Detail(p: Props) {
             <>
               <Body md={item.body} />
               <Shots ids={item.images} />
-              {parent?.plan && <PlanSource file={parent.plan.file} onRead={parent.archivedAt ? undefined : () => p.onReadPlan(parent, item.label)} />}
+              {planSource}
             </>
           )}
           {/* a card nobody worked on shows its conversation once there is something, such as a talk with the Koordinator */}
@@ -499,6 +493,9 @@ export function Detail(p: Props) {
   );
 }
 
+/** When the card went into the archive, after its state. */
+const archivedOn = (i: Item) => i.archivedAt && <span className="p-status"> · {t.archive.when(new Date(i.archivedAt))}</span>;
+
 /** The marks on the buttons that pause an agent and let it go on. */
 const PauseMark = () => (
   <svg className="btn-mark" viewBox="0 0 12 12" width="11" height="11" aria-hidden>
@@ -518,7 +515,7 @@ const PlayMark = () => (
  * An idea under discussion: the brief its agent keeps on top, a prototype's demo when there is one,
  * then the conversation, and the owner's decisions.
  */
-function IdeaView({ item, act, run, onDelete, onTell }: { item: Item; act: (a: CardAction, done: ActDone) => Promise<void>; run: Run; onDelete: () => void; onTell: Tell }) {
+function IdeaView({ item, act, run, listener, onDelete, onTell }: { item: Item; act: (a: CardAction, done: ActDone) => Promise<void>; run: Run; listener?: string; onDelete: () => void; onTell: Tell }) {
   const idea = item.idea!;
   const [prototyping, setPrototyping] = useState(false);
   const answer = usePicks(item.id, idea.questions);
@@ -530,7 +527,7 @@ function IdeaView({ item, act, run, onDelete, onTell }: { item: Item; act: (a: C
       <div className={finishingUp(item) ? 'p-state finishing' : 'p-state'}>
         ● {stateLabel(item)}
         {idea.thinking && <span className="p-status"> · {t.author.explorer} {t.idea.thinking}</span>}
-        {item.archivedAt && <span className="p-status"> · {t.archive.when(new Date(item.archivedAt))}</span>}
+        {archivedOn(item)}
       </div>
       {/* the brief is what stays; the conversation beside it is how it came about */}
       <Split
@@ -556,7 +553,7 @@ function IdeaView({ item, act, run, onDelete, onTell }: { item: Item; act: (a: C
               picks={answer}
               field={{
                 placeholder: t.idea.compose,
-                listener: agentListens(item) ? undefined : t.voice.card(plain(item.title)),
+                listener,
                 quote: true,
                 onWords: async (words, images, replyTo) => onTell(words, images, 'discuss', replyTo),
                 onPicked: (text, _, images, replyTo) => act({ action: 'discuss', text, images, ...(replyTo ? { replyTo } : {}) }, { close: false }),
@@ -634,7 +631,7 @@ function QuestionView({ item, act, run, onTell }: { item: Item; act: (a: CardAct
     <>
       <div className="p-state">
         ● {t.question.count(thread.answers, thread.files)} · {thread.thinking ? t.question.reading : t.question.ready}
-        {item.archivedAt && <span className="p-status"> · {t.archive.when(new Date(item.archivedAt))}</span>}
+        {archivedOn(item)}
       </div>
       {item.archivedAt ? (
         <Talk item={item} past />
@@ -662,13 +659,7 @@ function QuestionView({ item, act, run, onTell }: { item: Item; act: (a: CardAct
             >
               {t.question.asIdea}
             </button>
-            <button
-              className="btn primary"
-              title={t.question.doneHint}
-              onClick={() => run(() => api.archive(item.id), { close: true, ack: t.archive.archived(plain(item.title)), undo: () => api.unarchive(item.id) })}
-            >
-              {t.question.done}
-            </button>
+            <ArchiveButton item={item} run={run} className="btn primary" label={t.question.done} hint={t.question.doneHint} />
           </>
         )}
       </div>
@@ -1277,7 +1268,7 @@ type Run = (fn: () => Promise<void>, done: ActDone) => Promise<void>;
  */
 function DemoView({
   item,
-  summary,
+  summary = '',
   demo,
   children,
   top,
@@ -1285,9 +1276,9 @@ function DemoView({
   comments = false,
 }: {
   item: Item;
-  summary: string;
+  summary?: string;
   demo: Demo;
-  children: ReactNode;
+  children?: ReactNode;
   /** above the video or artifact, where it is seen on opening however long the chapters or the artifact: sharing */
   top?: ReactNode;
   autoplay?: boolean;
@@ -1776,8 +1767,11 @@ function ExportBox({ item, run, needs }: { item: Item; run: Run; needs?: { site:
   );
 }
 
-/** Takes a finished card or a parked or dropped idea into the archive, or an archived one back onto the canvas. */
-function ArchiveButton({ item, run }: { item: Item; run: Run }) {
+/**
+ * Takes a finished card or a parked or dropped idea into the archive, or an archived one back onto
+ * the canvas; `className`, `label` and `hint` dress the button that archives.
+ */
+function ArchiveButton({ item, run, className = 'btn', label = t.archive.archive, hint }: { item: Item; run: Run; className?: string; label?: string; hint?: string }) {
   const title = plain(item.title);
   // a stopped task whose workspace holds work stays on the canvas; the button says why
   const held = stopped(item) && !stoppedArchivable(item);
@@ -1786,8 +1780,8 @@ function ArchiveButton({ item, run }: { item: Item; run: Run }) {
       {t.archive.unarchive}
     </button>
   ) : (
-    <button className="btn" disabled={held} title={held ? t.archive.holdsWork : undefined} onClick={() => run(() => api.archive(item.id), { close: true, ack: t.archive.archived(title), undo: () => api.unarchive(item.id) })}>
-      {t.archive.archive}
+    <button className={className} disabled={held} title={held ? t.archive.holdsWork : hint} onClick={() => run(() => api.archive(item.id), { close: true, ack: t.archive.archived(title), undo: () => api.unarchive(item.id) })}>
+      {label}
     </button>
   );
 }

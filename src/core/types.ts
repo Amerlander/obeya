@@ -37,6 +37,8 @@ export const stopped = (i: Pick<Item, 'state' | 'branch'>) => i.state === 'plann
  */
 export const stoppedArchivable = (i: Pick<Item, 'state' | 'branch' | 'source' | 'queue' | 'workspace' | 'prototypeOf' | 'kind'>) =>
   stopped(i) && i.source === 'manual' && i.kind === 'task' && !i.prototypeOf && !i.queue && !i.workspace;
+/** A finished card of the owner's whose agent is done: the archive may take it. */
+export const finishedArchivable = (i: Pick<Item, 'state' | 'source' | 'finishing'>) => finished(i.state) && i.source === 'manual' && !i.finishing;
 /** A finished card whose agent still works: after the landing, or answering a follow-up question. */
 export const finishingUp = (i: Pick<Item, 'state' | 'finishing'>) => !!i.finishing && finished(i.state);
 /**

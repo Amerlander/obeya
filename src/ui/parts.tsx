@@ -1,8 +1,9 @@
 // Presentational pieces of the canvas. State and camera live in App.tsx.
 
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, type ReactNode, useEffect, useRef, useState } from 'react';
 import { type Bounds, shapeOf } from '../core/layout';
-import { answering, type AppUpdate, type CanvasInfo, type ClonePool, finished, finishingUp, type Item, needsYou, type PendingRestart, type PoolHost, type ProjectHistory, stoppedArchivable, titleFrom } from '../core/types';
+import { clip } from '../core/text';
+import { answering, type AppUpdate, type CanvasInfo, type ClonePool, finished, finishedArchivable, finishingUp, type Item, needsYou, type PendingRestart, type PoolHost, type ProjectHistory, stoppedArchivable, titleFrom } from '../core/types';
 import { api } from './api';
 import type { Cam } from './camera';
 import type { Shape } from './groups';
@@ -44,6 +45,19 @@ interface CardProps {
   underway?: string;
 }
 
+/** A card's title as it shows: its own, else the start of its text. */
+export const shownTitle = (i: Item) => (i.title ? <Inline md={i.title} /> : titleFrom(i.body) || t.titlePlaceholder);
+
+/** The play mark on the buttons that start a card or a project's workstreams. */
+const PlayIcon = ({ size }: { size: number }) => (
+  <svg width={size} height={size} viewBox="0 0 12 12">
+    <path d="M3 1.6v8.8a.6.6 0 0 0 .9.5l7-4.4a.6.6 0 0 0 0-1L3.9 1.1a.6.6 0 0 0-.9.5z" fill="currentColor" />
+  </svg>
+);
+
+/** How many of a project's workstreams its button starts: those planned and in no queue. */
+const startableIn = (kids: Item[]) => kids.filter((k) => k.state === 'planned' && !k.queue).length;
+
 const sameBounds = (a: Bounds, b: Bounds) => a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
 
 export const CardView = memo(
@@ -55,7 +69,7 @@ export const CardView = memo(
     // stopped task, or a parked or dropped idea without a prototype on the canvas
     const archivable =
       !item.archivedAt &&
-      ((finished(item.state) && item.source === 'manual' && !item.finishing) || stoppedArchivable(item) || (!!item.idea && item.idea.status !== 'open' && !prototyped));
+      (finishedArchivable(item) || stoppedArchivable(item) || (!!item.idea && item.idea.status !== 'open' && !prototyped));
     const kind =
       item.label ??
       (item.parent ? t.kind.workstream : item.kind === 'question' ? t.kind.question : item.idea || item.proposal?.idea ? t.kind.idea : item.becomesProject ? becomesLabel(item) : item.prototypeOf ? t.kind.prototype : item.kind === 'project' ? t.kind.project : '');
@@ -105,7 +119,7 @@ export const CardView = memo(
             <span>{label}</span>
           </div>
         )}
-        <div className={item.title ? 'ttl' : 'ttl untitled'}>{item.title ? <Inline md={item.title} /> : titleFrom(item.body) || t.titlePlaceholder}</div>
+        <div className={item.title ? 'ttl' : 'ttl untitled'}>{shownTitle(item)}</div>
         {meta && <div className="meta">{meta}</div>}
         <div className="state">
           {underway ?? stateLabel(item)}
@@ -129,9 +143,7 @@ export const CardView = memo(
               onStart(item);
             }}
           >
-            <svg width="12" height="12" viewBox="0 0 12 12">
-              <path d="M3 1.6v8.8a.6.6 0 0 0 .9.5l7-4.4a.6.6 0 0 0 0-1L3.9 1.1a.6.6 0 0 0-.9.5z" fill="currentColor" />
-            </svg>
+            <PlayIcon size={12} />
           </button>
         )}
         {archivable && (
@@ -207,105 +219,125 @@ export function CanvasPill({ canvas, canvases, waiting }: { canvas: CanvasInfo; 
 
 /** A restart that waits for workers or the owner: for whom and until when (on hover), and a button that has it go ahead now. */
 export function RestartPill({ restart, items }: { restart: PendingRestart; items: Item[] }) {
-  const [going, setGoing] = useState(false);
   if (restart.repos) return <ReposRestartPill restart={restart} items={items} />;
   const n = restart.cards.length + restart.elsewhere;
   const until = clock(restart.deadline);
-  const titles = restart.cards.map((id) => plain(items.find((i) => i.id === id)?.title ?? id));
   const owner = restart.owner;
   const stop = restart.reason === 'stop';
-  const now = () => {
-    setGoing(true);
-    api.restartNow().then(
-      (r) => r.restarting || setGoing(false),
-      () => setGoing(false),
-    );
-  };
-  if (going)
-    return (
-      <div className="pill restart going" id="restart">
-        <span className="spin">↻</span> {stop ? t.restart.goingStop : restart.reason === 'update' ? t.restart.goingUpdate : t.restart.going}
-      </div>
-    );
+  const update = restart.reason === 'update';
   return (
-    <div className="pill restart" id="restart">
-      <span className="spin">↻</span>
-      <span className="say">{t.restart.pill(n, owner, restart.reason)}</span>
-      {/* the deadline does not cut the owner off */}
-      {!owner.length && <span className="hint">{t.restart.until(until)}</span>}
-      <button onClick={now}>
-        {stop ? t.restart.nowStop : restart.reason === 'update' ? t.restart.nowUpdate : t.restart.now}
-        <span className="tip risk" role="tooltip">
-          {stop ? t.restart.nowRiskStop : n ? t.restart.nowRisk : t.restart.nowOwner}
-        </span>
-      </button>
-      <div className="tip why" role="tooltip">
-        <p>{t.restart.reason[restart.reason]}</p>
-        {owner.map((h) => (
-          <p key={h}>{t.restart.owner[h]}</p>
-        ))}
-        {n > 0 && (
-          <>
-            <p>{t.restart.waits}</p>
-            <ul>
-              {titles.map((x, i) => (
-                <li key={i}>{x}</li>
-              ))}
-              {restart.elsewhere > 0 && <li className="hint">{t.restart.elsewhere(restart.elsewhere)}</li>}
-            </ul>
-          </>
-        )}
-        <p className="hint">{stop ? t.restart.keptStop : restart.reason === 'update' ? t.restart.keptUpdate : t.restart.kept}</p>
-        {n > 0 && <p className="hint">{stop ? t.restart.deadlineStop(until) : owner.length ? t.restart.deadlineOwner(until) : restart.reason === 'update' ? t.restart.deadlineUpdate(until) : t.restart.deadline(until)}</p>}
-      </div>
-    </div>
+    <Pill
+      restart={restart}
+      items={items}
+      elsewhere={restart.elsewhere}
+      go={api.restartNow}
+      going={stop ? t.restart.goingStop : update ? t.restart.goingUpdate : t.restart.going}
+      say={t.restart.pill(n, owner, restart.reason)}
+      // the deadline does not cut the owner off
+      until={!owner.length}
+      now={stop ? t.restart.nowStop : update ? t.restart.nowUpdate : t.restart.now}
+      risk={stop ? t.restart.nowRiskStop : n ? t.restart.nowRisk : t.restart.nowOwner}
+      why={
+        <>
+          <p>{t.restart.reason[restart.reason]}</p>
+          {owner.map((h) => (
+            <p key={h}>{t.restart.owner[h]}</p>
+          ))}
+        </>
+      }
+      after={
+        <>
+          <p className="hint">{stop ? t.restart.keptStop : update ? t.restart.keptUpdate : t.restart.kept}</p>
+          {n > 0 && <p className="hint">{stop ? t.restart.deadlineStop(until) : owner.length ? t.restart.deadlineOwner(until) : update ? t.restart.deadlineUpdate(until) : t.restart.deadline(until)}</p>}
+        </>
+      }
+    />
   );
 }
 
 /** A restart of some repositories' agents alone, for a change to their configuration, that waits for them; Obeya runs on. */
 function ReposRestartPill({ restart, items }: { restart: PendingRestart; items: Item[] }) {
-  const [going, setGoing] = useState(false);
   const r = t.restart.repos;
-  const until = clock(restart.deadline);
+  return (
+    <Pill
+      restart={restart}
+      items={items}
+      go={api.restartReposNow}
+      going={r.going}
+      say={r.pill(restart.cards.length)}
+      until
+      now={r.now}
+      risk={r.nowRisk}
+      why={<p>{restart.leaving ? r.leaving : r.reason((restart.repos ?? []).join(', '), restart.reason === 'repository')}</p>}
+      after={
+        <>
+          {!restart.leaving && <p className="hint">{r.kept}</p>}
+          <p className="hint">{r.deadline(clock(restart.deadline))}</p>
+        </>
+      }
+    />
+  );
+}
+
+/**
+ * The pill of either restart: what it waits for (`say`), with `until` until when, and a button
+ * (`now`, its risk on hover) that has it go ahead through `go`, saying `going` once it does. On
+ * hover why (`why`), the cards it waits for and `elsewhere` more on other canvases, and what
+ * follows (`after`).
+ */
+function Pill({ restart, items, elsewhere = 0, go, going, say, until, now, risk, why, after }: {
+  restart: PendingRestart;
+  items: Item[];
+  elsewhere?: number;
+  go: () => Promise<{ restarting: boolean }>;
+  going: string;
+  say: string;
+  until: boolean;
+  now: string;
+  risk: string;
+  why: ReactNode;
+  after: ReactNode;
+}) {
+  const [on, setOn] = useState(false);
   const titles = restart.cards.map((id) => plain(items.find((i) => i.id === id)?.title ?? id));
-  const now = () => {
-    setGoing(true);
-    api.restartReposNow().then(
-      (x) => x.restarting || setGoing(false),
-      () => setGoing(false),
+  const click = () => {
+    setOn(true);
+    go().then(
+      (r) => r.restarting || setOn(false),
+      () => setOn(false),
     );
   };
-  if (going)
+  if (on)
     return (
       <div className="pill restart going" id="restart">
-        <span className="spin">↻</span> {r.going}
+        <span className="spin">↻</span> {going}
       </div>
     );
   return (
     <div className="pill restart" id="restart">
       <span className="spin">↻</span>
-      <span className="say">{r.pill(restart.cards.length)}</span>
-      <span className="hint">{t.restart.until(until)}</span>
-      <button onClick={now}>
-        {r.now}
+      <span className="say">{say}</span>
+      {until && <span className="hint">{t.restart.until(clock(restart.deadline))}</span>}
+      <button onClick={click}>
+        {now}
         <span className="tip risk" role="tooltip">
-          {r.nowRisk}
+          {risk}
         </span>
       </button>
       <div className="tip why" role="tooltip">
-        <p>{restart.leaving ? r.leaving : r.reason((restart.repos ?? []).join(', '), restart.reason === 'repository')}</p>
-        {titles.length > 0 && (
+        {why}
+        {titles.length + elsewhere > 0 && (
           <>
             <p>{t.restart.waits}</p>
             <ul>
               {titles.map((x, i) => (
                 <li key={i}>{x}</li>
               ))}
+              {elsewhere > 0 && <li className="hint">{t.restart.elsewhere(elsewhere)}</li>}
             </ul>
           </>
         )}
-        {!restart.leaving && <p className="hint">{r.kept}</p>}
-        <p className="hint">{r.deadline(until)}</p>
+        {after}
       </div>
     </div>
   );
@@ -380,17 +412,19 @@ export function WorkspacesPill({ pools, canvas, items }: { pools: ClonePool[]; c
   const free = (p: ClonePool) => p.hosts.reduce((n, h) => n + room(h), 0);
   const total = (p: ClonePool) => p.hosts.reduce((n, h) => n + h.total, 0);
   const full = pools.every((p) => free(p) === 0);
+  // the machines a pool names: those with clones, and every other machine than this one
+  const named = (p: ClonePool) => p.hosts.filter((h) => h.total > 0 || !h.here);
   return (
     <div className={full ? 'pill workspaces full' : 'pill workspaces'} id="workspaces">
       <span className="lbl">{t.workspaces.label}</span>
       {pools.map((p) => {
-        const named = p.hosts.filter((h) => h.total > 0 || !h.here);
+        const hosts = named(p);
         return (
           <span key={p.repo} className="pool">
             {several && <span className="hint">{name(p.repo)}</span>}
-            {named.map((h) => (
+            {hosts.map((h) => (
               <span key={h.name} className="host">
-                {named.length > 1 && <span className="hint">{h.name}</span>}
+                {hosts.length > 1 && <span className="hint">{h.name}</span>}
                 <span className="slots" aria-hidden>
                   {Array.from({ length: h.total }, (_, i) => (
                     <i key={i} className={i < h.busy.length ? 'on' : i < h.cards.length ? 'held' : undefined} />
@@ -410,26 +444,24 @@ export function WorkspacesPill({ pools, canvas, items }: { pools: ClonePool[]; c
                 <b>{name(p.repo)}</b>
               </p>
             )}
-            {p.hosts
-              .filter((h) => h.total > 0 || !h.here)
-              .map((h) => (
-                <div key={h.name}>
-                  <p>{h.worktrees ? t.workspaces.worktreeSlots(h.name, h.busy.length, h.slots) : t.workspaces.host(h.name, h.busy.length, h.slots, h.cards.length, h.total)}</p>
-                  {h.cards.length > 0 && (
-                    <ul>
-                      {[...h.busy, ...h.cards.filter((c) => !h.busy.includes(c))].map((id) => {
-                        const item = items.find((i) => i.id === id);
-                        return (
-                          <li key={id}>
-                            {item ? plain(item.title) : <span className="hint">{t.workspaces.offCanvas}</span>}
-                            {h.busy.includes(id) && <span className="hint"> · {t.workspaces.atWork}</span>}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </div>
-              ))}
+            {named(p).map((h) => (
+              <div key={h.name}>
+                <p>{h.worktrees ? t.workspaces.worktreeSlots(h.name, h.busy.length, h.slots) : t.workspaces.host(h.name, h.busy.length, h.slots, h.cards.length, h.total)}</p>
+                {h.cards.length > 0 && (
+                  <ul>
+                    {[...h.busy, ...h.cards.filter((c) => !h.busy.includes(c))].map((id) => {
+                      const item = items.find((i) => i.id === id);
+                      return (
+                        <li key={id}>
+                          {item ? plain(item.title) : <span className="hint">{t.workspaces.offCanvas}</span>}
+                          {h.busy.includes(id) && <span className="hint"> · {t.workspaces.atWork}</span>}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            ))}
           </div>
         ))}
         {forWorkspace > 0 && <p>{t.workspaces.waiting(forWorkspace)}</p>}
@@ -443,7 +475,7 @@ export const ProjectView = memo(
   function ProjectView({ item, b, kids, onStartAll }: { item: Item; b: Bounds; kids: Item[]; onStartAll: (project: Item, count: number) => void }) {
     const live = kids.filter((k) => finished(k.state)).length;
     const waiting = kids.filter(needsYou).length;
-    const startable = kids.filter((k) => k.state === 'planned' && !k.queue).length;
+    const startable = startableIn(kids);
     return (
       <div className={`item project s-${item.state}`} data-id={item.id} style={{ left: b.x, top: b.y, width: b.w, height: b.h, zIndex: 0 }}>
         <div className="head">
@@ -461,9 +493,7 @@ export const ProjectView = memo(
                 onStartAll(item, startable);
               }}
             >
-              <svg width="10" height="10" viewBox="0 0 12 12">
-                <path d="M3 1.6v8.8a.6.6 0 0 0 .9.5l7-4.4a.6.6 0 0 0 0-1L3.9 1.1a.6.6 0 0 0-.9.5z" fill="currentColor" />
-              </svg>
+              <PlayIcon size={10} />
               {t.plan.startAllShort(startable)}
             </button>
           )}
@@ -607,7 +637,7 @@ export function Sheet({
   const box = useRef<HTMLElement>(null);
   const markEl = useRef<HTMLElement | null>(null);
   const shown = reading && doc?.id === project?.id ? doc : null;
-  const startable = kids.filter((k) => k.state === 'planned' && !k.queue).length;
+  const startable = startableIn(kids);
   // the doc opens at its top, or at the workstream it was opened for
   useEffect(() => {
     if (!shown || !box.current) return;
@@ -727,7 +757,7 @@ export function Edges({ cam, targets, rightReserve, onOpen }: { cam: Cam; target
             <span className="arr" style={{ transform: `rotate(${ang}deg)` }}>
               ➜
             </span>
-            {title.length > 30 ? title.slice(0, 28) + '…' : title}
+            {clip(title, 30)}
           </button>
         );
       })}
