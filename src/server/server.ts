@@ -4,7 +4,7 @@ import type { ServerWebSocket } from 'bun';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { agentListens, type CanvasInfo, type CardAction, type ClientMessage, type CardPatch, type NewCard, type PendingRestart, type ServerMessage, type SpotInput, type TalkRef, isTalkRef, waitingOn } from '../core/types';
+import { agentListens, type CanvasInfo, type CardAction, type ClientMessage, type CardPatch, type Item, type NewCard, type PendingRestart, type ServerMessage, type SpotInput, type TalkRef, isTalkRef, waitingOn } from '../core/types';
 import index from '../ui/index.html';
 import panel from '../ui/panel.html';
 import { guarded, LOCAL_HOSTS, refusal } from './access';
@@ -130,7 +130,22 @@ export function serve(
     const due = restarter?.due();
     if (!due) return byId.get(id)?.pendingRestart() ?? null;
     const here = due.waiting.filter((w) => w.canvas === id);
-    return { reason: due.reason, deadline: due.deadline, cards: here.map((w) => w.card), elsewhere: due.waiting.length - here.length, owner: due.owner };
+    // the others by canvas, named, each card by its title: a canvas's page knows only its own cards
+    const elsewhere = new Map<string, string[]>();
+    const items = new Map<string, Item[]>();
+    for (const w of due.waiting) {
+      if (w.canvas === id) continue;
+      if (!items.has(w.canvas)) items.set(w.canvas, byId.get(w.canvas)?.board.snapshot().items ?? []);
+      const title = items.get(w.canvas)!.find((i) => i.id === w.card)?.title ?? w.card;
+      elsewhere.set(w.canvas, [...(elsewhere.get(w.canvas) ?? []), title]);
+    }
+    return {
+      reason: due.reason,
+      deadline: due.deadline,
+      cards: here.map((w) => w.card),
+      elsewhere: [...elsewhere].map(([c, cards]) => ({ canvas: byId.get(c)?.board.canvas.name ?? c, cards })),
+      owner: due.owner,
+    };
   };
   /** How many things on each canvas need the owner: each canvas's switcher points to the others. */
   const counted = (c: CanvasRuntime) => waitingOn(c.board.snapshot());

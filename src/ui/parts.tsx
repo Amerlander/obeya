@@ -223,7 +223,7 @@ export function CanvasPill({ canvas, canvases, waiting }: { canvas: CanvasInfo; 
 /** A restart that waits for workers or the owner: for whom and until when (on hover), and a button that has it go ahead now. */
 export function RestartPill({ restart, items }: { restart: PendingRestart; items: Item[] }) {
   if (restart.repos) return <ReposRestartPill restart={restart} items={items} />;
-  const n = restart.cards.length + restart.elsewhere;
+  const n = restart.cards.length + restart.elsewhere.reduce((m, c) => m + c.cards.length, 0);
   const until = clock(restart.deadline);
   const owner = restart.owner;
   const stop = restart.reason === 'stop';
@@ -250,7 +250,7 @@ export function RestartPill({ restart, items }: { restart: PendingRestart; items
       }
       after={
         <>
-          <p className="hint">{stop ? t.restart.keptStop : update ? t.restart.keptUpdate : t.restart.kept}</p>
+          {(stop || update) && <p className="hint">{stop ? t.restart.keptStop : t.restart.keptUpdate}</p>}
           {n > 0 && <p className="hint">{stop ? t.restart.deadlineStop(until) : owner.length ? t.restart.deadlineOwner(until) : update ? t.restart.deadlineUpdate(until) : t.restart.deadline(until)}</p>}
         </>
       }
@@ -285,13 +285,13 @@ function ReposRestartPill({ restart, items }: { restart: PendingRestart; items: 
 /**
  * The pill of either restart: what it waits for (`say`), with `until` until when, and a button
  * (`now`, its risk on hover) that has it go ahead through `go`, saying `going` once it does. On
- * hover why (`why`), the cards it waits for and `elsewhere` more on other canvases, and what
- * follows (`after`).
+ * hover why (`why`), the cards it waits for here and on the other canvases (`elsewhere`), and
+ * what follows (`after`).
  */
-function Pill({ restart, items, elsewhere = 0, go, going, say, until, now, risk, why, after }: {
+function Pill({ restart, items, elsewhere = [], go, going, say, until, now, risk, why, after }: {
   restart: PendingRestart;
   items: Item[];
-  elsewhere?: number;
+  elsewhere?: PendingRestart['elsewhere'];
   go: () => Promise<{ restarting: boolean }>;
   going: string;
   say: string;
@@ -329,15 +329,26 @@ function Pill({ restart, items, elsewhere = 0, go, going, say, until, now, risk,
       </button>
       <div className="tip why" role="tooltip">
         {why}
-        {titles.length + elsewhere > 0 && (
+        {titles.length + elsewhere.length > 0 && (
           <>
             <p>{t.restart.waits}</p>
-            <ul>
-              {titles.map((x, i) => (
-                <li key={i}>{x}</li>
-              ))}
-              {elsewhere > 0 && <li className="hint">{t.restart.elsewhere(elsewhere)}</li>}
-            </ul>
+            {titles.length > 0 && (
+              <ul>
+                {titles.map((x, i) => (
+                  <li key={i}>{x}</li>
+                ))}
+              </ul>
+            )}
+            {elsewhere.map((c) => (
+              <div key={c.canvas} className="elsewhere">
+                <p className="hint">{t.restart.on(c.canvas)}</p>
+                <ul>
+                  {c.cards.map((x, i) => (
+                    <li key={i}>{plain(x)}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </>
         )}
         {after}

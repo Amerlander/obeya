@@ -1796,8 +1796,8 @@ export interface PendingRestart {
   deadline: number;
   /** The cards on this canvas whose worker it waits for. */
   cards: string[];
-  /** How many workers on other canvases it waits for. */
-  elsewhere: number;
+  /** The workers on other canvases it waits for: each canvas (by name) with its cards' titles. */
+  elsewhere: { canvas: string; cards: string[] }[];
   /** What the owner does in some open page that it waits for, past the deadline too. */
   owner: OwnerHold[];
   /** Only the agents of these repositories (by name) restart, for a change to their configuration; Obeya and the others work on. */

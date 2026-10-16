@@ -762,15 +762,19 @@ describe('a newer version of the app', () => {
 });
 
 describe('a restart that waits', () => {
-  test('shows on the canvas with the cards it waits for, and goes ahead at the owner\'s word', async () => {
+  test('shows on the canvas with the cards it waits for, here and by title on the others, and goes ahead at the owner\'s word', async () => {
+    const other = join(dir, 'other');
+    gitRepo(other);
+    const second = new CanvasRuntime({ repos: [{ path: other }] }, { store: new Store(':memory:'), home: join(dir, 'home2'), runtime, forge: noForge });
+    const there = second.board.create({ title: 'Export als CSV', x: 0, y: 0 });
     let busy = [
       { canvas: 'main', card: 'k1' },
-      { canvas: 'other', card: 'k2' },
+      { canvas: second.id, card: there.id },
     ];
     let gone = 0;
     const restarter = new Restarter({ busy: () => busy, go: () => gone++, patienceMs: 60_000, intervalMs: 10 });
     server.stop(true);
-    server = serve([canvas], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, restarter);
+    server = serve([canvas, second], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, restarter);
     const messages: ServerMessage[] = [];
     const ws = new WebSocket(new URL(api('/ws'), server.url.href.replace('http', 'ws')));
     ws.onmessage = (e) => messages.push(JSON.parse(e.data));
@@ -782,10 +786,10 @@ describe('a restart that waits', () => {
 
     restarter.request('code');
     await until(() => restarts().length === 2);
-    expect(restarts()[1]!.restart).toMatchObject({ reason: 'code', cards: ['k1'], elsewhere: 1 });
+    expect(restarts()[1]!.restart).toMatchObject({ reason: 'code', cards: ['k1'], elsewhere: [{ canvas: second.board.canvas.name, cards: ['Export als CSV'] }] });
     busy = [busy[0]!];
     await until(() => restarts().length === 3);
-    expect(restarts()[2]!.restart).toMatchObject({ cards: ['k1'], elsewhere: 0 });
+    expect(restarts()[2]!.restart).toMatchObject({ cards: ['k1'], elsewhere: [] });
 
     expect(await (await post('/api/restart', '')).json()).toEqual({ restarting: true });
     await until(() => gone === 1);
@@ -815,7 +819,7 @@ describe('a restart that waits', () => {
     // no worker is busy and the patience is out: only the owner holds it off
     restarter.request('code');
     await until(() => last()?.owner.length === 2);
-    expect(last()).toMatchObject({ cards: [], elsewhere: 0, owner: ['video', 'voice'] });
+    expect(last()).toMatchObject({ cards: [], elsewhere: [], owner: ['video', 'voice'] });
     hold(watching, []);
     await until(() => last()?.owner.length === 1);
     expect(last()!.owner).toEqual(['voice']);

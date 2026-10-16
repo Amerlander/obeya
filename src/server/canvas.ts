@@ -705,7 +705,7 @@ export class CanvasRuntime {
       reason: p.reason,
       deadline: p.deadline,
       cards: p.waiting,
-      elsewhere: 0,
+      elsewhere: [],
       owner: [],
       repos: this.repos.filter((r) => p.paths.has(r.info.path)).map((r) => r.ref.name),
       ...(this.retiring ? { leaving: true } : {}),

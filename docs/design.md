@@ -4377,7 +4377,8 @@ not the page that said it is still open, and until it has run.
 
 While a restart waits, the bar shows it ("Neustart wartet auf N Agenten", "… auf dein Video", "… auf
 dein Diktat"; until when at most, while only agents hold it); hovering names why and the cards it
-waits for, and "Jetzt neu starten" (`POST /api/restart`) has it go ahead at once, its hover text
+waits for, on this canvas and under each other canvas's name (the server gives their titles, as the
+page knows only its own cards), and "Jetzt neu starten" (`POST /api/restart`) has it go ahead at once, its hover text
 saying what that cuts off.
 
 #### Keeping the page
