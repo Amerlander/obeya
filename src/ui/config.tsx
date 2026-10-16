@@ -11,8 +11,8 @@ import { AccessSection } from './access';
 import { api, reload } from './api';
 import { keepConfigDraft, keptConfigDraft } from './configDraft';
 import { keep } from './keep';
-import { demoState, GitSetup, megabytes, PLATFORMS, RecognitionDetail, SetupList, useFolderWithoutGit, voiceState } from './setup';
-import { failText, pushKeyLabel, t } from './strings';
+import { demoState, GitSetup, platformName, RecognitionDetail, SetupList, useFolderWithoutGit, voiceState } from './setup';
+import { failText, fileSize, pushKeyLabel, t } from './strings';
 import { applyTheme } from './theme';
 
 declare global {
@@ -916,9 +916,9 @@ function DemoBlock({ on }: { on: boolean }) {
             ) : (
               !shown.install.installed && (
                 <div className="c-install">
-                  <p className="hint">{d.notInstalled(shown.install.missing.join(', '), megabytes(shown.install.mb))}</p>
+                  <p className="hint">{d.notInstalled(shown.install.missing.join(', '), fileSize(shown.install.mb * 1e6))}</p>
                   <button className="btn small" disabled={installing} onClick={install}>
-                    {d.install(megabytes(shown.install.mb))}
+                    {d.install(fileSize(shown.install.mb * 1e6))}
                   </button>
                 </div>
               )
@@ -973,7 +973,7 @@ function SetupBlock({ draft, installing }: { draft: DemoSettings; installing: bo
   const items = setup.items.filter((i) => i.id !== 'voice');
   return (
     <div className="c-setup">
-      <Head sub title={s.title} hint={s.hint(`${PLATFORMS[setup.platform] ?? setup.platform} (${setup.arch})`)} />
+      <Head sub title={s.title} hint={s.hint(platformName(setup))} />
       <SetupList items={items} name={(i) => s.names[i.id]} state={demoState} />
       {!items.some((i) => i.state === 'missing') && <p className="hint">{s.ready}</p>}
       <p className="hint">
@@ -1025,7 +1025,7 @@ function VoiceBlock({ on }: { on: boolean }) {
   const blocked = view.items.some((i) => i.state === 'missing');
   return (
     <div className="c-setup">
-      <Head title={v.title} hint={v.hint(`${PLATFORMS[view.platform] ?? view.platform} (${view.arch})`)} />
+      <Head title={v.title} hint={v.hint(platformName(view))} />
       <SetupList items={view.items} name={(i) => v.names[i.id]} state={voiceState} action={(i) => i.id === 'recognition' && <RecognitionDetail item={i} busy={running} changed={recheck} />} />
       {view.listen === 'faster' && <p className="hint">{v.faster}</p>}
       {view.job?.running ? (
@@ -1035,7 +1035,7 @@ function VoiceBlock({ on }: { on: boolean }) {
       ) : view.fetch.mb ? (
         <div className="c-install">
           <button className="btn small" disabled={blocked} onClick={install}>
-            {v.install(megabytes(view.fetch.mb))}
+            {v.install(fileSize(view.fetch.mb * 1e6))}
           </button>
         </div>
       ) : (

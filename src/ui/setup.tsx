@@ -8,24 +8,21 @@ import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
 import { CLOUD_PRESETS, CLOUD_VOICES, type CloudPreset, type GitSetupPreview, LARGE_FILE, type Language, type MachineItem, type MachineSection, type MachineView, type SetupItem, type VoiceSetupItem } from '../core/types';
 import { LANGUAGES } from '../core/locale';
 import { api, reload } from './api';
+import { useCopy } from './copy';
 import { Sign } from './logo';
 import { failText, fileSize, pushKeyLabel, t } from './strings';
 
-export const megabytes = (mb: number) => (mb >= 1000 ? `${(mb / 1000).toFixed(1).replace('.', ',')} GB` : `${mb} MB`);
-export const PLATFORMS: Record<string, string> = { darwin: 'macOS', win32: 'Windows', linux: 'Linux' };
+const PLATFORMS: Record<string, string> = { darwin: 'macOS', win32: 'Windows', linux: 'Linux' };
+/** The machine's system and processor, as the owner knows them: "macOS (arm64)". */
+export const platformName = (v: { platform: string; arch: string }) => `${PLATFORMS[v.platform] ?? v.platform} (${v.arch})`;
 
 /** A command to run in a terminal, with a button that copies it. */
 function Command({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = () =>
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    }, console.error);
+  const [copied, copy] = useCopy(1500);
   return (
     <span className="c-cmd">
       <code>{text}</code>
-      <button className="c-copy" onClick={copy} title={t.setup.copy}>
+      <button className="c-copy" onClick={() => copy(text)} title={t.setup.copy}>
         {copied ? t.setup.copied : t.setup.copy}
       </button>
     </span>
@@ -87,7 +84,7 @@ export function voiceState(i: VoiceSetupItem | MachineItem) {
   const s = t.config.setup;
   // the app's key in another app: the key, or what is in the way (src/server/push-key.ts)
   if (i.id === 'globalKey') return i.state === 'ok' ? t.config.pushKey.on(pushKeyLabel(i.found ?? '')) : (t.config.pushKey.states[i.found ?? ''] ?? t.config.pushKey.states.error!);
-  if (i.state === 'later') return (i.waits ? v.waits : v.later)(megabytes(i.mb ?? 0));
+  if (i.state === 'later') return (i.waits ? v.waits : v.later)(fileSize((i.mb ?? 0) * 1e6));
   if (i.state === 'missing') return i.found && i.need ? s.needs(i.found, i.need) : s.missing;
   if (i.id === 'recognition') {
     if (i.cloud?.used) return v.cloud.found(i.found ?? '');
@@ -296,7 +293,7 @@ export function Setup({ first, onClose }: { first?: boolean; onClose?: () => voi
     return (
       <>
         <button className="btn small" disabled={running} onClick={() => act(section, i)}>
-          {i.mb ? s.installSized(megabytes(i.mb)) : s.install}
+          {i.mb ? s.installSized(fileSize(i.mb * 1e6)) : s.install}
         </button>
         {detail}
       </>
@@ -339,13 +336,13 @@ export function Setup({ first, onClose }: { first?: boolean; onClose?: () => voi
             <p className="hint">{checking ? t.config.setup.checking : status}</p>
           ) : (
             <>
-              <p className="hint">{s.platform(`${PLATFORMS[view.platform] ?? view.platform} (${view.arch})`)}</p>
+              <p className="hint">{s.platform(platformName(view))}</p>
               {view.sections.map((section) => (
                 <section key={section.id} className={`c-canvas c-setup setup-${section.id}`}>
                   <div className="setup-sh">
                     <b>{s.sections[section.id].title}</b>
                     <span className={section.id === 'needed' ? 'setup-tag needed' : 'setup-tag'}>{section.id === 'needed' ? s.needed : s.optional}</span>
-                    {section.mb > 0 && <span className="hint">{s.size(megabytes(section.mb))}</span>}
+                    {section.mb > 0 && <span className="hint">{s.size(fileSize(section.mb * 1e6))}</span>}
                     <span className={ready(section) ? 'setup-ok on' : 'setup-ok'}>
                       {!ready(section) ? s.open(section.items.filter((i) => i.state === 'missing').length) : section.items.some((i) => i.state === 'later') ? s.readyLater : s.ready}
                     </span>
@@ -429,7 +426,7 @@ function FirstCanvas({ view, ready, onView }: { view: MachineView; ready: boolea
   const [status, setStatus] = useState('');
   const [saved, setSaved] = useState<{ canvas: string; branch?: string; opens: boolean } | null>(null);
   // the main branch of the folder named, once Obeya looked at it; or that it is a folder without git
-  const [found, setFound] = useState<{ path: string; branch?: string; noGit?: boolean } | null>(null);
+  const found = useFolder(mode === 'folder' ? path.trim() : '');
   const s = t.setup;
   const failed = (e: unknown) => setStatus(failText(e, { detail: ['invalid', 'config'] }));
   const job = view.job?.kind === 'clone' ? view.job : undefined;
@@ -437,14 +434,8 @@ function FirstCanvas({ view, ready, onView }: { view: MachineView; ready: boolea
   useEffect(() => {
     if (job && !job.running && job.canvas) setSaved({ canvas: job.canvas, branch: job.branch, opens: !!job.opens });
   }, [job?.running, job?.canvas]);
-  useEffect(() => {
-    const p = path.trim();
-    if (!p) return setFound(null);
-    const timer = setTimeout(() => api.setupFolder(p).then((f) => setFound({ path: p, branch: f.branch, noGit: f.folder }), () => setFound(null)), 300);
-    return () => clearTimeout(timer);
-  }, [path]);
-  const branch = saved?.branch ?? (mode === 'folder' && found?.path === path.trim() ? found.branch : undefined);
-  const noGit = mode === 'folder' && found?.path === path.trim() && !!found.noGit;
+  const branch = saved?.branch ?? found?.branch;
+  const noGit = !!found?.noGit;
   // once Obeya runs with the canvas (by itself, or started again by the owner), the page opens it
   const opened = useRef(false);
   useEffect(() => {
@@ -552,17 +543,19 @@ function FirstCanvas({ view, ready, onView }: { view: MachineView; ready: boolea
   );
 }
 
-/** The path, once Obeya found a folder without git there (where git can be set up); else empty. */
-export function useFolderWithoutGit(path: string): string {
-  const [found, setFound] = useState('');
+/** What Obeya found at the folder `path` once it stopped changing for a moment: its main branch, or that it has no git; null until then. */
+function useFolder(path: string): { branch?: string; noGit?: boolean } | null {
+  const [found, setFound] = useState<{ path: string; branch?: string; noGit?: boolean } | null>(null);
   useEffect(() => {
-    setFound('');
     if (!path) return;
-    const timer = setTimeout(() => api.setupFolder(path).then((f) => setFound(f.folder ? path : ''), () => {}), 300);
+    const timer = setTimeout(() => api.setupFolder(path).then((f) => setFound({ path, branch: f.branch, noGit: f.folder }), () => setFound(null)), 300);
     return () => clearTimeout(timer);
   }, [path]);
-  return found;
+  return found?.path === path ? found : null;
 }
+
+/** The path, once Obeya found a folder without git there (where git can be set up); else empty. */
+export const useFolderWithoutGit = (path: string) => (useFolder(path)?.noGit ? path : '');
 
 // what stays out, listed up to this many
 const IGNORED_SHOWN = 12;
