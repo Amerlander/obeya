@@ -13,9 +13,7 @@ import { failText, stateLabel, t } from './strings';
 export function QueuePill({ items, onOpen }: { items: Item[]; onOpen: (i: Item) => void }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
-  // in turn, with the cards being cut after them
-  const order = queueOrder(items);
-  const queued = [...order, ...items.filter((i) => i.state === 'planned' && i.queue && !order.includes(i))];
+  const queued = queueOrder(items);
   useEffect(() => {
     if (!open) return;
     // a click anywhere else or Esc closes the list

@@ -4,11 +4,11 @@
 
 import type { Item } from './types';
 
-/** Waiting to start: being judged, behind others, or for a workspace (a card being cut is not). */
-export const inQueue = (i: Item) => i.state === 'planned' && !!i.queue && ('behind' in i.queue || 'checking' in i.queue || 'workspace' in i.queue);
+/** Waiting to start: being judged, behind others, or for a workspace. */
+export const inQueue = (i: Item) => i.state === 'planned' && !!i.queue;
 
 /** A card the Koordinator has decided on and that waits: the owner may move it. One being judged stays where it is. */
-export const movable = (i: Item) => i.state === 'planned' && !!i.queue && ('behind' in i.queue || 'workspace' in i.queue);
+export const movable = (i: Item) => inQueue(i) && !('checking' in i.queue!);
 
 /** The waiting cards, first in turn first. */
 export function queueOrder(items: Item[]): Item[] {

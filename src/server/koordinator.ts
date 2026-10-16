@@ -4,7 +4,7 @@
 
 import { z } from 'zod';
 import type { RepoAdapter } from '../adapters/types';
-import { inQueue, move, movable } from '../core/queue';
+import { inQueue, move, movable, queueOrder } from '../core/queue';
 import { type AgentRole, type CardEvent, type Item, nameless, type Preference, START_ALL_HOLD_MS, titleFrom, type Wait } from '../core/types';
 import { ACTIVE, BadRequest, type Board } from './board';
 import type { Utterance } from './db';
@@ -558,9 +558,7 @@ export class Koordinator {
     // has started, until it has landed: a card started or judged again here stays in this set
     const active = new Set([...this.inProgress(), ...items.filter(inQueue)].map((i) => i.id));
     // the card waiting longest goes first: one queued later must not take its turn
-    const waiting = items
-      .filter((i) => i.state === 'planned' && i.queue && ('behind' in i.queue || 'workspace' in i.queue))
-      .sort((a, b) => a.queue!.since.localeCompare(b.queue!.since));
+    const waiting = queueOrder(items).filter(movable);
     // a repository whose workspaces are taken by a card waiting longer is not asked again
     const full = new Set<string | undefined>();
     // the owner's question to a finished card whose agent needs a full clone goes before queued cards
