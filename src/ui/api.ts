@@ -413,10 +413,11 @@ export function useCanvas(id = canvasId): {
         setOnline(false);
         setOfflineSince((t) => t ?? Date.now());
         // a canvas the configuration no longer has: the page goes to the first one there is; a
-        // device removed from Obeya's devices gets the page that says how to connect again
+        // device removed from Obeya's devices, or a browser whose cookie no longer names the
+        // owner's key, gets the page that says how to connect or sign in again
         api.canvases().then(
           (list) => list.some((c) => c.id === id) || location.replace(location.pathname),
-          (e) => e instanceof ApiError && e.code === 'notPaired' && location.reload(),
+          (e) => e instanceof ApiError && (e.code === 'notPaired' || e.code === 'notOwner') && location.reload(),
         );
         retry = setTimeout(connect, delay);
         delay = Math.min(delay * 2, 8000);

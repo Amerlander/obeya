@@ -2,7 +2,8 @@
 // obeya <repo>… [--name <canvas>] [--workspace <path>]… [--clones <n>]
 //   [--port <n>] [--dev] [--permission-mode <mode>] [--idle-workers]
 //
-// Serves canvases at http://127.0.0.1:<port>. Without repositories: the canvases the JSON file
+// Serves canvases at http://127.0.0.1:<port>, to the owner alone (owner.ts): it prints a link that
+// signs a browser in, and a second start while it runs prints a new one. Without repositories: the canvases the JSON file
 // lists, `[{ "name"?, "id"?, "repos": [{ "path", "workspaces"?, "clones"? }] }]`, by default
 // $OBEYA_HOME/canvases.json; while that does not exist, none, and the page shows the setup
 // assistant, which checks the machine and creates the first canvas (machine.ts). With repositories: one canvas with them (the first is its home;
@@ -58,6 +59,7 @@ import { useLib } from '../../plugin/skills/demo/lib/here.ts';
 import { expandHome } from '../../plugin/skills/demo/lib/settings.ts';
 import { qwen3Serve } from '../../plugin/skills/demo/lib/voices.ts';
 import { agentSetting, ownerLanguage } from './settings';
+import { loginLink } from './owner';
 
 const { values, positionals } = parseArgs({
   args: Bun.argv.slice(2),
@@ -87,7 +89,9 @@ const configFile = values.config ? resolve(expandHome(values.config)) : join(hom
 if (!process.env.OBEYA_SUPERVISED) {
   const other = await running(home);
   if (other) {
-    console.error(`Obeya already runs on ${home}, at ${other.url} (pid ${other.pid}); one home serves one Obeya`);
+    // a new link to it, for a browser not signed in yet
+    const link = await loginLink(other.url, home);
+    console.error(`Obeya already runs on ${home}, at ${other.url} (pid ${other.pid}); one home serves one Obeya${link ? `\nOpen it signed in: ${link}` : ''}`);
     process.exit(1);
   }
 }
@@ -199,11 +203,11 @@ const commitOf = () => {
   const checkout = own ?? ownCheckout();
   return ranFrom ?? (checkout && headOf(checkout));
 };
-// where this Obeya answers: a demo's narration asks it for the voice it holds loaded (narration.ts)
-const url = `http://127.0.0.1:${values.port}`;
 const narration = new NarrationHost({ argv: (voice, language) => qwen3Serve(voice, language, home), log: (line) => console.log(line) });
-// what a worker on another machine reaches of Obeya: the narration and nothing else (design: Hosts)
+// what a demo's narration reaches of Obeya, for the voice it holds loaded (narration.ts): the
+// narration and nothing else, from a worker here as from one on another machine (design: Hosts)
 const narrationServer = serveNarration(narration);
+const narrationUrl = `http://127.0.0.1:${narrationServer.port}`;
 const config = new Config({
   file: configFile,
   source,
@@ -211,7 +215,7 @@ const config = new Config({
   store,
   running: () => live().map((c) => c.id),
   server: { port: Number(values.port), home, permissionMode: values['permission-mode'], commit: commitOf() },
-  narrationUrl: url,
+  narrationUrl,
   forge: ghForge,
   onSettings: () => {
     for (const c of live()) c.settingsChanged();
@@ -240,7 +244,7 @@ canvases = new Canvases(
     watch: true,
     ownCheckout: own,
     config,
-    workerEnv: { OBEYA_URL: url, OBEYA_NARRATION_URL: `http://127.0.0.1:${narrationServer.port}` },
+    workerEnv: { OBEYA_URL: narrationUrl, OBEYA_NARRATION_URL: narrationUrl },
     ...(process.env.OBEYA_PARK_GRACE ? { parkGrace: Number(process.env.OBEYA_PARK_GRACE) * 1000 } : {}),
     language: () => ownerLanguage(home),
     agents: (role) => agentSetting(home, role),
@@ -295,9 +299,11 @@ const access = new Access({ store, home, language: () => ownerLanguage(home) });
 const awake = new Awake({ wanted: () => access.awake() === 'always' || (access.awake() === 'works' && busy().length > 0) }).start();
 server = serve(canvases, { transcriber, setup: voiceSetup }, Number(values.port), values.dev, config, restarter, narration, machine, stop, shells, updates, access);
 claim(home, { pid: process.env.OBEYA_SUPERVISED ? process.ppid : process.pid, port: server.port!, url: `http://127.0.0.1:${server.port}`, version: VERSION, app: !!process.env.OBEYA_APP });
-console.log(`Obeya ${own ? `from ${own}` : VERSION} on ${server.url} (${source === 'file' ? configFile : 'canvases from the command line'}), agents on ${claudeExecutable() ?? 'the Claude Code the Agent SDK brings'}`);
+// the address as a one-time link that signs a browser in (owner.ts)
+const link = access.owner.link(`http://127.0.0.1:${server.port}`);
+console.log(`Obeya ${own ? `from ${own}` : VERSION} on ${link} (${source === 'file' ? configFile : 'canvases from the command line'}), agents on ${claudeExecutable() ?? 'the Claude Code the Agent SDK brings'}`);
 if (own) watchOwnCode(own, (from, to) => restart('code', `${own} moved from ${from.slice(0, 7)} to ${to.slice(0, 7)}`));
-if (!canvases.all().length) console.log(`  no canvas yet: the setup assistant on ${server.url} checks this machine and creates the first`);
+if (!canvases.all().length) console.log(`  no canvas yet: the setup assistant there checks this machine and creates the first`);
 for (const c of canvases.all()) {
   console.log(`  ${c.board.canvas.name} (?c=${c.id})`);
   for (const r of c.repos)

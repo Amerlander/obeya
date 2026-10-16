@@ -8,7 +8,7 @@ import { Config, demoSettingsProblems, readConfigFile } from './config';
 import { Store } from './db';
 import { serve } from './server';
 import { ownerLanguage } from './settings';
-import { FakeRuntime, noForge, gitRepo } from './testing';
+import { asOwner, FakeRuntime, noForge, gitRepo } from './testing';
 import { git } from './workspaces';
 
 let dir: string;
@@ -465,6 +465,7 @@ describe('the configuration over HTTP', () => {
     server.stop(true);
     canvas.shutdown();
   });
+  const { fetch } = asOwner(() => server);
   const call = async (method: string, path: string, body?: unknown) => {
     const res = await fetch(new URL(path, server.url), { method, ...(body === undefined ? {} : { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } }) });
     return { status: res.status, body: (await res.json()) as Record<string, unknown> };
@@ -567,7 +568,7 @@ describe('the configuration over HTTP', () => {
     const live = new CanvasRuntime({ repos: [{ path: web }] }, { store, home: dir, runtime: new FakeRuntime(), forge: noForge, config: c, settings: (p) => c.repoSettings(p) });
     const at = serve([live], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, c);
     const post = async (path: string, body?: unknown) => {
-      const res = await fetch(new URL(path, at.url), { method: 'POST', ...(body === undefined ? {} : { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } }) });
+      const res = await asOwner(() => at).fetch(new URL(path, at.url), { method: 'POST', ...(body === undefined ? {} : { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } }) });
       return { status: res.status, body: res.status === 204 ? null : ((await res.json()) as Record<string, unknown>) };
     };
     try {

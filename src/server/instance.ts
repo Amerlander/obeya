@@ -4,6 +4,7 @@
 
 import { readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { ownerHeaders } from './owner';
 
 /** What a running Obeya writes into its home. */
 export interface Instance {
@@ -66,9 +67,9 @@ const alive = (pid: number) => {
   }
 };
 
-const answers = async (url: string) => {
+const answers = async (url: string, home: string) => {
   try {
-    return (await fetch(`${url}/api/canvases`, { signal: AbortSignal.timeout(1000) })).ok;
+    return (await fetch(`${url}/api/canvases`, { headers: ownerHeaders(home), signal: AbortSignal.timeout(1000) })).ok;
   } catch {
     return false;
   }
@@ -88,7 +89,7 @@ export async function running(home: string, self = process.pid, graceMs = 5000, 
     // read again each time: the restarted server writes its own entry, perhaps with another port
     const i = recorded(home);
     if (!i || i.pid !== first.pid || !alive(i.pid)) return null;
-    if (await answers(i.url)) return i;
+    if (await answers(i.url, home)) return i;
     if (Date.now() - start > (i.restarting ? restartGraceMs : graceMs)) return null;
     await new Promise((r) => setTimeout(r, 250));
   }

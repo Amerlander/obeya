@@ -1,8 +1,8 @@
 // The narration voice held across renders. A voice that loads a large model and can stay loaded
 // (Qwen3-TTS, `qwen3.py --serve`) runs as a child of the Obeya server, which outlives every render
 // and runs on every platform: `tts.py` sends each clip to `POST /api/narration/clip` when
-// `OBEYA_URL` says where Obeya is (Obeya sets it for its workers and for the settings sheet's
-// sample). The clips of all renders wait in one queue, served one at a time: each render asks
+// `OBEYA_URL` says where Obeya's narration server is (`serveNarration`; Obeya sets it for its
+// workers and for the settings sheet's sample). The clips of all renders wait in one queue, served one at a time: each render asks
 // for one clip at a time, so parallel renders take turns clip by clip. Once the queue is empty
 // the voice stays loaded for a while (`idleMs`), then ends; a request for another voice (another
 // reference, speaker or language) ends it at once. Between this server and the voice runs the

@@ -5,9 +5,12 @@
 //
 //   bun scripts/scratch-obeya.ts <stage.json> [--port <n>] [--code <commit> | --binary <obeya>] [--real-workers] [--restarts]
 //   bun scripts/scratch-obeya.ts --stop <port>
+//   bun scripts/scratch-obeya.ts --login <port>
 //
 // Prints one JSON line, also kept in <dir>/staged.json:
 //   { "url", "port", "dir", "canvas", "pid", "log", "cards": { "<key>": "<card id>" } }
+// `url` signs browsers in (design: Who may talk to it), until the scratch Obeya stops; --login
+// prints it again. The script itself talks to the API with the owner's key of the scratch home.
 //
 // The server runs with --dev (it does not restart when the checkout commits; with --restarts it is
 // supervised like a real Obeya and restarts once the configuration is saved, PUT /api/config, and
@@ -97,9 +100,10 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, openSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import type { CanvasSnapshot, Item } from '../src/core/types';
+import { loginLink, ownerHeaders } from '../src/server/owner';
 import { findTailscale, type ServeEntry, Tailscale } from '../src/server/tailscale';
 import { opt } from './common';
-import { answers, waitUp } from './wait-up';
+import { waitUp } from './wait-up';
 
 type StageEvent = NonNullable<StageCard['events']>[number];
 
@@ -186,16 +190,26 @@ if (stopPort) {
   stop(opt('dir') ?? scratchDir(Number(stopPort)));
   process.exit(0);
 }
+const loginPort = opt('login');
+if (loginPort) {
+  const d = opt('dir') ?? scratchDir(Number(loginPort));
+  const canvas = existsSync(join(d, 'staged.json')) ? (JSON.parse(readFileSync(join(d, 'staged.json'), 'utf8')) as { canvas?: string }).canvas : undefined;
+  const link = await loginLink(`http://127.0.0.1:${loginPort}`, join(d, 'home'), canvas ? `/?c=${canvas}` : '/');
+  if (!link) fail(`no scratch Obeya of ${d} answers on port ${loginPort}`);
+  console.log(link);
+  process.exit(0);
+}
 
 const file = args.find((a, i) => !a.startsWith('--') && !args[i - 1]?.match(/^--(port|code|dir|binary)$/));
-if (!file) fail('usage: bun scripts/scratch-obeya.ts <stage.json> [--port <n>] [--code <commit> | --binary <obeya>] [--real-workers] [--restarts] | --stop <port>');
+if (!file) fail('usage: bun scripts/scratch-obeya.ts <stage.json> [--port <n>] [--code <commit> | --binary <obeya>] [--real-workers] [--restarts] | --stop <port> | --login <port>');
 const stage = JSON.parse(readFileSync(file!, 'utf8')) as Stage;
 const port = Number(opt('port') ?? stage.port ?? fail('no port: give "port" in the stage file or --port'));
 const dir = resolve(opt('dir') ?? stage.dir ?? scratchDir(port));
 const base = `http://127.0.0.1:${port}`;
 
 stop(dir);
-if (await answers(`${base}/api/canvases`)) fail(`port ${port} is taken by another process (lsof -i :${port})`);
+// whatever answers there, with Obeya's key or without
+if (await fetch(base, { signal: AbortSignal.timeout(1000) }).then(() => true, () => false)) fail(`port ${port} is taken by another process (lsof -i :${port})`);
 rmSync(dir, { recursive: true, force: true });
 const home = join(dir, 'home');
 /** Where a host keeps the repository's clones. */
@@ -203,6 +217,8 @@ const rootOn = (h: { root?: string }) => h.root ?? `${dir}/far`;
 const repo = join(dir, 'repo');
 const mainBranch = stage.mainBranch ?? 'main';
 mkdirSync(home, { recursive: true });
+// the owner's key, made before the server starts, which takes it from the home (owner.ts); code from before it has none and ignores it
+const owner = ownerHeaders(home);
 
 // the repository
 const files = { ...(stage.files ?? {}), ...(stage.plans ?? {}) };
@@ -300,6 +316,7 @@ writeFileSync(join(dir, 'server.pid'), String(server.pid));
 let exited: number | null = null;
 server.on('exit', (c) => (exited = c ?? -1));
 const started = await waitUp(`${base}/api/canvases`, {
+  headers: owner,
   exited: () => exited,
   limit: 5 * 60_000,
   slowAfter: 15_000,
@@ -311,17 +328,17 @@ if (!started.up) {
   fail(`the server did not come up ${started.exit !== null ? `(exit ${started.exit}) ${after}` : `${after}, so it was stopped`}; ${log}:\n${readFileSync(log, 'utf8').slice(-2000)}`);
 }
 if (stage.setup) {
-  const staged = { url: `${base}/`, port, dir, repo, pid: server.pid, log, cards: {} };
+  const staged = { url: (await loginLink(base, home)) ?? `${base}/`, port, dir, repo, pid: server.pid, log, cards: {} };
   writeFileSync(join(dir, 'staged.json'), JSON.stringify(staged, null, 2));
   console.log(JSON.stringify(staged));
   process.exit(0);
 }
-const allCanvases = (await (await fetch(`${base}/api/canvases`)).json()) as { id: string; name: string }[];
+const allCanvases = (await (await fetch(`${base}/api/canvases`, { headers: owner })).json()) as { id: string; name: string }[];
 const canvas = allCanvases[0]!.id;
 const api = async (method: string, path: string, body?: unknown, on = canvas) => {
   const r = await fetch(`${base}/api/c/${on}${path}`, {
     method,
-    headers: { 'content-type': 'application/json' },
+    headers: { ...owner, 'content-type': 'application/json' },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
   const text = await r.text();
@@ -531,7 +548,7 @@ for (const on of allCanvases) {
 for (const g of stage.groups ?? [])
   await api('POST', '/groups', { name: g.name, cards: g.cards.map((k) => ids[k] ?? fail(`group ${g.name}: card ${k} does not exist`)) });
 
-const staged = { url: `${base}/?c=${canvas}`, port, dir, canvas, pid: server.pid, log, cards: ids };
+const staged = { url: (await loginLink(base, home, `/?c=${canvas}`)) ?? `${base}/?c=${canvas}`, port, dir, canvas, pid: server.pid, log, cards: ids };
 writeFileSync(join(dir, 'staged.json'), JSON.stringify(staged, null, 2));
 console.log(JSON.stringify(staged));
 process.exit(0);

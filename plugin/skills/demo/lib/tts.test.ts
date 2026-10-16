@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { NarrationHost } from '../../../../src/server/narration';
-import { serve } from '../../../../src/server/server';
+import { serveNarration } from '../../../../src/server/server';
 
 const LIB = import.meta.dirname;
 const python = (args: string[], env: Record<string, string> = {}, input?: string) =>
@@ -107,7 +107,7 @@ describe('a voice that stays loaded', () => {
 
 describe('a voice Obeya holds', () => {
   const UV = ['uv', 'run', '--quiet', '--no-project', '--with', 'numpy', 'python'];
-  /** A render while this process serves Obeya: spawned, not spawnSync, which would block the server. */
+  /** A render while this process serves Obeya's narration: spawned, not spawnSync, which would block the server. */
   const render = (out: string, env: Record<string, string>, extra: string[] = []) =>
     new Promise<{ status: number | null; stderr: string }>((resolve) => {
       const child = spawn(UV[0]!, [...UV.slice(1), join(LIB, 'tts.py'), ...extra, join(dir, 'spec.json'), 'de', join(dir, 'jobs.json'), join(dir, out)], {
@@ -119,12 +119,13 @@ describe('a voice Obeya holds', () => {
     });
   const go = () => join(dir, 'go');
   let host: NarrationHost;
-  let server: ReturnType<typeof serve>;
+  let server: ReturnType<typeof serveNarration>;
   beforeEach(() => {
     // the voice loads at once; a test that removes `go` holds it
     writeFileSync(go(), '');
     host = new NarrationHost({ argv: () => [...UV, join(dir, 'voice.py'), join(dir, 'log'), go()] });
-    server = serve([], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, undefined, host);
+    // the narration server, as Obeya gives its workers in `OBEYA_URL`
+    server = serveNarration(host);
     const spec = JSON.parse(readFileSync(join(dir, 'spec.json'), 'utf8'));
     writeFileSync(join(dir, 'spec.json'), JSON.stringify({ ...spec, host: { speaker: 'ryan' } }));
   });

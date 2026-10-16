@@ -297,6 +297,12 @@ const de = {
       `Bereite \`${file}\` so auf, dass Obeya es als Projekt zeigt. Obeya liest ein Plan-Doc als Projekt, wenn unter \`## Workstreams\` (oder \`## Arbeitspakete\`) eine Checkliste steht: Jeder Punkt der obersten Ebene ist ein Workstream (\`- [ ] **W1:** Titel. Details\`), ein Paket, das einzeln landen kann, und ein abgehakter ist gelandet. Das Ziel des Projekts ist der erste Absatz unter \`## Goal\` (oder \`## Ziel\`).\n\nErgänze die Checkliste, und das Ziel, wenn es fehlt, im Stil des Docs aus dem, was es plant. Führt es seine Aufgaben schon unter einer anderen Überschrift (Tasks, Meilensteine, Phasen), wird daraus die Checkliste, statt sie zu verdoppeln. Hake ab, was schon erledigt ist; ist alles erledigt, sag es mir, denn ein Projekt mit lauter abgehakten Workstreams geht gleich ins Archiv. Der übrige Text bleibt, und gebaut wird nichts davon.`,
   },
   /** The page another device gets until it is paired (src/server/remote.ts). */
+  notOwner: {
+    title: 'Nicht angemeldet · Obeya',
+    heading: 'Dieser Browser ist nicht bei Obeya angemeldet',
+    how: 'Öffne den Link, den Obeya beim Start im Terminal ausgibt („Obeya … on http://127.0.0.1:…/login?token=…“). Er gilt, bis Obeya neu startet; danach gibt Obeya einen neuen aus, und auch, wenn du es noch einmal startest, während es läuft. In der App öffnet „Im Browser öffnen“ (in den Einstellungen) Obeya angemeldet im Browser.',
+    used: 'Dieser Link gilt nicht mehr: Obeya ist seither neu gestartet, oder er war für einen einzigen Browser.',
+  },
   notPaired: {
     title: 'Nicht verbunden · Obeya',
     heading: 'Dieses Gerät ist nicht mit Obeya verbunden',
@@ -580,6 +586,12 @@ const en: Messages = {
     title: (file: string) => `Prepare ${file.slice(file.lastIndexOf('/') + 1)} as a project`,
     body: (file: string) =>
       `Prepare \`${file}\` so that Obeya shows it as a project. Obeya reads a plan doc as a project when a checklist stands under \`## Workstreams\` (or \`## Arbeitspakete\`): each top-level item is a workstream (\`- [ ] **W1:** Title. Details\`), a package that can land on its own, and a ticked one has landed. The project's goal is the first paragraph under \`## Goal\` (or \`## Ziel\`).\n\nAdd the checklist, and the goal if it is missing, in the doc's own style, from what it plans. If the doc already keeps its tasks under another heading (Tasks, Milestones, Phases), that becomes the checklist instead of a copy of it. Tick what is already done; if everything is, tell me, since a project whose workstreams are all ticked goes straight to the archive. The rest of the text stays, and nothing of it is built.`,
+  },
+  notOwner: {
+    title: 'Not signed in · Obeya',
+    heading: 'This browser is not signed in to Obeya',
+    how: 'Open the link Obeya prints in its terminal when it starts (“Obeya … on http://127.0.0.1:…/login?token=…”). It holds until Obeya restarts; then Obeya prints a new one, and also when you start it again while it runs. In the app, “Open in browser” (in the settings) opens Obeya signed in in the browser.',
+    used: 'This link no longer holds: Obeya has restarted since, or it was for a single browser.',
   },
   notPaired: {
     title: 'Not connected · Obeya',

@@ -21,6 +21,7 @@ import { LOCAL_HOSTS, hostname, type Gate } from './access';
 import { BadRequest } from './board';
 import type { Store } from './db';
 import { OWNER_SETTINGS_FILE as SETTINGS_FILE } from '../../plugin/skills/demo/lib/language.ts';
+import { Owner } from './owner';
 import { remoteOf, remoteSetting, saveRemote } from './settings';
 import { type ServeEntry, Tailscale } from './tailscale';
 
@@ -69,12 +70,16 @@ export interface AccessOptions {
   language?: () => Language;
   now?: () => number;
   platform?: string;
+  /** Who is the owner on this machine; by default the key in `home` (made up for a test without one). */
+  owner?: Owner;
 }
 
 /** What answers on another address: started and stopped by the server, which knows its routes. */
 export type Listen = (address: string | null) => void;
 
 export class Access implements Gate {
+  /** The owner's key: what a request from this machine names. */
+  readonly owner: Owner;
   private readonly store: Store;
   private readonly home?: string;
   private readonly tailscale: Tailscale;
@@ -104,6 +109,7 @@ export class Access implements Gate {
     this.language = o.language ?? (() => 'de');
     this.now = o.now ?? Date.now;
     this.platform = o.platform ?? process.platform;
+    this.owner = o.owner ?? new Owner({ home: o.home, language: this.language });
     this.setting = o.home ? remoteSetting(o.home) : null;
     this.served = this.readServed();
   }
@@ -270,12 +276,12 @@ export class Access implements Gate {
   }
 
   /**
-   * What a request gets instead of its route's answer, or `null`: a local one passes, a remote one
-   * from a paired device too, but for managing access; another remote one gets the page that says
-   * how to connect, or a 401 for the API.
+   * What a request gets instead of its route's answer, or `null`: a local one passes with the
+   * owner's key (and to sign in), a remote one from a paired device too, but for managing access;
+   * another gets the page that says how to sign in or connect, or a 401 for the API.
    */
   admit(req: Request, server: Bun.Server<unknown>, route: string): Response | null {
-    if (this.isLocal(req, server)) return null;
+    if (this.isLocal(req, server)) return route === '/login' ? null : this.owner.refusal(req, server.port!, route);
     if (route === '/pair') return null;
     const device = this.device(req);
     if (device) {
@@ -286,6 +292,11 @@ export class Access implements Gate {
     }
     if (route.startsWith('/api/')) return Response.json({ code: 'notPaired', error: 'this device is not paired with Obeya' }, { status: 401 });
     return this.notPairedPage(false);
+  }
+
+  /** `/login`: a browser on this machine signs in with a one-time link; another device goes to the canvas, or to how to connect. */
+  loginRoute(req: Request, server: Bun.Server<unknown>): Response {
+    return this.isLocal(req, server) ? this.owner.login(req, server.port!) : new Response(null, { status: 303, headers: { location: '/' } });
   }
 
   /** The device an admitted remote request came from. */

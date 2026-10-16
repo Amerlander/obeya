@@ -1,8 +1,10 @@
 // Who may talk to the server: every request and WebSocket upgrade, from this machine too, names one
 // of Obeya's own hosts and comes from no other site. A page elsewhere in the owner's browser may
 // send requests to 127.0.0.1 (a `text/plain` POST needs no preflight) and a DNS name rebound to it
-// reaches the server under that name; neither gets an answer. Who comes from another device is the
-// gate's to say (remote.ts).
+// reaches the server under that name; neither gets an answer. Then the gate has its say (remote.ts):
+// on this machine the owner's key (owner.ts), from another device a paired one.
+
+import { timingSafeEqual } from 'node:crypto';
 
 /** The names this machine reaches Obeya by. */
 export const LOCAL_HOSTS: readonly string[] = ['localhost', '127.0.0.1', '[::1]'];
@@ -58,7 +60,7 @@ export function ownOrigin(req: Request): string {
   return `${proto ? `${proto}:` : new URL(req.url).protocol}//${host.toLowerCase()}`;
 }
 
-/** Who may come in beyond what `refusal` checks: other devices (remote.ts). */
+/** Who may come in beyond what `refusal` checks: the owner, and other devices (remote.ts). */
 export interface Gate {
   /** The names requests may come under. */
   hosts(): readonly string[];
@@ -66,25 +68,42 @@ export interface Gate {
   admit(req: Request, server: Bun.Server<unknown>, route: string): Response | null;
 }
 
-/** Only this machine, as before other devices could reach Obeya. */
-export const LOCAL_ONLY: Gate = { hosts: () => LOCAL_HOSTS, admit: () => null };
-
 type Routes<D, R extends string> = Bun.Serve.RoutesWithUpgrade<D, R>;
 type Handler = (req: Request, server: Bun.Server<unknown>) => unknown;
 
 /** The routes that serve the workers' files: an HTML artifact's, a looked-up answer's. */
-const FILES = ['/cards/:id/demo/*', '/threads/:thread/files/*'];
+const FILES = ['/cards/:id/demo/*', '/cards/:id/demos/:n/*', '/threads/:thread/files/*'];
+
+/** Keys the addresses of the workers' files with; new at every start, so an address with an old key is sent on to the new one. */
+const FILES_SECRET = crypto.getRandomValues(new Uint8Array(32));
+
+/** The key in the address of the workers' files under `base` (`/api/c/x/cards/y/demo/`): `<base>~<key>/index.html`. */
+export function filesKey(base: string): string {
+  return new Bun.CryptoHasher('sha256', FILES_SECRET).update(base).digest('hex').slice(0, 32);
+}
+
+/**
+ * Whether `req` asks for one of the workers' files at the address with its key (demo.ts sends a
+ * request without it there). Its sandboxed frame's page has an origin of its own, and the browser
+ * sends what it loads (its stylesheet, its images) as cross-site, without the owner's cookie: the
+ * key, which only a request with the owner's key or a paired device's gets to see, lets it in.
+ */
+function keyedFiles(req: Request): boolean {
+  const m = new URL(req.url).pathname.match(/^(\/api\/c\/[^/]+\/(?:cards\/[^/]+\/(?:demo|demos\/\d+)|threads\/[^/]+\/files)\/)~([0-9a-f]{32})\//);
+  return !!m && timingSafeEqual(Buffer.from(m[2]!), Buffer.from(filesKey(m[1]!)));
+}
 
 /**
  * `routes`, each answering only what `refusal` and then `gate` let through. An HTML page (Bun serves its bundle
  * itself, past any handler) moves to a path nobody knows, and its own path fetches it from there
  * once the request passed.
  */
-export function guarded<D, R extends string>(routes: Routes<D, R>, gate: Gate = LOCAL_ONLY): Routes<D, R> {
+export function guarded<D, R extends string>(routes: Routes<D, R>, gate: Gate): Routes<D, R> {
   const out: Record<string, unknown> = {};
   for (const [path, value] of Object.entries<unknown>(routes)) {
     const files = FILES.some((f) => path.endsWith(f));
-    const checked = (handler: Handler): Handler => (req, server) => refusal(req, gate.hosts(), files) ?? gate.admit(req, server, path) ?? handler(req, server);
+    const checked = (handler: Handler): Handler => (req, server) =>
+      refusal(req, gate.hosts(), files) ?? (files && (req.method === 'GET' || req.method === 'HEAD') && keyedFiles(req) ? null : gate.admit(req, server, path)) ?? handler(req, server);
     if (typeof value === 'function') out[path] = checked(value as Handler);
     else if (value && typeof value === 'object' && 'index' in value) {
       const hidden = `/_page/${crypto.randomUUID()}${path}`;

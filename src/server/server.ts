@@ -31,6 +31,7 @@ import { agentsView, languageView, pushKeyChoice, saveAgents, saveLanguage, save
 import { nonEmpty } from '../core/text';
 import { VERSION } from './resources';
 import { footerOf } from './wish';
+import { serving } from './owner';
 
 type Req = Request & { params: Record<string, string> };
 
@@ -357,6 +358,16 @@ export function serve(
     development: development && { hmr: true, console: true },
     routes: guarded({
       '/': index,
+      // a browser on this machine signing in with a one-time link (owner.ts)
+      '/login': { GET: (req, srv) => access.loginRoute(req, srv) },
+      // such a link, for whoever holds the owner's key (the app's shell, a second start, scripts); `next`: where it leads; `once`: for one browser
+      '/api/login-link': {
+        POST: async (req, srv) => {
+          if (!access.isLocal(req, srv)) return onlyHere();
+          const { next, once } = ((await req.json().catch(() => null)) ?? {}) as { next?: unknown; once?: unknown };
+          return Response.json({ url: access.owner.link(new URL(req.url).origin, typeof next === 'string' ? next : '/', once === true) });
+        },
+      },
       // another device pairing: the address in the QR code (`?code=`), or the code typed into the page it got
       '/pair': { GET: (req, srv) => access.pairRoute(req, srv), POST: (req, srv) => access.pairRoute(req, srv) },
       // „Von anderen Geräten“: the setting, what the network allows, the devices; only on this machine
@@ -787,6 +798,7 @@ export function serve(
     },
   };
   const server = Bun.serve(options);
+  serving(server, access.owner);
   // another VPN's address: the same routes there too, in plain HTTP
   let other: Bun.Server<Socket> | null = null;
   void access

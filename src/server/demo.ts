@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { pagePolicy, withHeightReport } from '../core/frame';
 import { chapterAt, type DemoKind } from '../core/types';
-import { ownOrigin } from './access';
+import { filesKey, ownOrigin } from './access';
 import { demoFile, esc } from './demo-page';
 import { resource } from './resources';
 
@@ -138,16 +138,14 @@ export function serveDemoFile(demo: { dir: string; kind: DemoKind }, name: strin
   });
 }
 
-/** Keys the workers' files' addresses with; new at every start, so an address with an old key is sent on to the new one. */
-const FILES_SECRET = crypto.getRandomValues(new Uint8Array(32));
-
 /**
  * Lets a worker's page read the files beside it, and no other page. Its sandboxed frame's origin is
  * `null`, so what its page loads in CORS mode (a module script, `fetch()`, a font) needs
  * `Access-Control-Allow-Origin: null`, which any sandboxed page on any site matches; a request from
  * that frame carries neither a referrer nor anything else of its own. Its address does: the page is
  * sent on to `<directory>/~<key>/index.html`, so whatever it loads relative to itself carries the
- * key, which nobody can know without Obeya's API. Only an address with the key gets the header.
+ * key, which nobody can know without Obeya's API; the server lets a request with it in without the
+ * owner's cookie (access.ts). Only an address with the key gets the header.
  *
  * `route`: where the route's file path begins (`/demo/`, `/demos/2/` for an earlier demo); `name`: the file path after it, decoded.
  * Returns the file path without the key, or the redirect to the address with it.
@@ -157,7 +155,7 @@ function keyed(req: Request, route: string, name: string): string | Response {
   const at = url.pathname.indexOf(route);
   if (at < 0) return notFound();
   const base = url.pathname.slice(0, at + route.length);
-  const key = new Bun.CryptoHasher('sha256', FILES_SECRET).update(base).digest('hex').slice(0, 32);
+  const key = filesKey(base);
   const given = /^~([0-9a-f]{32})\/(.*)$/s.exec(name);
   if (given?.[1] === key) return given[2]!;
   const file = (given ? given[2]! : name).split('/').map(encodeURIComponent).join('/');

@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { CanvasSnapshot } from '../src/core/types';
+import { ownerHeaders } from '../src/server/owner';
 
 const script = join(import.meta.dir, 'scratch-obeya.ts');
 const tmp = mkdtempSync(join(tmpdir(), 'obeya-stage-'));
@@ -37,8 +38,17 @@ test('stages a scratch Obeya with its cards in the states the stage file gives',
   const r = Bun.spawnSync([process.execPath, script, stage]);
   expect(r.stderr.toString()).toBe('');
   const staged = JSON.parse(r.stdout.toString()) as { url: string; canvas: string; cards: Record<string, string> };
-  expect(staged.url).toBe(`http://127.0.0.1:${port}/?c=repo`);
-  const { items } = (await (await fetch(`http://127.0.0.1:${port}/api/c/${staged.canvas}/canvas`)).json()) as CanvasSnapshot;
+  // a link that signs a browser in and opens the canvas
+  expect(staged.url).toStartWith(`http://127.0.0.1:${port}/login?token=`);
+  const signed = await fetch(staged.url, { redirect: 'manual' });
+  expect(await signed.text()).toContain('location.replace("/?c=repo")');
+  // again, in another browser
+  expect((await fetch(staged.url, { redirect: 'manual' })).status).toBe(200);
+  // the same from --login
+  expect(Bun.spawnSync([process.execPath, script, '--login', String(port), '--dir', dir]).stdout.toString().trim()).toBe(staged.url);
+  // the API with the owner's key of its home
+  const headers = ownerHeaders(join(dir, 'home'));
+  const { items } = (await (await fetch(`http://127.0.0.1:${port}/api/c/${staged.canvas}/canvas`, { headers })).json()) as CanvasSnapshot;
   const card = (key: string) => items.find((i) => i.id === staged.cards[key])!;
   expect(card('P')).toMatchObject({ kind: 'project', x: 0, y: 0 });
   expect(card('W1')).toMatchObject({ label: 'W1', state: 'working', statusLine: 'Liest ein' });
@@ -48,6 +58,6 @@ test('stages a scratch Obeya with its cards in the states the stage file gives',
   expect(card('D').from).toBe(staged.cards.C!);
   const created = Bun.spawnSync(['sqlite3', join(dir, 'home/obeya.db'), `SELECT created_at FROM cards WHERE id = '${staged.cards.A}'`]).stdout.toString();
   expect(Date.now() - Date.parse(created.trim())).toBeGreaterThan(7000_000);
-  const events = (await (await fetch(`http://127.0.0.1:${port}/api/c/${staged.canvas}/cards/${staged.cards.B}/events`)).json()) as { text: string }[];
+  const events = (await (await fetch(`http://127.0.0.1:${port}/api/c/${staged.canvas}/cards/${staged.cards.B}/events`, { headers })).json()) as { text: string }[];
   expect(events.map((e) => e.text)).toContain('wartet');
 }, 20_000);

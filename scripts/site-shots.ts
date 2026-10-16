@@ -16,6 +16,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFile
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium, type Page } from 'playwright-core';
+import { ownerHeaders } from '../src/server/owner';
 import { writeStage } from './hero-video/stage';
 
 const PORT = 4740;
@@ -73,7 +74,7 @@ writeFileSync(stageFile, JSON.stringify(stage, null, 1));
 
 const staged = JSON.parse(execFileSync('bun', [join(ROOT, 'scripts', 'scratch-obeya.ts'), stageFile], { encoding: 'utf8' }).trim().split('\n').at(-1)!);
 const base = `http://127.0.0.1:${PORT}`;
-await fetch(`${base}/api/language`, { method: 'PUT', body: JSON.stringify({ language: 'en' }) });
+await fetch(`${base}/api/language`, { method: 'PUT', headers: ownerHeaders(join(staged.dir, 'home')), body: JSON.stringify({ language: 'en' }) });
 console.log('staged', staged.url);
 
 if (process.argv.includes('--stage-only')) process.exit(0);

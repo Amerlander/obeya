@@ -7,12 +7,12 @@ export type Up = { up: true } | { up: false; exit: number | null; waited: number
 
 export async function waitUp(
   url: string,
-  o: { exited: () => number | null; limit: number; slowAfter?: number; onSlow?: () => void },
+  o: { exited: () => number | null; limit: number; slowAfter?: number; onSlow?: () => void; headers?: Record<string, string> },
 ): Promise<Up> {
   const start = Date.now();
   let warned = false;
   for (;;) {
-    if (await answers(url)) return { up: true };
+    if (await answers(url, o.headers)) return { up: true };
     const waited = Date.now() - start;
     const exit = o.exited();
     if (exit !== null) return { up: false, exit, waited };
@@ -25,9 +25,10 @@ export async function waitUp(
   }
 }
 
-export async function answers(url: string) {
+/** Whether `url` answers 2xx; Obeya's API only with the owner's key (`headers`, owner.ts). */
+export async function answers(url: string, headers: Record<string, string> = {}) {
   try {
-    return (await fetch(url, { signal: AbortSignal.timeout(1000) })).ok;
+    return (await fetch(url, { headers, signal: AbortSignal.timeout(1000) })).ok;
   } catch {
     return false;
   }

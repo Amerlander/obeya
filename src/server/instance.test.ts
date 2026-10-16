@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { claim, INSTANCE_FILE, recorded, release, restarting, running } from './instance';
+import { ownerHeaders } from './owner';
 import { gitRepo, until } from './testing';
 
 let dir: string;
@@ -80,13 +81,21 @@ test('a second Obeya on the same home ends and says where the first runs; the fi
     const i = recorded(home)!;
     // the supervisor, which stays across restarts
     expect(i.pid).toBe(first.pid);
-    expect((await fetch(`${i.url}/api/canvases`)).ok).toBe(true);
+    // only with the owner's key from its home (owner.ts)
+    expect((await fetch(`${i.url}/api/canvases`)).status).toBe(401);
+    expect((await fetch(`${i.url}/api/canvases`, { headers: ownerHeaders(home) })).ok).toBe(true);
 
     const second = Bun.spawn([process.execPath, main, repo, '--port', '0'], { env, stdout: 'pipe', stderr: 'pipe' });
     expect(await second.exited).toBe(1);
-    expect(await new Response(second.stderr).text()).toContain(`already runs on ${home}, at ${i.url}`);
+    const said = await new Response(second.stderr).text();
+    expect(said).toContain(`already runs on ${home}, at ${i.url}`);
+    // with a new link that signs a browser in
+    const link = said.match(/Open it signed in: (\S+)/)![1]!;
+    const signed = await fetch(link, { redirect: 'manual' });
+    expect(signed.status).toBe(200);
+    expect(signed.headers.get('set-cookie')).toContain('HttpOnly; SameSite=Strict');
 
-    expect(await (await fetch(`${i.url}/api/stop`, { method: 'POST' })).json()).toEqual({ stopping: true });
+    expect(await (await fetch(`${i.url}/api/stop`, { method: 'POST', headers: ownerHeaders(home) })).json()).toEqual({ stopping: true });
     expect(await first.exited).toBe(0);
     expect(existsSync(join(home, INSTANCE_FILE))).toBe(false);
   } finally {

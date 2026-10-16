@@ -10,8 +10,12 @@
 //   Quitting again goes ahead at once. No signal: Windows has no SIGTERM, and a killed server would
 //   cut its workers off mid-turn. The app ends when the server does.
 // - Single instance: starting the app again brings its window to the front.
+// - Every request to the server names the owner's key from the home (`owner.key`,
+//   src/server/owner.ts); the window and the panel sign in through a link the shell asks the server
+//   for (`POST /api/login-link`).
 // - Links to anything but the canvas, and new windows, open in the default browser; so does
-//   "Im Browser öffnen" (the page offers it when it finds `window.obeyaApp`, the macOS menu too).
+//   "Im Browser öffnen" (the page offers it when it finds `window.obeyaApp`, the macOS menu too),
+//   through a link that signs that one browser in.
 // - The page gets the microphone without asking (it records only while Space or the mic button is
 //   held); the system asks once for the app. WebKitGTK has media streams off until turned on here.
 // - Downloads go into the Downloads folder and are shown there.
@@ -40,7 +44,7 @@ use std::{
   process::{Child, Command, Stdio},
   sync::{
     atomic::{AtomicBool, AtomicU16, Ordering},
-    Arc, Mutex,
+    Arc, Mutex, OnceLock,
   },
   thread,
   time::{Duration, Instant},
@@ -57,6 +61,25 @@ const SERVER: &str = if cfg!(windows) { "obeya-server.exe" } else { "obeya-serve
 const DEFAULT_PORT: u16 = 4417;
 /// How long the server may take to answer after it was started.
 const START_PATIENCE: Duration = Duration::from_secs(120);
+pub(crate) const KEY_HEADER: &str = "X-Obeya-Key";
+
+/// Obeya's home, once known.
+static HOME: OnceLock<PathBuf> = OnceLock::new();
+
+/// The owner's key in the home, which the server makes when it first starts.
+pub(crate) fn key() -> Option<String> {
+  let key = fs::read_to_string(HOME.get()?.join("owner.key")).ok()?;
+  Some(key.trim().to_string()).filter(|k| !k.is_empty())
+}
+
+/// A link that signs a browser or webview in and opens `next`; `once`: for one browser, as one that
+/// goes through the system's `open` is seen by other accounts in the process list. The plain address
+/// from an Obeya that has no such link.
+pub(crate) fn login_link(port: u16, next: &str, once: bool) -> String {
+  ptt::post(port, "/api/login-link", &serde_json::json!({ "next": next, "once": once }))
+    .and_then(|v| v["url"].as_str().map(String::from))
+    .unwrap_or_else(|| format!("http://127.0.0.1:{port}{next}"))
+}
 
 /// What the shell knows of the Obeya its window shows.
 #[derive(Default)]
@@ -102,9 +125,10 @@ fn http(port: u16, method: &str, path: &str) -> Option<u16> {
   let addr = SocketAddr::from(([127, 0, 0, 1], port));
   let mut s = TcpStream::connect_timeout(&addr, Duration::from_millis(500)).ok()?;
   s.set_read_timeout(Some(Duration::from_secs(5))).ok()?;
+  let key = key().map(|k| format!("{KEY_HEADER}: {k}\r\n")).unwrap_or_default();
   write!(
     s,
-    "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+    "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{key}Content-Length: 0\r\nConnection: close\r\n\r\n"
   )
   .ok()?;
   let mut head = [0u8; 12];
@@ -151,6 +175,22 @@ fn show(app: &AppHandle) {
     let _ = w.unminimize();
     let _ = w.set_focus();
   }
+}
+
+/// A page of Obeya's in the system's browser, signed in there through a link of its own; another link as `open_in_browser`.
+fn open_outside(obeya: &Obeya, url: &Url) {
+  let port = obeya.port.load(Ordering::SeqCst);
+  if !obeya.ours(url) || url.scheme() != "http" || port == 0 {
+    return open_in_browser(url.as_str());
+  }
+  let next = match (url.query(), url.fragment()) {
+    (Some(q), Some(f)) => format!("{}?{q}#{f}", url.path()),
+    (Some(q), None) => format!("{}?{q}", url.path()),
+    (None, Some(f)) => format!("{}#{f}", url.path()),
+    (None, None) => url.path().to_string(),
+  };
+  // off the main thread: it asks the server first
+  thread::spawn(move || open_in_browser(&login_link(port, &next, true)));
 }
 
 /// A link out of Obeya, in the system's browser. Other schemes stay closed: the system would hand
@@ -306,10 +346,10 @@ fn watch(app: &AppHandle, obeya: &Obeya, home: &Path) {
   }
 }
 
-/// Shows the canvas once it answers, and tells it to stop when the owner quit meanwhile.
+/// Shows the canvas once it answers, signed in, and tells it to stop when the owner quit meanwhile.
 fn navigate(app: &AppHandle, obeya: &Obeya) {
-  let (Some(url), Some(w)) = (obeya.url(), main_window(app)) else { return };
-  if let Ok(url) = Url::parse(&url) {
+  let (Some(_), Some(w)) = (obeya.url(), main_window(app)) else { return };
+  if let Ok(url) = Url::parse(&login_link(obeya.port.load(Ordering::SeqCst), "/", false)) {
     let _ = w.navigate(url);
   }
   if obeya.stopping.load(Ordering::SeqCst) {
@@ -348,6 +388,7 @@ fn free_name(dir: &Path, name: &str) -> PathBuf {
 
 fn window(app: &AppHandle, obeya: Arc<Obeya>) -> tauri::Result<WebviewWindow> {
   let navigation = obeya.clone();
+  let outside = obeya.clone();
   let loaded = obeya.clone();
   let downloads = app.path().download_dir().ok();
   let saved: Arc<Mutex<HashMap<String, PathBuf>>> = Default::default();
@@ -372,8 +413,8 @@ fn window(app: &AppHandle, obeya: Arc<Obeya>) -> tauri::Result<WebviewWindow> {
       open_in_browser(url.as_str());
       false
     })
-    .on_new_window(|url, _| {
-      open_in_browser(url.as_str());
+    .on_new_window(move |url, _| {
+      open_outside(&outside, &url);
       NewWindowResponse::Deny
     })
     .on_download(move |_, event| {
@@ -461,6 +502,7 @@ fn main() {
     .invoke_handler(tauri::generate_handler![ptt::panel_fit])
     .setup(move |app| {
       let handle = app.handle().clone();
+      let _ = HOME.set(home(&handle));
       if cfg!(target_os = "macos") {
         app.set_menu(menu(&handle)?)?;
       }
@@ -468,7 +510,7 @@ fn main() {
       app.on_menu_event(move |app, event| {
         if event.id() == "browser" {
           if let Some(url) = main_window(app).and_then(|w| w.url().ok()) {
-            open_in_browser(url.as_str());
+            open_outside(&for_menu, &url);
           }
         } else if event.id() == "quit" && !quit(app, &for_menu) {
           app.exit(0);

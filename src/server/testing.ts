@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import type { Forge } from './forge';
 import type { AgentEvent, AgentRuntime, AgentSession, AgentSpec, PermissionAnswer } from './runtime';
 import { git } from './workspaces';
+import { KEY_HEADER, keyOf } from './owner';
 
 /** A forge for tests that never reach a pull request. */
 export const noForge: Forge = { status: () => ({}) as never, body: () => '', setBody: () => {}, merge: () => {}, open: () => '' };
@@ -111,6 +112,28 @@ export function identify(repo: string) {
  * loaded machine (other workers' test runs) takes longer than any fixed pause; a test that went
  * on too early failed and left its request open, and stopping the server reset it in the next test.
  */
+/**
+ * `fetch` and `WebSocket` with the owner's key of the server `of` gives (one of `serve`), as the
+ * page, the app's shell and Obeya's scripts send it. A request without it goes through the global ones.
+ */
+export function asOwner(of: () => object) {
+  const withKey = (given?: HeadersInit) => {
+    const headers = new Headers(given);
+    if (!headers.has(KEY_HEADER)) headers.set(KEY_HEADER, keyOf(of()));
+    return headers;
+  };
+  return {
+    fetch: (input: string | URL | Request, init: RequestInit = {}) => globalThis.fetch(input, { ...init, headers: withKey(init.headers) }),
+    WebSocket: class extends globalThis.WebSocket {
+      // `{ headers }` as Bun takes it (the DOM's type knows only protocols there)
+      constructor(url: string | URL, given: unknown = {}) {
+        const o = given as { headers?: HeadersInit };
+        super(url, { ...o, headers: Object.fromEntries(withKey(o.headers)) } as unknown as string[]);
+      }
+    },
+  };
+}
+
 export const until = async (done: () => unknown, ms = 3000) => {
   for (const end = Date.now() + ms; !(await done()); await Bun.sleep(2)) if (Date.now() > end) throw new Error(`timed out after ${ms} ms: ${done}`);
 };

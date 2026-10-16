@@ -24,6 +24,7 @@ import { type Subprocess } from 'bun';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { ownerHeaders } from '../src/server/owner';
 import { bad, check, exited, expect, failed, sleep, until as untilEvery } from './check-harness';
 
 const args = process.argv.slice(2);
@@ -165,7 +166,7 @@ const entry = () => {
   }
 };
 const startApp = () => Bun.spawn([program], { env, stdout: 'ignore', stderr: 'ignore' });
-const answers = async (url: string) => (await fetch(`${url}/api/canvases`, { signal: AbortSignal.timeout(2000) }).catch(() => null))?.ok === true;
+const answers = async (url: string) => (await fetch(`${url}/api/canvases`, { headers: ownerHeaders(home), signal: AbortSignal.timeout(2000) }).catch(() => null))?.ok === true;
 
 /** The app's window (macOS), else the screen, as a PNG. */
 async function screenshot(pid: number, file: string) {
@@ -245,7 +246,7 @@ try {
     return `exit ${code}`;
   });
   await check('stopping over HTTP ends the server, then the app', async () => {
-    const res = await fetch(`${url}/api/stop`, { method: 'POST' });
+    const res = await fetch(`${url}/api/stop`, { method: 'POST', headers: ownerHeaders(home) });
     expect(res.ok, `POST /api/stop: ${res.status}`);
     const code = await exited(app!, 30_000);
     expect(code !== null, 'the app is still running');
@@ -271,7 +272,7 @@ try {
       await exited(app!, 10_000);
       expect(await answers(e.url), 'it does not answer');
     });
-    await fetch(`${e.url}/api/stop`, { method: 'POST' }).catch(() => {});
+    await fetch(`${e.url}/api/stop`, { method: 'POST', headers: ownerHeaders(home) }).catch(() => {});
     await exited(server, 30_000);
   } else console.log('- the app beside an Obeya from a terminal: not checked (the AppImage keeps its server inside)');
 } finally {

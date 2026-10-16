@@ -84,7 +84,7 @@ moves to new code.
 git clone https://github.com/sadilek/obeya.git
 cd obeya
 bun install
-bun start                       # then open http://127.0.0.1:4417
+bun start                       # then open the link it prints: it signs the browser in
 ```
 
 The first start without canvases shows the same setup as the app. `bun run build` compiles the
@@ -105,7 +105,8 @@ Options: `--port <n>` (or `OBEYA_PORT`), `--workspace <path>`
 for workers (default `auto`). Data and worktrees live in `~/.obeya/` (`OBEYA_HOME` to move it),
 the same for the app and a checkout, so canvases, settings, voices and models carry over between
 them. One Obeya runs per home: starting the app while a checkout's Obeya runs opens a window on
-it, and `bun start` while the app runs says where it runs. An Obeya older than the one that last
+it, and `bun start` while the app runs says where it runs, with a new link that signs another
+browser in. An Obeya older than the one that last
 ran on the home (an app not yet updated after a newer checkout) leaves the database alone and
 says to update. Workers run on the Claude Code login of the machine.
 The canvases and their repositories can be seen and changed in the app ("Configuration") or by

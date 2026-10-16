@@ -71,13 +71,21 @@ fn base(port: u16) -> String {
   format!("http://127.0.0.1:{port}")
 }
 
+/// A request that names the owner's key, as every request to the server must (src/server/owner.ts).
+fn keyed(req: ureq::Request) -> ureq::Request {
+  match crate::key() {
+    Some(key) => req.set(crate::KEY_HEADER, &key),
+    None => req,
+  }
+}
+
 fn get(port: u16, path: &str) -> Option<Value> {
-  let res = ureq::get(&format!("{}{path}", base(port))).timeout(Duration::from_secs(2)).call().ok()?;
+  let res = keyed(ureq::get(&format!("{}{path}", base(port)))).timeout(Duration::from_secs(2)).call().ok()?;
   serde_json::from_str(&res.into_string().ok()?).ok()
 }
 
 pub(crate) fn post(port: u16, path: &str, body: &Value) -> Option<Value> {
-  let res = ureq::post(&format!("{}{path}", base(port)))
+  let res = keyed(ureq::post(&format!("{}{path}", base(port))))
     .timeout(Duration::from_secs(2))
     .set("content-type", "application/json")
     .send_string(&body.to_string())
@@ -199,7 +207,7 @@ fn send(app: &AppHandle, port: u16, focus: &Value, recording: &Recording, id: u6
     url += &format!("?project={}", encode(project));
   }
   // a command answers once transcribed and read, which on a busy CPU takes a while
-  let res = ureq::post(&url).timeout(Duration::from_secs(150)).set("content-type", "audio/wav").send_bytes(&recording.wav());
+  let res = keyed(ureq::post(&url)).timeout(Duration::from_secs(150)).set("content-type", "audio/wav").send_bytes(&recording.wav());
   let status = match &res {
     Ok(r) => r.status(),
     Err(ureq::Error::Status(code, _)) => *code,
@@ -230,7 +238,8 @@ fn make_panel(app: &AppHandle, port: u16) {
   if app.get_webview_window("panel").is_some() {
     return;
   }
-  let Ok(url) = Url::parse(&format!("{}/panel", base(port))) else { return };
+  // signed in as the main window is, through a link of its own
+  let Ok(url) = Url::parse(&crate::login_link(port, "/panel", false)) else { return };
   let built = WebviewWindowBuilder::new(app, "panel", WebviewUrl::External(url))
     .title("Obeya")
     .inner_size(PANEL_WIDTH, 80.0)

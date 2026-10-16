@@ -21,6 +21,7 @@
 
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { ownerHeaders } from '../src/server/owner';
 import { check, expect, failed, sleep, until } from './check-harness';
 
 const [programArg, homeArg, wavArg] = process.argv.slice(2);
@@ -65,7 +66,7 @@ const seen = (prefix: string, ms: number, from = 0) => until(prefix, ms, () => l
 try {
   await check('the shell reports what it hears', async () => {
     const { key, report } = await until('a report', 30_000, async () => {
-      const view = (await (await fetch(`${base}/api/push-to-talk`)).json()) as { key: string; shell: { state: string; platform: string } | null };
+      const view = (await (await fetch(`${base}/api/push-to-talk`, { headers: ownerHeaders(home) })).json()) as { key: string; shell: { state: string; platform: string } | null };
       return view.shell && { key: view.key, report: view.shell };
     });
     expect(report.state === 'on', `the shell says ${JSON.stringify(report)}`);

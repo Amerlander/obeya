@@ -11,7 +11,7 @@ import { AppUpdates } from './app-update';
 import { Restarter } from './self-update';
 import type { NarrationHost } from './narration';
 import { serve, serveNarration } from './server';
-import { artifact, FakeRuntime, gitRepo, identify, noForge, until } from './testing';
+import { artifact, asOwner, FakeRuntime, gitRepo, identify, noForge, until } from './testing';
 import { git } from './workspaces';
 import type { Transcript } from './voice';
 
@@ -57,6 +57,8 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
+// what the page, the app's shell and scripts send: the owner's key (owner.ts)
+const { fetch, WebSocket } = asOwner(() => server);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const card = () => board.create({ title: 'A', x: 0, y: 0 });
 const post = (path: string, body: string) => fetch(new URL(path, server.url), { method: 'POST', headers: { 'content-type': 'application/json' }, body });
@@ -159,11 +161,19 @@ describe('who may', () => {
     const demo = artifact();
     writeFileSync(join(demo.dir, 'chart.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
     board.work(c.id, { state: 'waiting', need: 'review', demo: JSON.stringify(demo) });
-    // the frame itself, from the canvas
-    expect((await at(api(`/cards/${c.id}/demo/index.html`), { 'sec-fetch-site': 'same-origin', 'sec-fetch-dest': 'iframe' })).status).toBe(200);
-    // what the page in it loads: from an origin of its own
-    expect((await at(api(`/cards/${c.id}/demo/chart.svg`), { origin: 'null', 'sec-fetch-site': 'cross-site' })).status).toBe(200);
-    expect((await at(api(`/cards/${c.id}/demo/chart.svg`), { host: 'rebound.evil.example' })).status).toBe(421);
+    // the frame itself, from the canvas, with the owner's cookie: to the path with its directory's cap
+    const frame = await at(api(`/cards/${c.id}/demo/index.html`), { 'sec-fetch-site': 'same-origin', 'sec-fetch-dest': 'iframe' }, { redirect: 'manual' });
+    expect(frame.status).toBe(302);
+    const capped = frame.headers.get('location')!;
+    expect(capped).toMatch(new RegExp(`^${api(`/cards/${c.id}/demo/~`)}[0-9a-f]{32}/index\\.html$`));
+    // what the page in it loads: from an origin of its own, without the cookie, beside it under the cap
+    const frameless = (path: string, headers: Record<string, string> = {}) => globalThis.fetch(new URL(path, server.url), { headers: { origin: 'null', 'sec-fetch-site': 'cross-site', ...headers } });
+    expect((await frameless(capped)).status).toBe(200);
+    expect(await (await frameless(capped.replace('index.html', 'chart.svg'))).text()).toContain('<svg');
+    // nothing without the cap, nor with another card's
+    expect((await frameless(api(`/cards/${c.id}/demo/chart.svg`))).status).toBe(401);
+    expect((await frameless(capped.replace(c.id, card().id))).status).toBe(401);
+    expect((await frameless(capped.replace('index.html', 'chart.svg'), { host: 'rebound.evil.example' })).status).toBe(421);
     rmSync(demo.dir, { recursive: true, force: true });
   });
 
@@ -180,6 +190,86 @@ describe('who may', () => {
     expect(await (await page(`/cards/${c.id}/demo/index.html`)).text()).toStartWith('<p>Ergebnis</p>');
     expect((await at(api(`/cards/${c.id}/demos/1/index.html`), {})).status).toBe(404);
     for (const d of [earlier, latest]) rmSync(d.dir, { recursive: true, force: true });
+  });
+});
+
+describe('only the owner', () => {
+  // another program or account on this machine: neither the key nor the cookie
+  const bare = (path: string, init: RequestInit = {}) => globalThis.fetch(new URL(path, server.url), { redirect: 'manual', ...init });
+  const opens = (headers: Record<string, string>) =>
+    new Promise<boolean>((done) => {
+      const ws = new globalThis.WebSocket(new URL(api('/ws'), server.url.href.replace('http', 'ws')), { headers } as unknown as string[]);
+      ws.onopen = () => (ws.close(), done(true));
+      ws.onerror = () => done(false);
+    });
+  /** Where a signed-in page goes on to: from a page of its own, not a redirect (owner.ts). */
+  const onward = async (res: Response) => (await res.text()).match(/location\.replace\("([^"]*)"\)/)?.[1];
+  const link = async (next?: string, once = false) => ((await (await post('/api/login-link', JSON.stringify({ ...(next ? { next } : {}), ...(once ? { once } : {}) }))).json()) as { url: string }).url;
+
+  test('nothing without the key: not the API, not the page, not the WebSocket', async () => {
+    const res = await bare(api('/cards'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Fremd', x: 0, y: 0 }) });
+    expect(res.status).toBe(401);
+    expect(((await res.json()) as { code: string }).code).toBe('notOwner');
+    expect((await bare('/api/demo-settings/sample', { method: 'POST', body: JSON.stringify({ voice: 'command', command: 'touch /tmp/x' }) })).status).toBe(401);
+    expect((await bare('/api/stop', { method: 'POST' })).status).toBe(401);
+    expect((await bare('/api/login-link', { method: 'POST' })).status).toBe(401);
+    expect((await bare('/api/c/main/cards/x/act', { method: 'POST', headers: { 'x-obeya-key': 'guessed' } })).status).toBe(401);
+    const page = await bare('/');
+    expect(page.status).toBe(401);
+    expect(await page.text()).toContain('nicht bei Obeya angemeldet');
+    expect((await bare('/panel')).status).toBe(401);
+    expect(await opens({})).toBe(false);
+    expect(board.snapshot().items).toEqual([]);
+  });
+
+  test('a link signs browsers in: its cookie carries the key, to the page, the API and the WebSocket', async () => {
+    const url = await link('/?c=main');
+    expect(url).toStartWith(`${server.url.origin}/login?token=`);
+    const signed = await bare(url);
+    expect(signed.status).toBe(200);
+    const set = signed.headers.get('set-cookie')!;
+    expect(await onward(signed)).toBe('/?c=main');
+    expect(set).toContain(`obeya-${server.port}=`);
+    expect(set).toContain('HttpOnly; SameSite=Strict');
+    const cookie = set.split(';')[0]!;
+    expect((await bare('/', { headers: { cookie } })).status).toBe(200);
+    expect((await bare(api('/canvas'), { headers: { cookie } })).status).toBe(200);
+    expect(await opens({ cookie, origin: server.url.origin })).toBe(true);
+    // another browser (Chrome beside Safari) with the same link, until the server stops; the same link from a second start
+    expect((await bare(url)).headers.get('set-cookie')).toBe(set);
+    expect(await link('/?c=main')).toBe(url);
+    expect(await onward(await bare(url, { headers: { cookie } }))).toBe('/?c=main');
+    // a cookie of the Obeya on another port, or with another key, names nobody
+    expect((await bare(api('/canvas'), { headers: { cookie: cookie.replace(`obeya-${server.port}`, `obeya-${server.port! + 1}`) } })).status).toBe(401);
+    expect((await bare(api('/canvas'), { headers: { cookie: `obeya-${server.port}=guessed` } })).status).toBe(401);
+  });
+
+  test('a link for one browser (through the system’s `open`) signs in only the first', async () => {
+    const url = await link('/?c=main', true);
+    expect(url).not.toBe(await link('/?c=main'));
+    const cookie = (await bare(url)).headers.get('set-cookie')!.split(';')[0]!;
+    expect((await bare(api('/canvas'), { headers: { cookie } })).status).toBe(200);
+    const again = await bare(url);
+    expect(again.status).toBe(401);
+    expect(await again.text()).toContain('für einen einzigen Browser');
+    expect(await onward(await bare(url, { headers: { cookie } }))).toBe('/?c=main');
+  });
+
+  test('a page a link from another site opened goes there again from its own, which carries the cookie', async () => {
+    const cookie = (await bare(await link())).headers.get('set-cookie')!.split(';')[0]!;
+    const opened = { 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document' };
+    // the browser does not send the Strict cookie with it
+    expect(await onward(await bare('/?c=main', { headers: opened }))).toBe('/?c=main');
+    // a path that looks like another host stays one of Obeya's
+    expect(await onward(await bare(`${server.url.origin}//evil.example/`, { headers: opened }))).toBe('/evil.example/');
+    expect((await bare('/?c=main', { headers: { 'sec-fetch-site': 'same-origin', 'sec-fetch-mode': 'navigate' } })).status).toBe(401);
+    expect((await bare('/?c=main', { headers: { 'sec-fetch-site': 'same-origin', 'sec-fetch-mode': 'navigate', cookie } })).status).toBe(200);
+  });
+
+  test('a link leads only to a path of Obeya’s', async () => {
+    for (const next of ['https://evil.example/', '//evil.example/', '/\\evil.example/'])
+      expect(await onward(await bare(await link(next)))).toBe('/');
+    expect((await bare(`${server.url.origin}/login?token=made-up`)).status).toBe(401);
   });
 });
 

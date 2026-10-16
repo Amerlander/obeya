@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type ClipRequest, NarrationHost, parseClipRequest } from './narration';
 import { serve } from './server';
+import { asOwner } from './testing';
 
 /** Logs its start, each clip and its end; `dies` as the speaker makes it die at the second clip. */
 const FAKE_VOICE = `
@@ -100,7 +101,7 @@ describe('a clip over HTTP', () => {
     const server = serve([], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, undefined, host);
     try {
       const post = (body: unknown, type = 'application/json') =>
-        fetch(new URL('/api/narration/clip', server.url), { method: 'POST', body: JSON.stringify(body), headers: { 'content-type': type } });
+        asOwner(() => server).fetch(new URL('/api/narration/clip', server.url), { method: 'POST', body: JSON.stringify(body), headers: { 'content-type': type } });
       const done = await post(clip('eins'));
       expect(await done.json()).toEqual({ ok: true, seconds: 0.01 });
       // a page elsewhere can send text/plain without asking first
@@ -117,7 +118,7 @@ describe('a clip over HTTP', () => {
     const server = serve([], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, undefined, host);
     try {
       const { out: _, ...rest } = clip('eins');
-      const r = (await (await fetch(new URL('/api/narration/clip', server.url), { method: 'POST', body: JSON.stringify({ ...rest, inline: true }), headers: { 'content-type': 'application/json' } })).json()) as { ok: boolean; wav: string };
+      const r = (await (await asOwner(() => server).fetch(new URL('/api/narration/clip', server.url), { method: 'POST', body: JSON.stringify({ ...rest, inline: true }), headers: { 'content-type': 'application/json' } })).json()) as { ok: boolean; wav: string };
       expect(r.ok).toBe(true);
       expect(Buffer.from(r.wav, 'base64').subarray(0, 4).toString()).toBe('RIFF');
       expect(parseClipRequest({ ...rest, inline: 'yes' })).toContain('inline');

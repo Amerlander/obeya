@@ -951,6 +951,7 @@ export type ErrorCode =
   | 'notReachable'
   /** From another device that is not paired (status 401). */
   | 'notPaired'
+  | 'notOwner'
   /** Managing who reaches Obeya, from another device (status 403). */
   | 'onlyHere'
   /** A group that no card belongs to any more, so it is gone. */

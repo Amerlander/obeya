@@ -13,6 +13,7 @@ import type { Locator, Page } from 'playwright-core';
 import { runDemo, type Director, type Scene } from '../../plugin/skills/demo/lib/director.ts';
 import { narration } from './narration.ts';
 import { PORT, writeStage } from './stage.ts';
+import { KEY_HEADER, ownerHeaders } from '../../src/server/owner.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 /** Where the video, its stills and the work files go: outside the repository. */
@@ -24,7 +25,9 @@ const SHORT = !!process.env.HERO_SHORT;
 const SHOT = path.join(OUT, 'tipjar-comma.png');
 
 /** What scratch-obeya.ts staged: its directory and the ids of the cards by their keys. */
-let staged: { dir: string; cards: Record<string, string> };
+let staged: { url: string; dir: string; cards: Record<string, string> };
+/** The scratch Obeya's owner key, for the API (design: Who may talk to it). */
+const owner = () => ownerHeaders(path.join(staged.dir, 'home'));
 
 function stage() {
   const file = path.join(OUT, 'stage.json');
@@ -36,9 +39,10 @@ function stage() {
   staged = JSON.parse(printed);
   // the worker's own demo: English, a quick voice (the hero video has no page audio)
   fs.writeFileSync(path.join(staged.dir, 'home', 'demo.json'), JSON.stringify({ language: 'en', voice: 'say', voiceName: 'Samantha' }));
-  execFileSync('curl', ['-s', '-X', 'PUT', `${base}/api/language`, '-d', '{"language":"en"}']);
+  const key = `${KEY_HEADER}: ${owner()[KEY_HEADER]}`;
+  execFileSync('curl', ['-s', '-H', key, '-X', 'PUT', `${base}/api/language`, '-d', '{"language":"en"}']);
   // Whisper and Obeya loaded before the take, so the spoken command is heard at once
-  execFileSync('curl', ['-s', '-X', 'POST', `${base}/api/c/tipjar/voice/warm`]);
+  execFileSync('curl', ['-s', '-H', key, '-X', 'POST', `${base}/api/c/tipjar/voice/warm`]);
   execFileSync('sleep', ['20']);
 }
 
@@ -111,7 +115,7 @@ const field = (d: Director) => d.page.locator('.composer.tell textarea');
 
 /** The card of the task the video creates, as the API has it. */
 async function created() {
-  const snap = (await (await fetch(`${base}/api/c/tipjar/canvas`)).json()) as {
+  const snap = (await (await fetch(`${base}/api/c/tipjar/canvas`, { headers: owner() })).json()) as {
     items: { title: string; state: string; statusLine?: string; answering?: true; held?: number[] }[];
   };
   return snap.items.find((x) => /split the bill/i.test(x.title));
@@ -494,7 +498,7 @@ const scenes: Scene[] = [
         async () => {
           await until(['live'], 'land');
           // Obeya's proposal from its retrospective, which the stage kept back so far
-          await fetch(`${base}/api/c/tipjar/cards/${staged.cards.R}/unarchive`, { method: 'POST' });
+          await fetch(`${base}/api/c/tipjar/cards/${staged.cards.R}/unarchive`, { method: 'POST', headers: owner() });
           await d.wait(1200);
         },
         { quiet: true },
@@ -571,6 +575,8 @@ await runDemo(
     sharp: true,
     login: async (page) => {
       stage();
+      // the staged link signs this browser in
+      await page.goto(staged.url);
       await tipjarShot(page);
     },
     open: async (d) => {
@@ -608,7 +614,7 @@ await runDemo(
         };
       });
       // Obeya's sidebar opens with the proposed rules folded: the video shows the chat first
-      const snap = (await (await fetch(`${base}/api/c/tipjar/canvas`)).json()) as { preferences: { id: number; state: string }[] };
+      const snap = (await (await fetch(`${base}/api/c/tipjar/canvas`, { headers: owner() })).json()) as { preferences: { id: number; state: string }[] };
       const proposed = snap.preferences.filter((p) => p.state === 'proposed').map((p) => p.id);
       await d.page.addInitScript((ids) => localStorage.setItem('obeya-ksheet-tipjar', JSON.stringify({ proposalsClosed: ids })), proposed);
       // an owner who knows double-click and `?`: the bar's New task and ? buttons have gone (`help.tsx`)

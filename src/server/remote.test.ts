@@ -8,7 +8,7 @@ import { Store } from './db';
 import { Access, deviceName, machineAddresses, PAIRING_MS, UNUSED_MS } from './remote';
 import { serve } from './server';
 import { Tailscale } from './tailscale';
-import { fakeTailscale, gitRepo, noForge, tailscaleStatus } from './testing';
+import { asOwner, fakeTailscale, gitRepo, noForge, tailscaleStatus } from './testing';
 
 const NAME = 'mac.tail1234.ts.net';
 const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
@@ -36,7 +36,8 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-const local = (path: string, init: RequestInit = {}) => fetch(new URL(path, server.url), init);
+// on this machine: with the owner's key
+const local = (path: string, init: RequestInit = {}) => asOwner(() => server).fetch(new URL(path, server.url), init);
 /** What `tailscale serve` sends on: from 127.0.0.1, under the tailnet name, forwarded. */
 const viaTailnet = (path: string, headers: Record<string, string> = {}, init: RequestInit = {}) =>
   fetch(new URL(path, server.url), { redirect: 'manual', ...init, headers: { host: NAME, 'x-forwarded-for': '100.64.0.7', 'x-forwarded-host': NAME, 'x-forwarded-proto': 'https', 'user-agent': IPHONE, ...headers } });

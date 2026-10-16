@@ -2942,11 +2942,14 @@ instead of hanging. Piper, `say` and the owner's command still run once per clip
 Under Obeya the Qwen3 voice lives longer than a render: Obeya holds it as a child process of its
 server (`src/server/narration.ts`), since the server runs all along and on every platform. The spec
 says which voice Obeya may hold (`host`: the reference clip or the stock speaker; the server builds
-the command itself from that, never takes one from a request), and Obeya sets `OBEYA_URL`
-(`http://127.0.0.1:<port>`) for its workers and for the configuration dialog's sample. `tts.py` then
-sends each clip to `POST /api/narration/clip` (`{voice, text, out, language}`, JSON only, so a page
-elsewhere cannot send one without asking first; `out` an absolute `.wav`) and gets `ok` with the
-seconds or `error` back. The clips of all renders wait in one queue and are served one at a time;
+the command itself from that, never takes one from a request), and Obeya sets `OBEYA_URL` for its
+workers and for the configuration dialog's sample: the address of its narration server
+(`serveNarration`, `http://127.0.0.1:<port>`), which answers narration clips and nothing else, so a
+worker holds no key to the rest of the API (Who may talk to it). `tts.py` then sends each clip to
+`POST /api/narration/clip` (`{voice, text, inline: true, language}`, JSON only, so a page elsewhere
+cannot send one without asking first) and gets `ok` with the seconds and the WAV, or `error`, back.
+Obeya's own server answers the same route with the owner's key, and there may write the WAV to an
+absolute `out` instead. The clips of all renders wait in one queue and are served one at a time;
 each render asks for its next clip only once the last is done, so parallel renders take turns clip
 by clip (throughput stays that of one GPU). The voice starts with the first clip and runs on for 5
 minutes after the queue empties (`NARRATION_IDLE_MS`), then its stdin ends; a clip for another voice
@@ -4135,27 +4138,72 @@ date (`OlderDatabase`).
 
 #### Who may talk to it
 
-The server listens on `127.0.0.1`, with no login, and still answers no other site: any page open in
-the owner's browser may send requests there (a `text/plain` POST needs no preflight, and
-`req.json()` parses it all the same), and a DNS name rebound to `127.0.0.1` reaches it under that
-name. So every request and every WebSocket upgrade, from this machine too, passes a check first
-(`src/server/access.ts`): its `Host` (and `X-Forwarded-Host`, where a proxy set it) names one of
-Obeya's own names (`localhost`, `127.0.0.1`, `[::1]`, and while other devices reach Obeya the
-tailnet name or the address it listens on; the port is not checked), else 421; an `Origin`, where
-it has one, is Obeya's own (scheme, host and port of the address it was sent to, as
-`X-Forwarded-Proto` and `-Host` say behind `tailscale serve`), and it carries no
+Only the owner. The server listens on `127.0.0.1`, which every program and every account on the
+machine reaches, and some routes run commands as the owner (a demo voice that is a command, the
+configuration, approving work). So two checks come first for every request and every WebSocket
+upgrade (`src/server/access.ts`): that it comes from Obeya and no other site, and that it names the
+owner (`src/server/owner.ts`).
+
+*Its own site.* Any page open in the owner's browser may send requests to `127.0.0.1` (a
+`text/plain` POST needs no preflight, and `req.json()` parses it all the same), and a DNS name
+rebound to `127.0.0.1` reaches it under that name. So a request's `Host` (and `X-Forwarded-Host`,
+where a proxy set it) names one of Obeya's own names (`localhost`, `127.0.0.1`, `[::1]`, and while
+other devices reach Obeya the tailnet name or the address it listens on; the port is not checked),
+else 421; an `Origin`, where it has one, is Obeya's own (scheme, host and port of the address it was
+sent to, as `X-Forwarded-Proto` and `-Host` say behind `tailscale serve`), and it carries no
 `Sec-Fetch-Site: cross-site`, else 403. A link from another site that opens one of Obeya's pages in
 the browser's window passes all the same (a GET outside `/api/` with `Sec-Fetch-Mode: navigate` and
 `Sec-Fetch-Dest: document`): it only shows the page, as typing the address would, and a phone
 scanning the QR code often arrives that way, from the scanner app's page. In another site's frame
-the page still gets nothing.
-Requests with neither header (the app's shell sending `POST /api/stop`, scripts, curl, the workers'
-narration) pass. The page and the push-to-talk panel are checked too: Bun serves an HTML bundle
-past any handler, so each moves to a path made up at every start and its own path fetches it from
-there once the request passed. A GET of the workers' files (an HTML artifact's, an answer's) passes
-from another origin: their sandboxed frame has the origin `null`, so the browser sends what its page
-loads (its stylesheet, its images, its scripts) as cross-site. Then the gate of other devices
-(below) has its say.
+the page still gets nothing. Requests with neither header (the app's shell, scripts) pass this
+check. The page and the push-to-talk panel are checked too: Bun serves an HTML bundle past
+any handler, so each moves to a path made up at every start and its own path fetches it from there
+once the request passed.
+
+*The owner's key.* A request from this machine names the owner's key: 32 random bytes in
+`owner.key` in Obeya's home, made at the first start, readable by the owner's account alone (0600;
+on Windows the profile's own permissions). The app's shell (`app/src`) and Obeya's scripts read it
+from there and send it as `X-Obeya-Key`; the page and the panel carry it in an `HttpOnly;
+SameSite=Strict` cookie `obeya-<port>` (a browser keeps cookies per host, not per port: a scratch
+Obeya beside the owner's has a cookie of its own). Without it the API answers 401 `notOwner` (the
+page then reloads), the page and the panel are „Dieser Browser ist nicht bei Obeya angemeldet“ with
+how to sign in (401), and a WebSocket opens not at all. A page a link from another site opens comes
+without the cookie, which is `SameSite=Strict`: it gets a page that opens the same address again,
+now from Obeya's own page, with the cookie.
+
+A browser gets the cookie from a link, as Jupyter's: `/login?token=…` (with `&next=` a path of
+Obeya's to open, nothing else) sets it and goes on from a page of its own, not with a redirect: a
+link opened from another app or site (the app's shell navigates its window from its own `tauri:`
+page) starts a cross-site navigation, whose redirects carry no `SameSite=Strict` cookie. The token
+is made at every start of the server and signs in any number of browsers (Chrome beside Safari)
+until the server stops; a link from before a restart says that it no longer holds. Who holds the
+key gets the link (`POST /api/login-link`, only on this machine):
+
+- Obeya prints it when it starts („Obeya … on http://127.0.0.1:4417/login?token=…“), at every
+  restart anew.
+- A second start of Obeya while one runs says where it runs and prints the link to it.
+- The app's window and its panel sign in through it at every start. „Im Browser öffnen“ (the File
+  menu on a Mac, the configuration) opens the page in the default browser through a link with a
+  token of its own (`once`), which signs in that one browser: it goes through the system's `open`,
+  whose command line other accounts on the machine see in the process list.
+- `scripts/scratch-obeya.ts` prints it as `url`, and `--login <port>` again.
+
+Once signed in, the address alone (a bookmark, `http://127.0.0.1:4417/`) opens Obeya: the cookie
+holds as long as the key (400 days at most, the longest a browser keeps one). Workers hold no key:
+their narration goes to a server of its own that answers narration clips and nothing else
+(`serveNarration`, their `OBEYA_URL`).
+
+*The workers' files.* A GET of an HTML artifact's files or an answer's passes the site check from
+another origin: their sandboxed frame has the origin `null`, so the browser sends what its page
+loads (its stylesheet, its images, its scripts) as cross-site, and without the cookie. The frame's
+own page comes with the cookie (the canvas loads it) and is sent on to an address with a key of its
+directory (`…/demo/~<key>/index.html`, keyed with a secret made at every start), so what it loads
+beside itself carries that key, which only a request with the owner's key (or a paired device's)
+gets to see; an address with it needs nothing more. Then the gate of other devices (below) has its
+say.
+
+The cookie is sent to any server on `127.0.0.1` the browser opens, whatever its port: a page the
+owner opens there from another account on the machine would see it.
 
 #### Other devices
 
@@ -4205,10 +4253,9 @@ cross-site`, so another site cannot spend them by sending a browser in the tailn
 the server sets the device cookie `obeya-device` (32 random bytes; the database keeps only its
 SHA-256 with a name from the user agent, „iPhone · Safari“, and when it was paired and last seen)
 and sends it to the canvas; the dialog then says „iPhone · Safari ist verbunden.“. The cookie is
-`HttpOnly`; over HTTPS `Secure; SameSite=None`, so what a worker's HTML artifact loads in its
-sandboxed frame (cross-site, as above) carries it too, and the origin check keeps other sites out as
-on this machine; over HTTP `SameSite=Lax`, where an HTML artifact's own files therefore do not load
-on the phone.
+`HttpOnly`; over HTTPS `Secure; SameSite=None`, and the origin check keeps other sites out as on
+this machine; over HTTP `SameSite=Lax`. Either way an HTML artifact's own files load through the
+keyed address (above).
 
 *Devices.* The section lists them with when they were paired and last seen, each with „Entfernen“,
 which takes effect at once and has no undo (pairing again is quick): its cookie lets nothing in,

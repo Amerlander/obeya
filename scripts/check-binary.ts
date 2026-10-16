@@ -22,6 +22,7 @@ import { type Subprocess } from 'bun';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { loginLink, ownerHeaders } from '../src/server/owner';
 import { pathToFileURL } from 'node:url';
 import pkg from '../package.json';
 import { check, expect, failed, until as untilEvery } from './check-harness';
@@ -44,7 +45,8 @@ const until: typeof untilEvery = (what, ms, fn) => untilEvery(what, ms, fn, 2000
 const api = async (path: string, init?: RequestInit & { json?: unknown }) => {
   const res = await fetch(`${base}${path}`, {
     ...init,
-    ...(init?.json !== undefined ? { method: init.method ?? 'POST', body: JSON.stringify(init.json), headers: { 'content-type': 'application/json' } } : {}),
+    headers: ownerHeaders(home),
+    ...(init?.json !== undefined ? { method: init.method ?? 'POST', body: JSON.stringify(init.json), headers: { ...ownerHeaders(home), 'content-type': 'application/json' } } : {}),
     signal: AbortSignal.timeout(180_000),
   });
   if (!res.ok) throw new Error(`${init?.method ?? 'GET'} ${path}: ${res.status} ${await res.text()}`);
@@ -120,7 +122,7 @@ process.on('exit', () => {
 
 await check(`Obeya ${pkg.version} starts from ${binary}`, async () => {
   server = Bun.spawn([binary, '--port', String(port)], { cwd: dir, env, stdout: Bun.file(log), stderr: Bun.file(log), detached: !win });
-  await until('the canvas answers', 60_000, async () => (await fetch(`${base}/api/canvases`)).ok);
+  await until('the canvas answers', 60_000, async () => (await fetch(`${base}/api/canvases`, { headers: ownerHeaders(home) })).ok);
   return logText().split('\n')[0];
 });
 const canvas = 'check';
@@ -192,7 +194,7 @@ await runDemo(
   {
     title: 'Obeya from one file',
     baseUrl: ${JSON.stringify(base)},
-    login: async (page) => { await page.goto(${JSON.stringify(`${base}/?c=${canvas}`)}); },
+    login: async (page) => { await page.goto(${JSON.stringify(await loginLink(base, home, `/?c=${canvas}`))}); },
     open: async (d) => { await d.goto('/?c=${canvas}'); await d.page.getByText('Configuration').first().waitFor(); },
     scenes: [{ title: 'The canvas', say: 'This canvas is served by the compiled Obeya.', run: async (d) => { await d.untilSpoken(0.5); } }],
     report: { summary: 'A check render.', shown: ['The canvas'], notShown: [], findings: [], meta: {} },
@@ -210,7 +212,7 @@ await runDemo(
       copyFileSync(shot, join(process.env.CHECK_ARTIFACTS, 'demo-failure.png'));
       copyFileSync(log, join(process.env.CHECK_ARTIFACTS, 'server.log'));
     }
-    expect(p.exitCode === 0, `exit ${p.exitCode}\n${out.slice(-3000)}\n${p.exitCode !== 0 ? pageConsole(demo) : ''}`);
+    expect(p.exitCode === 0, `exit ${p.exitCode}\n${out.slice(-3000)}\n${p.exitCode !== 0 ? pageConsole(demo, await loginLink(base, home, `/?c=${canvas}`)) : ''}`);
     expect(Bun.file(join(demo, 'demo.mp4')).size > 0, 'no demo.mp4');
     return out.split('\n').find((l) => /video →/.test(l))?.trim();
   });
@@ -256,7 +258,7 @@ if (args.includes('--worker')) {
 }
 
 /** What the browser says loading the canvas once more, as the director launches it: for a render that failed. */
-function pageConsole(demo: string): string {
+function pageConsole(demo: string, link: string | null): string {
   const chromium = join(resources, 'plugin', 'lib', 'chromium.ts');
   const script = join(demo, 'console.ts');
   writeFileSync(
@@ -269,7 +271,7 @@ p.on('console', (m) => console.log('console', m.type(), m.text().slice(0, 300)))
 p.on('pageerror', (e) => console.log('pageerror', e.message.slice(0, 500)));
 p.on('requestfailed', (r) => console.log('requestfailed', r.url(), r.failure()?.errorText));
 const started = Date.now();
-await p.goto(${JSON.stringify(`${base}/?c=${canvas}`)});
+await p.goto(${JSON.stringify(link)});
 await p.waitForTimeout(15000);
 console.log('after', Date.now() - started, 'ms the page says:', (await p.locator('body').innerText()).slice(0, 300).replace(/\\n/g, ' | '));
 await b.close();

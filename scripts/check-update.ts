@@ -23,6 +23,7 @@ import { type Subprocess } from 'bun';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { ownerHeaders } from '../src/server/owner';
 import { check, exited, expect, failed, sleep, until } from './check-harness';
 import { cargoPath, endingIn, opt } from './common';
 
@@ -156,7 +157,7 @@ const serverEntry = () => {
 const api = async (method: string, path: string) => {
   const entry = serverEntry();
   if (!entry) return null;
-  const res = await fetch(`http://127.0.0.1:${entry.port}${path}`, { method, signal: AbortSignal.timeout(5000) });
+  const res = await fetch(`http://127.0.0.1:${entry.port}${path}`, { method, headers: ownerHeaders(homeNow), signal: AbortSignal.timeout(5000) });
   return res.ok ? (res.status === 204 ? {} : await res.json()) : null;
 };
 
