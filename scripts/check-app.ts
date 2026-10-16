@@ -24,6 +24,7 @@ import { type Subprocess } from 'bun';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { bad, check, exited, expect, failed, sleep, until as untilEvery } from './check-harness';
 
 const args = process.argv.slice(2);
 const programArg = args.find((a) => !a.startsWith('--'));
@@ -34,35 +35,8 @@ if (!programArg) {
 const program = resolve(programArg);
 const win = process.platform === 'win32';
 
-let failed = 0;
-const ok = (what: string, detail = '') => console.log(`✓ ${what}${detail ? `: ${detail}` : ''}`);
-const bad = (what: string, detail: string) => {
-  failed++;
-  console.log(`✗ ${what}: ${detail}`);
-};
-const check = async (what: string, fn: () => Promise<string | void> | string | void) => {
-  try {
-    ok(what, (await fn()) ?? '');
-  } catch (e) {
-    bad(what, e instanceof Error ? e.message : String(e));
-  }
-};
-const expect = (cond: unknown, why: string) => {
-  if (!cond) throw new Error(why);
-};
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-async function until<T>(what: string, ms: number, fn: () => T | undefined | null | false | Promise<T | undefined | null | false>): Promise<T> {
-  const deadline = Date.now() + ms;
-  for (;;) {
-    const v = await Promise.resolve()
-      .then(fn)
-      .catch(() => undefined);
-    if (v) return v;
-    if (Date.now() > deadline) throw new Error(`${what}: not within ${Math.round(ms / 1000)} s`);
-    await sleep(250);
-  }
-}
-const exited = (p: Subprocess, ms: number) => Promise.race([p.exited, sleep(ms).then(() => null)]);
+// the page reports in moments: asked every 250 ms
+const until: typeof untilEvery = (what, ms, fn) => untilEvery(what, ms, fn, 250);
 
 // ---------------------------------------------------------------- a scratch repository and home
 const dir = mkdtempSync(join(tmpdir(), 'obeya-app-check-'));

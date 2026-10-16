@@ -21,6 +21,7 @@
 
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { check, expect, failed, sleep, until } from './check-harness';
 
 const [programArg, homeArg, wavArg] = process.argv.slice(2);
 if (!programArg || !homeArg || !wavArg) {
@@ -31,21 +32,6 @@ const keyboard = wavArg === '--keyboard';
 const home = resolve(homeArg);
 const { port } = JSON.parse(readFileSync(join(home, 'server.json'), 'utf8')) as { port: number };
 const base = `http://127.0.0.1:${port}`;
-
-let failed = 0;
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const check = async (what: string, fn: () => Promise<string | void>) => {
-  try {
-    const detail = await fn();
-    console.log(`✓ ${what}${detail ? `: ${detail}` : ''}`);
-  } catch (e) {
-    failed++;
-    console.log(`✗ ${what}: ${e instanceof Error ? e.message : String(e)}`);
-  }
-};
-const expect = (cond: unknown, why: string) => {
-  if (!cond) throw new Error(why);
-};
 
 const shell = Bun.spawn([resolve(programArg)], {
   stdin: 'pipe',
@@ -73,28 +59,17 @@ const key = (k: 'down' | 'up' | 'other') => {
   shell.stdin.write(`${k}\n`);
   shell.stdin.flush();
 };
-async function seen(prefix: string, ms: number, from = 0) {
-  const deadline = Date.now() + ms;
-  for (;;) {
-    const line = lines.slice(from).find((l) => l.startsWith(prefix));
-    if (line !== undefined) return line;
-    if (Date.now() > deadline) return null;
-    await sleep(100);
-  }
-}
+/** The first line from `from` on that starts with `prefix`, null when none came within `ms`. */
+const seen = (prefix: string, ms: number, from = 0) => until(prefix, ms, () => lines.slice(from).find((l) => l.startsWith(prefix)), 100).catch(() => null);
 
 try {
   await check('the shell reports what it hears', async () => {
-    const deadline = Date.now() + 30_000;
-    for (;;) {
+    const { key, report } = await until('a report', 30_000, async () => {
       const view = (await (await fetch(`${base}/api/push-to-talk`)).json()) as { key: string; shell: { state: string; platform: string } | null };
-      if (view.shell) {
-        expect(view.shell.state === 'on', `the shell says ${JSON.stringify(view.shell)}`);
-        return `${view.shell.platform}, ${view.shell.state}, key ${view.key}`;
-      }
-      expect(Date.now() < deadline, 'no report within 30 s');
-      await sleep(500);
-    }
+      return view.shell && { key: view.key, report: view.shell };
+    });
+    expect(report.state === 'on', `the shell says ${JSON.stringify(report)}`);
+    return `${report.platform}, ${report.state}, key ${key}`;
   });
   // the panel's page loads meanwhile
   await sleep(2000);

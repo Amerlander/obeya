@@ -10,17 +10,14 @@
 // On a Mac the key needs the "Input Monitoring" permission for the program the shell runs in:
 // started from a terminal, macOS asks for the terminal.
 
-import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { delimiter, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
+import { cargoPath } from './common';
 
 const ROOT = resolve(import.meta.dir, '..');
 const APP = join(ROOT, 'app');
 const args = process.argv.slice(2);
 const debug = args.includes('--debug');
 const target = join(APP, 'target', 'checkout');
-const cargoBin = join(homedir(), '.cargo', 'bin');
-const PATH = [process.env.PATH ?? '', ...(existsSync(cargoBin) ? [cargoBin] : [])].join(delimiter);
 
 // the shell alone: the server is this checkout's, not a sidecar, and there are no resources to bundle
 const config = JSON.stringify({ bundle: { externalBin: null, resources: null } });
@@ -28,7 +25,7 @@ const build = Bun.spawnSync([process.execPath, 'x', 'tauri', 'build', '--no-bund
   cwd: APP,
   stdout: 'inherit',
   stderr: 'inherit',
-  env: { ...process.env, PATH, CARGO_TARGET_DIR: target, CI: 'true' },
+  env: { ...process.env, PATH: cargoPath(), CARGO_TARGET_DIR: target, CI: 'true' },
 });
 if (build.exitCode !== 0) {
   console.error('app: the shell did not build (Rust from https://rustup.rs is needed)');

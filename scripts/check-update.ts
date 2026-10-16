@@ -20,51 +20,18 @@
 // exits 1 when one failed.
 
 import { type Subprocess } from 'bun';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { delimiter, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
+import { check, exited, expect, failed, sleep, until } from './check-harness';
+import { cargoPath, endingIn, opt } from './common';
 
 const ROOT = resolve(import.meta.dir, '..');
 const args = process.argv.slice(2);
-const opt = (name: string) => {
-  const i = args.indexOf(`--${name}`);
-  return i >= 0 ? args[i + 1] : undefined;
-};
 const os = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'darwin' : 'linux';
 const BUNDLE = join(ROOT, 'app', 'target', 'release', 'bundle');
-const cargoBin = join(homedir(), '.cargo', 'bin');
-const env = { ...process.env, PATH: [process.env.PATH ?? '', ...(existsSync(cargoBin) ? [cargoBin] : [])].join(delimiter) };
+const env = { ...process.env, PATH: cargoPath() };
 
-let failed = 0;
-const ok = (what: string, detail = '') => console.log(`✓ ${what}${detail ? `: ${detail}` : ''}`);
-const bad = (what: string, detail: string) => {
-  failed++;
-  console.log(`✗ ${what}: ${detail}`);
-};
-const check = async (what: string, fn: () => Promise<string | void> | string | void) => {
-  try {
-    ok(what, (await fn()) ?? '');
-    return true;
-  } catch (e) {
-    bad(what, e instanceof Error ? e.message : String(e));
-    return false;
-  }
-};
-const expect = (cond: unknown, why: string) => {
-  if (!cond) throw new Error(why);
-};
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-async function until<T>(what: string, ms: number, fn: () => T | undefined | null | false | Promise<T | undefined | null | false>): Promise<T> {
-  const deadline = Date.now() + ms;
-  for (;;) {
-    const v = await Promise.resolve()
-      .then(fn)
-      .catch(() => undefined);
-    if (v) return v;
-    if (Date.now() > deadline) throw new Error(`${what}: not within ${Math.round(ms / 1000)} s`);
-    await sleep(500);
-  }
-}
 const hash = (file: string) => new Bun.CryptoHasher('sha256').update(readFileSync(file)).digest('hex');
 function run(cmd: string[], cwd = ROOT, more: Record<string, string> = {}) {
   console.log(`$ ${cmd.map((c) => (c.length > 80 ? `${c.slice(0, 77)}...` : c)).join(' ')}`);
@@ -94,9 +61,9 @@ async function freePort() {
 
 /** The installer, the update and the program each build leaves, by platform. */
 const one = (sub: string, end: string) => {
-  const f = readdirSync(join(BUNDLE, sub)).find((f) => f.endsWith(end));
+  const f = endingIn(join(BUNDLE, sub), end);
   if (!f) throw new Error(`no ${end} in ${join(BUNDLE, sub)}`);
-  return join(BUNDLE, sub, f);
+  return f;
 };
 const UPDATE = { darwin: 'Obeya.app.tar.gz', windows: 'Obeya-setup.exe', linux: 'Obeya.AppImage' }[os];
 
@@ -220,8 +187,8 @@ try {
     await check(`installing it ends the server, replaces the app with ${NEW} and starts it again`, async () => {
       const asked = (await api('POST', '/api/app-update/install')) as { updating?: boolean } | null;
       expect(asked?.updating, `the server answered ${JSON.stringify(asked)}`);
-      const exited = await Promise.race([app!.exited, sleep(120_000).then(() => null)]);
-      expect(exited !== null, 'the old app did not end');
+      const code = await exited(app!, 120_000);
+      expect(code !== null, 'the old app did not end');
       if (os === 'windows') homeNow = join(homedir(), '.obeya');
       // the Windows installer is still at work when the old app has ended
       await until(`the installed program as ${NEW}'s`, 120_000, () => existsSync(shell) && hash(shell) !== before && isNew()).catch((e) => {
@@ -231,7 +198,7 @@ try {
         const e = serverEntry();
         return e && e.pid !== first.pid && (await api('GET', '/api/canvases')) ? e : null;
       });
-      return `exit ${exited}, then pid ${again.pid}`;
+      return `exit ${code}, then pid ${again.pid}`;
     });
     await check('the new version finds nothing newer', async () => {
       await sleep(12_000);

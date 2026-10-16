@@ -24,12 +24,10 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import pkg from '../package.json';
+import { check, expect, failed, until as untilEvery } from './check-harness';
+import { opt } from './common';
 
 const args = process.argv.slice(2);
-const opt = (name: string) => {
-  const i = args.indexOf(`--${name}`);
-  return i >= 0 ? args[i + 1] : undefined;
-};
 const binaryArg = args.find((a, i) => !a.startsWith('--') && args[i - 1] !== '--port');
 if (!binaryArg) {
   console.error('usage: bun scripts/check-binary.ts <obeya> [--voice] [--demo] [--worker] [--port <n>] [--keep]');
@@ -41,34 +39,8 @@ const port = Number(opt('port') ?? 4499);
 const base = `http://127.0.0.1:${port}`;
 const win = process.platform === 'win32';
 
-let failed = 0;
-const ok = (what: string, detail = '') => console.log(`✓ ${what}${detail ? `: ${detail}` : ''}`);
-const bad = (what: string, detail: string) => {
-  failed++;
-  console.log(`✗ ${what}: ${detail}`);
-};
-const check = async (what: string, fn: () => Promise<string | void> | string | void) => {
-  const started = performance.now();
-  try {
-    const detail = await fn();
-    ok(what, [detail, `${((performance.now() - started) / 1000).toFixed(1)} s`].filter(Boolean).join(', '));
-  } catch (e) {
-    bad(what, e instanceof Error ? e.message : String(e));
-  }
-};
-const expect = (cond: unknown, why: string) => {
-  if (!cond) throw new Error(why);
-};
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-async function until<T>(what: string, ms: number, fn: () => Promise<T | undefined | null | false>): Promise<T> {
-  const deadline = Date.now() + ms;
-  for (;;) {
-    const v = await fn().catch(() => undefined);
-    if (v) return v;
-    if (Date.now() > deadline) throw new Error(`${what}: not within ${Math.round(ms / 1000)} s`);
-    await sleep(2000);
-  }
-}
+// what is waited for here takes minutes: asked every 2 s
+const until: typeof untilEvery = (what, ms, fn) => untilEvery(what, ms, fn, 2000);
 const api = async (path: string, init?: RequestInit & { json?: unknown }) => {
   const res = await fetch(`${base}${path}`, {
     ...init,
@@ -285,14 +257,13 @@ if (args.includes('--worker')) {
 
 /** What the browser says loading the canvas once more, as the director launches it: for a render that failed. */
 function pageConsole(demo: string): string {
-  const pw = join(resources, 'node_modules', 'playwright-core', 'index.js');
-  const script = join(demo, 'console.mjs');
+  const chromium = join(resources, 'plugin', 'lib', 'chromium.ts');
+  const script = join(demo, 'console.ts');
   writeFileSync(
     script,
-    `const m = await import(${JSON.stringify(pathToFileURL(pw).href)});
-const chromium = m.chromium ?? m.default.chromium;
-let b;
-for (const channel of ['chrome', 'msedge', undefined]) { try { b = await chromium.launch({ channel, args: ['--window-size=1440,900'] }); console.log('browser', channel ?? 'chromium', b.version()); break; } catch {} }
+    `import { launchChromium } from ${JSON.stringify(pathToFileURL(chromium).href)};
+const b = await launchChromium({ args: ['--window-size=1440,900'] });
+console.log('browser', b.version());
 const p = await b.newPage({ viewport: { width: 1440, height: 900 } });
 p.on('console', (m) => console.log('console', m.type(), m.text().slice(0, 300)));
 p.on('pageerror', (e) => console.log('pageerror', e.message.slice(0, 500)));

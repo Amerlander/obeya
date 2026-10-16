@@ -35,6 +35,7 @@ import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmS
 import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import pkg from '../package.json';
+import { endingIn, opt } from './common';
 
 const TRIPLES = {
   'darwin-arm64': 'aarch64-apple-darwin',
@@ -48,10 +49,6 @@ type Target = keyof typeof TRIPLES;
 const ROOT = resolve(import.meta.dir, '..');
 const APP = join(ROOT, 'app');
 const args = process.argv.slice(2);
-const opt = (name: string) => {
-  const i = args.indexOf(`--${name}`);
-  return i >= 0 ? args[i + 1] : undefined;
-};
 const here = `${process.platform === 'win32' ? 'windows' : process.platform}-${process.arch}` as Target;
 const target = (args.find((a, i) => !a.startsWith('--') && !['--bundles', '--config'].includes(args[i - 1] ?? '')) ?? here) as Target;
 if (!(target in TRIPLES)) fail(`unknown target ${target} (known: ${Object.keys(TRIPLES).join(', ')})`);
@@ -158,12 +155,9 @@ function notarise() {
     if (key !== given) writeFileSync(key, given);
     const auth = ['--key', key, '--key-id', process.env.APPLE_NOTARY_KEY_ID!, ...(process.env.APPLE_NOTARY_ISSUER ? ['--issuer', process.env.APPLE_NOTARY_ISSUER] : [])];
     const app = join(out, 'macos', 'Obeya.app');
-    const dmg = existsSync(join(out, 'dmg')) ? readdirSync(join(out, 'dmg')).find((f) => f.endsWith('.dmg')) : undefined;
-    let submitted = dmg && join(out, 'dmg', dmg);
-    if (!submitted) {
-      submitted = join(tmp, 'Obeya.zip');
-      run(['ditto', '-c', '-k', '--keepParent', app, submitted]);
-    }
+    const dmg = endingIn(join(out, 'dmg'), '.dmg');
+    const submitted = dmg ?? join(tmp, 'Obeya.zip');
+    if (!dmg) run(['ditto', '-c', '-k', '--keepParent', app, submitted]);
     console.log(`$ xcrun notarytool submit ${submitted} --wait`);
     const answer = JSON.parse(output(['xcrun', 'notarytool', 'submit', submitted, ...auth, '--wait', '--timeout', '1h', '--output-format', 'json'])) as { id: string; status: string };
     if (answer.status !== 'Accepted') {
@@ -173,7 +167,7 @@ function notarise() {
     console.log(`notarised (${answer.id})`);
     // the DMG's ticket covers the app inside it, so the app beside it (there when the updater's
     // archive is made of it; Tauri removes it after a DMG alone) staples from it too
-    for (const file of [...(dmg ? [submitted] : []), ...(existsSync(app) ? [app] : [])]) {
+    for (const file of [...(dmg ? [dmg] : []), ...(existsSync(app) ? [app] : [])]) {
       persist(['xcrun', 'stapler', 'staple', file]);
       persist(['xcrun', 'stapler', 'validate', file]);
     }
@@ -200,10 +194,7 @@ function notarise() {
 
 if (process.env.TAURI_SIGNING_PRIVATE_KEY) {
   const sign = (file: string) => run([process.execPath, 'x', 'tauri', 'signer', 'sign', file], APP);
-  const one = (sub: string, end: string) => {
-    const f = existsSync(join(out, sub)) && readdirSync(join(out, sub)).find((f) => f.endsWith(end));
-    return f ? join(out, sub, f) : fail(`no ${end} in ${join(out, sub)} to sign for the updater`);
-  };
+  const one = (sub: string, end: string) => endingIn(join(out, sub), end) ?? fail(`no ${end} in ${join(out, sub)} to sign for the updater`);
   if (os === 'darwin') {
     // as Tauri packs it: the app at the archive's top, without macOS's ._ files
     run(['tar', '-czf', 'Obeya.app.tar.gz', 'Obeya.app'], join(out, 'macos'), { COPYFILE_DISABLE: '1' });

@@ -96,6 +96,7 @@ import { existsSync, mkdirSync, openSync, readFileSync, rmSync, symlinkSync, wri
 import { dirname, join, resolve } from 'node:path';
 import type { CanvasSnapshot, Item } from '../src/core/types';
 import { findTailscale, type ServeEntry, Tailscale } from '../src/server/tailscale';
+import { opt } from './common';
 import { answers, waitUp } from './wait-up';
 
 interface StageCard {
@@ -168,10 +169,6 @@ interface Stage {
 
 const ROOT = resolve(import.meta.dir, '..');
 const args = process.argv.slice(2);
-const opt = (name: string) => {
-  const i = args.indexOf(`--${name}`);
-  return i >= 0 ? args[i + 1] : undefined;
-};
 const fail = (msg: string): never => {
   console.error(`scratch-obeya: ${msg}`);
   process.exit(1);
@@ -208,9 +205,7 @@ for (const [path, text] of Object.entries(files)) {
   mkdirSync(dirname(join(repo, path)), { recursive: true });
   writeFileSync(join(repo, path), text);
 }
-run('git', ['init', '-q', '-b', mainBranch], repo);
-run('git', ['add', '-A'], repo);
-run('git', ['-c', 'user.name=Scratch', '-c', 'user.email=scratch@example.com', 'commit', '-qm', 'init'], repo);
+initRepo(repo);
 // a workspace of the pool is a clone of the repository's origin, the checkout included
 if (stage.poolCheckout || stage.hosts?.length) {
   run('git', ['clone', '-q', '--bare', repo, join(dir, 'scratch.git')], dir);
@@ -223,9 +218,7 @@ const further = (stage.canvases ?? []).map((name, i) => {
   const path = join(dir, `repo-${i + 2}`);
   mkdirSync(path, { recursive: true });
   writeFileSync(join(path, 'README.md'), `# ${name}\n`);
-  run('git', ['init', '-q', '-b', mainBranch], path);
-  run('git', ['add', '-A'], path);
-  run('git', ['-c', 'user.name=Scratch', '-c', 'user.email=scratch@example.com', 'commit', '-qm', 'init'], path);
+  initRepo(path);
   return { name, repos: [{ path }] };
 });
 // the origin at the same path on each host, which clones it from there
@@ -515,6 +508,13 @@ const staged = { url: `${base}/?c=${canvas}`, port, dir, canvas, pid: server.pid
 writeFileSync(join(dir, 'staged.json'), JSON.stringify(staged, null, 2));
 console.log(JSON.stringify(staged));
 process.exit(0);
+
+/** A git repository at `path` with what is there committed on the main branch. */
+function initRepo(path: string) {
+  run('git', ['init', '-q', '-b', mainBranch], path);
+  run('git', ['add', '-A'], path);
+  run('git', ['-c', 'user.name=Scratch', '-c', 'user.email=scratch@example.com', 'commit', '-qm', 'init'], path);
+}
 
 function run(cmd: string, a: string[], cwd: string) {
   const r = spawnSync(cmd, a, { cwd, encoding: 'utf8' });
