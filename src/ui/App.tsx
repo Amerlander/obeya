@@ -167,7 +167,7 @@ function Canvas({
   const bounds = (i: Item) => boundsOf(i, itemsRef.current);
 
   // ---------------------------------------------------------------- camera
-  const [cam, setCamState] = useState<Cam>(() => {
+  const [cam, setCam, camRef] = useLive<Cam>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(camKey(snapshot.canvas.id)) ?? 'null');
       // saved as it would be without a sheet, which none is before the page opens one
@@ -175,11 +175,6 @@ function Canvas({
     } catch {}
     return centreOn(all, 1);
   });
-  const camRef = useRef(cam);
-  const setCam = useCallback((c: Cam) => {
-    camRef.current = c;
-    setCamState(c);
-  }, []);
   // the width of the sheet docked on the right that the camera is laid out for: a sheet that opens,
   // closes or is dragged wider moves the view by half the difference, so its middle stays the middle
   const camSide = useRef(0);
@@ -209,23 +204,13 @@ function Canvas({
   }, []);
 
   // ---------------------------------------------------------------- focus
-  const [focus, setFocusState] = useState<Focus | null>(null);
-  const focusRef = useRef<Focus | null>(null);
-  const setFocus = (f: Focus | null) => {
-    focusRef.current = f;
-    setFocusState(f);
-  };
+  const [focus, setFocus, focusRef] = useLive<Focus | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [dim, setDim] = useState(false);
   const [sheetId, setSheetId] = useState<string | null>(null);
   const [sheetOn, setSheetOn, sheetOnRef] = useLive(false);
   // the open project's plan doc, read in the widened sheet
-  const [reading, setReadingState] = useState<{ mark?: string } | null>(null);
-  const readingRef = useRef(reading);
-  const setReading = (r: { mark?: string } | null) => {
-    readingRef.current = r;
-    setReadingState(r);
-  };
+  const [reading, setReading, readingRef] = useLive<{ mark?: string } | null>(null);
   // how wide the sheets are, as the owner dragged them; in effect clamped to the window
   const [widths, setWidths] = useState<SheetWidths>(() => loadWidths(localStorage));
   const sheetW = widthsIn(widths, innerWidth);
@@ -279,6 +264,8 @@ function Canvas({
   const [archived, setArchived] = useState<Item[]>([]);
   const archivedRef = useRef(archived);
   archivedRef.current = archived;
+  /** The card `id`, on the canvas or else in the archive. */
+  const itemOrArchived = (id: string) => byId(id) ?? archivedRef.current.find((i) => i.id === id);
   const archiveEls = useRef(new Map<string, HTMLElement>()).current;
   // rows of the project sheet, where its archived workstreams and its idea unfold from
   const sheetEls = useRef(new Map<string, HTMLElement>()).current;
@@ -369,7 +356,7 @@ function Canvas({
 
   // a card that starts or finishes work while open changes its width and colour: resize in place
   const openItem = openId
-    ? (items.find((i) => i.id === openId) ?? archived.find((i) => i.id === openId) ?? (opened?.id === openId ? opened : undefined))
+    ? (itemOrArchived(openId) ?? (opened?.id === openId ? opened : undefined))
     : undefined;
   const openState = openItem && `${shownState(openItem)}:${openItem.need ?? ''}:${split(openItem)}`;
   useEffect(() => {
@@ -389,7 +376,7 @@ function Canvas({
     const ro = new ResizeObserver(() => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
-        const i = byId(openId) ?? archivedRef.current.find((x) => x.id === openId);
+        const i = itemOrArchived(openId);
         if (i && unfolded.current) fitPanel(i);
       });
     });
@@ -401,7 +388,7 @@ function Canvas({
   }, [openId]);
   // and so does the window: a split filling the panel takes the height it has
   useEffect(() => {
-    const i = openId && (byId(openId) ?? archivedRef.current.find((x) => x.id === openId));
+    const i = openId && itemOrArchived(openId);
     if (i && unfolded.current) fitPanel(i);
   }, [tick]);
 
@@ -473,20 +460,19 @@ function Canvas({
   }
 
   async function openProject(p: Item, quick = false) {
-    const f = focusRef.current;
-    setFocus(f?.type === 'project' ? { ...f, id: p.id } : { type: 'project', id: p.id, prevCam: camRef.current, prevSide: camSide.current });
-    setSheetId(p.id);
-    setReading(null);
-    setSheetOn(true);
-    setKOn(false);
-    setAOn(false);
     // an archived project is not on the canvas: its sheet takes the archive list's place
-    if (!p.archivedAt) await flyOrJump(camFor(bounds(p), 40, sideNow(), 60), 700, quick);
+    await projectSheet(p, null, quick, !p.archivedAt);
   }
 
   /** Reads the project's plan doc in the sheet, at the workstream `mark`; `null` goes back to the workstreams. */
   async function readPlan(p: Item, r: { mark?: string } | null, quick = false) {
     if (focusRef.current?.type === 'card') await closeCard();
+    // the project stays in view beside the wider sheet
+    await projectSheet(p, r, quick, true);
+  }
+
+  /** Shows the project in the sheet, its workstreams or (`r`) its plan doc, and with `inView` flies to it. */
+  async function projectSheet(p: Item, r: { mark?: string } | null, quick: boolean, inView: boolean) {
     const f = focusRef.current;
     setFocus(f?.type === 'project' ? { ...f, id: p.id } : { type: 'project', id: p.id, prevCam: camRef.current, prevSide: camSide.current });
     setSheetId(p.id);
@@ -494,8 +480,7 @@ function Canvas({
     setSheetOn(true);
     setKOn(false);
     setAOn(false);
-    // the project stays in view beside the wider sheet
-    await flyOrJump(camFor(bounds(p), 40, sideNow(), 60), 700, quick);
+    if (inView) await flyOrJump(camFor(bounds(p), 40, sideNow(), 60), 700, quick);
   }
 
   /** Closes the open project; `toArchive`: back to the archive an archived one was opened from. */
@@ -591,6 +576,11 @@ function Canvas({
     if (undo) undoTimer.current = setTimeout(() => setAck((a) => (a && a.text === text ? { text } : a)), Math.max(0, undoMs - 400));
     ackTimer.current = setTimeout(() => setAckOn(false), 7000);
   }
+  /** What went wrong, in place of the confirmation; what the server did not refuse also goes to the console. */
+  function fail(e: unknown) {
+    if (!(e instanceof ApiError)) console.error(e);
+    showAck(failText(e));
+  }
   /** What the server is still at: stays, turning, until a confirmation takes its place. */
   function showWait(text: string) {
     setAck({ text, wait: true });
@@ -605,8 +595,7 @@ function Canvas({
       await api.act(i.id, { action: i.queue ? 'force' : 'start' });
       if (i.queue) showAck(t.queue.forced);
     } catch (e) {
-      if (!(e instanceof ApiError)) console.error(e);
-      showAck(failText(e));
+      fail(e);
     }
   }, []);
 
@@ -616,8 +605,7 @@ function Canvas({
       await api.archive(i.id);
       showAck(t.archive.archived(plain(i.title)), () => api.unarchive(i.id));
     } catch (e) {
-      if (!(e instanceof ApiError)) console.error(e);
-      showAck(failText(e));
+      fail(e);
     }
   }, []);
 
@@ -641,8 +629,7 @@ function Canvas({
         START_ALL_HOLD_MS,
       );
     } catch (e) {
-      if (!(e instanceof ApiError)) console.error(e);
-      showAck(failText(e));
+      fail(e);
     }
   }, []);
 
@@ -652,8 +639,7 @@ function Canvas({
       const card = await api.preparePlanDoc(snapshot.canvas.id, dir.repo, file);
       showAck(t.planDir.started(plain(card.title)));
     } catch (e) {
-      if (!(e instanceof ApiError)) console.error(e);
-      showAck(failText(e));
+      fail(e);
     }
   }, []);
 
@@ -692,14 +678,16 @@ function Canvas({
     if (h.token && !focusRef.current) newCardWatch.current = { known: new Set(itemsRef.current.map((i) => i.id)), until: Date.now() + 20_000 };
   }
   const told = useTold(onHeard);
+  /** The card `target` names, if any. */
+  const cardIn = (target: Where) => (target && 'card' in target ? byId(target.card) : undefined);
   /** The card in `target` when an agent listens on it: what the owner says there goes straight to that agent. */
   const listening = (target: Where) => {
-    const i = target && 'card' in target ? itemsRef.current.find((x) => x.id === target.card) : undefined;
+    const i = cardIn(target);
     return i && agentListens(i) ? i : undefined;
   };
   /** The card a command for `target` is about, named in its confirmation when another card is open by then. */
   const toldCard = (target: Where) => {
-    const i = target && 'card' in target ? itemsRef.current.find((x) => x.id === target.card) : undefined;
+    const i = cardIn(target);
     return i ? { id: i.id, title: plain(i.title) } : undefined;
   };
   /**
@@ -707,7 +695,7 @@ function Canvas({
    * it down for the open card's agent, or while the Koordinator reads it.
    */
   const tellAbout = (target: Where, request: () => Promise<Heard>) => {
-    const i = target ? itemsRef.current.find((x) => x.id === ('card' in target ? target.card : target.project)) : undefined;
+    const i = target ? byId('card' in target ? target.card : target.project) : undefined;
     const what = i ? `„${plain(i.title)}“` : t.voice.koordinator;
     return told.tell(listening(target) ? t.voice.transcribing(what) : t.voice.reading(what), toldCard(target), request);
   };
@@ -722,14 +710,13 @@ function Canvas({
         // typed while the card's demo video stands at a place: about that place, and the video plays on
         const taken = target && 'card' in target ? take(target.card) : null;
         if (taken) videoOf((target as { card: string }).card)?.play().catch(() => {});
-        await api.command(text, target, images, field, replyTo, await sent(taken));
+        await api.command(text, target, { images, field, replyTo, spot: await sent(taken) });
       } catch (e) {
-        if (!(e instanceof ApiError)) console.error(e);
-        showAck(failText(e));
+        fail(e);
       }
     else {
       const place = placeNow();
-      void told.tell(null, toldCard(target), () => api.command(text, target, images, field, replyTo, undefined, place));
+      void told.tell(null, toldCard(target), () => api.command(text, target, { images, field, replyTo, place }));
     }
   }, []);
   useEffect(() => {
@@ -817,7 +804,7 @@ function Canvas({
       removeEventListener('paste', paste);
     };
   }, []);
-  const focusItem = focus ? (items.find((i) => i.id === focus.id) ?? archived.find((i) => i.id === focus.id)) : undefined;
+  const focusItem = focus ? itemOrArchived(focus.id) : undefined;
   const target =
     focus?.type === 'card'
       ? (focusItem && agentListens(focusItem) ? (focusItem.kind === 'question' ? t.voice.question : focusItem.state === 'idea' ? t.voice.idea : focusItem.state === 'proposal' ? t.voice.proposal : t.voice.agent) : t.voice.card)(plain(focusItem?.title ?? ''))
@@ -857,8 +844,7 @@ function Canvas({
       if ('name' in to) await api.createGroup(to.name, r.ids);
       else await api.assign(r.ids, to.group);
     } catch (e) {
-      if (!(e instanceof ApiError)) console.error(e);
-      showAck(failText(e));
+      fail(e);
     }
   }
   /** The × on a group's name in the colour ring: its cards belong to none, with a moment to undo. */
@@ -869,8 +855,7 @@ function Canvas({
       const gone = await api.deleteGroup(g.id);
       showAck(t.groups.removed(g.name), () => api.createGroup(gone.group.name, gone.cards, gone.group.hue));
     } catch (e) {
-      if (!(e instanceof ApiError)) console.error(e);
-      showAck(failText(e));
+      fail(e);
     }
   }
   /** A right click on a card opens the colour ring for it; a workstream's is its project's. */
@@ -925,7 +910,7 @@ function Canvas({
     setResizing(false);
   }
   /** `c`, moved just far enough that the view outside the sheet shows some content. */
-  const kept = (c: Cam) => keepInView(c, contentRef.current, { left: 0, top: TOP, right: innerWidth - sideNow(), bottom: innerHeight - BOTTOM });
+  const kept = (c: Cam) => keepInView(c, contentRef.current, viewNow());
   /** The view at the current zoom with a world point in the middle, as far as content stays in sight. */
   const viewOn = (wx: number, wy: number) => kept({ s: camRef.current.s, x: (innerWidth - sideNow()) / 2 - wx * camRef.current.s, y: innerHeight / 2 - wy * camRef.current.s });
   /** When no content is in view any more (cards went, the window shrank), flies to the nearest. */
@@ -1189,7 +1174,7 @@ function Canvas({
   }, []);
 
   // ---------------------------------------------------------------- render
-  const sheetProject = sheetId ? (items.find((i) => i.id === sheetId) ?? archived.find((i) => i.id === sheetId)) : undefined;
+  const sheetProject = sheetId ? itemOrArchived(sheetId) : undefined;
   const sheetKids = !sheetProject ? [] : sheetProject.archivedAt ? archived.filter((i) => i.parent === sheetProject.id) : (kidsOf.get(sheetProject.id) ?? []);
   const deps = useMemo(() => (hoverId && !panning && !dragId ? depsOf(hoverId, items) : undefined), [hoverId, panning, dragId, items]);
   const depOf = (id: string) => (!deps ? undefined : id === hoverId ? 'self' : deps.before.has(id) ? 'before' : deps.after.has(id) ? 'after' : undefined);
@@ -1403,8 +1388,8 @@ function Canvas({
                   item={openItem}
                   all={items}
                   repos={snapshot.canvas.repos}
-                  parent={openItem.parent ? (items.find((p) => p.id === openItem.parent) ?? archived.find((p) => p.id === openItem.parent)) : undefined}
-                  from={openItem.from ? (items.find((p) => p.id === openItem.from) ?? archived.find((p) => p.id === openItem.from)) : undefined}
+                  parent={openItem.parent ? itemOrArchived(openItem.parent) : undefined}
+                  from={openItem.from ? itemOrArchived(openItem.from) : undefined}
                   onReadPlan={(project, mark) => readPlan(project, { mark })}
                   onClones={(repo, field) => {
                     showRepoClones({ canvas: snapshot.canvas.id, repo, field });
@@ -1428,7 +1413,7 @@ function Canvas({
           onTalk={talkFromConfig}
           onProblems={setConfigProblems}
           onConnect={() => (setCOn(false), setPhoneOn(true))}
-          onAsk={(text, canvas) => void told.tell(t.voice.reading(t.voice.koordinator), undefined, () => (canvas ? api.commandOn(canvas, text) : api.command(text, null, undefined, undefined, undefined, undefined, placeNow())))}
+          onAsk={(text, canvas) => void told.tell(t.voice.reading(t.voice.koordinator), undefined, () => (canvas ? api.commandOn(canvas, text) : api.command(text, null, { place: placeNow() })))}
         />
         {setupOn && <Setup onClose={() => setSetupOn(false)} />}
         {phoneOn && (
@@ -1450,7 +1435,7 @@ function Canvas({
           level={ptt.level}
           flat={ptt.flat}
           target={target}
-          field={draftFor(focus?.type === 'card' ? { card: focus.id } : focus?.type === 'project' ? { project: focus.id } : null)}
+          field={draftFor(where())}
           onDown={() => press(false)}
         />
         <Sheet
@@ -1583,7 +1568,7 @@ const rect = (r: DOMRect) => ({ left: `${r.left}px`, top: `${r.top}px`, width: `
 const centreOnPoint = (b: Bounds, s: number, side: number): Cam => ({ s, x: (innerWidth - side) / 2 - (b.x + b.w / 2) * s, y: innerHeight / 2 - (b.y + b.h / 2) * s });
 
 /** State with a ref that holds the value set last, for what reads it before the next render. */
-function useLive<T>(init: T): [T, (v: T) => void, { readonly current: T }] {
+function useLive<T>(init: T | (() => T)): [T, (v: T) => void, { readonly current: T }] {
   const [v, setV] = useState(init);
   const ref = useRef(v);
   const set = useCallback((n: T) => {

@@ -15,13 +15,19 @@ export class ApiError extends Error {
 }
 
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await send(method, path, body);
+  return (res.status === 204 ? undefined : await res.json()) as T;
+}
+
+/** The request, with `body` as JSON; throws the server's refusal. */
+async function send(method: string, path: string, body?: unknown) {
   const res = await fetch(path, {
     method,
     headers: body === undefined ? undefined : { 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   await refused(res);
-  return (res.status === 204 ? undefined : await res.json()) as T;
+  return res;
 }
 
 /** Throws the server's refusal as an ApiError. */
@@ -123,11 +129,7 @@ export const api = {
   demoSetup: (settings: DemoSettings) => call<SetupCheck>('POST', '/api/demo-settings/setup', settings),
   installDemoVoice: (settings: DemoSettings) => call<DemoSettingsView>('POST', '/api/demo-settings/install', settings),
   /** One sentence in the voice, as a WAV to play. */
-  async demoVoiceSample(settings: DemoSettings): Promise<Blob> {
-    const res = await fetch('/api/demo-settings/sample', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(settings) });
-    await refused(res);
-    return res.blob();
-  },
+  demoVoiceSample: async (settings: DemoSettings) => (await send('POST', '/api/demo-settings/sample', settings)).blob(),
   /** Has a restart that waits for workers go ahead now; false when none waits. */
   restartNow: () => call<{ restarting: boolean }>('POST', '/api/restart'),
   /** Has the restart of this canvas's repositories' agents that waits for them go ahead at once. */
@@ -171,16 +173,15 @@ export const api = {
   /** Stores a screenshot for a message; the message names it by the id. */
   uploadImage: async (image: Blob) => {
     const res = await fetch(at('/images'), { method: 'POST', headers: { 'content-type': image.type }, body: image });
-    const body = (await res.json().catch(() => ({}))) as { id?: string; code?: string; error?: string };
-    if (!res.ok || !body.id) throw new ApiError(body.code, body.error ?? `HTTP ${res.status}`);
-    return body.id;
+    await refused(res);
+    return ((await res.json()) as { id: string }).id;
   },
   events: (id: string) => call<CardEvent[]>('GET', at(`/cards/${id}/events`)),
-  /** What the card's work changes (null: nothing to read, no workspace and not landed); `full`: with the diff itself. */
   /** Whether the app in the card's workspace answers now. */
   appUp: async (id: string) => (await call<{ up: boolean }>('GET', at(`/cards/${id}/app`))).up,
   /** Where the owner's browser opens the card's app: through Obeya, which keeps it running a while after. */
   appOpen: (id: string) => at(`/cards/${id}/app/open`),
+  /** What the card's work changes (null: nothing to read, no workspace and not landed); `full`: with the diff itself. */
   diff: async (id: string, full = false) => (await call<CardDiff | undefined>('GET', at(`/cards/${id}/diff${full ? '?full' : ''}`))) ?? null,
   /** A project's plan doc as written. */
   planDoc: (id: string) => call<{ file: string; markdown: string }>('GET', at(`/cards/${id}/plan`)),
@@ -217,7 +218,7 @@ export const api = {
   /** The owner started speaking (or typing a command): Obeya gets ready to read it. */
   warmVoice: () => fetch(at('/voice/warm'), { method: 'POST' }).catch(() => {}),
   /** The same, typed; `field`: the field of the open card it was typed into. */
-  command: (text: string, where: Where, images?: string[], field?: Field, replyTo?: number | TalkRef, spot?: SpotInput, place?: Place) =>
+  command: (text: string, where: Where, { images, field, replyTo, spot, place }: { images?: string[]; field?: Field; replyTo?: number | TalkRef; spot?: SpotInput; place?: Place } = {}) =>
     call<HeardReply>('POST', at(`/command${query(where)}${place ? `${where ? '&' : '?'}place=${placeParam(place)}` : ''}`), { text, ...(images?.length ? { images } : {}), ...(field ? { field } : {}), ...(replyTo ? { replyTo } : {}), ...(spot ? { spot } : {}) }),
   /** A typed request to the Koordinator of another canvas, about nothing in view there. */
   commandOn: (canvas: string, text: string) => call<HeardReply>('POST', `/api/c/${encodeURIComponent(canvas)}/command`, { text }),
