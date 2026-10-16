@@ -407,6 +407,8 @@ const de = {
     notReady: 'Das Mikrofon war noch nicht bereit; bitte noch einmal.',
     flat: 'Das Mikrofon liefert keinen Ton.',
     failed: 'Das hat nicht geklappt; bitte noch einmal.',
+    /** The connection broke before Obeya's answer, but Obeya has the command. */
+    answerLost: 'Obeya hat es; nur die Antwort kam nicht an.',
     typePlaceholder: 'Obeya schreiben, z. B. „Neue Aufgabe: …“',
     tooLate: 'Zu spät: das ist schon passiert.',
     /** A spoken command while the Koordinator reads it: the card it was said to. */
@@ -1691,6 +1693,8 @@ const en: Strings = {
     notReady: 'The microphone was not ready yet; please try again.',
     flat: 'The microphone gives no sound.',
     failed: 'That did not work; please try again.',
+    /** The connection broke before Obeya's answer, but Obeya has the command. */
+    answerLost: 'Obeya has it; only its answer did not come through.',
     typePlaceholder: 'Write to Obeya, e.g. “New task: …”',
     tooLate: 'Too late: that has happened already.',
     reading: (what: string) => `${what} · being understood …`,

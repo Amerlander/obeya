@@ -305,6 +305,18 @@ describe('voice', () => {
     ]);
   });
 
+  test('a page that lost the answer learns whether its recording arrived, while Obeya still reads it', async () => {
+    const arrived = async (id: string) => (await (await fetch(new URL(api(`/voice/arrived/${id}`), server.url))).json()) as { arrived: boolean };
+    expect(await arrived('r1')).toEqual({ arrived: false });
+    const res = fetch(new URL(`${api('/voice')}?sent=r1`, server.url), { method: 'POST', body: 'AUDIO' });
+    const s = await briefed();
+    expect(await arrived('r1')).toEqual({ arrived: true });
+    expect(await arrived('r2')).toEqual({ arrived: false });
+    s.call('act', { actions: [], confirm: 'Ok.' });
+    s.emit({ type: 'idle' });
+    await res;
+  });
+
   test('a recording Whisper loops on is transcribed once more without the card titles', async () => {
     board.create({ title: 'Export für Vermieter', x: 0, y: 0 });
     const prompts: string[] = [];

@@ -1002,8 +1002,14 @@ microphone or pasted (⌘V) anywhere outside a text field, they land in that fie
 field is spoken to (the canvas with no card open and the sidebar closed) the microphone keeps
 screenshots of its own: picked with the small button to its right, dropped on it or pasted, they
 show beside it. A recording in which nothing was heard or understood leaves them where they were,
-and so does one that failed. One that the page cut off by going away (switching canvas, a reload)
-counts as sent: Obeya has it and reads on.
+and so does one Obeya refused. When the connection breaks before the answer (the browser cuts it
+off as the page goes to another canvas or reloads, or the network drops), the page cannot tell
+whether Obeya has the command: it names each recording (`?sent=<id>`), asks Obeya whether that one
+arrived (`GET …/voice/arrived/<id>`, asked again until Obeya answers), and gives the field its words
+and screenshots back only when it has not. Until Obeya answers, the command's line above the
+microphone still shows it being read; when Obeya has it, the line says so („Obeya hat es; nur die
+Antwort kam nicht an.“) instead of „Das hat nicht geklappt“. A page that goes away never hears, and
+gives nothing back.
 
 ### Marking screenshots
 
@@ -1126,7 +1132,9 @@ show on their cards as before. Owner-facing text from agents is in the owner's l
   microphone always had a store of its own, also beside an open card's field: a screenshot pasted
   into the field and then spoken about went out without it. Until 2026-10-15 a recording the page
   cut off by going away counted as failed, and the screenshots came back on the next load, to go out
-  a second time with the next command.
+  a second time with the next command. The fix then told a page that was leaving by its `pagehide`;
+  in the owner's Chrome the screenshots still came back after a quick switch to another canvas and
+  back (2026-10-16), so since then Obeya, not the browser's timing, says whether the command arrived.
 - **Marking without tools: the gesture decides** (owner, 2026-10-14): a free pen came out rough with
   mouse or trackpad, and a switch between pen, frame and number was one more choice each time.
   Frames got numbers like pins on 2026-10-15 (owner); until then only pins had them.

@@ -268,6 +268,19 @@ export function serve(
       }
     };
 
+  /**
+   * The recordings that arrived whole (`?sent=<id>`, the page's name for one): a page whose
+   * connection broke before the answer asks here whether Obeya has the command, and gives the field
+   * its words and screenshots back only when it has not. The newest few hundred; a restart forgets them.
+   */
+  const arrived = new Set<string>();
+  const ARRIVED_KEPT = 500;
+  const arrive = (id: string | null) => {
+    if (!id) return;
+    arrived.add(id);
+    for (const old of arrived) if (arrived.size > ARRIVED_KEPT) arrived.delete(old);
+  };
+
   /** The card or project in view, and where on the canvas the owner was: as the page says, else what it last had in view. */
   const focusOf = (req: Request, c?: CanvasRuntime): Focus => {
     const q = new URL(req.url).searchParams;
@@ -590,6 +603,7 @@ export function serve(
           const form = req.headers.get('content-type')?.startsWith('multipart/form-data') ? await req.formData() : null;
           const audio = form ? form.get('audio') : await req.blob();
           if (!(audio instanceof Blob)) throw new BadRequest('invalid', 'audio expected');
+          arrive(params.get('sent'));
           // a browser sends a form's line breaks as CRLF: they go on as typed
           const field = form?.get('text');
           const typed = typeof field === 'string' ? field.replace(/\r\n/g, '\n') : undefined;
@@ -616,6 +630,8 @@ export function serve(
         })),
       },
       // the owner started speaking: transcription and the Koordinator get ready meanwhile
+      // whether the recording the page named `?sent=<id>` arrived, for a page that lost the answer
+      '/api/c/:canvas/voice/arrived/:id': { GET: on((_c, req) => ({ arrived: arrived.has(req.params.id!) })) },
       '/api/c/:canvas/voice/warm': {
         POST: on((c) => {
           transcriber.warm?.();

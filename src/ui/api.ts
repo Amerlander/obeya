@@ -209,14 +209,17 @@ export const api = {
    * What the owner said about the card or project in view, with the screenshots shown with it;
    * `replyTo`: in reply to that message of the card's conversation, or of the sheet; `text`: typed in the field
    * before it, which goes first; `listen`: dictated into a field, the words only come back; `spot`:
-   * about that place in the card's demo video; `place`: where on the canvas the owner was, for a card it makes.
+   * about that place in the card's demo video; `place`: where on the canvas the owner was, for a card it makes;
+   * `sent`: the page's name for the recording, to ask whether it arrived (`voiceArrived`). A refusal
+   * throws an ApiError; a connection that broke, anything else.
    */
   voice: async (
     audio: Blob,
     where: Where,
-    { images = [], replyTo, text, listen, spot, place }: { images?: string[]; replyTo?: number | TalkRef; text?: string; listen?: boolean; spot?: SpotInput; place?: Place } = {},
+    { images = [], replyTo, text, listen, spot, place, sent }: { images?: string[]; replyTo?: number | TalkRef; text?: string; listen?: boolean; spot?: SpotInput; place?: Place; sent?: string } = {},
   ) => {
     const q = [
+      ...(sent ? [`sent=${encodeURIComponent(sent)}`] : []),
       ...images.map((id) => `image=${encodeURIComponent(id)}`),
       ...(place ? [`place=${placeParam(place)}`] : []),
       ...(replyTo ? [`replyTo=${typeof replyTo === 'number' ? replyTo : `${replyTo.talk}.${replyTo.part}`}`] : []),
@@ -230,9 +233,11 @@ export const api = {
       body.set('text', text);
     }
     const res = await fetch(at(`/voice${query(where)}${q && (where ? '&' : '?')}${q}`), { method: 'POST', body });
-    if (!res.ok) throw new Error(`voice: ${res.status}`);
+    await refused(res);
     return (await res.json()) as Heard;
   },
+  /** Whether the recording `voice` sent as `sent` arrived whole. */
+  voiceArrived: async (sent: string) => (await call<{ arrived: boolean }>('GET', at(`/voice/arrived/${encodeURIComponent(sent)}`))).arrived,
   /** The owner started speaking (or typing a command): Obeya gets ready to read it. */
   warmVoice: () => fetch(at('/voice/warm'), { method: 'POST' }).catch(() => {}),
   /** The same, typed; `field`: the field of the open card it was typed into. */

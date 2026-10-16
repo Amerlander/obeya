@@ -9,7 +9,7 @@
 
 import { createContext, useEffect, useRef, useState } from 'react';
 import type { Place } from '../core/layout';
-import { api, confirmShownMs, type Heard, holdRestart, undoShownMs, type Where } from './api';
+import { ApiError, api, confirmShownMs, type Heard, holdRestart, undoShownMs, type Where } from './api';
 import { beginDictation, dictate, draftOf, focusedDraft, MIC_DRAFT, takesImages, updateDraft, useDraft, useFieldOn, useFocusedDraft } from './draft';
 import { type Recording, record } from './recorder';
 import { AttachButton, ShotStrip, useShotInput } from './shots';
@@ -40,13 +40,22 @@ export const SPACE_SHOWS_MS = 200;
 const NOTE_MS = 6000;
 
 /**
- * The page is going away (another canvas, a reload): the browser cuts off a command still being
- * read, which Obeya has and reads on. Until 2026-10-15 that counted as failed, the field got its
- * words and screenshots back, and the draft kept for the page's next load brought them back again.
+ * Whether Obeya has the recording the page sent as `sent`, for a command whose answer the broken
+ * connection lost: asked until Obeya answers, for as long as the page lives. A page going away
+ * (another canvas, a reload) never hears, and gives nothing back.
  */
-let leaving = false;
-addEventListener('pagehide', () => void (leaving = true));
-addEventListener('pageshow', () => void (leaving = false));
+async function arrived(sent: string): Promise<boolean> {
+  for (let wait = 500; ; wait = Math.min(wait * 2, 8000)) {
+    try {
+      return await api.voiceArrived(sent);
+    } catch {
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
+}
+
+/** A name for a recording, unique enough to ask about it; `crypto.randomUUID` is missing outside a secure context. */
+const recordingName = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
 /**
  * Recording and sending; `level` drives the ring while listening, `flat` says the microphone delivers
@@ -159,14 +168,22 @@ export function usePushToTalk(
       // said in reply to the message the field quotes, as typed words are
       const reply = replyOn(key);
       if (reply) setReply(key, null);
+      // the field gets them back only when Obeya says it has not taken the command: until
+      // 2026-10-16 a connection that broke (the browser cutting it off as the page went to another
+      // canvas, say) counted as that, although Obeya had the command and read on, and the draft
+      // kept for the page's next load brought the screenshots back
+      const name = recordingName();
       let failed = false;
-      const h = await send(r.target, async () =>
-        api.voice(audio, r.target, { images, replyTo: reply?.to, text, spot: await sent(r.spot), place: at }).catch((e) => {
+      const h = await send(r.target, async () => {
+        try {
+          return await api.voice(audio, r.target, { images, replyTo: reply?.to, text, spot: await sent(r.spot), place: at, sent: name });
+        } catch (e) {
+          if (!(e instanceof ApiError) && (await arrived(name))) return { confirm: t.voice.answerLost };
           failed = true;
           throw e;
-        }),
-      );
-      if (!h.unheard && (!failed || leaving)) return;
+        }
+      });
+      if (!h.unheard && !failed) return;
       updateDraft(key, (d) => ({ text: [text, d.text].filter((x) => x.trim()).join(' '), images: [...images, ...d.images.filter((id) => !images.includes(id))] }));
       if (reply && !replyOn(key)) setReply(key, reply);
     }).finally(() => setWriting((n) => n - 1));
