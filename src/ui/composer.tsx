@@ -20,6 +20,17 @@ import { HoldToTalk, MicIcon, TAP_MS } from './voice';
  */
 const HOLD_MS = 250;
 
+/** Whether Enter sends what is written (Shift+Enter breaks the line), as at the desk. */
+let enterSends = true;
+
+/**
+ * On a phone Enter breaks the line and only Send sends: the keyboard's Enter key is where a line
+ * break is typed, and a message sent half written cannot be taken back.
+ */
+export function enterBreaksLines() {
+  enterSends = false;
+}
+
 /**
  * What the owner writes to an agent or to Obeya; screenshots are pasted, dropped or picked, unless
  * `noImages`. `draft`: the draft it shows and keeps (`draft.ts`), which the microphone reads; without
@@ -148,7 +159,7 @@ export function Composer({
             }
             // another key while Space is down: Space was typed, before it
             typeSpace();
-            if (e.key === 'Enter' && !e.shiftKey) {
+            if (enterSends && e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
               send();
             }
@@ -188,7 +199,8 @@ export function Composer({
       {shots.error && <p className="p-error c-error">{shots.error}</p>}
       {dictation === 'listening' ? (
         <div className="c-listener c-dictation">
-          → <b>{t.voice.intoField}</b> · {t.voice.sendWithEnter}
+          → <b>{t.voice.intoField}</b>
+          {t.voice.sendWithEnter && ` · ${t.voice.sendWithEnter}`}
         </div>
       ) : dictation === 'writing' ? (
         <div className="c-listener c-dictation">{t.voice.writing}</div>

@@ -1,12 +1,13 @@
 // The phone view: on a phone the page shows, instead of the canvas, what waits for the owner across
 // every canvas („Für dich“), what runs („Läuft“) and Obeya's conversation. A card opens full screen
 // with the canvas's own detail view (its conversation, answer options, demo, approve buttons), and
-// Back returns to the list. The microphone is held by touch; what was typed but not sent survives
-// a reload. It holds one WebSocket per canvas.
+// Back returns to the list. The microphone is held by touch; Enter breaks the line, only Send sends;
+// what was typed but not sent survives a reload. It holds one WebSocket per canvas.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { type CanvasInfo, type CanvasSnapshot, type CardPatch, type Item, needsYou, unreadAnswers } from '../core/types';
 import { api, beforeReload, onNotice, setCanvas, useCanvas, type Where } from './api';
+import { enterBreaksLines } from './composer';
 import { type ActDone, Detail, type Pending } from './detail';
 import { cardDraft, fieldOn, focusedDraft, keepDrafts, MIC_DRAFT, obeyaDraft } from './draft';
 import { KoordinatorTalk } from './koordinator';
@@ -53,7 +54,10 @@ const when = (iso: string | number) => (new Date(iso).toDateString() === new Dat
 
 export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
   keepDrafts(sessionStorage, DRAFTS);
-  useState(forTouch);
+  useState(() => {
+    forTouch();
+    enterBreaksLines();
+  });
   const [canvases, setCanvases] = useState(loaded);
   const [snaps, setSnaps] = useState<Record<string, CanvasSnapshot>>({});
   const [offline, setOffline] = useState<Record<string, number | null>>({});

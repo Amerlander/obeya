@@ -359,7 +359,8 @@ export function PushToTalk({ phase, level, flat, target, field, onDown }: { phas
         </div>
       ) : into ? (
         <div id="target" className="into">
-          → <b>{t.voice.intoField}</b> · {t.voice.sendWithEnter}
+          → <b>{t.voice.intoField}</b>
+          {t.voice.sendWithEnter && ` · ${t.voice.sendWithEnter}`}
         </div>
       ) : (
         <div id="target">

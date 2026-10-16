@@ -4372,7 +4372,10 @@ The microphone at the bottom is held by a finger (pointer events, no long-press 
 selected; lifting the finger or the browser taking the gesture ends the recording) and speaks to the
 open card's agent, else to Obeya. While a text field has the focus, and the keyboard is up, it
 hides: the field has its own microphone. The texts that name the space bar name the microphone
-there (`forTouch`). A field's screenshot button offers the photo library and the camera
+there (`forTouch`). Enter breaks the line in a field there, and only Send sends
+(`enterBreaksLines` in `src/ui/composer.tsx`): the keyboard's Enter key is where a phone types a
+line break, and a message sent half written cannot be taken back; the line under a dictating field
+leaves out „abschicken mit Enter“. A field's screenshot button offers the photo library and the camera
 (`accept="image/*"`), and marking a screenshot works with a finger. Drafts are kept per tab under a
 name of the phone view's own (`obeya-drafts-@phone`), with the field under Obeya's conversation one
 per canvas (`obeya:<canvas>`).

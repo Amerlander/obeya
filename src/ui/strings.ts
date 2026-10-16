@@ -2890,9 +2890,13 @@ export const errorText = (code: string | undefined) => (code && Object.hasOwn(t.
 export const failText = (e: unknown, { detail = [], offline = t.offlineError }: { detail?: string[]; offline?: string } = {}) =>
   e instanceof ApiError ? errorText(e.code) + (e.code && detail.includes(e.code) ? ` ${e.message}` : '') : offline;
 
-/** On a phone, which has no space bar: the texts that name it name the microphone instead. */
+/**
+ * On a phone, which has no space bar: the texts that name it name the microphone instead. Enter
+ * breaks the line there (`enterBreaksLines`): no text says it sends.
+ */
 export function forTouch() {
   t.compose.revise = t.phone.touch.revise;
+  t.voice.sendWithEnter = '';
   t.idea.compose = t.phone.touch.compose;
   t.demo.commentAt = t.phone.touch.commentAt;
 }
