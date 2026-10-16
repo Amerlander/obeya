@@ -343,7 +343,10 @@ export class Workers {
     o.board.showTurns(() => this.inTurn());
     // a forward to a card's app ends once the card no longer offers it: cleared, parked, its workspace gone
     o.board.onChange(() => {
-      for (const [id, f] of this.forwards) if (this.o.board.item(id)?.app !== f.app || this.o.board.row(id).workspace !== f.workspace) this.unforward(id);
+      for (const [id, f] of this.forwards) {
+        const card = this.o.board.item(id);
+        if (card?.app !== f.app || this.o.board.row(id).workspace !== f.workspace) this.unforward(id);
+      }
     });
   }
 
@@ -1728,7 +1731,12 @@ export class Workers {
     if (!app || !workspace) return null;
     const there = remote(workspace);
     if (!there) return app;
-    const url = new URL(app);
+    let url: URL;
+    try {
+      url = new URL(app);
+    } catch {
+      return null;
+    }
     let f = this.forwards.get(cardId);
     let prefer: number | undefined;
     if (f && !f.forward.alive) {
