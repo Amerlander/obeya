@@ -441,20 +441,19 @@ export class Config {
 
   /**
    * The owner confirmed the commands of the repository at `path` (as the configuration names it)
-   * that the dialog showed them (`seen`, `RepoTrust.now`): they count from now on, as long as its
-   * default branch has them so. Commands that changed there since are refused (`trustChanged`).
+   * that the dialog showed them: the groups `held` of `seen` (`RepoTrust`), which count from now on,
+   * as long as its default branch has them so. Commands that changed there since are refused (`trustChanged`).
    */
   trust(input: unknown) {
-    const parsed = z.object({ path: z.string(), seen: z.unknown() }).safeParse(input);
-    if (!parsed.success) throw new BadRequest('invalid', 'expected { path, seen }');
+    const parsed = z.object({ path: z.string(), seen: z.unknown(), held: z.array(z.enum(['app', 'site', 'claude'])) }).safeParse(input);
+    if (!parsed.success) throw new BadRequest('invalid', 'expected { path, seen, held }');
     const at = locate(this.current(), (r) => r.path === parsed.data.path);
     if (!at) throw new BadRequest('invalid', `no repository ${parsed.data.path} in the configuration`);
     const repoPath = resolve(expandHome(at.r.path));
     const now = commandsOf(readShared(repoPath));
     if (canonical(now) !== canonical(parsed.data.seen)) throw new BadRequest('trustChanged', `${repoPath}: its commands changed on the default branch since they were shown`);
-    // only what the dialog showed: a group this machine's values stand in for was not
-    const trusted = this.o.store.trustedCommands(repoPath);
-    this.o.store.trustCommands(repoPath, trustHeld(trusted, now, heldGroups(now, trusted, at.r.settings)));
+    // only the groups the dialog showed: one this machine's values (saved or in the draft) stand in for it did not
+    this.o.store.trustCommands(repoPath, trustHeld(this.o.store.trustedCommands(repoPath), now, parsed.data.held.filter((g) => now[g] !== undefined)));
     console.log(`Obeya: the owner confirmed the commands of ${repoPath}`);
     this.o.onSettings?.();
   }

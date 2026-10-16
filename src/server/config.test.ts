@@ -237,13 +237,13 @@ describe("Obeya's configuration", async () => {
     expect(checked.problems.map((p) => p.code)).toEqual(['untrusted']);
     expect(blocksSaving(checked.problems[0]!)).toBe(false);
     const trust = checked.resolved[0]!.repos[0]!.trust!;
-    expect(trust).toEqual({ held: ['app', 'claude'], now: { app: { stop: app.stop }, claude: { '.mcp.json': '{"mcpServers":{}}' } } });
+    expect(trust).toEqual({ held: ['app', 'claude'], now: { app: { stop: app.stop }, claude: { '.mcp.json': { id: expect.any(String), text: '{"mcpServers":{}}' } } } });
     expect(checked.resolved[0]!.repos[0]!.values.app).toMatchObject({ run: { source: 'repository' }, stop: { value: app.stop, source: 'repository', held: true } });
     expect(checked.resolved[0]!.repos[0]!.values.app.run.held).toBeUndefined();
 
     // what the dialog showed is trusted; commands that changed since are not
-    await expect(async () => c.trust({ path: own, seen: { app: { stop: 'other' } } })).toThrow(expect.objectContaining({ code: 'trustChanged' }));
-    c.trust({ path: own, seen: trust.now });
+    await expect(async () => c.trust({ path: own, seen: { app: { stop: 'other' } }, held: ['app'] })).toThrow(expect.objectContaining({ code: 'trustChanged' }));
+    c.trust({ path: own, seen: trust.now, held: trust.held });
     expect(applied).toBe(1);
     checked = await c.checkSaved();
     expect(checked.problems).toEqual([]);
@@ -263,8 +263,8 @@ describe("Obeya's configuration", async () => {
     writeFileSync(file, JSON.stringify([{ repos: [{ path: own, settings: mine }] }]));
     const shown = (await c.checkSaved()).resolved[0]!.repos[0]!.trust!;
     expect(shown.held).toEqual(['claude']);
-    c.trust({ path: own, seen: shown.now });
-    expect(store.trustedCommands(own)).toEqual({ app: { stop: app.stop }, claude: { '.mcp.json': '{"mcpServers":{"x":{}}}' } });
+    c.trust({ path: own, seen: shown.now, held: shown.held });
+    expect(store.trustedCommands(own)).toEqual({ app: { stop: app.stop }, claude: { '.mcp.json': { id: expect.any(String), text: '{"mcpServers":{"x":{}}}' } } });
   });
 
   test("commands this machine's values put into the repository's settings are the owner's own: no trust step for them", async () => {

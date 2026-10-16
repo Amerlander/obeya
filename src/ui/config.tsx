@@ -1695,7 +1695,7 @@ function TrustCommands({ path, trust, onDone }: { path: string; trust: RepoTrust
     setBusy(true);
     setError('');
     try {
-      await api.trustCommands(path, trust.now);
+      await api.trustCommands(path, trust);
       onDone();
     } catch (e) {
       setError(failText(e));

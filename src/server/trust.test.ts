@@ -5,17 +5,17 @@ const site = { title: 'Demos', url: 'https://demos.example.dev', deploy: 'wrangl
 
 describe("a repository's commands", () => {
   test('are its stop and keep, what of its demo site is run and contacted, and its Claude Code settings; what is empty is none', () => {
-    expect(commandsOf({ settings: { checks: ['bun test'], app: { run: 'bun dev', stop: 'make stop', keep: ' ' }, demo: { site } }, claude: { '.mcp.json': '{}' } })).toEqual({
+    expect(commandsOf({ settings: { checks: ['bun test'], app: { run: 'bun dev', stop: 'make stop', keep: ' ' }, demo: { site } }, claude: { '.mcp.json': { id: 'a1', text: '{}' } } })).toEqual({
       app: { stop: 'make stop' },
       site: { url: site.url, deploy: site.deploy },
-      claude: { '.mcp.json': '{}' },
+      claude: { '.mcp.json': { id: 'a1', text: '{}' } },
     });
     expect(commandsOf({ settings: { app: { run: 'bun dev' } } })).toEqual({});
     expect(canonical({ b: 1, a: { d: 2, c: 3 } })).toBe(canonical({ a: { c: 3, d: 2 }, b: 1 }));
   });
 
   test("are held where they differ from what the owner trusted, unless this machine's values stand in for all of a group", () => {
-    const now = { app: { stop: 'make stop' }, site: { url: site.url, deploy: site.deploy }, claude: { '.mcp.json': '{}' } };
+    const now = { app: { stop: 'make stop' }, site: { url: site.url, deploy: site.deploy }, claude: { '.mcp.json': { id: 'a1', text: '{}' } } };
     expect(heldGroups(now, null)).toEqual(['app', 'site', 'claude']);
     expect(heldGroups(now, { ...now, app: { stop: 'other' } })).toEqual(['app']);
     expect(heldGroups(now, now)).toEqual([]);

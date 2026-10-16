@@ -1,6 +1,6 @@
 import { defaultBranchCommit } from '../server/read-tree';
 import { onGitHub } from '../server/repo';
-import { isNested, SHARED_FIELDS, type NESTED_SETTINGS, type NestedSetting, type RepoSettings, type RepoValues, type SharedSettings } from '../core/types';
+import { type ClaudeFile, isNested, SHARED_FIELDS, type NESTED_SETTINGS, type NestedSetting, type RepoSettings, type RepoValues, type SharedSettings } from '../core/types';
 import { detectedBranch, type GitSteps, gitStepsSync } from '../server/workspaces';
 import { generic } from './generic';
 import { checkShared } from './schema';
@@ -81,7 +81,7 @@ export interface SharedRead {
   raw?: Record<string, unknown>;
   problems: string[];
   /** The repository's own Claude Code configuration on the default branch, by file (`CLAUDE_PATHS`); none where it has none. */
-  claude?: Record<string, string>;
+  claude?: Record<string, ClaudeFile>;
 }
 
 /**
@@ -118,13 +118,25 @@ export function readShared(repoPath: string, commit = defaultBranchCommit(repoPa
 export function* readingShared(commit: string): GitSteps<SharedRead> {
   const [text, listed] = yield [
     ['cat-file', 'blob', `${commit}:${REPO_SETTINGS_FILE}`],
-    ['ls-tree', '-r', '-z', '--name-only', commit, '--', ...CLAUDE_PATHS],
+    ['ls-tree', '-r', '-z', commit, '--', ...CLAUDE_PATHS],
   ];
   const read: SharedRead = text != null ? parseShared(text) : { problems: [] };
-  const names = (listed ?? '').split('\0').filter(Boolean).sort();
-  if (!names.length) return read;
-  const files = yield names.map((f) => ['cat-file', 'blob', `${commit}:${f}`]);
-  return { ...read, claude: Object.fromEntries(names.map((f, i) => [f, files[i] ?? ''])) };
+  // `<mode> <type> <object>\t<path>`: a blob's text is read (trimmed, for reading: its object tells
+  // contents apart), a submodule's commit stands for what it holds
+  const entries = (listed ?? '')
+    .split('\0')
+    .flatMap((e) => {
+      const m = e.match(/^\S+ (\S+) (\S+)\t(.+)$/s);
+      return m ? [{ type: m[1]!, id: m[2]!, file: m[3]! }] : [];
+    })
+    .sort((a, b) => (a.file < b.file ? -1 : 1));
+  if (!entries.length) return read;
+  const blobs = entries.filter((e) => e.type === 'blob');
+  const texts = blobs.length ? yield blobs.map((e) => ['cat-file', 'blob', e.id]) : [];
+  const claude = Object.fromEntries(
+    entries.map((e) => [e.file, { id: e.id, text: e.type === 'blob' ? (texts[blobs.indexOf(e)] ?? '') : `(${e.type} ${e.id})` }]),
+  );
+  return { ...read, claude };
 }
 
 /**

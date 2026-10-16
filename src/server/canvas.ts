@@ -23,7 +23,7 @@ import type { Forge } from './forge';
 import { Koordinator } from './koordinator';
 import { WorkRetro } from './work-retro';
 import { PrWatcher } from './pr-watcher';
-import { branchCommit, ReadTree } from './read-tree';
+import { branchCommit, defaultBranchCommit, ReadTree } from './read-tree';
 import { Revisions } from './revisions';
 import { ProjectAgents } from './project-agents';
 import { readPlanDocs, watchPlanDocs } from './repo';
@@ -335,8 +335,19 @@ export class CanvasRuntime {
     if (!best) return false;
     const path = best.r.info.path;
     const mine = this.deps.settings ? this.deps.settings(path) : best.r.config.settings;
-    return heldGroups(commandsOf(readShared(path)), this.deps.store.trustedCommands(path), mine).includes('claude');
+    const { commit } = defaultBranchCommit(path);
+    const trusted = this.deps.store.trustedCommands(path);
+    // read again only where the default branch, the trust or this machine's settings moved: agents start often
+    const key = JSON.stringify([commit, trusted, mine]);
+    const known = this.claudeTrust.get(path);
+    if (known?.key === key) return known.held;
+    const held = heldGroups(commandsOf(readShared(path, commit)), trusted, mine).includes('claude');
+    this.claudeTrust.set(path, { key, held });
+    return held;
   };
+
+  /** By repository's path: whether its Claude Code configuration was held, and what that was worked out from (`claudeHeld`). */
+  private claudeTrust = new Map<string, { key: string; held: boolean }>();
 
   /**
    * What a configuration of this canvas amounts to, with this machine's settings and the

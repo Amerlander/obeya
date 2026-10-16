@@ -136,3 +136,20 @@ describe('hasAdapterModule', () => {
     expect(hasAdapterModule(gitRepo(join(dir, 'plain')))).toBe(false);
   });
 });
+
+describe("a repository's Claude Code configuration", () => {
+  test('is every file under .claude/ and .mcp.json on the default branch, each told apart to the byte; a submodule by its commit', () => {
+    const repo = gitRepo(join(dir, 'claude'), { 'README.md': 'x\n', '.claude/skills/probe/SKILL.md': 'hooks\n', '.mcp.json': '{}\n', 'src/a.ts': '\n' });
+    const before = readShared(repo).claude!;
+    expect(Object.keys(before)).toEqual(['.claude/skills/probe/SKILL.md', '.mcp.json']);
+    expect(before['.mcp.json']!.text).toBe('{}');
+    // a blank line before the frontmatter is what decides whether a skill's hook runs
+    writeFileSync(join(repo, '.claude/skills/probe/SKILL.md'), '\nhooks\n');
+    git(repo, 'commit', '--quiet', '-am', 'blank line');
+    expect(readShared(repo).claude!['.claude/skills/probe/SKILL.md']!.id).not.toBe(before['.claude/skills/probe/SKILL.md']!.id);
+    const head = git(repo, 'rev-parse', 'HEAD').trim();
+    git(repo, 'update-index', '--add', '--cacheinfo', `160000,${head},.claude/skills/other`);
+    git(repo, 'commit', '--quiet', '-m', 'submodule');
+    expect(readShared(repo).claude!['.claude/skills/other']).toEqual({ id: head, text: `(commit ${head})` });
+  });
+});
