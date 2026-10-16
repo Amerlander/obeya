@@ -205,6 +205,11 @@ export class Access implements Gate {
     else rmSync(join(this.home, SERVE_FILE), { force: true });
   }
 
+  /** Whether the owner lets other devices reach Obeya (`remote` in the settings), whether they reach it yet or not. */
+  enabled(): boolean {
+    return !!this.setting;
+  }
+
   /** Where other devices reach Obeya now; `null` while they do not. */
   address(): string | null {
     const s = this.setting;

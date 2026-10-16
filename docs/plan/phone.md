@@ -44,7 +44,9 @@ service of its own, and none of this is macOS-only: it works on Windows and Linu
   browser; on a phone the picker offers the photo library and the camera.
 - The installed app is a Tauri shell around the server (design: App), which it starts on 4417 or a
   free port and stops when it quits.
-- Obeya sends no notifications of any kind and does nothing to keep the machine awake.
+- Obeya sends no notifications of any kind.
+- While the setting is on and a worker works, the machine stays awake (W5, `src/server/awake.ts`,
+  design: Other devices).
 - "Remote access from the phone through a relay" was parked on 2026-10-06, together with "no cloud
   service for now" (design: Concepts, Decisions). The private network below needs no service.
 - Tailscale is installed on the owner's Mac but logged out.

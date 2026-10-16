@@ -4205,6 +4205,19 @@ and the setting are managed only on this machine (`/api/access…` answers anoth
 `onlyHere`, and the section shows it only its heading and hint): a phone that is lost cannot pair others or keep
 itself in.
 
+*Keeping the machine awake* (`src/server/awake.ts`). While the setting is on and a worker is in a
+turn (or its ended turn waits for its background work, or its work is landing), Obeya keeps the
+machine it runs on from idle sleep, and lets go two minutes after the last one ended (the next turn
+often follows soon); it looks every five seconds. Per platform: `caffeinate -i -w <pid>` on macOS
+(`pmset -g assertions` shows it, "on behalf of" Obeya's process), `systemd-inhibit
+--what=idle:sleep --who=Obeya` around `tail --pid=<pid>` on Linux (`systemd-inhibit --list`), both
+ending by themselves when Obeya does; `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)`
+through `bun:ffi` on Windows (`powercfg /requests`), which holds as long as the process. The
+display may still sleep. With no worker at work the machine sleeps as it is set to, and a phone no
+longer reaches Obeya; a closed laptop lid puts it to sleep regardless, which the section says
+beside the note that Obeya answers only while it runs. Workers on SSH hosts keep the machine Obeya
+runs on awake too (Obeya drives them from there), but their hosts keep their own power settings.
+
 #### The phone view
 
 On a phone the page shows the phone view instead of the canvas (`src/ui/phone.tsx`): at the same

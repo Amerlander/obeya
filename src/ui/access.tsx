@@ -189,7 +189,9 @@ export function AccessSection({ on, onConnect }: { on: boolean; onConnect: () =>
         <p className="hint">{a.noDevices}</p>
       )}
       {status && <p className="hint c-status">{status}</p>}
-      <p className="hint acc-note">{a.whileRunning}</p>
+      <p className="hint acc-note">
+        {a.whileRunning} {a.awake}
+      </p>
     </>
   );
 }
