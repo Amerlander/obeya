@@ -195,7 +195,12 @@ describe('a site Obeya keeps', () => {
     expect(copy).toContain('<meta http-equiv="x-dns-prefetch-control" content="off"><html><body><h2>Graph</h2>');
     // the host sends that again with its files, with the sandbox, and keeps their connections to the site
     expect(readFileSync(join(siteDir(), '_headers'), 'utf8')).toBe(
-      `/:slug/artifact/*\n  Content-Security-Policy: sandbox allow-scripts; default-src 'self' ${origin} data: blob:; script-src 'self' ${origin} 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' data: blob:; style-src 'self' ${origin} 'unsafe-inline' data: blob:; form-action 'none'\n  Connection-Allowlist: (response-origin)\n  X-DNS-Prefetch-Control: off\n`,
+      ['/:slug/artifact/*', '/:slug/:n/artifact/*']
+        .map(
+          (at) =>
+            `${at}\n  Content-Security-Policy: sandbox allow-scripts; default-src 'self' ${origin} data: blob:; script-src 'self' ${origin} 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' data: blob:; style-src 'self' ${origin} 'unsafe-inline' data: blob:; form-action 'none'\n  Connection-Allowlist: (response-origin)\n  X-DNS-Prefetch-Control: off\n`,
+        )
+        .join(''),
     );
     const html = readFileSync(join(at, 'index.html'), 'utf8');
     // the frame opens no window, and the page lets it show nothing but the site's own files
@@ -298,6 +303,51 @@ describe('a site Obeya keeps', () => {
     // entry to PAGE_CHANGES (src/core/page-changes.ts) with its words in the UI's strings
     // (`pageChanges`); where nobody does, none. Then PAGES_HASH takes the new hash.
     expect(pagesHash()).toEqual(PAGES_HASH);
+  });
+
+  test('a page with several demo versions: the first on top, each later one below in a directory of its own', async () => {
+    const art = join(dir, 'art');
+    mkdirSync(art);
+    writeFileSync(join(art, 'index.html'), '<html><body><h2>Graph</h2></body></html>');
+    const later = join(dir, 'later');
+    mkdirSync(later);
+    writeFileSync(join(later, 'demo.mp4'), 'later video');
+    writeFileSync(join(later, 'captions.vtt'), 'WEBVTT\n');
+    const more = [
+      { title: 'Die Tabelle', text: 'Ein Detail.', kind: 'html' as const, chapters: [], dir: art, at: '2026-10-16T11:37:00.000Z' },
+      { title: 'Der Reset', text: 'Leert auch die Daten.', kind: 'video' as const, chapters: [[0, 'Reset']] as [number, string][], dir: later, at: '2026-10-16T12:00:00.000Z' },
+    ];
+    const r = await target.publish(page('filter', { more }));
+    expect(r).toMatchObject({ url: `${URL_}filter/` });
+    const at = join(deployed(), 'filter');
+    expect(readFileSync(join(at, 'demo.mp4'), 'utf8')).toBe('video');
+    expect(readFileSync(join(at, '2', 'artifact', 'index.html'), 'utf8')).toStartWith('<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy"');
+    expect(readFileSync(join(at, '3', 'demo.mp4'), 'utf8')).toBe('later video');
+    const html = readFileSync(join(at, 'index.html'), 'utf8');
+    expect(html).toContain('<h1>Titel filter</h1>');
+    expect(html).toContain('<nav class="sections"><a href="#v1">1. Demo</a><a href="#v2">2. Ergänzung vom ');
+    expect(html).toContain('<h3>Die Tabelle</h3>');
+    expect(html).toContain('<iframe src="2/artifact/index.html" sandbox="allow-scripts"');
+    expect(html).toContain('<a href="?alone=2" target="_blank"');
+    expect(html).toContain('src="3/demo.mp4"');
+    expect(html).toContain('poster="poster.jpg"');
+    expect(html).not.toContain('poster="3/poster.jpg"');
+    // the page lets its frames show nothing but its own files, as an artifact's page does
+    expect(html).toContain(`<meta http-equiv="Content-Security-Policy" content="default-src 'self' file: data: blob:;`);
+    const meta = JSON.parse(readFileSync(join(at, 'meta.json'), 'utf8'));
+    expect(meta.more).toMatchObject([
+      { kind: 'html', title: 'Die Tabelle', dir: '2', handed: '2026-10-16T11:37:00.000Z' },
+      { title: 'Der Reset', dir: '3', chapters: [[0, 'Reset']] },
+    ]);
+    // published again with the same files, each version keeps its date
+    const before = meta.more.map((m: { at: string }) => m.at);
+    await Bun.sleep(5);
+    await target.publish(page('filter', { more }));
+    expect(JSON.parse(readFileSync(join(at, 'meta.json'), 'utf8')).more.map((m: { at: string }) => m.at)).toEqual(before);
+    // one version again: the page as before, without the later ones' directories
+    await target.publish(page('filter'));
+    expect(existsSync(join(deployed(), 'filter', '2'))).toBe(false);
+    expect(readFileSync(join(deployed(), 'filter', 'index.html'), 'utf8')).not.toContain('class="sections"');
   });
 
   test('a site is named by its URL', () => {

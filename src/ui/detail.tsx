@@ -167,7 +167,10 @@ export function Detail(p: Props) {
   const waits = waitsFirstStart(item);
   // a demo, video or HTML artifact, goes to a page where the repository has a share target, else it is exported as a file; prototypes stay here
   const shares = p.repos.find((r) => r.id === item.repo);
-  const shareBox = !!item.demo && !item.prototypeOf ? shares?.share || item.share ? <ShareBox item={item} act={act} /> : <ExportBox item={item} run={run} needs={shares?.shareNeeds} /> : null;
+  // about the demo shown, the latest or an earlier one
+  const sharing = !!item.demo && !item.prototypeOf;
+  const shareBox = (demo: Demo) =>
+    shares?.share || item.share ? <ShareBox item={item} demo={demo} act={act} /> : <ExportBox item={item} demo={demo} run={run} needs={shares?.shareNeeds} />;
   // a prototype is discarded or its idea built on it, never approved or deleted; built once the idea's agent has taken in what changed
   const ideaTitle = plain(item.ideaTitle ?? p.from?.title ?? '');
   // once the idea has become a project, one of its workstreams is built on the prototype instead
@@ -442,12 +445,13 @@ export function Detail(p: Props) {
                     autoplay={demoWaits}
                     comments={agentListens(item)}
                     top={
-                      (!demoWaits || shareBox) && (
+                      (!demoWaits || sharing) &&
+                      ((shown, latest) => (
                         <>
-                          {!demoWaits && <p className="hint">{item.state === 'working' || item.state === 'waiting' ? t.demo.again : t.demo.kept}</p>}
-                          {shareBox}
+                          {!demoWaits && latest && <p className="hint">{item.state === 'working' || item.state === 'waiting' ? t.demo.again : t.demo.kept}</p>}
+                          {sharing && shareBox(shown)}
                         </>
-                      )
+                      ))
                     }
                   />
                 )}
@@ -1341,8 +1345,8 @@ function DemoView({
   summary?: string;
   demo: Demo;
   children?: ReactNode;
-  /** above the video or artifact, where it is seen on opening however long the chapters or the artifact: sharing; it is about the latest demo, so an earlier one goes without it */
-  top?: ReactNode;
+  /** above the video or artifact, where it is seen on opening however long the chapters or the artifact: sharing, about the demo shown */
+  top?: false | ((shown: Demo, latest: boolean) => ReactNode);
   autoplay?: boolean;
   comments?: boolean;
 }) {
@@ -1416,7 +1420,7 @@ function DemoView({
     <>
       <div className="demo-view">
         {/* which of the card's demos is shown, in the line with sharing */}
-        {(earlier.length > 0 || (top && demo === latest)) && (
+        {(earlier.length > 0 || top) && (
           <div className="demo-top">
             {earlier.length > 0 && (
               <div className={demo === latest ? 'demo-versions' : 'demo-versions earlier'} title={demo === latest ? undefined : t.demo.earlierHint}>
@@ -1426,6 +1430,11 @@ function DemoView({
                 <span>
                   {t.demo.version(shownAt + 1, all.length, demo === latest)}
                   {demo.at && ` · ${handedAt(demo.at)}`}
+                  {demo.handover !== undefined && item.share?.on?.includes(demo.handover) && (
+                    <span className="on-page" title={t.share.onPageMark} aria-label={t.share.onPageMark}>
+                      <ShareIcon />
+                    </span>
+                  )}
                 </span>
                 <button className="step" disabled={demo === latest} title={t.demo.newer} aria-label={t.demo.newer} onClick={() => show(all[shownAt + 1]!)}>
                   ›
@@ -1437,7 +1446,7 @@ function DemoView({
                 )}
               </div>
             )}
-            {demo === latest && top}
+            {top && top(demo, demo === latest)}
           </div>
         )}
         {demo.kind === 'html' ? (
@@ -1780,56 +1789,91 @@ function PrBox({ pr }: { pr: PullRequest }) {
 }
 
 /**
- * Sharing the demo with colleagues: "Teilen" publishes it right away, then the page's link with
- * "Nicht mehr teilen"; "Neu teilen" once the card has a newer demo than the page, "Erneut teilen"
- * once the site writes pages differently than when it published this one.
+ * Sharing the demo shown with colleagues: "Teilen" publishes it right away, then the page's link with
+ * "Nicht mehr teilen" for this demo. A demo not on the page yet goes onto it beside the versions
+ * there („Dazunehmen“; an earlier demo in its place by handover) or, the latest, in their place
+ * („Ersetzen“), the worker's word on it first; "Erneut teilen" once the site writes pages
+ * differently than when it published this one.
  */
-function ShareBox({ item, act }: { item: Item; act: (a: CardAction, done: ActDone) => Promise<void> }) {
+function ShareBox({ item, demo, act }: { item: Item; demo: Demo; act: (a: CardAction, done: ActDone) => Promise<void> }) {
   const [copied, copy] = useCopy(2000);
   const s = item.share;
-  const go = (action: 'share' | 'unshare') => act({ action }, { close: false });
+  const all = [...(item.demos ?? []), ...(item.demo ? [item.demo] : [])];
+  const latest = demo === item.demo;
+  const which = demo.handover !== undefined ? { demo: demo.handover } : {};
+  const go = (a: CardAction) => act(a, { close: false });
   const busy = s?.state === 'publishing' || s?.state === 'withdrawing';
+  // the versions on the page, by their numbers in the line above
+  const numbers = all.flatMap((d, i) => (d.handover !== undefined && s?.on?.includes(d.handover) ? [i + 1] : []));
+  const onPage = numbers.length ? t.share.demos(numbers) : null;
+  // a latest demo from before handovers were kept is on the page unless the page shows an earlier one
+  const here = !!s?.url && (demo.handover !== undefined ? !!s.on?.includes(demo.handover) : latest && !s.stale);
+  const replace = (first: boolean) => (
+    <button key="replace" className={first ? 'btn primary' : 'btn'} title={t.share.replaceHint} onClick={() => go({ action: 'share', ...which })}>
+      {t.share.replace}
+    </button>
+  );
+  const add = (first: boolean) => (
+    <button key="add" className={first ? 'btn primary' : 'btn'} title={latest ? t.share.addHint : t.share.addEarlierHint} onClick={() => go({ action: 'share', ...which, add: true })}>
+      {latest ? t.share.add : t.share.share}
+    </button>
+  );
+  const link = (
+    <>
+      <span className="share-label">{t.share.shared}</span>
+      <a className="share-link" href={s?.url} target="_blank" rel="noreferrer" title={t.share.open}>
+        {s?.url?.replace(/^https?:\/\//, '')}
+      </a>
+      <button className="btn" onClick={() => copy(s!.url!)}>
+        {copied ? t.share.copied : t.share.copy}
+      </button>
+    </>
+  );
   return (
     // the button and what is under way stay on the right, where the button was; the link takes the line
-    <div className={s && !busy ? 'share wide' : 'share'}>
-      {!s ? (
-        <button className="btn share-go" title={item.demo?.kind === 'html' ? t.share.shareHintHtml : t.share.shareHint} onClick={() => go('share')}>
+    <div className={s?.url && !busy ? 'share wide' : 'share'}>
+      {busy ? (
+        <span className="share-busy">{s.state === 'publishing' ? t.share.publishing : t.share.withdrawing}</span>
+      ) : !s?.url ? (
+        <button className="btn share-go" title={demo.kind === 'html' ? t.share.shareHintHtml : t.share.shareHint} onClick={() => go({ action: 'share', ...which })}>
           <ShareIcon />
           {t.share.share}
         </button>
-      ) : busy ? (
-        <span className="share-busy">{s.state === 'publishing' ? t.share.publishing : t.share.withdrawing}</span>
-      ) : (
+      ) : here ? (
         <>
           <div className="share-row">
-            <span className="share-label">{t.share.shared}</span>
-            <a className="share-link" href={s.url} target="_blank" rel="noreferrer" title={t.share.open}>
-              {s.url!.replace(/^https?:\/\//, '')}
-            </a>
-            <button className="btn" onClick={() => copy(s.url!)}>
-              {copied ? t.share.copied : t.share.copy}
-            </button>
-            <button className="btn" title={t.share.stopHint} onClick={() => go('unshare')}>
+            {link}
+            <button className="btn" title={numbers.length > 1 ? t.share.stopOneHint : t.share.stopHint} onClick={() => go({ action: 'unshare', ...which })}>
               {t.share.stop}
             </button>
           </div>
-          {s.stale && (
-            <div className="share-row">
-              <p className="hint">{t.share.stale}</p>
-              <button className="btn" title={t.share.againHint} onClick={() => go('share')}>
-                {t.share.again}
-              </button>
-            </div>
-          )}
+          {all.length > 1 && onPage && <p className="hint">{t.share.onPage(onPage)}</p>}
           {s.outdated && (
             <div className="share-row">
               <p className="hint">{t.share.outdated}</p>
               <PageChangeList changes={s.outdated.map((id) => ({ id }))} />
-              <button className="btn" title={t.share.reshareHint} onClick={() => go('share')}>
+              <button className="btn" title={t.share.reshareHint} onClick={() => go({ action: 'share', ...which })}>
                 {t.share.reshare}
               </button>
             </div>
           )}
+        </>
+      ) : (
+        <>
+          <div className="share-row">{link}</div>
+          <div className="share-row">
+            <p className="hint">
+              {t.share.pageShows(onPage)}
+              {latest && demo.follows && all.length > 1 && (
+                <>
+                  <br />
+                  <span className="agent-says">{t.share.agentSays(demo.follows, all.length - 1)}</span>
+                </>
+              )}
+            </p>
+            {/* the worker's word comes first; without it „Ersetzen“, as the latest demo always went out before */}
+            {!latest ? add(false) : demo.follows === 'supplements' ? [add(true), replace(false)] : [replace(true), add(false)]}
+          </div>
         </>
       )}
     </div>
@@ -1851,19 +1895,22 @@ function ShareIcon() {
  * (short videos, artifacts that are their index.html alone). Where its site lacks its credentials
  * on this machine, a line under the buttons names the file.
  */
-function ExportBox({ item, run, needs }: { item: Item; run: Run; needs?: { site: string; file: string } | undefined }) {
+function ExportBox({ item, demo, run, needs }: { item: Item; demo: Demo; run: Run; needs?: { site: string; file: string } | undefined }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<'zip' | 'html' | null>(null);
   const [size, setSize] = useState<number | null>(null);
-  const artifact = item.demo?.kind === 'html';
+  const artifact = demo.kind === 'html';
+  // the demo shown: the latest, or an earlier one by its place among the card's earlier demos
+  const n = demo === item.demo ? undefined : (demo as EarlierDemo).n;
   useEffect(() => {
-    if (open && !artifact) api.demoSize(item.id).then(setSize, () => {});
-  }, [open, item.id, artifact]);
+    setSize(null);
+    if (open && !artifact) api.demoSize(item.id, n).then(setSize, () => {});
+  }, [open, item.id, artifact, n]);
   const tooLarge = size !== null && size > EXPORT_HTML_MAX;
-  const notAlone = artifact && !item.demo?.single;
+  const notAlone = artifact && !demo.single;
   const go = (as: 'zip' | 'html') => {
     setBusy(as);
-    void run(() => api.exportDemo(item.id, as), { close: false }).finally(() => setBusy(null));
+    void run(() => api.exportDemo(item.id, as, demo === item.demo ? undefined : demo.handover), { close: false }).finally(() => setBusy(null));
   };
   return (
     <div className={open ? 'share wide' : 'share'}>
@@ -1890,7 +1937,7 @@ function ExportBox({ item, run, needs }: { item: Item; run: Run; needs?: { site:
           </div>
           {tooLarge && <p className="hint">{t.share.tooLarge(size!)}</p>}
           {notAlone && <p className="hint">{t.share.notAlone}</p>}
-          {busy && !item.demo?.page && <p className="hint">{t.share.writingPage}</p>}
+          {busy && !demo.page && <p className="hint">{t.share.writingPage}</p>}
         </>
       )}
       {needs && <p className="hint">{t.share.needsEnv(needs.site, needs.file)}</p>}

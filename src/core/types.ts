@@ -510,6 +510,11 @@ export interface Demo {
   page?: DemoPage;
   /** An HTML artifact that is its `index.html` alone: it also goes out as one HTML file. */
   single?: true;
+  /**
+   * What its worker said of it beside the demo before: recorded afresh (`replaces`), or only showing
+   * a detail corrected or explained since (`supplements`), to share beside that one.
+   */
+  follows?: 'replaces' | 'supplements';
 }
 
 /** A demo a later handover replaced: `n` is its place among the card's earlier demos, for its files. */
@@ -538,7 +543,9 @@ export interface Share {
   state: 'publishing' | 'shared' | 'withdrawing';
   /** The page; set once it was published, kept while it is published again. */
   url?: string;
-  /** The card has a newer demo than the one on the page. */
+  /** The card's demos on the page, by their handovers (`Demo.handover`), the oldest first. */
+  on?: number[];
+  /** The card's latest demo is not on the page. */
   stale?: boolean;
   /** The page shows the card's demo, but pages changed since it was published ("Erneut teilen"): those changes, oldest first. */
   outdated?: PageChangeId[];
@@ -932,10 +939,13 @@ export type CardAction =
   | { action: 'buildPrototype'; workstream?: string }
   /** Prototypes: thrown away, into the archive with log, demo and summary. */
   | { action: 'discard' }
-  /** A video demo is published for colleagues right away, or again with the card's newer demo. */
-  | { action: 'share' }
-  /** Withdraws the published page. */
-  | { action: 'unshare' }
+  /**
+   * A demo is published for colleagues right away: the one with handover `demo` (the latest
+   * without), on the card's page in place of the versions there, or beside them (`add`).
+   */
+  | { action: 'share'; demo?: number; add?: boolean }
+  /** Takes the demo with handover `demo` off the page, the page down with its last one; without `demo`, the whole page. */
+  | { action: 'unshare'; demo?: number }
   /** Question cards: the owner's words to the agent that looked the answers up. */
   | { action: 'ask'; text: string; spoken?: boolean; images?: string[]; replyTo?: number }
   /** Question cards: the thread becomes an idea, whose exploration agent starts from it. */

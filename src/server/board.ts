@@ -98,17 +98,38 @@ export interface Shipped {
   fetch?: true;
 }
 
-/** What Obeya keeps about a card's shared demo page (share.ts). */
+/** A demo version on a card's shared page, with what the page says of it, so it can be published again as it is. */
+export interface SharedDemo {
+  /** The handover it came with (`Demo.handover`): which of the card's demos it is. */
+  handover?: number;
+  /** When that handover was: a later version's section on the page is headed with it. */
+  at?: string;
+  /** The demo's directory. */
+  dir: string;
+  shown: { title: string; text: string; chapters: [number, string][]; kind: DemoKind };
+}
+
+/** Which of a card's demos a share means: by its handover, or by its directory where one of the two has no handover. */
+export type DemoRef = { handover?: number; dir: string };
+
+/** Whether two references name the same demo of a card. */
+export const sameDemo = (a: DemoRef, b: DemoRef) => (a.handover !== undefined && b.handover !== undefined ? a.handover === b.handover : a.dir === b.dir);
+
+/** What Obeya keeps about a card's shared demo page (share.ts): one page per card, holding one or more of its demo versions. */
 export interface StoredShare {
   /** The page's name on the site; it stays with the card, so its link keeps working. */
   slug: string;
   /** While published or withdrawn; none when at rest. */
   state?: 'publishing' | 'withdrawing';
-  /** The published page, and the directory of the demo it shows. */
+  /** The published page. */
   url?: string;
+  /** The demo versions on the published page, in order of handover: the first on top, each later one below as an addendum. */
+  demos?: SharedDemo[];
+  /** Before a page held several versions (until 2026-10-16): the one demo it showed, read as a list of one (`sharedDemos`). */
   dir?: string;
-  /** What the published page says, so it can be published again with the PR's link when the card has a newer demo by then. */
-  shown?: { title: string; text: string; chapters: [number, string][]; kind: DemoKind };
+  shown?: SharedDemo['shown'];
+  /** While `publishing` without `refresh`: the versions the page is to show, as the owner chose them. */
+  next?: DemoRef[];
   /** The pull request the published page links. */
   pr?: string;
   /** While `publishing`: the page goes out again as it is, now with the PR's link; the card shows it as shared meanwhile. */
@@ -118,6 +139,12 @@ export interface StoredShare {
   /** While `publishing` (with `refresh`): the page goes out again as it is, one of many the owner shares again at once. */
   again?: true;
 }
+
+/** The demo versions on a stored page, in order of handover. */
+export const sharedDemos = (s: StoredShare): SharedDemo[] => s.demos ?? (s.dir && s.shown ? [{ dir: s.dir, shown: s.shown }] : []);
+
+/** The file that shows a demo is there: its video, or its artifact's page. */
+export const demoThere = (d: { dir: string; kind: DemoKind }) => existsSync(join(d.dir, d.kind === 'html' ? 'index.html' : 'demo.mp4'));
 
 /** Sharing many outdated pages again at once (share.ts), kept so a restart goes on with it. */
 export interface StoredReshare {
@@ -133,9 +160,13 @@ const RESHARE_SETTING = 'reshare';
 /** The newest page change when the owner put the notice of outdated pages away: it shows again for pages a newer one leaves outdated. */
 const RESHARE_DISMISSED = 'reshare_dismissed';
 
-/** The changes since a stored page was published that show on its kind of page; none while it is not at rest. */
+/** The changes since a stored page was published that show on its kinds of page (a video, an artifact, or both on one page); none while it is not at rest. */
 export function missedBy(s: StoredShare): KnownChange[] {
-  return s.url && !s.state ? missedChanges(s.version, s.shown?.kind ?? 'video', PAGE_CHANGES) : [];
+  if (!s.url || s.state) return [];
+  const kinds = new Set(sharedDemos(s).map((d) => d.shown.kind));
+  if (!kinds.size) kinds.add('video');
+  const missed = new Set([...kinds].flatMap((k) => missedChanges(s.version, k, PAGE_CHANGES)));
+  return PAGE_CHANGES.filter((c) => missed.has(c));
 }
 
 /** A demo as a card keeps it (`CardRow.demo`, and each of `CardRow.demos`). */
@@ -161,8 +192,20 @@ function earlierDemos(r: CardRow): EarlierDemo[] {
 export function reshareable(r: CardRow): KnownChange[] {
   const s = r.share ? (JSON.parse(r.share) as StoredShare) : null;
   const missed = s ? missedBy(s) : [];
-  if (!missed.length || !s?.dir || !s.shown || !existsSync(join(s.dir, s.shown.kind === 'html' ? 'index.html' : 'demo.mp4'))) return [];
+  const demos = s ? sharedDemos(s) : [];
+  if (!missed.length || !demos.length || !demos.every((d) => demoThere({ dir: d.dir, kind: d.shown.kind }))) return [];
   return missed;
+}
+
+/**
+ * The card's demos a page may show, the oldest first: its earlier ones that are still at hand (as
+ * `earlierDemos` says), then the one on the card.
+ */
+export function cardDemos(r: CardRow): StoredDemo[] {
+  const all = storedDemos(r);
+  const latest = r.demo ? (JSON.parse(r.demo) as StoredDemo) : null;
+  const later = (i: number) => [...all.slice(i + 1).map((d) => d.dir), ...(latest ? [latest.dir] : [])];
+  return [...all.filter((d, i) => !later(i).includes(d.dir) && demoThere(d)), ...(latest ? [latest] : [])];
 }
 
 /** States a worker or the owner's decision is still part of. */
@@ -1796,14 +1839,19 @@ function work(r: CardRow): Partial<Item> {
 function shareOf(r: CardRow): Item['share'] {
   const s = r.share ? (JSON.parse(r.share) as StoredShare) : null;
   if (!s || (!s.state && !s.url)) return undefined;
-  const demoDir = r.demo ? (JSON.parse(r.demo) as { dir: string }).dir : undefined;
-  const stale = !!s.url && !!demoDir && s.dir !== demoDir;
+  const latest = r.demo ? (JSON.parse(r.demo) as StoredDemo) : undefined;
+  const shared = s.url ? sharedDemos(s) : [];
+  // the card's demos on the page, by their handovers
+  const on = cardDemos(r).flatMap((d) => (d.handover !== undefined && shared.some((x) => sameDemo(x, d)) ? [d.handover] : []));
+  const stale = !!s.url && !!latest && !shared.some((x) => sameDemo(x, latest));
   const outdated = reshareable(r);
   return {
     state: s.refresh ? 'shared' : (s.state ?? 'shared'),
     ...(s.url ? { url: s.url } : {}),
+    ...(on.length ? { on } : {}),
     ...(stale ? { stale: true } : {}),
-    ...(!stale && outdated.length ? { outdated: outdated.map((c) => c.id) } : {}),
+    // shown with each version on the page; the latest, not on it, brings the changes with „Ersetzen“ or „Dazunehmen“
+    ...(outdated.length ? { outdated: outdated.map((c) => c.id) } : {}),
   };
 }
 

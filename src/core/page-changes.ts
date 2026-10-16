@@ -27,7 +27,7 @@ export type KnownChange = (typeof PAGE_CHANGES)[number];
 export type PageChangeId = KnownChange['id'];
 
 /** The sample pages' hash (`pagesHash` in site.ts) the changes above account for. */
-export const PAGES_HASH = { video: '52e575d32a1e', html: '4ee75bb5e7cc' };
+export const PAGES_HASH = { video: '52e575d32a1e', html: '4ee75bb5e7cc', stacked: '9b5deed31296' };
 
 /** The version a page published now gets: the newest change; '' while there is none. */
 export const pagesVersion = (changes: readonly PageChange[] = PAGE_CHANGES): string => changes.at(-1)?.id ?? '';

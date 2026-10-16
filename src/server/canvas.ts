@@ -1088,9 +1088,9 @@ export class CanvasRuntime {
       case 'asIdea':
         return this.questionAsIdea(cardId);
       case 'share':
-        return this.sharing.share(cardId);
+        return this.sharing.share(cardId, { demo: Number.isInteger(a.demo) ? a.demo : undefined, add: a.add === true });
       case 'unshare':
-        return this.sharing.unshare(cardId);
+        return this.sharing.unshare(cardId, Number.isInteger(a.demo) ? a.demo : undefined);
       default:
         throw new BadRequest('invalid', 'unknown action');
     }

@@ -630,12 +630,14 @@ export function serve(
       },
       // where the owner was last in a page: the shell's command goes there
       '/api/focus': { GET: () => Response.json(lastFocus()) },
-      // a video demo as a file to pass on, where the repository has no share target (`?as=zip|html`)
+      // a demo as a file to pass on, where the repository has no share target (`?as=zip|html`)
       '/api/c/:canvas/cards/:id/export': {
         GET: on(async (c, req) => {
           const as = new URL(req.url).searchParams.get('as');
           if (as !== 'zip' && as !== 'html') throw new BadRequest('invalid', 'as must be zip or html');
-          const f = await c.sharing.export(req.params.id!, as);
+          // which of the card's demos, by its handover (`?demo=`); the latest without
+          const demo = Number(new URL(req.url).searchParams.get('demo') ?? NaN);
+          const f = await c.sharing.export(req.params.id!, as, Number.isInteger(demo) ? demo : undefined);
           return new Response(f.data, { headers: { 'content-type': f.type, 'content-disposition': `attachment; filename="${f.name}"`, 'cache-control': 'no-store' } });
         }),
       },

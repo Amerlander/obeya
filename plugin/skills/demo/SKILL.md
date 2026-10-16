@@ -105,6 +105,11 @@ Under Obeya, the card shows the video and the worker's handover summary, not the
 what the owner needs to know goes into that summary, a problem worth a card of its own into a
 proposal (`propose_card`).
 
+A later demo of the same card either shows the change afresh or only what was corrected or
+explained since the one before (often after feedback, a short one). Where `ready_for_review` asks
+for the demo's `follows`, say which (`replaces` or `supplements`): the owner can share a
+supplement beside the earlier demo on the same page, and a demo recorded afresh in its place.
+
 ## 4. Write the demo script
 
 Create `~/demos/<repo-dir>-<slug>/demo.ts` (model: the newest demo of the same repository under

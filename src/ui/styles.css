@@ -539,6 +539,9 @@ textarea.p-body:focus { border-color: var(--muted); }
 .demo-versions .step:hover:not(:disabled) { background: var(--chip); }
 .demo-versions .step:disabled { opacity: .3; cursor: default; }
 .demo-versions .link { margin-left: 10px; }
+.demo-versions .on-page { display: inline-flex; vertical-align: -2px; margin-left: 6px; color: var(--approved); }
+.demo-versions .on-page svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.share .agent-says { color: var(--muted); font-size: 12px; }
 .share { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; font-size: 13px; }
 .share.wide { flex: 1 1 100%; align-items: stretch; }
 .share .btn { padding: 7px 14px; }

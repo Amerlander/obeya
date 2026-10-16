@@ -41,7 +41,7 @@ import { dirname, join, resolve, sep } from 'node:path';
 import type { DemoSite } from '../adapters/types';
 import type { Messages } from '../core/messages';
 import { readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
-import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, day, demoFile, demoPageHtml, esc, PAGE_STYLE, PAGE_WORDS, type PageLanguage } from './demo-page';
+import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, day, demoFile, demoPageHtml, esc, PAGE_STYLE, PAGE_WORDS, type PageLanguage, type StackedDemo, stackedPageHtml } from './demo-page';
 import { artifactCopy } from './artifact-copy';
 import { pagePolicy, sealed, withHeightReport } from '../core/frame';
 import { DEMO_FILES, OWN_CONNECTIONS } from './demo';
@@ -70,7 +70,24 @@ interface Meta {
   /** A hash of the video or the artifact's files as the demo has them. */
   source: string;
   language: PageLanguage;
+  /** The later demo versions on the page, in order of handover, each in a directory of the page's (`dir`). */
+  more?: MoreMeta[];
 }
+
+/** A later demo version on a page: what its section shows, and when it was handed over (`handed`, its heading). */
+interface MoreMeta {
+  kind?: 'html';
+  title: string;
+  text: string;
+  chapters: [number, string][];
+  dir: string;
+  handed: string;
+  at: string;
+  source: string;
+}
+
+/** When the page's newest version last changed: the date the overview shows it with. */
+const newest = (m: Meta) => [m.at, ...(m.more ?? []).map((x) => x.at)].sort().at(-1)!;
 
 /** The site's directory name: its URL's host and path. */
 export function siteKey(url: string): string {
@@ -500,45 +517,72 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
     publish: (p: SharePage, log = () => {}) =>
       attempt(async (gone) => {
         const slug = checkSlug(p.slug);
-        if (!p.title?.trim() || !p.text?.trim() || !p.dir) throw new Refused(t.pageIncomplete);
-        const html = p.kind === 'html';
-        const files = html ? artifactFiles(p.dir) : DEMO_FILES.filter((f) => demoFile(p.dir, f));
-        for (const f of html ? ['index.html'] : ['demo.mp4', 'captions.vtt']) if (!files.includes(f)) throw new Refused(t.fileMissing(f, p.dir));
-        // what the artifact loads in CORS mode goes into its copy (artifact-copy.ts)
-        const copy = html ? await artifactCopy(p.dir, files, new URL(site.url).origin) : new Map<string, string>();
-        const max = site.maxFile ?? MAX_FILE;
-        for (const f of files) {
-          const size = copy.has(f) ? Buffer.byteLength(copy.get(f)!) : statSync(join(p.dir, f)).size;
-          if (size > max) throw new Refused(t.fileTooLarge(f, (size / 1024 / 1024).toFixed(1), String(Math.round((max / 1024 / 1024) * 10) / 10)));
-        }
+        // the first version at the page's root, each later one in a directory of its own
+        const parts = [{ ...p, sub: '' }, ...(p.more ?? []).map((m, i) => ({ ...m, sub: String(i + 2) }))];
+        const ready = await Promise.all(
+          parts.map(async (d) => {
+            if (!d.title?.trim() || !d.text?.trim() || !d.dir) throw new Refused(t.pageIncomplete);
+            const html = d.kind === 'html';
+            const files = html ? artifactFiles(d.dir) : DEMO_FILES.filter((f) => demoFile(d.dir, f));
+            for (const f of html ? ['index.html'] : ['demo.mp4', 'captions.vtt']) if (!files.includes(f)) throw new Refused(t.fileMissing(f, d.dir));
+            // what the artifact loads in CORS mode goes into its copy (artifact-copy.ts)
+            const copy = html ? await artifactCopy(d.dir, files, new URL(site.url).origin) : new Map<string, string>();
+            const max = site.maxFile ?? MAX_FILE;
+            for (const f of files) {
+              const size = copy.has(f) ? Buffer.byteLength(copy.get(f)!) : statSync(join(d.dir, f)).size;
+              if (size > max) throw new Refused(t.fileTooLarge(f, (size / 1024 / 1024).toFixed(1), String(Math.round((max / 1024 / 1024) * 10) / 10)));
+            }
+            return { d, html, files, copy };
+          }),
+        );
         const target = join(dir, slug);
         const said = await change(
           slug,
           p.shared ?? [],
           (rev, entry) => {
             const before = entry?.withdrawn ? null : entry?.meta;
-            mkdirSync(target, { recursive: true });
-            const into = html ? join(target, ARTIFACT_DIR) : target;
-            for (const f of files) {
-              mkdirSync(dirname(join(into, f)), { recursive: true });
-              copyFileSync(join(p.dir, f), join(into, f));
-            }
-            for (const [f, data] of copy) writeFileSync(join(into, f), data);
+            // a version keeps its date while its demo's own files stay the same, wherever it was on the page
+            const dated = new Map<string, string>(before ? [[before.source, before.at], ...(before.more ?? []).map((m) => [m.source, m.at] as [string, string])] : []);
             const now = new Date().toISOString();
-            const source = sourceHash(p.dir, html ? files : ['demo.mp4']);
+            const written = ready.map(({ d, html, files, copy }) => {
+              const into = join(target, d.sub, html ? ARTIFACT_DIR : '');
+              mkdirSync(into, { recursive: true });
+              for (const f of files) {
+                mkdirSync(dirname(join(into, f)), { recursive: true });
+                copyFileSync(join(d.dir, f), join(into, f));
+              }
+              for (const [f, data] of copy) writeFileSync(join(into, f), data);
+              const source = sourceHash(d.dir, html ? files : ['demo.mp4']);
+              return { d, html, source, at: dated.get(source) ?? now };
+            });
+            const [first, ...later] = written as [(typeof written)[number], ...typeof written];
             const meta: Meta = {
-              ...(html ? { kind: 'html' as const } : {}),
+              ...(first.html ? { kind: 'html' as const } : {}),
               title: p.title.trim(),
               text: p.text.trim(),
-              chapters: html ? [] : (p.chapters ?? []),
+              chapters: first.html ? [] : (p.chapters ?? []),
               pr: p.pr ?? null,
               first: before?.first ?? now,
-              at: before?.source === source ? before.at : now,
-              source,
+              at: first.at,
+              source: first.source,
               language: p.language,
+              ...(later.length
+                ? {
+                    more: later.map(({ d, html, source, at }) => ({
+                      ...(html ? { kind: 'html' as const } : {}),
+                      title: d.title.trim(),
+                      text: d.text.trim(),
+                      chapters: html ? [] : (d.chapters ?? []),
+                      dir: d.sub,
+                      handed: 'at' in d && d.at ? d.at : at,
+                      at,
+                      source,
+                    })),
+                  }
+                : {}),
             };
             writeFileSync(join(target, 'meta.json'), JSON.stringify(meta, null, 2));
-            writeFileSync(join(target, 'index.html'), pageHtml(site, meta, existsSync(join(target, 'poster.jpg'))));
+            writeFileSync(join(target, 'index.html'), pageHtml(site, meta, (sub) => existsSync(join(target, sub, 'poster.jpg'))));
             return { ...entryOf(slug), rev };
           },
           log,
@@ -608,7 +652,7 @@ function sourceHash(dir: string, files: string[]): string {
  * then the artifact pages': it changes with every change to Obeya's templates, and `PAGES_HASH`
  * (page-changes.ts) pins it, so a change is described for the viewers, or found to show nowhere.
  */
-export function pagesHash(): { video: string; html: string } {
+export function pagesHash(): { video: string; html: string; stacked: string } {
   const site = { title: 'Demos', url: 'https://demos.example.dev/', deploy: 'true' };
   const at = '2026-01-15T12:00:00.000Z';
   const sample: Meta = {
@@ -626,9 +670,16 @@ export function pagesHash(): { video: string; html: string } {
   };
   const hash = (pages: string[]) => createHash('sha256').update(pages.join('\0')).digest('hex').slice(0, 12);
   const languages: PageLanguage[] = ['de', 'en'];
-  const video = hash(languages.map((language) => pageHtml(site, { ...sample, language }, true)));
-  const html = hash(languages.map((language) => pageHtml(site, { ...sample, kind: 'html', chapters: [], language }, false) + sealed(withHeightReport('<body></body>'), new URL(site.url).origin)));
-  return { video, html };
+  const video = hash(languages.map((language) => pageHtml(site, { ...sample, language }, () => true)));
+  const html = hash(languages.map((language) => pageHtml(site, { ...sample, kind: 'html', chapters: [], language }, () => false) + sealed(withHeightReport('<body></body>'), new URL(site.url).origin)));
+  // a page with several versions: a video, then an artifact and a video as addenda
+  const more: MoreMeta[] = [
+    { kind: 'html', title: 'Second', text: 'A detail.', chapters: [], dir: '2', handed: at, at, source: '' },
+    { title: 'Third', text: 'Another detail.', chapters: [[0, 'Only']], dir: '3', handed: at, at, source: '' },
+  ];
+  // the same on every machine: the time of an addendum is said in the machine's time zone
+  const stacked = hash(languages.map((language) => pageHtml(site, { ...sample, language, more }, () => true, 'UTC')));
+  return { video, html, stacked };
 }
 
 /** The file a host such as Cloudflare Pages or Netlify reads the headers of the site's files from; on another host it is a file nobody asks for. */
@@ -642,15 +693,21 @@ export const HEADERS = '_headers';
  */
 export function artifactHeaders(site: DemoSite): string {
   const u = new URL(site.url);
-  return `${u.pathname.replace(/\/+$/, '')}/:slug/${ARTIFACT_DIR}/*
+  const path = u.pathname.replace(/\/+$/, '');
+  // an artifact as the page's first version, and as a later one in a directory of its own
+  return [`${path}/:slug/${ARTIFACT_DIR}/*`, `${path}/:slug/:n/${ARTIFACT_DIR}/*`]
+    .map(
+      (at) => `${at}
   Content-Security-Policy: sandbox allow-scripts; ${pagePolicy(u.origin)}
   Connection-Allowlist: ${OWN_CONNECTIONS}
   X-DNS-Prefetch-Control: off
-`;
+`,
+    )
+    .join('');
 }
 
-/** A page of the site, in its language. */
-function pageHtml(site: DemoSite, m: Meta, poster: boolean): string {
+/** A page of the site, in its language; `poster`: whether a version's directory (the page's own: '') holds a poster. */
+function pageHtml(site: DemoSite, m: Meta, poster: (dir: string) => boolean, timeZone?: string): string {
   const { language } = m;
   const w = PAGE_WORDS[language];
   const parts = {
@@ -662,12 +719,17 @@ function pageHtml(site: DemoSite, m: Meta, poster: boolean): string {
     language,
     top: { href: '../', text: w.allDemos },
   };
+  if (m.more?.length) {
+    const demo = (d: { kind?: 'html'; title: string; text: string; chapters: [number, string][] }, dir: string): StackedDemo =>
+      d.kind === 'html' ? { kind: 'html', title: d.title, text: d.text, base: dir ? `${dir}/` : '' } : { kind: 'video', title: d.title, text: d.text, base: dir ? `${dir}/` : '', chapters: d.chapters, poster: poster(dir) };
+    return stackedPageHtml({ ...parts, demos: [demo(m, ''), ...m.more.map((x) => ({ ...demo(x, x.dir), at: x.handed }))], ...(timeZone ? { timeZone } : {}) });
+  }
   if (m.kind === 'html') return artifactPageHtml({ ...parts, artifact: { src: `${ARTIFACT_DIR}/index.html` } });
   return demoPageHtml({
     ...parts,
     chapters: m.chapters,
     video: { src: 'demo.mp4' },
-    ...(poster ? { poster: 'poster.jpg' } : {}),
+    ...(poster('') ? { poster: 'poster.jpg' } : {}),
     captions: { src: 'captions.vtt' },
   });
 }
@@ -678,7 +740,7 @@ function readPages(dir: string): (Meta & { slug: string })[] {
   return readdirSync(dir)
     .filter((d) => existsSync(join(dir, d, 'meta.json')))
     .map((slug) => ({ slug, ...(JSON.parse(readFileSync(join(dir, slug, 'meta.json'), 'utf8')) as Meta) }))
-    .sort((a, b) => b.at.localeCompare(a.at));
+    .sort((a, b) => newest(b).localeCompare(newest(a)));
 }
 
 /** Every page on the site, the most recently shared first, in the site's language. */
@@ -693,7 +755,7 @@ function overviewHtml(site: DemoSite, pages: (Meta & { slug: string })[], langua
 <div class="when">${esc(w.overview)}</div>
 ${
   pages.length
-    ? `<ul class="demos">${pages.map((d) => `<li><a href="${d.slug}/"><b>${esc(d.title)}</b><span>${day(d.at, language)} · ${esc(first(d.text))}</span></a></li>`).join('\n')}</ul>`
+    ? `<ul class="demos">${pages.map((d) => `<li><a href="${d.slug}/"><b>${esc(d.title)}</b><span>${day(newest(d), language)} · ${esc(first(d.text))}</span></a></li>`).join('\n')}</ul>`
     : `<p>${esc(w.noDemos)}</p>`
 }
 </main></body></html>

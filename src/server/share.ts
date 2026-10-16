@@ -14,7 +14,7 @@ import { z } from 'zod';
 import { LANGUAGE_NAMES } from '../core/locale';
 import { MESSAGES, type Messages } from '../core/messages';
 import { type Demo, type DemoKind, type DemoPage, EXPORT_HTML_MAX, type Item } from '../core/types';
-import { BadRequest, type Board, missedBy, type PrState, reshareable, type StoredReshare, type StoredShare } from './board';
+import { BadRequest, type Board, cardDemos, type DemoRef, type PrState, reshareable, sameDemo, type SharedDemo, sharedDemos, type StoredDemo, type StoredReshare, type StoredShare } from './board';
 import { PAGE_CHANGES, pagesVersion } from '../core/page-changes';
 import type { DemoSite } from '../adapters/types';
 import { expandHome, readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
@@ -29,7 +29,18 @@ import { branchName } from './workspaces';
 import { zip } from './zip';
 import { messageOf } from '../core/text';
 
-/** What a page on the site is made of. */
+/** A later demo version on a page, below the first as an addendum. */
+export interface PageDemo {
+  title: string;
+  text: string;
+  kind: DemoKind;
+  chapters: [number, string][];
+  dir: string;
+  /** When it was handed over, which its section is headed with. */
+  at?: string;
+}
+
+/** What a page on the site is made of: the first demo version shared, and the later ones below it. */
 export interface SharePage {
   /** Stays the same for a card, so a shared link keeps working when the page is published again. */
   slug: string;
@@ -47,6 +58,8 @@ export interface SharePage {
   dir: string;
   /** The slugs of the other pages Obeya has stored as shared on this site: the site must still hold them. */
   shared: string[];
+  /** The later demo versions on the page, in order of handover. */
+  more?: PageDemo[];
 }
 
 /** Where a repository's demos go: the site its settings name; with its checkout. */
@@ -119,29 +132,49 @@ export class Sharing {
   constructor(private o: SharingOptions) {}
 
   /**
-   * "Teilen" or "Neu teilen": the card's demo is published right away. There is no hold to
-   * take it back: "Nicht mehr teilen" withdraws the page just as easily.
+   * "Teilen", "Ersetzen" or "Dazunehmen": one of the card's demos (by its handover; the latest
+   * without) is published right away, on the card's page in place of the versions there, or beside
+   * them in its place by handover (`add`). A demo on the page already goes out again with the rest.
+   * There is no hold to take it back: "Nicht mehr teilen" withdraws it just as easily.
    */
-  share(cardId: string) {
+  share(cardId: string, { demo: handover, add = false }: { demo?: number | undefined; add?: boolean } = {}) {
     const card = this.card(cardId);
-    const demo = this.demo(cardId);
+    const demo = handover === undefined ? this.demo(cardId) : this.cardDemo(cardId, { handover, dir: '' });
     if (card.prototypeOf || !demo || !this.target(card)) throw new BadRequest('noShare', 'the card has no demo, or its repository shares none');
     const s = this.stored(cardId);
     if (s?.state) throw new BadRequest('shareBusy', 'the page is being shared or withdrawn');
-    this.set(cardId, { ...(s ? atRest(s) : { slug: slugOf(card) }), state: 'publishing' });
+    const now: DemoRef[] = s?.url ? sharedDemos(s) : [];
+    const ref = refOf(demo);
+    const on = now.some((d) => sameDemo(d, ref));
+    const next = on ? now : add ? inOrder([...now, ref]) : [ref];
+    this.set(cardId, { ...(s ? atRest(s) : { slug: slugOf(card) }), state: 'publishing', next: next.map(refOf) });
     const t = this.o.board.t.share;
-    const again = !s?.url ? t.share : s.dir === demo.dir && missedBy(s).length ? t.again : t.newDemo;
-    this.o.board.log(cardId, 'state', 'owner', again);
+    const said = !s?.url ? t.share : on ? t.again : add ? t.added : t.newDemo;
+    this.o.board.log(cardId, 'state', 'owner', said);
     void serial(() => this.publish(cardId));
   }
 
-  /** Withdraws the published page. */
-  unshare(cardId: string) {
+  /**
+   * Takes one demo version off the page (by its handover), which goes out again without it; the
+   * last one, or without a handover the whole page, is withdrawn.
+   */
+  unshare(cardId: string, handover?: number) {
     const s = this.stored(cardId);
     if (s?.state) throw new BadRequest('shareBusy', 'the page is being shared or withdrawn');
     if (!s?.url) throw new BadRequest('notShared', 'the demo is not shared');
+    const t = this.o.board.t.share;
+    const now = sharedDemos(s);
+    const demo = handover === undefined ? null : (this.cardDemo(cardId, { handover, dir: '' }) ?? { handover, dir: '' });
+    const rest = demo ? now.filter((d) => !sameDemo(d, refOf(demo))) : [];
+    if (demo && rest.length === now.length) throw new BadRequest('notShared', 'the demo is not on the page');
+    if (rest.length) {
+      this.set(cardId, { ...s, state: 'publishing', next: rest.map(refOf) });
+      this.o.board.log(cardId, 'state', 'owner', t.unshareOne);
+      void serial(() => this.publish(cardId));
+      return;
+    }
     this.set(cardId, { ...s, state: 'withdrawing' });
-    this.o.board.log(cardId, 'state', 'owner', this.o.board.t.share.unshare);
+    this.o.board.log(cardId, 'state', 'owner', t.unshare);
     void serial(() => this.withdraw(cardId));
   }
 
@@ -188,6 +221,15 @@ export class Sharing {
       const { outdated: _, ...rest } = s as StoredShare & { outdated?: true };
       this.set(r.id, { ...rest, version });
     }
+    // pages from before several versions (until 2026-10-16) showed one demo: a list of one, the
+    // card's demo in that directory (the latest one rendered there) named by its handover
+    for (const { r, s } of this.shares()) {
+      if (s.demos || !s.dir || !s.shown) continue;
+      const { dir: _, shown: __, ...rest } = s;
+      const demo = cardDemos(r).findLast((d) => d.dir === s.dir);
+      const one: SharedDemo = { ...(demo ? refOf(demo) : { dir: s.dir }), ...(demo?.at ? { at: demo.at } : {}), dir: s.dir, shown: s.shown };
+      this.set(r.id, { ...rest, demos: [one] });
+    }
   }
 
   /**
@@ -205,8 +247,9 @@ export class Sharing {
       .map(({ r }) => ({ r, s: JSON.parse(r.share!) as StoredShare }));
     if (!rows.length) throw new BadRequest('nothingOutdated', 'no shared page is outdated');
     const made = (dir?: string) => (dir ? (statOr(join(dir, 'demo.mp4')) ?? statOr(join(dir, 'index.html')) ?? statOr(dir) ?? 0) : 0);
+    // newest by the newest version on the page
     const queue = rows
-      .map(({ r, s }) => ({ id: r.id, at: made(s.dir) }))
+      .map(({ r, s }) => ({ id: r.id, at: Math.max(0, ...sharedDemos(s).map((d) => made(d.dir))) }))
       .sort((a, b) => b.at - a.at)
       .slice(0, count ?? undefined)
       .map((r) => r.id);
@@ -336,37 +379,54 @@ export class Sharing {
       this.o.board.log(cardId, 'error', 'obeya', [`${failed}: ${why}`, out].filter(Boolean).join('\n\n'));
       return false;
     };
-    const demo = this.demo(cardId);
     const target = this.target(card);
-    let shown: NonNullable<StoredShare['shown']>;
-    let dir: string;
+    let demos: SharedDemo[];
     if (s.refresh) {
-      // the page as it is: a newer demo on the card waits for "Neu teilen"
-      const now = s.shown;
-      if (!now || !s.dir || !target) {
+      // the page as it is: a newer demo on the card waits for "Ersetzen" or "Dazunehmen"
+      demos = sharedDemos(s);
+      if (!demos.length || !target) {
         if (s.again) return back(t.demoGone);
         this.set(cardId, atRest(s));
         this.o.board.log(cardId, 'activity', 'obeya', t.linkLater);
         return null;
       }
-      shown = now;
-      dir = s.dir;
     } else {
-      if (!demo || !target) return back(t.noDemo);
-      const page = await this.page(card, demo);
-      shown = { title: page.title, text: page.text, chapters: demo.chapters, kind: demo.kind };
-      dir = demo.dir;
+      // the versions the owner chose; a share from before them (until 2026-10-16) meant the latest demo
+      const latest = this.demo(cardId);
+      const want = s.next ?? (latest ? [refOf(latest)] : []);
+      if (!want.length || !target) return back(t.noDemo);
+      demos = [];
+      for (const ref of want) {
+        const kept = s.url ? sharedDemos(s).find((d) => sameDemo(d, ref)) : undefined;
+        if (kept) {
+          demos.push(kept);
+          continue;
+        }
+        const demo = this.cardDemo(cardId, ref);
+        if (!demo) return back(t.noDemo);
+        const page = await this.page(card, demo);
+        demos.push({ ...refOf(demo), ...(demo.at ? { at: demo.at } : {}), shown: { title: page.title, text: page.text, chapters: demo.chapters, kind: demo.kind } });
+      }
     }
+    const [first, ...later] = demos as [SharedDemo, ...SharedDemo[]];
     const pr = this.prOf(cardId);
-    const input: SharePage = { slug: s.slug, ...shown, pr, language: this.languageOf(dir), dir, shared: this.others(cardId, target.key) };
+    const input: SharePage = {
+      slug: s.slug,
+      ...first.shown,
+      pr,
+      language: this.languageOf(first.dir),
+      dir: first.dir,
+      shared: this.others(cardId, target.key),
+      ...(later.length ? { more: later.map((d) => ({ ...d.shown, dir: d.dir, ...(d.at ? { at: d.at } : {}) })) } : {}),
+    };
     const r = await target.publish(input, (text) => this.o.board.log(cardId, 'activity', 'obeya', text));
     this.lost(target.key, r.gone);
     if ('why' in r) return back(r.why, r.said);
     const { url } = r;
-    this.set(cardId, { slug: s.slug, url, dir, shown, ...(pr ? { pr } : {}), version: pagesVersion() });
+    this.set(cardId, { slug: s.slug, url, demos, ...(pr ? { pr } : {}), version: pagesVersion() });
     if (r.said) this.o.board.log(cardId, 'activity', 'obeya', r.said);
     this.o.board.log(cardId, 'state', 'obeya', s.again ? t.sharedAgain(url) : s.refresh ? t.linksPr(url) : t.shared(url));
-    if (pr) this.linkPr(cardId, pr, url, target.repo, shown.kind);
+    if (pr) this.linkPr(cardId, pr, url, target.repo, first.shown.kind);
     // the pull request was opened while the page went out: once more, with its link
     const now = this.prOf(cardId);
     if (now && now !== pr) this.refresh(cardId);
@@ -414,9 +474,9 @@ export class Sharing {
    * up to EXPORT_HTML_MAX). An HTML artifact goes beside its page in the ZIP, or into the one file
    * when it is its `index.html` alone. Nothing leaves Obeya, so nothing is held.
    */
-  async export(cardId: string, as: 'zip' | 'html'): Promise<{ name: string; type: string; data: Uint8Array<ArrayBuffer> }> {
+  async export(cardId: string, as: 'zip' | 'html', handover?: number): Promise<{ name: string; type: string; data: Uint8Array<ArrayBuffer> }> {
     const card = this.card(cardId);
-    const demo = this.demo(cardId);
+    const demo = handover === undefined ? this.demo(cardId) : this.cardDemo(cardId, { handover, dir: '' });
     if (demo?.kind === 'html' && !card.prototypeOf) return this.exportArtifact(card, demo, as);
     const video = demo && demoFile(demo.dir, 'demo.mp4');
     if (card.prototypeOf || !demo || !video || !existsSync(video)) throw new BadRequest('noShare', 'the card has no demo');
@@ -497,7 +557,11 @@ export class Sharing {
   private async page(card: Item, demo: Demo & { dir: string }): Promise<DemoPage> {
     if (demo.page) return demo.page;
     const page = await this.writePage(card, demo);
-    if (this.demo(card.id)?.dir === demo.dir) this.o.board.work(card.id, { demo: JSON.stringify({ ...demo, page }) });
+    const row = this.o.board.row(card.id);
+    const latest = this.demo(card.id);
+    if (latest && sameDemo(latest, demo)) this.o.board.work(card.id, { demo: JSON.stringify({ ...latest, page }) });
+    else if (row.demos)
+      this.o.board.work(card.id, { demos: JSON.stringify((JSON.parse(row.demos) as StoredDemo[]).map((d) => (sameDemo(d, demo) ? { ...d, page } : d))) });
     return page;
   }
 
@@ -594,6 +658,11 @@ export class Sharing {
     return readDemoSettings(this.o.home).language;
   }
 
+  /** One of the card's demos a page may show (`cardDemos`), by its handover, else by its directory. */
+  private cardDemo(cardId: string, ref: DemoRef): StoredDemo | null {
+    return cardDemos(this.o.board.row(cardId)).findLast((d) => sameDemo(d, ref)) ?? null;
+  }
+
   private demo(cardId: string): (Demo & { dir: string }) | null {
     const d = this.o.board.row(cardId).demo;
     return d ? (JSON.parse(d) as Demo & { dir: string }) : null;
@@ -621,9 +690,15 @@ const pageSystem = (language: string) => `You write the page on which the demo o
 Then end your turn. Read code only if the summary leaves unclear what the change does for the user.`;
 
 /** A share at rest: neither held, nor publishing, nor withdrawing. */
-function atRest({ state: _, refresh: __, again: ___, ...s }: StoredShare): StoredShare {
+function atRest({ state: _, refresh: __, again: ___, next: ____, ...s }: StoredShare): StoredShare {
   return s;
 }
+
+/** What names a demo among the card's: its handover, and its directory. */
+const refOf = (d: DemoRef): DemoRef => ({ ...(d.handover !== undefined ? { handover: d.handover } : {}), dir: d.dir });
+
+/** Demo versions in order of handover; one without (from before handovers were kept) comes first. */
+const inOrder = <T extends DemoRef>(demos: T[]): T[] => [...demos].sort((a, b) => (a.handover ?? -1) - (b.handover ?? -1));
 
 /** When the file was last written, in ms; null when it is not there. */
 function statOr(path: string): number | null {

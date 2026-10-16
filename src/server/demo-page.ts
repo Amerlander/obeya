@@ -26,6 +26,9 @@ export const PAGE_WORDS: Record<
     allDemos: string;
     overview: string;
     noDemos: string;
+    /** A page with several demo versions: the first one's name in the list at the top, and the heading of each later one. */
+    first: string;
+    addendum: (at: string, timeZone?: string) => string;
   }
 > = {
   de: {
@@ -39,6 +42,8 @@ export const PAGE_WORDS: Record<
     allDemos: 'Alle Demos',
     overview: 'Videos und Auswertungen zu Änderungen, die neuesten zuerst.',
     noDemos: 'Noch keine Demos geteilt.',
+    first: 'Demo',
+    addendum: (at, timeZone) => `Ergänzung vom ${new Date(at).toLocaleString('de-DE', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', timeZone })}`,
   },
   en: {
     locale: 'en-US',
@@ -51,6 +56,8 @@ export const PAGE_WORDS: Record<
     allDemos: 'All demos',
     overview: 'Videos and analyses of changes, the newest first.',
     noDemos: 'No demos shared yet.',
+    first: 'Demo',
+    addendum: (at, timeZone) => `Addendum of ${new Date(at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone })}`,
   },
 };
 
@@ -227,14 +234,14 @@ export function artifactPageHtml(p: ArtifactPageParts): string {
 }
 
 /** A page's start, down to the demo's text: its head (with its `policy`, if it has one), the link above the title, the title, when it was shared. */
-function pageStart(p: PageParts, language: PageLanguage, policy?: string): string {
+function pageStart(p: PageParts, language: PageLanguage, policy?: string, style = '', list = ''): string {
   return `<!doctype html>
 <html lang="${language}"><head><meta charset="utf-8">${policy ? `<meta http-equiv="Content-Security-Policy" content="${policy}">` : ''}<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(p.tabTitle)}</title><style>${PAGE_STYLE}</style></head>
+<title>${esc(p.tabTitle)}</title><style>${PAGE_STYLE}${style}</style></head>
 <body><main>
 ${p.top ? `<div class="top"><a href="${esc(p.top.href)}">${esc(p.top.text)}</a></div>\n` : ''}<h1>${esc(p.title)}</h1>
 <div class="when">${esc(p.when)}</div>
-<div class="text">${paragraphs(p.text)}</div>
+${list}<div class="text">${paragraphs(p.text)}</div>
 `;
 }
 
@@ -262,6 +269,102 @@ ${'vtt' in p.captions ? `<script type="text/vtt" id="captions">${inScript(p.capt
   v.addEventListener('timeupdate', () => {
     let on = 0; bs.forEach((b, i) => { if (Number(b.dataset.at) <= v.currentTime + 0.05) on = i; });
     bs.forEach((b, i) => b.classList.toggle('on', i === on));
+  });
+</script>
+</body></html>
+`;
+}
+
+/** A demo version on a page with several: its title and text, and where its files are, relative to the page. */
+export type StackedDemo = { title: string; text: string; base: string } & ({ kind: 'video'; chapters: [number, string][]; poster: boolean } | { kind: 'html' });
+
+export interface StackedPageParts extends Omit<PageParts, 'title' | 'text'> {
+  /** The first version, with the page's title and text, then each later one, with when it was handed over. */
+  demos: [StackedDemo, ...(StackedDemo & { at: string })[]];
+  /** The time zone the later ones' headings say the time in; this machine's without. */
+  timeZone?: string;
+}
+
+/** The style a page with several demo versions adds: the list at the top, and each later version as an addendum. */
+const STACK_STYLE = `
+  .sections { font-size: 14px; color: var(--muted); margin: -10px 0 18px; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+  section.addendum { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--line); }
+  section.addendum h2 { font-size: 13px; font-weight: 600; color: var(--muted); margin: 0 0 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+  section.addendum h3 { font: 600 25px/1.2 Newsreader, "Iowan Old Style", Georgia, serif; margin: 0 0 10px; }
+  body.alone main > section.alone { display: block; }
+  body.alone section.alone > :not(.artifact) { display: none; }
+`;
+
+/**
+ * A page with several demo versions of one change, in order of handover: the first with the page's
+ * title and text on top, each later one below as an addendum („Ergänzung vom …“) with its own
+ * title, text and video or artifact, and a list of them at the top. A page with one version is
+ * `demoPageHtml` or `artifactPageHtml`. "In eigenem Fenster öffnen" shows an artifact alone
+ * (`?alone=<n>`, its place on the page).
+ */
+export function stackedPageHtml(p: StackedPageParts): string {
+  const language = p.language ?? 'de';
+  const w = PAGE_WORDS[language];
+  const [first, ...later] = p.demos;
+  const name = (i: number) => (i === 0 ? w.first : w.addendum(later[i - 1]!.at, p.timeZone));
+  const list = `<nav class="sections">${p.demos.map((_, i) => `<a href="#v${i + 1}">${i + 1}. ${esc(name(i))}</a>`).join('')}</nav>
+`;
+  const block = (d: StackedDemo, i: number) => {
+    const pr = i === 0 && p.pr ? p.pr : null;
+    if (d.kind === 'html')
+      return `<div class="links"><a href="?alone=${i + 1}" target="_blank" rel="noopener">${w.ownWindow}</a>${pr ? `<a href="${esc(pr)}">${w.pr}</a>` : ''}</div>
+<div class="artifact"><iframe src="${esc(d.base + ARTIFACT_DIR)}/index.html" sandbox="allow-scripts" title="${esc(d.title)}"></iframe></div>`;
+    const chapters = d.chapters.length
+      ? `<ol>${d.chapters.map(([at, title], j) => `<li><button data-at="${at}"${j === 0 ? ' class="on"' : ''}><span class="t">${mmss(at)}</span>${esc(title)}</button></li>`).join('')}</ol>`
+      : '';
+    return `<div class="grid">
+  <div class="player"><video controls preload="metadata" src="${esc(d.base)}demo.mp4"${d.poster ? ` poster="${esc(d.base)}poster.jpg"` : ''}><track kind="captions" src="${esc(d.base)}captions.vtt" srclang="${language}" label="${w.captions}"></video><button class="start" aria-label="${w.play}"><span><svg viewBox="0 0 24 24"><path d="M6 4l15 8-15 8z"/></svg></span></button></div>
+  <div>${chapters}${pr ? `<div class="pr"><a href="${esc(pr)}">${w.pr}</a></div>` : ''}</div>
+</div>`;
+  };
+  const artifacts = p.demos.some((d) => d.kind === 'html');
+  return `${pageStart({ ...p, title: first.title, text: first.text }, language, artifacts ? pagePolicy(ON_DISK) : undefined, STACK_STYLE, list)}<section id="v1">
+${block(first, 0)}
+</section>
+${later
+  .map(
+    (d, i) => `<section id="v${i + 2}" class="addendum">
+<h2>${esc(name(i + 1))}</h2>
+<h3>${esc(d.title)}</h3>
+<div class="text">${paragraphs(d.text)}</div>
+${block(d, i + 1)}
+</section>`,
+  )
+  .join('\n')}
+</main>
+<script>
+  // each video: seekable on a host without byte ranges, its chapters, its big play button
+  for (const g of document.querySelectorAll('.grid')) {
+    const v = g.querySelector('video'), bs = [...g.querySelectorAll('ol button')], src = v.getAttribute('src');
+    const seekable = fetch(src, { headers: { Range: 'bytes=0-' } }).then(async (r) => {
+      if (r.status === 206) return r.body?.cancel();
+      const url = URL.createObjectURL(await r.blob()), at = v.currentTime, playing = !v.paused;
+      v.src = url; v.currentTime = at;
+      if (playing) v.play();
+    }).catch(() => {});
+    bs.forEach((b) => b.addEventListener('click', () => seekable.then(() => { v.currentTime = Number(b.dataset.at); v.play(); })));
+    const start = g.querySelector('.start');
+    start.addEventListener('click', () => v.play());
+    v.addEventListener('play', () => { start.hidden = true; });
+    v.addEventListener('timeupdate', () => {
+      let on = 0; bs.forEach((b, i) => { if (Number(b.dataset.at) <= v.currentTime + 0.05) on = i; });
+      bs.forEach((b, i) => b.classList.toggle('on', i === on));
+    });
+  }
+  // each artifact grows to its height, at most 30 steps; ?alone=<n> shows the one at that place alone
+  const alone = new URLSearchParams(location.search).get('alone');
+  const shown = alone === null ? null : document.getElementById('v' + (alone || '1'));
+  if (shown && shown.querySelector('.artifact')) { document.body.classList.add('alone'); shown.classList.add('alone'); }
+  const steps = new Map([...document.querySelectorAll('.artifact iframe')].map((f) => [f, shown && shown.contains(f) ? 30 : 0]));
+  addEventListener('message', (e) => {
+    const f = [...steps.keys()].find((f) => f.contentWindow === e.source);
+    const h = f && e.data && e.data.obeyaHeight;
+    if (typeof h === 'number' && h > 0 && steps.get(f) < 30) { steps.set(f, steps.get(f) + 1); f.style.height = Math.min(Math.ceil(h), 30000) + 'px'; }
   });
 </script>
 </body></html>

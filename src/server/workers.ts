@@ -2096,13 +2096,19 @@ export class Workers {
                       .describe(
                         `required: the page on which the owner may share the demo (the video, or the HTML artifact below the text) with colleagues, in ${language}. They know the product but have never seen Obeya, this card or the plan doc. title: what changes, in a few words; text: two to five sentences on what changes for the user and why, without findings, tests or internal process`,
                       ),
+                    follows: z
+                      .enum(['replaces', 'supplements'])
+                      .optional()
+                      .describe(
+                        "when the card has a demo from an earlier handover: 'replaces' if this one shows the change afresh, so a shared page should show it instead; 'supplements' if it only shows what was corrected or explained since, to stand on the shared page beside the one before",
+                      ),
                   }
                 : {}),
             })
             .optional(),
         },
         run: ({ summary, demo }) => {
-          type Demo = { kind?: DemoKind; dir: string; chapters?: string[]; question?: string; page?: DemoPage };
+          type Demo = { kind?: DemoKind; dir: string; chapters?: string[]; question?: string; page?: DemoPage; follows?: 'replaces' | 'supplements' };
           const given = demo as Demo | undefined;
           const handOverWork = (d: Demo | undefined): string => {
             const s = clip(String(summary), 6000);
@@ -2120,7 +2126,8 @@ export class Workers {
             let demoJson: string | undefined;
             if (d) {
               const kind = d.kind ?? 'video';
-              const report = d.question ? { question: d.question } : {};
+              // what the worker says of it beside the demo before, for the owner's buttons when the page shows that one
+              const report = { ...(d.question ? { question: d.question } : {}), ...(row.demo && (d.follows === 'replaces' || d.follows === 'supplements') ? { follows: d.follows } : {}) };
               const page = d.page && d.page.title.trim() && d.page.text.trim() ? { title: clip(d.page.title.trim(), 200), text: clip(d.page.text.trim(), 2000) } : undefined;
               if (this.shares && !page)
                 return 'Not handed over: a demo here needs its page (title and text) for colleagues, in case the owner shares it. Call ready_for_review again with demo.page.';

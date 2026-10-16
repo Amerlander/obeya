@@ -316,6 +316,112 @@ describe('sharing a demo', () => {
 });
 
 /** The changes a page of the kind lacks when published before them all. */
+describe('several demo versions on one page', () => {
+  /** A card whose first demo came with handover 1. */
+  const first = () => card('Filter bleiben', { handover: 1, at: '2026-10-16T09:00:00.000Z' });
+  /** A later handover's demo: the one on the card goes to its earlier demos. */
+  function later(id: string, handover: number, extra: Record<string, unknown> = {}) {
+    const row = board.row(id);
+    const d = videoDir(join(dir, `demo-${id}-${handover}`));
+    writeFileSync(join(d, 'demo.mp4'), `video ${handover}`);
+    board.work(id, {
+      demos: JSON.stringify([...JSON.parse(row.demos ?? '[]'), JSON.parse(row.demo!)]),
+      demo: JSON.stringify({ kind: 'video', dir: d, chapters: [[0, 'Nachher']], page: { title: `Ergänzung ${handover}`, text: 'Der Reset leert auch die Daten.' }, handover, at: '2026-10-16T11:37:00.000Z', ...extra }),
+    });
+  }
+  const stored = (id: string) => JSON.parse(board.row(id).share!) as { demos?: { handover?: number; dir: string }[]; dir?: string; shown?: unknown };
+  const page = (id: string) => readFileSync(join(dir, 'deployed', slug(id), 'index.html'), 'utf8');
+  async function shared(id: string, act: () => void) {
+    act();
+    await until(() => share(id)?.state === 'shared');
+  }
+
+  test('"Dazunehmen" puts a later demo below the shared one, under the same link', async () => {
+    const c = first();
+    await shared(c.id, () => sharing.share(c.id));
+    expect(share(c.id)).toMatchObject({ on: [1] });
+    const url = share(c.id)!.url;
+    later(c.id, 2, { follows: 'supplements' });
+    expect(share(c.id)).toMatchObject({ on: [1], stale: true });
+    await shared(c.id, () => sharing.share(c.id, { add: true }));
+    expect(share(c.id)).toEqual({ state: 'shared', url, on: [1, 2] });
+    expect(stored(c.id).demos!.map((d) => d.handover)).toEqual([1, 2]);
+    expect(log(c.id)).toContain('Dazunehmen: Die Seite bekommt diese Demo als Ergänzung dazu.');
+    // the first stays at the page's root, the later one in a directory of its own
+    expect(readFileSync(join(dir, 'deployed', slug(c.id), 'demo.mp4'), 'utf8')).toBe('video');
+    expect(readFileSync(join(dir, 'deployed', slug(c.id), '2', 'demo.mp4'), 'utf8')).toBe('video 2');
+    expect(meta(c.id)).toMatchObject({ title: 'CSV-Export', more: [{ title: 'Ergänzung 2', dir: '2', chapters: [[0, 'Nachher']], handed: '2026-10-16T11:37:00.000Z' }] });
+    expect(page(c.id)).toContain('<h1>CSV-Export</h1>');
+    expect(page(c.id)).toContain('<a href="#v2">2. Ergänzung vom ');
+    expect(page(c.id)).toContain('<h3>Ergänzung 2</h3>');
+    expect(page(c.id)).toContain('src="2/demo.mp4"');
+  });
+
+  test('"Ersetzen" takes the shared ones off the page', async () => {
+    const c = first();
+    await shared(c.id, () => sharing.share(c.id));
+    later(c.id, 2);
+    await shared(c.id, () => sharing.share(c.id));
+    expect(share(c.id)).toMatchObject({ on: [2] });
+    expect(share(c.id)!.stale).toBeUndefined();
+    expect(meta(c.id)).toMatchObject({ title: 'Ergänzung 2' });
+    expect(meta(c.id)).not.toHaveProperty('more');
+    expect(existsSync(join(dir, 'deployed', slug(c.id), '2'))).toBe(false);
+    expect(log(c.id)).toContain('Ersetzen: Die Seite zeigt jetzt diese Demo statt der geteilten.');
+  });
+
+  test('an earlier demo shared goes onto the page in its place by handover', async () => {
+    const c = first();
+    later(c.id, 2);
+    await shared(c.id, () => sharing.share(c.id));
+    expect(share(c.id)).toMatchObject({ on: [2] });
+    await shared(c.id, () => sharing.share(c.id, { demo: 1, add: true }));
+    expect(share(c.id)).toMatchObject({ on: [1, 2] });
+    expect(meta(c.id)).toMatchObject({ title: 'CSV-Export', more: [{ title: 'Ergänzung 2' }] });
+  });
+
+  test('one version taken off goes out again without it; the last one takes the page down', async () => {
+    const c = first();
+    await shared(c.id, () => sharing.share(c.id));
+    later(c.id, 2);
+    await shared(c.id, () => sharing.share(c.id, { add: true }));
+    await shared(c.id, () => sharing.unshare(c.id, 1));
+    expect(share(c.id)).toMatchObject({ on: [2] });
+    expect(meta(c.id)).toMatchObject({ title: 'Ergänzung 2' });
+    expect(log(c.id)).toContain('Nicht mehr teilen: Die Seite geht ohne diese Demo wieder online.');
+    expect(() => sharing.unshare(c.id, 1)).toThrow(BadRequest);
+    sharing.unshare(c.id, 2);
+    await until(() => !share(c.id));
+    expect(calls().at(-1)!.pages[slug(c.id)]!.withdrawn).toBe(true);
+  });
+
+  test('a version already on the page goes out again with the others, and the PR link republishes them all', async () => {
+    const c = first();
+    await shared(c.id, () => sharing.share(c.id));
+    later(c.id, 2);
+    await shared(c.id, () => sharing.share(c.id, { add: true }));
+    await shared(c.id, () => sharing.share(c.id, { demo: 1 }));
+    expect(share(c.id)).toMatchObject({ on: [1, 2] });
+    openPr(c.id);
+    sharing.prOpened(c.id);
+    await until(() => meta(c.id).pr === PR);
+    expect(meta(c.id)).toMatchObject({ more: [{ title: 'Ergänzung 2' }] });
+  });
+
+  test('a page shared before several versions becomes a list of one, named by its handover', async () => {
+    const c = first();
+    await shared(c.id, () => sharing.share(c.id));
+    const { demos, ...rest } = stored(c.id) as { demos: { dir: string; shown: unknown }[] };
+    board.work(c.id, { share: JSON.stringify({ ...rest, dir: demos[0]!.dir, shown: demos[0]!.shown }) });
+    later(c.id, 2);
+    // read as a list of one before it is converted
+    expect(share(c.id)).toMatchObject({ on: [1], stale: true });
+    sharing.resume();
+    expect(stored(c.id)).not.toHaveProperty('dir');
+    expect(stored(c.id).demos!.map((d) => d.handover)).toEqual([1]);
+  });
+});
+
 const lacking = (kind: 'video' | 'html' = 'video') => missedChanges('', kind, PAGE_CHANGES).map((c) => c.id);
 /** The page went out before the changes since `version` ('': before them all). */
 const backdate = (id: string, version = '') => board.work(id, { share: JSON.stringify({ ...JSON.parse(board.row(id).share!), version }) });
@@ -356,14 +462,14 @@ describe('a page published before a change to the pages', () => {
     expect([share(v.id)!.outdated, share(h.id)!.outdated]).toEqual([ids('video').length ? ids('video') : undefined, ids('html').length ? ids('html') : undefined]);
   });
 
-  test('a newer demo is "Neu teilen", not "Erneut teilen"', async () => {
+  test('a newer demo is "Ersetzen" or "Dazunehmen"; the versions on the page still say what sharing them again brings', async () => {
     const c = card();
     sharing.share(c.id);
     await until(() => share(c.id)?.state === 'shared');
     backdate(c.id);
     board.work(c.id, { demo: JSON.stringify({ kind: 'video', dir: join(dir, 'newer'), chapters: [], page: { title: 'T', text: 'T.' } }) });
     expect(share(c.id)).toMatchObject({ stale: true });
-    expect(share(c.id)!.outdated).toBeUndefined();
+    expect(share(c.id)!.outdated).toEqual(missedChanges('', 'video', PAGE_CHANGES).map((c) => c.id));
   });
 
   test('each page is brought up to date on its own: sharing one again leaves the others outdated', async () => {
@@ -653,6 +759,21 @@ describe('exporting a demo, where the repository has no demo site', () => {
     writeFileSync(join(d, 'poster.jpg'), 'JPEG');
     writeFileSync(join(d, 'captions.vtt'), 'WEBVTT\n\n00:00.000 --> 00:02.500\nDer Export </script> beginnt.\n');
   }
+
+  test('the version shown goes into the file: an earlier one by its handover', async () => {
+    const c = card('Ohne Ziel', { handover: 1 });
+    files(c, 'FIRST');
+    const d = videoDir(join(dir, `demo-${c.id}-2`));
+    writeFileSync(join(d, 'demo.mp4'), 'SECOND');
+    board.work(c.id, {
+      demos: JSON.stringify([JSON.parse(board.row(c.id).demo!)]),
+      demo: JSON.stringify({ kind: 'video', dir: d, chapters: [], page: { title: 'Ergänzung', text: 'Ein Detail.' }, handover: 2 }),
+    });
+    const html = async (handover?: number) => new TextDecoder().decode((await sharing.export(c.id, 'html', handover)).data);
+    expect(await html()).toContain(Buffer.from('SECOND').toString('base64'));
+    expect(await html(1)).toContain(Buffer.from('FIRST').toString('base64'));
+    expect(await html(1)).toContain('<h1>CSV-Export</h1>');
+  });
 
   test('as a ZIP: the page in a folder with the video, poster and captions beside it', async () => {
     const c = card('Ohne Ziel');

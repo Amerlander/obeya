@@ -525,8 +525,8 @@ under `/api/cards/:id/demos/:n/`): a demo after feedback often shows only what c
 is one, plain text above the video, left of „Teilen“ in the same line, says which is shown
 („Neueste Demo 2 von 2 · 13:37“), with ‹ and › to step back and forth, and „Zur neuesten“ two or
 more steps back; an earlier one's text is in colour („Frühere Demo 1 von 2“), so it is not taken
-for the latest. Sharing is about the latest demo, so an earlier one shows without it (whether
-several versions may be shared at once is open). Until the owner's feedback on 2026-10-16 the line
+for the latest. Sharing is about the demo shown, an earlier one too (see Sharing a demo), and the
+text of a demo on the shared page carries a small share icon. Until the owner's feedback on 2026-10-16 the line
 was a bar of its own below sharing, coloured for an earlier demo. Stepping is no sign the owner has
 finished watching (see above), and a new handover leaves them on the demo they look at. An earlier
 demo whose directory a later one was rendered into, or whose files are gone (demos are deleted to
@@ -3184,8 +3184,34 @@ Where it goes depends on the repository's demo site: the static site its setting
 complete (`demo.site`, see Static sites; `siteOf` in `src/server/canvas.ts`). With a site, the demo
 is published on a page there. "Teilen" publishes right away, without a hold to take it back: "Nicht mehr
 teilen" withdraws the page just as easily. Once the page is up, the card shows the link (open, copy)
-and "Nicht mehr teilen". A card that gets a new demo after sharing says the page still shows the
-earlier one and offers "Neu teilen"; nothing is replaced on its own.
+and "Nicht mehr teilen". Nothing is replaced on its own.
+
+#### Several versions on one page
+
+Sharing belongs to a demo version, not to the card: a card has one page under one link, and the
+page holds the versions the owner shared, stacked in order of handover. The first one shared is on
+top with the page's title and text; each later one is below it as „Ergänzung vom 16.10., 13:37“
+(„Addendum of …“), the time of its handover, with its own title, text, chapters and video or
+artifact; with two or more, a list of them stands under the title. A page with one version looks as
+it did before (until 2026-10-16 a page held one demo), so those pages are not outdated by it. A
+later demo often only corrects or explains one detail, and standing below the one it corrects it
+is read after it; a page newest first, one player with a version switcher (a colleague would see
+one version and might never find the other) and a page per version (several links for one change)
+were dropped.
+
+The share box is about the version shown in the line above the demo (see Earlier demos). On a
+version on the page it holds the link, "Link kopieren" and "Nicht mehr teilen" for that version:
+the page goes out again without it, and the last one takes the page down. With earlier demos on
+the card, a line says which versions the page holds („Auf der Seite: Demo 1 und 2“); a card with
+one version shared and no earlier demos reads as before. On an earlier version not on the page,
+"Teilen" adds it in its place by handover. On the latest, not on the page yet, the hint „Die
+geteilte Seite zeigt Demo 1.“ offers „Ersetzen“ (it goes on the page, the shared ones off) and
+„Dazunehmen“ (it goes beside them). Which comes first is the worker's word: `ready_for_review`
+says of a later demo whether it was recorded afresh (`follows: replaces`) or only supplements the
+one before (`supplements`), the demo skill asks for it, and a line under the buttons says what the
+worker said („Der Agent: ergänzt Demo 1“ / „neu aufgenommen“). Without its word „Ersetzen“ comes
+first, as the latest demo always replaced the page before. The worker only suggests: nothing goes
+out without the owner's click.
 
 The page has a title and two to five sentences for colleagues who have never seen Obeya: where the
 repository has a site, `ready_for_review` takes them with every demo (`demo.page`), and for a demo
@@ -3196,8 +3222,10 @@ the owner shares, kept with the demo afterwards.
 
 Pages go out one change at a time, through one queue for all canvases (`src/server/share.ts`):
 `publish` writes the card's page on its site (slug, kind `video` or `html`, title, text, chapters,
-PR URL, the demo's language, demo directory, and the slugs of the other pages shared there), and
-`withdraw` takes it down. The slug comes from the card's title and id once and stays, so a link
+PR URL, the demo's language, demo directory, the later versions with the same and their handover's
+time, and the slugs of the other pages shared there), and `withdraw` takes it down. A share keeps
+each version on the page (`StoredShare.demos`: its handover, directory and what the page says of
+it); a share from before (one `dir` and `shown`) reads as a list of one and is converted at startup. The slug comes from the card's title and id once and stays, so a link
 keeps working across publishing again. What the deploy says goes into the card's log, a failure
 with its output as an error, and the card stays as it was. A share publishing or withdrawing at a
 restart goes on after it.
@@ -3215,11 +3243,14 @@ share keeps the newest change when it was published (`version`, '' before any). 
 it that show on its kind of page are what sharing it again brings; a page that lacks one is
 outdated and shows them on its card, each with its day ("Seit diese Seite geteilt wurde, haben sich
 die Seiten geändert: …"), beside "Erneut teilen" and "Nicht mehr teilen": the same demo published
-again under the same link. A card with a newer demo offers only "Neu teilen", which brings both.
+again under the same link, with all its versions. A page's changes are those of the kinds of page
+its versions show (a video and an artifact on one page: both). The latest demo, not on the page,
+brings them with „Ersetzen“ or „Dazunehmen“.
 Each page is brought up to date on its own card. A change that shows nowhere (a refactoring, a style
 only the other kind of page uses) gets no entry and marks no page. That the list misses no change
 is a test's: `PAGES_HASH` pins a hash of sample pages in both languages with everything a page can
-have (`pagesHash` in `site.ts`), and the test fails once the pages come out different, saying to add
+have (`pagesHash` in `site.ts`: a video page, an artifact page and a page with several versions,
+its addenda's times in UTC so the hash is the same on every machine), and the test fails once the pages come out different, saying to add
 an entry where a viewer sees the difference and to take the new hash either way. The site's title
 is not part of it: a new title shows on the overview with the next publish and on each page once it
 is published again. Pages published before the list (until 2026-10-16) kept a hash instead; at
@@ -3230,9 +3261,9 @@ it from again, and it stays out as it is.
 Many at once go from the Koordinator's sheet: while pages are outdated, a purple entry says how many
 („N geteilte Demos sind veraltet“, archived cards' included), lists what changed since, each change
 with its day and how many of them lack it, and shares again the newest 20 of them
-(or 10, 50, 100, all), newest by the demo's video file. They go out one after the other through the
+(or 10, 50, 100, all), newest by the video file of the newest version on the page. They go out one after the other through the
 same queue as every share, each published as it shows (what the share kept, so a newer demo on the
-card still waits for "Neu teilen"), and a share the owner starts meanwhile goes out between two of
+card still waits for „Ersetzen“ or „Dazunehmen“), and a share the owner starts meanwhile goes out between two of
 them. The entry shows how many are out, the one going now, and the failed ones with their cards (the
 reason is in each card's log, the page stays outdated); "Anhalten" lets the page going out finish
 and leaves the rest. "Ausblenden" puts the entry away, with the result of a finished run: the owner
@@ -3257,7 +3288,7 @@ already, adds a line `Demo-Video: <url> <!-- obeya:demo -->` (`Demo-Seite:` for 
 video:“ and „Demo page:“ in English) (`gh pr edit --body-file`); a later line of its own is found by
 the marker and replaced, not added again. A page shared before the PR existed is published again
 with the PR's link: what it showed then (title, text, chapters and demo directory, kept with the
-share), not a newer demo on the card, which still waits for "Neu teilen". The card goes on showing
+share, every version on the page), not a newer demo on the card, which still waits for the owner. The card goes on showing
 the link meanwhile; a PR reported while the page is going out gets a second round after it. A
 failure to read or edit the description goes into the card's log; the page stays shared. Withdrawing
 the page leaves the line in the description.
@@ -3271,7 +3302,9 @@ from a blob so it seeks; only for videos up to 15 MiB (`EXPORT_HTML_MAX`, so the
 mail), the button says so for larger ones. An artifact goes into the ZIP in `artifact/` beside the
 page; into one HTML file (as the frame's `srcdoc`) only when it is its `index.html` alone, which the
 handover notes (`single`), else the button says it goes as a ZIP. Nothing leaves Obeya, so an export
-is not held; the card's log names the file. Both pages carry their captions as cues in a script,
+is not held; the card's log names the file. It packs the version shown above the demo
+(`?demo=<handover>` for an earlier one), one per file: an export keeps no state, so there is no page
+to add to. Both pages carry their captions as cues in a script,
 since Chrome does not load a `<track>` for a page opened from disk. The ZIP is written by Obeya
 (`src/server/zip.ts`, stored without compression: the video is compressed already).
 
@@ -3324,10 +3357,12 @@ The site lives in `sites/<key>/` under Obeya's home, the key made of the URL's h
 clones and repositories naming the same site share it: `site/` is deployed whole with each publish
 or withdrawal, one directory per page with the demo's files, its `index.html` and a `meta.json`
 (kind, title, text, chapters, PR, when first shared and when its video or artifact last changed, a
-hash of the demo's own files, the page's language), plus the overview; `backup/` holds a page set
-aside while a deploy runs, put back when it fails. Pages are written
+hash of the demo's own files, the page's language; `more`, the later versions, each with the same
+and its handover's time, its files in `2/`, `3/` … of the page's directory), plus the overview,
+which dates a page by its newest version; `backup/` holds a page set aside while a deploy runs, put
+back when it fails. Pages are written
 with Obeya's templates, each in its demo's language ("Geteilt am", "Alle Demos"), the overview in
-the site's; a page keeps its date while its demo's own files stay the same (not the copies on the
+the site's; a version keeps its date while its demo's own files stay the same (not the copies on the
 site, which carry what Obeya adds to an artifact). The guard against a directory lacking pages
 Obeya has as shared, and the file limit, refuse before anything is deployed. Which pages a change to
 Obeya's templates leaves outdated says the list of page changes (see Outdated pages).
@@ -3448,6 +3483,11 @@ the microphone; Chrome launched by Playwright needs no audio service moved in-pr
   card's column, two scrollbars side by side; then the page came out a few pixels higher than the
   frame, or a page whose images grow with its width fitted only beside a scrollbar, and the frame
   kept a bar of its own that scrolled by a few pixels.
+- **Sharing belongs to a demo version** (owner, 2026-10-16). Until then a card shared one demo: a
+  newer one offered "Neu teilen", which replaced the page, so a short demo that only corrected one
+  detail could not stand beside the one it corrected. Now one page per card holds the versions the
+  owner shares (see Several versions on one page); the worker says whether a later demo replaces or
+  supplements, and the owner clicks.
 - **"Teilen" sits on the demo's own line** (2026-10-14). Until then sharing came under the chapters
   and a dividing line, a button as wide as the column: with many chapters, or under a tall artifact,
   it was out of sight on opening, and it sat right on top of what followed.

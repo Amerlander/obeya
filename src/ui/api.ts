@@ -164,10 +164,10 @@ export const api = {
   adapterSetup: (canvas: string, repo: string) => call<Item>('POST', `/api/c/${encodeURIComponent(canvas)}/adapter-setup`, { repo }),
   preparePlanDoc: (canvas: string, repo: string, file: string) => call<Item>('POST', `/api/c/${encodeURIComponent(canvas)}/prepare-plan-doc`, { repo, file }),
   /** Downloads a card's demo as a ZIP of its page with the files, or as one HTML file. */
-  exportDemo: (id: string, as: 'zip' | 'html') => download(at(`/cards/${id}/export?as=${as}`), `demo.${as}`),
-  /** The size of a card's demo video in bytes; null when unknown. */
-  demoSize: async (id: string) => {
-    const res = await fetch(at(`/cards/${id}/demo/demo.mp4`), { headers: { range: 'bytes=0-0' } });
+  exportDemo: (id: string, as: 'zip' | 'html', demo?: number) => download(at(`/cards/${id}/export?as=${as}${demo === undefined ? '' : `&demo=${demo}`}`), `demo.${as}`),
+  /** The size of a card's demo video in bytes, the latest one or earlier one `n`; null when unknown. */
+  demoSize: async (id: string, n?: number) => {
+    const res = await fetch(at(n === undefined ? `/cards/${id}/demo/demo.mp4` : `/cards/${id}/demos/${n}/demo.mp4`), { headers: { range: 'bytes=0-0' } });
     await res.body?.cancel();
     const total = Number(/\/(\d+)$/.exec(res.headers.get('content-range') ?? '')?.[1]);
     return res.ok && total > 0 ? total : null;
