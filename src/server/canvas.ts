@@ -34,7 +34,7 @@ import { changesCode, RESTART_PATIENCE_MS, whenIdle } from './self-update';
 import { Sharing, siteIncomplete } from './share';
 import { siteMissing, siteName } from './site';
 import { type DueRestart, Workers } from './workers';
-import { branchSetting, defaultBranch, detectingBranch, gitCalls, type GitSteps, gitStepsSync, type Landed, readingBranches, together, useBranchSetting, Workspaces } from './workspaces';
+import { branchSetting, defaultBranch, detectingBranch, gitCalls, gitOrNull, type GitSteps, gitStepsSync, type Landed, readingBranches, together, useBranchSetting, Workspaces } from './workspaces';
 import { claudeToken, githubToken, hostName, registerHost } from './hosts';
 import { messageOf } from '../core/text';
 import { type WishDraft, type WishInput, writeWish } from './wish';
@@ -335,13 +335,14 @@ export class CanvasRuntime {
     if (!best) return false;
     const path = best.r.info.path;
     const mine = this.deps.settings ? this.deps.settings(path) : best.r.config.settings;
-    const { commit } = defaultBranchCommit(path);
+    // the commit itself, not a name of it (`HEAD` in a repository without the branch), which moves
+    const commit = gitOrNull(path, 'rev-parse', '--verify', '--quiet', `${defaultBranchCommit(path).commit}^{commit}`);
     const trusted = this.deps.store.trustedCommands(path);
     // read again only where the default branch, the trust or this machine's settings moved: agents start often
     const key = JSON.stringify([commit, trusted, mine]);
     const known = this.claudeTrust.get(path);
-    if (known?.key === key) return known.held;
-    const held = heldGroups(commandsOf(readShared(path, commit)), trusted, mine).includes('claude');
+    if (commit && known?.key === key) return known.held;
+    const held = heldGroups(commandsOf(readShared(path, commit ?? undefined)), trusted, mine).includes('claude');
     this.claudeTrust.set(path, { key, held });
     return held;
   };

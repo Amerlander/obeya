@@ -1716,6 +1716,7 @@ function TrustCommands({ path, trust, onDone }: { path: string; trust: RepoTrust
               </div>
             ))}
           </div>
+          {g === 'claude' && blankOnly(trust).length > 0 && <p className="hint">{c.blankOnly(blankOnly(trust).join(', '))}</p>}
         </div>
       ))}
       <button className="btn small" disabled={busy} onClick={go}>
@@ -1725,6 +1726,13 @@ function TrustCommands({ path, trust, onDone }: { path: string; trust: RepoTrust
     </div>
   );
 }
+
+/** The files of the Claude Code configuration whose change the diff cannot show: other contents, the same text but for space at its start or end. */
+const blankOnly = (trust: RepoTrust) =>
+  Object.entries(trust.now.claude ?? {}).flatMap(([file, f]) => {
+    const was = trust.before?.claude?.[file];
+    return was && was.id !== f.id && was.text === f.text ? [file] : [];
+  });
 
 /** Creates the card that writes the repository's settings for everyone, and opens it on its canvas. */
 function AdapterSetup({ canvas, repo }: { canvas: string; repo: string }) {

@@ -787,6 +787,7 @@ const de = {
       site: 'Demo-Seite (demo.site): Obeya veröffentlicht mit diesem Befehl und liest die Seite unter dieser Adresse. Bis dahin werden Demos exportiert.',
       claude: 'Claude-Code-Konfiguration des Repositorys (.claude/, .mcp.json): Agenten führen ihre Hooks und MCP-Server ohne Rückfrage aus. Bis dahin arbeiten sie ohne sie.',
       trust: 'Diesen Befehlen vertrauen',
+      blankOnly: (files: string) => `In ${files} hat sich nur Leerraum am Anfang oder Ende geändert, den die Ansicht nicht zeigt. Er kann entscheiden, ob ein Hook läuft.`,
     },
     adapterSetupHint:
       'Obeya weiß noch nicht, wie diese App startet, welche Prüfungen laufen und wie ein Agent sie für eine Demo startet. Trag es in den Einstellungen selbst ein, oder lass einen Agenten das Repository lesen, die Einstellungen für alle ausfüllen und eine Demo damit ausprobieren.',
@@ -2139,6 +2140,7 @@ const en: Strings = {
       site: 'Demo site (demo.site): Obeya deploys with this command and reads the site at this address. Until then demos are exported.',
       claude: 'The repository’s Claude Code configuration (.claude/, .mcp.json): agents run its hooks and MCP servers without asking. Until then they work without it.',
       trust: 'Trust these commands',
+      blankOnly: (files: string) => `In ${files} only space at the start or end changed, which the view does not show. It can decide whether a hook runs.`,
     },
     adapterSetupHint:
       'Obeya does not know yet how this app starts, which checks run or how an agent runs it for a demo. Fill it in under Settings yourself, or let an agent read the repository, fill in the settings for everyone and try a demo with them.',
