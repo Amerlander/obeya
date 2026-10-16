@@ -4,7 +4,10 @@
 // an image stage for things the page itself cannot show (a PDF, a rendered e-mail), a white
 // veil over a time jump, a stretch the video leaves out, and a clock strip (`CLOCK`).
 (() => {
-  if (window.__demo) return;
+  // Playwright runs init scripts in every frame: an iframe painted a clock strip of its own, which
+  // stayed in the video, as the director paints over only the top page's. Pointer, rings and image
+  // stage belong to the top page too.
+  if (window.__demo || window !== window.top) return;
   // The time each frame was painted, in a strip of black and white cells at the bottom left: on a
   // busy machine the screencast hands frames over seconds after they were painted, so the director
   // reads the time from the picture (`readClock` in timeline.ts) and paints the strip over in the video.

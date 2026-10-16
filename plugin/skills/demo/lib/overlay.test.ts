@@ -1,0 +1,62 @@
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import path from 'node:path';
+import type { Browser, Page } from 'playwright-core';
+import { launchChromium } from '../../../lib/chromium.ts';
+
+// The overlay in a real browser, on a page with iframes as a card's HTML artifact has them.
+describe('the demo overlay', () => {
+  let browser: Browser;
+  let page: Page;
+  let server: ReturnType<typeof Bun.serve>;
+
+  // Chrome starts and closes slowly while the other test files run beside it.
+  beforeAll(async () => {
+    const html = (body: string) => new Response(`<!doctype html><body>${body}</body>`, { headers: { 'content-type': 'text/html' } });
+    server = Bun.serve({
+      port: 0,
+      fetch: (req) =>
+        new URL(req.url).pathname === '/frame'
+          ? html('<p id="inside">inside</p>')
+          : html('<button id="b">Go</button><iframe src="/frame"></iframe><iframe sandbox="allow-scripts" src="/frame"></iframe>'),
+    });
+    browser = await launchChromium();
+    const ctx = await browser.newContext({ viewport: { width: 800, height: 600 } });
+    await ctx.addInitScript({ path: path.join(import.meta.dirname, 'overlay.js') });
+    page = await ctx.newPage();
+    await page.goto(server.url.href);
+    await page.frameLocator('iframe').first().locator('#inside').waitFor();
+    await page.frameLocator('iframe').last().locator('#inside').waitFor();
+  }, 60_000);
+
+  afterAll(async () => {
+    await browser?.close();
+    server?.stop();
+  }, 30_000);
+
+  test('paints its clock strip in the top page and in no iframe', async () => {
+    await page.waitForFunction(() => document.querySelector('canvas')?.isConnected);
+    expect(await page.evaluate(() => document.querySelectorAll('canvas').length)).toBe(1);
+    const frames = page.frames().filter((f) => f !== page.mainFrame());
+    expect(frames).toHaveLength(2);
+    for (const f of frames) {
+      expect(await f.evaluate(() => ({ canvases: document.querySelectorAll('canvas').length, demo: '__demo' in window }))).toEqual({
+        canvases: 0,
+        demo: false,
+      });
+    }
+  });
+
+  test('pointer, highlight and image stage still work in the top page', async () => {
+    const button = await page.locator('#b').elementHandle();
+    const shown = await page.evaluate((b) => {
+      // biome-ignore lint: the overlay is untyped browser script
+      const demo = (window as any).__demo;
+      demo.moveTo(100, 100, true);
+      demo.highlight([b], 'Here');
+      demo.showImage('data:image/gif;base64,R0lGODlhAQABAAAAACw=', 0, 'An image');
+      const text = document.documentElement.innerText;
+      return { pointer: !!document.querySelector('svg path'), label: text.includes('Here'), caption: text.includes('An image'), image: !!document.querySelector('img') };
+    }, button);
+    expect(shown).toEqual({ pointer: true, label: true, caption: true, image: true });
+  });
+});

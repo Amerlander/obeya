@@ -2900,7 +2900,9 @@ quality 100 and CRF 18, so it looks as the app does live (the hero video, 2026-1
 Frames go on the video by the time they were painted, not by when the screencast handed them over:
 `overlay.js` paints the time into a strip of 24 black and white cells at the page's bottom left, the
 director reads it from every frame (one ffmpeg pass, `readClock` in `lib/timeline.ts`) and paints
-the strip over in the video.
+the strip over in the video. The overlay runs in the top frame only: Playwright runs init scripts in
+every frame, and until 2026-10-16 each iframe (an HTML artifact on a card, say) painted a strip of
+its own at its bottom left, which stayed in the video.
 
 #### Highlights
 
