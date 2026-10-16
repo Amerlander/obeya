@@ -39,6 +39,12 @@ export const showCanvasesSection = () => sessionStorage.setItem(SECTION_KEY, 'ca
 /** Opens the dialog at „Von anderen Geräten“ next time, as from „Telefon verbinden“. */
 export const showDevicesSection = () => sessionStorage.setItem(SECTION_KEY, 'devices');
 
+/** The section this tab showed last, if any. */
+const keptSection = () => {
+  const s = sessionStorage.getItem(SECTION_KEY) as Section | null;
+  return s && SECTIONS.includes(s) ? s : null;
+};
+
 /** A repository's clone count (or its slots, or one of its settings, folded open) to show and focus when the dialog opens. */
 export interface ConfigFocus {
   canvas: string;
@@ -87,10 +93,7 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems, 
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
   const [json, setJson] = useState(false);
-  const [section, setSectionState] = useState<Section>(() => {
-    const s = sessionStorage.getItem(SECTION_KEY) as Section | null;
-    return s && SECTIONS.includes(s) ? s : 'canvases';
-  });
+  const [section, setSectionState] = useState<Section>(() => keptSection() ?? 'canvases');
   const setSection = (s: Section) => {
     sessionStorage.setItem(SECTION_KEY, s);
     setSectionState(s);
@@ -138,8 +141,8 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems, 
   // read afresh whenever the dialog opens: the Koordinator or the file may have changed it; a draft not saved yet stays, after a reload too
   useEffect(() => {
     if (!on) return;
-    const s = sessionStorage.getItem(SECTION_KEY) as Section | null;
-    if (s && SECTIONS.includes(s)) setSectionState(s);
+    const s = keptSection();
+    if (s) setSectionState(s);
     const f = sessionStorage.getItem(FOCUS_KEY);
     sessionStorage.removeItem(FOCUS_KEY);
     setFocus(f ? (JSON.parse(f) as ConfigFocus) : null);
@@ -1036,7 +1039,7 @@ function VoiceBlock({ on }: { on: boolean }) {
           </button>
         </div>
       ) : (
-        !view.items.some((i) => i.state === 'missing') && <p className="hint">{v.ready}</p>
+        !blocked && <p className="hint">{v.ready}</p>
       )}
       {view.job?.error && !view.job.running && <p className="p-error">{v.failed(view.job.error.split('\n').at(-1) ?? '')}</p>}
       {status && <p className="hint c-status">{status}</p>}
