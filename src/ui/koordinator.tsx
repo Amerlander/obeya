@@ -48,7 +48,8 @@ export function KoordinatorSheet({ on, canvas, items, preferences, settings, rep
     <aside id="ksheet" className={on ? 'sheet on' : 'sheet'}>
       <h2>{t.koordinator.title}</h2>
       <Conversation talk={talk} fresh={fresh} items={items} onOpen={onOpen} />
-      <TellKoordinator onTell={onTell} />
+      {/* a command in writing, for when speaking is not possible; its screenshots go to the cards it creates or concerns */}
+      <Composer className="tell" draft={OBEYA_DRAFT} placeholder={t.voice.typePlaceholder} obeya onSend={onTell} />
 
       <div className="k-rest">
         {ids.length > 0 && (
@@ -220,9 +221,69 @@ function Conversation({ talk, fresh, items, onOpen }: { talk: Talk[]; fresh: num
   );
 }
 
-/** A command in writing, for when speaking is not possible; its screenshots go to the cards it creates or concerns. */
-function TellKoordinator({ onTell }: { onTell: Props['onTell'] }) {
-  return <Composer className="tell" draft={OBEYA_DRAFT} placeholder={t.voice.typePlaceholder} obeya onSend={onTell} />;
+/** An error to show under a row, and `act`, which runs a request and then shows its error or clears it. */
+function useAct(fail?: Parameters<typeof failText>[1]): [string, (fn: () => Promise<unknown>) => Promise<void>] {
+  const [error, setError] = useState('');
+  const act = async (fn: () => Promise<unknown>) => {
+    try {
+      await fn();
+      setError('');
+    } catch (e) {
+      setError(failText(e, fail));
+    }
+  };
+  return [error, act];
+}
+
+/** A card named in a row, which opens it while it is still on the canvas. */
+function CardLink({ card, title, onOpen }: { card: Item | undefined; title: string; onOpen: (i: Item) => void }) {
+  return card ? (
+    <a className="from" onClick={() => onOpen(card)}>
+      {plain(title)}
+    </a>
+  ) : (
+    plain(title)
+  );
+}
+
+/** Where a rule goes: the owner's preferences or a repository's CLAUDE.md. */
+function TargetPick({ value, repos, onChange }: { value: string; repos: RepoRef[]; onChange: (target: string) => void }) {
+  return (
+    <label className="target">
+      {t.koordinator.target}
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">{t.koordinator.targetPreferences}</option>
+        {repos.map((r) => (
+          <option key={r.id} value={r.id}>
+            {t.koordinator.targetClaudeMd(r.name)}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/** A rule's text being edited in place: Enter takes it, Escape leaves it as it was. */
+function RuleEdit({ draft, setDraft, onEnter, onBlur }: { draft: string; setDraft: (d: string | null) => void; onEnter: () => void; onBlur?: () => void }) {
+  return (
+    <textarea
+      data-esc
+      autoFocus
+      value={draft}
+      rows={2}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={onBlur}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          onEnter();
+        } else if (e.key === 'Escape') {
+          e.stopPropagation();
+          setDraft(null);
+        }
+      }}
+    />
+  );
 }
 
 /**
@@ -233,17 +294,9 @@ function TellKoordinator({ onTell }: { onTell: Props['onTell'] }) {
 function ProposalRow({ p, items, rules, repos, onOpen }: { p: Preference; items: Item[]; rules: Preference[]; repos: RepoRef[]; onOpen: (i: Item) => void }) {
   const [draft, setDraft] = useState<string | null>(null);
   const [target, setTarget] = useState(p.target ?? '');
-  const [error, setError] = useState('');
+  const [error, decide] = useAct();
   const card = p.cardId ? items.find((i) => i.id === p.cardId) : undefined;
   const replaced = p.replaces !== undefined ? rules.find((r) => r.id === p.replaces) : undefined;
-  const decide = async (act: () => Promise<void>) => {
-    try {
-      await act();
-      setError('');
-    } catch (e) {
-      setError(failText(e));
-    }
-  };
   const accept = () =>
     decide(() => api.acceptProposal(p.id, draft === null || draft.trim() === p.text ? undefined : draft.trim(), target === (p.target ?? '') ? undefined : target || null));
   const quote = p.quote && (p.quote.length > 200 ? `${p.quote.slice(0, 200).trimEnd()} …` : p.quote);
@@ -252,22 +305,7 @@ function ProposalRow({ p, items, rules, repos, onOpen }: { p: Preference; items:
       {draft === null ? (
         <span className="pref-text">{p.text}</span>
       ) : (
-        <textarea
-          data-esc
-          autoFocus
-          value={draft}
-          rows={2}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              if (draft.trim()) accept();
-            } else if (e.key === 'Escape') {
-              e.stopPropagation();
-              setDraft(null);
-            }
-          }}
-        />
+        <RuleEdit draft={draft} setDraft={setDraft} onEnter={() => draft.trim() && accept()} />
       )}
       {replaced && <span className="occasion">{t.koordinator.changes(replaced.text)}</span>}
       <span className="occasion">
@@ -278,27 +316,13 @@ function ProposalRow({ p, items, rules, repos, onOpen }: { p: Preference; items:
           </>
         ) : (
           <>
-            {card && (
-              <a className="from" onClick={() => onOpen(card)}>
-                {plain(card.title)}
-              </a>
-            )}
+            {card && <CardLink card={card} title={card.title} onOpen={onOpen} />}
             {card && quote && ': '}
             {quote && <q>{quote}</q>}
           </>
         )}
       </span>
-      <label className="target">
-        {t.koordinator.target}
-        <select value={target} onChange={(e) => setTarget(e.target.value)}>
-          <option value="">{t.koordinator.targetPreferences}</option>
-          {repos.map((r) => (
-            <option key={r.id} value={r.id}>
-              {t.koordinator.targetClaudeMd(r.name)}
-            </option>
-          ))}
-        </select>
-      </label>
+      <TargetPick value={target} repos={repos} onChange={setTarget} />
       <span className="pref-actions">
         <button className="btn primary" disabled={draft !== null && !draft.trim()} onClick={accept}>
           {t.koordinator.accept}
@@ -363,17 +387,12 @@ function SettingRow({ p, items, repo, onOpen, onConfig }: { p: SettingProposal; 
   const field = useRef<HTMLTextAreaElement>(null);
   useFitHeight(field, draft);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const [error, act] = useAct({ detail: ['settingsShare'] });
   const k = t.koordinator;
   const list = Array.isArray(p.value);
-  const decide = async (act: () => Promise<unknown>) => {
+  const decide = async (fn: () => Promise<unknown>) => {
     setBusy(true);
-    try {
-      await act();
-      setError('');
-    } catch (e) {
-      setError(failText(e, { detail: ['settingsShare'] }));
-    }
+    await act(fn);
     setBusy(false);
   };
   const changed = draft.trim() !== asText(p.value);
@@ -381,6 +400,7 @@ function SettingRow({ p, items, repo, onOpen, onConfig }: { p: SettingProposal; 
   const take = (where: 'machine' | 'repository') => decide(() => api.takeSetting(p.id, where, edited));
   const now = p.now === undefined ? null : asText(p.now).trim();
   const branch = repo?.branch ?? 'main';
+  const everyone = repo?.pullRequests ? k.forEveryonePr(branch) : k.forEveryoneMain(branch);
   return (
     <li className="proposal setting">
       <span className="setting-kind">
@@ -424,13 +444,7 @@ function SettingRow({ p, items, repo, onOpen, onConfig }: { p: SettingProposal; 
           return (
             <Fragment key={c.id}>
               {i > 0 && ', '}
-              {card ? (
-                <a className="from" onClick={() => onOpen(card)}>
-                  {plain(c.title)}
-                </a>
-              ) : (
-                plain(c.title)
-              )}
+              <CardLink card={card} title={c.title} onOpen={onOpen} />
             </Fragment>
           );
         })}
@@ -440,12 +454,12 @@ function SettingRow({ p, items, repo, onOpen, onConfig }: { p: SettingProposal; 
         <button className="btn primary" disabled={busy || !draft.trim()} title={k.onMachineHint} onClick={() => take('machine')}>
           {k.onMachine}
         </button>
-        <button className="btn primary" disabled={busy || !draft.trim()} title={repo?.pullRequests ? k.forEveryonePr(branch) : k.forEveryoneMain(branch)} onClick={() => take('repository')}>
+        <button className="btn primary" disabled={busy || !draft.trim()} title={everyone} onClick={() => take('repository')}>
           {k.forEveryone}
         </button>
       </span>
       <span className="occasion">
-        {k.onMachine}: {k.onMachineHint} {k.forEveryone}: {repo?.pullRequests ? k.forEveryonePr(branch) : k.forEveryoneMain(branch)}
+        {k.onMachine}: {k.onMachineHint} {k.forEveryone}: {everyone}
       </span>
       <span className="pref-actions">
         <button className="btn danger" disabled={busy} onClick={() => decide(() => api.rejectSetting(p.id))}>
@@ -467,19 +481,11 @@ const RESHARE_COUNTS = [10, 20, 50, 100];
 function ReshareBox({ r, items, onOpen }: { r: Reshare; items: Item[]; onOpen: (i: Item) => void }) {
   const counts = RESHARE_COUNTS.filter((n) => n < r.outdated);
   const [pick, setPick] = useState<number | 'all'>();
-  const [error, setError] = useState('');
+  const [error, act] = useAct();
   // the newest 20 unless the owner picks otherwise; null is all of them
   const chosen = pick === 'all' ? null : pick !== undefined && counts.includes(pick) ? pick : (counts.find((n) => n >= 20) ?? null);
   const run = r.run;
   const going = !!run && run.left > 0;
-  const act = async (fn: () => Promise<void>) => {
-    try {
-      await fn();
-      setError('');
-    } catch (e) {
-      setError(failText(e));
-    }
-  };
   const s = t.koordinator.reshare;
   const out = run ? run.done + run.failed.length : 0;
   return (
@@ -499,13 +505,7 @@ function ReshareBox({ r, items, onOpen }: { r: Reshare; items: Item[]; onOpen: (
                   const card = items.find((i) => i.id === f.id);
                   return (
                     <span key={f.id} className="failed">
-                      {card ? (
-                        <a className="from" onClick={() => onOpen(card)}>
-                          {plain(f.title)}
-                        </a>
-                      ) : (
-                        plain(f.title)
-                      )}
+                      <CardLink card={card} title={f.title} onOpen={onOpen} />
                     </span>
                   );
                 })}
@@ -553,16 +553,13 @@ function ReshareBox({ r, items, onOpen }: { r: Reshare; items: Item[]; onOpen: (
 
 function PreferenceRow({ p }: { p: Preference }) {
   const [draft, setDraft] = useState<string | null>(null);
-  const [error, setError] = useState('');
-  const save = async () => {
+  const [error, act] = useAct();
+  const save = () => {
     if (draft === null || draft.trim() === p.text) return setDraft(null);
-    try {
+    act(async () => {
       await api.setPreference(p.id, draft);
       setDraft(null);
-      setError('');
-    } catch (e) {
-      setError(failText(e));
-    }
+    });
   };
   return (
     <li>
@@ -571,23 +568,7 @@ function PreferenceRow({ p }: { p: Preference }) {
           {p.text}
         </span>
       ) : (
-        <textarea
-          data-esc
-          autoFocus
-          value={draft}
-          rows={2}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={save}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              save();
-            } else if (e.key === 'Escape') {
-              e.stopPropagation();
-              setDraft(null);
-            }
-          }}
-        />
+        <RuleEdit draft={draft} setDraft={setDraft} onEnter={save} onBlur={save} />
       )}
       <button className="pref-del" title={t.koordinator.remove} onClick={() => api.setPreference(p.id, null).catch(() => {})}>
         ✕
@@ -602,18 +583,14 @@ function NewPreference({ repos }: { repos: RepoRef[] }) {
   const [text, setText] = useState('');
   const [target, setTarget] = useState('');
   const [filed, setFiled] = useState('');
-  const [error, setError] = useState('');
-  const add = async () => {
-    if (!text.trim()) return;
-    try {
+  const [error, act] = useAct();
+  const add = () =>
+    text.trim() &&
+    act(async () => {
       await api.addPreference(text.trim(), target || undefined);
       setText('');
-      setError('');
       setFiled(target ? t.koordinator.filed(repos.find((r) => r.id === target)?.name ?? target) : '');
-    } catch (e) {
-      setError(failText(e));
-    }
-  };
+    });
   return (
     <div className="composer pref-new">
       <textarea
@@ -634,17 +611,7 @@ function NewPreference({ repos }: { repos: RepoRef[] }) {
       <button className="btn" disabled={!text.trim()} onClick={add}>
         {t.koordinator.add}
       </button>
-      <label className="target">
-        {t.koordinator.target}
-        <select value={target} onChange={(e) => setTarget(e.target.value)}>
-          <option value="">{t.koordinator.targetPreferences}</option>
-          {repos.map((r) => (
-            <option key={r.id} value={r.id}>
-              {t.koordinator.targetClaudeMd(r.name)}
-            </option>
-          ))}
-        </select>
-      </label>
+      <TargetPick value={target} repos={repos} onChange={setTarget} />
       {filed && <span className="hint filed">{filed}</span>}
       {error && <span className="p-error">{error}</span>}
     </div>
