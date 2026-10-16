@@ -1,16 +1,17 @@
 // Obeya's own settings, in `settings.json` under its home beside `canvases.json` and `demo.json`:
 // the language Obeya speaks to the owner, light or dark, the model and effort of each group of
-// agents, and the key that records a command from anywhere on the machine (heard by the app's
-// shell). The owner chooses them in the settings sheet; until then the system's language and look
-// apply, and the agents run as `AGENT_DEFAULTS` says. Saving restarts nothing: the page loads again
-// in the new language, takes the new look at once, and the server reads the file whenever it needs
-// the language or starts an agent.
+// agents, the key that records a command from anywhere on the machine (heard by the app's shell),
+// and how other devices reach Obeya (remote.ts). The owner chooses them in the settings sheet;
+// until then the system's language and look apply, the agents run as `AGENT_DEFAULTS` says, and
+// no other device reaches Obeya. Saving restarts nothing: the page loads again in the new
+// language, takes the new look at once, and the server reads the file whenever it needs the
+// language or starts an agent.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { OWNER_SETTINGS_FILE, systemLanguage } from '../../plugin/skills/demo/lib/language.ts';
 import { type Language, LANGUAGES } from '../core/locale';
-import { AGENT_DEFAULTS, AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentRole, type AgentSetting, type AgentsView, type LanguageView, type Theme, THEMES, type ThemeView } from '../core/types';
+import { AGENT_DEFAULTS, AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentRole, type AgentSetting, type AgentsView, type LanguageView, type RemoteSetting, type Theme, THEMES, type ThemeView } from '../core/types';
 import { defaultPushKey, parsePushKey } from '../core/push-key';
 import { BadRequest } from './board';
 
@@ -26,6 +27,8 @@ interface Settings {
   agents?: Partial<Record<AgentRole, Partial<AgentSetting>>>;
   /** The push-to-talk key anywhere on the machine, when not the default. */
   pushKey?: string;
+  /** How other devices reach Obeya; absent, they do not. */
+  remote?: RemoteSetting;
 }
 
 function read(home: string): Settings {
@@ -34,7 +37,7 @@ function read(home: string): Settings {
     const language = LANGUAGES.find((l) => l === o.language);
     const theme = THEMES.find((x) => x === o.theme);
     const pushKey = parsePushKey(o.pushKey) ?? undefined;
-    return { ...o, ...(language ? { language } : { language: undefined }), theme, agents: agentsOf(o.agents), pushKey };
+    return { ...o, ...(language ? { language } : { language: undefined }), theme, agents: agentsOf(o.agents), pushKey, remote: remoteOf(o.remote) ?? undefined };
   } catch {
     return {};
   }
@@ -128,4 +131,26 @@ export function savePushKey(home: string, input: unknown, platform: string = pro
   write(home, key && key !== defaultPushKey(platform) ? { ...rest, pushKey: key } : rest);
   console.log(`Obeya: push-to-talk key ${key ?? 'by default'} saved to ${join(home, SETTINGS_FILE)}`);
   return pushKeyChoice(home, platform);
+}
+
+/** A setting for other devices as the file or the page gives it; `null` for none or one Obeya cannot use. */
+export function remoteOf(input: unknown): RemoteSetting | null {
+  const o = (input && typeof input === 'object' ? input : {}) as { via?: unknown; address?: unknown };
+  if (o.via === 'tailscale') return { via: 'tailscale' };
+  if (o.via === 'address' && typeof o.address === 'string' && o.address.trim()) return { via: 'address', address: o.address.trim() };
+  return null;
+}
+
+/** How other devices reach Obeya, as the owner set it; `null`: they do not. */
+export const remoteSetting = (home: string): RemoteSetting | null => read(home).remote ?? null;
+
+/** Saves how other devices reach Obeya (`{ remote }`); `null` turns it off. Other settings in the file stay. */
+export function saveRemote(home: string, input: unknown): RemoteSetting | null {
+  const given = (input as { remote?: unknown } | null)?.remote;
+  const remote = given === null ? null : remoteOf(given);
+  if (given !== null && !remote) throw new BadRequest('invalid', 'remote must be null, { via: "tailscale" } or { via: "address", address }');
+  const { remote: _, ...rest } = existsSync(join(home, SETTINGS_FILE)) ? read(home) : {};
+  write(home, remote ? { ...rest, remote } : rest);
+  console.log(`Obeya: other devices ${remote ? `reach it ${remote.via === 'tailscale' ? 'through Tailscale' : `at ${remote.address}`}` : 'do not reach it'}, saved to ${join(home, SETTINGS_FILE)}`);
+  return remote;
 }

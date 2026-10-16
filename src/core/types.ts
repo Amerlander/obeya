@@ -901,6 +901,12 @@ export type CardAction =
  */
 export type ErrorCode =
   | 'unknownCard'
+  /** Pairing a device while other devices do not reach Obeya. */
+  | 'notReachable'
+  /** From another device that is not paired (status 401). */
+  | 'notPaired'
+  /** Managing who reaches Obeya, from another device (status 403). */
+  | 'onlyHere'
   /** A group that no card belongs to any more, so it is gone. */
   | 'unknownGroup'
   | 'project'
@@ -1389,6 +1395,71 @@ export interface ThemeView {
   file: string;
   /** What the owner chose; `null` follows the system. */
   chosen: Theme | null;
+}
+
+/**
+ * How other devices reach Obeya, when the owner lets them (`src/server/remote.ts`): through
+ * `tailscale serve`, which gives an HTTPS address in the tailnet, or on an address of this machine
+ * the owner picks (another VPN's interface), in plain HTTP.
+ */
+export type RemoteSetting = { via: 'tailscale' } | { via: 'address'; address: string };
+
+/** What Tailscale allows on this machine, as `tailscale status` says. */
+export type TailscaleState =
+  | { state: 'missing' }
+  /** Installed, but its service does not run (or the CLI cannot reach it). */
+  | { state: 'stopped' }
+  | { state: 'loggedOut' }
+  /** Logged in, but HTTPS certificates are off in the tailnet: `tailscale serve` cannot give an HTTPS address. */
+  | { state: 'noHttps'; name: string; enable?: string }
+  | { state: 'ready'; name: string };
+
+/** Why the address does not answer for other devices, though the setting is on. */
+export type RemoteProblem =
+  /** On Linux `tailscale serve` needs the operator right, given once (`sudo tailscale set --operator=$USER`). */
+  | { code: 'operator' }
+  /** Ports 443, 8443 and 10000 of the tailnet name already serve something else. */
+  | { code: 'portsTaken' }
+  /** The address picked is not one of this machine's, or listening on it failed. */
+  | { code: 'listen'; detail: string }
+  | { code: 'failed'; detail: string };
+
+/** A device paired with Obeya: its cookie lets it in from another machine. */
+export interface DeviceView {
+  id: string;
+  /** From its browser's user agent: „iPhone · Safari“. */
+  name: string;
+  pairedAt: string;
+  lastSeen: string;
+}
+
+/** A one-time code that pairs a device: in the QR code with the address, and to type in. */
+export interface Pairing {
+  code: string;
+  /** The address with the code, which the QR code holds. */
+  url: string;
+  expires: string;
+  /** The device it paired, once one did. */
+  paired?: DeviceView;
+}
+
+/** The section „Von anderen Geräten“ and „Telefon verbinden“ (`/api/access`), for a page on this machine. */
+export interface AccessView {
+  local: true;
+  /** The file the setting is saved in. */
+  file: string;
+  /** `null`: other devices do not reach Obeya. */
+  remote: RemoteSetting | null;
+  tailscale: TailscaleState;
+  /** Where other devices reach Obeya now; `null` while they do not. */
+  address: string | null;
+  problem?: RemoteProblem;
+  /** This machine's addresses beyond loopback, to pick one for another VPN. */
+  addresses: string[];
+  devices: DeviceView[];
+  pairing: Pairing | null;
+  /** The server's platform: what to install or run differs by it. */
+  platform: string;
 }
 
 /** The agents Obeya runs, grouped as the owner sets their model and effort (`src/server/settings.ts`). */

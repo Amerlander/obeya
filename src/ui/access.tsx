@@ -1,0 +1,275 @@
+// Other devices reaching Obeya (src/server/remote.ts): the dialog „Telefon verbinden“ the phone icon
+// in the bar opens, with the QR code that pairs a phone, and the section „Von anderen Geräten“ of the
+// configuration, with the setting, what the network lacks, the address and the paired devices. Both
+// show the setting and the network the same way (`Reach`), and only on this machine itself.
+
+import { Fragment, type ReactNode, useEffect, useState } from 'react';
+import { encode } from 'uqr';
+import type { AccessView, RemoteSetting } from '../core/types';
+import { api, ApiError } from './api';
+import { Field, Head } from './config';
+import { clock, errorText, shortDay, t } from './strings';
+
+/** Text with `code` in backticks, as the strings write commands. */
+function Coded({ text }: { text: string }) {
+  return (
+    <>
+      {text.split('`').map((part, i) => (i % 2 ? <code key={i}>{part}</code> : <Fragment key={i}>{part}</Fragment>))}
+    </>
+  );
+}
+
+/** The view of the section while `on`, looked at again every few seconds: Tailscale logged in meanwhile, a phone paired. */
+function useAccess(on: boolean): [AccessView | null, (v: AccessView) => void] {
+  const [view, setView] = useState<AccessView | null>(null);
+  useEffect(() => {
+    if (!on) return;
+    let live = true;
+    const load = () => api.access().then((v) => live && v.local && setView(v), console.error);
+    void load();
+    const timer = setInterval(load, 2500);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [on]);
+  return [view, setView];
+}
+
+/** Whether this page is on the machine Obeya runs on: only there are devices paired. */
+export function useLocalPage(): boolean {
+  const [local, setLocal] = useState(false);
+  useEffect(() => {
+    api.access().then((v) => setLocal(v.local), () => {});
+  }, []);
+  return local;
+}
+
+/** A moment as the device list says it: the time today, else the day. */
+const when = (iso: string) => (new Date(iso).toDateString() === new Date().toDateString() ? clock(iso) : shortDay(iso));
+
+/** The setting „Von anderen Geräten erreichbar“ and what the network needs for it, with one step each. */
+function Reach({ view, onView }: { view: AccessView; onView: (v: AccessView) => void }) {
+  const a = t.access;
+  const [status, setStatus] = useState('');
+  const [busy, setBusy] = useState(false);
+  const save = async (remote: RemoteSetting | null) => {
+    setBusy(true);
+    setStatus('');
+    try {
+      onView(await api.saveAccess(remote));
+    } catch (e) {
+      setStatus(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const via = view.remote?.via ?? null;
+  const ts = view.tailscale;
+  const p = view.problem;
+  const step = ts.state === 'missing' ? (a.step.missing[view.platform] ?? a.step.missing.linux!) : ts.state === 'ready' ? null : a.step[ts.state];
+  return (
+    <>
+      <Field label={a.setting}>
+        <div className="seg" role="radiogroup" aria-label={a.setting}>
+          {([null, 'tailscale', 'address'] as const).map((x) => (
+            <button
+              key={x ?? 'off'}
+              type="button"
+              role="radio"
+              aria-checked={via === x}
+              className={via === x ? 'on' : undefined}
+              disabled={busy}
+              onClick={() => via !== x && save(x === 'tailscale' ? { via: 'tailscale' } : x === 'address' ? { via: 'address', address: view.addresses[0] ?? '' } : null)}
+            >
+              {x === 'tailscale' ? a.tailscale : x === 'address' ? a.address : a.off}
+            </button>
+          ))}
+        </div>
+        <p className="hint">
+          <Coded text={via === 'tailscale' ? a.tailscaleHint : via === 'address' ? a.addressHint : a.offHint} />
+        </p>
+      </Field>
+      {via === 'address' && (
+        <Field label={a.pick}>
+          <select aria-label={a.pick} value={view.remote?.via === 'address' ? view.remote.address : ''} disabled={busy} onChange={(e) => e.target.value && save({ via: 'address', address: e.target.value })}>
+            {!view.addresses.length && <option value="">{a.pickNone}</option>}
+            {view.addresses.map((x) => (
+              <option key={x} value={x}>
+                {x}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
+      {via === 'tailscale' && (
+        <Field label={a.network}>
+          <div className={ts.state === 'ready' ? 'acc-state ok' : 'acc-state'}>{ts.state === 'ready' ? a.state.ready(ts.name) : a.state[ts.state]}</div>
+          {step && (
+            <p className="hint acc-step">
+              <Coded text={step} />
+            </p>
+          )}
+          {ts.state === 'noHttps' && (
+            <a className="btn small" href="https://login.tailscale.com/admin/dns" target="_blank" rel="noreferrer">
+              {a.openDns}
+            </a>
+          )}
+        </Field>
+      )}
+      {via && (
+        <Field label={a.reach}>
+          {view.address ? <code className="acc-address">{view.address}</code> : <span className="hint">{a.notYet}</span>}
+          {p && (
+            <p className="p-error">
+              {p.code === 'operator' ? (
+                <>
+                  <Coded text={a.problem.operator} /> <code>sudo tailscale set --operator=$USER</code>
+                </>
+              ) : p.code === 'portsTaken' ? (
+                <Coded text={a.problem.portsTaken} />
+              ) : (
+                a.problem[p.code](p.detail)
+              )}
+            </p>
+          )}
+        </Field>
+      )}
+      {status && <p className="hint c-status">{status}</p>}
+    </>
+  );
+}
+
+/** A QR code of `text`, dark on white whatever the theme, so every camera reads it. */
+function Qr({ text, size = 220 }: { text: string; size?: number }) {
+  const { data, size: n } = encode(text, { ecc: 'M', border: 3 });
+  let d = '';
+  data.forEach((row, y) => row.forEach((dark, x) => dark && (d += `M${x} ${y}h1v1h-1z`)));
+  return (
+    <svg className="acc-qr" width={size} height={size} viewBox={`0 0 ${n} ${n}`} shapeRendering="crispEdges" role="img" aria-label={text}>
+      <rect width={n} height={n} fill="#fff" />
+      <path d={d} fill="#000" />
+    </svg>
+  );
+}
+
+/** The section „Von anderen Geräten“ of the configuration. */
+export function AccessSection({ on, onConnect }: { on: boolean; onConnect: () => void }) {
+  const a = t.access;
+  const [view, setView] = useAccess(on);
+  const [status, setStatus] = useState('');
+  if (!view) return <Head title={t.config.sections.devices} hint={a.hint} />;
+  const remove = async (id: string) => {
+    setStatus('');
+    try {
+      await api.removeDevice(id);
+      setView({ ...view, devices: view.devices.filter((d) => d.id !== id) });
+    } catch (e) {
+      setStatus(e instanceof ApiError ? errorText(e.code) : t.offlineError);
+    }
+  };
+  return (
+    <>
+      <Head title={t.config.sections.devices} hint={a.hint} file={view.file} />
+      <Reach view={view} onView={setView} />
+      {view.address && (
+        <Field label="">
+          <button className="btn small primary" onClick={onConnect}>
+            {a.connect}
+          </button>
+        </Field>
+      )}
+      <Head sub title={a.devices} hint={a.devicesHint} />
+      {view.devices.length ? (
+        <ul className="acc-devices">
+          {view.devices.map((d) => (
+            <li key={d.id}>
+              <span className="acc-name">{d.name}</span>
+              <span className="hint">{a.pairedAt(when(d.pairedAt))}</span>
+              <span className="hint">{a.seenAt(when(d.lastSeen))}</span>
+              <button className="btn small" onClick={() => void remove(d.id)}>
+                {a.remove}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="hint">{a.noDevices}</p>
+      )}
+      {status && <p className="hint c-status">{status}</p>}
+      <p className="hint acc-note">{a.whileRunning}</p>
+    </>
+  );
+}
+
+/**
+ * „Telefon verbinden“: with other devices reaching Obeya, a QR code of the address with a one-time
+ * code (a new one once it expires) until a phone paired with it; else what is still missing, to set
+ * right here.
+ */
+export function PhoneDialog({ onClose, onSection }: { onClose: () => void; onSection: () => void }) {
+  const a = t.access;
+  const [view, setView] = useAccess(true);
+  const [asked, setAsked] = useState(false);
+  const pairing = view?.pairing ?? null;
+  // a code as soon as there is an address, and a new one when it expired unused
+  useEffect(() => {
+    if (!view?.address || pairing || asked) return;
+    setAsked(true);
+    api.pair().then((p) => setView({ ...view, pairing: p }), console.error).finally(() => setAsked(false));
+  }, [view?.address, pairing?.code]);
+  const another = () => api.pair().then((p) => view && setView({ ...view, pairing: p }), console.error);
+  let body: ReactNode;
+  if (!view) body = null;
+  else if (!view.address)
+    body = (
+      <>
+        <p>{a.first}</p>
+        <div className="acc-fields">
+          <Reach view={view} onView={setView} />
+        </div>
+      </>
+    );
+  else if (pairing?.paired)
+    body = (
+      <div className="acc-done">
+        <p className="acc-connected">{a.connected(pairing.paired.name)}</p>
+        <button className="btn small" onClick={() => void another()}>
+          {a.another}
+        </button>
+      </div>
+    );
+  else if (pairing)
+    body = (
+      <div className="acc-pair">
+        <Qr text={pairing.url} />
+        <div>
+          <p>{a.scan}</p>
+          <p className="hint">{a.orType}</p>
+          <p>
+            <code className="acc-address">{view.address}</code>
+          </p>
+          <p className="acc-code" aria-label={pairing.code}>
+            {pairing.code.slice(0, 3)} {pairing.code.slice(3)}
+          </p>
+          <p className="hint">{a.validUntil(clock(pairing.expires))}</p>
+        </div>
+      </div>
+    );
+  return (
+    <div id="phone" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="box" role="dialog" aria-modal="true" aria-label={a.connect}>
+        <button className="close" title={t.close} onClick={onClose}>
+          ✕
+        </button>
+        <h2>{a.connect}</h2>
+        {body}
+        <div className="acc-foot">
+          <button className="btn small" onClick={onSection}>
+            {a.toSection}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

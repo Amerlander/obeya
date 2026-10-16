@@ -7,6 +7,7 @@ import { type CSSProperties, Fragment, type ReactNode, useEffect, useId, useRef,
 import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigChecked, type ConfigProblem, type ConfigView, type DemoSettings, type DemoSettingsView, type DemoSite, type DemoVoiceCheck, type Language, type HostConfig, type LanguageView, type NarrationLanguage, restartsAgents, type RepoConfig, type RepoSettings, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type SetupCheck, type Theme, THEMES, type ThemeView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
 import { LANGUAGES } from '../core/locale';
 import { pushKeyFromEvent, type PushKeyView } from '../core/push-key';
+import { AccessSection } from './access';
 import { api, ApiError, reload } from './api';
 import { keepConfigDraft, keptConfigDraft } from './configDraft';
 import { keep } from './keep';
@@ -27,13 +28,16 @@ type Checked = Pick<ConfigChecked, 'resolved' | 'problems'>;
 type Ask = (text: string, canvas?: string) => void;
 
 /** The dialog's sections, in the order its list shows them. */
-type Section = 'canvases' | 'agents' | 'voice' | 'demos' | 'general';
-const SECTIONS: Section[] = ['canvases', 'agents', 'voice', 'demos', 'general'];
+type Section = 'canvases' | 'agents' | 'voice' | 'demos' | 'devices' | 'general';
+const SECTIONS: Section[] = ['canvases', 'agents', 'voice', 'demos', 'devices', 'general'];
 // the section shown, per tab: a new language reloads the page (as a save that restarts Obeya does), and the dialog comes back at it
 const SECTION_KEY = 'obeya-config-section';
 
 /** Opens the dialog at the canvases and their repositories next time, as from the note on a plan directory. */
 export const showCanvasesSection = () => sessionStorage.setItem(SECTION_KEY, 'canvases');
+
+/** Opens the dialog at „Von anderen Geräten“ next time, as from „Telefon verbinden“. */
+export const showDevicesSection = () => sessionStorage.setItem(SECTION_KEY, 'devices');
 
 /** A repository's clone count (or its slots, or one of its settings, folded open) to show and focus when the dialog opens. */
 export interface ConfigFocus {
@@ -74,7 +78,7 @@ function pinned(kept: KeptCanvases, loaded: CanvasConfig[], resolved: Checked['r
   return { draft: out.map((x) => x.c), origin: out.map((x) => x.id) };
 }
 
-export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }: { on: boolean; onClose: () => void; onSetup: () => void; onAsk: Ask; onTalk: () => void; onProblems: (n: number) => void }) {
+export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems, onConnect }: { on: boolean; onClose: () => void; onSetup: () => void; onAsk: Ask; onTalk: () => void; onProblems: (n: number) => void; onConnect: () => void }) {
   const [view, setView] = useState<ConfigView | null>(null);
   const [draft, setDraft] = useState<CanvasConfig[]>([]);
   const [checked, setChecked] = useState<Checked | null>(null);
@@ -280,6 +284,9 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }
           <section className="cfg-sec" hidden={section !== 'demos'}>
             <DemoBlock on={on} />
           </section>
+          <section className="cfg-sec" hidden={section !== 'devices'}>
+            <AccessSection on={on && section === 'devices'} onConnect={onConnect} />
+          </section>
           <section className="cfg-sec" hidden={section !== 'general'}>
             <Head title={c.sections.general} />
             <LanguageBlock on={on} />
@@ -293,7 +300,7 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems }
 }
 
 /** A section's title, what it is about, and the file it is saved in; `sub` for a part of a section. */
-function Head({ title, hint, file, sub }: { title: string; hint?: ReactNode; file?: string; sub?: boolean }) {
+export function Head({ title, hint, file, sub }: { title: string; hint?: ReactNode; file?: string; sub?: boolean }) {
   return (
     <header className={sub ? 'cfg-head sub' : 'cfg-head'}>
       {sub ? <h4>{title}</h4> : <h3>{title}</h3>}
@@ -308,7 +315,7 @@ function Head({ title, hint, file, sub }: { title: string; hint?: ReactNode; fil
 }
 
 /** One setting: what it is on the left, the control with what to know about it on the right. */
-function Field({ label, hint, children }: { label: ReactNode; hint?: ReactNode; children: ReactNode }) {
+export function Field({ label, hint, children }: { label: ReactNode; hint?: ReactNode; children: ReactNode }) {
   return (
     <div className="cfg-field">
       <div className="cfg-label">{label}</div>

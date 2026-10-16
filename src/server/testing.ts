@@ -170,3 +170,51 @@ export function artifact(): { kind: 'html'; dir: string } {
   writeFileSync(join(dir, 'index.html'), '<p>Ergebnis</p>\n');
   return { kind: 'html', dir };
 }
+
+/**
+ * A stand-in for Tailscale's CLI, in `dir`: `status --json` answers `<dir>/status.json` (as
+ * `tailscaleStatus` writes it), `serve status --json` and `serve --bg --https=<port> <target>` /
+ * `serve --https=<port> off` read and change `<dir>/serve.json`. While `<dir>/fail` exists, `serve`
+ * fails with its text on stderr. Each call is appended to `<dir>/calls`.
+ */
+export function fakeTailscale(dir: string, status: TailscaleStatus = { state: 'Running', name: 'mac.tail1234.ts.net', https: true }): string {
+  mkdirSync(dir, { recursive: true });
+  const program = join(dir, 'tailscale');
+  const script = join(dir, 'tailscale.ts');
+  writeFileSync(
+    script,
+    `import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+const dir = ${JSON.stringify(dir)};
+const args = process.argv.slice(2);
+appendFileSync(dir + '/calls', args.join(' ') + '\\n');
+const status = JSON.parse(readFileSync(dir + '/status.json', 'utf8'));
+const config = existsSync(dir + '/serve.json') ? JSON.parse(readFileSync(dir + '/serve.json', 'utf8')) : {};
+if (args[0] === 'status') console.log(JSON.stringify(status));
+else if (args[0] === 'serve' && args[1] === 'status') console.log(JSON.stringify(config));
+else if (args[0] === 'serve') {
+  if (existsSync(dir + '/fail')) { console.error(readFileSync(dir + '/fail', 'utf8')); process.exit(1); }
+  const port = args.find((a) => a.startsWith('--https='))!.slice(8);
+  const name = status.Self.DNSName.replace(/\\.$/, '');
+  const target = args[args.length - 1];
+  config.TCP ??= {}; config.Web ??= {};
+  if (target === 'off') { delete config.TCP[port]; delete config.Web[name + ':' + port]; }
+  else { config.TCP[port] = { HTTPS: true }; config.Web[name + ':' + port] = { Handlers: { '/': { Proxy: target } } }; }
+  writeFileSync(dir + '/serve.json', JSON.stringify(config));
+}
+`,
+  );
+  writeFileSync(program, `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(script)} "$@"\n`, { mode: 0o755 });
+  tailscaleStatus(dir, status);
+  return program;
+}
+
+/** What the fake `tailscale status --json` says: its backend's state, the machine's tailnet name, whether HTTPS is on. */
+export interface TailscaleStatus {
+  state: 'Running' | 'NeedsLogin' | 'Stopped';
+  name: string;
+  https: boolean;
+}
+
+export function tailscaleStatus(dir: string, s: TailscaleStatus) {
+  writeFileSync(join(dir, 'status.json'), JSON.stringify({ BackendState: s.state, Self: { DNSName: `${s.name}.` }, CertDomains: s.https ? [s.name] : null }));
+}

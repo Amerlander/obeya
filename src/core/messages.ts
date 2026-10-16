@@ -296,6 +296,15 @@ const de = {
     body: (file: string) =>
       `Bereite \`${file}\` so auf, dass Obeya es als Projekt zeigt. Obeya liest ein Plan-Doc als Projekt, wenn unter \`## Workstreams\` (oder \`## Arbeitspakete\`) eine Checkliste steht: Jeder Punkt der obersten Ebene ist ein Workstream (\`- [ ] **W1:** Titel. Details\`), ein Paket, das einzeln landen kann, und ein abgehakter ist gelandet. Das Ziel des Projekts ist der erste Absatz unter \`## Goal\` (oder \`## Ziel\`).\n\nErgänze die Checkliste, und das Ziel, wenn es fehlt, im Stil des Docs aus dem, was es plant. Führt es seine Aufgaben schon unter einer anderen Überschrift (Tasks, Meilensteine, Phasen), wird daraus die Checkliste, statt sie zu verdoppeln. Hake ab, was schon erledigt ist; ist alles erledigt, sag es mir, denn ein Projekt mit lauter abgehakten Workstreams geht gleich ins Archiv. Der übrige Text bleibt, und gebaut wird nichts davon.`,
   },
+  /** The page another device gets until it is paired (src/server/remote.ts). */
+  notPaired: {
+    title: 'Nicht verbunden · Obeya',
+    heading: 'Dieses Gerät ist nicht mit Obeya verbunden',
+    how: 'Am Rechner, auf dem Obeya läuft: oben in der Leiste das Telefon-Symbol, dann den QR-Code mit der Kamera dieses Geräts scannen. Oder den Code, der dort steht, hier eingeben:',
+    code: 'Code',
+    pair: 'Verbinden',
+    wrong: 'Dieser Code stimmt nicht oder ist abgelaufen. „Telefon verbinden“ am Rechner zeigt einen neuen.',
+  },
 };
 
 export type Messages = typeof de;
@@ -571,6 +580,14 @@ const en: Messages = {
     title: (file: string) => `Prepare ${file.slice(file.lastIndexOf('/') + 1)} as a project`,
     body: (file: string) =>
       `Prepare \`${file}\` so that Obeya shows it as a project. Obeya reads a plan doc as a project when a checklist stands under \`## Workstreams\` (or \`## Arbeitspakete\`): each top-level item is a workstream (\`- [ ] **W1:** Title. Details\`), a package that can land on its own, and a ticked one has landed. The project's goal is the first paragraph under \`## Goal\` (or \`## Ziel\`).\n\nAdd the checklist, and the goal if it is missing, in the doc's own style, from what it plans. If the doc already keeps its tasks under another heading (Tasks, Milestones, Phases), that becomes the checklist instead of a copy of it. Tick what is already done; if everything is, tell me, since a project whose workstreams are all ticked goes straight to the archive. The rest of the text stays, and nothing of it is built.`,
+  },
+  notPaired: {
+    title: 'Not connected · Obeya',
+    heading: 'This device is not connected to Obeya',
+    how: "On the computer Obeya runs on: the phone icon at the top of the bar, then scan the QR code with this device's camera. Or type the code shown there here:",
+    code: 'Code',
+    pair: 'Connect',
+    wrong: 'This code is wrong or has expired. “Connect a phone” on the computer shows a new one.',
   },
 };
 

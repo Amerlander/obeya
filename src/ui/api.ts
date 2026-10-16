@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { CardDiff } from '../core/diff';
 import type { PushKeyView } from '../core/push-key';
 import { type Place, placeParam } from '../core/layout';
-import type { AgentRole, AgentSetting, CloudPreset, AgentsView, CanvasConfig, CanvasInfo, CanvasSnapshot, ClientMessage, ConfigSaved, ConfigView, CardAction, ConfigChecked, DemoSettings, Group, DemoSettingsView, DemoVoiceCheck, FirstCanvas, GitSetupPreview, MachineItem, MachineSectionId, MachineView, SetupCheck, SetupFolder, VoiceSetupView, CardEvent, CardPatch, Item, Language, LanguageView, NewCard, Notice, OwnerHold, PendingRestart, ProjectHistory, ServerMessage, SettingsShared, SpotInput, TalkRef, AppUpdate, Theme, ThemeView } from '../core/types';
+import type { AccessView, Pairing, RemoteSetting, AgentRole, AgentSetting, CloudPreset, AgentsView, CanvasConfig, CanvasInfo, CanvasSnapshot, ClientMessage, ConfigSaved, ConfigView, CardAction, ConfigChecked, DemoSettings, Group, DemoSettingsView, DemoVoiceCheck, FirstCanvas, GitSetupPreview, MachineItem, MachineSectionId, MachineView, SetupCheck, SetupFolder, VoiceSetupView, CardEvent, CardPatch, Item, Language, LanguageView, NewCard, Notice, OwnerHold, PendingRestart, ProjectHistory, ServerMessage, SettingsShared, SpotInput, TalkRef, AppUpdate, Theme, ThemeView } from '../core/types';
 
 /** A request the server refused; `code` picks the owner's text, the message is the server's detail. */
 export class ApiError extends Error {
@@ -88,6 +88,11 @@ export const api = {
   saveLanguage: (language: Language | null) => call<LanguageView>('PUT', '/api/language', { language }),
   /** Light or dark as the owner chose, or `null` for the system's. */
   theme: () => call<ThemeView>('GET', '/api/theme'),
+  // other devices reaching Obeya: the section „Von anderen Geräten“ and „Telefon verbinden“
+  access: () => call<AccessView | { local: false }>('GET', '/api/access'),
+  saveAccess: (remote: RemoteSetting | null) => call<AccessView>('PUT', '/api/access', { remote }),
+  pair: () => call<Pairing>('POST', '/api/access/pair'),
+  removeDevice: (id: string) => call<{ removed: boolean }>('DELETE', `/api/access/devices/${encodeURIComponent(id)}`),
   saveTheme: (theme: Theme | null) => call<ThemeView>('PUT', '/api/theme', { theme }),
   /** The model and effort of each group of agents. */
   agents: () => call<AgentsView>('GET', '/api/agents'),
@@ -366,8 +371,12 @@ export function useCanvas(): {
       ws.onclose = () => {
         if (closed) return;
         setOnline(false);
-        // a canvas the configuration no longer has: the page goes to the first one there is
-        api.canvases().then((list) => list.some((c) => c.id === canvasId) || location.replace(location.pathname), () => {});
+        // a canvas the configuration no longer has: the page goes to the first one there is; a
+        // device removed from Obeya's devices gets the page that says how to connect again
+        api.canvases().then(
+          (list) => list.some((c) => c.id === canvasId) || location.replace(location.pathname),
+          (e) => e instanceof ApiError && e.code === 'notPaired' && location.reload(),
+        );
         retry = setTimeout(connect, delay);
         delay = Math.min(delay * 2, 8000);
       };

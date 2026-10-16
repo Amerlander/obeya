@@ -16,14 +16,18 @@ service of its own, and none of this is macOS-only: it works on Windows and Linu
 
 ## Where it stands
 
-- The server listens on `127.0.0.1` only (`Bun.serve` in `src/server/server.ts`), with no login.
-  Nothing outside the machine reaches it.
+- The server listens on `127.0.0.1` (`Bun.serve` in `src/server/server.ts`). With „Von anderen
+  Geräten erreichbar“ on (W2, `src/server/remote.ts`, design: Other devices), `tailscale serve`
+  proxies HTTPS at the tailnet name to it, or it also listens on an address the owner picked; a
+  device paired by the QR code of „Telefon verbinden“ (the phone icon in the bar) gets in with its
+  cookie, any other remote request gets the page that says how to connect. A device stays paired
+  until removed or unused for 90 days.
 - Every request and WebSocket upgrade is checked for `Host`, `Origin` and `Sec-Fetch-Site` (W1,
   `src/server/access.ts`, design: Who may talk to it). Before, a POST to `/api/c/<canvas>/cards`
   with `Origin: https://evil.example`, `Sec-Fetch-Site: cross-site` and a `text/plain` body created
   the card, and so did one with `Host: rebound.evil.example` (DNS rebinding); both get 403 and 421
-  now. The names it answers to are `LOCAL_HOSTS` there; W2 adds the tailnet name and the address
-  it listens on.
+  now. The names it answers to are `LOCAL_HOSTS` there, and the tailnet name or the other address
+  while other devices reach Obeya.
 - The UI is the canvas, built for a large screen. A window up to 760 px wide only lays the sheets
   over the canvas (`NARROW` in `src/ui/App.tsx`, `styles.css`); there is no touch handling.
 - The page holds one WebSocket per canvas (`/ws`, `src/ui/api.ts`) and tells the server when it
@@ -63,8 +67,8 @@ service of its own, and none of this is macOS-only: it works on Windows and Linu
   holding the address and a one-time pairing code (valid a few minutes, also shown as text to type
   in). The phone opens it, and the server sets a long-lived device cookie: random, stored hashed in
   the database with a name from the user agent, when it was paired and last seen; `HttpOnly`,
-  `SameSite=Strict`, `Secure` on HTTPS. How long a device stays paired is settled in the
-  workstream.
+  `SameSite=None; Secure` on HTTPS (so a worker's HTML artifact loads its files on the phone),
+  `SameSite=Lax` on HTTP. A device stays paired until removed or unused for 90 days (W2).
 - **Devices.** The configuration lists the paired devices with name and last seen, each with
   „Entfernen“, which takes effect at once (no undo: pairing again is quick): its cookie stops
   working, its open WebSockets close, its push subscription goes.
@@ -199,5 +203,4 @@ view says that it does not answer. A closed MacBook lid on battery sleeps regard
 
 ## Open questions
 
-None. The workstreams settle the rest: the rule for when the phone view shows (W3) and how long a
-device stays paired (W2).
+None. W3 settles the rule for when the phone view shows.

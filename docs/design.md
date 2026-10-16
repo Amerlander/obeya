@@ -1161,9 +1161,13 @@ what it waits for and the buttons that move it, and a row opens its card; a clic
 Esc closes it. The archive's button lists the archive under it the same way (`src/ui/archive.tsx`).
 The bar's buttons are all one height.
 
+Right in the bar, before „Konfiguration“, a phone icon opens „Telefon verbinden“ (see Other
+devices); it shows only on a page on the machine Obeya runs on.
+
 The bar's buttons always fit into it (`src/ui/barFit.ts`): narrower than its contents, beside a wide
 sheet or in a narrow window, it gives up in steps the wordmark for the sign and the branch, then the
-labels for icons a few at a time, then the pool and `?`, then all but the sheets' buttons. Which
+labels for icons a few at a time, then the pool, `?` and the phone icon, then all but the sheets'
+buttons. Which
 step is measured (the bar's right end within its padding) whenever its width or contents change,
 because the same width holds a short branch or a long one and one machine's clones or three.
 
@@ -3583,7 +3587,8 @@ The canvases with their repositories (path, clones, settings), seen and edited i
 it; what was open behind it stays as it was, and a draft not saved yet stays, written down per tab
 as it changes, so a reload, Obeya's restart included, brings it back) and lists its sections on the
 left: Leinwände, Modelle und Effort, Spracheingabe (with the push-to-talk key), Demos (the narration
-beside what demos need on this machine) and Allgemein (language, light or dark, the server). One
+beside what demos need on this machine), Von anderen Geräten (see Other devices) and Allgemein
+(language, light or dark, the server). One
 section shows at a time, the last one chosen per tab, so a save's restart or a new language comes
 back to it; Leinwände marks a draft not saved yet and counts its problems in red.
 
@@ -3884,19 +3889,78 @@ date (`OlderDatabase`).
 
 #### Who may talk to it
 
-The server listens on `127.0.0.1` only, with no login, and still answers no other site: any page
-open in the owner's browser may send requests there (a `text/plain` POST needs no preflight, and
+The server listens on `127.0.0.1`, with no login, and still answers no other site: any page open in
+the owner's browser may send requests there (a `text/plain` POST needs no preflight, and
 `req.json()` parses it all the same), and a DNS name rebound to `127.0.0.1` reaches it under that
 name. So every request and every WebSocket upgrade, from this machine too, passes a check first
-(`src/server/access.ts`): its `Host` names one of Obeya's own names (`localhost`, `127.0.0.1`,
-`[::1]`; the port is not checked), else 421; an `Origin`, where it has one, is Obeya's own (scheme, host
-and port of the address it was sent to), and it carries no `Sec-Fetch-Site: cross-site`, else 403.
+(`src/server/access.ts`): its `Host` (and `X-Forwarded-Host`, where a proxy set it) names one of
+Obeya's own names (`localhost`, `127.0.0.1`, `[::1]`, and while other devices reach Obeya the
+tailnet name or the address it listens on; the port is not checked), else 421; an `Origin`, where
+it has one, is Obeya's own (scheme, host and port of the address it was sent to, as
+`X-Forwarded-Proto` and `-Host` say behind `tailscale serve`), and it carries no
+`Sec-Fetch-Site: cross-site`, else 403.
 Requests with neither header (the app's shell sending `POST /api/stop`, scripts, curl, the workers'
 narration) pass. The page and the push-to-talk panel are checked too: Bun serves an HTML bundle
 past any handler, so each moves to a path made up at every start and its own path fetches it from
 there once the request passed. A GET of the workers' files (an HTML artifact's, an answer's) passes
 from another origin: their sandboxed frame has the origin `null`, so the browser sends what its page
-loads (its stylesheet, its images, its scripts) as cross-site.
+loads (its stylesheet, its images, its scripts) as cross-site. Then the gate of other devices
+(below) has its say.
+
+#### Other devices
+
+The owner's phone reaches Obeya over the owner's own private network (`src/server/remote.ts`,
+`src/server/tailscale.ts`, `src/ui/access.tsx`); Obeya runs no service of its own for it and goes
+onto no open internet. The setting „Von anderen Geräten erreichbar“ (`remote` in `settings.json`)
+is off by default, and off Obeya answers only on this machine. On, it is one of two:
+
+- *Über Tailscale*: Obeya keeps listening on `127.0.0.1` and runs `tailscale serve --bg
+  --https=<port> http://127.0.0.1:<its port>`, which proxies HTTPS and WebSockets from
+  `https://<machine>.<tailnet>.ts.net`, the name `tailscale status --json` gives. It takes 443,
+  else 8443, else 10000, whichever no entry serves yet, and touches no other entry; the one it made
+  it notes in `tailscale-serve.json` in its home, so it moves that entry to a new port of its own
+  (the app may pick another) and turning the setting off removes it, and only it, after a restart
+  too. The entry stays while Obeya is stopped, so the address stays the same.
+- *Über eine Adresse*: Obeya also listens on an address of this machine the owner picks from its
+  interfaces (another VPN's), with the same routes, in plain HTTP. The section says that a phone's
+  browser allows the microphone and push only over HTTPS.
+
+The section „Von anderen Geräten“ of the configuration and „Telefon verbinden“ show the setting the
+same way, with what the network lacks, each with its one step: Tailscale missing (how to install it,
+per platform), not running, logged out, HTTPS off in the tailnet (a link to the DNS page of the
+admin console; `CertDomains` empty in its status), on Linux the operator right `tailscale serve`
+needs (`sudo tailscale set --operator=$USER`, recognised by its "Access denied"), all three ports
+taken. They look at Tailscale again every few seconds while open, so logging in or turning HTTPS on
+shows (and serves Obeya) without a click. The section also says that other devices reach Obeya
+only while it runs here.
+
+A request is *local* when it comes from loopback under one of this machine's names and no proxy
+forwarded it (no `X-Forwarded-For`, `-Host`, `Forwarded`); through `tailscale serve` requests come
+from `127.0.0.1` too, but under the tailnet name and forwarded, and count as remote, as does
+anything on the other address. A remote request needs a paired device; without one the page is
+„Dieses Gerät ist nicht mit Obeya verbunden“ with how to connect and a field for the code (401),
+the API answers 401 `notPaired`, and a WebSocket opens not at all.
+
+*Pairing.* The phone icon in the bar opens „Telefon verbinden“: while other devices reach Obeya, a
+QR code of `<address>/pair?code=<code>` beside the address and the code in large digits. The code
+has six digits, holds five minutes (a new one comes when it ran out with the dialog open) and pairs
+one device; five wrong tries spend it. The phone opens the address (the camera reads the code), and
+the server sets the device cookie `obeya-device` (32 random bytes; the database keeps only its
+SHA-256 with a name from the user agent, „iPhone · Safari“, and when it was paired and last seen)
+and sends it to the canvas; the dialog then says „iPhone · Safari ist verbunden.“. The cookie is
+`HttpOnly`; over HTTPS `Secure; SameSite=None`, so what a worker's HTML artifact loads in its
+sandboxed frame (cross-site, as above) carries it too, and the origin check keeps other sites out as
+on this machine; over HTTP `SameSite=Lax`, where an HTML artifact's own files therefore do not load
+on the phone.
+
+*Devices.* The section lists them with when they were paired and last seen, each with „Entfernen“,
+which takes effect at once and has no undo (pairing again is quick): its cookie lets nothing in,
+and its open pages lose their WebSocket and reload to the page that says how to connect. A device
+stays paired until it is removed or has gone unused for 90 days (a phone given away or lost and
+forgotten); the cookie itself lives 400 days, the longest browsers keep one. Pairing, the devices
+and the setting are managed only on this machine (`/api/access…` answers another device 403
+`onlyHere`, and its page shows no phone icon): a phone that is lost cannot pair others or keep
+itself in.
 
 ### Setup assistant
 
@@ -4036,6 +4100,13 @@ Python sidecars ignore Ctrl-C instead.
 
 ### Decisions
 
+- **Other devices over the owner's private network, paired by a QR code** (2026-10-16, from the
+  plan „Obeya from the phone“): a public tunnel puts agents with shell rights on the open internet,
+  and a relay of Obeya's own is a cloud service. A paired device stays paired until removed or
+  unused for 90 days, rather than for a fixed time: a phone in daily use should not have to pair
+  again, and one forgotten drops by itself. Managing devices only on the machine itself, so a lost
+  phone cannot keep itself in. The cookie is `SameSite=None` over HTTPS rather than `Strict`, which
+  the plan said: with `Strict` a worker's HTML artifact on the phone could not load its own files.
 - **Obeya restarts itself for new code on its own checkout instead of hot reloading**: a restart is
   a path that already exists (workers resume by session id), hot reloading keeps old state alive
   next to new code. It also restarts for commits made outside Obeya.
@@ -4414,6 +4485,8 @@ Persistent (SQLite):
 - groups (name, colour) and the group of each card;
 - per-canvas settings (the home repository; per repository the card collecting its CLAUDE.md rules; the Rückschau's count and when its history
   begins; per repository the Arbeitsrückschau's count and when it last ran);
+- the devices paired to reach Obeya from elsewhere (`devices`: the hash of the cookie, name, when
+  paired and last seen);
 - the friction noted on each card's runs (per repository), and on a card the Arbeitsrückschau
   proposed what it rests on, and the settings' values it proposed (`setting_proposals`: repository,
   setting, value, basis, cards, and where the owner took it).
@@ -4421,6 +4494,7 @@ Persistent (SQLite):
 Files under `~/.obeya/` (the same for the app and a checkout): the database (`obeya.db`), the
 owner's screenshots (`images/<canvas>/`), the configuration (`canvases.json`), the settings
 (`settings.json`, `demo.json`, `voice.json`), where the running Obeya answers (`server.json`), the
+`tailscale serve` entry Obeya made (`tailscale-serve.json`), the
 app's server log (`app.log`), voices and models (`voices/`), the workers' clones and worktrees
 (`workspaces/`), the Lesestand's worktrees (`read/`), the files of looked-up answers
 (`answers/<canvas>/<thread>/`), the static sites Obeya keeps (`sites/<key>/`), the env files their

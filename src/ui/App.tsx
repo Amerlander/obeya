@@ -14,7 +14,8 @@ import type { Field } from './api';
 import { replyOn, setReply } from './reply';
 import { ArchivePill } from './archive';
 import { useBarFit } from './barFit';
-import { ConfigDialog, showCanvasesSection, showRepoClones } from './config';
+import { ConfigDialog, showCanvasesSection, showDevicesSection, showRepoClones } from './config';
+import { PhoneDialog, useLocalPage } from './access';
 import { Setup } from './setup';
 import { KoordinatorSheet } from './koordinator';
 import { QueuePill } from './queue';
@@ -257,6 +258,9 @@ function Canvas({
     requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('#ksheet .tell textarea')?.focus({ preventScroll: true }));
   };
   const [helpOn, setHelpOn] = useState(false);
+  // „Telefon verbinden“, from the phone icon in the bar: only on the machine Obeya runs on
+  const [phoneOn, setPhoneOn] = useState(false);
+  const localPage = useLocalPage();
   // the bar's `?` button stays until the owner opened the legend with the key; the legend's foot says so
   const [helpKnown, setHelpKnown] = useState(helpKeyKnown);
   const [helpNote, setHelpNote] = useState<'button' | 'gone'>();
@@ -1117,6 +1121,11 @@ function Canvas({
       }
       return;
     }
+    // so does „Telefon verbinden“
+    if (phoneOn) {
+      if (e.key === 'Escape') setPhoneOn(false);
+      return;
+    }
     // so does the hint on how to create a task; Space and Enter press its button
     if (newHintOn) {
       if (e.key === 'Escape') setNewHintOn(false);
@@ -1339,6 +1348,14 @@ function Canvas({
             {online && restart && <RestartPill restart={restart} items={items} />}
             {online && update && restart?.reason !== 'update' && <UpdatePill update={update} />}
             {snapshot.workspaces && <WorkspacesPill pools={snapshot.workspaces} canvas={snapshot.canvas} items={items} />}
+            {localPage && (
+              <button className={phoneOn ? 'pill phone on' : 'pill phone'} title={t.access.connect} aria-label={t.access.connect} onClick={() => setPhoneOn(!phoneOn)}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <rect x="6" y="2" width="12" height="20" rx="2.5" />
+                  <path d="M11 18h2" />
+                </svg>
+              </button>
+            )}
             <button className={cOn ? 'pill kpill config on' : 'pill kpill config'} title={t.config.button} onClick={toggleConfig}>
               <BarIcon d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
               <span className="lbl">{t.config.button}</span>
@@ -1409,9 +1426,20 @@ function Canvas({
           onSetup={() => setSetupOn(true)}
           onTalk={talkFromConfig}
           onProblems={setConfigProblems}
+          onConnect={() => (setCOn(false), setPhoneOn(true))}
           onAsk={(text, canvas) => void told.tell(t.voice.reading(t.voice.koordinator), undefined, () => (canvas ? api.commandOn(canvas, text) : api.command(text, null, undefined, undefined, undefined, undefined, placeNow())))}
         />
         {setupOn && <Setup onClose={() => setSetupOn(false)} />}
+        {phoneOn && (
+          <PhoneDialog
+            onClose={() => setPhoneOn(false)}
+            onSection={() => {
+              setPhoneOn(false);
+              showDevicesSection();
+              setCOn(true);
+            }}
+          />
+        )}
         <KoordinatorSheet on={kOn} canvas={snapshot.canvas.id} items={items} preferences={snapshot.preferences} settings={snapshot.settingProposals ?? []} repos={snapshot.canvas.repos} talk={snapshot.talk} reshare={snapshot.reshare} onOpen={(i) => void openFresh(i)} onTell={(text, images, replyTo) => tellTyped(text, images, null, undefined, replyTo)} onConfig={(repo, setting) => {
             showRepoClones({ canvas: snapshot.canvas.id, repo, field: 'settings', setting });
             setCOn(true);

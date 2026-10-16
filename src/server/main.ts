@@ -49,6 +49,7 @@ import { headOf, installDependencies, ownCheckout, RESTART, RESTART_FROM_FILE, R
 import { AppUpdates } from './app-update';
 import { COMPILED, resource, SELF, VERSION } from './resources';
 import { oldLinuxBun } from './repo';
+import { Access } from './remote';
 import { serve, serveNarration } from './server';
 import { LocalTranscriber, VoiceIn, voiceBackends } from './voice';
 import { VoiceSetup } from './voice-setup';
@@ -285,7 +286,9 @@ const stop = () => {
 };
 for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, stop);
 
-server = serve(canvases, { transcriber, setup: voiceSetup }, Number(values.port), values.dev, config, restarter, narration, machine, stop, shells, updates);
+// other devices, when the owner lets them: the phone over the owner's own network
+const access = new Access({ store, home, language: () => ownerLanguage(home) });
+server = serve(canvases, { transcriber, setup: voiceSetup }, Number(values.port), values.dev, config, restarter, narration, machine, stop, shells, updates, access);
 claim(home, { pid: process.env.OBEYA_SUPERVISED ? process.ppid : process.pid, port: server.port!, url: `http://127.0.0.1:${server.port}`, version: VERSION, app: !!process.env.OBEYA_APP });
 console.log(`Obeya ${own ? `from ${own}` : VERSION} on ${server.url} (${source === 'file' ? configFile : 'canvases from the command line'}), agents on ${claudeExecutable() ?? 'the Claude Code the Agent SDK brings'}`);
 if (own) watchOwnCode(own, (from, to) => restart('code', `${own} moved from ${from.slice(0, 7)} to ${to.slice(0, 7)}`));

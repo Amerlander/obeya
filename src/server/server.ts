@@ -24,6 +24,9 @@ import type { VoiceSetup } from './voice-setup';
 import { ShellReports } from './push-key';
 import { AppUpdates } from './app-update';
 import { oldLinuxBun } from './repo';
+import { Store } from './db';
+import { Access } from './remote';
+import { Tailscale } from './tailscale';
 
 type Req = Request & { params: Record<string, string> };
 
@@ -32,6 +35,13 @@ function replyParam(p: string | null): number | TalkRef | undefined {
   const m = p?.match(/^(\d+)(?:\.(said|reply|answer))?$/);
   if (!m) return;
   return m[2] ? { talk: Number(m[1]), part: m[2] as TalkRef['part'] } : Number(m[1]) || undefined;
+}
+
+/** What the server knows of an open page's WebSocket: its canvas, the page, and the paired device it is on, if another. */
+interface Socket {
+  canvas: string;
+  page: string;
+  device?: string;
 }
 
 export interface Voice {
@@ -98,11 +108,17 @@ export function serve(
   shells = new ShellReports(),
   /** The newer version of the app its shell has ready. */
   updates = new AppUpdates(),
+  /** Who reaches Obeya from other devices; by default no one. */
+  access = new Access({ store: new Store(':memory:'), tailscale: new Tailscale(null) }),
 ) {
   const canvases = Array.isArray(served) ? { all: () => served } : served;
   const byId = new Map<string, CanvasRuntime>();
   const started = crypto.randomUUID();
-  const sockets = new Map<string, Set<ServerWebSocket<{ canvas: string; page: string }>>>();
+  const sockets = new Map<string, Set<ServerWebSocket<Socket>>>();
+  // a device removed loses its open pages at once
+  access.onRemoved((device) => {
+    for (const set of sockets.values()) for (const ws of set) if (ws.data.device === device) ws.close(4401, 'device removed');
+  });
   /** The restart that waits, as canvas `id` sees it: Obeya's, else that of some of its repositories' agents. */
   const pending = (id: string): PendingRestart | null => {
     const due = restarter?.due();
@@ -291,7 +307,7 @@ export function serve(
     return { ...h, ...(h.token ? { undoMs: c.commander.delayMs } : {}), text };
   };
 
-  return Bun.serve({
+  const options = {
     port,
     hostname: '127.0.0.1',
     // a voice command answers once transcribed and read: with Whisper on a CPU that can take longer than Bun's 10 s
@@ -299,6 +315,15 @@ export function serve(
     development: development && { hmr: true, console: true },
     routes: guarded({
       '/': index,
+      // another device pairing: the address in the QR code (`?code=`), or the code typed into the page it got
+      '/pair': { GET: (req, srv) => access.pairRoute(req, srv), POST: (req, srv) => access.pairRoute(req, srv) },
+      // „Von anderen Geräten“: the setting, what the network allows, the devices; only on this machine
+      '/api/access': {
+        GET: (req, srv) => (access.isLocal(req, srv) ? handle(() => access.view()) : Response.json({ local: false })),
+        PUT: async (req, srv) => (access.isLocal(req, srv) ? handle(async () => access.save(await req.json())) : onlyHere()),
+      },
+      '/api/access/pair': { POST: (req, srv) => (access.isLocal(req, srv) ? handle(() => access.pair()) : onlyHere()) },
+      '/api/access/devices/:id': { DELETE: (req, srv) => (access.isLocal(req, srv) ? handle(() => ({ removed: access.remove(req.params.id) })) : onlyHere()) },
       // the app's floating panel for the push-to-talk key in another app
       '/panel': panel,
       '/api/canvases': { GET: () => Response.json(canvases.all().map((c) => c.board.canvas) satisfies CanvasInfo[]) },
@@ -666,14 +691,14 @@ export function serve(
       // the owner has the Koordinator's sheet in view: the answers waiting there are read
       '/api/c/:canvas/talk/read': { POST: on((c) => c.board.readTalk()) },
       '/api/c/:canvas/ws': (req, server) =>
-        byId.has(req.params.canvas) && server.upgrade(req, { data: { canvas: req.params.canvas, page: crypto.randomUUID() } })
+        byId.has(req.params.canvas) && server.upgrade(req, { data: { canvas: req.params.canvas, page: crypto.randomUUID(), device: access.deviceOf(req) } })
           ? undefined
           : new Response('WebSocket expected', { status: 400 }),
-    }),
-    fetch: (req) => refusal(req, LOCAL_HOSTS) ?? new Response('Not found', { status: 404 }),
+    }, access),
+    fetch: (req: Request, srv: Bun.Server<Socket>) => refusal(req, access.hosts()) ?? access.admit(req, srv, '') ?? new Response('Not found', { status: 404 }),
     websocket: {
-      data: {} as { canvas: string; page: string },
-      open: (ws) => {
+      data: {} as Socket,
+      open: (ws: ServerWebSocket<Socket>) => {
         const c = byId.get(ws.data.canvas);
         if (!c) return ws.close();
         sockets.get(c.id)!.add(ws);
@@ -685,13 +710,13 @@ export function serve(
         // a page that reloads within a command's undo window offers "Rückgängig" again
         for (const n of c.commander.undoable()) ws.send(JSON.stringify({ type: 'notice', ...n } satisfies ServerMessage));
       },
-      close: (ws) => {
+      close: (ws: ServerWebSocket<Socket>) => {
         sockets.get(ws.data.canvas)?.delete(ws);
         restarter?.hold(ws.data.page);
         focused.delete(ws.data.page);
       },
       // the owner watching a demo video or dictating in this page holds a restart off
-      message: (ws, text) => {
+      message: (ws: ServerWebSocket<Socket>, text: string | Buffer) => {
         try {
           const msg = JSON.parse(String(text)) as ClientMessage;
           if (msg.type === 'hold' && Array.isArray(msg.hold)) restarter?.hold(ws.data.page, msg.hold.filter((h) => h === 'video' || h === 'voice'));
@@ -707,5 +732,20 @@ export function serve(
         } catch {}
       },
     },
-  });
+  };
+  const server = Bun.serve(options);
+  // another VPN's address: the same routes there too, in plain HTTP
+  let other: Bun.Server<Socket> | null = null;
+  void access
+    .start(server.port!, (address) => {
+      other?.stop(true);
+      other = address ? Bun.serve({ ...options, hostname: address, port: server.port! }) : null;
+    })
+    .then(() => {
+      const address = access.address();
+      if (address) console.log(`Obeya: other devices reach it at ${address}`);
+    });
+  return server;
 }
+
+const onlyHere = () => Response.json({ code: 'onlyHere', error: 'only on the machine Obeya runs on' }, { status: 403 });

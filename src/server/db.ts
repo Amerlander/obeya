@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { AnswerFile, AnswerRef, CardEvent, CardKind, CardState, Mock, Need, Preference, PreferenceState, ProposedSetting, SettingProposal, SettingProposalState, Spot, Talk, TalkQuote, TalkRef } from '../core/types';
+import type { AnswerFile, AnswerRef, CardEvent, DeviceView, CardKind, CardState, Mock, Need, Preference, PreferenceState, ProposedSetting, SettingProposal, SettingProposalState, Spot, Talk, TalkQuote, TalkRef } from '../core/types';
 
 export interface CardRow {
   id: string;
@@ -337,6 +337,14 @@ export const MIGRATIONS = [
   'ALTER TABLE talk ADD COLUMN reply_to TEXT;',
   // where the app in a card's workspace runs, for the owner to try it by hand
   'ALTER TABLE cards ADD COLUMN app TEXT;',
+  // devices paired to reach Obeya from another machine: the hash of each one's cookie
+  `CREATE TABLE devices (
+    id TEXT PRIMARY KEY,
+    token_hash TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    paired_at TEXT NOT NULL,
+    last_seen TEXT NOT NULL
+  );`,
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter';
@@ -1061,6 +1069,28 @@ export class Store {
     this.db
       .query('INSERT INTO settings (canvas_id, key, value) VALUES ($c, $key, $value) ON CONFLICT(canvas_id, key) DO UPDATE SET value = $value')
       .run({ c: canvasId, key, value });
+  }
+
+  // ---------------------------------------------------------------- devices
+
+  devices(): DeviceView[] {
+    return this.db.query('SELECT id, name, paired_at AS pairedAt, last_seen AS lastSeen FROM devices ORDER BY paired_at').all() as DeviceView[];
+  }
+
+  deviceByToken(hash: string): DeviceView | null {
+    return this.db.query('SELECT id, name, paired_at AS pairedAt, last_seen AS lastSeen FROM devices WHERE token_hash = $hash').get({ hash }) as DeviceView | null;
+  }
+
+  addDevice(d: DeviceView & { tokenHash: string }) {
+    this.db.query('INSERT INTO devices (id, token_hash, name, paired_at, last_seen) VALUES ($id, $hash, $name, $paired, $seen)').run({ id: d.id, hash: d.tokenHash, name: d.name, paired: d.pairedAt, seen: d.lastSeen });
+  }
+
+  deviceSeen(id: string, at: string) {
+    this.db.query('UPDATE devices SET last_seen = $at WHERE id = $id').run({ id, at });
+  }
+
+  removeDevice(id: string): boolean {
+    return this.db.query('DELETE FROM devices WHERE id = $id').run({ id }).changes > 0;
   }
 }
 

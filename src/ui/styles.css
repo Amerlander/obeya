@@ -269,7 +269,7 @@ button.pill:hover { box-shadow: var(--lift); }
   #bar[data-fit~="4"] :is(.queue, #attention) .lbl { display: none; }
 #bar[data-fit~="2"] .config .bar-icon, #bar[data-fit~="3"] .archive .bar-icon, #bar[data-fit~="4"] .queue .bar-icon { display: block; }
 #bar[data-fit~="2"] .config, #bar[data-fit~="3"] :is(.archive .kpill, .new-card), #bar[data-fit~="4"] .queue .kpill { padding-inline: 10px; }
-#bar[data-fit~="5"] #workspaces, #bar[data-fit~="5"] .help { display: none; }
+#bar[data-fit~="5"] #workspaces, #bar[data-fit~="5"] .help, #bar[data-fit~="5"] .phone { display: none; }
 #bar[data-fit~="6"] .canvas-pill, #bar[data-fit~="6"] .new-card, #bar[data-fit~="6"] .pill.restart .say { display: none; }
 /* the bar's buttons are one height, whatever they hold: text, an icon, a count */
 #bar .pill, .pill.talk-pill { height: 34px; box-sizing: border-box; padding-block: 0; }
@@ -957,7 +957,7 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 .cfg-close { position: absolute; right: 16px; top: 14px; border: 0; background: var(--chip); color: var(--ink); width: 32px; height: 32px; border-radius: 3px; cursor: pointer; z-index: 2; }
 .cfg-sec { max-width: 1180px; padding-bottom: 32px; }
 .cfg-sec[hidden] { display: none; }
-#config code { font: 12px var(--mono); overflow-wrap: anywhere; }
+#config code, #phone code { font: 12px var(--mono); overflow-wrap: anywhere; }
 #config .warn { color: var(--warn); }
 #config .p-error { margin: 6px 0 0; font-size: 13px; }
 /* fields sunk a little into the sheet, a shade darker than it with a firmer edge, so the page's structure
@@ -969,6 +969,8 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 #config input:focus, #config textarea:focus, #config select:focus { border-color: var(--muted); background-color: var(--panel); }
 /* a select's own arrow, drawn as two strokes in the muted ink, as far in from the right edge as the text is
    from the left; the browser's arrow sat almost on the edge and cannot be moved */
+#phone select { font: inherit; font-size: 13px; padding: 6px 9px; border-radius: 2px; border: 1px solid color-mix(in srgb, var(--ink) 16%, var(--panel));
+  background: color-mix(in srgb, var(--ink) 5%, var(--panel)); color: var(--ink); }
 #config select { appearance: none; -webkit-appearance: none; padding-right: 30px;
   --arrow: color-mix(in srgb, var(--ink) 70%, transparent);
   background-image: linear-gradient(45deg, transparent 50%, var(--arrow) 50%, var(--arrow) calc(50% + 1.3px), transparent calc(50% + 1.3px)),
@@ -1419,3 +1421,27 @@ button.link:hover { text-decoration: underline; }
 .git-ignore-file pre { font: 12px var(--mono); margin: 6px 0; padding: 8px 10px; background: var(--card); border: 1px solid var(--line); border-radius: 4px; }
 .setup code { font: 12px var(--mono); }
 .setup .c-how code { padding: 2px 6px; border-radius: 2px; background: var(--card); border: 1px solid var(--line); user-select: all; }
+
+/* „Telefon verbinden“ (access.tsx): the QR code beside the address and the code to type */
+#bar .pill.phone { padding-inline: 10px; }
+#bar .pill.phone svg { display: block; }
+#phone { position: fixed; inset: 0; z-index: 60; background: var(--dim); display: flex; align-items: center; justify-content: center; padding: 24px; animation: fade .15s ease-out; }
+#phone .box { position: relative; background: var(--panel); border-radius: 3px; box-shadow: var(--lift); padding: 22px 26px 20px; width: 680px; max-width: 100%; max-height: 100%; overflow: auto; font-size: 14px; }
+#phone h2 { margin: 0 0 16px; font-size: 23px; }
+#phone .close { position: absolute; right: 14px; top: 12px; border: 0; background: var(--chip); color: var(--ink); width: 32px; height: 32px; border-radius: 3px; cursor: pointer; }
+#phone .cfg-field { grid-template-columns: 150px minmax(0, 1fr); }
+.acc-pair { display: flex; gap: 26px; align-items: flex-start; }
+.acc-pair p { margin: 0 0 10px; line-height: 1.45; }
+.acc-qr { flex: none; border-radius: 3px; box-shadow: var(--shadow); }
+.acc-code { font: 600 34px/1.1 var(--mono); letter-spacing: .08em; margin: 4px 0 6px !important; }
+.acc-address { font-size: 13px !important; }
+.acc-connected { font-size: 18px; font-weight: 600; margin: 8px 0; }
+.acc-connected::before { content: "✓ "; color: var(--approved); }
+.acc-foot { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--line); }
+.acc-state.ok::before { content: "✓ "; color: var(--approved); }
+.acc-step { margin: 4px 0 0 !important; }
+.acc-devices { list-style: none; margin: 0; padding: 0; max-width: 720px; }
+.acc-devices li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 18px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.acc-devices .btn.small { margin-top: 0; }
+.acc-name { font-weight: 600; }
+.acc-note { margin-top: 18px; max-width: 76ch; }
