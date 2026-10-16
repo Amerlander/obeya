@@ -131,9 +131,10 @@ export function savePushKey(home: string, input: unknown, platform: string = pro
 
 /** A setting for other devices as the file or the page gives it; `null` for none or one Obeya cannot use. */
 export function remoteOf(input: unknown): RemoteSetting | null {
-  const o = (input && typeof input === 'object' ? input : {}) as { via?: unknown; address?: unknown };
-  if (o.via === 'tailscale') return { via: 'tailscale' };
-  if (o.via === 'address' && typeof o.address === 'string' && o.address.trim()) return { via: 'address', address: o.address.trim() };
+  const o = (input && typeof input === 'object' ? input : {}) as { via?: unknown; address?: unknown; awake?: unknown };
+  const awake = o.awake === 'always' ? { awake: 'always' as const } : {};
+  if (o.via === 'tailscale') return { via: 'tailscale', ...awake };
+  if (o.via === 'address' && typeof o.address === 'string' && o.address.trim()) return { via: 'address', address: o.address.trim(), ...awake };
   return null;
 }
 
@@ -144,7 +145,7 @@ export const remoteSetting = (home: string): RemoteSetting | null => read(home).
 export function saveRemote(home: string, input: unknown): RemoteSetting | null {
   const given = (input as { remote?: unknown } | null)?.remote;
   const remote = given === null ? null : remoteOf(given);
-  if (given !== null && !remote) throw new BadRequest('invalid', 'remote must be null, { via: "tailscale" } or { via: "address", address }');
+  if (given !== null && !remote) throw new BadRequest('invalid', 'remote must be null, { via: "tailscale" } or { via: "address", address }, each with an optional awake: "always"');
   save(home, 'remote', remote, `other devices ${remote ? `reach it ${remote.via === 'tailscale' ? 'through Tailscale' : `at ${remote.address}`}` : 'do not reach it'},`);
   return remote;
 }

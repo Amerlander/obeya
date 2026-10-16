@@ -291,8 +291,8 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, stop);
 
 // other devices, when the owner lets them: the phone over the owner's own network
 const access = new Access({ store, home, language: () => ownerLanguage(home) });
-// while other devices may reach Obeya, the machine stays awake as long as a worker works
-const awake = new Awake({ wanted: () => access.enabled() && busy().length > 0 }).start();
+// while other devices may reach Obeya, the machine stays awake as long as a worker works, or the whole time
+const awake = new Awake({ wanted: () => access.awake() === 'always' || (access.awake() === 'works' && busy().length > 0) }).start();
 server = serve(canvases, { transcriber, setup: voiceSetup }, Number(values.port), values.dev, config, restarter, narration, machine, stop, shells, updates, access);
 claim(home, { pid: process.env.OBEYA_SUPERVISED ? process.ppid : process.pid, port: server.port!, url: `http://127.0.0.1:${server.port}`, version: VERSION, app: !!process.env.OBEYA_APP });
 console.log(`Obeya ${own ? `from ${own}` : VERSION} on ${server.url} (${source === 'file' ? configFile : 'canvases from the command line'}), agents on ${claudeExecutable() ?? 'the Claude Code the Agent SDK brings'}`);

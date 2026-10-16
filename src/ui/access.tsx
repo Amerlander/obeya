@@ -56,6 +56,9 @@ function Reach({ view, onView }: { view: AccessView; onView: (v: AccessView) => 
     }
   };
   const via = view.remote?.via ?? null;
+  // what the owner set for keeping the machine awake goes along when the way changes
+  const awake = view.remote?.awake ? { awake: view.remote.awake } : {};
+  const always = view.remote?.awake === 'always';
   const ts = view.tailscale;
   const p = view.problem;
   const step = ts.state === 'missing' ? (a.step.missing[view.platform] ?? a.step.missing.linux!) : ts.state === 'ready' ? null : a.step[ts.state];
@@ -71,7 +74,7 @@ function Reach({ view, onView }: { view: AccessView; onView: (v: AccessView) => 
               aria-checked={via === x}
               className={via === x ? 'on' : undefined}
               disabled={busy}
-              onClick={() => via !== x && save(x === 'tailscale' ? { via: 'tailscale' } : x === 'address' ? { via: 'address', address: view.addresses[0] ?? '' } : null)}
+              onClick={() => via !== x && save(x === 'tailscale' ? { via: 'tailscale', ...awake } : x === 'address' ? { via: 'address', address: view.addresses[0] ?? '', ...awake } : null)}
             >
               {x === 'tailscale' ? a.tailscale : x === 'address' ? a.address : a.off}
             </button>
@@ -83,7 +86,7 @@ function Reach({ view, onView }: { view: AccessView; onView: (v: AccessView) => 
       </Field>
       {via === 'address' && (
         <Field label={a.pick}>
-          <select aria-label={a.pick} value={view.remote?.via === 'address' ? view.remote.address : ''} disabled={busy} onChange={(e) => e.target.value && save({ via: 'address', address: e.target.value })}>
+          <select aria-label={a.pick} value={view.remote?.via === 'address' ? view.remote.address : ''} disabled={busy} onChange={(e) => e.target.value && save({ via: 'address', address: e.target.value, ...awake })}>
             {!view.addresses.length && <option value="">{a.pickNone}</option>}
             {view.addresses.map((x) => (
               <option key={x} value={x}>
@@ -125,6 +128,32 @@ function Reach({ view, onView }: { view: AccessView; onView: (v: AccessView) => 
               )}
             </p>
           )}
+        </Field>
+      )}
+      {view.remote && (
+        <Field label={a.awake}>
+          <div className="seg" role="radiogroup" aria-label={a.awake}>
+            {([false, true] as const).map((x) => (
+              <button
+                key={String(x)}
+                type="button"
+                role="radio"
+                aria-checked={always === x}
+                className={always === x ? 'on' : undefined}
+                disabled={busy}
+                onClick={() => {
+                  if (always === x || !view.remote) return;
+                  const { awake: _, ...rest } = view.remote;
+                  void save(x ? { ...rest, awake: 'always' } : rest);
+                }}
+              >
+                {x ? a.awakeAlways : a.awakeWorks}
+              </button>
+            ))}
+          </div>
+          <p className="hint">
+            {always ? a.awakeAlwaysHint : a.awakeWorksHint} {a.lid}
+          </p>
         </Field>
       )}
       {status && <p className="hint c-status">{status}</p>}
@@ -189,9 +218,7 @@ export function AccessSection({ on, onConnect }: { on: boolean; onConnect: () =>
         <p className="hint">{a.noDevices}</p>
       )}
       {status && <p className="hint c-status">{status}</p>}
-      <p className="hint acc-note">
-        {a.whileRunning} {a.awake}
-      </p>
+      <p className="hint acc-note">{a.whileRunning}</p>
     </>
   );
 }

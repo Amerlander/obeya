@@ -4205,20 +4205,21 @@ and the setting are managed only on this machine (`/api/access…` answers anoth
 `onlyHere`, and the section shows it only its heading and hint): a phone that is lost cannot pair others or keep
 itself in.
 
-*Keeping the machine awake* (`src/server/awake.ts`). While the setting is on and a worker is in a
-turn (or its ended turn waits for its background work, or its work is landing), Obeya keeps the
-machine it runs on from idle sleep, and lets go two minutes after the last one ended (the next turn
-often follows soon); it looks every five seconds. Per platform: `caffeinate -i -w <pid>` on macOS
-(`pmset -g assertions` shows it, "on behalf of" Obeya's process), `systemd-inhibit
---what=idle:sleep --who=Obeya` around `tail --pid=<pid>` on Linux (`systemd-inhibit --list`), both
-ending by themselves when Obeya does; `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)`
-through `bun:ffi` on Windows (`powercfg /requests` as an admin; without admin rights
-`CallNtPowerInformation(SystemExecutionState)` shows `ES_SYSTEM_REQUIRED`), which holds as long as
-the process. The
-display may still sleep. With no worker at work the machine sleeps as it is set to, and a phone no
-longer reaches Obeya; a closed laptop lid puts it to sleep regardless, which the section says
-beside the note that Obeya answers only while it runs. Workers on SSH hosts keep the machine Obeya
-runs on awake too (Obeya drives them from there), but their hosts keep their own power settings.
+*Keeping the machine awake* (`src/server/awake.ts`). While the setting is on, Obeya keeps the
+machine it runs on from idle sleep, as the switch „Rechner wach halten“ beside it says: *Solange ein
+Agent arbeitet* (the default), while a worker is in a turn (or its ended turn waits for its
+background work, or its work is landing), letting go two minutes after the last one ended (the next
+turn often follows soon); or *Immer*, the whole time Obeya runs, so the phone can give it a task
+while no agent works (`awake: "always"` in `remote`). It looks every five seconds. Per platform:
+`caffeinate -i -w <pid>` on macOS (`pmset -g assertions` shows it, "on behalf of" Obeya's process),
+`systemd-inhibit --what=idle:sleep --who=Obeya` around `tail --pid=<pid>` on Linux
+(`systemd-inhibit --list`), both ending by themselves when Obeya does;
+`SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)` through `bun:ffi` on Windows
+(`powercfg /requests` as an admin; without admin rights `CallNtPowerInformation(SystemExecutionState)`
+shows `ES_SYSTEM_REQUIRED`), which holds as long as the process. The display may still sleep.
+Otherwise the machine sleeps as it is set to, and a phone no longer reaches Obeya until it wakes; a
+closed laptop lid puts it to sleep either way, which the switch's hint says. Workers on SSH hosts
+keep the machine Obeya runs on awake too (Obeya drives them from there), but their hosts keep their own power settings.
 
 #### The phone view
 
@@ -4404,6 +4405,11 @@ Python sidecars ignore Ctrl-C instead.
 
 ### Decisions
 
+- **The machine stays awake while a worker works, or always where the owner switches it so**
+  (2026-10-16, the owner). Keeping it awake the whole time other devices may reach Obeya would be
+  too much as a default (a laptop on battery), but the owner wants to give Obeya tasks from the
+  phone while no agent works; a hint how to keep the machine awake by hand, per platform, was the
+  other way, and a switch does it without leaving Obeya.
 - **Other devices over the owner's private network, paired by a QR code** (2026-10-16, from the
   plan „Obeya from the phone“): a public tunnel puts agents with shell rights on the open internet,
   and a relay of Obeya's own is a cloud service. A paired device stays paired until removed or

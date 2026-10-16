@@ -52,6 +52,21 @@ const opens = (headers: Record<string, string>) =>
     ws.onerror = () => done(null);
   });
 
+describe('keeping the machine awake', () => {
+  test('off while other devices may not reach Obeya; while a worker works by default, or always as the owner sets it', async () => {
+    expect(access.awake()).toBe('off');
+    await turnOn({ via: 'tailscale' });
+    expect(access.awake()).toBe('works');
+    expect((await turnOn({ via: 'tailscale', awake: 'always' })).remote).toEqual({ via: 'tailscale', awake: 'always' });
+    expect(access.awake()).toBe('always');
+    expect(JSON.parse(readFileSync(join(dir, 'settings.json'), 'utf8')).remote).toEqual({ via: 'tailscale', awake: 'always' });
+    await turnOn({ via: 'tailscale', awake: 'sometimes' });
+    expect(access.awake()).toBe('works');
+    await turnOn(null);
+    expect(access.awake()).toBe('off');
+  });
+});
+
 describe('through Tailscale', () => {
   test('off by default: the tailnet name is not one of Obeya’s', async () => {
     expect((await view()).remote).toBeNull();

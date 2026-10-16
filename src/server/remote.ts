@@ -205,9 +205,12 @@ export class Access implements Gate {
     else rmSync(join(this.home, SERVE_FILE), { force: true });
   }
 
-  /** Whether the owner lets other devices reach Obeya (`remote` in the settings), whether they reach it yet or not. */
-  enabled(): boolean {
-    return !!this.setting;
+  /**
+   * How long Obeya keeps this machine from sleeping for other devices: `off` while they may not reach
+   * it, else `always` or only while a worker `works`, as the owner set it.
+   */
+  awake(): 'off' | 'works' | 'always' {
+    return !this.setting ? 'off' : this.setting.awake === 'always' ? 'always' : 'works';
   }
 
   /** Where other devices reach Obeya now; `null` while they do not. */
@@ -250,7 +253,7 @@ export class Access implements Gate {
   /** Saves the setting (`{ remote }`), makes the network as it says, and returns the section. */
   async save(input: unknown): Promise<AccessView> {
     const given = (input as { remote?: unknown } | null)?.remote;
-    if (given !== null && !remoteOf(given)) throw new BadRequest('invalid', 'remote must be null, { via: "tailscale" } or { via: "address", address }');
+    if (given !== null && !remoteOf(given)) throw new BadRequest('invalid', 'remote must be null, { via: "tailscale" } or { via: "address", address }, each with an optional awake: "always"');
     this.setting = this.home ? saveRemote(this.home, input) : remoteOf(given);
     this.problem = undefined;
     if (!this.setting) this.pairing = null;

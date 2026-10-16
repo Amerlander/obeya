@@ -1,7 +1,7 @@
 // Keeping the machine awake for the owner's phone: while other devices may reach Obeya and a worker
-// is in a turn (or its ended turn waits for its background work), the machine Obeya runs on does
-// not idle-sleep, and a short while after the last one ends it sleeps again as it is set to. The
-// display may still sleep, and a closed laptop lid puts the machine to sleep regardless. Per
+// is in a turn (or its ended turn waits for its background work), or the whole time where the owner
+// set so, the machine Obeya runs on does not idle-sleep, and a short while after that ends it sleeps
+// again as it is set to. The display may still sleep, and a closed laptop lid puts the machine to sleep regardless. Per
 // platform: `caffeinate -i -w <pid>` on macOS, `systemd-inhibit --what=idle:sleep` on Linux (both
 // end with Obeya by themselves), `SetThreadExecutionState` on Windows, which holds as long as the
 // process does. SSH hosts keep their own power settings.
@@ -18,7 +18,7 @@ export interface Held {
 /** Takes the assertion; `null` where this machine offers none. */
 export type Hold = () => Held;
 
-const WHY = 'An agent is at work for Obeya';
+const WHY = 'Other devices reach Obeya';
 
 /** A process that keeps the assertion while it runs. */
 function holdingProcess(argv: string[]): Held {
@@ -58,7 +58,7 @@ export function platformHold(platform: string = process.platform, pid = process.
   return null;
 }
 
-/** How long the machine stays awake after the last worker's turn ended: the next turn often follows soon. */
+/** How long the machine stays awake after it was last wanted (the last worker's turn ended): the next turn often follows soon. */
 export const LINGER_MS = 2 * 60_000;
 /** How often whether it should stay awake is looked at. */
 const EVERY_MS = 5_000;
@@ -66,7 +66,7 @@ const EVERY_MS = 5_000;
 const RETRY_MS = 5 * 60_000;
 
 export interface AwakeOptions {
-  /** Whether the machine should stay awake now: other devices may reach Obeya and a worker works. */
+  /** Whether the machine should stay awake now: other devices may reach Obeya, and a worker works or the owner set it to stay awake. */
   wanted: () => boolean;
   hold?: Hold | null;
   lingerMs?: number;
@@ -119,7 +119,7 @@ export class Awake {
     }
     if (keep && !this.held && this.o.hold && now >= this.notBefore) {
       this.held = this.o.hold();
-      this.o.log('Obeya: keeping this machine awake while agents work');
+      this.o.log('Obeya: keeping this machine awake for other devices');
     }
     if (!keep) this.letGo();
   }
@@ -128,6 +128,6 @@ export class Awake {
     if (!this.held) return;
     this.held.release();
     this.held = null;
-    this.o.log('Obeya: no agent at work any more; this machine sleeps as it is set to again');
+    this.o.log('Obeya: this machine sleeps as it is set to again');
   }
 }

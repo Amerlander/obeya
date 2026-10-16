@@ -155,7 +155,9 @@ runs), Obeya keeps the machine from idle sleep, and lets go a short while after 
 `ES_CONTINUOUS | ES_SYSTEM_REQUIRED` on Windows, `systemd-inhibit --what=idle:sleep` on Linux. The
 display may still sleep. With no worker at work the machine sleeps as it is set to, and the phone
 view says that it does not answer. A closed MacBook lid on battery sleeps regardless; the section
-„Von anderen Geräten“ says so. SSH hosts keep their own power settings.
+„Von anderen Geräten“ says so. SSH hosts keep their own power settings. A switch beside the
+setting („Rechner wach halten“: „Solange ein Agent arbeitet“ or „Immer“) keeps the machine awake the
+whole time Obeya runs instead, for tasks from the phone while no agent works (W5).
 
 ### Testing
 
