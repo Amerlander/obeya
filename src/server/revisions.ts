@@ -8,6 +8,7 @@ import { LANGUAGE_NAMES } from '../core/locale';
 import { formatQuestion, type Item, type Question } from '../core/types';
 import { BadRequest, type Board } from './board';
 import type { AgentRuntime } from './runtime';
+import { readSession } from './koordinator';
 import { toObeyaTool } from './to-obeya';
 import { messageOf } from '../core/text';
 import { PROPOSAL_QUESTIONS, proposalQuestions, proposalTask } from './workers';
@@ -99,66 +100,54 @@ export class Revisions {
   }
 
   /** The reworked proposal, or null when the agent only passed the words on to Obeya. */
-  private ask(card: Item, said: { words: string; spoken?: boolean }): Promise<Revised | null> {
-    return new Promise((resolve, reject) => {
-      let done = false;
-      let passed = false;
-      const toObeya = this.o.toObeya;
-      const session = this.o.runtime.start(
+  private async ask(card: Item, said: { words: string; spoken?: boolean }): Promise<Revised | null> {
+    let revised: Revised | undefined;
+    let passed = false;
+    const toObeya = this.o.toObeya;
+    const error = await readSession(this.o.runtime, {
+      cwd: this.o.pathFor(card),
+      role: 'koordinator',
+      system: [SYSTEM, this.o.toObeya ? TO_OBEYA : '', this.o.preferences?.() ?? ''].filter(Boolean).join('\n\n'),
+      tools: (finish) => [
         {
-          cwd: this.o.pathFor(card),
-          readOnly: true,
-          role: 'koordinator',
-          system: [SYSTEM, this.o.toObeya ? TO_OBEYA : '', this.o.preferences?.() ?? ''].filter(Boolean).join('\n\n'),
-          tools: [
-            {
-              name: 'revise_proposal',
-              description: [
-                `The whole proposal as it is to stand now, in ${LANGUAGE_NAMES[this.o.board.language()]}.`,
-                `title: short and precise. ${proposalTask('the card it came from nor this conversation')}`,
-                `reason: for the owner only, why it is proposed, a sentence or two (keep it unless what the owner said changes it). idea: true for something to think through with the owner before anyone builds it.`,
-                `questions: what the owner still has to decide, each with up to four short options; keep them out of task. A question the owner's words settle goes, and its decision goes into task.`,
-                `reply: your turn in the conversation beside the proposal, a sentence or two for the owner: the answer to what they asked (asked which option you would take: your pick and why), and what you changed, without repeating the text.`,
-              ].join(' '),
-              schema: {
-                title: z.string(),
-                task: z.string(),
-                reason: z.string().optional(),
-                idea: z.boolean().optional(),
-                questions: PROPOSAL_QUESTIONS,
-                reply: z.string(),
-              },
-              run: (r) => {
-                if (done) return 'Only the first one counts.';
-                if (!String(r.title).trim() || !String(r.task).trim()) return 'Not recorded: title and task must not be empty.';
-                done = true;
-                resolve(r as unknown as Revised);
-                return 'Recorded. End your turn now.';
-              },
-            },
-            ...(toObeya
-              ? [
-                  toObeyaTool((request) => {
-                    passed = true;
-                    return toObeya(card.id, request);
-                  }),
-                ]
-              : []),
-          ],
-          onEvent: (e) => {
-            if (e.type === 'error' && !done) {
-              session.close();
-              reject(new Error(e.message));
-            } else if (e.type === 'idle') {
-              session.close();
-              if (passed && !done) resolve(null);
-              else if (!done) reject(new Error('der Agent hat keinen neuen Text geliefert'));
-            }
+          name: 'revise_proposal',
+          description: [
+            `The whole proposal as it is to stand now, in ${LANGUAGE_NAMES[this.o.board.language()]}.`,
+            `title: short and precise. ${proposalTask('the card it came from nor this conversation')}`,
+            `reason: for the owner only, why it is proposed, a sentence or two (keep it unless what the owner said changes it). idea: true for something to think through with the owner before anyone builds it.`,
+            `questions: what the owner still has to decide, each with up to four short options; keep them out of task. A question the owner's words settle goes, and its decision goes into task.`,
+            `reply: your turn in the conversation beside the proposal, a sentence or two for the owner: the answer to what they asked (asked which option you would take: your pick and why), and what you changed, without repeating the text.`,
+          ].join(' '),
+          schema: {
+            title: z.string(),
+            task: z.string(),
+            reason: z.string().optional(),
+            idea: z.boolean().optional(),
+            questions: PROPOSAL_QUESTIONS,
+            reply: z.string(),
+          },
+          run: (r) => {
+            if (revised) return 'Only the first one counts.';
+            if (!String(r.title).trim() || !String(r.task).trim()) return 'Not recorded: title and task must not be empty.';
+            revised = r as unknown as Revised;
+            return finish('Recorded. End your turn now.');
           },
         },
-        this.message(card, said),
-      );
+        ...(toObeya
+          ? [
+              toObeyaTool((request) => {
+                passed = true;
+                return toObeya(card.id, request);
+              }),
+            ]
+          : []),
+      ],
+      brief: this.message(card, said),
     });
+    if (revised) return revised;
+    if (error !== undefined) throw new Error(error);
+    if (passed) return null;
+    throw new Error('der Agent hat keinen neuen Text geliefert');
   }
 
   private message(card: Item, said: { words: string; spoken?: boolean }): string {

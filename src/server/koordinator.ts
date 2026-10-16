@@ -224,15 +224,16 @@ export class Koordinator {
   }
 
   /** The Rückschau: one session reads what happened since `since` and proposes rules for patterns across cards. */
-  private review(since: string): Promise<void> {
+  private async review(since: string): Promise<void> {
     const history = this.history(since);
-    if (!history.length) return Promise.resolve();
+    if (!history.length) return;
     const rules = this.o.board.preferences('active');
     let proposed = 0;
-    return this.read(
-      this.o.home(),
-      REVIEW_SYSTEM(this.language),
-      (finish): AgentTool[] => [
+    await readSession(this.o.runtime, {
+      cwd: this.o.home(),
+      role: 'koordinator',
+      system: REVIEW_SYSTEM(this.language),
+      tools: (finish): AgentTool[] => [
         {
           name: 'propose',
           description: `Propose a rule to the owner: one short rule in ${this.language}, and why (one short sentence in ${this.language}, under 150 characters, naming what in the history it rests on). Pass replaces with the number of a recorded rule it refines or contradicts. ${REPOS_PARAM}`,
@@ -253,13 +254,8 @@ export class Koordinator {
         },
         { name: 'done', description: 'Nothing (more) to propose.', schema: {}, run: () => finish('Fine. End your turn now.') },
       ],
-      [
-        `What happened on the canvas since the last Rückschau, oldest first:\n${history.join('\n')}`,
-        ...this.rules(null),
-      ]
-        .filter(Boolean)
-        .join('\n\n'),
-    );
+      brief: [`What happened on the canvas since the last Rückschau, oldest first:\n${history.join('\n')}`, ...this.rules(null)].filter(Boolean).join('\n\n'),
+    });
   }
 
   /**
@@ -338,11 +334,6 @@ export class Koordinator {
     return ids.length ? ids : [undefined];
   }
 
-  /** A reading session of the learner's, read-only: it ends with its turn, or once a tool calls `finish`. */
-  private read(cwd: string, system: string, tools: (finish: (r: string) => string) => AgentTool[], brief: string): Promise<void> {
-    return readSession(this.o.runtime, { cwd, system, tools, brief, role: 'koordinator' });
-  }
-
   /** What the learner reads an input in: the card's text, the agent's last message before it, what the owner said in the last days. */
   private around(card: Item | null, kind: OwnerInput, text: string, { question }: InputContext): string[] {
     // a card deleted meanwhile has no log to read
@@ -365,15 +356,16 @@ export class Koordinator {
     ];
   }
 
-  private distill(card: Item | null, kind: OwnerInput, text: string, context: InputContext, around: string[]): Promise<void> {
+  private async distill(card: Item | null, kind: OwnerInput, text: string, context: InputContext, around: string[]): Promise<void> {
     const rules = this.o.board.preferences('active');
     const open = this.o.board.preferences('proposed');
     const { question, reply, before } = context;
     let proposed = false;
-    return this.read(
-      card ? this.o.repoFor(card).path : this.o.home(),
-      LEARN_SYSTEM(this.language),
-      (finish): AgentTool[] => [
+    await readSession(this.o.runtime, {
+      cwd: card ? this.o.repoFor(card).path : this.o.home(),
+      role: 'koordinator',
+      system: LEARN_SYSTEM(this.language),
+      tools: (finish): AgentTool[] => [
         {
           name: 'propose',
           description: `Propose a lasting preference to the owner as one short rule in ${this.language}. Pass replaces with the number of a recorded rule it refines or contradicts. ${REPOS_PARAM}`,
@@ -395,18 +387,18 @@ export class Koordinator {
         },
         { name: 'nothing', description: 'Nothing lasting to record.', schema: {}, run: () => finish('Fine. End your turn now.') },
       ],
-        [
-          card ? `Card${kind === 'talk' || kind === 'command' ? ' the owner had open' : ''}: ${card.kind === 'project' ? 'project ' : ''}"${card.title}".` : '',
-          ...around,
-          question ? `The worker asked: ${question}` : '',
-          before ? `Before the owner wrote in it, the card's text read:\n${before}` : '',
-          `The owner's ${INPUTS[kind]}: ${text}`,
-          reply ? `You replied: ${reply}` : '',
-          ...this.rules(card),
-        ]
-          .filter(Boolean)
-          .join('\n\n'),
-    );
+      brief: [
+        card ? `Card${kind === 'talk' || kind === 'command' ? ' the owner had open' : ''}: ${card.kind === 'project' ? 'project ' : ''}"${card.title}".` : '',
+        ...around,
+        question ? `The worker asked: ${question}` : '',
+        before ? `Before the owner wrote in it, the card's text read:\n${before}` : '',
+        `The owner's ${INPUTS[kind]}: ${text}`,
+        reply ? `You replied: ${reply}` : '',
+        ...this.rules(card),
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
+    });
   }
 
   /** Cards in progress; with a repository, only those a card of it can collide with. */
@@ -650,158 +642,112 @@ export class Koordinator {
     return naming;
   }
 
-  private writeTitle(card: Item): Promise<string> {
-    const fallback = titleFrom(card.body);
-    return new Promise((resolve) => {
-      let title: string | null = null;
-      const session = this.o.runtime.start(
+  private async writeTitle(card: Item): Promise<string> {
+    let title: string | null = null;
+    await readSession(this.o.runtime, {
+      cwd: this.o.repoFor(card).path,
+      role: 'chores',
+      system: NAME_SYSTEM(this.language),
+      tools: (finish) => [
         {
-          cwd: this.o.repoFor(card).path,
-          readOnly: true,
-          role: 'chores',
-          system: NAME_SYSTEM(this.language),
-          tools: [
-            {
-              name: 'title',
-              description: `The card's title, in ${this.language}.`,
-              schema: { title: z.string() },
-              run: (a) => {
-                if (title !== null) return 'Already named.';
-                title = String(a.title).replace(/\s+/g, ' ').trim().slice(0, 200);
-                return 'Recorded. End your turn now.';
-              },
-            },
-          ],
-          onEvent: (e) => {
-            if (e.type === 'idle' || e.type === 'error') {
-              session.close();
-              resolve(title || fallback);
-            }
+          name: 'title',
+          description: `The card's title, in ${this.language}.`,
+          schema: { title: z.string() },
+          run: (a) => {
+            if (title !== null) return 'Already named.';
+            title = String(a.title).replace(/\s+/g, ' ').trim().slice(0, 200);
+            return finish('Recorded. End your turn now.');
           },
         },
-        card.body.trim() ? `The task:\n${card.body.trim()}` : 'The task is in the screenshots alone (shown below).',
-        this.o.imageFiles?.(card.images) ?? [],
-      );
+      ],
+      brief: card.body.trim() ? `The task:\n${card.body.trim()}` : 'The task is in the screenshots alone (shown below).',
+      images: this.o.imageFiles?.(card.images) ?? [],
     });
+    return title || titleFrom(card.body);
   }
 
   // ---------------------------------------------------------------- the estimate
 
-  private estimate(card: Item, active: Item[], ahead: Item[] = []): Promise<Scope> {
-    return new Promise((resolve, reject) => {
-      let done = false;
-      const tags = new Map([...active, ...ahead].map((a, n) => [`K${n + 1}`, a.id]));
-      const session = this.o.runtime.start(
+  private async estimate(card: Item, active: Item[], ahead: Item[] = []): Promise<Scope> {
+    let scope: Scope | undefined;
+    const tags = new Map([...active, ...ahead].map((a, n) => [`K${n + 1}`, a.id]));
+    const error = await readSession(this.o.runtime, {
+      cwd: this.o.repoFor(card).path,
+      role: 'koordinator',
+      system: SYSTEM(this.language),
+      tools: (finish) => [
         {
-          cwd: this.o.repoFor(card).path,
-          readOnly: true,
-          role: 'koordinator',
-          system: SYSTEM(this.language),
-          tools: [
-            {
-              name: 'scope',
-              description: `Report the files the card will change, the cards in progress or queued ahead whose changes are likely to conflict with it on merge (their tags), and a one-sentence reason in ${this.language}.`,
-              schema: { files: z.array(z.string()), conflicts_with: z.array(z.string()), reason: z.string() },
-              run: (a) => {
-                if (done) return 'Already reported.';
-                done = true;
-                resolve({
-                  files: (a.files as string[]).slice(0, 200),
-                  conflictsWith: (a.conflicts_with as string[]).map((t) => tags.get(t)).filter((x): x is string => !!x),
-                  reason: String(a.reason).slice(0, 500),
-                });
-                return 'Recorded. End your turn now.';
-              },
-            },
-          ],
-          onEvent: (e) => {
-            if (e.type === 'error' && !done) {
-              done = true;
-              session.close();
-              reject(new Error(e.message));
-            } else if (e.type === 'idle') {
-              session.close();
-              if (!done) {
-                done = true;
-                reject(new Error('no estimate'));
-              }
-            }
+          name: 'scope',
+          description: `Report the files the card will change, the cards in progress or queued ahead whose changes are likely to conflict with it on merge (their tags), and a one-sentence reason in ${this.language}.`,
+          schema: { files: z.array(z.string()), conflicts_with: z.array(z.string()), reason: z.string() },
+          run: (a) => {
+            if (scope) return 'Already reported.';
+            scope = {
+              files: (a.files as string[]).slice(0, 200),
+              conflictsWith: (a.conflicts_with as string[]).map((t) => tags.get(t)).filter((x): x is string => !!x),
+              reason: String(a.reason).slice(0, 500),
+            };
+            return finish('Recorded. End your turn now.');
           },
         },
-        this.brief(card, active, ahead, tags),
-      );
+      ],
+      brief: this.brief(card, active, ahead, tags),
     });
+    if (!scope) throw new Error(error ?? 'no estimate');
+    return scope;
   }
 
   /** One turn over all the workstreams: in which order they go, and which wait for what. */
-  private schedule(project: Item, batch: Item[], active: Item[], ahead: Item[]): Promise<Planned[]> {
-    return new Promise((resolve, reject) => {
-      let done = false;
-      const tags = new Map([...active, ...ahead, ...batch].map((a, n) => [`K${n + 1}`, a.id]));
-      const tagOf = (id: string) => [...tags].find(([, x]) => x === id)![0];
-      const session = this.o.runtime.start(
+  private async schedule(project: Item, batch: Item[], active: Item[], ahead: Item[]): Promise<Planned[]> {
+    let plan: Planned[] | undefined;
+    const tags = new Map([...active, ...ahead, ...batch].map((a, n) => [`K${n + 1}`, a.id]));
+    const error = await readSession(this.o.runtime, {
+      cwd: this.o.repoFor(project).path,
+      role: 'koordinator',
+      system: SCHEDULE_SYSTEM(this.language),
+      tools: (finish) => [
         {
-          cwd: this.o.repoFor(project).path,
-          readOnly: true,
-          role: 'koordinator',
-          system: SCHEDULE_SYSTEM(this.language),
-          tools: [
-            {
-              name: 'schedule',
-              description: `Report every workstream once, in the order they should go: its tag, the files it will change, the tags of the cards it waits for (in progress, queued ahead, or workstreams earlier in your order; empty to start now), and a one-sentence reason in ${this.language}.`,
-              schema: {
-                workstreams: z.array(z.object({ card: z.string(), files: z.array(z.string()), waits_for: z.array(z.string()), reason: z.string() })),
-              },
-              run: (a) => {
-                if (done) return 'Already reported.';
-                const mine = new Set(batch.map((w) => w.id));
-                const seen = new Set<string>();
-                const plan: Planned[] = [];
-                for (const w of a.workstreams as { card: string; files: string[]; waits_for: string[]; reason: string }[]) {
-                  const id = tags.get(w.card);
-                  if (!id || !mine.has(id) || seen.has(id)) continue;
-                  seen.add(id);
-                  plan.push({
-                    card: id,
-                    files: w.files.slice(0, 200),
-                    waitsFor: w.waits_for.map((t) => tags.get(t)).filter((x): x is string => !!x && x !== id),
-                    reason: String(w.reason).slice(0, 500),
-                  });
-                }
-                const missing = batch.filter((w) => !seen.has(w.id));
-                if (missing.length) return `Every workstream once, please: missing ${missing.map((w) => tagOf(w.id)).join(', ')}. Call schedule again with all of them.`;
-                done = true;
-                resolve(plan);
-                return 'Recorded. End your turn now.';
-              },
-            },
-          ],
-          onEvent: (e) => {
-            if (e.type === 'error' && !done) {
-              done = true;
-              session.close();
-              reject(new Error(e.message));
-            } else if (e.type === 'idle') {
-              session.close();
-              if (!done) {
-                done = true;
-                reject(new Error('no schedule'));
-              }
+          name: 'schedule',
+          description: `Report every workstream once, in the order they should go: its tag, the files it will change, the tags of the cards it waits for (in progress, queued ahead, or workstreams earlier in your order; empty to start now), and a one-sentence reason in ${this.language}.`,
+          schema: {
+            workstreams: z.array(z.object({ card: z.string(), files: z.array(z.string()), waits_for: z.array(z.string()), reason: z.string() })),
+          },
+          run: (a) => {
+            if (plan) return 'Already reported.';
+            const mine = new Set(batch.map((w) => w.id));
+            const seen = new Set<string>();
+            const order: Planned[] = [];
+            for (const w of a.workstreams as { card: string; files: string[]; waits_for: string[]; reason: string }[]) {
+              const id = tags.get(w.card);
+              if (!id || !mine.has(id) || seen.has(id)) continue;
+              seen.add(id);
+              order.push({
+                card: id,
+                files: w.files.slice(0, 200),
+                waitsFor: w.waits_for.map((t) => tags.get(t)).filter((x): x is string => !!x && x !== id),
+                reason: String(w.reason).slice(0, 500),
+              });
             }
+            const missing = batch.filter((w) => !seen.has(w.id));
+            if (missing.length) return `Every workstream once, please: missing ${missing.map((w) => tagOf(tags, w.id)).join(', ')}. Call schedule again with all of them.`;
+            plan = order;
+            return finish('Recorded. End your turn now.');
           },
         },
-        [
-          `The project: "${project.title}"${project.plan ? `; plan doc ${project.plan.file}` : ''}.`,
-          project.plan?.goal ? `Goal: ${project.plan.goal}` : '',
-          `Its workstreams to schedule, in the plan's order:\n${batch
-            .map((w) => `- ${tagOf(w.id)}: ${w.label ? `${w.label} ` : ''}"${w.title}"${w.body ? ` — ${w.body.replace(/\s+/g, ' ').slice(0, 600)}` : ''}`)
-            .join('\n')}`,
-          ...this.others(project, active, ahead, tags),
-        ]
-          .filter(Boolean)
-          .join('\n\n'),
-      );
+      ],
+      brief: [
+        `The project: "${project.title}"${project.plan ? `; plan doc ${project.plan.file}` : ''}.`,
+        project.plan?.goal ? `Goal: ${project.plan.goal}` : '',
+        `Its workstreams to schedule, in the plan's order:\n${batch
+          .map((w) => `- ${tagOf(tags, w.id)}: ${w.label ? `${w.label} ` : ''}"${w.title}"${w.body ? ` — ${w.body.replace(/\s+/g, ' ').slice(0, 600)}` : ''}`)
+          .join('\n')}`,
+        ...this.others(project, active, ahead, tags),
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
     });
+    if (!plan) throw new Error(error ?? 'no schedule');
+    return plan;
   }
 
   private brief(card: Item, active: Item[], ahead: Item[], tags: Map<string, string>): string {
@@ -819,12 +765,11 @@ export class Koordinator {
   private others(card: Item, active: Item[], ahead: Item[], tags: Map<string, string>): string[] {
     const soft = this.o.repoFor(card).adapter.softPaths;
     const hard = (f: string) => !soft.some((s) => overlaps(normalize(f), s));
-    const tagOf = (id: string) => [...tags].find(([, x]) => x === id)![0];
     return [
       active.length
         ? `Cards in progress:\n${active
             .map((a) => {
-              const tag = tagOf(a.id);
+              const tag = tagOf(tags, a.id);
               const changed = this.o.repoFor(a).workspaces.changes(a.id).filter((c) => hard(c.file));
               return [
                 `- ${tag}: "${a.title}"${a.body ? ` — ${a.body.split('\n')[0]!.slice(0, 200)}` : ''}`,
@@ -841,7 +786,7 @@ export class Koordinator {
               const waitsFor =
                 'behind' in q ? q.behind.map((id) => `"${this.o.board.item(id)?.title ?? id}"`).join(', ') : 'workspace' in q ? 'a free workspace (its start is decided)' : '';
               return [
-                `- ${tagOf(a.id)}: "${a.title}"${a.body ? ` — ${a.body.split('\n')[0]!.slice(0, 200)}` : ''}`,
+                `- ${tagOf(tags, a.id)}: "${a.title}"${a.body ? ` — ${a.body.split('\n')[0]!.slice(0, 200)}` : ''}`,
                 `  expected to change: ${(a.scope ?? []).filter(hard).join(', ') || '(no estimate)'}`,
                 `  waits for: ${waitsFor || 'your decision'}`,
               ].join('\n');
@@ -1000,20 +945,24 @@ const INPUTS: Record<OwnerInput, string> = {
 };
 
 /**
- * A read-only session that reads `brief` and answers through its tools: it ends with its turn, or
- * once a tool calls `finish`. The learner, the Rückschau and the Arbeitsrückschau read this way.
+ * A read-only session that reads `brief` (and `images`) and answers through its tools: it ends with
+ * its turn, or once a tool calls `finish`. It settles with the error that ended it before a tool
+ * called `finish`, if one did.
  */
 export function readSession(
   runtime: AgentRuntime,
-  o: { cwd: string; system: string; tools: (finish: (r: string) => string) => AgentTool[]; brief: string; role: AgentRole },
-): Promise<void> {
+  o: { cwd: string; system: string; tools: (finish: (r: string) => string) => AgentTool[]; brief: string; role: AgentRole; images?: string[] },
+): Promise<string | undefined> {
   return new Promise((resolve) => {
     let done = false;
-    const finish = (r: string) => {
+    const end = (error?: string) => {
       if (!done) {
         done = true;
-        resolve();
+        resolve(error);
       }
+    };
+    const finish = (r: string) => {
+      end();
       return r;
     };
     const session = runtime.start(
@@ -1026,11 +975,12 @@ export function readSession(
         onEvent: (e) => {
           if (e.type === 'idle' || e.type === 'error') {
             session.close();
-            finish('');
+            end(e.type === 'error' ? e.message : undefined);
           }
         },
       },
       o.brief,
+      o.images,
     );
   });
 }
@@ -1038,6 +988,9 @@ export function readSession(
 /** A changed file with the places changed in it: "src/a.ts (lines 12-20 in function f; 40)", or "(new)". */
 const describe = (c: Change) =>
   `${c.file} (${c.regions.length ? (c.regions[0] === 'deleted' ? 'deleted' : `lines ${c.regions.slice(0, 8).join('; ')}${c.regions.length > 8 ? '; …' : ''}`) : 'new'})`;
+
+/** The tag a turn of the Koordinator knows a card by. */
+const tagOf = (tags: Map<string, string>, id: string) => [...tags].find(([, x]) => x === id)![0];
 
 const normalize = (p: string) => p.trim().replace(/^\.\//, '').replace(/^\/+/, '');
 

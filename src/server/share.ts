@@ -23,6 +23,7 @@ import { artifactCopy } from './artifact-copy';
 import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, type DemoPageParts, day, demoFile, demoPageHtml, PAGE_WORDS, type PageLanguage } from './demo-page';
 import { type Forge, parsePrUrl } from './forge';
 import type { AgentRuntime } from './runtime';
+import { readSession } from './koordinator';
 import { branchName } from './workspaces';
 import { zip } from './zip';
 import { messageOf } from '../core/text';
@@ -510,52 +511,41 @@ export class Sharing {
    * The page's text for a demo handed over without one (its repository did not share then): a short
    * session writes it from the worker's summary. Without one, the card's title and the summary's start stand in.
    */
-  private writePage(card: Item, demo: Demo): Promise<DemoPage> {
+  private async writePage(card: Item, demo: Demo): Promise<DemoPage> {
     // a card's summary goes with its approval; the log keeps every handover
     const summary = this.o.board.summary(card.id) ?? this.o.board.events(card.id).filter((e) => e.kind === 'review' && e.author === 'worker').at(-1)?.text ?? '';
     const fallback: DemoPage = { title: plainText(card.title), text: plainText(summary).split(/(?<=[.!?])\s+/).slice(0, 4).join(' ') || plainText(card.title) };
-    const repo = this.target(card)?.repo;
-    return new Promise((resolve) => {
-      let page: DemoPage | null = null;
-      const session = this.o.runtime.start(
+    let page: DemoPage | null = null;
+    await readSession(this.o.runtime, {
+      cwd: this.target(card)?.repo ?? this.o.home,
+      role: 'chores',
+      system: pageSystem(LANGUAGE_NAMES[this.o.board.language()]),
+      tools: (finish) => [
         {
-          cwd: repo ?? this.o.home,
-          readOnly: true,
-          role: 'chores',
-          system: pageSystem(LANGUAGE_NAMES[this.o.board.language()]),
-          tools: [
-            {
-              name: 'page',
-              description: `The page's title and text, in ${LANGUAGE_NAMES[this.o.board.language()]}.`,
-              schema: { title: z.string(), text: z.string() },
-              run: ({ title, text }) => {
-                if (page) return 'Already written.';
-                page = { title: String(title).trim().slice(0, 200) || fallback.title, text: String(text).trim().slice(0, 2000) || fallback.text };
-                return 'Recorded. End your turn now.';
-              },
-            },
-          ],
-          onEvent: (e) => {
-            if (e.type === 'idle' || (e.type === 'error' && !page)) {
-              session.close();
-              resolve(page ?? fallback);
-            }
+          name: 'page',
+          description: `The page's title and text, in ${LANGUAGE_NAMES[this.o.board.language()]}.`,
+          schema: { title: z.string(), text: z.string() },
+          run: ({ title, text }) => {
+            if (page) return 'Already written.';
+            page = { title: String(title).trim().slice(0, 200) || fallback.title, text: String(text).trim().slice(0, 2000) || fallback.text };
+            return finish('Recorded. End your turn now.');
           },
         },
-        [
-          `The card: “${plainText(card.title)}”.`,
-          card.body.trim() ? `Its task:\n${card.body.trim().slice(0, 3000)}` : '',
-          summary ? `What its worker handed over:\n${summary.slice(0, 4000)}` : '',
-          demo.kind === 'html'
-            ? 'The demo is a page to look at (an HTML artifact: charts, a comparison, an analysis), not a video.'
-            : demo.chapters.length
-              ? `The demo video's chapters: ${demo.chapters.map(([, t]) => t).join(' · ')}`
-              : '',
-        ]
-          .filter(Boolean)
-          .join('\n\n'),
-      );
+      ],
+      brief: [
+        `The card: “${plainText(card.title)}”.`,
+        card.body.trim() ? `Its task:\n${card.body.trim().slice(0, 3000)}` : '',
+        summary ? `What its worker handed over:\n${summary.slice(0, 4000)}` : '',
+        demo.kind === 'html'
+          ? 'The demo is a page to look at (an HTML artifact: charts, a comparison, an analysis), not a video.'
+          : demo.chapters.length
+            ? `The demo video's chapters: ${demo.chapters.map(([, t]) => t).join(' · ')}`
+            : '',
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
     });
+    return page ?? fallback;
   }
 
   /** The slugs of the other pages shared through the target. */
