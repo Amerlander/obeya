@@ -20,6 +20,8 @@ shows them as projects); when one is done, what lasts moves into `docs/design.md
   for trusted clicks, drags, keys held for push-to-talk; `start --fake-mic <wav>` for voice. A
   claude-in-chrome tab is often hidden, which freezes `requestAnimationFrame`: camera flights and
   the unfold never finish there.
+- Reviews of the code (security, code quality and the like) always bring in Codex (`codex exec`)
+  as a second reviewer.
 - Voice on this machine: Parakeet through uv, the default, needs nothing set. For Whisper instead:
   `OBEYA_WHISPER_BACKEND=mlx OBEYA_WHISPER_PYTHON=/Users/sadilek/dev/stimmzwilling/.venv/bin/python`
   (has `mlx_whisper`; the model is cached). That Python alone, without the backend, fails: it has no
