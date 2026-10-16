@@ -1850,7 +1850,7 @@ function shareOf(r: CardRow): Item['share'] {
     ...(s.url ? { url: s.url } : {}),
     ...(on.length ? { on } : {}),
     ...(stale ? { stale: true } : {}),
-    // shown with each version on the page; the latest, not on it, brings the changes with „Ersetzen“ or „Dazunehmen“
+    // shown with each version on the page; the latest, not on it, brings the changes with „Auf der Seite ersetzen“ or „Zur Seite dazunehmen“
     ...(outdated.length ? { outdated: outdated.map((c) => c.id) } : {}),
   };
 }

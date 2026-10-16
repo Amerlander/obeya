@@ -132,7 +132,7 @@ export class Sharing {
   constructor(private o: SharingOptions) {}
 
   /**
-   * "Teilen", "Ersetzen" or "Dazunehmen": one of the card's demos (by its handover; the latest
+   * "Teilen", "Auf der Seite ersetzen" or "Zur Seite dazunehmen": one of the card's demos (by its handover; the latest
    * without) is published right away, on the card's page in place of the versions there, or beside
    * them in its place by handover (`add`). A demo on the page already goes out again with the rest.
    * There is no hold to take it back: "Nicht mehr teilen" withdraws it just as easily.
@@ -382,7 +382,7 @@ export class Sharing {
     const target = this.target(card);
     let demos: SharedDemo[];
     if (s.refresh) {
-      // the page as it is: a newer demo on the card waits for "Ersetzen" or "Dazunehmen"
+      // the page as it is: a newer demo on the card waits for "Auf der Seite ersetzen" or "Zur Seite dazunehmen"
       demos = sharedDemos(s);
       if (!demos.length || !target) {
         if (s.again) return back(t.demoGone);

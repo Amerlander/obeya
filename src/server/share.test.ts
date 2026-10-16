@@ -336,7 +336,7 @@ describe('several demo versions on one page', () => {
     await until(() => share(id)?.state === 'shared');
   }
 
-  test('"Dazunehmen" puts a later demo below the shared one, under the same link', async () => {
+  test('"Zur Seite dazunehmen" puts a later demo below the shared one, under the same link', async () => {
     const c = first();
     await shared(c.id, () => sharing.share(c.id));
     expect(share(c.id)).toMatchObject({ on: [1] });
@@ -346,7 +346,7 @@ describe('several demo versions on one page', () => {
     await shared(c.id, () => sharing.share(c.id, { add: true }));
     expect(share(c.id)).toEqual({ state: 'shared', url, on: [1, 2] });
     expect(stored(c.id).demos!.map((d) => d.handover)).toEqual([1, 2]);
-    expect(log(c.id)).toContain('Dazunehmen: Die Seite bekommt diese Demo als Ergänzung dazu.');
+    expect(log(c.id)).toContain('Zur Seite dazunehmen: Die Seite bekommt diese Demo als Ergänzung dazu.');
     // the first stays at the page's root, the later one in a directory of its own
     expect(readFileSync(join(dir, 'deployed', slug(c.id), 'demo.mp4'), 'utf8')).toBe('video');
     expect(readFileSync(join(dir, 'deployed', slug(c.id), '2', 'demo.mp4'), 'utf8')).toBe('video 2');
@@ -357,7 +357,7 @@ describe('several demo versions on one page', () => {
     expect(page(c.id)).toContain('src="2/demo.mp4"');
   });
 
-  test('"Ersetzen" takes the shared ones off the page', async () => {
+  test('"Auf der Seite ersetzen" takes the shared ones off the page', async () => {
     const c = first();
     await shared(c.id, () => sharing.share(c.id));
     later(c.id, 2);
@@ -367,7 +367,7 @@ describe('several demo versions on one page', () => {
     expect(meta(c.id)).toMatchObject({ title: 'Ergänzung 2' });
     expect(meta(c.id)).not.toHaveProperty('more');
     expect(existsSync(join(dir, 'deployed', slug(c.id), '2'))).toBe(false);
-    expect(log(c.id)).toContain('Ersetzen: Die Seite zeigt jetzt diese Demo statt der geteilten.');
+    expect(log(c.id)).toContain('Auf der Seite ersetzen: Die Seite zeigt jetzt diese Demo statt der geteilten.');
   });
 
   test('an earlier demo shared goes onto the page in its place by handover', async () => {
@@ -462,7 +462,7 @@ describe('a page published before a change to the pages', () => {
     expect([share(v.id)!.outdated, share(h.id)!.outdated]).toEqual([ids('video').length ? ids('video') : undefined, ids('html').length ? ids('html') : undefined]);
   });
 
-  test('a newer demo is "Ersetzen" or "Dazunehmen"; the versions on the page still say what sharing them again brings', async () => {
+  test('a newer demo is replaced on the page or added to it; the versions on the page still say what sharing them again brings', async () => {
     const c = card();
     sharing.share(c.id);
     await until(() => share(c.id)?.state === 'shared');

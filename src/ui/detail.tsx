@@ -1791,8 +1791,8 @@ function PrBox({ pr }: { pr: PullRequest }) {
 /**
  * Sharing the demo shown with colleagues: "Teilen" publishes it right away, then the page's link with
  * "Nicht mehr teilen" for this demo. A demo not on the page yet goes onto it beside the versions
- * there („Dazunehmen“; an earlier demo in its place by handover) or, the latest, in their place
- * („Ersetzen“), the worker's word on it first; "Erneut teilen" once the site writes pages
+ * there („Zur Seite dazunehmen“; an earlier demo in its place by handover) or, the latest, in their place
+ * („Auf der Seite ersetzen“), the worker's word on it first; "Erneut teilen" once the site writes pages
  * differently than when it published this one.
  */
 function ShareBox({ item, demo, act }: { item: Item; demo: Demo; act: (a: CardAction, done: ActDone) => Promise<void> }) {
@@ -1871,7 +1871,7 @@ function ShareBox({ item, demo, act }: { item: Item; demo: Demo; act: (a: CardAc
                 </>
               )}
             </p>
-            {/* the worker's word comes first; without it „Ersetzen“, as the latest demo always went out before */}
+            {/* the worker's word comes first; without it „Auf der Seite ersetzen“, as the latest demo always went out before */}
             {!latest ? add(false) : demo.follows === 'supplements' ? [add(true), replace(false)] : [replace(true), add(false)]}
           </div>
         </>

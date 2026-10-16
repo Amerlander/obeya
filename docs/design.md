@@ -3205,11 +3205,14 @@ the page goes out again without it, and the last one takes the page down. With e
 the card, a line says which versions the page holds („Auf der Seite: Demo 1 und 2“); a card with
 one version shared and no earlier demos reads as before. On an earlier version not on the page,
 "Teilen" adds it in its place by handover. On the latest, not on the page yet, the hint „Die
-geteilte Seite zeigt Demo 1.“ offers „Ersetzen“ (it goes on the page, the shared ones off) and
-„Dazunehmen“ (it goes beside them). Which comes first is the worker's word: `ready_for_review`
+geteilte Seite zeigt Demo 1.“ offers „Auf der Seite ersetzen“ (it goes on the page, the shared
+ones off) and „Zur Seite dazunehmen“ (it goes beside them); the buttons name the page, since the
+choice is about what the page shows, not about the card's demos. Which comes first is the worker's word: `ready_for_review`
 says of a later demo whether it was recorded afresh (`follows: replaces`) or only supplements the
 one before (`supplements`), the demo skill asks for it, and a line under the buttons says what the
-worker said („Der Agent: ergänzt Demo 1“ / „neu aufgenommen“). Without its word „Ersetzen“ comes
+worker said, as a sentence about the video („Laut Agent ergänzt dieses Video Demo 1.“ / „… ist
+neu aufgenommen und ersetzt Demo 1.“; until the owner's feedback on 2026-10-16 a label, „Der
+Agent: ergänzt Demo 1“, which did not say what was supplemented). Without its word „Auf der Seite ersetzen“ comes
 first, as the latest demo always replaced the page before. The worker only suggests: nothing goes
 out without the owner's click.
 
@@ -3245,7 +3248,7 @@ outdated and shows them on its card, each with its day ("Seit diese Seite geteil
 die Seiten geändert: …"), beside "Erneut teilen" and "Nicht mehr teilen": the same demo published
 again under the same link, with all its versions. A page's changes are those of the kinds of page
 its versions show (a video and an artifact on one page: both). The latest demo, not on the page,
-brings them with „Ersetzen“ or „Dazunehmen“.
+brings them with „Auf der Seite ersetzen“ or „Zur Seite dazunehmen“.
 Each page is brought up to date on its own card. A change that shows nowhere (a refactoring, a style
 only the other kind of page uses) gets no entry and marks no page. That the list misses no change
 is a test's: `PAGES_HASH` pins a hash of sample pages in both languages with everything a page can
@@ -3263,7 +3266,7 @@ Many at once go from the Koordinator's sheet: while pages are outdated, a purple
 with its day and how many of them lack it, and shares again the newest 20 of them
 (or 10, 50, 100, all), newest by the video file of the newest version on the page. They go out one after the other through the
 same queue as every share, each published as it shows (what the share kept, so a newer demo on the
-card still waits for „Ersetzen“ or „Dazunehmen“), and a share the owner starts meanwhile goes out between two of
+card still waits for the owner), and a share the owner starts meanwhile goes out between two of
 them. The entry shows how many are out, the one going now, and the failed ones with their cards (the
 reason is in each card's log, the page stays outdated); "Anhalten" lets the page going out finish
 and leaves the rest. "Ausblenden" puts the entry away, with the result of a finished run: the owner
