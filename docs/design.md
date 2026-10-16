@@ -4183,8 +4183,8 @@ anything on the other address. A remote request needs a paired device; without o
 „Dieses Gerät ist nicht mit Obeya verbunden“ with how to connect and a field for the code (401),
 the API answers 401 `notPaired`, and a WebSocket opens not at all.
 
-*Pairing.* The section's button „Telefon verbinden“ opens a dialog of that name: while other
-devices reach Obeya, a QR code of `<address>/pair?code=<code>` beside the address and the code in large digits. The code
+*Pairing.* The section's button „Telefon verbinden“, below the paired devices (shown while other
+devices reach Obeya), opens a dialog of that name: a QR code of `<address>/pair?code=<code>` beside the address and the code in large digits. The code
 has six digits, holds five minutes (a new one comes when it ran out with the dialog open) and pairs
 one device; five wrong tries spend it (only those from Obeya's own page or without `Sec-Fetch-Site:
 cross-site`, so another site cannot spend them by sending a browser in the tailnet to `/pair`). The phone opens the address (the camera reads the code), and
