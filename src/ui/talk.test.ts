@@ -397,6 +397,26 @@ test("a proposal's open questions leave where they were asked; settled ones stay
   expect(withoutOpen(events, [pdf])).toEqual([q1, owner, reply]);
 });
 
+test("the usage limit that stopped the agent's turn is a line where it happened; what the agent did until then stays above it once it went on", () => {
+  const note = ev('hint', 'owner', 'Und wenn wir früher handeln?');
+  const reply = ev('talk', 'worker', 'Ich rechne das nach.');
+  const run = ev('activity', 'worker', '$ python3 study.py');
+  const limit = ev('state', 'obeya', "You've hit your session limit · resets 7:20pm (Europe/Berlin). The agent goes on by itself at 19:20.");
+  // the limit holds: the steps wait for the agent's bubble, above the line
+  expect(talkTurns([note, reply, run, limit])).toMatchObject({ shown: [{ e: note }, { e: reply }, { e: limit, line: true }], pending: [run] });
+  // the owner wrote after the limit: the line stands above their words, not folded into the reply to them
+  const more = ev('hint', 'owner', 'mach weiter');
+  const parked = ev('state', 'obeya', 'Stopped the app in the workspace while the card waits.');
+  const now = ev('activity', 'worker', '$ python3 report.py');
+  const t = talkTurns([note, reply, run, limit, parked, more, now]);
+  expect(t.shown.map((x) => x.e)).toEqual([note, reply, run, limit, more]);
+  expect(t.shown[2]).toMatchObject({ steps: [run], quiet: true });
+  expect(t.pending).toEqual([parked, now]);
+  // in German, and when Obeya only tries again
+  const retry = ev('state', 'obeya', 'Nutzungslimit erreicht. Obeya versucht es um 19:35 noch einmal.');
+  expect(talkTurns([note, retry]).shown).toMatchObject([{ e: note }, { e: retry, line: true }]);
+});
+
 test('what an agent did until it was paused stays above the line once it went on; while paused, its bubble shows it', () => {
   const asked = ev('talk', 'owner', 'Was bräuchte ein Export?');
   const read = ev('activity', 'explorer', '$ git ls-files');

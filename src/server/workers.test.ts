@@ -570,6 +570,52 @@ describe('workers', () => {
     workers.stop(c.id);
   });
 
+  test("a worker the usage limit stopped while it took in the owner's words on its handover stays at them and goes on once it lifts", async () => {
+    setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, limitMargin: 30 }));
+    const c = manual();
+    workers.start(c.id);
+    runtime.last.call('ready_for_review', { summary: 'Studie fertig.', demo: artifact() });
+    runtime.last.emit({ type: 'idle' });
+    workers.message(c.id, 'Und wenn wir früher handeln?');
+    runtime.last.call('reply', { text: 'Ich rechne das nach.' });
+    runtime.last.call('report', { status: 'Rechne frühes Handeln nach' });
+    runtime.last.emit({ type: 'tool', name: 'Bash', input: { command: 'python3 study.py' } });
+    runtime.last.emit({ type: 'error', message: "You've hit your session limit", limit: { resetsAt: Date.now() + 20 } });
+    runtime.last.emit({ type: 'idle' });
+    const sent = runtime.last.inbox.length;
+    // the card does not wait for the owner: its worker is still at their words, and says why it rests
+    expect(board.item(c.id)).toMatchObject({ state: 'waiting', need: 'demo', answering: true });
+    expect(needsYou(board.item(c.id)!)).toBe(false);
+    expect(board.item(c.id)!.statusLine).toStartWith('Nutzungslimit · weiter um ');
+    expect(workers.busyCards()).toEqual([]);
+    await Bun.sleep(60);
+    expect(runtime.last.inbox.length).toBe(sent + 1);
+    expect(runtime.last.inbox.at(-1)).toContain('usage limit');
+    runtime.last.emit({ type: 'text', text: 'Weiter mit der Rechnung.' });
+    expect(board.item(c.id)!.statusLine).toBe('Rechne frühes Handeln nach');
+    workers.stop(c.id);
+  });
+
+  test('a worker the usage limit stopped while its background work runs says so, and goes on once it lifts', async () => {
+    setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, limitMargin: 30 }));
+    const c = manual();
+    workers.start(c.id);
+    runtime.last.call('report', { status: 'Rendere das Demo-Video' });
+    runtime.last.emit({ type: 'background', tasks: [{ id: 'render', description: 'node demo.ts' }] });
+    runtime.last.emit({ type: 'error', message: "You've hit your session limit", limit: { resetsAt: Date.now() + 20 } });
+    runtime.last.emit({ type: 'idle', background: 1 });
+    const sent = runtime.last.inbox.length;
+    expect(state(c.id)).toBe('working');
+    expect(board.item(c.id)!.statusLine).toStartWith('Nutzungslimit · weiter um ');
+    // the render still runs in the session: a restart waits for it
+    expect(workers.busyCards().length).toBeGreaterThan(0);
+    // the owner's words the limit cut off need not wait for the render to end
+    await Bun.sleep(60);
+    expect(runtime.last.inbox.length).toBe(sent + 1);
+    expect(runtime.last.inbox.at(-1)).toContain('usage limit');
+    workers.stop(c.id);
+  });
+
   test('a worker the usage limit stopped is not woken once stopped', async () => {
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, limitMargin: 10 }));
     const c = manual();

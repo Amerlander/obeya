@@ -751,7 +751,12 @@ nudged nor a question: the card's log says when the worker goes on, its status l
 where it stopped (a limit that holds past its reset time is tried again after a minute, one without
 a reset time every 15 minutes). Meanwhile the worker is not busy, so a restart need not wait for it
 (the resumed session runs into the limit again and waits anew), and a note from the owner reaches it
-at once. Once it works again its status line from before is back.
+at once. Once it works again its status line from before is back. The conversation shows the limit
+as a line where it happened, with what the worker did until then above it, not folded into the
+message that follows the owner's next words. A worker the limit stops while it takes in the owner's
+words on its handover is still at them: the card does not wait for the owner meanwhile. One whose background work runs on (a demo render) says so on its
+status line too and goes on at the reset without waiting for that work to wake it; it stays busy
+while the work runs, which a restart would cut off.
 
 A turn that ends while the worker's own background work runs (a demo render, a test suite, a watcher
 it started) is no such turn: the work wakes the worker when it finishes or fires, so Obeya waits,
@@ -884,7 +889,7 @@ Every card shows its exchanges as a conversation („Gespräch“), the way an i
 - what the Koordinator looked up for the owner.
 
 Small lines between them are the state changes (started, pull request opened, approved, landed,
-stopped, errors). Everything else folds away under the agent's next message as „Verlauf“ (a worker's
+stopped, errors, the usage limit that stopped the agent). Everything else folds away under the agent's next message as „Verlauf“ (a worker's
 closing words after a reply under that message, as its last step): tool calls, thoughts,
 status lines, the Koordinator's confirmations, Obeya's notes (restarts, sessions, what happens on
 the pull request).
@@ -1966,6 +1971,11 @@ archived card has no field.
 - **Failed and limited turns after the landing are retried** (2026-10). Before, such a turn ended
   the card, and what remained after the landing was silently left undone; the same held for a turn
   the usage limit stopped. Before, only the detail view showed the status line of a finishing card.
+- **A turn on the owner's words that the usage limit stopped is still at them** (2026-10-16).
+  Before, Obeya counted it as answered: the card said „Agent hat geantwortet, wartet auf dich“,
+  stopped its app and never went on by itself. A limit hit while background work ran showed only
+  once that work ended, and the worker went on only when it woke it. The limit's note folded into
+  the next message, which put it under the reply to words the owner wrote after the reset.
 - **A finishing card looks awake** (2026-10-13). Before, it faded at the landing like a finished
   card, its state line in the pale live ink ("Agent erledigt den Rest", which suggested a small
   remainder, where a release still has tag, build and uploads to do), and a workstream became a

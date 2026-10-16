@@ -183,8 +183,10 @@ interface Live {
   failed?: string;
   /** Between a message and the end of the turn it starts: a restart now would cut the worker off. */
   busy: boolean;
-  /** Set while an ended turn waits for the worker's background work to wake it, or for a usage limit to lift. */
+  /** Set while an ended turn waits for the worker's background work to wake it. */
   waiting?: ReturnType<typeof setTimeout>;
+  /** Set while the worker waits for a usage limit to lift: it then goes on where it stopped. */
+  lifts?: ReturnType<typeof setTimeout>;
   /** How many of the worker's background tasks run, as the session last said. */
   background: number;
   /** Those tasks by the session's id, as the agent described them and since when Obeya saw them run, the oldest first: on the card while they run. */
@@ -1361,6 +1363,8 @@ export class Workers {
       // the turn this starts reports the background work that is still running
       clearTimeout(live.waiting);
       live.waiting = undefined;
+      clearTimeout(live.lifts);
+      live.lifts = undefined;
       this.setBusy(live, true);
       ({ text, images } = this.withUnheard(cardId, text, images));
       const message = this.withRestart(cardId, live, text);
@@ -1490,6 +1494,7 @@ export class Workers {
     const live = this.live.get(cardId);
     this.live.delete(cardId);
     clearTimeout(live?.waiting);
+    clearTimeout(live?.lifts);
     live?.session.close();
     // its slot is free again
     if (live?.busy) this.o.board.changed();
@@ -1512,6 +1517,8 @@ export class Workers {
     this.setBusy(live, e.type !== 'idle');
     clearTimeout(live.waiting);
     live.waiting = undefined;
+    clearTimeout(live.lifts);
+    live.lifts = undefined;
     if (e.type === 'text' || e.type === 'tool') {
       // a turn of its own (a finished background command woke it) after it answered the owner's
       // words on its handover: it works on towards what it told them, so the card is at work again
@@ -1607,6 +1614,9 @@ export class Workers {
     if (closing !== undefined) this.o.board.log(cardId, 'closing', 'worker', closing);
     const row = this.o.board.row(cardId);
     if (background > 0) {
+      // the usage limit cut the worker's turn off while its work runs on: the card says so, and the
+      // worker goes on once it lifts, without waiting for that work to wake it
+      if (live.limited && !handedOver && this.goesOnAfterLimit(cardId)) return this.waitForLimit(cardId, live, live.limited);
       // the background work still belongs to the turn, whatever the card's state (a worker may ask
       // while its render runs): a restart now would cut it off
       this.waitForWorker(cardId, live);
@@ -1618,6 +1628,8 @@ export class Workers {
       if (!acted && !handedOver) return this.waitForWorker(cardId, live);
       // it paused for the restart, which resumes it, still taking in the answer
       if (this.restart && live.toldRestart && !handedOver) return this.pausedForRestart(cardId, live);
+      // the usage limit cut it off: it goes on by itself once the limit lifts, still taking in the answer
+      if (live.limited && !handedOver) return this.waitForLimit(cardId, live, live.limited);
       this.answerTaken(cardId, true);
     }
     if (handedOver) {
@@ -1731,8 +1743,7 @@ export class Workers {
     live.tasks = new Map(running.map((t) => [t.id, { description: t.description, since: live.tasks.get(t.id)?.since ?? now }]));
     // the card shows what runs while the worker is in a turn
     if (live.busy) this.o.board.changed();
-    // busy between turns: waiting for the worker, not for a usage limit to lift
-    if (live.waiting && live.busy) this.waitForWorker(cardId, live);
+    if (live.waiting) this.waitForWorker(cardId, live);
   }
 
   // ---------------------------------------------------------------- parking
@@ -1852,6 +1863,7 @@ export class Workers {
     if (!there) return;
     this.live.delete(cardId);
     clearTimeout(live.waiting);
+    clearTimeout(live.lifts);
     const pending = live.pending;
     // in a turn, or its ended turn waiting for background work that woke it: that work went with the session
     const busy = live.busy;
@@ -1921,27 +1933,36 @@ export class Workers {
   }
 
   /**
-   * The usage limit stopped the worker, at work or after the landing: it goes on by itself once the
-   * limit lifts. Meanwhile it is not busy (a restart need not wait for it, and resumes it into the
-   * same limit); a message from the owner reaches it at once and finds out whether the limit still holds.
+   * The usage limit stopped the worker, at work, taking in the owner's words on its handover or after
+   * the landing: it goes on by itself once the limit lifts. Meanwhile it is not busy (a restart need
+   * not wait for it, and resumes it into the same limit), unless its background work runs on, which
+   * a restart would cut off; a message from the owner reaches it at once and finds out whether the
+   * limit still holds.
    */
   private waitForLimit(cardId: string, live: Live, at: number) {
-    this.setBusy(live, false);
+    if (live.background > 0) this.waitForWorker(cardId, live);
+    else this.setBusy(live, false);
     if (live.statusBefore === undefined) {
       // after a restart the line may still be the one this shows
       const line = this.o.board.row(cardId).status_line;
       live.statusBefore = line && limitLine(line) ? null : line;
     }
     this.o.board.work(cardId, { status_line: this.o.board.t.worker.limitStatusUntil(this.o.board.t.when(at)) });
+    clearTimeout(live.lifts);
     // a timer runs at most about 24 days
-    live.waiting = setTimeout(() => {
-      live.waiting = undefined;
-      if (this.live.get(cardId) !== live) return;
-      const state = this.o.board.item(cardId)?.state;
-      const landed = !!this.o.board.row(cardId).landed;
-      if (state !== 'working' && state !== 'inPr' && !(landed && state !== 'waiting')) return;
+    live.lifts = setTimeout(() => {
+      live.lifts = undefined;
+      if (this.live.get(cardId) !== live || !this.goesOnAfterLimit(cardId)) return;
       this.deliver(cardId, LIMIT_LIFTED);
     }, Math.min(Math.max(0, at - Date.now()), 2 ** 31 - 1));
+  }
+
+  /** Whether the card's worker goes on by itself once the usage limit lifts: it is at work on the card, not waiting for the owner. */
+  private goesOnAfterLimit(cardId: string): boolean {
+    const card = this.o.board.item(cardId);
+    if (!card) return false;
+    const landed = !!this.o.board.row(cardId).landed;
+    return card.state === 'working' || card.state === 'inPr' || answering(card) || (landed && card.state !== 'waiting');
   }
 
   /** A worker that waited for the usage limit works again: its status line is back. */

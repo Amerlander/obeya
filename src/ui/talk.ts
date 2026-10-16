@@ -69,7 +69,7 @@ const place = (e: CardEvent, prev: CardEvent | undefined): 'owner' | 'agent' | '
     case 'denied':
       return 'line';
     case 'state':
-      return e.author === 'explorer' || (e.author === 'obeya' && !MILESTONE.test(e.text)) ? 'step' : 'line';
+      return e.author === 'explorer' || (e.author === 'obeya' && !MILESTONE.test(e.text) && !limitLine(e)) ? 'step' : 'line';
     default:
       return 'step';
   }
@@ -98,6 +98,9 @@ export function talkTurns(all: CardEvent[], opts: { asking?: Question; over?: bo
   let open = false;
   const events = asRead(all.filter((e) => !e.unread));
   const lastPause = events.findLast(pauseLine);
+  // the usage limit holds at its last line while nothing of the agent's came after it
+  const lastLimit = events.findLast(limitLine);
+  const limitHolds = !!lastLimit && !events.slice(events.indexOf(lastLimit) + 1).some(agentAuthor);
   // the worker handed over since it started
   let handedOver = false;
   // the agent's steps so far, closed above what comes next
@@ -127,9 +130,9 @@ export function talkTurns(all: CardEvent[], opts: { asking?: Question; over?: bo
       else steps.push(e);
     }
     else if (where === 'line' || where === 'aside') {
-      // what the agent did until the owner paused it stays above that line once it went on; while it
-      // is paused there, its bubble shows it
-      if (pauseLine(e) && !(opts.paused && e === lastPause)) close();
+      // what the agent did until the owner or the usage limit paused it stays above that line once it
+      // went on; while it is paused there, its bubble shows it
+      if ((pauseLine(e) && !(opts.paused && e === lastPause)) || (limitLine(e) && !(limitHolds && e === lastLimit))) close();
       shown.push({ e, steps: [], ...(where === 'line' ? { line: true as const } : {}) });
     }
     else if (where === 'agent') {
@@ -172,6 +175,17 @@ function repliesLater(events: CardEvent[], i: number): boolean {
 
 /** The line that the owner paused the card's agent. */
 const pauseLine = (e: CardEvent) => e.kind === 'state' && e.author === 'owner' && LANGUAGES.some((l) => e.text === MESSAGES[l].worker.pausedByOwner);
+
+/** Obeya's line that the usage limit stopped the agent's turn, and when it goes on. */
+const limitLine = (e: CardEvent) =>
+  e.kind === 'state' &&
+  e.author === 'obeya' &&
+  LANGUAGES.some((l) =>
+    [MESSAGES[l].worker.limitResumes, MESSAGES[l].worker.limitRetries].some((says) => {
+      const [before, after] = says('\0').split('\0') as [string, string];
+      return e.text.includes(before) && e.text.endsWith(after);
+    }),
+  );
 
 /** The events in the order the agent saw them: the owner's words it read later stand after the line it read them at, in the order said. */
 function asRead(events: CardEvent[]): CardEvent[] {
