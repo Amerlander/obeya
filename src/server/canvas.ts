@@ -170,7 +170,7 @@ export class CanvasRuntime {
     // the main branch the owner set counts from the start: the repository's id, its settings and its Lesestand go by it
     for (const r of config.repos) this.useBranch(r);
     const resolved = this.resolve(config);
-    const { id, name, refs, stored } = resolved;
+    const { id, name, repos, stored } = resolved;
     this.config = resolved.config;
     const images = (this.images = new Images(join(deps.home, 'images', id)));
     this.board = new Board(
@@ -182,7 +182,7 @@ export class CanvasRuntime {
       deps.language,
     );
     const board = this.board;
-    if (!stored) deps.store.setSetting(id, 'home_repo', refs[0]!.id);
+    if (!stored) deps.store.setSetting(id, 'home_repo', repos[0]!.ref.id);
 
     this.workRetro = new WorkRetro({
       board,
@@ -192,7 +192,7 @@ export class CanvasRuntime {
     });
     board.showSettings(this.settingsNow);
     // the Koordinator needs the workers, and the workers ask it: it is set right after them
-    resolved.config.repos.forEach((_, i) => this.addRepo(this.startRepo(resolved, i)));
+    repos.forEach((_, i) => this.addRepo(this.startRepo(resolved, i)));
     board.showPools(() =>
       this.repos.filter((r) => r.workspaces.pooled).map((r) => ({ repo: r.ref.id, hosts: r.workspaces.pool(r.workers.inTurn()) })),
     );
@@ -219,7 +219,7 @@ export class CanvasRuntime {
       onOwnerInput: (card, text) => koordinator.learn(card, 'idea', text),
       imageFiles: this.imageFiles,
       onReplied: (cardId, replied) => this.replied(cardId, replied),
-      toObeya: (cardId, request) => this.forward(cardId, request),
+      toObeya: this.toObeya,
       ...(deps.permissionMode ? { permissionMode: deps.permissionMode } : {}),
     });
     this.explorers.resumeAll();
@@ -233,7 +233,7 @@ export class CanvasRuntime {
       ...(deps.permissionMode ? { permissionMode: deps.permissionMode } : {}),
       dirOf: (thread) => answersDir(deps.home, id, thread),
       imageFiles: this.imageFiles,
-      toObeya: (cardId, request) => this.forward(cardId, request),
+      toObeya: this.toObeya,
       onAnswer: (talk, question, answer) =>
         this.commander.tell(`The answer ${answerTag(talk)} you looked up for the owner's question „${question}“ came in and was shown to them: ${answer}`),
     });
@@ -252,7 +252,7 @@ export class CanvasRuntime {
     board.interruptTalk();
     this.commander.resume();
     this.answers.resumeAll();
-    this.revisions = new Revisions({ board, runtime: deps.runtime, preferences: this.preferences, pathFor: (card) => this.repoOf(card).read.path, toObeya: (cardId, request) => this.forward(cardId, request), onRevised: (cardId, revised) => this.revised(cardId, revised) });
+    this.revisions = new Revisions({ board, runtime: deps.runtime, preferences: this.preferences, pathFor: (card) => this.repoOf(card).read.path, toObeya: this.toObeya, onRevised: (cardId, revised) => this.revised(cardId, revised) });
     this.revisions.resume();
     this.sharing = new Sharing({
       board,
@@ -272,6 +272,9 @@ export class CanvasRuntime {
   }
 
   private preferences = () => this.board.preferencesText();
+
+  /** What an agent passes on to Obeya (`forward`). */
+  private toObeya = (cardId: string, request: string) => this.forward(cardId, request);
 
   /** The settings of a repository the Arbeitsrückschau may propose a value for, as they apply now. */
   private settingsNow = (repo: string): Record<ProposedSetting, string | string[]> | undefined => {
@@ -326,10 +329,12 @@ export class CanvasRuntime {
   private startRepo(resolved: Resolved, index: number): Repo {
     const deps = this.deps;
     const board = this.board;
-    const rc = resolved.config.repos[index]!;
-    const info = resolved.infos[index]!;
-    const adapter = resolved.adapters[index]!;
-    const ref = resolved.refs[index]!;
+    const {
+      config: rc,
+      read: { info },
+      adapter,
+      ref,
+    } = resolved.repos[index]!;
     const isHome = index === 0;
     for (const p of this.shared.get(info.path)?.problems ?? []) console.warn(`Obeya: ${info.path}: ${p} (ignored)`);
     const site = siteOf(adapter);
@@ -421,7 +426,7 @@ export class CanvasRuntime {
       },
       imageFiles: this.imageFiles,
       onWorkEnded: (cardId, workspace) => this.workRetro.ended(cardId, workspace),
-      toObeya: (cardId, request) => this.forward(cardId, request),
+      toObeya: this.toObeya,
       ...(deps.permissionMode ? { permissionMode: deps.permissionMode } : {}),
       ...(deps.workerEnv ? { env: deps.workerEnv } : {}),
       ...(deps.parkGrace !== undefined ? { parkGrace: deps.parkGrace } : {}),
@@ -491,16 +496,15 @@ export class CanvasRuntime {
       this.deps.store.ensureCanvas(this.id, resolved.name);
       console.log(`Obeya: the canvas ${this.id} is called ${resolved.name} now`);
     }
-    const at = (path: string) => resolved.infos.findIndex((info) => info.path === path);
     const changed = this.repos.filter((r) => {
-      const i = at(r.info.path);
-      if (i < 0 || repoShape(r.config) !== repoShape(resolved.config.repos[i]!) || r.ref.id !== resolved.refs[i]!.id) return true;
-      r.config = resolved.config.repos[i]!;
+      const now = resolved.repos.find((x) => x.read.info.path === r.info.path);
+      if (!now || repoShape(r.config) !== repoShape(now.config) || r.ref.id !== now.ref.id) return true;
+      r.config = now.config;
       return false;
     });
     if (changed.length) this.due(changed.map((r) => r.info.path), 'config');
     // a repository new on the canvas starts at once; one whose restart waits starts with it
-    resolved.infos.forEach((info, i) => {
+    resolved.repos.forEach(({ read: { info } }, i) => {
       if (this.repos.some((r) => r.info.path === info.path) || this.pending?.paths.has(info.path)) return;
       const r = this.startRepo(resolved, i);
       this.addRepo(r);
@@ -535,7 +539,7 @@ export class CanvasRuntime {
       const patience = this.deps.restartPatienceMs ?? RESTART_PATIENCE_MS;
       p = this.pending = { paths: new Set(paths), reason, since, deadline: since + patience, waiting: [], stop: () => {} };
     }
-    const due: DueRestart = { reason: p.reason, deadline: p.deadline, repo: true };
+    const due = repoDue(p);
     for (const r of this.repos) if (paths.includes(r.info.path) && !this.obeyaDue) r.workers.restartDue(due);
     console.log(`Obeya: ${this.retiring ? `the canvas ${this.id} leaves the configuration; it stops` : `restarting the agents of ${paths.join(', ')}`}${this.pendingBusy().length ? ' once they paused' : ''}`);
     p.waiting = this.pendingBusy();
@@ -606,7 +610,7 @@ export class CanvasRuntime {
     for (const path of p.paths) {
       const at = this.repos.findIndex((r) => r.info.path === path);
       if (at >= 0) this.stopRepo(this.repos[at]!);
-      const i = resolved.infos.findIndex((info) => info.path === path);
+      const i = resolved.repos.findIndex((x) => x.read.info.path === path);
       if (i < 0) {
         if (at >= 0) this.repos.splice(at, 1);
         this.branchSettings.get(path)?.();
@@ -701,9 +705,7 @@ export class CanvasRuntime {
     const site = siteOf(r.adapter);
     if (JSON.stringify(site) !== JSON.stringify(r.site)) {
       r.site = site;
-      delete r.ref.share;
-      delete r.ref.shareNeeds;
-      Object.assign(r.ref, shareRef(site, this.deps.home));
+      setShare(r.ref, shareRef(site, this.deps.home));
       return 'follow';
     }
     return shared || problems ? 'follow' : 'same';
@@ -1213,18 +1215,23 @@ export class CanvasRuntime {
     const named = `${ws.label ? `${ws.label} ` : ''}${this.board.t.quote(ws.title)}`;
     const { path, branch } = this.repoOf(prototype).workers.buildOn(prototype.id, ws, named);
     this.board.work(ws.id, { workspace: path, branch, built_on: prototype.id });
-    for (const p of this.board.snapshot().items.filter((i) => i.prototypeOf === prototype.prototypeOf)) this.repoOf(p).workers.endPrototype(p.id, 'discarded', 'obeya');
+    this.discardPrototypes(prototype.prototypeOf!);
     const t = this.board.t.idea;
     this.board.decide({ project_id: project.id, card_id: ws.id, question: t.whichPrototype(named), answer: t.onPrototype(prototype.title), by: 'owner' });
     this.board.log(ws.id, 'state', 'owner', t.workstreamOnLog(prototype.title));
     this.koordinator.request(ws.id);
   }
 
+  /** The idea's prototypes still on the canvas go into the archive as discarded. */
+  private discardPrototypes(ideaId: string) {
+    for (const p of this.board.snapshot().items.filter((i) => i.prototypeOf === ideaId)) this.repoOf(p).workers.endPrototype(p.id, 'discarded', 'obeya');
+  }
+
   /** The idea is decided for building: its agent's conversation ends, the brief becomes the task, the other prototypes are discarded. */
   private decided(idea: Item, how: { answer: string; log: string }) {
     const { brief } = this.board.idea(idea.id);
     this.explorers.close(idea.id);
-    for (const p of this.board.snapshot().items.filter((i) => i.prototypeOf === idea.id)) this.repoOf(p).workers.endPrototype(p.id, 'discarded', 'obeya');
+    this.discardPrototypes(idea.id);
     this.board.work(idea.id, { state: 'planned', ...(brief.trim() ? { body: brief.trim() } : {}) });
     // the screenshots the owner showed in the discussion belong to what is built
     const shown = this.board.events(idea.id).flatMap((e) => (e.kind === 'talk' && e.author === 'owner' ? (e.images ?? []) : []));
@@ -1485,9 +1492,7 @@ export class CanvasRuntime {
     for (const r of this.repos) {
       const next = shareRef(r.site, this.deps.home);
       if (r.ref.share !== next.share || r.ref.shareNeeds?.file !== next.shareNeeds?.file) {
-        delete r.ref.share;
-        delete r.ref.shareNeeds;
-        Object.assign(r.ref, next);
+        setShare(r.ref, next);
         changed = true;
       }
     }
@@ -1498,7 +1503,7 @@ export class CanvasRuntime {
   restartDue(due: DueRestart | null) {
     this.obeyaDue = due;
     const p = this.pending;
-    for (const r of this.repos) r.workers.restartDue(due ?? (p?.paths.has(r.info.path) ? { reason: p.reason, deadline: p.deadline, repo: true } : null));
+    for (const r of this.repos) r.workers.restartDue(due ?? (p?.paths.has(r.info.path) ? repoDue(p) : null));
   }
 
   shutdown() {
@@ -1649,9 +1654,9 @@ export const readRepo = (path: string): RepoRead | null => gitStepsSync(path, re
  * first), each with Obeya's defaults and in front of them the repository's `.obeya/settings.json`
  * (`shared`: where they are read, by the repository's path; as `read` read them when left out) and
  * this machine's settings (`settings`: where a repository's are read; its entry's when left out),
- * their ids, their settings without this machine's (`values`), and the canvas's id and name. `read`
- * reads each repository, by its absolute path (git, waiting for it, when left out). Throws a
- * ConfigError.
+ * each with its id and its settings without this machine's (`values`), and the canvas's id and
+ * name. `read` reads each repository, by its absolute path (git, waiting for it, when left out).
+ * Throws a ConfigError.
  */
 export function resolveCanvas(
   config: CanvasConfig,
@@ -1661,15 +1666,14 @@ export function resolveCanvas(
   read: (path: string) => RepoRead | null = readRepo,
 ) {
   if (!config.repos.length) throw new ConfigError('noRepo', 'a canvas needs at least one repository');
-  let reads = config.repos.map((r, i) => {
+  const reads = config.repos.map((r, i) => {
     const got = read(resolve(r.path));
     if (!got) throw new ConfigError('notRepo', `${r.path} is not a git repository`, i);
     return got;
   });
-  let infos = reads.map((x) => x.info);
   // a repository runs once on a canvas: twice, it would have two of everything, its plan docs' note too
-  infos.forEach((info, i) => {
-    if (infos.findIndex((x) => x.path === info.path) < i) throw new ConfigError('sameRepo', `${config.repos[i]!.path} is on the canvas already`, i);
+  reads.forEach(({ info }, i) => {
+    if (reads.findIndex((x) => x.info.path === info.path) < i) throw new ConfigError('sameRepo', `${config.repos[i]!.path} is on the canvas already`, i);
   });
   const sharedOf =
     shared ??
@@ -1677,25 +1681,27 @@ export function resolveCanvas(
       const settings = reads.find((x) => x.info.path === path)?.shared.settings;
       return () => settings;
     });
-  let adapters = config.repos.map((r, i) => repoAdapter(r, infos[i]!, settings(r), sharedOf(infos[i]!.path)));
-  let refs = uniqueRefs(infos, adapters);
-  const id = config.id ? slug(config.id) : config.name ? slug(config.name) : slug(repoName(infos[0]!));
+  let repos = config.repos.map((r, i) => ({ config: r, read: reads[i]!, adapter: repoAdapter(r, reads[i]!.info, settings(r), sharedOf(reads[i]!.info.path)) }));
+  const refsOf = () => uniqueRefs(repos.map((x) => x.read.info), repos.map((x) => x.adapter));
+  let refs = refsOf();
+  const id = config.id ? slug(config.id) : config.name ? slug(config.name) : slug(repoName(reads[0]!.info));
   // the home repository is fixed when the canvas is first served: bare plan references, cards
   // without a repository and the home workspace directory are its, whatever the order later
   const stored = store.setting(id, 'home_repo');
   if (stored && stored !== refs[0]!.id) {
     const at = refs.findIndex((r) => r.id === stored);
     if (at < 0) throw new ConfigError('homeMissing', `canvas ${id}: its home repository "${stored}" is not configured; list it (first or anywhere)`);
-    const order = [at, ...refs.map((_, i) => i).filter((i) => i !== at)];
-    config = { ...config, repos: order.map((i) => config.repos[i]!) };
-    reads = order.map((i) => reads[i]!);
-    infos = order.map((i) => infos[i]!);
-    adapters = order.map((i) => adapters[i]!);
-    refs = uniqueRefs(infos, adapters);
+    repos = [repos[at]!, ...repos.filter((_, i) => i !== at)];
+    refs = refsOf();
   }
-  const name = config.name ?? repoName(infos[0]!);
-  const values = () => infos.map((info, i) => repoValues(info, namesClones(config.repos[i]!), sharedOf(info.path)() ?? {}, reads[i]!.detected));
-  return { config, id, name, infos, reads, adapters, values, refs, stored };
+  const name = config.name ?? repoName(repos[0]!.read.info);
+  return {
+    config: { ...config, repos: repos.map((x) => x.config) },
+    id,
+    name,
+    repos: repos.map((x, i) => ({ ...x, ref: refs[i]!, values: () => repoValues(x.read.info, namesClones(x.config), sharedOf(x.read.info.path)() ?? {}, x.read.detected) })),
+    stored,
+  };
 }
 
 /** What `resolveCanvas` resolved. */
@@ -1750,6 +1756,16 @@ function shareRef(site: DemoSite | null, home: string): Pick<RepoRef, 'share' | 
   const missing = siteMissing(home, site);
   return missing ? { shareNeeds: { site: siteName(site), file: missing } } : { share: true };
 }
+
+/** Tells the UI about sharing on the repository what `share` says, in place of what it was told before. */
+function setShare(ref: RepoRef, share: Pick<RepoRef, 'share' | 'shareNeeds'>) {
+  delete ref.share;
+  delete ref.shareNeeds;
+  Object.assign(ref, share);
+}
+
+/** The restart of a repository's agents that waits, as its workers hear of it. */
+const repoDue = (p: RepoRestart): DueRestart => ({ reason: p.reason, deadline: p.deadline, repo: true });
 
 function sameDir(a: string, b: string): boolean {
   try {

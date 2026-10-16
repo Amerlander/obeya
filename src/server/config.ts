@@ -479,38 +479,34 @@ export class Config {
         }),
       );
       try {
-        const { id, name, adapters, reads: got, values, refs, config } = resolveCanvas(c, this.o.store, undefined, undefined, read);
-        const without = values();
+        const { id, name, repos } = resolveCanvas(c, this.o.store, undefined, undefined, read);
+        // the repositories in the order given, though the home one runs first
+        const given = c.repos.map((r) => repos.find((x) => x.config === r)!);
         // what is wrong in a repository's settings for everyone is fixed there, not here: it keeps nothing from being saved
-        const leftover = c.repos.map((r) => got[config.repos.indexOf(r)]!.adapterModule);
         c.repos.forEach((r, repo) => {
-          const adapter = adapters[config.repos.indexOf(r)]!;
-          if (leftover[repo])
+          const { adapter, read: got } = given[repo]!;
+          if (got.adapterModule)
             problems.push({ code: 'adapterGone', canvas, repo, detail: `${REPO_ADAPTER_DIR}/ on the main branch is no longer read; what it says belongs in ${REPO_SETTINGS_FILE}` });
           if (r.hosts?.length) {
-            const why = adapter.land === 'main' ? 'its work lands on the main of this checkout' : !got[config.repos.indexOf(r)]!.info.remote ? 'it has no remote to clone from' : null;
+            const why = adapter.land === 'main' ? 'its work lands on the main of this checkout' : !got.info.remote ? 'it has no remote to clone from' : null;
             if (why) problems.push({ code: 'hostRepo', canvas, repo, detail: `the repository cannot have workers on other machines: ${why}` });
           }
           const site = adapter.demo?.site;
           const wrong = site && siteProblem(site, resolve(r.path));
           if (wrong) problems.push({ code: 'demoSite', canvas, repo, detail: wrong });
-          for (const detail of got[config.repos.indexOf(r)]!.shared.problems) problems.push({ code: 'repoSettings', canvas, repo, detail });
+          for (const detail of got.shared.problems) problems.push({ code: 'repoSettings', canvas, repo, detail });
         });
-        // the repositories in the order given, though the home one runs first
         return {
           id,
           name,
-          repos: c.repos.map((r) => {
-            const i = config.repos.indexOf(r);
-            return {
-              id: refs[i]!.id,
-              workspaces: adapters[i]!.workspaces,
-              ...(leftover[c.repos.indexOf(r)] ? { adapterGone: true } : {}),
-              values: without[i]!,
-              shareTo: adapters[i]!.land === 'main' ? 'main' : 'pr',
-              ...(adapters[i]!.land === 'pr' && adapters[i]!.direct ? { shareDirect: true } : {}),
-            };
-          }),
+          repos: given.map(({ ref, adapter, read: got, values }) => ({
+            id: ref.id,
+            workspaces: adapter.workspaces,
+            ...(got.adapterModule ? { adapterGone: true } : {}),
+            values: values(),
+            shareTo: adapter.land === 'main' ? 'main' : 'pr',
+            ...(adapter.land === 'pr' && adapter.direct ? { shareDirect: true } : {}),
+          })),
         };
       } catch (e) {
         if (!(e instanceof ConfigError)) throw e;
