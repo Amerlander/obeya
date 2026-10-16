@@ -1979,14 +1979,14 @@ export class Workers {
       },
       {
         name: 'reply',
-        description: `Answer a note or feedback from the owner in your card's conversation: a sentence or two in ${language}, what you change because of it or why nothing. Your turn goes on: carry on with your work.`,
+        description: `Answer a note or feedback from the owner in your card's conversation: a sentence or two in ${language}, what you change because of it or why nothing. The reply does not end your turn: if work remains, carry on with it; if none does (your work is handed over and the note changes nothing), your turn ends with the reply, and the card goes on waiting for the owner's approval.`,
         schema: { text: z.string() },
         run: ({ text }) => {
           const s = clip(String(text).trim(), 2000);
           if (!s) return 'Not shown: the reply is empty.';
           this.o.board.log(cardId, 'talk', 'worker', s);
           live.answered = true;
-          return 'Shown to the owner. Carry on.';
+          return 'Shown to the owner.';
         },
       },
       {
@@ -2067,7 +2067,7 @@ export class Workers {
       },
       {
         name: 'ready_for_review',
-        description: `Hand the finished work to the owner, after committing it, running the checks and making the demo. The summary (in ${language}) is what this handover tells the owner beyond what the card's conversation already holds: on your first handover, what changed from the user's point of view and what they really need to know (something left open or not verified, a decision you took for them), in a few short paragraphs at most; on a later one, only what is new since your last handover and your replies after it, often a sentence. Obeya keeps your handovers and replies together as the card's report for whoever reads it later. A problem you noticed outside the task goes to propose_card, not into the summary. The demo: a video's directory and chapter titles in scene order, or an HTML artifact's directory, with its report (in ${language}); without a new one, the demo already on the card stands. Then end your turn.`,
+        description: `Hand the finished work to the owner, after committing it, running the checks and making the demo. The summary (in ${language}) is what this handover tells the owner beyond what the card's conversation already holds: on your first handover, what changed from the user's point of view and what they really need to know (something left open or not verified, a decision you took for them), in a few short paragraphs at most; on a later one, only what your last handover and your replies since have not said yet, often a sentence. Obeya keeps your handovers and replies together as the card's report for whoever reads it later. A problem you noticed outside the task goes to propose_card, not into the summary. The demo: a video's directory and chapter titles in scene order, or an HTML artifact's directory, with its report (in ${language}); without a new one, the demo already on the card stands. Then end your turn.`,
         schema: {
           summary: z.string(),
           demo: z
@@ -2315,7 +2315,7 @@ Rules:
 - Follow the repository's own instructions (CLAUDE.md and docs).
 - Owner-facing text (report, reply, ask, ${prototype ? 'propose_build' : 'propose_card'}, ready_for_review) is in ${language}, short and concrete. What you write between tool calls also shows on the card for the owner, folded under your next message: keep it brief and in ${language} too.
 - Wait for anything external (a deploy, a CI run, a point in time, a process to finish) in the background: run_in_background or Monitor, then end your turn; Obeya wakes you when it finishes or fires. Never wait with sleep or a polling loop in the foreground: a note from the owner reaches you only once the running command is done.
-- When a note or feedback from the owner arrives, answer it with reply and go on. If it is unclear what they want, ask.
+- When a note or feedback from the owner arrives, answer it with reply. If it is unclear what they want, ask.
 `.trim() + (preferences ? `\n\n${preferences}` : '');
   }
 

@@ -432,10 +432,14 @@ the decision log as such), and a change they also ask for comes as a new handove
 
 The worker's summary is its handover in the card's conversation below, not repeated under the demo:
 what changed for the user and what the owner needs to know, in a few short paragraphs at most. A
-later handover says only what is new since the one before and the worker's replies after it, often
+later handover says only what the one before and the worker's replies since have not said yet, often
 a sentence: the owner has the rest in the conversation above it. Until 2026-10-15 the tool and the
 worker's instructions called the summary the whole report, the one thing the owner reads at the end,
-so a handover after feedback repeated the reply just before it nearly word for word. Whoever reads the card's report beyond its conversation (a follow-up's worker, the Koordinator, a
+so a handover after feedback repeated the reply just before it nearly word for word. Until
+2026-10-16 the reply told the worker its turn goes on („carry on with your work“) and the handover
+tool asked for „what is new since your last handover and your replies after it“, so a worker that
+answered a note on handed-over work and had nothing to change handed over again with the reply's
+facts; now the reply alone ends such a turn. Whoever reads the card's report beyond its conversation (a follow-up's worker, the Koordinator, a
 prototype's idea, a shared page's text) gets the whole of it, as the card's summary: the first
 handover since the worker started, then „Danach im Gespräch:“ with its replies and later handovers
 in order (`report` in `src/server/workers.ts`). A problem the worker noticed beyond the task is a proposal (`propose_card`), not
@@ -697,7 +701,8 @@ A worker has its tools served in-process:
   handover and an approval clear it, and a line reported while pausing for a restart gives way to
   the one from before once the worker paused.
 - `reply(text)`, its answer to a note or feedback in the card's conversation, which does not end its
-  turn.
+  turn: with work left the worker carries on; with none (its work handed over, the note changing
+  nothing) its turn ends with the reply, and the card goes on waiting for approval.
 - `ask(question, options, multiple, pick, pick_why)`, which returns at once — the worker ends its
   turn and the answer arrives as its next message. The owner picks one option, several when
   `multiple`, or writes their own answer, or both; `pick` and `pick_why` are the options the worker

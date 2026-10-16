@@ -314,7 +314,7 @@ describe('workers', () => {
     workers.start(c.id);
     workers.message(c.id, 'Bitte auch Excel.');
     expect(runtime.last.toolStep()).toContain('Bitte auch Excel.');
-    expect(runtime.last.call('reply', { text: 'Mache ich: Excel kommt als zweites Format dazu.' })).toBe('Shown to the owner. Carry on.');
+    expect(runtime.last.call('reply', { text: 'Mache ich: Excel kommt als zweites Format dazu.' })).toBe('Shown to the owner.');
     expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'talk', author: 'worker', text: 'Mache ich: Excel kommt als zweites Format dazu.' });
     expect(state(c.id)).toBe('working');
     // a reply is no handover: the turn ending after it is nudged
@@ -810,7 +810,7 @@ describe('workers', () => {
     writeFileSync(join(clone, 'export.ts'), 'export {}\n');
     git(clone, 'add', '.');
     git(clone, 'commit', '--quiet', '-m', 'Export');
-    expect(runtime.last.spec.tools.find((x) => x.name === 'ready_for_review')!.description).toContain('on a later one, only what is new since your last handover and your replies after it');
+    expect(runtime.last.spec.tools.find((x) => x.name === 'ready_for_review')!.description).toContain('on a later one, only what your last handover and your replies since have not said yet');
     runtime.last.call('ready_for_review', { summary: 'CSV-Export gebaut.', demo: artifact() });
     runtime.last.emit({ type: 'idle' });
     workers.message(c.id, 'Bitte mit Kopfzeile.');
