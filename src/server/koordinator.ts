@@ -6,7 +6,7 @@ import { z } from 'zod';
 import type { RepoAdapter } from '../adapters/types';
 import { inQueue, move, movable } from '../core/queue';
 import { type AgentRole, type CardEvent, type Item, nameless, type Preference, START_ALL_HOLD_MS, titleFrom, type Wait } from '../core/types';
-import { BadRequest, type Board } from './board';
+import { ACTIVE, BadRequest, type Board } from './board';
 import type { Utterance } from './db';
 import type { AgentRuntime, AgentTool } from './runtime';
 import type { Workers } from './workers';
@@ -62,8 +62,6 @@ export interface KoordinatorOptions {
   repoFor: (card: Item) => RepoHands;
   /** Where the Koordinator reads for what the owner says without a card: the home repository's Lesestand. */
   home: () => string;
-  /** The owner's recorded preferences, as agents read them. */
-  preferences?: () => string;
   /** How long a project's start waits for the owner to take it back; START_ALL_HOLD_MS by default. */
   holdMs?: number;
   /** After how many of the owner's inputs the Rückschau runs; REVIEW_EVERY by default. */
@@ -184,8 +182,6 @@ export class Koordinator {
     this.o.board.log(cardId, 'state', 'owner', this.o.board.t.koordinator.dequeued);
   }
 
-
-
   /**
    * The owner said something (to a worker, in an idea, to the Koordinator, in a card's text): if it
    * states a lasting preference, propose it as a rule for every agent; the owner accepts it in the
@@ -195,10 +191,7 @@ export class Koordinator {
   learn(card: Item | null, kind: OwnerInput, text: string, context: InputContext = {}) {
     // what surrounded the input is read now: by its turn, the agent may have answered it
     const around = this.around(card, kind, text, context);
-    this.learning = this.learning
-      .catch(() => {})
-      .then(() => this.distill(card, kind, text, context, around))
-      .catch((e) => console.error('Koordinator (learning):', e));
+    this.learning = this.learning.then(() => this.distill(card, kind, text, context, around)).catch((e) => console.error('Koordinator (learning):', e));
     this.noticed();
   }
 
@@ -217,10 +210,7 @@ export class Koordinator {
     const since = b.setting(REVIEW_SINCE)!;
     b.setSetting(REVIEW_COUNT, '0');
     b.setSetting(REVIEW_SINCE, new Date().toISOString());
-    this.learning = this.learning
-      .catch(() => {})
-      .then(() => this.review(since))
-      .catch((e) => console.error('Koordinator (Rückschau):', e));
+    this.learning = this.learning.then(() => this.review(since)).catch((e) => console.error('Koordinator (Rückschau):', e));
   }
 
   /** The Rückschau: one session reads what happened since `since` and proposes rules for patterns across cards. */
@@ -407,7 +397,7 @@ export class Koordinator {
       .snapshot()
       // approved work counts until it has landed: a PR not yet merged still holds its files
       // a prototype never lands, so it collides with nothing
-      .items.filter((i) => ['working', 'waiting', 'inPr', 'approved'].includes(i.state) && i.kind !== 'project' && !i.prototypeOf && (!repo || i.repo === repo));
+      .items.filter((i) => ACTIVE.includes(i.state) && i.kind !== 'project' && !i.prototypeOf && (!repo || i.repo === repo));
   }
 
   /**
@@ -425,7 +415,7 @@ export class Koordinator {
 
   private async decide(cardId: string) {
     // a card started without a title gets one first: its worker, branch and the owner know it by it
-    if (this.o.board.item(cardId) && nameless(this.o.board.item(cardId)!)) await this.name(cardId);
+    await this.name(cardId);
     const card = this.o.board.item(cardId);
     // taken out of the queue or deleted while waiting for its turn
     if (!card || card.state !== 'planned' || !card.queue || !('checking' in card.queue)) return;
@@ -450,7 +440,8 @@ export class Koordinator {
     }
     if (!this.o.board.item(cardId)?.queue) return;
     this.o.board.work(cardId, { scope: JSON.stringify({ files: scope.files, reason: scope.reason }) });
-    const behind = this.collisions(card, scope, [...active, ...ahead]);
+    // the cards in progress or queued ahead whose changes it expects to conflict with the card's
+    const behind = [...active, ...ahead].filter((a) => scope.conflictsWith.includes(a.id)).map((a) => a.id);
     const t = this.o.board.t.koordinator;
     if (!behind.length) return this.startNow(cardId, `${t.noConflict}${scope.reason ? ` ${scope.reason}` : ''}`);
     const names = behind
@@ -549,11 +540,6 @@ export class Koordinator {
       this.setQueue(cardId, { workspace: shortage }, since);
       this.o.board.log(cardId, 'state', 'obeya', { none: this.o.board.t.koordinator.noWorkspace, dirty: this.o.board.t.koordinator.dirtyWorkspaces, slots: this.o.board.t.koordinator.noSlot }[shortage]);
     }
-  }
-
-  /** Cards of the card's repository (in progress or queued ahead) whose changes the Koordinator expects to conflict with the card's. */
-  collisions(card: Item, scope: Scope, others: Item[]): string[] {
-    return others.filter((a) => a.repo === card.repo && scope.conflictsWith.includes(a.id)).map((a) => a.id);
   }
 
   /** Queued cards start once nothing they wait for is in progress or queued any more. */
@@ -931,7 +917,6 @@ const UTTERED: Record<Utterance['kind'], string> = {
   talk: "in an idea's discussion",
   say: 'to you',
 };
-
 
 /** How the learner hears each kind of input. */
 const INPUTS: Record<OwnerInput, string> = {

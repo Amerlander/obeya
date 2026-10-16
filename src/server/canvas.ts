@@ -200,7 +200,6 @@ export class CanvasRuntime {
     const koordinator = (this.koordinator = new Koordinator({
       board,
       runtime: deps.runtime,
-      preferences: this.preferences,
       home: () => this.repos[0]!.read.path,
       repoFor: (card) => {
         const r = this.repoOf(card);

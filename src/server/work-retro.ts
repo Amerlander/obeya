@@ -278,10 +278,7 @@ export class WorkRetro {
   }
 
   private serial(fn: () => Promise<void>) {
-    this.chain = this.chain
-      .catch(() => {})
-      .then(fn)
-      .catch((e) => console.error('Arbeitsrückschau:', e));
+    this.chain = this.chain.then(fn).catch((e) => console.error('Arbeitsrückschau:', e));
   }
 
   /** Settles once what is queued now has run (tests). */

@@ -99,8 +99,6 @@ export interface SharingOptions {
   home: string;
   /** Where the card's pull request is, for the page's link in its description. */
   forge: Forge;
-  /** This machine's name on a site several machines publish to; the host name without it. */
-  machine?: string;
 }
 
 /** A site's deploy that has not finished by then is stopped (an upload of a few files takes seconds). */
@@ -565,7 +563,7 @@ export class Sharing {
   private target(card: Item): ShareTarget | null {
     const src = this.o.sourceFor(card);
     if (!src || siteMissing(this.o.home, src.site)) return null;
-    return siteTarget(src.site, src.repo, this.o.home, this.o.board.t.share, { machine: this.o.machine });
+    return siteTarget(src.site, src.repo, this.o.home, this.o.board.t.share);
   }
 
   private card(cardId: string): Item {

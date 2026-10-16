@@ -139,7 +139,7 @@ export function reshareable(r: CardRow): boolean {
 }
 
 /** States a worker or the owner's decision is still part of. */
-const ACTIVE: string[] = ['working', 'waiting', 'inPr', 'approved'];
+export const ACTIVE: string[] = ['working', 'waiting', 'inPr', 'approved'];
 
 /** Exchanges with the Koordinator its sheet shows. */
 const SHEET_TALK = 30;
