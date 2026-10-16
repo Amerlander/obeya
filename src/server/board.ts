@@ -8,7 +8,7 @@
 
 import { existsSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { boundsOf, CARD_SIZE, freeSpotNear, GAP, type Place, PROJECT_HEAD, placeProjects, placeWorkstreams, projectSize, sizeOf, unionBounds } from '../core/layout';
+import { type Bounds, boundsOf, CARD_SIZE, freeSpotNear, GAP, type Place, PROJECT_HEAD, placeProjects, placeWorkstreams, projectSize, sizeOf, unionBounds } from '../core/layout';
 import type { Language } from '../core/locale';
 import { MESSAGES, type Messages } from '../core/messages';
 import { allTicked, type OtherDoc, type PlanDoc } from '../core/plan-doc';
@@ -445,12 +445,7 @@ export class Board {
     const items = this.snapshot().items;
     if (place) {
       const [w, h] = CARD_SIZE.task;
-      const at = freeSpotNear(
-        { x: place.x - w / 2, y: place.y - h / 2 },
-        CARD_SIZE.task,
-        items.filter((i) => !i.parent).map((i) => boundsOf(i, items)),
-        place.view,
-      );
+      const at = this.nearFree(items, { x: place.x - w / 2, y: place.y - h / 2 }, place.view);
       return { x: Math.round(at.x), y: Math.round(at.y) };
     }
     const top = items.filter((i) => !i.parent);
@@ -471,17 +466,17 @@ export class Board {
     const from = items.find((i) => i.id === fromId);
     // an archived card is not on the canvas: its follow-ups go where there is room
     if (!from) return this.freeSpot();
-    const b = boundsOf(from, items);
     const earlier = items.filter((i) => i.from === fromId && i.state !== 'proposal' && !i.prototypeOf).length;
-    return this.nearFree(items, { x: b.x + 35 + earlier * (CARD_SIZE.task[0] + GAP), y: b.y + b.h + 60 });
+    return this.nearFree(items, below(boundsOf(from, items), earlier));
   }
 
-  /** The free spot nearest `want` for a new card, clear of every project and card on the canvas. */
-  private nearFree(items: Item[], want: { x: number; y: number }): { x: number; y: number } {
+  /** The free spot nearest `want` for a new card, clear of every project and card on the canvas; in `view` if there is room there. */
+  private nearFree(items: Item[], want: { x: number; y: number }, view?: Bounds): { x: number; y: number } {
     return freeSpotNear(
       want,
       CARD_SIZE.task,
       items.filter((i) => !i.parent).map((i) => boundsOf(i, items)),
+      view,
     );
   }
 
@@ -498,13 +493,8 @@ export class Board {
   propose(fromId: string, p: { title: string; task: string; reason?: string; idea?: boolean; questions?: Question[] }): Item {
     const items = this.snapshot().items;
     const from = items.find((i) => i.id === fromId);
-    const b = from ? boundsOf(from, items) : undefined;
-    const at = b ? this.nearFree(items, { x: b.x + 35, y: b.y + b.h + 60 }) : this.freeSpot();
-    const proposal: Proposal = {
-      ...(p.idea ? { idea: true } : {}),
-      ...(p.reason?.trim() ? { reason: p.reason.trim().slice(0, 2000) } : {}),
-      questions: (p.questions ?? []).slice(0, 5),
-    };
+    const at = from ? this.nearFree(items, below(boundsOf(from, items))) : this.freeSpot();
+    const proposal = proposalOf(p);
     const [row] = this.store.insert([
       {
         canvas_id: this.canvas.id,
@@ -514,7 +504,7 @@ export class Board {
         body: p.task.slice(0, 20000),
         ...at,
         from_id: fromId,
-        repo: from && from.repo !== this.home ? from.repo : null,
+        repo: this.repoColumn(from?.repo),
         proposal: JSON.stringify(proposal),
         group_id: from?.group ?? null,
       },
@@ -522,7 +512,7 @@ export class Board {
     // its questions stand in its conversation as the proposing agent asked them, and stay there once settled
     for (const q of proposal.questions) this.log(row!.id, 'question', 'worker', formatQuestion(q, this.language()));
     this.changed();
-    return toItems([row!], [], this.home)[0]!;
+    return this.itemOf(row!);
   }
 
   /**
@@ -538,17 +528,17 @@ export class Board {
         title: p.title.slice(0, 200),
         body: p.body.slice(0, 20000),
         ...this.freeSpot(),
-        repo: repo !== this.home ? repo : null,
+        repo: this.repoColumn(repo),
         retro: p.basis.slice(0, 2000),
       },
     ]);
     this.changed();
-    return toItems([row!], [], this.home)[0]!;
+    return this.itemOf(row!);
   }
 
   /** The cards the Arbeitsrückschau proposed for a repository, with what became of them. */
   retroProposals(repo: string) {
-    return this.store.retroProposals(this.canvas.id, repo !== this.home ? repo : null);
+    return this.store.retroProposals(this.canvas.id, this.repoColumn(repo));
   }
 
   /** A value for a repository's setting the Arbeitsrückschau proposes: it waits in Obeya's sheet beside the rules. */
@@ -649,7 +639,7 @@ export class Board {
   addQuestion(title: string, thread: StoredThread, session: string | undefined, repo: string | undefined, near?: string): Item {
     const at = near && this.item(near) ? this.followUpSpot(near) : this.freeSpot();
     const [row] = this.store.insert([
-      { canvas_id: this.canvas.id, kind: 'question', state: 'done', title: clip(oneLine(title), 160), body: '', ...at, repo: repo && repo !== this.home ? repo : null, ...(near && this.item(near) ? { group_id: this.groupOf(this.own(near)) } : {}) },
+      { canvas_id: this.canvas.id, kind: 'question', state: 'done', title: clip(oneLine(title), 160), body: '', ...at, repo: this.repoColumn(repo), ...(near && this.item(near) ? { group_id: this.groupOf(this.own(near)) } : {}) },
     ]);
     this.store.update(row!.id, { thread: JSON.stringify(thread), ...(session ? { session_id: session } : {}) });
     this.changed();
@@ -660,8 +650,7 @@ export class Board {
   addPrototype(ideaId: string, title: string, body: string, variant?: string): Item {
     const items = this.snapshot().items;
     const idea = items.find((i) => i.id === ideaId);
-    const b = idea ? boundsOf(idea, items) : { x: 0, y: 0, w: 0, h: 0 };
-    const prototypes = items.filter((i) => i.prototypeOf === ideaId).length;
+    const at = below(idea ? boundsOf(idea, items) : { x: 0, y: 0, w: 0, h: 0 }, items.filter((i) => i.prototypeOf === ideaId).length);
     const [row] = this.store.insert([
       {
         canvas_id: this.canvas.id,
@@ -669,17 +658,16 @@ export class Board {
         state: 'planned',
         title: title.slice(0, 200),
         body: body.slice(0, 20000),
-        x: b.x + 35 + prototypes * (CARD_SIZE.task[0] + GAP),
-        y: b.y + b.h + 60,
+        ...at,
         from_id: ideaId,
         prototype_of: ideaId,
         group_id: idea?.group ?? null,
         ...(variant ? { prototype: JSON.stringify({ variant } satisfies StoredPrototype) } : {}),
-        repo: idea && idea.repo !== this.home ? idea.repo : null,
+        repo: this.repoColumn(idea?.repo),
       },
     ]);
     this.changed();
-    return toItems([row!], [], this.home)[0]!;
+    return this.itemOf(row!);
   }
 
   /** The prototype's worker proposes to build the idea on it; the owner accepts on the prototype's card. */
@@ -821,7 +809,7 @@ export class Board {
   accept(id: string, picks: string[][] = [], asIdea = false) {
     const row = this.own(id);
     if (row.state !== 'proposal') throw new BadRequest('notProposal', 'not a proposal');
-    const proposal = row.proposal ? (JSON.parse(row.proposal) as Proposal) : undefined;
+    const proposal = storedProposal(row);
     if (proposal?.revising) throw new BadRequest('revising', 'the proposal is being reworked');
     const idea = asIdea && !!proposal?.idea;
     // an agent's proposal keeps that it was one: its task is not the owner's words
@@ -838,7 +826,7 @@ export class Board {
   revising(id: string, words: string, spoken: boolean, said?: number): boolean {
     const row = this.own(id);
     if (row.state !== 'proposal') throw new BadRequest('notProposal', 'not a proposal');
-    const proposal: Proposal = row.proposal ? JSON.parse(row.proposal) : { questions: [] };
+    const proposal = storedProposal(row) ?? { questions: [] };
     const these: Revising = { words: words.slice(0, 20000), ...(spoken ? { spoken } : {}), ...(said ? { said: [said] } : {}) };
     const revising = proposal.revising ? { ...proposal.revising, next: [...(proposal.revising.next ?? []), these] } : these;
     this.store.update(id, { proposal: JSON.stringify({ ...proposal, revising } satisfies Proposal) });
@@ -849,7 +837,7 @@ export class Board {
   /** The owner takes back words that wait for the proposal's next rework; false when none of them are these. */
   unrevise(id: string, said: number): boolean {
     const row = this.own(id);
-    const proposal: Proposal | undefined = row.proposal ? JSON.parse(row.proposal) : undefined;
+    const proposal = storedProposal(row);
     const next = proposal?.revising?.next;
     if (!proposal?.revising || !next?.some((r) => r.said?.includes(said))) return false;
     const rest = next.filter((r) => !r.said?.includes(said));
@@ -863,7 +851,7 @@ export class Board {
   acceptAfterRevision(id: string, on: boolean): boolean {
     const row = this.own(id);
     if (row.state !== 'proposal') throw new BadRequest('notProposal', 'not a proposal');
-    const { acceptAfterRevision: was, ...proposal }: Proposal = row.proposal ? JSON.parse(row.proposal) : { questions: [] };
+    const { acceptAfterRevision: was, ...proposal } = storedProposal(row) ?? { questions: [] };
     if (!!was === on) return false;
     this.store.update(id, { proposal: JSON.stringify({ ...proposal, ...(on ? { acceptAfterRevision: true } : {}) } satisfies Proposal) });
     this.changed();
@@ -878,17 +866,10 @@ export class Board {
   revised(id: string, p?: { title: string; task: string; reason?: string; idea?: boolean; questions: Question[] }): boolean {
     const row = this.store.card(id);
     if (!row || row.canvas_id !== this.canvas.id || row.deleted_at || row.state !== 'proposal') return false;
-    const { revising: done, ...was }: Proposal = row.proposal ? JSON.parse(row.proposal) : { questions: [] };
+    const { revising: done, ...was } = storedProposal(row) ?? { questions: [] };
     // what the owner said meanwhile is the next rework's
     const next = done?.next?.length ? { revising: merged(done.next) } : {};
-    const proposal: Proposal = p
-      ? {
-          ...(p.idea ? { idea: true } : {}),
-          ...(p.reason?.trim() ? { reason: p.reason.trim().slice(0, 2000) } : {}),
-          questions: p.questions.slice(0, 5),
-          ...(was.acceptAfterRevision ? { acceptAfterRevision: true } : {}),
-        }
-      : was;
+    const proposal: Proposal = p ? { ...proposalOf(p), ...(was.acceptAfterRevision ? { acceptAfterRevision: true } : {}) } : was;
     this.store.update(id, { ...(p ? { title: p.title.slice(0, 200), body: p.task.slice(0, 20000) } : {}), proposal: JSON.stringify({ ...proposal, ...next } satisfies Proposal) });
     this.changed();
     return true;
@@ -1279,6 +1260,16 @@ export class Board {
     if (!this.canvas.repos.some((r) => r.id === repo)) throw new BadRequest('invalid', 'unknown repository');
   }
 
+  /** What a card's `repo` column holds for `repo`: nothing for the home repository. */
+  private repoColumn(repo: string | undefined): string | null {
+    return repo && repo !== this.home ? repo : null;
+  }
+
+  /** A card just stored, as the UI sees it. */
+  private itemOf(row: CardRow): Item {
+    return toItems([row], [], this.home)[0]!;
+  }
+
   /** The owner rejects a proposal; it is kept, so the same one does not come back. */
   rejectProposal(id: number) {
     if (!this.store.decideProposal(this.canvas.id, id, 'rejected')) throw new BadRequest('unknownPreference', 'no such proposal');
@@ -1365,7 +1356,7 @@ export class Board {
   create(n: NewCard): Item {
     checkText(n.title, 'title', 200);
     if (n.body !== undefined) checkText(n.body, 'body', 20000);
-    if (n.repo !== undefined && !this.canvas.repos.some((r) => r.id === n.repo)) throw new BadRequest('invalid', 'unknown repository');
+    if (n.repo !== undefined) this.checkRepo(n.repo);
     const from = n.from !== undefined ? this.own(n.from) : undefined;
     if (from && n.idea) throw new BadRequest('invalid', 'an idea follows up on no card');
     if (!from) {
@@ -1384,14 +1375,14 @@ export class Board {
         title: n.title,
         body: n.body ?? '',
         ...at,
-        repo: repo && repo !== this.home ? repo : null,
+        repo: this.repoColumn(repo),
         ...(from ? { from_id: from.id, group_id: this.groupOf(from) } : {}),
         images: n.images?.length ? JSON.stringify(n.images) : null,
         ...(n.idea ? { idea: JSON.stringify({ status: 'open', brief: '' } satisfies StoredIdea) } : {}),
       },
     ]);
     this.changed();
-    return toItems([row!], [], this.home)[0]!;
+    return this.itemOf(row!);
   }
 
   patch(id: string, p: CardPatch) {
@@ -1411,13 +1402,13 @@ export class Board {
     if (p.state === 'idea' && row.state !== 'idea' && (row.plan_ref || (row.state ?? 'planned') !== 'planned' || row.workspace))
       throw new BadRequest('invalid', 'only a planned card of your own that has not been worked on can become an idea');
     if (repo !== undefined) {
-      if (!this.canvas.repos.some((r) => r.id === repo)) throw new BadRequest('invalid', 'unknown repository');
+      this.checkRepo(repo);
       // its workspace and branch belong to the repository it started in
       if ((row.state ?? 'planned') !== 'planned' || row.workspace) throw new BadRequest('invalid', 'a card changes repository only before work begins');
     }
     this.store.update(id, {
       ...fields,
-      ...(repo !== undefined ? { repo: repo === this.home ? null : repo } : {}),
+      ...(repo !== undefined ? { repo: this.repoColumn(repo) } : {}),
       ...(images !== undefined ? { images: images.length ? JSON.stringify(images) : null } : {}),
     });
     this.changed();
@@ -1608,7 +1599,7 @@ export function toItems(rows: CardRow[], docs: PlanDoc[], home: string): Item[] 
         ...(r.built_on ? { builtOn: r.built_on } : {}),
         ...(r.images ? { images: JSON.parse(r.images) as string[] } : {}),
         ...(r.retro ? { retro: r.retro } : {}),
-        ...(r.proposal ? (r.state === 'proposal' ? { proposal: JSON.parse(r.proposal) as Proposal } : { proposed: true as const }) : {}),
+        ...(r.proposal ? (r.state === 'proposal' ? { proposal: storedProposal(r)! } : { proposed: true as const }) : {}),
         ...(r.group_id ? { group: r.group_id } : {}),
       });
       continue;
@@ -1673,6 +1664,9 @@ export function toItems(rows: CardRow[], docs: PlanDoc[], home: string): Item[] 
   );
   return [...projects, ...ordered, ...manual];
 }
+
+/** Where a card goes below the card with bounds `b`: the `n`th of those there, each beside the one before. */
+const below = (b: Bounds, n = 0) => ({ x: b.x + 35 + n * (CARD_SIZE.task[0] + GAP), y: b.y + b.h + 60 });
 
 /** The fields a worker adds to a card. */
 function work(r: CardRow): Partial<Item> {
@@ -1808,6 +1802,15 @@ const merged = (said: Revising[]): Revising => ({
   words: said.map((r) => r.words).join('\n\n'),
   ...(said.some((r) => r.spoken) ? { spoken: true } : {}),
   said: said.flatMap((r) => r.said ?? []),
+});
+
+const storedProposal = (r: CardRow): Proposal | undefined => (r.proposal ? (JSON.parse(r.proposal) as Proposal) : undefined);
+
+/** A proposal as an agent made it: whether it is an idea, why, and at most five questions. */
+const proposalOf = (p: { reason?: string; idea?: boolean; questions?: Question[] }): Proposal => ({
+  ...(p.idea ? { idea: true } : {}),
+  ...(p.reason?.trim() ? { reason: p.reason.trim().slice(0, 2000) } : {}),
+  questions: (p.questions ?? []).slice(0, 5),
 });
 
 const toDecision = (d: DecisionRow): Decision => ({ id: d.id, cardId: d.card_id, question: d.question, answer: d.answer, by: d.by, at: d.at });
