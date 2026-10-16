@@ -48,7 +48,7 @@ export class VoiceSetup {
     const job = this.job ? { job: { ...this.job } } : {};
     // through the cloud nothing on this machine is needed
     if (cloud?.used && cloud.key)
-      return { platform, arch, listen, items: [{ id: 'recognition', state: 'ok', found: serviceName(cloud), cloud }], fetch: { parts: [], mb: 0 }, ...job };
+      return { platform, arch, listen, items: [{ id: 'recognition', state: 'ok', found: serviceName(cloud), cloud }], fetch: { mb: 0 }, ...job };
     await freshPath(env, platform);
     const family = platform === 'linux' ? linuxFamily() : null;
     const hint = (id: 'ffmpeg' | 'uv') => installHint(id, platform, arch, family);
@@ -80,7 +80,7 @@ export class VoiceSetup {
     }
     const ffmpeg = ffmpegOut?.match(/ffmpeg version (\S+)/)?.[1];
     items.push(ffmpeg ? { id: 'ffmpeg', state: 'ok', found: ffmpeg } : { id: 'ffmpeg', state: 'missing', install: hint('ffmpeg') });
-    return { platform, arch, listen, items, fetch: { parts: mb ? ['recognition'] : [], mb }, ...job };
+    return { platform, arch, listen, items, fetch: { mb }, ...job };
   }
 
   /** The measurement of this machine's recognition: running, or the last one of the backend in use. */
@@ -104,7 +104,7 @@ export class VoiceSetup {
   }
 
   private run(fetching: boolean): Promise<VoiceSetupView> {
-    const job: NonNullable<VoiceSetupView['job']> = (this.job = { running: true, step: fetching ? 'fetch' : 'measure', line: '' });
+    const job: NonNullable<VoiceSetupView['job']> = (this.job = { running: true, step: fetching ? 'fetch' : 'measure' });
     const listen = this.o.local.backend;
     this.done = (async () => {
       console.log(`Obeya: loading the speech recognition (${listenKit(listen).name}, fetched the first time)`);
@@ -119,7 +119,7 @@ export class VoiceSetup {
         ({ text } = await this.o.local.transcribe(this.clip, ''));
         seconds = Math.min(seconds, Math.round((performance.now() - started) / 10) / 100);
       }
-      const speed: VoiceSpeed = { backend: listen, seconds, clip: CHECK_CLIP.seconds, heard: text, slow: seconds > CHECK_CLIP.seconds };
+      const speed: VoiceSpeed = { backend: listen, seconds, slow: seconds > CHECK_CLIP.seconds };
       writeVoiceFile(this.o.home, { ...readVoiceFile(this.o.home), speed });
       console.log(`Obeya: the speech recognition heard ${CHECK_CLIP.seconds} s of speech in ${seconds} s${speed.slow ? ', too slow' : ''}: ${text}`);
     })().then(
@@ -158,7 +158,7 @@ export class VoiceSetup {
       if (e instanceof CloudError) throw new BadRequest('voiceCloud', e.message);
       throw e;
     }
-    const tested: CloudVoiceView['tested'] = { seconds: Math.round((performance.now() - started) / 10) / 100, heard: heard.text };
+    const tested: CloudVoiceView['tested'] = { seconds: Math.round((performance.now() - started) / 10) / 100 };
     writeVoiceFile(this.o.home, { ...readVoiceFile(this.o.home), use: 'cloud', cloud: { ...service, tested } });
     console.log(`Obeya: voice in through ${serviceName(service)} (${service.model}), which heard the check in ${tested.seconds} s: ${heard.text}`);
     return this.view();

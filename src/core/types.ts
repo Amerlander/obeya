@@ -599,8 +599,6 @@ export interface RepoRef {
   share?: boolean;
   /** The demo site of its settings needs an env file this machine lacks (as the settings name it, relative to Obeya's home): demos are exported meanwhile. */
   shareNeeds?: { site: string; file: string };
-  /** Its workers work in a pool of clones (else a worktree per card, as many as there are cards). */
-  clones?: boolean;
   /** Its approved work goes out as a pull request (else it lands on the default branch of the Obeya checkout). */
   pullRequests?: boolean;
   /** With `pullRequests`: the owner may have approved work pushed directly onto the default branch instead (`direct` of its settings). */
@@ -1542,8 +1540,8 @@ export interface CloudVoiceView {
   key: boolean;
   /** Recordings go to it rather than to the recognition on this machine. */
   used: boolean;
-  /** How long it took for the check's sentence, and what it heard, when it was last tested. */
-  tested?: { seconds: number; heard: string };
+  /** How long it took for the check's sentence when it was last tested. */
+  tested?: { seconds: number };
 }
 
 /**
@@ -1553,9 +1551,6 @@ export interface CloudVoiceView {
 export interface VoiceSpeed {
   backend: ListenBackend;
   seconds: number;
-  /** The sentence's length in seconds. */
-  clip: number;
-  heard: string;
   slow: boolean;
 }
 
@@ -1579,10 +1574,10 @@ export interface VoiceSetupView {
   arch: string;
   listen: ListenBackend;
   items: VoiceSetupItem[];
-  /** What "Installieren" fetches and about how much: the recognition and its model. */
-  fetch: { parts: 'recognition'[]; mb: number };
+  /** About how much "Installieren" fetches (the recognition and its model); 0: nothing to fetch. */
+  fetch: { mb: number };
   /** The installation or measurement running or last run. */
-  job?: { running: boolean; step: 'fetch' | 'measure'; line: string; error?: string };
+  job?: { running: boolean; step: 'fetch' | 'measure'; error?: string };
 }
 
 /** The setup assistant's list (`src/server/machine.ts`): what Obeya needs on this machine, by what it is for. */
@@ -1702,8 +1697,7 @@ export type OwnerHold = 'video' | 'voice';
 /** A restart that waits for workers to finish their turns, or for the owner, as one canvas sees it. */
 export interface PendingRestart {
   reason: RestartReason;
-  /** When it was due, and when it goes ahead however busy the workers are (ms since the epoch). */
-  since: number;
+  /** When it goes ahead however busy the workers are (ms since the epoch). */
   deadline: number;
   /** The cards on this canvas whose worker it waits for. */
   cards: string[];

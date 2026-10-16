@@ -128,7 +128,7 @@ export function serve(
     const due = restarter?.due();
     if (!due) return byId.get(id)?.pendingRestart() ?? null;
     const here = due.waiting.filter((w) => w.canvas === id);
-    return { reason: due.reason, since: due.since, deadline: due.deadline, cards: here.map((w) => w.card), elsewhere: due.waiting.length - here.length, owner: due.owner };
+    return { reason: due.reason, deadline: due.deadline, cards: here.map((w) => w.card), elsewhere: due.waiting.length - here.length, owner: due.owner };
   };
   /** How many things on each canvas need the owner: each canvas's switcher points to the others. */
   const counted = (c: CanvasRuntime) => waitingOn(c.board.snapshot());

@@ -17,7 +17,7 @@ export class ShellReports {
   report(input: unknown): PushKeyShell {
     const s = (input ?? {}) as Partial<Record<keyof PushKeyShell, unknown>>;
     if (!nonEmpty(s.state) || !nonEmpty(s.platform)) throw new BadRequest('invalid', 'state and platform expected');
-    const shell = { state: nonEmpty(s.state), platform: nonEmpty(s.platform), session: nonEmpty(s.session), detail: nonEmpty(s.detail) } as PushKeyShell;
+    const shell = { state: nonEmpty(s.state), platform: nonEmpty(s.platform), detail: nonEmpty(s.detail) } as PushKeyShell;
     for (const k of Object.keys(shell) as (keyof PushKeyShell)[]) if (shell[k] === undefined) delete shell[k];
     this.last = { shell, at: this.now() };
     return shell;

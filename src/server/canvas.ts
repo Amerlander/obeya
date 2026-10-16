@@ -106,13 +106,12 @@ interface Repo extends RepoRuntime {
 
 /**
  * A restart of some repositories' agents that waits for them to pause (their configuration
- * changed where they work, or they leave the canvas): the repositories by path, why, since when and
- * until when at most.
+ * changed where they work, or they leave the canvas): the repositories by path, why, and until when
+ * at most.
  */
 interface RepoRestart {
   paths: Set<string>;
   reason: 'config' | 'repository';
-  since: number;
   deadline: number;
   /** The cards it waits for, as the page was last told. */
   waiting: string[];
@@ -534,9 +533,8 @@ export class CanvasRuntime {
     const fresh = !p;
     if (p) for (const path of paths) p.paths.add(path);
     else {
-      const since = Date.now();
       const patience = this.deps.restartPatienceMs ?? RESTART_PATIENCE_MS;
-      p = this.pending = { paths: new Set(paths), reason, since, deadline: since + patience, waiting: [], stop: () => {} };
+      p = this.pending = { paths: new Set(paths), reason, deadline: Date.now() + patience, waiting: [], stop: () => {} };
     }
     const due = repoDue(p);
     for (const r of this.repos) if (paths.includes(r.info.path) && !this.obeyaDue) r.workers.restartDue(due);
@@ -646,7 +644,6 @@ export class CanvasRuntime {
     if (!p) return null;
     return {
       reason: p.reason,
-      since: p.since,
       deadline: p.deadline,
       cards: p.waiting,
       elsewhere: 0,
@@ -748,7 +745,7 @@ export class CanvasRuntime {
   private follow() {
     for (const r of this.repos) {
       r.info.branch = defaultBranch(r.info.path);
-      for (const k of ['clones', 'pullRequests', 'direct'] as const) delete r.ref[k];
+      for (const k of ['pullRequests', 'direct'] as const) delete r.ref[k];
       Object.assign(r.ref, settled(r.info, r.adapter));
       // where work lands on the local main, the checkout is the Lesestand; otherwise a worktree on the default branch
       r.read.retarget(r.adapter.land === 'main' ? null : join(this.deps.home, 'read', this.id, r.ref.id));
@@ -1734,11 +1731,10 @@ function uniqueRefs(infos: RepoInfo[], adapters: RepoAdapter[]): RepoRef[] {
   });
 }
 
-/** What a repository's ref says of its settings, which may change while the canvas runs: its main branch, its workspaces, how work lands. */
-function settled(info: RepoInfo, adapter: RepoAdapter): Pick<RepoRef, 'branch' | 'clones' | 'pullRequests' | 'direct'> {
+/** What a repository's ref says of its settings, which may change while the canvas runs: its main branch, how work lands. */
+function settled(info: RepoInfo, adapter: RepoAdapter): Pick<RepoRef, 'branch' | 'pullRequests' | 'direct'> {
   return {
     branch: info.branch,
-    ...(adapter.workspaces === 'clones' ? { clones: true } : {}),
     ...(adapter.land === 'pr' ? { pullRequests: true, ...(adapter.direct ? { direct: true } : {}) } : {}),
   };
 }

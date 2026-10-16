@@ -67,7 +67,6 @@ test('the voice check names what is missing, how to install it here, and what "I
     // without uv the package is not in its cache: fetched by "Installieren" or the first command, once uv is there
     expect(by.recognition).toMatchObject({ state: 'later', found: 'Parakeet', waits: 'uv' });
     await expect(setup.install()).rejects.toThrow('uv');
-    expect(view.fetch.parts).toEqual(['recognition']);
     expect(view.fetch.mb).toBe(by.recognition!.mb!);
 
     // a Python of one's own without the package is missing
@@ -93,9 +92,9 @@ test('"Installieren" loads the recognition and times it on a short sentence, and
     await setup.finished();
     expect(loaded).toBe(1);
     const view = await setup.view();
-    expect(view.job).toEqual({ running: false, step: 'measure', line: '' });
+    expect(view.job).toEqual({ running: false, step: 'measure' });
     const speed = view.items.find((i) => i.id === 'recognition')!.speed;
-    expect(speed).toMatchObject({ backend: 'parakeet', clip: CHECK_CLIP.seconds, heard: 'Starte die Karte', slow: false });
+    expect(speed).toMatchObject({ backend: 'parakeet', slow: false });
     expect(typeof speed === 'object' && speed.seconds).toBeGreaterThan(0.02);
     // kept for the next start, for this backend only
     expect(readVoiceFile(home).speed?.backend).toBe('parakeet');
@@ -153,7 +152,7 @@ test('a cloud service is tested with the sentence, then hears every recording; a
     expect((sent.at(-1)!.form.get('file') as File).name).toBe('clip.ogg');
     // nothing on this machine is needed any more; the page never sees the key
     expect(view.items).toHaveLength(1);
-    expect(view.items[0]).toMatchObject({ id: 'recognition', state: 'ok', found: 'Groq', cloud: { preset: 'groq', key: true, used: true, tested: { heard: 'Starte die Karte Export für Vermieter.' } } });
+    expect(view.items[0]).toMatchObject({ id: 'recognition', state: 'ok', found: 'Groq', cloud: { preset: 'groq', key: true, used: true, tested: { seconds: expect.any(Number) } } });
     expect(JSON.stringify(view)).not.toContain('gsk_right');
     if (process.platform !== 'win32') expect(statSync(join(home, VOICE_FILE)).mode & 0o777).toBe(0o600);
 

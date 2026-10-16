@@ -63,9 +63,8 @@ export type PushKeyState = 'on' | 'permission' | 'bind' | 'none' | 'unsupported'
 
 export interface PushKeyShell {
   state: PushKeyState;
-  /** The shell's platform (`macos`, `windows`, `linux`) and, on Linux, its session: `x11` or `wayland`. */
+  /** The shell's platform: `macos`, `windows` or `linux`. */
   platform: string;
-  session?: string;
   /** What the desktop shows for the bound shortcut (Wayland), or what failed. */
   detail?: string;
 }

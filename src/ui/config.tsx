@@ -1027,9 +1027,9 @@ function VoiceBlock({ on }: { on: boolean }) {
       {view.listen === 'faster' && <p className="hint">{v.faster}</p>}
       {view.job?.running ? (
         <p className="hint c-install">
-          <span className="c-step">{v.step[view.job.step]}</span> <code>{view.job.line}</code>
+          <span className="c-step">{v.step[view.job.step]}</span>
         </p>
-      ) : view.fetch.parts.length ? (
+      ) : view.fetch.mb ? (
         <div className="c-install">
           <button className="btn small" disabled={blocked} onClick={install}>
             {v.install(megabytes(view.fetch.mb))}
