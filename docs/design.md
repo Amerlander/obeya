@@ -4420,6 +4420,10 @@ video plays, within the last half minute: it says so every 30 s then (`{ type: '
 comes back into view. A canvas left in view with nobody at it holds nothing off. What starts waiting
 while the owner is there is not pushed later either: it is on the canvas in front of them.
 
+Every push goes as urgent (`Urgency: high`), which lets the push service wake a sleeping phone. Whether
+it does is up to the phone: on the owner's Pixel (2026-10-16) a push sent while it slept showed only
+once it was unlocked, as Android held Chrome's messages back.
+
 *Several at once:* the first goes out at once; what starts waiting within the minute after goes out as
 one push at its end, without what no longer waits by then („3 Karten warten auf dich“, the titles as
 the text), and a further minute starts; a minute without anything ends it.
