@@ -23,6 +23,7 @@ import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, type DemoPageParts, day,
 import { type Forge, parsePrUrl } from './forge';
 import type { AgentRuntime } from './runtime';
 import { readSession } from './koordinator';
+import type { CardRow } from './db';
 import { branchName } from './workspaces';
 import { zip } from './zip';
 import { messageOf } from '../core/text';
@@ -158,8 +159,7 @@ export class Sharing {
 
   /** After a restart: a share under way goes on, a withdrawal too; pages published with an earlier version are marked. */
   resume() {
-    for (const r of this.o.board.sharedRows()) {
-      const s = JSON.parse(r.share!) as StoredShare;
+    for (const { r, s } of this.shares()) {
       // one of many shared again goes on with the rest of them
       if (s.state === 'publishing' && s.again && this.o.board.reshareRun()?.queue[0] === r.id) continue;
       if (s.state === 'publishing') void serial(() => this.publish(r.id));
@@ -178,14 +178,11 @@ export class Sharing {
   reshareMany(count: number | null) {
     const run = this.o.board.reshareRun();
     if (run?.queue.length) throw new BadRequest('reshareBusy', 'pages are being shared again already');
-    const rows = this.o.board.sharedRows().filter((r) => reshareable(r) && this.find(r.id) && this.target(this.find(r.id)!));
+    const rows = this.shares().filter(({ r }) => reshareable(r) && this.find(r.id) && this.target(this.find(r.id)!));
     if (!rows.length) throw new BadRequest('nothingOutdated', 'no shared page is outdated');
-    const made = (r: (typeof rows)[number]) => {
-      const dir = (JSON.parse(r.share!) as StoredShare).dir;
-      return dir ? (statOr(join(dir, 'demo.mp4')) ?? statOr(join(dir, 'index.html')) ?? statOr(dir) ?? 0) : 0;
-    };
+    const made = (dir?: string) => (dir ? (statOr(join(dir, 'demo.mp4')) ?? statOr(join(dir, 'index.html')) ?? statOr(dir) ?? 0) : 0);
     const queue = rows
-      .map((r) => ({ id: r.id, at: made(r) }))
+      .map(({ r, s }) => ({ id: r.id, at: made(s.dir) }))
       .sort((a, b) => b.at - a.at)
       .slice(0, count ?? undefined)
       .map((r) => r.id);
@@ -258,9 +255,9 @@ export class Sharing {
    */
   async checkVersions() {
     const targets = new Map<string, ShareTarget>();
-    for (const r of this.o.board.sharedRows()) {
+    for (const { r, s } of this.shares()) {
       const card = this.find(r.id);
-      const target = card && (JSON.parse(r.share!) as StoredShare).url ? this.target(card) : null;
+      const target = card && s.url ? this.target(card) : null;
       if (target) targets.set(target.key, target);
     }
     for (const target of targets.values()) {
@@ -274,10 +271,9 @@ export class Sharing {
 
   /** Pages shared from here that another machine's deployment took offline: deployed again, a line on each card. */
   private async repair(target: ShareTarget, shared: string[], missing: string[]) {
-    const ids = this.o.board
-      .sharedRows()
-      .filter((r) => missing.includes((JSON.parse(r.share!) as StoredShare).slug))
-      .map((r) => r.id);
+    const ids = this.shares()
+      .filter(({ s }) => missing.includes(s.slug))
+      .map(({ r }) => r.id);
     const log = (kind: 'activity' | 'state' | 'error', text: string) => ids.forEach((id) => this.o.board.log(id, kind, 'obeya', text));
     const t = this.o.board.t.share;
     const r = await target.repair(shared, (text) => log('activity', text));
@@ -290,8 +286,7 @@ export class Sharing {
   /** Pages withdrawn on another machine: their cards here lose their link. */
   private lost(key: string, gone: Gone[] = []) {
     for (const g of gone) {
-      const r = this.o.board.sharedRows().find((r) => (JSON.parse(r.share!) as StoredShare).slug === g.slug);
-      const s = r && (JSON.parse(r.share!) as StoredShare);
+      const { r, s } = this.shares().find(({ s }) => s.slug === g.slug) ?? {};
       const card = r && this.find(r.id);
       if (!r || !s?.url || s.state || !card || this.target(card)?.key !== key) continue;
       this.set(r.id, { slug: s.slug });
@@ -301,8 +296,7 @@ export class Sharing {
 
   /** Marks each page at rest shared through the target as published with another version than its current one, or not. */
   private mark(key: string, versions: Versions) {
-    for (const r of this.o.board.sharedRows()) {
-      const s = JSON.parse(r.share!) as StoredShare;
+    for (const { r, s } of this.shares()) {
       const card = this.find(r.id);
       if (!s.url || s.state || !card || this.target(card)?.key !== key) continue;
       const current = versionOf(versions, s.shown?.kind);
@@ -547,11 +541,9 @@ export class Sharing {
 
   /** The slugs of the other pages shared through the target. */
   private others(cardId: string, key: string): string[] {
-    return this.o.board
-      .sharedRows()
-      .filter((r) => r.id !== cardId)
-      .flatMap((r) => {
-        const s = JSON.parse(r.share!) as StoredShare;
+    return this.shares()
+      .filter(({ r }) => r.id !== cardId)
+      .flatMap(({ r, s }) => {
         const card = this.find(r.id);
         return s.url && s.state !== 'withdrawing' && card && this.target(card)?.key === key ? [s.slug] : [];
       })
@@ -602,6 +594,11 @@ export class Sharing {
   private demo(cardId: string): (Demo & { dir: string }) | null {
     const d = this.o.board.row(cardId).demo;
     return d ? (JSON.parse(d) as Demo & { dir: string }) : null;
+  }
+
+  /** The cards of the canvas, archived ones too, that were ever shared or are about to be, with their shares. */
+  private shares(): { r: CardRow; s: StoredShare }[] {
+    return this.o.board.sharedRows().map((r) => ({ r, s: JSON.parse(r.share!) as StoredShare }));
   }
 
   private stored(cardId: string): StoredShare | null {
