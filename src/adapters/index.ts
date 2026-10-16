@@ -5,6 +5,7 @@ import { detectedBranch, type GitSteps, gitStepsSync } from '../server/workspace
 import { generic } from './generic';
 import { checkShared } from './schema';
 import type { RepoAdapter, RepoInfo } from './types';
+import { messageOf } from '../core/text';
 
 /** Where a repository kept an adapter module before its settings said it all (`hasAdapterModule`). */
 export const REPO_ADAPTER_DIR = '.obeya/adapter';
@@ -87,7 +88,7 @@ export function parseShared(text: string): SharedRead {
   try {
     made = JSON.parse(text);
   } catch (e) {
-    return { problems: [`${REPO_SETTINGS_FILE} is no JSON: ${e instanceof Error ? e.message : String(e)}`] };
+    return { problems: [`${REPO_SETTINGS_FILE} is no JSON: ${messageOf(e)}`] };
   }
   if (!made || typeof made !== 'object' || Array.isArray(made)) return { problems: [`${REPO_SETTINGS_FILE} holds no JSON object`] };
   const raw = made as Record<string, unknown>;

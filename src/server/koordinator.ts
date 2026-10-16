@@ -12,7 +12,7 @@ import type { AgentRuntime, AgentTool } from './runtime';
 import type { Workers } from './workers';
 import { type Change, RECHECK_MS, type Workspaces } from './workspaces';
 import { LANGUAGE_NAMES } from '../core/locale';
-import { clip } from '../core/text';
+import { clip, messageOf } from '../core/text';
 
 /** A workstream as the Koordinator scheduled it, in its turn's order. */
 interface Planned {
@@ -453,7 +453,7 @@ export class Koordinator {
     try {
       scope = await this.estimate(card, active, ahead);
     } catch (e) {
-      this.o.board.log(cardId, 'error', 'obeya', this.o.board.t.koordinator.estimateFailed(e instanceof Error ? e.message : String(e)));
+      this.o.board.log(cardId, 'error', 'obeya', this.o.board.t.koordinator.estimateFailed(messageOf(e)));
       scope = { files: [], conflictsWith: [], reason: '' };
     }
     if (!this.o.board.item(cardId)?.queue) return;
@@ -494,7 +494,7 @@ export class Koordinator {
       plan = await this.schedule(this.o.board.item(projectId)!, batch, active, ahead);
     } catch (e) {
       // judged one by one instead: without the dependencies, but nothing is lost
-      this.o.board.log(projectId, 'error', 'obeya', this.o.board.t.koordinator.togetherFailed(e instanceof Error ? e.message : String(e)));
+      this.o.board.log(projectId, 'error', 'obeya', this.o.board.t.koordinator.togetherFailed(messageOf(e)));
       for (const w of batch) {
         this.setQueue(w.id, { checking: true });
         this.serial(() => this.decide(w.id));
@@ -553,7 +553,7 @@ export class Koordinator {
       this.o.repoFor(card).workers.start(cardId);
     } catch (e) {
       const shortage = e instanceof BadRequest ? SHORTAGE[e.code] : undefined;
-      if (!shortage) return this.o.board.log(cardId, 'error', 'obeya', e instanceof Error ? e.message : String(e), e instanceof BadRequest ? e.code : undefined);
+      if (!shortage) return this.o.board.log(cardId, 'error', 'obeya', messageOf(e), e instanceof BadRequest ? e.code : undefined);
       this.setQueue(cardId, { workspace: shortage }, since);
       this.o.board.log(cardId, 'state', 'obeya', { none: this.o.board.t.koordinator.noWorkspace, dirty: this.o.board.t.koordinator.dirtyWorkspaces, slots: this.o.board.t.koordinator.noSlot }[shortage]);
     }

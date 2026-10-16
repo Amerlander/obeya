@@ -1,6 +1,7 @@
 // A command of the `app` of a repository's settings (`stop`, `keep`), run in a workspace by Obeya itself (design: Parking).
 
 import { remote } from './hosts';
+import { messageOf } from '../core/text';
 
 /** An app's stop takes seconds; one that hangs this long counts as failed. */
 const APP_TIMEOUT = 2 * 60_000;
@@ -18,6 +19,6 @@ export async function runAppCommand(cwd: string, command: string, timeout = APP_
     const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
     return { ok: code === 0, output: `${out}${err}`.trim() || (code === 0 ? '' : p.signalCode ? `stopped (${p.signalCode})` : `exit code ${code}`) };
   } catch (e) {
-    return { ok: false, output: e instanceof Error ? e.message : String(e) };
+    return { ok: false, output: messageOf(e) };
   }
 }

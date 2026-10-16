@@ -21,6 +21,7 @@ import { mediaType } from './images';
 import { COMPILED } from './resources';
 import type { Messages } from '../core/messages';
 import type { AgentEffort, AgentRole, AgentSetting } from '../core/types';
+import { messageOf } from '../core/text';
 
 export interface AgentTool {
   name: string;
@@ -269,7 +270,7 @@ export const sdkRuntime: AgentRuntime = {
           }
         }
       } catch (e) {
-        if (!abort.signal.aborted && !lost) spec.onEvent({ type: 'error', message: e instanceof Error ? e.message : String(e) });
+        if (!abort.signal.aborted && !lost) spec.onEvent({ type: 'error', message: messageOf(e) });
       }
       if (lost && !abort.signal.aborted) spec.onEvent({ type: 'lost', message: `the connection to ${there!.host.name} was lost` });
     })();

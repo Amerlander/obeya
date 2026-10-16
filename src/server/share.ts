@@ -25,6 +25,7 @@ import { type Forge, parsePrUrl } from './forge';
 import type { AgentRuntime } from './runtime';
 import { branchName } from './workspaces';
 import { zip } from './zip';
+import { messageOf } from '../core/text';
 
 /** What a page on the site is made of. */
 export interface SharePage {
@@ -387,7 +388,7 @@ export class Sharing {
       this.o.forge.setBody(cwd, pr, body);
       this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.share.prLinked(n));
     } catch (e) {
-      this.o.board.log(cardId, 'error', 'obeya', this.o.board.t.share.prNotLinked(n, e instanceof Error ? e.message : String(e)));
+      this.o.board.log(cardId, 'error', 'obeya', this.o.board.t.share.prNotLinked(n, messageOf(e)));
     }
   }
 

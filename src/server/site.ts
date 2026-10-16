@@ -43,6 +43,7 @@ import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, day, demoFile, demoPageH
 import { artifactCopy } from './artifact-copy';
 import { BUN_ENV } from './resources';
 import { COMMAND_TIMEOUT, commandWords, SHARE_CWD, type SharePage, type ShareTarget, scriptArgv, tail, type Versions } from './share';
+import { messageOf } from '../core/text';
 
 /** Where the sites live under Obeya's home. */
 export const SITES_DIR = 'sites';
@@ -227,7 +228,7 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
         return await get(path, env);
       } catch (e) {
         if (e instanceof Refused) throw e;
-        throw unreadable(e instanceof Error ? e.message : String(e));
+        throw unreadable(messageOf(e));
       }
     };
     const status = (r: Response) => (r.status >= 300 && r.status < 400 ? t.loginWall(r.status) : `HTTP ${r.status}`);
@@ -330,7 +331,7 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
           bytes = new Uint8Array(await r.arrayBuffer());
         } catch (err) {
-          throw new Refused(t.downloadFailed(name, err instanceof Error ? err.message : String(err)));
+          throw new Refused(t.downloadFailed(name, messageOf(err)));
         }
         if (bytes.length !== want.size || hashOf(bytes) !== want.hash) throw new Refused(t.downloadBad(name));
         writeFileSync(to, bytes);
@@ -395,7 +396,7 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
       out = `${o}\n${e}`.trim();
       code = c;
     } catch (e) {
-      out = e instanceof Error ? e.message : String(e);
+      out = messageOf(e);
       code = -1;
     }
     if (code !== 0) throw new Refused(t.deployFailed(code), { cause: out });
@@ -486,7 +487,7 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
       return { ...(await fn(gone)), gone };
     } catch (e) {
       if (e instanceof Refused) return { why: e.message, said: typeof e.cause === 'string' ? tail(e.cause) : '', gone };
-      return { why: e instanceof Error ? e.message : String(e), said: '', gone };
+      return { why: messageOf(e), said: '', gone };
     }
   };
 

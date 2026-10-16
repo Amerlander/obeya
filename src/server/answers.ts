@@ -20,7 +20,7 @@ import { imageNote } from './images';
 import type { AgentRuntime } from './runtime';
 import { TO_OBEYA, toObeyaTool } from './to-obeya';
 import { describeTool, SPOKEN } from './workers';
-import { clip } from '../core/text';
+import { clip, messageOf } from '../core/text';
 
 export interface AnswerOptions {
   board: Board;
@@ -108,7 +108,7 @@ export class Answers {
           : { message: fresh }),
       })
         .then((a) => this.deliver(talkId, thread, by, t.question!, a, reading))
-        .catch((e) => this.deliver(talkId, thread, by, t.question!, { text: this.o.board.t.answer.failed(e instanceof Error ? e.message : String(e)) }, reading)),
+        .catch((e) => this.deliver(talkId, thread, by, t.question!, { text: this.o.board.t.answer.failed(messageOf(e)) }, reading)),
     ).finally(() => this.busy.delete(talkId));
   }
 
@@ -267,7 +267,7 @@ export class Answers {
     } catch (e) {
       // paused: what it was asked stays pending
       if (e instanceof Interrupted) return;
-      a = { text: this.o.board.t.answer.failed(e instanceof Error ? e.message : String(e)) };
+      a = { text: this.o.board.t.answer.failed(messageOf(e)) };
     } finally {
       this.reading.delete(cardId);
       if (this.turnEnds.get(cardId) === end) this.turnEnds.delete(cardId);

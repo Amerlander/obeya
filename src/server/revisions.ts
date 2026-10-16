@@ -10,6 +10,7 @@ import { toQuestion } from './advisor';
 import { BadRequest, type Board } from './board';
 import type { AgentRuntime } from './runtime';
 import { toObeyaTool } from './to-obeya';
+import { messageOf } from '../core/text';
 
 export interface RevisionOptions {
   board: Board;
@@ -84,7 +85,7 @@ export class Revisions {
         },
         (e) => {
           if (!this.o.board.revised(cardId)) return;
-          this.o.board.log(cardId, 'error', 'koordinator', this.o.board.t.koordinator.reviseFailed(e instanceof Error ? e.message : String(e)));
+          this.o.board.log(cardId, 'error', 'koordinator', this.o.board.t.koordinator.reviseFailed(messageOf(e)));
           return false;
         },
       )

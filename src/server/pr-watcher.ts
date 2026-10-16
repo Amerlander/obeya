@@ -8,6 +8,7 @@ import { confidence, lastAsked, readyToMerge, reviewOf, reviewStale, type Forge,
 /** Below this share of a reviewer's confidence (4 of 5), Obeya leaves the merge to the owner. */
 const MIN_CONFIDENCE = 0.8;
 import type { Workers } from './workers';
+import { messageOf } from '../core/text';
 
 export class PrWatcher {
   private timer: ReturnType<typeof setInterval> | undefined;
@@ -147,7 +148,7 @@ export class PrWatcher {
           this.save(cardId, next);
           return this.workers.merged(cardId, commit || undefined);
         } catch (e) {
-          const reason = (e instanceof Error ? e.message : String(e)).replace(/^gh pr merge \S+: /, '');
+          const reason = (messageOf(e)).replace(/^gh pr merge \S+: /, '');
           if (pr.mergeError !== reason || pr.readyHead !== s.head) this.board.log(cardId, 'state', 'obeya', this.board.t.pr.mergeFailed(reason));
           next.mergeError = reason;
         }

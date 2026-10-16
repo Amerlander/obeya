@@ -12,6 +12,7 @@ import { layerSettings, SHARED_FIELDS, type SettingsShared, type SharedSettings 
 import { BadRequest } from './board';
 import type { Forge } from './forge';
 import { defaultBranch, GIT } from './workspaces';
+import { messageOf } from '../core/text';
 
 interface Run {
   code: number;
@@ -132,6 +133,6 @@ export function proposeShared(repoPath: string, mine: SharedSettings, forge: For
     });
     return { pr };
   } catch (e) {
-    throw new BadRequest('settingsShare', e instanceof Error ? e.message : String(e));
+    throw new BadRequest('settingsShare', messageOf(e));
   }
 }

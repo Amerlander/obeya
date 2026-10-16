@@ -13,6 +13,7 @@ import { type CardDiff, cardDiff } from '../core/diff';
 import type { PoolHost, WorkspaceShortage } from '../core/types';
 import type { Store } from './db';
 import { HostError, hostName, onHost, remote, sh as shWord, type SshHost, TOKEN_HELPER, tokenHelperArgs } from './hosts';
+import { messageOf } from '../core/text';
 
 export class WorkspaceError extends Error {
   constructor(
@@ -55,7 +56,7 @@ function remoteWorkspace(path: string) {
   try {
     return remote(path);
   } catch (e) {
-    throw new WorkspaceError(e instanceof Error ? e.message : String(e));
+    throw new WorkspaceError(messageOf(e));
   }
 }
 
@@ -165,7 +166,7 @@ async function rebaseOnto(ws: string, upstream: string, base: string): Promise<L
       code: 'landConflict',
       worker: true,
       files,
-      detail: `rebase onto ${base} failed${files.length ? `; conflicts in ${files.join(', ')}` : ''}: ${e instanceof Error ? e.message : String(e)}`,
+      detail: `rebase onto ${base} failed${files.length ? `; conflicts in ${files.join(', ')}` : ''}: ${messageOf(e)}`,
     };
   }
 }
@@ -260,7 +261,7 @@ export class Workspaces {
       }
       return null;
     } catch (e) {
-      return e instanceof Error ? e.message : String(e);
+      return messageOf(e);
     }
   }
 
@@ -457,7 +458,7 @@ export class Workspaces {
       if ((await gitAsync(ws, 'rev-list', '--count', `${upstream}..HEAD`)) === '0') return { code: 'landEmpty', worker: true, detail: 'the branch has no commits' };
       if ((await gitAsync(this.o.repoPath, 'branch', '--show-current')) !== base) return { code: 'landCheckout', worker: false, detail: `the Obeya checkout is not on ${base}` };
     } catch (e) {
-      return { code: 'land', worker: false, detail: e instanceof Error ? e.message : String(e) };
+      return { code: 'land', worker: false, detail: messageOf(e) };
     }
     try {
       const from = await gitAsync(this.o.repoPath, 'rev-parse', 'HEAD');
@@ -469,7 +470,7 @@ export class Workspaces {
       return { from, to: await gitAsync(this.o.repoPath, 'rev-parse', 'HEAD') };
     } catch (e) {
       // typically local changes in the Obeya checkout that the fast-forward would overwrite
-      return { code: 'landMerge', worker: false, detail: e instanceof Error ? e.message : String(e) };
+      return { code: 'landMerge', worker: false, detail: messageOf(e) };
     }
   }
 
@@ -499,13 +500,13 @@ export class Workspaces {
         if ((await gitAsync(ws, 'rev-list', '--count', `${upstream}..HEAD`)) === '0') return { code: 'landEmpty', worker: true, detail: 'the branch has no commits' };
         from = await gitAsync(ws, 'rev-parse', upstream);
       } catch (e) {
-        return { code: 'landPush', worker: false, detail: e instanceof Error ? e.message : String(e) };
+        return { code: 'landPush', worker: false, detail: messageOf(e) };
       }
       try {
         await gitAsync(ws, 'push', '--quiet', 'origin', `HEAD:refs/heads/${base}`);
         return { from, to: await gitAsync(ws, 'rev-parse', 'HEAD') };
       } catch (e) {
-        const detail = e instanceof Error ? e.message : String(e);
+        const detail = messageOf(e);
         // the default branch moved since the fetch, or while pushing; anything else (a protected branch, say) is the owner's
         if (attempt === 0 && /non-fast-forward|fetch first|\[rejected\]|cannot lock ref|failed to update ref/.test(detail)) continue;
         return { code: 'landPush', worker: false, detail };

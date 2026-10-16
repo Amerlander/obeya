@@ -33,6 +33,7 @@ import { siteMissing, siteName } from './site';
 import { type DueRestart, Workers } from './workers';
 import { branchSetting, defaultBranch, detectingBranch, gitCalls, type GitSteps, gitStepsSync, type Landed, readingBranches, together, useBranchSetting, Workspaces } from './workspaces';
 import { claudeToken, githubToken, hostName, registerHost } from './hosts';
+import { messageOf } from '../core/text';
 
 export type { CanvasConfig, RepoConfig };
 
@@ -479,7 +480,7 @@ export class CanvasRuntime {
     try {
       resolved = this.resolve(next);
     } catch (e) {
-      console.error(`Obeya: the new configuration of the canvas ${this.id} does not resolve; it runs on as it was: ${e instanceof Error ? e.message : String(e)}`);
+      console.error(`Obeya: the new configuration of the canvas ${this.id} does not resolve; it runs on as it was: ${messageOf(e)}`);
       return;
     }
     this.config = resolved.config;
@@ -594,7 +595,7 @@ export class CanvasRuntime {
     try {
       resolved = this.resolve(this.config);
     } catch (e) {
-      console.error(`Obeya: the configuration of the canvas ${this.id} does not resolve; its repositories run on as they were: ${e instanceof Error ? e.message : String(e)}`);
+      console.error(`Obeya: the configuration of the canvas ${this.id} does not resolve; its repositories run on as they were: ${messageOf(e)}`);
       for (const r of this.repos) if (p.paths.has(r.info.path)) r.workers.restartDue(this.obeyaDue);
       this.emitPending();
       return;

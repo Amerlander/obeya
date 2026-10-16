@@ -12,7 +12,7 @@ import type { Moment } from './db';
 import { type AgentRuntime, type AgentSession, failureReason } from './runtime';
 import { type Language, LANGUAGE_NAMES } from '../core/locale';
 import { MESSAGES } from '../core/messages';
-import { clip, oneLine } from '../core/text';
+import { clip, oneLine, messageOf } from '../core/text';
 
 export type Command = (
   /** `from`: the card it follows up on; `place`: where the owner was on the canvas, for one without. */
@@ -241,7 +241,7 @@ export class Commander {
     } catch (e) {
       // the Koordinator's session failed (not logged in, say): the owner hears why, not that they went unheard
       const t = this.o.board.t;
-      const confirm = t.voice.couldNotRead(failureReason(e instanceof Error ? e.message : String(e), t));
+      const confirm = t.voice.couldNotRead(failureReason(messageOf(e), t));
       reply(confirm);
       return { confirm };
     }
@@ -350,7 +350,7 @@ export class Commander {
       await this.o.execute(command);
     } catch (e) {
       const card = 'card' in command ? command.card : undefined;
-      if (card) this.o.board.log(card, 'error', 'obeya', e instanceof Error ? e.message : String(e), e instanceof BadRequest ? e.code : undefined);
+      if (card) this.o.board.log(card, 'error', 'obeya', messageOf(e), e instanceof BadRequest ? e.code : undefined);
       else console.error('voice command:', e);
     }
   }

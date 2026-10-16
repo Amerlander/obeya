@@ -22,7 +22,7 @@ import { readingShared } from '../adapters';
 import { branchName, gitStepsSync, type Landed, together, WorkspaceError, type Workspaces } from './workspaces';
 import type { PrState, Shipped } from './board';
 import { parsePrUrl } from './forge';
-import { clip } from '../core/text';
+import { clip, messageOf } from '../core/text';
 
 export interface WorkerOptions {
   board: Board;
@@ -689,7 +689,7 @@ export class Workers {
         try {
           this.release(cardId);
         } catch (e) {
-          if (this.o.board.item(cardId)) this.o.board.log(cardId, 'error', 'obeya', e instanceof Error ? e.message : String(e));
+          if (this.o.board.item(cardId)) this.o.board.log(cardId, 'error', 'obeya', messageOf(e));
         }
       }, ms),
     );
@@ -1537,7 +1537,7 @@ export class Workers {
       await this.land(cardId, 'obeya');
     } catch (e) {
       // the Obeya checkout is in the way: the card waits for the owner, who approves again
-      if (!(e instanceof BadRequest)) return this.o.board.log(cardId, 'error', 'obeya', e instanceof Error ? e.message : String(e));
+      if (!(e instanceof BadRequest)) return this.o.board.log(cardId, 'error', 'obeya', messageOf(e));
       this.o.board.work(cardId, { state: 'waiting', need: this.o.board.row(cardId).demo ? 'demo' : 'review', status_line: null });
       this.o.board.log(cardId, 'error', 'obeya', e.message, e.code);
     }
@@ -1844,7 +1844,7 @@ export class Workers {
       await there.host.copyFrom(dir, copy);
       return { dir: copy };
     } catch (e) {
-      return { wrong: e instanceof Error ? e.message : String(e) };
+      return { wrong: messageOf(e) };
     }
   }
 

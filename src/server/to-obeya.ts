@@ -5,6 +5,7 @@
 
 import { z } from 'zod';
 import type { AgentTool } from './runtime';
+import { messageOf } from '../core/text';
 
 /** Passes `request` on from the agent's card; settles with what the Koordinator did or replied. */
 export type Forward = (request: string) => Promise<string>;
@@ -25,7 +26,7 @@ export function toObeyaTool(forward: Forward): AgentTool {
       try {
         return `Obeya: ${await forward(r)}`;
       } catch (e) {
-        return `Obeya could not take it: ${e instanceof Error ? e.message : String(e)}`;
+        return `Obeya could not take it: ${messageOf(e)}`;
       }
     },
   };
