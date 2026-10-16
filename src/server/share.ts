@@ -9,7 +9,6 @@
 // Pages of one target are on one site, so they share its version and each publish names the others.
 
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import { z } from 'zod';
 import { LANGUAGE_NAMES } from '../core/locale';
@@ -17,7 +16,7 @@ import { MESSAGES, type Messages } from '../core/messages';
 import { type Demo, type DemoKind, type DemoPage, EXPORT_HTML_MAX, type Item } from '../core/types';
 import { BadRequest, type Board, type PrState, reshareable, type StoredReshare, type StoredShare } from './board';
 import type { DemoSite } from '../adapters/types';
-import { readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
+import { expandHome, readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
 import { type Gone, siteMissing, siteTarget } from './site';
 import { artifactCopy } from './artifact-copy';
 import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, type DemoPageParts, day, demoFile, demoPageHtml, PAGE_WORDS, type PageLanguage } from './demo-page';
@@ -673,7 +672,7 @@ export const commandWords = (line: string): string[] => [...line.matchAll(/"([^"
 export function scriptArgv(words: string[], repoPath: string): string[] {
   if (!words.length) return [];
   let [program, ...rest] = words as [string, ...string[]];
-  program = program.replace(/^~(?=$|[\\/])/, homedir());
+  program = expandHome(program);
   const script = /\.(m?[jt]sx?|cjs)$/.test(program);
   if ((script || /[\\/]/.test(program)) && !isAbsolute(program)) program = resolve(repoPath, program);
   return script ? [process.execPath, program, ...rest] : [program, ...rest];

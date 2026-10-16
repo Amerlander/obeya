@@ -9,12 +9,12 @@ import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { type AddressInfo, createServer } from 'node:net';
 import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { PassThrough } from 'node:stream';
 import type { SpawnedProcess, SpawnOptions } from '@anthropic-ai/claude-agent-sdk';
 import { resource } from './resources';
 import { spawnOutput } from './spawn';
+import { expandHome } from '../../plugin/skills/demo/lib/settings.ts';
 
 /** Where a workspace on another machine says which machine it is on. */
 const PREFIX = 'ssh://';
@@ -566,7 +566,7 @@ export function sessionFiles(home: string, plugins: string[]): HostFiles {
         if (!existsSync(file)) return undefined;
         try {
           const { keyFile: _, ...settings } = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
-          if (typeof settings.reference === 'string') settings.reference = settings.reference.replace(/^~(?=$|\/)/, homedir());
+          if (typeof settings.reference === 'string') settings.reference = expandHome(settings.reference);
           return JSON.stringify(settings, null, 2);
         } catch {
           return undefined;

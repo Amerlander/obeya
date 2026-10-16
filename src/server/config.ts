@@ -6,7 +6,7 @@
 // them alone restarts nothing but where they change where the workers work.
 
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
 import { REPO_ADAPTER_DIR, REPO_SETTINGS_FILE } from '../adapters';
@@ -39,14 +39,19 @@ import { siteProblem } from './share';
 
 export const CONFIG_FILE = 'canvases.json';
 
-/** A path with `~` for the home directory, as the owner may write it. */
-export const expand = (p: string) => p.replace(/^~(?=$|\/)/, homedir());
+/** Whether the configuration's repository `r` is the one at `path` (absolute). */
+const isAt = (r: { path: string }, path: string) => resolve(expandHome(r.path)) === path;
+
+/** The first repository of the configuration that `match` takes, with the index of its canvas and its own. */
+function locate(canvases: CanvasConfig[], match: (r: CanvasConfig['repos'][number]) => boolean) {
+  return canvases.flatMap((c, canvas) => c.repos.map((r, repo) => ({ r, canvas, repo }))).find(({ r }) => match(r));
+}
 
 /** The configuration with its paths as the server uses them. */
 export function expandConfig(canvases: CanvasConfig[]): CanvasConfig[] {
   return canvases.map((c) => ({
     ...c,
-    repos: c.repos.map((r) => ({ ...r, path: expand(r.path), ...(r.workspaces ? { workspaces: r.workspaces.map(expand) } : {}) })),
+    repos: c.repos.map((r) => ({ ...r, path: expandHome(r.path), ...(r.workspaces ? { workspaces: r.workspaces.map(expandHome) } : {}) })),
   }));
 }
 
@@ -278,8 +283,7 @@ export class Config {
 
   /** The settings the owner set for the repository at `path` (absolute) on this machine, as saved now; none where they set none. */
   repoSettings(path: string): RepoSettings | undefined {
-    for (const c of this.current()) for (const r of c.repos) if (resolve(expand(r.path)) === path) return r.settings;
-    return undefined;
+    return locate(this.current(), (r) => isAt(r, path))?.r.settings;
   }
 
   /**
@@ -312,7 +316,7 @@ export class Config {
     const canvases = this.current().map((c) => ({
       ...c,
       repos: c.repos.map((r) => {
-        if (resolve(expand(r.path)) !== path || !r.settings) return r;
+        if (!isAt(r, path) || !r.settings) return r;
         const s: RepoSettings = { ...r.settings };
         for (const k of Object.keys(NESTED_SETTINGS) as NestedSetting[]) if (s[k]) (s as Record<string, unknown>)[k] = { ...s[k] };
         drop(s);
@@ -339,7 +343,7 @@ export class Config {
    */
   async takeSetting(path: string, field: ProposedSetting, value: string | string[], where: 'machine' | 'repository'): Promise<SettingsShared | null> {
     const canvases = this.current();
-    const at = canvases.flatMap((c, canvas) => c.repos.map((r, repo) => ({ r, canvas, repo }))).find(({ r }) => resolve(expand(r.path)) === path);
+    const at = locate(canvases, (r) => isAt(r, path));
     if (!at) throw new BadRequest('invalid', `no repository ${path} in the configuration`);
     const patch = settingPatch(field, value);
     const onMachine = () =>
@@ -349,16 +353,11 @@ export class Config {
       return null;
     }
     const to = (await this.check(canvases)).resolved[at.canvas]?.repos[at.repo]?.shareTo ?? 'main';
+    const done = this.share(path, patch, to, field);
     if (to === 'pr') {
-      if (!this.o.forge) throw new BadRequest('settingsShare', 'no forge to open a pull request with');
-      const done = proposeShared(path, patch, this.o.forge);
-      console.log(`Obeya: ${field} of ${path} for everyone, as a pull request: ${'pr' in done ? done.pr : ''}`);
       await onMachine();
       return done;
     }
-    const { before: _, after, ...done } = commitShared(path, patch);
-    console.log(`Obeya: ${field} of ${path} for everyone, committed on ${'branch' in done ? done.branch : ''}`);
-    this.takenOver(path, undefined, after);
     // where this machine set another value, the repository's applies here as well from now on
     this.dropSettings(path, (s) => {
       if (field === 'run') delete s.app?.run;
@@ -379,11 +378,11 @@ export class Config {
     const parsed = z.object({ path: z.string(), direct: z.boolean().optional() }).safeParse(input);
     if (!parsed.success) throw new BadRequest('invalid', 'expected { path, direct? }');
     const canvases = this.current();
-    const at = canvases.flatMap((c, canvas) => c.repos.map((r, repo) => ({ r, canvas, repo }))).find(({ r }) => r.path === parsed.data.path);
+    const at = locate(canvases, (r) => r.path === parsed.data.path);
     if (!at) throw new BadRequest('noSettings', `no repository ${parsed.data.path} in the configuration`);
     const { branch: _, ...mine } = at.r.settings ?? {};
     if (!Object.keys(mine).length) throw new BadRequest('noSettings', `${at.r.path}: nothing set on this machine to take over`);
-    const repoPath = resolve(expand(at.r.path));
+    const repoPath = resolve(expandHome(at.r.path));
     const resolved = (await this.check(canvases)).resolved[at.canvas];
     const to = resolved?.repos[at.repo]?.shareTo ?? 'main';
     if (to === 'pr' && parsed.data.direct) {
@@ -394,17 +393,27 @@ export class Config {
       this.o.onSettings?.();
       return done;
     }
+    const done = this.share(repoPath, mine, to, 'settings');
+    if (to === 'main') this.o.onSettings?.();
+    return done;
+  }
+
+  /**
+   * `patch` goes into the `.obeya/settings.json` of the repository at `path` for everyone: as a pull
+   * request, or committed on the main branch, after which all of it comes from the repository, here
+   * too. The caller follows.
+   */
+  private share(path: string, patch: SharedSettings, to: 'main' | 'pr', what: string): SettingsShared {
     if (to === 'pr') {
       if (!this.o.forge) throw new BadRequest('settingsShare', 'no forge to open a pull request with');
-      const done = proposeShared(repoPath, mine, this.o.forge);
-      console.log(`Obeya: settings of ${repoPath} for everyone, as a pull request: ${'pr' in done ? done.pr : ''}`);
+      const done = proposeShared(path, patch, this.o.forge);
+      console.log(`Obeya: ${what} of ${path} for everyone, as a pull request: ${'pr' in done ? done.pr : ''}`);
       return done;
     }
-    const { before: _was, after, ...done } = commitShared(repoPath, mine);
-    console.log(`Obeya: settings of ${repoPath} for everyone, committed on ${'branch' in done ? done.branch : ''}`);
-    // all of them are in the file now, also those it held already
-    this.takenOver(repoPath, undefined, after);
-    this.o.onSettings?.();
+    const { before: _, after, ...done } = commitShared(path, patch);
+    console.log(`Obeya: ${what} of ${path} for everyone, committed on ${'branch' in done ? done.branch : ''}`);
+    // all of it is in the file now, also what it held already
+    this.takenOver(path, undefined, after);
     return done;
   }
 

@@ -16,12 +16,12 @@ import { dirname, join, resolve } from 'node:path';
 // by its path: the package exports no package.json, which Bun imports all the same but TypeScript does not
 import sdk from '../../node_modules/@anthropic-ai/claude-agent-sdk/package.json';
 import { blocksSaving, CLONES, type FirstCanvas, type MachineItem, type MachineJob, type MachineSection, type MachineSectionId, type MachineView, type SetupFolder, type GitSetupPreview } from '../core/types';
-import { readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
+import { expandHome, readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
 import { checkSetup, type LinuxFamily, linuxFamily, output } from '../../plugin/skills/demo/lib/setup.ts';
 import { installVoice } from '../../plugin/skills/demo/lib/voices.ts';
 import { BadRequest } from './board';
 import type { CanvasRuntime } from './canvas';
-import { type Config, expand } from './config';
+import type { Config } from './config';
 import { previewGitSetup, setUpGit, withoutGit } from './git-setup';
 import { repoInfo } from './repo';
 import { COMPILED } from './resources';
@@ -177,7 +177,7 @@ function waited(argv: string[], env: Env): Promise<string | null> {
 function folderOf(input: unknown): string {
   const { path } = (input ?? {}) as { path?: unknown };
   if (typeof path !== 'string' || !path.trim()) throw new BadRequest('invalid', 'a folder');
-  return resolve(expand(path.trim()));
+  return resolve(expandHome(path.trim()));
 }
 
 /** The marker of a canvas the assistant created: once it runs, it gets a first card that says what to try. */
@@ -477,13 +477,13 @@ export class MachineSetup {
   /** The first canvas: a repository's folder, saved at once; or a clone of one, in the background. */
   async canvas(input: unknown): Promise<FirstCanvas | MachineView> {
     const { path, clone, into } = (input ?? {}) as { path?: unknown; clone?: unknown; into?: unknown };
-    if (typeof path === 'string' && path.trim()) return this.add(resolve(expand(path.trim())));
+    if (typeof path === 'string' && path.trim()) return this.add(resolve(expandHome(path.trim())));
     if (typeof clone !== 'string' || !clone.trim()) throw new BadRequest('invalid', 'a folder or a repository to clone');
     this.idle();
     const spec = clone.trim();
     const name = cloneName(spec);
     if (!name) throw new BadRequest('invalid', `no repository in ${spec}`);
-    const dest = join(resolve(expand(typeof into === 'string' && into.trim() ? into.trim() : homedir())), name);
+    const dest = join(resolve(expandHome(typeof into === 'string' && into.trim() ? into.trim() : homedir())), name);
     if (existsSync(dest)) throw new BadRequest('cloneTarget', `${dest} exists`);
     // owner/name through gh where it is logged in (private repositories too), else from GitHub by its URL
     const short = /^[\w.-]+\/[\w.-]+$/.test(spec);

@@ -35,7 +35,7 @@ import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import type { RestartReason } from '../core/types';
 import { type CanvasConfig, Canvases } from './canvas';
-import { Config, CONFIG_FILE, expand, expandConfig, readConfigFile } from './config';
+import { Config, CONFIG_FILE, expandConfig, readConfigFile } from './config';
 import { checkPlugin } from './demo';
 import { Store, UnusableDatabase } from './db';
 import { ghForge } from './forge';
@@ -54,6 +54,7 @@ import { serve, serveNarration } from './server';
 import { LocalTranscriber, VoiceIn, voiceBackends } from './voice';
 import { VoiceSetup } from './voice-setup';
 import { useLib } from '../../plugin/skills/demo/lib/here.ts';
+import { expandHome } from '../../plugin/skills/demo/lib/settings.ts';
 import { qwen3Serve } from '../../plugin/skills/demo/lib/voices.ts';
 import { agentSetting, ownerLanguage } from './settings';
 
@@ -80,7 +81,7 @@ if (process.platform !== 'win32' && (statSync(home).mode & 0o077) !== 0 && statS
 extendPath();
 // the demo skill's modules this server carries inside the binary find their files among the resources
 if (COMPILED) useLib(resource('plugin', 'skills', 'demo', 'lib'));
-const configFile = values.config ? resolve(expand(values.config)) : join(home, CONFIG_FILE);
+const configFile = values.config ? resolve(expandHome(values.config)) : join(home, CONFIG_FILE);
 
 if (!process.env.OBEYA_SUPERVISED) {
   const other = await running(home);
@@ -137,11 +138,11 @@ if (source === 'file' && !values.config && !existsSync(configFile)) {
       repos: positionals.map((path, i) =>
         i === 0
           ? {
-              path: resolve(expand(path)),
-              ...(values.workspace.length ? { workspaces: values.workspace.map((w) => resolve(expand(w))) } : {}),
+              path: resolve(expandHome(path)),
+              ...(values.workspace.length ? { workspaces: values.workspace.map((w) => resolve(expandHome(w))) } : {}),
               ...(values.clones ? { clones: Number(values.clones) } : {}),
             }
-          : { path: resolve(expand(path)) },
+          : { path: resolve(expandHome(path)) },
       ),
     },
   ];
