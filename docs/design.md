@@ -1488,8 +1488,8 @@ marks of a Claude Code session that may have started it (`CLAUDE_CODE_*`, `CLAUD
 `CLAUDE_CODE_OAUTH_TOKEN`, the login of a machine without a keychain.
 
 A worker is one SDK session per card with streaming input, the repo's own settings and CLAUDE.md
-(Claude Code's settings sources left as they are; a repository whose own Claude Code settings the
-owner has not trusted yet gets none of them, see Trusting a repository's commands),
+(Claude Code's settings sources left as they are; a repository whose own Claude Code configuration the
+owner has not trusted yet gets none of it, see Trusting a repository's commands),
 and permission mode `auto` (`--permission-mode`); after a restart it resumes by session id. A
 project agent is one session per project on the repository's Lesestand, resumed for each question,
 answering the owner's questions about the project and its workstreams one at a time. It, ideas'
@@ -3751,8 +3751,9 @@ Some of what a repository brings Obeya runs on this machine itself, outside Clau
 permission checks, or contacts without a click: `app.stop` and `app.keep` (run when a card is
 parked), `demo.site`'s `deploy` with its `env` file, and its `url` and `headers` (read whenever the
 owner comes back to the page, `Sharing.checkVersions`). The agents' sessions read the repository's
-own Claude Code settings (`.claude/settings.json`, `.claude/settings.local.json` and `.mcp.json`;
-`CLAUDE_FILES`) and run what they name without asking, read-only agents included: tried on
+own Claude Code configuration (everything under `.claude/` and `.mcp.json`, `CLAUDE_PATHS`: the
+hooks, MCP servers and helpers of its settings, and the hooks and MCP servers its skills, commands
+and subagents may declare) and run what it names without asking, read-only agents included: tried on
 2026-10-16 with the SDK 0.3.285 and no `settingSources`, a `SessionStart` hook of the repository's
 ran in a session with only Read, Grep and Glob, and so did an MCP server of its `.mcp.json` that
 the repository's own `enableAllProjectMcpServers` approved. Turning off hooks (`disableAllHooks`)
@@ -3764,32 +3765,39 @@ noticing (VS Code puts the same kind of settings behind Workspace Trust).
 So these count only as the owner last trusted them. Obeya keeps, per repository (by its path, the
 table `trusted_commands`), the commands as the owner last trusted them (`RepoCommands`, in three
 groups: `app` for stop and keep together, since a stop without its keep could stop what it keeps;
-`site`; `claude`, the files' text). The values themselves, not a hash: the dialog shows what changed. A group that the default
+`site`; `claude`, the text of each file under `.claude/` and of `.mcp.json`). The values themselves, not a hash: the dialog shows what changed. A group that the default
 branch has otherwise (`heldGroups` in `src/server/trust.ts`: new, or changed since) is held:
 the canvas reads the repository's settings without it (`withoutHeld`), so no stop or keep runs and
 no site is deployed to or read (demos are exported); an agent working in the repository (its
-checkout, Lesestand or a workspace of it; `withRepoTrust` in `runtime.ts`) starts with
-`settingSources: ['user']`, none of the repository's Claude Code settings, and since Claude Code
+checkout, Lesestand or a workspace of it, the most specific of them, since the home repository's
+workspace directory holds the other repositories'; `withRepoTrust` in `runtime.ts`, which reads
+the configuration afresh from the default branch at each start, since a commit on the checkout's
+main from outside Obeya moves nothing the canvas notices) starts with
+`settingSources: ['user']`, none of the repository's Claude Code configuration, and since Claude Code
 then reads its CLAUDE.md neither, the agent gets the CLAUDE.md of its directory in its
 instructions instead (not in a workspace on another machine). What this machine sets needs no
 trust: where its values stand in for all of a group (`app.stop` and `app.keep`, or `demo.site`),
 the repository's are not held; and values taken over from this machine into the file („Für alle
 ins Repository übernehmen“, a setting proposal) are the owner's own (`trustTakenOver`, in
-`Config.takenOver`). A repository with commands on the canvas before this came in (2026-10-16)
+`Config.takenOver`; a trusted `keep` that went beside them is not, since the stop would then stop
+what it kept). A repository with commands on the canvas before this came in (2026-10-16)
 was trusted with none, so its commands wait once.
 
 Held commands are the problem `untrusted` at the repository in "Konfiguration", counted in the
 bar's button like the others: what each group does and that it waits, its lines as last trusted
 against those on the default branch now as a diff, and „Diesen Befehlen vertrauen“, which trusts
-what the dialog showed (`POST /api/config/trust` with them; ones that changed on the default branch
-meanwhile are refused, `trustChanged`) and has the canvases follow at once (`settingsChanged`). The
+what the dialog showed, the held groups alone (`POST /api/config/trust` with them; ones that
+changed on the default branch meanwhile are refused, `trustChanged`; a group this machine's values
+stand in for was not shown and stays untrusted) and has the canvases follow at once (`settingsChanged`). The
 values held show „aus dem Repository, noch nicht vertraut“ as their source. Whenever the canvas
 reads the settings again (`moved`), it works out what is held again; a change there counts in
 `configRev`, so the page reads the problems again.
 
-A worker's own workspace may hold Claude Code settings the default branch does not (its own edit,
-or a branch from before a change): those count as long as the default branch's are trusted, as
-the worker's other edits do; what it changed there waits for trust once it lands.
+A worker's own workspace may hold Claude Code configuration the default branch does not (its own
+edit, or a branch from before a change): it counts as long as the default branch's is trusted, as
+the worker's other edits do; what it changed there waits for trust once it lands. Trust covers the
+configuration, not the repository's code it calls: a trusted hook that runs `scripts/x.ts` runs
+whatever that script says now, as the checks do.
 
 #### Writing the settings
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { boundsOf, CARD_SIZE } from '../core/layout';
@@ -469,6 +469,30 @@ describe("a repository's settings for everyone (.obeya/settings.json)", () => {
     canvas.settingsChanged();
     expect(r.adapter.app).toEqual({ run: 'bun dev' });
     expect(r.site).toEqual(site);
+
+    // a skill of its own with a hook, committed on main without the canvas noticing: the next agent is without it
+    writeFileSync(join(shop, '.claude/skill.md'), '---\nhooks:\n  Stop: [{ hooks: [{ type: command, command: touch ran }] }]\n---\n');
+    git(shop, 'add', '-A');
+    git(shop, 'commit', '--quiet', '-m', 'A skill');
+    const third = canvas.board.create({ title: 'Dritte', x: 0, y: 0 });
+    r.workers.start(third.id);
+    expect(runtime.last.spec.untrusted).toBe(true);
+  });
+
+  test("a repository's agents go by its own Claude Code configuration, not by the home repository's whose workspaces hold its own", () => {
+    const api = join(dir, 'api');
+    mkdirSync(join(api, '.claude'), { recursive: true });
+    writeFileSync(join(api, '.claude/settings.json'), '{ "hooks": {} }\n');
+    git(api, 'add', '-A');
+    git(api, 'commit', '--quiet', '-m', 'Claude settings');
+    canvas.settingsChanged();
+    const home = canvas.board.create({ title: 'Home', x: 0, y: 0 });
+    const other = canvas.board.create({ title: 'Andere', x: 0, y: 0, repo: 'api' });
+    canvas.repoOf(home.id).workers.start(home.id);
+    expect(runtime.last.spec.untrusted).toBeUndefined();
+    canvas.repoOf(other.id).workers.start(other.id);
+    expect(runtime.last.spec.cwd).toBe(join(dir, 'workspaces/produkt/api/1'));
+    expect(runtime.last.spec.untrusted).toBe(true);
   });
 
   test("where its workers work changed in it: its agents restart with it once they paused, Obeya runs on", async () => {

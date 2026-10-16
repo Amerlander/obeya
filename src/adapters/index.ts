@@ -80,15 +80,16 @@ export interface SharedRead {
   /** The object the file holds, every field as it is; none where there is no file or it is no JSON object. */
   raw?: Record<string, unknown>;
   problems: string[];
-  /** The repository's own Claude Code settings on the default branch, by file (`CLAUDE_FILES`); none where it has none. */
+  /** The repository's own Claude Code configuration on the default branch, by file (`CLAUDE_PATHS`); none where it has none. */
   claude?: Record<string, string>;
 }
 
 /**
- * The files of a repository's own Claude Code settings: an agent's session working in it reads
- * them, and runs their hooks, MCP servers and helpers outside the permission checks.
+ * Where a repository keeps its own Claude Code configuration: an agent's session working in it reads
+ * it and runs what it names outside the permission checks (the hooks, MCP servers and helpers of
+ * `.claude/settings.json`; the hooks and MCP servers of its skills, commands and subagents; `.mcp.json`).
  */
-export const CLAUDE_FILES = ['.claude/settings.json', '.claude/settings.local.json', '.mcp.json'];
+export const CLAUDE_PATHS = ['.claude', '.mcp.json'];
 
 /** Reads the text of a `.obeya/settings.json`: a field that is unknown or of the wrong type does not count, the rest does. */
 export function parseShared(text: string): SharedRead {
@@ -113,12 +114,17 @@ export function readShared(repoPath: string, commit = defaultBranchCommit(repoPa
   return gitStepsSync(repoPath, readingShared(commit));
 }
 
-/** `readShared` at `commit` as git steps, with the repository's Claude Code settings beside it. */
+/** `readShared` at `commit` as git steps, with the repository's Claude Code configuration beside it. */
 export function* readingShared(commit: string): GitSteps<SharedRead> {
-  const [text, ...files] = yield [REPO_SETTINGS_FILE, ...CLAUDE_FILES].map((f) => ['cat-file', 'blob', `${commit}:${f}`]);
+  const [text, listed] = yield [
+    ['cat-file', 'blob', `${commit}:${REPO_SETTINGS_FILE}`],
+    ['ls-tree', '-r', '-z', '--name-only', commit, '--', ...CLAUDE_PATHS],
+  ];
   const read: SharedRead = text != null ? parseShared(text) : { problems: [] };
-  const claude = Object.fromEntries(CLAUDE_FILES.flatMap((f, i) => (files[i] != null ? [[f, files[i]!]] : [])));
-  return Object.keys(claude).length ? { ...read, claude } : read;
+  const names = (listed ?? '').split('\0').filter(Boolean).sort();
+  if (!names.length) return read;
+  const files = yield names.map((f) => ['cat-file', 'blob', `${commit}:${f}`]);
+  return { ...read, claude: Object.fromEntries(names.map((f, i) => [f, files[i] ?? ''])) };
 }
 
 /**

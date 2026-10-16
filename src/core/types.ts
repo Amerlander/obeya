@@ -1225,7 +1225,7 @@ export interface RepoCommands {
   app?: { stop?: string; keep?: string };
   /** What of `demo.site` the deploy runs with and the live site is read from. */
   site?: Pick<DemoSite, 'url' | 'deploy' | 'env' | 'headers'>;
-  /** The repository's own Claude Code settings by file (`.claude/settings.json`, `.mcp.json`): hooks, MCP servers, helpers. */
+  /** The repository's own Claude Code configuration by file (everything under `.claude/`, `.mcp.json`): hooks, MCP servers, helpers. */
   claude?: Record<string, string>;
 }
 

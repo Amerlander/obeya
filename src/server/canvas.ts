@@ -319,12 +319,23 @@ export class CanvasRuntime {
 
   /**
    * Whether an agent working in `cwd` works in a repository of the canvas (its checkout, its
-   * Lesestand, a workspace of it) whose own Claude Code settings wait for the owner's confirmation.
+   * Lesestand, a workspace of it; the most specific, since the home repository's workspaces hold
+   * the others') whose own Claude Code configuration waits for the owner's trust. Read afresh from
+   * the default branch, not as the canvas last read it: a commit there that the canvas did not
+   * notice (on the checkout's main, from outside Obeya) is in the files the session reads.
    */
   private claudeHeld = (cwd: string): boolean => {
-    const within = (dir: string) => cwd === dir || cwd.startsWith(dir.endsWith(sep) || dir.endsWith('/') ? dir : `${dir}${dir.includes('://') ? '/' : sep}`);
-    const r = this.repos.find((r) => [r.info.path, r.read.path, r.workspaces.dir, ...r.workspaces.list().map((w) => w.path)].some(within));
-    return !!r && this.heldOf(r.info.path).includes('claude');
+    const depth = (dir: string) => (cwd === dir || cwd.startsWith(dir.endsWith(sep) || dir.endsWith('/') ? dir : `${dir}${dir.includes('://') ? '/' : sep}`) ? dir.length : -1);
+    let best: { r: Repo; at: number } | undefined;
+    for (const r of this.repos)
+      for (const dir of [r.info.path, r.read.path, r.workspaces.dir, ...r.workspaces.list().map((w) => w.path)]) {
+        const at = depth(dir);
+        if (at >= 0 && (!best || at > best.at)) best = { r, at };
+      }
+    if (!best) return false;
+    const path = best.r.info.path;
+    const mine = this.deps.settings ? this.deps.settings(path) : best.r.config.settings;
+    return heldGroups(commandsOf(readShared(path)), this.deps.store.trustedCommands(path), mine).includes('claude');
   };
 
   /**

@@ -785,7 +785,7 @@ const de = {
     trust: {
       app: 'App stoppen und behalten (app.stop, app.keep): Obeya führt sie aus, wenn eine Karte wartet. Bis dahin bleibt die App laufen.',
       site: 'Demo-Seite (demo.site): Obeya veröffentlicht mit diesem Befehl und liest die Seite unter dieser Adresse. Bis dahin werden Demos exportiert.',
-      claude: 'Claude-Code-Einstellungen des Repositorys: Agenten führen ihre Hooks und MCP-Server ohne Rückfrage aus. Bis dahin arbeiten sie ohne sie.',
+      claude: 'Claude-Code-Konfiguration des Repositorys (.claude/, .mcp.json): Agenten führen ihre Hooks und MCP-Server ohne Rückfrage aus. Bis dahin arbeiten sie ohne sie.',
       trust: 'Diesen Befehlen vertrauen',
     },
     adapterSetupHint:
@@ -2137,7 +2137,7 @@ const en: Strings = {
     trust: {
       app: 'Stopping and keeping the app (app.stop, app.keep): Obeya runs them while a card waits. Until then the app keeps running.',
       site: 'Demo site (demo.site): Obeya deploys with this command and reads the site at this address. Until then demos are exported.',
-      claude: 'The repository’s Claude Code settings: agents run their hooks and MCP servers without asking. Until then they work without them.',
+      claude: 'The repository’s Claude Code configuration (.claude/, .mcp.json): agents run its hooks and MCP servers without asking. Until then they work without it.',
       trust: 'Trust these commands',
     },
     adapterSetupHint:

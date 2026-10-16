@@ -243,16 +243,15 @@ create a task that fixes it.
 
 Some fields are commands Obeya runs on your machine itself, or addresses it contacts without a
 click: `app.stop` and `app.keep`, and the demo site's `deploy`, `env`, `url` and `headers`. Beside
-them, the agents' sessions run what the repository's own Claude Code settings name
-(`.claude/settings.json`, `.claude/settings.local.json`, `.mcp.json`: hooks, MCP servers, helpers)
-without asking. A repository cloned from someone else, or a change a colleague merged, can change
+them, the agents' sessions run what the repository's own Claude Code configuration names
+(everything under `.claude/` and `.mcp.json`: hooks, MCP servers, helpers) without asking. A repository cloned from someone else, or a change a colleague merged, can change
 them without you noticing, so Obeya holds each of them that is new on the default branch, or
 changed there, until you trust it:
 
 - a held `stop` or `keep` does not run: a waiting card's app keeps running;
 - a held demo site is neither deployed to nor read: "Teilen" exports demos;
-- held Claude Code settings are not read: the agents work in the repository without them (and get
-  its CLAUDE.md in their instructions, since Claude Code reads that with the settings).
+- a held Claude Code configuration is not read: the agents work in the repository without it (and
+  get its CLAUDE.md in their instructions, since Claude Code reads that with the configuration).
 
 "Konfiguration" shows them as a problem at the repository, counted on its button in the bar: what
 each does, a diff against what you trusted last, and „Diesen Befehlen vertrauen“ („Trust these

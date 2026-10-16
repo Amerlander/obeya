@@ -38,6 +38,13 @@ export function heldGroups(now: RepoCommands, trusted: RepoCommands | null, mine
   return GROUPS.filter((g) => now[g] !== undefined && !covered(g) && !same(now[g], trusted?.[g]));
 }
 
+/** What is trusted once the owner trusted the groups `held` of `now`, as the dialog showed them: those groups as they are now, the others as trusted before. */
+export function trustHeld(trusted: RepoCommands | null, now: RepoCommands, held: TrustGroup[]): RepoCommands {
+  const next: RepoCommands = { ...trusted };
+  for (const g of held) (next as Record<TrustGroup, unknown>)[g] = now[g];
+  return next;
+}
+
 /** The repository's settings without what `held` holds: those fields then come from this machine or the defaults. */
 export function withoutHeld(s: SharedSettings | undefined, held: TrustGroup[]): SharedSettings | undefined {
   if (!s) return s;
@@ -67,7 +74,9 @@ export function trustTakenOver(trusted: RepoCommands | null, after: SharedSettin
   const next: RepoCommands = { ...trusted };
   let changed = false;
   const app = now.app;
-  if (app && !same(app, trusted?.app) && (['stop', 'keep'] as const).every((f) => app[f] === undefined || app[f] === own.app?.[f] || app[f] === trusted?.app?.[f])) {
+  // each of the two is the owner's or trusted; one that went, though trusted, needs confirming: a stop without its keep could stop what it kept
+  const theirs = (f: 'stop' | 'keep') => (app?.[f] === undefined ? trusted?.app?.[f] === undefined : app[f] === own.app?.[f] || app[f] === trusted?.app?.[f]);
+  if (app && !same(app, trusted?.app) && theirs('stop') && theirs('keep')) {
     next.app = app;
     changed = true;
   }

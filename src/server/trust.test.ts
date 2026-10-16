@@ -35,6 +35,8 @@ describe("a repository's commands", () => {
     expect(trustTakenOver(null, { app: { stop: 'make stop', run: 'bun dev' } }, { app: { stop: 'make stop' } })).toEqual({ app: { stop: 'make stop' } });
     // a keep the owner trusted before, beside the stop of theirs
     expect(trustTakenOver({ app: { keep: 'k' } }, { app: { stop: 's', keep: 'k' } }, { app: { stop: 's' } })).toEqual({ app: { stop: 's', keep: 'k' } });
+    // a trusted keep that went, beside a stop that stays, is not: the stop now stops what it kept
+    expect(trustTakenOver({ app: { stop: 's', keep: 'k' } }, { app: { stop: 's' } }, undefined)).toBeNull();
     // someone else's stop that came with it is not
     expect(trustTakenOver(null, { app: { stop: 'evil' }, checks: ['x'] }, { checks: ['x'] })).toBeNull();
     expect(trustTakenOver(null, { demo: { site } }, { demo: { site } })).toEqual({ site: { url: site.url, deploy: site.deploy } });

@@ -35,7 +35,7 @@ import { commitShared, proposeShared, pushShared } from './shared-settings';
 import { gitCalls, gitSteps } from './workspaces';
 import { VERSION } from './resources';
 import { siteProblem } from './share';
-import { canonical, commandsOf, heldGroups, trustTakenOver } from './trust';
+import { canonical, commandsOf, heldGroups, trustHeld, trustTakenOver } from './trust';
 
 export const CONFIG_FILE = 'canvases.json';
 
@@ -452,7 +452,9 @@ export class Config {
     const repoPath = resolve(expandHome(at.r.path));
     const now = commandsOf(readShared(repoPath));
     if (canonical(now) !== canonical(parsed.data.seen)) throw new BadRequest('trustChanged', `${repoPath}: its commands changed on the default branch since they were shown`);
-    this.o.store.trustCommands(repoPath, now);
+    // only what the dialog showed: a group this machine's values stand in for was not
+    const trusted = this.o.store.trustedCommands(repoPath);
+    this.o.store.trustCommands(repoPath, trustHeld(trusted, now, heldGroups(now, trusted, at.r.settings)));
     console.log(`Obeya: the owner confirmed the commands of ${repoPath}`);
     this.o.onSettings?.();
   }
