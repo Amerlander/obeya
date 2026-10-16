@@ -51,7 +51,7 @@ import { COMPILED, resource, SELF, VERSION } from './resources';
 import { oldLinuxBun } from './repo';
 import { Access } from './remote';
 import { serve, serveNarration } from './server';
-import { LocalTranscriber, VoiceIn, voiceBackends } from './voice';
+import { LocalTranscriber, VoiceIn } from './voice';
 import { VoiceSetup } from './voice-setup';
 import { useLib } from '../../plugin/skills/demo/lib/here.ts';
 import { expandHome } from '../../plugin/skills/demo/lib/settings.ts';
@@ -253,9 +253,8 @@ if (new Set(ids).size !== ids.length) {
   console.error(`two canvases share an id: ${ids.join(', ')}; give them different names`);
   process.exit(2);
 }
-const backends = voiceBackends();
-const transcriber = new VoiceIn(home, new LocalTranscriber(backends.listen));
-const voiceSetup = new VoiceSetup({ home, backends, local: transcriber.local });
+const transcriber = new VoiceIn(home, new LocalTranscriber());
+const voiceSetup = new VoiceSetup({ home, local: transcriber.local });
 const shells = new ShellReports();
 const updates = new AppUpdates();
 const machine = new MachineSetup({ home, config, voice: voiceSetup, shells });

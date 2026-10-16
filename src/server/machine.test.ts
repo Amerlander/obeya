@@ -127,8 +127,8 @@ describe('what Obeya needs on this machine', () => {
   });
 
   test('lists uv above the speech recognition, whose installation waits for it', async () => {
-    const local = { prepare: async () => {}, transcribe: async () => ({ text: '', doubtful: false }) };
-    const voice = new VoiceSetup({ home, backends: { listen: 'parakeet' }, local, env: { PATH: bin } });
+    const local = { backend: 'parakeet' as const, prepare: async () => {}, transcribe: async () => ({ text: '', doubtful: false }) };
+    const voice = new VoiceSetup({ home, local, env: { PATH: bin } });
     const machine = new MachineSetup({ home, config: config(), voice, env: { PATH: bin }, platform: 'linux', arch: 'x64', compiled: true });
     const items = section(await machine.view(), 'voice').items;
     expect(items.map((i) => i.id)).toEqual(['uv', 'recognition', 'ffmpeg']);

@@ -2,8 +2,9 @@ import { expect, test } from 'bun:test';
 import { chmodSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { ListenBackend } from '../core/types';
 import { resource } from './resources';
-import { LocalTranscriber, looping, silence, VoiceIn, voiceBackends } from './voice';
+import { listenBackend, LocalTranscriber, looping, silence, VoiceIn } from './voice';
 import { CloudError, cloudInUse, readVoiceFile, VOICE_FILE } from './voice-cloud';
 import { CHECK_CLIP, VoiceSetup } from './voice-setup';
 
@@ -35,17 +36,18 @@ test("Whisper's words for silence are told from a command", () => {
 });
 
 test('every machine hears with Parakeet, unless Whisper is asked for', () => {
-  expect(voiceBackends({}, 'darwin', 'arm64')).toEqual({ listen: 'parakeet' });
-  expect(voiceBackends({}, 'win32', 'x64')).toEqual({ listen: 'parakeet' });
-  expect(voiceBackends({ OBEYA_WHISPER_BACKEND: 'faster' }, 'darwin', 'arm64')).toEqual({ listen: 'faster' });
-  expect(voiceBackends({ OBEYA_WHISPER_BACKEND: 'mlx' }, 'darwin', 'arm64')).toEqual({ listen: 'mlx' });
-  expect(voiceBackends({ OBEYA_WHISPER_BACKEND: 'whisper' }, 'darwin', 'arm64')).toEqual({ listen: 'mlx' });
-  expect(voiceBackends({ OBEYA_WHISPER_BACKEND: 'whisper' }, 'linux', 'x64')).toEqual({ listen: 'faster' });
-  expect(voiceBackends({ OBEYA_WHISPER_BACKEND: 'nope' }, 'linux', 'x64')).toEqual({ listen: 'parakeet' });
+  expect(listenBackend({}, 'darwin', 'arm64')).toBe('parakeet');
+  expect(listenBackend({}, 'win32', 'x64')).toBe('parakeet');
+  expect(listenBackend({ OBEYA_WHISPER_BACKEND: 'faster' }, 'darwin', 'arm64')).toBe('faster');
+  expect(listenBackend({ OBEYA_WHISPER_BACKEND: 'mlx' }, 'darwin', 'arm64')).toBe('mlx');
+  expect(listenBackend({ OBEYA_WHISPER_BACKEND: 'whisper' }, 'darwin', 'arm64')).toBe('mlx');
+  expect(listenBackend({ OBEYA_WHISPER_BACKEND: 'whisper' }, 'linux', 'x64')).toBe('faster');
+  expect(listenBackend({ OBEYA_WHISPER_BACKEND: 'nope' }, 'linux', 'x64')).toBe('parakeet');
 });
 
 /** A recognition on this machine that hears `text` after `ms`. */
 const hearing = (text: string, ms = 0, loaded = () => {}) => ({
+  backend: 'parakeet' as ListenBackend,
   prepare: async () => loaded(),
   transcribe: async () => (await Bun.sleep(ms), { text, doubtful: false }),
 });
@@ -53,7 +55,7 @@ const hearing = (text: string, ms = 0, loaded = () => {}) => ({
 test('the voice check names what is missing, how to install it here, and what "Installieren" fetches', async () => {
   const home = mkdtempSync(join(tmpdir(), 'obeya-voice-setup-'));
   try {
-    const setup = new VoiceSetup({ home, backends: { listen: 'parakeet' }, local: hearing(''), env: { PATH: join(home, 'none') } });
+    const setup = new VoiceSetup({ home, local: hearing(''), env: { PATH: join(home, 'none') } });
     const view = await setup.view();
     const by = Object.fromEntries(view.items.map((i) => [i.id, i]));
     // uv first: it brings the recognition
@@ -69,7 +71,7 @@ test('the voice check names what is missing, how to install it here, and what "I
     expect(view.fetch.mb).toBe(by.recognition!.mb!);
 
     // a Python of one's own without the package is missing
-    const own = new VoiceSetup({ home, backends: { listen: 'mlx' }, local: hearing(''), env: { PATH: join(home, 'none'), OBEYA_WHISPER_PYTHON: join(home, 'python') } });
+    const own = new VoiceSetup({ home, local: { ...hearing(''), backend: 'mlx' }, env: { PATH: join(home, 'none'), OBEYA_WHISPER_PYTHON: join(home, 'python') } });
     const mac = Object.fromEntries((await own.view()).items.map((i) => [i.id, i]));
     expect(mac.recognition).toMatchObject({ state: 'missing', need: 'mlx-whisper' });
     expect(mac.uv).toBeUndefined();
@@ -85,7 +87,7 @@ test('"Installieren" loads the recognition and times it on a short sentence, and
     // uv is there; the package is not in its cache
     writeFileSync(join(home, 'uv'), '#!/bin/sh\ncase "$1" in --version) echo "uv 0.9.2";; *) exit 1;; esac\n');
     chmodSync(join(home, 'uv'), 0o755);
-    const setup = new VoiceSetup({ home, backends: { listen: 'parakeet' }, local: hearing('Starte die Karte', 30, () => void loaded++), env: { PATH: home } });
+    const setup = new VoiceSetup({ home, local: hearing('Starte die Karte', 30, () => void loaded++), env: { PATH: home } });
     await setup.install();
     expect((await setup.view()).job).toMatchObject({ running: true });
     await setup.finished();
@@ -97,10 +99,10 @@ test('"Installieren" loads the recognition and times it on a short sentence, and
     expect(typeof speed === 'object' && speed.seconds).toBeGreaterThan(0.02);
     // kept for the next start, for this backend only
     expect(readVoiceFile(home).speed?.backend).toBe('parakeet');
-    const whisper = new VoiceSetup({ home, backends: { listen: 'faster' }, local: hearing(''), env: { PATH: home } });
+    const whisper = new VoiceSetup({ home, local: { ...hearing(''), backend: 'faster' }, env: { PATH: home } });
     expect((await whisper.view()).items.find((i) => i.id === 'recognition')!.speed).toBeUndefined();
 
-    const failing = new VoiceSetup({ home, backends: { listen: 'parakeet' }, local: { ...hearing(''), prepare: () => Promise.reject(new Error('transcription sidecar exited (1)')) }, env: { PATH: home } });
+    const failing = new VoiceSetup({ home, local: { ...hearing(''), prepare: () => Promise.reject(new Error('transcription sidecar exited (1)')) }, env: { PATH: home } });
     await failing.install();
     await failing.finished().catch(() => {});
     expect((await failing.view()).job).toMatchObject({ running: false, error: 'transcription sidecar exited (1)' });
@@ -112,7 +114,7 @@ test('"Installieren" loads the recognition and times it on a short sentence, and
 test('a recognition slower than the sentence lasts counts as too slow', async () => {
   const home = mkdtempSync(join(tmpdir(), 'obeya-voice-setup-'));
   try {
-    const setup = new VoiceSetup({ home, backends: { listen: 'parakeet' }, local: hearing('Starte', 60), clip: join(home, 'clip.ogg'), env: { PATH: home } });
+    const setup = new VoiceSetup({ home, local: hearing('Starte', 60), clip: join(home, 'clip.ogg'), env: { PATH: home } });
     // a sentence of 4.1 s heard in 60 ms is fast; as if it lasted 0.05 s, the same is slow
     CHECK_CLIP.seconds = 0.05;
     try {
@@ -138,7 +140,7 @@ test('a cloud service is tested with the sentence, then hears every recording; a
       return refuse ? Response.json({ error: { message: 'Invalid API Key' } }, { status: 401 }) : Response.json({ text: ' Starte die Karte Export für Vermieter. ' });
     }) as unknown as typeof fetch;
     const local = new LocalTranscriber('parakeet');
-    const setup = new VoiceSetup({ home, backends: { listen: 'parakeet' }, local: hearing('lokal'), clip: join(home, 'clip.ogg'), env: { PATH: home }, fetcher });
+    const setup = new VoiceSetup({ home, local: hearing('lokal'), clip: join(home, 'clip.ogg'), env: { PATH: home }, fetcher });
     await expect(setup.useCloud({ preset: 'groq' })).rejects.toThrow('an API key');
     refuse = true;
     await expect(setup.useCloud({ preset: 'groq', key: 'gsk_wrong' })).rejects.toThrow('401: Invalid API Key');

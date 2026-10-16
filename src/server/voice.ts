@@ -9,8 +9,6 @@ import type { ListenBackend } from '../core/types';
 import { resource } from './resources';
 import { cloudInUse, transcribeInCloud } from './voice-cloud';
 
-export type { ListenBackend };
-
 /**
  * `doubtful`: Whisper itself counts the decode as failed (a loop, or too unsure of its words).
  * `unprompted`: the card titles did not go in as vocabulary (Parakeet takes none), so hearing it
@@ -71,11 +69,9 @@ export function listenKit(backend: ListenBackend = 'parakeet') {
  * instead: `mlx`, `faster`, or `whisper` for this platform's (MLX on Apple Silicon, faster-whisper
  * elsewhere).
  */
-export function voiceBackends(env: Record<string, string | undefined> = process.env, platform: string = process.platform, arch: string = process.arch) {
+export function listenBackend(env: Record<string, string | undefined> = process.env, platform: string = process.platform, arch: string = process.arch): ListenBackend {
   const asked = env.OBEYA_WHISPER_BACKEND;
-  const listen: ListenBackend =
-    asked === 'mlx' || asked === 'faster' ? asked : asked === 'whisper' ? (platform === 'darwin' && arch === 'arm64' ? 'mlx' : 'faster') : 'parakeet';
-  return { listen };
+  return asked === 'mlx' || asked === 'faster' ? asked : asked === 'whisper' ? (platform === 'darwin' && arch === 'arm64' ? 'mlx' : 'faster') : 'parakeet';
 }
 
 /**
@@ -84,7 +80,41 @@ export function voiceBackends(env: Record<string, string | undefined> = process.
  * workers. Not on Windows, where a detached process has no console and every console program it
  * starts (ffmpeg) opens a window; the Python sidecars ignore Ctrl-C there themselves.
  */
-export const OWN_GROUP = process.platform !== 'win32';
+const OWN_GROUP = process.platform !== 'win32';
+
+/**
+ * How a Python helper process starts (the transcription sidecar, the narration voice): UTF-8 on
+ * stdin and stdout, also where Python would take the code page (Windows), and out of the
+ * terminal's process group, so its Ctrl-C reaches Obeya alone, which ends the helper itself.
+ */
+export const pythonSpawn = () => ({ env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' }, detached: OWN_GROUP });
+
+/** A helper process's output, line by line (without the line break). */
+export async function* lines(stream: ReadableStream<Uint8Array>) {
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for await (const chunk of stream) {
+    buffer += decoder.decode(chunk, { stream: true });
+    let nl: number;
+    while ((nl = buffer.indexOf('\n')) >= 0) {
+      yield buffer.slice(0, nl);
+      buffer = buffer.slice(nl + 1);
+    }
+  }
+}
+
+/**
+ * Ends a helper process gently: its stdin ends, and with it the process, which finishes what it is
+ * on; one still there after 30 s is killed. Killed at once, Python leaves the semaphore of its
+ * model download's progress bar behind, and its resource tracker warns about it on the terminal.
+ */
+export function endGently(proc: Pick<Subprocess<'pipe', 'pipe', 'pipe'>, 'stdin' | 'kill' | 'exited'>) {
+  try {
+    proc.stdin.end();
+  } catch {}
+  const kill = setTimeout(() => proc.kill(), 30_000);
+  void proc.exited.then(() => clearTimeout(kill));
+}
 
 /** A helper process that stays up and answers JSON lines by id: `{id, …}` in, `{id, …}` or `{id, error}` out. */
 class Sidecar {
@@ -101,31 +131,22 @@ class Sidecar {
 
   ensure() {
     if (this.proc && this.proc.exitCode === null) return this.proc;
-    // UTF-8 on stdin and stdout, also where Python would take the code page (Windows); out of the
-    // terminal's process group, so its Ctrl-C reaches Obeya alone, which ends the sidecar itself
-    const proc = Bun.spawn(this.cmd(), { stdin: 'pipe', stdout: 'pipe', stderr: 'inherit', env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' }, detached: OWN_GROUP });
+    const proc = Bun.spawn(this.cmd(), { stdin: 'pipe', stdout: 'pipe', stderr: 'inherit', ...pythonSpawn() });
     this.proc = proc;
     let ready = () => {};
     let ended = (_: Error) => {};
     this.loaded = new Promise<void>((resolve, reject) => ((ready = resolve), (ended = reject)));
     this.loaded.catch(() => {});
     (async () => {
-      let buf = '';
-      for await (const chunk of proc.stdout as ReadableStream<Uint8Array>) {
-        buf += new TextDecoder().decode(chunk);
-        let nl: number;
-        while ((nl = buf.indexOf('\n')) >= 0) {
-          const line = buf.slice(0, nl).trim();
-          buf = buf.slice(nl + 1);
-          if (!line) continue;
-          const msg = JSON.parse(line) as { id?: number; error?: string; ready?: boolean };
-          if (msg.ready) ready();
-          const job = msg.id !== undefined ? this.pending.get(msg.id) : undefined;
-          if (!job) continue;
-          this.pending.delete(msg.id!);
-          if (msg.error !== undefined) job.reject(new Error(msg.error));
-          else job.resolve(msg);
-        }
+      for await (const line of lines(proc.stdout)) {
+        if (!line.trim()) continue;
+        const msg = JSON.parse(line) as { id?: number; error?: string; ready?: boolean };
+        if (msg.ready) ready();
+        const job = msg.id !== undefined ? this.pending.get(msg.id) : undefined;
+        if (!job) continue;
+        this.pending.delete(msg.id!);
+        if (msg.error !== undefined) job.reject(new Error(msg.error));
+        else job.resolve(msg);
       }
       // the sidecar died: fail what waits, the next request starts a new one
       ended(new Error(`${this.name} sidecar exited (${await proc.exited})`));
@@ -151,19 +172,9 @@ class Sidecar {
     });
   }
 
-  /**
-   * Its stdin ends, and with it the sidecar, which finishes a recording it is on; one still there
-   * after 30 s is killed. Killed at once, Python leaves the semaphore of its model download's progress
-   * bar behind, and its resource tracker warns about it on the terminal.
-   */
+  /** Ends the sidecar gently, which finishes a recording it is on. */
   stop() {
-    const proc = this.proc;
-    if (!proc || proc.exitCode !== null) return;
-    try {
-      proc.stdin.end();
-    } catch {}
-    const kill = setTimeout(() => proc.kill(), 30_000);
-    void proc.exited.then(() => clearTimeout(kill));
+    if (this.proc && this.proc.exitCode === null) endGently(this.proc);
   }
 }
 
@@ -175,7 +186,7 @@ class Sidecar {
 export class LocalTranscriber implements Transcriber {
   private sidecar: Sidecar;
 
-  constructor(readonly backend: ListenBackend = voiceBackends().listen) {
+  constructor(readonly backend: ListenBackend = listenBackend()) {
     this.sidecar = new Sidecar('transcription', () => {
       const script = [join(VOICE, 'transcribe_sidecar.py'), '--backend', backend];
       const python = process.env.OBEYA_WHISPER_PYTHON;

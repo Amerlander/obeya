@@ -12,7 +12,7 @@ import type { Subprocess } from 'bun';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import type { HeldVoice } from '../../plugin/skills/demo/lib/voices.ts';
-import { OWN_GROUP } from './voice.ts';
+import { endGently, lines, pythonSpawn } from './voice.ts';
 import { messageOf } from '../core/text';
 
 export interface ClipRequest {
@@ -45,19 +45,6 @@ interface Running {
   lines: AsyncIterator<string>;
   /** The tail of its stderr: why, when it dies. */
   stderr: string[];
-}
-
-async function* lines(stream: ReadableStream<Uint8Array>) {
-  const decoder = new TextDecoder();
-  let buffer = '';
-  for await (const chunk of stream) {
-    buffer += decoder.decode(chunk, { stream: true });
-    let nl: number;
-    while ((nl = buffer.indexOf('\n')) >= 0) {
-      yield buffer.slice(0, nl);
-      buffer = buffer.slice(nl + 1);
-    }
-  }
 }
 
 export class NarrationHost {
@@ -128,7 +115,7 @@ export class NarrationHost {
     const started = performance.now();
     let child: Running['child'];
     try {
-      child = Bun.spawn(argv, { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe', env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' }, detached: OWN_GROUP });
+      child = Bun.spawn(argv, { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe', ...pythonSpawn() });
     } catch (e) {
       return { error: `the voice did not start: ${messageOf(e)}` };
     }
@@ -171,17 +158,13 @@ export class NarrationHost {
     return { error };
   }
 
-  /** Its stdin ends, and with it the voice; one that does not end within 30 s is killed. */
+  /** Ends the voice gently. */
   private end(why: string) {
     const voice = this.voice;
     if (!voice) return;
     this.voice = undefined;
     this.o.log?.(`Obeya: narration voice ends (${why})`);
-    try {
-      voice.child.stdin.end();
-    } catch {}
-    const kill = setTimeout(() => voice.child.kill(), 30_000);
-    void voice.child.exited.then(() => clearTimeout(kill));
+    endGently(voice.child);
   }
 }
 

@@ -8,13 +8,13 @@
 // the sheet offers a cloud service instead (voice-cloud.ts), tested with the same sentence. With a
 // cloud service in use nothing of the above is needed.
 
-import type { CloudVoiceView, VoiceSetupItem, VoiceSetupView, VoiceSpeed } from '../core/types';
+import type { CloudVoiceView, ListenBackend, VoiceSetupItem, VoiceSetupView, VoiceSpeed } from '../core/types';
 import { installHint, linuxFamily, output } from '../../plugin/skills/demo/lib/setup.ts';
 import { hfModelPresent } from '../../plugin/skills/demo/lib/voices.ts';
 import { BadRequest } from './board';
 import { freshPath } from './path';
 import { resource } from './resources';
-import { type ListenBackend, listenKit, type Transcript } from './voice';
+import { listenKit, type Transcript } from './voice';
 import { CloudError, cloudFrom, cloudInUse, cloudView, readVoiceFile, serviceName, transcribeInCloud, writeVoiceFile } from './voice-cloud';
 
 /** The sentence the check transcribes („Starte die Karte Export für Vermieter und sag mir Bescheid, wenn sie fertig ist.“), and how long it lasts. */
@@ -22,9 +22,8 @@ export const CHECK_CLIP = { file: 'check-de.ogg', seconds: 4.1 };
 
 export interface VoiceSetupOptions {
   home: string;
-  backends: { listen: ListenBackend };
-  /** The recognition on this machine: loading it (which the first time fetches it), and hearing. */
-  local: { prepare(): Promise<void>; transcribe(audioPath: string, vocabulary: string): Promise<Transcript> };
+  /** The recognition on this machine: its backend, loading it (which the first time fetches it), and hearing. */
+  local: { backend: ListenBackend; prepare(): Promise<void>; transcribe(audioPath: string, vocabulary: string): Promise<Transcript> };
   env?: Record<string, string | undefined>;
   /** The check's sentence; Obeya's own by default. */
   clip?: string;
@@ -44,7 +43,7 @@ export class VoiceSetup {
   async view(): Promise<VoiceSetupView> {
     const env = this.o.env ?? process.env;
     const { platform, arch } = process;
-    const { listen } = this.o.backends;
+    const listen = this.o.local.backend;
     const cloud = cloudView(this.o.home);
     const job = this.job ? { job: { ...this.job } } : {};
     // through the cloud nothing on this machine is needed
@@ -88,7 +87,7 @@ export class VoiceSetup {
   private speed(): VoiceSpeed | 'measuring' | undefined {
     if (this.job?.running && this.job.step === 'measure') return 'measuring';
     const speed = readVoiceFile(this.o.home).speed;
-    return speed?.backend === this.o.backends.listen ? speed : undefined;
+    return speed?.backend === this.o.local.backend ? speed : undefined;
   }
 
   /** Loads the recognition and measures it, in the background; the view says how far it got. */
@@ -106,7 +105,7 @@ export class VoiceSetup {
 
   private run(fetching: boolean): Promise<VoiceSetupView> {
     const job: NonNullable<VoiceSetupView['job']> = (this.job = { running: true, step: fetching ? 'fetch' : 'measure', line: '' });
-    const { listen } = this.o.backends;
+    const listen = this.o.local.backend;
     this.done = (async () => {
       console.log(`Obeya: loading the speech recognition (${listenKit(listen).name}, fetched the first time)`);
       await this.o.local.prepare();
