@@ -79,6 +79,9 @@ export function frameDurations(frames: Frame[], t0: number, tEnd: number, cuts: 
   return held.filter((h, i) => h.seconds >= 0.0005 || i === held.length - 1).map((h) => ({ ...h, seconds: Math.max(0.001, h.seconds) }));
 }
 
+/** A place in the video as its player shows it: `m:ss`. */
+export const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
 /** What the picture says during a cut: how much later it is when the demo goes on. */
 export function laterLabel(seconds: number, language: NarrationLanguage) {
   const s = Math.max(1, Math.round(seconds));

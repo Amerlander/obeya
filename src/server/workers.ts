@@ -8,6 +8,7 @@ import type { CardDiff } from '../core/diff';
 import { LANGUAGE_NAMES, LANGUAGES } from '../core/locale';
 import { MESSAGES, type Messages, type Pause } from '../core/messages';
 import { basename } from 'node:path';
+import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
 import { answering, askable, pausable, type CardLanding, type DemoKind, type DemoPage, formatQuestion, handedOver, type Item, type Mock, ownWords, pickedAnswer, type Question, type RepoSettings, type RestartReason, type Spot, type SpotInput, started } from '../core/types';
 import { BadRequest, type Board, replyNote } from './board';
 import { type Asked, decisionLog, toQuestion, withPick } from './advisor';
@@ -96,9 +97,7 @@ interface HeldComment {
 
 /** Where in the demo video the owner's words are, as the worker reads it above them. */
 export const spotNote = (spot: Spot) => {
-  const m = Math.floor(spot.at / 60);
-  const time = `${m}:${String(Math.floor(spot.at % 60)).padStart(2, '0')}`;
-  return `[Demo video at ${time}${spot.chapter ? `, chapter „${spot.chapter}“` : ''}${spot.narration ? `, narration: „${spot.narration}“` : ''}]`;
+  return `[Demo video at ${mmss(spot.at)}${spot.chapter ? `, chapter „${spot.chapter}“` : ''}${spot.narration ? `, narration: „${spot.narration}“` : ''}]`;
 };
 
 /** What is stored while landed work's worker finishes (`CardRow.landed`). */

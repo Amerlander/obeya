@@ -6,6 +6,7 @@
 import { type Dirent, existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { withHeightReport } from '../core/frame';
+import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
 
 /** The languages a page speaks: those a demo is narrated in. */
 export type PageLanguage = 'de' | 'en';
@@ -89,7 +90,6 @@ const paragraphs = (text: string) =>
     .filter(Boolean)
     .map((p) => `<p>${esc(p)}</p>`)
     .join('\n');
-const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 /** Text inside a `<script>` element must not close it. */
 const inScript = (s: string) => s.replace(/<\//g, '<\\/');
 

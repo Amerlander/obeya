@@ -3,6 +3,7 @@
 import { Fragment, type ReactNode, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { agentListens, askable, buildableOn, type CardAction, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, EXPORT_HTML_MAX, finished, finishingUp, handedOver, type Item, type Mock, type NextStep, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, type Spot, started, stopped, stoppedArchivable, titleFrom } from '../core/types';
 import { mockPage } from '../core/frame';
+import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
 import { answerText, toggle } from './answer';
 import { ApiError, api, at, type Field, holdRestart, onCardEvent, onCardEventGone } from './api';
 import { firstOpening } from './demoSeen';
@@ -1808,8 +1809,6 @@ function ArchiveButton({ item, run }: { item: Item; run: Run }) {
     </button>
   );
 }
-
-const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
 function PlanSource({ file, onRead }: { file: string; onRead?: () => void }) {
   return (

@@ -12,7 +12,7 @@ import type { Browser, BrowserContext, Locator, Page } from 'playwright-core';
 import { launchChromium } from '../../../lib/chromium.ts';
 import { type NarrationLanguage, readDemoSettings, withVoice } from './settings.ts';
 import { checkSetup, describeSetup } from './setup.ts';
-import { CLOCK, type Cut, type Frame, frameDurations, laterLabel, onPaintTime, readClock, untagged, videoTime } from './timeline.ts';
+import { CLOCK, type Cut, type Frame, frameDurations, laterLabel, mmss, onPaintTime, readClock, untagged, videoTime } from './timeline.ts';
 import { TTS_LOCK, voiceSpec } from './voices.ts';
 
 export interface Scene {
@@ -689,10 +689,6 @@ export async function runDemo(spec: DemoSpec, demoDir: string) {
 
 function esc(s: string) {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-}
-
-function mmss(s: number) {
-  return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 }
 
 /** The report page's own words, in the narration language. */
