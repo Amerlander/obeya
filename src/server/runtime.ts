@@ -49,10 +49,10 @@ export type AgentEvent =
    */
   | { type: 'idle'; background?: number; more?: boolean }
   /**
-   * The number of the agent's background tasks still running changed, in a turn or between turns:
-   * a deploy watcher that ends, say, which then wakes the session.
+   * The agent's background tasks still running changed, in a turn or between turns: a deploy
+   * watcher that ends, say, which then wakes the session. `tasks`: all that run now, by the SDK's id.
    */
-  | { type: 'background'; running: number }
+  | { type: 'background'; tasks: { id: string; description: string }[] }
   /**
    * The session's machine is out of reach (a worker on an SSH host whose connection failed or
    * dropped): the session has ended, and resumes by its id once the host answers again.
@@ -236,7 +236,7 @@ export const sdkRuntime: AgentRuntime = {
         },
       },
     });
-    let background = 0;
+    let background: { id: string; description: string }[] = [];
     // what the agent's tool calls were called with, by id: a denial names only the call
     const inputs = new Map<string, Record<string, unknown>>();
     // the account's usage limits as last reported, and whether the turn's request was refused for one
@@ -248,7 +248,7 @@ export const sdkRuntime: AgentRuntime = {
           if (m.type === 'system' && m.subtype === 'init') spec.onEvent({ type: 'session', id: m.session_id });
           else if (m.type === 'system' && m.subtype === 'background_tasks_changed') {
             const running = backgroundWork(m.tasks);
-            if (running !== background) spec.onEvent({ type: 'background', running });
+            if (JSON.stringify(running) !== JSON.stringify(background)) spec.onEvent({ type: 'background', tasks: running });
             background = running;
           }
           else if (m.type === 'rate_limit_event') limits = m.rate_limit_info;
@@ -267,7 +267,7 @@ export const sdkRuntime: AgentRuntime = {
             const limit = failed ? usageLimit(failed, limited, limits) : undefined;
             limited = false;
             if (failed) spec.onEvent({ type: 'error', message: failed, ...(limit ? { limit } : {}) });
-            spec.onEvent({ type: 'idle', background, ...(inbox.taken(m) ? {} : { more: true }) });
+            spec.onEvent({ type: 'idle', background: background.length, ...(inbox.taken(m) ? {} : { more: true }) });
           }
         }
       } catch (e) {
@@ -587,12 +587,12 @@ export const idleRuntime: AgentRuntime = {
 };
 
 /**
- * How many of the agent's background tasks wake it when they finish or fire: a render, a test run,
- * a watcher. The SDK marks watchers `ambient` (no activity to show), like its own housekeeping,
+ * The agent's background tasks that wake it when they finish or fire: a render, a test run, a
+ * watcher. The SDK marks watchers `ambient` (no activity to show), like its own housekeeping,
  * which wakes no one and does not count.
  */
-export function backgroundWork(tasks: { task_type: string; ambient?: boolean }[]): number {
-  return tasks.filter((t) => !t.ambient || t.task_type.startsWith('monitor')).length;
+export function backgroundWork(tasks: { task_id: string; task_type: string; description: string; ambient?: boolean }[]): { id: string; description: string }[] {
+  return tasks.filter((t) => !t.ambient || t.task_type.startsWith('monitor')).map((t) => ({ id: t.task_id, description: t.description }));
 }
 
 /**

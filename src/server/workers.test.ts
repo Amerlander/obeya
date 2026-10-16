@@ -641,12 +641,12 @@ describe('workers', () => {
     // as long as the work runs, the worker waits for it: nothing comes after its brief
     const brief = runtime.last.inbox.length;
     expect(workers.busyCards().length).toBeGreaterThan(0);
-    runtime.last.emit({ type: 'background', running: 0 });
+    runtime.last.emit({ type: 'background', tasks: [] });
     await Bun.sleep(20);
     expect(runtime.last.inbox.length).toBe(brief + 1);
     expect(runtime.last.inbox.at(-1)).toContain('ready_for_review');
     runtime.last.emit({ type: 'idle', background: 1 });
-    runtime.last.emit({ type: 'background', running: 0 });
+    runtime.last.emit({ type: 'background', tasks: [] });
     await Bun.sleep(20);
     expect(state(c.id)).toBe('waiting:question');
     expect(workers.busyCards()).toEqual([]);
@@ -676,6 +676,38 @@ describe('workers', () => {
     // a watcher nobody stopped does not keep a restart away for good
     expect(workers.busyCards()).toEqual([]);
     expect(state(c.id)).toBe('waiting:question');
+  });
+
+  test('the card shows the background work that keeps its worker in a turn, each since it started, until it ends', async () => {
+    setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, backgroundGrace: 1000, backgroundLimit: 1000 }));
+    const c = manual();
+    workers.start(c.id);
+    const s = runtime.last;
+    const t0 = Date.now();
+    s.emit({ type: 'background', tasks: [{ id: 'b1', description: 'Run the test suite' }] });
+    expect(board.item(c.id)!.background).toEqual([{ description: 'Run the test suite', since: expect.any(Number) }]);
+    const since = board.item(c.id)!.background![0]!.since;
+    expect(since).toBeGreaterThanOrEqual(t0);
+    await Bun.sleep(5);
+    s.emit({ type: 'background', tasks: [{ id: 'b1', description: 'Run the test suite' }, { id: 'a1', description: 'Review the diff' }] });
+    s.call('ask', { question: 'Soll das Video Ton haben?' });
+    s.emit({ type: 'idle', background: 2 });
+    // after the question the turn stays open for the work, and the card says which
+    expect(state(c.id)).toBe('waiting:question');
+    const shown = board.item(c.id)!.background!;
+    expect(shown.map((x) => x.description)).toEqual(['Run the test suite', 'Review the diff']);
+    expect(shown[0]!.since).toBe(since);
+    expect(shown[1]!.since).toBeGreaterThan(since);
+    // one ends: it goes from the card, the other stays
+    s.emit({ type: 'background', tasks: [{ id: 'a1', description: 'Review the diff' }] });
+    expect(board.item(c.id)!.background!.map((x) => x.description)).toEqual(['Review the diff']);
+    // the last one wakes the worker, whose turn then ends with nothing in the background
+    s.emit({ type: 'background', tasks: [] });
+    expect(board.item(c.id)!.background).toBeUndefined();
+    s.emit({ type: 'text', text: 'Review gelesen.' });
+    s.emit({ type: 'idle', background: 0 });
+    expect(board.item(c.id)!.inTurn).toBeUndefined();
+    expect(board.item(c.id)!.background).toBeUndefined();
   });
 
   test('a note to a worker waiting for its background work starts a turn of its own', async () => {

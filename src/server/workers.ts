@@ -9,7 +9,7 @@ import { LANGUAGE_NAMES, LANGUAGES } from '../core/locale';
 import { MESSAGES, type Messages, type Pause } from '../core/messages';
 import { basename } from 'node:path';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
-import { answering, askable, pausable, type CardLanding, type DemoKind, type DemoPage, formatQuestion, handedOver, type Item, type Mock, ownWords, pickedAnswer, type Question, type RepoSettings, type RestartReason, type Spot, type SpotInput, started } from '../core/types';
+import { answering, askable, type BackgroundTask, pausable, type CardLanding, type DemoKind, type DemoPage, formatQuestion, handedOver, type Item, type Mock, ownWords, pickedAnswer, type Question, type RepoSettings, type RestartReason, type Spot, type SpotInput, started } from '../core/types';
 import { BadRequest, type Board, replyNote } from './board';
 import { type Asked, decisionLog, toQuestion, withPick } from './advisor';
 import { checkArtifact, DEMO_SKILL, DEMO_SKILL_FILE, demoSkillName, OBEYA_PLUGIN, placeIn, readChapters } from './demo';
@@ -185,6 +185,8 @@ interface Live {
   waiting?: ReturnType<typeof setTimeout>;
   /** How many of the worker's background tasks run, as the session last said. */
   background: number;
+  /** Those tasks by the session's id, as the agent described them and since when Obeya saw them run, the oldest first: on the card while they run. */
+  tasks: Map<string, BackgroundTask>;
   /** When the usage limit that stopped the worker lifts (or, not knowing, when to try again); gone once it works. */
   limited?: number;
   /** The card's status line from before the worker waited for the limit, back once it works again. */
@@ -367,7 +369,7 @@ export class Workers {
 
   constructor(private o: WorkerOptions) {
     // what a worker does shows on its card while it is in a turn, and only then can it be paused
-    o.board.showTurns(() => this.inTurn());
+    o.board.showTurns(() => this.turnsShown());
     // a forward to a card's app ends once the card no longer offers it: cleared, parked, its workspace gone
     o.board.onChange(() => {
       for (const [id, f] of this.forwards) {
@@ -1200,6 +1202,11 @@ export class Workers {
     return [...this.live].filter(([, l]) => l.busy).map(([id]) => id);
   }
 
+  /** The cards whose worker is in a turn, each with its background work that runs. */
+  private turnsShown(): Map<string, BackgroundTask[]> {
+    return new Map([...this.live].filter(([, l]) => l.busy).map(([id, l]) => [id, [...l.tasks.values()]]));
+  }
+
   /** How many of these workers are in a turn on a machine (null: the one Obeya runs on). */
   busyOn(host: string | null): number {
     return [...this.live.values()].filter((l) => l.busy && l.host === host).length;
@@ -1247,7 +1254,7 @@ export class Workers {
     const row = this.o.board.row(cardId);
     if (!row.workspace) throw new Error(`card ${cardId} has no workspace to work in`);
     const preferences = this.o.preferences?.() ?? '';
-    const live: Live = { session: undefined!, host: hostName(row.workspace), handedOver: false, acted: false, nudged: false, lastText: '', busy: true, background: 0, stalled: false, preferences };
+    const live: Live = { session: undefined!, host: hostName(row.workspace), handedOver: false, acted: false, nudged: false, lastText: '', busy: true, background: 0, tasks: new Map(), stalled: false, preferences };
     const project = this.o.board.item(cardId)?.parent;
     if (project) live.project = { id: project, decision: this.o.board.decisions(project).at(-1)?.id ?? 0 };
     this.live.set(cardId, live);
@@ -1471,7 +1478,7 @@ export class Workers {
 
   private onEvent(cardId: string, live: Live, e: AgentEvent) {
     if (this.live.get(cardId) !== live) return;
-    if (e.type === 'background') return this.backgroundChanged(cardId, live, e.running);
+    if (e.type === 'background') return this.backgroundChanged(cardId, live, e.tasks);
     // a turn may also start without a message from Obeya (a finished background command)
     this.setBusy(live, e.type !== 'idle');
     clearTimeout(live.waiting);
@@ -1527,6 +1534,7 @@ export class Workers {
         break;
       case 'idle':
         live.background = e.background ?? 0;
+        if (!live.background) live.tasks.clear();
         this.turnEnded(cardId, live, live.background, false, this.unheardStarts(cardId, live) || e.more);
         this.parkLater(cardId);
         break;
@@ -1685,8 +1693,12 @@ export class Workers {
   }
 
   /** The worker's background work started or ended: an ended turn waiting for it waits as long as it runs. */
-  private backgroundChanged(cardId: string, live: Live, running: number) {
-    live.background = running;
+  private backgroundChanged(cardId: string, live: Live, running: { id: string; description: string }[]) {
+    live.background = running.length;
+    const now = Date.now();
+    live.tasks = new Map(running.map((t) => [t.id, { description: t.description, since: live.tasks.get(t.id)?.since ?? now }]));
+    // the card shows what runs while the worker is in a turn
+    if (live.busy) this.o.board.changed();
     // busy between turns: waiting for the worker, not for a usage limit to lift
     if (live.waiting && live.busy) this.waitForWorker(cardId, live);
   }

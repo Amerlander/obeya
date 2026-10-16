@@ -1,7 +1,7 @@
 // The unfolded card: what it is, what its worker does, and what the owner decides.
 
 import { Fragment, type ReactNode, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { agentListens, askable, buildableOn, type CardAction, chapterAt, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, EXPORT_HTML_MAX, finished, finishedArchivable, finishingUp, handedOver, type Item, type Mock, type NextStep, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, type Spot, started, stopped, stoppedArchivable } from '../core/types';
+import { agentListens, askable, type BackgroundTask, buildableOn, type CardAction, chapterAt, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, EXPORT_HTML_MAX, finished, finishedArchivable, finishingUp, handedOver, type Item, type Mock, type NextStep, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, type Spot, started, stopped, stoppedArchivable } from '../core/types';
 import { mockPage } from '../core/frame';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
 import { answerText, toggle } from './answer';
@@ -966,6 +966,7 @@ function Conversation({
       }
     >
       {pending.at(-1) && <Gist text={pending.at(-1)!.text} />}
+      {!paused && <Background tasks={item.background} />}
       <Steps steps={pending} />
     </Msg>
   );
@@ -1242,6 +1243,31 @@ function Steps({ steps }: { steps: CardEvent[] }) {
         ))}
       </ol>
     </details>
+  );
+}
+
+/** The agent's background work that runs (a test run, a render, a watcher), each with how long it has run, the time going on. */
+function Background({ tasks }: { tasks?: BackgroundTask[] }) {
+  const [now, setNow] = useState(Date.now);
+  const runs = !!tasks?.length;
+  useEffect(() => {
+    if (!runs) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [runs]);
+  if (!tasks?.length) return null;
+  return (
+    <div className="background-work">
+      <span className="background-head">{t.talk.background}</span>
+      <ul>
+        {tasks.map((task, i) => (
+          <li key={`${i}|${task.since}|${task.description}`}>
+            {task.description} <span className="t">{t.talk.backgroundFor(Math.max(0, Math.floor((now - task.since) / 1000)))}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

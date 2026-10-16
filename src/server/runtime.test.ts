@@ -8,14 +8,18 @@ import { MESSAGES } from '../core/messages';
 test('background work counts renders, test runs and watchers, not housekeeping', () => {
   expect(
     backgroundWork([
-      { task_type: 'local_bash' },
-      { task_type: 'local_agent' },
+      { task_id: 'b1', task_type: 'local_bash', description: 'Run the test suite' },
+      { task_id: 'a1', task_type: 'local_agent', description: 'Review the diff' },
       // a watcher the SDK marks as no activity still wakes the agent when it fires
-      { task_type: 'monitor_ws', ambient: true },
-      { task_type: 'dream', ambient: true },
+      { task_id: 'm1', task_type: 'monitor_ws', description: 'Watch the deploy', ambient: true },
+      { task_id: 'd1', task_type: 'dream', description: 'Consolidate memory', ambient: true },
     ]),
-  ).toBe(3);
-  expect(backgroundWork([])).toBe(0);
+  ).toEqual([
+    { id: 'b1', description: 'Run the test suite' },
+    { id: 'a1', description: 'Review the diff' },
+    { id: 'm1', description: 'Watch the deploy' },
+  ]);
+  expect(backgroundWork([])).toEqual([]);
 });
 
 test('foreground sleep: sleep durations, loops, bounds and background', () => {

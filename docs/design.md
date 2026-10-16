@@ -746,6 +746,14 @@ a note or the PR's review starts its next turn (its field then reads „Hinweis 
 macht sich daran“, not that it works on). The agent reworking a proposal has no pause: its rework is
 short and starts again from the owner's words.
 
+A worker's bubble also names the background work that runs: under „Im Hintergrund“ each task as the
+agent described it (the SDK's `background_tasks_changed` list, `Item.background`), with how long it
+has run („Run the test suite seit 2 min“), counting on while the card is open; a task that ends
+leaves the list. That is what the bubble shows when only background work keeps the turn open (right
+after a question, reply or handover), where it would otherwise show no step and no gist. Obeya
+learns no start time from the SDK and counts from when it first saw the task; the SDK's own
+housekeeping, which wakes no one, does not show (`backgroundWork` in `src/server/runtime.ts`).
+
 Pausing ends the agent's session at once, in the middle of a step if need be, with whatever it ran,
 and keeps the card's state and the session (`paused` on the card's row). A worker keeps its
 workspace and branch, its slot is free, and its app is parked after the grace like a waiting

@@ -261,6 +261,9 @@ const de = {
     /** After „Obeya“, under the owner's words while the Koordinator reads them. */
     reading: 'liest …',
     steps: (n: number) => `Verlauf: ${n} ${n === 1 ? 'Schritt' : 'Schritte'}`,
+    // in the bubble of the agent at work: what it runs in the background, and for how long already
+    background: 'Im Hintergrund',
+    backgroundFor: (s: number) => `seit ${s < 60 ? `${s} s` : s < 3600 ? `${Math.floor(s / 60)} min` : `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`}`,
     question: 'Frage',
     handover: 'Übergabe',
     settled: 'Durch deinen Hinweis erledigt.',
@@ -1588,6 +1591,8 @@ const en: Strings = {
     working: 'working …',
     reading: 'is reading …',
     steps: (n: number) => `History: ${n} ${n === 1 ? 'step' : 'steps'}`,
+    background: 'In the background',
+    backgroundFor: (s: number) => `for ${s < 60 ? `${s} s` : s < 3600 ? `${Math.floor(s / 60)} min` : `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`}`,
     question: 'Question',
     handover: 'Handover',
     settled: 'Settled by your note.',

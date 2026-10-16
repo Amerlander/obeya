@@ -48,6 +48,12 @@ export const finishingUp = (i: Pick<Item, 'state' | 'finishing'>) => !!i.finishi
  * the card's state: at work, taking in the owner's words on its handover, on its pull request, after
  * the landing). An idle agent is no such agent: there is nothing running to pause.
  */
+/** A piece of an agent's background work as the agent described it (`Run the test suite`), and since when it runs (milliseconds). */
+export interface BackgroundTask {
+  description: string;
+  since: number;
+}
+
 export const pausable = (i: Pick<Item, 'kind' | 'state' | 'idea' | 'thread' | 'inTurn' | 'paused'>) =>
   !i.paused && (i.kind === 'question' ? !!i.thread?.thinking : i.state === 'idea' && i.idea ? i.idea.thinking : !!i.inTurn);
 
@@ -255,6 +261,8 @@ export interface Item {
   waitsForClone?: true;
   /** Its worker is in a turn right now, its background work included (a render, a watcher): what it does shows, and the owner can pause it. */
   inTurn?: true;
+  /** While `inTurn`: the worker's background work that runs (a test run, a render, a watcher), the oldest first. */
+  background?: BackgroundTask[];
   /**
    * The owner paused the card's agent (its worker, the idea's agent, the Question card's agent):
    * nothing of it runs, its session stays, and it goes on where it stopped with „Weitermachen“ or

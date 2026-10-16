@@ -48,6 +48,7 @@ import {
   finished,
   formatQuestion,
   type Notice,
+  type BackgroundTask,
 } from '../core/types';
 import type { CardRow, DecisionRow, Friction, FrictionNote, GroupRow, NewRow, RowUpdate, Store } from './db';
 import type { Images } from './images';
@@ -997,8 +998,11 @@ export class Board {
       items = toItems(this.store.cards(this.canvas.id), docs, this.home);
     }
     items = this.withPrototypes(items);
-    const inTurn = new Set([...this.turns].flatMap((f) => f()));
-    if (inTurn.size) items = items.map((i) => (inTurn.has(i.id) ? { ...i, inTurn: true } : i));
+    const inTurn = new Map([...this.turns].flatMap((f) => [...f()]));
+    if (inTurn.size) items = items.map((i) => {
+      const background = inTurn.get(i.id);
+      return background ? { ...i, inTurn: true, ...(background.length ? { background } : {}) } : i;
+    });
     const reshare = this.reshare();
     const pools = this.clonePools();
     const planDirs = this.planDirs(all);
@@ -1068,11 +1072,11 @@ export class Board {
     });
   }
 
-  /** Who says which cards' workers are in a turn: one per repository's workers (`showTurns`). */
-  private turns = new Set<() => string[]>();
+  /** Who says which cards' workers are in a turn, each with its background work: one per repository's workers (`showTurns`). */
+  private turns = new Set<() => Map<string, BackgroundTask[]>>();
 
-  /** Who says which cards' workers are in a turn; a worker's turn starts and ends with `changed`, so the cache holds. */
-  showTurns(turns: () => string[]) {
+  /** Who says which cards' workers are in a turn; a worker's turn starts and ends with `changed`, and so does its background work, so the cache holds. */
+  showTurns(turns: () => Map<string, BackgroundTask[]>) {
     this.turns.add(turns);
   }
 

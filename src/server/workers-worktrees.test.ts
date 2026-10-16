@@ -620,7 +620,7 @@ describe('a worktree per card', () => {
     s.emit({ type: 'idle' });
     await workers.approve(c.id);
     s.emit({ type: 'tool', name: 'Bash', input: { command: 'until deployed; do sleep 30; done', run_in_background: true } });
-    s.emit({ type: 'background', running: 1 });
+    s.emit({ type: 'background', tasks: [{ id: 'w1', description: 'Wait for the deploy' }] });
     s.emit({ type: 'text', text: 'Ich warte auf den Prod-Deploy und bereite danach das Senden vor.' });
     s.emit({ type: 'idle', background: 1 });
     // the deploy takes longer than a sign of life would: the watcher still runs
@@ -630,7 +630,7 @@ describe('a worktree per card', () => {
     expect(board.item(c.id)!.finishing).toBe(true);
     expect(board.row(c.id).workspace).toBe(wc);
     // the deploy is done: the watcher ends and wakes the worker, which does what remained
-    s.emit({ type: 'background', running: 0 });
+    s.emit({ type: 'background', tasks: [] });
     s.emit({ type: 'tool', name: 'Bash', input: { command: 'bun scripts/send.ts' } });
     s.emit({ type: 'idle', background: 0 });
     expect(s.closed).toBe(true);
