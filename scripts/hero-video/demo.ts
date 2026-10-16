@@ -23,14 +23,19 @@ const SHORT = !!process.env.HERO_SHORT;
 /** The screenshot pasted into the message: Tipjar with a comma in the bill. */
 const SHOT = path.join(OUT, 'tipjar-comma.png');
 
+/** What scratch-obeya.ts staged: its directory and the ids of the cards by their keys. */
+let staged: { dir: string; cards: Record<string, string> };
+
 function stage() {
   const file = path.join(OUT, 'stage.json');
   writeStage(file);
-  execFileSync('bun', [path.join(ROOT, 'scripts/scratch-obeya.ts'), file, ...(SHORT ? [] : ['--real-workers'])], {
+  const printed = execFileSync('bun', [path.join(ROOT, 'scripts/scratch-obeya.ts'), file, ...(SHORT ? [] : ['--real-workers'])], {
     env: { ...process.env, OBEYA_HOME: undefined },
+    encoding: 'utf8',
   });
+  staged = JSON.parse(printed);
   // the worker's own demo: English, a quick voice (the hero video has no page audio)
-  fs.writeFileSync(`/tmp/obeya-scratch-${PORT}/home/demo.json`, JSON.stringify({ language: 'en', voice: 'say', voiceName: 'Samantha' }));
+  fs.writeFileSync(path.join(staged.dir, 'home', 'demo.json'), JSON.stringify({ language: 'en', voice: 'say', voiceName: 'Samantha' }));
   execFileSync('curl', ['-s', '-X', 'PUT', `${base}/api/language`, '-d', '{"language":"en"}']);
   // Whisper and Obeya loaded before the take, so the spoken command is heard at once
   execFileSync('curl', ['-s', '-X', 'POST', `${base}/api/c/tipjar/voice/warm`]);
@@ -48,11 +53,6 @@ async function tipjarShot(page: Page) {
   await page.goto('http://tipjar.test/');
   await page.locator('#bill').fill('84,50');
   await page.locator('.calc').screenshot({ path: SHOT });
-}
-
-/** The narration clip of the scene that says `text`, else (a dry run) one from `say`. */
-function clipWav(text: string) {
-  return clipOf(text).file;
 }
 
 /** The narration clip of the scene that says `text` and its length, else (a dry run) one from `say`. */
@@ -494,7 +494,6 @@ const scenes: Scene[] = [
         async () => {
           await until(['live'], 'land');
           // Obeya's proposal from its retrospective, which the stage kept back so far
-          const staged = JSON.parse(fs.readFileSync(`/tmp/obeya-scratch-${PORT}/staged.json`, 'utf8')) as { cards: Record<string, string> };
           await fetch(`${base}/api/c/tipjar/cards/${staged.cards.R}/unarchive`, { method: 'POST' });
           await d.wait(1200);
         },
@@ -575,7 +574,7 @@ await runDemo(
       await tipjarShot(page);
     },
     open: async (d) => {
-      const clips = { command: clipWav(narration.command), dictation: clipWav(narration.dictation), comments: clipWav(narration.comments) };
+      const clips = { command: clipOf(narration.command).file, dictation: clipOf(narration.dictation).file, comments: clipOf(narration.comments).file };
       await d.page.route('**/__demo/*.wav', (r) => r.fulfill({ path: clips[path.basename(new URL(r.request().url()).pathname, '.wav') as keyof typeof clips] }));
       await d.page.addInitScript(() => {
         let ctx: AudioContext | undefined;

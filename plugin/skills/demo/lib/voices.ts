@@ -172,7 +172,7 @@ export function components(s: DemoSettings, home = obeyaHome()): Component[] {
   if (s.voice === 'piper') {
     const dir = path.join(voicesHome(home), 'piper');
     const voice = piperVoice(s);
-    const onnx = path.join(dir, `${voice.name}.onnx`);
+    const { onnx } = piperFiles(s, home);
     return [
       pythonEnv(dir, ['piper-tts'], 'Piper', 150),
       {

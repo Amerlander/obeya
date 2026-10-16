@@ -14,24 +14,21 @@ write('logo.svg', renderToStaticMarkup(<Sign />));
 write('wordmark.svg', renderToStaticMarkup(<Wordmark ink="#1f1b14" />));
 write('wordmark-dark.svg', renderToStaticMarkup(<Wordmark ink="#efe9dc" />));
 
-const png = async (svg: string, px: number, name: string) => {
-  const p = Bun.spawn(['rsvg-convert', '-w', `${px}`, '-h', `${px}`, '-o', `${dir}/${name}`], { stdin: new Blob([svg]) });
-  if ((await p.exited) !== 0) throw new Error(`rsvg-convert failed for ${name}`);
+const png = async (svg: string, px: number, file: string) => {
+  const p = Bun.spawn(['rsvg-convert', '-w', `${px}`, '-h', `${px}`, '-o', file], { stdin: new Blob([svg]) });
+  if ((await p.exited) !== 0) throw new Error(`rsvg-convert failed for ${file}`);
 };
-await png(renderToStaticMarkup(<Sign />), 64, 'logo.png');
+await png(renderToStaticMarkup(<Sign />), 64, `${dir}/logo.png`);
 // a touch icon is shown on an opaque square with rounded corners: the sign keeps a margin on card stock
 await png(
   `<svg width="180" height="180" viewBox="-6 -6 44 44" xmlns="http://www.w3.org/2000/svg"><rect x="-6" y="-6" width="44" height="44" fill="#fdfbf5"/>${renderToStaticMarkup(<Sign />).replace(/^<svg[^>]*>|<\/svg>$/g, '')}</svg>`,
   180,
-  'apple-touch-icon.png',
+  `${dir}/apple-touch-icon.png`,
 );
 // an app icon is the sign on a rounded square of card stock, with the margin macOS draws its icons with
-await (async () => {
-  const p = Bun.spawn(['rsvg-convert', '-w', '1024', '-h', '1024', '-o', `${import.meta.dir}/../app/icons/source.png`], {
-    stdin: new Blob([
-      `<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><rect x="100" y="100" width="824" height="824" rx="185" fill="#fdfbf5"/><g transform="translate(240 240) scale(17)">${renderToStaticMarkup(<Sign />).replace(/^<svg[^>]*>|<\/svg>$/g, '')}</g></svg>`,
-    ]),
-  });
-  if ((await p.exited) !== 0) throw new Error('rsvg-convert failed for the app icon');
-})();
+await png(
+  `<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><rect x="100" y="100" width="824" height="824" rx="185" fill="#fdfbf5"/><g transform="translate(240 240) scale(17)">${renderToStaticMarkup(<Sign />).replace(/^<svg[^>]*>|<\/svg>$/g, '')}</g></svg>`,
+  1024,
+  `${import.meta.dir}/../app/icons/source.png`,
+);
 console.log(dir);

@@ -25,8 +25,8 @@ const PROJECT_GAP = 60;
 export function shapeOf(i: Pick<Item, 'kind' | 'state' | 'parent' | 'finishing'>): Shape {
   if (i.kind === 'project') return 'project';
   if (i.parent && finished(i.state) && !finishingUp(i)) return 'chip';
-  // a Question card has a task's size, and a look of its own
-  return i.kind === 'question' ? 'task' : i.kind;
+  // a Question card too: it has a task's size, and a look of its own
+  return 'task';
 }
 
 export function projectSize(children: Pick<Item, 'kind' | 'state' | 'parent' | 'finishing' | 'x' | 'y'>[]): [number, number] {
