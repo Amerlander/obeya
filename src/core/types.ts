@@ -493,6 +493,9 @@ export interface Demo {
   single?: true;
 }
 
+/** Which of the demo's chapters plays at `at` seconds (the first before any starts); a seek lands a little before a chapter's start. */
+export const chapterAt = (chapters: Demo['chapters'], at: number) => chapters.reduce((cur, [start], i) => (start <= at + 0.05 ? i : cur), 0);
+
 export interface DemoPage {
   title: string;
   /** Two to five sentences on what changes and why. */

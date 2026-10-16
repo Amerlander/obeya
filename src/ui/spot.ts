@@ -4,8 +4,9 @@
 // end of the video, the words are about the work as a whole.
 
 import { useSyncExternalStore } from 'react';
-import type { SpotInput } from '../core/types';
+import { chapterAt, type SpotInput } from '../core/types';
 import { api } from './api';
+import { MAX_SIDE } from './shots';
 
 interface Watched {
   cardId: string;
@@ -63,7 +64,7 @@ export function placeOn(cardId: string): Place | null {
   const v = videoOf(cardId);
   if (!v || !v.paused || !midway(v) || dismissed === v.currentTime) return null;
   const at = v.currentTime;
-  const chapter = watched!.chapters.reduce<string | undefined>((cur, [start, title]) => (start <= at + 0.05 ? title : cur), watched!.chapters[0]?.[1]);
+  const chapter = watched!.chapters[chapterAt(watched!.chapters, at)]?.[1];
   return { at, ...(chapter ? { chapter } : {}) };
 }
 
@@ -85,9 +86,6 @@ export function dismissPlace() {
   dismissed = watched.video.currentTime;
   bump();
 }
-
-/** The largest side of a frame sent to the agent, as for screenshots. */
-const MAX_SIDE = 2000;
 
 /**
  * The frame the video shows now, drawn at once; it is uploaded when `upload` is called (once the

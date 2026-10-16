@@ -13,7 +13,7 @@ import { failText, t } from './strings';
 import { behindThumb, type Box, onto, ZOOM_EASE, ZOOM_MS } from './zoomBox';
 
 /** The longest side the model looks at in detail; larger screenshots only cost upload and context. */
-const MAX_SIDE = 2000;
+export const MAX_SIDE = 2000;
 
 /** The images among pasted or dropped files. */
 export const imageFiles = (files: FileList | null | undefined) => [...(files ?? [])].filter((f) => f.type.startsWith('image/'));

@@ -5,7 +5,7 @@ import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'n
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { withHeightReport } from '../core/frame';
-import type { DemoKind } from '../core/types';
+import { chapterAt, type DemoKind } from '../core/types';
 import { demoFile } from './demo-page';
 import { resource } from './resources';
 
@@ -94,7 +94,7 @@ function cues(dir: string): { start: number; end: number; text: string }[] {
  * enough for that); between cues, the last one's last sentence.
  */
 export function placeIn(dir: string, chapters: [number, string][], at: number): { chapter?: string; narration?: string } {
-  const chapter = chapters.reduce<string | undefined>((cur, [start, title]) => (start <= at + 0.05 ? title : cur), chapters[0]?.[1]);
+  const chapter = chapters[chapterAt(chapters, at)]?.[1];
   const cue = cues(dir).findLast((c) => c.start <= at + 0.05);
   let narration: string | undefined;
   if (cue) {
