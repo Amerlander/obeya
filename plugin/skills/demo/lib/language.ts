@@ -5,25 +5,15 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-
-export const OWNER_LANGUAGES = ['de', 'en'] as const;
-export type OwnerLanguage = (typeof OWNER_LANGUAGES)[number];
-
-/** Obeya's language for a system with a language it does not speak. */
-export const FALLBACK_OWNER_LANGUAGE: OwnerLanguage = 'en';
+import { FALLBACK_LANGUAGE, type Language, LANGUAGES, languageOf } from './locale.ts';
 
 export const OWNER_SETTINGS_FILE = 'settings.json';
 
-const languageIn = (locale: string | null | undefined): OwnerLanguage | undefined => {
-  const code = locale?.trim().toLowerCase().split(/[-_.@]/)[0];
-  return OWNER_LANGUAGES.find((l) => l === code);
-};
-
 /** The language the owner chose in the configuration dialog, if they did. */
-export function chosenLanguage(home: string): OwnerLanguage | undefined {
+export function chosenLanguage(home: string): Language | undefined {
   try {
     const o = JSON.parse(fs.readFileSync(path.join(home, OWNER_SETTINGS_FILE), 'utf8')) as Record<string, unknown>;
-    return OWNER_LANGUAGES.find((l) => l === o.language);
+    return LANGUAGES.find((l) => l === o.language);
   } catch {
     return undefined;
   }
@@ -35,10 +25,10 @@ export function chosenLanguage(home: string): OwnerLanguage | undefined {
  * gives them, then what the runtime reports (Windows). A language Obeya does not speak gives the
  * fallback.
  */
-export function systemLanguage(env: Record<string, string | undefined> = process.env, platform: string = process.platform, apple = appleLanguage): OwnerLanguage {
+export function systemLanguage(env: Record<string, string | undefined> = process.env, platform: string = process.platform, apple = appleLanguage): Language {
   const fromEnv = [env.LC_ALL, env.LC_MESSAGES, env.LANG].find((v) => v && v !== 'C' && v !== 'POSIX' && !v.startsWith('C.'));
   const locale = (platform === 'darwin' ? apple() : undefined) ?? fromEnv ?? Intl.DateTimeFormat().resolvedOptions().locale;
-  return languageIn(locale) ?? FALLBACK_OWNER_LANGUAGE;
+  return languageOf(locale) ?? FALLBACK_LANGUAGE;
 }
 
 let apple: string | null | undefined;
@@ -56,4 +46,4 @@ function appleLanguage(): string | undefined {
 }
 
 /** The language that applies: the owner's choice, else the system's. */
-export const ownerLanguageIn = (home: string): OwnerLanguage => chosenLanguage(home) ?? systemLanguage();
+export const ownerLanguageIn = (home: string): Language => chosenLanguage(home) ?? systemLanguage();

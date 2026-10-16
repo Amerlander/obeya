@@ -12,9 +12,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { isMain } from './here.ts';
 import { ownerLanguageIn } from './language.ts';
+import { type Language, LANGUAGE_NAMES, LANGUAGES } from './locale.ts';
 
-export const NARRATION_LANGUAGES = ['de', 'en'] as const;
-export type NarrationLanguage = (typeof NARRATION_LANGUAGES)[number];
+/** The language a demo is narrated in: one Obeya speaks. */
+export type NarrationLanguage = Language;
 /**
  * The voice providers (`voices.ts` turns each into what `tts.py` runs). Local models Obeya
  * installs on request (`piper`, the default, and `qwen3`), macOS `say`, the owner's own command or
@@ -63,7 +64,7 @@ const TEXT_FIELDS = ['command', 'url', 'voiceName', 'reference', 'keyFile'] as c
 export function tidyDemoSettings(input: unknown, fallbackLanguage: NarrationLanguage = DEFAULT_DEMO_SETTINGS.language): DemoSettings {
   const o = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
-  const language = NARRATION_LANGUAGES.find((l) => l === o.language) ?? fallbackLanguage;
+  const language = LANGUAGES.find((l) => l === o.language) ?? fallbackLanguage;
   const voice = VOICES.find((v) => v === o.voice) ?? DEFAULT_DEMO_SETTINGS.voice;
   const out: DemoSettings = { language, voice };
   if (o.ownVoice === true) out.ownVoice = true;
@@ -110,8 +111,6 @@ export function withVoice(s: DemoSettings, voice: string | undefined): DemoSetti
  * presents the work without an "I".
  */
 export const narrationPerson = (s: Pick<DemoSettings, 'ownVoice'>): 'first' | 'third' => (s.ownVoice ? 'first' : 'third');
-
-const LANGUAGE_NAMES: Record<NarrationLanguage, string> = { de: 'German', en: 'English' };
 
 /** What the agent writing a narration needs to know, in a few lines. */
 export function describeDemoSettings(saved: DemoSettings, override: string | undefined = process.env.DEMO_VOICE): string {

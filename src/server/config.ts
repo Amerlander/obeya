@@ -11,12 +11,12 @@ import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
 import { REPO_ADAPTER_DIR, REPO_SETTINGS_FILE } from '../adapters';
 import { settingsShape } from '../adapters/schema';
+import { LANGUAGES } from '../core/locale';
 import { blocksSaving, type CanvasConfig, type DemoSite, type ConfigChecked, type ConfigProblem, type ConfigSaved, type ConfigView, type RepoSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type SettingsShared, type SharedSettings, type DemoSettingsProblem, type DemoSettingsView, type DemoVoiceCheck, type ResolvedCanvas, type VoiceInstallJob, layerSettings, type ProposedSetting, settingPatch } from '../core/types';
 import {
   DEMO_SETTINGS_FILE,
   type DemoSettings,
   expandHome,
-  NARRATION_LANGUAGES,
   narrationPerson,
   readDemoSettings,
   SERVICES,
@@ -218,7 +218,7 @@ async function hasBranch(path: string, branch: string): Promise<boolean> {
 
 const demoShape = z
   .object({
-    language: z.enum(NARRATION_LANGUAGES),
+    language: z.enum(LANGUAGES),
     voice: z.enum(VOICES),
     ownVoice: z.boolean().optional(),
     command: z.string().optional(),
