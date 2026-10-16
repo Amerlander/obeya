@@ -2962,7 +2962,10 @@ page, at most 30 steps (an artifact as high as its window would grow on), and "I
 The frame's origin is `null` there too, and a static site cannot answer the way Obeya does (a keyed
 address, see The demo on the card): Cloudflare Pages sends `Access-Control-Allow-Origin: *`, other
 hosts nothing, and behind a login (Cloudflare Access) the frame's CORS requests carry no cookie and
-get the login page; from a ZIP opened from disk none of them loads. So the copy of the artifact on
+get the login page; from a ZIP opened from disk none of them loads. From disk Chrome loads nothing
+at all beside a sandboxed page, not even its stylesheets and images, so the ZIP's page lets the
+frame keep the page's origin when it is opened from disk (`file:`; there is no site to keep it
+from) and sandboxes it as the site does when served. So the copy of the artifact on
 the page makes none (`artifactCopy` in `src/server/artifact-copy.ts`, for the site and the ZIP
 alike): its module scripts are bundled into its `index.html` (`Bun.build`; imports from a CDN or a
 package stay imports, a script that does not bundle stays as it is, and the comments naming the
@@ -3245,7 +3248,9 @@ the microphone; Chrome launched by Playwright needs no audio service moved in-pr
   Cloudflare Access, answered the frame's cookieless requests with its login page, and a ZIP from
   disk loads none. Giving the frame `allow-same-origin` would have let the artifact's scripts read
   every other page of a site behind a login with the viewer's cookie; asking the page around it
-  for the files works on a site but not from disk.
+  for the files works on a site but not from disk. Opened from disk, a ZIP's page showed not even
+  the artifact's stylesheets and images (Chrome loads nothing beside a sandboxed page there); its
+  frame keeps the page's origin now, since a file on disk has no site to keep it from.
 - **HTML artifacts are shared too** (2026-10-05): an analysis with charts is background for a pull
   request as much as a video.
 - **Sharing takes effect at once.** Until 2026-10-02 it held 8 s with "Doch nicht"; withdrawing is

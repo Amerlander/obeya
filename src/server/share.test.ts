@@ -745,7 +745,9 @@ describe('exporting a demo, where the repository has no demo site', () => {
     writeFileSync(join(dir, out.name), out.data);
     expect(Bun.spawnSync(['unzip', '-o', '-d', join(dir, 'unzipped'), join(dir, out.name)]).exitCode).toBe(0);
     const at = join(dir, 'unzipped', out.name.replace(/\.zip$/, ''));
-    expect(readFileSync(join(at, 'index.html'), 'utf8')).toContain('<iframe src="artifact/index.html"');
+    // opened from disk, the frame keeps the page's origin: Chrome loads nothing beside a sandboxed page there
+    expect(readFileSync(join(at, 'index.html'), 'utf8')).toContain('<iframe sandbox="allow-scripts');
+    expect(readFileSync(join(at, 'index.html'), 'utf8')).toContain(`if (location.protocol === 'file:') f.sandbox.add('allow-same-origin');\n  f.src = "artifact/index.html";`);
     expect(readFileSync(join(at, 'index.html'), 'utf8')).toContain('>In eigenem Fenster öffnen</a>');
     expect(readFileSync(join(at, 'artifact/data/chart.js'), 'utf8')).toBe('draw()');
     expect(readFileSync(join(at, 'artifact/index.html'), 'utf8')).toMatch(/<h2>Graph<\/h2><script>[\s\S]*obeyaHeight[\s\S]*<\/script><\/body>/);

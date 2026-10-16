@@ -175,19 +175,23 @@ export interface ArtifactPageParts {
   top?: { href: string; text: string };
   /** The artifact's page beside this one, or its HTML for a page that holds everything. */
   artifact: { src: string } | { html: string };
+  /** A page passed on as a file (the ZIP), opened from disk. */
+  disk?: boolean;
 }
 
 /**
  * The artifact runs in a sandboxed frame, an origin of its own, so its scripts reach neither the
  * page nor the site. The frame grows to the artifact's height where the artifact says it
- * (`withHeightReport`); without that it stays at 80 % of the window and scrolls.
+ * (`withHeightReport`); without that it stays at 80 % of the window and scrolls. Opened from disk
+ * (`disk`), the frame keeps the page's origin: there is no site to keep it from, and Chrome loads
+ * nothing beside a sandboxed page from disk, not even its stylesheets and images.
  */
 export function artifactPageHtml(p: ArtifactPageParts): string {
   const language = p.language ?? 'de';
   const w = PAGE_WORDS[language];
   const frame =
     'src' in p.artifact
-      ? `<iframe src="${esc(p.artifact.src)}" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" title="${esc(p.title)}"></iframe>`
+      ? `<iframe ${p.disk ? '' : `src="${esc(p.artifact.src)}" `}sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" title="${esc(p.title)}"></iframe>`
       : `<iframe srcdoc="${esc(withHeightReport(p.artifact.html))}" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" title="${esc(p.title)}"></iframe>`;
   const links = [
     'src' in p.artifact ? `<a href="${esc(p.artifact.src)}" target="_blank" rel="noopener">${w.ownWindow}</a>` : '',
@@ -204,7 +208,13 @@ ${links.length ? `<div class="links">${links.join('')}</div>\n` : ''}<div class=
 </main>
 <script>
   // an artifact as high as its window (100vh plus a margin) would grow with each step: it stops after a few
-  const f = document.querySelector('.artifact iframe');
+  const f = document.querySelector('.artifact iframe');${
+    p.disk && 'src' in p.artifact
+      ? `
+  if (location.protocol === 'file:') f.sandbox.add('allow-same-origin');
+  f.src = ${JSON.stringify(p.artifact.src)};`
+      : ''
+  }
   let steps = 0;
   addEventListener('message', (e) => {
     const h = e.source === f.contentWindow && e.data && e.data.obeyaHeight;

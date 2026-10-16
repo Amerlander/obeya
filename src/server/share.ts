@@ -482,7 +482,7 @@ export class Sharing {
     } else {
       const copy = await artifactCopy(demo.dir, files);
       const entries = [
-        { name: `${slug}/index.html`, data: new TextEncoder().encode(artifactPageHtml({ ...parts, artifact: { src: `${ARTIFACT_DIR}/index.html` } })) },
+        { name: `${slug}/index.html`, data: new TextEncoder().encode(artifactPageHtml({ ...parts, artifact: { src: `${ARTIFACT_DIR}/index.html` }, disk: true })) },
         ...files.map((f) => ({
           name: `${slug}/${ARTIFACT_DIR}/${f}`,
           data: copy.has(f) ? new TextEncoder().encode(copy.get(f)) : new Uint8Array(readFileSync(join(demo.dir, f))),
