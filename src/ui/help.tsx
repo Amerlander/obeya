@@ -2,6 +2,7 @@
 
 import { Fragment } from 'react';
 import { t } from './strings';
+import { WishLink } from './wish';
 
 /** The `?` button in the bar. */
 export function HelpButton({ on, onClick }: { on: boolean; onClick: () => void }) {
@@ -13,7 +14,7 @@ export function HelpButton({ on, onClick }: { on: boolean; onClick: () => void }
 }
 
 /**
- * The legend; a click beside it, Esc or `?` closes it. `note` is its foot while the bar still has the
+ * The legend, with the link to the draft for Obeya's makers at its foot; a click beside it, Esc or `?` closes it. `note` is its foot while the bar still has the
  * button: opened by the button it says the key goes away with the button, opened by the key for the
  * first time it says the button has gone.
  */
@@ -52,6 +53,11 @@ export function Help({ onClose, note }: { onClose: () => void; note?: 'button' |
             </section>
           ))}
         </div>
+        {/* what the owner misses goes to Obeya's makers; the legend closes for the draft */}
+        <p className="wish-line">
+          <WishLink onOpen={onClose} />
+          <span className="w-legend">{t.wish.legend}</span>
+        </p>
         {note && <p className="key-note">{note === 'button' ? t.help.keyNote.button : t.help.keyNote.gone}</p>}
       </div>
     </div>

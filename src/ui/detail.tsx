@@ -24,6 +24,7 @@ import { useStickToEnd } from './stickToEnd';
 import { dismissPlace, type Place, seekTo, usePlace, videoOf, watch } from './spot';
 import { becomesLabel, clock as time, errorText, failText, stateLabel, t } from './strings';
 import { agentWorks, demoHandover, koordinatorReads, ownerField, parseQuestion, talkAlone, talkTurns, type Turn, withoutOpen, worked as isWorked } from './talk';
+import { WishReplyLink } from './wish';
 
 /**
  * What the panel does after an action: fold the card and confirm (with undo, when it has one), or stay open.
@@ -1161,6 +1162,7 @@ function Message({
       {answer.continues}
       {e.spot && <SpotLink cardId={e.cardId} spot={e.spot} />}
       {!turn.quiet && <Body md={q ? q.text : (turn.words ?? e.text)} />}
+      {e.wish && <WishReplyLink wish={e.wish} />}
       {q && !turn.settled && q.options.length > 0 && (
         <ul className="q-opts">
           {q.options.map((o) => (

@@ -50,6 +50,8 @@ export const cardDraft = (id: string) => `card:${id}`;
 export const OBEYA_DRAFT = 'obeya';
 /** The screenshots beside the microphone, where no field is spoken to. */
 export const MIC_DRAFT = 'mic';
+/** The field of the draft for Obeya's makers (`wish.tsx`). */
+export const WISH_DRAFT = 'wish';
 
 const drafts = new Map<string, Draft>();
 /** The text field of each draft on the page. */
@@ -69,7 +71,7 @@ const subscribe = (fn: () => void) => {
 
 type Store = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 /** The drafts that last beyond their field: the cards', the sidebar's and the microphone's, not those of a field of its own. */
-const lasting = (key: string) => key.startsWith('card:') || key === OBEYA_DRAFT || key === MIC_DRAFT;
+const lasting = (key: string) => key.startsWith('card:') || key === OBEYA_DRAFT || key === MIC_DRAFT || key === WISH_DRAFT;
 const storeKey = (canvas: string) => `obeya-drafts-${canvas}`;
 const markupsKey = (canvas: string) => `obeya-markups-${canvas}`;
 let kept: { store: Store; canvas: string } | null = null;

@@ -5,6 +5,7 @@ import type { SetupId, SetupItem } from '../../plugin/skills/demo/lib/setup.ts';
 import type { Language } from './locale';
 import { MESSAGES } from './messages';
 import type { NotAProject } from './plan-doc';
+import type { Wish } from './wish';
 
 export type { DemoSettings, NarrationLanguage, VoiceKind } from '../../plugin/skills/demo/lib/settings.ts';
 export type { Language } from './locale';
@@ -559,6 +560,8 @@ export interface CardEvent {
   unread?: true;
   /** The owner's words the agent read later than they were written: they stand after this line of the log, where it read them. */
   readAfter?: number;
+  /** Obeya's reply on the card says it cannot do what the owner asked (or the owner asked to tell its makers): what a draft for them starts from. */
+  wish?: Wish;
 }
 
 /** Obeya's line that a worker started on the card afresh: what it handed over before belongs to an earlier run. */
@@ -724,6 +727,11 @@ export interface Talk {
   movedTo?: string;
   /** The message of the sheet the owner's words reply to, shown above them as a quote. */
   replyTo?: TalkQuote;
+  /**
+   * The reply says Obeya cannot do what the owner asked, or the owner asked to tell Obeya's makers
+   * something: what a draft for them starts from, under a link on the reply.
+   */
+  wish?: Wish;
 }
 
 /** A message of Obeya's sheet: one part of an exchange, what the owner said, the Koordinator's reply or the looked-up answer. */
@@ -1763,4 +1771,6 @@ export interface Notice {
   text: string;
   token?: string;
   undoMs?: number;
+  /** The owner asked to tell Obeya's makers something: the page opens the draft for them with it. */
+  wish?: Wish;
 }

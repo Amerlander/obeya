@@ -1,7 +1,8 @@
 // The Koordinator's prompt against the real model: requests the agent of an open card passes on from
 // the owner's words, in each state an agent is on; sentences said or typed with a card open that no
-// agent works on; new tasks that start or wait; and questions with no card open (an opinion becomes
-// an idea, a fact stays in the conversation). Runs only with OBEYA_LIVE=1 (it uses the machine's
+// agent works on; new tasks that start or wait; questions with no card open (an opinion becomes
+// an idea, a fact stays in the conversation); and requests Obeya cannot do, or words for its makers.
+// Runs only with OBEYA_LIVE=1 (it uses the machine's
 // Claude login and takes about a minute): `OBEYA_LIVE=1 bun test src/server/commands.live.test.ts`.
 
 import { afterAll, beforeAll, expect, test } from 'bun:test';
@@ -169,6 +170,45 @@ test.skipIf(!process.env.OBEYA_LIVE)(
     const wrong = results.filter((r) => JSON.stringify(r.got.did) !== JSON.stringify(r.want));
     for (const r of results)
       console.log(`${wrong.includes(r) ? '✗' : '✓'} „${r.text}“ → ${r.got.did.join(', ') || 'reply or look-up'} · ${JSON.stringify(r.got.executed.map((c) => ('title' in c ? `${c.title}: ${'body' in c ? c.body : ''}` : '')))} · ${r.got.confirm}`);
+    expect(wrong.map((r) => r.text)).toEqual([]);
+  },
+  300_000,
+);
+
+/**
+ * What the owner says with no card open, and what comes of it: a reply that Obeya cannot do it
+ * (`cannot`, with a link to report it as a wish), a draft for Obeya's makers they asked for (`wish`),
+ * or neither (unclear, a fact, a request that fails for the moment or does not fit a card's state).
+ */
+const WISHES: [string, 'cannot' | 'wish' | null][] = [
+  ['Sortier die Karten auf der Leinwand nach Erstellungsdatum', 'cannot'],
+  ['Exportier die ganze Leinwand als PDF', 'cannot'],
+  ['Schick mir eine SMS, sobald eine Demo fertig ist', 'cannot'],
+  ['Zeig mir für jede Aufgabe, wie viele Tokens sie gekostet hat, als Diagramm', null],
+  ['Obeya, Feedback: die Minikarte soll sich ausblenden lassen', 'wish'],
+  ['Sag den Entwicklern von Obeya, dass der Start zu lange dauert', 'wish'],
+  ['mach das Ding da mal weg', null],
+  ['Was ist seit gestern passiert?', null],
+  ['Starte Login', null],
+];
+
+/** What the Koordinator makes of one sentence with no card open: whether it says Obeya cannot do it, or opens a draft for the makers. */
+async function wishOf(text: string) {
+  const board = new Board(new Store(':memory:'), { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
+  board.work(board.create({ title: 'Export als CSV', x: 0, y: 0 }).id, { state: 'live' });
+  board.work(board.create({ title: 'Login', x: 0, y: 0 }).id, { state: 'working' });
+  const runtime = withAgentSetting(sdkRuntime, () => AGENT_DEFAULTS.koordinator);
+  const k = new Commander({ board, runtime, cwd: cwd(), execute: () => {}, delayMs: 1 });
+  const heard = await k.hear(text, {}, [], { typed: true });
+  return { got: heard.wish ? ('wish' as const) : heard.cannot ? ('cannot' as const) : null, confirm: heard.confirm };
+}
+
+test.skipIf(!process.env.OBEYA_LIVE)(
+  "a reply says when Obeya lacks what the owner asked, and words for Obeya's makers open a draft; nothing else does",
+  async () => {
+    const results = await Promise.all(WISHES.flatMap((c) => [c, c]).map(async ([text, want]) => ({ text, want, ...(await wishOf(text)) })));
+    const wrong = results.filter((r) => r.got !== r.want);
+    for (const r of results) console.log(`${wrong.includes(r) ? '✗' : '✓'} „${r.text}“ → ${r.got ?? 'neither'} · ${r.confirm}`);
     expect(wrong.map((r) => r.text)).toEqual([]);
   },
   300_000,

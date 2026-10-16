@@ -13,6 +13,7 @@ import { type AgentRuntime, type AgentSession, failureReason } from './runtime';
 import { type Language, LANGUAGE_NAMES } from '../core/locale';
 import { MESSAGES } from '../core/messages';
 import { clip, oneLine, messageOf } from '../core/text';
+import type { Wish } from '../core/wish';
 
 export type Command = (
   /** `from`: the card it follows up on; `place`: where the owner was on the canvas, for one without. */
@@ -81,6 +82,10 @@ export interface Heard {
   token?: string;
   /** Said to the agent of the card the owner has open: it went straight there and stands in the card's conversation, which is confirmation enough. */
   quiet?: boolean;
+  /** The owner asked to tell Obeya's makers something: the page opens the draft for them with it. */
+  wish?: Wish;
+  /** The reply says Obeya cannot do what the owner asked: a link under it offers to report that as a wish. */
+  cannot?: true;
 }
 
 export interface Focus {
@@ -161,7 +166,7 @@ interface Session {
   /** The command being read; `from`: the card whose agent passed it on. */
   reading?: {
     from?: string;
-    finish: (commands: Command[], confirm: string, lookUp?: LookUp) => string;
+    finish: (commands: Command[], confirm: string, lookUp?: LookUp, more?: More) => string;
     /** The turn ended, with the error that ended it. */
     end: (error?: Error) => void;
   };
@@ -169,10 +174,12 @@ interface Session {
 
 /** A question to look up: what the owner asked, the card it is about, and the answer it follows up on (an exchange). */
 type LookUp = { question: string; about?: string; follows?: number };
-type Decision = { commands: Command[]; confirm: string; lookUp?: LookUp };
+/** `wish`: what the owner wants Obeya's makers told; `cannot`: the reply says Obeya cannot do what they asked. */
+type More = { wish?: string; cannot?: boolean };
+type Decision = { commands: Command[]; confirm: string; lookUp?: LookUp } & More;
 
 /** The actions `act` takes, as the Koordinator names them. */
-const ACTIONS = ['new_card', 'new_idea', 'start', 'dequeue', 'note', 'answer', 'feedback', 'approve', 'accept', 'dismiss', 'revise', 'stop', 'pause', 'resume', 'discuss', 'build', 'plan_doc', 'prototype', 'park', 'drop', 'remember', 'work_retro', 'group', 'ungroup', 'rename_group'] as const;
+const ACTIONS = ['new_card', 'new_idea', 'start', 'dequeue', 'note', 'answer', 'feedback', 'approve', 'accept', 'dismiss', 'revise', 'stop', 'pause', 'resume', 'discuss', 'build', 'plan_doc', 'prototype', 'park', 'drop', 'remember', 'work_retro', 'group', 'ungroup', 'rename_group', 'wish'] as const;
 
 /** What `act` gets for one action. */
 const ACTION = z.object({
@@ -247,9 +254,9 @@ export class Commander {
     // the owner's words stand in the conversation at once, the Koordinator's reply follows once it has read them
     const talk = this.o.board.addTalk(transcript, '', card ?? null, undefined, images, quoted);
     if (card && said) this.o.board.log(card, 'say', 'owner', said, { images, replyTo });
-    const reply = (confirm: string, lookUp?: { question: string; about: string | null }) => {
-      this.o.board.replyTalk(talk, confirm, lookUp);
-      if (card) this.o.board.log(card, 'say', 'koordinator', confirm);
+    const reply = (confirm: string, lookUp?: { question: string; about: string | null }, wish?: Wish) => {
+      this.o.board.replyTalk(talk, confirm, lookUp, wish);
+      if (card) this.o.board.log(card, 'say', 'koordinator', confirm, wish ? { wish } : {});
     };
     let decision: Decision;
     try {
@@ -262,6 +269,9 @@ export class Commander {
       return { confirm };
     }
     const { confirm, lookUp } = decision;
+    // a draft for Obeya's makers: what the owner wants them told, or what they asked and Obeya could not do
+    const wish: Wish | undefined = decision.wish ? { said: decision.wish } : decision.cannot && !lookUp ? { said: transcript, answer: confirm } : undefined;
+    const drafted = { ...(decision.wish ? { wish: wish! } : {}), ...(wish && !decision.wish ? { cannot: true as const } : {}) };
     // a proposal is reworked by what the owner said of it in their own words, however the Koordinator put them
     const verbatim = !input.forwarded && decision.commands.length === 1 && decision.commands[0]!.do === 'revise';
     const commands = decision.commands.map((c): Command => {
@@ -287,15 +297,15 @@ export class Commander {
     // talking about an idea changes nothing that would need taking back: it goes on at once
     const talking = commands.filter((c) => c.do === 'discuss');
     const rest = commands.filter((c) => !talking.includes(c));
-    reply(confirm);
+    reply(confirm, undefined, wish);
     for (const c of talking) await this.run(c);
-    if (!commands.length && said) this.o.onOwnerInput?.(card, 'talk', said, confirm);
-    if (!rest.length) return { confirm };
+    if (!commands.length && said && !decision.wish) this.o.onOwnerInput?.(card, 'talk', said, confirm);
+    if (!rest.length) return { confirm, ...drafted };
     const token = crypto.randomUUID();
     // the words reach the learner as the agent's note when an agent passed them on
     const learn = said && !commands.some((c) => LEARNED.includes(c.do)) ? { said } : {};
     this.waiting.set(token, { commands: rest, ...learn, talk, confirm, ...(card ? { card } : {}) });
-    return { confirm, token };
+    return { confirm, token, ...drafted };
   }
 
   /**
@@ -422,7 +432,7 @@ export class Commander {
     const t = MESSAGES[language];
     const say = CONFIRM[language];
     const s: Session = { agent: null as unknown as AgentSession, ended: false, language, choice: this.choice(), tags: new Map(), tagOf: new Map(), read: 0, since: '', rules: [] };
-    const finish = (commands: Command[], confirm: string, lookUp?: LookUp) => (s.reading ? s.reading.finish(commands, confirm, lookUp) : 'No command to read.');
+    const finish = (commands: Command[], confirm: string, lookUp?: LookUp, more?: More) => (s.reading ? s.reading.finish(commands, confirm, lookUp, more) : 'No command to read.');
     const repos = this.o.board.canvas.repos;
     const config = this.o.config;
     s.agent = this.o.runtime.start({
@@ -451,6 +461,7 @@ export class Commander {
             "- plan_doc also on a planned task of the owner's that nobody has worked on yet (not with Obeya, no branch): an agent starts at once on a plan doc with workstreams from the task, and the project then takes the task's place („plane das als Projekt“).",
             `- group: put cards into a group, shown on the canvas as a coloured territory behind them. cards: their tags; text: the group's name (group is only for rename_group), one the canvas has (see the list) or a new one, which is then created. A card is in one group at most, so this takes it out of its group. A workstream stands for its project: the whole project goes into the group. ungroup: take cards (cards) out of their group. rename_group: group the group's current name, text its new name. A group no card belongs to any more goes. confirm e.g. ${say.group}`,
             '- On a prototype (a card marked prototype of an idea): build (the idea is built on this prototype\'s branch; its other prototypes are thrown away; when the idea became a project, one of its workstreams is built on the branch instead: the one its plan doc builds on the prototype with, or cards: the tag of the one the owner names), drop (the prototype is thrown away into the archive). approve on a prototype also throws it away.',
+            `- wish (no card): the owner wants Obeya's makers told something about Obeya itself: a wish, something missing, a bug („Obeya, Feedback: …“, „Sag den Entwicklern …“, „Wunsch an Obeya: …“). text: what they want the makers to know, in their words. It opens a draft for the owner to check and send on GitHub themselves; nothing goes out. Feedback on a card's work is feedback, and the developers of the repository's own app are the agents (a new card), not this. confirm e.g. ${say.wish}`,
             "Texts for a card's agent (note, answer, feedback) and for revise in the owner's own words, not rephrased: all they said, or with several actions in one sentence the part for that action. Other texts (a new card's body, a rule, talk to an idea) as the owner meant them (fix obvious recognition errors).",
           ].join('\n'),
           schema: {
@@ -460,7 +471,10 @@ export class Commander {
           run: ({ actions, confirm }) => {
             const commands: Command[] = [];
             const problems: string[] = [];
-            const given = actions as ActionArgs[];
+            // what the owner wants Obeya's makers told goes into a draft on their page, not into the actions that run
+            const wishes = (actions as ActionArgs[]).filter((a) => a.do === 'wish').map((a) => a.text?.trim() ?? '');
+            if (wishes.some((w) => !w)) problems.push("wish: the text is missing (what the owner wants Obeya's makers told)");
+            const given = (actions as ActionArgs[]).filter((a) => a.do !== 'wish');
             const problem = (n: number, why: string) => {
               const a = given[n]!;
               problems.push(`action ${n + 1} (${a.do}${a.card ? ` on ${a.card}` : ''}): ${why}`);
@@ -477,15 +491,18 @@ export class Commander {
               });
             if (problems.length)
               return `Nothing recorded: ${problems.join('; ')}. Fix or drop what does not fit and call act again, or use reply (a question the owner asks is answered with reply, or with look_up when it needs reading).`;
-            return finish(commands, String(confirm));
+            return finish(commands, String(confirm), undefined, wishes.length ? { wish: wishes.join('\n\n') } : {});
           },
         },
         {
           name: 'reply',
           description:
-            'No action: answer a question from what this conversation gives you (the cards, their states and history, what was said), or say that it is unclear what is meant (ask what is meant, briefly).',
-          schema: { confirm: z.string() },
-          run: ({ confirm }) => finish([], String(confirm)),
+            [
+              'No action: answer a question from what this conversation gives you (the cards, their states and history, what was said), or say that it is unclear what is meant (ask what is meant, briefly).',
+              "wish: true when the reply says Obeya cannot do what the owner asked because Obeya has no such feature (sorting cards by date, say, where nothing in Obeya does that); the owner then gets a link to send it to Obeya's makers as a wish. Not when it is unclear what they mean, when something failed just now (git, the network, a refused tool call), when the request does not fit a card's state (an action that waits, a card that is not there), or for a question of fact.",
+            ].join('\n'),
+          schema: { confirm: z.string(), wish: z.boolean().optional() },
+          run: ({ confirm, wish }) => finish([], String(confirm), undefined, wish === true ? { cannot: true } : {}),
         },
         ...(config
           ? [
@@ -607,6 +624,8 @@ export class Commander {
 
   /** One action as a command, or why it cannot be done. */
   private command(a: ActionArgs, s: Session): Command | string {
+    // taken out before: it opens a draft, it does not run
+    if (a.do === 'wish') return 'a wish is no action that runs';
     if (a.do === 'remember') {
       const text = a.text?.trim();
       if (!text) return 'the rule is missing';
@@ -767,10 +786,10 @@ export class Commander {
     const ended = new Promise<Error | undefined>((end) => {
       s.reading = {
         ...(input.forwarded && focus.card ? { from: focus.card } : {}),
-        finish: (commands, confirm, lookUp) => {
+        finish: (commands, confirm, lookUp, more) => {
           if (decided) return 'Already decided.';
           decided = true;
-          decide({ commands, confirm: confirm.trim().slice(0, 400), ...(lookUp ? { lookUp } : {}) });
+          decide({ commands, confirm: confirm.trim().slice(0, 400), ...(lookUp ? { lookUp } : {}), ...more });
           return 'Done. End your turn now.';
         },
         end,
@@ -976,7 +995,7 @@ function when(iso: string): string {
 }
 
 /** Examples of the confirmations the Koordinator speaks, and the owner's words for its cards, per language. */
-const CONFIRM: Record<Language, { act: string; words: string; remember: string; retro: string; group: string; configure: string; lookUp: string; idea: string }> = {
+const CONFIRM: Record<Language, { act: string; words: string; remember: string; retro: string; group: string; configure: string; lookUp: string; idea: string; wish: string }> = {
   de: {
     act: '"Neue Aufgabe „Zählerstände als CSV“, der Agent fängt an." / "„Rabatt“ freigegeben, und die Folgeaufgabe „Archiv“ ist angelegt." / "An den Agenten von „Export“ weitergegeben."',
     words: 'In German, a card is an „Aufgabe“ (a follow-up: „Folgeaufgabe“), an idea „Idee“, a project „Projekt“; never say „Karte“. The owner may still say „Karte“ and means the same.',
@@ -986,6 +1005,7 @@ const CONFIRM: Record<Language, { act: string; words: string; remember: string; 
     configure: '„Das Repository shop-web kommt auf die Leinwand Shop.“ / „shop-web bekommt einen dritten Klon; seine Agenten starten neu, sobald sie pausieren.“',
     lookUp: '„Ich schaue im Plan nach.“ / „Moment, ich lese nach, was der Agent bei „…“ tun würde.“',
     idea: '„Neue Idee „Erlaubte Datenbankabfragen“, zum Durchdenken mit dir.“',
+    wish: '„Der Entwurf für die Macher von Obeya ist offen: prüf ihn und schick ihn auf GitHub ab.“',
   },
   en: {
     act: '"New task “Meter readings as CSV”, the agent starts." / "“Discount” approved, and the follow-up “Archive” is created." / "Passed on to the agent of “Export”."',
@@ -996,6 +1016,7 @@ const CONFIRM: Record<Language, { act: string; words: string; remember: string; 
     configure: '“The repository shop-web joins the canvas Shop.” / “shop-web gets a third clone; its agents restart once they paused.”',
     lookUp: '“Let me look at the plan.” / “One moment, I am reading what the agent would do on “…”.”',
     idea: '“New idea “Allowed database queries”, to think through with you.”',
+    wish: '“The draft for Obeya’s makers is open: check it and submit it on GitHub.”',
   },
 };
 
@@ -1010,9 +1031,10 @@ For each message, call act, reply or look_up once, then end your turn:
 - look_up, when the answer needs reading or checking: what an agent would do on a card ("Was würde der Agent hier machen, wenn ich starte?"), what the plan says, how or why something works, what is on the machine or on GitHub (which file is newest, whether a script ran, what a release holds). Never reply that you cannot know or predict it; look it up. The answer follows in a few seconds.
 All three take confirm: one short ${LANGUAGE_NAMES[language]} sentence (two at most for an answer or several actions) the owner hears back, saying what will happen, naming the cards (${CONFIRM[language].act}). No preamble, no questions back unless you use reply.
 ${CONFIRM[language].words}
+What the owner wants Obeya's makers told (a wish for Obeya, a bug in it) is act with wish: it opens the owner's draft for them, which they send themselves. When what they ask of you is something Obeya has no feature for, reply that it cannot, with wish: the owner gets a link to send that to the makers.
 Questions about Obeya's configuration (which canvases and repositories it serves, their settings, clones, port) you answer with reply after reading it with config; a change to it the owner asks for is configure.
 When the owner wants something kept for all future work ("Merk dir …", "ab jetzt immer …", "nie wieder …"), that is remember, not a note to the open card's agent. Decide where it goes: only a rule on how the agents work with the owner through Obeya, whatever the repository, is one of the owner's rules (no repos); anything about a repository (named, "hier", "in diesem Repo", or about its code, UI, wording, tests, tools or product) goes into that repository's CLAUDE.md: pass repos. Leave the place out of the rule's text, and say in confirm where it went (for a CLAUDE.md: into the repository's card ${MESSAGES[language].quote(MESSAGES[language].claudeMd.title)}, which writes it into the file).
-What the owner says or types with a card open that an agent works on (working, in PR, waiting, waiting for review, finishing what remains, a live or done card a note resumes its agent on, an idea with its exploration agent) goes straight to that agent, not to you. The agent passes on to you what asks Obeya for something rather than the agent: approve, pause, stop, start, a follow-up or new card, a new idea, remember, grouping cards, an action on another card, a question about the canvas or another card. Such a message brings the agent's request and the owner's own words; that card is the open one. Do what the owner asked of Obeya, as with any command (act, reply or look_up); the agent has their words already, so pass nothing back to it as note, answer, feedback or discuss. Your confirm goes back to the agent and to the owner.
+What the owner says or types with a card open that an agent works on (working, in PR, waiting, waiting for review, finishing what remains, a live or done card a note resumes its agent on, an idea with its exploration agent) goes straight to that agent, not to you. The agent passes on to you what asks Obeya for something rather than the agent: approve, pause, stop, start, a follow-up or new card, a new idea, remember, grouping cards, an action on another card, a question about the canvas or another card, a wish or a bug for Obeya's makers. Such a message brings the agent's request and the owner's own words; that card is the open one. Do what the owner asked of Obeya, as with any command (act, reply or look_up); the agent has their words already, so pass nothing back to it as note, answer, feedback or discuss. Your confirm goes back to the agent and to the owner.
 When the open card is a proposal, what the owner says about it (what should be added, dropped, decided or put differently, or their thoughts on it) is revise with their words, unless they clearly accept or dismiss it or ask for something else.
 On an idea, "Mach, was du vorschlägst" takes the step its agent would take next, as its line says; when that is answering, discuss with its own answers. Wanting to think about something, rather than have it done, is new_idea. So is asking you for an opinion or a way forward rather than a fact ("Was meinst du, was wir da jetzt machen sollen?", "Wie sollten wir … angehen?", "Was hältst du davon, …?"): such a discussion belongs on an idea card, where its exploration agent opens it. body: the owner's words as they are (their screenshots go along); confirm names the idea (${CONFIRM[language].idea}). A question of fact (what the plan says, what happened, what an agent would do) stays reply or look_up. A wrong guess costs one idea card, which the owner takes back with undo, so go ahead.
 `.trim();

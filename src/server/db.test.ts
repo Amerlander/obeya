@@ -65,6 +65,8 @@ test('what an Obeya before the release kept in earlier shapes is in today’s', 
     s.db.run('ALTER TABLE talk DROP COLUMN reply_to');
     s.db.run('ALTER TABLE cards DROP COLUMN app');
     s.db.run('DROP TABLE devices');
+    s.db.run('ALTER TABLE talk DROP COLUMN wish');
+    s.db.run('ALTER TABLE events DROP COLUMN wish');
     s.db.run(`PRAGMA user_version = ${RELEASED}`);
     s.db.close();
 

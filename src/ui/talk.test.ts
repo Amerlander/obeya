@@ -155,6 +155,15 @@ test('a spoken note stands once; the Koordinator confirms in the steps and answe
   ]);
 });
 
+test("Obeya's answer that it cannot do what the owner asked stands in the conversation, for its link to report it", () => {
+  const asked = ev('say', 'owner', 'Sortier die Karten nach Datum.');
+  const cannot = { ...ev('say', 'koordinator', 'Das gibt es in Obeya nicht.'), wish: { said: 'Sortier die Karten nach Datum.', answer: 'Das gibt es in Obeya nicht.' } };
+  expect(talkTurns([asked, cannot]).shown).toEqual([
+    { e: asked, steps: [] },
+    { e: cannot, steps: [] },
+  ]);
+});
+
 test('a conversation nobody works on ends with its last message or line, the steps without a message where they happened', () => {
   const review = ev('review', 'worker', 'Gesprächsverlauf steht.');
   const approved = ev('state', 'owner', 'Freigegeben und auf main.');

@@ -344,6 +344,41 @@ button.pill.help:hover, button.pill.help.on { color: var(--ink); }
 #help .key-note { margin: 16px 0 0; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
 #help .hint-box { width: 440px; display: flex; flex-direction: column; align-items: flex-end; gap: 18px; }
 #help .hint-box p { margin: 0; align-self: stretch; font-size: 15px; line-height: 1.45; }
+#help .wish-line { margin: 16px 0 0; padding-top: 12px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+#help .wish-line .wish-link { font-size: 13px; }
+#help .w-legend { font-size: 12px; color: var(--muted); }
+
+/* the draft of a wish or a bug for Obeya's makers: over the page, as tall as its text needs; the box scrolls, its fields never */
+#wish { position: fixed; inset: 0; z-index: 61; background: var(--dim); display: flex; align-items: center; justify-content: center; padding: 24px; animation: fade .15s ease-out; }
+#wish .box { position: relative; background: var(--panel); border-radius: 3px; box-shadow: var(--lift); padding: 22px 26px 22px; width: 760px; max-width: 100%; max-height: 100%; overflow: auto;
+  display: flex; flex-direction: column; gap: 12px; }
+#wish h2 { margin: 0 0 2px; font-size: 21px; }
+#wish .close { position: absolute; right: 14px; top: 12px; border: 0; background: var(--chip); color: var(--ink); width: 32px; height: 32px; border-radius: 3px; cursor: pointer; }
+#wish .w-issue { display: flex; flex-direction: column; gap: 10px; }
+#wish .w-issue label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+#wish .w-issue input, #wish .w-issue textarea { font: inherit; font-size: 14px; line-height: 1.45; color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 3px; padding: 8px 10px; }
+#wish .w-issue input { font-weight: 600; }
+#wish .w-issue textarea { resize: none; overflow: hidden; min-height: 90px; }
+#wish .w-issue :is(input, textarea):focus { outline: none; border-color: var(--muted); }
+#wish .w-issue :is(input, textarea):disabled { opacity: .55; }
+#wish .w-issue .hint { margin: 0; }
+#wish .w-compose { margin-top: 0; max-width: none; }
+#wish .w-writing, #wish .w-pending { margin: 0; font-size: 13px; }
+#wish .w-pending { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+#wish .w-public { margin: 0; font-size: 12px; color: var(--muted); }
+#wish .w-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+#wish .w-discard { border: 0; background: none; padding: 0; font: inherit; font-size: 12px; color: var(--muted); cursor: pointer; border-bottom: 1px solid var(--line); }
+#wish .w-discard:hover { color: var(--ink); }
+#wish .w-sent { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+#wish .w-sent p { margin: 0; font-size: 15px; line-height: 1.45; }
+#wish .w-sent .btn { align-self: flex-end; margin-top: 10px; }
+/* the quiet link to it: at the foot of Obeya's sidebar, in the legend, under a reply that Obeya cannot do something */
+.wish-link { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; padding: 0; font: inherit; font-size: 12px; color: var(--muted); cursor: pointer; text-align: left; }
+.wish-link .w-text { border-bottom: 1px solid var(--line); }
+.wish-link:hover { color: var(--ink); }
+.wish-link:hover .w-text { border-color: var(--muted); }
+.wish-link.on-reply { display: flex; margin-top: 6px; }
+.k-rest .k-foot { margin: 16px 0 8px; }
 .empty { position: fixed; left: calc(50% - var(--side, 0px) / 2); top: 50%; transform: translate(-50%, -50%); color: var(--muted); pointer-events: none; text-align: center; white-space: nowrap; }
 .empty p { margin: 0; }
 .empty p + p { margin-top: 4px; }

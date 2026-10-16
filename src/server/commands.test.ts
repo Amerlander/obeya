@@ -909,3 +909,81 @@ describe('groups by voice', () => {
     ]);
   });
 });
+
+describe("wishes for Obeya's makers", () => {
+  test('a reply that Obeya cannot do something carries what the owner asked and the answer, for a draft', async () => {
+    const k = commander();
+    const { heard } = await say(k, 'sortier die Karten nach Datum', 'reply', { confirm: 'Karten nach Datum sortieren kann ich nicht; das gibt es in Obeya nicht.', wish: true });
+    expect(heard).toEqual({ confirm: 'Karten nach Datum sortieren kann ich nicht; das gibt es in Obeya nicht.', cannot: true });
+    expect(board.snapshot().talk.at(-1)!.wish).toEqual({ said: 'sortier die Karten nach Datum', answer: 'Karten nach Datum sortieren kann ich nicht; das gibt es in Obeya nicht.' });
+  });
+
+  test('a reply for words that are unclear, or that failed just now, offers nothing', async () => {
+    const k = commander();
+    const { heard } = await say(k, 'mach das Ding da', 'reply', { confirm: 'Welche Aufgabe meinst du?' });
+    expect(heard).toEqual({ confirm: 'Welche Aufgabe meinst du?' });
+    expect(board.snapshot().talk.at(-1)!.wish).toBeUndefined();
+  });
+
+  test('a question looked up is never a wish, even flagged', async () => {
+    const k = commander();
+    const heard = k.hear('kann Obeya Karten nach Datum sortieren?', {});
+    await settle();
+    runtime.last.call('look_up', { question: 'Kann Obeya Karten nach Datum sortieren?', confirm: 'Ich schaue nach.' });
+    runtime.last.emit({ type: 'idle' });
+    expect(await heard).toEqual({ confirm: 'Ich schaue nach.' });
+    expect(board.snapshot().talk.at(-1)!.wish).toBeUndefined();
+  });
+
+  test('what the owner wants the makers told opens a draft at once: nothing runs, nothing to take back', async () => {
+    const k = commander();
+    const { heard } = await say(k, 'Obeya, Feedback: die Leiste soll sich ausblenden lassen', 'act', {
+      actions: [{ do: 'wish', text: 'Die Leiste soll sich ausblenden lassen.' }],
+      confirm: 'Der Entwurf für die Entwickler ist offen.',
+    });
+    expect(heard).toEqual({ confirm: 'Der Entwurf für die Entwickler ist offen.', wish: { said: 'Die Leiste soll sich ausblenden lassen.' } });
+    expect(board.snapshot().talk.at(-1)!.wish).toEqual({ said: 'Die Leiste soll sich ausblenden lassen.' });
+    await new Promise((r) => setTimeout(r, 40));
+    expect(executed).toEqual([]);
+  });
+
+  test('a wish beside another action: the other one waits for undo as usual', async () => {
+    board.create({ title: 'Export', x: 0, y: 0 });
+    const k = commander();
+    const { heard } = await say(k, 'starte Export und sag den Entwicklern, dass der Start zu lange dauert', 'act', {
+      actions: [
+        { do: 'start', card: 'K1' },
+        { do: 'wish', text: 'Der Start dauert zu lange.' },
+      ],
+      confirm: '„Export“ startet; der Entwurf für die Entwickler ist offen.',
+    });
+    expect(heard.token).toBeDefined();
+    expect(heard.wish).toEqual({ said: 'Der Start dauert zu lange.' });
+    k.arm(heard.token!);
+    await new Promise((r) => setTimeout(r, 40));
+    expect(executed.map((c) => c.do)).toEqual(['start']);
+  });
+
+  test("a wish without text is sent back", async () => {
+    const k = commander();
+    const heard = k.hear('Feedback', {});
+    await settle();
+    expect(runtime.last.call('act', { actions: [{ do: 'wish' }], confirm: 'Offen.' })).toContain('Nothing recorded');
+    runtime.last.call('reply', { confirm: 'Was sollen die Entwickler erfahren?' });
+    runtime.last.emit({ type: 'idle' });
+    expect((await heard).wish).toBeUndefined();
+  });
+
+  test("passed on by a card's agent: the answer on the card carries the flag", async () => {
+    const a = board.create({ title: 'Export', x: 0, y: 0 });
+    board.work(a.id, { state: 'working' });
+    const k = commander();
+    const heard = k.forward(a.id, 'Sort the cards by date.', { text: 'sortier die Karten nach Datum', spoken: true });
+    await settle();
+    runtime.last.call('reply', { confirm: 'Das kann Obeya nicht.', wish: true });
+    runtime.last.emit({ type: 'idle' });
+    expect(await heard).toEqual({ confirm: 'Das kann Obeya nicht.', cannot: true });
+    const answer = board.events(a.id).find((e) => e.author === 'koordinator')!;
+    expect(answer.wish).toEqual({ said: 'sortier die Karten nach Datum', answer: 'Das kann Obeya nicht.' });
+  });
+});

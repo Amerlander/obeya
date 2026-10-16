@@ -24,6 +24,7 @@ import { collect, keep, type Kept, restore, type SideSheet, takeKept } from './k
 import { Sign, Wordmark } from './logo';
 import { DOUBLE_CLICK_KNOWN, Help, HelpButton, HELP_KEY_KNOWN, NewCardHint } from './help';
 import { know, known } from './known';
+import { closeWish, keepWish, openWish, useWish, WishDialog } from './wish';
 import { PlanDirNote, planDirBoxes, useHiddenEmptyNotes } from './planDirs';
 import { attachTo, imageFiles } from './shots';
 import { cardDraft, fieldOn, focusedDraft, keepDrafts, MIC_DRAFT, OBEYA_DRAFT, takesImages } from './draft';
@@ -48,6 +49,7 @@ export function App() {
   if (!current) return <Setup first />;
   setCanvas(current.id);
   keepDrafts(sessionStorage, current.id);
+  keepWish(sessionStorage, current.id);
   return <Live canvases={canvases} />;
 }
 
@@ -245,6 +247,7 @@ function Canvas({
   // „Telefon verbinden“, from the phone icon in the bar: only on the machine Obeya runs on
   const [phoneOn, setPhoneOn] = useState(false);
   const localPage = useLocalPage();
+  const wishOn = useWish().open;
   // the bar's `?` button stays until the owner opened the legend with the key; the legend's foot says so
   const [helpKnown, setHelpKnown] = useState(() => known(HELP_KEY_KNOWN));
   const [helpNote, setHelpNote] = useState<'button' | 'gone'>();
@@ -673,6 +676,8 @@ function Canvas({
   function onHeard(h: Heard) {
     // said to the open card's agent: the card shows it
     if (h.quiet) return;
+    // the owner asked to tell Obeya's makers something: the draft for them opens
+    if (h.wish) openWish(h.wish);
     if (h.token && !focusRef.current) newCardWatch.current = { known: new Set(itemsRef.current.map((i) => i.id)), until: Date.now() + 20_000 };
   }
   const told = useTold(onHeard);
@@ -737,6 +742,7 @@ function Canvas({
     () =>
       onNotice((n) => {
         const i = itemsRef.current.find((x) => x.id === n.cardId);
+        if (n.wish) openWish(n.wish);
         told.show(i ? { id: i.id, title: plain(i.title) } : undefined, { confirm: n.text, ...(n.token ? { token: n.token } : {}), ...(n.undoMs ? { undoMs: n.undoMs } : {}) });
       }),
     [],
@@ -1115,6 +1121,14 @@ function Canvas({
       if (e.key === 'Escape') setNewHintOn(false);
       return;
     }
+    // the draft for Obeya's makers takes the keys until it closes, Esc closing it
+    if (wishOn) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeWish();
+      }
+      return;
+    }
     // the legend over the page takes the keys until it closes
     if (helpOn) {
       if (e.key === 'Escape' || e.key === '?') setHelpOn(false);
@@ -1372,6 +1386,7 @@ function Canvas({
         />
         <div id="dim" className={dim ? 'on' : undefined} onClick={() => closeCard()} />
         {helpOn && <Help note={helpNote} onClose={() => setHelpOn(false)} />}
+        <WishDialog />
         {newHintOn && <NewCardHint onClose={() => setNewHintOn(false)} />}
         <div id="panel" ref={panelRef}>
           <button className="close" title={t.close} onClick={() => closeCard()}>

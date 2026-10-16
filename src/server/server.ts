@@ -29,6 +29,8 @@ import { Access } from './remote';
 import { Tailscale } from './tailscale';
 import { agentsView, languageView, pushKeyChoice, saveAgents, saveLanguage, savePushKey, saveTheme, themeView } from './settings';
 import { nonEmpty } from '../core/text';
+import { VERSION } from './resources';
+import { footerOf } from './wish';
 
 type Req = Request & { params: Record<string, string> };
 
@@ -651,6 +653,20 @@ export function serve(
           // screenshots pasted into the typed command go to the cards it creates or concerns
           c.images.resolve(images);
           return heard(c, text.trim(), focusOf(req, c), images ?? [], { typed: true, ...(isField(field) ? { field } : {}), ...(typeof replyTo === 'number' || isTalkRef(replyTo) ? { replyTo } : {}), ...(spot ? { spot } : {}) });
+        }),
+      },
+      // a wish or a bug for Obeya's makers: the issue's text as a small job writes it, for the owner to check and open on GitHub
+      '/api/c/:canvas/wish': {
+        POST: on(async (c, req) => {
+          const { said, answer, title, body, images, app } = ((await req.json()) ?? {}) as Record<string, unknown>;
+          if (typeof said !== 'string' || !said.trim()) throw new BadRequest('emptyText', 'said must be a non-empty string');
+          const ids = Array.isArray(images) ? images.filter((i): i is string => typeof i === 'string') : [];
+          const server = config?.view().server;
+          return c.writeWish(
+            { said, ...(typeof answer === 'string' ? { answer } : {}), ...(typeof title === 'string' ? { title } : {}), ...(typeof body === 'string' ? { body } : {}) },
+            footerOf(server?.version ?? VERSION, server?.commit ?? null, app === true),
+            ids,
+          );
         }),
       },
       '/api/c/:canvas/command/undo': {

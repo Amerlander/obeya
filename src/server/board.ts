@@ -52,6 +52,7 @@ import {
 import type { CardRow, DecisionRow, Friction, FrictionNote, GroupRow, NewRow, RowUpdate, Store } from './db';
 import type { Images } from './images';
 import { clip, oneLine } from '../core/text';
+import type { Wish } from '../core/wish';
 
 /** What Obeya keeps about a card's pull request; `url` is null until the worker opened it. */
 export interface PrState {
@@ -319,16 +320,17 @@ export class Board {
    * Appends a line to the card's log. `images`: the owner's screenshots, by file or id (the log keeps
    * the id); `replyTo`: the message the owner's words reply to (`quoted`); `spot`: the place in the
    * demo video they are about; `picks`: the options an answer picked; `answer`: a looked-up answer's
-   * exchange and files; `at` keeps a message's time when a thread is copied onto its Question card.
+   * exchange and files; `at` keeps a message's time when a thread is copied onto its Question card;
+   * `wish`: on a reply of Obeya's, what a draft for its makers starts from.
    */
   log(
     cardId: string,
     kind: CardEvent['kind'],
     author: CardEvent['author'],
     text: string,
-    extra: Partial<Pick<CardEvent, 'code' | 'images' | 'mocks' | 'replyTo' | 'spot' | 'answer' | 'picks' | 'at'>> & { unread?: boolean } = {},
+    extra: Partial<Pick<CardEvent, 'code' | 'images' | 'mocks' | 'replyTo' | 'spot' | 'answer' | 'picks' | 'at' | 'wish'>> & { unread?: boolean } = {},
   ): CardEvent {
-    const { code, images, mocks, replyTo, spot, answer, picks, at, unread } = extra;
+    const { code, images, mocks, replyTo, spot, answer, picks, at, unread, wish } = extra;
     const e = this.store.addEvent({
       cardId,
       kind,
@@ -343,6 +345,7 @@ export class Board {
       ...(at ? { at } : {}),
       ...(unread ? { unread: true as const } : {}),
       ...(picks?.length ? { picks } : {}),
+      ...(wish ? { wish } : {}),
     });
     for (const fn of this.eventListeners) fn(e);
     return e;
@@ -700,9 +703,9 @@ export class Board {
     return id;
   }
 
-  /** The Koordinator's reply to words it has read, and the question it looks up for them. */
-  replyTalk(id: number, reply: string, lookUp?: { question: string; about: string | null }) {
-    this.store.replyTalk(id, reply, lookUp);
+  /** The Koordinator's reply to words it has read, the question it looks up for them, and what a draft for Obeya's makers would start from. */
+  replyTalk(id: number, reply: string, lookUp?: { question: string; about: string | null }, wish?: Wish) {
+    this.store.replyTalk(id, reply, lookUp, wish);
     this.changed();
   }
 

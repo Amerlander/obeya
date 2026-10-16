@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { AnswerFile, AnswerRef, CardEvent, DeviceView, CardKind, CardState, Mock, Need, Preference, PreferenceState, ProposedSetting, SettingProposal, SettingProposalState, Spot, Talk, TalkQuote, TalkRef } from '../core/types';
+import type { Wish } from '../core/wish';
 
 export interface CardRow {
   id: string;
@@ -345,10 +346,12 @@ export const MIGRATIONS = [
     paired_at TEXT NOT NULL,
     last_seen TEXT NOT NULL
   );`,
+  // Obeya's reply says it cannot do what the owner asked, or the owner asked to tell its makers: what a draft for them starts from (JSON `Wish`)
+  'ALTER TABLE talk ADD COLUMN wish TEXT; ALTER TABLE events ADD COLUMN wish TEXT;',
 ];
 
-const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter';
-type EventRow = Omit<CardEvent, 'images' | 'mocks' | 'replyTo' | 'spot' | 'answer' | 'picks' | 'unread' | 'readAfter'> & {
+const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter, wish';
+type EventRow = Omit<CardEvent, 'images' | 'mocks' | 'replyTo' | 'spot' | 'answer' | 'picks' | 'unread' | 'readAfter' | 'wish'> & {
   code: CardEvent['code'] | null;
   images: string | null;
   mocks: string | null;
@@ -358,8 +361,9 @@ type EventRow = Omit<CardEvent, 'images' | 'mocks' | 'replyTo' | 'spot' | 'answe
   picks: string | null;
   unread: number | null;
   readAfter: number | null;
+  wish: string | null;
 };
-const eventOf = ({ code, images, mocks, replyTo, spot, answer, picks, unread, readAfter, ...e }: EventRow): CardEvent => ({
+const eventOf = ({ code, images, mocks, replyTo, spot, answer, picks, unread, readAfter, wish, ...e }: EventRow): CardEvent => ({
   ...e,
   ...(code ? { code } : {}),
   ...(images ? { images: JSON.parse(images) as string[] } : {}),
@@ -370,6 +374,7 @@ const eventOf = ({ code, images, mocks, replyTo, spot, answer, picks, unread, re
   ...(picks ? { picks: JSON.parse(picks) as string[] } : {}),
   ...(unread ? { unread: true as const } : {}),
   ...(readAfter ? { readAfter } : {}),
+  ...(wish ? { wish: JSON.parse(wish) as Wish } : {}),
 });
 
 export type NewRow = Pick<CardRow, 'canvas_id' | 'kind' | 'x' | 'y'> &
@@ -581,7 +586,7 @@ export class Store {
     const at = e.at ?? now();
     const { id } = this.db
       .query(
-        'INSERT INTO events (card_id, at, kind, author, text, code, images, mocks, reply_to, spot, answer, picks, unread) VALUES ($cardId, $at, $kind, $author, $text, $code, $images, $mocks, $replyTo, $spot, $answer, $picks, $unread) RETURNING id',
+        'INSERT INTO events (card_id, at, kind, author, text, code, images, mocks, reply_to, spot, answer, picks, unread, wish) VALUES ($cardId, $at, $kind, $author, $text, $code, $images, $mocks, $replyTo, $spot, $answer, $picks, $unread, $wish) RETURNING id',
       )
       .get({
         ...e,
@@ -593,6 +598,7 @@ export class Store {
         spot: e.spot ? JSON.stringify(e.spot) : null,
         picks: e.picks?.length ? JSON.stringify(e.picks) : null,
         unread: e.unread ? 1 : null,
+        wish: e.wish ? JSON.stringify(e.wish) : null,
         at,
       }) as { id: number };
     return { ...e, id, at };
@@ -789,11 +795,11 @@ export class Store {
     ).id;
   }
 
-  /** The Koordinator's reply to words it has read, and the question it looks up for them. */
-  replyTalk(id: number, reply: string, lookUp?: { question: string; about: string | null }) {
+  /** The Koordinator's reply to words it has read, the question it looks up for them, and what a draft for Obeya's makers would start from. */
+  replyTalk(id: number, reply: string, lookUp?: { question: string; about: string | null }, wish?: Wish) {
     this.db
-      .query('UPDATE talk SET reply = $reply, question = $question, about = $about WHERE id = $id')
-      .run({ id, reply, question: lookUp?.question ?? null, about: lookUp?.about ?? null });
+      .query('UPDATE talk SET reply = $reply, question = $question, about = $about, wish = $wish WHERE id = $id')
+      .run({ id, reply, question: lookUp?.question ?? null, about: lookUp?.about ?? null, wish: wish ? JSON.stringify(wish) : null });
   }
 
   /** Words the Koordinator was reading when Obeya stopped: they get `reply`; returns them. */
@@ -1081,6 +1087,7 @@ interface TalkRow {
   files: string | null;
   card: string | null;
   reply_to: string | null;
+  wish: string | null;
 }
 
 const toTalk = (r: TalkRow): Talk => ({
@@ -1101,6 +1108,7 @@ const toTalk = (r: TalkRow): Talk => ({
   ...(r.follows ? { follows: r.follows } : {}),
   ...(r.files ? { files: JSON.parse(r.files) as AnswerFile[] } : {}),
   ...(r.card ? { movedTo: r.card } : {}),
+  ...(r.wish ? { wish: JSON.parse(r.wish) as Wish } : {}),
 });
 
 /**

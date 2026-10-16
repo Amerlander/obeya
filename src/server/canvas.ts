@@ -36,6 +36,7 @@ import { type DueRestart, Workers } from './workers';
 import { branchSetting, defaultBranch, detectingBranch, gitCalls, type GitSteps, gitStepsSync, type Landed, readingBranches, together, useBranchSetting, Workspaces } from './workspaces';
 import { claudeToken, githubToken, hostName, registerHost } from './hosts';
 import { messageOf } from '../core/text';
+import { type WishDraft, type WishInput, writeWish } from './wish';
 
 export type { CanvasConfig, RepoConfig };
 
@@ -905,8 +906,16 @@ export class CanvasRuntime {
     if (!said) return "Nothing passed on: the owner has said nothing on your card. to_obeya passes on the owner's own words.";
     const h = await this.commander.forward(cardId, request, said);
     if (h.token) this.commander.arm(h.token);
-    this.board.notify({ cardId, text: h.confirm, ...(h.token ? { token: h.token, undoMs: this.commander.delayMs } : {}) });
+    this.board.notify({ cardId, text: h.confirm, ...(h.token ? { token: h.token, undoMs: this.commander.delayMs } : {}), ...(h.wish ? { wish: h.wish } : {}) });
+    // the agent learns what the owner finds under the answer
+    if (h.wish) return `${h.confirm} (A draft for Obeya's makers opened for the owner to check and send on GitHub.)`;
+    if (h.cannot) return `${h.confirm} (Obeya lacks this; under this answer the owner finds a link to send it to Obeya's makers as a wish.)`;
     return h.confirm;
+  }
+
+  /** The issue a small job writes from the owner's words, for Obeya's makers; `footer` ends its body. */
+  writeWish(w: WishInput, footer: string, images: string[] = []): Promise<WishDraft> {
+    return writeWish(this.deps.runtime, w, footer, this.imageFiles(images));
   }
 
   /** The owner clicks in the card's panel: a click without words the learner reads counts towards the Rückschau. */

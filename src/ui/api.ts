@@ -3,6 +3,7 @@ import type { CardDiff } from '../core/diff';
 import type { PushKeyView } from '../core/push-key';
 import { type Place, placeParam } from '../core/layout';
 import type { AccessView, Pairing, RemoteSetting, AgentRole, AgentSetting, CloudPreset, AgentsView, CanvasConfig, CanvasInfo, CanvasSnapshot, ClientMessage, ConfigSaved, ConfigView, CardAction, ConfigChecked, DemoSettings, Group, DemoSettingsView, DemoVoiceCheck, FirstCanvas, GitSetupPreview, MachineItem, MachineSectionId, MachineView, SetupCheck, SetupFolder, VoiceSetupView, CardEvent, CardPatch, Item, Language, LanguageView, NewCard, Notice, OwnerHold, PendingRestart, ProjectHistory, ServerMessage, SettingsShared, SpotInput, TalkRef, AppUpdate, Theme, ThemeView } from '../core/types';
+import type { Wish } from '../core/wish';
 
 /** A request the server refused; `code` picks the owner's text, the message is the server's detail. */
 export class ApiError extends Error {
@@ -86,6 +87,8 @@ export interface Heard {
   unheard?: boolean;
   /** The words heard. */
   text?: string;
+  /** The owner asked to tell Obeya's makers something: the draft for them opens with it. */
+  wish?: Wish;
 }
 /** How long "Rückgängig" shows: until shortly before the command stops waiting. */
 export const undoShownMs = (undoMs: number) => Math.max(0, undoMs - 400);
@@ -246,6 +249,9 @@ export const api = {
   /** A typed request to the Koordinator of another canvas, about nothing in view there. */
   commandOn: (canvas: string, text: string) => call<Heard>('POST', `/api/c/${encodeURIComponent(canvas)}/command`, { text }),
   undo: (token: string) => call<{ undone: boolean }>('POST', at('/command/undo'), { token }),
+  /** The issue for Obeya's makers as a small job writes it from the owner's words, reworking the draft so far; `app`: Obeya runs in its app. */
+  writeWish: (w: { said: string; answer?: string; title?: string; body?: string; images?: string[]; app: boolean }) =>
+    call<{ title: string; body: string; raw?: true }>('POST', at('/wish'), w),
   /** A rule of the owner's, active at once, or with `target` one for that repository's CLAUDE.md. */
   addPreference: (text: string, target?: string) => call<void>('POST', at('/preferences'), { text, ...(target ? { target } : {}) }),
   /** Changes a preference, or deletes it with `null`. */

@@ -34,7 +34,8 @@ Contents:
   hosts
 - [Landing](#landing) — how work lands, PR loop, after landing
 - [The Koordinator](#the-koordinator) — scheduling, learning the owner's rules, the Koordinator's
-  sheet, Arbeitsrückschau, looked-up questions, looked-up threads, Koordinator memory
+  sheet, Arbeitsrückschau, looked-up questions, looked-up threads, Koordinator memory, wishes for
+  Obeya's makers
 - [Voice](#voice) — voice in, speech recognition, who hears the words, commands to the Koordinator,
   voice latency, no voice out, push-to-talk anywhere
 - [Demos](#demos) — the demo skill, the demo settings and voices, what a render needs, recording a
@@ -1161,7 +1162,8 @@ The bar keeps no hint line: `?` (or the round `?` button beside "Neue Aufgabe") 
 mouse and keys as a box over the greyed page (`src/ui/help.tsx`), and Esc, `?` or a click beside it
 closes it. The `?` button only teaches the key: opened by the button, the legend's foot says that
 `?` opens it too and that the button goes once the key has; the first time the key opens it, the
-foot says the button has gone, and it stays gone (per browser).
+foot says the button has gone, and it stays gone (per browser). Under its sections the legend has
+the link „Wunsch oder Fehler melden“ (see Wishes for Obeya's makers).
 
 Left in the bar, after the canvas switcher: the archive's button, the queue's and "Neue Aufgabe".
 The queue's button counts the waiting cards (grey); a click lists them under it in turn, each with
@@ -2066,7 +2068,9 @@ scrollbar). Send is an arrow in a dark circle, as in chat apps, with what it doe
 
 Below that come sections that open and close, each a head with its count: the open proposals
 („Vorschläge (2)“, shown while there are any, open whenever a proposal came after the owner closed
-them) and the preferences (always there, closed by default). Whether a section is open is kept per
+them) and the preferences (always there, closed by default). At its foot stands the quiet link
+„Wunsch oder Fehler melden“, with „Entwurf offen“ beside it while a draft waits (see Wishes for
+Obeya's makers). Whether a section is open is kept per
 canvas in the browser, so a reload keeps it. What runs is not listed there: the canvas shows it.
 
 With no card open, the sheet shows the conversation, newest last, in all the height the sheet has;
@@ -2272,8 +2276,60 @@ commands so the context stays short, a fresh one starts from memory: the last 20
 canvas's last 14 days (at most 60 steps), with times. Of the answers it looked up, the newest five
 come in full, older ones clipped to 400 characters.
 
+### Wishes for Obeya's makers
+
+The owner tells Obeya's makers what is missing or broken from inside Obeya, as an issue on GitHub
+that they submit themselves under their own account (`src/ui/wish.tsx`, `src/server/wish.ts`,
+`src/core/wish.ts`). The repository is fixed, sadilek/obeya: the app runs without a checkout whose
+`origin` could name another.
+
+Four ways lead to the draft, a dialog over the page: the link „Wunsch oder Fehler melden“ at the foot
+of Obeya's sheet, the same link under the legend's sections, words to Obeya („Obeya, Feedback: …“,
+„Sag den Entwicklern von Obeya …“: the action `wish`, which opens the draft at once with what was
+said, without an undo window, since it sends nothing), and the link under a reply that says Obeya
+cannot do what the owner asked. The bar gets no icon of its own: it would stand there always for
+something used rarely.
+
+The dialog's field is the shared composer (text, screenshots, microphone). What the owner writes or
+says there a small job (`chores`, read-only, in a temporary directory) writes up as a title and a
+body in English, the repository's language, adding nothing they did not say; a body that stands
+already is reworked with the new words. The body ends with one line about this Obeya: its version,
+the system, and `app`, `checkout <commit>` or `binary`. Nothing from cards, repositories, paths or
+the conversation goes in unless the owner wrote it, or it is the request Obeya could not do and its
+answer. Without a written issue (not logged in, say) the owner's own words stand in the draft, with
+a line that says so. Title and body stand editable, exactly as they go out, above the line that the
+issue appears publicly on GitHub under the owner's account.
+
+„Auf GitHub öffnen ↗“ opens GitHub's page for a new issue, prefilled (`issues/new?title=…&body=…`),
+in a new tab, which the app's shell hands to the system's browser on every platform. Screenshots
+cannot travel in the link: the dialog says to paste them there, and the click puts the first on the
+clipboard (as PNG). The link stays under 8000 characters: a longer body is cut, with a line at the
+cut, and without a screenshot waiting there the whole body goes on the clipboard. Then the draft is
+gone, and the dialog says what is on the clipboard. Until then the draft (title, body, screenshots)
+is kept per tab and canvas like every input, and so is what stands in its field. A wish that comes
+while a draft stands does not replace it: the dialog offers to discard it and write the new one.
+
+The Koordinator's `reply` carries the flag `wish` when it says Obeya cannot do what the owner asked
+because Obeya has no such feature: not when it is unclear what they mean, when something failed just
+now, when a request does not fit a card's state, or for a question of fact (a look-up is never
+flagged). A flagged reply, in the sheet or on the card that was open, shows „↗ Als Wunsch melden“
+under its text, which opens the draft with what the owner asked and what Obeya answered; on a card
+such an answer stands in the conversation rather than folding away with the confirmations. The
+exchange keeps what the draft starts from (`talk.wish`, `events.wish`). An agent that passed the
+owner's words on through `to_obeya` gets the answer with a note that the owner finds that link under
+it; for `wish` the page opens the draft from the notice that reaches it. `commands.test.ts` checks
+the flag's way through, `commands.live.test.ts` the judgement against the real model on both sides
+of the line.
+
 ### Decisions
 
+- **Wishes go out as a prefilled GitHub issue the owner submits** (2026-10-16), under their own
+  account, with Obeya holding no token. Rejected: posting through gh (it publishes with only Obeya's
+  preview as the check), a hosted endpoint of Obeya's (a service to run, spam, a privacy notice),
+  and mail (attachments by hand, and it exposes an address). Obeya offers it itself as a link under
+  its reply that it cannot do something, rather than never (nobody would learn where Obeya falls
+  short) or by collecting such requests under „Vorschläge“ (late, and without their context). The
+  action is called `wish`, since `feedback` is feedback on a card's work.
 - **A card waits rather than risking a collision**; the Koordinator's estimate is taken once, before
   the start, and a waiting card is checked again against what runs when its blockers finish.
 - **A new card does not overtake a queued one it likely conflicts with**: it queues behind it, also
@@ -2543,7 +2599,8 @@ proposal's).
 Acting takes one or more actions from one sentence, up to 20: new card, new idea, start, taking a
 card out of the queue, note, answer, feedback, approve, accept, dismiss, revise, stop, remember,
 Arbeitsrückschau, putting cards into a group or out of it, renaming a group, changing the
-configuration (`configure`, see The Konfiguration dialog); on ideas: discuss, build, plan doc (on a
+configuration (`configure`, see The Konfiguration dialog), a wish for Obeya's makers (`wish`, see
+Wishes for Obeya's makers); on ideas: discuss, build, plan doc (on a
 planned task of the owner's nobody has worked on too), prototype, park, drop; on prototypes: build
 on it, discard. The actions are checked against the cards' states in the turn, so an action that
 does not fit (a note to a card no agent works on) goes back to the Koordinator, which may reply
@@ -4485,14 +4542,15 @@ Persistent (SQLite):
   chapters, kind) and the pull request it links, the version of the site's pages it was published
   with and whether that is behind, and whether it is publishing or withdrawing; sharing many
   outdated pages again: the cards still to go, how many are out and which failed;
-- card events (the log, with an error code where the UI words it, the owner's screenshots and an
-  idea agent's mocks), a card's own screenshots, workspaces and their leases;
+- card events (the log, with an error code where the UI words it, the owner's screenshots, an idea
+  agent's mocks, and on Obeya's reply what a draft for its makers starts from), a card's own screenshots, workspaces and their leases;
 - decision log, preferences;
 - the Koordinator's conversation with the owner (what was said, its reply, the screenshots that came
   with it, the open card, whether it was taken back; a looked-up question, the card it is about, its
   answer and who gave it, the session of the agent that looked it up, the thread it belongs to and
   the answer it follows up on, the files the answer came with, and the Question card the thread
-  moved onto), a Question card's thread (the exchange it started with, whether its agent reads, what
+  moved onto, and what a draft for Obeya's makers starts from when its reply says Obeya cannot do it
+or the owner asked to tell them something), a Question card's thread (the exchange it started with, whether its agent reads, what
   the owner asked that it has not answered yet, its counts of answers and files), the answer a
   message of a card's log is (its thread, files, the question it continues);
 - confirmed commands waiting for their undo window (`commands`);
