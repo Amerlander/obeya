@@ -50,6 +50,7 @@ import {
   STATES,
   finished,
   formatQuestion,
+  needsYou,
   type Notice,
   type BackgroundTask,
 } from '../core/types';
@@ -1047,6 +1048,7 @@ export class Board {
       const background = inTurn.get(i.id);
       return background ? { ...i, inTurn: true, ...(background.length ? { background } : {}) } : i;
     });
+    items = this.withWaitingSince(items);
     const reshare = this.reshare();
     const pools = this.clonePools();
     const planDirs = this.planDirs(all);
@@ -1068,6 +1070,24 @@ export class Board {
       ...(planDirs.length ? { planDirs } : {}),
     };
     return this.cache;
+  }
+
+  /**
+   * Each card that waits for the owner with since when: noted when it starts to wait, kept in the
+   * database across restarts while it waits, and forgotten once it no longer does.
+   */
+  private withWaitingSince(items: Item[]): Item[] {
+    const known = this.store.waitingSince(this.canvas.id);
+    const at = new Date().toISOString();
+    const out = items.map((i) => {
+      if (!needsYou(i)) return i;
+      let since = known.get(i.id);
+      if (!since) this.store.setWaitingSince(i.id, (since = at));
+      return { ...i, waitingSince: since };
+    });
+    const waiting = new Set(out.flatMap((i) => (i.waitingSince ? [i.id] : [])));
+    for (const id of known.keys()) if (!waiting.has(id)) this.store.setWaitingSince(id, null);
+    return out;
   }
 
   private read(): PlanDoc[] {

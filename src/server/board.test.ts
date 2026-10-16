@@ -601,3 +601,21 @@ describe('groups', () => {
     expect(() => other.group([a.id], null)).toThrow(BadRequest);
   });
 });
+
+describe('waiting since', () => {
+  test('a card notes when it starts to wait for the owner, keeps it while it waits and forgets it after', () => {
+    const c = board.create({ title: 'Own', x: 0, y: 0 });
+    expect(board.item(c.id)!.waitingSince).toBeUndefined();
+    board.work(c.id, { state: 'waiting', need: 'demo' });
+    const since = board.item(c.id)!.waitingSince!;
+    expect(Date.now() - Date.parse(since)).toBeLessThan(5000);
+    // a change while it waits keeps the time, and so does a new board on the same database (a restart)
+    board.work(c.id, { status_line: 'Demo fertig' });
+    expect(board.item(c.id)!.waitingSince).toBe(since);
+    const again = new Board(store, { id: 'shop', name: 'Shop', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => ({ docs, dirs }));
+    expect(again.item(c.id)!.waitingSince).toBe(since);
+    board.work(c.id, { state: 'working', need: null });
+    expect(board.item(c.id)!.waitingSince).toBeUndefined();
+    expect(store.waitingSince('shop').size).toBe(0);
+  });
+});

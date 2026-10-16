@@ -269,6 +269,8 @@ export interface Item {
   inTurn?: true;
   /** While `inTurn`: the worker's background work that runs (a test run, a render, a watcher), the oldest first. */
   background?: BackgroundTask[];
+  /** Since when it waits for the owner (`needsYou`), for the phone view's „Für dich“. */
+  waitingSince?: string;
   /**
    * The owner paused the card's agent (its worker, the idea's agent, the Question card's agent):
    * nothing of it runs, its session stays, and it goes on where it stopped with „Weitermachen“ or

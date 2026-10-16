@@ -95,6 +95,8 @@ export interface CardRow {
   unheard: string | null;
   /** The address its worker opens the app in the card's workspace at, while it runs (`app_running`); gone once Obeya stops the app or the workspace goes. */
   app: string | null;
+  /** Since when the card waits for the owner (`needsYou`), kept while it does; null while it does not. */
+  waiting_since: string | null;
 }
 
 export interface GroupRow {
@@ -352,6 +354,8 @@ export const MIGRATIONS = [
   'ALTER TABLE talk ADD COLUMN wish TEXT; ALTER TABLE events ADD COLUMN wish TEXT;',
   // the demos of earlier handovers a later one replaced
   'ALTER TABLE cards ADD COLUMN demos TEXT;',
+  // since when a card waits for the owner, for the phone view's „Für dich“
+  'ALTER TABLE cards ADD COLUMN waiting_since TEXT;',
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter, wish';
@@ -529,6 +533,17 @@ export class Store {
       }),
     )();
     return ids.map((id) => this.card(id)!);
+  }
+
+  /** Since when each of the canvas's cards waits for the owner, for those that do. */
+  waitingSince(canvasId: string): Map<string, string> {
+    const rows = this.db.query('SELECT id, waiting_since AS since FROM cards WHERE canvas_id = $c AND waiting_since IS NOT NULL').all({ c: canvasId }) as { id: string; since: string }[];
+    return new Map(rows.map((r) => [r.id, r.since]));
+  }
+
+  /** Notes since when a card waits for the owner, or that it no longer does (`null`); the card counts as unchanged. */
+  setWaitingSince(id: string, since: string | null) {
+    this.db.query('UPDATE cards SET waiting_since = $since WHERE id = $id').run({ id, since });
   }
 
   update(id: string, fields: RowUpdate) {
