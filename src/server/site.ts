@@ -27,7 +27,7 @@
 // would make a difference). A page published again with the same video, or the same artifact
 // files, keeps its date, so the overview keeps its order when pages are brought up to date or get
 // their pull request's link. What counts is the demo's own files (`source` in meta.json), not the
-// copies on the site, which carry the script Obeya adds to an artifact.
+// copies on the site, which carry what Obeya adds to an artifact (artifact-copy.ts).
 //
 // A host may serve no byte ranges (Cloudflare Pages does not): the video page then loads the video
 // whole, so a browser can seek in it (`demo-page.ts`).
@@ -40,6 +40,7 @@ import type { DemoSite } from '../adapters/types';
 import type { Messages } from '../core/messages';
 import { readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
 import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, day, demoPageHtml, esc, PAGE_STYLE, PAGE_WORDS, type PageLanguage, withHeightReport } from './demo-page';
+import { artifactCopy } from './artifact-copy';
 import { BUN_ENV } from './resources';
 import { COMMAND_TIMEOUT, commandWords, SHARE_CWD, type SharePage, type ShareTarget, scriptArgv, tail, type Versions } from './share';
 
@@ -488,9 +489,11 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
         const html = p.kind === 'html';
         const files = html ? artifactFiles(p.dir) : VIDEO_FILES.filter((f) => existsSync(join(p.dir, f)));
         for (const f of html ? ['index.html'] : ['demo.mp4', 'captions.vtt']) if (!files.includes(f)) throw new Refused(t.fileMissing(f, p.dir));
+        // what the artifact loads in CORS mode goes into its copy (artifact-copy.ts)
+        const copy = html ? await artifactCopy(p.dir, files) : new Map<string, string>();
         const max = site.maxFile ?? MAX_FILE;
         for (const f of files) {
-          const size = statSync(join(p.dir, f)).size;
+          const size = copy.has(f) ? Buffer.byteLength(copy.get(f)!) : statSync(join(p.dir, f)).size;
           if (size > max) throw new Refused(t.fileTooLarge(f, (size / 1024 / 1024).toFixed(1), String(Math.round((max / 1024 / 1024) * 10) / 10)));
         }
         const target = join(dir, slug);
@@ -505,8 +508,7 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
               mkdirSync(dirname(join(into, f)), { recursive: true });
               copyFileSync(join(p.dir, f), join(into, f));
             }
-            // the artifact tells the page around it its height, so the frame grows to it
-            if (html) writeFileSync(join(into, 'index.html'), withHeightReport(readFileSync(join(p.dir, 'index.html'), 'utf8')));
+            for (const [f, data] of copy) writeFileSync(join(into, f), data);
             const now = new Date().toISOString();
             const source = sourceHash(p.dir, html ? files : ['demo.mp4']);
             const meta: Meta = {

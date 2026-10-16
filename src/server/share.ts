@@ -19,7 +19,8 @@ import { BadRequest, type Board, type PrState, reshareable, type StoredReshare, 
 import type { DemoSite } from '../adapters/types';
 import { readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
 import { type Gone, siteMissing, siteTarget } from './site';
-import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, type DemoPageParts, day, demoPageHtml, PAGE_WORDS, type PageLanguage, withHeightReport } from './demo-page';
+import { artifactCopy } from './artifact-copy';
+import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, type DemoPageParts, day, demoPageHtml, PAGE_WORDS, type PageLanguage } from './demo-page';
 import { type Forge, parsePrUrl } from './forge';
 import type { AgentRuntime } from './runtime';
 import { branchName } from './workspaces';
@@ -479,11 +480,12 @@ export class Sharing {
     if (as === 'html') {
       out = { name: `${slug}.html`, type: 'text/html; charset=utf-8', data: new TextEncoder().encode(artifactPageHtml({ ...parts, artifact: { html: index } })) };
     } else {
+      const copy = await artifactCopy(demo.dir, files);
       const entries = [
         { name: `${slug}/index.html`, data: new TextEncoder().encode(artifactPageHtml({ ...parts, artifact: { src: `${ARTIFACT_DIR}/index.html` } })) },
         ...files.map((f) => ({
           name: `${slug}/${ARTIFACT_DIR}/${f}`,
-          data: f === 'index.html' ? new TextEncoder().encode(withHeightReport(index)) : new Uint8Array(readFileSync(join(demo.dir, f))),
+          data: copy.has(f) ? new TextEncoder().encode(copy.get(f)) : new Uint8Array(readFileSync(join(demo.dir, f))),
         })),
       ];
       out = { name: `${slug}.zip`, type: 'application/zip', data: zip(entries) };

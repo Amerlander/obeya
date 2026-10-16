@@ -1,0 +1,105 @@
+import { afterAll, describe, expect, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { artifactCopy } from './artifact-copy';
+import { artifactFiles } from './demo-page';
+
+const root = mkdtempSync(join(tmpdir(), 'obeya-artifact-copy-'));
+afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+let n = 0;
+/** An artifact's directory with these files, and its copy. */
+async function copyOf(files: Record<string, string>) {
+  const dir = join(root, `a${n++}`);
+  for (const [f, data] of Object.entries(files)) {
+    mkdirSync(join(dir, f, '..'), { recursive: true });
+    writeFileSync(join(dir, f), data);
+  }
+  return { dir, copy: await artifactCopy(dir, artifactFiles(dir)) };
+}
+
+/** The page's first script, the one answering requests for its files, run with this page address. */
+function answering(index: string, href: string) {
+  const code = /<script>(\(\(\) => \{\n {2}const files[\s\S]*?)<\/script>/.exec(index)![1]!;
+  const asked: string[] = [];
+  const window = { fetch: async (input: RequestInfo) => (asked.push(String(input instanceof Request ? input.url : input)), new Response('from the site')) };
+  const opened: string[] = [];
+  class XMLHttpRequest {
+    open(_method: string, url: string) {
+      opened.push(url);
+    }
+  }
+  new Function('window', 'location', 'document', 'XMLHttpRequest', code)(window, { href }, { baseURI: href }, XMLHttpRequest);
+  return { fetch: window.fetch as (input: RequestInfo, init?: RequestInit) => Promise<Response>, xhr: () => new XMLHttpRequest(), asked, opened };
+}
+
+describe('artifactCopy', () => {
+  test('bundles module scripts into the page, without the paths of this machine', async () => {
+    const { dir, copy } = await copyOf({
+      'index.html': `<html><body><script type="module" src="app.js"></script>
+<script type="module">import { label } from './lib/label.js'; document.title = label;</script>
+<script type="module">document.title = 'alone';</script>
+<script>var classic = 1;</script></body></html>`,
+      'app.js': "import { label } from './lib/label.js';\nimport * as d3 from 'https://cdn.example/d3.js';\ndocument.body.append(label, '</script>');",
+      'lib/label.js': "export const label = 'from the module';",
+    });
+    const index = copy.get('index.html')!;
+    expect(index).not.toContain('src="app.js"');
+    expect(index).toMatch(/<script type="module">var label = "from the module";[\s\S]*document\.body\.append\(label, "<\\\/script>"\);\n<\/script>/);
+    // an import from elsewhere stays one; an inline module that imports a file beside it is bundled, one that imports none stays as it is
+    expect(index).toContain('import * as d3 from "https://cdn.example/d3.js"');
+    expect(index).toMatch(/<script type="module">var label = "from the module";\s*document\.title = label;/);
+    expect(index).toContain(`<script type="module">document.title = 'alone';</script>`);
+    expect(index).toContain('<script>var classic = 1;</script>');
+    expect(index).not.toContain(dir);
+    expect(index).not.toMatch(/^\/\/ .*label\.js$/m);
+    expect(index).toContain('obeyaHeight');
+    // scripts and stylesheets load without CORS: no table of files to fetch
+    expect(index).not.toContain('const files');
+    expect([...copy.keys()]).toEqual(['index.html']);
+  });
+
+  test('a module script that does not bundle stays as it is', async () => {
+    const { copy } = await copyOf({ 'index.html': '<script type="module" src="app.js"></script>', 'app.js': "import './missing.js';" });
+    expect(copy.get('index.html')).toContain('<script type="module" src="app.js"></script>');
+  });
+
+  test('fonts go into the stylesheets that load them, images stay files', async () => {
+    const { copy } = await copyOf({
+      'index.html': '<style>@font-face { font-family: T; src: url("fonts/t.woff2") format("woff2"); } body { background: url(bg.png); }</style><link rel="stylesheet" href="css/site.css">',
+      'css/site.css': "@font-face { font-family: U; src: url('../fonts/t.woff2?v=2'); }",
+      'fonts/t.woff2': 'wOF2',
+      'bg.png': 'png',
+    });
+    expect(copy.get('index.html')).toContain('src: url("data:font/woff2;base64,d09GMg==") format("woff2")');
+    expect(copy.get('index.html')).toContain('url(bg.png)');
+    expect(copy.get('css/site.css')).toBe('@font-face { font-family: U; src: url("data:font/woff2;base64,d09GMg=="); }');
+  });
+
+  test('answers fetch and XMLHttpRequest for the files beside the page from inside it', async () => {
+    const { copy } = await copyOf({
+      'index.html': '<!doctype html><html lang="en"><head><title>T</title><script>first()</script></head><body></body></html>',
+      'data.json': '{"rows":[1,2,3],"end":"</script>"}',
+      'nested/table.csv': 'a,b\n1,2\n',
+      'chart.png': 'png',
+    });
+    const index = copy.get('index.html')!;
+    // before any script of the page
+    expect(index.indexOf('const files')).toBeLessThan(index.indexOf('first()'));
+    expect(index).toStartWith('<!doctype html><html lang="en"><head><script>');
+    expect(index).not.toContain('chart.png');
+    const page = answering(index, 'https://demos.example/page-1/artifact/index.html');
+    expect(await (await page.fetch('data.json')).json()).toEqual({ rows: [1, 2, 3], end: '</script>' });
+    const csv = await page.fetch(new Request('https://demos.example/page-1/artifact/nested/table.csv?v=3'));
+    expect([csv.headers.get('content-type'), await csv.text()]).toEqual(['text/csv', 'a,b\n1,2\n']);
+    page.xhr().open('GET', './data.json');
+    expect(page.opened[0]).toStartWith('blob:');
+    // anything else goes to the site: another file, another directory, a POST
+    for (const [url, init] of [['chart.png'], ['../index.html'], ['https://other.example/page-1/artifact/data.json'], ['data.json', { method: 'POST' }]] as const)
+      expect(await (await page.fetch(url, init)).text()).toBe('from the site');
+    expect(page.asked).toEqual(['chart.png', '../index.html', 'https://other.example/page-1/artifact/data.json', 'data.json']);
+    page.xhr().open('POST', 'data.json');
+    expect(page.opened[1]).toBe('data.json');
+  });
+});

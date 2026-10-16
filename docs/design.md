@@ -2959,6 +2959,19 @@ tells the page its height (`postMessage`), so the frame grows to it instead of s
 page, at most 30 steps (an artifact as high as its window would grow on), and "In eigenem Fenster
 öffnen" shows it alone.
 
+The frame's origin is `null` there too, and a static site cannot answer the way Obeya does (a keyed
+address, see The demo on the card): Cloudflare Pages sends `Access-Control-Allow-Origin: *`, other
+hosts nothing, and behind a login (Cloudflare Access) the frame's CORS requests carry no cookie and
+get the login page; from a ZIP opened from disk none of them loads. So the copy of the artifact on
+the page makes none (`artifactCopy` in `src/server/artifact-copy.ts`, for the site and the ZIP
+alike): its module scripts are bundled into its `index.html` (`Bun.build`; imports from a CDN or a
+package stay imports, a script that does not bundle stays as it is, and the comments naming the
+modules' paths on this machine go), its stylesheets carry their fonts as `data:` URLs, and the files
+its scripts may fetch (all but images, media, scripts, stylesheets and fonts, which load without
+CORS) go into the page, where `fetch` and `XMLHttpRequest` get a GET for them answered without
+asking the site. What still cannot load in the frame: a Web Worker's script, an `import()` of a path
+computed at run time, a font set from a script.
+
 #### Where a demo goes
 
 Where it goes depends on the repository's demo site: the static site its settings name, once it is
@@ -3097,7 +3110,7 @@ hash of the demo's own files, the page's language), plus the overview; `backup/`
 aside while a deploy runs, put back when it fails. Pages are written
 with Obeya's templates, each in its demo's language ("Geteilt am", "Alle Demos"), the overview in
 the site's; a page keeps its date while its demo's own files stay the same (not the copies on the
-site, which carry the script Obeya adds to an artifact). The guard against a directory lacking pages
+site, which carry what Obeya adds to an artifact). The guard against a directory lacking pages
 Obeya has as shared, and the file limit, refuse before anything is deployed. The version is computed
 in the process, a hash of sample pages in both languages with the site's title, so a change to
 Obeya's templates marks the pages outdated with Obeya's next start.
@@ -3227,6 +3240,12 @@ the microphone; Chrome launched by Playwright needs no audio service moved in-pr
   read the files of a card whose id it knows, and an answer's files sit under a thread's plain
   number. The frame's requests carry no `Referer` in Chrome, so only their address can tell them
   apart.
+- **A shared artifact's copy loads nothing in CORS mode** (2026-10-16). Until then a shared page
+  showed an artifact whose module script, fetched JSON or font did not load: the site, behind
+  Cloudflare Access, answered the frame's cookieless requests with its login page, and a ZIP from
+  disk loads none. Giving the frame `allow-same-origin` would have let the artifact's scripts read
+  every other page of a site behind a login with the viewer's cookie; asking the page around it
+  for the files works on a site but not from disk.
 - **HTML artifacts are shared too** (2026-10-05): an analysis with charts is background for a pull
   request as much as a video.
 - **Sharing takes effect at once.** Until 2026-10-02 it held 8 s with "Doch nicht"; withdrawing is
