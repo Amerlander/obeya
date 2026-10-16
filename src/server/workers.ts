@@ -416,9 +416,10 @@ export class Workers {
     const handover = handedOver(card);
     if (place && handover) return this.hold(card, text, images, spoken, replyTo, place);
     const words = this.words(cardId, text, images, replyTo, place);
-    const shots = images.map((f) => basename(f));
+    // the log shows the owner's screenshots, not the stills that join them below
+    const shots = images;
     // words that reach the worker in the middle of a turn wait for its next step, unread until then
-    const log = (later = false) => [this.o.board.log(cardId, 'hint', 'owner', text, undefined, shots, undefined, replyTo, place, later && this.takesLater(cardId)).id];
+    const log = (later = false) => [this.o.board.log(cardId, 'hint', 'owner', text, { images: shots, replyTo, spot: place, unread: later && this.takesLater(cardId) }).id];
     // the worker sees the frame the words are about
     images = [...this.stills(place), ...images];
     if (handover) {
@@ -460,7 +461,7 @@ export class Workers {
       );
     } else if (this.waitsForClone(cardId)) {
       // no session to take them in now: they go with the message that resumes it in the clone
-      const said = [this.o.board.log(cardId, 'hint', 'owner', text, undefined, shots, undefined, replyTo, place, true).id];
+      const said = [this.o.board.log(cardId, 'hint', 'owner', text, { images: shots, replyTo, spot: place, unread: true }).id];
       if (text) this.o.onOwnerInput?.(card, 'note', text);
       this.o.board.work(cardId, { unheard: JSON.stringify([...this.unheard(cardId), { said, text: `A note from the owner while you waited for the clone${spoken ? ` (${SPOKEN})` : ''}:\n\n${words}`, images }] satisfies Unheard[]) });
     } else if (card.state === 'working' || card.state === 'inPr' || card.finishing) {
@@ -496,7 +497,7 @@ export class Workers {
     const landed: LandedState = { ...(card.state === 'done' ? { unchanged: true } : commit ? { commit } : {}), followUp: true, ...(worktree ? { worktree } : {}) };
     this.o.board.work(card.id, { workspace: path, landed: JSON.stringify(landed), status_line: null, app: null });
     const stills = this.stills(place);
-    this.o.board.log(card.id, 'hint', 'owner', text, undefined, images.slice(stills.length).map((f) => basename(f)), undefined, replyTo, place);
+    this.o.board.log(card.id, 'hint', 'owner', text, { images: images.slice(stills.length), replyTo, spot: place });
     if (text) this.o.onOwnerInput?.(card, 'note', text);
     const message = [
       `The owner asks about this card${spoken ? ` (${SPOKEN})` : ''}. ${card.state === 'done' ? 'It was closed without a change to the repository' : `Its work is on main${commit ? ` (${commit.slice(0, 7)})` : ''}`}, and your session had ended; it goes on in a fresh workspace ${worktree ? 'at the head of' : 'on'} the branch ${row.branch}, where main may have moved on since.`,
@@ -600,7 +601,7 @@ export class Workers {
     const allowed = is((t) => t.worker.allow);
     const words = (allowed || is((t) => t.worker.deny) ? rest.join('\n\n') : text).trim();
     this.backToWork(card.id);
-    this.o.board.log(card.id, 'answer', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo);
+    this.o.board.log(card.id, 'answer', 'owner', text, { images, replyTo });
     if (words) this.o.onOwnerInput?.(card, 'answer', words, { question: card.question?.text ?? '' });
     const said = words ? `${spoken ? ` (${SPOKEN})` : ''}:\n\n${this.words(card.id, words, images, replyTo)}` : images.length ? `, with screenshots:${imageNote(images)}` : '.';
     const live = this.live.get(card.id);
@@ -674,7 +675,7 @@ export class Workers {
    */
   private hold(card: Item, text: string, images: string[], spoken: boolean, replyTo: number | undefined, place: Spot) {
     // unread until they go: they stand below whatever the worker does meanwhile, and where they went once sent
-    const e = this.o.board.log(card.id, 'hint', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo, place, true);
+    const e = this.o.board.log(card.id, 'hint', 'owner', text, { images, replyTo, spot: place, unread: true });
     if (text) this.o.onOwnerInput?.(card, 'feedback', text);
     this.o.board.work(card.id, { held: JSON.stringify([...this.held(card.id), { id: e.id, ...(spoken ? { spoken: true } : {}) }]) });
     this.releaseLater(card.id, this.o.holdGrace ?? HOLD_GRACE);
@@ -886,7 +887,7 @@ export class Workers {
     }
     if ('code' in result) {
       this.o.board.work(cardId, { state: 'working', need: null, detail: null, approved_at: row.approved_at ?? new Date().toISOString() });
-      this.o.board.log(cardId, 'error', 'obeya', result.detail, result.code);
+      this.o.board.log(cardId, 'error', 'obeya', result.detail, { code: result.code });
       this.deliver(
         cardId,
         [
@@ -1540,7 +1541,7 @@ export class Workers {
       // the Obeya checkout is in the way: the card waits for the owner, who approves again
       if (!(e instanceof BadRequest)) return this.o.board.log(cardId, 'error', 'obeya', messageOf(e));
       this.o.board.work(cardId, { state: 'waiting', need: this.o.board.row(cardId).demo ? 'demo' : 'review', status_line: null });
-      this.o.board.log(cardId, 'error', 'obeya', e.message, e.code);
+      this.o.board.log(cardId, 'error', 'obeya', e.message, { code: e.code });
     }
   }
 
@@ -2243,7 +2244,7 @@ export class Workers {
 
   /** The owner's answer to the question `q`: in the card's log, as a decision, and for whoever learns from it. */
   private recordAnswer(card: Item, q: string, text: string, images: string[], replyTo: number | undefined, picks: string[]) {
-    this.o.board.log(card.id, 'answer', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo, undefined, undefined, picks);
+    this.o.board.log(card.id, 'answer', 'owner', text, { images, replyTo, picks });
     this.o.board.decide({ project_id: card.parent ?? null, card_id: card.id, question: q, answer: text || '(Screenshot)', by: 'owner' });
     if (text) this.o.onOwnerInput?.(card, 'answer', text, { question: q });
     if (card.prototypeOf) this.o.onPrototypeAnswer?.(card, q, text || '(Screenshot)');

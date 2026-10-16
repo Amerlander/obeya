@@ -119,7 +119,7 @@ export class Answers {
    */
   ask(cardId: string, text: string, images: string[], spoken: boolean, replyTo?: number, talk?: number) {
     const card = this.questionCard(cardId);
-    const e = this.o.board.logThread(cardId, { kind: 'talk', author: 'owner', text, images: images.map((f) => f.split(/[\\/]/).pop()!), ...(replyTo ? { replyTo } : {}), unread: this.reading.has(cardId) && !talk });
+    const e = this.o.board.log(cardId, 'talk', 'owner', text, { images, replyTo, unread: this.reading.has(cardId) && !talk });
     const quoted = replyTo ? this.o.board.quoted(cardId, replyTo) : undefined;
     const said = `${replyNote(quoted, 'koordinator')}${text}${imageNote(images)}`;
     const thread = this.o.board.thread(cardId);
@@ -206,8 +206,8 @@ export class Answers {
     const session = rows.findLast((r) => r.session)?.session;
     const card = this.o.board.addQuestion(root.question, { talk: thread, answers: answered.length, files }, session, about?.repo, root.cardId);
     for (const r of rows) {
-      this.o.board.logThread(card.id, { kind: 'talk', author: 'owner', text: r.said, ...(r.images?.length ? { images: r.images } : {}), at: r.at });
-      if (r.answer !== undefined) this.o.board.logThread(card.id, { kind: 'talk', author: r.answerBy ?? by, text: r.answer, answer: answerRef(thread, r.files, r.continues), at: r.at });
+      this.o.board.log(card.id, 'talk', 'owner', r.said, { images: r.images, at: r.at });
+      if (r.answer !== undefined) this.o.board.log(card.id, 'talk', r.answerBy ?? by, r.answer, { answer: answerRef(thread, r.files, r.continues), at: r.at });
     }
     this.o.board.moveThread(thread, card.id);
     return this.o.board.item(card.id)!;
@@ -274,7 +274,7 @@ export class Answers {
     }
     const text = clip(a.text, 12000);
     // the card may have become an idea meanwhile; the answer stands in its conversation all the same
-    this.o.board.logThread(cardId, { kind: 'talk', author: by, text, answer: answerRef(stored.talk, a.files) });
+    this.o.board.log(cardId, 'talk', by, text, { answer: answerRef(stored.talk, a.files) });
     const now = this.o.board.row(cardId).thread ? this.o.board.thread(cardId) : undefined;
     if (now) {
       const left = (now.pending ?? []).slice(taken.length);
@@ -359,9 +359,9 @@ export class Answers {
     const moved = t?.movedTo && this.o.board.item(t.movedTo)?.kind === 'question' ? t.movedTo : undefined;
     this.o.board.answerTalk(talkId, text, by, a.files);
     const ref = answerRef(thread, a.files, t?.continues);
-    if (card) this.o.board.logThread(card, { kind: 'say', author: by, text, answer: ref });
+    if (card) this.o.board.log(card, 'say', by, text, { answer: ref });
     if (moved) {
-      this.o.board.logThread(moved, { kind: 'talk', author: by, text, answer: ref });
+      this.o.board.log(moved, 'talk', by, text, { answer: ref });
       const s = this.o.board.thread(moved);
       this.o.board.setThread(moved, { answers: s.answers + 1, files: s.files + (a.files?.length ?? 0) });
     }

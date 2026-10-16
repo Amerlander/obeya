@@ -7,14 +7,13 @@
 // leaves its doc stays stored but is not shown.
 
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { boundsOf, CARD_SIZE, freeSpotNear, GAP, type Place, PROJECT_HEAD, placeProjects, placeWorkstreams, projectSize, sizeOf, unionBounds } from '../core/layout';
 import type { Language } from '../core/locale';
 import { MESSAGES, type Messages } from '../core/messages';
 import { allTicked, type OtherDoc, type PlanDoc } from '../core/plan-doc';
 import {
   type AnswerFile,
-  type AnswerRef,
   type CanvasInfo,
   type CanvasSnapshot,
   type CardEvent,
@@ -41,7 +40,6 @@ import {
   type Question,
   type PlanDir,
   type Reshare,
-  type Spot,
   type TalkQuote,
   type TalkRef,
   type Thread,
@@ -140,7 +138,6 @@ export function reshareable(r: CardRow): boolean {
   return !!s.shown && existsSync(join(s.dir, s.shown.kind === 'html' ? 'index.html' : 'demo.mp4'));
 }
 
-/** A request the server refuses: a stable code for the UI's text, and an English detail. */
 /** States a worker or the owner's decision is still part of. */
 const ACTIVE: string[] = ['working', 'waiting', 'inPr', 'approved'];
 
@@ -153,6 +150,7 @@ const CLAUDE_MD_SETTING = 'claude_md_card:';
 /** How long an empty card of the owner's (no title, text or screenshots) may exist before Obeya drops it on start. */
 const UNTITLED_GRACE_MS = 10 * 60_000;
 
+/** A request the server refuses: a stable code for the UI's text, and an English detail. */
 export class BadRequest extends Error {
   constructor(
     readonly code: ErrorCode,
@@ -318,45 +316,36 @@ export class Board {
   }
 
   /**
-   * Appends a line to the card's log; `replyTo`: the message the owner's words reply to (`quoted`),
-   * `spot`: the place in the demo video they are about, `picks`: the options an answer picked.
+   * Appends a line to the card's log. `images`: the owner's screenshots, by file or id (the log keeps
+   * the id); `replyTo`: the message the owner's words reply to (`quoted`); `spot`: the place in the
+   * demo video they are about; `picks`: the options an answer picked; `answer`: a looked-up answer's
+   * exchange and files; `at` keeps a message's time when a thread is copied onto its Question card.
    */
-  log(cardId: string, kind: CardEvent['kind'], author: CardEvent['author'], text: string, code?: ErrorCode, images?: string[], mocks?: Mock[], replyTo?: number, spot?: Spot, unread?: boolean, picks?: string[]): CardEvent {
+  log(
+    cardId: string,
+    kind: CardEvent['kind'],
+    author: CardEvent['author'],
+    text: string,
+    extra: Partial<Pick<CardEvent, 'code' | 'images' | 'mocks' | 'replyTo' | 'spot' | 'answer' | 'picks' | 'at'>> & { unread?: boolean } = {},
+  ): CardEvent {
+    const { code, images, mocks, replyTo, spot, answer, picks, at, unread } = extra;
     const e = this.store.addEvent({
       cardId,
       kind,
       author,
       text,
       ...(code ? { code } : {}),
-      ...(images?.length ? { images } : {}),
+      ...(images?.length ? { images: images.map((f) => basename(f)) } : {}),
       ...(mocks?.length ? { mocks } : {}),
       ...(replyTo ? { replyTo } : {}),
       ...(spot ? { spot } : {}),
+      ...(answer ? { answer } : {}),
+      ...(at ? { at } : {}),
       ...(unread ? { unread: true as const } : {}),
       ...(picks?.length ? { picks } : {}),
     });
     for (const fn of this.eventListeners) fn(e);
     return e;
-  }
-
-  /**
-   * A message of a looked-up thread in a card's log: the owner's words or an answer, with its
-   * exchange and files; `at` keeps its time when a thread is copied onto its Question card.
-   */
-  logThread(cardId: string, e: { kind: 'say' | 'talk'; author: CardEvent['author']; text: string; images?: string[]; replyTo?: number; answer?: AnswerRef; at?: string; unread?: boolean }): CardEvent {
-    const added = this.store.addEvent({
-      cardId,
-      kind: e.kind,
-      author: e.author,
-      text: e.text,
-      ...(e.images?.length ? { images: e.images } : {}),
-      ...(e.replyTo ? { replyTo: e.replyTo } : {}),
-      ...(e.answer ? { answer: e.answer } : {}),
-      ...(e.at ? { at: e.at } : {}),
-      ...(e.unread ? { unread: true as const } : {}),
-    });
-    for (const fn of this.eventListeners) fn(added);
-    return added;
   }
 
   /** Takes a line out of the card's log: a comment the owner deleted before anyone read it. */
@@ -1581,7 +1570,6 @@ export class Board {
   }
 }
 
-/** Visible items: projects first, their workstreams in doc order, then manual cards. */
 /**
  * The repository a plan reference belongs to: `<repo>:<path>` for the canvas's other repositories,
  * a bare path for its home repository.
@@ -1591,6 +1579,7 @@ export function repoOfRef(ref: string, home: string): string {
   return m ? m[1]! : home;
 }
 
+/** Visible items: projects first, their workstreams in doc order, then manual cards. */
 export function toItems(rows: CardRow[], docs: PlanDoc[], home: string): Item[] {
   const docByFile = new Map(docs.map((d) => [d.file, d]));
   // a project's group covers its workstreams
@@ -1689,7 +1678,8 @@ export function toItems(rows: CardRow[], docs: PlanDoc[], home: string): Item[] 
 function work(r: CardRow): Partial<Item> {
   const detail = r.detail ? (JSON.parse(r.detail) as { question?: Item['question']; summary?: string; noChange?: boolean; lands?: Item['lands']; answering?: boolean; answered?: boolean }) : {};
   const demo = r.demo ? (({ dir: _, ...d }) => d)(JSON.parse(r.demo) as Item['demo'] & { dir: string }) : undefined;
-  const answering = detail.answering && (r.need === 'review' || r.need === 'demo');
+  const handed = r.need === 'review' || r.need === 'demo';
+  const answering = detail.answering && handed;
   const scope = r.scope ? (JSON.parse(r.scope) as { files: string[] }).files : undefined;
   const pr = r.pr ? (JSON.parse(r.pr) as PrState) : undefined;
   const share = shareOf(r);
@@ -1702,9 +1692,9 @@ function work(r: CardRow): Partial<Item> {
     ...(detail.question && r.need === 'question' ? { question: detail.question } : {}),
     // a demo's question is as open as a worker's: the owner answers it on the card or by voice
     ...(demo?.question && !demo.answer && r.need === 'demo' ? { question: { text: demo.question, options: [] } } : {}),
-    ...(detail.summary && (r.need === 'review' || r.need === 'demo') ? { summary: detail.summary } : {}),
+    ...(detail.summary && handed ? { summary: detail.summary } : {}),
     ...(answering ? { answering: true } : {}),
-    ...(detail.answered && !answering && (r.need === 'review' || r.need === 'demo') ? { answered: true } : {}),
+    ...(detail.answered && !answering && handed ? { answered: true } : {}),
     ...(r.held ? { held: (JSON.parse(r.held) as { id: number }[]).map((h) => h.id) } : {}),
     // approved work is held for its next handover while the card is at work; on a waiting card it is landing
     ...(r.approved_at && r.state === 'waiting' ? { landing: true } : {}),
@@ -1715,8 +1705,8 @@ function work(r: CardRow): Partial<Item> {
     // a workspace on another machine as ssh and scp write it
     ...(r.workspace ? { workspace: r.workspace.replace(/^ssh:\/\/([^/]+)/, '$1:') } : {}),
     ...(landed && (r.workspace || landed.needsClone) ? { finishing: true, ...(landed.followUp ? { followUp: true } : {}), ...(landed.needsClone && !r.workspace ? { waitsForClone: true } : {}) } : {}),
-    ...(detail.noChange && (r.need === 'review' || r.need === 'demo') ? { noChange: true } : {}),
-    ...(detail.lands && (r.need === 'review' || r.need === 'demo') ? { lands: detail.lands } : {}),
+    ...(detail.noChange && handed ? { noChange: true } : {}),
+    ...(detail.lands && handed ? { lands: detail.lands } : {}),
     ...(r.paused ? { paused: true } : {}),
     ...(r.app && r.workspace && !r.parked ? { app: r.app } : {}),
   };
@@ -1832,7 +1822,6 @@ function threadOf(r: CardRow): Thread {
   const t = JSON.parse(r.thread!) as StoredThread;
   return { talk: t.talk, ...(t.thinking ? { thinking: true } : {}), answers: t.answers, files: t.files };
 }
-
 
 function ideaOf(r: CardRow): Idea {
   const i = r.idea ? (JSON.parse(r.idea) as StoredIdea) : { status: 'open' as const, brief: '' };

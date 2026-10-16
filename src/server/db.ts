@@ -375,49 +375,8 @@ const eventOf = ({ code, images, mocks, replyTo, spot, answer, picks, unread, re
 export type NewRow = Pick<CardRow, 'canvas_id' | 'kind' | 'x' | 'y'> &
   Partial<Pick<CardRow, 'state' | 'title' | 'body' | 'parent_id' | 'plan_ref' | 'from_id' | 'repo' | 'idea' | 'prototype_of' | 'prototype' | 'images' | 'retro' | 'proposal' | 'group_id'>>;
 
-export type RowUpdate = Partial<
-  Pick<
-    CardRow,
-    | 'x'
-    | 'y'
-    | 'kind'
-    | 'title'
-    | 'body'
-    | 'state'
-    | 'need'
-    | 'deleted_at'
-    | 'session_id'
-    | 'workspace'
-    | 'branch'
-    | 'status_line'
-    | 'detail'
-    | 'scope'
-    | 'queue'
-    | 'pr'
-    | 'demo'
-    | 'archived_at'
-    | 'idea'
-    | 'approved_at'
-    | 'landed'
-    | 'images'
-    | 'plan'
-    | 'plan_docs'
-    | 'from_id'
-    | 'prototype'
-    | 'built_on'
-    | 'share'
-    | 'proposal'
-    | 'group_id'
-    | 'shipped'
-    | 'parked'
-    | 'held'
-    | 'becomes_project'
-    | 'thread'
-    | 'paused'
-    | 'unheard'
-    | 'app'
-  >
->;
+/** What `Store.update` may change on a card: all but what is set once at its creation, and its times. */
+export type RowUpdate = Partial<Omit<CardRow, 'id' | 'canvas_id' | 'parent_id' | 'plan_ref' | 'prototype_of' | 'retro' | 'created_at' | 'updated_at'>>;
 
 /** A database this Obeya cannot open as it is: it leaves it alone. */
 export class UnusableDatabase extends Error {}
@@ -476,11 +435,12 @@ export class Store {
     return this.db.query('SELECT * FROM cards WHERE canvas_id = $c AND deleted_at IS NULL AND archived_at IS NULL').all({ c: canvasId }) as CardRow[];
   }
 
-  /** The canvas's archive, the most recently archived first. */
+  /** The canvas's cards, archived ones too, that were ever shared or are about to be. */
   shared(canvasId: string): CardRow[] {
     return this.db.query('SELECT * FROM cards WHERE canvas_id = $c AND deleted_at IS NULL AND share IS NOT NULL').all({ c: canvasId }) as CardRow[];
   }
 
+  /** The canvas's archive, the most recently archived first. */
   archived(canvasId: string): CardRow[] {
     return this.db
       .query('SELECT * FROM cards WHERE canvas_id = $c AND deleted_at IS NULL AND archived_at IS NOT NULL ORDER BY archived_at DESC, created_at DESC')

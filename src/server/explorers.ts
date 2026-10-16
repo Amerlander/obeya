@@ -5,7 +5,6 @@
 // the agent got to a reply (what it read and thought) folds away under that reply.
 
 import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
-import { basename } from 'node:path';
 import { z } from 'zod';
 import { type Language, LANGUAGE_NAMES } from '../core/locale';
 import { MESSAGES } from '../core/messages';
@@ -70,7 +69,7 @@ export class Explorers {
       this.o.board.log(cardId, 'state', 'owner', this.o.board.t.idea.reopened);
     }
     // words said while the agent works on a reply wait for its next turn, unread until then
-    const said = this.o.board.log(cardId, 'talk', 'owner', text, undefined, images.map((f) => basename(f)), undefined, replyTo, undefined, this.live.has(cardId));
+    const said = this.o.board.log(cardId, 'talk', 'owner', text, { images, replyTo, unread: this.live.has(cardId) });
     this.o.board.setIdea(cardId, { yourTurn: false, questions: [], next: undefined });
     if (text) this.o.onOwnerInput?.(card, text);
     const quoted = replyTo ? this.o.board.quoted(cardId, replyTo) : undefined;
@@ -300,7 +299,7 @@ export class Explorers {
 
   /** The agent's reply stands in the conversation, its mocks and questions below it; the owner is next. */
   private answer(cardId: string, text: string, questions: Question[] = [], next?: NextStep, mocks: Mock[] = []) {
-    this.o.board.log(cardId, 'talk', 'explorer', text, undefined, undefined, mocks);
+    this.o.board.log(cardId, 'talk', 'explorer', text, { mocks });
     this.o.board.setIdea(cardId, { yourTurn: true, questions, next });
   }
 

@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { settingsShape } from '../adapters/schema';
-import { type AgentSetting, answering, askable, blocksSaving, type CanvasConfig, finished, handedOver, type Item, type NextStep, type Notice, pausable, plannableAsProject, prototypeWorkstream, type Queue, type SpotInput, type TalkQuote, type TalkRef } from '../core/types';
+import { type AgentSetting, agentListens, answering, askable, blocksSaving, type CanvasConfig, finished, handedOver, type Item, type NextStep, type Notice, pausable, plannableAsProject, prototypeWorkstream, type Queue, type SpotInput, type TalkQuote, type TalkRef } from '../core/types';
 import { answerTag, fromAnswerTag } from './answers';
 import { BadRequest, type Board, excerpt, replyNote } from './board';
 import type { Place } from '../core/layout';
@@ -230,7 +230,7 @@ export class Commander {
     const quoted = card ? undefined : this.o.board.quotedTalk(input.replyTo);
     // the owner's words stand in the conversation at once, the Koordinator's reply follows once it has read them
     const talk = this.o.board.addTalk(transcript, '', card ?? null, undefined, images, quoted);
-    if (card && said) this.o.board.log(card, 'say', 'owner', said, undefined, images, undefined, replyTo);
+    if (card && said) this.o.board.log(card, 'say', 'owner', said, { images, replyTo });
     const reply = (confirm: string, lookUp?: { question: string; about: string | null }) => {
       this.o.board.replyTalk(talk, confirm, lookUp);
       if (card) this.o.board.log(card, 'say', 'koordinator', confirm);
@@ -350,7 +350,7 @@ export class Commander {
       await this.o.execute(command);
     } catch (e) {
       const card = 'card' in command ? command.card : undefined;
-      if (card) this.o.board.log(card, 'error', 'obeya', messageOf(e), e instanceof BadRequest ? e.code : undefined);
+      if (card) this.o.board.log(card, 'error', 'obeya', messageOf(e), { code: e instanceof BadRequest ? e.code : undefined });
       else console.error('voice command:', e);
     }
   }
@@ -670,7 +670,7 @@ export class Commander {
       return { do: 'buildPrototype', card: card.id, workstream: ws };
     }
     // the agent that passed the request on has the owner's words already
-    if (card.id === s.reading?.from && ['note', 'answer', 'feedback', 'discuss', 'revise'].includes(a.do))
+    if (card.id === s.reading?.from && (TO_AGENT as string[]).includes(a.do))
       return "the owner's words reached this card's agent already, which passed on what it asks of Obeya: do that, or reply";
     // a planned task of the owner's can be planned as a project too
     if (a.do === 'plan_doc' && card.state !== 'idea') {
@@ -1025,4 +1025,4 @@ On an idea, "Mach, was du vorschlägst" takes the step its agent would take next
 `.trim();
 
 /** Whether an agent is on the card: working on it, waiting for the owner, in a PR, or finishing what remains after the landing. */
-const hasAgent = (i: Item) => i.kind === 'question' || i.state === 'working' || i.state === 'waiting' || i.state === 'inPr' || !!i.finishing || askable(i);
+const hasAgent = (i: Item) => agentListens(i) && i.state !== 'idea' && i.state !== 'proposal';

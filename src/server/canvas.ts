@@ -990,7 +990,7 @@ export class CanvasRuntime {
       case 'revise': {
         // said while it is reworked, they wait for the next rework, unread until then
         const later = !!this.board.item(cardId)?.proposal?.revising;
-        const said = log ? this.board.log(cardId, 'say', 'owner', text.trim(), undefined, undefined, undefined, replyTo, undefined, later).id : undefined;
+        const said = log ? this.board.log(cardId, 'say', 'owner', text.trim(), { replyTo, unread: later }).id : undefined;
         return this.revisions.revise(cardId, `${replyNote(this.board.quoted(cardId, replyTo), 'koordinator')}${text.trim()}`, !!a.spoken, said);
       }
       case 'discuss':

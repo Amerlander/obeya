@@ -553,7 +553,7 @@ export class Koordinator {
       this.o.repoFor(card).workers.start(cardId);
     } catch (e) {
       const shortage = e instanceof BadRequest ? shortageOf(e.code) : undefined;
-      if (!shortage) return this.o.board.log(cardId, 'error', 'obeya', messageOf(e), e instanceof BadRequest ? e.code : undefined);
+      if (!shortage) return this.o.board.log(cardId, 'error', 'obeya', messageOf(e), { code: e instanceof BadRequest ? e.code : undefined });
       this.setQueue(cardId, { workspace: shortage }, since);
       this.o.board.log(cardId, 'state', 'obeya', { none: this.o.board.t.koordinator.noWorkspace, dirty: this.o.board.t.koordinator.dirtyWorkspaces, slots: this.o.board.t.koordinator.noSlot }[shortage]);
     }
