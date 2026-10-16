@@ -2,10 +2,11 @@
 // that are not projects, each with its reason and "Als Projekt aufbereiten", or, while the
 // repository has no plan doc yet, where the first one goes (which the owner can hide).
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback } from 'react';
 import { type Bounds, unionBounds } from '../core/layout';
 import type { Item, PlanDir } from '../core/types';
 import { t } from './strings';
+import { useStoredState } from './stored';
 
 const NOTE_W = 380;
 /** Between the note and the projects below it. */
@@ -34,27 +35,9 @@ export function planDirBoxes(dirs: PlanDir[], placed: { item: Item; b: Bounds }[
  * its repository has no plan doc; a directory changed in the settings brings it back.
  */
 export function useHiddenEmptyNotes(canvas: string): [(d: PlanDir) => boolean, (d: PlanDir) => void] {
-  const key = `obeya-plan-dir-hidden-${canvas}`;
-  const [hidden, setHidden] = useState<{ key: string; ids: string[] }>({ key: '', ids: [] });
-  const ids = useMemo(() => {
-    if (hidden.key === key) return hidden.ids;
-    try {
-      return (JSON.parse(localStorage.getItem(key) ?? '[]') ?? []) as string[];
-    } catch {
-      return [];
-    }
-  }, [hidden, key]);
+  const [ids, setIds] = useStoredState<string[]>(`obeya-plan-dir-hidden-${canvas}`, []);
   const isHidden = useCallback((d: PlanDir) => d.empty && ids.includes(noteId(d)), [ids]);
-  const hide = useCallback(
-    (d: PlanDir) => {
-      const next = [...ids, noteId(d)];
-      setHidden({ key, ids: next });
-      try {
-        localStorage.setItem(key, JSON.stringify(next));
-      } catch {}
-    },
-    [ids, key],
-  );
+  const hide = (d: PlanDir) => setIds([...ids, noteId(d)]);
   return [isHidden, hide];
 }
 

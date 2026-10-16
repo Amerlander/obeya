@@ -15,6 +15,7 @@ import { OBEYA_DRAFT } from './draft';
 import { Shots } from './shots';
 import { useStickToEnd } from './stickToEnd';
 import { useFitHeight } from './fitHeight';
+import { useStoredState } from './stored';
 
 interface Props {
   on: boolean;
@@ -38,7 +39,7 @@ interface Props {
 export function KoordinatorSheet({ on, canvas, items, preferences, settings, repos, talk, reshare, onOpen, onTell, onConfig }: Props) {
   const proposals = preferences.filter((p) => p.state === 'proposed');
   const rules = preferences.filter((p) => p.state === 'active');
-  const [folds, setFolds] = useFolds(canvas);
+  const [folds, setFolds] = useStoredState<Folds>(`obeya-ksheet-${canvas}`, {});
   const fresh = useRead(on, talk);
   // the proposals stay closed only as long as no proposal came after the owner closed them; a setting's id counts negative beside the rules'
   const ids = [...proposals.map((p) => p.id), ...settings.map((p) => -p.id)];
@@ -118,33 +119,10 @@ function useRead(on: boolean, talk: Talk[]): number[] {
   return fresh;
 }
 
-/** Which of the sheet's sections the owner opened; the proposals are open unless closed, with the ones open then. */
+/** Which of the sheet's sections the owner opened, per canvas; the proposals are open unless closed, with the ones open then. */
 interface Folds {
   preferences?: boolean;
   proposalsClosed?: number[];
-}
-
-/** The sections' state, per canvas, so a reload keeps it. */
-function useFolds(canvas: string): [Folds, (f: Folds) => void] {
-  const key = `obeya-ksheet-${canvas}`;
-  const read = (): Folds => {
-    try {
-      return JSON.parse(localStorage.getItem(key) ?? '{}') ?? {};
-    } catch {
-      return {};
-    }
-  };
-  const [folds, setFolds] = useState<{ key: string; f: Folds }>(() => ({ key, f: read() }));
-  const f = folds.key === key ? folds.f : read();
-  return [
-    f,
-    (next) => {
-      setFolds({ key, f: next });
-      try {
-        localStorage.setItem(key, JSON.stringify(next));
-      } catch {}
-    },
-  ];
 }
 
 /** A section under the conversation: a head with its count that opens and closes it. */
