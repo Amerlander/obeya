@@ -180,13 +180,16 @@ function Conversation({ talk, fresh, items, onOpen, draft }: { talk: Talk[]; fre
           const q = { talk: x.id, part, by, text };
           setReply(draft, { to: { talk: x.id, part }, quote: talkQuote(q) });
         };
+        // a thread moved onto a Question card goes on there, while the card is on the canvas; once it
+        // is done (archived) or deleted, its answers stand here again
+        const card = x.movedTo ? items.find((i) => i.id === x.movedTo) : undefined;
         return (
           <Fragment key={x.id}>
             <Msg by="owner" who={t.author.owner} at={x.at} ev={talkEv({ talk: x.id, part: 'said' })} onReply={reply('said', 'owner', x.said)}>
               {x.replyTo && <Quote q={talkQuote(x.replyTo)} />}
               <Body md={x.said} />
               <Shots ids={x.images} />
-              {x.continues && <Continues question={x.continues} reading={x.answer === undefined && !x.movedTo} />}
+              {x.continues && <Continues question={x.continues} reading={x.answer === undefined && !card} />}
             </Msg>
             {x.reply === undefined ? (
               <Reading />
@@ -204,10 +207,10 @@ function Conversation({ talk, fresh, items, onOpen, draft }: { talk: Talk[]; fre
                 {x.undone && <div className="hint">{t.koordinator.undone}</div>}
               </Msg>
             )}
-            {/* a thread moved onto a Question card goes on there: a line leads to it */}
-            {x.movedTo ? (
+            {/* a line leads to the Question card the thread goes on at */}
+            {card ? (
               <div className="moved">
-                <ThreadCard thread={x.thread!} card={items.find((i) => i.id === x.movedTo)} onOpen={onOpen} />
+                <ThreadCard thread={x.thread!} card={card} onOpen={onOpen} />
               </div>
             ) : (
               <>

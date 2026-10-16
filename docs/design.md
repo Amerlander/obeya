@@ -2289,9 +2289,10 @@ files already there.
 Every looked-up answer has „Als Karte“ in its head, always in view: the thread moves onto a
 **Question card** (`kind: 'question'`), next to the card whose log held it or where there is room,
 its question as the title, its exchanges (the owner's words, the answers with their files and times)
-as its conversation, the same session going on. The sheet keeps a line „Auf der Karte „…““ in place
-of each of its answers, which opens the card; a follow-up asked in the sheet afterwards goes to the
-card's agent and stands on the card.
+as its conversation, the same session going on. While the card is on the canvas, the sheet keeps a
+line „Auf der Karte „…““ in place of each of its answers, which opens the card; once it is archived
+(„Erledigt“) or deleted, the answers stand in the sheet again, each with „Als Karte“. A follow-up
+asked in the sheet afterwards goes to the card's agent and stands on the card.
 
 On the card the owner's words go straight to that agent (`CanvasRuntime.tell` → `ask`, the shared
 conversation, Send and unsent input), words that come while it reads go in with its next turn, and
