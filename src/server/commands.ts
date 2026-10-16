@@ -173,7 +173,23 @@ type Decision = { commands: Command[]; confirm: string; lookUp?: LookUp };
 
 /** The actions `act` takes, as the Koordinator names them. */
 const ACTIONS = ['new_card', 'new_idea', 'start', 'dequeue', 'note', 'answer', 'feedback', 'approve', 'accept', 'dismiss', 'revise', 'stop', 'pause', 'resume', 'discuss', 'build', 'plan_doc', 'prototype', 'park', 'drop', 'remember', 'work_retro', 'group', 'ungroup', 'rename_group'] as const;
-type Action = (typeof ACTIONS)[number];
+
+/** What `act` gets for one action. */
+const ACTION = z.object({
+  do: z.enum(ACTIONS),
+  card: z.string().optional(),
+  text: z.string().optional(),
+  title: z.string().optional(),
+  body: z.string().optional(),
+  start: z.boolean().optional(),
+  repo: z.string().optional(),
+  replaces: z.number().int().optional(),
+  repos: z.array(z.string()).optional(),
+  cards: z.array(z.string()).optional(),
+  group: z.string().optional(),
+  direct: z.boolean().optional(),
+});
+type ActionArgs = z.infer<typeof ACTION>;
 
 /** Actions in one command, at most: "start all queued cards" may name many. */
 const MAX_ACTIONS = 20;
@@ -438,40 +454,26 @@ export class Commander {
             "Texts for a card's agent (note, answer, feedback) and for revise in the owner's own words, not rephrased: all they said, or with several actions in one sentence the part for that action. Other texts (a new card's body, a rule, talk to an idea) as the owner meant them (fix obvious recognition errors).",
           ].join('\n'),
           schema: {
-            actions: z
-              .array(
-                z.object({
-                  do: z.enum(ACTIONS),
-                  card: z.string().optional(),
-                  text: z.string().optional(),
-                  title: z.string().optional(),
-                  body: z.string().optional(),
-                  start: z.boolean().optional(),
-                  repo: z.string().optional(),
-                  replaces: z.number().int().optional(),
-                  repos: z.array(z.string()).optional(),
-                  cards: z.array(z.string()).optional(),
-                  group: z.string().optional(),
-                  direct: z.boolean().optional(),
-                }),
-              )
-              .min(1)
-              .max(MAX_ACTIONS),
+            actions: z.array(ACTION).min(1).max(MAX_ACTIONS),
             confirm: z.string(),
           },
           run: ({ actions, confirm }) => {
             const commands: Command[] = [];
             const problems: string[] = [];
-            (actions as ActionArgs[]).forEach((a, n) => {
+            const given = actions as ActionArgs[];
+            const problem = (n: number, why: string) => {
+              const a = given[n]!;
+              problems.push(`action ${n + 1} (${a.do}${a.card ? ` on ${a.card}` : ''}): ${why}`);
+            };
+            given.forEach((a, n) => {
               const r = this.command(a, s);
-              if (typeof r === 'string') problems.push(`action ${n + 1} (${a.do}${a.card ? ` on ${a.card}` : ''}): ${r}`);
+              if (typeof r === 'string') problem(n, r);
               else commands.push(r);
             });
             if (!problems.length)
               commands.forEach((c, n) => {
                 const r = this.waitsForReply(c, commands, s.reading?.from);
-                const a = (actions as ActionArgs[])[n]!;
-                if (r) problems.push(`action ${n + 1} (${a.do}${a.card ? ` on ${a.card}` : ''}): ${r}`);
+                if (r) problem(n, r);
               });
             if (problems.length)
               return `Nothing recorded: ${problems.join('; ')}. Fix or drop what does not fit and call act again, or use reply (a question the owner asks is answered with reply, or with look_up when it needs reading).`;
@@ -592,16 +594,26 @@ export class Commander {
     return `the idea's agent ${talked ? 'starts on a reply with the discuss in this command' : 'is still working on its reply'}, and building or planning waits for that reply, so the owner decides on the brief it leaves. Drop this action and pass what the owner said to the idea with discuss (one per idea), then say in confirm that ${c.do === 'planDoc' ? 'planning' : 'building'} goes by a click on the card once the reply is there.`;
   }
 
+  /** The repository an action names for a new card, where the canvas has more than one and it is among them. */
+  private newCardRepo(a: ActionArgs): string | undefined {
+    const repos = this.o.board.canvas.repos;
+    return repos.length > 1 && repos.some((r) => r.id === a.repo) ? a.repo : undefined;
+  }
+
+  /** Why an action cannot be done: the repositories it names that the canvas does not have. */
+  private unknownRepo(names: string[]): string {
+    return `unknown repository ${names.join(', ')}; the canvas has ${this.o.board.canvas.repos.map((r) => r.id).join(', ')}`;
+  }
+
   /** One action as a command, or why it cannot be done. */
   private command(a: ActionArgs, s: Session): Command | string {
     if (a.do === 'remember') {
       const text = a.text?.trim();
       if (!text) return 'the rule is missing';
       if (text.length > 500) return 'a rule has at most 500 characters';
-      const known = this.o.board.canvas.repos.map((r) => r.id);
       const repos = [...new Set(a.repos ?? [])];
-      const unknown = repos.filter((r) => !known.includes(r));
-      if (unknown.length) return `unknown repository ${unknown.join(', ')}; the canvas has ${known.join(', ')}`;
+      const unknown = repos.filter((r) => !this.o.board.canvas.repos.some((x) => x.id === r));
+      if (unknown.length) return this.unknownRepo(unknown);
       const to = repos.length ? { repos } : {};
       if (a.replaces === undefined) return { do: 'remember', text, ...to };
       const replaces = s.rules[a.replaces - 1];
@@ -609,10 +621,9 @@ export class Commander {
       return { do: 'remember', text, replaces, ...to };
     }
     if (a.do === 'work_retro') {
-      const repos = this.o.board.canvas.repos;
-      if (a.repo && !repos.some((r) => r.id === a.repo)) return `unknown repository ${a.repo}; the canvas has ${repos.map((r) => r.id).join(', ')}`;
+      if (a.repo && !this.o.board.canvas.repos.some((r) => r.id === a.repo)) return this.unknownRepo([a.repo]);
       const open = a.card ? this.o.board.item(s.tags.get(a.card) ?? '')?.repo : undefined;
-      return { do: 'workRetro', repo: a.repo ?? open ?? repos[0]!.id };
+      return { do: 'workRetro', repo: a.repo ?? open ?? this.o.board.home };
     }
     if (a.do === 'group' || a.do === 'ungroup') {
       const tags = [...new Set([...(a.cards ?? []), ...(a.card ? [a.card] : [])])];
@@ -642,14 +653,12 @@ export class Commander {
     }
     if (a.do === 'new_idea') {
       if (!a.title?.trim()) return 'a new idea needs a title';
-      const repos = this.o.board.canvas.repos;
-      const repo = repos.length > 1 && repos.some((r) => r.id === a.repo) ? a.repo : undefined;
+      const repo = this.newCardRepo(a);
       return { do: 'newIdea', title: a.title.trim(), body: a.body ?? '', ...(repo ? { repo } : {}) };
     }
     if (a.do === 'new_card') {
       if (!a.title?.trim()) return 'a new card needs a title';
-      const repos = this.o.board.canvas.repos;
-      const repo = repos.length > 1 && repos.some((r) => r.id === a.repo) ? a.repo : undefined;
+      const repo = this.newCardRepo(a);
       const from = a.card ? s.tags.get(a.card) : undefined;
       if (a.card && (!from || !this.o.board.item(from))) return `unknown tag ${a.card}; give the card a follow-up comes from, or none`;
       return { do: 'newCard', title: a.title.trim(), body: a.body ?? '', start: a.start !== false, ...(repo ? { repo } : {}), ...(from ? { from } : {}) };
@@ -923,22 +932,6 @@ export class Commander {
       `Repositories on this canvas (the first is the default for a new card): ${this.o.board.canvas.repos.map((r) => `${r.id} (${r.name}${r.pullRequests ? `; approved work goes out as a pull request${r.direct ? ', or directly onto main where the owner says so' : ''}` : ''})`).join(', ')}`,
     ].join('\n\n');
   }
-}
-
-/** What `act` gets for one action. */
-interface ActionArgs {
-  do: Action;
-  card?: string;
-  text?: string;
-  title?: string;
-  body?: string;
-  start?: boolean;
-  repo?: string;
-  replaces?: number;
-  repos?: string[];
-  cards?: string[];
-  group?: string;
-  direct?: boolean;
 }
 
 /** How a step of a card's history reads. */
