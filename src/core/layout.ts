@@ -61,6 +61,9 @@ export function boundsOf(i: Item, all: Item[]): Bounds {
   return { x: i.x + (parent?.x ?? 0), y: i.y + (parent?.y ?? 0), w, h };
 }
 
+/** The middle of `b`. */
+export const centre = (b: Bounds) => ({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
+
 export function unionBounds(bs: Bounds[]): Bounds | null {
   if (!bs.length) return null;
   const x1 = Math.min(...bs.map((b) => b.x));

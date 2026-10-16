@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { type Bounds, boundsOf, CARD_SIZE, type Place, PROJECT_HEAD, PROJECT_PAD, unionBounds } from '../core/layout';
+import { type Bounds, boundsOf, CARD_SIZE, centre, type Place, PROJECT_HEAD, PROJECT_PAD, unionBounds } from '../core/layout';
 import { agentListens, answering, type CanvasInfo, type CanvasSnapshot, type CardPatch, finished, type Group, type Item, nameless, needsYou, openPerGroup, type PendingRestart, type PlanDir, START_ALL_HOLD_MS, type TalkRef, titleFrom, type AppUpdate, unreadAnswers } from '../core/types';
 import { api, ApiError, beforeReload, onNotice, reportFocus, setCanvas, useCanvas } from './api';
 import { GroupNames, growFrom, inside, Lasso, Ring, TerritoryLayer, useTerritories } from './groups';
@@ -837,7 +837,7 @@ function Canvas({
     setLasso([]);
     // the territory grows from the pointer, or from the one card it is for
     const one = r.ids.length === 1 ? placed.find((p) => p.item.id === r.ids[0])?.b : undefined;
-    growFrom(r.ids, one ? { x: one.x + one.w / 2, y: one.y + one.h / 2 } : toWorld(camRef.current, r.at.x, r.at.y));
+    growFrom(r.ids, one ? centre(one) : toWorld(camRef.current, r.at.x, r.at.y));
     try {
       if ('name' in to) await api.createGroup(to.name, r.ids);
       else await api.assign(r.ids, to.group);

@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { type Claim, Territories, within } from './territory';
+import { inside } from './groups';
+import { type Claim, Territories, type Territory } from './territory';
 
 const card = (id: string, x: number, y: number, w: Record<string, number> = {}): Claim => ({ id, b: { x, y, w: 300, h: 140 }, w });
 const mid = (c: Claim) => ({ x: c.b.x + c.b.w / 2, y: c.b.y + c.b.h / 2 });
+/** Whether `p` lies in the territory (even-odd over all its rings). */
+const within = (t: Territory, p: { x: number; y: number }) => t.pieces.flat().filter((ring) => inside(p, ring.map(([x, y]) => ({ x, y })))).length % 2 === 1;
 
 describe('territories', () => {
   test("cover their group's cards, linked when near, and leave strangers out", () => {

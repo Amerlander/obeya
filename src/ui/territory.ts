@@ -7,7 +7,7 @@
 // something within its reach changed, and its contour only when its field or a neighbour's did.
 
 import { contours } from 'd3-contour';
-import type { Bounds } from '../core/layout';
+import { type Bounds, centre, unionBounds } from '../core/layout';
 
 type Pt = { x: number; y: number };
 
@@ -54,7 +54,6 @@ const REACH = R_MEMBER * (1 - Math.sqrt(T_AREA));
 const len = (dx: number, dy: number) => Math.sqrt(dx * dx + dy * dy);
 const rectDist = (x: number, y: number, b: Bounds) => len(Math.max(b.x - x, 0, x - b.x - b.w), Math.max(b.y - y, 0, y - b.y - b.h));
 const gap = (a: Bounds, b: Bounds) => len(Math.max(a.x - b.x - b.w, 0, b.x - a.x - a.w), Math.max(a.y - b.y - b.h, 0, b.y - a.y - a.h));
-const centre = (b: Bounds) => ({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
 const near = (a: Bounds, b: Bounds, d: number) => a.x - d < b.x + b.w && b.x < a.x + a.w + d && a.y - d < b.y + b.h && b.y < a.y + a.h + d;
 
 function segDist(x: number, y: number, a: Pt, b: Pt) {
@@ -90,10 +89,11 @@ type Stranger = { b: Bounds; s: number };
 
 /** A group's energy around its members. */
 function field(members: Member[], strangers: Stranger[]): Field {
-  const i0 = Math.floor((Math.min(...members.map((m) => m.b.x)) - MARGIN) / CELL);
-  const j0 = Math.floor((Math.min(...members.map((m) => m.b.y)) - MARGIN) / CELL);
-  const nx = Math.ceil((Math.max(...members.map((m) => m.b.x + m.b.w)) + MARGIN) / CELL) - i0;
-  const ny = Math.ceil((Math.max(...members.map((m) => m.b.y + m.b.h)) + MARGIN) / CELL) - j0;
+  const u = unionBounds(members.map((m) => m.b))!;
+  const i0 = Math.floor((u.x - MARGIN) / CELL);
+  const j0 = Math.floor((u.y - MARGIN) / CELL);
+  const nx = Math.ceil((u.x + u.w + MARGIN) / CELL) - i0;
+  const ny = Math.ceil((u.y + u.h + MARGIN) / CELL) - j0;
   const v = new Float64Array(nx * ny);
   // the members' pull, the strongest one's at each cell: summed, two cards side by side would push
   // the edge out over the gap between them
@@ -352,14 +352,8 @@ export class Territories {
       const members = claims.flatMap((c) => ((c.w[g] ?? 0) > 0.01 ? [{ b: c.b, w: c.w[g]! }] : []));
       if (!members.length) continue;
       // strangers matter only within the members' reach
-      const reach: Bounds = {
-        x: Math.min(...members.map((m) => m.b.x)) - MARGIN,
-        y: Math.min(...members.map((m) => m.b.y)) - MARGIN,
-        w: 0,
-        h: 0,
-      };
-      reach.w = Math.max(...members.map((m) => m.b.x + m.b.w)) + MARGIN - reach.x;
-      reach.h = Math.max(...members.map((m) => m.b.y + m.b.h)) + MARGIN - reach.y;
+      const u = unionBounds(members.map((m) => m.b))!;
+      const reach = { x: u.x - MARGIN, y: u.y - MARGIN, w: u.w + 2 * MARGIN, h: u.h + 2 * MARGIN };
       const strangers = claims.flatMap((c) => {
         const s = 1 - Math.min(1, c.w[g] ?? 0);
         return s > 0.01 && near(c.b, reach, R_OBST) ? [{ b: c.b, s }] : [];
@@ -390,17 +384,4 @@ export class Territories {
     this.last = last;
     return out;
   }
-}
-
-/** Whether `p` lies in the territory (even-odd over all its rings). */
-export function within(t: Pick<Territory, 'pieces'>, p: Pt): boolean {
-  let c = false;
-  for (const poly of t.pieces)
-    for (const ring of poly)
-      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-        const [ax, ay] = ring[i]!;
-        const [bx, by] = ring[j]!;
-        if (ay > p.y !== by > p.y && p.x < ((bx - ax) * (p.y - ay)) / (by - ay) + ax) c = !c;
-      }
-  return c;
 }

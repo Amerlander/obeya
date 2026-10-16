@@ -3,7 +3,7 @@
 // that assign a group.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { Bounds } from '../core/layout';
+import { type Bounds, centre } from '../core/layout';
 import type { Group, Item } from '../core/types';
 import { t } from './strings';
 import { type Claim, type Territory, Territories } from './territory';
@@ -53,7 +53,6 @@ export function growFrom(ids: string[], at: Pt) {
 
 /** Springs past 1 a little and settles: the territory grows a bit too far and draws back. */
 const spring = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : 1 - Math.exp(-5 * x) * Math.cos(9 * x));
-const centre = (b: Bounds) => ({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
 
 let effectKey = 0;
 
