@@ -96,7 +96,7 @@ export function talkTurns(all: CardEvent[], opts: { asking?: Question; over?: bo
   let steps: CardEvent[] = [];
   // the owner said something to the agent, and the worker has not answered yet
   let open = false;
-  const events = asRead(all.filter((e) => !e.unread));
+  const events = closedBeforeLimit(asRead(all.filter((e) => !e.unread)));
   const lastPause = events.findLast(pauseLine);
   // the usage limit holds at its last line while nothing of the agent's came after it
   const lastLimit = events.findLast(limitLine);
@@ -186,6 +186,14 @@ const limitLine = (e: CardEvent) =>
       return e.text.includes(before) && e.text.endsWith(after);
     }),
   );
+
+/** The worker's closing words of a turn the usage limit stopped belong to that turn: Obeya logs them after its line on the limit. */
+function closedBeforeLimit(events: CardEvent[]): CardEvent[] {
+  if (!events.some(limitLine)) return events;
+  const out = [...events];
+  for (let i = 1; i < out.length; i++) if (out[i]!.kind === 'closing' && limitLine(out[i - 1]!)) [out[i - 1], out[i]] = [out[i]!, out[i - 1]!];
+  return out;
+}
 
 /** The events in the order the agent saw them: the owner's words it read later stand after the line it read them at, in the order said. */
 function asRead(events: CardEvent[]): CardEvent[] {

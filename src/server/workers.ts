@@ -1616,7 +1616,7 @@ export class Workers {
     if (background > 0) {
       // the usage limit cut the worker's turn off while its work runs on: the card says so, and the
       // worker goes on once it lifts, without waiting for that work to wake it
-      if (live.limited && !handedOver && this.goesOnAfterLimit(cardId)) return this.waitForLimit(cardId, live, live.limited);
+      if (live.limited && !handedOver && this.goesOnAfterLimit(cardId)) return this.waitForLimit(cardId, live, live.limited, background);
       // the background work still belongs to the turn, whatever the card's state (a worker may ask
       // while its render runs): a restart now would cut it off
       this.waitForWorker(cardId, live);
@@ -1935,12 +1935,12 @@ export class Workers {
   /**
    * The usage limit stopped the worker, at work, taking in the owner's words on its handover or after
    * the landing: it goes on by itself once the limit lifts. Meanwhile it is not busy (a restart need
-   * not wait for it, and resumes it into the same limit), unless its background work runs on, which
-   * a restart would cut off; a message from the owner reaches it at once and finds out whether the
-   * limit still holds.
+   * not wait for it, and resumes it into the same limit), unless its `background` work runs on,
+   * which a restart would cut off; a message from the owner reaches it at once and finds out whether
+   * the limit still holds.
    */
-  private waitForLimit(cardId: string, live: Live, at: number) {
-    if (live.background > 0) this.waitForWorker(cardId, live);
+  private waitForLimit(cardId: string, live: Live, at: number, background = 0) {
+    if (background > 0) this.waitForWorker(cardId, live);
     else this.setBusy(live, false);
     if (live.statusBefore === undefined) {
       // after a restart the line may still be the one this shows

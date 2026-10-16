@@ -616,6 +616,21 @@ describe('workers', () => {
     workers.stop(c.id);
   });
 
+  test('a worker the usage limit stopped is no longer busy once its background work stopped counting', async () => {
+    setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, backgroundLimit: 10 }));
+    const c = manual();
+    workers.start(c.id);
+    runtime.last.emit({ type: 'background', tasks: [{ id: 'watch', description: 'watch the deploy' }] });
+    runtime.last.emit({ type: 'error', message: "You've hit your session limit", limit: { resetsAt: Date.now() + 60_000 } });
+    runtime.last.emit({ type: 'idle', background: 1 });
+    expect(workers.busyCards().length).toBeGreaterThan(0);
+    // the session never says the work ended: after the wait for it, the worker only waits for the limit
+    await Bun.sleep(40);
+    expect(workers.busyCards()).toEqual([]);
+    expect(board.item(c.id)!.statusLine).toStartWith('Nutzungslimit · weiter um ');
+    workers.stop(c.id);
+  });
+
   test('a worker the usage limit stopped is not woken once stopped', async () => {
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, limitMargin: 10 }));
     const c = manual();

@@ -415,6 +415,11 @@ test("the usage limit that stopped the agent's turn is a line where it happened;
   // in German, and when Obeya only tries again
   const retry = ev('state', 'obeya', 'Nutzungslimit erreicht. Obeya versucht es um 19:35 noch einmal.');
   expect(talkTurns([note, retry]).shown).toMatchObject([{ e: note }, { e: retry, line: true }]);
+  // the worker's closing words, which Obeya logs after the limit's line, close the turn the limit stopped
+  const closing = ev('closing', 'worker', 'Ich warte auf die Vertragsprüfung.');
+  const held = talkTurns([note, reply, run, limit, closing]);
+  expect(held.shown).toEqual([{ e: note, steps: [] }, { e: reply, steps: [run, closing] }, { e: limit, steps: [], line: true }]);
+  expect(held.pending).toEqual([]);
 });
 
 test('what an agent did until it was paused stays above the line once it went on; while paused, its bubble shows it', () => {
