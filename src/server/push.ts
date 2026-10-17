@@ -52,10 +52,14 @@ export function kindOf(i: Item, before?: Item): PushKind {
   return i.need === 'demo' ? 'demo' : 'review';
 }
 
-/** The cards of `after` that need the owner and did not in `before` (the items by id), with what they wait for. */
+/**
+ * The cards of `after` that need the owner and did not in `before` (the items by id), with what they
+ * wait for; a card its agent withdrew or replaced just now, also when it waited for them already.
+ */
 export function startedWaiting(before: ReadonlyMap<string, Item>, after: readonly Item[]): { item: Item; kind: PushKind }[] {
   return after.flatMap((i) => {
     const was = before.get(i.id);
+    if (i.superseded && was && !was.superseded && !i.snoozed) return [{ item: i, kind: 'superseded' as const }];
     return needsYou(i) && !(was && needsYou(was)) ? [{ item: i, kind: kindOf(i, was) }] : [];
   });
 }

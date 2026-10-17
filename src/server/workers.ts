@@ -2195,7 +2195,8 @@ export class Workers {
               schema: { title: z.string(), why: z.string(), replaced_by: z.string().optional() },
               run: (args: Record<string, unknown>) => {
                 const { title, why, replaced_by } = args as { title: string; why: string; replaced_by?: string };
-                const by = replaced_by?.trim() ? this.o.board.snapshot().items.find((i) => i.from === cardId && titleKey(i.title) === titleKey(replaced_by)) : undefined;
+                // the latest by that title, as retract takes the latest it replaces: of two alike, the newer replaces the older
+                const by = replaced_by?.trim() ? this.o.board.snapshot().items.findLast((i) => i.from === cardId && (!!i.proposal || !!i.proposed) && titleKey(i.title) === titleKey(replaced_by)) : undefined;
                 if (replaced_by?.trim() && !by) return `No card you proposed on the canvas is called „${replaced_by.trim()}“. Nothing was withdrawn.`;
                 return this.retract(cardId, String(title).trim(), { ...(by ? { by: by.id, title: by.title } : {}), ...(why?.trim() ? { why: clip(why.trim(), 1000) } : {}) });
               },

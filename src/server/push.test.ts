@@ -58,6 +58,7 @@ describe('what starts waiting', () => {
       ['b', item({ id: 'b', state: 'waiting', need: 'demo' })],
       ['l', item({ id: 'l', state: 'waiting', need: 'demo', landing: true })],
       ['s', item({ id: 's' })],
+      ['r', item({ id: 'r', state: 'waiting', need: 'demo', proposed: true })],
     ]);
     const after = [
       item({ id: 'a', state: 'waiting', need: 'demo' }),
@@ -68,12 +69,15 @@ describe('what starts waiting', () => {
       item({ id: 's', state: 'waiting', need: 'question', question: { text: 'Fehler', options: [], stuck: true } }),
       item({ id: 'n', state: 'proposal' }),
       item({ id: 'w' }),
+      // waited before already, and its agent withdrew it now
+      item({ id: 'r', state: 'waiting', need: 'demo', proposed: true, superseded: { why: 'x' } }),
     ];
     expect(startedWaiting(before, after).map((x) => [x.item.id, x.kind])).toEqual([
       ['a', 'demo'],
       ['l', 'landing'],
       ['s', 'stuck'],
       ['n', 'proposal'],
+      ['r', 'superseded'],
     ]);
   });
 

@@ -1041,6 +1041,11 @@ describe('workers', () => {
     // the Rückschau reads deleted proposals as the owner's dismissals: this one was not
     expect(board.removed(since)).toEqual([]);
     expect(runtime.last.call('withdraw_proposal', { title: 'Lange Schnitte', why: 'W' })).toContain('withdrawn already');
+    // of two alike, the newer replaces the older
+    runtime.last.call('propose_card', { title: 'Gleich', task: 'Alt', reason: 'R' });
+    runtime.last.call('propose_card', { title: 'Gleich', task: 'Neu', reason: 'R' });
+    runtime.last.call('withdraw_proposal', { title: 'Gleich', why: 'W', replaced_by: 'Gleich' });
+    expect(board.snapshot().items.filter((i) => i.title === 'Gleich').map((i) => i.body)).toEqual(['Neu']);
   });
 
   test('a new proposal that replaces an accepted one marks it, and the owner removes or keeps it', () => {
