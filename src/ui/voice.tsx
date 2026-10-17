@@ -317,16 +317,24 @@ export function ToldList({ told, open, onUndo }: { told: Told[]; open?: string; 
  * view, while that has its field on the page). With no `target` (the phone, where what is in view
  * fills the screen) that line is left out. Without such a field, screenshots for the next
  * recording are picked beside the microphone; dropped on it or pasted (App), they go to the field
- * when there is one. When Obeya's field comes into view, those beside the microphone go into it:
- * they were for Obeya too.
+ * when there is one. Those for Obeya stay in view: they go into Obeya's field when it opens, and
+ * back beside the microphone when it closes.
  */
 export function PushToTalk({ phase, level, flat, target, field, onDown }: { phase: Phase; level: number; flat: boolean; target: string | null; field: string | null; onDown: () => void }) {
   const on = useFieldOn(field);
   const key = on ? field! : MIC_DRAFT;
   const shots = useShotInput({ draft: key, off: !takesImages(key) });
+  // the screenshots for Obeya show where Obeya is spoken to: in its field while that is in view, else beside the microphone
+  const obeya = useRef<string | null>(null);
   const waiting = useDraft(MIC_DRAFT).images;
   useEffect(() => {
-    if (key !== MIC_DRAFT && toObeya(key) && takesImages(key)) moveImages(MIC_DRAFT, key);
+    if (toObeya(key) && takesImages(key)) {
+      obeya.current = key;
+      moveImages(MIC_DRAFT, key);
+    } else if (key === MIC_DRAFT && obeya.current) {
+      moveImages(obeya.current, MIC_DRAFT);
+      obeya.current = null;
+    }
   }, [key, waiting]);
   const { text } = useDraft(key);
   const quote = useReply(key);
