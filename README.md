@@ -8,33 +8,53 @@
 A spatial workspace for directing AI coding agents the way an engineering director directs a
 team. Every task and every project is a card on one canvas. Agents do the work in the
 background; you keep every essential decision — made by voice, from a narrated demo of the
-finished work, without reading code or cycling through terminals.
+finished work, without reading code or cycling through terminals. At your desk or from your phone.
 
 *Obeya* is Japanese for "big room": in lean management, the room where every project hangs
 visibly on the walls. More on [obeya.si](https://obeya.si).
 
 [![The demo video: an idea said into the microphone, built by an agent that records its own demo, approved and landed on main](docs/images/video.jpg)](https://obeya.si/#film)
 
-The video shows Obeya at work in four minutes: an idea is said into the microphone, an agent builds
-it and records its demo, and the approval lands it on `main` ([watch on obeya.si](https://obeya.si/#film),
-with captions).
+The video shows Obeya at work in four and a half minutes: an idea is said into the microphone, an
+agent builds it and records its demo, and the approval lands it on `main` ([watch on
+obeya.si](https://obeya.si/#film), with captions and chapters).
+
+## How it works
 
 Each card gets its own agent (Claude Code) in its own clone or worktree of your repository, on
 this machine or on another one reached over SSH. The agent asks on the card when it needs a
-decision and hands over with a narrated demo video of the change. You approve it or say what to
-change, also about one moment of the video: what you type or say while it stands there goes to the
-agent with that frame and the narration's sentence. Approved work lands on `main` or goes out as a
-pull request that Obeya carries to the merge; beside the branch the card shows how large the change
-is, and a click shows the diff.
+decision and hands over with a demo: a narrated screen recording of the change, or a page to look
+at when the result is a layout or variants side by side. You approve it or say what to change, also
+about one moment of the video: what you type or say while it stands there goes to the agent with
+that frame and the narration's sentence. Approved work lands on `main` or goes out as a pull
+request that Obeya carries to the merge; beside the branch the card shows how large the change is,
+and a click shows the diff.
 
-You talk to Obeya itself, spoken or typed: it takes your
-instructions, queues cards whose changes would collide, cuts large ones into parallel packages and
-learns your preferences. An idea is thought through on its card with an agent of its own, which
-keeps a brief of variants and open questions and can have throwaway prototypes built; deciding
-builds it or plans it as a project. Larger work is planned in plan docs in the repository, which
-show as projects with a card per workstream.
+You talk to Obeya itself, spoken or typed: it takes your instructions, queues cards whose changes
+would collide, cuts large ones into parallel packages and learns your preferences. An idea is
+thought through on its card with an agent of its own, which keeps a brief of variants and open
+questions and can have throwaway prototypes built; deciding builds it or plans it as a project.
+Larger work is planned in plan docs in the repository, which show as projects with a card per
+workstream. Each product you build gets a canvas of its own, over one repository or several, and
+one Obeya runs them all.
 
-![An Obeya canvas: a project with its workstreams, one at work and one with a demo waiting; a question and a task queued behind it; a task at work, a live one and an idea](docs/images/canvas.png)
+![An Obeya canvas: a project with its workstreams, one at work and one in the queue; beside it a demo and a question waiting for you, a task at work, an approved and a live one, and an idea](site/img/canvas.png)
+
+## On your phone
+
+Away from the desk, your phone shows what waits for you across all your canvases, and what is
+running. Watch a demo and approve it, answer a question, or hold the microphone and say a new
+task. A notification tells you when a card needs you.
+
+<p>
+  <img src="site/img/phone.png" alt="The phone view: three cards for you (a demo, a question, an idea), and below them the cards that are running" width="280">
+  &nbsp;
+  <img src="site/img/phone-demo.png" alt="A card opened on the phone: its demo video with chapters, and the buttons to approve it, snooze it or stop it" width="280">
+</p>
+
+Obeya keeps running on your computer, and the phone reaches it over your own private network:
+Tailscale or another VPN. Nothing goes through a service of ours, and nothing is open to the
+internet. How to connect a phone is [below](#connecting-a-phone).
 
 **Status:** early, but in daily use. Obeya is built with Obeya, and it's used to build commercial
 software. It speaks English and German. How it works and why is in
@@ -63,6 +83,24 @@ shows what the agent is doing; when it waits for you ("need you" in the top bar)
 answer a question or watch the demo and approve it ("Approve"). Hold Space to say what to do
 instead of typing; `?` lists every key.
 
+### Connecting a phone
+
+1. Install [Tailscale](https://tailscale.com) on the computer and on the phone, both logged in as
+   the same account.
+2. In Obeya's "Configuration", under "Other devices", turn on "Reachable from other devices". The
+   section says what the network still lacks (Tailscale not running, HTTPS off in the tailnet, …),
+   each with its one step.
+3. "Connect a phone" shows a QR code. Scan it with the phone: that pairs it, and the address opens
+   the phone view from then on.
+4. Turn on notifications on the phone. On an iPhone this needs Obeya on the home screen first
+   ("Share" → "Add to Home Screen", then open it from there).
+
+Instead of Tailscale, Obeya can listen on an address of another VPN ("At an address"). That is
+plain HTTP, so the phone's browser allows neither the microphone nor notifications there. Pairing
+and removing devices happen on the computer only. The phone reaches Obeya only while the computer
+is awake: "Keep this computer awake" beside the setting holds off sleep while an agent works, or
+always (a closed laptop lid still sends it to sleep).
+
 ## From source
 
 Obeya is developed this way: started from a checkout, it updates itself whenever the checkout
@@ -73,12 +111,12 @@ moves to new code.
   the agents run on your own login.
 - git, and the [GitHub CLI](https://cli.github.com) (`gh`, logged in) for repositories whose work
   lands through pull requests.
-- For demos: Node.js 22.18 or newer, a Chromium browser, ffmpeg and uv. Obeya's settings
-  show what is missing and how to install it; see [`docs/demo-setup.md`](docs/demo-setup.md).
+- For demos: Node.js 22.18 or newer, a Chromium browser, ffmpeg and uv. "Configuration" →
+  "Demos" shows what is missing and how to install it; see [`docs/demo-setup.md`](docs/demo-setup.md).
 - For voice: ffmpeg and uv. Parakeet hears what you say, on the CPU of any machine (a fraction
-  of a second per command). Obeya's settings ("Voice") show what is missing, install the rest and
-  measure how fast it is; where it is too slow, they offer a cloud service instead (Groq for free,
-  Mistral, or any OpenAI-compatible endpoint). Everything else works without it.
+  of a second per command). "Configuration" → "Voice input" shows what is missing, installs the
+  rest and measures how fast it is; where it is too slow, it offers a cloud service instead (Groq
+  for free, Mistral, or any OpenAI-compatible endpoint). Everything else works without it.
 
 ```bash
 git clone https://github.com/sadilek/obeya.git
@@ -100,29 +138,29 @@ bun run dev ~/dev/shop          # same, with hot reload
 bun test --parallel && bun run typecheck
 ```
 
-Options: `--port <n>` (or `OBEYA_PORT`), `--workspace <path>`
-(repeatable) or `--clones <n>` to have workers use clones instead of a worktree per card, `--permission-mode <mode>`
-for workers (default `auto`). Data and worktrees live in `~/.obeya/` (`OBEYA_HOME` to move it),
-the same for the app and a checkout, so canvases, settings, voices and models carry over between
+Options: `--port <n>` (or `OBEYA_PORT`), `--workspace <path>` (repeatable) or `--clones <n>` to
+have workers use clones instead of a worktree per card, `--permission-mode <mode>` for workers
+(default `auto`). Data and worktrees live in `~/.obeya/` (`OBEYA_HOME` to move it), the same for
+the app and a checkout, so canvases, settings, voices, models and paired phones carry over between
 them. One Obeya runs per home: starting the app while a checkout's Obeya runs opens a window on
 it, and `bun start` while the app runs says where it runs, with a new link that signs another
-browser in. An Obeya older than the one that last
-ran on the home (an app not yet updated after a newer checkout) leaves the database alone and
-says to update. Workers run on the Claude Code login of the machine.
-The canvases and their repositories can be seen and changed in the app ("Configuration") or by
-telling Obeya; saving writes `canvases.json`, and the running canvases take it over at once
-(started with repositories on the command line, Obeya restarts with the file).
+browser in. An Obeya older than the one that last ran on the home (an app not yet updated after a
+newer checkout) leaves the database alone and says to update. Workers run on the Claude Code login
+of the machine. The canvases and their repositories can be seen and changed in the app
+("Configuration") or by telling Obeya; saving writes `canvases.json`, and the running canvases take
+it over at once (started with repositories on the command line, Obeya restarts with the file).
 
 Voice runs Parakeet (`onnx-asr`) in a sidecar through `uv run`, or in a Python of your own with that
 package (`OBEYA_WHISPER_PYTHON=/path/to/python`). `OBEYA_WHISPER_BACKEND` chooses Whisper instead:
 `mlx`, `faster`, or `whisper` for this platform's. Demos are recorded by the skill in
 `plugin/`, which Obeya gives its workers; what a machine needs for them (Node, a browser, ffmpeg,
-uv, a voice) is in [`docs/demo-setup.md`](docs/demo-setup.md), checked in the app's settings.
+uv, a voice) is in [`docs/demo-setup.md`](docs/demo-setup.md).
 
 `bun run app` starts Obeya in its app window from the checkout (it needs Rust, on Linux also
-WebKitGTK's development files; the first build takes a few minutes). The app adds push-to-talk from anywhere: hold the right Option key on a Mac,
-the right Ctrl key elsewhere, while another app is in front (another key in the settings). On a
-Mac this needs the "Input Monitoring" permission, which macOS asks for.
+WebKitGTK's development files; the first build takes a few minutes). The app adds push-to-talk
+from anywhere: hold the right Option key on a Mac, the right Ctrl key elsewhere, while another app
+is in front (another key in the settings). On a Mac this needs the "Input Monitoring" permission,
+which macOS asks for.
 
 ### Workers on other machines
 
@@ -140,11 +178,15 @@ Obeya works on any git repository. How a project's app starts, which checks a ch
 how approved work lands and how a demo is recorded, the repository says in its settings,
 `.obeya/settings.json`; [`docs/settings.md`](docs/settings.md) describes them. "Configuration" shows
 them, changes them for one machine and takes them over into the repository for everyone, and offers
-a card whose agent writes them for a repository that has none.
+a card whose agent writes them for a repository that has none. Commands a repository brings along
+(in these settings and in its Claude Code configuration) run only once you have trusted them, and
+after a change only once you have trusted them again.
 
 ## Contributing
 
-How Obeya itself is built, with Obeya, is in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+How Obeya itself is built, with Obeya, is in [`CONTRIBUTING.md`](CONTRIBUTING.md). A wish or a bug
+can be reported from inside Obeya ("Report a wish or a bug" in "Configuration"): it drafts a GitHub
+issue for you to send.
 
 ## License
 

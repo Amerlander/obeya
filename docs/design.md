@@ -142,9 +142,11 @@ on the walls and decisions are made in front of the wall.
 - **Agents may propose cards.**
 - **Open source** under the MIT licence, copyright Daniel Sadilek (`LICENSE`, the README,
   `package.json`), in a public repository on GitHub (2026-10-06). Code, tests and docs name no other
-  work projects. The README is written for strangers: the idea, the hero video, a screenshot of a
-  scratch canvas (`docs/images/canvas.png`), the status, requirements, a quick start, a link to
-  obeya.si. GitHub plays a video in a README only when it was uploaded through its web page (a
+  work projects. The README is written for strangers: the idea, the hero video, the site's screenshots of
+  the canvas and of the phone view (`site/img/canvas.png`, `phone.png`, `phone-demo.png`, taken
+  again at every release, so the README shows no picture of its own that could go stale; until
+  2026-10-17 it had `docs/images/canvas.png`, taken once), the status, requirements, a quick start,
+  how to connect a phone, a link to obeya.si. GitHub plays a video in a README only when it was uploaded through its web page (a
   `user-attachments` link, which no API makes and every re-render would have to replace); a link to
   the release asset shows as a download. So the README shows the video's first frame with the site's
   play button drawn on it (`docs/images/video.jpg`, made with the poster), linked to the video on
