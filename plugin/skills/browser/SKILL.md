@@ -14,6 +14,9 @@ The browser belongs to this session: other sessions on the machine have their ow
 itself when this session ends. It is always muted, so a page's videos and narration stay silent.
 Its profile is fresh at every `start`: no logins or cookies of the machine's user.
 
+For what headless Chromium can't reproduce (on-screen keyboard, fullscreen, rotation), use
+`bun scripts/android-phone.ts` in Obeya's repository: Chrome in the Android emulator, with real taps.
+
 ## Commands
 
 All commands: `node ${CLAUDE_SKILL_DIR}/lib/browser.ts <command>`

@@ -19,7 +19,9 @@ shows them as projects); when one is done, what lasts moves into `docs/design.md
   (`obeya:browser`; a session without the plugin reads `plugin/skills/browser/SKILL.md`): `input`
   for trusted clicks, drags, keys held for push-to-talk; `start --fake-mic <wav>` for voice. A
   claude-in-chrome tab is often hidden, which freezes `requestAnimationFrame`: camera flights and
-  the unfold never finish there.
+  the unfold never finish there. For what headless Chromium can't reproduce (on-screen keyboard,
+  fullscreen, rotation), use `bun scripts/android-phone.ts`: Chrome in the Android emulator, with
+  real taps (its header describes the commands).
 - Reviews of the code (security, code quality and the like) always bring in Codex (`codex exec`)
   as a second reviewer.
 - Voice on this machine: Parakeet through uv, the default, needs nothing set. For Whisper instead:

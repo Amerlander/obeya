@@ -3570,6 +3570,23 @@ works on Windows, where killing the holder would leave the browser behind) or on
 the microphone; Chrome launched by Playwright needs no audio service moved in-process for it
 (checked 2026-10-14). Its tests run real browsers on macOS and Linux.
 
+What headless Chromium can't reproduce (the on-screen keyboard and `visualViewport`, video
+fullscreen, screen rotation) workers check in Obeya's repository with `scripts/android-phone.ts`:
+Chrome in the Android emulator, driven from the shell (start, open, eval, tap, type, rotate,
+screenshot, record, stop). Workers had built the same helpers in /tmp for each such card, which
+took most of a run's tool calls, and their unbounded waits were blocked; so every wait in the
+script is bounded and ends with an error naming what it waited for. It finds the SDK through
+`ANDROID_HOME`/`ANDROID_SDK_ROOT` or Android Studio's default place. `start` boots the AVD with
+`-read-only`, so several checkouts each run their own emulator of the same AVD at once (nothing
+persists in it); the device, its DevTools port and the open page are kept in a state file in the
+OS temp directory named by the checkout. A tap is a real touch (`adb shell input tap`), so the
+keyboard opens and fullscreen counts as a user's gesture: the element's centre comes from the page
+over CDP, the page's place on the screen from the WebView node of `uiautomator dump`. `open` turns
+off what Chrome and Android lay over a page on their own (first-run screens, the notification
+prompt, the offers to translate or install the page, the hint at the first fullscreen; Chrome as the debug app reads
+`/data/local/tmp/chrome-command-line`), which would catch taps meant for the page; `rotate` turns the emulator's acceleration sensor, as a hand turns
+the phone.
+
 ### Decisions
 
 - **A demo is a video or an HTML artifact, chosen by the worker** (2026-10-01): drafts to choose
