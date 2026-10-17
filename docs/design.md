@@ -4619,6 +4619,13 @@ it. Obeya holds the screen until full screen ends instead, so the screen and ful
 disagree. A browser that puts only the video itself into full screen (Safari on an iPhone) has no
 such button and keeps the video's own controls, whose player turns with the phone.
 
+Each time full screen starts, Chrome on Android shows its notice at the bottom („<origin> – zum
+Beenden des Vollbildmodus: von oben ziehen …“). It is a security notice that no page can turn off.
+Only skipping the browser's full screen would avoid it: the player would then cover the page, with
+Chrome's address bar or the status bar still showing, and could no longer hold the screen in the
+video's orientation, since Chrome locks the orientation only in full screen (or in a web app whose
+manifest says `fullscreen`). The owner kept real full screen with the notice (2026-10-17).
+
 When the server does not answer for 3 s (a phone back from its lock screen reconnects within that),
 a line at the top says „Obeya antwortet nicht · seit 14:02“ and why that may be; the page connects
 again by itself, at once when it comes back into view rather than after the pause it waits. The 3 s
