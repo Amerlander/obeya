@@ -312,6 +312,25 @@ export function ToldList({ told, open, onUndo }: { told: Told[]; open?: string; 
 }
 
 /**
+ * A microphone held by a finger: the touch is the press and nothing else. Held for half a second,
+ * Chrome on Android took it for a long press on what stands around the button (the field's frame):
+ * it began selecting text, which closed the keyboard and cancelled the touch, so the recording ended
+ * at once. A touch whose start is cancelled makes no long press, no selection and no focus change.
+ */
+export function useHeldByTouch<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // React listens to touchstart passively, where cancelling it does nothing
+    const hold = (e: TouchEvent) => e.preventDefault();
+    el.addEventListener('touchstart', hold, { passive: false });
+    return () => el.removeEventListener('touchstart', hold);
+  });
+  return ref;
+}
+
+/**
  * The microphone at the bottom, and under it where what is said goes: into the field with the
  * cursor, or to `target` with what stands in its field (`field`, the draft of the card or sidebar in
  * view, while that has its field on the page). With no `target` (the phone, where what is in view
@@ -340,12 +359,14 @@ export function PushToTalk({ phase, level, flat, target, field, onDown }: { phas
   const quote = useReply(key);
   const into = useFocusedDraft();
   const n = shots.images.length;
+  const mic = useHeldByTouch<HTMLButtonElement>();
   const parts = [...(on && text.trim() ? [t.voice.withText] : []), ...(n ? [t.voice.withShots(n)] : []), ...(on && quote ? [t.voice.withQuote] : [])];
   return (
     <div id="ptt" className={`${phase}${shots.dropping ? ' dropping' : ''}`} {...shots.drop}>
       <div className="ptt-row">
         <button
           id="mic"
+          ref={mic}
           title={t.voice.hold}
           style={{ ['--lvl' as string]: 1 + level * 0.45 }}
           onPointerDown={(e) => {

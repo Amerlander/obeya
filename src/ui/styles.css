@@ -1553,7 +1553,7 @@ button.link:hover { text-decoration: underline; }
 .pill.ph-talk-open.on { color: var(--bg); }
 .ph-talk-open svg { width: 20px; height: 20px; }
 .ph-talk-open:active { box-shadow: none; transform: translateY(1px); }
-.ph-view:has(textarea:focus, input:focus) ~ :is(.ph-talk-open, .ph-canvas-pick) { display: none; }
+.ph-kb .ph-view ~ :is(.ph-talk-open, .ph-canvas-pick) { display: none; }
 /* the canvas whose Obeya is spoken to, right of the microphone and its screenshot button: the phone's own picker opens */
 .pill.ph-canvas-pick { position: fixed; z-index: 50; right: max(14px, env(safe-area-inset-right)); bottom: calc(30px + env(safe-area-inset-bottom));
   height: 44px; box-sizing: border-box; padding: 0 12px; gap: 6px; max-width: calc(50vw - 106px); font-size: 15px; cursor: pointer; }
@@ -1577,7 +1577,7 @@ button.link:hover { text-decoration: underline; }
 .ph-talk > .talk { flex: 0 1 auto; min-height: 0; max-height: none; max-width: none; }
 .ph-talk > .composer { max-width: none; margin-top: 10px; flex: none; }
 /* while the keyboard is up the field has its own microphone: the field stands right above the keyboard */
-.ph-panel:has(textarea:focus, input:focus) { padding-bottom: 10px; }
+.ph-kb .ph-panel { padding-bottom: 10px; }
 .ph-panel ~ #acks { bottom: calc(var(--ph-field, 0px) + 97px + env(safe-area-inset-bottom)); }
 /* a card opened: full screen, in its state's colour along the top */
 /* the list fades out under the microphone */
@@ -1611,7 +1611,7 @@ button.link:hover { text-decoration: underline; }
 #mic, .c-mic { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: none; }
 @media (pointer: coarse) { .lb-bar { flex-wrap: wrap; max-width: 100%; } }
 /* while the keyboard is up the field has its own microphone: the big one would stand over the field */
-.ph-view:has(textarea:focus, input:focus) ~ #ptt, .ph-view:has(textarea:focus, input:focus)::after { display: none; }
+.ph-kb .ph-view ~ #ptt, .ph-kb .ph-view::after { display: none; }
 /* the phone turned: the height is short, so the microphone moves to the right edge, where the thumb holds the phone,
    in a strip of its own beside the cards; no fade at the bottom, a slimmer bar, the sign's bar scrolls away */
 @media (orientation: landscape) and (max-height: 599px) {
@@ -1643,6 +1643,6 @@ button.link:hover { text-decoration: underline; }
   /* the panel needs no room under the field: the microphone stands beside it */
   .ph-grip { padding-top: 10px; }
   /* while the keyboard is up the strip is empty (the field has its own microphone): the field takes its width */
-  .ph-panel:has(textarea:focus, input:focus) { padding-right: max(14px, env(safe-area-inset-right)); }
+  .ph-kb .ph-panel { padding-right: max(14px, env(safe-area-inset-right)); }
   .ph-panel ~ #acks { bottom: calc(var(--ph-field, 0px) + 34px + env(safe-area-inset-bottom)); }
 }

@@ -4437,7 +4437,12 @@ speaks to its agent then). The button opens the conversation an answer waits unr
 one picked has none, and the picker follows. The conversation is the only thing in it that scrolls: as a box in
 the scrolling list (until 2026-10-16) it was a scroll area inside another, and the list scrolled on
 past the field to make room for the microphone. The panel takes the part of the screen the keyboard
-leaves (`visualViewport`), so the field stands right above the keyboard. Its top is a grip: dragged
+leaves, so the field stands right above the keyboard: the phone view asks the browser to make the
+page shorter while the keyboard is up (`interactive-widget=resizes-content`, which Chrome on Android
+heeds), and follows the visual viewport where it does not (Safari). Until 2026-10-17 the visual
+viewport alone decided, and Chrome reports it wrong by its own bars: where it draws the page under
+the gesture bar the field ended behind the keyboard by that bar's height, and with a toolbar at the
+bottom it ended far above it. Its top is a grip: dragged
 down, the panel follows the finger, and let go further than 110 px down (or flicked) it closes;
 otherwise it springs back. The same button left of the microphone, Back and Esc close it
 too, and its address is
@@ -4458,8 +4463,19 @@ selected; lifting the finger or the browser taking the gesture ends the recordin
 open card's agent, else to Obeya. No line under it names whom it speaks to (until 2026-10-17 the
 canvas's „→ Agent · …“ stood there): what is in view fills the screen, so that goes without saying,
 and the 33 px it took go to the list and the conversation; the line still says when the microphone
-hears only silence. While a text field has the focus, and the keyboard is up, it
-hides: the field has its own microphone. The texts that name the space bar name the microphone
+hears only silence. While the keyboard is up it hides, and so do the button for
+Obeya's conversation and the canvas picker: the field has its own microphone. The keyboard counts as
+up while a text field has the focus and the page's height is more than 150 px below the tallest it
+had at that width (`ph-kb` on the page's root); the keyboard closed with the phone's own button
+leaves the focus in the field, and until 2026-10-17, when the focus alone decided, the microphone
+stayed hidden then. Shown again with the cursor still in the field, it dictates into the field. The
+field's microphone is held by a finger as the one at the bottom is, and the touch on either is
+nothing but the press (its `touchstart` is cancelled): held half a second, Chrome took it for a long
+press on the field's frame and began selecting text, which closed the keyboard and cancelled the
+touch, so the recording ended at once. A tap on the field's screenshot button leaves the cursor in
+the field, so the keyboard stays up and the field does not move away under the finger (before, the
+tap only closed the keyboard and the picker needed a second one), and back from the picker the field
+takes the focus anew, which brings the keyboard up again. The texts that name the space bar name the microphone
 there (`forTouch`). Enter breaks the line in a field there, and only Send sends
 (`enterBreaksLines` in `src/ui/composer.tsx`): the keyboard's Enter key is where a phone types a
 line break, and a message sent half written cannot be taken back; the line under a dictating field

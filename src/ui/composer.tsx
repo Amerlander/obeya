@@ -12,7 +12,7 @@ import { Quote } from './message';
 import { type Reply, replyOn, setReply, useReply } from './reply';
 import { AttachButton, ShotStrip, useShotInput } from './shots';
 import { t } from './strings';
-import { HoldToTalk, MicIcon, TAP_MS } from './voice';
+import { HoldToTalk, MicIcon, TAP_MS, useHeldByTouch } from './voice';
 
 /**
  * How long Space stays down before it is held to speak rather than typed. Typing presses it for
@@ -90,6 +90,7 @@ export function Composer({
     quoted.current = reply?.quote.ev;
   }, [reply?.quote.ev]);
   const talk = useContext(HoldToTalk);
+  const mic = useHeldByTouch<HTMLButtonElement>();
   // Space pressed in the field: typed, or held to speak once it stays down (`held`)
   const space = useRef<number | 'held' | null>(null);
   const spaceDown = useRef(0);
@@ -169,6 +170,7 @@ export function Composer({
           <AttachButton shots={shots} />
           {talk && (
             <button
+              ref={mic}
               className={dictation === 'listening' ? 'c-mic on' : 'c-mic'}
               title={t.voice.dictate}
               aria-label={t.voice.dictate}

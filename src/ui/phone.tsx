@@ -55,6 +55,53 @@ const talkInAddress = () => new URLSearchParams(location.search).has('talk');
 /** How far the panel's top is dragged down before letting go closes it (a quick flick closes it sooner). */
 const DRAG_CLOSES = 110;
 
+/**
+ * The keyboard makes the page shorter (`interactive-widget`), as Chrome on Android does with it: the
+ * views fixed to the screen end at the keyboard then. Without it Chrome only shrinks the visual
+ * viewport and reports it wrong by its own bars (by the gesture bar where it draws under it, by the
+ * bottom toolbar where it has one), and the field ended under the keyboard or far above it. Safari
+ * ignores it and shrinks the visual viewport, which the panel follows.
+ */
+function keyboardResizes() {
+  const meta = document.querySelector<HTMLMetaElement>('meta[name=viewport]');
+  if (meta && !meta.content.includes('interactive-widget')) meta.content += ', interactive-widget=resizes-content';
+}
+
+/** How much shorter than the tallest seen the screen gets while the keyboard is up; a browser's bars sliding in and out take less. */
+const KEYBOARD_PX = 150;
+
+/**
+ * Marks the page while the keyboard is up (`ph-kb` on the root): a text field has the focus and the
+ * height the page has is well below the tallest it had at this width. The keyboard closed with the
+ * phone's own button leaves the focus in the field, so the focus alone does not tell (until
+ * 2026-10-17 it did, and the microphone stayed hidden after that).
+ */
+function watchKeyboard() {
+  const vv = window.visualViewport;
+  const tallest = new Map<number, number>();
+  const check = () => {
+    const h = vv?.height ?? innerHeight;
+    const w = Math.round(innerWidth);
+    const top = Math.max(tallest.get(w) ?? 0, h);
+    tallest.set(w, top);
+    const el = document.activeElement;
+    const typing = el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && !['button', 'checkbox', 'file', 'radio', 'range'].includes(el.type));
+    document.documentElement.classList.toggle('ph-kb', typing && h < top - KEYBOARD_PX);
+  };
+  check();
+  vv?.addEventListener('resize', check);
+  addEventListener('resize', check);
+  addEventListener('focusin', check);
+  addEventListener('focusout', check);
+  return () => {
+    vv?.removeEventListener('resize', check);
+    removeEventListener('resize', check);
+    removeEventListener('focusin', check);
+    removeEventListener('focusout', check);
+    document.documentElement.classList.remove('ph-kb');
+  };
+}
+
 /** When something began: the time today, else the day. */
 const when = (iso: string | number) => (new Date(iso).toDateString() === new Date().toDateString() ? clock(iso) : shortDay(iso));
 
@@ -64,7 +111,9 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
     forTouch();
     enterBreaksLines();
     phoneInUse();
+    keyboardResizes();
   });
+  useEffect(watchKeyboard, []);
   const [canvases, setCanvases] = useState(loaded);
   // the canvases it last had, while the server did not answer: the list the server sends once it does
   useEffect(() => setCanvases(loaded), [loaded]);
@@ -585,7 +634,8 @@ function TalkPanel({
     setTimeout(onClose, 200);
   };
   leaveRef.current = leave;
-  // the panel takes the part of the screen the keyboard leaves, so the field stays above it
+  // the panel takes the part of the screen the keyboard leaves, so the field stays above it (in Safari;
+  // Chrome makes the page itself shorter, `keyboardResizes`)
   useEffect(() => {
     const vv = window.visualViewport;
     const el = panel.current;

@@ -182,10 +182,43 @@ export function ShotStrip({ shots }: { shots: ShotInput }) {
 
 /** The button in the text field's corner that picks screenshots from disk. */
 export function AttachButton({ shots, title = t.shots.attach }: { shots: ShotInput; title?: string }) {
+  // the field the cursor stood in when the picker opened
+  const typing = useRef<HTMLElement | null>(null);
+  /**
+   * Back from the picker (an image picked or none), the cursor goes back into that field: a phone took
+   * its keyboard down for the picker, and focusing the field anew brings it up again.
+   */
+  const back = () => {
+    const f = typing.current;
+    typing.current = null;
+    if (!f?.isConnected) return;
+    f.blur();
+    f.focus();
+  };
+  const backRef = useRef(back);
+  backRef.current = back;
+  useEffect(() => {
+    const input = shots.picker.current;
+    if (!input) return;
+    const cancel = () => backRef.current();
+    input.addEventListener('cancel', cancel);
+    return () => input.removeEventListener('cancel', cancel);
+  }, [shots.off]);
   if (shots.off) return null;
   return (
     <>
-      <button className="c-attach" title={title} aria-label={title} onClick={() => shots.picker.current?.click()}>
+      <button
+        className="c-attach"
+        title={title}
+        aria-label={title}
+        // the cursor stays in the field: on a phone the keyboard stays up, and the field does not jump away from under the finger
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => {
+          const el = document.activeElement;
+          typing.current = el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement ? el : null;
+          shots.picker.current?.click();
+        }}
+      >
         <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
           <rect x="2.5" y="4" width="15" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth="1.5" />
           <circle cx="7" cy="8.5" r="1.5" fill="currentColor" />
@@ -201,6 +234,7 @@ export function AttachButton({ shots, title = t.shots.attach }: { shots: ShotInp
         onChange={(e) => {
           shots.attach(imageFiles(e.target.files));
           e.target.value = '';
+          back();
         }}
       />
     </>
