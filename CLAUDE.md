@@ -39,6 +39,8 @@ shows them as projects); when one is done, what lasts moves into `docs/design.md
   button, the conversation history, starting („So bauen“, „Übernehmen und starten“) while the agent
   is still working) is built once in shared code and works the same on each of them; no card kind
   gets its own variant.
+- The phone view follows the desktop version: same controls, icons, button states and card layout,
+  departing from it only where the small screen requires.
 - Whatever the owner has entered on a card but not sent yet (text, pasted screenshots, picked answer
   options, comments) survives closing the card, switching canvases and a page reload, for every
   input on the card, not only the text field.
