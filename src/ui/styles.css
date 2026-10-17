@@ -1641,7 +1641,8 @@ button.link:hover { text-decoration: underline; }
 .ph-view .demo-view .screen.full video { width: 100%; height: 100%; object-fit: contain; border-radius: 0; }
 .ph-view .demo-view .screen.full .fullscreen, .ph-view .demo-view .screen.full .comment-here { top: max(10px, env(safe-area-inset-top)); }
 .ph-view .demo-view .screen.full .fullscreen { right: max(10px, env(safe-area-inset-right)); }
-.ph-view .demo-view .comment-here { right: 60px; }
+/* as tall as the full screen button beside it, so the two line up */
+.ph-view .demo-view .comment-here { right: 60px; height: 42px; border-radius: 21px; }
 /* `nofullscreen` only greys out the controls' own full screen button in Chrome's newer controls: it goes, beside Obeya's */
 .ph-view .demo-view video::-webkit-media-controls-fullscreen-button { display: none; }
 .ph-view .demo-view .screen.full .comment-here { right: calc(50px + max(10px, env(safe-area-inset-right))); }
