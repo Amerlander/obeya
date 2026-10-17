@@ -340,10 +340,15 @@ export function reportFocus(where: Where, target: string, title: string | undefi
 }
 
 // The owner uses this page: in view, and they moved, typed or scrolled in it, or a video plays, within
-// the last half minute. While they do at the machine (and three minutes after), nothing that starts
-// waiting is pushed to their phone; a page left in view with nobody at it does not hold pushes off.
+// the last half minute; in the phone view, in view at all, as a phone's screen locks by itself. While
+// they do at the machine (and three minutes after) or on the phone (until it goes out of view),
+// nothing that starts waiting is pushed to their phone; a page at the machine left in view with
+// nobody at it does not hold pushes off.
 const HERE_MS = 30_000;
 let used = true;
+let inViewIsUse = false;
+/** The phone view: being in view is using it. */
+export const phoneInUse = () => void (inViewIsUse = true);
 const sendHere = () => {
   const ws = sockets.get(canvasId);
   if (document.visibilityState === 'visible' && ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'here' } satisfies ClientMessage));
@@ -352,10 +357,17 @@ if (typeof document !== 'undefined') {
   for (const type of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart']) addEventListener(type, () => void (used = true), { capture: true, passive: true });
   setInterval(() => {
     const playing = [...document.querySelectorAll('video')].some((v) => !v.paused && !v.ended);
-    if (!used && !playing) return;
+    if (!used && !playing && !inViewIsUse) return;
     used = false;
     sendHere();
   }, HERE_MS);
+  // the phone locked or another app in front: what starts waiting from now on is pushed again
+  const away = () => {
+    if (document.visibilityState !== 'hidden') return;
+    for (const ws of sockets.values()) if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'away' } satisfies ClientMessage));
+  };
+  document.addEventListener('visibilitychange', away);
+  addEventListener('pagehide', away);
 }
 
 // Whoever has something to keep across the reload a restart brings writes it down here first.

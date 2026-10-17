@@ -1844,6 +1844,8 @@ export type ClientMessage =
   | { type: 'back' }
   /** The owner uses this page: it is in view and they moved, typed or scrolled in it (or a video plays) within the last half minute. */
   | { type: 'here' }
+  /** This page went out of view (on a phone: locked, or another app in front). */
+  | { type: 'away' }
   /**
    * What the owner has in view (sent on every change and when the page gets the focus back): a
    * command from the app's push-to-talk key in another app goes there. `target` and `title` as the

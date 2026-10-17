@@ -3,8 +3,8 @@
 // that failed, a worker that is stuck. Each paired device that turned notifications on holds one
 // subscription; Obeya signs with a VAPID key of its own in its home and needs no account.
 //
-// Nothing goes out while the owner is at the machine: a page there that was in view and used in the
-// last `DESK_MS`. The first push goes out at once; what starts waiting within `WINDOW_MS` after it
+// Nothing goes out while the owner uses Obeya: a page at the machine that was in view and used in the
+// last `DESK_MS`, or one on a paired device that is in view (a phone in their hand). The first push goes out at once; what starts waiting within `WINDOW_MS` after it
 // goes out as one push at the end of that minute.
 
 import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -19,6 +19,8 @@ import { newVapidJwk, type Post, type PushMessage, send, subscriptionOf, type Su
 
 /** How long after the owner last used a page at the machine nothing is pushed. */
 export const DESK_MS = 3 * 60_000;
+/** How long a page on a paired device counts as in view after it last said so (every 30 s). */
+export const DEVICE_MS = 45_000;
 /** What starts waiting within this after a push goes out together at its end. */
 export const WINDOW_MS = 60_000;
 /** Obeya's VAPID key, in its home: subscriptions hold its public half, so it stays. */
@@ -89,6 +91,8 @@ export class Push {
   private vapid?: Promise<Vapid>;
   /** When the owner last used a page at the machine. */
   private desk = -Infinity;
+  /** The paired devices with a page in view, by id, and when it last said so. */
+  private devices = new Map<string, number>();
   /** The minute after a push: what starts waiting meanwhile, by card. */
   private window: Map<string, Waits> | null = null;
   /** Deliveries, one after the other. */
@@ -153,11 +157,32 @@ export class Push {
     return this.now() - this.desk < DESK_MS;
   }
 
+  /** A page on paired device `device` is in view: nothing is pushed until it goes out of view (`away`), or says nothing for `DEVICE_MS`. */
+  onDevice(device: string) {
+    this.devices.set(device, this.now());
+  }
+
+  /** The device's page went out of view (the phone locked, another app) or closed: pushes go out again at once. */
+  away(device: string) {
+    this.devices.delete(device);
+  }
+
+  /** Whether the owner has a page in view on a paired device. */
+  onADevice(): boolean {
+    return [...this.devices.values()].some((at) => this.now() - at < DEVICE_MS);
+  }
+
+  /** Whether the owner uses Obeya, at the machine or on a device; the server's log says why a phone got nothing. */
+  private inUse(cards: Waits[]): boolean {
+    const where = this.atDesk() ? 'at the machine' : this.onADevice() && 'on a device';
+    if (where) console.log(`Obeya: not pushed, the owner is ${where}: ${cards.map((w) => `„${plainTitle(w.title)}“`).join(', ')}`);
+    return !!where;
+  }
+
   /** Cards that started to wait for the owner. */
   waits(cards: Waits[]) {
     if (!cards.length || !this.subscriptions().length) return;
-    // the server's log says why a phone got nothing
-    if (this.atDesk()) return console.log(`Obeya: not pushed, the owner is at the machine: ${cards.map((w) => `„${plainTitle(w.title)}“`).join(', ')}`);
+    if (this.inUse(cards)) return;
     if (this.window) {
       for (const w of cards) this.window.set(w.card, w);
       return;
@@ -172,8 +197,7 @@ export class Push {
   private windowEnds() {
     const cards = [...(this.window?.values() ?? [])].filter((w) => w.still());
     this.window = null;
-    if (!cards.length) return;
-    if (this.atDesk()) return console.log(`Obeya: not pushed, the owner is at the machine: ${cards.map((w) => `„${plainTitle(w.title)}“`).join(', ')}`);
+    if (!cards.length || this.inUse(cards)) return;
     this.window = new Map();
     this.deliver(this.message(cards));
     this.later(() => this.windowEnds(), WINDOW_MS);

@@ -831,6 +831,9 @@ export function serve(
         sockets.get(ws.data.canvas)?.delete(ws);
         restarter?.hold(ws.data.page);
         focused.delete(ws.data.page);
+        // a phone's last page closed: it no longer holds pushes off
+        const { device } = ws.data;
+        if (device && ![...sockets.values()].some((set) => [...set].some((w) => w.data.device === device))) push.away(device);
       },
       // the owner watching a demo video or dictating in this page holds a restart off
       message: (ws: ServerWebSocket<Socket>, text: string | Buffer) => {
@@ -838,8 +841,10 @@ export function serve(
           const msg = JSON.parse(String(text)) as ClientMessage;
           if (msg.type === 'hold' && Array.isArray(msg.hold)) restarter?.hold(ws.data.page, msg.hold.filter((h) => h === 'video' || h === 'voice'));
           if (msg.type === 'back') byId.get(ws.data.canvas)?.ownerBack();
-          // the owner uses a page at the machine: what starts waiting meanwhile is not pushed to their phone
-          if ((msg.type === 'back' || msg.type === 'here') && !ws.data.device) push.here();
+          // the owner uses a page at the machine or on their phone: what starts waiting meanwhile is not pushed
+          const { device } = ws.data;
+          if (msg.type === 'back' || msg.type === 'here') device ? push.onDevice(device) : push.here();
+          if (msg.type === 'away' && device) push.away(device);
           if (msg.type === 'focus') {
             const f = { card: nonEmpty(msg.card), project: nonEmpty(msg.project), target: nonEmpty(msg.target), title: nonEmpty(msg.title) };
             focused.set(ws.data.page, { canvas: ws.data.canvas, ...Object.fromEntries(Object.entries(f).filter(([, v]) => v)), at: Date.now() });

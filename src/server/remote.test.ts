@@ -299,15 +299,25 @@ describe('push', () => {
     expect(store.pushes()).toEqual([]);
   });
 
-  test("the phone's page saying it is in use holds nothing off", async () => {
+  test("the phone's page in view holds pushes off until it goes out of view or closes, without counting as the machine", async () => {
     await turnOn();
     const cookie = cookieOf(await viaTailnet(`/pair?code=${(await pairing()).code}`));
-    const ws = (await opens({ host: NAME, 'x-forwarded-for': '100.64.0.7', 'x-forwarded-proto': 'https', origin: `https://${NAME}`, cookie }))!;
+    const phone = () => opens({ host: NAME, 'x-forwarded-for': '100.64.0.7', 'x-forwarded-proto': 'https', origin: `https://${NAME}`, cookie }).then((ws) => ws!);
+    const ws = await phone();
     ws.send(JSON.stringify({ type: 'here' }));
-    ws.send(JSON.stringify({ type: 'back' }));
-    await Bun.sleep(50);
+    await until(() => push.onADevice());
     expect(push.atDesk()).toBe(false);
+    ws.send(JSON.stringify({ type: 'away' }));
+    await until(() => !push.onADevice());
+    ws.send(JSON.stringify({ type: 'back' }));
+    await until(() => push.onADevice());
+    // a second page of the phone closing leaves the first holding them off; the last one closing lets go
+    const other = await phone();
+    other.close();
+    await Bun.sleep(50);
+    expect(push.onADevice()).toBe(true);
     ws.close();
+    await until(() => !push.onADevice());
   });
 });
 

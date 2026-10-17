@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { type CanvasInfo, type CanvasSnapshot, type CardPatch, type Item, needsYou, unreadAnswers } from '../core/types';
-import { api, beforeReload, onNotice, setCanvas, useCanvas, type Where } from './api';
+import { api, beforeReload, onNotice, phoneInUse, setCanvas, useCanvas, type Where } from './api';
 import { enterBreaksLines } from './composer';
 import { type ActDone, Detail, type Pending } from './detail';
 import { cardDraft, fieldOn, focusedDraft, keepDrafts, MIC_DRAFT, obeyaDraft } from './draft';
@@ -63,6 +63,7 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
   useState(() => {
     forTouch();
     enterBreaksLines();
+    phoneInUse();
   });
   const [canvases, setCanvases] = useState(loaded);
   // the canvases it last had, while the server did not answer: the list the server sends once it does

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type { Item } from '../core/types';
 import { Store } from './db';
 import { UNUSED_MS } from './remote';
-import { DESK_MS, kindOf, plainTitle, Push, startedWaiting, type Waits } from './push';
+import { DESK_MS, DEVICE_MS, kindOf, plainTitle, Push, startedWaiting, type Waits } from './push';
 import { b64u, type Bytes, fromB64u, type Post } from './webpush';
 
 const subtle = crypto.subtle;
@@ -103,6 +103,26 @@ describe('Push', () => {
     tick(2000);
     push.waits([waits('c2')]);
     expect((await shown()).map((m) => m.tag)).toEqual(['c2']);
+  });
+
+  test('nothing is pushed while a page on the phone is in view, and again from when it goes out of view', async () => {
+    const { push, shown, tick } = await setup();
+    push.onDevice('phone');
+    push.waits([waits('c1')]);
+    tick(DEVICE_MS - 1000);
+    push.waits([waits('c2')]);
+    expect(await shown()).toEqual([]);
+    push.away('phone');
+    push.waits([waits('c3')]);
+    expect((await shown()).map((m) => m.tag)).toEqual(['c3']);
+  });
+
+  test('a phone page that stopped saying it is in view (locked before it could say so) holds nothing off', async () => {
+    const { push, shown, tick } = await setup();
+    push.onDevice('phone');
+    tick(DEVICE_MS);
+    push.waits([waits('c1')]);
+    expect((await shown()).map((m) => m.tag)).toEqual(['c1']);
   });
 
   test('what starts waiting within the minute after a push goes out as one push at its end, without what no longer waits', async () => {

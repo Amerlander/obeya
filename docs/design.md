@@ -4508,11 +4508,15 @@ failed or ended twice without a handover and Obeya made a question of it, `stuck
 „Agent kommt nicht weiter“). Obeya's answers in its conversation are not pushed: the owner asked from
 where they are. Cards waiting already when Obeya starts are not pushed.
 
-*Not while the owner is at the machine:* nothing is pushed while a page on this machine was in use in
-the last three minutes. A page in use is one in view in which the owner moved, typed or scrolled, or a
-video plays, within the last half minute: it says so every 30 s then (`{ type: 'here' }`), and when it
-comes back into view. A canvas left in view with nobody at it holds nothing off. What starts waiting
-while the owner is there is not pushed later either: it is on the canvas in front of them.
+*Not while the owner uses Obeya:* nothing is pushed while a page on this machine was in use in the
+last three minutes, or while a page on a paired device is in use. A page in use is one in view in
+which the owner moved, typed or scrolled, or a video plays, within the last half minute: it says so
+every 30 s then (`{ type: 'here' }`), and when it comes back into view. A canvas left in view with
+nobody at it holds nothing off. The phone view counts as in use whenever it is in view, as a phone's
+screen locks by itself; and a device holds pushes off only until its page goes out of view (locked,
+another app in front: `{ type: 'away' }`), closes, or has said nothing for 45 s, without the three
+minutes after: a phone put away is where the pushes should reach the owner. What starts waiting while
+the owner is there is not pushed later either: it is in front of them.
 
 Every push goes as urgent (`Urgency: high`), which lets the push service wake a sleeping phone. Whether
 it does is up to the phone: on the owner's Pixel (2026-10-16) a push sent while it slept showed only
@@ -4695,6 +4699,10 @@ Python sidecars ignore Ctrl-C instead.
   WebCrypto rather than a library: the two RFCs are a few dozen lines, checked against RFC 8291's own
   example. The owner counts as at the machine while a page there is in use, not merely in view, which
   the plan said: a canvas left in view would otherwise hold every push off until the screen locks.
+- **Nor while the owner uses Obeya on the phone** (2026-10-17): the pushes added nothing while the
+  owner was working through the cards on the phone anyway. Before, only a page at the machine held
+  them off. The phone's hold ends the moment its page goes out of view rather than three minutes
+  later, so a push for what starts waiting right after the phone is locked still comes.
 - **„Telefon verbinden“ only in the configuration** (2026-10-16): a phone is connected once, and
   again only for a new phone or a closed tab, so it takes no place in the bar. Before, a phone icon
   stood in the bar beside „Konfiguration“.
