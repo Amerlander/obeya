@@ -958,7 +958,14 @@ function Conversation({
   // a paused agent's steps stay where they were, in its bubble standing still
   const paused = !past && !!item.paused && !item.snoozed;
   const asked = JSON.stringify(item.idea?.questions ?? asking ?? []);
-  const onScroll = useStickToEnd(box, `${events?.at(-1)?.id}|${working}|${paused}|${asked}`, events);
+  // on the phone the conversation opens at the first message the owner has not seen
+  const away = useContext(TalkElsewhere);
+  const unseenFrom = (el: HTMLElement) => {
+    if (!away || !events) return null;
+    const from = Math.max(away.seen, events.findLast((e) => e.author === 'owner')?.id ?? -1);
+    return [...el.querySelectorAll<HTMLElement>('[data-ev]')].find((m) => Number(m.dataset.ev) > from) ?? null;
+  };
+  const onScroll = useStickToEnd(box, `${events?.at(-1)?.id}|${working}|${paused}|${asked}`, events, unseenFrom);
   // a proposal's open questions stand at the end, where they are answered, rather than where they were asked
   const openKey = JSON.stringify(proposal && !working ? (item.proposal?.questions ?? []) : []);
   const turns = useMemo(() => (events ? cardTalk(item, events, past) : null), [events, asked, working, paused, openKey]);
@@ -2172,10 +2179,11 @@ function Split({ main, talk, className }: { main: ReactNode; talk: ReactNode; cl
 
 /**
  * Where a card's conversation goes instead of its column: the phone view's panel from below (`el`,
- * null while the panel is closed), which `open` brings up, with the cursor in the field when `focus`.
+ * null while the panel is closed), which `open` brings up, with the cursor in the field when `focus`;
+ * `seen`: the last event the owner had seen before it opened, so it opens at the first one after it.
  * None on the canvas.
  */
-export const TalkElsewhere = createContext<{ el: HTMLElement | null; open: (focus?: boolean) => void } | null>(null);
+export const TalkElsewhere = createContext<{ el: HTMLElement | null; open: (focus?: boolean) => void; seen: number } | null>(null);
 
 /** A card's conversation: in its column, or where `TalkElsewhere` puts it. `bare`: no column of its own on the canvas. */
 function TalkColumn({ children, bare }: { children: ReactNode; bare?: boolean }) {

@@ -428,9 +428,15 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
   const [talkEl, setTalkEl] = useState<HTMLElement | null>(null);
   /** The cursor goes into the panel's field once it is there (a comment on the demo). */
   const wantFocus = useRef(false);
+  // what of the conversation the owner had seen when it opened: its button marks it all seen at once
+  const seenAtOpen = useRef(-1);
+  const wasOpen = useRef(false);
+  if (talk && !wasOpen.current && open) seenAtOpen.current = seenOf(open);
+  wasOpen.current = talk;
   const elsewhere = useMemo(
     () => ({
       el: talk ? talkEl : null,
+      seen: seenAtOpen.current,
       open: (focus?: boolean) => {
         if (talkRef.current) return void (focus && talkEl?.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus());
         wantFocus.current = !!focus;

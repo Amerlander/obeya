@@ -4561,7 +4561,12 @@ beside a demo video (below), so the title, state line and buttons stay in view a
 says. While the conversation shows an agent at work (`agentWorks`, or Obeya reading the owner's
 words on the card; for Obeya's own conversation, Obeya reading or looking a question up,
 `obeyaWorks`), the button carries the moving line of a working card along its foot, so the work is
-seen with the panel closed too. Beside a demo video the panel is a half sheet and the page scrolls the video into the upper
+seen with the panel closed too. The conversation opens at the first message the owner has not seen (as
+the button counts them: after the last one they saw and after their own last words), at the top of
+the panel as far as it scrolls, so with nothing new it opens at its end; `TalkElsewhere` carries what
+was seen when the panel opened, since the button marks it all seen at once. Until 2026-10-17 a half
+panel opened scrolled near the conversation's start: the scroll to the end, made while the panel
+still rose, was taken for the owner scrolling up (`useStickToEnd` now knows its own scrolls). Beside a demo video the panel is a half sheet and the page scrolls the video into the upper
 half, so a comment at a place in the video („Hier kommentieren“ brings the panel up with the cursor
 in the field) is written while the video stays in view, with the place's chip and the pause on typing
 as on the canvas; its grip sets another height, as on Obeya's. Turned sideways the panel opens at
