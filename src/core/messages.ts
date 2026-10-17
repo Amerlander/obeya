@@ -15,6 +15,13 @@ const de = {
     const time = `um ${d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`;
     return d.toDateString() === new Date().toDateString() ? time : `am ${d.getDate()}.${d.getMonth() + 1}. ${time}`;
   },
+  /** A day and time in the owner's words, the year only when it is not this one: „Fr 31.10., 08:00“. */
+  at: (at: number) => {
+    const d = new Date(at);
+    const day = d.toLocaleDateString('de-DE', { weekday: 'short' }).replace(/\.$/, '');
+    const year = d.getFullYear() === new Date().getFullYear() ? '' : String(d.getFullYear());
+    return `${day} ${d.getDate()}.${d.getMonth() + 1}.${year}, ${d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`;
+  },
   /** A title as the text around it quotes it. */
   quote: (s: string) => `„${s}“`,
   /** The marker of a question with several answers allowed, after its text in the log. */
@@ -79,6 +86,10 @@ const de = {
     /** The owner paused the worker, and let it go on again. */
     pausedByOwner: 'Pausiert.',
     resumedByOwner: 'Weiter.',
+    /** The card was snoozed until a time (`at`), with what its agent does then. */
+    snoozed: (at: string, why?: string) => `Zurückgestellt bis ${at}${why ? ` · ${why}` : ''}`,
+    /** It woke, from a snooze by its agent or by the owner. */
+    woke: (by: 'agent' | 'owner') => `Wieder da (${by === 'agent' ? 'vom Agenten' : 'von dir'} zurückgestellt)`,
     parked: 'App im Workspace gestoppt, solange die Karte wartet. Der Agent startet sie wieder, wenn er sie braucht.',
     parkKept: 'Die App im Workspace läuft weiter, während die Karte wartet: Sie hält Daten, die bleiben sollen. Soll sie trotzdem gestoppt werden, sag es dem Agenten.',
     parkFailed: (output: string) => `Die App im Workspace zu stoppen, ist fehlgeschlagen: ${output}`,
@@ -342,6 +353,11 @@ const en: Messages = {
     const time = `at ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
     return d.toDateString() === new Date().toDateString() ? time : `on ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ${time}`;
   },
+  at: (at: number) => {
+    const d = new Date(at);
+    const year = d.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' as const };
+    return `${d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', ...year }).replace(',', '')}, ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+  },
   quote: (s: string) => `“${s}”`,
   multiple: 'multiple choice',
   decided: 'Decided',
@@ -399,6 +415,8 @@ const en: Messages = {
     stopped: 'Stopped.',
     pausedByOwner: 'Paused.',
     resumedByOwner: 'Resumed.',
+    snoozed: (at: string, why?: string) => `Snoozed until ${at}${why ? ` · ${why}` : ''}`,
+    woke: (by: 'agent' | 'owner') => `Woke up (snoozed by ${by === 'agent' ? 'the agent' : 'you'})`,
     parked: 'Stopped the app in the workspace while the card waits. The agent starts it again when it needs it.',
     parkKept: 'The app in the workspace keeps running while the card waits: it holds data that should stay. To have it stopped anyway, tell the agent.',
     parkFailed: (output: string) => `Stopping the app in the workspace failed: ${output}`,

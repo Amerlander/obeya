@@ -9,7 +9,7 @@ import { LANGUAGE_NAMES, LANGUAGES } from '../core/locale';
 import { MESSAGES, type Messages, type Pause } from '../core/messages';
 import { basename } from 'node:path';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
-import { answering, askable, type BackgroundTask, pausable, type CardLanding, type DemoKind, type DemoPage, formatQuestion, handedOver, type Item, type Mock, ownWords, pickedAnswer, type Question, type RepoSettings, type RestartReason, type Spot, type SpotInput, started } from '../core/types';
+import { answering, askable, type BackgroundTask, pausable, type CardLanding, type DemoKind, type DemoPage, formatQuestion, handedOver, type Item, type Mock, ownWords, pickedAnswer, type Question, type RepoSettings, type RestartReason, type Snooze, type Spot, type SpotInput, started } from '../core/types';
 import { BadRequest, type Board, replyNote, type StoredDemo } from './board';
 import { type Asked, decisionLog, toQuestion, withPick } from './advisor';
 import { checkArtifact, DEMO_SKILL, DEMO_SKILL_FILE, demoSkillName, OBEYA_PLUGIN, placeIn, readChapters } from './demo';
@@ -170,6 +170,8 @@ interface Live {
   handedOver: boolean;
   /** Whether the worker answered the owner with `reply` in the current turn. */
   answered?: boolean;
+  /** Whether the worker snoozed in the current turn: its session ends with the turn, and its closing words repeat the snooze. */
+  snoozed?: boolean;
   /** The worker's words since its reply: its words once a step follows them, its closing words at the turn's end. */
   held?: string;
   /**
@@ -331,6 +333,28 @@ const stillDue = (due: DueRestart) =>
 const RESUMED =
   'The owner paused you and has now let you go on. Pausing ended your session at once: whatever you had running was stopped with it, background commands, servers you started, and a command still running in your turn (its result shows exit code 137). Run again what you still need, and go on where you stopped.';
 
+/** A year: no snooze lasts longer. */
+const SNOOZE_LIMIT = 366 * 24 * 60 * 60_000;
+
+/**
+ * What a snoozed worker hears when it wakes: why now (`timeUp`: its time has come; `owner`: the
+ * owner woke it, `words` with words of theirs that follow; else Obeya has something for it).
+ */
+function wokeNote(s: Snooze, timeUp: boolean, owner: boolean, words: boolean): string {
+  const now = MESSAGES.en.at(Date.now());
+  const until = MESSAGES.en.at(Date.parse(s.until));
+  const why = s.why ? `, to: ${s.why}` : '';
+  const ended =
+    s.by === 'agent'
+      ? 'Your session ended when you snoozed, and whatever still ran in the background then was stopped with it. Run again what you still need.'
+      : 'Snoozing ended your session at once: whatever you had running was stopped with it, background commands, servers you started, and a command still running in your turn (its result shows exit code 137). Run again what you still need, and go on where you stopped.';
+  if (timeUp)
+    return `${s.by === 'owner' ? `The owner snoozed you until ${until}, and it is that time now.` : s.moved ? `It is now ${now}: you snoozed${why}, and the owner moved the time to now.` : `It is now ${now}, the time you snoozed until${why}.`} ${ended}`;
+  const who = s.by === 'owner' ? `The owner snoozed you until ${until}` : s.moved ? `You snoozed${why}, and the owner moved the time to ${until}` : `You snoozed until ${until}${why}`;
+  const early = owner ? (words ? 'the owner wakes you early' : 'the owner wakes you early, without words, so tell them with reply where things stand') : 'what follows wakes you early';
+  return `${who}; it is now ${now}, and ${early}. ${ended}${s.by === 'agent' ? ' Once you have dealt with it, snooze again if there is still nothing to do until then.' : ''}`;
+}
+
 const AFTER_RESTART = 'If something that remains needs Obeya to run your change, call after_restart and end your turn: Obeya tells you once it runs it.';
 
 const AFTER_LANDING =
@@ -398,7 +422,7 @@ export class Workers {
     // the run before is not resumed, but the Arbeitsrückschau still reads it
     if (row.session_id) this.o.board.log(card.id, 'state', 'obeya', this.o.board.t.worker.restarted(this.o.board.t.worker.earlierRun(row.session_id)));
     // a fresh session knows of no app that was stopped
-    this.o.board.work(card.id, { state: 'working', need: null, detail: null, status_line: null, workspace: path, branch, session_id: null, pr: null, approved_at: null, parked: null, paused: null, app: null });
+    this.o.board.work(card.id, { state: 'working', need: null, detail: null, status_line: null, workspace: path, branch, session_id: null, pr: null, approved_at: null, parked: null, paused: null, snoozed: null, app: null });
     this.o.board.log(card.id, 'state', 'obeya', this.o.board.t.worker.started(branch));
     this.launch(card.id, this.briefing(card, branch, !!row.branch), undefined, this.taskImages(card));
   }
@@ -1006,7 +1030,7 @@ export class Workers {
         console.error('freeing a landed workspace:', e);
       }
     const landed = landedOf(row);
-    this.o.board.work(cardId, { landed: null, workspace: null, status_line: null, parked: null, paused: null, app: null, ...(row.state === 'waiting' ? { state: landed?.unchanged ? 'done' : 'live', need: null, detail: null } : {}) });
+    this.o.board.work(cardId, { landed: null, workspace: null, status_line: null, parked: null, paused: null, snoozed: null, app: null, ...(row.state === 'waiting' ? { state: landed?.unchanged ? 'done' : 'live', need: null, detail: null } : {}) });
     this.o.board.workDone(cardId);
     // the Arbeitsrückschau read the card's runs when its work ended
     if (!landed?.followUp) this.o.onWorkEnded?.(cardId, row.workspace);
@@ -1033,7 +1057,7 @@ export class Workers {
     this.o.onWorkEnded?.(cardId, this.o.board.row(cardId).workspace);
     this.end(cardId);
     this.bump(cardId);
-    this.o.board.work(cardId, { paused: null });
+    this.o.board.work(cardId, { paused: null, snoozed: null });
     try {
       this.o.workspaces.discard(cardId, this.o.board.row(cardId).branch ?? '');
     } catch (e) {
@@ -1126,7 +1150,7 @@ export class Workers {
     // work on the branch keeps its workspace, so starting again goes on from there
     const keep = this.o.workspaces.hasWork(cardId);
     if (!keep) this.o.workspaces.release(cardId);
-    this.o.board.work(cardId, { state: 'planned', need: null, detail: null, pr: null, approved_at: null, paused: null, app: null, ...(keep ? {} : { workspace: null }) });
+    this.o.board.work(cardId, { state: 'planned', need: null, detail: null, pr: null, approved_at: null, paused: null, snoozed: null, app: null, ...(keep ? {} : { workspace: null }) });
     this.o.board.log(cardId, 'state', 'owner', card.pr ? this.o.board.t.worker.stoppedPrOpen(card.pr.number) : this.o.board.t.worker.stopped);
   }
 
@@ -1160,6 +1184,34 @@ export class Workers {
     this.deliver(cardId, '', [], true);
   }
 
+  /**
+   * The owner snoozes the card's worker until `until` (ISO), whether it is in a turn or between
+   * turns: as on a pause, its session ends at once and what Obeya has for it meanwhile waits; at the
+   * time it goes on where it stopped. A worker snoozed already only gets the new time.
+   */
+  snooze(cardId: string, until: string) {
+    const card = this.card(cardId);
+    if (card.snoozed) return this.o.board.snooze(cardId, { ...card.snoozed, until, ...(card.snoozed.by === 'agent' ? { moved: true as const } : {}) }, 'owner');
+    // a message the worker had not taken in yet goes to it with the rest, after what a pause held already
+    const pending = this.live.get(cardId)?.pending;
+    const held = this.pausedOf(cardId)?.held ?? [];
+    this.end(cardId);
+    this.bump(cardId);
+    clearTimeout(this.reconnecting.get(cardId));
+    this.reconnecting.delete(cardId);
+    this.o.board.work(cardId, { paused: JSON.stringify({ held: [...held, ...(pending ? [pending] : [])] } satisfies PausedState) });
+    this.o.board.snooze(cardId, { until, by: 'owner' });
+    this.parkLater(cardId);
+  }
+
+  /** The snoozed worker wakes and goes on: at its time (`timeUp`), or because the owner wakes it now. */
+  wake(cardId: string, timeUp = false) {
+    this.card(cardId);
+    const s = this.o.board.snoozedOf(cardId);
+    if (!s || s.waiting) throw new BadRequest('notSnoozed', 'the agent is not snoozed');
+    this.deliver(cardId, '', [], true, [], timeUp);
+  }
+
   /** What the owner's pause holds for the worker, or null when it is not paused. */
   private pausedOf(cardId: string): PausedState | null {
     const paused = this.o.board.row(cardId).paused;
@@ -1175,6 +1227,20 @@ export class Workers {
       if (i.held?.length) this.releaseLater(i.id, this.o.holdGrace ?? HOLD_GRACE);
       const row = this.o.board.row(i.id);
       const landed = landedOf(row);
+      // a snoozed worker sleeps on until its time, a restart notwithstanding
+      if (row.snoozed && !(JSON.parse(row.snoozed) as Snooze).waiting) {
+        // the owner's snooze holds what Obeya has for the worker, as a pause does
+        if (row.paused) this.pausedOverRestart(i.id, landed);
+        else {
+          this.parkLater(i.id);
+          // a restart it waited for after the landing has happened: that wakes it
+          if (landed?.restarts) {
+            this.o.board.work(i.id, { landed: JSON.stringify(settled(landed)) });
+            this.deliver(i.id, 'Obeya has started again and runs main with your change now.');
+          }
+        }
+        continue;
+      }
       // the owner's pause holds across the restart
       if (row.paused) {
         this.pausedOverRestart(i.id, landed);
@@ -1319,19 +1385,28 @@ export class Workers {
    * owner's words of the log's lines `said` wait for the worker's next step while it is in a turn
    * (`takesLater`), unread until then; other words go into the session's input at once.
    */
-  private deliver(cardId: string, text: string, images: string[] = [], owner = false, said: number[] = []) {
+  private deliver(cardId: string, text: string, images: string[] = [], owner = false, said: number[] = [], timeUp = false) {
     const paused = this.pausedOf(cardId);
     if (paused && !owner) {
       this.o.board.work(cardId, { paused: JSON.stringify({ held: [...(paused.held ?? []), { text, images }] } satisfies PausedState) });
       return;
     }
+    // a snoozed worker wakes: at its time, by the owner's words, or (snoozed by itself) by whatever Obeya has for it
+    const snoozed = this.o.board.snoozedOf(cardId);
+    const woke = snoozed && !snoozed.waiting ? snoozed : null;
+    if (woke) {
+      this.o.board.unsnooze(cardId, owner && !timeUp ? 'owner' : 'obeya');
+      const live = this.live.get(cardId);
+      if (live) live.snoozed = false;
+    }
+    const wokeText = woke ? wokeNote(woke, timeUp, owner, !!text) : '';
     if (paused) {
       this.o.board.work(cardId, { paused: null });
-      this.o.board.log(cardId, 'state', 'owner', this.o.board.t.worker.resumedByOwner);
+      if (!woke) this.o.board.log(cardId, 'state', 'owner', this.o.board.t.worker.resumedByOwner);
       const held = paused.held ?? [];
-      text = [RESUMED, ...(held.length ? [`While you were paused, Obeya had this for you:\n\n${held.map((h) => h.text).join('\n\n---\n\n')}`] : []), ...(text ? [`Then:\n\n${text}`] : [])].join('\n\n');
+      text = [woke ? wokeText : RESUMED, ...(held.length ? [`While you were ${woke ? 'snoozed' : 'paused'}, Obeya had this for you:\n\n${held.map((h) => h.text).join('\n\n---\n\n')}`] : []), ...(text ? [`Then:\n\n${text}`] : [])].join('\n\n');
       images = [...held.flatMap((h) => h.images), ...images];
-    }
+    } else if (woke) text = [wokeText, text].filter(Boolean).join('\n\n');
     this.unpark(cardId);
     const stopping = this.stopping.get(cardId);
     if (stopping) {
@@ -1536,7 +1611,7 @@ export class Workers {
         // after handing over the worker's closing words repeat the handover the card shows: the
         // conversation leaves them out; after a reply its words wait to see whether work follows them
         // or they close the turn, repeating the reply
-        if (live.handedOver) break;
+        if (live.handedOver || live.snoozed) break;
         if (live.answered) live.held = clip(e.text, 12000);
         else this.o.board.log(cardId, 'say', 'worker', clip(e.text, 12000));
         break;
@@ -1595,8 +1670,11 @@ export class Workers {
     const handedOver = live.handedOver;
     const acted = live.acted || waited;
     const closing = live.held;
+    const snoozed = live.snoozed;
     live.handedOver = false;
     live.answered = false;
+    // a snooze holds across a turn a message from Obeya still starts (a restart notice): its session ends after that one
+    if (!more) live.snoozed = false;
     live.held = undefined;
     live.acted = false;
     // a turn that took in the restart pauses for it, whatever else keeps the worker busy
@@ -1605,6 +1683,8 @@ export class Workers {
     if (!card) return;
     if (closing !== undefined) this.o.board.log(cardId, 'closing', 'worker', closing);
     const row = this.o.board.row(cardId);
+    // it snoozed: its session ends (its background work with it), and Obeya resumes it at the time
+    if (snoozed && !handedOver && !more && row.snoozed) return this.end(cardId);
     if (background > 0) {
       // the usage limit cut the worker's turn off while its work runs on: the card says so, and the
       // worker goes on once it lifts, without waiting for that work to wake it
@@ -1746,7 +1826,7 @@ export class Workers {
    */
   private waitsForOwner(cardId: string): boolean {
     const card = this.o.board.item(cardId);
-    if (!card || !(card.state === 'waiting' || (card.state === 'inPr' && card.pr) || card.paused)) return false;
+    if (!card || !(card.state === 'waiting' || (card.state === 'inPr' && card.pr) || card.paused || card.snoozed)) return false;
     // paused while taking in the owner's words on its handover, nothing of it runs either
     if ((answering(card) && !card.paused) || this.live.get(cardId)?.busy) return false;
     const row = this.o.board.row(cardId);
@@ -1871,7 +1951,7 @@ export class Workers {
       }
       const row = this.o.board.row(cardId);
       const card = this.o.board.item(cardId);
-      if (!current() || !card || !row.workspace || !row.session_id) return;
+      if (!current() || !card || !row.workspace || !row.session_id || card.snoozed) return;
       const working = busy || card.state === 'working' || card.state === 'inPr' || answering(card) || !!row.landed;
       if (!pending && !working) return;
       this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.hostBack(there.host.name));
@@ -1983,6 +2063,11 @@ export class Workers {
     const handOver = () => {
       live.handedOver = true;
       live.nudged = false;
+      // a question or a handover after a snooze in the same turn: the card waits for the owner instead
+      if (live.snoozed) {
+        live.snoozed = false;
+        this.o.board.work(cardId, { snoozed: null });
+      }
     };
     // a session the owner stopped or replaced may still call its tools: those calls change nothing
     const current = (tools: AgentTool[]): AgentTool[] =>
@@ -2218,6 +2303,25 @@ export class Workers {
         },
       },
       {
+        name: 'snooze',
+        description: `Snooze until a point in time further off than a background command can wait (a check at midnight, a test that runs for days, a report on the 31st), when there is nothing to do until then. until: that time, ISO 8601 with your timezone's offset (2026-10-31T08:00:00+01:00); why: what you do then, in a few words in ${language}, shown on the card. Your session ends with your turn, and whatever you still run in the background with it; workspace and branch stay. Obeya resumes this session at that time, or earlier with a note from the owner or whatever else comes for you (a review, the landing). For checkpoints one after the other, snooze to the next one each time you wake. Then end your turn.`,
+        schema: { until: z.string(), why: z.string() },
+        run: ({ until, why }) => {
+          const card = this.o.board.item(cardId);
+          if (!card) return 'Not snoozed: the card is gone.';
+          if (live.handedOver) return 'Not snoozed: you asked or handed over in this turn, so the card waits for the owner.';
+          if (!(card.state === 'working' || card.state === 'inPr' || card.finishing)) return 'Not snoozed: the card waits for the owner; their answer or approval comes as your next message.';
+          const at = Date.parse(String(until));
+          if (Number.isNaN(at)) return 'Not snoozed: give the time as ISO 8601 with your timezone offset (2026-10-31T08:00:00+01:00).';
+          if (at <= Date.now()) return `Not snoozed: that time has passed (it is ${new Date().toISOString()} now).`;
+          if (at > Date.now() + SNOOZE_LIMIT) return 'Not snoozed: snooze for a year at most.';
+          live.snoozed = true;
+          live.nudged = false;
+          this.o.board.snooze(cardId, { until: new Date(at).toISOString(), by: 'agent', ...(String(why).trim() ? { why: clip(String(why).trim(), 200) } : {}) });
+          return `Snoozed until ${MESSAGES.en.at(at)}. End your turn now; Obeya resumes this session then.`;
+        },
+      },
+      {
         name: 'app_running',
         description: `The app runs in your workspace and opens in a browser: its address as you open it (http://localhost:5173, say), so the owner can open it from the card to try it by hand while it runs. Again when the address changes; an empty url once you stop it.`,
         schema: { url: z.string() },
@@ -2284,6 +2388,7 @@ export class Workers {
     const t = this.o.board.t;
     const q: Question = { text: t.worker.permission(permissionWhat(request.name, request.input, t), request.reason && clip(request.reason, 600)), options: [t.worker.allow, t.worker.deny] };
     this.o.board.log(cardId, 'question', 'worker', formatQuestion(q, this.o.board.language()));
+    this.wokenForOwner(cardId);
     this.o.board.work(cardId, { state: 'waiting', need: 'question', detail: JSON.stringify({ question: q, permission: asked }) });
     this.setBusy(live, false);
     return new Promise((resolve) => {
@@ -2298,7 +2403,18 @@ export class Workers {
   }
 
   private toOwner(cardId: string, q: Question) {
+    this.wokenForOwner(cardId);
     this.o.board.work(cardId, { state: 'waiting', need: 'question', detail: JSON.stringify({ question: q }) });
+  }
+
+  /**
+   * The card needs the owner now (its pull request closed, a tool call to allow): a snooze of its
+   * worker's is over, so the card reaches them. One the owner snoozed stays paused, holding what
+   * came for it meanwhile, until their answer lets it go on.
+   */
+  private wokenForOwner(cardId: string) {
+    const s = this.o.board.snoozedOf(cardId);
+    if (s && !s.waiting) this.o.board.unsnooze(cardId, 'obeya');
   }
 
   private pendingQuestion(cardId: string): string | undefined {
@@ -2343,7 +2459,7 @@ Rules:
 - Commit your work on your branch in this workspace. Do not push, do not open pull requests, do not switch branches.
 - Follow the repository's own instructions (CLAUDE.md and docs).
 - Owner-facing text (report, reply, ask, ${prototype ? 'propose_build' : 'propose_card'}, ready_for_review) is in ${language}, short and concrete. What you write between tool calls also shows on the card for the owner, folded under your next message: keep it brief and in ${language} too.
-- Wait for anything external (a deploy, a CI run, a point in time, a process to finish) in the background: run_in_background or Monitor, then end your turn; Obeya wakes you when it finishes or fires. Never wait with sleep or a polling loop in the foreground: a note from the owner reaches you only once the running command is done.
+- Wait for anything external (a deploy, a CI run, a process to finish) in the background: run_in_background or Monitor, then end your turn; Obeya wakes you when it finishes or fires. A point in time further off than a background command can wait (two hours), you snooze until (snooze). Never wait with sleep or a polling loop in the foreground: a note from the owner reaches you only once the running command is done.
 - When a note or feedback from the owner arrives, answer it with reply. If it is unclear what they want, ask.
 `.trim() + (preferences ? `\n\n${preferences}` : '');
   }

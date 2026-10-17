@@ -71,6 +71,7 @@ test('what an Obeya before the release kept in earlier shapes is in today’s', 
     s.db.run('ALTER TABLE cards DROP COLUMN waiting_since');
     s.db.run('DROP TABLE trusted_commands');
     s.db.run('ALTER TABLE talk DROP COLUMN held');
+    s.db.run('ALTER TABLE cards DROP COLUMN snoozed');
     s.db.run(`PRAGMA user_version = ${RELEASED}`);
     s.db.close();
 

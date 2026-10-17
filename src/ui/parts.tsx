@@ -8,6 +8,7 @@ import { api } from './api';
 import type { Cam } from './camera';
 import type { Shape } from './groups';
 import { Doc, Inline, plain } from './markdown';
+import { ClockMark, snoozeWho } from './snooze';
 import { becomesLabel, clock, shortDay, stateLabel, t } from './strings';
 
 /** The first line of a card's text that says something (not a bare "Ziel" label, as briefs start). */
@@ -19,7 +20,8 @@ const firstLine = (md: string) =>
 
 /** What of a workstream planned again has landed: its pull request, else its commit. */
 /** The state whose colour an open card wears: a demo whose worker takes in the owner's answer is at work. */
-export const shownState = (i: Item) => (i.kind === 'question' ? 'question' : answering(i) ? 'working' : i.state);
+/** The colour a card's state gives its unfolded sheet: a snoozed card's is pencil grey, as on the canvas. */
+export const shownState = (i: Item) => (i.snoozed ? 'muted' : i.kind === 'question' ? 'question' : answering(i) ? 'working' : i.state);
 
 export const landedRef = (l: NonNullable<Item['landedPart']>) => (l.pr ? `PR #${l.pr.number}` : (l.commit?.slice(0, 7) ?? ''));
 
@@ -85,6 +87,7 @@ export const cardClass = (item: Item, underway?: string) =>
     answering(item) && 'answering',
     finishingUp(item) && 'finishing',
     item.paused && 'paused',
+    item.snoozed && 'snoozed',
     item.queue && 'queued',
   ]
     .filter(Boolean)
@@ -109,6 +112,7 @@ export function CardFace({ item, where, underway, since }: { item: Item; where?:
         ? t.pr.short(item.pr.number, item.pr.checks.filter((c) => c.state === 'failure').length, item.pr.conflict, item.pr.ready, item.pr.held?.score)
         : undefined;
   const meta =
+    (item.snoozed ? snoozeWho(item.snoozed) : undefined) ??
     (item.limitedUntil ? t.limitedUntil(clock(item.limitedUntil)) : undefined) ??
     (item.kind === 'question' && item.thread ? t.question.count(item.thread.answers, item.thread.files) : undefined) ??
     item.question?.text ??
@@ -127,6 +131,7 @@ export function CardFace({ item, where, underway, since }: { item: Item; where?:
       <div className={item.title ? 'ttl' : 'ttl untitled'}>{shownTitle(item)}</div>
       {meta && <div className="meta">{meta}</div>}
       <div className="state">
+        {item.snoozed && !underway && <ClockMark />}
         {underway ?? stateLabel(item)}
         {item.landedPart && <span className="landed-part">{t.landedPart.short} · {landedRef(item.landedPart)}</span>}
         {item.buildProposal && ` · ${t.idea.proposesBuild}`}
@@ -878,7 +883,7 @@ export function Minimap({
             width={b.w * k}
             height={b.h * k}
             rx={item.kind === 'project' ? 1.5 : 0.5}
-            style={{ fill: item.kind === 'project' ? 'var(--container-line)' : `var(--${item.state})` }}
+            style={{ fill: item.kind === 'project' ? 'var(--container-line)' : `var(--${item.snoozed ? 'muted' : item.state})` }}
             opacity={item.kind === 'project' || needsYou(item) ? 1 : 0.55}
           />
         ))}

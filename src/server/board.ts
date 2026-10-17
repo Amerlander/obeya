@@ -26,6 +26,7 @@ import {
   type EarlierDemo,
   type ErrorCode,
   type Group,
+  type Snooze,
   type Idea,
   type Item,
   type Mock,
@@ -1100,6 +1101,7 @@ export class Board {
       const background = inTurn.get(i.id);
       return background ? { ...i, inTurn: true, ...(background.length ? { background } : {}) } : i;
     });
+    items = this.withoutStaleSnoozes(items);
     items = this.withWaitingSince(items);
     const limited = (key: string) => {
       const until = this.limits.get(key);
@@ -1128,6 +1130,41 @@ export class Board {
       ...(planDirs.length ? { planDirs } : {}),
     };
     return this.cache;
+  }
+
+  /**
+   * A card the owner snoozed while it waited for them that no longer waits for them (they answered
+   * it after all, its proposal is reworked, its idea parked) is snoozed no longer.
+   */
+  private withoutStaleSnoozes(items: Item[]): Item[] {
+    return items.map((i) => {
+      if (!i.snoozed?.waiting) return i;
+      const { snoozed: _, ...awake } = i;
+      if (needsYou(awake)) return i;
+      this.store.update(i.id, { snoozed: null });
+      return awake;
+    });
+  }
+
+  /** The card's snooze, or null when it is not snoozed. */
+  snoozedOf(cardId: string): Snooze | null {
+    const s = this.own(cardId).snoozed;
+    return s ? (JSON.parse(s) as Snooze) : null;
+  }
+
+  /** Snoozes the card until `until` (ISO), as `s` says, with the line in its conversation by whoever snoozed it (or changed the time). */
+  snooze(cardId: string, s: Snooze, by: 'agent' | 'owner' = s.by) {
+    this.work(cardId, { snoozed: JSON.stringify(s) });
+    this.log(cardId, 'state', by === 'agent' ? 'worker' : 'owner', this.t.worker.snoozed(this.t.at(Date.parse(s.until)), s.why));
+  }
+
+  /** The card is snoozed no longer, with the line that it woke: at its time (`obeya`), or as the owner woke it. Returns the snooze it had. */
+  unsnooze(cardId: string, by: 'owner' | 'obeya'): Snooze | null {
+    const s = this.snoozedOf(cardId);
+    if (!s) return null;
+    this.work(cardId, { snoozed: null });
+    this.log(cardId, 'state', by, this.t.worker.woke(s.by));
+    return s;
   }
 
   /**
@@ -1865,6 +1902,7 @@ function work(r: CardRow): Partial<Item> {
     ...(detail.noChange && handed ? { noChange: true } : {}),
     ...(detail.lands && handed ? { lands: detail.lands } : {}),
     ...(r.paused ? { paused: true } : {}),
+    ...(r.snoozed ? { snoozed: JSON.parse(r.snoozed) as Snooze } : {}),
     ...(r.app && r.workspace && !r.parked ? { app: r.app } : {}),
   };
 }

@@ -2,7 +2,7 @@
 
 import { createContext, Fragment, type ReactNode, type RefObject, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { agentListens, answering, askable, type BackgroundTask, buildableOn, type CardAction, chapterAt, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, type EarlierDemo, EXPORT_HTML_MAX, finished, finishedArchivable, finishingUp, handedOver, type Item, type Mock, type NextStep, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, type Spot, started, stopped, stoppedArchivable } from '../core/types';
+import { agentListens, answering, askable, type BackgroundTask, buildableOn, type CardAction, chapterAt, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, type EarlierDemo, EXPORT_HTML_MAX, finished, finishedArchivable, finishingUp, handedOver, type Item, type Mock, type NextStep, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, snoozable, type Spot, started, stopped, stoppedArchivable } from '../core/types';
 import { mockPage } from '../core/frame';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
 import { answerText, toggle } from './answer';
@@ -24,8 +24,9 @@ import { type Box, onto, ZOOM_EASE, ZOOM_MS, zoomBox } from './zoomBox';
 import { AttachButton, imageUrl, ShotStrip, Shots, useShotInput } from './shots';
 import { useStickToEnd } from './stickToEnd';
 import { dismissPlace, type Place, seekTo, showsVersions, usePlace, videoOf, watch } from './spot';
+import { SnoozeLine, SnoozeMenu, snoozeWho } from './snooze';
 import { becomesLabel, clock as time, errorText, failText, shortDay, stateLabel, t } from './strings';
-import { agentWorks, demoHandover, koordinatorReads, ownerField, parseQuestion, talkAlone, talkTurns, type Turn, waitsFirstStart, withoutOpen, worked as isWorked } from './talk';
+import { agentWorks, demoHandover, koordinatorReads, ownerField, parseQuestion, snoozeLine, talkAlone, talkTurns, type Turn, waitsFirstStart, withoutOpen, worked as isWorked } from './talk';
 import { PageChangeList } from './page-changes';
 import { WishReplyLink } from './wish';
 
@@ -333,9 +334,13 @@ export function Detail(p: Props) {
     <>
       {kind && <div className="p-kind">{kind}</div>}
       {editable ? <ManualTitle item={item} onEdit={p.onEdit} /> : <div className="p-title">{shownTitle(item)}</div>}
-      <div className={['p-state', finishingUp(item) && 'finishing', item.paused && 'paused'].filter(Boolean).join(' ')}>
+      <div className={['p-state', finishingUp(item) && 'finishing', (item.paused || item.snoozed) && 'paused'].filter(Boolean).join(' ')}>
         ● {stateLabel(item)}
-        {item.statusLine && (item.state === 'working' || item.state === 'inPr' || item.finishing || answering(item)) && <span className="p-status"> · {item.statusLine}</span>}
+        {item.snoozed ? (
+          <span className="p-status"> · {snoozeWho(item.snoozed)}</span>
+        ) : (
+          item.statusLine && (item.state === 'working' || item.state === 'inPr' || item.finishing || answering(item)) && <span className="p-status"> · {item.statusLine}</span>
+        )}
         <Limited item={item} />
         {archivedOn(item)}
       </div>
@@ -499,7 +504,7 @@ export function Detail(p: Props) {
       )}
 
       {/* the decisions go below both columns, as on an idea or a proposal */}
-      {worked && (running || archivable || halted) && (
+      {worked && (running || archivable || halted || snoozable(item)) && (
         <div className="actions">
           {halted && !item.archivedAt && (
             <button className="btn primary" title={t.startAgainHint} onClick={() => act({ action: 'start' }, { close: false })}>
@@ -507,6 +512,7 @@ export function Detail(p: Props) {
             </button>
           )}
           {review ? prototypeActions || approveButton : (running || (halted && !item.archivedAt)) && prototypeActions}
+          <Later item={item} act={act} />
           {running && (
             <button className="btn" title={t.stopHint} onClick={() => act({ action: 'stop' }, { close: true, ack: t.stopped })}>
               {t.stop}
@@ -547,6 +553,12 @@ const PlayMark = () => (
   </svg>
 );
 
+/** „Später …“ in a card's action row, on any card the owner can snooze that is not snoozed yet (a snoozed one changes its time on its line in the conversation). */
+function Later({ item, act }: { item: Item; act: (a: CardAction, done: ActDone) => Promise<void> }) {
+  if (!snoozable(item) || item.snoozed) return null;
+  return <SnoozeMenu label={t.snooze.button} onSnooze={(until) => void act({ action: 'snooze', until }, { close: false })} />;
+}
+
 // ------------------------------------------------------------------ ideas
 
 /**
@@ -562,8 +574,9 @@ function IdeaView({ item, act, run, listener, onDelete, onTell }: { item: Item; 
   const btn = (step: NextStep['step']) => (next ? (next.step === step ? 'btn primary suggested' : 'btn') : step === 'build' ? 'btn primary' : 'btn');
   return (
     <>
-      <div className={finishingUp(item) ? 'p-state finishing' : 'p-state'}>
+      <div className={['p-state', finishingUp(item) && 'finishing', item.snoozed && 'paused'].filter(Boolean).join(' ')}>
         ● {stateLabel(item)}
+        {item.snoozed && <span className="p-status"> · {snoozeWho(item.snoozed)}</span>}
         {idea.thinking && <span className="p-status"> · {t.author.explorer} {t.idea.thinking}</span>}
         <Limited item={item} />
         {archivedOn(item)}
@@ -646,6 +659,7 @@ function IdeaView({ item, act, run, listener, onDelete, onTell }: { item: Item; 
                 {t.idea.drop}
               </button>
             )}
+            <Later item={item} act={act} />
             {/* not while a prototype of it is on the canvas */}
             {idea.status !== 'open' && !item.prototypes?.some((p) => !p.archivedAt) && <ArchiveButton item={item} run={run} />}
             <button className="btn danger" onClick={onDelete}>
@@ -791,6 +805,7 @@ function ProposalView({
         <button className="btn" onClick={() => act({ action: 'dismiss' }, { close: true, ack: t.dismissed })}>
           {t.dismiss}
         </button>
+        <Later item={item} act={act} />
       </div>
       {questions.length > 0 && !revising && <p className="hint">{t.proposalQuestionsHint}</p>}
     </>
@@ -940,7 +955,7 @@ function Conversation({
   // stands, also while the worker's background work keeps its turn open
   const waits = item.state === 'waiting' && !!item.question;
   // a paused agent's steps stay where they were, in its bubble standing still
-  const paused = !past && !!item.paused;
+  const paused = !past && !!item.paused && !item.snoozed;
   const asked = JSON.stringify(item.idea?.questions ?? asking ?? []);
   const onScroll = useStickToEnd(box, `${events?.at(-1)?.id}|${working}|${paused}|${asked}`, events);
   // a proposal's open questions stand at the end, where they are answered, rather than where they were asked
@@ -972,10 +987,13 @@ function Conversation({
   // the comments on places in the demo video Obeya holds back while the owner watches: each can be
   // deleted, and under the last the owner can send them without watching to the end
   const held = item.held ?? [];
+  // the line where the card was snoozed, while it still is, offers to wake it or change the time
+  const snoozedAt = item.snoozed && !past ? turns.shown.findLast((x) => snoozeLine(x.e))?.e.id : undefined;
   const line = (turn: Turn) => (
     <Fragment key={turn.e.id}>
       <Line
         turn={turn}
+        snoozed={turn.e.id === snoozedAt ? item : undefined}
         demoQuestion={turn === handover ? item.demo : undefined}
         quoted={turn.e.replyTo ? byId.get(turn.e.replyTo) : undefined}
         onReply={onReply}
@@ -1157,8 +1175,10 @@ function Scope({ files }: { files?: string[] }) {
 }
 
 /** A state change or an error between the messages, or a message. */
-function Line({ turn, ...rest }: { turn: Turn; demoQuestion?: Demo; quoted?: CardEvent; onReply?: (e: CardEvent) => void; onDelete?: () => void }) {
-  return turn.line ? (
+function Line({ turn, snoozed, ...rest }: { turn: Turn; snoozed?: Item; demoQuestion?: Demo; quoted?: CardEvent; onReply?: (e: CardEvent) => void; onDelete?: () => void }) {
+  return snoozed ? (
+    <SnoozeLine item={snoozed} e={turn.e} at={time(turn.e.at)} />
+  ) : turn.line ? (
     <div className={`note ev-${turn.e.kind}`} title={turn.e.code ? turn.e.text : undefined}>
       {time(turn.e.at)} · {eventText(turn.e)}
     </div>
@@ -2114,7 +2134,7 @@ function TaskTalk({
         field
           ? {
               key: `${item.state}:${item.need ?? ''}:${field}:${key}`,
-              placeholder: { note: item.paused ? t.pause.compose : askable(item) || item.followUp ? t.compose.followUp : agentWorks(item) ? t.compose.working : inQueue(item) ? t.compose.queued : t.compose.idle, answer: t.compose.question, feedback: t.compose.review, demo: t.compose.demo, discuss: '', revise: t.compose.revise }[field],
+              placeholder: { note: item.snoozed && !item.snoozed.waiting ? t.snooze.compose : item.paused ? t.pause.compose : askable(item) || item.followUp ? t.compose.followUp : agentWorks(item) ? t.compose.working : inQueue(item) ? t.compose.queued : t.compose.idle, answer: t.compose.question, feedback: t.compose.review, demo: t.compose.demo, discuss: '', revise: t.compose.revise }[field],
               listener,
               onWords: tell(field),
               onPicked: (text, [picks = []], images, replyTo) => act({ action: 'answer', text, picks, images, ...(replyTo ? { replyTo } : {}) }, { close: false }),

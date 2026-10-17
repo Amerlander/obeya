@@ -1080,3 +1080,38 @@ describe("wishes for Obeya's makers", () => {
     expect(answer.wish).toEqual({ said: 'sortier die Karten nach Datum', answer: 'Das kann Obeya nicht.' });
   });
 });
+
+describe('snoozing by voice', () => {
+  test('„stell das bis morgen früh zurück“ snoozes the card until that local time; wake brings a snoozed one back; the card list says it is snoozed', async () => {
+    const a = board.create({ title: 'Export', x: 0, y: 0 });
+    board.work(a.id, { state: 'waiting', need: 'question', detail: JSON.stringify({ question: { text: 'CSV?', options: [] } }) });
+    const k = commander();
+    const next = new Date(Date.now() + 86_400_000);
+    const p = (n: number) => String(n).padStart(2, '0');
+    const local = `${next.getFullYear()}-${p(next.getMonth() + 1)}-${p(next.getDate())}T08:00`;
+    const { heard, brief } = await say(k, 'stell Export bis morgen früh zurück', 'act', { actions: [{ do: 'snooze', card: 'K1', until: local }], confirm: '„Export“ bis morgen 8 Uhr zurückgestellt.' });
+    expect(brief).toContain('Now: ');
+    k.arm(heard.token!);
+    await until(() => executed.length > 0);
+    expect(executed).toEqual([{ do: 'snooze', card: a.id, until: new Date(local).toISOString() }]);
+
+    board.snooze(a.id, { until: new Date(local).toISOString(), by: 'owner', waiting: true });
+    const back = await say(k, 'hol Export zurück', 'act', { actions: [{ do: 'wake', card: 'K1' }], confirm: '„Export“ ist zurück.' });
+    expect(back.brief).toContain('snoozed by the owner until');
+    k.arm(back.heard.token!);
+    await until(() => executed.length > 1);
+    expect(executed[1]).toEqual({ do: 'wake', card: a.id });
+  });
+
+  test('a time that passed, or a card neither at work nor waiting, is refused', async () => {
+    board.create({ title: 'Export', x: 0, y: 0 });
+    const k = commander();
+    const s = k.hear('stell Export zurück', {});
+    await settle();
+    const r = runtime.last.call('act', { actions: [{ do: 'snooze', card: 'K1', until: '2030-01-01T08:00' }], confirm: 'x' });
+    expect(String(r)).toContain('nothing to snooze');
+    runtime.last.call('reply', { confirm: 'Geht nicht.' });
+    runtime.last.emit({ type: 'idle' });
+    await s;
+  });
+});

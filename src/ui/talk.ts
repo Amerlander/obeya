@@ -69,7 +69,7 @@ const place = (e: CardEvent, prev: CardEvent | undefined): 'owner' | 'agent' | '
     case 'denied':
       return 'line';
     case 'state':
-      return e.author === 'explorer' || (e.author === 'obeya' && !MILESTONE.test(e.text) && !limitLine(e)) ? 'step' : 'line';
+      return e.author === 'explorer' || (e.author === 'obeya' && !MILESTONE.test(e.text) && !limitLine(e) && !wokeLine(e)) ? 'step' : 'line';
     default:
       return 'step';
   }
@@ -132,7 +132,7 @@ export function talkTurns(all: CardEvent[], opts: { asking?: Question; over?: bo
     else if (where === 'line' || where === 'aside') {
       // what the agent did until the owner or the usage limit paused it stays above that line once it
       // went on; while it is paused there, its bubble shows it
-      if ((pauseLine(e) && !(opts.paused && e === lastPause)) || (limitLine(e) && !(limitHolds && e === lastLimit))) close();
+      if ((pauseLine(e) && !(opts.paused && e === lastPause)) || snoozeLine(e) || (limitLine(e) && !(limitHolds && e === lastLimit))) close();
       shown.push({ e, steps: [], ...(where === 'line' ? { line: true as const } : {}) });
     }
     else if (where === 'agent') {
@@ -175,6 +175,12 @@ function repliesLater(events: CardEvent[], i: number): boolean {
 
 /** The line that the owner paused the card's agent. */
 const pauseLine = (e: CardEvent) => e.kind === 'state' && e.author === 'owner' && LANGUAGES.some((l) => e.text === MESSAGES[l].worker.pausedByOwner);
+
+/** The line that the card was snoozed until a time (or its time changed), by its agent or the owner. */
+export const snoozeLine = (e: CardEvent) => e.kind === 'state' && (e.author === 'worker' || e.author === 'owner') && LANGUAGES.some((l) => e.text.startsWith(MESSAGES[l].worker.snoozed('\0').split('\0')[0]!));
+
+/** The line that a snoozed card woke, at its time or as the owner woke it. */
+const wokeLine = (e: CardEvent) => e.kind === 'state' && LANGUAGES.some((l) => e.text === MESSAGES[l].worker.woke('agent') || e.text === MESSAGES[l].worker.woke('owner'));
 
 /** Obeya's line that the usage limit stopped the agent's turn, and when it goes on. */
 const limitLine = (e: CardEvent) =>
@@ -330,7 +336,7 @@ export function unseen(events: CardEvent[], seen = -1): number {
  * Whether the card's agent is at work on it, so its conversation ends with the agent at work: an
  * agent working on something, which the owner can pause (`pausable`), or a proposal reworked.
  */
-export const agentWorks = (i: Pick<Item, 'kind' | 'state' | 'idea' | 'thread' | 'inTurn' | 'paused' | 'proposal'>) =>
+export const agentWorks = (i: Pick<Item, 'kind' | 'state' | 'idea' | 'thread' | 'inTurn' | 'paused' | 'snoozed' | 'proposal'>) =>
   pausable(i) || (i.state === 'proposal' && !!i.proposal?.revising);
 
 /**

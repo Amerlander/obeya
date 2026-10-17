@@ -97,6 +97,8 @@ export interface CardRow {
   app: string | null;
   /** Since when the card waits for the owner (`needsYou`), kept while it does; null while it does not. */
   waiting_since: string | null;
+  /** JSON, while the card is snoozed until a point in time (`Snooze`): Obeya wakes it then. */
+  snoozed: string | null;
 }
 
 /** Words the usage limit keeps the Koordinator from reading (`talk.held`): until when, and how it reads them then (`Commander`'s). */
@@ -372,6 +374,8 @@ export const MIGRATIONS = [
   'ALTER TABLE devices ADD COLUMN push TEXT;',
   // words the usage limit kept the Koordinator from reading, until it lifts (JSON `HeldTalk`)
   'ALTER TABLE talk ADD COLUMN held TEXT;',
+  // a card set aside until a point in time, by its worker or the owner (JSON `Snooze`)
+  'ALTER TABLE cards ADD COLUMN snoozed TEXT;',
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter, wish';

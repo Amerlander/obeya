@@ -55,8 +55,8 @@ export interface BackgroundTask {
   since: number;
 }
 
-export const pausable = (i: Pick<Item, 'kind' | 'state' | 'idea' | 'thread' | 'inTurn' | 'paused'>) =>
-  !i.paused && (i.kind === 'question' ? !!i.thread?.thinking : i.state === 'idea' && i.idea ? i.idea.thinking : !!i.inTurn);
+export const pausable = (i: Pick<Item, 'kind' | 'state' | 'idea' | 'thread' | 'inTurn' | 'paused' | 'snoozed'>) =>
+  !i.paused && !(i.snoozed && !i.snoozed.waiting) && (i.kind === 'question' ? !!i.thread?.thinking : i.state === 'idea' && i.idea ? i.idea.thinking : !!i.inTurn);
 
 /**
  * A finished card an agent worked on, on the canvas, with no agent on it now: what the owner asks
@@ -151,7 +151,18 @@ export function titleFrom(body: string): string {
  * owner's merge, or is an open idea whose agent has replied and is done.
  */
 export const needsYou = (i: Item) =>
-  (i.state === 'waiting' && !answering(i) && !i.landing) || (i.state === 'proposal' && !i.proposal?.revising) || (i.state === 'inPr' && !!i.pr?.ready) || (!!i.idea && i.idea.status === 'open' && i.idea.yourTurn && !i.idea.thinking);
+  !i.snoozed &&
+  ((i.state === 'waiting' && !answering(i) && !i.landing) || (i.state === 'proposal' && !i.proposal?.revising) || (i.state === 'inPr' && !!i.pr?.ready) || (!!i.idea && i.idea.status === 'open' && i.idea.yourTurn && !i.idea.thinking));
+
+/** A worker on the card is at work (whether or not in a turn right now): it has started on the card, opens or follows its pull request, finishes after the landing, or takes in the owner's words on its handover. */
+const workerAtWork = (i: Item) => i.kind === 'task' && (i.state === 'working' || i.state === 'inPr' || !!i.finishing || answering(i));
+
+/**
+ * A card the owner can snooze until a point in time („Später …“): one at work (its worker stops
+ * until then, as on a pause), or one that waits for them (it leaves them until then); a snoozed
+ * card's time can be changed.
+ */
+export const snoozable = (i: Item) => !i.archivedAt && (!!i.snoozed || needsYou(i) || workerAtWork(i));
 
 /** Answers in the Koordinator's sheet the owner has not seen yet. */
 export const unreadAnswers = (talk: Talk[]) => talk.filter((x) => x.unread).length;
@@ -284,6 +295,8 @@ export interface Item {
    * the owner's next words to it.
    */
   paused?: true;
+  /** Set aside until a point in time: nothing of its agent runs, and it does not wait for the owner meanwhile. */
+  snoozed?: Snooze;
   /**
    * Where the app in the card's workspace runs, as its worker opens it (`http://localhost:5173`):
    * while the worker says it runs and Obeya has not stopped it. The card offers it to the owner to
@@ -307,6 +320,24 @@ export interface Item {
   becomesProject?: boolean;
   /** The group the card belongs to (a `Group` id); a workstream's is its project's. */
   group?: string;
+}
+
+/**
+ * A card set aside until a point in time (`CardRow.snoozed`): by its worker, which has nothing to do
+ * until then (a test that runs for days, a check at midnight), or by the owner. Obeya holds the time
+ * and wakes it then; the owner's words, „Jetzt zurückholen“, or what Obeya has for an agent that
+ * snoozed itself wake it earlier.
+ */
+export interface Snooze {
+  /** When it wakes (ISO). */
+  until: string;
+  by: 'agent' | 'owner';
+  /** What the agent does once it wakes, in its words. */
+  why?: string;
+  /** It waited for the owner when they snoozed it: it comes back to them at the time, and nothing goes to its agent. */
+  waiting?: true;
+  /** The owner changed the time its agent snoozed until: the agent hears so when it wakes. */
+  moved?: true;
 }
 
 /**
@@ -892,6 +923,13 @@ export type CardAction =
   /** The worker stops at once and goes on later where it stopped (`resume`, or the owner's next words to it). */
   | { action: 'pause' }
   | { action: 'resume' }
+  /**
+   * Set aside until `until` (ISO): a card at work stops until then as on a pause, one waiting for the
+   * owner leaves them until then. On a snoozed card, it changes the time.
+   */
+  | { action: 'snooze'; until: string }
+  /** A snoozed card wakes now. */
+  | { action: 'wake' }
   /** `images`: ids of screenshots uploaded before (`POST /api/c/<canvas>/images`); with them the text may be empty. */
   /** `spoken`: the words came through speech recognition, which the agent is told. */
   /** `replyTo`: the message of the card's conversation the words reply to (`CardEvent.replyTo`). */
@@ -993,6 +1031,12 @@ export type ErrorCode =
   | 'noAgent'
   /** Resuming an agent the owner has not paused. */
   | 'notPaused'
+  /** Snoozing a card that is neither at work nor waiting for the owner. */
+  | 'notSnoozable'
+  /** Waking a card that is not snoozed. */
+  | 'notSnoozed'
+  /** A time to snooze until that has passed, or lies more than a year ahead. */
+  | 'snoozeTime'
   | 'noQuestion'
   | 'notReady'
   /** Deleting a comment on the demo video: it is no longer held back, the worker has it. */

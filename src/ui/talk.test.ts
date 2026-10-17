@@ -465,3 +465,19 @@ test("a card's messages count as unseen after the last one seen, and never befor
   expect(unseen(all, handover.id)).toBe(0);
   expect(unseen([...all, ev('say', 'owner', 'Danke')])).toBe(0);
 });
+
+test('the snooze is a line, with what the agent did before it closed above it, and waking is a line too', () => {
+  const read = ev('activity', 'worker', '$ ha automation reload');
+  const said = ev('say', 'worker', 'Kurz nach Mitternacht sehe ich nach.');
+  const snoozed = ev('state', 'worker', 'Zurückgestellt bis So 18.10., 00:05 · Prüfen');
+  const woke = ev('state', 'obeya', 'Wieder da (vom Agenten zurückgestellt)');
+  const now = ev('activity', 'worker', '$ ha state fan');
+  const t = talkTurns([read, said, snoozed, woke, now]);
+  expect(t.shown.map((x) => x.e)).toEqual([said, snoozed, woke]);
+  expect(t.shown[0]).toMatchObject({ steps: [read] });
+  expect(t.shown[1]).toMatchObject({ line: true });
+  expect(t.shown[2]).toMatchObject({ line: true });
+  expect(t.pending).toEqual([now]);
+  // a snoozed agent offers no pause, nor shows at work
+  expect(pausable({ kind: 'task', state: 'working', inTurn: true, snoozed: { until: '2026-10-18T00:05:00Z', by: 'agent' } })).toBe(false);
+});

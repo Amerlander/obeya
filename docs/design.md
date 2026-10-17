@@ -25,7 +25,7 @@ Contents:
 - [Card lifecycle](#card-lifecycle) — proposals, at work, waiting for approval, approval and
   landing, live and done, archive, projects end
 - [Communication](#communication) — a worker's tools, turns that end without a handover, pausing an
-  agent, waiting without blocking, refused and confirmed tool calls, notes and replies, the
+  agent, snoozing a card, waiting without blocking, refused and confirmed tool calls, notes and replies, the
   conversation, reading order, replying to a message, the task as first message, card layout,
   screenshots, marking screenshots, questions go to the owner
 - [The canvas](#the-canvas) — the bar, creating cards, cards on the canvas, moving around, unfolding
@@ -732,6 +732,8 @@ A worker has its tools served in-process:
 - `ready_for_review(summary, demo)`, whose summary is the report the owner reads.
 - `app_running(url)`, where the app in its workspace opens in a browser, for the owner to try it by
   hand (see Trying the app by hand); in a workspace on another machine, Obeya forwards its port.
+- `snooze(until, why)`, when it has nothing to do until a point in time further off than a
+  background command can wait (see Snoozing a card).
 - `to_obeya(request)`, for what the owner's words to it ask of Obeya rather than of the worker (see
   Voice in).
 
@@ -845,12 +847,69 @@ a message it had not taken in yet wait and go along then.
 „Stoppen“ stays in the card's action row: it ends the agent and plans the card again, a decision
 about the card.
 
+### Snoozing a card
+
+A card can be set aside until a point in time: by its worker, which has nothing to do until then (a
+test that runs for two weeks, a check at midnight, a report on the 31st), or by the owner. Obeya holds
+the time (`snoozed` on the card's row: until when, by whom, what the agent does then), not the
+agent's session. Only a point in time, no condition: waiting until CI is green stays background work,
+minutes rather than days.
+
+The worker snoozes itself with `snooze(until, why)` and ends its turn; it takes effect at once,
+without asking the owner. Its session ends with that turn, and whatever it still ran in the
+background with it; workspace and branch stay, its slot is free, its app is parked after the grace
+like a waiting card's, and no nudge or question follows the turn. A worker snoozes only while the
+card is at work (started, in its pull request, finishing after the landing); a question or a
+handover in the same turn takes the snooze back. Its instructions send a wait for a point in time
+that is further off than a background command can wait (two hours) to `snooze`; checkpoints one
+after the other are one snooze after another, the worker checking and snoozing to the next each
+time it wakes. Idea and Question cards' agents have no such tool: they never wait on the world.
+
+The owner snoozes with „Später …“ in the card's action row (a visible button, with its clock mark):
+this evening 18:00 (while that is more than half an hour off), tomorrow 08:00, next Monday 08:00, or
+a date and time to pick (`SnoozeMenu` in `src/ui/snooze.tsx`, one component for every kind of card;
+by voice „stell das bis morgen früh zurück“, `snooze` with the local time). It is offered on any card
+at work and on any card that waits for the owner (`snoozable` in `src/core/types.ts`):
+
+- A card at work stops as on a pause (see Pausing an agent): its session ends at once, mid-step if
+  need be, and what Obeya has for it meanwhile waits; at the time it goes on where it stopped.
+- A card that waits for the owner (a question, a demo, a proposal, an idea whose agent replied, a
+  pull request ready to merge) leaves „brauchen dich“, Tab and the phone's „Für dich“ until then and
+  comes back at the time like a snoozed mail, with a push to the phone as when it first waited;
+  nothing goes to its agent, and background work its worker still runs (a render it asked beside)
+  goes on, with the pause on its bubble. Answering it all the same (or its idea parked, its proposal
+  reworked) ends the snooze: it no longer waits for the owner.
+
+Waking: a timer (every 15 s) and every start of Obeya look for snoozed cards whose time has come
+(`wakeDue` in `src/server/canvas.ts`), so a restart touches no snoozed card and a time missed while
+Obeya was not running or the machine slept is caught up at the next start or wake. The worker hears
+that it is now the time it snoozed until, and what for (and that the owner moved that time, when they
+did); snoozed by the owner, that the owner snoozed it until then and what ran was stopped. The owner's words to the card, „Jetzt zurückholen“, and for
+a worker that snoozed itself whatever Obeya has for it (a review, the landing, a failed check) wake
+it earlier; it hears what woke it (woken by the owner without words, that they want to know where
+things stand) and may snooze again once it dealt with that. What Obeya has for a
+worker the owner snoozed waits until it wakes, as on a pause. A question for the owner that arises
+meanwhile (its pull request closed, a tool call to allow) ends a worker's snooze, so it reaches
+them. A restart announced in the turn the worker snoozes in ends its session after the turn the
+notice starts; a restart a worker waited for after the landing wakes it once Obeya runs again.
+
+On the canvas a snoozed card is pushed back on greyed stock, its line still in pencil grey with a
+clock: „◷ Zurückgestellt bis morgen, 00:05“ (today and tomorrow by name, later days by weekday and
+date), and over it who snoozed it and why („vom Agenten · Prüfen, ob der Test den Kellerlüfter
+eingeschaltet hat“). It counts neither as at work nor as needing the owner; on the phone it stands at
+the end of its list („Läuft“, or „Für dich“ for one that waited for the owner). Its conversation has
+a line where it happened, „Zurückgestellt bis Sa 31.10., 08:00 · …“, which while it lasts carries
+„Jetzt zurückholen“ and „Ändern“ (the same menu; it changes the time, whoever snoozed it), and on
+waking a line „Wieder da (vom Agenten zurückgestellt)“ or „(von dir zurückgestellt)“. The field reads
+„Hinweis an den Agenten – er wacht damit auf“.
+
 ### Waiting without blocking
 
 The SDK hands a waiting message to the agent only after its running tool call, so a note never cuts
 a command off (tests and renders included), and workers keep their tool calls short instead: they
-wait for anything external (a deploy, a CI run, a point in time) in the background
-(`run_in_background`, Monitor) and end their turn, which a note starts again at once.
+wait for anything external (a deploy, a CI run, a process to finish) in the background
+(`run_in_background`, Monitor) and end their turn, which a note starts again at once. A point in time
+further off than that, they snooze until (see Snoozing a card).
 
 A Bash command in the foreground that sleeps longer than 30 seconds (`sleep N`, a polling loop
 without a bound, counted from the command line by `foregroundSleep` in `src/server/runtime.ts`) is
@@ -1179,6 +1238,18 @@ show on their cards as before. Owner-facing text from agents is in the owner's l
   like a pause, and was the only way to halt an agent, losing its session. Rejected: pausing at the
   next safe point, as for a restart: the owner pauses an agent that goes the wrong way, and waiting
   for its step to end lets it go on doing so.
+- **Waits of hours or days are a snooze Obeya holds** (2026-10-17). Until then a worker that had to
+  wait days (a controlled test running two weeks, a check at midnight) kept its turn open with chained
+  background sleeps of at most two hours, each wake a model turn. The card read as at work for days
+  and held a slot; every restart of Obeya cut in (notice, stopping the sleep, „Pausiert bis zum
+  Neustart“, resuming, a new sleep, a message: about 35 times in one day, nearly all of a card's 239
+  events); reminders the worker set in its own session were unknown to Obeya; and a night without
+  network turned a failed turn into a stuck question, so the midnight check never ran. Rejected:
+  the agent only proposing a snooze for the owner to click (a click per checkpoint moves the noise to
+  the owner, and a snooze is undone with one click); keeping the agent's own waits and only hiding
+  the restart noise (the card would still look busy, hold a slot, wake every two hours and fail on a
+  network gap); conditions besides a time („bis CI grün ist“, which background work covers). German
+  wording follows Gmail's „Zurückstellen“, which owners know.
 - **A question stands while background work keeps the turn open** (2026-10-16). Until then a card
   whose worker asked while its background work ran read „Frage an dich“ in its header, but the
   conversation showed only the agent at work: the question and its options stood only once nothing
@@ -4408,10 +4479,11 @@ canvas page, nothing new), and shows, under the sign and the word Obeya:
   answer waits unread there. Each card says what it waits for (its state line: „Demo bereit“,
   „Frage an dich“, „Vorschlag eines Agenten“ …) and since when. Since when a card waits the server
   notes when `needsYou` turns true for it (`waiting_since` on the card, kept across restarts while it
-  waits, `waitingSince` in the snapshot).
+  waits, `waitingSince` in the snapshot). Cards the owner snoozed while they waited stand at the
+  end, until they come back (see Snoozing a card).
 - **„Läuft“**: the cards an agent or Obeya is at and that wait for nobody (working, finishing,
   landing, in the queue, in a PR, an idea's or a Question card's agent thinking), with their status
-  line.
+  line; snoozed ones at the end.
 
 Both lists show the cards as the canvas does, as wide as the screen (`CardFace` and `cardClass` in
 `src/ui/parts.tsx`, shared with the canvas): the state's colour as a rule across the top and in the
@@ -5112,7 +5184,7 @@ Persistent (SQLite):
   open questions with its agent's picks and suggested next step, a prototype's idea, how it ended
   and its worker's proposal to build on it, the prototype an idea is built on, landed work whose
   worker still finishes; an approval held until the work can land; what landed work shipped with; a
-  waiting card's stopped app; a worker's proposal waiting for the owner (why, its open
+  waiting card's stopped app; until when a card is snoozed, by whom and why; a worker's proposal waiting for the owner (why, its open
   questions); a project's plan doc as last read and the idea or task it came from; that a card
   becomes a project, and the plan docs its landed work added;
 - the shared demo page: slug, link, the demo directory it shows, what the page shows (title, text,

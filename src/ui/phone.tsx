@@ -569,7 +569,8 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
         <section className="ph-section">
           <h2>{t.phone.running}</h2>
           {/* nothing known yet (the server has not answered since the page loaded): no claim that nothing runs */}
-          {ordered.length > 0 && <Running entries={all.filter(({ item }) => runs(item))} several={several} onOpen={openCard} />}
+          {/* a snoozed card at the end, after those at work now */}
+          {ordered.length > 0 && <Running entries={all.filter(({ item }) => runs(item)).sort((a, b) => Number(!!a.item.snoozed) - Number(!!b.item.snoozed))} several={several} onOpen={openCard} />}
         </section>
       </div>
       {talk && (
@@ -617,7 +618,7 @@ function Feed({ id, onChange }: { id: string; onChange: (id: string, live: Retur
 
 /** A card an agent or Obeya is at (working on it, landing it, finding it a turn in the queue), and that waits for nobody. */
 const runs = (i: Item) =>
-  !needsYou(i) && (i.state === 'working' || !!i.finishing || !!i.landing || !!i.queue || (i.state === 'inPr' && !!i.pr) || !!i.idea?.thinking || !!i.thread?.thinking);
+  !needsYou(i) && !i.snoozed?.waiting && (i.state === 'working' || !!i.finishing || !!i.landing || !!i.queue || (i.state === 'inPr' && !!i.pr) || !!i.idea?.thinking || !!i.thread?.thinking);
 
 /** What waits for the owner, canvas by canvas in the switcher's order and within a canvas in Tab's order; Obeya where an answer waits unread. */
 function ForYou({
@@ -637,7 +638,8 @@ function ForYou({
 }) {
   const rows = canvases.flatMap((c) => {
     const s = snaps[c.id]!;
-    const cards = s.items.filter((i) => needsYou(i) && !underway(i.id));
+    // cards snoozed while they waited for the owner stand at the end, until they come back
+    const cards = [...s.items.filter((i) => needsYou(i) && !underway(i.id)), ...s.items.filter((i) => i.snoozed?.waiting)];
     const unread = unreadAnswers(s.talk) ? s.talk.filter((x) => x.unread) : [];
     return [
       ...cards.map((i) => (
@@ -666,7 +668,13 @@ function ForYou({
     ];
   });
   if (!canvases.length) return null;
-  return rows.length ? <ul className="ph-list">{rows}</ul> : <p className="ph-none">{t.phone.nothingWaits}</p>;
+  const waits = canvases.some((c) => snaps[c.id]!.items.some(needsYou) || unreadAnswers(snaps[c.id]!.talk) > 0);
+  return (
+    <>
+      {!waits && <p className="ph-none">{t.phone.nothingWaits}</p>}
+      {rows.length > 0 && <ul className="ph-list">{rows}</ul>}
+    </>
+  );
 }
 
 /** The cards at work, each with its status line, as their cards on the canvas show them. */

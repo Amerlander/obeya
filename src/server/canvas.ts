@@ -12,7 +12,7 @@ import { repoName } from '../adapters/generic';
 import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
 import type { Language } from '../core/locale';
-import { AGENT_DEFAULTS, agentListens, type AgentRole, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, type PendingRestart, plannableAsProject, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, type SharedSettings, type SpotInput, type TrustGroup } from '../core/types';
+import { AGENT_DEFAULTS, agentListens, type AgentRole, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, needsYou, snoozable, type PendingRestart, plannableAsProject, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, type SharedSettings, type SpotInput, type TrustGroup } from '../core/types';
 import { inQueue } from '../core/queue';
 import { BadRequest, Board, replyNote } from './board';
 import { type Command, Commander } from './commands';
@@ -125,6 +125,10 @@ interface RepoRestart {
 
 /** How long a host that could not be reached at start (or failed to clone) waits before Obeya tries again. */
 const HOST_RETRY_MS = 2 * 60_000;
+/** How often Obeya looks for snoozed cards whose time has come. */
+const WAKE_EVERY_MS = 15_000;
+/** No card is snoozed longer than this. */
+const SNOOZE_LIMIT = 366 * 24 * 60 * 60_000;
 
 export class CanvasRuntime {
   readonly board: Board;
@@ -273,6 +277,48 @@ export class CanvasRuntime {
       },
     });
     this.sharing.resume();
+    // snoozed cards wake at their time: one that passed while Obeya was not running, or the machine slept, at once
+    this.wakeDue();
+    this.waker = setInterval(() => this.wakeDue(), WAKE_EVERY_MS);
+    this.waker.unref?.();
+  }
+
+  /** Looks for snoozed cards whose time has come. */
+  private waker: ReturnType<typeof setInterval>;
+
+  /** Wakes the snoozed cards whose time has come by `now`. */
+  wakeDue(now = Date.now()) {
+    for (const i of this.board.snapshot().items) {
+      if (!i.snoozed || Date.parse(i.snoozed.until) > now) continue;
+      try {
+        this.wake(i.id, true);
+      } catch (e) {
+        console.error(`waking the card ${i.id}:`, e);
+      }
+    }
+  }
+
+  /**
+   * The owner snoozes a card until `until` (ISO): one waiting for them leaves them until then, and
+   * nothing goes to its agent; one at work has its worker stop until then. A snoozed card gets the
+   * new time.
+   */
+  private snooze(cardId: string, until: unknown) {
+    const at = typeof until === 'string' ? Date.parse(until) : NaN;
+    if (Number.isNaN(at) || at <= Date.now() || at > Date.now() + SNOOZE_LIMIT) throw new BadRequest('snoozeTime', 'until must be a time within the coming year');
+    const card = this.board.item(cardId);
+    if (!card || !snoozable(card)) throw new BadRequest('notSnoozable', 'the card is neither at work nor waiting for the owner');
+    const iso = new Date(at).toISOString();
+    if (card.snoozed?.waiting || (!card.snoozed && needsYou(card))) return this.board.snooze(cardId, { ...(card.snoozed ?? { by: 'owner', waiting: true }), until: iso }, 'owner');
+    this.repoOf(cardId).workers.snooze(cardId, iso);
+  }
+
+  /** A snoozed card wakes: at its time (`timeUp`), or as the owner wakes it now. One that waited for the owner waits for them again; a worker goes on. */
+  private wake(cardId: string, timeUp: boolean) {
+    const card = this.board.item(cardId);
+    if (!card?.snoozed) throw new BadRequest('notSnoozed', 'the card is not snoozed');
+    if (card.snoozed.waiting) return void this.board.unsnooze(cardId, timeUp ? 'obeya' : 'owner');
+    this.repoOf(cardId).workers.wake(cardId, timeUp);
   }
 
   get id() {
@@ -1036,6 +1082,10 @@ export class CanvasRuntime {
         const agent = card?.kind === 'question' ? this.answers : card?.state === 'idea' ? this.explorers : this.repoOf(cardId).workers;
         return a.action === 'pause' ? agent.pause(cardId) : agent.resume(cardId);
       }
+      case 'snooze':
+        return this.snooze(cardId, a.until);
+      case 'wake':
+        return this.wake(cardId, false);
       case 'message':
         // a note to a Question card is a question to its agent
         if (this.board.item(cardId)?.kind === 'question') return this.answers.ask(cardId, text.trim(), images, !!a.spoken, replyTo);
@@ -1529,7 +1579,10 @@ export class CanvasRuntime {
       case 'stop':
       case 'pause':
       case 'resume':
+      case 'wake':
         return this.act(c.card, { action: c.do });
+      case 'snooze':
+        return this.act(c.card, { action: 'snooze', until: c.until });
       case 'configure':
         return this.deps.config?.save(c.canvases);
       case 'remember':
@@ -1584,6 +1637,7 @@ export class CanvasRuntime {
   }
 
   shutdown() {
+    clearInterval(this.waker);
     this.pending?.stop();
     this.pending = null;
     for (const [, w] of this.writing) clearTimeout(w.timer);

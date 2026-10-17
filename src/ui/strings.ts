@@ -7,7 +7,7 @@ import type { DiffFile } from '../core/diff';
 import { type Language, languageOf } from '../core/locale';
 import type { PageChangeId } from '../core/page-changes';
 import type { NotAProject } from '../core/plan-doc';
-import { type AgentEffort, type AgentModel, type AgentRole, type CardState, type ConfigProblemCode, type DemoKind, type DemoSettingsProblem, type ErrorCode, EXPORT_HTML_MAX, type NarrationLanguage, type Theme, type VoiceKind, type Idea, type Need, type NextStep, type Queue, type OwnerHold, type RestartReason, type SetupId, type VoiceSetupId, type CloudPreset, type MachineSectionId, type NeededId, type PrId, stopped } from '../core/types';
+import { type AgentEffort, type AgentModel, type AgentRole, type CardState, type ConfigProblemCode, type DemoKind, type DemoSettingsProblem, type ErrorCode, EXPORT_HTML_MAX, type NarrationLanguage, type Theme, type VoiceKind, type Idea, type Need, type NextStep, type Queue, type OwnerHold, type RestartReason, type SetupId, type VoiceSetupId, type CloudPreset, type MachineSectionId, type NeededId, type PrId, type Snooze, stopped } from '../core/types';
 
 const de = {
   kind: { task: 'Aufgabe', question: 'Frage', project: 'Projekt', workstream: 'Workstream', idea: 'Idee', prototype: 'Prototyp', becomesProject: 'Idee → Projekt', taskBecomesProject: 'Aufgabe → Projekt' },
@@ -209,6 +209,25 @@ const de = {
     waiting: (need: string) => `${need} · Agent pausiert`,
     compose: 'Hinweis an den Agenten – er macht damit weiter',
   },
+  snooze: {
+    button: 'Später …',
+    hint: 'Zurückstellen bis zu einem Zeitpunkt: Eine Karte in Arbeit hält bis dahin an, eine, die auf dich wartet, verlässt „brauchen dich“ bis dahin. Dann ist sie von selbst wieder da.',
+    heading: 'Zurückstellen bis',
+    evening: (time: string) => `Heute Abend, ${time}`,
+    tomorrow: (time: string) => `Morgen, ${time}`,
+    monday: (time: string) => `Montag, ${time}`,
+    pick: 'Datum und Uhrzeit wählen …',
+    set: 'Zurückstellen',
+    /** The card's state while snoozed, with when it wakes. */
+    until: (when: string) => `Zurückgestellt bis ${when}`,
+    by: { agent: 'vom Agenten', owner: 'von dir' },
+    today: 'heute',
+    nextDay: 'morgen',
+    wake: 'Jetzt zurückholen',
+    wakeHint: 'Die Karte ist sofort wieder da: Der Agent macht weiter, oder sie wartet wieder auf dich.',
+    change: 'Ändern',
+    compose: 'Hinweis an den Agenten – er wacht damit auf',
+  },
   approve: 'Freigeben',
   approvePr: 'Freigeben (PR)',
   approveDirect: 'Direkt auf main',
@@ -370,6 +389,9 @@ const de = {
     notPlannable: 'Als Projekt planen lässt sich nur eine Idee oder eine eigene, geplante Aufgabe, an der noch niemand gearbeitet hat.',
     noAgent: 'An dieser Aufgabe arbeitet gerade kein Agent.',
     notPaused: 'Der Agent ist nicht pausiert.',
+    notSnoozable: 'Zurückstellen lässt sich nur eine Karte in Arbeit oder eine, die auf dich wartet.',
+    notSnoozed: 'Die Karte ist nicht zurückgestellt.',
+    snoozeTime: 'Dieser Zeitpunkt liegt nicht im kommenden Jahr.',
     noQuestion: 'Hier ist keine Frage mehr offen.',
     notReady: 'Das ist nicht bereit zur Abnahme.',
     notHeld: 'Der Kommentar ist schon beim Agenten.',
@@ -1641,6 +1663,24 @@ const en: Strings = {
     waiting: (need: string) => `${need} · agent paused`,
     compose: 'A note to the agent – it goes on with it',
   },
+  snooze: {
+    button: 'Later …',
+    hint: 'Snooze until a point in time: a card at work stops until then, one waiting for you leaves “need you” until then. Then it comes back by itself.',
+    heading: 'Snooze until',
+    evening: (time: string) => `This evening, ${time}`,
+    tomorrow: (time: string) => `Tomorrow, ${time}`,
+    monday: (time: string) => `Monday, ${time}`,
+    pick: 'Pick date and time …',
+    set: 'Snooze',
+    until: (when: string) => `Snoozed until ${when}`,
+    by: { agent: 'by the agent', owner: 'by you' },
+    today: 'today',
+    nextDay: 'tomorrow',
+    wake: 'Wake now',
+    wakeHint: 'The card is back at once: its agent goes on, or it waits for you again.',
+    change: 'Change',
+    compose: 'A note to the agent – it wakes up with it',
+  },
   approve: 'Approve',
   approvePr: 'Approve (PR)',
   approveDirect: 'Straight to main',
@@ -1786,6 +1826,9 @@ const en: Strings = {
     notPlannable: 'Only an idea, or a planned task of your own nobody has worked on yet, can be planned as a project.',
     noAgent: 'No agent is working on this task right now.',
     notPaused: 'The agent is not paused.',
+    notSnoozable: 'Only a card at work or one waiting for you can be snoozed.',
+    notSnoozed: 'The card is not snoozed.',
+    snoozeTime: 'That time is not within the coming year.',
     noQuestion: 'No question is open here any more.',
     notReady: 'This is not ready for review.',
     notHeld: 'The comment is with the agent already.',
@@ -2867,6 +2910,21 @@ export const fileSize = (bytes: number) => {
 };
 /** A time of day, hours and minutes. */
 export const clock = (d: Date | string | number) => new Date(d).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+/** When a snoozed card wakes: „heute, 18:00“, „morgen, 08:00“, else its weekday and date („Sa 31.10., 08:00“), with the year when it is not this one. */
+export const snoozeWhen = (at: string | number) => {
+  const d = new Date(at);
+  const now = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const day =
+    d.toDateString() === now.toDateString()
+      ? t.snooze.today
+      : d.toDateString() === next.toDateString()
+        ? t.snooze.nextDay
+        : d
+            .toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'numeric', ...(d.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }) })
+            .replace(/^(\p{L}+)\.?,?/u, '$1');
+  return `${day}, ${clock(d)}`;
+};
 /** A short date: day and month. */
 export const shortDay = (d: Date | string | number) => new Date(d).toLocaleDateString(locale, { day: 'numeric', month: 'short' });
 /** A long date with its weekday; the year only when it is not this one. */
@@ -2875,8 +2933,10 @@ const longDay = (d: Date, today: Date) =>
 /** A number, with `digits` decimals at most. */
 const number = (n: number, digits = 0) => n.toLocaleString(locale, { maximumFractionDigits: digits, minimumFractionDigits: digits });
 
-export const stateLabel = (i: { kind?: string; thread?: { thinking?: boolean }; state: CardState; need?: Need; pr?: unknown; queue?: Queue; idea?: Idea; question?: unknown; answering?: true; answered?: true; finishing?: boolean; followUp?: boolean; paused?: true; prototypeEnd?: 'discarded' | 'built'; retro?: string; branch?: string }) =>
-  i.kind === 'question'
+export const stateLabel = (i: { kind?: string; thread?: { thinking?: boolean }; state: CardState; need?: Need; pr?: unknown; queue?: Queue; idea?: Idea; question?: unknown; answering?: true; answered?: true; finishing?: boolean; followUp?: boolean; paused?: true; snoozed?: Snooze; prototypeEnd?: 'discarded' | 'built'; retro?: string; branch?: string }) =>
+  i.snoozed
+    ? t.snooze.until(snoozeWhen(i.snoozed.until))
+    : i.kind === 'question'
     ? i.paused
       ? t.pause.working
       : i.thread?.thinking

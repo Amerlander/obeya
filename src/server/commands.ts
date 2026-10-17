@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { settingsShape } from '../adapters/schema';
-import { type AgentSetting, agentListens, answering, askable, blocksSaving, type CanvasConfig, finished, handedOver, type Item, type NextStep, type Notice, pausable, plannableAsProject, prototypeWorkstream, type Queue, type SpotInput, type TalkQuote, type TalkRef } from '../core/types';
+import { type AgentSetting, agentListens, answering, askable, blocksSaving, type CanvasConfig, finished, handedOver, type Item, type NextStep, type Notice, pausable, plannableAsProject, prototypeWorkstream, snoozable, type Queue, type SpotInput, type TalkQuote, type TalkRef } from '../core/types';
 import { inQueue } from '../core/queue';
 import { answerTag, fromAnswerTag } from './answers';
 import { BadRequest, type Board, excerpt, replyNote } from './board';
@@ -23,7 +23,9 @@ export type Command = (
   /** `force` starts a card that waits behind others now, despite the likely merge conflict. */
   /** `direct`: onto the default branch without a pull request, where the card's repository allows it. */
   | { do: 'approve'; card: string; direct?: boolean }
-  | { do: 'start' | 'force' | 'dequeue' | 'dismiss' | 'stop' | 'pause' | 'resume' | 'build' | 'planDoc' | 'park' | 'drop'; card: string }
+  | { do: 'start' | 'force' | 'dequeue' | 'dismiss' | 'stop' | 'pause' | 'resume' | 'wake' | 'build' | 'planDoc' | 'park' | 'drop'; card: string }
+  /** Set aside until `until` (ISO), or a snoozed card's time changed. */
+  | { do: 'snooze'; card: string; until: string }
   /** `idea`: a proposed task is taken as an idea to discuss first. */
   | { do: 'accept'; card: string; idea?: boolean }
   /** On a prototype: build its idea on it (or `workstream`, of the project the idea became), or throw it away. */
@@ -186,7 +188,7 @@ type More = { wish?: string; cannot?: boolean };
 type Decision = { commands: Command[]; confirm: string; lookUp?: LookUp } & More;
 
 /** The actions `act` takes, as the Koordinator names them. */
-const ACTIONS = ['new_card', 'new_idea', 'start', 'dequeue', 'note', 'answer', 'feedback', 'approve', 'accept', 'dismiss', 'revise', 'stop', 'pause', 'resume', 'discuss', 'build', 'plan_doc', 'prototype', 'park', 'drop', 'remember', 'work_retro', 'group', 'ungroup', 'rename_group', 'wish'] as const;
+const ACTIONS = ['new_card', 'new_idea', 'start', 'dequeue', 'note', 'answer', 'feedback', 'approve', 'accept', 'dismiss', 'revise', 'stop', 'pause', 'resume', 'snooze', 'wake', 'discuss', 'build', 'plan_doc', 'prototype', 'park', 'drop', 'remember', 'work_retro', 'group', 'ungroup', 'rename_group', 'wish'] as const;
 
 /** What `act` gets for one action. */
 const ACTION = z.object({
@@ -203,6 +205,7 @@ const ACTION = z.object({
   group: z.string().optional(),
   direct: z.boolean().optional(),
   idea: z.boolean().optional(),
+  until: z.string().optional(),
 });
 type ActionArgs = z.infer<typeof ACTION>;
 
@@ -558,6 +561,7 @@ export class Commander {
             '- feedback: text as feedback on work waiting for review (demo or summary), a question about that work included; its agent takes it in while the work still waits for approval, and hands over anew when it changes something.',
             '- approve: approve work waiting for review; direct: true when the owner wants it straight onto main without a pull request („ohne PR“, „direkt auf main“), which a repository whose work goes out as a pull request allows only where the list of repositories says so. accept: take a proposed card and start it (a proposed idea: its discussion opens; the open questions on it go along); idea: true when the owner wants a proposed task discussed as an idea first rather than built („als Idee“, „erst besprechen“). dismiss: discard a proposed card. revise: text what the owner wants changed in a proposed card, or their thoughts on it (added, dropped, decided, put differently); an agent rewrites its text and questions by it in a minute or so, and accepting it waits for that (by a click once it is there).',
             '- pause: pause the agent on a card at once, only while it is working on something (the card list says so): a worker at work, or in any other state while the list says its agent is working on something; an idea\'s agent working on its reply; a Question card\'s agent reading. Nothing of it runs, its session stays, and it goes on where it stopped with resume, or with what the owner says to it, which it goes on with („halt mal an“, „pausier …“, „warte mal kurz“). resume: let a paused agent go on („mach weiter“, „lass ihn weitermachen“). stop: end the agent on a card for good, which plans the card again („stopp“, „brich ab“).',
+            '- snooze: set a card aside until a point in time („stell das bis morgen früh zurück“, „erinner mich Montag daran“, „das später“), on a card at work (its agent stops until then, as on a pause, and goes on at the time) or one waiting for the owner (it leaves their list until then; nothing goes to its agent); on a snoozed card it changes the time. until: the local time as YYYY-MM-DDTHH:MM, from Now above („heute Abend“ 18:00, „morgen früh“ 08:00, „Montag“ 08:00 next Monday). wake: a snoozed card now („hol … zurück“, „weck … auf“).',
             `- new_idea: a new idea to think through with an exploration agent before anything is planned ("Ich will über … nachdenken", "Idee: …"). title short and precise, body what the owner said about it, in their words${repos.length > 1 ? ', repo as for new_card' : ''}.`,
             `- remember (no card): a rule the owner wants kept for all future work („Merk dir: …“, „ab jetzt immer …“). text: the rule, short and general, in ${LANGUAGE_NAMES[language]}; replaces: the number of a rule of the owner it changes or contradicts, also when it moves that rule into a CLAUDE.md. It goes to one of two places. The owner's rules, for how the agents work with the owner through Obeya whatever the repository (what to ask and what to decide alone, how to report, hand over and demo): leave repos out; it applies at once. A repository's CLAUDE.md, for anything about a repository (its conventions, product, tools, how its code is written, tested and landed, its UI and wording, taste in code even when it holds in every repository): repos the ids of the repositories it concerns (usually the open card's; every one when it holds in all of them); it goes into the repository's card ${t.quote(t.claudeMd.title)}, whose worker writes it into the CLAUDE.md. confirm says where it goes (${say.remember}).`,
             `- work_retro (no card): the Arbeitsrückschau of a repository, now („Mach eine Arbeitsrückschau für den Shop“): it reads the friction noted on the workers' runs of its finished cards since the last one and proposes cards (a script, a skill), CLAUDE.md lines or values for the repository's settings (checks, setup, soft paths, how to run the app for a demo) for what recurs on several cards; they come as proposals for the owner, and the owner hears when it is done. It also runs by itself: in a new repository after its first finished card, then after 2 more and 4 more, then every 10. repo: the repository's id (the one the owner names, else the open card's, else the first). confirm e.g. ${say.retro}`,
@@ -874,6 +878,16 @@ export class Commander {
       case 'resume':
         if (!card.paused) return `its agent is not paused (${is})`;
         break;
+      case 'snooze': {
+        if (!snoozable(card)) return `the card is neither at work nor waiting for the owner, so there is nothing to snooze (${is})`;
+        const at = a.until ? Date.parse(a.until) : NaN;
+        if (Number.isNaN(at)) return 'until is missing: the local time as YYYY-MM-DDTHH:MM';
+        if (at <= Date.now()) return 'that time has passed';
+        return { do: 'snooze', card: card.id, until: new Date(at).toISOString() };
+      }
+      case 'wake':
+        if (!card.snoozed) return `the card is not snoozed (${is})`;
+        break;
     }
     return { do: a.do, card: card.id };
   }
@@ -959,7 +973,9 @@ export class Commander {
               : askable(i)
                 ? `${i.state}, its agent's session has ended; a note resumes it to answer`
                 : i.state;
-      const paused = i.paused
+      const paused = i.snoozed
+        ? `; snoozed by ${i.snoozed.by === 'agent' ? 'its agent' : 'the owner'} until ${when(i.snoozed.until)}${i.snoozed.why ? ` (then: ${clip(oneLine(i.snoozed.why), 120)})` : ''}${i.snoozed.waiting ? ': it waits for the owner again then, and is not on their list until then' : ': nothing of its agent runs until then; a note or wake wakes it earlier'}`
+        : i.paused
         ? '; its agent is paused by the owner: nothing of it runs until resume or what the owner says to it, which it goes on with'
         : i.inTurn && i.state !== 'working'
           ? '; its agent is working on something right now'
