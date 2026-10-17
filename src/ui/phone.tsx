@@ -52,6 +52,8 @@ function addressWith({ card, talk }: { card: string | null; talk: boolean }) {
 }
 const cardInAddress = () => new URLSearchParams(location.search).get('card');
 const talkInAddress = () => new URLSearchParams(location.search).has('talk');
+/** What a step in the browser's history opened: a card, or the conversation of what is in view. */
+type Step = 'card' | 'talk';
 /** How far the panel's top is dragged down before letting go closes it (a quick flick closes it sooner). */
 const DRAG_CLOSES = 110;
 /** How far a half panel's top is dragged up before letting go gives it the full height. */
@@ -160,27 +162,28 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
     if (!talk) setClosing(false);
   }, [talk]);
   // opening a card or the panel is a step in the browser's history: its Back (or the swipe) closes it
-  // again; the steps this page pushed, the latest last
-  const pushed = useRef<('card' | 'talk')[]>([]);
-  const step = (what: 'card' | 'talk', to: { card: string | null; talk: boolean }) => {
-    history.pushState(null, '', addressWith(to));
-    pushed.current.push(what);
-  };
+  // again. Each entry holds the steps that led to it, the latest last, so they hold after Back,
+  // Forward and a reload alike.
+  const steps = (): Step[] => (history.state as { steps?: Step[] } | null)?.steps ?? [];
+  const step = (what: Step, to: { card: string | null; talk: boolean }) => history.pushState({ steps: [...steps(), what] }, '', addressWith(to));
   /** Back from `what`: the browser's own step back where this page pushed it, else the address without it. */
-  const stepBack = (what: 'card' | 'talk', to: { card: string | null; talk: boolean }) => {
-    if (pushed.current.at(-1) === what) return history.back();
-    history.replaceState(null, '', addressWith(to));
+  const stepBack = (what: Step, to: { card: string | null; talk: boolean }) => {
+    if (steps().at(-1) === what) return history.back();
+    history.replaceState(history.state, '', addressWith(to));
     if (what === 'card') setOpenState(null);
     else setTalk(false);
   };
+  /** The card just opened, until it is known whether it waits for answers (its conversation opens then). */
+  const looked = useRef<string | null>(cardInAddress());
   // a card opens over Obeya's conversation, and from a card's conversation another card in its place
   const openId = (id: string) => {
     if (openRef.current === id) return;
+    looked.current = id;
     if (!openRef.current) homeScroll.current = homeRef.current?.scrollTop ?? 0;
     if (openRef.current) {
-      history.replaceState(null, '', addressWith({ card: id, talk: false }));
       // the step that opened the conversation now opens this card: Back returns to the one before
-      if (pushed.current.at(-1) === 'talk') pushed.current[pushed.current.length - 1] = 'card';
+      const s = steps();
+      history.replaceState({ steps: s.at(-1) === 'talk' ? [...s.slice(0, -1), 'card'] : s }, '', addressWith({ card: id, talk: false }));
     } else step('card', { card: id, talk: false });
     setOpenState(id);
     setTalk(false);
@@ -191,12 +194,8 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
   const back = () => {
     if (!openRef.current) return;
     flushEdit().catch(console.error);
-    const p = pushed.current;
-    // one step back is popped here, the other when the browser has gone back (`popstate`)
-    if (p.at(-1) === 'talk' && p.at(-2) === 'card') {
-      p.pop();
-      return history.go(-2);
-    }
+    const p = steps();
+    if (p.at(-1) === 'talk' && p.at(-2) === 'card') return history.go(-2);
     if (p.at(-1) === 'talk') {
       // the card was opened before this page pushed anything (a reload): back past the conversation, then off the card
       leavesCard.current = true;
@@ -214,8 +213,7 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
   /** Back to the list, from a card and the panel alike. */
   const home = () => {
     flushEdit().catch(console.error);
-    const n = pushed.current.length;
-    pushed.current = [];
+    const n = steps().length;
     if (n) return history.go(-n);
     history.replaceState(null, '', addressWith({ card: null, talk: false }));
     setOpenState(null);
@@ -238,7 +236,7 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
   useEffect(() => {
     const pop = () => {
       flushEdit().catch(console.error);
-      pushed.current.pop();
+      looked.current = null;
       if (leavesCard.current) {
         leavesCard.current = false;
         history.replaceState(null, '', addressWith({ card: null, talk: false }));
@@ -444,12 +442,11 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
     }),
     [talk, talkEl],
   );
-  // a card that waits for answers to its questions opens with its conversation, once each time it is opened
-  const looked = useRef<string | null>(null);
+  // a card that waits for answers to its questions opens with its conversation, once each time it is
+  // opened (a tap, a push, the page loading); Back or Forward to it leaves it as that step had it
   useEffect(() => {
-    if (!open) return void (looked.current = null);
-    if (!opened || looked.current === open) return;
-    looked.current = open;
+    if (!open || !opened || looked.current !== open) return;
+    looked.current = null;
     if (!talkRef.current && openQuestions(opened.item).some((q) => q.options.length > 0)) openTalk();
   }, [open, !!opened]);
   // beside a demo video the conversation is a half sheet, and the page shows the video above it
@@ -528,7 +525,7 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
             <div id="ph-card-talk" className="ph-talk split-talk" ref={setTalkEl} />
           </TalkPanel>
         )}
-        {i && <CardTalkButton item={i} open={talk} shown={talk && !closing} onClick={() => (talk ? leaveTalk.current?.() : openTalk())} />}
+        {i && <CardTalkButton key={i.id} item={i} open={talk} shown={talk && !closing} onClick={() => (talk ? leaveTalk.current?.() : openTalk())} />}
         {voice}
       </HoldToTalk.Provider>
     );
