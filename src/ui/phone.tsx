@@ -1,7 +1,7 @@
 // The phone view: on a phone the page shows, instead of the canvas, what waits for the owner across
-// every canvas („Für dich“), what runs („Läuft“) and Obeya's conversation. A card opens full screen
-// with the canvas's own detail view (its conversation, answer options, demo, approve buttons), and
-// Back returns to the list. The microphone is held by touch; Enter breaks the line, only Send sends;
+// every canvas („Für dich“) and what runs („Läuft“); Obeya's conversation is a panel of its own that
+// comes up from below. A card opens full screen with the canvas's own detail view (its conversation,
+// answer options, demo, approve buttons), and Back returns to the list. The microphone is held by touch; Enter breaks the line, only Send sends;
 // what was typed but not sent survives a reload. It holds one WebSocket per canvas.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -16,7 +16,7 @@ import { Notify, registerWorker } from './notify';
 import { plain } from './markdown';
 import { Cards } from './message';
 import type { Reply } from './reply';
-import { CardFace, cardClass, shownState } from './parts';
+import { CardFace, cardClass, shownState, TalkIcon } from './parts';
 import { videoOf } from './spot';
 import { clock, failText, forTouch, shortDay, t } from './strings';
 import { tellers, useAck, voiceTarget } from './tell';
@@ -40,15 +40,20 @@ const OBEYA_CANVAS = 'obeya-phone-canvas';
 /** How long the server may not answer before the view says so: a phone back from its lock screen reconnects within this. */
 const QUIET_MS = 3000;
 
-/** The address with `card` open (or none), keeping what else it holds (`?view=phone`, say). */
-function addressWith(card: string | null) {
+/** The address with `card` open (or none) and Obeya's panel open or not, keeping what else it holds (`?view=phone`, say). */
+function addressWith({ card, talk }: { card: string | null; talk: boolean }) {
   const q = new URLSearchParams(location.search);
   if (card) q.set('card', card);
   else q.delete('card');
-  const s = q.toString();
+  if (talk) q.set('talk', '');
+  else q.delete('talk');
+  const s = q.toString().replace(/=(&|$)/g, '$1');
   return `${location.pathname}${s ? `?${s}` : ''}`;
 }
 const cardInAddress = () => new URLSearchParams(location.search).get('card');
+const talkInAddress = () => new URLSearchParams(location.search).has('talk');
+/** How far the panel's top is dragged down before letting go closes it (a quick flick closes it sooner). */
+const DRAG_CLOSES = 110;
 
 /** When something began: the time today, else the day. */
 const when = (iso: string | number) => (new Date(iso).toDateString() === new Date().toDateString() ? clock(iso) : shortDay(iso));
@@ -74,26 +79,52 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
   const [open, setOpenState] = useState<string | null>(cardInAddress);
   const openRef = useRef(open);
   openRef.current = open;
-  // opening a card is a step in the browser's history: its Back (or the swipe) closes it again
-  const pushed = useRef(false);
+  // Obeya's conversation, a panel over the list
+  const [talk, setTalk] = useState(talkInAddress);
+  const talkRef = useRef(talk);
+  talkRef.current = talk;
+  // opening a card or the panel is a step in the browser's history: its Back (or the swipe) closes it
+  // again; the steps this page pushed, the latest last
+  const pushed = useRef<('card' | 'talk')[]>([]);
+  const step = (what: 'card' | 'talk', to: { card: string | null; talk: boolean }) => {
+    history.pushState(null, '', addressWith(to));
+    pushed.current.push(what);
+  };
+  /** Back from `what`: the browser's own step back where this page pushed it, else the address without it. */
+  const stepBack = (what: 'card' | 'talk', to: { card: string | null; talk: boolean }) => {
+    if (pushed.current.at(-1) === what) return history.back();
+    history.replaceState(null, '', addressWith(to));
+    if (what === 'card') setOpenState(null);
+    else setTalk(false);
+  };
   const openId = (id: string) => {
     if (openRef.current === id) return;
     if (!openRef.current) homeScroll.current = homeRef.current?.scrollTop ?? 0;
-    history[openRef.current ? 'replaceState' : 'pushState'](null, '', addressWith(id));
-    if (!openRef.current) pushed.current = true;
+    if (openRef.current) history.replaceState(null, '', addressWith({ card: id, talk: talkRef.current }));
+    else step('card', { card: id, talk: talkRef.current });
     setOpenState(id);
   };
   const openCard = (i: Item) => openId(i.id);
   const back = () => {
     if (!openRef.current) return;
     flushEdit().catch(console.error);
-    if (pushed.current) {
-      pushed.current = false;
-      history.back();
-    } else {
-      history.replaceState(null, '', addressWith(null));
-      setOpenState(null);
-    }
+    stepBack('card', { card: null, talk: talkRef.current });
+  };
+  const openTalk = () => {
+    if (talkRef.current || openRef.current) return;
+    step('talk', { card: null, talk: true });
+    setTalk(true);
+  };
+  const closeTalk = () => talkRef.current && !openRef.current && stepBack('talk', { card: null, talk: false });
+  /** Back to the list, from a card and the panel alike. */
+  const home = () => {
+    flushEdit().catch(console.error);
+    const n = pushed.current.length;
+    pushed.current = [];
+    if (n) return history.go(-n);
+    history.replaceState(null, '', addressWith({ card: null, talk: false }));
+    setOpenState(null);
+    setTalk(false);
   };
   // a tapped push: its card (or „Für dich“ for several) in the app that is open already
   useEffect(() => {
@@ -104,7 +135,7 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
       if (e.data?.type !== 'open' || typeof e.data.url !== 'string') return;
       const card = new URL(e.data.url, location.href).searchParams.get('card');
       if (card) openId(card);
-      else back();
+      else home();
     };
     sw.addEventListener('message', tapped);
     return () => sw.removeEventListener('message', tapped);
@@ -112,8 +143,9 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
   useEffect(() => {
     const pop = () => {
       flushEdit().catch(console.error);
-      pushed.current = false;
+      pushed.current.pop();
       setOpenState(cardInAddress());
+      setTalk(talkInAddress());
     };
     addEventListener('popstate', pop);
     return () => removeEventListener('popstate', pop);
@@ -222,7 +254,11 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
   );
   // Esc closes the open card, as Back does (a keyboard at the phone, or the view tried at the desk)
   useEffect(() => {
-    const key = (e: KeyboardEvent) => e.key === 'Escape' && !document.querySelector('.lightbox') && back();
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || document.querySelector('.lightbox')) return;
+      if (openRef.current) back();
+      else closeTalk();
+    };
     addEventListener('keydown', key);
     return () => removeEventListener('keydown', key);
   }, []);
@@ -340,6 +376,22 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
 
   const isUnderway = (id: string) => underway.includes(id);
   const obeyaSnap = snaps[obeyaId];
+  const unreadOf = (id: string) => (snaps[id] ? unreadAnswers(snaps[id].talk) : 0);
+  const unread = ordered.reduce((n, c) => n + unreadOf(c.id), 0);
+  /** The panel, with the conversation an answer waits unread in when the one last picked has none. */
+  const openTalkNewest = () => {
+    const waiting = ordered.find((c) => unreadOf(c.id));
+    if (!unreadOf(obeyaId) && waiting) setObeyaCanvas(waiting.id);
+    openTalk();
+  };
+  /** Closes the open panel as dragging it down does, sliding out. */
+  const leaveTalk = useRef<(() => void) | null>(null);
+  // the panel sliding out: the button offers it again at once
+  const [closing, setClosing] = useState(false);
+  useEffect(() => {
+    if (!talk) setClosing(false);
+  }, [talk]);
+  const shown = talk && !closing;
   return (
     <HoldToTalk.Provider value={press}>
       {feeds}
@@ -352,32 +404,64 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
         <Notify />
         <section className="ph-section">
           <h2>{t.phone.forYou}</h2>
-          <ForYou canvases={ordered} snaps={snaps} several={several} underway={isUnderway} onOpen={openCard} onObeya={(id) => {
+          <ForYou
+            canvases={ordered}
+            snaps={snaps}
+            several={several}
+            underway={isUnderway}
+            onOpen={openCard}
+            onObeya={(id) => {
               setObeyaCanvas(id);
-              requestAnimationFrame(() => document.querySelector('.ph-obeya')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-            }} />
+              openTalk();
+            }}
+          />
         </section>
         <section className="ph-section">
           <h2>{t.phone.running}</h2>
           {/* nothing known yet (the server has not answered since the page loaded): no claim that nothing runs */}
           {ordered.length > 0 && <Running entries={all.filter(({ item }) => runs(item))} several={several} onOpen={openCard} />}
         </section>
-        <section className="ph-section ph-obeya">
-          <h2>
-            {t.koordinator.title}
-            {several && (
-              <select value={obeyaId} aria-label={t.phone.canvas} onChange={(e) => setObeyaCanvas(e.target.value)}>
-                {canvases.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            )}
-          </h2>
-          {obeyaSnap && <ObeyaTalk key={obeyaId} canvas={obeyaId} snap={obeyaSnap} onOpen={openCard} onTell={(text, images, replyTo) => void tellTyped(text, images, null, undefined, replyTo)} />}
-        </section>
       </div>
+      {talk && (
+        <TalkPanel
+          canvas={obeyaId}
+          banner={banner}
+          snap={obeyaSnap}
+          onClose={closeTalk}
+          leave={leaveTalk}
+          onLeave={() => setClosing(true)}
+          onOpen={openCard}
+          onTell={(text, images, replyTo) => void tellTyped(text, images, null, undefined, replyTo)}
+        />
+      )}
+      {/* left of the microphone, in reach of the thumb, as the canvas's top bar has it: opens the panel, and closes it while it is open (inverted then) */}
+      <button
+        className={shown ? 'pill kpill talk-pill ph-talk-open on' : 'pill kpill talk-pill ph-talk-open'}
+        aria-expanded={shown}
+        aria-label={shown ? t.phone.closeTalk : t.phone.talkTitle}
+        onClick={() => (talk ? leaveTalk.current?.() : openTalkNewest())}
+      >
+        <TalkIcon />
+        {!shown && unread > 0 && (
+          <span className="n unread" title={t.koordinator.unreadCount(unread)}>
+            {unread}
+          </span>
+        )}
+      </button>
+      {/* right of the microphone, with several canvases: whose Obeya the microphone and the panel speak to */}
+      {several && (
+        <label className="pill ph-canvas-pick">
+          <span className="name">{canvases.find((c) => c.id === obeyaId)?.name}</span>
+          <span className="hint">▾</span>
+          <select value={obeyaId} aria-label={t.phone.canvas} onChange={(e) => setObeyaCanvas(e.target.value)}>
+            {canvases.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       {voice}
     </HoldToTalk.Provider>
   );
@@ -460,20 +544,105 @@ function Running({ entries, several, onOpen }: { entries: { item: Item; canvas: 
   );
 }
 
-/** Obeya's conversation of one canvas: its answers count as read once the conversation is in view. */
-function ObeyaTalk({ canvas, snap, onOpen, onTell }: { canvas: string; snap: CanvasSnapshot; onOpen: (i: Item) => void; onTell: (text: string, images?: string[], replyTo?: Reply['to']) => void }) {
-  const box = useRef<HTMLDivElement>(null);
-  const [seen, setSeen] = useState(false);
+/**
+ * Obeya's conversation of one canvas as a panel over the list, from below: the conversation is the
+ * only thing in it that scrolls, the field stands under it and the microphone below that. Its answers
+ * count as read while it is open. Dragging its top down (or the button under it, or Back) closes it.
+ */
+function TalkPanel({
+  canvas,
+  banner,
+  snap,
+  onClose,
+  leave: leaveRef,
+  onLeave,
+  onOpen,
+  onTell,
+}: {
+  canvas: string;
+  banner: React.ReactNode;
+  snap: CanvasSnapshot | undefined;
+  onClose: () => void;
+  /** Where the panel puts its way of closing, for the button beside the microphone. */
+  leave: React.RefObject<(() => void) | null>;
+  /** The panel starts sliding out. */
+  onLeave: () => void;
+  onOpen: (i: Item) => void;
+  onTell: (text: string, images?: string[], replyTo?: Reply['to']) => void;
+}) {
+  const panel = useRef<HTMLDivElement>(null);
+  const [dy, setDy] = useState(0);
+  const [leaving, setLeaving] = useState(false);
+  const drag = useRef<{ y: number; at: number; dy: number } | null>(null);
+  const gone = useRef(false);
+  const leave = () => {
+    if (gone.current) return;
+    gone.current = true;
+    onLeave();
+    setLeaving(true);
+    setTimeout(onClose, 200);
+  };
+  leaveRef.current = leave;
+  // the panel takes the part of the screen the keyboard leaves, so the field stays above it
   useEffect(() => {
-    const el = box.current;
-    if (!el) return;
-    const io = new IntersectionObserver(([e]) => setSeen(!!e?.isIntersecting), { threshold: 0.3 });
-    io.observe(el);
-    return () => io.disconnect();
+    const vv = window.visualViewport;
+    const el = panel.current;
+    if (!vv || !el) return;
+    const fit = () => {
+      el.style.setProperty('--vvh', `${vv.height}px`);
+      el.style.setProperty('--vvt', `${vv.offsetTop}px`);
+    };
+    fit();
+    vv.addEventListener('resize', fit);
+    vv.addEventListener('scroll', fit);
+    return () => {
+      vv.removeEventListener('resize', fit);
+      vv.removeEventListener('scroll', fit);
+    };
   }, []);
+  // the confirmations above the microphone stand above the field while the panel is open
+  useEffect(() => {
+    const field = panel.current?.querySelector('.composer');
+    if (!field) return;
+    const root = document.documentElement;
+    const keep = new ResizeObserver(() => root.style.setProperty('--ph-field', `${field.getBoundingClientRect().height}px`));
+    keep.observe(field);
+    return () => {
+      keep.disconnect();
+      root.style.removeProperty('--ph-field');
+    };
+  }, [snap === undefined, canvas]);
+  const down = (e: React.PointerEvent) => {
+    if ((e.target as Element).closest('button, select')) return;
+    drag.current = { y: e.clientY, at: Date.now(), dy: 0 };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const move = (e: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d) return;
+    d.dy = Math.max(0, e.clientY - d.y);
+    setDy(d.dy);
+  };
+  const up = () => {
+    const d = drag.current;
+    drag.current = null;
+    if (!d) return;
+    const flick = d.dy > 30 && d.dy / Math.max(1, Date.now() - d.at) > 0.6;
+    if (d.dy > DRAG_CLOSES || flick) leave();
+    else setDy(0);
+  };
+  const style = leaving ? undefined : dy ? { transform: `translateY(${dy}px)` } : undefined;
   return (
-    <div className="ph-talk" ref={box}>
-      <KoordinatorTalk on={seen} talk={snap.talk} items={snap.items} onOpen={onOpen} onTell={onTell} draft={obeyaDraft(canvas)} />
+    <div id="ph-talk" className={['ph-view ph-panel', leaving && 'leaving', drag.current && 'dragging'].filter(Boolean).join(' ')} ref={panel} style={style} role="dialog" aria-label={t.phone.talkTitle}>
+      <header className="ph-bar ph-grip" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
+        <span className="ph-word">{t.koordinator.title}</span>
+      </header>
+      {banner}
+      {snap && (
+        <div className="ph-talk" key={canvas}>
+          <KoordinatorTalk on talk={snap.talk} items={snap.items} onOpen={onOpen} onTell={onTell} draft={obeyaDraft(canvas)} />
+        </div>
+      )}
     </div>
   );
 }

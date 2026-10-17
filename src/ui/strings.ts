@@ -749,6 +749,10 @@ const de = {
     obeyaAnswered: 'Obeya hat geantwortet',
     since: (when: string) => `seit ${when}`,
     back: 'Zurück',
+    /** The button left of the microphone that opens Obeya's conversation as a panel from below. */
+    talkTitle: 'Gespräch mit Obeya',
+    /** Closes the panel; dragging its top down does it too. */
+    closeTalk: 'Schließen',
     canvas: 'Leinwand',
     notAnswering: (since: string) => `Obeya antwortet nicht · seit ${since}`,
     notAnsweringWhy: 'Vielleicht schläft der Rechner, oder Obeya läuft dort nicht. Sobald es wieder antwortet, ist die Seite wieder verbunden.',
@@ -2131,6 +2135,8 @@ const en: Strings = {
     obeyaAnswered: 'Obeya answered',
     since: (when: string) => `since ${when}`,
     back: 'Back',
+    talkTitle: 'Conversation with Obeya',
+    closeTalk: 'Close',
     canvas: 'Canvas',
     notAnswering: (since: string) => `Obeya is not answering · since ${since}`,
     notAnsweringWhy: 'The computer may be asleep, or Obeya is not running there. The page connects again as soon as it answers.',

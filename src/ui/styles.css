@@ -1529,7 +1529,6 @@ button.link:hover { text-decoration: underline; }
 .ph-notify .btn { margin-top: 0; }
 .ph-section { margin-top: 22px; }
 .ph-section h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font: 600 21px/1.15 var(--serif); }
-.ph-section h2 select { margin-left: auto; font: 15px var(--cond); padding: 4px 6px; border: 1px solid var(--line); border-radius: 3px; background: var(--card); color: var(--ink); }
 /* the lists' rows are the cards of the canvas, as wide as the screen: the state's rule across the top, an idea's
    stock, the owner's turn framed and pinned, the state line in its colour */
 /* one column held upright, two (or more) side by side once the screen is wide enough, the phone turned, say */
@@ -1547,9 +1546,39 @@ button.link:hover { text-decoration: underline; }
 /* everything in „Für dich“ waits for the owner: the heading says so, no pin on each card */
 .ph-card .badge { display: none; }
 .ph-none { margin: 0; color: var(--muted); font-size: 14.5px; }
-.ph-talk { display: flex; flex-direction: column; }
-.ph-talk > .talk { max-height: 62vh; min-height: 0; }
-.ph-talk > .composer { max-width: none; margin-top: 10px; }
+/* the button for Obeya's conversation (the canvas's talk pill, a finger's size), left of the microphone in
+   reach of the thumb; inverted while the panel is open */
+.pill.ph-talk-open { position: fixed; z-index: 50; left: max(14px, env(safe-area-inset-left)); bottom: calc(64px + env(safe-area-inset-bottom));
+  height: 44px; padding: 0 14px; color: var(--ink); cursor: pointer; }
+.pill.ph-talk-open.on { color: var(--bg); }
+.ph-talk-open svg { width: 20px; height: 20px; }
+.ph-talk-open:active { box-shadow: none; transform: translateY(1px); }
+.ph-view:has(textarea:focus, input:focus) ~ :is(.ph-talk-open, .ph-canvas-pick) { display: none; }
+/* the canvas whose Obeya is spoken to, right of the microphone and its screenshot button: the phone's own picker opens */
+.pill.ph-canvas-pick { position: fixed; z-index: 50; right: max(14px, env(safe-area-inset-right)); bottom: calc(64px + env(safe-area-inset-bottom));
+  height: 44px; box-sizing: border-box; padding: 0 12px; gap: 6px; max-width: calc(50vw - 106px); font-size: 15px; cursor: pointer; }
+.ph-canvas-pick .name { overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.ph-canvas-pick select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font-size: 16px; }
+/* Obeya's conversation: a panel from below over the list, in the part of the screen the keyboard leaves;
+   only the conversation scrolls, the field stands under it, and below that the room of the microphone */
+.ph-panel { top: var(--vvt, 0); bottom: auto; height: var(--vvh, 100%); z-index: 20; overflow: hidden; display: flex; flex-direction: column;
+  padding-bottom: calc(120px + env(safe-area-inset-bottom)); background: var(--bg); box-shadow: 0 -6px 24px rgba(0, 0, 0, .12);
+  animation: ph-up .22s ease-out; transition: transform .2s ease-out; }
+.ph-panel.dragging { transition: none; }
+.ph-panel.leaving { transform: translateY(100%); }
+.ph-panel::after { display: none; }
+@keyframes ph-up { from { transform: translateY(100%); } }
+/* its top is the grip: dragged down, the panel follows the finger and closes */
+.ph-grip { touch-action: none; -webkit-user-select: none; user-select: none; padding-top: 14px; cursor: grab; }
+.ph-grip::before { content: ""; position: absolute; left: 50%; top: 5px; width: 40px; height: 4px; margin-left: -20px; border-radius: 2px;
+  background: color-mix(in srgb, var(--ink) 22%, transparent); }
+.ph-grip .ph-word { font: 600 21px/1 var(--serif); }
+.ph-talk { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; padding-top: 12px; }
+.ph-talk > .talk { flex: 0 1 auto; min-height: 0; max-height: none; max-width: none; }
+.ph-talk > .composer { max-width: none; margin-top: 10px; flex: none; }
+/* while the keyboard is up the field has its own microphone: the field stands right above the keyboard */
+.ph-panel:has(textarea:focus, input:focus) { padding-bottom: 10px; }
+.ph-panel ~ #acks { bottom: calc(var(--ph-field, 0px) + 130px + env(safe-area-inset-bottom)); }
 /* a card opened: full screen, in its state's colour along the top */
 /* the list fades out under the microphone */
 .ph-view::after { content: ""; position: fixed; left: 0; right: 0; bottom: 0; height: calc(120px + env(safe-area-inset-bottom)); z-index: 4;

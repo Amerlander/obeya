@@ -23,6 +23,15 @@ export const shownState = (i: Item) => (i.kind === 'question' ? 'question' : ans
 
 export const landedRef = (l: NonNullable<Item['landedPart']>) => (l.pr ? `PR #${l.pr.number}` : (l.commit?.slice(0, 7) ?? ''));
 
+/** The button for the conversation with Obeya (the canvas's top bar, the phone view's): a speech bubble. */
+export function TalkIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden>
+      <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H11l-4.5 4v-4h0A2.5 2.5 0 0 1 4 13.5z" />
+    </svg>
+  );
+}
+
 // ------------------------------------------------------------------ cards
 
 interface CardProps {

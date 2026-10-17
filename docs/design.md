@@ -4391,9 +4391,26 @@ wide enough for two of at least 340 px (the phone turned) they stand side by sid
 as its taller card, the state lines at the bottom. Before (until 2026-10-17) a row was a white box with a thin coloured
 strip at its left edge, and on the phone the idea's red and the owner's turn's orange could hardly be
 told apart there.
-- **Obeya**: its conversation with the field under it, the sheet's own (`KoordinatorTalk`), with a
-  picker of the canvas whose Obeya it is when there are several. Its unread answers count as read
-  once the conversation is scrolled into view, not when the page opens.
+
+Obeya's conversation is not on the list but a panel of its own over it: the button for it left of the
+microphone, in reach of the thumb, opens it, and so does the card „Obeya hat geantwortet“. The button
+is the canvas's (the speech bubble, with the number of answers waiting unread, across the canvases),
+at a finger's size, and inverted while the panel is open. It comes up from below and fills the screen: the
+conversation with the field under it, the sheet's own (`KoordinatorTalk`), and below the field the
+room of the microphone, so the microphone never stands over the field. Whose Obeya it is (when there
+are several canvases) a picker right of the microphone says, on the list as in the panel, since it
+also decides whom the microphone speaks to with no card open: the canvas's name, which opens the
+phone's own list of them; with one canvas there is none, and with a card open neither (the microphone
+speaks to its agent then). The button opens the conversation an answer waits unread in when the
+one picked has none, and the picker follows. The conversation is the only thing in it that scrolls: as a box in
+the scrolling list (until 2026-10-16) it was a scroll area inside another, and the list scrolled on
+past the field to make room for the microphone. The panel takes the part of the screen the keyboard
+leaves (`visualViewport`), so the field stands right above the keyboard. Its top is a grip: dragged
+down, the panel follows the finger, and let go further than 110 px down (or flicked) it closes;
+otherwise it springs back. The same button left of the microphone, Back and Esc close it
+too, and its address is
+`?talk`, as a card's is `?card=<id>`. Its unread answers count as read once it is open, not when the
+page opens. A card opened from the conversation opens over it, and Back returns to it.
 
 A tap opens a card full screen: Back (the button, the browser's back, Esc) returns to the list where
 it was scrolled. The card's address is `?card=<id>`, so a reload or a restart opens it again. It is
