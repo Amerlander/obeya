@@ -89,6 +89,8 @@ export interface Heard {
   text?: string;
   /** The owner asked to tell Obeya's makers something: the draft for them opens with it. */
   wish?: Wish;
+  /** The exchange the reply stands in, which the conversation in view may show already. */
+  talk?: number;
 }
 /** How long "Rückgängig" shows: until shortly before the command stops waiting. */
 export const undoShownMs = (undoMs: number) => Math.max(0, undoMs - 400);

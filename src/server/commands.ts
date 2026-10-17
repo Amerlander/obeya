@@ -91,6 +91,8 @@ export interface Heard {
   wish?: Wish;
   /** The reply says Obeya cannot do what the owner asked: a link under it offers to report that as a wish. */
   cannot?: true;
+  /** The exchange of Obeya's sheet the reply stands in (none with a card open): a page that shows the sheet needs no line above the microphone. */
+  talk?: number;
 }
 
 export interface Focus {
@@ -294,8 +296,8 @@ export class Commander {
     const held: Held = { transcript, images, focus, input, at: new Date().toISOString() };
     // what the usage limit held is read first, in the order it was said; while the limit holds, these words wait with it
     await this.drain();
-    if (this.held.size) return this.hold(talk, held);
-    return (await this.answer(talk, held)) ?? this.hold(talk, held);
+    const h = this.held.size ? this.hold(talk, held) : ((await this.answer(talk, held)) ?? this.hold(talk, held));
+    return card ? h : { ...h, talk };
   }
 
   /** Reads the words of exchange `talk` and acts on them; nothing when the usage limit kept the Koordinator from reading them. */
@@ -403,7 +405,7 @@ export class Commander {
         this.held.delete(talk);
         if (heard.token) this.arm(heard.token);
         const card = h.focus.card && this.o.board.item(h.focus.card) ? h.focus.card : undefined;
-        this.o.board.notify({ ...(card ? { cardId: card } : {}), text: heard.confirm, ...(heard.token ? { token: heard.token, undoMs: this.delayMs } : {}), ...(heard.wish ? { wish: heard.wish } : {}) });
+        this.o.board.notify({ text: heard.confirm, ...(card ? { cardId: card } : { talk }), ...(heard.token ? { token: heard.token, undoMs: this.delayMs } : {}), ...(heard.wish ? { wish: heard.wish } : {}) });
       }
     })().finally(() => (this.draining = undefined)));
   }

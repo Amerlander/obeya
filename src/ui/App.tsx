@@ -687,7 +687,8 @@ function Canvas({
     if (h.wish) openWish(h.wish);
     if (h.token && !focusRef.current) newCardWatch.current = { known: new Set(itemsRef.current.map((i) => i.id)), until: Date.now() + 20_000 };
   }
-  const told = useTold(onHeard);
+  // the reply stands in Obeya's sheet, open in front of the owner: no line above the microphone
+  const told = useTold(onHeard, (h) => kOnRef.current && !cOnRef.current && snapshotRef.current.talk.some((x) => x.id === h.talk));
   const { tellAbout, tellTyped } = tellers(byId, told, fail, placeNow);
   useEffect(() => {
     const w = newCardWatch.current;
@@ -710,7 +711,7 @@ function Canvas({
       onNotice((n) => {
         const i = itemsRef.current.find((x) => x.id === n.cardId);
         if (n.wish) openWish(n.wish);
-        told.show(i ? { id: i.id, title: plain(i.title) } : undefined, { confirm: n.text, ...(n.token ? { token: n.token } : {}), ...(n.undoMs ? { undoMs: n.undoMs } : {}) });
+        told.show(i ? { id: i.id, title: plain(i.title) } : undefined, { confirm: n.text, ...(n.token ? { token: n.token } : {}), ...(n.undoMs ? { undoMs: n.undoMs } : {}), ...(n.talk ? { talk: n.talk } : {}) });
       }),
     [],
   );

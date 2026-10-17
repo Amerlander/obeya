@@ -571,7 +571,7 @@ describe('the Koordinator remembers', () => {
     const s: FakeSession = runtime.last;
     expect(s.inbox).toHaveLength(1);
     s.call('reply', { confirm: 'Eins.' });
-    expect(await first).toEqual({ confirm: 'Eins.' });
+    expect(await first).toEqual({ confirm: 'Eins.', talk: 1 });
     await settle();
     // the turn is still running: the idle that ends it must not answer the next command
     expect(s.inbox).toHaveLength(1);
@@ -581,7 +581,7 @@ describe('the Koordinator remembers', () => {
     expect(s.inbox[1]).toContain('"zwei"');
     s.call('reply', { confirm: 'Zwei.' });
     s.emit({ type: 'idle' });
-    expect(await second).toEqual({ confirm: 'Zwei.' });
+    expect(await second).toEqual({ confirm: 'Zwei.', talk: 2 });
   });
 });
 
@@ -614,7 +614,7 @@ describe('the usage limit', () => {
     runtime.last.call('act', { actions: [{ do: 'start', card: 'K1' }], confirm: '„Export“ startet.' });
     runtime.last.emit({ type: 'idle' });
     await until(() => notices.length);
-    expect(notices[0]).toMatchObject({ text: '„Export“ startet.', undoMs: 20 });
+    expect(notices[0]).toMatchObject({ text: '„Export“ startet.', undoMs: 20, talk: x!.id });
     expect(notices[0]!.token).toBeString();
     expect(board.snapshot().talk[0]!.reply).toBe('„Export“ startet.');
     await until(() => executed.length);
@@ -934,7 +934,7 @@ describe("the Koordinator and Obeya's configuration", () => {
     expect(JSON.parse(await runtime.last.call('config', {}))).toMatchObject({ file: '/h/canvases.json', running: ['obeya'], problems: [] });
     runtime.last.call('reply', { confirm: 'Eine: Obeya.' });
     runtime.last.emit({ type: 'idle' });
-    expect(await heard).toEqual({ confirm: 'Eine: Obeya.' });
+    expect(await heard).toEqual({ confirm: 'Eine: Obeya.', talk: 1 });
   });
 
   test('changes it on the owner\'s word after the undo window; one that does not work goes back to it', async () => {
@@ -1021,14 +1021,14 @@ describe("wishes for Obeya's makers", () => {
   test('a reply that Obeya cannot do something carries what the owner asked and the answer, for a draft', async () => {
     const k = commander();
     const { heard } = await say(k, 'sortier die Karten nach Datum', 'reply', { confirm: 'Karten nach Datum sortieren kann ich nicht; das gibt es in Obeya nicht.', wish: true });
-    expect(heard).toEqual({ confirm: 'Karten nach Datum sortieren kann ich nicht; das gibt es in Obeya nicht.', cannot: true });
+    expect(heard).toEqual({ confirm: 'Karten nach Datum sortieren kann ich nicht; das gibt es in Obeya nicht.', cannot: true, talk: 1 });
     expect(board.snapshot().talk.at(-1)!.wish).toEqual({ said: 'sortier die Karten nach Datum', answer: 'Karten nach Datum sortieren kann ich nicht; das gibt es in Obeya nicht.' });
   });
 
   test('a reply for words that are unclear, or that failed just now, offers nothing', async () => {
     const k = commander();
     const { heard } = await say(k, 'mach das Ding da', 'reply', { confirm: 'Welche Aufgabe meinst du?' });
-    expect(heard).toEqual({ confirm: 'Welche Aufgabe meinst du?' });
+    expect(heard).toEqual({ confirm: 'Welche Aufgabe meinst du?', talk: 1 });
     expect(board.snapshot().talk.at(-1)!.wish).toBeUndefined();
   });
 
@@ -1038,7 +1038,7 @@ describe("wishes for Obeya's makers", () => {
     await settle();
     runtime.last.call('look_up', { question: 'Kann Obeya Karten nach Datum sortieren?', confirm: 'Ich schaue nach.' });
     runtime.last.emit({ type: 'idle' });
-    expect(await heard).toEqual({ confirm: 'Ich schaue nach.' });
+    expect(await heard).toEqual({ confirm: 'Ich schaue nach.', talk: 1 });
     expect(board.snapshot().talk.at(-1)!.wish).toBeUndefined();
   });
 
@@ -1048,7 +1048,7 @@ describe("wishes for Obeya's makers", () => {
       actions: [{ do: 'wish', text: 'Die Leiste soll sich ausblenden lassen.' }],
       confirm: 'Der Entwurf für die Entwickler ist offen.',
     });
-    expect(heard).toEqual({ confirm: 'Der Entwurf für die Entwickler ist offen.', wish: { said: 'Die Leiste soll sich ausblenden lassen.' } });
+    expect(heard).toEqual({ confirm: 'Der Entwurf für die Entwickler ist offen.', wish: { said: 'Die Leiste soll sich ausblenden lassen.' }, talk: 1 });
     expect(board.snapshot().talk.at(-1)!.wish).toEqual({ said: 'Die Leiste soll sich ausblenden lassen.' });
     await new Promise((r) => setTimeout(r, 40));
     expect(executed).toEqual([]);

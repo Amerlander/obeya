@@ -232,8 +232,10 @@ export interface Told {
  * Commands spoken or typed, each with its own line from sending to its confirmation; one that went
  * out quietly (to the open card's agent) leaves no line. The server reads them one after the other.
  * `show` adds a confirmation that comes without a request: a request a card's agent passed on.
+ * `inView` says whether the conversation the owner looks at shows the reply already: then it gets
+ * no line, unless it has „Rückgängig“, which only the line offers.
  */
-export function useTold(onHeard: (h: Heard) => void) {
+export function useTold(onHeard: (h: Heard) => void, inView: (h: Heard) => boolean = () => false) {
   const [told, setTold] = useState<Told[]>([]);
   const toldRef = useRef(told);
   toldRef.current = told;
@@ -241,7 +243,7 @@ export function useTold(onHeard: (h: Heard) => void) {
   const update = (id: number, fn: (x: Told) => Told | null) => setTold((ts) => ts.flatMap((x) => (x.id === id ? (fn(x) ?? []) : [x])));
 
   function settle(id: number, h: Heard) {
-    if (h.quiet) return update(id, () => null);
+    if (h.quiet || (!h.token && inView(h))) return update(id, () => null);
     const undo = !!(h.token && h.undoMs);
     update(id, (x) => ({ ...x, heard: h, undo }));
     if (undo) setTimeout(() => update(id, (x) => ({ ...x, undo: false })), undoShownMs(h.undoMs!));

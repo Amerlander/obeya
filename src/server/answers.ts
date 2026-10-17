@@ -374,7 +374,7 @@ export class Answers {
       this.o.board.setThread(moved, { answers: s.answers + 1, files: s.files + (a.files?.length ?? 0) });
     }
     // above the microphone too, wherever the owner is by now; in full on the card or in the sheet
-    this.o.board.notify({ ...(card || moved ? { cardId: card ?? moved } : {}), text: clip(text, 300) });
+    this.o.board.notify({ ...(card || moved ? { cardId: card ?? moved } : { talk: talkId }), text: clip(text, 300) });
     this.o.onAnswer?.(talkId, question, text);
   }
 

@@ -1954,4 +1954,6 @@ export interface Notice {
   undoMs?: number;
   /** The owner asked to tell Obeya's makers something: the page opens the draft for them with it. */
   wish?: Wish;
+  /** The exchange of Obeya's sheet it answers, there in full: a page that shows the sheet needs no line above the microphone. */
+  talk?: number;
 }

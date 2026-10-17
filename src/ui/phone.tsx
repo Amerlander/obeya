@@ -122,6 +122,8 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
   // the canvases it last had, while the server did not answer: the list the server sends once it does
   useEffect(() => setCanvases(loaded), [loaded]);
   const [snaps, setSnaps] = useState<Record<string, CanvasSnapshot>>({});
+  const snapsRef = useRef(snaps);
+  snapsRef.current = snaps;
   const [offline, setOffline] = useState<Record<string, number | null>>({});
   const feed = (id: string, live: ReturnType<typeof useCanvas>) => {
     if (live.snapshot) setSnaps((s) => (s[id] === live.snapshot ? s : { ...s, [id]: live.snapshot! }));
@@ -288,7 +290,8 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
 
   // ---------------------------------------------------------------- voice and confirmations
   const { showAck, showWait, fail, line: ackLine } = useAck(true);
-  const told = useTold(() => {});
+  // the reply stands in Obeya's conversation, open in front of the owner: no line above the microphone
+  const told = useTold(() => {}, (h) => talkRef.current && !!snapsRef.current[obeyaRef.current]?.talk.some((x) => x.id === h.talk));
   const { tellAbout, tellTyped } = tellers(byId, told, fail, () => undefined);
   const where = (): Where => (openRef.current ? { card: openRef.current } : null);
   /** The draft of the field that speaks to `target`: the open card's, or the one under Obeya's conversation. */
@@ -328,7 +331,7 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
     () =>
       onNotice((n) => {
         const i = n.cardId ? byId(n.cardId) : undefined;
-        told.show(i ? { id: i.id, title: plain(i.title) } : undefined, { confirm: n.text, ...(n.token ? { token: n.token } : {}), ...(n.undoMs ? { undoMs: n.undoMs } : {}) });
+        told.show(i ? { id: i.id, title: plain(i.title) } : undefined, { confirm: n.text, ...(n.token ? { token: n.token } : {}), ...(n.undoMs ? { undoMs: n.undoMs } : {}), ...(n.talk ? { talk: n.talk } : {}) });
       }),
     [],
   );

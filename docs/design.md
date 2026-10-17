@@ -2910,7 +2910,11 @@ the words and „Obeya liest …“), only its confirmation with „Rückgängig
 configuration dialog, whose conversation is out of view, keeps the line. Several stack, oldest
 first, and the server reads them one after the other. A confirmation that arrives while another card
 is open starts with the card it is about; so does one for a request an agent passed on, and an
-answer looked up.
+answer looked up. A reply that stands in Obeya's sheet while the sheet is open (on the phone, its
+conversation) gets no line: the owner reads it there already (2026-10-17). Only one with
+„Rückgängig“ keeps it, since the sheet offers no undo. The server marks the exchange of the sheet a
+reply or a notice answers (`talk`); the page checks that its sheet shows that exchange, so a
+spoken command with a card open, a reply for another canvas and a failure keep their line.
 
 ### Voice latency
 

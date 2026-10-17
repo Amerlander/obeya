@@ -528,7 +528,7 @@ describe('voice', () => {
     const fresh = await briefed();
     expect(fresh.inbox[0]).toContain('"ähm"');
     fresh.call('reply', { confirm: 'Was genau soll ich tun?' });
-    expect(await heard).toEqual({ confirm: 'Was genau soll ich tun?' });
+    expect(await heard).toEqual({ confirm: 'Was genau soll ich tun?', talk: 1 });
   });
 
   test('a session that fails again tells the owner why, not that they went unheard', async () => {

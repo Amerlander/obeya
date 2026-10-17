@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pagePolicy } from '../core/frame';
-import { waitingOn } from '../core/types';
+import { type Notice, waitingOn } from '../core/types';
 import { answersDir } from './answers';
 import { CanvasRuntime } from './canvas';
 import { serveAnswerFile } from './demo';
@@ -16,11 +16,11 @@ let main: string;
 let store: Store;
 let runtime: FakeRuntime;
 let canvas: CanvasRuntime;
-let notices: [string | undefined, string][];
+let notices: Notice[];
 
 const open = () => {
   const c = new CanvasRuntime({ repos: [{ path: main, clones: 1 }] }, { store, home: dir, runtime, forge: noForge, commandDelayMs: 10, permissionMode: 'acceptEdits', limitMargin: 10 });
-  c.board.onNotice((n) => notices.push([n.cardId, n.text]));
+  c.board.onNotice((n) => notices.push(n));
   return c;
 };
 
@@ -87,7 +87,7 @@ describe('a question the Koordinator looks up', () => {
       ['say', 'project', '1. Liest das Plan-Doc.\n2. Fragt nach dem Go.'],
     ]);
     // above the microphone too, written
-    expect(notices).toEqual([[w4.id, '1. Liest das Plan-Doc.\n2. Fragt nach dem Go.']]);
+    expect(notices).toEqual([{ cardId: w4.id, text: '1. Liest das Plan-Doc.\n2. Fragt nach dem Go.' }]);
     // the project agent keeps its session: it knows the plan and the history
     expect(board().row(w4.parent!).session_id).toBe('project-1');
     expect(board().talk().at(-1)).toMatchObject({ question: 'What would the worker do on W4 if the owner started it now?', answer: '1. Liest das Plan-Doc.\n2. Fragt nach dem Go.', answerBy: 'project' });
@@ -118,7 +118,8 @@ describe('a question the Koordinator looks up', () => {
     a.emit({ type: 'idle' });
     await settle();
     expect(board().snapshot().talk.at(-1)).toMatchObject({ answer: 'Er sucht den Hänger.', answerBy: 'koordinator', unread: true });
-    expect(notices).toEqual([[undefined, 'Er sucht den Hänger.']]);
+    // the sheet shows it in full: a page with the sheet open needs no line above the microphone for it
+    expect(notices).toEqual([{ text: 'Er sucht den Hänger.', talk: board().snapshot().talk.at(-1)!.id }]);
     // Obeya waits for the owner with it, like a card that needs them, until they see the sheet
     expect(waitingOn(board().snapshot())).toBe(1);
     board().readTalk();
@@ -223,7 +224,7 @@ describe('a look-up the usage limit stops', () => {
     a.emit({ type: 'idle' });
     await settle();
     expect(talk().answer).toBe('Der Plan sagt nichts dazu.');
-    expect(notices).toEqual([[undefined, 'Der Plan sagt nichts dazu.']]);
+    expect(notices).toEqual([{ text: 'Der Plan sagt nichts dazu.', talk: talk().id }]);
   });
 
   test("a workstream's project agent waits the same way", async () => {
