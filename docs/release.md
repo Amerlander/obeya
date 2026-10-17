@@ -32,8 +32,8 @@ machine's active account may lack the admin rights a workflow run or a rerun nee
    (`scripts/hero-video/README.md`), and its stills checked for the three failures the README
    names. Then from the same render, in the release's checkout:
    - the site's screenshots, `bun scripts/site-shots.ts --demo <dir>` with the Tipjar demo the
-     render's agent left (the newest `~/demos/tipjar-split-the-bill*` without `-two`), into
-     `site/img/`: the desktop ones and the two of the phone view (`phone.png`, `phone-demo.png`);
+     render's agent left (the newest `~/demos/tipjar-split-the-bill*`), into `site/img/`: the
+     desktop ones and the two of the phone view (`phone.png`, `phone-demo.png`);
    - the poster and the README's picture of the video, `node scripts/hero-video/publish.ts --poster-only`
      (it uploads nothing);
    - a copy of `demo.mp4`, `captions.vtt`, `chapters.vtt` and `review/` in `~/demos/obeya-v<version>/`,
