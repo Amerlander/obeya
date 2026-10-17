@@ -4541,7 +4541,7 @@ page opens. A card opened from the conversation opens over it, and Back returns 
 A tap opens a card full screen: Back (the button, the browser's back, Esc) returns to the list where
 it was scrolled. The card's address is `?card=<id>`, so a reload or a restart opens it again. It is
 the canvas's detail view (`Detail`) with the same answer options, demo, approve buttons and undo;
-a demo video plays full width and full screen from its own controls. The page holds what the card
+a demo video plays full width, and full screen from Obeya's button on it (see below). The page holds what the card
 is about (title, text or brief, demo) and the decisions, and is the only thing on it that scrolls.
 The card's conversation is not on it but in the same panel as Obeya's, with the same grip, Back and
 Esc, keyboard handling and confirmations above the field: the button left of the microphone opens
@@ -4601,6 +4601,20 @@ stays, with Back; on the panel, as its grip). The panel leaves no room under its
 microphone standing beside it, and while the keyboard is up the field takes the strip's width too.
 Confirmations stand at the bottom of the content, in the panel above the field. Held upright nothing
 changes.
+
+A demo video goes full screen from the button at its top right (`useFullscreen` in
+`src/ui/fullscreen.ts`), not from its own controls: their full screen button is hidden
+(`controlsList="nofullscreen"`). Full screen holds the screen in the video's orientation (landscape
+for a demo), however the phone is held when it starts. Once the phone has been turned to match,
+turning it back ends full screen (held the other way for 300 ms, read from the device's orientation
+sensor, which goes on while the screen is held), as do the button and Back. Turning the phone into
+landscape while the video plays and stands in view starts full screen too. Chrome on Android did all
+this itself for a video in full screen from its own controls, but racily: once the phone matched the
+video it released the screen, which right then could still report the orientation from before, so
+turning the phone into landscape sometimes ended full screen and turning it back sometimes started
+it. Obeya holds the screen until full screen ends instead, so the screen and full screen never
+disagree. A browser that puts only the video itself into full screen (Safari on an iPhone) has no
+such button and keeps the video's own controls, whose player turns with the phone.
 
 When the server does not answer for 3 s (a phone back from its lock screen reconnects within that),
 a line at the top says „Obeya antwortet nicht · seit 14:02“ and why that may be; the page connects

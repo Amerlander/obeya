@@ -1631,8 +1631,20 @@ button.link:hover { text-decoration: underline; }
 .ph-view .proposal-grid textarea.p-body { min-height: 160px; max-height: 50vh; }
 .ph-view .actions { flex-wrap: wrap; }
 .ph-view .actions .btn { min-height: 42px; }
-/* the video plays full width, and full screen from its own controls; zooming within the page adds nothing on a phone */
+/* the video plays full width, and full screen from Obeya's button over it (fullscreen.ts); zooming within the page adds nothing on a phone */
 .ph-view .demo-view .zoom, .ph-view .seek-hint { display: none; }
+.ph-view .demo-view .fullscreen { position: absolute; top: 10px; right: 10px; z-index: 1; width: 42px; height: 42px; border: 0; border-radius: 50%;
+  background: rgba(0, 0, 0, .55); display: grid; place-items: center; }
+.ph-view .demo-view .fullscreen svg { width: 22px; height: 22px; fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+/* in full screen the player is black around the video, which fills it as far as its shape allows */
+.ph-view .demo-view .screen.full { background: #000; display: flex; align-items: center; }
+.ph-view .demo-view .screen.full video { width: 100%; height: 100%; object-fit: contain; border-radius: 0; }
+.ph-view .demo-view .screen.full .fullscreen, .ph-view .demo-view .screen.full .comment-here { top: max(10px, env(safe-area-inset-top)); }
+.ph-view .demo-view .screen.full .fullscreen { right: max(10px, env(safe-area-inset-right)); }
+.ph-view .demo-view .comment-here { right: 60px; }
+/* `nofullscreen` only greys out the controls' own full screen button in Chrome's newer controls: it goes, beside Obeya's */
+.ph-view .demo-view video::-webkit-media-controls-fullscreen-button { display: none; }
+.ph-view .demo-view .screen.full .comment-here { right: calc(50px + max(10px, env(safe-area-inset-right))); }
 /* a phone's browser zooms into a text field written smaller than 16 px */
 .ph-view textarea, .ph-view select, .ph-view input { font-size: 16px; }
 /* no pointer hovers on a phone: the reply button shows on every message */

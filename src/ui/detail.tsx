@@ -20,6 +20,7 @@ import { cardDraft, giveBack, questionsKey, updateDraft, useDraft } from './draf
 import { eventQuote, type Reply, setReply, useReplyKnown } from './reply';
 import { Composer } from './composer';
 import { useFitHeight } from './fitHeight';
+import { useFullscreen } from './fullscreen';
 import { type Box, onto, ZOOM_EASE, ZOOM_MS, zoomBox } from './zoomBox';
 import { AttachButton, imageUrl, ShotStrip, Shots, useShotInput } from './shots';
 import { useStickToEnd } from './stickToEnd';
@@ -1419,6 +1420,8 @@ function DemoView({
   }, []);
   useEffect(() => () => holdRestart('video', null), []);
   const zoom = useZoom(video);
+  // the phone view, which puts the conversation elsewhere, puts the video into full screen itself (fullscreen.ts)
+  const fullscreen = useFullscreen(zoom.screen, video, !!elsewhere);
   const seek = useSeekKeys(video);
   const watching = useWatching(cardId, video, comments && demo.kind !== 'html' ? demo.chapters : null, demo.handover);
   const current = chapterAt(demo.chapters, now);
@@ -1508,13 +1511,14 @@ function DemoView({
           <div className="player" ref={zoom.player} style={zoom.box ? { height: zoom.box.from.height } : undefined}>
             {zoom.box && <div className={zoom.box.closing ? 'demo-zoom closing' : 'demo-zoom'} ref={zoom.backdrop} title={t.demo.unzoom} onClick={zoom.toggle} />}
             <div
-              className={zoom.box ? 'screen zoomed' : 'screen'}
+              className={zoom.box ? 'screen zoomed' : fullscreen.full ? 'screen full' : 'screen'}
               ref={zoom.screen}
               style={zoom.box ? { left: zoom.box.to.left, top: zoom.box.to.top, width: zoom.box.to.width, height: zoom.box.to.height } : undefined}
             >
               <video
                 ref={video}
                 controls
+                controlsList={fullscreen.can ? 'nofullscreen' : undefined}
                 preload="metadata"
                 poster={src('poster.jpg')}
                 src={src('demo.mp4')}
@@ -1555,6 +1559,7 @@ function DemoView({
                   onClick={() => {
                     video.current?.pause();
                     if (zoom.box) zoom.toggle();
+                    fullscreen.leave();
                     if (elsewhere) elsewhere.open(true);
                     else document.querySelector<HTMLTextAreaElement>('.card-sheet .split-talk .composer textarea')?.focus();
                   }}
@@ -1563,6 +1568,13 @@ function DemoView({
                     <path d="M4 5.5h16v10.5H10l-4.5 3.5V16H4z" />
                   </svg>
                   {t.demo.comment}
+                </button>
+              )}
+              {fullscreen.can && (
+                <button className="fullscreen" title={fullscreen.full ? t.demo.fullscreenOff : t.demo.fullscreen} aria-label={fullscreen.full ? t.demo.fullscreenOff : t.demo.fullscreen} onClick={fullscreen.toggle}>
+                  <svg viewBox="0 0 24 24">
+                    <path d={fullscreen.full ? 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5' : 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5'} />
+                  </svg>
                 </button>
               )}
               <button

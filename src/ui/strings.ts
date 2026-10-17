@@ -538,6 +538,8 @@ const de = {
     unzoomHint: 'Kleiner mit',
     seekHint: '5 Sekunden springen mit',
     comment: 'Hier kommentieren',
+    fullscreen: 'Vollbild',
+    fullscreenOff: 'Vollbild beenden',
     commentHint: 'Hält das Video an: was du schreibst oder bei gehaltener Leertaste sagst, gehört zu dieser Stelle',
     /** The field's placeholder while the video stands at a place. */
     commentAt: (time: string) => `Etwas zu ${time} schreiben oder Leertaste halten`,
@@ -1965,6 +1967,8 @@ const en: Strings = {
     unzoomHint: 'Smaller with',
     seekHint: 'Jump 5 seconds with',
     comment: 'Comment here',
+    fullscreen: 'Full screen',
+    fullscreenOff: 'Exit full screen',
     commentHint: 'Pauses the video: what you type, or say holding space, is about this moment',
     commentAt: (time: string) => `Write about ${time} or hold space`,
     place: 'Your comment is about this moment in the video',
