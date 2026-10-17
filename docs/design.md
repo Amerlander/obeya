@@ -474,8 +474,13 @@ starts with the press, so no word is cut off, but with a demo video open the mic
 only once Space stays down for 200 ms (`SPACE_SHOWS_MS`), so a tap does not flicker it; without a
 video Space has nothing to play, so the microphone lights up at once. ← and → jump 5 seconds back
 and forward (`useSeekKeys`). The browser's controls keep every key to themselves once clicked, so
-the video hands the focus back to the page at once. A click on the controls shows the arrow keys
-over them for a moment, until the owner first jumped with them (per browser).
+the video hands the focus back to the page at once. Not when the controls take it again within a
+second (`MENU_FOCUS_MS`): their overflow menu (⋮) takes the focus as it opens, right after the
+press on its button gave it to them, and closes when it loses it, so handing it back left the menu
+dead. Without a mouse (a phone, a tablet: `pointer: fine` does not match) there are no keys, and the
+video keeps the focus. A press or click on the controls never reaches the page, only the focus
+does, which is why the menu is told apart by time. A click on the controls shows the arrow keys over them for a moment,
+until the owner first jumped with them (per browser).
 
 #### Comments at a place in the video
 

@@ -1693,6 +1693,8 @@ function keyedVideo() {
 
 /** How far ← and → jump in the demo video, in seconds. */
 const SEEK_S = 5;
+/** How soon after the video handed the focus back its controls take it again for their overflow menu: a press on its button, ms. */
+const MENU_FOCUS_MS = 1000;
 /** Set once the owner jumped with the arrow keys: a click on the video's controls stops showing them. */
 const SEEK_KEYS_KNOWN = 'obeya-seek-keys-known';
 
@@ -1700,8 +1702,11 @@ const SEEK_KEYS_KNOWN = 'obeya-seek-keys-known';
  * ← and → jump back and forward in the demo video, without a click on its progress bar first. The
  * browser's controls keep every key to themselves once clicked (Space too, which then neither paused
  * the video nor started a recording), so the video hands the focus back to the page at once; then
- * the keys reach Obeya's own handlers. A click on the controls shows the keys over the video for a
- * moment, until the owner first jumped with them.
+ * the keys reach Obeya's own handlers. Their overflow menu (⋮) takes the focus as it opens, right
+ * after the press on its button gave it to them, and closes when it loses it: the focus coming back
+ * that soon stays. Without a mouse (a phone, a tablet) there are no keys, and the focus stays too. A
+ * click on the controls shows the keys over the video for a moment, until the owner first jumped
+ * with them.
  */
 function useSeekKeys(video: RefObject<HTMLVideoElement | null>) {
   const [hint, setHint] = useState(false);
@@ -1723,8 +1728,12 @@ function useSeekKeys(video: RefObject<HTMLVideoElement | null>) {
       clearTimeout(hide.current);
     };
   }, []);
+  /** when the video last handed the focus back */
+  const gaveBack = useRef(-Infinity);
   const focused = (v: HTMLVideoElement) => {
+    if (!matchMedia('(pointer: fine)').matches || performance.now() - gaveBack.current < MENU_FOCUS_MS) return;
     v.blur();
+    gaveBack.current = performance.now();
     if (known(SEEK_KEYS_KNOWN)) return;
     setHint(true);
     clearTimeout(hide.current);
