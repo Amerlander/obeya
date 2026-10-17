@@ -3249,7 +3249,10 @@ mask's layer went, Chrome stalled for about 0.27 s, a jerk in the video wherever
 
 Obeya takes the chapter times from the captions and serves the video, poster and captions of the
 card's demo (range requests). The card shows it on the left, the conversation with the field for
-feedback beside it and approve below both; feedback asks for a new render.
+feedback beside it and approve below both; feedback asks for a new render. A video without a
+`poster.jpg` (one the demo skill did not render) shows its first frame instead (`noPoster`), and
+the player takes the video's shape from its metadata: until a video first plays, Chrome sizes it by
+its poster, and a poster that did not load left a flat strip of 300 × 150 at full width.
 
 When the result is something to look at rather than something that happens, the worker makes an HTML
 artifact instead (`kind: 'html'`): a directory with an `index.html` and the files it loads, handed

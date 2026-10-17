@@ -216,6 +216,7 @@ describe('handing over with a demo', () => {
     const d = join(dir, 'demo');
     Bun.spawnSync(['mkdir', '-p', d]);
     writeFileSync(join(d, 'demo.mp4'), 'x');
+    writeFileSync(join(d, 'poster.jpg'), 'x');
     writeFileSync(join(d, 'captions.vtt'), 'WEBVTT\n\n00:00:00.350 --> 00:00:05.000\nA.\n\n00:00:06.350 --> 00:00:09.000\nB.\n');
     return d;
   };

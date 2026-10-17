@@ -573,6 +573,8 @@ export interface Demo {
    * a detail corrected or explained since (`supplements`), to share beside that one.
    */
   follows?: 'replaces' | 'supplements';
+  /** A video without `poster.jpg` (one the demo skill did not render): the player shows its first frame instead. */
+  noPoster?: true;
 }
 
 /** A demo a later handover replaced: `n` is its place among the card's earlier demos, for its files. */

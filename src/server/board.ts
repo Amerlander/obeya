@@ -175,6 +175,9 @@ export function missedBy(s: StoredShare): KnownChange[] {
 /** A demo as a card keeps it (`CardRow.demo`, and each of `CardRow.demos`). */
 export type StoredDemo = Demo & { dir: string };
 
+/** A demo as the UI gets it: without its directory, and saying whether a video has a poster. */
+const shownDemo = ({ dir, ...d }: StoredDemo): Demo => (d.kind !== 'html' && !existsSync(join(dir, 'poster.jpg')) ? { ...d, noPoster: true } : d);
+
 const storedDemos = (r: CardRow): StoredDemo[] => (r.demos ? (JSON.parse(r.demos) as StoredDemo[]) : []);
 
 /**
@@ -184,7 +187,7 @@ const storedDemos = (r: CardRow): StoredDemo[] => (r.demos ? (JSON.parse(r.demos
 function earlierDemos(r: CardRow): EarlierDemo[] {
   const all = storedDemos(r);
   const later = (i: number) => [...all.slice(i + 1).map((d) => d.dir), ...(r.demo ? [(JSON.parse(r.demo) as StoredDemo).dir] : [])];
-  return all.flatMap(({ dir, ...d }, n) => (!later(n).includes(dir) && existsSync(join(dir, d.kind === 'html' ? 'index.html' : 'demo.mp4')) ? [{ ...d, n }] : []));
+  return all.flatMap((d, n) => (!later(n).includes(d.dir) && existsSync(join(d.dir, d.kind === 'html' ? 'index.html' : 'demo.mp4')) ? [{ ...shownDemo(d), n }] : []));
 }
 
 /**
@@ -1906,7 +1909,7 @@ const below = (b: Bounds, n = 0) => ({ x: b.x + 35 + n * (CARD_SIZE.task[0] + GA
 /** The fields a worker adds to a card. */
 function work(r: CardRow): Partial<Item> {
   const detail = r.detail ? (JSON.parse(r.detail) as { question?: Item['question']; summary?: string; noChange?: boolean; lands?: Item['lands']; answering?: boolean; answered?: boolean }) : {};
-  const demo = r.demo ? (({ dir: _, ...d }) => d)(JSON.parse(r.demo) as StoredDemo) : undefined;
+  const demo = r.demo ? shownDemo(JSON.parse(r.demo) as StoredDemo) : undefined;
   const earlier = demo ? earlierDemos(r) : [];
   const handed = r.need === 'review' || r.need === 'demo';
   const answering = detail.answering && handed;

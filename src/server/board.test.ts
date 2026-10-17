@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { boundsOf, sizeOf } from '../core/layout';
 import type { PlanDoc } from '../core/plan-doc';
 import { BadRequest, Board, type PlanRead } from './board';
@@ -631,5 +634,27 @@ describe('waiting since', () => {
     board.work(c.id, { state: 'working', need: null });
     expect(board.item(c.id)!.waitingSince).toBeUndefined();
     expect(store.waitingSince('shop').size).toBe(0);
+  });
+});
+
+describe('a demo on the card', () => {
+  test('a video without a poster says so, for the player to show its first frame; one with a poster does not', () => {
+    const dir = (files: string[]) => {
+      const d = mkdtempSync(join(tmpdir(), 'obeya-demo-'));
+      for (const f of files) writeFileSync(join(d, f), f);
+      return d;
+    };
+    const [bare, framed] = [dir(['demo.mp4', 'captions.vtt']), dir(['demo.mp4', 'captions.vtt', 'poster.jpg'])];
+    const c = board.create({ title: 'Video', x: 0, y: 0 });
+    board.work(c.id, {
+      state: 'working',
+      branch: 'obeya/video',
+      demo: JSON.stringify({ kind: 'video', dir: framed, chapters: [[0, 'Danach']], handover: 2 }),
+      demos: JSON.stringify([{ kind: 'video', dir: bare, chapters: [[0, 'Vorher']], handover: 1 }]),
+    });
+    const item = board.item(c.id)!;
+    expect(item.demo).toEqual({ kind: 'video', chapters: [[0, 'Danach']], handover: 2 });
+    expect(item.demos).toEqual([{ kind: 'video', chapters: [[0, 'Vorher']], handover: 1, noPoster: true, n: 0 }]);
+    for (const d of [bare, framed]) rmSync(d, { recursive: true, force: true });
   });
 });
