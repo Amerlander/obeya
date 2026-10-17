@@ -301,7 +301,7 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
   useEffect(() => beforeReload(() => void flushEdit().catch(console.error)), []);
 
   // ---------------------------------------------------------------- voice and confirmations
-  const { showAck, showWait, fail, line: ackLine } = useAck();
+  const { showAck, showWait, fail, line: ackLine } = useAck(true);
   const told = useTold(() => {});
   const { tellAbout, tellTyped } = tellers(byId, told, fail, () => undefined);
   const where = (): Where => (openRef.current ? { card: openRef.current } : null);
@@ -408,7 +408,7 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
   const voice = (
     <>
       <div id="acks">
-        <ToldList told={told.told} open={open ?? undefined} onUndo={told.undo} />
+        <ToldList told={told.told} open={open ?? undefined} onUndo={told.undo} aside onGone={told.drop} />
         {ackLine}
       </div>
       <PushToTalk

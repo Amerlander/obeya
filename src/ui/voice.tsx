@@ -11,6 +11,7 @@ import { createContext, useEffect, useRef, useState } from 'react';
 import type { Place } from '../core/layout';
 import { ApiError, api, confirmShownMs, type Heard, holdRestart, undoShownMs, type Where } from './api';
 import { beginDictation, dictate, draftOf, focusedDraft, MIC_DRAFT, moveImages, takesImages, toObeya, updateDraft, useDraft, useFieldOn, useFocusedDraft } from './draft';
+import { Aside } from './aside';
 import { type Recording, record } from './recorder';
 import { AttachButton, ShotStrip, useShotInput } from './shots';
 import { replyOn, setReply, useReply } from './reply';
@@ -285,15 +286,20 @@ export function useTold(onHeard: (h: Heard) => void) {
     holdRestart('told', reading ? 'voice' : null);
     return () => holdRestart('told', null);
   }, [reading]);
-  return { told, tell, show, undo };
+  /** A line the owner swiped aside: gone, and the confirmation of a command still read does not follow. */
+  const drop = (x: Told) => update(x.id, () => null);
+  return { told, tell, show, undo, drop };
 }
 
-/** The commands on their way, above the microphone, oldest first; `open`: the card open now. */
-export function ToldList({ told, open, onUndo }: { told: Told[]; open?: string; onUndo: (x: Told) => void }) {
+/**
+ * The commands on their way, above the microphone, oldest first; `open`: the card open now. With
+ * `aside` (the phone) the owner swipes a line away, and `onGone` drops it.
+ */
+export function ToldList({ told, open, onUndo, aside = false, onGone }: { told: Told[]; open?: string; onUndo: (x: Told) => void; aside?: boolean; onGone?: (x: Told) => void }) {
   return (
     <>
       {told.map((x) => (x.heard || x.pending) && (
-        <div key={x.id} className={`ack told ${x.heard ? 'heard' : 'reading'}`}>
+        <Aside key={x.id} on={aside} onGone={() => onGone?.(x)} className={`ack told ${x.heard ? 'heard' : 'reading'}`}>
           <span>
             {x.heard ? (
               <>
@@ -305,7 +311,7 @@ export function ToldList({ told, open, onUndo }: { told: Told[]; open?: string; 
             )}
           </span>
           {x.undo && <button onClick={() => onUndo(x)}>{t.undo}</button>}
-        </div>
+        </Aside>
       ))}
     </>
   );

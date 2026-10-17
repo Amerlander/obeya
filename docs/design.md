@@ -4565,6 +4565,15 @@ too, and its address is
 `?talk`, as a card's is `?card=<id>`. Its unread answers count as read once it is open, not when the
 page opens. A card opened from the conversation opens over it, and Back returns to it.
 
+The lines above the microphone (Obeya's reply, a confirmation with „Rückgängig“, a command still
+being read) are swiped aside, to either side, to be rid of them before they go by themselves, on the
+list as on an open card: pulled past a third of their width or flicked, they fly out; less, they
+spring back, and a drag up or down leaves them (`Aside` in `src/ui/aside.tsx`). A line swiped away
+takes nothing back: a command's „Rückgängig“ goes with it unused, and a command still being read is
+carried out, its confirmation not shown. Until the owner has swiped one away in this browser, each
+line nudges aside and back once after it appears. The canvas has no such gesture: it was wanted on
+the phone only.
+
 A tap opens a card full screen: Back (the button, the browser's back, Esc) returns to the list where
 it was scrolled. The card's address is `?card=<id>`, so a reload or a restart opens it again. It is
 the canvas's detail view (`Detail`) with the same answer options, demo, approve buttons and undo;

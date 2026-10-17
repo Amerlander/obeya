@@ -6,6 +6,7 @@
 import { useRef, useState } from 'react';
 import type { Place } from '../core/layout';
 import { agentListens, type Item, type TalkRef } from '../core/types';
+import { Aside } from './aside';
 import { api, ApiError, type Field, type Heard, type Where } from './api';
 import { plain } from './markdown';
 import { sent, take, videoOf } from './spot';
@@ -17,9 +18,10 @@ const ACK_MS = 7000;
 
 /**
  * The confirmation above the microphone: `showAck` with „Rückgängig“ while the action still waits,
- * `showWait` for what the server is still at, `fail` for what went wrong; `line` shows it.
+ * `showWait` for what the server is still at, `fail` for what went wrong; `line` shows it. With
+ * `aside` (the phone) the owner swipes it away.
  */
-export function useAck() {
+export function useAck(aside = false) {
   const [ack, setAck] = useState<{ text: string; undo?: () => unknown; wait?: boolean } | null>(null);
   const [ackOn, setAckOn] = useState(false);
   const ackTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -45,8 +47,13 @@ export function useAck() {
     clearTimeout(ackTimer.current);
     clearTimeout(undoTimer.current);
   }
+  function gone() {
+    setAckOn(false);
+    clearTimeout(ackTimer.current);
+    clearTimeout(undoTimer.current);
+  }
   const line = (
-    <div id="ack" className={`ack${ackOn ? ' on' : ''}${ack?.wait ? ' wait' : ''}`}>
+    <Aside id="ack" on={aside} onGone={gone} className={`ack${ackOn ? ' on' : ''}${ack?.wait ? ' wait' : ''}`}>
       <span>{ack?.text}</span>
       {ack?.undo && (
         <button
@@ -58,7 +65,7 @@ export function useAck() {
           {t.undo}
         </button>
       )}
-    </div>
+    </Aside>
   );
   return { showAck, showWait, fail, line };
 }

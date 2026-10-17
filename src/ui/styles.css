@@ -1339,6 +1339,10 @@ button.link:hover { text-decoration: underline; }
 #ack:not(.on) { display: none; }
 .ack.reading { background: var(--card); color: var(--muted); box-shadow: var(--shadow); padding: 7px 14px; font-size: 13px; }
 .ack.reading::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--working); animation: spin .8s linear infinite; }
+/* on the phone a line is swiped aside to be rid of it; until that has happened once, each nudges aside and back */
+.ack.aside { touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.ack.aside.nudge:not(.reading) { animation: ack-in .25s, ack-nudge .9s .7s ease-in-out; }
+@keyframes ack-nudge { 30% { transform: translateX(36px); } 55% { transform: translateX(-10px); } 75%, 100% { transform: none; } }
 .c-listener { flex-basis: 100%; margin-top: -4px; font-size: 11.5px; color: var(--muted); }
 .c-listener.c-dictation, .c-listener.c-dictation b { color: var(--working); }
 .c-listener.c-note { color: var(--warn); }
