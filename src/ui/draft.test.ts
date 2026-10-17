@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { cardDraft, draftOf, dropDraft, giveBack, keepDrafts, markupOf, setMarkup, updateDraft } from './draft';
+import { cardDraft, draftOf, dropDraft, giveBack, keepDrafts, MIC_DRAFT, markupOf, moveImages, OBEYA_DRAFT, setMarkup, updateDraft } from './draft';
 
 const store = () => {
   const m = new Map<string, string>();
@@ -62,4 +62,14 @@ test('words taken back go into an empty field with their screenshots; a field wi
   giveBack(key, 'Und PDF.');
   expect(draftOf(key)).toMatchObject({ text: 'Etwas anderes.', images: [] });
   dropDraft(key);
+});
+
+test("the screenshots beside the microphone go into Obeya's field after those it has, the field's words untouched", () => {
+  updateDraft(MIC_DRAFT, { images: ['a.png', 'b.png'] });
+  updateDraft(OBEYA_DRAFT, { text: 'Schau mal', images: ['b.png', 'c.png'] });
+  moveImages(MIC_DRAFT, OBEYA_DRAFT);
+  expect(draftOf(OBEYA_DRAFT)).toMatchObject({ text: 'Schau mal', images: ['b.png', 'c.png', 'a.png'] });
+  expect(draftOf(MIC_DRAFT).images).toEqual([]);
+  dropDraft(MIC_DRAFT);
+  dropDraft(OBEYA_DRAFT);
 });

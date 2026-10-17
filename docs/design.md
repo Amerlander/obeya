@@ -1082,7 +1082,8 @@ when no card is open, go with the next recording (see Voice in: one draft per fi
 microphone or pasted (⌘V) anywhere outside a text field, they land in that field. Only where no
 field is spoken to (the canvas with no card open and the sidebar closed) the microphone keeps
 screenshots of its own: picked with the small button to its right, dropped on it or pasted, they
-show beside it. A recording in which nothing was heard or understood leaves them where they were,
+show beside it. Opening the sidebar moves them into its field, as they were for Obeya too; an open
+card leaves them beside the microphone, out of sight until it closes. A recording in which nothing was heard or understood leaves them where they were,
 and so does one Obeya refused. When the connection breaks before the answer (the browser cuts it
 off as the page goes to another canvas or reloads, or the network drops), the page cannot tell
 whether Obeya has the command: it names each recording (`?sent=<id>`), asks Obeya whether that one
@@ -1216,6 +1217,8 @@ show on their cards as before. Owner-facing text from agents is in the owner's l
   a second time with the next command. The fix then told a page that was leaving by its `pagehide`;
   in the owner's Chrome the screenshots still came back after a quick switch to another canvas and
   back (2026-10-16), so since then Obeya, not the browser's timing, says whether the command arrived.
+  Until 2026-10-17 the microphone's screenshots hid when the sidebar opened, and looked lost to the
+  owner who then wanted to type about them.
 - **Marking without tools: the gesture decides** (owner, 2026-10-14): a free pen came out rough with
   mouse or trackpad, and a switch between pen, frame and number was one more choice each time.
   Frames got numbers like pins on 2026-10-15 (owner); until then only pins had them.

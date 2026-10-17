@@ -10,7 +10,7 @@
 import { createContext, useEffect, useRef, useState } from 'react';
 import type { Place } from '../core/layout';
 import { ApiError, api, confirmShownMs, type Heard, holdRestart, undoShownMs, type Where } from './api';
-import { beginDictation, dictate, draftOf, focusedDraft, MIC_DRAFT, takesImages, updateDraft, useDraft, useFieldOn, useFocusedDraft } from './draft';
+import { beginDictation, dictate, draftOf, focusedDraft, MIC_DRAFT, moveImages, takesImages, toObeya, updateDraft, useDraft, useFieldOn, useFocusedDraft } from './draft';
 import { type Recording, record } from './recorder';
 import { AttachButton, ShotStrip, useShotInput } from './shots';
 import { replyOn, setReply, useReply } from './reply';
@@ -317,12 +317,17 @@ export function ToldList({ told, open, onUndo }: { told: Told[]; open?: string; 
  * view, while that has its field on the page). With no `target` (the phone, where what is in view
  * fills the screen) that line is left out. Without such a field, screenshots for the next
  * recording are picked beside the microphone; dropped on it or pasted (App), they go to the field
- * when there is one.
+ * when there is one. When Obeya's field comes into view, those beside the microphone go into it:
+ * they were for Obeya too.
  */
 export function PushToTalk({ phase, level, flat, target, field, onDown }: { phase: Phase; level: number; flat: boolean; target: string | null; field: string | null; onDown: () => void }) {
   const on = useFieldOn(field);
   const key = on ? field! : MIC_DRAFT;
   const shots = useShotInput({ draft: key, off: !takesImages(key) });
+  const waiting = useDraft(MIC_DRAFT).images;
+  useEffect(() => {
+    if (key !== MIC_DRAFT && toObeya(key) && takesImages(key)) moveImages(MIC_DRAFT, key);
+  }, [key, waiting]);
   const { text } = useDraft(key);
   const quote = useReply(key);
   const into = useFocusedDraft();

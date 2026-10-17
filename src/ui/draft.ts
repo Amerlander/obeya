@@ -158,6 +158,17 @@ export function giveBack(key: string, text: string, images: string[] = []) {
   updateDraft(key, { text, images });
 }
 
+/** Whether the draft's field speaks to Obeya, as the microphone does without one: the sidebar's, the phone view's under Obeya's conversation. */
+export const toObeya = (key: string) => key === OBEYA_DRAFT || key.startsWith(`${OBEYA_DRAFT}:`);
+
+/** The screenshots of draft `from` go into draft `to`, after those it has. */
+export function moveImages(from: string, to: string) {
+  const { images } = draftOf(from);
+  if (!images.length || from === to) return;
+  updateDraft(to, (d) => ({ images: [...d.images, ...images.filter((id) => !d.images.includes(id))] }));
+  updateDraft(from, { images: [] });
+}
+
 /** Forgets a draft whose field is gone for good. */
 export function dropDraft(key: string) {
   if (drafts.delete(key)) changed();
