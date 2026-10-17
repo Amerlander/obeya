@@ -1580,6 +1580,8 @@ button.link:hover { text-decoration: underline; }
 /* everything in „Für dich“ waits for the owner: the heading says so, no pin on each card */
 .ph-card .badge { display: none; }
 .ph-none { margin: 0; color: var(--muted); font-size: 14.5px; }
+/* the cards snoozed while they waited stand under it, as far off as the cards from each other */
+.ph-none + .ph-list { margin-top: 14px; }
 /* the button for Obeya's conversation (the canvas's talk pill, a finger's size), left of the microphone in
    reach of the thumb; inverted while the panel is open */
 .pill.ph-talk-open { position: fixed; z-index: 50; left: max(14px, env(safe-area-inset-left)); bottom: calc(30px + env(safe-area-inset-bottom));
