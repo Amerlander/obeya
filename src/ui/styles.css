@@ -1530,14 +1530,20 @@ button.link:hover { text-decoration: underline; }
 .ph-section { margin-top: 22px; }
 .ph-section h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font: 600 21px/1.15 var(--serif); }
 .ph-section h2 select { margin-left: auto; font: 15px var(--cond); padding: 4px 6px; border: 1px solid var(--line); border-radius: 3px; background: var(--card); color: var(--ink); }
-.ph-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.ph-row { width: 100%; display: flex; flex-direction: column; align-items: stretch; text-align: left;
-  padding: 11px 12px; border: 0; border-left: 4px solid var(--c, var(--line)); border-radius: 3px; background: var(--card); box-shadow: var(--shadow); cursor: pointer; }
-.ph-row:active { box-shadow: none; transform: translateY(1px); }
-.ph-row.obeya { --c: var(--working); }
-.ph-what { font-size: 12.5px; color: var(--muted); }
-.ph-title { font-size: 16.5px; line-height: 1.3; margin-top: 2px; overflow-wrap: anywhere; }
-.ph-where { font-size: 12.5px; color: var(--muted); margin-top: 3px; overflow-wrap: anywhere; }
+/* the lists' rows are the cards of the canvas, as wide as the screen: the state's rule across the top, an idea's
+   stock, the owner's turn framed and pinned, the state line in its colour */
+.ph-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.ph-card { position: relative; display: block; width: 100%; text-align: left; color: var(--ink); border: 0; padding: 14px 14px 12px; }
+.ph-card:hover { transform: none; }
+.ph-card:active { transform: translateY(1px); }
+.ph-card .kind { font-size: 12.5px; }
+.ph-card .ttl { font-size: 18.5px; line-height: 1.2; margin-top: 2px; -webkit-line-clamp: 3; }
+.ph-card .meta { font-size: 14px; }
+.ph-card .state { position: static; margin-top: 8px; font-size: 13px; flex-wrap: wrap; gap: 0; }
+.ph-card .state::after { margin-left: 7px; }
+.ph-card .state .since { color: var(--muted); font-weight: 500; white-space: pre; }
+/* everything in „Für dich“ waits for the owner: the heading says so, no pin on each card */
+.ph-card .badge { display: none; }
 .ph-none { margin: 0; color: var(--muted); font-size: 14.5px; }
 .ph-talk { display: flex; flex-direction: column; }
 .ph-talk > .talk { max-height: 62vh; min-height: 0; }

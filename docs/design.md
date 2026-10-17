@@ -4373,13 +4373,22 @@ canvas page, nothing new), and shows, under the sign and the word Obeya:
 
 - **„Für dich“**: what waits for the owner across every canvas (`needsYou`), canvas by canvas in the
   switcher's order and within a canvas in Tab's order, then „Obeya hat geantwortet“ where an
-  answer waits unread there. Each row says what it waits for (its state line: „Demo bereit“,
-  „Frage an dich“, „Vorschlag eines Agenten“ …), since when, its title and, with several canvases,
-  its canvas. Since when a card waits the server notes when `needsYou` turns true for it
-  (`waiting_since` on the card, kept across restarts while it waits, `waitingSince` in the snapshot).
+  answer waits unread there. Each card says what it waits for (its state line: „Demo bereit“,
+  „Frage an dich“, „Vorschlag eines Agenten“ …) and since when. Since when a card waits the server
+  notes when `needsYou` turns true for it (`waiting_since` on the card, kept across restarts while it
+  waits, `waitingSince` in the snapshot).
 - **„Läuft“**: the cards an agent or Obeya is at and that wait for nobody (working, finishing,
   landing, in the queue, in a PR, an idea's or a Question card's agent thinking), with their status
   line.
+
+Both lists show the cards as the canvas does, as wide as the screen (`CardFace` and `cardClass` in
+`src/ui/parts.tsx`, shared with the canvas): the state's colour as a rule across the top and in the
+state line at the bottom, an idea on its rose stock, the owner's turn framed in orange, the kind
+line (with several canvases after the canvas's name), the title in the serif and the line of text
+the canvas shows (the question, the status line). Only the pin is left out: everything in „Für
+dich“ waits for the owner. Before (until 2026-10-17) a row was a white box with a thin coloured
+strip at its left edge, and on the phone the idea's red and the owner's turn's orange could hardly be
+told apart there.
 - **Obeya**: its conversation with the field under it, the sheet's own (`KoordinatorTalk`), with a
   picker of the canvas whose Obeya it is when there are several. Its unread answers count as read
   once the conversation is scrolled into view, not when the page opens.

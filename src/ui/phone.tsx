@@ -13,12 +13,12 @@ import { cardDraft, fieldOn, focusedDraft, keepDrafts, MIC_DRAFT, obeyaDraft } f
 import { KoordinatorTalk } from './koordinator';
 import { Sign } from './logo';
 import { Notify, registerWorker } from './notify';
-import { Inline, plain } from './markdown';
+import { plain } from './markdown';
 import { Cards } from './message';
 import type { Reply } from './reply';
-import { shownState } from './parts';
+import { CardFace, cardClass, shownState } from './parts';
 import { videoOf } from './spot';
-import { clock, failText, forTouch, shortDay, stateLabel, t } from './strings';
+import { clock, failText, forTouch, shortDay, t } from './strings';
 import { tellers, useAck, voiceTarget } from './tell';
 import { HoldToTalk, PushToTalk, ToldList, usePushToTalk, useTold } from './voice';
 
@@ -417,28 +417,23 @@ function ForYou({
     return [
       ...cards.map((i) => (
         <li key={i.id}>
-          <button className="ph-row" style={{ '--c': `var(--${shownState(i)})` } as React.CSSProperties} onClick={() => onOpen(i)}>
-            <span className="ph-what">
-              {stateLabel(i)}
-              {i.waitingSince && <span className="ph-since"> · {t.phone.since(when(i.waitingSince))}</span>}
-            </span>
-            <span className="ph-title">
-              <Inline md={i.title} />
-            </span>
-            {several && <span className="ph-where">{c.name}</span>}
+          <button className={`${cardClass(i)} ph-card`} onClick={() => onOpen(i)}>
+            <CardFace item={i} where={several ? c.name : undefined} since={i.waitingSince ? t.phone.since(when(i.waitingSince)) : undefined} />
           </button>
         </li>
       )),
       ...(unread.length
         ? [
             <li key={`obeya:${c.id}`}>
-              <button className="ph-row obeya" onClick={() => onObeya(c.id)}>
-                    <span className="ph-what">
+              <button className="card s-working ph-card" onClick={() => onObeya(c.id)}>
+                <div className="kind">
+                  <span>{[several && c.name, t.koordinator.title].filter(Boolean).join(' · ')}</span>
+                </div>
+                <div className="ttl">{plain(unread.at(-1)!.question ?? unread.at(-1)!.said)}</div>
+                <div className="state">
                   {t.phone.obeyaAnswered}
-                  <span className="ph-since"> · {t.phone.since(when(unread.at(-1)!.at))}</span>
-                </span>
-                <span className="ph-title">{plain(unread.at(-1)!.question ?? unread.at(-1)!.said)}</span>
-                {several && <span className="ph-where">{c.name}</span>}
+                  <span className="since"> · {t.phone.since(when(unread.at(-1)!.at))}</span>
+                </div>
               </button>
             </li>,
           ]
@@ -449,19 +444,15 @@ function ForYou({
   return rows.length ? <ul className="ph-list">{rows}</ul> : <p className="ph-none">{t.phone.nothingWaits}</p>;
 }
 
-/** The cards at work, each with its status line. */
+/** The cards at work, each with its status line, as their cards on the canvas show them. */
 function Running({ entries, several, onOpen }: { entries: { item: Item; canvas: CanvasInfo }[]; several: boolean; onOpen: (i: Item) => void }) {
   if (!entries.length) return <p className="ph-none">{t.phone.nothingRuns}</p>;
   return (
     <ul className="ph-list">
       {entries.map(({ item: i, canvas: c }) => (
         <li key={i.id}>
-          <button className="ph-row" style={{ '--c': `var(--${shownState(i)})` } as React.CSSProperties} onClick={() => onOpen(i)}>
-            <span className="ph-what">{stateLabel(i)}</span>
-            <span className="ph-title">
-              <Inline md={i.title} />
-            </span>
-            {(i.statusLine || several) && <span className="ph-where">{[i.statusLine, several ? c.name : ''].filter(Boolean).join(' · ')}</span>}
+          <button className={`${cardClass(i)} ph-card`} onClick={() => onOpen(i)}>
+            <CardFace item={i} where={several ? c.name : undefined} />
           </button>
         </li>
       ))}

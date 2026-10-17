@@ -63,6 +63,74 @@ const startableIn = (kids: Item[]) => kids.filter((k) => k.state === 'planned' &
 
 const sameBounds = (a: Bounds, b: Bounds) => a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
 
+/** The classes that give a card its look: its state's colour, an idea's stock, the owner's turn, an agent at it. */
+export const cardClass = (item: Item, underway?: string) =>
+  [
+    'card',
+    `s-${item.state}`,
+    item.idea && `idea-${item.idea.status}`,
+    item.kind === 'question' && 'q-card',
+    (item.idea?.thinking || item.proposal?.revising || item.thread?.thinking) && 'thinking',
+    item.idea && needsYou(item) && 'your-turn',
+    underway && 'underway',
+    answering(item) && 'answering',
+    finishingUp(item) && 'finishing',
+    item.paused && 'paused',
+    item.queue && 'queued',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+/**
+ * What a card says on its face, on the canvas and in the phone view's lists alike: its kind (after
+ * `where` it is, its repository or canvas), its title, a line of its text, its state line in its
+ * state's colour (`since` after it) and the pin while it needs the owner.
+ */
+export function CardFace({ item, where, underway, since }: { item: Item; where?: string; underway?: string; since?: string }) {
+  const kind =
+    item.label ??
+    (item.parent ? t.kind.workstream : item.kind === 'question' ? t.kind.question : item.idea || item.proposal?.idea ? t.kind.idea : item.becomesProject ? becomesLabel(item) : item.prototypeOf ? t.kind.prototype : item.kind === 'project' ? t.kind.project : '');
+  // a plain task says nothing of its kind: that it is one shows
+  const label = [item.state === 'proposal' && t.proposalMark, where, kind].filter(Boolean).join(' · ');
+  // a card whose agent finishes after the landing, opens its PR or takes in the owner's words on its handover shows its line like one at work: the usage limit it waits on, its reports
+  const status =
+    item.state === 'working' || item.finishing || answering(item) || (item.state === 'inPr' && !item.pr)
+      ? item.statusLine
+      : item.state === 'inPr' && item.pr
+        ? t.pr.short(item.pr.number, item.pr.checks.filter((c) => c.state === 'failure').length, item.pr.conflict, item.pr.ready, item.pr.held?.score)
+        : undefined;
+  const meta =
+    (item.kind === 'question' && item.thread ? t.question.count(item.thread.answers, item.thread.files) : undefined) ??
+    item.question?.text ??
+    (item.idea?.yourTurn ? item.idea.questions[0]?.text : undefined) ??
+    (item.queue && 'behind' in item.queue ? item.queue.reason : undefined) ??
+    (item.queue && 'workspace' in item.queue ? t.queue.workspaceWhy[item.queue.workspace] : undefined) ??
+    status ??
+    (item.idea ? firstLine(item.idea.brief) || firstLine(item.body) : firstLine(item.body));
+  return (
+    <>
+      {label && (
+        <div className="kind">
+          <span>{label}</span>
+        </div>
+      )}
+      <div className={item.title ? 'ttl' : 'ttl untitled'}>{shownTitle(item)}</div>
+      {meta && <div className="meta">{meta}</div>}
+      <div className="state">
+        {underway ?? stateLabel(item)}
+        {item.landedPart && <span className="landed-part">{t.landedPart.short} · {landedRef(item.landedPart)}</span>}
+        {item.buildProposal && ` · ${t.idea.proposesBuild}`}
+        {item.proposal?.revising && ` · ${t.revisingShort}`}
+        {item.proposal?.acceptAfterRevision && ` · ${t.acceptsAfterRevision}`}
+        {item.idea?.buildAfterReply && ` · ${t.idea.buildsAfterReply}`}
+        {item.idea?.next && needsYou(item) && ` · ${t.idea.suggests[item.idea.next.step]}`}
+        {since && <span className="since"> · {since}</span>}
+      </div>
+      {needsYou(item) && !underway && <div className="badge pulse">{item.state === 'proposal' ? '✦' : '!'}</div>}
+    </>
+  );
+}
+
 export const CardView = memo(
   function CardView({ item, b, lifted, dragging, pop, prototyped, showRepo, els, onStart, onArchive, dep, onHover, underway }: CardProps) {
     const shape = shapeOf(item);
@@ -73,40 +141,11 @@ export const CardView = memo(
     const archivable =
       !item.archivedAt &&
       (finishedArchivable(item) || stoppedArchivable(item) || (!!item.idea && item.idea.status !== 'open' && !prototyped));
-    const kind =
-      item.label ??
-      (item.parent ? t.kind.workstream : item.kind === 'question' ? t.kind.question : item.idea || item.proposal?.idea ? t.kind.idea : item.becomesProject ? becomesLabel(item) : item.prototypeOf ? t.kind.prototype : item.kind === 'project' ? t.kind.project : '');
-    // a plain task says nothing of its kind: that it is one shows
-    const label = [item.state === 'proposal' && t.proposalMark, showRepo && item.repo, kind].filter(Boolean).join(' · ');
-    // a card whose agent finishes after the landing, opens its PR or takes in the owner's words on its handover shows its line like one at work: the usage limit it waits on, its reports
-    const status =
-      item.state === 'working' || item.finishing || answering(item) || (item.state === 'inPr' && !item.pr)
-        ? item.statusLine
-        : item.state === 'inPr' && item.pr
-          ? t.pr.short(item.pr.number, item.pr.checks.filter((c) => c.state === 'failure').length, item.pr.conflict, item.pr.ready, item.pr.held?.score)
-          : undefined;
-    const meta =
-      (item.kind === 'question' && item.thread ? t.question.count(item.thread.answers, item.thread.files) : undefined) ??
-      item.question?.text ??
-      (item.idea?.yourTurn ? item.idea.questions[0]?.text : undefined) ??
-      (item.queue && 'behind' in item.queue ? item.queue.reason : undefined) ??
-      (item.queue && 'workspace' in item.queue ? t.queue.workspaceWhy[item.queue.workspace] : undefined) ??
-      status ??
-      (item.idea ? firstLine(item.idea.brief) || firstLine(item.body) : firstLine(item.body));
     const cls = [
       'item',
-      'card',
+      cardClass(item, underway),
       shape,
-      `s-${item.state}`,
-      item.idea && `idea-${item.idea.status}`,
-      item.kind === 'question' && 'q-card',
-      (item.idea?.thinking || item.proposal?.revising || item.thread?.thinking) && 'thinking',
-      item.idea && needsYou(item) && 'your-turn',
-      underway && 'underway',
-      answering(item) && 'answering',
-      finishingUp(item) && 'finishing',
-      item.paused && 'paused',
-      item.queue && 'queued', dep && `dep-${dep}`, lifted && 'lifted', dragging && 'dragging', pop && 'pop'].filter(Boolean).join(' ');
+      dep && `dep-${dep}`, lifted && 'lifted', dragging && 'dragging', pop && 'pop'].filter(Boolean).join(' ');
     return (
       <div
         className={cls}
@@ -117,23 +156,7 @@ export const CardView = memo(
         onPointerLeave={() => onHover(null)}
       >
         {(dep === 'before' || dep === 'after') && <div className="dep-tag">{t.deps[dep]}</div>}
-        {label && (
-          <div className="kind">
-            <span>{label}</span>
-          </div>
-        )}
-        <div className={item.title ? 'ttl' : 'ttl untitled'}>{shownTitle(item)}</div>
-        {meta && <div className="meta">{meta}</div>}
-        <div className="state">
-          {underway ?? stateLabel(item)}
-          {item.landedPart && <span className="landed-part">{t.landedPart.short} · {landedRef(item.landedPart)}</span>}
-          {item.buildProposal && ` · ${t.idea.proposesBuild}`}
-          {item.proposal?.revising && ` · ${t.revisingShort}`}
-          {item.proposal?.acceptAfterRevision && ` · ${t.acceptsAfterRevision}`}
-          {item.idea?.buildAfterReply && ` · ${t.idea.buildsAfterReply}`}
-          {item.idea?.next && needsYou(item) && ` · ${t.idea.suggests[item.idea.next.step]}`}
-        </div>
-        {needsYou(item) && !underway && <div className="badge pulse">{item.state === 'proposal' ? '✦' : '!'}</div>}
+        <CardFace item={item} where={showRepo ? item.repo : undefined} underway={underway} />
         {startable && (
           <button
             className="play"
