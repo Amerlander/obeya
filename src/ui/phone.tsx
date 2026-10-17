@@ -19,7 +19,7 @@ import { glide, type Mark, settle, speed, THROWN, thrown } from './panelHeight';
 import { CardFace, cardClass, shownState, TalkIcon } from './parts';
 import { videoOf } from './spot';
 import { clock, failText, forTouch, shortDay, t } from './strings';
-import { agentWorks, cardTalk, koordinatorReads, obeyaWorks, openQuestions, opensWithTalk, unseen } from './talk';
+import { agentWorks, cardTalk, koordinatorReads, obeyaWorks, openQuestions, opensWithTalk, runs, unseen } from './talk';
 import { tellers, useAck } from './tell';
 import { HoldToTalk, PushToTalk, ToldList, usePushToTalk, useTold } from './voice';
 
@@ -573,7 +573,7 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
           <h2>{t.phone.running}</h2>
           {/* nothing known yet (the server has not answered since the page loaded): no claim that nothing runs */}
           {/* a snoozed card at the end, after those at work now */}
-          {ordered.length > 0 && <Running entries={all.filter(({ item }) => runs(item)).sort((a, b) => Number(!!a.item.snoozed) - Number(!!b.item.snoozed))} several={several} onOpen={openCard} />}
+          {ordered.length > 0 && <Running entries={all.filter(({ item }) => runs(item) || isUnderway(item.id)).sort((a, b) => Number(!!a.item.snoozed) - Number(!!b.item.snoozed))} several={several} onOpen={openCard} />}
         </section>
       </div>
       {talk && (
@@ -618,10 +618,6 @@ function Feed({ id, onChange }: { id: string; onChange: (id: string, live: Retur
   useEffect(() => onChange(id, live), [live.snapshot, live.offlineSince, live.canvases]);
   return null;
 }
-
-/** A card an agent or Obeya is at (working on it, landing it, finding it a turn in the queue), and that waits for nobody. */
-const runs = (i: Item) =>
-  !needsYou(i) && !i.snoozed?.waiting && (i.state === 'working' || !!i.finishing || !!i.landing || !!i.queue || (i.state === 'inPr' && !!i.pr) || !!i.idea?.thinking || !!i.thread?.thinking);
 
 /** What waits for the owner, canvas by canvas in the switcher's order and within a canvas in Tab's order; Obeya where an answer waits unread. */
 function ForYou({

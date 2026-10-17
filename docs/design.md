@@ -4548,9 +4548,12 @@ canvas page, nothing new), and shows, under the sign and the word Obeya:
   notes when `needsYou` turns true for it (`waiting_since` on the card, kept across restarts while it
   waits, `waitingSince` in the snapshot). Cards the owner snoozed while they waited stand at the
   end, until they come back (see Snoozing a card).
-- **„Läuft“**: the cards an agent or Obeya is at and that wait for nobody (working, finishing,
-  landing, in the queue, in a PR, an idea's or a Question card's agent thinking), with their status
-  line; snoozed ones at the end.
+- **„Läuft“**: the cards an agent or Obeya is at and that wait for nobody (working, taking in the
+  owner's words on its handover, finishing, landing or just approved, in the queue, in a PR, an
+  idea's or a Question card's agent thinking; `runs` in `src/ui/talk.ts`), with their status line;
+  snoozed ones at the end. Every card that leaves „Für dich“ without being done stands here: until
+  2026-10-17 a handed-over card whose worker took in a note of the owner's stood in neither list
+  until it handed over again.
 
 Both lists show the cards as the canvas does, as wide as the screen (`CardFace` and `cardClass` in
 `src/ui/parts.tsx`, shared with the canvas): the state's colour as a rule across the top and in the

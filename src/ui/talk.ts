@@ -3,7 +3,7 @@
 import { LANGUAGES } from '../core/locale';
 import { MESSAGES } from '../core/messages';
 import { inQueue } from '../core/queue';
-import { askable, type CardEvent, type Demo, finishingUp, type Item, ownWords, pausable, type Question, started, type Talk as Exchange } from '../core/types';
+import { answering, askable, type CardEvent, type Demo, finishingUp, type Item, needsYou, ownWords, pausable, type Question, started, type Talk as Exchange } from '../core/types';
 import type { Field } from './api';
 
 /** One entry of the conversation: a message, with how the agent got to it folded under it, or a small line. */
@@ -331,6 +331,15 @@ export function openQuestions(i: Item): Question[] {
   const field = ownerField(i);
   return (field === 'answer' || field === 'demo') && i.question ? [i.question] : [];
 }
+
+/**
+ * A card an agent or Obeya is at (working on it, taking in the owner's words on its handover,
+ * landing it, finding it a turn in the queue), and that waits for nobody: the phone's „Läuft“.
+ */
+export const runs = (i: Item) =>
+  !needsYou(i) &&
+  !i.snoozed?.waiting &&
+  (i.state === 'working' || answering(i) || !!i.finishing || !!i.landing || !!i.queue || (i.state === 'inPr' && !!i.pr) || !!i.idea?.thinking || !!i.thread?.thinking);
 
 /**
  * Whether the phone opens a card with its conversation up: while its agent works on it, what the

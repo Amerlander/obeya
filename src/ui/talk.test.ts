@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
-import { type CardEvent, formatQuestion, type Item, pausable } from '../core/types';
-import { agentWorks, demoHandover, koordinatorReads, obeyaWorks, openQuestions, opensWithTalk, ownerField, parseQuestion, split, talkAlone, talkTurns, unseen, withoutOpen } from './talk';
+import { type CardEvent, formatQuestion, type Item, needsYou, pausable } from '../core/types';
+import { agentWorks, demoHandover, koordinatorReads, obeyaWorks, openQuestions, opensWithTalk, ownerField, parseQuestion, runs, split, talkAlone, talkTurns, unseen, withoutOpen } from './talk';
 
 let id = 0;
 const ev = (kind: CardEvent['kind'], author: CardEvent['author'], text: string): CardEvent => ({ id: ++id, cardId: 'c', at: '2026-10-01T10:00:00Z', kind, author, text });
@@ -495,6 +495,18 @@ test('the phone opens a card at work, or one whose questions offer options, with
   expect(opensWithTalk({ state: 'waiting', need: 'question', question: { text: 'Welcher Name?', options: [] as string[] } } as Item)).toBe(false);
   expect(opensWithTalk({ state: 'planned' } as Item)).toBe(false);
   expect(opensWithTalk({ state: 'done' } as Item)).toBe(false);
+});
+
+test("the phone's „Läuft“ holds a handed-over card while its worker takes in the owner's note, and „Für dich“ holds it again after", () => {
+  const demo = { kind: 'task', state: 'waiting', need: 'demo' } as Item;
+  expect(needsYou(demo)).toBe(true);
+  expect(runs(demo)).toBe(false);
+  // until 2026-10-17 such a card stood in neither list until its worker handed over again
+  const answering = { ...demo, answering: true } as Item;
+  expect(needsYou(answering)).toBe(false);
+  expect(runs(answering)).toBe(true);
+  expect(runs({ kind: 'task', state: 'working' } as Item)).toBe(true);
+  expect(runs({ kind: 'task', state: 'planned' } as Item)).toBe(false);
 });
 
 test("Obeya's conversation shows it at work while it reads the owner's words or looks a question up, not while the usage limit holds it", () => {
