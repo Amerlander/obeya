@@ -454,6 +454,20 @@ describe('the Koordinator remembers', () => {
     expect(brief).toContain('(with "Export" open) the owner: "halt ihn an" → you: "„Export“ wird angehalten." (the owner took it back)');
   });
 
+  test('a long reply stands whole in the sheet and on the card', async () => {
+    const long = `${'Der Chatverlauf steht jetzt in einem eigenen Bereich. '.repeat(12)}Sag mir Bescheid, dann lege ich eine Aufgabe dafür an.`;
+    const k = commander();
+    expect((await say(k, 'wo ist der Chatverlauf?', 'reply', { confirm: long })).heard.confirm).toBe(long);
+    expect(board.snapshot().talk.at(-1)!.reply).toBe(long);
+    const a = board.create({ title: 'Export', x: 0, y: 0 });
+    const heard = k.hear('und hier?', { card: a.id });
+    await settle();
+    runtime.last.call('reply', { confirm: long });
+    runtime.last.emit({ type: 'idle' });
+    await heard;
+    expect(board.events(a.id).at(-1)!.text).toBe(long);
+  });
+
   test('words in reply to a message of the sheet stand with its quote, and the Koordinator reads the message whole', async () => {
     const k = commander();
     await say(k, 'wie viele Karten laufen?', 'reply', { confirm: 'Zwei: „Export“ und „Login“.' });

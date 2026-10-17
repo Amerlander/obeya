@@ -909,7 +909,7 @@ export class Commander {
         finish: (commands, confirm, lookUp, more) => {
           if (decided) return 'Already decided.';
           decided = true;
-          decide({ commands, confirm: confirm.trim().slice(0, 400), ...(lookUp ? { lookUp } : {}), ...more });
+          decide({ commands, confirm: confirm.trim(), ...(lookUp ? { lookUp } : {}), ...more });
           return 'Done. End your turn now.';
         },
         end,
