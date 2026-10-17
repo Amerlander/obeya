@@ -1587,21 +1587,22 @@ button.link:hover { text-decoration: underline; }
 .ph-canvas-pick select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font-size: 16px; }
 /* Obeya's conversation: a panel from below over the list, in the part of the screen the keyboard leaves;
    only the conversation scrolls, the field stands under it, and below that the room of the microphone */
-.ph-panel { top: var(--vvt, 0); bottom: auto; height: var(--vvh, 100%); z-index: 20; overflow: hidden; display: flex; flex-direction: column;
+.ph-panel { --ph-h: 1; top: calc(var(--vvt, 0px) + var(--vvh, 100dvh) * (1 - var(--ph-h))); bottom: auto; height: calc(var(--vvh, 100dvh) * var(--ph-h)); z-index: 20; overflow: hidden; display: flex; flex-direction: column;
   padding-bottom: calc(87px + env(safe-area-inset-bottom)); background: var(--bg); box-shadow: 0 -6px 24px rgba(0, 0, 0, .12);
   animation: ph-up .22s ease-out; transition: transform .2s ease-out, top .2s ease-out, height .2s ease-out; }
 .ph-panel.dragging { transition: none; }
 .ph-panel.leaving { transform: translateY(100%); }
 .ph-panel::after { display: none; }
 @keyframes ph-up { from { transform: translateY(100%); } }
-/* beside a demo video the lower half, so the video stays in view above it; its top dragged up lifts it (`--raise`) */
-.ph-panel.half { top: calc(var(--vvt, 0px) + var(--vvh, 100dvh) * .48 - var(--raise, 0px)); height: calc(var(--vvh, 100dvh) * .52 + var(--raise, 0px)); border-top: 1px solid var(--line); }
-.ph-panel.half .ph-grip { cursor: ns-resize; }
+/* `--ph-h`: its height as a share of the screen the keyboard leaves, the one the owner dragged it to (set on the panel)
+   or the one it opens with: beside a demo video the lower half, so the video stays in view above it */
+.ph-panel.half { --ph-h: .52; }
+.ph-panel:is(.half, .part) { border-top: 1px solid var(--line); }
 .ph-panel:has(#ph-card-talk) .ph-grip .ph-word { font-size: 18px; }
-/* the card page scrolls on under a half panel, so all of it can stand above it */
-#ph-card.with-half { padding-bottom: calc(52dvh + 20px); }
-/* its top is the grip: dragged down, the panel follows the finger and closes */
-.ph-grip { touch-action: none; -webkit-user-select: none; user-select: none; padding-top: 14px; cursor: grab; }
+/* the page scrolls on under a panel lower than the screen, so all of it can stand above it (`--ph-panel`: its height) */
+.ph-view:has(~ .ph-panel) { padding-bottom: max(calc(157px + env(safe-area-inset-bottom)), calc(var(--ph-panel, 0px) + 20px)); }
+/* its top is the grip: the panel follows the finger up and down, and closes when let go near the bottom */
+.ph-grip { touch-action: none; -webkit-user-select: none; user-select: none; padding-top: 14px; cursor: ns-resize; }
 .ph-grip::before { content: ""; position: absolute; left: 50%; top: 5px; width: 40px; height: 4px; margin-left: -20px; border-radius: 2px;
   background: color-mix(in srgb, var(--ink) 22%, transparent); }
 .ph-grip .ph-word { font: 600 21px/1 var(--serif); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
@@ -1679,8 +1680,8 @@ button.link:hover { text-decoration: underline; }
   /* the panel needs no room under the field: the microphone stands beside it */
   .ph-grip { padding-top: 10px; }
   /* half of 400 px leaves no room for a conversation, and the video does not fit above it anyway */
-  .ph-panel.half { top: var(--vvt, 0); height: var(--vvh, 100%); }
-  #ph-card.with-half { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+  .ph-panel.half { --ph-h: 1; }
+  .ph-view:has(~ .ph-panel) { padding-bottom: max(calc(24px + env(safe-area-inset-bottom)), calc(var(--ph-panel, 0px) + 20px)); }
   /* while the keyboard is up the strip is empty (the field has its own microphone): the field takes its width */
   .ph-kb .ph-panel { padding-right: max(14px, env(safe-area-inset-right)); }
   .ph-panel ~ #acks { bottom: calc(var(--ph-field, 0px) + 34px + env(safe-area-inset-bottom)); }

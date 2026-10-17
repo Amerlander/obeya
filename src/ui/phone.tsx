@@ -15,6 +15,7 @@ import { Sign } from './logo';
 import { Notify, registerWorker } from './notify';
 import { plain } from './markdown';
 import { Cards } from './message';
+import { settle } from './panelHeight';
 import { CardFace, cardClass, shownState, TalkIcon } from './parts';
 import { videoOf } from './spot';
 import { clock, failText, forTouch, shortDay, t } from './strings';
@@ -54,10 +55,6 @@ const cardInAddress = () => new URLSearchParams(location.search).get('card');
 const talkInAddress = () => new URLSearchParams(location.search).has('talk');
 /** What a step in the browser's history opened: a card, or the conversation of what is in view. */
 type Step = 'card' | 'talk';
-/** How far the panel's top is dragged down before letting go closes it (a quick flick closes it sooner). */
-const DRAG_CLOSES = 110;
-/** How far a half panel's top is dragged up before letting go gives it the full height. */
-const DRAG_RISES = 50;
 /** The last message of each card's conversation the owner had in view, by card. */
 const SEEN = 'obeya-phone-seen';
 const seenOf = (card: string): number => {
@@ -474,7 +471,7 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
     return (
       <HoldToTalk.Provider value={press}>
         {feeds}
-        <div id="ph-card" className={half && talk ? 'ph-view with-half' : 'ph-view'} ref={cardRef} style={i ? ({ '--c': `var(--${shownState(i)})` } as React.CSSProperties) : undefined}>
+        <div id="ph-card" className="ph-view" ref={cardRef} style={i ? ({ '--c': `var(--${shownState(i)})` } as React.CSSProperties) : undefined}>
           <header className="ph-bar">
             <button className="ph-back" onClick={back}>
               <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -516,7 +513,6 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
             label={t.phone.cardTalk}
             banner={banner}
             half={half}
-            onFull={() => setHalf(false)}
             onClose={closeTalk}
             leave={leaveTalk}
             onLeave={() => setClosing(true)}
@@ -729,15 +725,15 @@ function CardTalkButton({ item, open, shown, onClick }: { item: Item; open: bool
 /**
  * A conversation as a panel from below, Obeya's or the open card's (`children`): the conversation is
  * the only thing in it that scrolls, the field stands under it and the microphone below that.
- * Dragging its top down (or the button beside the microphone, or Back) closes it. `half`: beside a
- * demo video it takes the lower half of the screen, and dragging its top up gives it the full height.
+ * Its top is a grip the owner drags to the height they want (`settle`): let go near the screen's top
+ * it takes the full height, near the bottom it closes (as the button beside the microphone and Back
+ * do). It opens at the full height, or beside a demo video (`half`) in the lower half of the screen.
  */
 function TalkPanel({
   title,
   label,
   banner,
   half = false,
-  onFull,
   onClose,
   leave: leaveRef,
   onLeave,
@@ -748,7 +744,6 @@ function TalkPanel({
   label: string;
   banner: React.ReactNode;
   half?: boolean;
-  onFull?: () => void;
   onClose: () => void;
   /** Where the panel puts its way of closing, for the button beside the microphone. */
   leave: React.RefObject<(() => void) | null>;
@@ -759,11 +754,15 @@ function TalkPanel({
   children: React.ReactNode;
 }) {
   const panel = useRef<HTMLDivElement>(null);
-  const [dy, setDy] = useState(0);
-  // a half panel's top dragged up
-  const [lift, setLift] = useState(0);
+  // the height the owner dragged it to, as a share of the screen the keyboard leaves; until then the
+  // one it opens with
+  const [height, setHeight] = useState<number | null>(null);
+  useEffect(() => setHeight(null), [half]);
   const [leaving, setLeaving] = useState(false);
-  const drag = useRef<{ y: number; at: number; dy: number } | null>(null);
+  /** Where the finger went down and where the panel's top stood then, both from the top of the screen the keyboard leaves. */
+  const drag = useRef<{ y: number; top: number } | null>(null);
+  // the panel follows the finger without easing
+  const [dragging, setDragging] = useState(false);
   const gone = useRef(false);
   const leave = () => {
     if (gone.current) return;
@@ -820,34 +819,50 @@ function TalkPanel({
       root.style.removeProperty('--ph-field');
     };
   }, []);
+  // the page under a panel lower than the screen scrolls on until all of it can stand above the panel
+  useEffect(() => {
+    const el = panel.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const size = new ResizeObserver(() => root.style.setProperty('--ph-panel', `${el.getBoundingClientRect().height}px`));
+    size.observe(el);
+    return () => {
+      size.disconnect();
+      root.style.removeProperty('--ph-panel');
+    };
+  }, []);
+  const screen = () => ({ top: window.visualViewport?.offsetTop ?? 0, height: window.visualViewport?.height ?? innerHeight });
   const down = (e: React.PointerEvent) => {
     if ((e.target as Element).closest('button, select')) return;
-    drag.current = { y: e.clientY, at: Date.now(), dy: 0 };
+    drag.current = { y: e.clientY, top: panel.current!.getBoundingClientRect().top - screen().top };
     e.currentTarget.setPointerCapture(e.pointerId);
   };
+  /** Where the dragged top stands, as a share of the screen from its top. */
+  const topAt = (e: React.PointerEvent) => {
+    const d = drag.current!;
+    return (d.top + e.clientY - d.y) / screen().height;
+  };
   const move = (e: React.PointerEvent) => {
-    const d = drag.current;
-    if (!d) return;
-    d.dy = e.clientY - d.y;
-    setDy(Math.max(0, d.dy));
-    setLift(half ? Math.max(0, -d.dy) : 0);
+    if (!drag.current) return;
+    setDragging(true);
+    setHeight(Math.min(1, 1 - topAt(e)));
   };
-  const up = () => {
-    const d = drag.current;
+  const up = (e: React.PointerEvent) => {
+    if (!drag.current) return;
+    const moved = Math.abs(e.clientY - drag.current.y) > 4;
+    const to = settle(topAt(e));
     drag.current = null;
-    if (!d) return;
-    const speed = Math.abs(d.dy) / Math.max(1, Date.now() - d.at);
-    const flick = Math.abs(d.dy) > 30 && speed > 0.6;
-    if (d.dy > DRAG_CLOSES || (d.dy > 0 && flick)) leave();
-    else if (half && (-d.dy > DRAG_RISES || (d.dy < 0 && flick))) onFull?.();
-    setDy(0);
-    setLift(0);
+    setDragging(false);
+    // a tap leaves the panel as it was
+    if (!moved) return;
+    if (to === 'close') leave();
+    else setHeight(to);
   };
-  const style = leaving ? undefined : { ...(dy ? { transform: `translateY(${dy}px)` } : {}), ...(lift ? { '--raise': `${lift}px` } : {}) };
+  const style = height === null ? undefined : { '--ph-h': Math.max(0, height) };
   return (
     <div
       id="ph-talk"
-      className={['ph-view ph-panel', half && 'half', leaving && 'leaving', drag.current && 'dragging'].filter(Boolean).join(' ')}
+      className={['ph-view ph-panel', half && 'half', (height ?? 1) < 1 && 'part', leaving && 'leaving', dragging && 'dragging'].filter(Boolean).join(' ')}
       ref={panel}
       style={style as React.CSSProperties}
       role="dialog"

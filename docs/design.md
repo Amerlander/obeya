@@ -4528,9 +4528,12 @@ page shorter while the keyboard is up (`interactive-widget=resizes-content`, whi
 heeds), and follows the visual viewport where it does not (Safari). Until 2026-10-17 the visual
 viewport alone decided, and Chrome reports it wrong by its own bars: where it draws the page under
 the gesture bar the field ended behind the keyboard by that bar's height, and with a toolbar at the
-bottom it ended far above it. Its top is a grip: dragged
-down, the panel follows the finger, and let go further than 110 px down (or flicked) it closes;
-otherwise it springs back. The same button left of the microphone, Back and Esc close it
+bottom it ended far above it. Its top is a grip the owner drags up and down to the height they want:
+the panel follows the finger and stays where it is let go, the page under it scrolling on until all
+of it can stand above the panel. Let go within 15 % of the screen's top it takes the full height,
+within 15 % of its bottom it closes (`settle` in `src/ui/panelHeight.ts`). Until 2026-10-17 it only
+closed or sprang back: let go further than 110 px down (or flicked) it closed, so a full panel could
+not be dragged to the middle. It opens at the full height (beside a demo video at half, below). The same button left of the microphone, Back and Esc close it
 too, and its address is
 `?talk`, as a card's is `?card=<id>`. Its unread answers count as read once it is open, not when the
 page opens. A card opened from the conversation opens over it, and Back returns to it.
@@ -4551,8 +4554,8 @@ for answers to its questions (options to pick) opens with the panel up; otherwis
 first. Beside a demo video the panel is a half sheet and the page scrolls the video into the upper
 half, so a comment at a place in the video („Hier kommentieren“ brings the panel up with the cursor
 in the field) is written while the video stays in view, with the place's chip and the pause on typing
-as on the canvas; dragging its top up gives the full height. Turned sideways the panel always takes
-the full height. Until 2026-10-17 the conversation stood on the page below the card's columns, a box
+as on the canvas; its grip sets another height, as on Obeya's. Turned sideways the panel opens at
+the full height there too. Until 2026-10-17 the conversation stood on the page below the card's columns, a box
 capped at 62 % of the screen's height: a scroll area inside another, where the finger decided which
 of the two scrolled, and the page scrolled on past the field to make room for the microphone. Plan docs are not read there and the configuration is not opened from there:
 the links to them do not show. Every call goes to the API of the canvas in view (the open card's,
