@@ -1021,7 +1021,10 @@ characters, whole while the mouse is over it; the question the card waits on (it
 its demo report) stands at the end with its options, and the card's one field under it. A worker
 that asks while its background work runs (a test suite, a review it started) is still in its turn:
 its question stands with its options, and the bubble at work below it; a question a
-note took back stays, without options, „Durch deinen Hinweis erledigt“. A card that was an idea
+note took back stays, without options, „Durch deinen Hinweis erledigt“. A question answered or asked
+anew has no orange edge either: only its label „Agent · Frage“ stays orange, a turn where the owner
+had something to do. Until 2026-10-17 an answered question kept its
+orange edge, which also marks the messages new to the owner, so it looked as if it still waited. A card that was an idea
 continues the idea's conversation in the same list.
 
 The messages new to the owner keep an orange edge until the conversation goes (the card closes, on
