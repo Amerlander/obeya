@@ -4451,9 +4451,24 @@ page opens. A card opened from the conversation opens over it, and Back returns 
 
 A tap opens a card full screen: Back (the button, the browser's back, Esc) returns to the list where
 it was scrolled. The card's address is `?card=<id>`, so a reload or a restart opens it again. It is
-the canvas's detail view (`Detail`) with the same conversation, answer options, demo, approve
-buttons and undo, its columns one below the other; a demo video plays full width and full screen
-from its own controls. Plan docs are not read there and the configuration is not opened from there:
+the canvas's detail view (`Detail`) with the same answer options, demo, approve buttons and undo;
+a demo video plays full width and full screen from its own controls. The page holds what the card
+is about (title, text or brief, demo) and the decisions, and is the only thing on it that scrolls.
+The card's conversation is not on it but in the same panel as Obeya's, with the same grip, Back and
+Esc, keyboard handling and confirmations above the field: the button left of the microphone opens
+it, with a number for what waits there (the messages since the owner last had the conversation open
+or last wrote there, plus the questions open), and its address is `?card=<id>&talk`. Every card kind
+gets there the same way: the talk column of `Split` (and the Question card's conversation) goes into
+the panel through a context the phone view provides (`TalkElsewhere` in `src/ui/detail.tsx`, a React
+portal), so the canvas is untouched and no card kind has code of its own for it. A card that waits
+for answers to its questions (options to pick) opens with the panel up; otherwise the page shows
+first. Beside a demo video the panel is a half sheet and the page scrolls the video into the upper
+half, so a comment at a place in the video („Hier kommentieren“ brings the panel up with the cursor
+in the field) is written while the video stays in view, with the place's chip and the pause on typing
+as on the canvas; dragging its top up gives the full height. Turned sideways the panel always takes
+the full height. Until 2026-10-17 the conversation stood on the page below the card's columns, a box
+capped at 62 % of the screen's height: a scroll area inside another, where the finger decided which
+of the two scrolled, and the page scrolled on past the field to make room for the microphone. Plan docs are not read there and the configuration is not opened from there:
 the links to them do not show. Every call goes to the API of the canvas in view (the open card's,
 else Obeya's), and the list is not on the page while a card is open, so nothing in it loads from
 another canvas's API.
@@ -4463,7 +4478,8 @@ selected; lifting the finger or the browser taking the gesture ends the recordin
 open card's agent, else to Obeya. No line under it names whom it speaks to (until 2026-10-17 the
 canvas's „→ Agent · …“ stood there): what is in view fills the screen, so that goes without saying,
 and the 33 px it took go to the list and the conversation; the line still says when the microphone
-hears only silence. While the keyboard is up it hides, and so do the button for
+hears only silence. Nor does „→ ins Feld“ show under it with the cursor in a field: the line lifted
+the microphone onto the field above it. While the keyboard is up it hides, and so do the button for
 Obeya's conversation and the canvas picker: the field has its own microphone. The keyboard counts as
 up while a text field has the focus and the page's height is more than 150 px below the tallest it
 had at that width (`ph-kb` on the page's root); the keyboard closed with the phone's own button

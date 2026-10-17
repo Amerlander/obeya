@@ -1,6 +1,7 @@
 // The unfolded card: what it is, what its worker does, and what the owner decides.
 
-import { Fragment, type ReactNode, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createContext, Fragment, type ReactNode, type RefObject, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { agentListens, answering, askable, type BackgroundTask, buildableOn, type CardAction, chapterAt, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, type EarlierDemo, EXPORT_HTML_MAX, finished, finishedArchivable, finishingUp, handedOver, type Item, type Mock, type NextStep, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, type Spot, started, stopped, stoppedArchivable } from '../core/types';
 import { mockPage } from '../core/frame';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
@@ -489,7 +490,11 @@ export function Detail(p: Props) {
             </>
           )}
           {/* a card nobody worked on shows its conversation once there is something, such as a talk with the Koordinator */}
-          {item.state !== 'proposal' && <Conversation item={item} past hideEmpty />}
+          {item.state !== 'proposal' && (
+            <TalkColumn bare>
+              <Conversation item={item} past hideEmpty />
+            </TalkColumn>
+          )}
         </>
       )}
 
@@ -668,19 +673,21 @@ function QuestionView({ item, act, run, onTell }: { item: Item; act: (a: CardAct
         <Limited item={item} />
         {archivedOn(item)}
       </div>
-      {item.archivedAt ? (
-        <Talk item={item} past />
-      ) : (
-        <Talk
-          item={item}
-          field={{
-            placeholder: t.question.compose,
-            quote: true,
-            onWords: async (words, images, replyTo) => onTell(words, images, 'note', replyTo),
-            onPicked: (text, _, images, replyTo) => act({ action: 'ask', text, images, ...(replyTo ? { replyTo } : {}) }, { close: false }),
-          }}
-        />
-      )}
+      <TalkColumn bare>
+        {item.archivedAt ? (
+          <Talk item={item} past />
+        ) : (
+          <Talk
+            item={item}
+            field={{
+              placeholder: t.question.compose,
+              quote: true,
+              onWords: async (words, images, replyTo) => onTell(words, images, 'note', replyTo),
+              onPicked: (text, _, images, replyTo) => act({ action: 'ask', text, images, ...(replyTo ? { replyTo } : {}) }, { close: false }),
+            }}
+          />
+        )}
+      </TalkColumn>
       <div className="actions">
         {item.archivedAt ? (
           <ArchiveButton item={item} run={run} />
@@ -1365,6 +1372,8 @@ function DemoView({
 }) {
   const cardId = item.id;
   const video = useRef<HTMLVideoElement>(null);
+  // on the phone the field is in a panel of its own, which a comment brings up
+  const elsewhere = useContext(TalkElsewhere);
   const artifact = useRef<HTMLIFrameElement>(null);
   const artifactHeight = useReportedHeight(artifact, ARTIFACT_CAP);
   const [now, setNow] = useState(0);
@@ -1526,7 +1535,8 @@ function DemoView({
                   onClick={() => {
                     video.current?.pause();
                     if (zoom.box) zoom.toggle();
-                    document.querySelector<HTMLTextAreaElement>('.card-sheet .split-talk .composer textarea')?.focus();
+                    if (elsewhere) elsewhere.open(true);
+                    else document.querySelector<HTMLTextAreaElement>('.card-sheet .split-talk .composer textarea')?.focus();
                   }}
                 >
                   <svg viewBox="0 0 24 24">
@@ -1608,7 +1618,7 @@ function useWatching(cardId: string, video: RefObject<HTMLVideoElement | null>, 
     const v = video.current;
     if (!on || !v) return;
     const typed = (e: Event) => {
-      if (!v.paused && e.target instanceof HTMLTextAreaElement && e.target.closest('.card-sheet .split-talk .composer')) v.pause();
+      if (!v.paused && e.target instanceof HTMLTextAreaElement && e.target.closest('.card-sheet .split-talk .composer, #ph-card-talk .composer')) v.pause();
     };
     let stood: ReturnType<typeof setTimeout> | undefined;
     const paused = () => {
@@ -2124,9 +2134,23 @@ function Split({ main, talk, className }: { main: ReactNode; talk: ReactNode; cl
   return (
     <div className={['split', className, !main && 'alone'].filter(Boolean).join(' ')}>
       {main && <div className="split-main">{main}</div>}
-      <div className="split-talk">{talk}</div>
+      <TalkColumn>{talk}</TalkColumn>
     </div>
   );
+}
+
+/**
+ * Where a card's conversation goes instead of its column: the phone view's panel from below (`el`,
+ * null while the panel is closed), which `open` brings up, with the cursor in the field when `focus`.
+ * None on the canvas.
+ */
+export const TalkElsewhere = createContext<{ el: HTMLElement | null; open: (focus?: boolean) => void } | null>(null);
+
+/** A card's conversation: in its column, or where `TalkElsewhere` puts it. `bare`: no column of its own on the canvas. */
+function TalkColumn({ children, bare }: { children: ReactNode; bare?: boolean }) {
+  const away = useContext(TalkElsewhere);
+  if (away) return away.el && createPortal(children, away.el);
+  return bare ? children : <div className="split-talk">{children}</div>;
 }
 
 /** The owner's one field under a conversation: words, and the options picked, go out with one Send. */
@@ -2295,7 +2319,7 @@ function Questions(p: { questions: Question[]; heading: string; picks: string[][
 }
 
 /** A card's log, live; null while the history loads. */
-function useEvents(cardId: string): CardEvent[] | null {
+export function useEvents(cardId: string): CardEvent[] | null {
   const [events, setEvents] = useState<CardEvent[] | null>(null);
   useEffect(() => {
     let alive = true;

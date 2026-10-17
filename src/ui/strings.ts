@@ -757,6 +757,11 @@ const de = {
     back: 'Zurück',
     /** The button left of the microphone that opens Obeya's conversation as a panel from below. */
     talkTitle: 'Gespräch mit Obeya',
+    /** The same button with a card open: it opens the card's conversation. */
+    cardTalk: 'Gespräch der Karte',
+    /** What waits in the card's conversation, on the button's number. */
+    cardWaiting: (messages: number, questions: number) =>
+      [messages && (messages === 1 ? '1 neue Nachricht' : `${messages} neue Nachrichten`), questions && (questions === 1 ? '1 offene Frage' : `${questions} offene Fragen`)].filter(Boolean).join(', '),
     /** Closes the panel; dragging its top down does it too. */
     closeTalk: 'Schließen',
     canvas: 'Leinwand',
@@ -2145,6 +2150,9 @@ const en: Strings = {
     since: (when: string) => `since ${when}`,
     back: 'Back',
     talkTitle: 'Conversation with Obeya',
+    cardTalk: "The card's conversation",
+    cardWaiting: (messages: number, questions: number) =>
+      [messages && (messages === 1 ? '1 new message' : `${messages} new messages`), questions && (questions === 1 ? '1 open question' : `${questions} open questions`)].filter(Boolean).join(', '),
     closeTalk: 'Close',
     canvas: 'Canvas',
     notAnswering: (since: string) => `Obeya is not answering · since ${since}`,

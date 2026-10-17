@@ -304,6 +304,28 @@ export function ownerField(item: Pick<Item, 'state' | 'need' | 'question' | 'fin
   return item.state === 'working' || item.state === 'inPr' || item.finishing || askable(item) || inQueue(item) ? 'note' : null;
 }
 
+/** The questions on a card that wait for the owner's answer: its idea's, its proposal's, its agent's. */
+export function openQuestions(i: Item): Question[] {
+  if (i.archivedAt) return [];
+  if (i.state === 'idea') return i.idea?.status === 'open' && !i.idea.thinking ? i.idea.questions : [];
+  if (i.state === 'proposal') return i.proposal && !i.proposal.revising ? i.proposal.questions : [];
+  const field = ownerField(i);
+  return (field === 'answer' || field === 'demo') && i.question ? [i.question] : [];
+}
+
+/** What an agent (or Obeya) said on a card, as against its steps and the owner's own words. */
+const said = (e: CardEvent) => e.author !== 'owner' && ['say', 'report', 'question', 'answer', 'talk', 'review'].includes(e.kind);
+
+/**
+ * The messages of a card's conversation the owner has not seen: those after the last one they saw
+ * (`seen`, an event id), and never those before their own last words, which they wrote having read them.
+ */
+export function unseen(events: CardEvent[], seen = -1): number {
+  const spoke = events.findLast((e) => e.author === 'owner')?.id ?? -1;
+  const from = Math.max(seen, spoke);
+  return events.filter((e) => e.id > from && said(e)).length;
+}
+
 /**
  * Whether the card's agent is at work on it, so its conversation ends with the agent at work: an
  * agent working on something, which the owner can pause (`pausable`), or a proposal reworked.

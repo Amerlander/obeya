@@ -1563,19 +1563,27 @@ button.link:hover { text-decoration: underline; }
    only the conversation scrolls, the field stands under it, and below that the room of the microphone */
 .ph-panel { top: var(--vvt, 0); bottom: auto; height: var(--vvh, 100%); z-index: 20; overflow: hidden; display: flex; flex-direction: column;
   padding-bottom: calc(87px + env(safe-area-inset-bottom)); background: var(--bg); box-shadow: 0 -6px 24px rgba(0, 0, 0, .12);
-  animation: ph-up .22s ease-out; transition: transform .2s ease-out; }
+  animation: ph-up .22s ease-out; transition: transform .2s ease-out, top .2s ease-out, height .2s ease-out; }
 .ph-panel.dragging { transition: none; }
 .ph-panel.leaving { transform: translateY(100%); }
 .ph-panel::after { display: none; }
 @keyframes ph-up { from { transform: translateY(100%); } }
+/* beside a demo video the lower half, so the video stays in view above it; its top dragged up lifts it (`--raise`) */
+.ph-panel.half { top: calc(var(--vvt, 0px) + var(--vvh, 100dvh) * .48 - var(--raise, 0px)); height: calc(var(--vvh, 100dvh) * .52 + var(--raise, 0px)); border-top: 1px solid var(--line); }
+.ph-panel.half .ph-grip { cursor: ns-resize; }
+.ph-panel:has(#ph-card-talk) .ph-grip .ph-word { font-size: 18px; }
+/* the card page scrolls on under a half panel, so all of it can stand above it */
+#ph-card.with-half { padding-bottom: calc(52dvh + 20px); }
 /* its top is the grip: dragged down, the panel follows the finger and closes */
 .ph-grip { touch-action: none; -webkit-user-select: none; user-select: none; padding-top: 14px; cursor: grab; }
 .ph-grip::before { content: ""; position: absolute; left: 50%; top: 5px; width: 40px; height: 4px; margin-left: -20px; border-radius: 2px;
   background: color-mix(in srgb, var(--ink) 22%, transparent); }
-.ph-grip .ph-word { font: 600 21px/1 var(--serif); }
+.ph-grip .ph-word { font: 600 21px/1 var(--serif); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .ph-talk { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; padding-top: 12px; }
 .ph-talk > .talk { flex: 0 1 auto; min-height: 0; max-height: none; max-width: none; }
 .ph-talk > .composer { max-width: none; margin-top: 10px; flex: none; }
+/* a card's conversation: the panel's top names the card, no heading above the conversation */
+#ph-card-talk > .p-h { display: none; }
 /* while the keyboard is up the field has its own microphone: the field stands right above the keyboard */
 .ph-kb .ph-panel { padding-bottom: 10px; }
 .ph-panel ~ #acks { bottom: calc(var(--ph-field, 0px) + 97px + env(safe-area-inset-bottom)); }
@@ -1586,10 +1594,10 @@ button.link:hover { text-decoration: underline; }
 #ph-card::before { content: ""; position: fixed; left: 0; right: 0; top: 0; height: 4px; background: var(--c); z-index: 6; }
 .ph-sheet { padding-top: 14px; }
 .ph-sheet .p-title { font-size: 26px; }
-/* the columns of a split stand one below the other, the conversation a box of its own height */
+/* the conversation is in the panel (`TalkElsewhere`): what the card is about is the page, which alone scrolls */
 .ph-view .split { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; max-height: none; gap: 18px; }
+.ph-view .split:empty { display: none; }
 .ph-view .split-main { overflow: visible; padding-right: 0; }
-.ph-view .split .split-talk .talk { min-height: 120px; max-height: 62vh; flex: none; }
 .ph-view .proposal-grid { grid-template-rows: none; }
 .ph-view .proposal-grid .split-main { max-height: none; }
 .ph-view .proposal-grid .split-talk { contain: none; }
@@ -1607,6 +1615,8 @@ button.link:hover { text-decoration: underline; }
 .ph-view ~ #acks { bottom: calc(91px + env(safe-area-inset-bottom)); width: calc(100vw - 24px); }
 .ph-view ~ #acks .ack { max-width: 100%; }
 .ph-view ~ #ptt #mic { width: 68px; height: 68px; }
+/* the cursor in a field says where the words go: a line under the microphone would lift it onto the field */
+.ph-view ~ #ptt #target.into { display: none; }
 /* the microphone is held by a finger: no long-press menu, no text selected */
 #mic, .c-mic { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: none; }
 @media (pointer: coarse) { .lb-bar { flex-wrap: wrap; max-width: 100%; } }
@@ -1642,6 +1652,9 @@ button.link:hover { text-decoration: underline; }
   .pill.ph-canvas-pick { top: 52px; bottom: auto; max-width: 104px; }
   /* the panel needs no room under the field: the microphone stands beside it */
   .ph-grip { padding-top: 10px; }
+  /* half of 400 px leaves no room for a conversation, and the video does not fit above it anyway */
+  .ph-panel.half { top: var(--vvt, 0); height: var(--vvh, 100%); }
+  #ph-card.with-half { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
   /* while the keyboard is up the strip is empty (the field has its own microphone): the field takes its width */
   .ph-kb .ph-panel { padding-right: max(14px, env(safe-area-inset-right)); }
   .ph-panel ~ #acks { bottom: calc(var(--ph-field, 0px) + 34px + env(safe-area-inset-bottom)); }

@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
-import { type CardEvent, formatQuestion, pausable } from '../core/types';
-import { agentWorks, demoHandover, koordinatorReads, ownerField, parseQuestion, split, talkAlone, talkTurns, withoutOpen } from './talk';
+import { type CardEvent, formatQuestion, type Item, pausable } from '../core/types';
+import { agentWorks, demoHandover, koordinatorReads, openQuestions, ownerField, parseQuestion, split, talkAlone, talkTurns, unseen, withoutOpen } from './talk';
 
 let id = 0;
 const ev = (kind: CardEvent['kind'], author: CardEvent['author'], text: string): CardEvent => ({ id: ++id, cardId: 'c', at: '2026-10-01T10:00:00Z', kind, author, text });
@@ -437,4 +437,31 @@ test('what an agent did until it was paused stays above the line once it went on
   expect(t.shown.map((x) => x.e)).toEqual([asked, read, paused, more, resumed]);
   expect(t.shown[1]).toMatchObject({ steps: [read, thought], quiet: true });
   expect(t.pending).toEqual([now]);
+});
+
+test("the questions waiting for the owner: an idea's until its agent thinks again, a proposal's until it is reworked, a worker's while it asks", () => {
+  const q = { text: 'A oder B?', options: ['A', 'B'] };
+  const idea = { state: 'idea', idea: { status: 'open', thinking: false, questions: [q] } } as unknown as Item;
+  expect(openQuestions(idea)).toEqual([q]);
+  expect(openQuestions({ ...idea, idea: { ...idea.idea!, thinking: true } })).toEqual([]);
+  expect(openQuestions({ ...idea, archivedAt: '2026-10-17T10:00:00Z' })).toEqual([]);
+  const proposal = { state: 'proposal', proposal: { questions: [q] } } as unknown as Item;
+  expect(openQuestions(proposal)).toEqual([q]);
+  expect(openQuestions({ ...proposal, proposal: { ...proposal.proposal!, revising: {} as never } })).toEqual([]);
+  expect(openQuestions({ state: 'waiting', need: 'question', question: q } as Item)).toEqual([q]);
+  expect(openQuestions({ state: 'waiting', need: 'review', question: q } as Item)).toEqual([]);
+  expect(openQuestions({ state: 'working' } as Item)).toEqual([]);
+});
+
+test("a card's messages count as unseen after the last one seen, and never before the owner's own words", () => {
+  const began = ev('say', 'worker', 'Ich fange an.');
+  const asked = ev('say', 'owner', 'Wie weit bist du?');
+  const step = ev('activity', 'worker', 'Liest src/a.ts');
+  const reply = ev('say', 'worker', 'Fast fertig.');
+  const handover = ev('report', 'worker', 'Fertig.');
+  const all = [began, asked, step, reply, handover];
+  expect(unseen(all)).toBe(2);
+  expect(unseen(all, reply.id)).toBe(1);
+  expect(unseen(all, handover.id)).toBe(0);
+  expect(unseen([...all, ev('say', 'owner', 'Danke')])).toBe(0);
 });
