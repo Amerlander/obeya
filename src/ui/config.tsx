@@ -15,6 +15,7 @@ import { keep } from './keep';
 import { demoState, GitSetup, platformName, RecognitionDetail, SetupList, useFolderWithoutGit, voiceState } from './setup';
 import { failText, fileSize, pushKeyLabel, t } from './strings';
 import { applyTheme } from './theme';
+import { WishLink } from './wish';
 
 declare global {
   interface Window {
@@ -218,6 +219,7 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems, 
             <button className="btn small" onClick={onSetup}>
               {t.setup.check}
             </button>
+            <WishLink onOpen={onClose} />
           </div>
         </nav>
         <div className="cfg-main">

@@ -262,7 +262,7 @@ function IssueFields({ issue, disabled }: { issue: Issue; disabled: boolean }) {
   );
 }
 
-/** The quiet link that opens the dialog: at the foot of Obeya's sidebar, and in the legend (`onOpen` closes it). */
+/** The quiet link that opens the dialog: under „Einrichtung prüfen“ in the Konfiguration dialog, and in the legend (`onOpen` closes either). */
 export function WishLink({ className, onOpen }: { className?: string; onOpen?: () => void }) {
   const draft = useWishDraft();
   return (

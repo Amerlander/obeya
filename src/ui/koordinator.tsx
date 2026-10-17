@@ -1,7 +1,7 @@
 // The Koordinator's sheet: the conversation, with the height the sheet has, and below it sections
 // that open and close: the rules it learned and proposes, with the values for repositories'
 // settings the Arbeitsrückschau proposes, and the owner's preferences; shared demos to bring
-// up to date at once; and at its foot the link to a wish or a bug for Obeya's makers.
+// up to date at once.
 
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
 import type { Item, Preference, RepoRef, Reshare, SettingProposal, Talk, TalkQuote, TalkRef } from '../core/types';
@@ -18,7 +18,7 @@ import { useStickToEnd } from './stickToEnd';
 import { useFitHeight } from './fitHeight';
 import { PageChangeList } from './page-changes';
 import { useStoredState } from './stored';
-import { WishLink, WishReplyLink } from './wish';
+import { WishReplyLink } from './wish';
 
 interface Props {
   on: boolean;
@@ -94,7 +94,6 @@ export function KoordinatorSheet({ on, canvas, items, preferences, settings, rep
           <NewPreference repos={repos} />
         </Fold>
 
-        <WishLink className="k-foot" />
       </div>
     </aside>
   );

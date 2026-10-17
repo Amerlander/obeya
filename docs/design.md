@@ -2283,9 +2283,7 @@ text that fit. Send is an arrow in a dark circle, as in chat apps, with what it 
 
 Below that come sections that open and close, each a head with its count: the open proposals
 („Vorschläge (2)“, shown while there are any, open whenever a proposal came after the owner closed
-them) and the preferences (always there, closed by default). At its foot stands the quiet link
-„Wunsch oder Fehler melden“, with „Entwurf offen“ beside it while a draft waits (see Wishes for
-Obeya's makers). Whether a section is open is kept per
+them) and the preferences (always there, closed by default). Whether a section is open is kept per
 canvas in the browser, so a reload keeps it. What runs is not listed there: the canvas shows it.
 
 With no card open, the sheet shows the conversation, newest last, in all the height the sheet has;
@@ -2499,12 +2497,14 @@ that they submit themselves under their own account (`src/ui/wish.tsx`, `src/ser
 `src/core/wish.ts`). The repository is fixed, sadilek/obeya: the app runs without a checkout whose
 `origin` could name another.
 
-Four ways lead to the draft, a dialog over the page: the link „Wunsch oder Fehler melden“ at the foot
-of Obeya's sheet, the same link under the legend's sections, words to Obeya („Obeya, Feedback: …“,
-„Sag den Entwicklern von Obeya …“: the action `wish`, which opens the draft at once with what was
-said, without an undo window, since it sends nothing), and the link under a reply that says Obeya
-cannot do what the owner asked. The bar gets no icon of its own: it would stand there always for
-something used rarely.
+Four ways lead to the draft, a dialog over the page: the quiet link „Wunsch oder Fehler melden“ (with
+„Entwurf offen“ beside it while a draft waits) under „Einrichtung prüfen“ at the foot of the
+Konfiguration dialog's list of sections, the same link under the legend's sections, words to Obeya
+(„Obeya, Feedback: …“, „Sag den Entwicklern von Obeya …“: the action `wish`, which opens the draft
+at once with what was said, without an undo window, since it sends nothing), and the link under a
+reply that says Obeya cannot do what the owner asked. The bar gets no icon of its own: it would
+stand there always for something used rarely. Obeya's sheet had the link at its foot until
+2026-10-17; it took a line of its own there (the owner).
 
 The dialog's field is the shared composer (text, screenshots, microphone). What the owner writes or
 says there a small job (`chores`, read-only, in a temporary directory) writes up as a title and a
@@ -4101,7 +4101,8 @@ it; what was open behind it stays as it was, and a draft not saved yet stays, wr
 as it changes, so a reload, Obeya's restart included, brings it back) and lists its sections on the
 left: Leinwände, Modelle und Effort, Spracheingabe (with the push-to-talk key), Demos (the narration
 beside what demos need on this machine), Von anderen Geräten (see Other devices) and Allgemein
-(language, light or dark, the server). One
+(language, light or dark, the server); under the list stand „Einrichtung prüfen“ and the link
+„Wunsch oder Fehler melden“ (see Wishes for Obeya's makers). One
 section shows at a time, the last one chosen per tab, so a save's restart or a new language comes
 back to it; Leinwände marks a draft not saved yet and counts its problems in red.
 
