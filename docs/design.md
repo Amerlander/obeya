@@ -4461,6 +4461,19 @@ leaves out „abschicken mit Enter“. A field's screenshot button offers the ph
 name of the phone view's own (`obeya-drafts-@phone`), with the field under Obeya's conversation one
 per canvas (`obeya:<canvas>`).
 
+Turned sideways (landscape, the screen under 600 px high) the phone has about 400 px of height, of
+which the bar at the top, the microphone at the bottom and the fade under it took almost half, the
+microphone standing over the middle of the two columns of cards. There the microphone stands at the
+right edge, halfway up, where the thumb holds the phone, in a strip of its own beside
+the content, so it covers no card; the line under it naming whom it speaks to wraps in that strip,
+and the screenshot button stands above it. What stands beside the microphone held upright moves into
+the strip too: the canvas picker to its top, the button for Obeya's conversation to its bottom. The
+fade goes, the bar is slimmer, and on the list it scrolls away with the sign (on an open card it
+stays, with Back; on the panel, as its grip). The panel leaves no room under its field, the
+microphone standing beside it, and while the keyboard is up the field takes the strip's width too.
+Confirmations stand at the bottom of the content, in the panel above the field. Held upright nothing
+changes.
+
 When the server does not answer for 3 s (a phone back from its lock screen reconnects within that),
 a line at the top says „Obeya antwortet nicht · seit 14:02“ and why that may be; the page connects
 again by itself, at once when it comes back into view rather than after the pause it waits. A
