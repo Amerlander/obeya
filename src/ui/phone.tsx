@@ -84,6 +84,13 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
   const [talk, setTalk] = useState(talkInAddress);
   const talkRef = useRef(talk);
   talkRef.current = talk;
+  /** Closes the open panel as dragging it down does, sliding out. */
+  const leaveTalk = useRef<(() => void) | null>(null);
+  // the panel sliding out: the button offers it again at once
+  const [closing, setClosing] = useState(false);
+  useEffect(() => {
+    if (!talk) setClosing(false);
+  }, [talk]);
   // opening a card or the panel is a step in the browser's history: its Back (or the swipe) closes it
   // again; the steps this page pushed, the latest last
   const pushed = useRef<('card' | 'talk')[]>([]);
@@ -385,13 +392,6 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
     if (!unreadOf(obeyaId) && waiting) setObeyaCanvas(waiting.id);
     openTalk();
   };
-  /** Closes the open panel as dragging it down does, sliding out. */
-  const leaveTalk = useRef<(() => void) | null>(null);
-  // the panel sliding out: the button offers it again at once
-  const [closing, setClosing] = useState(false);
-  useEffect(() => {
-    if (!talk) setClosing(false);
-  }, [talk]);
   const shown = talk && !closing;
   return (
     <HoldToTalk.Provider value={press}>
