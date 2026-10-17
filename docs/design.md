@@ -3580,7 +3580,8 @@ script is bounded and ends with an error naming what it waited for. It finds the
 `-read-only`, so several checkouts each run their own emulator of the same AVD at once (nothing
 persists in it); the device, its DevTools port and the open page are kept in a state file in the
 OS temp directory named by the checkout. A tap is a real touch (`adb shell input tap`), so the
-keyboard opens and fullscreen counts as a user's gesture: the element's centre comes from the page
+keyboard opens (on a text field, `tap` returns once it is open and the page has settled) and
+fullscreen counts as a user's gesture: the element's centre comes from the page
 over CDP, the page's place on the screen from the WebView node of `uiautomator dump`. `open` turns
 off what Chrome and Android lay over a page on their own (first-run screens, the notification
 prompt, the offers to translate or install the page, the hint at the first fullscreen; Chrome as the debug app reads

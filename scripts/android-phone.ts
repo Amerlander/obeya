@@ -30,14 +30,16 @@
 // opens the URL in Chrome as its only tab and waits until the page has loaded and stayed (a
 // sign-in link's redirect followed; default up to 60 s). The first `open` on a device turns off
 // what Chrome and Android lay over a page on their own (first-run screens, the notification
-// prompt, the offers to translate or install the page, the hint at the first fullscreen): Chrome as the debug app reads /data/local/tmp/chrome-command-line.
+// prompt, the offers to translate or install the page, the hint at the first fullscreen): Chrome
+// as the debug app reads /data/local/tmp/chrome-command-line.
 // `eval` runs JS in that page over the DevTools protocol (awaits promises; `await` works at the
 // top) and prints the result as JSON, e.g. `eval 'visualViewport.height'`.
 // `tap` taps the centre of the first element the selector matches (scrolled into view, once it has
 // stopped moving) as a real touch through `adb shell input tap`, so the on-screen keyboard and the
 // APIs that need a user's gesture (fullscreen) behave as on a phone. Where the page lies on the
 // screen comes from the device's view hierarchy (`uiautomator dump`, about a second). The keyboard
-// takes a moment to open: `eval 'await new Promise(r => setTimeout(r, 1500)); visualViewport.height'`.
+// takes a moment to open: on a text field, `tap` returns once it is open and the page has settled
+// around it.
 // `type` types into the focused element: ASCII as key presses (`input text`), a newline as Enter,
 // other characters (umlauts) inserted as the keyboard's input method would (`Input.insertText`).
 // `rotate` turns the emulator's acceleration sensor, as a hand turns the phone (on a USB phone it
@@ -487,7 +489,18 @@ class Phone {
     if (at.x < page.left || at.x >= page.right || at.y < page.top || at.y >= page.bottom)
       throw new Fail(`the centre of ${selector} lies at ${at.x},${at.y}, off the page's visible area ${JSON.stringify(page)} (under the keyboard?)`);
     await this.shell(`input tap ${at.x} ${at.y}`);
-    return at;
+    // a text field the tap focused opens the keyboard, which takes a moment: return once it is open
+    // and the page has settled around it, so that what is measured next is the page with the keyboard
+    const editable = `(() => { const a = document.activeElement; return !!a && (a.isContentEditable || /^(INPUT|TEXTAREA)$/.test(a.tagName)); })()`;
+    const focused = await until('a text field to take the focus', 600, async () =>
+      (await evaluate(target, editable, 2000)).result.value === true ? true : undefined,
+    ).catch(() => false);
+    if (!focused) return { ...at, keyboard: undefined };
+    const keyboard = await until('the keyboard', 10_000, async () =>
+      /mInputShown=true/.test(await this.shell('dumpsys input_method')) ? true : undefined,
+    ).catch(() => false);
+    await evaluate(target, STEADY_JS, 10_000);
+    return { ...at, keyboard };
   }
 
   async type(text: string) {
@@ -748,7 +761,6 @@ async function start(sdk: ReturnType<typeof findSdk>, c: Extract<Command, { cmd:
   for (const cmd of [
     'settings put system screen_off_timeout 2147483647',
     'svc power stayon true',
-    'input keyevent 82',
     'wm dismiss-keyguard',
     'settings put global hide_error_dialogs 1',
     'am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS',
@@ -818,7 +830,8 @@ async function main(c: Command) {
     }
     case 'tap': {
       const at = await phone.tap(c.selector, c.timeout * 1000);
-      return `tapped ${c.selector} at ${at.x},${at.y}`;
+      const keyboard = at.keyboard === undefined ? '' : at.keyboard ? ', the keyboard is open' : ', a text field but no keyboard within 10 s';
+      return `tapped ${c.selector} at ${at.x},${at.y}${keyboard}`;
     }
     case 'type':
       await phone.type(c.text);
