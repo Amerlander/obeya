@@ -5,7 +5,7 @@
 // A demo file default-exports nothing; it calls `runDemo(spec, import.meta.dirname)` and is run
 // with plain `node demo.ts`. Everything lands in the demo file's directory. `node demo.ts --dry`
 // only plays the scenes against the app, to find a scene that fails before a render does.
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Browser, BrowserContext, Locator, Page } from 'playwright-core';
@@ -70,6 +70,8 @@ const MIN_CUT_SECONDS = 5;
 const PAGE_TIMEOUT_SECONDS = 20;
 /** The clock strip repaints the page every frame: a screencast without a frame this long has stopped. */
 const STALL_SECONDS = 20;
+/** The director's own once-a-second timer this late: the director stood still, as through a sleep of this computer. */
+const STILL_SECONDS = 5;
 const SAVED = readDemoSettings();
 /** The settings of this render: `DEMO_VOICE` names another provider, or a `.wav` to clone. */
 const SETTINGS = withVoice(SAVED, process.env.DEMO_VOICE);
@@ -301,6 +303,76 @@ function now() {
   return Date.now() / 1000;
 }
 
+/**
+ * The spells the director stood still, each from when (wall clock) and how long, and whether this
+ * computer slept meanwhile (known on a Mac). A laptop with its lid closed sleeps on battery
+ * whatever keeps it awake otherwise, and wakes for a few seconds now and then: renders failed
+ * mid-take with "no frame for 20 s", which looked like a hanging page (2026-10-17). The display
+ * sleeping costs a render nothing.
+ */
+const stillSpells: { at: number; seconds: number; slept: boolean }[] = [];
+let lastTick = now();
+/** Since when (wall clock, s) the director watches whether it stands still; a failure names the spells since. */
+let watchedSince = now();
+let watching: ReturnType<typeof setInterval> | undefined;
+
+/** Notes a spell when the director has not ticked for `STILL_SECONDS`; called every second. */
+function tick() {
+  const t = now();
+  if (t - lastTick > STILL_SECONDS) stillSpells.push({ at: lastTick, seconds: t - lastTick, slept: macSleptSince(lastTick) });
+  lastTick = t;
+}
+
+/**
+ * Watches from now on, once the app is staged: the synthesis, the setup check and a demo's `login`
+ * before it may block the director in child processes, which is no sleep.
+ */
+function watchStillness() {
+  lastTick = watchedSince = now();
+  stillSpells.length = 0;
+  watching ??= setInterval(tick, 1000);
+  watching.unref();
+}
+
+const AWAKE_ADVICE = 'render again once it stays awake (a laptop with its lid closed sleeps on battery whatever keeps it awake otherwise)';
+
+/** Why the take fails when this computer slept since `since` (wall clock, s); else undefined. */
+function sleepCause(since: number) {
+  const spells = stillSpells.filter((s) => s.slept && s.at >= since - 1);
+  if (!spells.length) return undefined;
+  const seconds = Math.round(spells.reduce((sum, s) => sum + s.seconds, 0));
+  return `this computer slept for ${seconds} s during the render, and nothing can be recorded meanwhile: ${AWAKE_ADVICE}`;
+}
+
+/** What a failure since `since` likely comes from when the director stood still meanwhile; else undefined. */
+function stillCause(since: number) {
+  const slept = sleepCause(since);
+  if (slept) return slept;
+  const spells = stillSpells.filter((s) => s.at >= since - 1);
+  if (!spells.length) return undefined;
+  const seconds = Math.round(spells.reduce((sum, s) => sum + s.seconds, 0));
+  return `the director stood still for ${seconds} s during the render: this computer may have slept; if so, ${AWAKE_ADVICE}`;
+}
+
+/** Whether this Mac went to sleep at `t` (wall clock, s) or later, from the kernel's last sleep; false elsewhere. */
+function macSleptSince(t: number) {
+  if (process.platform !== 'darwin') return false;
+  const r = spawnSync('/usr/sbin/sysctl', ['-n', 'kern.sleeptime'], { encoding: 'utf8' });
+  const sec = Number(/sec = (\d+)/.exec(r.stdout ?? '')?.[1]);
+  return sec >= Math.floor(t);
+}
+
+/**
+ * On a Mac, no idle sleep while the director runs (`caffeinate -i`, ending with it): Obeya holds
+ * that only while other devices may reach it. A closed lid on battery sleeps regardless.
+ */
+function stayAwake() {
+  if (process.platform !== 'darwin') return;
+  spawn('/usr/bin/caffeinate', ['-i', '-w', String(process.pid)], { stdio: 'ignore' })
+    .on('error', () => {})
+    .unref();
+}
+
 /** `call`, or an error once it has not settled for `PAGE_TIMEOUT_SECONDS`. */
 function answered<T>(call: Promise<T>, what: string, seconds = PAGE_TIMEOUT_SECONDS): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -425,11 +497,14 @@ async function failure(step: string, page: Page, dir: string, error: unknown) {
   await closeBrowser(page.context().browser());
   // Playwright's message names the call and the locator it waited for; its colours are noise here.
   const cause = (error instanceof Error ? error.message : String(error)).replace(/\x1b\[[0-9;]*m/g, '').trim();
+  tick();
+  const still = stillCause(watchedSince);
   const lines = [
     `${step} failed`,
     `  URL: ${page.url()}`,
     `  Screenshot: ${captured ? shot : 'none (the page could not be captured)'}`,
     `  Cause: ${cause.split('\n').join('\n    ')}`,
+    ...(still && still !== cause ? [`  Likely cause: ${still}`] : []),
   ];
   return new Error(lines.join('\n'), { cause: error });
 }
@@ -446,6 +521,7 @@ function sceneName(i: number, spec: DemoSpec) {
 /** The recording browser, with the overlay, on the opening shot. */
 async function openPage(spec: DemoSpec, viewport: { width: number; height: number }, work: string, paced: boolean) {
   const storageState = await login({ ...spec, viewport }, work);
+  watchStillness();
   const browser = await launch(viewport);
   const ctx = await browser.newContext({ viewport, storageState, deviceScaleFactor: spec.sharp ? 2 : 1 });
   await ctx.addInitScript({ path: path.join(LIB, 'overlay.js') });
@@ -491,8 +567,13 @@ async function startScreencast(ctx: BrowserContext, page: Page, dir: string, siz
   let stall: (error: Error) => void = () => {};
   const stalled = new Promise<never>((_, reject) => (stall = reject));
   stalled.catch(() => {});
+  const since = now();
   const watch = setInterval(() => {
-    if (now() - lastFrame > STALL_SECONDS) stall(new Error(`the recording page sent no frame for ${STALL_SECONDS} s: it hangs`));
+    tick();
+    // the frames from before the sleep and after it no longer fit the narration
+    const slept = sleepCause(since);
+    if (slept) stall(new Error(slept));
+    else if (now() - lastFrame > STALL_SECONDS) stall(new Error(`the recording page sent no frame for ${STALL_SECONDS} s: it hangs`));
   }, 1000);
   watch.unref();
   cdp.on('Page.screencastFrame', (f) => {
@@ -516,6 +597,9 @@ async function startScreencast(ctx: BrowserContext, page: Page, dir: string, siz
     stalled,
     stop: async () => {
       clearInterval(watch);
+      tick();
+      const slept = sleepCause(since);
+      if (slept) throw new Error(slept);
       await answered(cdp.send('Page.stopScreencast'), 'stopping the screencast');
       frames.splice(0, frames.length, ...onPaintTime(frames, paintTimes(frames, dir, size, scale)));
     },
@@ -563,6 +647,7 @@ function vttTime(s: number) {
 
 export async function runDemo(spec: DemoSpec, demoDir: string) {
   underNode();
+  stayAwake();
   const override = process.env.DEMO_VOICE;
   const voiceName = override?.endsWith('.wav') ? path.basename(override, '.wav') : override;
   // The voice of the settings renders next to the script; another one gets its own subdirectory,
@@ -615,8 +700,12 @@ export async function runDemo(spec: DemoSpec, demoDir: string) {
     marks.push({ title: scene.title, start: at, speechStart: at + LEAD_SECONDS, speechEnd: at + LEAD_SECONDS + clip.seconds });
   }
   const tEnd = now() + 0.8;
-  await d.wait(800);
-  await cast.stop();
+  try {
+    await Promise.race([d.wait(800), cast.stalled]);
+    await cast.stop();
+  } catch (error) {
+    throw await failure('the end of the take', page, work, error);
+  }
   await closeBrowser(browser);
   const total = videoTime(tEnd, t0, d.cuts);
   const cut = cast.frames.find((f) => Math.round(f.width) !== viewport.width || Math.round(f.height) !== viewport.height);

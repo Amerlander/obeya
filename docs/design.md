@@ -3142,8 +3142,13 @@ synthesis and the scenes before it. A failing step names the page's URL, the scr
 Playwright's message on lines of their own. A page that hangs fails the render too, instead of
 leaving it waiting: a call into the page (the overlay's, `d.evaluate`) that gets no answer within 20
 s fails its step, and so does a screencast that sends no frame for 20 s (the clock strip repaints
-every frame, so a live page always sends them). A demo started with `bun demo.ts` runs again under
-Node (see the decisions).
+every frame, so a live page always sends them). A computer that sleeps mid-take fails the take at
+once, named as such: the director's own timer ticking five seconds late means it stood still, and a
+Mac's kernel says whether it slept meanwhile (`kern.sleeptime`). A step that fails after the
+director stood still names that as its likely cause, a possible sleep where no kernel tells. On a
+Mac the director holds `caffeinate -i` while it runs, against idle sleep; a laptop with its lid
+closed on battery sleeps regardless. A demo started with `bun demo.ts` runs
+again under Node (see the decisions).
 
 #### Cutting waits
 
@@ -3604,6 +3609,12 @@ the microphone; Chrome launched by Playwright needs no audio service moved in-pr
   recording browser lost its DevTools pipe a few seconds into the take, once the login browser was
   collected, and Playwright under Bun never noticed: every Obeya demo of a worker that ran its demo
   with `bun` hung after its first scene.
+- **A render names a sleep of the computer, and keeps no display awake** (2026-10-17). Renders of
+  a worker failed mid-take with "no frame for 20 s" while the owner was away, in whatever scene;
+  the screencast stopped to the second when the Mac went to sleep (its lid closed, on battery,
+  waking only for seconds now and then). A display that sleeps or a locked screen costs a render
+  nothing: renders and a page's `requestAnimationFrame` ran through with both. Taken first for a
+  hanging page, then for the sleeping display.
 - **Waits are cut, but not short ones**: a demo of real agents had half a minute of a canvas where
   nothing happened; the flash for "2 Sekunden später" disturbed more than the wait.
 - **Frames are timed by a clock painted into the page** (2026-10-08): on a busy machine (other
