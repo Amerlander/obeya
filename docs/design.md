@@ -4531,7 +4531,11 @@ the gesture bar the field ended behind the keyboard by that bar's height, and wi
 bottom it ended far above it. Its top is a grip the owner drags up and down to the height they want:
 the panel follows the finger and stays where it is let go, the page under it scrolling on until all
 of it can stand above the panel. Let go within 15 % of the screen's top it takes the full height,
-within 15 % of its bottom it closes (`settle` in `src/ui/panelHeight.ts`). Until 2026-10-17 it only
+within 15 % of its bottom it closes (`settle` in `src/ui/panelHeight.ts`). Let go while the finger
+still moves, it is thrown: it glides on in that direction and slows down evenly until it stops
+(`thrown`, `glide`), so a short swipe up gives the full height and one down closes it, and a gentle
+push carries it a little further; a finger that stood still for 50 ms before lifting leaves it where
+it is. Until 2026-10-17 it only
 closed or sprang back: let go further than 110 px down (or flicked) it closed, so a full panel could
 not be dragged to the middle. It opens at the full height (beside a demo video at half, below). The same button left of the microphone, Back and Esc close it
 too, and its address is

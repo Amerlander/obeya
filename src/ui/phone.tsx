@@ -15,7 +15,7 @@ import { Sign } from './logo';
 import { Notify, registerWorker } from './notify';
 import { plain } from './markdown';
 import { Cards } from './message';
-import { settle } from './panelHeight';
+import { glide, type Mark, settle, speed, THROWN, thrown } from './panelHeight';
 import { CardFace, cardClass, shownState, TalkIcon } from './parts';
 import { videoOf } from './spot';
 import { clock, failText, forTouch, shortDay, t } from './strings';
@@ -736,7 +736,9 @@ function CardTalkButton({ item, open, shown, onClick }: { item: Item; open: bool
  * the only thing in it that scrolls, the field stands under it and the microphone below that.
  * Its top is a grip the owner drags to the height they want (`settle`): let go near the screen's top
  * it takes the full height, near the bottom it closes (as the button beside the microphone and Back
- * do). It opens at the full height, or beside a demo video (`half`) in the lower half of the screen.
+ * do). Let go in motion, it glides on and slows down (`thrown`), so a short swipe throws it to the
+ * full height or closes it. It opens at the full height, or beside a demo video (`half`) in the
+ * lower half of the screen.
  */
 function TalkPanel({
   title,
@@ -768,17 +770,20 @@ function TalkPanel({
   const [height, setHeight] = useState<number | null>(null);
   useEffect(() => setHeight(null), [half]);
   const [leaving, setLeaving] = useState(false);
-  /** Where the finger went down and where the panel's top stood then, both from the top of the screen the keyboard leaves. */
-  const drag = useRef<{ y: number; top: number } | null>(null);
+  /** Where the finger went down and where the panel's top stood then, both from the top of the screen the keyboard leaves, and where the finger has been since. */
+  const drag = useRef<{ y: number; top: number; trail: Mark[] } | null>(null);
+  // how a thrown panel glides on to where it comes to rest
+  const [gliding, setGliding] = useState<{ ms: number; ease: string } | null>(null);
+  const glided = useRef<ReturnType<typeof setTimeout>>(undefined);
   // the panel follows the finger without easing
   const [dragging, setDragging] = useState(false);
   const gone = useRef(false);
-  const leave = () => {
+  const leave = (ms = 200) => {
     if (gone.current) return;
     gone.current = true;
     onLeave();
     setLeaving(true);
-    setTimeout(onClose, 200);
+    setTimeout(onClose, ms);
   };
   leaveRef.current = leave;
   // the panel takes the part of the screen the keyboard leaves, so the field stays above it (in Safari;
@@ -843,8 +848,10 @@ function TalkPanel({
   const screen = () => ({ top: window.visualViewport?.offsetTop ?? 0, height: window.visualViewport?.height ?? innerHeight });
   const down = (e: React.PointerEvent) => {
     if ((e.target as Element).closest('button, select')) return;
-    drag.current = { y: e.clientY, top: panel.current!.getBoundingClientRect().top - screen().top };
+    drag.current = { y: e.clientY, top: panel.current!.getBoundingClientRect().top - screen().top, trail: [{ t: e.timeStamp, y: e.clientY }] };
     e.currentTarget.setPointerCapture(e.pointerId);
+    clearTimeout(glided.current);
+    setGliding(null);
   };
   /** Where the dragged top stands, as a share of the screen from its top. */
   const topAt = (e: React.PointerEvent) => {
@@ -853,21 +860,37 @@ function TalkPanel({
   };
   const move = (e: React.PointerEvent) => {
     if (!drag.current) return;
+    drag.current.trail = [...drag.current.trail.filter((m) => e.timeStamp - m.t < 200), { t: e.timeStamp, y: e.clientY }];
     setDragging(true);
     setHeight(Math.min(1, 1 - topAt(e)));
   };
   const up = (e: React.PointerEvent) => {
     if (!drag.current) return;
     const moved = Math.abs(e.clientY - drag.current.y) > 4;
-    const to = settle(topAt(e));
+    const px = screen().height;
+    // the top stands no higher than the screen's
+    const at = Math.max(0, topAt(e));
+    const v = e.type === 'pointercancel' ? 0 : speed(drag.current.trail, e.timeStamp);
+    const to = settle(thrown(at, v, px));
     drag.current = null;
     setDragging(false);
     // a tap leaves the panel as it was
     if (!moved) return;
-    if (to === 'close') leave();
+    let ms: number | undefined;
+    if (Math.abs(v) >= THROWN) {
+      // the way left to go: down out of the screen, or to the top's new place
+      const g = glide(to === 'close' ? panel.current!.getBoundingClientRect().height : (at - (1 - to)) * px, v);
+      ms = g.ms;
+      setGliding(g);
+      glided.current = setTimeout(() => setGliding(null), g.ms);
+    }
+    if (to === 'close') leave(ms);
     else setHeight(to);
   };
-  const style = height === null ? undefined : { '--ph-h': Math.max(0, height) };
+  const style = {
+    ...(height === null ? {} : { '--ph-h': Math.max(0, height) }),
+    ...(gliding ? { transitionDuration: `${gliding.ms}ms`, transitionTimingFunction: gliding.ease } : {}),
+  };
   return (
     <div
       id="ph-talk"
