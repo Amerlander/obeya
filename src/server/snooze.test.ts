@@ -75,7 +75,7 @@ describe('the agent snoozes itself', () => {
     expect(runtime.last.spec.resume).toBe('sess-1');
     expect(runtime.last.inbox[0]).toContain('the time you snoozed until, to: Testergebnis prüfen');
     expect(item(id).snoozed).toBeUndefined();
-    expect(last(id)).toMatchObject({ kind: 'state', author: 'obeya', text: 'Wieder da (vom Agenten zurückgestellt)' });
+    expect(last(id)).toMatchObject({ kind: 'state', author: 'obeya', text: 'Wieder da: Zeitpunkt erreicht' });
     expect(workers().busyCards()).toEqual([id]);
   });
 
@@ -88,13 +88,14 @@ describe('the agent snoozes itself', () => {
     expect(runtime.last.inbox[0]).toContain('the owner wakes you early');
     expect(runtime.last.inbox[0]).toContain('Schau jetzt schon mal nach.');
     expect(item(id).snoozed).toBeUndefined();
-    expect(board().events(id).some((e) => e.kind === 'state' && e.author === 'owner' && e.text === 'Wieder da (vom Agenten zurückgestellt)')).toBe(true);
+    expect(board().events(id).some((e) => e.kind === 'state' && e.author === 'owner' && e.text === 'Wieder da: von dir zurückgeholt')).toBe(true);
 
     runtime.last.call('snooze', { until: later(10 * HOUR), why: 'Prüfen' });
     runtime.last.emit({ type: 'idle' });
     workers().prEvent(id, 'Check rot.', 'A check of your pull request failed: test.');
     expect(runtime.last.inbox[0]).toContain('what follows wakes you early');
     expect(runtime.last.inbox[0]).toContain('A check of your pull request failed');
+    expect(board().events(id).some((e) => e.text === 'Wieder da: Neues für den Agenten')).toBe(true);
   });
 
   test('the owner moves the time it snoozed until: woken then, it hears so', () => {
@@ -167,7 +168,7 @@ describe('the agent snoozes until another card gets somewhere', () => {
     expect(runtime.last.inbox[0]).toContain('The card “Tests auf Linux grün machen” is done: its work is on main');
     expect(runtime.last.inbox[0]).toContain('to: Tag verschieben');
     expect(item(id).snoozed).toBeUndefined();
-    expect(last(id)).toMatchObject({ author: 'obeya', text: 'Wieder da (vom Agenten zurückgestellt)' });
+    expect(last(id)).toMatchObject({ author: 'obeya', text: 'Wieder da: „Tests auf Linux grün machen“ ist erledigt' });
   });
 
   test('until it waits for the owner, at the latest at a time: whichever comes first wakes it', () => {
@@ -269,7 +270,7 @@ describe('the owner snoozes a card', () => {
     expect(inbox).toContain('A check of your pull request failed');
     expect(item(id).snoozed).toBeUndefined();
     expect(item(id).paused).toBeUndefined();
-    expect(last(id).text).toBe('Wieder da (von dir zurückgestellt)');
+    expect(last(id).text).toBe('Wieder da: Zeitpunkt erreicht');
   });
 
   test('waiting for them: it leaves them and comes back at the time; nothing goes to its agent', () => {
@@ -314,7 +315,7 @@ describe('the owner snoozes a card', () => {
     expect(runtime.last.spec.resume).toBe('sess-1');
     expect(runtime.last.inbox[0]).toContain('You snoozed until');
     expect(runtime.last.inbox[0]).toContain('the owner wakes you early, without words, so tell them with reply where things stand');
-    expect(last(id)).toMatchObject({ author: 'owner', text: 'Wieder da (vom Agenten zurückgestellt)' });
+    expect(last(id)).toMatchObject({ author: 'owner', text: 'Wieder da: von dir zurückgeholt' });
     expect(() => canvas.act(id, { action: 'wake' })).toThrow('not snoozed');
   });
 
@@ -353,6 +354,7 @@ describe('edges a review found', () => {
     s.emit({ type: 'idle' });
     workers().prClosed(id);
     expect(item(id).snoozed).toBeUndefined();
+    expect(board().events(id).some((e) => e.text === 'Wieder da: die Karte braucht dich')).toBe(true);
     expect(needsYou(item(id))).toBe(true);
   });
 

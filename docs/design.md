@@ -939,7 +939,11 @@ eingeschaltet hat“). It counts neither as at work nor as needing the owner; on
 the end of its list („Läuft“, or „Für dich“ for one that waited for the owner). Its conversation has
 a line where it happened, „Zurückgestellt bis Sa 31.10., 08:00 · …“, which while it lasts carries
 „Jetzt zurückholen“ and „Ändern“ (the same menu; it changes the time, whoever snoozed it), and on
-waking a line „Wieder da (vom Agenten zurückgestellt)“ or „(von dir zurückgestellt)“. The field reads
+waking a line that says why it is back: „Wieder da: Zeitpunkt erreicht“, „… von dir zurückgeholt“,
+„… Neues für den Agenten“, „… die Karte braucht dich“, or what became of the card it waited on („…
+„Tests auf Linux grün machen“ ist erledigt“). Until 2026-10-17 that line said who had snoozed the
+card („Wieder da (vom Agenten zurückgestellt)“), which the snooze line says already and which did
+not tell why it was back. The field reads
 „Hinweis an den Agenten – er wacht damit auf“.
 
 ### Waiting without blocking

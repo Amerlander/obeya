@@ -1462,7 +1462,7 @@ export class Workers {
     const snoozed = this.o.board.snoozedOf(cardId);
     const woke = snoozed && !snoozed.waiting ? snoozed : null;
     if (woke) {
-      this.o.board.unsnooze(cardId, owner && !timeUp ? 'owner' : 'obeya');
+      this.o.board.unsnooze(cardId, met ? { met } : timeUp ? 'time' : owner ? 'owner' : 'news');
       const live = this.live.get(cardId);
       if (live) live.snoozed = false;
     }
@@ -2530,7 +2530,7 @@ export class Workers {
    */
   private wokenForOwner(cardId: string) {
     const s = this.o.board.snoozedOf(cardId);
-    if (s && !s.waiting) this.o.board.unsnooze(cardId, 'obeya');
+    if (s && !s.waiting) this.o.board.unsnooze(cardId, 'needsYou');
   }
 
   private pendingQuestion(cardId: string): string | undefined {

@@ -335,7 +335,7 @@ export class CanvasRuntime {
   private wake(cardId: string, timeUp: boolean, met?: Awaited) {
     const card = this.board.item(cardId);
     if (!card?.snoozed) throw new BadRequest('notSnoozed', 'the card is not snoozed');
-    if (card.snoozed.waiting) return void this.board.unsnooze(cardId, timeUp ? 'obeya' : 'owner');
+    if (card.snoozed.waiting) return void this.board.unsnooze(cardId, timeUp ? 'time' : 'owner');
     this.repoOf(cardId).workers.wake(cardId, timeUp, met);
   }
 

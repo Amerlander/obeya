@@ -192,8 +192,8 @@ const pauseLine = (e: CardEvent) => e.kind === 'state' && e.author === 'owner' &
 /** The line that the card was snoozed until a time (or its time changed), by its agent or the owner. */
 export const snoozeLine = (e: CardEvent) => e.kind === 'state' && (e.author === 'worker' || e.author === 'owner') && LANGUAGES.some((l) => e.text.startsWith(MESSAGES[l].worker.snoozed('\0').split('\0')[0]!));
 
-/** The line that a snoozed card woke, at its time or as the owner woke it. */
-const wokeLine = (e: CardEvent) => e.kind === 'state' && LANGUAGES.some((l) => e.text === MESSAGES[l].worker.woke('agent') || e.text === MESSAGES[l].worker.woke('owner'));
+/** The line that a snoozed card woke, and why (or, until 2026-10-17, who had snoozed it: „Wieder da (vom Agenten zurückgestellt)“). */
+const wokeLine = (e: CardEvent) => e.kind === 'state' && LANGUAGES.some((l) => e.text.startsWith(MESSAGES[l].worker.woke('\0').split('\0')[0]!) || e.text.startsWith(`${MESSAGES[l].worker.woke('').replace(/: $/, '')} (`));
 
 /** Obeya's line that the usage limit stopped the agent's turn, and when it goes on. */
 const limitLine = (e: CardEvent) =>

@@ -4,7 +4,7 @@
 // the language that applies when it is written and stays so.
 
 import type { Language } from './locale';
-import type { AwaitedState, Snooze } from './types';
+import type { Awaited, AwaitedState, Snooze } from './types';
 
 /** What a worker pauses for: Obeya restarting, Obeya stopping, or only its repository's agents restarting (a change to its configuration). */
 export type Pause = 'restart' | 'stop' | 'repo';
@@ -91,8 +91,18 @@ const de = {
     snoozed: (at: string, why?: string) => `Zurückgestellt bis ${at}${why ? ` · ${why}` : ''}`,
     /** Until when a worker waits on another card: until it is done or waits for the owner, and at the latest when, if it gave a time. */
     awaits: (title: string, state: AwaitedState, at?: string) => `„${title}“ ${state === 'done' ? 'erledigt ist' : 'auf dich wartet'}${at ? `, spätestens ${at}` : ''}`,
-    /** It woke, from a snooze by its agent or by the owner. */
-    woke: (by: 'agent' | 'owner') => `Wieder da (${by === 'agent' ? 'vom Agenten' : 'von dir'} zurückgestellt)`,
+    /** It woke from a snooze, and why (`wokeWhy`). Until 2026-10-17 the line said who had snoozed it: „Wieder da (vom Agenten zurückgestellt)“. */
+    woke: (why: string) => `Wieder da: ${why}`,
+    wokeWhy: {
+      time: 'Zeitpunkt erreicht',
+      owner: 'von dir zurückgeholt',
+      /** Obeya had something for an agent that snoozed itself (a review, the landing, a failed check). */
+      news: 'Neues für den Agenten',
+      needsYou: 'die Karte braucht dich',
+      /** What became of the card the agent waited on. */
+      card: (title: string, met: Awaited, state: AwaitedState) =>
+        `„${title}“ ${{ reached: state === 'done' ? 'ist erledigt' : 'wartet auf dich', gone: 'ist nicht mehr da', archived: 'ist archiviert', stopped: 'wurde gestoppt', dropped: 'wurde verworfen' }[met]}`,
+    },
     parked: 'App im Workspace gestoppt, solange die Karte wartet. Der Agent startet sie wieder, wenn er sie braucht.',
     parkKept: 'Die App im Workspace läuft weiter, während die Karte wartet: Sie hält Daten, die bleiben sollen. Soll sie trotzdem gestoppt werden, sag es dem Agenten.',
     parkFailed: (output: string) => `Die App im Workspace zu stoppen, ist fehlgeschlagen: ${output}`,
@@ -427,7 +437,15 @@ const en: Messages = {
     resumedByOwner: 'Resumed.',
     snoozed: (at: string, why?: string) => `Snoozed until ${at}${why ? ` · ${why}` : ''}`,
     awaits: (title: string, state: AwaitedState, at?: string) => `“${title}” ${state === 'done' ? 'is done' : 'waits for you'}${at ? `, at the latest ${at}` : ''}`,
-    woke: (by: 'agent' | 'owner') => `Woke up (snoozed by ${by === 'agent' ? 'the agent' : 'you'})`,
+    woke: (why: string) => `Woke up: ${why}`,
+    wokeWhy: {
+      time: 'the time has come',
+      owner: 'woken by you',
+      news: 'news for the agent',
+      needsYou: 'the card needs you',
+      card: (title: string, met: Awaited, state: AwaitedState) =>
+        `“${title}” ${{ reached: state === 'done' ? 'is done' : 'waits for you', gone: 'is gone', archived: 'was archived', stopped: 'was stopped', dropped: 'was dropped' }[met]}`,
+    },
     parked: 'Stopped the app in the workspace while the card waits. The agent starts it again when it needs it.',
     parkKept: 'The app in the workspace keeps running while the card waits: it holds data that should stay. To have it stopped anyway, tell the agent.',
     parkFailed: (output: string) => `Stopping the app in the workspace failed: ${output}`,

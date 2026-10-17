@@ -165,6 +165,9 @@ export type AwaitedState = (typeof AWAITED_STATES)[number];
 
 export type Awaited = 'reached' | 'gone' | 'archived' | 'stopped' | 'dropped';
 
+/** Why a snoozed card woke: its time came, the owner woke it, Obeya had something for its agent, it needs the owner, or what became of the card it waited on. */
+export type Woke = 'time' | 'owner' | 'news' | 'needsYou' | { met: Awaited };
+
 /**
  * Whether the card a snoozed worker waits on gets it to wake: `reached` the state it waits for;
  * `gone`, `archived`, `stopped` (planned again by the owner), `dropped` (an idea let go) when it no
