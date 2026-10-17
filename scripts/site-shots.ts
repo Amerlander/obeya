@@ -7,7 +7,7 @@
 //
 // --demo names a Tipjar demo to put on that card (a directory with demo.mp4 and poster.jpg); without
 // it the newest ~/demos/tipjar-split-the-bill* is taken, which every render of the hero video leaves
-// behind (its agent's demo of splitting the bill). The scratch Obeya runs on port 4740 and is stopped
+// behind (its agent's demo of splitting the bill); its chapters come from its chapters.vtt. The scratch Obeya runs on port 4740 and is stopped
 // at the end; --keep leaves it running for a look, --stage-only stages it and takes nothing. Needs
 // Google Chrome.
 
@@ -40,6 +40,13 @@ function newestDemo(): string {
 }
 const demo = arg('--demo') ?? newestDemo();
 
+/** The demo's chapters from its `chapters.vtt`, as the card has them: [start in seconds, title]. */
+function chaptersOf(dir: string): [number, string][] {
+  const seconds = (t: string) => t.split(':').reduce((s, part) => s * 60 + Number(part), 0);
+  return [...readFileSync(join(dir, 'chapters.vtt'), 'utf8').matchAll(/^([\d:.]+) --> [\d:.]+\n(.+)$/gm)].map((m) => [Math.round(seconds(m[1]!) * 10) / 10, m[2]!.trim()]);
+}
+const chapters = chaptersOf(demo);
+
 // the hero video's repository and plan doc, with cards of our own
 const dir = mkdtempSync(join(tmpdir(), 'site-shots-'));
 const stageFile = join(dir, 'stage.json');
@@ -58,7 +65,7 @@ stage.cards = [
       { kind: 'review', author: 'worker', text: 'Below the tip there is a People field now, and the result says what each person pays, rounded up to the cent so the shares always cover the bill.', ago: '3m' },
     ],
     summary: 'Below the tip there is a People field now, and the result says what each person pays, rounded up to the cent so the shares always cover the bill.',
-    demo: { dir: demo, chapters: [[0, 'The new field'], [10.2, 'An even split'], [17.2, 'An uneven split'], [29.4, 'Empty or zero'], [34.6, 'Recap']] } },
+    demo: { dir: demo, chapters } },
   { key: 'C', title: 'Run the tests on every push', body: 'A GitHub Actions workflow runs bun test on every push.', state: 'working', statusLine: 'Writing the workflow', branch: 'obeya/ci', x: 1100, y: 100 },
   { key: 'I', title: 'App icon', body: 'An icon for the home screen.', state: 'waiting', need: 'question', x: 780, y: 260,
     branch: 'obeya/app-icon',
@@ -130,16 +137,16 @@ async function shots(page: Page, cards: Record<string, string>) {
   await page.mouse.move(5, 500);
   console.log('order.png');
 
-  // a demo to approve: the card unfolded, its video paused on the even split, tall enough for all its chapters
+  // a demo to approve: the card unfolded, its video paused in its second chapter (the change at work), tall enough for all its chapters
   await page.setViewportSize({ width: 1440, height: 1100 });
   await page.click(card(cards.S));
   await page.locator('#panel video').waitFor();
   await page.waitForTimeout(1500);
-  await page.locator('#panel video').evaluate(async (v: HTMLVideoElement) => {
+  await page.locator('#panel video').evaluate(async (v: HTMLVideoElement, at: number) => {
     v.pause();
-    v.currentTime = 14.5;
+    v.currentTime = at;
     await new Promise((r) => v.addEventListener('seeked', r, { once: true }));
-  });
+  }, chapters[1] ? chapters[1][0] + ((chapters[2]?.[0] ?? chapters[1][0] + 4) - chapters[1][0]) * 0.8 : 3);
   await page.hover('#panel video');
   await page.waitForTimeout(500);
   await page.screenshot({ path: join(IMG, 'demo.png'), clip: around([await boxOf(page, '#panel')], 0) });

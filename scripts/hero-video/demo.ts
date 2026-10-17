@@ -429,6 +429,11 @@ const scenes: Scene[] = [
     run: async (d) => {
       await bringIntoView(d, split(d));
       await d.click(split(d));
+      // the demo starts by itself on its first opening; where it did not (one render of 2026-10-17,
+      // with the agent's app still served in the background), it is started as the owner would
+      await d.wait(1200);
+      const play = d.page.locator('.player button.start');
+      if (await play.isVisible()) await d.click(play);
       await saying(d, narration.demo, 'and a short report');
       await d.highlight(d.page.locator('.talk.conv').first(), 'report');
       await saying(d, narration.demo, 'You judge');
