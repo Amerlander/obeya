@@ -1236,8 +1236,10 @@ export class CanvasRuntime {
    * once the new text is there, unless that asks questions.
    */
   private accept(cardId: string, picks: string[][] | undefined, start: boolean, asIdea?: boolean) {
-    const proposal = this.board.item(cardId)?.proposal;
-    if (!proposal) throw new BadRequest('notProposal', 'not a proposal');
+    const card = this.board.item(cardId);
+    if (card?.state !== 'proposal') throw new BadRequest('notProposal', 'not a proposal');
+    // one the Arbeitsrückschau made before it stored proposal data has none
+    const proposal = card.proposal ?? { questions: [] };
     if ((start || asIdea) && proposal.revising) {
       // the owner knows what comes; the new text still may ask what must be settled first
       if (this.board.acceptAfterRevision(cardId, asIdea ? 'idea' : true))

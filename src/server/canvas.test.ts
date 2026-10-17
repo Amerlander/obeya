@@ -15,6 +15,7 @@ let dir: string;
 const dirs: string[] = [];
 let runtime: FakeRuntime;
 let canvas: CanvasRuntime;
+let store: Store;
 
 /** A fresh `dir`; tests that need an empty one take another, and all of them go after the test. */
 function fresh() {
@@ -33,7 +34,7 @@ beforeEach(() => {
   runtime = new FakeRuntime();
   canvas = new CanvasRuntime(
     { name: 'Produkt', repos: [{ path: web, clones: 1, settings: { land: 'pr' } }, { path: api, clones: 1, settings: { land: 'pr' } }] },
-    { store: new Store(':memory:'), home: dir, runtime, forge: noForge },
+    { store: (store = new Store(':memory:')), home: dir, runtime, forge: noForge },
   );
 });
 afterEach(() => {
@@ -195,6 +196,22 @@ describe('a canvas with several repositories', () => {
     expect(item(p.id).queue).toBeFalsy();
     const s = runtime.sessions.filter((x) => x.spec.tools.some((t) => t.name === 'update_brief')).at(-1)!;
     expect(s.inbox[0]).toContain('A worker proposed this as a task to build');
+  });
+
+  test("the work retrospective's proposals are accepted like an agent's, also one stored without proposal data", () => {
+    const p = canvas.board.proposeRetro('web', { title: 'Skript für Starts', body: 'Ein Skript, das den Server startet.', basis: 'Starts dauern.' });
+    expect(item(p.id).proposal).toEqual({ questions: [] });
+    canvas.act(p.id, { action: 'accept' });
+    expect(item(p.id).state).toBe('planned');
+    // as the work retrospective made them before
+    const q = canvas.board.proposeRetro('web', { title: 'Skill für Demos', body: 'Ein Skill.', basis: 'Demos scheitern.' });
+    store.update(q.id, { proposal: null });
+    canvas.act(q.id, { action: 'accept', start: false });
+    expect(item(q.id).state).toBe('planned');
+    const r = canvas.board.proposeRetro('web', { title: 'Regel für Tests', body: 'Eine Regel.', basis: 'Tests fehlen.' });
+    store.update(r.id, { proposal: null });
+    canvas.act(r.id, { action: 'accept', idea: true });
+    expect(item(r.id).state).toBe('idea');
   });
 
   test('a proposal from a workstream goes to a free spot beside its project, not onto it', () => {

@@ -604,6 +604,7 @@ export class Board {
         ...this.freeSpot(),
         repo: this.repoColumn(repo),
         retro: p.basis.slice(0, 2000),
+        proposal: JSON.stringify(proposalOf({})),
       },
     ]);
     this.changed();
