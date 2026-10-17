@@ -12,6 +12,7 @@ import { Board } from './board';
 import { Store } from './db';
 import { HostError, hostName, onHost, RECHECK_DOWN_MS, registerHost, remote, sessionFiles, type SshHost } from './hosts';
 import { runAppCommand } from './app-command';
+import { type AgentEvent, sdkRuntime } from './runtime';
 import { FakeRuntime, fakeSsh, gitRepo, identify, until } from './testing';
 import { Workers } from './workers';
 import { git, gitAsync, HERE, Workspaces } from './workspaces';
@@ -86,8 +87,8 @@ describe('a workspace on a host', () => {
 
 describe('a session on a host', () => {
   /** A session's process from the SDK's spawn options, with what it printed. */
-  const spawnSession = (s: Omit<SpawnOptions, 'signal'>, files = { dirs: { plugin: join(dir, 'plugin') } }) => {
-    const p = host.session({ cwd: join(dir, 'ws'), files })({ ...s, signal: new AbortController().signal });
+  const spawnSession = (s: Omit<SpawnOptions, 'signal'>, files = { dirs: { plugin: join(dir, 'plugin') } }, onExit?: (code: number | null) => void) => {
+    const p = host.session({ cwd: join(dir, 'ws'), files, onExit })({ ...s, signal: new AbortController().signal });
     let out = '';
     p.stdout.on('data', (d: Buffer) => (out += d.toString()));
     const exited = new Promise<number | null>((r) => p.on('exit', (code) => r(code)));
@@ -129,8 +130,19 @@ describe('a session on a host', () => {
 
   test("ends as a lost connection when the host cannot be made ready", async () => {
     writeFileSync(join(dir, 'net', 'down'), '');
-    const s = spawnSession({ command: 'true', args: [], env: {} });
+    let heard: number | null | undefined;
+    const s = spawnSession({ command: 'true', args: [], env: {} }, undefined, (code) => (heard = code));
     expect(await s.exited).toBe(255);
+    // what has the runtime call it a lost connection rather than a failed session
+    expect(heard).toBe(255);
+  });
+
+  test("a host unreachable before Claude Code starts there loses the connection rather than failing the session", async () => {
+    writeFileSync(join(dir, 'net', 'down'), '');
+    const events: AgentEvent[] = [];
+    const session = sdkRuntime.start({ cwd: onHost(name, join(dir, 'ws')), system: '', tools: [], plugins: [join(dir, 'plugin')], onEvent: (e) => events.push(e) }, 'hello');
+    await session.done;
+    expect(events).toEqual([{ type: 'lost', message: `the connection to ${name} was lost` }]);
   });
 
   test('copies the plugin once, until it changes', async () => {

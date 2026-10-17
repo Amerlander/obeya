@@ -399,8 +399,8 @@ export class SshHost {
    */
   session(o: { cwd: string; files: HostFiles; onExit?: (code: number | null) => void }): (s: SpawnOptions) => SpawnedProcess {
     const ready = this.prepare(o.files);
-    return (s) =>
-      deferred(ready, (dir) => {
+    return (s) => {
+      const p = deferred(ready, (dir) => {
         const token = this.o.claudeToken?.();
         const local = Object.entries(o.files.dirs);
         const args = s.args.map((a) => {
@@ -429,9 +429,12 @@ export class SshHost {
           const text = d.toString().trim();
           if (text) console.error(`${this.name}: ${text}`);
         });
-        child.on('exit', (code) => o.onExit?.(code));
         return child;
       });
+      // the process's exit, not ssh's: a host that could not be made ready never started it
+      p.on('exit', (code: number | null) => o.onExit?.(code));
+      return p;
+    };
   }
 }
 

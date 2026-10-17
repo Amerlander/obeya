@@ -1783,7 +1783,8 @@ request runs here, on its URL.
 
 #### A dropped connection
 
-A dropped connection (ssh's exit code 255) ends the session as a restart does (`lost`): the card
+A dropped connection (ssh's exit code 255), or a host that cannot be reached to get the plugin
+before the session starts, ends the session as a restart does (`lost`): the card
 says so, Obeya asks every 30 s whether the host answers, then resumes the session by its id with the
 message it had not yet taken, or with word of the drop if it was at work; a card waiting for the
 owner needs no session until their next message. The session that resumes ends the one the drop may
