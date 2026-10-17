@@ -17,7 +17,7 @@ describe('the demo overlay', () => {
       fetch: (req) =>
         new URL(req.url).pathname === '/frame'
           ? html('<p id="inside">inside</p>')
-          : html('<button id="b">Go</button><iframe src="/frame"></iframe><iframe sandbox="allow-scripts" src="/frame"></iframe>'),
+          : html('<button id="b">Go</button><button id="edge" style="position:fixed;right:4px;top:2px">Send</button><iframe src="/frame"></iframe><iframe sandbox="allow-scripts" src="/frame"></iframe>'),
     });
     browser = await launchChromium();
     const ctx = await browser.newContext({ viewport: { width: 800, height: 600 } });
@@ -58,5 +58,32 @@ describe('the demo overlay', () => {
       return { pointer: !!document.querySelector('svg path'), label: text.includes('Here'), caption: text.includes('An image'), image: !!document.querySelector('img') };
     }, button);
     expect(shown).toEqual({ pointer: true, label: true, caption: true, image: true });
+  });
+
+  test('a label stays inside the window when its ring is at the edge', async () => {
+    const button = await page.locator('#edge').elementHandle();
+    const label = 'A label much longer than the button it belongs to';
+    await page.evaluate(
+      ([b, text]) => {
+        // biome-ignore lint: the overlay is untyped browser script
+        const demo = (window as any).__demo;
+        demo.clearHighlights();
+        demo.highlight([b], text);
+      },
+      [button, label] as const,
+    );
+    // the overlay places the label on the next frame
+    await page.waitForTimeout(300);
+    const tag = await page.evaluate((text) => {
+      const el = [...document.querySelectorAll('div')].find((d) => d.textContent === text && !d.children.length);
+      const r = el?.getBoundingClientRect();
+      return r && { left: r.left, top: r.top, right: r.right, bottom: r.bottom, height: r.height };
+    }, label);
+    expect(tag).toBeTruthy();
+    expect(tag!.left).toBeGreaterThanOrEqual(0);
+    expect(tag!.right).toBeLessThanOrEqual(800);
+    // the button sits at the top, so the label goes below it, on one line
+    expect(tag!.top).toBeGreaterThanOrEqual(0);
+    expect(tag!.height).toBeLessThan(40);
   });
 });

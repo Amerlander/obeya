@@ -31,6 +31,8 @@
   }
   requestAnimationFrame(tick);
   const ACCENT = '#f5a524';
+  // the least distance of a label from the window's edges
+  const EDGE = 8;
   let root = null;
   let cursor = null;
   let rings = [];
@@ -154,7 +156,8 @@
       const path = `path(evenodd, "M0 0H${innerWidth}V${innerHeight}H0Z${holes.join('')}")`;
       if (path !== dim.path) dim.el.style.clipPath = dim.path = path;
     }
-    // A label sits above its ring unless that covers another ring; then it goes below.
+    // A label sits above its ring unless that covers another ring or leaves the window at the
+    // top; then it goes below, as long as it fits there.
     for (const ring of rings) {
       if (!ring.tag) continue;
       const box = ring.box.getBoundingClientRect();
@@ -165,8 +168,15 @@
         const o = other.box.getBoundingClientRect();
         return o.top < above.bottom && o.bottom > above.top;
       });
-      ring.tag.style.bottom = covers ? '' : 'calc(100% + 8px)';
-      ring.tag.style.top = covers ? 'calc(100% + 8px)' : '';
+      const below = (covers || above.top < EDGE) && box.bottom + h <= innerHeight - EDGE;
+      ring.tag.style.bottom = below ? '' : 'calc(100% + 8px)';
+      ring.tag.style.top = below ? 'calc(100% + 8px)' : '';
+      // It starts at the ring's left edge but stays inside the window: a ring at the right edge
+      // pushed half its label out of the video.
+      const w = ring.tag.offsetWidth;
+      const left = Math.max(EDGE, Math.min(box.left, innerWidth - EDGE - w));
+      // (offset from the ring's padding box, inside its border)
+      ring.tag.style.left = `${left - box.left - ring.box.clientLeft}px`;
     }
     requestAnimationFrame(track);
   }
@@ -206,7 +216,9 @@
         tag.textContent = label;
         tag.style.cssText =
           `position:absolute;left:-3px;bottom:calc(100% + 8px);background:${ACCENT};color:#111;` +
-          'font:600 15px/1.2 system-ui,sans-serif;padding:6px 10px;border-radius:8px;white-space:nowrap;';
+          'font:600 15px/1.2 system-ui,sans-serif;padding:6px 10px;border-radius:8px;' +
+          // one line as long as the window is wide enough, else it wraps
+          `box-sizing:border-box;width:max-content;max-width:calc(100vw - ${2 * EDGE}px);`;
         box.appendChild(tag);
       }
       root.insertBefore(box, cursor);
