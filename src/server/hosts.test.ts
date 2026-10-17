@@ -342,6 +342,31 @@ describe('a worker on a host', () => {
     expect(runtime.last.inbox[0]).toContain('dropped');
     workers.shutdown();
   }, 20_000);
+
+  test('that could not start there, as the host did not answer, starts once it does, with its task', async () => {
+    gitRepo(join(dir, 'main'));
+    const origin = join(dir, 'origin.git');
+    git(dir, 'clone', '--quiet', '--bare', join(dir, 'main'), origin);
+    const store = new Store(':memory:');
+    const board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: join(dir, 'main'), branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
+    const spaces = new Workspaces(store, 'c', { mode: 'clones', repoPath: join(dir, 'main'), dir: join(dir, 'ws') });
+    expect(await spaces.ensureHostClones(host, join(dir, 'far'), origin, 1, () => undefined)).toBeNull();
+    const runtime = new FakeRuntime();
+    const workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, workspaces: 'clones', land: 'pr' }, reconnectMs: 20 });
+    const card = board.create({ title: 'Weit weg', body: 'Eine Wochenansicht.', x: 0, y: 0 });
+    workers.start(card.id);
+    // the host goes before the session reports an id: getting it ready failed
+    writeFileSync(join(dir, 'net', 'down'), '');
+    runtime.last.emit({ type: 'lost', message: 'the connection was lost' });
+    expect(board.events(card.id).some((e) => e.text.includes(`Die Verbindung zu ${name} ist weg`))).toBe(true);
+    await Bun.sleep(80);
+    expect(runtime.sessions).toHaveLength(1);
+    rmSync(join(dir, 'net', 'down'));
+    await until(() => runtime.sessions.length === 2);
+    expect(runtime.last.spec.resume).toBeUndefined();
+    expect(runtime.last.inbox[0]).toContain('Eine Wochenansicht.');
+    workers.shutdown();
+  }, 20_000);
 });
 
 describe('the app of a card on a host', () => {

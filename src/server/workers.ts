@@ -1928,7 +1928,9 @@ export class Workers {
    * The connection to the machine the card's workspace is on is gone, and the session with it (as
    * at a restart of Obeya): once that machine answers again, the session resumes by its id, with
    * the message it had not yet taken, else told what happened if it was at work (or waited for its
-   * background work). A card that waits for the owner meanwhile needs no session until their next message.
+   * background work). A session that never started there (the host could not be reached to get
+   * it ready) has no id: a new one starts with the message it was to begin with. A card that waits
+   * for the owner meanwhile needs no session until their next message.
    */
   private lost(cardId: string, live: Live) {
     const there = remote(this.o.board.row(cardId).workspace);
@@ -1951,12 +1953,12 @@ export class Workers {
       }
       const row = this.o.board.row(cardId);
       const card = this.o.board.item(cardId);
-      if (!current() || !card || !row.workspace || !row.session_id || card.snoozed) return;
+      if (!current() || !card || !row.workspace || (!row.session_id && !pending) || card.snoozed) return;
       const working = busy || card.state === 'working' || card.state === 'inPr' || answering(card) || !!row.landed;
       if (!pending && !working) return;
       this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.hostBack(there.host.name));
-      if (pending) this.launch(cardId, pending.text, row.session_id, pending.images);
-      else this.launch(cardId, hostResumed(there.host.name), row.session_id);
+      if (pending) this.launch(cardId, pending.text, row.session_id ?? undefined, pending.images);
+      else this.launch(cardId, hostResumed(there.host.name), row.session_id!);
     };
     this.reconnecting.set(cardId, setTimeout(again, this.o.reconnectMs ?? RECONNECT_MS));
   }
