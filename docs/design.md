@@ -1789,7 +1789,8 @@ asks every 30 s whether the host answers, then resumes the session by its id wit
 had not yet taken, or with word of the drop if it was at work (a session that never started there
 has no id: a new one starts with the message it was to begin with); a card waiting for the owner
 needs no session until their next message. The session that resumes ends the one the drop may
-have left running there first (by the pid it wrote).
+have left running there first (by the pid it wrote; never itself, as a host that restarted since,
+a container say, gives out the same pids again).
 
 What a host needs installed: git, Claude Code and what the repository's own work needs (for the
 owner's work repository: .NET, Bun, Node, uv, Docker, Chrome, ffmpeg); Homebrew no longer serves

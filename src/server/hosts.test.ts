@@ -3,6 +3,7 @@
 // there, and a session that resumes once a dropped connection is back.
 
 import { afterEach, beforeEach, describe, expect, setSystemTime, test } from 'bun:test';
+import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -143,6 +144,28 @@ describe('a session on a host', () => {
     const session = sdkRuntime.start({ cwd: onHost(name, join(dir, 'ws')), system: '', tools: [], plugins: [join(dir, 'plugin')], onEvent: (e) => events.push(e) }, 'hello');
     await session.done;
     expect(events).toEqual([{ type: 'lost', message: `the connection to ${name} was lost` }]);
+  });
+
+  test('ends the session a dropped connection left running there, but never itself', async () => {
+    const pids = join(dir, 'net', 'home', '.obeya', 'remote', 'sessions');
+    const pidFile = join(pids, `${join(dir, 'ws').replace(/[^\w.-]+/g, '-')}.pid`);
+    mkdirSync(pids, { recursive: true });
+    // the one left running
+    const left = spawn('sh', ['-c', 'sleep 30; echo claude']);
+    writeFileSync(pidFile, `${left.pid}\n`);
+    const ended = new Promise((r) => left.on('exit', r));
+    const s = spawnSession({ command: 'sh', args: ['-c', 'echo claude here'], env: {} });
+    expect(await s.exited).toBe(0);
+    await ended;
+    // a host that restarted gives out its pids again: the new session may have the one in the file
+    const wrapper = join(dir, 'net', 'same-pid');
+    writeFileSync(wrapper, `#!/bin/sh\necho $$ > ${JSON.stringify(pidFile)}\nexec ${JSON.stringify(ssh)} "$@"\n`, { mode: 0o755 });
+    const again = registerHost({ name: `${name}-again`, ssh: 'me@box', home: join(dir, 'home'), program: wrapper });
+    const p = again.session({ cwd: join(dir, 'ws'), files: { dirs: { plugin: join(dir, 'plugin') } } })({ command: 'sh', args: ['-c', 'echo claude here'], env: {}, signal: new AbortController().signal });
+    let out = '';
+    p.stdout.on('data', (d: Buffer) => (out += d.toString()));
+    expect(await new Promise<number | null>((r) => p.on('exit', (code: number | null) => r(code)))).toBe(0);
+    expect(out).toContain('claude here');
   });
 
   test('copies the plugin once, until it changes', async () => {

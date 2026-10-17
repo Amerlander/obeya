@@ -411,9 +411,10 @@ export class SshHost {
         const here = s.env.OBEYA_NARRATION_URL ? Number(new URL(s.env.OBEYA_NARRATION_URL).port) : 0;
         // a port of its own per session, so that sessions ending do not take another's forward along
         const there = here ? 30_000 + Math.floor(Math.random() * 30_000) : 0;
-        // a session cut off by a dropped connection may still run there: the one that resumes it ends it first
+        // a session cut off by a dropped connection may still run there: the one that resumes it ends it first;
+        // not itself, whose pid a host that restarted since (a container, say) may give out again
         const pid = sh(`${dir}/sessions/${o.cwd.replace(/[^\w.-]+/g, '-')}.pid`);
-        const previous = `mkdir -p ${sh(`${dir}/sessions`)}; old=$(cat ${pid} 2>/dev/null); [ -n "$old" ] && ps -p "$old" -o command= 2>/dev/null | grep -q claude && kill "$old"; echo $$ > ${pid};`;
+        const previous = `mkdir -p ${sh(`${dir}/sessions`)}; old=$(cat ${pid} 2>/dev/null); [ -n "$old" ] && [ "$old" != $$ ] && ps -p "$old" -o command= 2>/dev/null | grep -q claude && kill "$old"; echo $$ > ${pid};`;
         const argv = this.argv(`${previous} exec ${[s.command, ...args].map(sh).join(' ')}`, {
           cwd: o.cwd,
           env: true,
