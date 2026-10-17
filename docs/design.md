@@ -880,7 +880,8 @@ about the card.
 A card can be set aside until a point in time: by its worker, which has nothing to do until then (a
 test that runs for two weeks, a check at midnight, a report on the 31st), or by the owner. A worker
 can also set itself aside until another card of the canvas gets somewhere: until it is done (its work
-on main, or closed without a change) or waits for the owner (asks or hands over), as a release waits
+on main, or closed without a change) or waits for the owner (asks, hands over, or as a proposal or an
+idea's questions), as a release waits
 for the fix another card makes. Obeya holds the time and the card (`snoozed` on the card's row: until
 when, on which card for what, by whom, what the agent does then), not the agent's session. No other
 condition: waiting until CI is green stays background work, minutes rather than days.
@@ -914,8 +915,9 @@ at work and on any card that waits for the owner (`snoozable` in `src/core/types
   goes on, with the pause on its bubble. Answering it all the same (or its idea parked, its proposal
   reworked) ends the snooze: it no longer waits for the owner.
 
-Waking: a timer (every 15 s) and every start of Obeya look for snoozed cards whose time has come or
-whose card they wait on got there (`wakeDue` in `src/server/canvas.ts`, `awaited` in
+Waking: a timer (every 15 s), every change on the board (so a card that only passes through the
+state waited for, asked and answered at once, counts) and every start of Obeya look for snoozed
+cards whose time has come or whose card they wait on got there (`wakeDue` in `src/server/canvas.ts`, `awaited` in
 `src/core/types.ts`), or no longer gets there by itself (stopped, archived, removed, an idea
 dropped), so a restart touches no snoozed card and a time missed while
 Obeya was not running or the machine slept is caught up at the next start or wake. The worker hears

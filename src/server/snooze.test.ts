@@ -192,6 +192,28 @@ describe('the agent snoozes until another card gets somewhere', () => {
     expect(runtime.last.inbox[0]).toContain('waits for the owner now');
   });
 
+  test('a state the card passes through between two ticks wakes it all the same', async () => {
+    const demo = other('Demo des Exports');
+    const { s } = atWork();
+    s.call('snooze', { card: 'Demo des Exports', state: 'waits_for_owner', why: 'Vergleichen' });
+    s.emit({ type: 'idle' });
+    board().work(demo, { state: 'waiting', need: 'question' });
+    await Bun.sleep(5);
+    board().work(demo, { state: 'working', need: null });
+    expect(runtime.last.inbox[0]).toContain('waits for the owner now');
+  });
+
+  test('an idea whose questions wait for the owner waits for them', () => {
+    const idea = board().create({ idea: true, title: 'Export-Formate', body: 'Welche?', x: 0, y: 0 });
+    board().work(idea.id, { idea: JSON.stringify({ status: 'open', brief: '', yourTurn: false, thinking: true, questions: [] }) });
+    const { s } = atWork();
+    s.call('snooze', { card: 'Export-Formate', state: 'waits_for_owner', why: 'x' });
+    s.emit({ type: 'idle' });
+    board().work(idea.id, { idea: JSON.stringify({ status: 'open', brief: '', yourTurn: true, questions: [] }) });
+    canvas.wakeDue();
+    expect(runtime.last.inbox[0]).toContain('waits for the owner now');
+  });
+
   test('the card stopped, archived or removed: it wakes, as that card no longer gets there', () => {
     const fix = other();
     const { s } = atWork();
@@ -217,6 +239,8 @@ describe('the agent snoozes until another card gets somewhere', () => {
     const { id, s } = atWork();
     expect(s.call('snooze', { card: 'Windows', why: 'x' })).toContain('no card on the canvas is called “Windows”');
     expect(s.call('snooze', { card: 'Linux', why: 'x' })).toContain('several cards have “Linux” in their title');
+    // a finished card makes no part of a title ambiguous
+    expect(s.call('snooze', { card: 'ertig', why: 'x' })).toContain('no card on the canvas is called “ertig”');
     expect(s.call('snooze', { card: 'Fertig', why: 'x' })).toContain('is done already');
     expect(s.call('snooze', { why: 'x' })).toContain('give until, card, or both');
     expect(s.call('snooze', { card: 'Lüftertest', why: 'x' })).toContain('no card on the canvas');

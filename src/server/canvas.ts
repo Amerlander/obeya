@@ -281,10 +281,21 @@ export class CanvasRuntime {
     this.wakeDue();
     this.waker = setInterval(() => this.wakeDue(), WAKE_EVERY_MS);
     this.waker.unref?.();
+    // a card another waits on may pass through the state it waits for between two ticks (asked, and answered at once)
+    this.unwatch = board.onChange(() => {
+      if (this.wakeSoon) return;
+      this.wakeSoon = setTimeout(() => {
+        this.wakeSoon = undefined;
+        this.wakeDue();
+      }, 0);
+    });
   }
 
   /** Looks for snoozed cards whose time has come. */
   private waker: ReturnType<typeof setInterval>;
+  /** A look for snoozed cards to wake after the board changed, and the subscription to its changes. */
+  private wakeSoon: ReturnType<typeof setTimeout> | undefined;
+  private unwatch: () => void;
 
   /** Wakes the snoozed cards whose time has come by `now`, and those whose card they wait on got there (or no longer can). */
   wakeDue(now = Date.now()) {
@@ -1652,6 +1663,8 @@ export class CanvasRuntime {
 
   shutdown() {
     clearInterval(this.waker);
+    clearTimeout(this.wakeSoon);
+    this.unwatch();
     this.pending?.stop();
     this.pending = null;
     for (const [, w] of this.writing) clearTimeout(w.timer);

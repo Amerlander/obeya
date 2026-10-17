@@ -157,7 +157,8 @@ export const needsYou = (i: Item) =>
 
 /**
  * What a worker can wait for another card to reach: `done`, its work on main (or the card closed
- * without a change); `waitsForOwner`, it asks the owner or hands its work over (or got done already).
+ * without a change); `waitsForOwner`, it needs the owner (asks, hands its work over, a proposal or an
+ * idea's questions; snoozed by them or not), or got done already.
  */
 export const AWAITED_STATES = ['done', 'waitsForOwner'] as const;
 export type AwaitedState = (typeof AWAITED_STATES)[number];
@@ -171,7 +172,7 @@ export type Awaited = 'reached' | 'gone' | 'archived' | 'stopped' | 'dropped';
  */
 export function awaited(card: Item | undefined, state: AwaitedState): Awaited | null {
   if (!card) return 'gone';
-  if (finished(card.state) || (state === 'waitsForOwner' && (card.state === 'waiting' || (card.state === 'inPr' && !!card.pr?.ready)))) return 'reached';
+  if (finished(card.state) || (state === 'waitsForOwner' && needsYou({ ...card, snoozed: undefined }))) return 'reached';
   if (card.archivedAt) return 'archived';
   if (stopped(card)) return 'stopped';
   if (card.idea?.status === 'dropped') return 'dropped';

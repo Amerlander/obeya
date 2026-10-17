@@ -1245,7 +1245,7 @@ export class Workers {
     const exact = items.filter((i) => titleKey(i.title) === key);
     const pick = (of: Item[]) => of.findLast((i) => !i.archivedAt && !finished(i.state)) ?? of.at(-1)!;
     if (exact.length) return pick(exact);
-    const near = items.filter((i) => !i.archivedAt && titleKey(i.title).includes(key));
+    const near = items.filter((i) => !i.archivedAt && !finished(i.state) && titleKey(i.title).includes(key));
     if (near.length === 1) return near[0]!;
     if (near.length > 1) return `several cards have “${title}” in their title (${near.map((i) => `“${i.title}”`).join(', ')}); give one's full title.`;
     return `no card on the canvas is called “${title}”.`;
