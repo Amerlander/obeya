@@ -19,7 +19,7 @@ import type { Reply } from './reply';
 import { CardFace, cardClass, shownState, TalkIcon } from './parts';
 import { videoOf } from './spot';
 import { clock, failText, forTouch, shortDay, t } from './strings';
-import { tellers, useAck, voiceTarget } from './tell';
+import { tellers, useAck } from './tell';
 import { HoldToTalk, PushToTalk, ToldList, usePushToTalk, useTold } from './voice';
 
 /**
@@ -329,7 +329,8 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
         phase={ptt.phase}
         level={ptt.level}
         flat={ptt.flat}
-        target={voiceTarget(open ? { type: 'card', item: opened?.item } : null)}
+        // what is in view fills the screen: whom the microphone speaks to goes without saying, and the room is short
+        target={null}
         field={draftFor(where())}
         onDown={press}
       />

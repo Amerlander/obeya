@@ -4451,7 +4451,10 @@ another canvas's API.
 
 The microphone at the bottom is held by a finger (pointer events, no long-press menu, no text
 selected; lifting the finger or the browser taking the gesture ends the recording) and speaks to the
-open card's agent, else to Obeya. While a text field has the focus, and the keyboard is up, it
+open card's agent, else to Obeya. No line under it names whom it speaks to (until 2026-10-17 the
+canvas's „→ Agent · …“ stood there): what is in view fills the screen, so that goes without saying,
+and the 33 px it took go to the list and the conversation; the line still says when the microphone
+hears only silence. While a text field has the focus, and the keyboard is up, it
 hides: the field has its own microphone. The texts that name the space bar name the microphone
 there (`forTouch`). Enter breaks the line in a field there, and only Send sends
 (`enterBreaksLines` in `src/ui/composer.tsx`): the keyboard's Enter key is where a phone types a

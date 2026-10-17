@@ -314,11 +314,12 @@ export function ToldList({ told, open, onUndo }: { told: Told[]; open?: string; 
 /**
  * The microphone at the bottom, and under it where what is said goes: into the field with the
  * cursor, or to `target` with what stands in its field (`field`, the draft of the card or sidebar in
- * view, while that has its field on the page). Without such a field, screenshots for the next
+ * view, while that has its field on the page). With no `target` (the phone, where what is in view
+ * fills the screen) that line is left out. Without such a field, screenshots for the next
  * recording are picked beside the microphone; dropped on it or pasted (App), they go to the field
  * when there is one.
  */
-export function PushToTalk({ phase, level, flat, target, field, onDown }: { phase: Phase; level: number; flat: boolean; target: string; field: string | null; onDown: () => void }) {
+export function PushToTalk({ phase, level, flat, target, field, onDown }: { phase: Phase; level: number; flat: boolean; target: string | null; field: string | null; onDown: () => void }) {
   const on = useFieldOn(field);
   const key = on ? field! : MIC_DRAFT;
   const shots = useShotInput({ draft: key, off: !takesImages(key) });
@@ -363,10 +364,12 @@ export function PushToTalk({ phase, level, flat, target, field, onDown }: { phas
           {t.voice.sendWithEnter && ` · ${t.voice.sendWithEnter}`}
         </div>
       ) : (
-        <div id="target">
-          → <b>{target}</b>
-          {parts.length > 0 && <span className="with"> {t.voice.with(parts)}</span>}
-        </div>
+        target !== null && (
+          <div id="target">
+            → <b>{target}</b>
+            {parts.length > 0 && <span className="with"> {t.voice.with(parts)}</span>}
+          </div>
+        )
       )}
     </div>
   );
