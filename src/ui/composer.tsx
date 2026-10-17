@@ -1,13 +1,16 @@
 // The field the owner writes in under a conversation, the same on a card and in Obeya's sheet: one
 // frame with the text, the screenshot button, the microphone and Send (an arrow, as in chat apps) in
-// its bottom corner, as wide as the conversation above it. The text grows with what is written, up
-// to a part of the window. A message replied to stands above the text as a quote. With the cursor in
-// the field, speaking dictates into it: hold its microphone, the one at the bottom, or Space.
+// its bottom corner, as wide as the conversation above it. The text grows with what is written (or
+// with its placeholder, which shows in full), up to a part of the window.
+// The buttons stand side by side beside a short text and on top of each other beside a tall one,
+// which then gets the width they free (`fitField`). A message replied to stands above the text as a
+// quote. With the cursor in the field, speaking dictates into it: hold its microphone, the one at
+// the bottom, or Space.
 
 import { type MouseEvent, type ReactNode, useContext, useEffect, useId, useRef, useState } from 'react';
 import { api } from './api';
 import { dropDraft, typeInto, updateDraft, useDraft, useDraftField } from './draft';
-import { useFitHeight } from './fitHeight';
+import { setHeight, textHeight, useFitHeight } from './fitHeight';
 import { Quote } from './message';
 import { type Reply, replyOn, setReply, useReply } from './reply';
 import { AttachButton, ShotStrip, useShotInput } from './shots';
@@ -29,6 +32,35 @@ let enterSends = true;
  */
 export function enterBreaksLines() {
   enterSends = false;
+}
+
+/**
+ * Fits the field's text box to its text and lays out the buttons beside it (`tools`): on top of each
+ * other once the text, at the width it has beside them stacked, is about as high as their stack (to
+ * half a line: on the phone three lines are a few pixels short of it), else side by side. The text is measured at that one width whichever way the buttons stand, so a
+ * text near the threshold does not switch back and forth as the width it gets changes with them.
+ * An empty field measures its placeholder. The text box keeps its cursor and, around the
+ * measuring, its scroll position.
+ */
+function fitField(el: HTMLTextAreaElement, tools: HTMLElement | null) {
+  const buttons = tools ? ([...tools.children] as HTMLElement[]) : [];
+  if (!tools || !buttons.length) return setHeight(el, textHeight(el));
+  const gap = parseFloat(getComputedStyle(tools).rowGap) || 0;
+  const stackWidth = Math.max(...buttons.map((b) => b.offsetWidth));
+  const stackHeight = buttons.reduce((h, b) => h + b.offsetHeight, 0) + gap * (buttons.length - 1);
+  // the width the text has beside the stacked buttons, from the width it has now beside them
+  const narrow = el.offsetWidth + tools.offsetWidth - stackWidth;
+  const { scrollTop } = el;
+  const { width, flex } = el.style;
+  el.style.flex = 'none';
+  el.style.width = `${narrow}px`;
+  const stacked = textHeight(el) >= stackHeight - parseFloat(getComputedStyle(el).lineHeight) / 2;
+  el.style.flex = flex;
+  el.style.width = width;
+  tools.classList.toggle('stacked', stacked);
+  // beside the stack the text starts at its top, not at its bottom
+  setHeight(el, Math.max(textHeight(el), stacked ? stackHeight : 0));
+  el.scrollTop = scrollTop;
 }
 
 /**
@@ -77,8 +109,9 @@ export function Composer({
   const images = shots.images;
   const field = useRef<HTMLTextAreaElement>(null);
   useDraftField(key, () => field.current, !noImages);
+  const tools = useRef<HTMLDivElement>(null);
   // as high as the text; the stylesheet caps it, and beyond that it scrolls
-  useFitHeight(field, text);
+  useFitHeight(field, text, true, (el) => fitField(el, tools.current));
   const listen = useRef(onText);
   listen.current = onText;
   useEffect(() => listen.current?.(text), [text]);
@@ -171,7 +204,7 @@ export function Composer({
             }
           }}
         />
-        <div className="c-tools">
+        <div className="c-tools" ref={tools}>
           <AttachButton shots={shots} />
           {talk && (
             <button

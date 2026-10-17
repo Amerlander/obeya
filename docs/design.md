@@ -2238,7 +2238,16 @@ Its sheet (button or `C`) gives the conversation with the Koordinator the height
 field to write in under it (the same as a card's, `src/ui/composer.tsx`: one frame as wide as the
 conversation, the text growing with what is written up to 30 % of the window, the screenshot button,
 the microphone that dictates into it (see Voice in) and Send in its bottom corner beside the text's
-scrollbar). Send is an arrow in a dark circle, as in chat apps, with what it does, „Senden“ or
+scrollbar). Its placeholder shows in full, on two lines where it needs them: it often says what the
+agent does with a message (the owner, 2026-10-17, after it had been cut off with „…“). Beside a short text the
+three buttons stand side by side; once the text is about as high as the three on top of each other
+(three lines on the phone), they stack in a narrow column, screenshot, microphone, Send from top to
+bottom, and the text gets the width they free, about 55 px a line. Long dictated messages had kept
+the narrow column beside the buttons on every line. Whether they stack is decided by the text's
+height at the width it has beside the stack, whichever way they stand, so a text near the threshold
+does not switch back and forth as the width changes with them. Below its cap the text box does not
+scroll: its height was rounded, and the fraction of a pixel left over showed a scrollbar beside a
+text that fit. Send is an arrow in a dark circle, as in chat apps, with what it does, „Senden“ or
 „Antworten“, as its tooltip; only a button that starts something rather than sends keeps its words,
 „Prototyp starten“.
 
