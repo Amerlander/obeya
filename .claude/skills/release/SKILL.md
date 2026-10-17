@@ -41,7 +41,8 @@ in the scenes is fixed in `demo.ts` or `stage.ts` (committed with the release) a
 the clips are cached, so that costs no credits. The agent's run differs each time: a run that went
 wrong (the Tipjar agent stuck, a demo that shows nothing) is rendered again as it is. If the same
 fault comes back after two renders, ask. Then the screenshots, the poster and the copy; look at the
-new screenshots (`git diff --stat site/img`, then the pictures themselves) before committing them.
+new screenshots (`git diff --stat site/img`, then the pictures themselves, the two phone screens
+`phone.png` and `phone-demo.png` among them) before committing them.
 
 **Step 4, the handover.** Commit the version, poster, README picture and screenshots, run the
 checks, and hand over with `ready_for_review`. The demo is the new hero video: the directory
