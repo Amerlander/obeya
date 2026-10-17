@@ -13,7 +13,7 @@ import { chmodSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { timingSafeEqual } from 'node:crypto';
 import type { Language } from '../core/locale';
-import { MESSAGES } from '../core/messages';
+import { MESSAGES } from '../core/messages.ts';
 
 export const KEY_FILE = 'owner.key';
 export const KEY_HEADER = 'x-obeya-key';
