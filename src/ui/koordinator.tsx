@@ -118,15 +118,19 @@ export function KoordinatorTalk({ on, talk, items, onOpen, onTell, draft = OBEYA
 /**
  * Answers that came while the owner was elsewhere are read once the sheet is in view (open, and the
  * page not hidden); those that were waiting stay marked until it closes, so the owner sees which.
+ * Those that come while it is in view are read as they come, unmarked.
  */
 function useRead(on: boolean, talk: Talk[]): number[] {
   const [fresh, setFresh] = useState<number[]>([]);
   const visible = usePageVisible();
   const unread = talk.filter((x) => x.unread).map((x) => x.id);
+  const inView = useRef(false);
   useEffect(() => {
+    const was = inView.current;
+    inView.current = on && visible;
     if (!on) return setFresh([]);
     if (!visible || !unread.length) return;
-    setFresh((f) => [...f, ...unread.filter((id) => !f.includes(id))]);
+    if (!was) setFresh((f) => [...f, ...unread.filter((id) => !f.includes(id))]);
     api.readTalk().catch(() => {});
   }, [on, visible, unread.join()]);
   return fresh;

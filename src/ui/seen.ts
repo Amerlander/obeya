@@ -37,18 +37,32 @@ export function usePageVisible(): boolean {
   return visible;
 }
 
+/** Event ids of a conversation that came while it was in view: each span after its first up to its second. */
+export type Spans = [number, number][];
+
+/** Whether the event came while the conversation was in view. */
+export const cameInView = (came: Spans, id: number) => came.some(([after, upTo]) => id > after && id <= upTo);
+
+/** What came in view, with the conversation's last event now `last`, and before it `before`. */
+export const follow = (came: Spans, before: number | undefined, last: number | undefined, visible: boolean): Spans =>
+  visible && before !== undefined && last !== undefined && last > before ? [...came, [before, last]] : came;
+
 /**
  * A card's conversation in view: what of it the owner had seen when it came into view (so what came
- * after stays marked as new until it goes), while all it holds counts as seen as long as the page is
- * in view. `last`: the conversation's last event.
+ * after stays marked as new until it goes), and what came while it was in view (seen as it came,
+ * never marked), while all it holds counts as seen as long as the page is in view. `last`: the
+ * conversation's last event.
  */
-export function useSeen(card: string, last: number | undefined): number {
-  const atOpen = useRef<{ card: string; seen: number } | null>(null);
-  if (atOpen.current?.card !== card) atOpen.current = { card, seen: seenOf(card) };
+export function useSeen(card: string, last: number | undefined): { seen: number; came: Spans } {
   const visible = usePageVisible();
+  const atOpen = useRef<{ card: string; seen: number; last: number | undefined; came: Spans } | null>(null);
+  if (atOpen.current?.card !== card) atOpen.current = { card, seen: seenOf(card), last, came: [] };
+  const o = atOpen.current;
+  o.came = follow(o.came, o.last, last, visible);
+  if (last !== undefined) o.last = last;
   useEffect(() => {
     if (!visible || last === undefined || last <= seenOf(card)) return;
     markSeen(card, last);
   }, [card, last, visible]);
-  return atOpen.current.seen;
+  return { seen: o.seen, came: o.came };
 }

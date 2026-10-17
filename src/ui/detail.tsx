@@ -25,7 +25,7 @@ import { type Box, onto, ZOOM_EASE, ZOOM_MS, zoomBox } from './zoomBox';
 import { AttachButton, imageUrl, ShotStrip, Shots, useShotInput } from './shots';
 import { useStickToEnd } from './stickToEnd';
 import { dismissPlace, type Place, seekTo, showsVersions, usePlace, videoOf, watch } from './spot';
-import { useSeen } from './seen';
+import { cameInView, useSeen } from './seen';
 import { SnoozeLine, SnoozeMenu, snoozeWho } from './snooze';
 import { becomesLabel, clock as time, errorText, failText, shortDay, stateLabel, t } from './strings';
 import { agentWorks, cardTalk, demoHandover, koordinatorReads, ownerField, parseQuestion, snoozeLine, talkAlone, type Turn, unseenTurns, waitsFirstStart, worked as isWorked } from './talk';
@@ -987,8 +987,8 @@ function Conversation({
   // a paused agent's steps stay where they were, in its bubble standing still
   const paused = !past && !!item.paused && !item.snoozed;
   const asked = JSON.stringify(item.idea?.questions ?? asking ?? []);
-  // what the owner had not seen when the conversation came into view stays marked until it goes
-  const seen = useSeen(item.id, events?.at(-1)?.id);
+  // what the owner had not seen when the conversation came into view stays marked until it goes, what comes in view is seen
+  const { seen, came } = useSeen(item.id, events?.at(-1)?.id);
   // on the phone the conversation opens at the first message the owner has not seen
   const away = useContext(TalkElsewhere);
   const unseenFrom = (el: HTMLElement) => {
@@ -1001,7 +1001,10 @@ function Conversation({
   const openKey = JSON.stringify(proposal && !working ? (item.proposal?.questions ?? []) : []);
   const turns = useMemo(() => (events ? cardTalk(item, events, past) : null), [events, asked, working, paused, openKey]);
   const byId = useMemo(() => new Map(events?.map((e) => [e.id, e])), [events]);
-  const fresh = useMemo(() => new Set(turns && events ? unseenTurns(turns, events, seen).map((x) => x.e.id) : []), [turns, seen]);
+  const fresh = useMemo(
+    () => new Set(turns && events ? unseenTurns(turns, events, seen).filter((x) => !cameInView(came, x.e.id)).map((x) => x.e.id) : []),
+    [turns, seen, came],
+  );
   const replyKnown = useReplyKnown();
   if (!events || !turns) return null;
   if (hideEmpty && !turns.shown.length && !turns.pending.length) return null;

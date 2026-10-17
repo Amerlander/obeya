@@ -1045,11 +1045,13 @@ continues the idea's conversation in the same list.
 The messages new to the owner keep an orange edge until the conversation goes (the card closes, on
 the phone its panel), as the answers that waited do in Obeya's sheet: those after the last event
 they had in view and after their own last words (`unseenTurns` in `src/ui/talk.ts`, the messages the
-phone's button counts), also those that come while it is open. What it holds counts as seen while it
-is in view (the page not hidden), in this browser (`useSeen` in `src/ui/seen.ts`, localStorage); the
-conversation itself keeps that, in the code every card kind shares, on the desktop as on the phone.
-Until 2026-10-17 only the phone kept what was seen, for its button's count, and no message was
-marked.
+phone's button counts). A message that comes while the conversation is in view (the page not hidden)
+is seen as it comes and gets no edge; one that came while the page was hidden keeps it. What it holds
+counts as seen while it is in view, in this browser (`useSeen` in `src/ui/seen.ts`, localStorage);
+the conversation itself keeps that, in the code every card kind shares, on the desktop as on the
+phone. Until 2026-10-17 only the phone kept what was seen, for its button's count, and no message
+was marked; that day the marks came, at first also on messages that came while the conversation was
+open, which the owner had watched arrive.
 
 ### Reading order
 
@@ -2442,8 +2444,9 @@ the open card meanwhile. An answer in the sheet waits there unread (`unread` in 
 owner has the sheet in view (open, the page not hidden): until then Obeya's button counts the unread
 answers in orange, the colour of everything that waits for the owner, Obeya counts once in "brauchen
 dich" and in the canvas's count in the switcher (`waitingOn`), and Tab goes there too, after the
-cards that need the owner. The answers that waited keep an orange edge until the sheet closes. An
-answer on a card's log is read there and does not wait in the sheet.
+cards that need the owner. The answers that waited keep an orange edge until the sheet closes; one
+that comes while the sheet is in view is read as it comes, without the edge. An answer on a card's
+log is read there and does not wait in the sheet.
 
 The Koordinator hears the answer with the next command, in full as the owner saw it (a card it
 offers at the end is one "ja" away), and it is part of its stored memory. A question still open at a
