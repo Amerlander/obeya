@@ -4556,7 +4556,12 @@ portal), so the canvas is untouched and no card kind has code of its own for it.
 (`working`) and one that waits for answers to its questions (options to pick) open with the panel
 up (`opensWithTalk` in `src/ui/talk.ts`): what its agent says, or what it asks, is what the owner
 opened it for; otherwise the page shows first. Until 2026-10-17 a working card opened on its page
-too, and the owner missed its conversation there. Beside a demo video the panel is a half sheet and the page scrolls the video into the upper
+too, and the owner missed its conversation there. On a working card the panel is a half sheet, as
+beside a demo video (below), so the title, state line and buttons stay in view above what its agent
+says. While the conversation shows an agent at work (`agentWorks`, or Obeya reading the owner's
+words on the card; for Obeya's own conversation, Obeya reading or looking a question up,
+`obeyaWorks`), the button carries the moving line of a working card along its foot, so the work is
+seen with the panel closed too. Beside a demo video the panel is a half sheet and the page scrolls the video into the upper
 half, so a comment at a place in the video („Hier kommentieren“ brings the panel up with the cursor
 in the field) is written while the video stays in view, with the place's chip and the pause on typing
 as on the canvas; its grip sets another height, as on Obeya's. Turned sideways the panel opens at

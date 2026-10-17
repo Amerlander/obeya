@@ -19,7 +19,7 @@ import { settle } from './panelHeight';
 import { CardFace, cardClass, shownState, TalkIcon } from './parts';
 import { videoOf } from './spot';
 import { clock, failText, forTouch, shortDay, t } from './strings';
-import { cardTalk, openQuestions, opensWithTalk, unseen } from './talk';
+import { agentWorks, cardTalk, koordinatorReads, obeyaWorks, openQuestions, opensWithTalk, unseen } from './talk';
 import { tellers, useAck } from './tell';
 import { HoldToTalk, PushToTalk, ToldList, usePushToTalk, useTold } from './voice';
 
@@ -446,7 +446,8 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
     looked.current = null;
     if (!talkRef.current && opensWithTalk(opened.item)) openTalk();
   }, [open, !!opened]);
-  // beside a demo video the conversation is a half sheet, and the page shows the video above it
+  // beside a demo video the conversation is a half sheet, and the page shows the video above it; on a
+  // working card too, so what the card is about stays in view above what its agent says
   const [half, setHalf] = useState(false);
   const halfFor = useRef<string | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -454,7 +455,7 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
     const now = open && talk && opened ? open : null;
     if (now === halfFor.current) return;
     halfFor.current = now;
-    setHalf(!!now && !!pageVideo());
+    setHalf(!!now && (!!pageVideo() || opened?.item.state === 'working'));
   }, [open, talk, !!opened]);
   useLayoutEffect(() => {
     const page = cardRef.current;
@@ -585,7 +586,7 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
           )}
         </TalkPanel>
       )}
-      <TalkButton label={t.phone.talkTitle} shown={shown} n={unread} count={t.koordinator.unreadCount(unread)} onClick={() => (talk ? leaveTalk.current?.() : openTalkNewest())} />
+      <TalkButton label={t.phone.talkTitle} shown={shown} n={unread} count={t.koordinator.unreadCount(unread)} working={ordered.some((c) => obeyaWorks(snaps[c.id]!.talk))} onClick={() => (talk ? leaveTalk.current?.() : openTalkNewest())} />
       {/* right of the microphone, with several canvases: whose Obeya the microphone and the panel speak to */}
       {several && (
         <label className="pill ph-canvas-pick">
@@ -691,11 +692,12 @@ function Running({ entries, several, onOpen }: { entries: { item: Item; canvas: 
 
 /**
  * Left of the microphone, in reach of the thumb, as the canvas's top bar has it: opens the conversation
- * of what is in view as a panel, and closes it while it is open (inverted then). `n`: what waits there.
+ * of what is in view as a panel, and closes it while it is open (inverted then). `n`: what waits there;
+ * `working`: the conversation shows an agent (or Obeya) at work, which the moving line of a working card says.
  */
-function TalkButton({ label, shown, n, count, onClick }: { label: string; shown: boolean; n: number; count: string; onClick: () => void }) {
+function TalkButton({ label, shown, n, count, working, onClick }: { label: string; shown: boolean; n: number; count: string; working: boolean; onClick: () => void }) {
   return (
-    <button className={shown ? 'pill kpill talk-pill ph-talk-open on' : 'pill kpill talk-pill ph-talk-open'} aria-expanded={shown} aria-label={shown ? t.phone.closeTalk : label} onClick={onClick}>
+    <button className={['pill kpill talk-pill ph-talk-open', shown && 'on', working && 'working'].filter(Boolean).join(' ')} aria-expanded={shown} aria-label={shown ? t.phone.closeTalk : label} onClick={onClick}>
       <TalkIcon />
       {!shown && n > 0 && (
         <span className="n unread" title={count}>
@@ -719,7 +721,8 @@ function CardTalkButton({ item, open, shown, onClick }: { item: Item; open: bool
   }, [open, last]);
   const messages = events && !open ? unseen(cardTalk(item, events), events, seen) : 0;
   const questions = openQuestions(item).length;
-  return <TalkButton label={t.phone.cardTalk} shown={shown} n={messages + questions} count={t.phone.cardWaiting(messages, questions)} onClick={onClick} />;
+  const working = agentWorks(item) || (!!events && koordinatorReads(events));
+  return <TalkButton label={t.phone.cardTalk} shown={shown} n={messages + questions} count={t.phone.cardWaiting(messages, questions)} working={working} onClick={onClick} />;
 }
 
 /**

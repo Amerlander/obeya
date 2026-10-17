@@ -1579,6 +1579,11 @@ button.link:hover { text-decoration: underline; }
 .pill.ph-talk-open.on { color: var(--bg); }
 .ph-talk-open svg { width: 20px; height: 20px; }
 .ph-talk-open:active { box-shadow: none; transform: translateY(1px); }
+/* the conversation shows an agent at work: the moving line of a working card, along the button's foot */
+.ph-talk-open.working::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 5px; height: 2px;
+  background: linear-gradient(90deg, var(--working) 0 50%, transparent 50%) 0 0 / 200% 100% no-repeat,
+    color-mix(in srgb, var(--working) 22%, transparent);
+  animation: draw 1.6s cubic-bezier(.5,0,.3,1) infinite; }
 .ph-kb .ph-view ~ :is(.ph-talk-open, .ph-canvas-pick) { display: none; }
 /* the canvas whose Obeya is spoken to, right of the microphone and its screenshot button: the phone's own picker opens */
 .pill.ph-canvas-pick { position: fixed; z-index: 50; right: max(14px, env(safe-area-inset-right)); bottom: calc(30px + env(safe-area-inset-bottom));

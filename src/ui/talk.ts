@@ -3,7 +3,7 @@
 import { LANGUAGES } from '../core/locale';
 import { MESSAGES } from '../core/messages';
 import { inQueue } from '../core/queue';
-import { askable, type CardEvent, type Demo, finishingUp, type Item, ownWords, pausable, type Question, started } from '../core/types';
+import { askable, type CardEvent, type Demo, finishingUp, type Item, ownWords, pausable, type Question, started, type Talk as Exchange } from '../core/types';
 import type { Field } from './api';
 
 /** One entry of the conversation: a message, with how the agent got to it folded under it, or a small line. */
@@ -338,7 +338,6 @@ export function openQuestions(i: Item): Question[] {
  */
 export const opensWithTalk = (i: Item) => (i.state === 'working' && !i.archivedAt) || openQuestions(i).some((q) => q.options.length > 0);
 
-
 /**
  * The messages of a card's conversation the owner has not seen: those it shows (`talk`, not the words
  * folded into a message's steps) after the last event they saw (`seen`, an event id), and never those
@@ -368,6 +367,10 @@ export const koordinatorReads = (events: CardEvent[]) => {
   const last = events.at(-1);
   return last?.kind === 'say' && last.author === 'owner';
 };
+
+/** Whether Obeya's conversation shows it at work: reading the owner's words, or looking a question up (not while the usage limit holds it). */
+export const obeyaWorks = (talk: Exchange[]) =>
+  talk.some((x) => (x.reply === undefined && !x.heldUntil) || (x.question !== undefined && x.answer === undefined && !x.movedTo && !x.limitedUntil));
 
 /** A task an agent has worked on, stopped ones included: what came of it stands beside its conversation. */
 export const worked = (i: Pick<Item, 'state' | 'branch'>) => i.state !== 'idea' && i.state !== 'proposal' && !!i.branch;

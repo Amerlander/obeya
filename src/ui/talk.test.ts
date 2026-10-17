@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { type CardEvent, formatQuestion, type Item, pausable } from '../core/types';
-import { agentWorks, demoHandover, koordinatorReads, openQuestions, opensWithTalk, ownerField, parseQuestion, split, talkAlone, talkTurns, unseen, withoutOpen } from './talk';
+import { agentWorks, demoHandover, koordinatorReads, obeyaWorks, openQuestions, opensWithTalk, ownerField, parseQuestion, split, talkAlone, talkTurns, unseen, withoutOpen } from './talk';
 
 let id = 0;
 const ev = (kind: CardEvent['kind'], author: CardEvent['author'], text: string): CardEvent => ({ id: ++id, cardId: 'c', at: '2026-10-01T10:00:00Z', kind, author, text });
@@ -495,4 +495,16 @@ test('the phone opens a card at work, or one whose questions offer options, with
   expect(opensWithTalk({ state: 'waiting', need: 'question', question: { text: 'Welcher Name?', options: [] as string[] } } as Item)).toBe(false);
   expect(opensWithTalk({ state: 'planned' } as Item)).toBe(false);
   expect(opensWithTalk({ state: 'done' } as Item)).toBe(false);
+});
+
+test("Obeya's conversation shows it at work while it reads the owner's words or looks a question up, not while the usage limit holds it", () => {
+  const done = { id: 1, at: '2026-10-17T10:00:00Z', said: 'Was läuft?', reply: 'Zwei Karten.' };
+  expect(obeyaWorks([done])).toBe(false);
+  expect(obeyaWorks([done, { id: 2, at: '2026-10-17T10:01:00Z', said: 'Und jetzt?' }])).toBe(true);
+  expect(obeyaWorks([{ id: 2, at: '2026-10-17T10:01:00Z', said: 'Und jetzt?', heldUntil: '2026-10-17T12:00:00Z' }])).toBe(false);
+  const asked = { ...done, question: 'Wo steht der Export?' };
+  expect(obeyaWorks([asked])).toBe(true);
+  expect(obeyaWorks([{ ...asked, answer: 'In src/export.ts.' }])).toBe(false);
+  expect(obeyaWorks([{ ...asked, limitedUntil: '2026-10-17T12:00:00Z' }])).toBe(false);
+  expect(obeyaWorks([{ ...asked, movedTo: 'q1' }])).toBe(false);
 });
