@@ -4476,9 +4476,12 @@ changes.
 
 When the server does not answer for 3 s (a phone back from its lock screen reconnects within that),
 a line at the top says „Obeya antwortet nicht · seit 14:02“ and why that may be; the page connects
-again by itself, at once when it comes back into view rather than after the pause it waits. A
-sleeping machine answers nothing at all, not even a refusal: a connection that has not opened within
-3 s counts as not answering, and one not open after 10 s is tried anew.
+again by itself, at once when it comes back into view rather than after the pause it waits. The 3 s
+count from that moment: a phone that was locked lost its connection meanwhile, which says nothing of
+the server, so the line does not show while the page reconnects, and a connection still opening
+from before is tried anew. A sleeping machine answers nothing at all, not even a refusal: a
+connection that has not opened within 3 s counts as not answering, and one not open after 10 s is
+tried anew.
 
 #### Notifications on the phone
 

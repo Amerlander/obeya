@@ -426,6 +426,7 @@ export function useCanvas(id = canvasId): {
     let delay = 500;
     let closed = false;
     let server: string | undefined;
+    let hidden = document.visibilityState !== 'visible';
     const connect = () => {
       ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/c/${encodeURIComponent(id)}/ws`);
       sockets.set(id, ws);
@@ -480,10 +481,19 @@ export function useCanvas(id = canvasId): {
     connect();
     // back from GitHub, say: the server looks at the pull requests now instead of at its next round
     const back = () => {
-      if (document.visibilityState === 'visible' && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'back' } satisfies ClientMessage));
+      const visible = document.visibilityState === 'visible';
+      const cameBack = hidden && visible;
+      hidden = !visible;
+      if (visible && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'back' } satisfies ClientMessage));
+      if (!visible || closed || ws.readyState === WebSocket.OPEN) return sendFocus();
+      // a phone that was locked had no connection meanwhile, which says nothing of the server: not
+      // answering counts from now, and a connection still opening from back then is tried anew
+      if (cameBack) setOfflineSince((t) => (t === null ? null : Date.now()));
       // a connection lost meanwhile is tried again now, not after the pause it waits
-      if (document.visibilityState === 'visible' && ws.readyState === WebSocket.CLOSED && !closed) {
+      if (ws.readyState === WebSocket.CLOSED || (cameBack && ws.readyState === WebSocket.CONNECTING)) {
         clearTimeout(retry);
+        ws.onclose = null;
+        ws.close();
         delay = 500;
         connect();
       }
