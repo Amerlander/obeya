@@ -1109,8 +1109,12 @@ export class CanvasRuntime {
       case 'unaccept':
         return this.unaccept(cardId);
       case 'dismiss':
+        // a card its agent withdrew or replaced goes like a deleted one, its worker stopped
+        if (this.board.item(cardId)?.superseded) return this.remove(cardId);
         if (this.board.row(cardId).state !== 'proposal') throw new BadRequest('notProposal', 'not a proposal');
         return this.board.remove(cardId);
+      case 'keep':
+        return this.board.keep(cardId);
       case 'revise': {
         // said while it is reworked, they wait for the next rework, unread until then
         const later = !!this.board.item(cardId)?.proposal?.revising;
@@ -1577,6 +1581,7 @@ export class CanvasRuntime {
       case 'accept':
         return this.act(c.card, { action: 'accept', ...(c.idea ? { idea: true } : {}) });
       case 'dismiss':
+      case 'keep':
       case 'dequeue':
       case 'stop':
       case 'pause':

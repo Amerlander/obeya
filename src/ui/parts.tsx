@@ -113,6 +113,7 @@ export function CardFace({ item, where, underway, since }: { item: Item; where?:
         : undefined;
   const meta =
     (item.snoozed ? snoozeWho(item.snoozed) : undefined) ??
+    (item.superseded ? (item.superseded.by ? t.superseded.byShort(plain(item.superseded.title ?? '')) : t.superseded.withdrawnShort) : undefined) ??
     (item.limitedUntil ? t.limitedUntil(clock(item.limitedUntil)) : undefined) ??
     (item.kind === 'question' && item.thread ? t.question.count(item.thread.answers, item.thread.files) : undefined) ??
     item.question?.text ??

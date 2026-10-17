@@ -1,5 +1,5 @@
 // Pushes to the owner's phone when something starts to wait for them (design: Push): a card whose
-// `needsYou` turns true (a demo, a question, a proposal, a PR to merge, an idea's turn), a landing
+// `needsYou` turns true (a demo, a question, a proposal, a card its agent withdrew, a PR to merge, an idea's turn), a landing
 // that failed, a worker that is stuck. Each paired device that turned notifications on holds one
 // subscription; Obeya signs with a VAPID key of its own in its home and needs no account.
 //
@@ -44,6 +44,7 @@ export interface Waits {
 export function kindOf(i: Item, before?: Item): PushKind {
   if (before?.landing) return 'landing';
   if (i.state === 'proposal') return 'proposal';
+  if (i.superseded) return 'superseded';
   if (i.state === 'inPr') return 'pr';
   if (i.idea) return 'idea';
   if (i.need === 'question') return i.question?.stuck ? 'stuck' : 'question';

@@ -371,6 +371,22 @@ The other way round, „Als Idee besprechen“ on a proposed task makes it an op
 whose agent hears that it was proposed to be built and the owner wants to think it through first;
 said to the Koordinator („erst als Idee besprechen“), it is `accept` with `idea`.
 
+#### A proposal its agent takes back
+
+A worker takes back a proposal of its own that turned out wrong or needless with `withdraw_proposal`
+(its title, why, and `replaced_by` when another of its proposals takes its place), or proposes the
+better one with `propose_card`'s `replaces` naming the old title. Obeya finds the latest of the
+card's proposals by that title (case, quotes and markdown aside) and answers the worker what became
+of it; a title that matches none gets the list of its proposals back. A proposal still open goes
+from the canvas at once, while it is reworked too; the proposing card's conversation says „Zieht den
+Vorschlag „…“ zurück: …“ or „Ersetzt den Vorschlag „…“ durch „…““. It is kept deleted with the
+mark, so the Rückschau does not read it as one the owner dismissed. One the owner has accepted
+already (as a task or an idea, planned or at work) carries the mark (`Item.superseded`) until it is
+finished: its canvas card reads „Ersetzt durch „…““ or „Vom Agenten zurückgezogen“, it needs the
+owner (a push says so), and its panel says who replaced it by what and why, with „Entfernen“ (as
+„Löschen“: its worker stops, with an undo) and „Behalten“ (the mark goes). Said to the Koordinator,
+they are `dismiss` and `keep`. A finished card stays as it is.
+
 #### Reworking a proposal by words
 
 Instead of editing a proposal by hand, the owner may say (or type into its field „Was soll anders
@@ -653,6 +669,10 @@ Projekt“) is linked the same way.
 - **A proposed task can be taken as an idea** (2026-10-16). Before, a proposal could become an idea
   only when its worker had proposed one: the owner who wanted to discuss and prototype a proposed
   task first had to ask the Koordinator to make an idea of it.
+- **An agent takes back its own proposal** (2026-10-17): an open one goes at once, an accepted one
+  only marked, for the owner to remove, since the owner chose it and work on it may be under way.
+  Before, a worker could only say in a new proposal's text that it replaced an older one: both stood
+  on the canvas, and the owner started both.
 - **Feedback keeps the approval** (2026-10-08). Before, feedback sent the card back to `working` and
   took the approval away until the next handover, so it waited for "Rückgängig" like a command.
 - **Earlier demos stay on the card** (2026-10-16). Until then a new demo replaced the one before for
@@ -733,7 +753,8 @@ A worker has its tools served in-process:
   their own words`; the log keeps both as one text, picks first, for whoever reads it later
   (decision log, Koordinator). An answer leaves the card open, picked or written, and stands in its
   conversation at once.
-- `propose_card(title, task, reason, idea?, questions?)` (see Proposals).
+- `propose_card(title, task, reason, idea?, questions?, replaces?)` and
+  `withdraw_proposal(title, why, replaced_by?)` (see Proposals).
 - `ready_for_review(summary, demo)`, whose summary is the report the owner reads.
 - `app_running(url)`, where the app in its workspace opens in a browser, for the owner to try it by
   hand (see Trying the app by hand); in a workspace on another machine, Obeya forwards its port.

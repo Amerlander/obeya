@@ -594,6 +594,7 @@ textarea.p-body:focus { border-color: var(--muted); }
 .prototype-demo > summary .hint { font-weight: 400; }
 .prototype-demo[open] > summary { margin-bottom: 8px; }
 .question.proposal { border-style: dashed; border-color: var(--proposal); }
+.question.superseded { border-color: var(--proposal); background: color-mix(in srgb, var(--proposal) 6%, transparent); }
 .question.brief .p-lead { margin-top: 6px; font-size: 14px; }
 .question.brief .p-list { margin-top: 4px; }
 .talk { background: var(--chip); border-radius: 3px; padding: 12px 14px; overflow: auto;

@@ -132,6 +132,12 @@ const de = {
     proposesBuild: (reason: string) => `Schlägt vor, die Idee auf diesem Prototyp zu bauen: ${reason}`,
     proposedIdea: (title: string) => `Idee vorgeschlagen: ${title}`,
     proposedCard: (title: string) => `Aufgabe vorgeschlagen: ${title}`,
+    /** The agent's own earlier proposal, withdrawn or replaced (`by`: the proposal that takes its place). */
+    withdrewProposal: (title: string, why?: string, by?: string) =>
+      by ? `Ersetzt den Vorschlag „${title}“ durch „${by}“${why ? `: ${why}` : '.'}` : `Zieht den Vorschlag „${title}“ zurück${why ? `: ${why}` : '.'}`,
+    /** On the accepted proposal it withdrew or replaced: who did and why. */
+    superseded: (by?: string, why?: string) =>
+      by ? `Der vorschlagende Agent hat diese Karte ersetzt durch „${by}“${why ? `: ${why}` : '.'}` : `Der vorschlagende Agent hat diese Karte zurückgezogen${why ? `: ${why}` : '.'}`,
     prOpened: (n: number) => `Pull Request #${n} geöffnet.`,
     landing: 'Landet auf main',
     waitsForRestart: 'Wartet auf den Neustart von Obeya mit der neuen Version',
@@ -339,6 +345,7 @@ const de = {
     stuck: 'Agent kommt nicht weiter',
     landing: 'Landen fehlgeschlagen',
     proposal: 'Vorschlag eines Agenten',
+    superseded: 'Vom Agenten zurückgezogen oder ersetzt',
     pr: 'PR wartet auf dich',
     idea: 'Idee · du bist dran',
     several: (n: number) => `${n} Karten warten auf dich`,
@@ -456,6 +463,10 @@ const en: Messages = {
     proposesBuild: (reason: string) => `Proposes building the idea on this prototype: ${reason}`,
     proposedIdea: (title: string) => `Proposed an idea: ${title}`,
     proposedCard: (title: string) => `Proposed a task: ${title}`,
+    withdrewProposal: (title: string, why?: string, by?: string) =>
+      by ? `Replaces the proposal “${title}” by “${by}”${why ? `: ${why}` : '.'}` : `Withdraws the proposal “${title}”${why ? `: ${why}` : '.'}`,
+    superseded: (by?: string, why?: string) =>
+      by ? `The agent that proposed this card replaced it by “${by}”${why ? `: ${why}` : '.'}` : `The agent that proposed this card withdrew it${why ? `: ${why}` : '.'}`,
     prOpened: (n: number) => `Pull request #${n} opened.`,
     landing: 'Landing on main',
     waitsForRestart: 'Waits for Obeya to restart with the new version',
@@ -653,6 +664,7 @@ const en: Messages = {
     stuck: 'The agent is stuck',
     landing: 'Landing failed',
     proposal: 'Proposal from an agent',
+    superseded: 'Withdrawn or replaced by its agent',
     pr: 'A PR waits for you',
     idea: 'Idea · your turn',
     several: (n: number) => `${n} cards wait for you`,

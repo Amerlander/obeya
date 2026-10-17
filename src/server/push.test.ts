@@ -80,6 +80,7 @@ describe('what starts waiting', () => {
   test('kinds', () => {
     expect(kindOf(item({ state: 'waiting', need: 'question', question: { text: 'x', options: [] } }))).toBe('question');
     expect(kindOf(item({ state: 'waiting', need: 'review' }))).toBe('review');
+    expect(kindOf(item({ state: 'working', proposed: true, superseded: { why: 'x' } }))).toBe('superseded');
     expect(kindOf(item({ state: 'waiting', need: 'demo', answered: true }))).toBe('answered');
     expect(kindOf(item({ state: 'inPr', pr: { url: 'u', number: 1, checks: [], conflict: false, ready: true } }))).toBe('pr');
     expect(plainTitle('**Login** mit `OAuth` [hier](https://x)')).toBe('Login mit OAuth hier');

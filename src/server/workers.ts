@@ -9,8 +9,8 @@ import { LANGUAGE_NAMES, LANGUAGES } from '../core/locale';
 import { MESSAGES, type Messages, type Pause } from '../core/messages';
 import { basename } from 'node:path';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
-import { answering, askable, type BackgroundTask, pausable, type CardLanding, type DemoKind, type DemoPage, formatQuestion, handedOver, type Item, type Mock, ownWords, pickedAnswer, type Question, type RepoSettings, type RestartReason, type Snooze, type Spot, type SpotInput, started } from '../core/types';
-import { BadRequest, type Board, replyNote, type StoredDemo } from './board';
+import { answering, askable, type BackgroundTask, pausable, type CardLanding, type DemoKind, type DemoPage, formatQuestion, handedOver, type Item, type Mock, ownWords, pickedAnswer, type Question, type RepoSettings, type RestartReason, type Snooze, type Spot, type Superseded, type SpotInput, started } from '../core/types';
+import { BadRequest, type Board, replyNote, type Retracted, type StoredDemo, titleKey } from './board';
 import { type Asked, decisionLog, toQuestion, withPick } from './advisor';
 import { checkArtifact, DEMO_SKILL, DEMO_SKILL_FILE, demoSkillName, OBEYA_PLUGIN, placeIn, readChapters } from './demo';
 import { artifactFiles } from './demo-page';
@@ -142,6 +142,27 @@ export const PROPOSAL_QUESTIONS = z.array(z.object({ question: z.string(), optio
 export const proposalQuestions = (questions: z.infer<typeof PROPOSAL_QUESTIONS> = []) => questions.map((q) => toQuestion(q.question, q.options, q.multiple));
 
 /** How an agent writes a proposal's task, for the agent who takes it on and has not seen `unseen`. */
+/** What became of a proposal the worker took back (`replaced`: by a new one), as it reads it. */
+const retractedText = (r: Retracted, replaced: boolean): string => {
+  if (r.kind === 'unknown')
+    return `No proposal of yours is called so${replaced ? ', so nothing was replaced' : '; nothing was withdrawn'}. Yours: ${r.mine.length ? r.mine.map((m) => `„${m.title}“ (${m.gone ? 'removed' : m.state})`).join(', ') : 'none'}.`;
+  const it = `„${r.title}“`;
+  switch (r.kind) {
+    case 'gone':
+      return `${it} was still open and is gone from the canvas.`;
+    case 'marked':
+      return `The owner had taken ${it} on already (${r.state}): Obeya marks it as ${replaced ? 'replaced' : 'withdrawn'} and offers the owner to remove it.`;
+    case 'finished':
+      return `${it} is done already (${r.state}); it stays as it is.`;
+    case 'dismissed':
+      return `The owner had dismissed ${it} already.`;
+    case 'removed':
+      return `The owner had removed ${it} already.`;
+    case 'already':
+      return `${it} was withdrawn already.`;
+  }
+};
+
 export const proposalTask = (unseen: string) =>
   `task: the card's text, written for the agent who will take it on, which has seen neither ${unseen}: what is wrong or wanted, where (files, names), what done looks like. Write it as the owner would write a card: no "I", no "my question", no "your card"; name other cards by their title.`;
 
@@ -2136,6 +2157,7 @@ export class Workers {
               proposalTask('your card nor your session'),
               `reason: for the owner only, why you propose it, a sentence or two; it does not go to that agent.`,
               `questions: what the owner has to decide first (product behaviour, a trade-off), each with up to four short options; keep them out of task. The owner may answer them on the proposal; what they decided and what stays open go to the agent with the task.`,
+              `replaces: the title of an earlier proposal of yours this one takes the place of; Obeya takes that one off the canvas, or, if the owner has taken it on already, marks it as replaced and offers to remove it.`,
               `Everything in ${language}.`,
             ].join(' '),
             schema: {
@@ -2144,8 +2166,9 @@ export class Workers {
               reason: z.string(),
               idea: z.boolean().optional(),
               questions: PROPOSAL_QUESTIONS.optional(),
+              replaces: z.string().optional(),
             },
-            run: ({ title, task, reason, idea, questions }) => {
+            run: ({ title, task, reason, idea, questions, replaces }) => {
               const p = this.o.board.propose(cardId, {
                 title: String(title),
                 task: String(task),
@@ -2154,9 +2177,30 @@ export class Workers {
                 questions: proposalQuestions(questions as z.infer<typeof PROPOSAL_QUESTIONS> | undefined),
               });
               this.o.board.log(cardId, 'activity', 'worker', idea ? this.o.board.t.worker.proposedIdea(p.title) : this.o.board.t.worker.proposedCard(p.title));
-              return 'Proposed; the owner decides. Continue with your task.';
+              const old = typeof replaces === 'string' && replaces.trim() ? replaces.trim() : undefined;
+              return old ? `Proposed. ${this.retract(cardId, old, { by: p.id, title: p.title })}` : 'Proposed; the owner decides. Continue with your task.';
             },
           },
+      // a prototype makes no cards, so it has none to take back
+      ...(prototype
+        ? []
+        : [
+            {
+              name: 'withdraw_proposal',
+              description: [
+                `Take back a card you proposed earlier (propose_card) that turned out wrong or needless, by its title. Still open, it goes from the canvas at once; if the owner has taken it on already, Obeya marks it as withdrawn and offers to remove it.`,
+                `replaced_by: the title of a proposal of yours that takes its place, when you made one already (a new one names the old with replaces instead).`,
+                `why: for the owner, a sentence, in ${language}.`,
+              ].join(' '),
+              schema: { title: z.string(), why: z.string(), replaced_by: z.string().optional() },
+              run: (args: Record<string, unknown>) => {
+                const { title, why, replaced_by } = args as { title: string; why: string; replaced_by?: string };
+                const by = replaced_by?.trim() ? this.o.board.snapshot().items.find((i) => i.from === cardId && titleKey(i.title) === titleKey(replaced_by)) : undefined;
+                if (replaced_by?.trim() && !by) return `No card you proposed on the canvas is called „${replaced_by.trim()}“. Nothing was withdrawn.`;
+                return this.retract(cardId, String(title).trim(), { ...(by ? { by: by.id, title: by.title } : {}), ...(why?.trim() ? { why: clip(why.trim(), 1000) } : {}) });
+              },
+            },
+          ]),
       {
         name: 'pr_opened',
         description: 'After the owner approved: report the pull request you opened for this card (its GitHub URL). Then end your turn; Obeya watches it.',
@@ -2404,6 +2448,13 @@ export class Workers {
     });
   }
 
+  /** The worker takes back one of its proposals by title, or marks it replaced (`s.by`): what became of it, as the tool's result. */
+  private retract(cardId: string, title: string, s: Superseded): string {
+    const r = this.o.board.retract(cardId, title, s);
+    if (r.kind === 'gone' || r.kind === 'marked') this.o.board.log(cardId, 'activity', 'worker', this.o.board.t.worker.withdrewProposal(r.title, s.why, s.title));
+    return retractedText(r, !!s.by);
+  }
+
   private toOwner(cardId: string, q: Question) {
     this.wokenForOwner(cardId);
     this.o.board.work(cardId, { state: 'waiting', need: 'question', detail: JSON.stringify({ question: q }) });
@@ -2452,7 +2503,7 @@ The owner does not watch you work and does not read code. They see your card's c
 - report: a short status line at milestones.
 - reply: your answer to a note or feedback from the owner, in a sentence or two: what you change because of it, or why nothing.
 - ask: a decision that is not yours (product behaviour, trade-offs, anything irreversible or external). Make routine judgement calls yourself. After ask, end your turn; the answer arrives as the next message.
-${prototype ? '- propose_build: propose that the idea be built on your prototype, once it convinced. You make no other cards; mention other problems you noticed in your summary.' : '- propose_card: a separate problem or idea you noticed, as a card for the agent who will take it on; do not widen your task.'}
+${prototype ? '- propose_build: propose that the idea be built on your prototype, once it convinced. You make no other cards; mention other problems you noticed in your summary.' : '- propose_card: a separate problem or idea you noticed, as a card for the agent who will take it on; do not widen your task. withdraw_proposal takes back one of yours that turned out wrong.'}
 - ready_for_review: the work is committed and the checks pass. Then end your turn.${this.o.toObeya ? '\n- to_obeya: what the owner\'s words ask of Obeya rather than you.' : ''}
 
 Obeya's messages tell you what happened: feedback, an answer, a note from the owner, a landing that failed, your work landing. What to do about it is yours to judge. Approved work lands (or goes out as a pull request) and Obeya tells you once it is on main; your session ends with the turn after that, so whatever was waiting for the landing can still be done then. Work that changed nothing in the repository (the task needed only a demo, an analysis or an answer) lands nothing: approving it makes the card done, and Obeya tells you so the same way.

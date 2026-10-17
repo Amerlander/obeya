@@ -362,3 +362,38 @@ describe('a proposal reworked by what the owner says', () => {
     expect(reviser()!.inbox[0]).toContain('Excel auch');
   });
 });
+
+describe('a proposal its agent takes back', () => {
+  test('withdrawn while it is reworked, it stays gone', async () => {
+    const p = proposal();
+    canvas.revisions.revise(p.id, 'Excel auch', false);
+    expect(board().retract(p.from!, 'CSV-Export prüfen', { why: 'Falsch.' }).kind).toBe('gone');
+    reviser()!.call('revise_proposal', { title: 'X', task: 'Y', questions: [] });
+    reviser()!.emit({ type: 'idle' });
+    await settle();
+    expect(board().item(p.id)).toBeUndefined();
+  });
+
+  test('accepted and replaced since, the owner removes it by a click or keeps it by voice', async () => {
+    const p = proposal();
+    board().accept(p.id);
+    const q = board().propose(p.from!, { title: 'CSV-Kodierung festlegen', task: 'T' });
+    expect(board().retract(p.from!, 'CSV-Export prüfen', { by: q.id, title: q.title }).kind).toBe('marked');
+
+    // the Koordinator sees the mark, and keep takes it off
+    const heard = canvas.commander.hear('Behalte die alte Karte', { card: p.id }, []);
+    await settle();
+    const s = runtime.sessions.filter(isKoordinator).at(-1)!;
+    expect(s.inbox.at(-1)).toContain('replaced it by "CSV-Kodierung festlegen"; the owner removes it (dismiss) or keeps it (keep)');
+    const tag = s.inbox.at(-1)!.match(/(K\d+) \[planned\] "CSV-Export prüfen"/)![1]!;
+    s.call('act', { actions: [{ do: 'keep', card: tag }], confirm: 'Sie bleibt.' });
+    s.emit({ type: 'idle' });
+    canvas.commander.arm((await heard).token!);
+    await settle(30);
+    expect(board().item(p.id)!.superseded).toBeUndefined();
+
+    board().retract(p.from!, 'CSV-Export prüfen', { why: 'Doch nicht nötig.' });
+    await canvas.act(p.id, { action: 'dismiss' });
+    expect(board().item(p.id)).toBeUndefined();
+  });
+});

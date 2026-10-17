@@ -147,12 +147,13 @@ export function titleFrom(body: string): string {
 
 /**
  * A card needs the owner: it waits (but not while its worker takes in what the owner wrote on its
- * handover, nor once they approved it and its work lands), is a proposal, has a pull request that only waits for the
- * owner's merge, or is an open idea whose agent has replied and is done.
+ * handover, nor once they approved it and its work lands), is a proposal or an accepted one its agent withdrew or
+ * replaced since, has a pull request that only waits for the owner's merge, or is an open idea whose agent has replied
+ * and is done.
  */
 export const needsYou = (i: Item) =>
   !i.snoozed &&
-  ((i.state === 'waiting' && !answering(i) && !i.landing) || (i.state === 'proposal' && !i.proposal?.revising) || (i.state === 'inPr' && !!i.pr?.ready) || (!!i.idea && i.idea.status === 'open' && i.idea.yourTurn && !i.idea.thinking));
+  ((i.state === 'waiting' && !answering(i) && !i.landing) || (i.state === 'proposal' && !i.proposal?.revising) || !!i.superseded || (i.state === 'inPr' && !!i.pr?.ready) || (!!i.idea && i.idea.status === 'open' && i.idea.yourTurn && !i.idea.thinking));
 
 /** A worker on the card is at work (whether or not in a turn right now): it has started on the card, opens or follows its pull request, finishes after the landing, or takes in the owner's words on its handover. */
 const workerAtWork = (i: Item) => i.kind === 'task' && (i.state === 'working' || i.state === 'inPr' || !!i.finishing || answering(i));
@@ -234,6 +235,8 @@ export interface Item {
   proposal?: Proposal;
   /** An agent's proposal the owner accepted: its text is that agent's. */
   proposed?: true;
+  /** An accepted proposal its agent withdrew or replaced since, while the card is not finished: the owner removes it or keeps it. */
+  superseded?: Superseded;
   /** The repository the card belongs to (an id from the canvas's `repos`). */
   repo: string;
   branch?: string;
@@ -373,6 +376,20 @@ export interface Proposal {
    * is accepted once the new text is there, unless that asks questions.
    */
   acceptAfterRevision?: true | 'idea';
+  /** Its agent withdrew it or replaced it by another proposal of its own (`withdraw_proposal`, `propose_card` with `replaces`). */
+  superseded?: Superseded;
+}
+
+/**
+ * An agent's proposal its agent withdrew or replaced: still open, it went at once; already accepted,
+ * the card carries this until the owner removes it or keeps it.
+ */
+export interface Superseded {
+  /** The proposal that takes its place, and its title then; none when it was withdrawn without one. */
+  by?: string;
+  title?: string;
+  /** Why, in the agent's words. */
+  why?: string;
 }
 
 /** The owner's words a proposal is reworked by. */
@@ -961,7 +978,10 @@ export type CardAction =
   | { action: 'accept'; start?: boolean; idea?: boolean; picks?: string[][] }
   /** A proposal: accepting it after its revision is taken back. */
   | { action: 'unaccept' }
+  /** A proposal, or a card whose agent withdrew or replaced it since (`Item.superseded`): it goes, its worker stopped. */
   | { action: 'dismiss' }
+  /** A card whose agent withdrew or replaced it since: the owner keeps it, and the mark goes. */
+  | { action: 'keep' }
   /** A proposal: an agent reworks its text, reason and questions by what the owner said (`text`). */
   | { action: 'revise'; text: string; spoken?: boolean; replyTo?: number }
   /** Ideas: talk to the exploration agent; `spoken` gets a short spoken summary back. */
@@ -1044,6 +1064,7 @@ export type ErrorCode =
   /** Approving directly onto main: the card's repository lands approved work only through a pull request. */
   | 'noDirect'
   | 'notProposal'
+  | 'notSuperseded'
   | 'revising'
   | 'planCard'
   | 'noWorkspace'

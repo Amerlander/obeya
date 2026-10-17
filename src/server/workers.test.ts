@@ -1028,6 +1028,53 @@ describe('workers', () => {
     expect(board.item(p.id)!.body).toBe('Der Knopf „Export“ heißt in src/ui/strings.ts noch „Exportieren“.\n\nOffene Fragen:\n- Welches Wort? (Export / Exportieren)');
   });
 
+  test('a worker withdraws its open proposal: it goes at once, and not as a dismissal of the owner’s', () => {
+    const c = manual();
+    workers.start(c.id);
+    const since = new Date(Date.now() - 1000).toISOString();
+    runtime.last.call('propose_card', { title: 'Lange Schnitte', task: 'T', reason: 'R' });
+    const p = board.snapshot().items.find((i) => i.state === 'proposal')!;
+    const out = runtime.last.call('withdraw_proposal', { title: '„lange  Schnitte“', why: 'Die Diagnose war falsch.' }) as string;
+    expect(out).toContain('gone from the canvas');
+    expect(board.item(p.id)).toBeUndefined();
+    expect(board.events(c.id).some((e) => e.text === 'Zieht den Vorschlag „Lange Schnitte“ zurück: Die Diagnose war falsch.')).toBe(true);
+    // the Rückschau reads deleted proposals as the owner's dismissals: this one was not
+    expect(board.removed(since)).toEqual([]);
+    expect(runtime.last.call('withdraw_proposal', { title: 'Lange Schnitte', why: 'W' })).toContain('withdrawn already');
+  });
+
+  test('a new proposal that replaces an accepted one marks it, and the owner removes or keeps it', () => {
+    const c = manual();
+    workers.start(c.id);
+    runtime.last.call('propose_card', { title: 'Lange Schnitte', task: 'T', reason: 'R' });
+    const old = board.snapshot().items.find((i) => i.state === 'proposal')!;
+    board.accept(old.id);
+    expect(needsYou(board.item(old.id)!)).toBe(false);
+    const out = runtime.last.call('propose_card', { title: 'Display schläft', task: 'T2', reason: 'R2', replaces: 'Lange Schnitte' }) as string;
+    const replacement = board.snapshot().items.find((i) => i.state === 'proposal')!;
+    expect(out).toContain('marks it as replaced');
+    expect(board.item(old.id)!.superseded).toEqual({ by: replacement.id, title: 'Display schläft' });
+    expect(needsYou(board.item(old.id)!)).toBe(true);
+    expect(board.events(old.id).at(-1)!.text).toBe('Der vorschlagende Agent hat diese Karte ersetzt durch „Display schläft“.');
+    board.keep(old.id);
+    expect(board.item(old.id)!.superseded).toBeUndefined();
+    expect(() => board.keep(old.id)).toThrow(BadRequest);
+  });
+
+  test('withdrawing a proposal names the worker’s proposals when the title matches none, and leaves finished ones', () => {
+    const c = manual();
+    workers.start(c.id);
+    runtime.last.call('propose_card', { title: 'Lange Schnitte', task: 'T', reason: 'R' });
+    const p = board.snapshot().items.find((i) => i.state === 'proposal')!;
+    expect(runtime.last.call('withdraw_proposal', { title: 'Kurze Schnitte', why: 'W' })).toBe('No proposal of yours is called so; nothing was withdrawn. Yours: „Lange Schnitte“ (proposal).');
+    expect(runtime.last.call('withdraw_proposal', { title: 'Lange Schnitte', why: 'W', replaced_by: 'Gibt es nicht' })).toContain('Nothing was withdrawn');
+    expect(board.item(p.id)).toBeDefined();
+    board.accept(p.id);
+    board.work(p.id, { state: 'done' });
+    expect(runtime.last.call('withdraw_proposal', { title: 'Lange Schnitte', why: 'W' })).toContain('done already');
+    expect(board.item(p.id)!.superseded).toBeUndefined();
+  });
+
   test('a delivery to a worker that never reported a session starts one with the card', () => {
     const c = manual();
     workers.start(c.id);

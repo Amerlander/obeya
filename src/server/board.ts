@@ -38,6 +38,8 @@ import {
   type PrReviewEntry,
   type ProjectHistory,
   type Proposal,
+  type Superseded,
+  type CardState,
   type Revising,
   type NextStep,
   type PlannedPrototype,
@@ -587,6 +589,40 @@ export class Board {
     for (const q of proposal.questions) this.log(row!.id, 'question', 'worker', formatQuestion(q, this.language()));
     this.changed();
     return this.itemOf(row!);
+  }
+
+  /**
+   * An agent withdraws one of its own proposals from card `fromId` (the latest by that title), or
+   * marks it replaced (`s.by`): still open, it goes at once; already accepted and not finished, it
+   * carries the mark until the owner removes the card or keeps it. Says what became of it.
+   */
+  retract(fromId: string, title: string, s: Superseded): Retracted {
+    // the proposal that replaces it is not among those it may replace
+    const mine = this.store.proposalsFrom(this.canvas.id, fromId).filter((r) => r.id !== s.by);
+    const row = mine.findLast((r) => titleKey(r.title ?? '') === titleKey(title));
+    if (!row) return { kind: 'unknown', mine: mine.map((r) => ({ title: r.title ?? '', state: r.state ?? 'planned', gone: !!r.deleted_at })) };
+    const proposal = storedProposal(row)!;
+    const was = { title: row.title ?? '', state: row.state ?? 'planned' };
+    if (row.deleted_at) return { kind: proposal.superseded ? 'already' : was.state === 'proposal' ? 'dismissed' : 'removed', ...was };
+    if (row.archived_at || finished(was.state)) return { kind: 'finished', ...was };
+    const superseded = JSON.stringify({ ...proposal, superseded: s } satisfies Proposal);
+    // a proposal still open goes without the owner, as if never made
+    if (was.state === 'proposal') this.store.update(row.id, { proposal: superseded, deleted_at: new Date().toISOString() });
+    else {
+      this.store.update(row.id, { proposal: superseded });
+      this.log(row.id, 'state', 'koordinator', this.t.worker.superseded(s.title, s.why));
+    }
+    this.changed();
+    return { kind: was.state === 'proposal' ? 'gone' : 'marked', ...was };
+  }
+
+  /** The owner keeps a card whose agent withdrew or replaced it: the mark goes. */
+  keep(id: string) {
+    const row = this.own(id);
+    const { superseded, ...proposal } = storedProposal(row) ?? { questions: [] };
+    if (!superseded) throw new BadRequest('notSuperseded', 'its agent has not withdrawn or replaced this card');
+    this.store.update(id, { proposal: JSON.stringify(proposal satisfies Proposal) });
+    this.changed();
   }
 
   /**
@@ -1798,7 +1834,7 @@ export function toItems(rows: CardRow[], docs: PlanDoc[], home: string): Item[] 
         ...(r.built_on ? { builtOn: r.built_on } : {}),
         ...(r.images ? { images: JSON.parse(r.images) as string[] } : {}),
         ...(r.retro ? { retro: r.retro } : {}),
-        ...(r.proposal ? (r.state === 'proposal' ? { proposal: storedProposal(r)! } : { proposed: true as const }) : {}),
+        ...(r.proposal ? (r.state === 'proposal' ? { proposal: storedProposal(r)! } : { proposed: true as const, ...supersededOf(r) }) : {}),
         ...(r.group_id ? { group: r.group_id } : {}),
       });
       continue;
@@ -2013,6 +2049,27 @@ const merged = (said: Revising[]): Revising => ({
 });
 
 const storedProposal = (r: CardRow): Proposal | undefined => (r.proposal ? (JSON.parse(r.proposal) as Proposal) : undefined);
+
+/** The mark of an accepted proposal its agent withdrew or replaced, while the card is not finished. */
+const supersededOf = (r: CardRow): { superseded?: Superseded } => {
+  const superseded = storedProposal(r)?.superseded;
+  return superseded && !r.archived_at && !finished(r.state ?? 'planned') ? { superseded } : {};
+};
+
+/** A title as an agent may name it: without case, quotes, markdown marks or extra spaces. */
+export const titleKey = (title: string) =>
+  title
+    .toLowerCase()
+    .replace(/[„“”"'‚‘’«»*_`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/** What became of an agent's own proposal it withdrew or replaced (`Board.retract`). */
+export type Retracted =
+  /** gone: it was still open and went; marked: accepted, it carries the mark now; finished: done or archived, it stays; dismissed: the owner had dismissed it; removed: the owner had deleted it; already: withdrawn before. */
+  | { kind: 'gone' | 'marked' | 'finished' | 'dismissed' | 'removed' | 'already'; title: string; state: CardState }
+  /** No proposal of the agent's has that title: those it has. */
+  | { kind: 'unknown'; mine: { title: string; state: CardState; gone: boolean }[] };
 
 /** A proposal as an agent made it: whether it is an idea, why, and at most five questions. */
 const proposalOf = (p: { reason?: string; idea?: boolean; questions?: Question[] }): Proposal => ({

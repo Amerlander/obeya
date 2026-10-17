@@ -138,6 +138,7 @@ export function Detail(p: Props) {
       <>
         {kind && <div className="p-kind">{kind}</div>}
         {item.archivedAt ? <div className="p-title">{shownTitle(item)}</div> : <ManualTitle item={item} onEdit={p.onEdit} />}
+        <SupersededBox item={item} all={all} act={act} onDelete={p.onDelete} />
         <IdeaView item={item} act={act} run={run} listener={listener} onDelete={p.onDelete} onTell={p.onTell} />
         {error && <p className="p-error">{error}</p>}
       </>
@@ -345,6 +346,8 @@ export function Detail(p: Props) {
         <Limited item={item} />
         {archivedOn(item)}
       </div>
+
+      <SupersededBox item={item} all={all} act={act} onDelete={p.onDelete} />
 
       {item.state === 'proposal' && (
         <ProposalView item={item} from={p.from} act={act} listener={listener} onRevise={tell('revise')}>
@@ -566,6 +569,31 @@ function Later({ item, act }: { item: Item; act: (a: CardAction, done: ActDone) 
  * An idea under discussion: the brief its agent keeps on top, a prototype's demo when there is one,
  * then the conversation, and the owner's decisions.
  */
+/**
+ * On an accepted proposal its agent withdrew or replaced since: who did, why, and the choice to
+ * remove the card (as „Löschen“ does, its worker stopped, with an undo) or keep it.
+ */
+function SupersededBox({ item, all, act, onDelete }: { item: Item; all: Item[]; act: (a: CardAction, done: ActDone) => Promise<void>; onDelete: () => void }) {
+  const s = item.superseded;
+  if (!s) return null;
+  // the replacement under its title now, if it is still on the canvas
+  const by = s.by ? plain(all.find((x) => x.id === s.by)?.title ?? s.title ?? '') : undefined;
+  return (
+    <div className="question superseded">
+      <h4>{by !== undefined ? t.superseded.by(by) : t.superseded.withdrawn}</h4>
+      {s.why && <div className="q-text">{s.why}</div>}
+      <div className="actions">
+        <button className="btn danger" title={t.superseded.removeHint} onClick={onDelete}>
+          {t.superseded.remove}
+        </button>
+        <button className="btn" title={t.superseded.keepHint} onClick={() => act({ action: 'keep' }, { close: false })}>
+          {t.superseded.keep}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function IdeaView({ item, act, run, listener, onDelete, onTell }: { item: Item; act: (a: CardAction, done: ActDone) => Promise<void>; run: Run; listener?: string; onDelete: () => void; onTell: Tell }) {
   const idea = item.idea!;
   const [prototyping, setPrototyping] = useState(false);

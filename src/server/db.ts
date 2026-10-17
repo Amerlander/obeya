@@ -515,6 +515,11 @@ export class Store {
       .run({ c: canvasId, before, now: now() }).changes;
   }
 
+  /** The proposals an agent made from a card, deleted and archived ones too, oldest first. */
+  proposalsFrom(canvasId: string, fromId: string): CardRow[] {
+    return this.db.query('SELECT * FROM cards WHERE canvas_id = $c AND from_id = $f AND proposal IS NOT NULL ORDER BY created_at, rowid').all({ c: canvasId, f: fromId }) as CardRow[];
+  }
+
   card(id: string): CardRow | null {
     return (this.db.query('SELECT * FROM cards WHERE id = $id').get({ id }) as CardRow | null) ?? null;
   }
@@ -998,8 +1003,12 @@ export class Store {
    * worker's proposal the owner dismissed, say. Plan cards go with their plan doc, not by a click.
    */
   removed(canvasId: string, since: string): { at: string; title: string; state: CardState }[] {
+    // a proposal its agent withdrew went without the owner
     return this.db
-      .query(`SELECT deleted_at AS at, title, COALESCE(state, 'planned') AS state FROM cards WHERE canvas_id = $c AND plan_ref IS NULL AND deleted_at > $since ORDER BY deleted_at`)
+      .query(
+        `SELECT deleted_at AS at, title, COALESCE(state, 'planned') AS state FROM cards WHERE canvas_id = $c AND plan_ref IS NULL AND deleted_at > $since
+         AND NOT (state = 'proposal' AND json_extract(proposal, '$.superseded') IS NOT NULL) ORDER BY deleted_at`,
+      )
       .all({ c: canvasId, since }) as { at: string; title: string; state: CardState }[];
   }
 
