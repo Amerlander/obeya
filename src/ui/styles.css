@@ -1532,14 +1532,16 @@ button.link:hover { text-decoration: underline; }
 .ph-section h2 select { margin-left: auto; font: 15px var(--cond); padding: 4px 6px; border: 1px solid var(--line); border-radius: 3px; background: var(--card); color: var(--ink); }
 /* the lists' rows are the cards of the canvas, as wide as the screen: the state's rule across the top, an idea's
    stock, the owner's turn framed and pinned, the state line in its colour */
-.ph-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
-.ph-card { position: relative; display: block; width: 100%; text-align: left; color: var(--ink); border: 0; padding: 14px 14px 12px; }
+/* one column held upright, two (or more) side by side once the screen is wide enough, the phone turned, say */
+.ph-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 14px; }
+.ph-list > li { display: flex; }
+.ph-card { position: relative; display: flex; flex-direction: column; width: 100%; text-align: left; color: var(--ink); border: 0; padding: 14px 14px 12px; }
 .ph-card:hover { transform: none; }
 .ph-card:active { transform: translateY(1px); }
 .ph-card .kind { font-size: 12.5px; }
 .ph-card .ttl { font-size: 18.5px; line-height: 1.2; margin-top: 2px; -webkit-line-clamp: 3; }
 .ph-card .meta { font-size: 14px; }
-.ph-card .state { position: static; margin-top: 8px; font-size: 13px; flex-wrap: wrap; gap: 0; }
+.ph-card .state { position: static; margin-top: auto; padding-top: 8px; font-size: 13px; flex-wrap: wrap; gap: 0; }
 .ph-card .state::after { margin-left: 7px; }
 .ph-card .state .since { color: var(--muted); font-weight: 500; white-space: pre; }
 /* everything in „Für dich“ waits for the owner: the heading says so, no pin on each card */

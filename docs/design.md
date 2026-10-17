@@ -4386,7 +4386,9 @@ Both lists show the cards as the canvas does, as wide as the screen (`CardFace` 
 state line at the bottom, an idea on its rose stock, the owner's turn framed in orange, the kind
 line (with several canvases after the canvas's name), the title in the serif and the line of text
 the canvas shows (the question, the status line). Only the pin is left out: everything in „Für
-dich“ waits for the owner. Before (until 2026-10-17) a row was a white box with a thin coloured
+dich“ waits for the owner. Held upright the cards stand one below the other; where the screen is
+wide enough for two of at least 340 px (the phone turned) they stand side by side, each row as high
+as its taller card, the state lines at the bottom. Before (until 2026-10-17) a row was a white box with a thin coloured
 strip at its left edge, and on the phone the idea's red and the owner's turn's orange could hardly be
 told apart there.
 - **Obeya**: its conversation with the field under it, the sheet's own (`KoordinatorTalk`), with a
