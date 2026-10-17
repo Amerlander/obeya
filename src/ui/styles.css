@@ -666,7 +666,7 @@ textarea.p-body:focus { border-color: var(--muted); }
 @keyframes msg-flash {
   0%, 45% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--working) 60%, transparent), var(--shadow); background: color-mix(in srgb, var(--working) 14%, var(--card)); }
 }
-/* an answer that waited for the owner, marked while the sheet stays open */
+/* a message new to the owner: an answer that waited in Obeya's sheet, a card's message not seen yet, marked while it stays open */
 .talk .msg.fresh { box-shadow: inset 3px 0 0 var(--waiting), var(--shadow); }
 .talk .msg.thinking .who::after { content: ""; display: inline-block; vertical-align: middle; margin-left: 8px; width: 34px; height: 3px; border-radius: 2px;
   background: linear-gradient(90deg, transparent, var(--idea), transparent); background-size: 200% 100%; animation: flow 1.4s linear infinite; }

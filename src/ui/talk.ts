@@ -353,11 +353,14 @@ export const opensWithTalk = (i: Item) => (i.state === 'working' && !i.archivedA
  * before their own last words, which they wrote having read them. Until 2026-10-17 every word an agent
  * said counted, also those between its tool calls, and a card with two handovers counted 81.
  */
-export function unseen(talk: Talk, events: CardEvent[], seen = -1): number {
+export const unseen = (talk: Talk, events: CardEvent[], seen = -1): number => unseenTurns(talk, events, seen).length;
+
+/** Those messages themselves, a handover that follows its reply in the same message (`then`) on its own. */
+export function unseenTurns(talk: Talk, events: CardEvent[], seen = -1): Turn[] {
   const spoke = events.findLast((e) => e.author === 'owner')?.id ?? -1;
   const from = Math.max(seen, spoke);
   const message = (x: Turn) => !x.line && !x.quiet && x.e.author !== 'owner' && x.e.id > from;
-  return talk.shown.flatMap((x) => [x, ...(x.then ? [x.then] : [])]).filter(message).length;
+  return talk.shown.flatMap((x) => [x, ...(x.then ? [x.then] : [])]).filter(message);
 }
 
 /**

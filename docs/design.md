@@ -1022,6 +1022,15 @@ its question stands with its options, and the bubble at work below it; a questio
 note took back stays, without options, „Durch deinen Hinweis erledigt“. A card that was an idea
 continues the idea's conversation in the same list.
 
+The messages new to the owner keep an orange edge until the conversation goes (the card closes, on
+the phone its panel), as the answers that waited do in Obeya's sheet: those after the last event
+they had in view and after their own last words (`unseenTurns` in `src/ui/talk.ts`, the messages the
+phone's button counts), also those that come while it is open. What it holds counts as seen while it
+is in view (the page not hidden), in this browser (`useSeen` in `src/ui/seen.ts`, localStorage); the
+conversation itself keeps that, in the code every card kind shares, on the desktop as on the phone.
+Until 2026-10-17 only the phone kept what was seen, for its button's count, and no message was
+marked.
+
 ### Reading order
 
 A conversation shows things in the order the agent saw them, on every card the same way. The owner's
@@ -4632,8 +4641,8 @@ words on the card; for Obeya's own conversation, Obeya reading or looking a ques
 `obeyaWorks`), the button carries the moving line of a working card along its foot, so the work is
 seen with the panel closed too. The conversation opens at the first message the owner has not seen (as
 the button counts them: after the last one they saw and after their own last words), at the top of
-the panel as far as it scrolls, so with nothing new it opens at its end; `TalkElsewhere` carries what
-was seen when the panel opened, since the button marks it all seen at once. Until 2026-10-17 a half
+the panel as far as it scrolls, so with nothing new it opens at its end; the new messages carry the
+orange edge they have on the desktop (The conversation). Until 2026-10-17 a half
 panel opened scrolled near the conversation's start: the scroll to the end, made while the panel
 still rose, was taken for the owner scrolling up (`useStickToEnd` now knows its own scrolls). Beside a demo video the panel is a half sheet and the page scrolls the video into the upper
 half, so a comment at a place in the video („Hier kommentieren“ brings the panel up with the cursor

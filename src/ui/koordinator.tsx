@@ -13,6 +13,7 @@ import { clock, failText, t } from './strings';
 import { Composer } from './composer';
 import { OBEYA_DRAFT } from './draft';
 import { Shots } from './shots';
+import { usePageVisible } from './seen';
 import { useStickToEnd } from './stickToEnd';
 import { useFitHeight } from './fitHeight';
 import { PageChangeList } from './page-changes';
@@ -121,12 +122,7 @@ export function KoordinatorTalk({ on, talk, items, onOpen, onTell, draft = OBEYA
  */
 function useRead(on: boolean, talk: Talk[]): number[] {
   const [fresh, setFresh] = useState<number[]>([]);
-  const [visible, setVisible] = useState(() => document.visibilityState === 'visible');
-  useEffect(() => {
-    const seen = () => setVisible(document.visibilityState === 'visible');
-    document.addEventListener('visibilitychange', seen);
-    return () => document.removeEventListener('visibilitychange', seen);
-  }, []);
+  const visible = usePageVisible();
   const unread = talk.filter((x) => x.unread).map((x) => x.id);
   useEffect(() => {
     if (!on) return setFresh([]);

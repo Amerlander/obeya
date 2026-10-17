@@ -25,9 +25,10 @@ import { type Box, onto, ZOOM_EASE, ZOOM_MS, zoomBox } from './zoomBox';
 import { AttachButton, imageUrl, ShotStrip, Shots, useShotInput } from './shots';
 import { useStickToEnd } from './stickToEnd';
 import { dismissPlace, type Place, seekTo, showsVersions, usePlace, videoOf, watch } from './spot';
+import { useSeen } from './seen';
 import { SnoozeLine, SnoozeMenu, snoozeWho } from './snooze';
 import { becomesLabel, clock as time, errorText, failText, shortDay, stateLabel, t } from './strings';
-import { agentWorks, cardTalk, demoHandover, koordinatorReads, ownerField, parseQuestion, snoozeLine, talkAlone, type Turn, waitsFirstStart, worked as isWorked } from './talk';
+import { agentWorks, cardTalk, demoHandover, koordinatorReads, ownerField, parseQuestion, snoozeLine, talkAlone, type Turn, unseenTurns, waitsFirstStart, worked as isWorked } from './talk';
 import { PageChangeList } from './page-changes';
 import { WishReplyLink } from './wish';
 
@@ -986,11 +987,13 @@ function Conversation({
   // a paused agent's steps stay where they were, in its bubble standing still
   const paused = !past && !!item.paused && !item.snoozed;
   const asked = JSON.stringify(item.idea?.questions ?? asking ?? []);
+  // what the owner had not seen when the conversation came into view stays marked until it goes
+  const seen = useSeen(item.id, events?.at(-1)?.id);
   // on the phone the conversation opens at the first message the owner has not seen
   const away = useContext(TalkElsewhere);
   const unseenFrom = (el: HTMLElement) => {
     if (!away || !events) return null;
-    const from = Math.max(away.seen, events.findLast((e) => e.author === 'owner')?.id ?? -1);
+    const from = Math.max(seen, events.findLast((e) => e.author === 'owner')?.id ?? -1);
     return [...el.querySelectorAll<HTMLElement>('[data-ev]')].find((m) => Number(m.dataset.ev) > from) ?? null;
   };
   const onScroll = useStickToEnd(box, `${events?.at(-1)?.id}|${working}|${paused}|${asked}`, events, unseenFrom);
@@ -998,6 +1001,7 @@ function Conversation({
   const openKey = JSON.stringify(proposal && !working ? (item.proposal?.questions ?? []) : []);
   const turns = useMemo(() => (events ? cardTalk(item, events, past) : null), [events, asked, working, paused, openKey]);
   const byId = useMemo(() => new Map(events?.map((e) => [e.id, e])), [events]);
+  const fresh = useMemo(() => new Set(turns && events ? unseenTurns(turns, events, seen).map((x) => x.e.id) : []), [turns, seen]);
   const replyKnown = useReplyKnown();
   if (!events || !turns) return null;
   if (hideEmpty && !turns.shown.length && !turns.pending.length) return null;
@@ -1031,6 +1035,7 @@ function Conversation({
         snoozed={turn.e.id === snoozedAt ? item : undefined}
         demoQuestion={turn === handover ? item.demo : undefined}
         quoted={turn.e.replyTo ? byId.get(turn.e.replyTo) : undefined}
+        fresh={fresh.has(turn.e.id) || (!!turn.then && fresh.has(turn.then.e.id))}
         onReply={onReply}
         onDelete={held.includes(turn.e.id) ? () => takeBack(item.id, turn.e) : undefined}
       />
@@ -1210,7 +1215,7 @@ function Scope({ files }: { files?: string[] }) {
 }
 
 /** A state change or an error between the messages, or a message. */
-function Line({ turn, snoozed, ...rest }: { turn: Turn; snoozed?: Item; demoQuestion?: Demo; quoted?: CardEvent; onReply?: (e: CardEvent) => void; onDelete?: () => void }) {
+function Line({ turn, snoozed, ...rest }: { turn: Turn; snoozed?: Item; demoQuestion?: Demo; quoted?: CardEvent; fresh?: boolean; onReply?: (e: CardEvent) => void; onDelete?: () => void }) {
   return snoozed ? (
     <SnoozeLine item={snoozed} e={turn.e} at={time(turn.e.at)} />
   ) : turn.line ? (
@@ -1229,12 +1234,14 @@ const ownerSide = (e: CardEvent) => e.author === 'owner' || e.kind === 'answer';
  * One message of the conversation; a question with its options and what came of it, a handover with
  * its demo report's question, a reply with the handover that came next and says what changed; the owner's reply with the message it replies to (`quoted`) above it.
  * `onReply`: the owner can reply to it; `onDelete`: the owner can take it back (a comment not yet
- * sent, words not yet read); `unread`: the agent has not read it yet, and when it will.
+ * sent, words not yet read); `unread`: the agent has not read it yet, and when it will; `fresh`: the
+ * owner had not seen it when the conversation came into view.
  */
 function Message({
   turn,
   demoQuestion,
   quoted,
+  fresh,
   onReply,
   onDelete,
   unread,
@@ -1242,6 +1249,7 @@ function Message({
   turn: Turn;
   demoQuestion?: Demo;
   quoted?: CardEvent;
+  fresh?: boolean;
   onReply?: (e: CardEvent) => void;
   onDelete?: () => void;
   unread?: string;
@@ -1252,7 +1260,7 @@ function Message({
   return (
     <Msg
       by={ownerSide(e) ? 'owner' : e.author}
-      className={[q && 'q', turn.settled && 'settled', unread ? 'unread' : onDelete && 'held'].filter(Boolean).join(' ')}
+      className={[q && 'q', turn.settled && 'settled', fresh && 'fresh', unread ? 'unread' : onDelete && 'held'].filter(Boolean).join(' ')}
       who={`${t.author[e.author]}${e.kind === 'question' ? ` · ${t.talk.question}` : e.kind === 'review' ? ` · ${t.talk.handover}` : ''}`}
       at={e.at}
       ev={e.id}
@@ -2217,10 +2225,9 @@ function Split({ main, talk, className }: { main: ReactNode; talk: ReactNode; cl
 /**
  * Where a card's conversation goes instead of its column: the phone view's panel from below (`el`,
  * null while the panel is closed), which `open` brings up, with the cursor in the field when `focus`;
- * `seen`: the last event the owner had seen before it opened, so it opens at the first one after it.
  * None on the canvas.
  */
-export const TalkElsewhere = createContext<{ el: HTMLElement | null; open: (focus?: boolean) => void; seen: number } | null>(null);
+export const TalkElsewhere = createContext<{ el: HTMLElement | null; open: (focus?: boolean) => void } | null>(null);
 
 /** A card's conversation: in its column, or where `TalkElsewhere` puts it. `bare`: no column of its own on the canvas. */
 function TalkColumn({ children, bare }: { children: ReactNode; bare?: boolean }) {

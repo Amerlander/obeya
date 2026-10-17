@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { type CardEvent, formatQuestion, type Item, needsYou, pausable } from '../core/types';
-import { agentWorks, demoHandover, koordinatorReads, obeyaWorks, openQuestions, opensWithTalk, ownerField, parseQuestion, runs, split, talkAlone, talkTurns, unseen, withoutOpen } from './talk';
+import { agentWorks, demoHandover, koordinatorReads, obeyaWorks, openQuestions, opensWithTalk, ownerField, parseQuestion, runs, split, talkAlone, talkTurns, unseen, unseenTurns, withoutOpen } from './talk';
 
 let id = 0;
 const ev = (kind: CardEvent['kind'], author: CardEvent['author'], text: string): CardEvent => ({ id: ++id, cardId: 'c', at: '2026-10-01T10:00:00Z', kind, author, text });
@@ -470,6 +470,9 @@ test("a card's messages count as unseen after the last one seen, its words betwe
   expect(count(all)).toBe(1);
   expect(count(all, reply.id)).toBe(0);
   expect(count([...all, ev('hint', 'owner', 'Danke')])).toBe(0);
+  // the conversation marks the same messages it counts
+  expect(unseenTurns(talkTurns(all, { over: true }), all, began.id).map((x) => x.e.id)).toEqual([reply.id]);
+  expect(unseenTurns(talkTurns(work, { over: true }), work).map((x) => x.e.id)).toEqual([handover.id]);
 });
 
 test('the snooze is a line, with what the agent did before it closed above it, and waking is a line too', () => {

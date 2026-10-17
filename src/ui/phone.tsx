@@ -20,6 +20,7 @@ import { CardFace, cardClass, shownState, TalkIcon } from './parts';
 import { videoOf } from './spot';
 import { clock, failText, forTouch, shortDay, t } from './strings';
 import { agentWorks, cardTalk, koordinatorReads, obeyaWorks, openQuestions, opensWithTalk, runs, unseen } from './talk';
+import { seenOf } from './seen';
 import { tellers, useAck } from './tell';
 import { HoldToTalk, PushToTalk, ToldList, usePushToTalk, useTold } from './voice';
 
@@ -55,21 +56,6 @@ const cardInAddress = () => new URLSearchParams(location.search).get('card');
 const talkInAddress = () => new URLSearchParams(location.search).has('talk');
 /** What a step in the browser's history opened: a card, or the conversation of what is in view. */
 type Step = 'card' | 'talk';
-/** The last message of each card's conversation the owner had in view, by card. */
-const SEEN = 'obeya-phone-seen';
-const seenOf = (card: string): number => {
-  try {
-    return (JSON.parse(localStorage.getItem(SEEN) ?? '{}') as Record<string, number>)[card] ?? -1;
-  } catch {
-    return -1;
-  }
-};
-function markSeen(card: string, id: number) {
-  try {
-    const all = Object.entries(JSON.parse(localStorage.getItem(SEEN) ?? '{}') as Record<string, number>).filter(([c]) => c !== card);
-    localStorage.setItem(SEEN, JSON.stringify(Object.fromEntries([...all.slice(-299), [card, id]])));
-  } catch {}
-}
 /** The open card's demo video, on its page. */
 const pageVideo = () => document.querySelector<HTMLVideoElement>('#ph-card .demo-view video');
 
@@ -428,15 +414,9 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
   const [talkEl, setTalkEl] = useState<HTMLElement | null>(null);
   /** The cursor goes into the panel's field once it is there (a comment on the demo). */
   const wantFocus = useRef(false);
-  // what of the conversation the owner had seen when it opened: its button marks it all seen at once
-  const seenAtOpen = useRef(-1);
-  const wasOpen = useRef(false);
-  if (talk && !wasOpen.current && open) seenAtOpen.current = seenOf(open);
-  wasOpen.current = talk;
   const elsewhere = useMemo(
     () => ({
       el: talk ? talkEl : null,
-      seen: seenAtOpen.current,
       open: (focus?: boolean) => {
         if (talkRef.current) return void (focus && talkEl?.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus());
         wantFocus.current = !!focus;
@@ -713,15 +693,8 @@ function TalkButton({ label, shown, n, count, working, onClick }: { label: strin
 /** The button for an open card's conversation: what waits there is the messages not seen yet and the questions open. */
 function CardTalkButton({ item, open, shown, onClick }: { item: Item; open: boolean; shown: boolean; onClick: () => void }) {
   const events = useEvents(item.id);
-  const [seen, setSeen] = useState(() => seenOf(item.id));
-  const last = events?.at(-1)?.id;
-  // what the conversation holds counts as seen while it is open
-  useEffect(() => {
-    if (!open || last === undefined || last <= seen) return;
-    markSeen(item.id, last);
-    setSeen(last);
-  }, [open, last]);
-  const messages = events && !open ? unseen(cardTalk(item, events), events, seen) : 0;
+  // the conversation marks what it holds seen while it is open
+  const messages = events && !open ? unseen(cardTalk(item, events), events, seenOf(item.id)) : 0;
   const questions = openQuestions(item).length;
   const working = agentWorks(item) || (!!events && koordinatorReads(events));
   return <TalkButton label={t.phone.cardTalk} shown={shown} n={messages + questions} count={t.phone.cardWaiting(messages, questions)} working={working} onClick={onClick} />;
