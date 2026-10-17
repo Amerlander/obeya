@@ -4,7 +4,7 @@
 // to a part of the window. A message replied to stands above the text as a quote. With the cursor in
 // the field, speaking dictates into it: hold its microphone, the one at the bottom, or Space.
 
-import { type ReactNode, useContext, useEffect, useId, useRef, useState } from 'react';
+import { type MouseEvent, type ReactNode, useContext, useEffect, useId, useRef, useState } from 'react';
 import { api } from './api';
 import { dropDraft, typeInto, updateDraft, useDraft, useDraftField } from './draft';
 import { useFitHeight } from './fitHeight';
@@ -118,6 +118,11 @@ export function Composer({
     // a reply chosen meanwhile stays for the next words
     if (reply && replyOn(key) === reply) setReply(key, null);
   };
+  /**
+   * The cursor stays in the field when Send is pressed. On a phone the field's blur took the keyboard
+   * down and moved the layout before the click landed, so the first tap only closed the keyboard.
+   */
+  const keepFocus = (e: MouseEvent) => e.preventDefault();
   return (
     <div className={['composer', className, shots.dropping && 'dropping', dictation && 'dictating'].filter(Boolean).join(' ')} {...shots.drop}>
       <ShotStrip shots={shots} />
@@ -186,11 +191,11 @@ export function Composer({
             </button>
           )}
           {action ? (
-            <button className="btn primary c-send" disabled={!ready} onClick={send}>
+            <button className="btn primary c-send" disabled={!ready} onMouseDown={keepFocus} onClick={send}>
               {action}
             </button>
           ) : (
-            <button className="btn primary c-send c-arrow" title={label} aria-label={label} disabled={!ready} onClick={send}>
+            <button className="btn primary c-send c-arrow" title={label} aria-label={label} disabled={!ready} onMouseDown={keepFocus} onClick={send}>
               <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
                 <path d="M10 16V4M4.5 9.5 10 4l5.5 5.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>

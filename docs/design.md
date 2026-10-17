@@ -4599,7 +4599,9 @@ press on the field's frame and began selecting text, which closed the keyboard a
 touch, so the recording ended at once. A tap on the field's screenshot button leaves the cursor in
 the field, so the keyboard stays up and the field does not move away under the finger (before, the
 tap only closed the keyboard and the picker needed a second one), and back from the picker the field
-takes the focus anew, which brings the keyboard up again. The texts that name the space bar name the microphone
+takes the focus anew, which brings the keyboard up again. A tap on Send leaves the cursor in the
+field the same way and sends at once, and the keyboard stays up for the next message (until
+2026-10-17 the first tap only closed the keyboard and the second sent). The texts that name the space bar name the microphone
 there (`forTouch`). Enter breaks the line in a field there, and only Send sends
 (`enterBreaksLines` in `src/ui/composer.tsx`): the keyboard's Enter key is where a phone types a
 line break, and a message sent half written cannot be taken back; the line under a dictating field
