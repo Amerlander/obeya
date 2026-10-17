@@ -98,6 +98,11 @@ export class Answers {
         project,
         onTool,
         onSession: (id) => this.o.board.talkSession(talkId, id),
+        // under the question in the sheet, and in the conversation of the card it was asked on
+        onLimit: (until) => {
+          this.o.board.waitsForLimit({ talk: talkId }, until);
+          if (reading && until !== undefined) this.o.board.log(reading, 'state', 'obeya', this.o.board.t.answer.limited(this.o.board.t.when(until)));
+        },
         ...(follow
           ? {
               resume,
@@ -258,6 +263,7 @@ export class Answers {
           if (!name.startsWith('mcp__')) this.o.board.log(cardId, 'activity', by, describeTool(name, input, this.o.board.t));
         },
         onSession: (id) => this.o.board.work(cardId, { session_id: id }),
+        onLimit: (until) => this.o.board.waitsForLimit({ card: cardId }, until),
         resume: this.o.board.row(cardId).session_id ?? undefined,
         message: `${resumed}${followUp(words, undefined, true)}`,
         fallback: `${this.message(root.said, root.question, about, project)}\n\n${this.history(stored.talk, cardId)}\n\n${followUp(words, undefined, true)}`,
@@ -301,10 +307,12 @@ export class Answers {
     signal?: AbortSignal;
     onTool: (name: string, input: Record<string, unknown>) => void;
     onSession: (id: string) => void;
+    /** Where it shows that it waits for the usage limit. */
+    onLimit: (until: number | undefined) => void;
   }): Promise<OwnerAnswer> {
     const dir = this.o.dirOf(c.thread);
     mkdirSync(dir, { recursive: true });
-    if (c.by === 'project') return this.o.projectAgent(c.project!).inform(c.project!, `${c.message}\n\n${filesNote(dir)}`, c.onTool, dir, c.signal);
+    if (c.by === 'project') return this.o.projectAgent(c.project!).inform(c.project!, `${c.message}\n\n${filesNote(dir)}`, c.onLimit, c.onTool, dir, c.signal);
     const toObeya = c.card && this.o.toObeya ? this.o.toObeya : undefined;
     const ask = (message: string, resume?: string) =>
       inform({
@@ -315,6 +323,7 @@ export class Answers {
         dir,
         onTool: c.onTool,
         onSession: c.onSession,
+        onLimit: c.onLimit,
         language: this.o.board.language(),
         ...(resume ? { resume } : {}),
         ...(c.images?.length ? { images: c.images } : {}),

@@ -19,7 +19,7 @@ let canvas: CanvasRuntime;
 let notices: [string | undefined, string][];
 
 const open = () => {
-  const c = new CanvasRuntime({ repos: [{ path: main, clones: 1 }] }, { store, home: dir, runtime, forge: noForge, commandDelayMs: 10, permissionMode: 'acceptEdits' });
+  const c = new CanvasRuntime({ repos: [{ path: main, clones: 1 }] }, { store, home: dir, runtime, forge: noForge, commandDelayMs: 10, permissionMode: 'acceptEdits', limitMargin: 10 });
   c.board.onNotice((n) => notices.push([n.cardId, n.text]));
   return c;
 };
@@ -185,6 +185,63 @@ describe('a question the Koordinator looks up', () => {
     a.emit({ type: 'error', message: 'boom' });
     await settle();
     expect(board().events(w4.id).at(-1)!.text).toContain('Ich konnte die Frage nicht beantworten (boom)');
+  });
+});
+
+const HIT = "You've hit your session limit · resets 2:40pm (Europe/Berlin)";
+
+/** The usage limit stops the turn of `s`, until `ms` from now. */
+function limit(s: FakeSession, ms: number) {
+  s.emit({ type: 'error', message: HIT, limit: { resetsAt: Date.now() + ms } });
+  s.emit({ type: 'idle' });
+}
+
+describe('a look-up the usage limit stops', () => {
+  test('waits under its question in the sheet and answers once the limit lifts, after a restart too', async () => {
+    await say('was steht im plan zu login?', {}, 'look_up', { question: 'What does the plan say about login?', confirm: 'Moment.' });
+    let a = answerer();
+    limit(a, 20);
+    await settle();
+    // no answer that it failed: the sheet says when it goes on
+    const talk = () => board().snapshot().talk.at(-1)!;
+    expect(talk().answer).toBeUndefined();
+    expect(Date.parse(talk().limitedUntil!)).toBeGreaterThan(Date.now());
+    expect(a.closed).toBe(false);
+    // Obeya restarts: the question is looked up again, runs into the limit again and waits anew
+    canvas.shutdown();
+    canvas = open();
+    await settle();
+    expect(answerer()).not.toBe(a);
+    a = answerer();
+    expect(talk().limitedUntil).toBeUndefined();
+    limit(a, 20);
+    expect(talk().limitedUntil).toBeDefined();
+    await settle(60);
+    expect(a.inbox.at(-1)).toContain('The usage limit that stopped your last turn has reset');
+    expect(talk().limitedUntil).toBeUndefined();
+    a.call('answer_owner', { text: 'Der Plan sagt nichts dazu.' });
+    a.emit({ type: 'idle' });
+    await settle();
+    expect(talk().answer).toBe('Der Plan sagt nichts dazu.');
+    expect(notices).toEqual([[undefined, 'Der Plan sagt nichts dazu.']]);
+  });
+
+  test("a workstream's project agent waits the same way", async () => {
+    const w4 = workstream();
+    await say('was würde der agent tun?', { card: w4.id }, 'look_up', { question: 'What would the worker do?', confirm: 'Ich schaue nach.' });
+    const a = answerer();
+    expect(a.spec.system).toContain('project agent');
+    limit(a, 20);
+    await settle();
+    // in the card's conversation, without the error
+    expect(board().events(w4.id).at(-1)).toMatchObject({ kind: 'state', author: 'obeya' });
+    expect(board().events(w4.id).at(-1)!.text).toStartWith('Das Nutzungslimit ist erreicht. Obeya schlägt das um ');
+    expect(board().events(w4.id).some((e) => e.text.includes('hit your'))).toBe(false);
+    await settle(60);
+    a.call('answer_owner', { text: 'Er fragt nach dem Go.' });
+    a.emit({ type: 'idle' });
+    await settle();
+    expect(board().events(w4.id).at(-1)).toMatchObject({ author: 'project', text: 'Er fragt nach dem Go.' });
   });
 });
 
@@ -443,6 +500,32 @@ describe('a thread on a Question card', () => {
     expect(b.inbox[0]).toContain('The owner paused you');
     expect(b.inbox[0]!.indexOf('und im Oktober?')).toBeLessThan(b.inbox[0]!.indexOf('und November?'));
     expect(board().item(card.id)!.paused).toBeUndefined();
+  });
+
+  test('its agent the usage limit stops waits on the card and answers once the limit lifts; paused meanwhile, it waits no more', async () => {
+    const { card } = await moved();
+    canvas.tell(card.id, 'und im Oktober?', [], false);
+    const a = answerer();
+    limit(a, 20);
+    await settle();
+    expect(board().item(card.id)).toMatchObject({ thread: { thinking: true } });
+    expect(board().item(card.id)!.limitedUntil).toBeDefined();
+    await settle(60);
+    expect(board().item(card.id)!.limitedUntil).toBeUndefined();
+    expect(a.inbox.at(-1)).toContain('usage limit');
+    a.call('answer_owner', { text: 'Oktober: 12 ct.' });
+    a.emit({ type: 'idle' });
+    await settle();
+    expect(board().events(card.id).filter((e) => e.kind === 'talk').at(-1)!.text).toBe('Oktober: 12 ct.');
+
+    canvas.tell(card.id, 'und November?', [], false);
+    const b = answerer();
+    limit(b, 10_000);
+    await settle();
+    expect(board().item(card.id)!.limitedUntil).toBeDefined();
+    canvas.act(card.id, { action: 'pause' });
+    expect(b.closed).toBe(true);
+    expect(board().item(card.id)!.limitedUntil).toBeUndefined();
   });
 
   test('what the card asked when Obeya stopped is asked again', async () => {

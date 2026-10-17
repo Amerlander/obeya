@@ -11,6 +11,7 @@ import { move, queueOrder } from '../core/queue';
 import { artifact, FakeRuntime, type FakeSession, gitRepo } from './testing';
 import { Workers } from './workers';
 import { git, HERE, parseChanges, Workspaces } from './workspaces';
+import { withLimitWait } from './runtime';
 
 let dir: string;
 let board: Board;
@@ -352,6 +353,29 @@ describe('Koordinator', () => {
     expect(item(d.id).queue).toMatchObject({ behind: [c.id] });
   });
 
+  test('an estimate the usage limit stops waits on the card, and the card is judged once the limit lifts', async () => {
+    k = new Koordinator({ board, runtime: withLimitWait(runtime, 10), home: () => dir, repoFor: () => ({ workers, workspaces, adapter: generic, path: dir }), holdMs: 0 });
+    const a = card('A');
+    k.request(a.id);
+    await scope(['src/a.ts']);
+    const b = card('B');
+    k.request(b.id);
+    await settle();
+    const s = estimates().at(-1)!;
+    s.emit({ type: 'error', message: "You've hit your session limit · resets 2:40pm (Europe/Berlin)", limit: { resetsAt: Date.now() + 20 } });
+    s.emit({ type: 'idle' });
+    await settle();
+    // it does not start without an estimate: it waits with the Koordinator, and says until when
+    expect(item(b.id)).toMatchObject({ state: 'planned', queue: { checking: true } });
+    expect(item(b.id).limitedUntil).toBeDefined();
+    expect(board.events(b.id).some((e) => e.kind === 'error')).toBe(false);
+    await new Promise((r) => setTimeout(r, 60));
+    expect(item(b.id).limitedUntil).toBeUndefined();
+    expect(s.inbox.at(-1)).toContain('usage limit');
+    await scope(['src/a.ts'], ['K1']);
+    expect(item(b.id).queue).toMatchObject({ behind: [a.id] });
+  });
+
   test('without an estimate the card still starts, and says why', async () => {
     const a = card('A');
     k.request(a.id);
@@ -397,6 +421,23 @@ describe('Koordinator names a card the owner left without a title', () => {
     namings().at(-1)!.emit({ type: 'error', message: 'down' });
     await failed;
     expect(item(b.id).title).toBe('Erste Zeile');
+  });
+
+  test('a naming the usage limit stops waits on the card, and names it once the limit lifts', async () => {
+    k = new Koordinator({ board, runtime: withLimitWait(runtime, 10), home: () => dir, repoFor: () => ({ workers, workspaces, adapter: generic, path: dir }), holdMs: 0 });
+    const a = task('Erste Zeile\nmehr');
+    const naming = k.name(a.id);
+    const s = namings()[0]!;
+    s.emit({ type: 'error', message: "You've hit your session limit", limit: { resetsAt: Date.now() + 20 } });
+    s.emit({ type: 'idle' });
+    await settle();
+    expect(item(a.id).title).toBe('');
+    expect(item(a.id).limitedUntil).toBeDefined();
+    await new Promise((r) => setTimeout(r, 60));
+    expect(item(a.id).limitedUntil).toBeUndefined();
+    s.call('title', { title: 'Zeilen zählen' });
+    await naming;
+    expect(item(a.id).title).toBe('Zeilen zählen');
   });
 
   test('an empty card or one with a title is not named', async () => {

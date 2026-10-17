@@ -54,6 +54,8 @@ const de = {
     rework: 'Einarbeiten',
     writing: 'Obeya schreibt den Entwurf …',
     raw: 'Obeya konnte den Text nicht umschreiben; er steht hier, wie du ihn geschrieben hast.',
+    /** The usage limit kept the job from writing: it writes the draft by itself at `time`, unless the owner edits it first. */
+    limited: (time: string) => `Das Nutzungslimit ist erreicht: Obeya schreibt den Entwurf um ${time} von selbst. Bis dahin steht dein Text hier, wie du ihn geschrieben hast; änderst du ihn, bleibt er so.`,
     issueTitle: 'Titel',
     issueBody: 'Text',
     public: 'Erscheint öffentlich auf GitHub unter deinem Konto; abschicken tust du es dort.',
@@ -249,6 +251,8 @@ const de = {
   proposalQuestionsHint: 'Mit „Antworten“ schreibt ein Agent den Vorschlag nach deiner Wahl neu. Übernimmst du gleich, steht deine Wahl als entschieden im Text; der Rest geht als offene Frage mit.',
   proposedByRetro: (basis: string) => `Aus der Arbeitsrückschau: ${basis}`,
   revisingShort: 'wird überarbeitet',
+  /** A card whose agent (not its worker) waits for the account's usage limit: when it goes on by itself. */
+  limitedUntil: (time: string) => `Nutzungslimit · weiter um ${time}`,
   revising: 'Wird nach deinen Worten überarbeitet …',
   /** "Übernehmen und starten" during a revision: the line above the buttons before and after the click, the button while it waits, taking it back, and the same short on the canvas card. */
   acceptWaitsFor: (button: string) => `Der neue Text kommt gleich. „${button}“ wartet auf ihn und entfällt, wenn er noch Fragen hat.`,
@@ -655,6 +659,8 @@ const de = {
     filed: (repo: string) => `In die Aufgabe „CLAUDE.md ergänzen“ für ${repo} aufgenommen.`,
     undone: 'zurückgenommen',
     lookingUp: 'schlägt nach …',
+    /** A look-up the usage limit stopped: when it goes on by itself. */
+    lookUpLimited: (time: string) => `Nutzungslimit · schlägt das um ${time} von selbst nach`,
     /** Under words the usage limit keeps Obeya from reading: when it reads them by itself. */
     held: (time: string) => `Nutzungslimit · liest das um ${time} von selbst`,
     reshare: {
@@ -1483,6 +1489,7 @@ const en: Strings = {
     rework: 'Work it in',
     writing: 'Obeya is writing the draft …',
     raw: 'Obeya could not rewrite the text; it stands here as you wrote it.',
+    limited: (time: string) => `The usage limit is reached: Obeya writes the draft by itself at ${time}. Until then your text stands here as you wrote it; if you edit it, it stays as it is.`,
     issueTitle: 'Title',
     issueBody: 'Text',
     public: 'Appears publicly on GitHub under your account; you submit it there.',
@@ -1668,6 +1675,7 @@ const en: Strings = {
   proposalQuestionsHint: 'With “Answer” an agent rewrites the proposal by your choice. If you accept it right away, your choice goes into the text as decided; the rest goes along as an open question.',
   proposedByRetro: (basis: string) => `From the work retrospective: ${basis}`,
   revisingShort: 'being reworked',
+  limitedUntil: (time: string) => `Usage limit · continues at ${time}`,
   revising: 'Being reworked by what you said …',
   acceptWaitsFor: (button: string) => `The new text is coming. “${button}” waits for it and is dropped if it still has questions.`,
   acceptWaitsHint: 'It is accepted once reworked, unless it still has questions then.',
@@ -2045,6 +2053,7 @@ const en: Strings = {
     filed: (repo: string) => `Added to the task “Add to CLAUDE.md” for ${repo}.`,
     undone: 'taken back',
     lookingUp: 'looking it up …',
+    lookUpLimited: (time: string) => `Usage limit · looks this up by itself at ${time}`,
     held: (time: string) => `Usage limit · reads this by itself at ${time}`,
     reshare: {
       outdated: (n: number) => (n === 1 ? 'One shared demo is outdated' : `${n} shared demos are outdated`),

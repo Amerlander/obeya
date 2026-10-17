@@ -2,7 +2,8 @@ import { expect, test } from 'bun:test';
 import type { HookInput, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { askOwner, BOUNDED_WAITS, Inbox, backgroundWork, deniedBy, claudeExecutable, cleanEnv, FOREGROUND_SLEEP_LIMIT, failureReason, foregroundSleep, refuseForegroundWait, resetIn, resultFailure, usageLimit } from './runtime';
+import { type AgentEvent, askOwner, BOUNDED_WAITS, Inbox, backgroundWork, deniedBy, claudeExecutable, cleanEnv, FOREGROUND_SLEEP_LIMIT, failureReason, foregroundSleep, refuseForegroundWait, resetIn, resultFailure, usageLimit, withLimitWait } from './runtime';
+import { FakeRuntime } from './testing';
 import { MESSAGES } from '../core/messages';
 
 test('background work counts renders, test runs and watchers, not housekeeping', () => {
@@ -127,6 +128,46 @@ test('the reset time a limit message names is the next such time in its zone', (
   expect(resetIn("You've hit your session limit")).toBeUndefined();
   // a zone the machine does not know: its own
   expect(resetIn('resets 3pm (Nowhere/Else)')).toBeNumber();
+});
+
+test('an agent with onLimit waits for the usage limit and goes on where it stopped once it lifts; one without fails on it', async () => {
+  const fake = new FakeRuntime();
+  const runtime = withLimitWait(fake, 10);
+  const events: AgentEvent[] = [];
+  const waits: (number | undefined)[] = [];
+  const session = runtime.start({ cwd: '/r', system: '', tools: [], onLimit: (until) => waits.push(until), onEvent: (e) => events.push(e) }, 'Los.');
+  const s = fake.last;
+  const limit = (ms: number) => {
+    s.emit({ type: 'error', message: "You've hit your session limit", limit: { resetsAt: Date.now() + ms } });
+    s.emit({ type: 'idle' });
+  };
+  limit(20);
+  // neither the error nor the end of the turn it stopped
+  expect(events).toEqual([]);
+  expect(waits).toHaveLength(1);
+  expect(waits[0]! - Date.now()).toBeGreaterThan(20);
+  await new Promise((r) => setTimeout(r, 50));
+  expect(waits.at(-1)).toBeUndefined();
+  expect(s.inbox).toEqual(['Los.', 'The usage limit that stopped your last turn has reset. Go on where you stopped.']);
+  // a turn after it ends as ever; another error is one
+  s.emit({ type: 'idle' });
+  s.emit({ type: 'error', message: 'boom' });
+  expect(events).toEqual([{ type: 'idle' }, { type: 'error', message: 'boom' }]);
+  // closed while it waits, it waits no more
+  limit(10_000);
+  expect(waits).toHaveLength(3);
+  session.close();
+  expect(waits).toHaveLength(4);
+  expect(waits.at(-1)).toBeUndefined();
+  expect(s.closed).toBe(true);
+  await new Promise((r) => setTimeout(r, 30));
+  expect(s.inbox).toHaveLength(2);
+
+  // without onLimit, the limit is the agent's to handle
+  const plain: AgentEvent[] = [];
+  runtime.start({ cwd: '/r', system: '', tools: [], onEvent: (e) => plain.push(e) }, 'Los.');
+  fake.last.emit({ type: 'error', message: 'limit', limit: {} });
+  expect(plain).toEqual([{ type: 'error', message: 'limit', limit: {} }]);
 });
 
 test("agents run the Agent SDK's Claude Code from the checkout, the machine's own from the binary", () => {

@@ -13,7 +13,7 @@ let store: Store;
 let runtime: FakeRuntime;
 let canvas: CanvasRuntime;
 
-const open = () => new CanvasRuntime({ repos: [{ path: main, clones: 1 }] }, { store, home: dir, runtime, forge: noForge, commandDelayMs: 10 });
+const open = () => new CanvasRuntime({ repos: [{ path: main, clones: 1 }] }, { store, home: dir, runtime, forge: noForge, commandDelayMs: 10, limitMargin: 10 });
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'obeya-revisions-'));
@@ -319,6 +319,27 @@ describe('a proposal reworked by what the owner says', () => {
     expect(item.proposal?.revising).toBeUndefined();
     expect(item.proposal?.questions).toHaveLength(1);
     expect(board().events(p.id).at(-1)).toMatchObject({ kind: 'error', text: expect.stringContaining('Überarbeiten ging nicht') });
+  });
+
+  test('a reviser the usage limit stops waits on the proposal and reworks it once the limit lifts', async () => {
+    const p = proposal();
+    canvas.revisions.revise(p.id, 'Excel auch', false);
+    const r = reviser()!;
+    r.emit({ type: 'error', message: "You've hit your session limit · resets 2:40pm (Europe/Berlin)", limit: { resetsAt: Date.now() + 20 } });
+    r.emit({ type: 'idle' });
+    await settle();
+    // no error: the proposal waits for its rework, and says until when
+    expect(board().item(p.id)!.proposal?.revising).toMatchObject({ words: 'Excel auch' });
+    expect(board().item(p.id)!.limitedUntil).toBeDefined();
+    expect(board().events(p.id).some((e) => e.kind === 'error')).toBe(false);
+    await settle(60);
+    expect(board().item(p.id)!.limitedUntil).toBeUndefined();
+    expect(r.inbox.at(-1)).toContain('usage limit');
+    r.call('revise_proposal', { title: 'CSV- und Excel-Export prüfen', task: 'Beide schreiben Umlaute falsch.', questions: [], reply: 'Excel ist drin.' });
+    r.emit({ type: 'idle' });
+    await settle();
+    expect(board().item(p.id)).toMatchObject({ title: 'CSV- und Excel-Export prüfen' });
+    expect(board().item(p.id)!.proposal?.revising).toBeUndefined();
   });
 
   test('a proposal dismissed meanwhile stays gone', async () => {

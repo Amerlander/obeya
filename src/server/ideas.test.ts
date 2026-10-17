@@ -14,7 +14,7 @@ let runtime: FakeRuntime;
 let canvas: CanvasRuntime;
 
 const open = (clones = 1) =>
-  new CanvasRuntime({ repos: [{ path: main, clones, settings: { land: 'pr' } }] }, { store, home: dir, runtime, forge: noForge, commandDelayMs: 10, permissionMode: 'acceptEdits' });
+  new CanvasRuntime({ repos: [{ path: main, clones, settings: { land: 'pr' } }] }, { store, home: dir, runtime, forge: noForge, commandDelayMs: 10, permissionMode: 'acceptEdits', limitMargin: 10 });
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'obeya-ideas-'));
@@ -625,6 +625,53 @@ describe('an idea', () => {
     expect(next.inbox[0]).toContain('Erstens.');
     expect(next.inbox[0]).toContain('Zweitens.');
     expect(next.inbox[0]).toContain('Hallo?');
+  });
+
+  test('its agent the usage limit stops waits on the card, with what the owner says meanwhile, and replies once it lifts', async () => {
+    const i = idea();
+    canvas.act(i.id, { action: 'discuss', text: 'Erstens.' });
+    const s = explorer();
+    s.emit({ type: 'session', id: 'sess-1' });
+    s.emit({ type: 'error', message: "You've hit your session limit · resets 2:40pm (Europe/Berlin)", limit: { resetsAt: Date.now() + 20 } });
+    s.emit({ type: 'idle' });
+    // no error in its conversation: the card says when it goes on, and the agent still works on its reply
+    expect(board().events(i.id).some((e) => e.kind === 'error' || e.text.includes('hit your'))).toBe(false);
+    expect(item(i.id).idea).toMatchObject({ thinking: true });
+    expect(Date.parse(item(i.id).limitedUntil!)).toBeGreaterThan(Date.now());
+    expect(s.closed).toBe(false);
+    canvas.act(i.id, { action: 'discuss', text: 'Zweitens.' });
+    expect(s.inbox).toHaveLength(1);
+    await settle(60);
+    expect(item(i.id).limitedUntil).toBeUndefined();
+    expect(s.inbox[1]).toContain('The usage limit that stopped your last turn has reset');
+    s.call('reply', { text: 'Zu erstens.' });
+    s.emit({ type: 'idle' });
+    // what the owner said meanwhile is its next turn
+    expect(s.inbox[2]).toContain('Zweitens.');
+    expect(talk(i.id)).toEqual([
+      ['owner', 'Erstens.'],
+      ['owner', 'Zweitens.'],
+      ['explorer', 'Zu erstens.'],
+    ]);
+  });
+
+  test('its agent the usage limit stops when Obeya restarts runs into it again and waits anew; parked meanwhile, it waits no more', () => {
+    const i = idea();
+    canvas.act(i.id, { action: 'discuss', text: 'Frage.' });
+    explorer().emit({ type: 'session', id: 'sess-9' });
+    explorer().emit({ type: 'error', message: "You've hit your session limit", limit: { resetsAt: Date.now() + 10_000 } });
+    explorer().emit({ type: 'idle' });
+    canvas.shutdown();
+    canvas = open();
+    expect(item(i.id).limitedUntil).toBeUndefined();
+    const s = explorer();
+    expect(s.inbox[0]).toContain('Obeya was restarted');
+    s.emit({ type: 'error', message: "You've hit your session limit", limit: { resetsAt: Date.now() + 10_000 } });
+    s.emit({ type: 'idle' });
+    expect(item(i.id).limitedUntil).toBeDefined();
+    canvas.act(i.id, { action: 'park' });
+    expect(s.closed).toBe(true);
+    expect(item(i.id).limitedUntil).toBeUndefined();
   });
 
   test('what waited for its agent’s turn when Obeya stopped reaches it after the restart', () => {

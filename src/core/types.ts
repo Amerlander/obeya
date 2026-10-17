@@ -271,6 +271,11 @@ export interface Item {
   inTurn?: true;
   /** While `inTurn`: the worker's background work that runs (a test run, a render, a watcher), the oldest first. */
   background?: BackgroundTask[];
+  /**
+   * The card's agent other than its worker (an idea's, a Question card's, the reviser of a proposal,
+   * the Koordinator naming or checking it) waits for the account's usage limit: it goes on by itself then (ISO time).
+   */
+  limitedUntil?: string;
   /** Since when it waits for the owner (`needsYou`), for the phone view's „Für dich“. */
   waitingSince?: string;
   /**
@@ -773,6 +778,8 @@ export interface Talk {
   wish?: Wish;
   /** The usage limit keeps the Koordinator from reading the words: it reads them by itself then (ISO time), the reply follows. */
   heldUntil?: string;
+  /** The usage limit stopped the agent that looks the question up: it goes on by itself then (ISO time), the answer follows. */
+  limitedUntil?: string;
 }
 
 /** A message of Obeya's sheet: one part of an exchange, what the owner said, the Koordinator's reply or the looked-up answer. */

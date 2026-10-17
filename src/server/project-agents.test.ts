@@ -30,7 +30,7 @@ const card = () => board.snapshot().items.find((i) => i.label === 'W1')!;
 describe('project agents', () => {
   test("answer the owner's question in a session with a worker's tools on the repository, with the decision log", async () => {
     board.decide({ project_id: project().id, card_id: card().id, question: 'Trennzeichen?', answer: 'Semikolon', by: 'owner' });
-    const answer = agents.inform(project(), 'Was macht W1 als Nächstes?');
+    const answer = agents.inform(project(), 'Was macht W1 als Nächstes?', () => {});
     await tick();
     const s = runtime.last;
     expect(s.spec).toMatchObject({ cwd: '/repo' });
@@ -44,8 +44,8 @@ describe('project agents', () => {
   });
 
   test('one session per project, resumed; questions wait for each other', async () => {
-    const r1 = agents.inform(project(), 'Q1');
-    const r2 = agents.inform(project(), 'Q2');
+    const r1 = agents.inform(project(), 'Q1', () => {});
+    const r2 = agents.inform(project(), 'Q2', () => {});
     await tick();
     expect(runtime.sessions).toHaveLength(1);
     runtime.last.emit({ type: 'session', id: 'p-1' });

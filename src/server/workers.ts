@@ -16,7 +16,7 @@ import { checkArtifact, DEMO_SKILL, DEMO_SKILL_FILE, demoSkillName, OBEYA_PLUGIN
 import { artifactFiles } from './demo-page';
 import { imageNote } from './images';
 import type { InputContext } from './koordinator';
-import { type AgentEvent, type AgentRuntime, type AgentSession, type AgentTool, failureReason, limitLifts, type PermissionAnswer, type PermissionRequest } from './runtime';
+import { type AgentEvent, type AgentRuntime, type AgentSession, type AgentTool, failureReason, LIMIT_LIFTED, limitLifts, type PermissionAnswer, type PermissionRequest } from './runtime';
 import { TO_OBEYA, toObeyaTool } from './to-obeya';
 import { type Forward, HOST_DIR, hostName, remote } from './hosts';
 import { runAppCommand } from './app-command';
@@ -260,8 +260,6 @@ export function answerNote(picks: string[], text: string): string {
   const words = ownWords({ text, picks });
   return `They picked ${picks.map((o) => `„${o}“`).join(', ')}.${words ? `\n\nThey added in their own words:\n\n${words}` : ''}`;
 }
-
-const LIMIT_LIFTED = 'The usage limit that stopped your last turn has reset. Go on where you stopped.';
 
 const END_TURN = 'Recorded. End your turn now without further work; the reply arrives as your next message.';
 

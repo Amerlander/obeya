@@ -335,6 +335,7 @@ export function Detail(p: Props) {
       <div className={['p-state', finishingUp(item) && 'finishing', item.paused && 'paused'].filter(Boolean).join(' ')}>
         ● {stateLabel(item)}
         {item.statusLine && (item.state === 'working' || item.state === 'inPr' || item.finishing || answering(item)) && <span className="p-status"> · {item.statusLine}</span>}
+        <Limited item={item} />
         {archivedOn(item)}
       </div>
 
@@ -522,6 +523,9 @@ export function Detail(p: Props) {
   );
 }
 
+/** Beside the card's state: its agent (not its worker, which says so in its status line) waits for the usage limit, until when. */
+const Limited = ({ item }: { item: Item }) => (item.limitedUntil ? <span className="p-status"> · {t.limitedUntil(time(item.limitedUntil))}</span> : null);
+
 /** When the card went into the archive, after its state. */
 const archivedOn = (i: Item) => i.archivedAt && <span className="p-status"> · {t.archive.when(new Date(i.archivedAt))}</span>;
 
@@ -556,6 +560,7 @@ function IdeaView({ item, act, run, listener, onDelete, onTell }: { item: Item; 
       <div className={finishingUp(item) ? 'p-state finishing' : 'p-state'}>
         ● {stateLabel(item)}
         {idea.thinking && <span className="p-status"> · {t.author.explorer} {t.idea.thinking}</span>}
+        <Limited item={item} />
         {archivedOn(item)}
       </div>
       {/* the brief is what stays; the conversation beside it is how it came about */}
@@ -660,6 +665,7 @@ function QuestionView({ item, act, run, onTell }: { item: Item; act: (a: CardAct
     <>
       <div className="p-state">
         ● {t.question.count(thread.answers, thread.files)} · {thread.thinking ? t.question.reading : t.question.ready}
+        <Limited item={item} />
         {archivedOn(item)}
       </div>
       {item.archivedAt ? (
@@ -999,6 +1005,7 @@ function Conversation({
       }
     >
       {pending.at(-1) && <Gist text={pending.at(-1)!.text} />}
+      {!paused && item.limitedUntil && <div className="hint">{t.limitedUntil(time(item.limitedUntil))}</div>}
       {!paused && <Background tasks={item.background} />}
       <Steps steps={pending} />
     </Msg>

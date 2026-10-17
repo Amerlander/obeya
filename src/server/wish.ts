@@ -23,6 +23,8 @@ export interface WishDraft {
   body: string;
   /** The job wrote nothing (not logged in, say): the owner's own words stand in the draft. */
   raw?: true;
+  /** With `raw`: the account's usage limit kept the job from writing, until then (ISO time); it can write the draft after. */
+  limitedUntil?: string;
 }
 
 /** How long the job may take before the owner's words stand as they are. */
@@ -68,6 +70,10 @@ export function writeWish(runtime: AgentRuntime, w: WishInput, footer: string, i
         readOnly: true,
         role: 'chores',
         system: SYSTEM,
+        // the owner is waiting for the draft: their words stand in it, and the draft says when the job can write it
+        onLimit: (until) => {
+          if (until !== undefined) end({ ...fallback(), limitedUntil: new Date(until).toISOString() });
+        },
         tools: [
           {
             name: 'issue',

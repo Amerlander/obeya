@@ -12,7 +12,7 @@ import { Composer } from './composer';
 import { WISH_DRAFT } from './draft';
 import { useFitHeight } from './fitHeight';
 import { imageUrl, Shots } from './shots';
-import { errorText, t } from './strings';
+import { clock, errorText, t } from './strings';
 
 /** The issue as it will go out; `raw`: the job wrote nothing, the owner's words stand as they are. */
 interface Issue {
@@ -20,6 +20,11 @@ interface Issue {
   body: string;
   images: string[];
   raw?: true;
+  /**
+   * The account's usage limit kept the job from writing: it writes the draft from the same words at
+   * `until` (ISO time), reworking the draft before them (`base`), unless the owner edits it first.
+   */
+  again?: { wish: Wish; images: string[]; until: string; base: { title: string; body: string } | null };
 }
 
 interface WishState {
@@ -40,12 +45,27 @@ let kept: { store: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>; key: str
 function set(change: Partial<WishState>) {
   const before = state.issue;
   state = { ...state, ...change };
-  if (kept && state.issue !== before)
-    try {
-      if (state.issue) kept.store.setItem(kept.key, JSON.stringify(state.issue));
-      else kept.store.removeItem(kept.key);
-    } catch {}
+  if (state.issue !== before) {
+    if (kept)
+      try {
+        if (state.issue) kept.store.setItem(kept.key, JSON.stringify(state.issue));
+        else kept.store.removeItem(kept.key);
+      } catch {}
+    writeAgain();
+  }
   for (const fn of listeners) fn();
+}
+
+let again: ReturnType<typeof setTimeout> | undefined;
+
+/** A draft the usage limit kept the job from writing is written once it lifts, after a reload too. */
+function writeAgain() {
+  clearTimeout(again);
+  const a = state.issue?.again;
+  if (!a) return;
+  again = setTimeout(() => {
+    if (state.issue?.again === a && !state.writing) void write(a.wish, a.images, a.base);
+  }, Math.min(Math.max(0, Date.parse(a.until) - Date.now()), 2 ** 31 - 1));
 }
 
 /** Takes back the canvas's draft that `store` kept, and writes it down there from now on. Once per page. */
@@ -56,6 +76,7 @@ export function keepWish(store: Pick<Storage, 'getItem' | 'setItem' | 'removeIte
     const issue = JSON.parse(store.getItem(kept.key) ?? 'null') as Issue | null;
     if (issue && typeof issue.title === 'string' && typeof issue.body === 'string') state = { ...state, issue: { ...issue, images: issue.images ?? [] } };
   } catch {}
+  writeAgain();
 }
 
 export const useWish = () =>
@@ -83,9 +104,12 @@ export function openWish(seed?: Wish) {
 
 export const closeWish = () => set({ open: false, sent: undefined });
 
-/** The job writes the issue from the owner's words, reworking the draft that stands. */
-async function write(w: Wish, images: string[]) {
-  const before = state.issue;
+/**
+ * The job writes the issue from the owner's words, reworking the draft that stands; `base`: the
+ * draft it reworks instead, for words the usage limit kept it from writing up, whose screenshots stand already.
+ */
+async function write(w: Wish, images: string[], base?: { title: string; body: string } | null) {
+  const before = base === undefined ? state.issue : base;
   set({ writing: true, error: '' });
   try {
     const out = await api.writeWish({
@@ -95,7 +119,9 @@ async function write(w: Wish, images: string[]) {
       ...(images.length ? { images } : {}),
       app: !!window.obeyaApp,
     });
-    set({ writing: false, issue: { title: out.title, body: out.body, images: [...(state.issue?.images ?? []), ...images], ...(out.raw ? { raw: true as const } : {}) } });
+    const shots = base === undefined ? [...(state.issue?.images ?? []), ...images] : (state.issue?.images ?? images);
+    const limited = out.limitedUntil ? { again: { wish: w, images, until: out.limitedUntil, base: before ? { title: before.title, body: before.body } : null } } : {};
+    set({ writing: false, issue: { title: out.title, body: out.body, images: shots, ...(out.raw ? { raw: true as const } : {}), ...limited } });
   } catch (e) {
     set({ writing: false, error: e instanceof ApiError ? errorText(e.code) : t.offlineError });
   }
@@ -212,7 +238,11 @@ export function WishDialog() {
 function IssueFields({ issue, disabled }: { issue: Issue; disabled: boolean }) {
   const body = useRef<HTMLTextAreaElement>(null);
   useFitHeight(body, issue.body);
-  const edit = (change: Partial<Issue>) => set({ issue: { ...issue, ...change } });
+  // what the owner edits stands: the job does not write it again once the usage limit lifts
+  const edit = (change: Partial<Issue>) => {
+    const { again: _, ...rest } = issue;
+    set({ issue: { ...rest, ...change } });
+  };
   // the job's draft arrives: the title is where the owner reads first
   const title = useRef<HTMLInputElement>(null);
   useEffect(() => title.current?.focus(), [disabled]);
@@ -226,7 +256,7 @@ function IssueFields({ issue, disabled }: { issue: Issue; disabled: boolean }) {
         <span>{t.wish.issueBody}</span>
         <textarea ref={body} value={issue.body} disabled={disabled} spellCheck rows={4} onChange={(e) => edit({ body: e.target.value })} />
       </label>
-      {issue.raw && <p className="hint">{t.wish.raw}</p>}
+      {issue.again ? <p className="hint">{t.wish.limited(clock(issue.again.until))}</p> : issue.raw && <p className="hint">{t.wish.raw}</p>}
       <Shots ids={issue.images} />
     </div>
   );

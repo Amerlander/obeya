@@ -29,7 +29,7 @@ import { Revisions } from './revisions';
 import { ProjectAgents } from './project-agents';
 import { readPlanDocs, watchPlanDocs } from './repo';
 import { boundsOf, GAP, type Place, unionBounds } from '../core/layout';
-import { type AgentRuntime, withAgentSetting, withRepoTrust } from './runtime';
+import { type AgentRuntime, withAgentSetting, withLimitWait, withRepoTrust } from './runtime';
 import { commandsOf, heldGroups, withoutHeld } from './trust';
 import { changesCode, RESTART_PATIENCE_MS, whenIdle } from './self-update';
 import { Sharing, siteIncomplete } from './share';
@@ -67,6 +67,8 @@ export interface CanvasDeps {
   parkGrace?: number;
   /** The language Obeya speaks to the owner now (`ownerLanguage`); German when left out (the tests). */
   language?: () => Language;
+  /** How long after the usage limit lifts the agents that wait for it go on; ten seconds when left out. */
+  limitMargin?: number;
   /** The model and effort of a group of agents (`agentSetting`), asked whenever one starts; the defaults when left out. */
   agents?: (role: AgentRole) => AgentSetting;
   /** How long a restart of a repository's agents waits for them to pause at most; Obeya's patience for a restart when left out. */
@@ -169,7 +171,8 @@ export class CanvasRuntime {
 
   constructor(config: CanvasConfig, private deps: CanvasDeps) {
     const agents = deps.agents ?? ((role: AgentRole) => AGENT_DEFAULTS[role]);
-    const runtime = (r: AgentRuntime) => withRepoTrust(withAgentSetting(r, agents), this.claudeHeld);
+    // the agents other than workers and Obeya's chat wait for the usage limit through it, each where it shows
+    const runtime = (r: AgentRuntime) => withLimitWait(withRepoTrust(withAgentSetting(r, agents), this.claudeHeld), deps.limitMargin);
     deps = { ...deps, runtime: runtime(deps.runtime), ...(deps.workerRuntime ? { workerRuntime: runtime(deps.workerRuntime) } : {}) };
     this.deps = deps;
     // the main branch the owner set counts from the start: the repository's id, its settings and its Lesestand go by it

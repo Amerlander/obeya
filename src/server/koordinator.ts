@@ -8,7 +8,7 @@ import { inQueue, move, movable, queueOrder } from '../core/queue';
 import { type AgentRole, type CardEvent, type Item, nameless, type Preference, START_ALL_HOLD_MS, titleFrom, type Wait } from '../core/types';
 import { ACTIVE, BadRequest, type Board } from './board';
 import type { Utterance } from './db';
-import type { AgentRuntime, AgentTool } from './runtime';
+import { type AgentRuntime, type AgentTool, waitQuietly } from './runtime';
 import type { Workers } from './workers';
 import { type Change, RECHECK_MS, shortageOf, type Workspaces } from './workspaces';
 import { LANGUAGE_NAMES } from '../core/locale';
@@ -222,6 +222,7 @@ export class Koordinator {
     await readSession(this.o.runtime, {
       cwd: this.o.home(),
       role: 'koordinator',
+      onLimit: waitQuietly,
       system: REVIEW_SYSTEM(this.language),
       tools: (finish): AgentTool[] => [
         {
@@ -354,6 +355,7 @@ export class Koordinator {
     await readSession(this.o.runtime, {
       cwd: card ? this.o.repoFor(card).path : this.o.home(),
       role: 'koordinator',
+      onLimit: waitQuietly,
       system: LEARN_SYSTEM(this.language),
       tools: (finish): AgentTool[] => [
         {
@@ -426,14 +428,14 @@ export class Koordinator {
       this.startNow(cardId, this.o.board.t.koordinator.nothingRuns);
       if (this.o.board.item(cardId)?.state !== 'working') return;
       try {
-        const scope = await this.estimate(card, []);
+        const scope = await this.estimate(card, [], [], waitQuietly);
         this.o.board.work(cardId, { scope: JSON.stringify({ files: scope.files, reason: scope.reason }) });
       } catch {}
       return;
     }
     let scope: Scope;
     try {
-      scope = await this.estimate(card, active, ahead);
+      scope = await this.estimate(card, active, ahead, (until) => this.o.board.waitsForLimit({ card: cardId }, until));
     } catch (e) {
       this.o.board.log(cardId, 'error', 'obeya', this.o.board.t.koordinator.estimateFailed(messageOf(e)));
       scope = { files: [], conflictsWith: [], reason: '' };
@@ -631,6 +633,7 @@ export class Koordinator {
     await readSession(this.o.runtime, {
       cwd: this.o.repoFor(card).path,
       role: 'chores',
+      onLimit: (until) => this.o.board.waitsForLimit({ card: card.id }, until),
       system: NAME_SYSTEM(this.language),
       tools: (finish) => [
         {
@@ -652,12 +655,14 @@ export class Koordinator {
 
   // ---------------------------------------------------------------- the estimate
 
-  private async estimate(card: Item, active: Item[], ahead: Item[] = []): Promise<Scope> {
+  /** `onLimit`: where the estimate shows that it waits for the usage limit. */
+  private async estimate(card: Item, active: Item[], ahead: Item[], onLimit: (until: number | undefined) => void): Promise<Scope> {
     let scope: Scope | undefined;
     const tags = new Map([...active, ...ahead].map((a, n) => [`K${n + 1}`, a.id]));
     const error = await readSession(this.o.runtime, {
       cwd: this.o.repoFor(card).path,
       role: 'koordinator',
+      onLimit,
       system: SYSTEM(this.language),
       tools: (finish) => [
         {
@@ -688,6 +693,10 @@ export class Koordinator {
     const error = await readSession(this.o.runtime, {
       cwd: this.o.repoFor(project).path,
       role: 'koordinator',
+      // the workstreams the owner started wait with it
+      onLimit: (until) => {
+        for (const w of batch) this.o.board.waitsForLimit({ card: w.id }, until);
+      },
       system: SCHEDULE_SYSTEM(this.language),
       tools: (finish) => [
         {
@@ -930,11 +939,20 @@ const INPUTS: Record<OwnerInput, string> = {
 /**
  * A read-only session that reads `brief` (and `images`) and answers through its tools: it ends with
  * its turn, or once a tool calls `finish`. It settles with the error that ended it before a tool
- * called `finish`, if one did.
+ * called `finish`, if one did. With `onLimit` it waits for the account's usage limit instead of
+ * failing on it (`AgentSpec.onLimit`).
  */
 export function readSession(
   runtime: AgentRuntime,
-  o: { cwd: string; system: string; tools: (finish: (r: string) => string) => AgentTool[]; brief: string; role: AgentRole; images?: string[] },
+  o: {
+    cwd: string;
+    system: string;
+    tools: (finish: (r: string) => string) => AgentTool[];
+    brief: string;
+    role: AgentRole;
+    images?: string[];
+    onLimit?: (until: number | undefined) => void;
+  },
 ): Promise<string | undefined> {
   return new Promise((resolve) => {
     let done = false;
@@ -955,6 +973,7 @@ export function readSession(
         role: o.role,
         system: o.system,
         tools: o.tools(finish),
+        ...(o.onLimit ? { onLimit: o.onLimit } : {}),
         onEvent: (e) => {
           if (e.type === 'idle' || e.type === 'error') {
             session.close();

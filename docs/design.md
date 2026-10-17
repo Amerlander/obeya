@@ -765,6 +765,24 @@ words on its handover is still at them: the card does not wait for the owner mea
 status line too and goes on at the reset without waiting for that work to wake it; it stays busy
 while the work runs, which a restart would cut off.
 
+The other agents wait for the limit the same way (`withLimitWait` in `runtime.ts`, which an agent
+joins with `onLimit`): a look-up and a project agent, a Question card's agent, an idea's exploration
+agent, the reviser of a proposal, and the Koordinator's own small jobs (naming a card, checking a
+queued card or a project's workstreams, the learner, the Rückschau, the Arbeitsrückschau). The turn
+the limit stopped is neither an error nor over: ten seconds after the reset (with a worker's retries
+when the time is unknown or passes) the session is told to go on where it stopped, and the owner's
+words meanwhile wait for its next turn as during any other. Where the agent waits says until when:
+under a looked-up question in the sheet „Nutzungslimit · schlägt das um 19:20 von selbst nach“ (on
+the card it was asked on, a line in its conversation), and on a card, on its face, beside its state
+and in the agent's bubble, „Nutzungslimit · weiter um 19:20“ (`Item.limitedUntil`, `Talk.limitedUntil`,
+held in memory). After a restart they are resumed with their work (a question looked up, an idea's
+reply, a proposal being reworked, a card being named or checked), run into the limit again and wait
+anew; ending the session (pausing the agent, parking the idea) ends the wait. Two do not wait: a demo
+page shared without the worker's text, which takes the card's title and the summary's start as
+before, and the draft of a wish, whose owner is waiting for it in the dialog (see „Wishes for
+Obeya's makers“). Workers and Obeya's chat handle the limit themselves, as described above and in
+„Confirmation and undo“.
+
 A turn that ends while the worker's own background work runs (a demo render, a test suite, a watcher
 it started) is no such turn: the work wakes the worker when it finishes or fires, so Obeya waits,
 also after the landing, where an ended turn would otherwise finish the card and take the work's
@@ -1983,6 +2001,13 @@ archived card has no field.
   stopped its app and never went on by itself. A limit hit while background work ran showed only
   once that work ended, and the worker went on only when it woke it. The limit's note folded into
   the next message, which put it under the reply to words the owner wrote after the reset.
+- **Look-ups, ideas and the other agents wait for the usage limit too** (2026-10-17). Before, only
+  workers and Obeya's chat did: a looked-up question was answered with „Ich konnte die Frage nicht
+  beantworten (You've hit your session limit …)“, an idea's turn ended in that error, a proposal's
+  rework failed, a card started without a title was named after its text's start, a queued card
+  started without its check, and the draft of a wish stood as the owner wrote it for good.
+  Each now waits where it shows and goes on by itself; the shared wrapper does the waiting, so an
+  agent added later waits by passing `onLimit`.
 - **A finishing card looks awake** (2026-10-13). Before, it faded at the landing like a finished
   card, its state line in the pale live ink ("Agent erledigt den Rest", which suggested a small
   remainder, where a release still has tag, build and uploads to do), and a workstream became a
@@ -2366,7 +2391,10 @@ already is reworked with the new words. The body ends with one line about this O
 the system, and `app`, `checkout <commit>` or `binary`. Nothing from cards, repositories, paths or
 the conversation goes in unless the owner wrote it, or it is the request Obeya could not do and its
 answer. Without a written issue (not logged in, say) the owner's own words stand in the draft, with
-a line that says so. Title and body stand editable, exactly as they go out, above the line that the
+a line that says so. When it was the usage limit, the line says when Obeya writes the draft by itself
+(„Das Nutzungslimit ist erreicht: Obeya schreibt den Entwurf um 19:20 von selbst …“), and the page
+does that once the limit lifts, after a reload too (the draft keeps the words); a draft the owner
+edits meanwhile stays as they made it. Title and body stand editable, exactly as they go out, above the line that the
 issue appears publicly on GitHub under the owner's account.
 
 „Auf GitHub öffnen ↗“ opens GitHub's page for a new issue, prefilled (`issues/new?title=…&body=…`),

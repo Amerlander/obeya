@@ -11,7 +11,7 @@ import { type CardEvent, PROPOSED_SETTINGS, type ProposedSetting } from '../core
 import type { Board } from './board';
 import type { FrictionNote } from './db';
 import { readSession } from './koordinator';
-import type { AgentRuntime, AgentTool } from './runtime';
+import { type AgentRuntime, type AgentTool, waitQuietly } from './runtime';
 import { remote } from './hosts';
 import { type Excerpt, excerptOf, excerptText, findTranscript } from './transcript';
 import { type Language, LANGUAGE_NAMES } from '../core/locale';
@@ -128,6 +128,8 @@ export class WorkRetro {
       cwd: this.o.pathFor(card.repo),
       system: NOTES_SYSTEM(LANGUAGE_NAMES[this.o.board.language()]),
       role: 'chores',
+      // nobody waits for it
+      onLimit: waitQuietly,
       brief: `The card: "${card.title}".${settings ? `\n\n${settings}` : ''}\n\nThe excerpt of its worker's ${runs.length > 1 ? `${runs.length} runs` : 'run'}:\n\n${text}`,
       tools: (finish): AgentTool[] => [
         {
@@ -200,6 +202,7 @@ export class WorkRetro {
       cwd: this.o.pathFor(repo),
       system: RETRO_SYSTEM(b.language()),
       role: 'chores',
+      onLimit: waitQuietly,
       brief: [
         `The repository: ${name}. The friction noted on its cards since the last Arbeitsrückschau, card by card:\n\n${byCard.join('\n\n')}`,
         settings,

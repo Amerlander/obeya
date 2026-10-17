@@ -41,6 +41,8 @@ const de = {
   },
   answer: {
     failed: (why: string) => `Ich konnte die Frage nicht beantworten (${why}).`,
+    /** On the card the question was asked on: the usage limit stopped the look-up, which goes on by itself. */
+    limited: (when: string) => `Das Nutzungslimit ist erreicht. Obeya schlägt das ${when} von selbst nach.`,
     asIdea: 'Als Idee weiter besprochen.',
   },
   tool: {
@@ -361,6 +363,7 @@ const en: Messages = {
   },
   answer: {
     failed: (why: string) => `I could not answer the question (${why}).`,
+    limited: (when: string) => `The usage limit is reached. Obeya looks this up by itself ${when}.`,
     asIdea: 'Discussed further as an idea.',
   },
   tool: {

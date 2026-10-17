@@ -117,6 +117,12 @@ export interface AgentSpec {
    * call is refused, as in any session without someone to ask.
    */
   askOwner?: (request: PermissionRequest, signal: AbortSignal) => Promise<PermissionAnswer>;
+  /**
+   * The agent waits for the account's usage limit instead of failing on it (`withLimitWait`): a turn
+   * the limit stops is neither an error nor over, and this hears when the agent goes on by itself,
+   * and nothing once it does or its session ends. Without it, the turn fails with the error's `limit`.
+   */
+  onLimit?: (until: number | undefined) => void;
   onEvent: (e: AgentEvent) => void;
 }
 
@@ -180,6 +186,67 @@ export function withRepoTrust(runtime: AgentRuntime, untrusted: (cwd: string) =>
       const notes = !remote(spec.cwd) && existsSync(file) ? readFileSync(file, 'utf8').trim() : '';
       const system = notes ? `${spec.system}\n\nThe repository's CLAUDE.md:\n\n${notes}` : spec.system;
       return runtime.start({ ...spec, untrusted: true, system }, firstMessage, images);
+    },
+  };
+}
+
+/** What an agent the usage limit stopped is told once it lifts. */
+export const LIMIT_LIFTED = 'The usage limit that stopped your last turn has reset. Go on where you stopped.';
+
+/** For an agent that waits for the usage limit with nowhere to show it (`AgentSpec.onLimit`): nobody waits for its result. */
+export const waitQuietly = () => {};
+
+/**
+ * A runtime whose agents with `onLimit` wait for the account's usage limit: the turn it stopped
+ * waits, without its error and its end, and `margin` after the limit lifts (`limitLifts`) the
+ * session is told to go on where it stopped; one that runs into the limit again waits anew.
+ */
+export function withLimitWait(runtime: AgentRuntime, margin = 10_000): AgentRuntime {
+  return {
+    start(spec, firstMessage, images) {
+      const onLimit = spec.onLimit;
+      if (!onLimit) return runtime.start(spec, firstMessage, images);
+      let lifts: ReturnType<typeof setTimeout> | undefined;
+      // the end of the turn the limit stopped is not the end of its work
+      let stopped = false;
+      let closed = false;
+      const session: AgentSession = runtime.start(
+        {
+          ...spec,
+          onEvent: (e) => {
+            if (e.type === 'error' && e.limit) {
+              stopped = true;
+              if (closed) return;
+              const until = limitLifts(e.limit, margin);
+              clearTimeout(lifts);
+              // a timer runs at most about 24 days
+              lifts = setTimeout(
+                () => {
+                  lifts = undefined;
+                  onLimit(undefined);
+                  session.send(LIMIT_LIFTED);
+                },
+                Math.min(Math.max(0, until - Date.now()), 2 ** 31 - 1),
+              );
+              onLimit(until);
+            } else if (e.type === 'idle' && stopped) stopped = false;
+            else spec.onEvent(e);
+          },
+        },
+        firstMessage,
+        images,
+      );
+      return {
+        send: (text, images) => session.send(text, images),
+        close: () => {
+          closed = true;
+          if (lifts) onLimit(undefined);
+          clearTimeout(lifts);
+          lifts = undefined;
+          session.close();
+        },
+        done: session.done,
+      };
     },
   };
 }

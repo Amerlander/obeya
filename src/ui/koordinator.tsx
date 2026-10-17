@@ -221,7 +221,7 @@ function Conversation({ talk, fresh, items, onOpen, draft }: { talk: Talk[]; fre
                 {/* a question it looked up: the answer follows the acknowledgement */}
                 {x.question && x.answer === undefined && (
                   <Msg by="koordinator" className="thinking" who={t.author.koordinator}>
-                    <div className="hint">{t.koordinator.lookingUp}</div>
+                    <div className="hint">{x.limitedUntil ? t.koordinator.lookUpLimited(clock(x.limitedUntil)) : t.koordinator.lookingUp}</div>
                   </Msg>
                 )}
                 {x.answer !== undefined && (

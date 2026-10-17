@@ -37,6 +37,8 @@ export interface Briefing {
   images?: string[];
   /** Ends the turn at once, its session with it (the owner paused the agent): the answer fails with `Interrupted`. */
   signal?: AbortSignal;
+  /** Where the answer shows that it waits for the account's usage limit, until when; nothing once it goes on (`AgentSpec.onLimit`). */
+  onLimit: (until: number | undefined) => void;
 }
 
 /** A turn that answered nothing because it was ended on purpose (`Briefing.signal`). */
@@ -69,6 +71,7 @@ export function inform(b: Briefing): Promise<OwnerAnswer> {
         ...(b.resume ? { resume: b.resume } : {}),
         ...(b.dir ? { dirs: [b.dir] } : {}),
         system: b.system,
+        onLimit: b.onLimit,
         tools: [
           {
             name: 'answer_owner',

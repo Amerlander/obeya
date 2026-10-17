@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { withLimitWait } from './runtime';
 import { FakeRuntime } from './testing';
 import { footerOf, writeWish } from './wish';
 
@@ -38,6 +39,16 @@ test('without a written issue, the owner’s own words stand in the draft', asyn
   await settle();
   runtime.last.emit({ type: 'error', message: 'not logged in' });
   expect(await draft).toEqual({ title: 'Die Leiste soll sich ausblenden lassen', body: 'Die Leiste soll sich ausblenden lassen\n\nF', raw: true });
+});
+
+test('stopped by the usage limit, the draft is the owner’s words, and says when the job can write it', async () => {
+  const runtime = new FakeRuntime();
+  const draft = writeWish(withLimitWait(runtime, 10), { said: 'Die Leiste soll sich ausblenden lassen' }, 'F');
+  await settle();
+  const resetsAt = Date.now() + 60_000;
+  runtime.last.emit({ type: 'error', message: "You've hit your session limit · resets 2:40pm (Europe/Berlin)", limit: { resetsAt } });
+  expect(await draft).toEqual({ title: 'Die Leiste soll sich ausblenden lassen', body: 'Die Leiste soll sich ausblenden lassen\n\nF', raw: true, limitedUntil: new Date(resetsAt + 10).toISOString() });
+  expect(runtime.last.closed).toBe(true);
 });
 
 test('the footer says how this Obeya runs', () => {

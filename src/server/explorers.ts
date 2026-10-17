@@ -231,6 +231,8 @@ export class Explorers {
         tools: this.tools(card.id, live),
         contextUpdate: () => [this.buildNote(card.id, live), this.preferencesUpdate(live)].filter(Boolean).join('\n\n') || undefined,
         ...(resume ? { resume } : {}),
+        // the idea's agent waits for the usage limit, on the card, and the owner's words wait with it
+        onLimit: (until) => this.o.board.waitsForLimit({ card: card.id }, until),
         onEvent: (e) => this.onEvent(card.id, live, e),
       },
       message,

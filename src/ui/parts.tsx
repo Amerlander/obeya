@@ -109,6 +109,7 @@ export function CardFace({ item, where, underway, since }: { item: Item; where?:
         ? t.pr.short(item.pr.number, item.pr.checks.filter((c) => c.state === 'failure').length, item.pr.conflict, item.pr.ready, item.pr.held?.score)
         : undefined;
   const meta =
+    (item.limitedUntil ? t.limitedUntil(clock(item.limitedUntil)) : undefined) ??
     (item.kind === 'question' && item.thread ? t.question.count(item.thread.answers, item.thread.files) : undefined) ??
     item.question?.text ??
     (item.idea?.yourTurn ? item.idea.questions[0]?.text : undefined) ??

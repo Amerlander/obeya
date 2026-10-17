@@ -25,11 +25,19 @@ export class ProjectAgents {
   /**
    * Answers a question the owner asked about the project or one of its workstreams, in the project's
    * session. `dir`: the output directory of the looked-up thread, which the answer's files are in;
-   * `signal` ends the turn at once.
+   * `signal` ends the turn at once; `onLimit` shows where it waits for the usage limit.
    */
-  inform(project: Item, message: string, onTool?: (name: string, input: Record<string, unknown>) => void, dir?: string, signal?: AbortSignal): Promise<OwnerAnswer> {
+  inform(
+    project: Item,
+    message: string,
+    onLimit: (until: number | undefined) => void,
+    onTool?: (name: string, input: Record<string, unknown>) => void,
+    dir?: string,
+    signal?: AbortSignal,
+  ): Promise<OwnerAnswer> {
     return this.queued(project, () =>
       inform({
+        onLimit,
         runtime: this.runtime,
         cwd: this.repoPath(),
         resume: this.board.row(project.id).session_id ?? undefined,

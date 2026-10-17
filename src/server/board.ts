@@ -1101,6 +1101,12 @@ export class Board {
       return background ? { ...i, inTurn: true, ...(background.length ? { background } : {}) } : i;
     });
     items = this.withWaitingSince(items);
+    const limited = (key: string) => {
+      const until = this.limits.get(key);
+      return until ? { limitedUntil: until } : {};
+    };
+    if (this.limits.size) items = items.map((i) => ({ ...i, ...limited(`card:${i.id}`) }));
+    const talk = this.store.talk(this.canvas.id, SHEET_TALK, true);
     const reshare = this.reshare();
     const pools = this.clonePools();
     const planDirs = this.planDirs(all);
@@ -1116,7 +1122,7 @@ export class Board {
       groups: this.store.groups(this.canvas.id).map(toGroup),
       preferences: this.store.preferences(this.canvas.id, ['proposed', 'active']),
       ...(settingProposals.length ? { settingProposals } : {}),
-      talk: this.store.talk(this.canvas.id, SHEET_TALK, true),
+      talk: this.limits.size ? talk.map((x) => ({ ...x, ...limited(`talk:${x.id}`) })) : talk,
       ...(pools.length ? { workspaces: pools } : {}),
       ...(reshare ? { reshare } : {}),
       ...(planDirs.length ? { planDirs } : {}),
@@ -1192,6 +1198,25 @@ export class Board {
         },
       ];
     });
+  }
+
+  /**
+   * When the agents that wait for the account's usage limit go on by themselves (ISO time), by
+   * `card:<id>` and `talk:<id>`. Held in memory: after a restart they run into the limit again.
+   */
+  private limits = new Map<string, string>();
+
+  /**
+   * The agent of a card (other than its worker), or the one looking up the question of an exchange
+   * in the sheet, waits for the usage limit until `until`; nothing once it goes on.
+   */
+  waitsForLimit(at: { card: string } | { talk: number }, until: number | undefined) {
+    const key = 'card' in at ? `card:${at.card}` : `talk:${at.talk}`;
+    const iso = until === undefined ? undefined : new Date(until).toISOString();
+    if (this.limits.get(key) === iso) return;
+    if (iso) this.limits.set(key, iso);
+    else this.limits.delete(key);
+    this.changed();
   }
 
   /** Who says which cards' workers are in a turn, each with its background work: one per repository's workers (`showTurns`). */
