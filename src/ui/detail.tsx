@@ -27,7 +27,7 @@ import { useStickToEnd } from './stickToEnd';
 import { dismissPlace, type Place, seekTo, showsVersions, usePlace, videoOf, watch } from './spot';
 import { SnoozeLine, SnoozeMenu, snoozeWho } from './snooze';
 import { becomesLabel, clock as time, errorText, failText, shortDay, stateLabel, t } from './strings';
-import { agentWorks, demoHandover, koordinatorReads, ownerField, parseQuestion, snoozeLine, talkAlone, talkTurns, type Turn, waitsFirstStart, withoutOpen, worked as isWorked } from './talk';
+import { agentWorks, cardTalk, demoHandover, koordinatorReads, ownerField, parseQuestion, snoozeLine, talkAlone, type Turn, waitsFirstStart, worked as isWorked } from './talk';
 import { PageChangeList } from './page-changes';
 import { WishReplyLink } from './wish';
 
@@ -960,9 +960,8 @@ function Conversation({
   const asked = JSON.stringify(item.idea?.questions ?? asking ?? []);
   const onScroll = useStickToEnd(box, `${events?.at(-1)?.id}|${working}|${paused}|${asked}`, events);
   // a proposal's open questions stand at the end, where they are answered, rather than where they were asked
-  const open = proposal && !working ? (item.proposal?.questions ?? []) : [];
-  const openKey = JSON.stringify(open);
-  const turns = useMemo(() => (events ? talkTurns(withoutOpen(events, open), { asking, over: !working && !paused, paused }) : null), [events, asked, working, paused, openKey]);
+  const openKey = JSON.stringify(proposal && !working ? (item.proposal?.questions ?? []) : []);
+  const turns = useMemo(() => (events ? cardTalk(item, events, past) : null), [events, asked, working, paused, openKey]);
   const byId = useMemo(() => new Map(events?.map((e) => [e.id, e])), [events]);
   const replyKnown = useReplyKnown();
   if (!events || !turns) return null;

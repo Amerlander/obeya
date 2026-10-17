@@ -4546,7 +4546,10 @@ is about (title, text or brief, demo) and the decisions, and is the only thing o
 The card's conversation is not on it but in the same panel as Obeya's, with the same grip, Back and
 Esc, keyboard handling and confirmations above the field: the button left of the microphone opens
 it, with a number for what waits there (the messages since the owner last had the conversation open
-or last wrote there, plus the questions open), and its address is `?card=<id>&talk`. Every card kind
+or last wrote there, plus the questions open). Only the messages the conversation shows count, not
+the agent's words between its steps that fold under them (`unseen` in `src/ui/talk.ts`, over
+`cardTalk`, the conversation as the card shows it); until 2026-10-17 those counted too, and a card
+with two handovers showed 81, and its address is `?card=<id>&talk`. Every card kind
 gets there the same way: the talk column of `Split` (and the Question card's conversation) goes into
 the panel through a context the phone view provides (`TalkElsewhere` in `src/ui/detail.tsx`, a React
 portal), so the canvas is untouched and no card kind has code of its own for it. A card that waits

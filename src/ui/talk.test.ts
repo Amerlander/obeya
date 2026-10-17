@@ -453,17 +453,23 @@ test("the questions waiting for the owner: an idea's until its agent thinks agai
   expect(openQuestions({ state: 'working' } as Item)).toEqual([]);
 });
 
-test("a card's messages count as unseen after the last one seen, and never before the owner's own words", () => {
+test("a card's messages count as unseen after the last one seen, its words between steps not, and never before the owner's own words", () => {
   const began = ev('say', 'worker', 'Ich fange an.');
-  const asked = ev('say', 'owner', 'Wie weit bist du?');
   const step = ev('activity', 'worker', 'Liest src/a.ts');
+  const between = ev('say', 'worker', 'Der Test fängt den Fehler.');
+  const status = ev('report', 'worker', 'Fix committet');
+  const handover = ev('review', 'worker', 'Fertig.');
+  const work = [began, step, between, status, handover];
+  const count = (events: CardEvent[], seen?: number) => unseen(talkTurns(events, { over: true }), events, seen);
+  expect(count(work)).toBe(1);
+  expect(count(work, began.id)).toBe(1);
+  expect(count(work, handover.id)).toBe(0);
+  const asked = ev('hint', 'owner', 'Wie weit bist du?');
   const reply = ev('say', 'worker', 'Fast fertig.');
-  const handover = ev('report', 'worker', 'Fertig.');
-  const all = [began, asked, step, reply, handover];
-  expect(unseen(all)).toBe(2);
-  expect(unseen(all, reply.id)).toBe(1);
-  expect(unseen(all, handover.id)).toBe(0);
-  expect(unseen([...all, ev('say', 'owner', 'Danke')])).toBe(0);
+  const all = [...work, asked, reply];
+  expect(count(all)).toBe(1);
+  expect(count(all, reply.id)).toBe(0);
+  expect(count([...all, ev('hint', 'owner', 'Danke')])).toBe(0);
 });
 
 test('the snooze is a line, with what the agent did before it closed above it, and waking is a line too', () => {

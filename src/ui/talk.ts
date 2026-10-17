@@ -164,6 +164,19 @@ export function talkTurns(all: CardEvent[], opts: { asking?: Question; over?: bo
   return { shown, pending: steps, unread: all.filter((e) => e.unread), ...(asked ? { asked } : {}) };
 }
 
+/**
+ * A card's conversation as it shows: its question waiting for the owner at the end, a proposal's open
+ * questions where they are answered, and steps without a message settled once nobody works on it
+ * (`past`: nobody does any more).
+ */
+export function cardTalk(item: Item, events: CardEvent[], past = false): Talk {
+  const asking = item.state === 'waiting' && item.need === 'question' ? item.question : undefined;
+  const working = !past && agentWorks(item);
+  const paused = !past && !!item.paused && !item.snoozed;
+  const open = item.state === 'proposal' && !working ? (item.proposal?.questions ?? []) : [];
+  return talkTurns(withoutOpen(events, open), { asking, over: !working && !paused, paused });
+}
+
 /** Whether the worker replies after its words at `i`, before the owner says anything more: then those words were a step on the way to the reply. */
 function repliesLater(events: CardEvent[], i: number): boolean {
   for (const e of events.slice(i + 1)) {
@@ -319,17 +332,17 @@ export function openQuestions(i: Item): Question[] {
   return (field === 'answer' || field === 'demo') && i.question ? [i.question] : [];
 }
 
-/** What an agent (or Obeya) said on a card, as against its steps and the owner's own words. */
-const said = (e: CardEvent) => e.author !== 'owner' && ['say', 'report', 'question', 'answer', 'talk', 'review'].includes(e.kind);
-
 /**
- * The messages of a card's conversation the owner has not seen: those after the last one they saw
- * (`seen`, an event id), and never those before their own last words, which they wrote having read them.
+ * The messages of a card's conversation the owner has not seen: those it shows (`talk`, not the words
+ * folded into a message's steps) after the last event they saw (`seen`, an event id), and never those
+ * before their own last words, which they wrote having read them. Until 2026-10-17 every word an agent
+ * said counted, also those between its tool calls, and a card with two handovers counted 81.
  */
-export function unseen(events: CardEvent[], seen = -1): number {
+export function unseen(talk: Talk, events: CardEvent[], seen = -1): number {
   const spoke = events.findLast((e) => e.author === 'owner')?.id ?? -1;
   const from = Math.max(seen, spoke);
-  return events.filter((e) => e.id > from && said(e)).length;
+  const message = (x: Turn) => !x.line && !x.quiet && x.e.author !== 'owner' && x.e.id > from;
+  return talk.shown.flatMap((x) => [x, ...(x.then ? [x.then] : [])]).filter(message).length;
 }
 
 /**

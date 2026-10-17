@@ -19,7 +19,7 @@ import { settle } from './panelHeight';
 import { CardFace, cardClass, shownState, TalkIcon } from './parts';
 import { videoOf } from './spot';
 import { clock, failText, forTouch, shortDay, t } from './strings';
-import { openQuestions, unseen } from './talk';
+import { cardTalk, openQuestions, unseen } from './talk';
 import { tellers, useAck } from './tell';
 import { HoldToTalk, PushToTalk, ToldList, usePushToTalk, useTold } from './voice';
 
@@ -717,7 +717,7 @@ function CardTalkButton({ item, open, shown, onClick }: { item: Item; open: bool
     markSeen(item.id, last);
     setSeen(last);
   }, [open, last]);
-  const messages = events && !open ? unseen(events, seen) : 0;
+  const messages = events && !open ? unseen(cardTalk(item, events), events, seen) : 0;
   const questions = openQuestions(item).length;
   return <TalkButton label={t.phone.cardTalk} shown={shown} n={messages + questions} count={t.phone.cardWaiting(messages, questions)} onClick={onClick} />;
 }
