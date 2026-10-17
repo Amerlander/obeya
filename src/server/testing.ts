@@ -179,7 +179,9 @@ HOME=${JSON.stringify(join(dir, 'home'))}; export HOME; mkdir -p "$HOME"
 [ -z "$fwd" ] && exec sh -c "$*"
 echo $$ >> ${JSON.stringify(join(dir, 'forwards'))}
 ${JSON.stringify(process.execPath)} ${JSON.stringify(proxy)} "$fwd" & proxy=$!
-sh -c "$*" <&0 & command=$!
+# a command in the background reads /dev/null in dash, even with <&0: stdin goes by another fd
+exec 3<&0
+sh -c "$*" <&3 3<&- & command=$!
 trap 'kill $proxy $command 2>/dev/null; exit 255' TERM INT
 wait $command
 kill $proxy 2>/dev/null

@@ -1774,8 +1774,9 @@ only when that changes or the clones are in place) and registers each clone as t
 
 A workspace's name says where it is, so every git call in it (`git`, `gitAsync`, `exists`), the
 stack commands and the worker's session run there through `ssh` without the callers
-knowing: `ssh <target> sh -c '…'` with the installers' directories on its `PATH` (the host's own
-`~/.zshenv` adds the rest), one shared connection where the platform has `ControlMaster` (not
+knowing: `ssh <target> exec sh -c '…'` with the installers' directories on its `PATH` (the host's own
+`~/.zshenv` adds the rest; `exec`, so a login shell that forks for a command, as dash does, does not
+stay as the session's parent with another pid), one shared connection where the platform has `ControlMaster` (not
 Windows; its sockets in `/tmp/obeya-ssh-<uid>`, the owner's alone, since whoever reaches a socket
 uses its connection), `BatchMode` so nothing prompts, and keep-alives that notice a dropped link within 45 s.
 
@@ -3378,7 +3379,8 @@ and "Nicht mehr teilen". Nothing is replaced on its own.
 Sharing belongs to a demo version, not to the card: a card has one page under one link, and the
 page holds the versions the owner shared, stacked in order of handover. The first one shared is on
 top with the page's title and text; each later one is below it as „Ergänzung vom 16.10., 13:37“
-(„Addendum of …“), the time of its handover, with its own title, text, chapters and video or
+(„Addendum of Oct 16 at 13:37“), the time of its handover (its parts joined by Obeya, not by the
+platform's ICU, which joins them differently on macOS and Linux), with its own title, text, chapters and video or
 artifact; with two or more, a list of them stands under the title. A page with one version looks as
 it did before (until 2026-10-16 a page held one demo), so those pages are not outdated by it. A
 later demo often only corrects or explains one detail, and standing below the one it corrects it

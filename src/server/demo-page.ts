@@ -43,7 +43,10 @@ export const PAGE_WORDS: Record<
     overview: 'Videos und Auswertungen zu Änderungen, die neuesten zuerst.',
     noDemos: 'Noch keine Demos geteilt.',
     first: 'Demo',
-    addendum: (at, timeZone) => `Ergänzung vom ${new Date(at).toLocaleString('de-DE', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', timeZone })}`,
+    addendum: (at, timeZone) => {
+      const t = timeParts(at, 'de-DE', 'numeric', timeZone);
+      return `Ergänzung vom ${t.day}.${t.month}., ${t.hour}:${t.minute}`;
+    },
   },
   en: {
     locale: 'en-US',
@@ -57,9 +60,23 @@ export const PAGE_WORDS: Record<
     overview: 'Videos and analyses of changes, the newest first.',
     noDemos: 'No demos shared yet.',
     first: 'Demo',
-    addendum: (at, timeZone) => `Addendum of ${new Date(at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone })}`,
+    addendum: (at, timeZone) => {
+      const t = timeParts(at, 'en-US', 'short', timeZone);
+      return `Addendum of ${t.month} ${t.day} at ${t.hour}:${t.minute}`;
+    },
   },
 };
+
+/**
+ * The day, month, hour and minute of a time in a time zone (the machine's without one), each as the
+ * locale writes it; the page joins them itself, since how a platform's ICU data joins them differs
+ * (macOS says "Jan 15 at 12:00", Linux "Jan 15, 12:00").
+ */
+function timeParts(at: string, locale: string, month: 'numeric' | 'short', timeZone?: string): Record<'day' | 'month' | 'hour' | 'minute', string> {
+  const f = new Intl.DateTimeFormat(locale, { month, day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', ...(timeZone ? { timeZone } : {}) });
+  const parts = Object.fromEntries(f.formatToParts(new Date(at)).map((p) => [p.type, p.value]));
+  return { day: parts.day ?? '', month: parts.month ?? '', hour: parts.hour ?? '', minute: parts.minute ?? '' };
+}
 
 /** What a page shows of every demo, a video or an HTML artifact. */
 interface PageParts {

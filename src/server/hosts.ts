@@ -132,7 +132,9 @@ export class SshHost {
   /**
    * The argv of `ssh` running `command` (words, or a shell line) there in `cwd`: through `sh`, with
    * the installers' directories on its PATH; with `env`, read as the first line of stdin, so that
-   * no secret shows in a process list.
+   * no secret shows in a process list. `sh` replaces the login shell there rather than running
+   * under it (dash, say, forks for it), so that a session's pid is the one ssh started and a signal
+   * to it reaches the command.
    */
   argv(command: string[] | string, o: { cwd?: string; env?: boolean; forward?: string; local?: string } = {}): string[] {
     const line = typeof command === 'string' ? command : `exec ${command.map(sh).join(' ')}`;
@@ -146,7 +148,7 @@ export class SshHost {
       .join(' ');
     // a forward from here goes on a connection of its own, which ends with it rather than with the shared one
     const forwards = [...(o.forward ? ['-R', o.forward] : []), ...(o.local ? ['-o', 'ExitOnForwardFailure=yes', '-L', o.local] : [])];
-    return [this.o.program ?? 'ssh', ...this.options(!!o.local), ...forwards, this.o.ssh, `sh -c ${sh(script)}`];
+    return [this.o.program ?? 'ssh', ...this.options(!!o.local), ...forwards, this.o.ssh, `exec sh -c ${sh(script)}`];
   }
 
   /** The environment line for a command in `cwd`: the GitHub login of the repository it is in. */
