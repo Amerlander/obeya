@@ -4552,9 +4552,11 @@ the agent's words between its steps that fold under them (`unseen` in `src/ui/ta
 with two handovers showed 81, and its address is `?card=<id>&talk`. Every card kind
 gets there the same way: the talk column of `Split` (and the Question card's conversation) goes into
 the panel through a context the phone view provides (`TalkElsewhere` in `src/ui/detail.tsx`, a React
-portal), so the canvas is untouched and no card kind has code of its own for it. A card that waits
-for answers to its questions (options to pick) opens with the panel up; otherwise the page shows
-first. Beside a demo video the panel is a half sheet and the page scrolls the video into the upper
+portal), so the canvas is untouched and no card kind has code of its own for it. A card at work
+(`working`) and one that waits for answers to its questions (options to pick) open with the panel
+up (`opensWithTalk` in `src/ui/talk.ts`): what its agent says, or what it asks, is what the owner
+opened it for; otherwise the page shows first. Until 2026-10-17 a working card opened on its page
+too, and the owner missed its conversation there. Beside a demo video the panel is a half sheet and the page scrolls the video into the upper
 half, so a comment at a place in the video („Hier kommentieren“ brings the panel up with the cursor
 in the field) is written while the video stays in view, with the place's chip and the pause on typing
 as on the canvas; its grip sets another height, as on Obeya's. Turned sideways the panel opens at

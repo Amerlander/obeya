@@ -333,6 +333,13 @@ export function openQuestions(i: Item): Question[] {
 }
 
 /**
+ * Whether the phone opens a card with its conversation up: while its agent works on it, what the
+ * agent says is what there is to see, and a card that waits for answers to its questions shows them.
+ */
+export const opensWithTalk = (i: Item) => (i.state === 'working' && !i.archivedAt) || openQuestions(i).some((q) => q.options.length > 0);
+
+
+/**
  * The messages of a card's conversation the owner has not seen: those it shows (`talk`, not the words
  * folded into a message's steps) after the last event they saw (`seen`, an event id), and never those
  * before their own last words, which they wrote having read them. Until 2026-10-17 every word an agent

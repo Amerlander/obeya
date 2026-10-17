@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { type CardEvent, formatQuestion, type Item, pausable } from '../core/types';
-import { agentWorks, demoHandover, koordinatorReads, openQuestions, ownerField, parseQuestion, split, talkAlone, talkTurns, unseen, withoutOpen } from './talk';
+import { agentWorks, demoHandover, koordinatorReads, openQuestions, opensWithTalk, ownerField, parseQuestion, split, talkAlone, talkTurns, unseen, withoutOpen } from './talk';
 
 let id = 0;
 const ev = (kind: CardEvent['kind'], author: CardEvent['author'], text: string): CardEvent => ({ id: ++id, cardId: 'c', at: '2026-10-01T10:00:00Z', kind, author, text });
@@ -486,4 +486,13 @@ test('the snooze is a line, with what the agent did before it closed above it, a
   expect(t.pending).toEqual([now]);
   // a snoozed agent offers no pause, nor shows at work
   expect(pausable({ kind: 'task', state: 'working', inTurn: true, snoozed: { until: '2026-10-18T00:05:00Z', by: 'agent' } })).toBe(false);
+});
+
+test('the phone opens a card at work, or one whose questions offer options, with its conversation up', () => {
+  expect(opensWithTalk({ state: 'working' } as Item)).toBe(true);
+  expect(opensWithTalk({ state: 'working', archivedAt: '2026-10-17T10:00:00Z' } as Item)).toBe(false);
+  expect(opensWithTalk({ state: 'waiting', need: 'question', question: { text: 'A oder B?', options: ['A', 'B'] } } as Item)).toBe(true);
+  expect(opensWithTalk({ state: 'waiting', need: 'question', question: { text: 'Welcher Name?', options: [] as string[] } } as Item)).toBe(false);
+  expect(opensWithTalk({ state: 'planned' } as Item)).toBe(false);
+  expect(opensWithTalk({ state: 'done' } as Item)).toBe(false);
 });

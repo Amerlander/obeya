@@ -19,7 +19,7 @@ import { settle } from './panelHeight';
 import { CardFace, cardClass, shownState, TalkIcon } from './parts';
 import { videoOf } from './spot';
 import { clock, failText, forTouch, shortDay, t } from './strings';
-import { cardTalk, openQuestions, unseen } from './talk';
+import { cardTalk, openQuestions, opensWithTalk, unseen } from './talk';
 import { tellers, useAck } from './tell';
 import { HoldToTalk, PushToTalk, ToldList, usePushToTalk, useTold } from './voice';
 
@@ -439,12 +439,12 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
     }),
     [talk, talkEl],
   );
-  // a card that waits for answers to its questions opens with its conversation, once each time it is
-  // opened (a tap, a push, the page loading); Back or Forward to it leaves it as that step had it
+  // a card at work, or one that waits for answers to its questions, opens with its conversation, once
+  // each time it is opened (a tap, a push, the page loading); Back or Forward to it leaves it as that step had it
   useEffect(() => {
     if (!open || !opened || looked.current !== open) return;
     looked.current = null;
-    if (!talkRef.current && openQuestions(opened.item).some((q) => q.options.length > 0)) openTalk();
+    if (!talkRef.current && opensWithTalk(opened.item)) openTalk();
   }, [open, !!opened]);
   // beside a demo video the conversation is a half sheet, and the page shows the video above it
   const [half, setHalf] = useState(false);
