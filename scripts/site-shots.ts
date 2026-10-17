@@ -1,7 +1,7 @@
 // The screenshots on obeya.si (`site/img/`), taken again from a scratch Obeya in English: the Tipjar
 // app of the hero video as the repository, cards in the states the page talks about, and a demo of
 // a Tipjar change on the card whose demo the page shows, so that the picture is of a demo and not of
-// Obeya itself.
+// Obeya itself. The same wall on a phone (`phone.png`, `phone-demo.png`) shows the phone view.
 //
 //   bun scripts/site-shots.ts [--demo <dir>] [--keep | --stage-only]
 //
@@ -95,6 +95,7 @@ try {
   await page.locator('.card').first().waitFor();
   await page.waitForTimeout(1000);
   await shots(page, staged.cards as Record<string, string>);
+  await phoneShots(staged.url);
 } finally {
   await browser.close();
   if (!process.argv.includes('--keep')) execFileSync('bun', [join(ROOT, 'scripts', 'scratch-obeya.ts'), '--stop', String(PORT)]);
@@ -112,6 +113,15 @@ async function boxOf(page: Page, selector: string) {
 function card(id: string | undefined) {
   if (!id) throw new Error('a card the stage names was not staged');
   return `[data-id="${id}"]`;
+}
+
+/** Pauses the demo video in its second chapter (the change at work). */
+async function still(page: Page, video: string) {
+  await page.locator(video).evaluate(async (v: HTMLVideoElement, at: number) => {
+    v.pause();
+    v.currentTime = at;
+    await new Promise((r) => v.addEventListener('seeked', r, { once: true }));
+  }, chapters[1] ? chapters[1][0] + ((chapters[2]?.[0] ?? chapters[1][0] + 4) - chapters[1][0]) * 0.8 : 3);
 }
 
 async function shots(page: Page, cards: Record<string, string>) {
@@ -142,11 +152,7 @@ async function shots(page: Page, cards: Record<string, string>) {
   await page.click(card(cards.S));
   await page.locator('#panel video').waitFor();
   await page.waitForTimeout(1500);
-  await page.locator('#panel video').evaluate(async (v: HTMLVideoElement, at: number) => {
-    v.pause();
-    v.currentTime = at;
-    await new Promise((r) => v.addEventListener('seeked', r, { once: true }));
-  }, chapters[1] ? chapters[1][0] + ((chapters[2]?.[0] ?? chapters[1][0] + 4) - chapters[1][0]) * 0.8 : 3);
+  await still(page, '#panel video');
   await page.hover('#panel video');
   await page.waitForTimeout(500);
   await page.screenshot({ path: join(IMG, 'demo.png'), clip: around([await boxOf(page, '#panel')], 0) });
@@ -164,4 +170,26 @@ async function shots(page: Page, cards: Record<string, string>) {
   await page.screenshot({ path: join(IMG, 'voice.png'), clip: around([await boxOf(page, '#panel'), (await page.locator('.ptt-row').locator('..').boundingBox())!], 24, 150) });
   await page.keyboard.up('Space');
   console.log('voice.png');
+}
+
+// the phone view, at an iPhone's size: what waits for the owner, and the demo opened from there
+async function phoneShots(url: string) {
+  const phone = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  // granted, so the offer to turn notifications on stays off the list
+  await phone.grantPermissions(['notifications'], { origin: base });
+  const page = await phone.newPage();
+  await page.goto(url);
+  await page.locator('.ph-card').first().waitFor();
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: join(IMG, 'phone.png') });
+  console.log('phone.png');
+
+  await page.locator('.ph-card', { hasText: 'Split the bill' }).tap();
+  await page.locator('#ph-card video').waitFor();
+  await page.waitForTimeout(1500);
+  await still(page, '#ph-card video');
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: join(IMG, 'phone-demo.png') });
+  console.log('phone-demo.png');
+  await phone.close();
 }

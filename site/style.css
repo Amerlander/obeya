@@ -73,6 +73,11 @@ section { max-width: var(--wide); margin: 0 auto; padding: 0 24px; }
 .shot { border-radius: 3px; border: 1px solid var(--line); box-shadow: 0 18px 40px -24px rgba(28,27,25,.4); }
 .tag { display: inline-block; font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 2px; border-top: 3px solid; background: var(--card); box-shadow: var(--shadow); }
 .tag.blue { border-color: var(--blue); } .tag.amber { border-color: var(--amber); } .tag.green { border-color: var(--green); } .tag.grey { border-color: var(--grey); }
+.tag.pink { border-color: var(--pink); }
+.pillar p.aside { margin-top: 14px; font-size: 15px; }
+/* two phone screens side by side, with a phone's rounded corners */
+.phones { display: flex; justify-content: center; gap: 28px; }
+.phones .phone { width: min(300px, calc(50% - 14px)); border-radius: 22px; border: 6px solid var(--ink); }
 .legend { list-style: none; padding: 0; margin: 20px 0 0; display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 14px; font-weight: 500; }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 1px; margin-right: 8px; vertical-align: -1px; }
 .dot.blue { background: var(--blue); } .dot.amber { background: var(--amber); } .dot.green { background: var(--green); }
@@ -233,6 +238,8 @@ footer span { margin-right: auto; }
   .pillars { margin-top: 80px; gap: 72px; }
   .pillar { grid-template-columns: 1fr; gap: 24px; }
   .pillar.flip .text { order: 0; }
+  .phones { gap: 14px; }
+  .phones .phone { width: calc(50% - 7px); border-width: 4px; border-radius: 16px; }
   .how, .room { margin-top: 96px; }
   .room { grid-template-columns: 1fr; gap: 8px; padding-top: 48px; padding-bottom: 64px; }
   .room-mark { writing-mode: horizontal-tb; justify-self: start; font-size: 72px; margin-bottom: 16px; }

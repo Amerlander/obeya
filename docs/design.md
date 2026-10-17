@@ -5215,10 +5215,12 @@ From the top:
 
 - one sentence ("Direct coding agents like an engineering director": the picture of the one who
   decides and directs spoke to a test reader more than "like a team") and the hero video;
-- four pillars with screenshots (the canvas, voice, the demo the owner watches instead of testing
+- five pillars with screenshots (the canvas, voice, the demo the owner watches instead of testing
   the change themselves, as in a launch review: the audience reads no code anyway, so the contrast
   is with testing, not with code review; the order in which cards run: parallel where they can, one
-  after the other where they must);
+  after the other where they must; the phone, two screens of the phone view side by side, what
+  waits and the demo opened from there, with how the phone reaches Obeya: over the owner's own
+  private network, through no service of Obeya's);
 - "From idea to main" with a switch between the standard case, shown first, and the extended cases
   (two radios and CSS, no JavaScript): the standard case is the three steps most cards take, say the
   task, watch the demo, approve, each a card in its state, so that the page reads simple at first
@@ -5238,8 +5240,9 @@ It has Obeya's palette and type (see Visual identity): Newsreader, IBM Plex Sans
 three characters of 大部屋 (Noto Serif JP) are served from `site/fonts/` with their OFL licences, not
 from Google Fonts; logo and wordmark are copies from `src/ui/logo/`. The screenshots show the
 English interface on the Tipjar app of the hero video, the demo one a demo of a Tipjar change (so
-that the picture is of a demo, not of Obeya); `bun scripts/site-shots.ts` takes them all again from
-a scratch Obeya. Paths are relative, so the site works under sadilek.github.io/obeya as well.
+that the picture is of a demo, not of Obeya), the phone's the same wall in the phone view at an
+iPhone's size; `bun scripts/site-shots.ts` takes them all again from a scratch Obeya, the demo's
+chapters from its `chapters.vtt`. Paths are relative, so the site works under sadilek.github.io/obeya as well.
 
 `.github/workflows/pages.yml` publishes `site/` to GitHub Pages on every push to `main` on GitHub
 that touches `site/` or the workflow, and on demand from the Actions tab; Pages serves a branch only
