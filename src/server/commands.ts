@@ -979,7 +979,7 @@ export class Commander {
                 ? `${i.state}, its agent's session has ended; a note resumes it to answer`
                 : i.state;
       const paused = i.snoozed
-        ? `; snoozed by ${i.snoozed.by === 'agent' ? 'its agent' : 'the owner'} until ${when(i.snoozed.until)}${i.snoozed.why ? ` (then: ${clip(oneLine(i.snoozed.why), 120)})` : ''}${i.snoozed.waiting ? ': it waits for the owner again then, and is not on their list until then' : ': nothing of its agent runs until then; a note or wake wakes it earlier'}`
+        ? `; snoozed by ${i.snoozed.by === 'agent' ? 'its agent' : 'the owner'} until ${i.snoozed.on ? `the card „${i.snoozed.on.title}“ ${i.snoozed.on.state === 'done' ? 'is done' : 'waits for the owner'}${i.snoozed.until ? `, ${when(i.snoozed.until)} at the latest` : ''}` : when(i.snoozed.until!)}${i.snoozed.why ? ` (then: ${clip(oneLine(i.snoozed.why), 120)})` : ''}${i.snoozed.waiting ? ': it waits for the owner again then, and is not on their list until then' : ': nothing of its agent runs until then; a note or wake wakes it earlier'}`
         : i.paused
         ? '; its agent is paused by the owner: nothing of it runs until resume or what the owner says to it, which it goes on with'
         : i.inTurn && i.state !== 'working'

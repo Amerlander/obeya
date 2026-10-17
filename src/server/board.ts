@@ -10,7 +10,7 @@ import { existsSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { type Bounds, boundsOf, CARD_SIZE, freeSpotNear, GAP, type Place, PROJECT_HEAD, placeProjects, placeWorkstreams, projectSize, sizeOf, unionBounds } from '../core/layout';
 import type { Language } from '../core/locale';
-import { MESSAGES, type Messages } from '../core/messages';
+import { MESSAGES, type Messages, snoozeTerm } from '../core/messages';
 import { type KnownChange, missedChanges, PAGE_CHANGES, pagesVersion } from '../core/page-changes';
 import { allTicked, type OtherDoc, type PlanDoc } from '../core/plan-doc';
 import {
@@ -1192,10 +1192,10 @@ export class Board {
     return s ? (JSON.parse(s) as Snooze) : null;
   }
 
-  /** Snoozes the card until `until` (ISO), as `s` says, with the line in its conversation by whoever snoozed it (or changed the time). */
+  /** Snoozes the card until `until` (ISO) or the card it waits on, as `s` says, with the line in its conversation by whoever snoozed it (or changed the time). */
   snooze(cardId: string, s: Snooze, by: 'agent' | 'owner' = s.by) {
     this.work(cardId, { snoozed: JSON.stringify(s) });
-    this.log(cardId, 'state', by === 'agent' ? 'worker' : 'owner', this.t.worker.snoozed(this.t.at(Date.parse(s.until)), s.why));
+    this.log(cardId, 'state', by === 'agent' ? 'worker' : 'owner', this.t.worker.snoozed(snoozeTerm(this.t, s), s.why));
   }
 
   /** The card is snoozed no longer, with the line that it woke: at its time (`obeya`), or as the owner woke it. Returns the snooze it had. */

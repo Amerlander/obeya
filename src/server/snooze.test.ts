@@ -140,6 +140,90 @@ describe('the agent snoozes itself', () => {
   });
 });
 
+describe('the agent snoozes until another card gets somewhere', () => {
+  /** Another card at work on the canvas. */
+  const other = (title = 'Tests auf Linux grün machen') => {
+    const c = board().create({ title, x: 0, y: 0 });
+    board().work(c.id, { state: 'working', branch: 'obeya/linux' });
+    return c.id;
+  };
+
+  test('until that card is done: it wakes once its work is on main, and hears so', () => {
+    const fix = other();
+    const { id, s } = atWork();
+    expect(s.call('snooze', { card: 'tests auf linux grün machen', why: 'Tag verschieben' })).toContain('Snoozed until the card “Tests auf Linux grün machen” is done');
+    expect(item(id).snoozed).toEqual({ on: { card: fix, title: 'Tests auf Linux grün machen', state: 'done' }, by: 'agent', why: 'Tag verschieben' });
+    expect(last(id)).toMatchObject({ kind: 'state', author: 'worker', text: 'Zurückgestellt bis „Tests auf Linux grün machen“ erledigt ist · Tag verschieben' });
+    s.emit({ type: 'idle' });
+    expect(s.closed).toBe(true);
+    const n = runtime.sessions.length;
+    // it waits for the owner's approval: not done yet
+    board().work(fix, { state: 'waiting', need: 'demo' });
+    canvas.wakeDue(Date.now() + 400 * 24 * HOUR);
+    expect(runtime.sessions.length).toBe(n);
+    board().work(fix, { state: 'live' });
+    canvas.wakeDue();
+    expect(runtime.last.spec.resume).toBe('sess-1');
+    expect(runtime.last.inbox[0]).toContain('The card “Tests auf Linux grün machen” is done: its work is on main');
+    expect(runtime.last.inbox[0]).toContain('to: Tag verschieben');
+    expect(item(id).snoozed).toBeUndefined();
+    expect(last(id)).toMatchObject({ author: 'obeya', text: 'Wieder da (vom Agenten zurückgestellt)' });
+  });
+
+  test('until it waits for the owner, at the latest at a time: whichever comes first wakes it', () => {
+    other('Demo des Exports');
+    const { id, s } = atWork();
+    const until = later(5 * HOUR);
+    s.call('snooze', { card: 'Export', state: 'waits_for_owner', until, why: 'Vergleichen' });
+    expect(last(id).text).toMatch(/^Zurückgestellt bis „Demo des Exports“ auf dich wartet, spätestens .* · Vergleichen$/);
+    s.emit({ type: 'idle' });
+    canvas.wakeDue(Date.parse(until) + 1);
+    expect(runtime.last.inbox[0]).toContain('you snoozed until the card “Demo des Exports” waits for the owner');
+    expect(runtime.last.inbox[0]).toContain('has not got there yet');
+  });
+
+  test('a card that asks the owner is one that waits for them', () => {
+    const demo = other('Demo des Exports');
+    const { s } = atWork();
+    s.call('snooze', { card: 'Demo des Exports', state: 'waits_for_owner', why: 'Vergleichen' });
+    s.emit({ type: 'idle' });
+    board().work(demo, { state: 'waiting', need: 'question' });
+    canvas.wakeDue();
+    expect(runtime.last.inbox[0]).toContain('waits for the owner now');
+  });
+
+  test('the card stopped, archived or removed: it wakes, as that card no longer gets there', () => {
+    const fix = other();
+    const { s } = atWork();
+    s.call('snooze', { card: 'Tests auf Linux grün machen', why: 'x' });
+    s.emit({ type: 'idle' });
+    board().work(fix, { state: 'planned' });
+    canvas.wakeDue();
+    expect(runtime.last.inbox[0]).toContain('The owner stopped the card “Tests auf Linux grün machen”');
+
+    const gone = other('Weg damit');
+    runtime.last.call('snooze', { card: 'Weg damit', why: 'x' });
+    runtime.last.emit({ type: 'idle' });
+    board().remove(gone);
+    canvas.wakeDue();
+    expect(runtime.last.inbox[0]).toContain('The card “Weg damit” is gone from the canvas.');
+  });
+
+  test('a card nobody can find, one done already, several alike, or neither card nor time is refused', () => {
+    other('Linux-Tests');
+    other('Linux-Build');
+    const done = board().create({ title: 'Fertig', x: 0, y: 0 });
+    board().work(done.id, { state: 'live' });
+    const { id, s } = atWork();
+    expect(s.call('snooze', { card: 'Windows', why: 'x' })).toContain('no card on the canvas is called “Windows”');
+    expect(s.call('snooze', { card: 'Linux', why: 'x' })).toContain('several cards have “Linux” in their title');
+    expect(s.call('snooze', { card: 'Fertig', why: 'x' })).toContain('is done already');
+    expect(s.call('snooze', { why: 'x' })).toContain('give until, card, or both');
+    expect(s.call('snooze', { card: 'Lüftertest', why: 'x' })).toContain('no card on the canvas');
+    expect(item(id).snoozed).toBeUndefined();
+  });
+});
+
 describe('the owner snoozes a card', () => {
   test('at work: its worker stops at once as on a pause, Obeya’s messages wait, and at the time it goes on with them', () => {
     const { id, s } = atWork();

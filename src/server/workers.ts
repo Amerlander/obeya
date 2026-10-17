@@ -9,7 +9,7 @@ import { LANGUAGE_NAMES, LANGUAGES } from '../core/locale';
 import { MESSAGES, type Messages, type Pause } from '../core/messages';
 import { basename } from 'node:path';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
-import { answering, askable, type BackgroundTask, pausable, type CardLanding, type DemoKind, type DemoPage, formatQuestion, handedOver, type Item, type Mock, ownWords, pickedAnswer, type Question, type RepoSettings, type RestartReason, type Snooze, type Spot, type Superseded, type SpotInput, started } from '../core/types';
+import { answering, askable, type Awaited, AWAITED_STATES, awaited, type BackgroundTask, pausable, type CardLanding, type DemoKind, type DemoPage, finished, formatQuestion, handedOver, type Item, type Mock, ownWords, pickedAnswer, type Question, type RepoSettings, type RestartReason, type Snooze, type Spot, type Superseded, type SpotInput, started } from '../core/types';
 import { BadRequest, type Board, replyNote, type Retracted, type StoredDemo, titleKey } from './board';
 import { type Asked, decisionLog, toQuestion, withPick } from './advisor';
 import { checkArtifact, DEMO_SKILL, DEMO_SKILL_FILE, demoSkillName, OBEYA_PLUGIN, placeIn, readChapters } from './demo';
@@ -357,21 +357,51 @@ const RESUMED =
 /** A year: no snooze lasts longer. */
 const SNOOZE_LIMIT = 366 * 24 * 60 * 60_000;
 
+/** Until when a worker snoozed, as it hears it: a time, or the card it waits on (and the time at the latest). */
+function snoozedUntil(s: Snooze): string {
+  const at = s.until ? MESSAGES.en.at(Date.parse(s.until)) : '';
+  if (!s.on) return at;
+  const what = s.on.state === 'done' ? 'is done (its work on main, or the card closed without a change)' : 'waits for the owner (a question or a handover)';
+  return `the card “${s.on.title}” ${what}${at ? `, or ${at} at the latest` : ''}`;
+}
+
+/** What became of the card a snoozed worker waits on, that wakes it. */
+function metNote(on: NonNullable<Snooze['on']>, met: Awaited): string {
+  const card = `the card “${on.title}”`;
+  switch (met) {
+    case 'reached':
+      return on.state === 'done' ? `${cap(card)} is done: its work is on main, or it closed without a change.` : `${cap(card)} waits for the owner now (a question or a handover), or is done.`;
+    case 'gone':
+      return `${cap(card)} is gone from the canvas.`;
+    case 'archived':
+      return `${cap(card)} was archived.`;
+    case 'stopped':
+      return `The owner stopped ${card}: it is planned again, and nobody works on it.`;
+    case 'dropped':
+      return `${cap(card)} was an idea, and the owner dropped it.`;
+  }
+}
+const cap = (s: string) => s[0]!.toUpperCase() + s.slice(1);
+
 /**
- * What a snoozed worker hears when it wakes: why now (`timeUp`: its time has come; `owner`: the
- * owner woke it, `words` with words of theirs that follow; else Obeya has something for it).
+ * What a snoozed worker hears when it wakes: why now (`timeUp`: its time has come; `met`: the card it
+ * waits on got there, or no longer can; `owner`: the owner woke it, `words` with words of theirs
+ * that follow; else Obeya has something for it).
  */
-function wokeNote(s: Snooze, timeUp: boolean, owner: boolean, words: boolean): string {
+function wokeNote(s: Snooze, timeUp: boolean, owner: boolean, words: boolean, met?: Awaited): string {
   const now = MESSAGES.en.at(Date.now());
-  const until = MESSAGES.en.at(Date.parse(s.until));
+  const until = snoozedUntil(s);
   const why = s.why ? `, to: ${s.why}` : '';
   const ended =
     s.by === 'agent'
       ? 'Your session ended when you snoozed, and whatever still ran in the background then was stopped with it. Run again what you still need.'
       : 'Snoozing ended your session at once: whatever you had running was stopped with it, background commands, servers you started, and a command still running in your turn (its result shows exit code 137). Run again what you still need, and go on where you stopped.';
-  if (timeUp)
-    return `${s.by === 'owner' ? `The owner snoozed you until ${until}, and it is that time now.` : s.moved ? `It is now ${now}: you snoozed${why}, and the owner moved the time to now.` : `It is now ${now}, the time you snoozed until${why}.`} ${ended}`;
-  const who = s.by === 'owner' ? `The owner snoozed you until ${until}` : s.moved ? `You snoozed${why}, and the owner moved the time to ${until}` : `You snoozed until ${until}${why}`;
+  if (met && s.on) return `${metNote(s.on, met)} You snoozed until ${until}${why}. ${ended}`;
+  if (timeUp) {
+    const yet = s.on ? ` The card “${s.on.title}” has not got there yet.` : '';
+    return `${s.by === 'owner' ? `The owner snoozed you until ${until}, and it is that time now.` : s.moved ? `It is now ${now}: you snoozed${why}, and the owner moved the time to now.` : s.on ? `It is now ${now}: you snoozed until ${until}${why}.` : `It is now ${now}, the time you snoozed until${why}.`}${yet} ${ended}`;
+  }
+  const who = s.by === 'owner' ? `The owner snoozed you until ${until}` : s.moved ? `You snoozed${why}, and the owner moved the time to ${MESSAGES.en.at(Date.parse(s.until!))}` : `You snoozed until ${until}${why}`;
   const early = owner ? (words ? 'the owner wakes you early' : 'the owner wakes you early, without words, so tell them with reply where things stand') : 'what follows wakes you early';
   return `${who}; it is now ${now}, and ${early}. ${ended}${s.by === 'agent' ? ' Once you have dealt with it, snooze again if there is still nothing to do until then.' : ''}`;
 }
@@ -1206,6 +1236,22 @@ export class Workers {
   }
 
   /**
+   * The card of the canvas a worker means by `title`, to wait on: the one by that title (the open
+   * one, of several), else the one whose title holds it, if only one does; else why there is none.
+   */
+  private cardTitled(cardId: string, title: string): Item | string {
+    const items = this.o.board.snapshot().items.filter((i) => i.id !== cardId && i.kind !== 'project');
+    const key = titleKey(title);
+    const exact = items.filter((i) => titleKey(i.title) === key);
+    const pick = (of: Item[]) => of.findLast((i) => !i.archivedAt && !finished(i.state)) ?? of.at(-1)!;
+    if (exact.length) return pick(exact);
+    const near = items.filter((i) => !i.archivedAt && titleKey(i.title).includes(key));
+    if (near.length === 1) return near[0]!;
+    if (near.length > 1) return `several cards have “${title}” in their title (${near.map((i) => `“${i.title}”`).join(', ')}); give one's full title.`;
+    return `no card on the canvas is called “${title}”.`;
+  }
+
+  /**
    * The owner snoozes the card's worker until `until` (ISO), whether it is in a turn or between
    * turns: as on a pause, its session ends at once and what Obeya has for it meanwhile waits; at the
    * time it goes on where it stopped. A worker snoozed already only gets the new time.
@@ -1225,12 +1271,12 @@ export class Workers {
     this.parkLater(cardId);
   }
 
-  /** The snoozed worker wakes and goes on: at its time (`timeUp`), or because the owner wakes it now. */
-  wake(cardId: string, timeUp = false) {
+  /** The snoozed worker wakes and goes on: at its time (`timeUp`), as the card it waits on got there or no longer can (`met`), or because the owner wakes it now. */
+  wake(cardId: string, timeUp = false, met?: Awaited) {
     this.card(cardId);
     const s = this.o.board.snoozedOf(cardId);
     if (!s || s.waiting) throw new BadRequest('notSnoozed', 'the agent is not snoozed');
-    this.deliver(cardId, '', [], true, [], timeUp);
+    this.deliver(cardId, '', [], true, [], timeUp, met);
   }
 
   /** What the owner's pause holds for the worker, or null when it is not paused. */
@@ -1406,7 +1452,7 @@ export class Workers {
    * owner's words of the log's lines `said` wait for the worker's next step while it is in a turn
    * (`takesLater`), unread until then; other words go into the session's input at once.
    */
-  private deliver(cardId: string, text: string, images: string[] = [], owner = false, said: number[] = [], timeUp = false) {
+  private deliver(cardId: string, text: string, images: string[] = [], owner = false, said: number[] = [], timeUp = false, met?: Awaited) {
     const paused = this.pausedOf(cardId);
     if (paused && !owner) {
       this.o.board.work(cardId, { paused: JSON.stringify({ held: [...(paused.held ?? []), { text, images }] } satisfies PausedState) });
@@ -1420,7 +1466,7 @@ export class Workers {
       const live = this.live.get(cardId);
       if (live) live.snoozed = false;
     }
-    const wokeText = woke ? wokeNote(woke, timeUp, owner, !!text) : '';
+    const wokeText = woke ? wokeNote(woke, timeUp, owner, !!text, met) : '';
     if (paused) {
       this.o.board.work(cardId, { paused: null });
       if (!woke) this.o.board.log(cardId, 'state', 'owner', this.o.board.t.worker.resumedByOwner);
@@ -2351,21 +2397,37 @@ export class Workers {
       },
       {
         name: 'snooze',
-        description: `Snooze until a point in time further off than a background command can wait (a check at midnight, a test that runs for days, a report on the 31st), when there is nothing to do until then. until: that time, ISO 8601 with your timezone's offset (2026-10-31T08:00:00+01:00); why: what you do then, in a few words in ${language}, shown on the card. Your session ends with your turn, and whatever you still run in the background with it; workspace and branch stay. Obeya resumes this session at that time, or earlier with a note from the owner or whatever else comes for you (a review, the landing). For checkpoints one after the other, snooze to the next one each time you wake. Then end your turn.`,
-        schema: { until: z.string(), why: z.string() },
-        run: ({ until, why }) => {
+        description: [
+          `Snooze while there is nothing to do until a point in time further off than a background command can wait (a check at midnight, a test that runs for days, a report on the 31st), or until another card on this canvas gets somewhere (its fix is on main, its demo is ready).`,
+          `until: that time, ISO 8601 with your timezone's offset (2026-10-31T08:00:00+01:00). card: the title of the card to wait on; state: what it is to reach, 'done' (its work is on main, or it closed without a change; the default) or 'waits_for_owner' (it asks the owner or hands its work over). Give until, card or both: Obeya wakes you at whichever comes first, and also when that card can no longer get there (stopped, archived, removed).`,
+          `why: what you do then, in a few words in ${language}, shown on the card. Your session ends with your turn, and whatever you still run in the background with it; workspace and branch stay. Obeya resumes this session then, or earlier with a note from the owner or whatever else comes for you (a review, the landing). For checkpoints one after the other, snooze to the next one each time you wake. Then end your turn.`,
+        ].join(' '),
+        schema: { until: z.string().optional(), why: z.string(), card: z.string().optional(), state: z.enum(['done', 'waits_for_owner']).optional() },
+        run: ({ until, why, card: title, state }) => {
           const card = this.o.board.item(cardId);
           if (!card) return 'Not snoozed: the card is gone.';
           if (live.handedOver) return 'Not snoozed: you asked or handed over in this turn, so the card waits for the owner.';
           if (!(card.state === 'working' || card.state === 'inPr' || card.finishing)) return 'Not snoozed: the card waits for the owner; their answer or approval comes as your next message.';
-          const at = Date.parse(String(until));
-          if (Number.isNaN(at)) return 'Not snoozed: give the time as ISO 8601 with your timezone offset (2026-10-31T08:00:00+01:00).';
-          if (at <= Date.now()) return `Not snoozed: that time has passed (it is ${new Date().toISOString()} now).`;
-          if (at > Date.now() + SNOOZE_LIMIT) return 'Not snoozed: snooze for a year at most.';
+          const named = typeof until === 'string' && until.trim() !== '';
+          const at = named ? Date.parse(String(until)) : NaN;
+          if (named && Number.isNaN(at)) return 'Not snoozed: give the time as ISO 8601 with your timezone offset (2026-10-31T08:00:00+01:00).';
+          if (named && at <= Date.now()) return `Not snoozed: that time has passed (it is ${new Date().toISOString()} now).`;
+          if (named && at > Date.now() + SNOOZE_LIMIT) return 'Not snoozed: snooze for a year at most.';
+          let on: Snooze['on'];
+          if (typeof title === 'string' && title.trim()) {
+            const found = this.cardTitled(cardId, title.trim());
+            if (typeof found === 'string') return `Not snoozed: ${found}`;
+            const awaits = state === 'waits_for_owner' ? 'waitsForOwner' : AWAITED_STATES[0];
+            const now = awaited(found, awaits);
+            if (now === 'reached') return `Not snoozed: the card “${found.title}” ${awaits === 'done' ? 'is done already' : 'waits for the owner already'}.`;
+            if (now) return `Not snoozed: the card “${found.title}” cannot get there now (${now}).`;
+            on = { card: found.id, title: found.title, state: awaits };
+          } else if (!named) return 'Not snoozed: give until, card, or both.';
           live.snoozed = true;
           live.nudged = false;
-          this.o.board.snooze(cardId, { until: new Date(at).toISOString(), by: 'agent', ...(String(why).trim() ? { why: clip(String(why).trim(), 200) } : {}) });
-          return `Snoozed until ${MESSAGES.en.at(at)}. End your turn now; Obeya resumes this session then.`;
+          const s: Snooze = { ...(named ? { until: new Date(at).toISOString() } : {}), ...(on ? { on } : {}), by: 'agent', ...(String(why).trim() ? { why: clip(String(why).trim(), 200) } : {}) };
+          this.o.board.snooze(cardId, s);
+          return `Snoozed until ${snoozedUntil(s)}. End your turn now; Obeya resumes this session then.`;
         },
       },
       {
@@ -2513,7 +2575,7 @@ Rules:
 - Commit your work on your branch in this workspace. Do not push, do not open pull requests, do not switch branches.
 - Follow the repository's own instructions (CLAUDE.md and docs).
 - Owner-facing text (report, reply, ask, ${prototype ? 'propose_build' : 'propose_card'}, ready_for_review) is in ${language}, short and concrete. What you write between tool calls also shows on the card for the owner, folded under your next message: keep it brief and in ${language} too.
-- Wait for anything external (a deploy, a CI run, a process to finish) in the background: run_in_background or Monitor, then end your turn; Obeya wakes you when it finishes or fires. A point in time further off than a background command can wait (two hours), you snooze until (snooze). Never wait with sleep or a polling loop in the foreground: a note from the owner reaches you only once the running command is done.
+- Wait for anything external (a deploy, a CI run, a process to finish) in the background: run_in_background or Monitor, then end your turn; Obeya wakes you when it finishes or fires. A point in time further off than a background command can wait (two hours), or another card getting somewhere (its fix on main), you snooze until (snooze). Never wait with sleep or a polling loop in the foreground: a note from the owner reaches you only once the running command is done.
 - When a note or feedback from the owner arrives, answer it with reply. If it is unclear what they want, ask.
 `.trim() + (preferences ? `\n\n${preferences}` : '');
   }

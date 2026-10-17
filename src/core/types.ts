@@ -155,6 +155,29 @@ export const needsYou = (i: Item) =>
   !i.snoozed &&
   ((i.state === 'waiting' && !answering(i) && !i.landing) || (i.state === 'proposal' && !i.proposal?.revising) || !!i.superseded || (i.state === 'inPr' && !!i.pr?.ready) || (!!i.idea && i.idea.status === 'open' && i.idea.yourTurn && !i.idea.thinking));
 
+/**
+ * What a worker can wait for another card to reach: `done`, its work on main (or the card closed
+ * without a change); `waitsForOwner`, it asks the owner or hands its work over (or got done already).
+ */
+export const AWAITED_STATES = ['done', 'waitsForOwner'] as const;
+export type AwaitedState = (typeof AWAITED_STATES)[number];
+
+export type Awaited = 'reached' | 'gone' | 'archived' | 'stopped' | 'dropped';
+
+/**
+ * Whether the card a snoozed worker waits on gets it to wake: `reached` the state it waits for;
+ * `gone`, `archived`, `stopped` (planned again by the owner), `dropped` (an idea let go) when it no
+ * longer gets there by itself; null while it may still.
+ */
+export function awaited(card: Item | undefined, state: AwaitedState): Awaited | null {
+  if (!card) return 'gone';
+  if (finished(card.state) || (state === 'waitsForOwner' && (card.state === 'waiting' || (card.state === 'inPr' && !!card.pr?.ready)))) return 'reached';
+  if (card.archivedAt) return 'archived';
+  if (stopped(card)) return 'stopped';
+  if (card.idea?.status === 'dropped') return 'dropped';
+  return null;
+}
+
 /** A worker on the card is at work (whether or not in a turn right now): it has started on the card, opens or follows its pull request, finishes after the landing, or takes in the owner's words on its handover. */
 const workerAtWork = (i: Item) => i.kind === 'task' && (i.state === 'working' || i.state === 'inPr' || !!i.finishing || answering(i));
 
@@ -327,13 +350,16 @@ export interface Item {
 
 /**
  * A card set aside until a point in time (`CardRow.snoozed`): by its worker, which has nothing to do
- * until then (a test that runs for days, a check at midnight), or by the owner. Obeya holds the time
- * and wakes it then; the owner's words, „Jetzt zurückholen“, or what Obeya has for an agent that
- * snoozed itself wake it earlier.
+ * until then (a test that runs for days, a check at midnight), or by the owner; or by its worker
+ * until another card reaches a state (`on`). Obeya holds the time and the card and wakes it then;
+ * the owner's words, „Jetzt zurückholen“, or what Obeya has for an agent that snoozed itself wake it
+ * earlier.
  */
 export interface Snooze {
-  /** When it wakes (ISO). */
-  until: string;
+  /** When it wakes (ISO); without one, it wakes when the card it waits on gets there. */
+  until?: string;
+  /** The card of the canvas it waits on (as its title read then), and what for: it wakes once that card got there, or no longer can. */
+  on?: { card: string; title: string; state: AwaitedState };
   by: 'agent' | 'owner';
   /** What the agent does once it wakes, in its words. */
   why?: string;

@@ -7,7 +7,7 @@ import type { DiffFile } from '../core/diff';
 import { type Language, languageOf } from '../core/locale';
 import type { PageChangeId } from '../core/page-changes';
 import type { NotAProject } from '../core/plan-doc';
-import { type AgentEffort, type AgentModel, type AgentRole, type CardState, type ConfigProblemCode, type DemoKind, type DemoSettingsProblem, type ErrorCode, EXPORT_HTML_MAX, type NarrationLanguage, type Theme, type VoiceKind, type Idea, type Need, type NextStep, type Queue, type OwnerHold, type RestartReason, type SetupId, type VoiceSetupId, type CloudPreset, type MachineSectionId, type NeededId, type PrId, type Snooze, stopped } from '../core/types';
+import { type AgentEffort, type AgentModel, type AgentRole, type CardState, type ConfigProblemCode, type DemoKind, type DemoSettingsProblem, type ErrorCode, EXPORT_HTML_MAX, type NarrationLanguage, type Theme, type VoiceKind, type Idea, type Need, type NextStep, type Queue, type OwnerHold, type RestartReason, type SetupId, type VoiceSetupId, type CloudPreset, type MachineSectionId, type NeededId, type PrId, type Snooze, type AwaitedState, stopped } from '../core/types';
 
 const de = {
   kind: { task: 'Aufgabe', question: 'Frage', project: 'Projekt', workstream: 'Workstream', idea: 'Idee', prototype: 'Prototyp', becomesProject: 'Idee → Projekt', taskBecomesProject: 'Aufgabe → Projekt' },
@@ -220,6 +220,8 @@ const de = {
     set: 'Zurückstellen',
     /** The card's state while snoozed, with when it wakes. */
     until: (when: string) => `Zurückgestellt bis ${when}`,
+    /** The card's state while its agent waits on another card: until that is done or waits for the owner, and at the latest when, if it has a time too. */
+    on: (title: string, state: AwaitedState, when?: string) => `Zurückgestellt bis „${title}“ ${state === 'done' ? 'erledigt ist' : 'auf dich wartet'}${when ? `, spätestens ${when}` : ''}`,
     by: { agent: 'vom Agenten', owner: 'von dir' },
     today: 'heute',
     nextDay: 'morgen',
@@ -1687,6 +1689,7 @@ const en: Strings = {
     pick: 'Pick date and time …',
     set: 'Snooze',
     until: (when: string) => `Snoozed until ${when}`,
+    on: (title: string, state: AwaitedState, when?: string) => `Snoozed until “${title}” ${state === 'done' ? 'is done' : 'waits for you'}${when ? `, at the latest ${when}` : ''}`,
     by: { agent: 'by the agent', owner: 'by you' },
     today: 'today',
     nextDay: 'tomorrow',
@@ -2962,7 +2965,9 @@ const number = (n: number, digits = 0) => n.toLocaleString(locale, { maximumFrac
 
 export const stateLabel = (i: { kind?: string; thread?: { thinking?: boolean }; state: CardState; need?: Need; pr?: unknown; queue?: Queue; idea?: Idea; question?: unknown; answering?: true; answered?: true; finishing?: boolean; followUp?: boolean; paused?: true; snoozed?: Snooze; prototypeEnd?: 'discarded' | 'built'; retro?: string; branch?: string }) =>
   i.snoozed
-    ? t.snooze.until(snoozeWhen(i.snoozed.until))
+    ? i.snoozed.on
+      ? t.snooze.on(i.snoozed.on.title, i.snoozed.on.state, i.snoozed.until && snoozeWhen(i.snoozed.until))
+      : t.snooze.until(snoozeWhen(i.snoozed.until!))
     : i.kind === 'question'
     ? i.paused
       ? t.pause.working

@@ -12,7 +12,7 @@ import { repoName } from '../adapters/generic';
 import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
 import type { Language } from '../core/locale';
-import { AGENT_DEFAULTS, agentListens, type AgentRole, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, needsYou, snoozable, type PendingRestart, plannableAsProject, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, type SharedSettings, type SpotInput, type TrustGroup } from '../core/types';
+import { AGENT_DEFAULTS, agentListens, type AgentRole, awaited, type Awaited, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, needsYou, snoozable, type PendingRestart, plannableAsProject, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, type SharedSettings, type SpotInput, type TrustGroup } from '../core/types';
 import { inQueue } from '../core/queue';
 import { BadRequest, Board, replyNote } from './board';
 import { type Command, Commander } from './commands';
@@ -286,12 +286,16 @@ export class CanvasRuntime {
   /** Looks for snoozed cards whose time has come. */
   private waker: ReturnType<typeof setInterval>;
 
-  /** Wakes the snoozed cards whose time has come by `now`. */
+  /** Wakes the snoozed cards whose time has come by `now`, and those whose card they wait on got there (or no longer can). */
   wakeDue(now = Date.now()) {
-    for (const i of this.board.snapshot().items) {
-      if (!i.snoozed || Date.parse(i.snoozed.until) > now) continue;
+    const items = this.board.snapshot().items;
+    for (const i of items) {
+      if (!i.snoozed) continue;
+      const on = i.snoozed.on;
+      const met = on ? awaited(items.find((x) => x.id === on.card), on.state) : null;
+      if (!met && !(i.snoozed.until && Date.parse(i.snoozed.until) <= now)) continue;
       try {
-        this.wake(i.id, true);
+        this.wake(i.id, true, met ?? undefined);
       } catch (e) {
         console.error(`waking the card ${i.id}:`, e);
       }
@@ -313,12 +317,15 @@ export class CanvasRuntime {
     this.repoOf(cardId).workers.snooze(cardId, iso);
   }
 
-  /** A snoozed card wakes: at its time (`timeUp`), or as the owner wakes it now. One that waited for the owner waits for them again; a worker goes on. */
-  private wake(cardId: string, timeUp: boolean) {
+  /**
+   * A snoozed card wakes: at its time (`timeUp`), as the card it waits on got there or no longer can
+   * (`met`), or as the owner wakes it now. One that waited for the owner waits for them again; a worker goes on.
+   */
+  private wake(cardId: string, timeUp: boolean, met?: Awaited) {
     const card = this.board.item(cardId);
     if (!card?.snoozed) throw new BadRequest('notSnoozed', 'the card is not snoozed');
     if (card.snoozed.waiting) return void this.board.unsnooze(cardId, timeUp ? 'obeya' : 'owner');
-    this.repoOf(cardId).workers.wake(cardId, timeUp);
+    this.repoOf(cardId).workers.wake(cardId, timeUp, met);
   }
 
   get id() {
