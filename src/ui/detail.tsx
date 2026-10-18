@@ -620,6 +620,13 @@ function IdeaView({ item, act, run, listener, onDelete, onTell }: { item: Item; 
               {idea.brief.trim() ? <Body md={idea.brief} /> : <div className="hint">{t.idea.briefEmpty}</div>}
               <Mocks mocks={idea.mocks} />
             </div>
+            {/* what "Fertiges bauen" would build, as its worker's task */}
+            {idea.split && !item.archivedAt && (
+              <details className="question brief settled">
+                <summary>{t.idea.settled(idea.split.title)}</summary>
+                <Body md={idea.split.brief} />
+              </details>
+            )}
             <PrototypeDemos item={item} />
           </>
         }
@@ -663,8 +670,19 @@ function IdeaView({ item, act, run, listener, onDelete, onTell }: { item: Item; 
             </div>
           )}
           {/* planning waits for the reply, which will change the brief the owner decides on; building goes ahead after it unless it asks questions */}
-          {idea.thinking && <p className={idea.buildAfterReply ? 'hint go-waits' : 'hint'}>{idea.buildAfterReply ? t.idea.buildWaitsHint : t.idea.waitForReply}</p>}
+          {idea.thinking && <p className={idea.buildAfterReply ? 'hint go-waits' : 'hint'}>{idea.buildAfterReply ? t.idea.buildWaitsHint : idea.split ? t.idea.waitForReplySplit : t.idea.waitForReply}</p>}
           <div className="actions">
+            {/* the settled part as a task of its own; the reply may change the split, so it waits for it */}
+            {idea.split && (
+              <button
+                className={btn('buildSettled')}
+                disabled={idea.thinking}
+                title={t.idea.buildSettledHint(idea.split.title)}
+                onClick={() => act({ action: 'buildSettled' }, { close: false })}
+              >
+                {t.idea.buildSettled}
+              </button>
+            )}
             {idea.buildAfterReply ? (
               <Armed label={t.idea.buildWaits} undo={t.idea.unbuild} onUndo={() => act({ action: 'unbuild' }, { close: false })} />
             ) : (

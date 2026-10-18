@@ -469,6 +469,8 @@ export interface Idea {
   variants: PlannedPrototype[];
   /** How the brief's variants look, one mock each, shown beside it. */
   mocks: Mock[];
+  /** The part that is settled while the rest is open: "Fertiges bauen" builds it as a task of its own. */
+  split?: SettledPart;
 }
 
 /** The thread of looked-up answers a Question card holds, as its card shows it. */
@@ -509,8 +511,17 @@ export interface PlannedPrototype {
   show: string;
 }
 
+/**
+ * The part of an idea that is settled while the rest is still open, as its agent marks it: what
+ * "Fertiges bauen" makes a task of its own, the idea staying with what is open.
+ */
+export interface SettledPart {
+  title: string;
+  brief: string;
+}
+
 /** The owner's next click on an idea: answer its questions, or one of the decisions on the card. */
-export const NEXT_STEPS = ['answer', 'build', 'planDoc', 'prototype', 'park', 'drop'] as const;
+export const NEXT_STEPS = ['answer', 'build', 'buildSettled', 'planDoc', 'prototype', 'park', 'drop'] as const;
 export interface NextStep {
   step: (typeof NEXT_STEPS)[number];
   why: string;
@@ -1044,6 +1055,11 @@ export type CardAction =
   | { action: 'build' }
   /** Ideas: building after the reply is taken back. */
   | { action: 'unbuild' }
+  /**
+   * Ideas: the part its agent marked as settled becomes a task of its own beside the idea, started at
+   * once; the idea stays open with its conversation, its agent and its prototypes.
+   */
+  | { action: 'buildSettled' }
   /** Ideas, and planned tasks of the owner's nobody has worked on: a planned card whose worker writes a plan doc from the brief or the task. */
   | { action: 'planDoc' }
   | { action: 'park' }
@@ -1143,6 +1159,7 @@ export type ErrorCode =
   | 'noFile'
   /** The idea's agent is still working on its reply: building or planning waits for it. */
   | 'ideaThinking'
+  | 'noSplit'
   /** A prototype for the idea is still running. */
   | 'prototypeRunning'
   /** The prototype's idea is becoming a project: its plan doc is not there yet. */

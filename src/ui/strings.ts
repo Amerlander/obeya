@@ -428,7 +428,8 @@ const de = {
     notIdea: 'Das ist keine Idee (mehr).',
     notQuestion: 'Diese Karte hält keine nachgeschlagenen Antworten.',
     noFile: 'Diese Datei gibt es im Ordner der Antwort nicht (mehr).',
-    ideaThinking: 'Der Agent arbeitet noch an seiner Antwort. Planen oder auf einem Prototyp bauen geht, sobald sie da ist.',
+    ideaThinking: 'Der Agent arbeitet noch an seiner Antwort. Planen, Fertiges bauen oder auf einem Prototyp bauen geht, sobald sie da ist.',
+    noSplit: 'Der Agent hat keinen Teil der Idee als fertig zum Bauen markiert.',
     prototypeRunning: 'Für diese Idee liegt noch ein Prototyp auf der Leinwand.',
     variantsRunning: 'Für jede geplante Variante läuft schon ein Prototyp. Für einen weiteren: den Ansatz nennen.',
     notPrototype: 'Das ist kein Prototyp (mehr).',
@@ -1412,6 +1413,11 @@ const de = {
     thinking: 'denkt nach …',
     compose: 'Frag nach, widersprich, entscheide – oder halte die Leertaste',
     build: 'So bauen',
+    /** Builds the part the agent marked as settled as a task of its own; the idea stays with what is open. */
+    buildSettled: 'Fertiges bauen',
+    buildSettledHint: (task: string) => `„${task}“ wird eine eigene Aufgabe neben der Idee und startet gleich. Die Idee bleibt mit dem, was offen ist, ihrem Gespräch und ihren Prototypen.`,
+    /** Over what "Fertiges bauen" would build, under the brief. */
+    settled: (task: string) => `Fertig zum Bauen: „${task}“`,
     planDoc: 'Als Projekt planen',
     prototype: 'Prototyp bauen lassen',
     prototypePlaceholder: 'Der Ansatz in ein paar Worten, dann was der Prototyp zeigen soll. Leer: die Idee, wie sie steht.',
@@ -1423,6 +1429,8 @@ const de = {
     park: 'Parken',
     drop: 'Verwerfen',
     waitForReply: 'Antwort kommt gleich. Planen geht, sobald sie da ist; „So bauen“ wartet auf sie und entfällt, wenn der Agent noch etwas fragt.',
+    /** The same while a settled part is marked, which the reply may change. */
+    waitForReplySplit: 'Antwort kommt gleich. Planen und „Fertiges bauen“ gehen, sobald sie da ist; „So bauen“ wartet auf sie und entfällt, wenn der Agent noch etwas fragt.',
     /** On a prototype while its idea's agent works on a reply. */
     prototypeWaits: 'Antwort kommt gleich: Bauen geht, sobald sie da ist.',
     /** "So bauen" was clicked during the agent's reply: the button while it waits, the line above it, taking it back. */
@@ -1448,6 +1456,7 @@ const de = {
     nextStep: {
       answer: (n: number): string => (n > 1 ? 'Erst die Fragen beantworten' : 'Erst die Frage beantworten'),
       build: () => 'So bauen',
+      buildSettled: () => 'Fertiges bauen',
       planDoc: () => 'Als Projekt planen',
       prototype: () => 'Prototyp bauen lassen',
       park: () => 'Parken',
@@ -1457,6 +1466,7 @@ const de = {
     suggests: {
       answer: 'Tipp: erst antworten',
       build: 'Tipp: so bauen',
+      buildSettled: 'Tipp: Fertiges bauen',
       planDoc: 'Tipp: als Projekt',
       prototype: 'Tipp: Prototyp',
       park: 'Tipp: parken',
@@ -1899,7 +1909,8 @@ const en: Strings = {
     notIdea: 'This is not an idea (any more).',
     notQuestion: 'This card holds no looked-up answers.',
     noFile: 'This file is not (or no longer) in the answer’s folder.',
-    ideaThinking: 'The agent is still working on its reply. Planning or building on a prototype works once it is there.',
+    ideaThinking: 'The agent is still working on its reply. Planning, building what’s settled or building on a prototype works once it is there.',
+    noSplit: 'The agent has marked no part of the idea as settled to build.',
     prototypeRunning: 'A prototype for this idea is still on the canvas.',
     variantsRunning: 'A prototype already runs for every planned variant. For another one, name its approach.',
     notPrototype: 'This is not a prototype (any more).',
@@ -2845,6 +2856,9 @@ const en: Strings = {
     thinking: 'thinking …',
     compose: 'Ask, object, decide – or hold the space bar',
     build: 'Build it like this',
+    buildSettled: 'Build what’s settled',
+    buildSettledHint: (task: string) => `“${task}” becomes a task of its own beside the idea and starts right away. The idea stays with what is open, its conversation and its prototypes.`,
+    settled: (task: string) => `Settled to build: “${task}”`,
     planDoc: 'Plan as a project',
     prototype: 'Have a prototype built',
     prototypePlaceholder: 'The approach in a few words, then what the prototype should show. Empty: the idea as it stands.',
@@ -2855,6 +2869,7 @@ const en: Strings = {
     park: 'Park',
     drop: 'Drop',
     waitForReply: 'The reply is coming. Planning works once it is there; “Build it like this” waits for it and is dropped if the agent still asks something.',
+    waitForReplySplit: 'The reply is coming. Planning and “Build what’s settled” work once it is there; “Build it like this” waits for it and is dropped if the agent still asks something.',
     prototypeWaits: 'The reply is coming: building works once it is there.',
     buildWaits: 'Builds after the reply …',
     buildWaitsHint: 'It is built as soon as the reply is there, unless the agent still asks something.',
@@ -2876,6 +2891,7 @@ const en: Strings = {
     nextStep: {
       answer: (n: number) => (n > 1 ? 'Answer the questions first' : 'Answer the question first'),
       build: () => 'Build it like this',
+      buildSettled: () => 'Build what’s settled',
       planDoc: () => 'Plan as a project',
       prototype: () => 'Have a prototype built',
       park: () => 'Park',
@@ -2884,6 +2900,7 @@ const en: Strings = {
     suggests: {
       answer: 'Tip: answer first',
       build: 'Tip: build it',
+      buildSettled: 'Tip: build what’s settled',
       planDoc: 'Tip: as a project',
       prototype: 'Tip: prototype',
       park: 'Tip: park',

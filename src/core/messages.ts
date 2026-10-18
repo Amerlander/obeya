@@ -180,6 +180,11 @@ const de = {
     whichPrototype: (workstream: string) => `Auf welchem Prototyp baut ${workstream}?`,
     onPrototype: (prototype: string) => `Auf Prototyp „${prototype}“.`,
     workstreamOnLog: (prototype: string) => `Auf dem Prototyp „${prototype}“ bauen: Sein Branch ist jetzt der dieses Workstreams.`,
+    buildSettledAnswer: (task: string) => `Fertiges bauen: „${task}“.`,
+    buildSettledLog: (task: string) => `Fertiges bauen: „${task}“ ist jetzt eine eigene Aufgabe; das Offene bleibt hier.`,
+    /** The task "Fertiges bauen" makes: where it comes from, before the part its agent marked. */
+    settledTask: (idea: string) => `Aus der Idee „${idea}“ der Teil, der feststeht. Was dort noch offen ist, bespricht die Idee weiter; es gehört nicht zu dieser Aufgabe.`,
+    settledFrom: (idea: string) => `Aus der Idee „${idea}“: Fertiges bauen.`,
     howOn: (idea: string) => `Idee „${idea}“: wie weiter?`,
     howOnTask: (task: string) => `Aufgabe „${task}“: wie weiter?`,
     planDocAnswer: 'Als Projekt: erst ein Plan-Doc mit Workstreams.',
@@ -205,6 +210,8 @@ const de = {
     briefUpdated: 'Aktualisiert den Stand der Idee',
     plansPrototypes: (approaches: string) => `Plant Prototypen: ${approaches}`,
     plansNoPrototypes: 'Plant keine Prototypen mehr',
+    plansSplit: (task: string) => `Markiert als fertig zum Bauen: „${task}“`,
+    plansNoSplit: 'Markiert nichts mehr als fertig zum Bauen',
     decision: (question: string, answer: string) => `Entscheidung: ${question} → ${answer}`,
     becameProject: 'Das Projekt steht jetzt an der Stelle der Idee; die Idee liegt im Archiv.',
     taskBecameProject: 'Das Projekt steht jetzt an der Stelle der Aufgabe; die Aufgabe liegt im Archiv.',
@@ -213,6 +220,7 @@ const de = {
     /** How the brief and the prototype button are called on the card, for the idea's agent. */
     briefName: 'Stand der Idee',
     prototypeButton: 'Prototyp bauen lassen',
+    buildSettledButton: 'Fertiges bauen',
   },
   proposal: {
     /** `how`: the button clicked, "Übernehmen und starten", "Übernehmen und besprechen" (a proposed idea) or "Als Idee besprechen". */
@@ -518,6 +526,10 @@ const en: Messages = {
     whichPrototype: (workstream: string) => `Which prototype does ${workstream} build on?`,
     onPrototype: (prototype: string) => `On the prototype “${prototype}”.`,
     workstreamOnLog: (prototype: string) => `Build on the prototype “${prototype}”: its branch is now this workstream’s.`,
+    buildSettledAnswer: (task: string) => `Build what’s settled: “${task}”.`,
+    buildSettledLog: (task: string) => `Build what’s settled: “${task}” is now a task of its own; what is open stays here.`,
+    settledTask: (idea: string) => `The part of the idea “${idea}” that is settled. What is still open there, the idea goes on discussing; it is not part of this task.`,
+    settledFrom: (idea: string) => `From the idea “${idea}”: build what’s settled.`,
     howOn: (idea: string) => `Idea “${idea}”: how to go on?`,
     howOnTask: (task: string) => `Task “${task}”: how to go on?`,
     planDocAnswer: 'As a project: a plan doc with workstreams first.',
@@ -543,12 +555,15 @@ const en: Messages = {
     briefUpdated: 'Updates where the idea stands',
     plansPrototypes: (approaches: string) => `Plans prototypes: ${approaches}`,
     plansNoPrototypes: 'Plans no prototypes any more',
+    plansSplit: (task: string) => `Marks as settled to build: “${task}”`,
+    plansNoSplit: 'Marks nothing as settled to build any more',
     decision: (question: string, answer: string) => `Decision: ${question} → ${answer}`,
     becameProject: 'The project now stands in the idea’s place; the idea is in the archive.',
     taskBecameProject: 'The project now stands in the task’s place; the task is in the archive.',
     partLanded: 'Part landed; the plan doc keeps it open.',
     briefName: 'Where the idea stands',
     prototypeButton: 'Have a prototype built',
+    buildSettledButton: 'Build what’s settled',
   },
   proposal: {
     acceptAfterRevision: (how: 'start' | 'discuss' | 'asIdea') =>

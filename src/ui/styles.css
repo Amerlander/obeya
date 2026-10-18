@@ -590,6 +590,9 @@ textarea.p-body:focus { border-color: var(--muted); }
 .proposal-grid textarea.p-body { min-height: min(360px, calc(100vh - 440px)); max-height: calc(100vh - 440px); resize: none; }
 .proposal-grid .split-talk { contain: size; }
 .question.brief { border-color: var(--idea); background: color-mix(in srgb, var(--idea) 6%, transparent); }
+/* the settled part "Fertiges bauen" builds, folded under the brief */
+.question.brief.settled { margin-top: 10px; }
+.question.brief.settled > summary { cursor: pointer; font-weight: 600; font-size: 14px; }
 .prototype-demo { margin-top: 10px; }
 .prototype-demo > summary { cursor: pointer; font-weight: 600; font-size: 14px; }
 .prototype-demo > summary .hint { font-weight: 400; }

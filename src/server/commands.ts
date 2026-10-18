@@ -23,7 +23,7 @@ export type Command = (
   /** `force` starts a card that waits behind others now, despite the likely merge conflict. */
   /** `direct`: onto the default branch without a pull request, where the card's repository allows it. */
   | { do: 'approve'; card: string; direct?: boolean }
-  | { do: 'start' | 'force' | 'dequeue' | 'dismiss' | 'keep' | 'stop' | 'pause' | 'resume' | 'wake' | 'build' | 'planDoc' | 'park' | 'drop'; card: string }
+  | { do: 'start' | 'force' | 'dequeue' | 'dismiss' | 'keep' | 'stop' | 'pause' | 'resume' | 'wake' | 'build' | 'buildSettled' | 'planDoc' | 'park' | 'drop'; card: string }
   /** Set aside until `until` (ISO), or a snoozed card's time changed. */
   | { do: 'snooze'; card: string; until: string }
   /** `idea`: a proposed task is taken as an idea to discuss first. */
@@ -69,6 +69,7 @@ const LEARNED: Command['do'][] = ['note', 'answer', 'feedback', 'discuss', 'newI
 const NEXT_ACTION: Record<NextStep['step'], string> = {
   answer: 'have the owner answer its open questions (discuss)',
   build: 'build',
+  buildSettled: 'build_settled',
   planDoc: 'plan_doc',
   prototype: 'prototype',
   park: 'park',
@@ -211,7 +212,7 @@ type More = { wish?: string; cannot?: boolean };
 type Decision = { commands: Command[]; confirm: string; lookUp?: LookUp } & More;
 
 /** The actions `act` takes, as the Koordinator names them. */
-const ACTIONS = ['new_card', 'new_idea', 'start', 'dequeue', 'note', 'answer', 'feedback', 'approve', 'accept', 'dismiss', 'keep', 'revise', 'stop', 'pause', 'resume', 'snooze', 'wake', 'discuss', 'build', 'plan_doc', 'prototype', 'park', 'drop', 'remember', 'work_retro', 'group', 'ungroup', 'rename_group', 'wait_for', 'stop_waiting', 'wish'] as const;
+const ACTIONS = ['new_card', 'new_idea', 'start', 'dequeue', 'note', 'answer', 'feedback', 'approve', 'accept', 'dismiss', 'keep', 'revise', 'stop', 'pause', 'resume', 'snooze', 'wake', 'discuss', 'build', 'build_settled', 'plan_doc', 'prototype', 'park', 'drop', 'remember', 'work_retro', 'group', 'ungroup', 'rename_group', 'wait_for', 'stop_waiting', 'wish'] as const;
 
 /** What `act` gets for one action. */
 const ACTION = z.object({
@@ -699,7 +700,7 @@ export class Commander {
             `- new_idea: a new idea to think through with an exploration agent before anything is planned ("Ich will über … nachdenken", "Idee: …"). title short and precise, body what the owner said about it, in their words${repos.length > 1 ? ', repo as for new_card' : ''}.`,
             `- remember (no card): a rule the owner wants kept for all future work („Merk dir: …“, „ab jetzt immer …“). text: the rule, short and general, in ${LANGUAGE_NAMES[language]}; replaces: the number of a rule of the owner it changes or contradicts, also when it moves that rule into a CLAUDE.md. It goes to one of two places. The owner's rules, for how the agents work with the owner through Obeya whatever the repository (what to ask and what to decide alone, how to report, hand over and demo): leave repos out; it applies at once. A repository's CLAUDE.md, for anything about a repository (its conventions, product, tools, how its code is written, tested and landed, its UI and wording, taste in code even when it holds in every repository): repos the ids of the repositories it concerns (usually the open card's; every one when it holds in all of them); it goes into the repository's card ${t.quote(t.claudeMd.title)}, whose worker writes it into the CLAUDE.md. confirm says where it goes (${say.remember}).`,
             `- work_retro (no card): the Arbeitsrückschau of a repository, now („Mach eine Arbeitsrückschau für den Shop“): it reads the friction noted on the workers' runs of its finished cards since the last one and proposes cards (a script, a skill), CLAUDE.md lines or values for the repository's settings (checks, setup, soft paths, how to run the app for a demo) for what recurs on several cards; they come as proposals for the owner, and the owner hears when it is done. It also runs by itself: in a new repository after its first finished card, then after 2 more and 4 more, then every 10. repo: the repository's id (the one the owner names, else the open card's, else the first). confirm e.g. ${say.retro}`,
-            "- On a card in state idea: discuss (text: what the owner says in its discussion: a thought, a question, an answer to the idea's agent; it goes on at once, without undo), build (its brief becomes the task and a worker starts on it at once; while its agent works on a reply, or starts on one with a discuss in the same command, once that reply is there, unless the reply asks questions), plan_doc (a big idea becomes a project: an agent starts at once on its plan doc, and the project then takes the idea's place), prototype (a worker builds a throwaway prototype shown as a demo on it, beside any others; text: what it should show, its approach first in a few words; empty: one prototype for each variant its agent planned that has none running yet, all at once, or without planned variants one of the idea as it stands), park (for later), drop (it stays on the canvas with its brief). Planning an idea waits for its agent's reply while it works on one, or starts on one in the same command: then pass what the owner said with discuss, and say that planning goes by a click once the reply is there.",
+            "- On a card in state idea: discuss (text: what the owner says in its discussion: a thought, a question, an answer to the idea's agent; it goes on at once, without undo), build (its brief becomes the task and a worker starts on it at once; while its agent works on a reply, or starts on one with a discuss in the same command, once that reply is there, unless the reply asks questions; it ends the discussion, and the idea's prototypes, planned and running, are thrown away), build_settled (only where the list says its agent marked a part as settled: that part becomes a task of its own beside the idea, which a worker starts on at once, and the idea stays open with its discussion and its prototypes for what is still open), plan_doc (a big idea becomes a project: an agent starts at once on its plan doc, and the project then takes the idea's place), prototype (a worker builds a throwaway prototype shown as a demo on it, beside any others; text: what it should show, its approach first in a few words; empty: one prototype for each variant its agent planned that has none running yet, all at once, or without planned variants one of the idea as it stands), park (for later), drop (it stays on the canvas with its brief). Planning an idea, or building its settled part, waits for its agent's reply while it works on one, or starts on one in the same command: then pass what the owner said with discuss, and say that it goes by a click once the reply is there.",
             "- plan_doc also on a planned task of the owner's that nobody has worked on yet (not with Obeya, no branch): an agent starts at once on a plan doc with workstreams from the task, and the project then takes the task's place („plane das als Projekt“).",
             `- group: put cards into a group, shown on the canvas as a coloured territory behind them. cards: their tags; text: the group's name (group is only for rename_group), one the canvas has (see the list) or a new one, which is then created. A card is in one group at most, so this takes it out of its group. A workstream stands for its project: the whole project goes into the group. ungroup: take cards (cards) out of their group. rename_group: group the group's current name, text its new name. A group no card belongs to any more goes. confirm e.g. ${say.group}`,
             '- On a prototype (a card marked prototype of an idea): build (the idea is built on this prototype\'s branch; its other prototypes are thrown away; when the idea became a project, one of its workstreams is built on the branch instead: the one its plan doc builds on the prototype with, or cards: the tag of the one the owner names), drop (the prototype is thrown away into the archive). approve on a prototype also throws it away.',
@@ -843,13 +844,14 @@ export class Commander {
   private waitsForReply(c: Command, all: Command[], from?: string): string | undefined {
     if (c.do === 'accept' && all.some((d) => d.do === 'revise' && d.card === c.card))
       return 'accepting a proposal waits for its reworked text, so the owner sees what they take: drop this action, keep revise, and say in confirm that accepting goes by a click once the new text is there';
-    if (c.do !== 'planDoc' && c.do !== 'buildPrototype') return;
+    if (c.do !== 'planDoc' && c.do !== 'buildPrototype' && c.do !== 'buildSettled') return;
     const id = c.do === 'buildPrototype' ? this.o.board.item(c.card)?.prototypeOf : c.card;
     const idea = id ? this.o.board.item(id) : undefined;
     if (!idea) return;
     const talked = all.some((d) => d.do === 'discuss' && d.card === idea.id);
     if (!idea.idea?.thinking && !talked) return;
-    if (idea.id === from) return `${c.do === 'planDoc' ? 'planning' : 'building on a prototype'} waits for the reply the idea's agent is working on, which changes the brief the owner decides on: drop this action and say in confirm that it goes by a click on the card once the reply is there.`;
+    const what = { planDoc: 'planning', buildPrototype: 'building on a prototype', buildSettled: 'building its settled part' }[c.do];
+    if (idea.id === from) return `${what} waits for the reply the idea's agent is working on, which changes the brief the owner decides on: drop this action and say in confirm that it goes by a click on the card once the reply is there.`;
     return `the idea's agent ${talked ? 'starts on a reply with the discuss in this command' : 'is still working on its reply'}, and building or planning waits for that reply, so the owner decides on the brief it leaves. Drop this action and pass what the owner said to the idea with discuss (one per idea), then say in confirm that ${c.do === 'planDoc' ? 'planning' : 'building'} goes by a click on the card once the reply is there.`;
   }
 
@@ -982,8 +984,8 @@ export class Commander {
     // a planned task of the owner's can be planned as a project too
     if (a.do === 'plan_doc' && card.state !== 'idea') {
       if (!plannableAsProject(card)) return `only an idea, or a planned task of the owner's that nobody has worked on yet, can be planned as a project (${is})`;
-    } else if (['discuss', 'build', 'plan_doc', 'prototype', 'park', 'drop'].includes(a.do) !== (card.state === 'idea'))
-      return card.state === 'idea' ? `the card is an idea: discuss it, or build, plan_doc, prototype, park or drop it` : `only an idea can be discussed, built, prototyped, parked or dropped (${is})`;
+    } else if (['discuss', 'build', 'build_settled', 'plan_doc', 'prototype', 'park', 'drop'].includes(a.do) !== (card.state === 'idea'))
+      return card.state === 'idea' ? `the card is an idea: discuss it, or build, build_settled, plan_doc, prototype, park or drop it` : `only an idea can be discussed, built, prototyped, parked or dropped (${is})`;
     switch (a.do) {
       case 'discuss':
         if (!a.text?.trim()) return 'the text is missing';
@@ -992,6 +994,9 @@ export class Commander {
         return { do: 'prototype', card: card.id, text: a.text?.trim() ?? '' };
       case 'plan_doc':
         return { do: 'planDoc', card: card.id };
+      case 'build_settled':
+        if (!card.idea?.split) return "its agent has marked no part of the idea as settled to build: build it all (build), or pass on to it what the owner wants built now (discuss)";
+        return { do: 'buildSettled', card: card.id };
       case 'note':
       case 'answer':
       case 'feedback': {
@@ -1162,7 +1167,7 @@ export class Commander {
       const became = i.prototypeOf ? items.find((x) => x.kind === 'project' && x.origin === i.prototypeOf) : undefined;
       const builds = became && prototypeWorkstream(items, became.id);
       const group = i.group ? groups.get(i.group) : undefined;
-      return `${tag(i.id)} [${state}${paused}] "${i.title}"${repo}${project ? ` (project "${project.title}")` : ''}${group ? ` (group "${group}")` : ''}${became ? ` (prototype of the idea "${i.ideaTitle ?? ''}", which became the project ${tag(became.id)} "${became.title}"${builds ? `; build starts its workstream ${tag(builds.id)} "${builds.title}" on it` : ''}${i.buildProposal ? '; its worker proposes to build on it' : ''})` : idea ? ` (prototype of ${tag(idea.id)} "${idea.title}"${i.buildProposal ? '; its worker proposes to build the idea on it' : ''})` : ''}${i.proposal ? ` — proposed ${i.proposal.idea ? 'idea' : 'task'}${i.proposal.revising ? `, being reworked by what the owner said${i.proposal.acceptAfterRevision ? `; accepted${i.proposal.acceptAfterRevision === 'idea' ? ' as an idea' : ''} once the new text is there, unless it asks questions` : ''}` : ''}${i.proposal.questions.length ? `, open questions: ${i.proposal.questions.map((q) => q.text).join(' | ')}` : ''}` : ''}${i.superseded ? ` — the agent that proposed it ${i.superseded.by ? `replaced it by "${i.superseded.title ?? ''}"` : 'withdrew it'}${i.superseded.why ? ` (${clip(oneLine(i.superseded.why), 200)})` : ''}; the owner removes it (dismiss) or keeps it (keep)` : ''}${i.statusLine ? ` — status: ${clip(oneLine(i.statusLine), 160)}` : ''}${i.question ? ` — open question${i.need === 'demo' ? ' in its demo report' : ''}: ${i.question.text}${i.question.pick ? ` (its worker would pick: ${i.question.pick.options.join(', ')})` : ''}` : ''}${i.idea?.next ? ` — its agent would ${NEXT_ACTION[i.idea.next.step]} next: ${clip(oneLine(i.idea.next.why), 200)}${picks(i)}` : ''}${i.idea?.variants.length ? ` — prototypes its agent planned: ${i.idea.variants.map((v) => v.approach).join(', ')}` : ''}`;
+      return `${tag(i.id)} [${state}${paused}] "${i.title}"${repo}${project ? ` (project "${project.title}")` : ''}${group ? ` (group "${group}")` : ''}${became ? ` (prototype of the idea "${i.ideaTitle ?? ''}", which became the project ${tag(became.id)} "${became.title}"${builds ? `; build starts its workstream ${tag(builds.id)} "${builds.title}" on it` : ''}${i.buildProposal ? '; its worker proposes to build on it' : ''})` : idea ? ` (prototype of ${tag(idea.id)} "${idea.title}"${i.buildProposal ? '; its worker proposes to build the idea on it' : ''})` : ''}${i.proposal ? ` — proposed ${i.proposal.idea ? 'idea' : 'task'}${i.proposal.revising ? `, being reworked by what the owner said${i.proposal.acceptAfterRevision ? `; accepted${i.proposal.acceptAfterRevision === 'idea' ? ' as an idea' : ''} once the new text is there, unless it asks questions` : ''}` : ''}${i.proposal.questions.length ? `, open questions: ${i.proposal.questions.map((q) => q.text).join(' | ')}` : ''}` : ''}${i.superseded ? ` — the agent that proposed it ${i.superseded.by ? `replaced it by "${i.superseded.title ?? ''}"` : 'withdrew it'}${i.superseded.why ? ` (${clip(oneLine(i.superseded.why), 200)})` : ''}; the owner removes it (dismiss) or keeps it (keep)` : ''}${i.statusLine ? ` — status: ${clip(oneLine(i.statusLine), 160)}` : ''}${i.question ? ` — open question${i.need === 'demo' ? ' in its demo report' : ''}: ${i.question.text}${i.question.pick ? ` (its worker would pick: ${i.question.pick.options.join(', ')})` : ''}` : ''}${i.idea?.next ? ` — its agent would ${NEXT_ACTION[i.idea.next.step]} next: ${clip(oneLine(i.idea.next.why), 200)}${picks(i)}` : ''}${i.idea?.variants.length ? ` — prototypes its agent planned: ${i.idea.variants.map((v) => v.approach).join(', ')}` : ''}${i.idea?.split ? ` — part its agent marked as settled to build now (build_settled): "${clip(oneLine(i.idea.split.title), 160)}"` : ''}`;
     };
     const step = (m: Moment) => {
       const card = items.find((i) => i.id === m.cardId);

@@ -8,7 +8,7 @@ import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { type Language, LANGUAGE_NAMES } from '../core/locale';
 import { MESSAGES } from '../core/messages';
-import { type Item, type Mock, NEXT_STEPS, type NextStep, type PlannedPrototype, type Question } from '../core/types';
+import { type Item, type Mock, NEXT_STEPS, type NextStep, type PlannedPrototype, type Question, type SettledPart } from '../core/types';
 import { type Asked, decisionLog, withPick } from './advisor';
 import { BadRequest, type Board, type Message, replyNote, type Unread } from './board';
 import type { AgentEvent, AgentRuntime, AgentSession, AgentTool } from './runtime';
@@ -315,7 +315,7 @@ export class Explorers {
     return current([
       {
         name: 'reply',
-        description: `Your turn in the conversation, shown on the card beside the brief (markdown, in ${OWNER_LANGUAGE}): a few sentences that do not repeat the brief. questions: the questions you ask now, each with its answer options (multiple: true when several may be chosen together); the card shows them under your reply for the owner to pick from, so the reply does not repeat them; pick: the options you would choose yourself if you had to decide (one, or several when multiple), and pick_why: why, in one short sentence in ${OWNER_LANGUAGE}. next: what you would do next in the owner's place, always: answer (the open questions come first), build, planDoc, prototype, park or drop, with why in one short sentence in ${OWNER_LANGUAGE}; the card marks that click for the owner. mocks: only when the owner asked to see something the brief has no place for; ${MOCKS}. Call it once per message, then end your turn.`,
+        description: `Your turn in the conversation, shown on the card beside the brief (markdown, in ${OWNER_LANGUAGE}): a few sentences that do not repeat the brief. questions: the questions you ask now, each with its answer options (multiple: true when several may be chosen together); the card shows them under your reply for the owner to pick from, so the reply does not repeat them; pick: the options you would choose yourself if you had to decide (one, or several when multiple), and pick_why: why, in one short sentence in ${OWNER_LANGUAGE}. next: what you would do next in the owner's place, always: answer (the open questions come first), build, buildSettled (with a part marked with plan_split), planDoc, prototype, park or drop, with why in one short sentence in ${OWNER_LANGUAGE}; the card marks that click for the owner. mocks: only when the owner asked to see something the brief has no place for; ${MOCKS}. Call it once per message, then end your turn.`,
         schema: {
           text: z.string(),
           questions: z
@@ -337,7 +337,7 @@ export class Explorers {
           if (live.replied) return 'Already replied. End your turn now.';
           live.replied = true;
           const asked = ((questions as Asked[] | undefined) ?? []).map(withPick).filter((q) => q.text);
-          this.answer(cardId, clip(String(text), 12000), asked, nextStep(next, asked), mocksOf(mocks));
+          this.answer(cardId, clip(String(text), 12000), asked, nextStep(next, asked, !!this.o.board.idea(cardId).split), mocksOf(mocks));
           return 'Shown to the owner. End your turn now; their next message arrives as a new one.';
         },
       },
@@ -360,6 +360,17 @@ export class Explorers {
           this.o.board.setIdea(cardId, { variants });
           this.o.board.log(cardId, 'activity', 'explorer', variants.length ? t.plansPrototypes(variants.map((v) => v.approach).join(', ')) : t.plansNoPrototypes);
           return variants.length ? `Planned ${variants.length} prototype${variants.length > 1 ? 's' : ''}.` : 'No prototypes planned.';
+        },
+      },
+      {
+        name: 'plan_split',
+        description: `When part of the idea is settled and part is still open (to be discussed further, or prototyped), the part to build now: the owner builds it with "${t.buildSettledButton}" as a task of its own, and the idea stays with what is open. title: that task's title, a few words in ${OWNER_LANGUAGE}. brief: its worker's task, in ${OWNER_LANGUAGE} markdown, standing on its own and holding only what is settled; what is still open is no part of it. The whole value each time; both empty when no part is settled apart from the rest any more.`,
+        schema: { title: z.string(), brief: z.string() },
+        run: ({ title, brief }) => {
+          const part = settledPart(title, brief);
+          this.o.board.setIdea(cardId, { split: part });
+          this.o.board.log(cardId, 'activity', 'explorer', part ? t.plansSplit(part.title) : t.plansNoSplit);
+          return part ? `Marked “${part.title}” as settled to build.` : 'No part marked as settled.';
         },
       },
       {
@@ -423,12 +434,14 @@ Tools, within a turn in this order:
 - record_decision: when the owner decided something in the message. General preferences (how they like to work) are not decisions; Obeya learns those on its own.
 - update_brief: keep the brief current whenever the conversation changed it. It has these parts, as short bold-labelled paragraphs or lists: ${goal}, ${today} (what the code does today, when it matters), ${variants} (open and dropped ones, each with why), ${decisions}, ${open}, and ${effort} once you can say. An answered question leaves the open questions; what it decided goes where it belongs. Whoever opens the card later reads only the brief, so it must stand on its own. When the owner builds the idea as it stands, the brief is the worker's task.
 - plan_prototypes: whenever the brief plans prototypes you have not passed to it yet, or the plan changes (which variants are to be seen side by side, and what each is to show). The owner then starts them all with one click, one worker per variant.
+- plan_split: whenever part of the idea is settled while the rest is still open, or that split changes or goes: the part to build now, as one worker's task.
 - reply, last: your turn in the conversation. Exactly once per message, then end your turn.
 
-The owner decides on the card whether to build the idea, turn it into a plan doc, have a throwaway prototype built, park it or drop it. With every reply, say through next what you would do in their place if you had to decide, and why; the card marks that click, so the owner sees at a glance where to go on:
+The owner decides on the card whether to build the idea, build its settled part, turn it into a plan doc, have a throwaway prototype built, park it or drop it. With every reply, say through next what you would do in their place if you had to decide, and why; the card marks that click, so the owner sees at a glance where to go on:
 - answer: an open question has to be settled before anything else makes sense. Then give your own pick for each question too, so the owner can follow it or overrule it.
-- build: the brief is clear enough to be one worker's task, and what is still open is a judgement call the worker can make.
-- planDoc: it is too big for one card (several workstreams, or an order to work in).
+- build: the brief is clear enough to be one worker's task, and what is still open is a judgement call the worker can make. Building ends this conversation: the brief becomes the task, and the idea's prototypes, planned and running, are dropped.
+- buildSettled: part of the idea is settled and part is still open (to be discussed further, or prototyped). The part you marked with plan_split becomes a task of its own, which a worker starts on at once; the idea stays with this conversation, its open part and its prototypes, planned and running. Without a part marked with plan_split, the card has no such click.
+- planDoc: it is too big for one card (several workstreams, or an order to work in). The idea's prototypes stay, for the workstream that builds on them.
 - prototype: only seeing it will settle it (a layout, how it feels, a risky approach), and a throwaway build costs less than guessing.
 - park or drop: it is not worth it now, or no longer.
 Give your pick on every question with options, whatever next is. Do not hold the idea back with questions you could settle as well as the owner: settle them in the brief and say so. Several prototypes may try different approaches side by side, one per variant you planned with plan_prototypes; you hear each one's result, and the questions their workers asked with the owner's answers, which belong in the brief like answers given here. Once one convinces, the owner builds the idea on that prototype's branch.
@@ -436,7 +449,7 @@ Owner-facing text is in ${LANGUAGE_NAMES[language]}.
 `.trim();
 };
 
-const OWN_TOOLS = ['reply', 'update_brief', 'plan_prototypes', 'record_decision', 'to_obeya'];
+const OWN_TOOLS = ['reply', 'update_brief', 'plan_prototypes', 'plan_split', 'record_decision', 'to_obeya'];
 
 /** At most this many prototypes are planned for one idea. */
 const MAX_VARIANTS = 6;
@@ -499,11 +512,18 @@ function mocksOf(list: unknown): Mock[] {
 /** A mock is a sketch, not a page: longer ones are left out rather than cut off mid-tag. */
 const MOCK_MAX = 20000;
 
-/** The step the agent suggests; answering needs questions to answer. */
-function nextStep(next: unknown, asked: Question[]): NextStep | undefined {
+/** The part to build now as the agent marked it: both a title and a brief, or no split. */
+function settledPart(title: unknown, brief: unknown): SettledPart | undefined {
+  const part = { title: clip(String(title ?? '').replace(/\s+/g, ' ').trim(), 160), brief: clip(String(brief ?? '').trim(), 20000) };
+  return part.title && part.brief ? part : undefined;
+}
+
+/** The step the agent suggests; answering needs questions to answer, building the settled part a part marked. */
+function nextStep(next: unknown, asked: Question[], split: boolean): NextStep | undefined {
   const n = next as { step?: unknown; why?: unknown } | undefined;
   if (!n || !NEXT_STEPS.includes(n.step as NextStep['step'])) return undefined;
   if (n.step === 'answer' && !asked.length) return undefined;
+  if (n.step === 'buildSettled' && !split) return undefined;
   return { step: n.step as NextStep['step'], why: clip(String(n.why ?? '').trim(), 400) };
 }
 

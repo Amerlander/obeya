@@ -202,11 +202,17 @@ on the way to a reply folds away under that reply ("Verlauf"), for whoever wants
 
 With every reply the agent also says what it would do in the owner's place: the option it would pick
 for each of its questions ("Würde ich nehmen", with why), and the next step ("Nächster Schritt, wenn
-der Agent entscheiden müsste": answer first, build, plan, prototype, park or drop, with why). The
-card marks that click (the suggested button instead of "So bauen", the picked options), and the
-canvas card says it short ("Tipp: Prototyp"); the owner follows or overrules it, and the suggestion
-goes with their next message. The voice Koordinator reads it too, so "mach, was du vorschlägst"
-takes that step (said to the Koordinator, or to the agent, which passes it on).
+der Agent entscheiden müsste": answer first, build, build what's settled, plan, prototype, park or
+drop, with why). The card marks that click (the suggested button instead of "So bauen", the picked
+options), and the canvas card says it short ("Tipp: Prototyp"); the owner follows or overrules it,
+and the suggestion goes with their next message. Each suggestion is a button on the card: answering
+needs questions to answer, building what's settled a part marked as settled, and a suggestion
+without them is none. The agent's instructions say what each step does to the rest of the idea
+(building ends the conversation and drops its prototypes, planned and running; building what's
+settled keeps the idea, its conversation and its prototypes; planning keeps the prototypes for the
+workstream that builds on them), so it does not recommend a click for what the click does not do.
+The voice Koordinator reads it too, so "mach, was du vorschlägst" takes that step (said to the
+Koordinator, or to the agent, which passes it on).
 
 Once the agent has replied, the open idea needs the owner like a waiting card ("Idee · du bist
 dran", badge, counted in "brauchen dich") until they answer, park, drop or decide it.
@@ -259,6 +265,20 @@ bauen" (or accepting its worker's proposal) builds the idea on it, see Deciding.
 "So bauen" makes the brief the card's task and starts it at once, through the Koordinator like
 "Agent starten" (it waits only if it would likely conflict with running work).
 
+"Fertiges bauen", when part of the idea is settled and part still open (the game logic of an app
+settled, its pictures still to be prototyped): the agent marks the settled part (`plan_split`: its
+title and a brief that stands on its own as a worker's task, the whole value each time, empty when
+there is none any more), and only then does the button show, next to "So bauen", with what it would
+build folded under the brief ("Fertig zum Bauen: „…“"). The click makes that part a task of its own
+beside the idea, in its group and linked to it, with the screenshots the owner showed in the
+discussion and a line saying it is the settled part of the idea and the open part is not its, and
+starts it through the Koordinator like "So bauen". The decision log records it on the idea
+("Fertiges bauen: „…“"). The idea stays open with its conversation, its agent and its prototypes,
+planned and running; the split is cleared, and the agent hears that the part is now that task, trims
+the brief to what is open and replies. "So bauen", "Diesen Prototyp bauen" and "Als Projekt planen"
+work on the idea later as before. It is not a second way to break work up beside the plan doc: it
+only separates what is settled from what is open, always into one task and the remaining idea.
+
 "Diesen Prototyp bauen", on a prototype, does the same on that prototype's branch: its workspace and
 branch (renamed for the idea) become the idea's, whose worker hears that the branch holds a
 throwaway prototype, to take over what carries and bring it to production quality (tests, checks,
@@ -288,8 +308,9 @@ the Koordinator as before.
 
 ### While the agent replies
 
-While the agent works on a reply, planning waits (so does "Diesen Prototyp bauen"): the buttons are
-disabled with "Antwort kommt gleich", and the server refuses them (`ideaThinking`). The reply almost
+While the agent works on a reply, planning waits (so do "Fertiges bauen" and "Diesen Prototyp
+bauen"): the buttons are disabled with "Antwort kommt gleich", and the server refuses them
+(`ideaThinking`). The reply almost
 always rewrites the brief, so a plan taken before it would start from a brief the owner never read.
 
 "So bauen" does not wait: clicked during a reply, the idea is built once the agent has answered all
@@ -300,9 +321,9 @@ nach der Antwort". The agent hears of the click with its next step, as the brief
 the task. A turn that ends without a reply (an error, a restart), parking or dropping call the
 building off too.
 
-Asked to plan such an idea while its agent works on a reply (by the agent, which passes the owner's
-words on, or in the Koordinator's sheet along with talk to the idea), the Koordinator says that
-planning goes by a click once the reply is there; asked to build it ("nimm noch X auf und bau es
+Asked to plan such an idea, or to build its settled part (`build_settled`), while its agent works on
+a reply (by the agent, which passes the owner's words on, or in the Koordinator's sheet along with
+talk to the idea), the Koordinator says that it goes by a click once the reply is there; asked to build it ("nimm noch X auf und bau es
 dann"), it builds after the reply, like the click.
 
 Parking and dropping act at once and end the turn, but lose nothing: the messages the agent has not
@@ -341,6 +362,13 @@ for a turn that ended with an error, and for messages queued when Obeya stopped.
 - **Planning an idea takes its prototypes along** (2026-10-06): before, planning left the prototypes
   behind unmentioned: the plan doc planned them again as workstreams, and once the idea was
   archived, building on one failed with a 400.
+- **"Fertiges bauen" builds the settled part and keeps the idea** (2026-10-18). An idea's agent had
+  recommended "So bauen" with "start the two picture prototypes alongside it", which no button did:
+  building turned the idea into a task and dropped the planned prototypes without a word. Two other
+  ways were weighed. Restricting the agent to the steps there were gave a correct but clumsy route
+  (prototypes first, then a plan doc, the settled part waiting); one button for "build and start the
+  prototypes" was dropped because building ends the idea the prototypes belong to. Since then every
+  suggested step is a button, and the agent's instructions say what each does to the rest of the idea.
 - **"So bauen" does not wait for the agent's reply** (2026-10-06): the last answer of a session is
   often clear and simple, and the owner knows that building comes next.
 - **Mocks in a field of their own** (2026-10-05): an idea's agent shows how a variant looks as a

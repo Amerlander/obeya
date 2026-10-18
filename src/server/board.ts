@@ -44,6 +44,7 @@ import {
   type Revising,
   type NextStep,
   type PlannedPrototype,
+  type SettledPart,
   type Question,
   type PlanDir,
   type Reshare,
@@ -2031,6 +2032,8 @@ export interface StoredIdea {
   variants?: PlannedPrototype[];
   /** The brief's mocks, as the agent last set them. */
   mocks?: Mock[];
+  /** The settled part "Fertiges bauen" builds, as the agent last marked it. */
+  split?: SettledPart;
   /** Messages a turn ended before answering (the idea parked or dropped, an error, a restart); they go to the agent first next time. */
   unread?: Unread;
 }
@@ -2114,7 +2117,7 @@ function threadOf(r: CardRow): Thread {
 
 function ideaOf(r: CardRow): Idea {
   const i = r.idea ? (JSON.parse(r.idea) as StoredIdea) : { status: 'open' as const, brief: '' };
-  return { status: i.status, brief: i.brief, thinking: !!i.thinking, ...(i.buildAfterReply ? { buildAfterReply: true as const } : {}), yourTurn: !!i.yourTurn, questions: i.questions ?? [], ...(i.next ? { next: i.next } : {}), variants: i.variants ?? [], mocks: i.mocks ?? [] };
+  return { status: i.status, brief: i.brief, thinking: !!i.thinking, ...(i.buildAfterReply ? { buildAfterReply: true as const } : {}), yourTurn: !!i.yourTurn, questions: i.questions ?? [], ...(i.next ? { next: i.next } : {}), variants: i.variants ?? [], mocks: i.mocks ?? [], ...(i.split ? { split: i.split } : {}) };
 }
 
 function checkPreference(v: unknown): string {
