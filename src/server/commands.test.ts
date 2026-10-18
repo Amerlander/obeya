@@ -1181,13 +1181,14 @@ describe('a step the Koordinator takes once a card gets somewhere', () => {
     expect(brief).toContain('the card "Repository ~/dev/leserina anlegen" is done');
     expect(brief).toContain('to then: Start „Leserina einrichten“ (K1).');
     const [, , after] = board.snapshot().talk;
-    // no longer waiting; the exchange stands with what became of the card in place of the owner's words
-    expect(board.snapshot().talk[0]!.waits).toBeUndefined();
+    // the exchange stands with what became of the card in place of the owner's words
     expect(after).toMatchObject({ said: '', after: { title: card.title, state: 'done', met: 'reached', from: board.snapshot().talk[0]!.id } });
     runtime.last.call('act', { actions: [{ do: 'start', card: 'K1' }], confirm: '„Leserina einrichten“ startet.' });
     runtime.last.emit({ type: 'idle' });
     await until(() => notices.length);
     expect(notices[0]).toMatchObject({ text: '„Leserina einrichten“ startet.', talk: after!.id, undoMs: 20 });
+    // decided: it no longer waits
+    expect(board.snapshot().talk[0]!.waits).toBeUndefined();
     await until(() => executed.length === 2);
     expect(executed[1]).toEqual({ do: 'start', card: other.id });
     expect(board.snapshot().talk).toHaveLength(3);
@@ -1219,6 +1220,62 @@ describe('a step the Koordinator takes once a card gets somewhere', () => {
     const fresh = making();
     const later = await say(fresh, 'und?', 'reply', { confirm: 'Nichts weiter.' });
     expect(later.brief).toContain('the card "Export" was stopped by the owner (planned again), and you took up the step you had waited on it for → you: "„Export“ wurde gestoppt; ich habe ihm nichts gesagt."');
+  });
+
+  test('a wait names its new card by title, whatever else the command holds; several steps on one card each stand', async () => {
+    const k = making();
+    const { heard } = await say(k, 'zwei Aufgaben, und danach je etwas', 'act', {
+      actions: [
+        { do: 'new_card', title: 'Erste', body: '' },
+        { do: 'new_card', title: 'Zweite', body: '' },
+        { do: 'wait_for', title: 'erste', text: 'Tell the owner Erste is done.' },
+        { do: 'wait_for', title: 'Erste', state: 'waits_for_owner', text: 'Pass on: use CSV.' },
+      ],
+      confirm: 'Zwei Aufgaben; danach melde ich mich.',
+    });
+    k.arm(heard.token!);
+    await until(() => board.snapshot().talk[0]!.waits?.length === 2);
+    const first = board.snapshot().items.find((i) => i.title === 'Erste')!;
+    expect(board.snapshot().talk[0]!.waits).toEqual([
+      { card: first.id, title: 'Erste', state: 'done' },
+      { card: first.id, title: 'Erste', state: 'waitsForOwner' },
+    ]);
+  });
+
+  test('a card that got done counts as done for a wait until it waits for the owner', async () => {
+    const a = board.create({ title: 'Export', x: 0, y: 0 });
+    board.work(a.id, { state: 'working' });
+    const k = making();
+    const { heard } = await say(k, 'wenn Export wartet, sag Bescheid', 'act', { actions: [{ do: 'wait_for', card: 'K1', state: 'waits_for_owner', text: 'Tell the owner.' }], confirm: 'Gut.' });
+    k.arm(heard.token!);
+    await until(() => board.snapshot().talk[0]!.waits);
+    board.work(a.id, { state: 'live' });
+    k.due(board.snapshot().items);
+    await until(() => runtime.last.inbox.length === 2);
+    expect(runtime.last.inbox.at(-1)).toContain('Now the card "Export" is done.');
+    expect(board.snapshot().talk[1]!.after).toMatchObject({ state: 'done', met: 'reached' });
+  });
+
+  test('the wait stands while the step is read: a restart takes it up again, and dropping it then takes back what was decided', async () => {
+    const a = board.create({ title: 'Export', x: 0, y: 0 });
+    const b = board.create({ title: 'Login', x: 0, y: 0 });
+    board.work(a.id, { state: 'working' });
+    const k = making();
+    const { heard } = await say(k, 'wenn Export fertig ist, starte Login', 'act', { actions: [{ do: 'wait_for', card: 'K1', text: 'Start „Login“.' }], confirm: 'Mache ich.' });
+    k.arm(heard.token!);
+    await until(() => board.snapshot().talk[0]!.waits);
+    board.work(a.id, { state: 'live' });
+    k.due(board.snapshot().items);
+    await until(() => runtime.last.inbox.length === 2);
+    expect(board.snapshot().talk[0]!.waits).toHaveLength(1);
+    // the owner drops it while it is read: the start it decides is taken back
+    expect(k.unwait(board.snapshot().talk[0]!.id, a.id)).toBe(true);
+    runtime.last.call('act', { actions: [{ do: 'start', card: 'K2' }], confirm: '„Login“ startet.' });
+    runtime.last.emit({ type: 'idle' });
+    await until(() => board.snapshot().talk[1]!.undone);
+    await settle();
+    expect(executed.filter((c) => c.do === 'start')).toEqual([]);
+    expect(b.id).toBeString();
   });
 
   test('a card there already is refused; stop_waiting and „Nicht mehr warten“ drop the step, and it hears of the latter', async () => {

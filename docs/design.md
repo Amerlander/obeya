@@ -2936,9 +2936,12 @@ Koordinator sees its waits with every command and drops one on the owner's word 
 
 Every change of the board, the 15 s timer and every start look for waits whose card got there or no
 longer gets there by itself (stopped, archived, removed, dropped), beside the snoozed cards
-(`Commander.due`, called from `wakeDue`). Such a wait goes, and a new exchange without words of the
-owner's takes it up: the Koordinator hears what it said it would do, what became of the card (its
-state and its worker's summary), and takes the step, or replies what became of the card instead.
+(`Commander.due`, called from `wakeDue`). A new exchange without words of the owner's takes such a
+wait up: the Koordinator hears what it said it would do, what became of the card (its state and
+its worker's summary; a card that got done counts as done, also for a wait until it waits for the
+owner), and takes the step, or replies what became of the card instead. The wait goes only once
+that is decided, so a restart meanwhile takes it up again, and dropping it meanwhile takes back what
+was decided. Several steps on one card each stand.
 Its reply reaches the owner as a notice, with „Rückgängig“ where it has actions, as for words the
 usage limit held (which also holds this turn, the same way); its actions run after the undo window.
 The exchange stands where the waiting one was: in the sheet, or on the card that was open then.

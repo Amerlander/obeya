@@ -49,9 +49,9 @@ export type Command = (
   | { do: 'renameGroup'; group: string; name: string }
   /**
    * The Koordinator waits until the card is done or waits for the owner, and then takes the step
-   * `then`; `newCard`: instead of `card`, the card the command's action of that index creates.
+   * `then`; `newCard`: instead of `card`, the card of that title a new card action of the same command creates.
    */
-  | { do: 'waitFor'; card?: string; newCard?: number; state: AwaitedState; then: string }
+  | { do: 'waitFor'; card?: string; newCard?: string; state: AwaitedState; then: string }
   /** It no longer waits on the card. */
   | { do: 'stopWaiting'; card: string }
 ) & {
@@ -481,8 +481,11 @@ export class Commander {
       // what the owner takes back is not learned from either
       if (w.said) this.o.onOwnerInput?.(w.card, 'command', w.said, w.confirm);
       // in the order the owner said them; one that fails does not hold up the others
-      const made: (string | undefined)[] = [];
-      for (const command of w.commands) made.push(await this.run(command, w.talk, made));
+      const made = new Map<string, string>();
+      for (const command of w.commands) {
+        const id = await this.run(command, w.talk, made);
+        if (id && command.do === 'newCard') made.set(command.title, id);
+      }
       this.waiting.delete(token);
     }, Math.max(0, due - Date.now()));
   }
@@ -502,10 +505,10 @@ export class Commander {
 
   /**
    * Runs one command; what it throws is logged on its card. Returns the id of the card a new card
-   * command created, for a wait in the same command (`made`, by index) to name; `talk` is the
+   * command created, for a wait in the same command (`made`, by title) to name; `talk` is the
    * exchange the command came from.
    */
-  private async run(command: Command, talk?: number, made: (string | undefined)[] = []): Promise<string | undefined> {
+  private async run(command: Command, talk?: number, made = new Map<string, string>()): Promise<string | undefined> {
     try {
       if (command.do === 'waitFor') return void this.waitFor(command, talk, made);
       if (command.do === 'stopWaiting') return void this.stopWaiting(command.card);
@@ -542,12 +545,13 @@ export class Commander {
   }
 
   /** Waits after the exchange `talk` until the card gets there (`waitFor`); a new card of the same command by the id it got. */
-  private waitFor(c: Extract<Command, { do: 'waitFor' }>, talk: number | undefined, made: (string | undefined)[]) {
-    const id = c.card ?? (c.newCard !== undefined ? made[c.newCard] : undefined);
+  private waitFor(c: Extract<Command, { do: 'waitFor' }>, talk: number | undefined, made: Map<string, string>) {
+    const id = c.card ?? (c.newCard !== undefined ? made.get(c.newCard) : undefined);
     const card = id ? this.o.board.item(id) : undefined;
     if (talk === undefined || !card) throw new Error(`the card to wait on is not there: ${c.then}`);
     const before = this.o.board.waitingTalk().find((x) => x.id === talk)?.waiting ?? [];
-    this.o.board.waitTalk(talk, [...before.filter((w) => w.card !== card.id), { card: card.id, title: card.title, state: c.state, then: c.then }]);
+    // several steps on one card each stand
+    this.o.board.waitTalk(talk, [...before, { card: card.id, title: card.title, state: c.state, then: c.then }]);
   }
 
   /** It no longer waits on the card, after whichever exchange it said so. */
@@ -558,14 +562,14 @@ export class Commander {
   /** The owner no longer wants the step the Koordinator waits on the card for, after exchange `talk` („Nicht mehr warten“); false when it no longer waits. */
   unwait(talk: number, card: string): boolean {
     const x = this.o.board.waitingTalk().find((t) => t.id === talk);
-    const w = x?.waiting.find((y) => y.card === card);
-    if (!x || !w || this.following.has(`${talk}:${card}`)) return false;
-    this.o.board.waitTalk(talk, x.waiting.filter((y) => y !== w));
-    this.news.push(`The owner told you to stop waiting on „${w.title}“: you do not take the step you would have taken then (${w.then}).`);
+    const dropped = x?.waiting.filter((y) => y.card === card) ?? [];
+    if (!x || !dropped.length) return false;
+    this.o.board.waitTalk(talk, x.waiting.filter((y) => y.card !== card));
+    this.news.push(`The owner told you to stop waiting on „${dropped[0]!.title}“: you do not take the step you would have taken then (${dropped.map((w) => w.then).join('; ')}).`);
     return true;
   }
 
-  /** The waits being taken up, by exchange and card. */
+  /** The waits being taken up, by exchange, card and step. */
   private following = new Set<string>();
 
   /**
@@ -574,7 +578,7 @@ export class Commander {
    */
   due(items: Item[]) {
     for (const { talk, wait } of this.waits()) {
-      const key = `${talk.id}:${wait.card}`;
+      const key = JSON.stringify([talk.id, wait.card, wait.then]);
       const met = this.following.has(key) ? null : awaited(items.find((i) => i.id === wait.card), wait.state);
       if (!met) continue;
       this.following.add(key);
@@ -585,15 +589,24 @@ export class Commander {
   }
 
   /**
-   * A card the Koordinator waited on got there, or no longer can: it no longer waits on it, and a new
-   * exchange, with no words of the owner's, takes the step up where the waiting one was (the sheet,
-   * or the card open then). Its reply reaches the owner as a notice, with „Rückgängig“ where it has actions.
+   * A card the Koordinator waited on got there, or no longer can: a new exchange, with no words of
+   * the owner's, takes the step up where the waiting one was (the sheet, or the card open then). The
+   * wait stands until the step is decided (or held by the usage limit, which keeps it), so a restart
+   * meanwhile takes it up again, and the owner can still drop it: then what was decided is taken
+   * back. Its reply reaches the owner as a notice, with „Rückgängig“ where it has actions.
    */
   private async follow(x: Talk, w: TalkWaitRow, met: Awaited) {
     const card = x.cardId && this.o.board.item(x.cardId) ? x.cardId : undefined;
-    const after: TalkAfter = { title: w.title, state: w.state, met, from: x.id };
-    const left = this.o.board.waitingTalk().find((t) => t.id === x.id)?.waiting.filter((y) => y.card !== w.card) ?? [];
-    this.o.board.waitTalk(x.id, left);
+    // a card that got done also counts for a wait until it needs the owner: it is done, not waiting
+    const reached = met === 'reached' && finished(this.o.board.item(w.card)?.state ?? 'planned') ? 'done' : w.state;
+    const after: TalkAfter = { title: w.title, state: reached, met, from: x.id };
+    /** Takes the wait off its exchange; false when the owner dropped it meanwhile. */
+    const consume = () => {
+      const now = this.o.board.waitingTalk().find((t) => t.id === x.id)?.waiting ?? [];
+      const n = now.findIndex((y) => y.card === w.card && y.then === w.then);
+      if (n >= 0) this.o.board.waitTalk(x.id, now.filter((_, i) => i !== n));
+      return n >= 0;
+    };
     const talk = this.o.board.addTalk('', '', card ?? null, undefined, [], undefined, after);
     const h: Held = {
       transcript: '',
@@ -603,8 +616,16 @@ export class Commander {
       at: new Date().toISOString(),
     };
     await this.drain();
-    if (this.held.size) return void this.hold(talk, h);
-    const heard = await this.answer(talk, h);
+    const heard = this.held.size ? undefined : await this.answer(talk, h);
+    if (!consume()) {
+      // dropped while it was read: what it decided does not happen
+      if (heard?.token) this.undo(heard.token);
+      else if (!heard) {
+        this.o.board.replyTalk(talk, this.o.board.t.voice.undone);
+        this.o.board.undoTalk(talk);
+      }
+      return;
+    }
     if (!heard) return void this.hold(talk, h);
     if (heard.token) this.arm(heard.token);
     this.o.board.notify({ text: heard.confirm, ...(card ? { cardId: card } : { talk }), ...(heard.token ? { token: heard.token, undoMs: this.delayMs } : {}), ...(heard.wish ? { wish: heard.wish } : {}) });
@@ -845,8 +866,8 @@ export class Commander {
       const state: AwaitedState = a.state === 'waits_for_owner' ? 'waitsForOwner' : 'done';
       if (!a.card) {
         const title = a.title?.trim().toLowerCase();
-        const newCard = title ? all.findIndex((x) => x.do === 'new_card' && x.title?.trim().toLowerCase() === title) : -1;
-        if (newCard < 0) return 'name the card with card (its tag), or with title the title of a new_card in this act';
+        const newCard = title ? all.find((x) => x.do === 'new_card' && x.title?.trim().toLowerCase() === title)?.title?.trim() : undefined;
+        if (!newCard) return 'name the card with card (its tag), or with title the title of a new_card in this act';
         return { do: 'waitFor', newCard, state, then };
       }
       const id = s.tags.get(a.card);
