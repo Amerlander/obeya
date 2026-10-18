@@ -3170,7 +3170,14 @@ Playwright on the local Chrome, else Edge, else Playwright's own Chromium, as on
 there is no Chrome, launched by the plugin's `lib/chromium.ts`, which the browser skill shares; cut
 with ffmpeg, run with plain `node`; on macOS, Linux and Windows, checked 2026-10-05), the overlay
 (`lib/overlay.js`) and the narration (`lib/tts.py`), with Playwright
-among Obeya's dependencies.
+among Obeya's dependencies. Every page of the demo's browser, as of the browser skill's, gets
+`plugin/lib/silent-speech.js` as an init script: Chrome's `--mute-audio` leaves the Web Speech API
+alone, and a page's `speechSynthesis` spoke through the system's voice on the machine (an app's
+speech fallback said a name every half minute while an agent tested it). The script keeps the API
+and speaks nothing: utterances queue, fire `start` and, after about as long as saying them takes
+(70 ms a character at rate 1), `end`; `pause`, `resume` and `cancel` fire the spec's events, and a
+page without a user activation gets `not-allowed`, as in Chrome. So the page goes on as it would,
+which leaving the API out (`--disable-speech-synthesis-api`) would not.
 
 Obeya loads the plugin into every worker session (the Agent SDK's `plugins` option, a local plugin),
 so the worker has the skill as `obeya:demo`, which its brief names, and `obeya:settings` (see Repository
@@ -3733,7 +3740,10 @@ owner's earlier private skill `chrome-headless`, so workers' habits and notes ca
 Each Claude Code session has its own browser: the state file in the OS temp directory is named by
 the session's process (`CLAUDE_PID`, which Claude Code gives every command), and `start` leaves a
 detached Node process (`serve`) that launches the browser through Playwright
-(`plugin/lib/chromium.ts`, the demo's Chromium) with a CDP port and `--mute-audio`, and closes it
+(`plugin/lib/chromium.ts`, the demo's Chromium) with a CDP port and `--mute-audio`, keeps a CDP
+connection that gives every page and out-of-process frame the silent `speechSynthesis` (see The demo
+skill; auto-attached with `waitForDebuggerOnStart`, so it is there before a page's first script,
+and with `Page.enable`, without which it ran only in the target's first document), and closes it
 once the session's process has ended (checked every second), at `stop` (CDP `Browser.close`, which
 works on Windows, where killing the holder would leave the browser behind) or on a signal. Without
 `CLAUDE_PID` (a terminal) there is one browser per user until `stop`. `--fake-mic` plays a WAV as

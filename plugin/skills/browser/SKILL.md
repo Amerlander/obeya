@@ -11,7 +11,8 @@ on the browser the demo skill records with: Chrome where it is installed, else E
 Playwright's own Chromium (`DEMO_CHROME` names another).
 
 The browser belongs to this session: other sessions on the machine have their own, and it closes by
-itself when this session ends. It is always muted, so a page's videos and narration stay silent.
+itself when this session ends. It is always muted, so a page's videos and narration stay silent, and its `speechSynthesis` speaks
+nothing (it goes on as if it had: `start`, then `end` after about as long as saying it takes).
 Its profile is fresh at every `start`: no logins or cookies of the machine's user.
 
 For what headless Chromium can't reproduce (on-screen keyboard, fullscreen, rotation), use

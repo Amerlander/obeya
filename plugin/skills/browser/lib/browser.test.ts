@@ -129,6 +129,32 @@ describe('browser skill', () => {
     await browser(b, 'stop');
   }, 30_000);
 
+  test("a page's speechSynthesis speaks nothing, from its first script on, in its frames too", async () => {
+    const pid = session();
+    await browser(pid, 'start');
+    // the frame from another site (localhost, not 127.0.0.1) runs in a process of its own
+    const server = Bun.serve({
+      port: 0,
+      fetch: (req) =>
+        new Response(
+          new URL(req.url).pathname === '/frame'
+            ? `<script>parent.postMessage('frame ' + !!speechSynthesis.__silent, '*')</script>`
+            : `<button>go</button><script>window.log = ['first ' + !!speechSynthesis.__silent]; addEventListener('message', (e) => log.push(e.data))</script><iframe src="http://localhost:${new URL(req.url).port}/frame"></iframe>`,
+          { headers: { 'content-type': 'text/html' } },
+        ),
+    });
+    const tab = await browser(pid, 'open', `http://127.0.0.1:${server.port}/`);
+    await until(async () => (await browser(pid, 'eval', 'log.length')) === '2');
+    expect(JSON.parse(await browser(pid, 'eval', 'log'))).toEqual(['first true', 'frame true']);
+    // spoken after a trusted click, it goes on as if said
+    const said = await browser(pid, 'input', 'click:@button', `eval:await new Promise((r) => { const u = new SpeechSynthesisUtterance('Lena'); u.onend = () => r('said'); u.onerror = (e) => r(e.error); speechSynthesis.speak(u) })`, '--tab', tab);
+    expect(said).toBe('said');
+    await browser(pid, 'nav', 'data:text/html,<p>next</p>', '--tab', tab);
+    expect(await browser(pid, 'eval', '!!speechSynthesis.__silent', '--tab', tab)).toBe('true');
+    server.stop();
+    await browser(pid, 'stop');
+  }, 30_000);
+
   test('a fake microphone plays the WAV into the page', async () => {
     const pid = session();
     const wav = join(dir, 'tone.wav');

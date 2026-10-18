@@ -6,6 +6,9 @@
 import { join } from 'node:path';
 import { chromium, type Browser, type LaunchOptions } from 'playwright-core';
 
+/** The init script every page of it gets: its `speechSynthesis` speaks nothing (`silent-speech.js`). */
+export const SILENT_SPEECH = join(import.meta.dirname, 'silent-speech.js');
+
 /**
  * Chromium launched by Playwright: `DEMO_CHROME` when set (the path of any Chromium-based browser),
  * else Chrome where it is installed, else Edge (on every Windows), else Playwright's own Chromium

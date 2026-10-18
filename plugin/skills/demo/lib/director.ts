@@ -9,7 +9,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Browser, BrowserContext, Locator, Page } from 'playwright-core';
-import { launchChromium } from '../../../lib/chromium.ts';
+import { launchChromium, SILENT_SPEECH } from '../../../lib/chromium.ts';
 import { type NarrationLanguage, readDemoSettings, withVoice } from './settings.ts';
 import { checkSetup, describeSetup } from './setup.ts';
 import { CLOCK, type Cut, type Frame, frameDurations, laterLabel, mmss, onPaintTime, readClock, untagged, videoTime } from './timeline.ts';
@@ -450,6 +450,13 @@ async function launch(viewport: { width: number; height: number }) {
   return launchChromium({ args: [`--window-size=${viewport.width},${viewport.height}`] });
 }
 
+/** A context of the demo's browser, whose pages speak nothing out loud (`SILENT_SPEECH`). */
+async function newContext(browser: Browser, options: Parameters<Browser['newContext']>[0]) {
+  const ctx = await browser.newContext(options);
+  await ctx.addInitScript({ path: SILENT_SPEECH });
+  return ctx;
+}
+
 /**
  * For looking at the app before writing the scenes: opens `url` in the demo's browser and viewport,
  * runs `fn` and closes. Run it from a file in the demo directory (`node explore.ts`); importing this
@@ -459,7 +466,7 @@ export async function explore(url: string, fn: (page: Page) => Promise<void>, vi
   underNode();
   const browser = await launch(viewport);
   try {
-    const page = await (await browser.newContext({ viewport, deviceScaleFactor: 1 })).newPage();
+    const page = await (await newContext(browser, { viewport, deviceScaleFactor: 1 })).newPage();
     await page.goto(url);
     await page.waitForLoadState('networkidle').catch(() => {});
     await fn(page);
@@ -472,7 +479,7 @@ async function login(spec: DemoSpec, dir: string) {
   const stateFile = path.join(dir, 'state.json');
   if (!spec.login) return undefined;
   const browser = await launch(spec.viewport!);
-  const ctx = await browser.newContext({ viewport: spec.viewport });
+  const ctx = await newContext(browser, { viewport: spec.viewport });
   const page = await ctx.newPage();
   try {
     await spec.login(page);
@@ -523,7 +530,7 @@ async function openPage(spec: DemoSpec, viewport: { width: number; height: numbe
   const storageState = await login({ ...spec, viewport }, work);
   watchStillness();
   const browser = await launch(viewport);
-  const ctx = await browser.newContext({ viewport, storageState, deviceScaleFactor: spec.sharp ? 2 : 1 });
+  const ctx = await newContext(browser, { viewport, storageState, deviceScaleFactor: spec.sharp ? 2 : 1 });
   await ctx.addInitScript({ path: path.join(LIB, 'overlay.js') });
   const page = await ctx.newPage();
   const d = new Director(page, spec.baseUrl, work, paced);

@@ -339,7 +339,7 @@ interface ServeSpec {
  * too, where killing this process would leave the browser behind) or on a signal.
  */
 async function serve(spec: ServeSpec) {
-  const { launchChromium } = await import('../../../lib/chromium.ts');
+  const { launchChromium, SILENT_SPEECH } = await import('../../../lib/chromium.ts');
   const port = await freePort();
   const micFlags = spec.fakeMic
     ? [
@@ -369,6 +369,7 @@ async function serve(spec: ServeSpec) {
     }
     process.exit(0);
   };
+  await silenceSpeech(port, fs.readFileSync(SILENT_SPEECH, 'utf8'));
   browser.on('disconnected', end);
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) process.on(signal, end);
   const watch = setInterval(() => {
@@ -377,6 +378,38 @@ async function serve(spec: ServeSpec) {
   const state: State = { port, pid: process.pid, owner: spec.owner };
   fs.writeFileSync(`${spec.state}.tmp`, JSON.stringify(state));
   fs.renameSync(`${spec.state}.tmp`, spec.state);
+}
+
+/**
+ * Gives every page of the browser, and every frame in a process of its own, the init script that
+ * keeps its `speechSynthesis` silent, whoever opens it (`open`, a page's `window.open`, a link).
+ * The connection stays open while the browser runs: CDP holds each new target until this
+ * connection has added the script, so not even a page's first script speaks.
+ */
+async function silenceSpeech(port: number, source: string) {
+  const { webSocketDebuggerUrl } = await http(port, '/json/version');
+  const ws = new WebSocket(webSocketDebuggerUrl);
+  await new Promise((r, j) => ((ws.onopen = r), (ws.onerror = () => j(new Error('WebSocket failed')))));
+  let id = 0;
+  const send = (method: string, params: object = {}, sessionId?: string) =>
+    ws.send(JSON.stringify({ id: ++id, method, params, ...(sessionId ? { sessionId } : {}) }));
+  const autoAttach = (sessionId?: string) => send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, sessionId);
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(String(event.data));
+    if (msg.method !== 'Target.attachedToTarget') return;
+    const { sessionId, targetInfo } = msg.params;
+    if (targetInfo.type === 'page' || targetInfo.type === 'iframe') {
+      // without Page.enable, the script ran only in the document the target opened with
+      send('Page.enable', {}, sessionId);
+      send('Page.addScriptToEvaluateOnNewDocument', { source, runImmediately: true }, sessionId);
+      autoAttach(sessionId);
+      send('Runtime.runIfWaitingForDebugger', {}, sessionId);
+    } else {
+      send('Runtime.runIfWaitingForDebugger', {}, sessionId);
+      send('Target.detachFromTarget', { sessionId });
+    }
+  };
+  autoAttach();
 }
 
 async function start(args: string[]) {
