@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { CardDiff } from '../core/diff';
 import type { PushKeyView } from '../core/push-key';
 import { type Place, placeParam } from '../core/layout';
-import type { AccessView, Pairing, RemoteSetting, AgentRole, AgentSetting, CloudPreset, AgentsView, CanvasConfig, CanvasInfo, CanvasSnapshot, ClientMessage, ConfigSaved, ConfigView, CardAction, ConfigChecked, DemoSettings, Group, DemoSettingsView, DemoVoiceCheck, FirstCanvas, GitSetupPreview, MachineItem, MachineSectionId, MachineView, SetupCheck, SetupFolder, VoiceSetupView, CardEvent, CardPatch, Item, Language, LanguageView, NewCard, Notice, OwnerHold, PendingRestart, ProjectHistory, RepoTrust, ServerMessage, SettingsShared, SpotInput, TalkRef, AppUpdate, Theme, ThemeView } from '../core/types';
+import type { AccessView, Pairing, RemoteSetting, AgentRole, AgentSetting, CloudPreset, AgentsView, CanvasConfig, CanvasInfo, CanvasSnapshot, ClientMessage, ConfigSaved, ConfigView, CardAction, ConfigChecked, DemoSettings, Group, DemoSettingsView, DemoVoiceCheck, FirstCanvas, GitSetupPreview, MachineItem, MachineSectionId, MachineView, SetupCheck, SetupFolder, VoiceSetupView, CardEvent, CardPatch, Item, Language, LanguageView, NewCard, Notice, OwnerHold, PendingRestart, ProjectHistory, RepoTrust, ServerMessage, SettingsShared, SourceUpdate, SpotInput, TalkRef, AppUpdate, Theme, ThemeView } from '../core/types';
 import type { Wish } from '../core/wish';
 
 /** A request the server refused; `code` picks the owner's text, the message is the server's detail. */
@@ -164,6 +164,8 @@ export const api = {
   restartReposNow: () => call<{ restarting: boolean }>('POST', at('/restart')),
   /** Installs the newer version of the app once the workers paused, as a restart waits for them. */
   installUpdate: () => call<{ updating: boolean }>('POST', '/api/app-update/install'),
+  /** Fast-forwards the checkout Obeya runs from to its upstream; Obeya then restarts with the new code once the workers paused. */
+  pullSource: () => call<{ source: SourceUpdate | null }>('POST', '/api/source-update/pull'),
   create: (c: NewCard) => call<Item>('POST', at('/cards'), c),
   /** The card that writes a repository's settings for everyone, on the canvas it belongs to (not necessarily the shown one). */
   adapterSetup: (canvas: string, repo: string) => call<Item>('POST', `/api/c/${encodeURIComponent(canvas)}/adapter-setup`, { repo }),
@@ -408,6 +410,8 @@ export function useCanvas(id = canvasId): {
   offlineSince: number | null;
   restart: PendingRestart | null;
   update: AppUpdate | null;
+  /** New commits on the upstream of the checkout Obeya runs from. */
+  source: SourceUpdate | null;
   waiting: Record<string, number>;
   oldBun: string | null;
   /** The canvases as they changed while the page is open (one started, stopped or renamed); null until they do. */
@@ -419,6 +423,7 @@ export function useCanvas(id = canvasId): {
   const [offlineSince, setOfflineSince] = useState<number | null>(() => (quietAtStart ? Date.now() - QUIET_MS : null));
   const [restart, setRestart] = useState<PendingRestart | null>(null);
   const [update, setUpdate] = useState<AppUpdate | null>(null);
+  const [source, setSource] = useState<SourceUpdate | null>(null);
   const [waiting, setWaiting] = useState<Record<string, number>>({});
   const [oldBun, setOldBun] = useState<string | null>(null);
   const [canvases, setCanvases] = useState<CanvasInfo[] | null>(null);
@@ -459,6 +464,7 @@ export function useCanvas(id = canvasId): {
         } else if (msg.type === 'snapshot') setSnapshot(msg.snapshot);
         else if (msg.type === 'restart') setRestart(msg.restart);
         else if (msg.type === 'update') setUpdate(msg.update);
+        else if (msg.type === 'source') setSource(msg.source);
         else if (msg.type === 'waiting') setWaiting(msg.waiting);
         else if (msg.type === 'canvases') setCanvases(msg.canvases);
         else if (msg.type === 'event') for (const fn of eventListeners) fn(msg.event);
@@ -512,5 +518,5 @@ export function useCanvas(id = canvasId): {
       ws.close();
     };
   }, [id]);
-  return { snapshot, online, offlineSince, restart, update, waiting, oldBun, canvases };
+  return { snapshot, online, offlineSince, restart, update, source, waiting, oldBun, canvases };
 }

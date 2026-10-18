@@ -11,7 +11,8 @@
 // ~/.obeya).
 //
 // Without --dev the process supervises the server: it runs it as a child and starts it again
-// when the server exits to pick up new code on Obeya's own checkout (self-update.ts). A
+// when the server exits to pick up new code on Obeya's own checkout (self-update.ts); new commits
+// on that checkout's upstream show in the bar, for the owner to pull (source-update.ts). A
 // configuration the owner saves applies while the server runs (config.ts, `Canvases`); saved while
 // the canvases came from the command line, it starts the server again, from the file from then on.
 //
@@ -48,6 +49,7 @@ import { extendPath } from './path';
 import { ShellReports } from './push-key';
 import { headOf, installDependencies, ownCheckout, RESTART, RESTART_FROM_FILE, RESTART_PATIENCE_MS, Restarter, UPDATE, watchOwnCode } from './self-update';
 import { AppUpdates } from './app-update';
+import { SourceUpdates } from './source-update';
 import { COMPILED, resource, SELF, VERSION } from './resources';
 import { oldLinuxBun } from './repo';
 import { Access } from './remote';
@@ -263,6 +265,8 @@ const transcriber = new VoiceIn(home, new LocalTranscriber());
 const voiceSetup = new VoiceSetup({ home, local: transcriber.local });
 const shells = new ShellReports();
 const updates = new AppUpdates();
+// run from a clone of Obeya's repository: new commits on its upstream, for the owner to pull
+const sources = own ? new SourceUpdates(own) : undefined;
 const machine = new MachineSetup({ home, config, voice: voiceSetup, shells });
 // the canvas the assistant created gets a first card that says what to try
 welcome(home, canvases.all());
@@ -300,12 +304,13 @@ const access = new Access({ store, home, language: () => ownerLanguage(home) });
 const push = new Push({ store, home, language: () => ownerLanguage(home) });
 // while other devices may reach Obeya, the machine stays awake as long as a worker works, or the whole time
 const awake = new Awake({ wanted: () => access.awake() === 'always' || (access.awake() === 'works' && busy().length > 0) }).start();
-server = serve(canvases, { transcriber, setup: voiceSetup }, Number(values.port), values.dev, config, restarter, narration, machine, stop, shells, updates, access, push);
+server = serve(canvases, { transcriber, setup: voiceSetup }, Number(values.port), values.dev, config, restarter, narration, machine, stop, shells, updates, access, push, sources);
 claim(home, { pid: process.env.OBEYA_SUPERVISED ? process.ppid : process.pid, port: server.port!, url: `http://127.0.0.1:${server.port}`, version: VERSION, app: !!process.env.OBEYA_APP });
 // the address as a one-time link that signs a browser in (owner.ts)
 const link = access.owner.link(`http://127.0.0.1:${server.port}`);
 console.log(`Obeya ${own ? `from ${own}` : VERSION} on ${link} (${source === 'file' ? configFile : 'canvases from the command line'}), agents on ${claudeExecutable() ?? 'the Claude Code the Agent SDK brings'}`);
 if (own) watchOwnCode(own, (from, to) => restart('code', `${own} moved from ${from.slice(0, 7)} to ${to.slice(0, 7)}`));
+sources?.start();
 if (!canvases.all().length) console.log(`  no canvas yet: the setup assistant there checks this machine and creates the first`);
 for (const c of canvases.all()) {
   console.log(`  ${c.board.canvas.name} (?c=${c.id})`);

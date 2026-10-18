@@ -3,7 +3,7 @@
 import { memo, type ReactNode, useEffect, useRef, useState } from 'react';
 import { type Bounds, shapeOf } from '../core/layout';
 import { clip } from '../core/text';
-import { answering, type AppUpdate, type CanvasInfo, type ClonePool, finished, finishedArchivable, finishingUp, type Item, needsYou, type PendingRestart, type PoolHost, type ProjectHistory, stoppedArchivable, titleFrom } from '../core/types';
+import { answering, type AppUpdate, type CanvasInfo, type ClonePool, finished, finishedArchivable, finishingUp, type Item, needsYou, type PendingRestart, type PoolHost, type ProjectHistory, type SourceUpdate, stoppedArchivable, titleFrom } from '../core/types';
 import { api } from './api';
 import type { Cam } from './camera';
 import type { Shape } from './groups';
@@ -423,6 +423,55 @@ export function UpdatePill({ update }: { update: AppUpdate }) {
         </p>
         {update.notes && <Doc md={update.notes} />}
         <p className="hint">{update.download ? t.update.howDownload : t.update.how}</p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * New commits on the upstream of the checkout Obeya runs from (Obeya from source): which (on
+ * hover), and a button that pulls them as a fast-forward, after which Obeya restarts with the new
+ * code once the workers paused (then RestartPill shows the wait). Where Obeya cannot fast-forward,
+ * there is no button, and the hover says what stands in the way.
+ */
+export function SourcePill({ source }: { source: SourceUpdate }) {
+  const [asked, setAsked] = useState(false);
+  // a pull that failed comes back with git's message: the button is there again
+  useEffect(() => setAsked(false), [source]);
+  const pull = () => {
+    setAsked(true);
+    api.pullSource().catch(() => setAsked(false));
+  };
+  const more = source.count - source.commits.length;
+  const how = !source.blocked
+    ? t.source.how(source.checkout)
+    : source.blocked.why === 'diverged'
+      ? t.source.diverged(source.checkout, source.upstream)
+      : t.source.local(source.checkout, source.blocked.files.map((f) => `\`${f}\``).join(', '));
+  return (
+    <div className={source.blocked ? 'pill restart update source by-hand' : 'pill restart update source'} id="source-update">
+      <span>{t.source.pill(source.count)}</span>
+      {!source.blocked && (
+        <button onClick={pull} disabled={asked}>
+          {t.source.pull}
+        </button>
+      )}
+      <div className="tip why" role="tooltip">
+        <p>
+          <b>{t.source.title(source.count, source.upstream)}</b>
+        </p>
+        <ul>
+          {source.commits.map((c, i) => (
+            <li key={i}>
+              {c.subject} <span className="hint">{shortDay(c.date)}</span>
+            </li>
+          ))}
+        </ul>
+        {more > 0 && <p className="hint">{t.source.more(more)}</p>}
+        {source.error && <p className="warn">{t.source.failed(source.error)}</p>}
+        <p className="hint">
+          <Inline md={how} />
+        </p>
       </div>
     </div>
   );

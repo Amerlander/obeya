@@ -104,7 +104,7 @@ always (a closed laptop lid still sends it to sleep).
 ## From source
 
 Obeya is developed this way: started from a checkout, it updates itself whenever the checkout
-moves to new code.
+moves to new code. When `origin` has new commits, the bar says so and offers to `git pull` them.
 
 - [Bun](https://bun.sh) 1.3.14 or newer (on Linux, older 1.3 releases can hang the canvas).
 - [Claude Code](https://claude.com/claude-code), installed and logged in. Obeya starts it for every agent;

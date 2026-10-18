@@ -1336,6 +1336,19 @@ const de = {
     how: 'Installieren wartet wie ein Neustart, bis die Agenten an einem sicheren Punkt pausieren (höchstens 15 Minuten), und nicht mitten in deinem Video oder Diktat. Dann ersetzt sich die App und startet neu, und die Agenten machen weiter.',
     howDownload: 'Als .deb-Paket installiert, kann sich Obeya nicht selbst ersetzen: Lade das neue Paket herunter und installiere es wie das erste.',
   },
+  source: {
+    pill: (n: number) => `Update: ${n === 1 ? '1 neuer Commit' : `${n} neue Commits`}`,
+    pull: 'git pull',
+    title: (n: number, upstream: string) => `${n === 1 ? '1 neuer Commit' : `${n} neue Commits`} auf ${upstream}`,
+    more: (n: number) => `… und ${n === 1 ? '1 weiterer' : `${n} weitere`}`,
+    how: (checkout: string) =>
+      `„git pull“ holt sie in \`${checkout}\` (als Fast-Forward). Dann startet Obeya mit dem neuen Code neu, wie nach einer Landung: sobald die Agenten an einem sicheren Punkt pausieren (höchstens 15 Minuten), und nicht mitten in deinem Video oder Diktat. Die Agenten machen danach weiter.`,
+    diverged: (checkout: string, upstream: string) =>
+      `Dein Checkout \`${checkout}\` hat Commits, die ${upstream} nicht hat, also geht kein Fast-Forward. Führe dort \`git pull\` selbst aus; Obeya startet danach mit dem neuen Code neu.`,
+    local: (checkout: string, files: string) =>
+      `In \`${checkout}\` hast du nicht committete Änderungen an Dateien, die die neuen Commits ändern: ${files}. Committe sie oder lege sie mit \`git stash\` beiseite; dann holt „git pull“ hier die Commits.`,
+    failed: (error: string) => `„git pull“ ging nicht: ${error}`,
+  },
   workspaces: {
     label: 'Workspaces',
     free: (n: number, total: number) => (total === 0 ? 'keine eingerichtet' : n <= 0 ? 'alle belegt' : `${n} frei`),
@@ -2755,6 +2768,19 @@ const en: Strings = {
     title: (version: string, day: string | null) => `Obeya ${version} is out${day ? ` (${day})` : ''}.`,
     how: 'Installing waits like a restart until the agents pause at a safe point (at most 15 minutes), and not in the middle of your video or dictation. Then the app replaces itself and restarts, and the agents carry on.',
     howDownload: 'Installed as a .deb package, Obeya cannot replace itself: download the new package and install it like the first one.',
+  },
+  source: {
+    pill: (n: number) => `Update: ${n === 1 ? '1 new commit' : `${n} new commits`}`,
+    pull: 'git pull',
+    title: (n: number, upstream: string) => `${n === 1 ? '1 new commit' : `${n} new commits`} on ${upstream}`,
+    more: (n: number) => `… and ${n} more`,
+    how: (checkout: string) =>
+      `"git pull" brings them into \`${checkout}\` (as a fast-forward). Obeya then restarts with the new code, as after a landing: once the agents pause at a safe point (at most 15 minutes), and not in the middle of your video or dictation. The agents carry on afterwards.`,
+    diverged: (checkout: string, upstream: string) =>
+      `Your checkout \`${checkout}\` has commits that ${upstream} does not, so no fast-forward is possible. Run \`git pull\` there yourself; Obeya then restarts with the new code.`,
+    local: (checkout: string, files: string) =>
+      `\`${checkout}\` has uncommitted changes to files the new commits change: ${files}. Commit them or put them aside with \`git stash\`; then "git pull" here brings in the commits.`,
+    failed: (error: string) => `"git pull" failed: ${error}`,
   },
   workspaces: {
     label: 'Workspaces',

@@ -1913,6 +1913,28 @@ export interface AppUpdate {
   download?: string;
 }
 
+/**
+ * New commits on the upstream of the checkout Obeya runs from (`origin/main`, say) that change code,
+ * shown in the bar for the owner to pull (src/server/source-update.ts).
+ */
+export interface SourceUpdate {
+  /** The upstream, as git names it: `origin/main`. */
+  upstream: string;
+  /** The checkout's directory. */
+  checkout: string;
+  /** How many commits the upstream has that the checkout does not. */
+  count: number;
+  /** The newest of them (at most ten), newest first: subject and when it was committed (ms since the epoch). */
+  commits: { subject: string; date: number }[];
+  /**
+   * Why Obeya cannot pull them itself, if it cannot: the checkout has commits of its own (`diverged`,
+   * a fast-forward is not possible), or uncommitted changes to files the new commits change (`local`).
+   */
+  blocked?: { why: 'diverged' } | { why: 'local'; files: string[] };
+  /** What git said when the owner's last pull failed. */
+  error?: string;
+}
+
 /** What the owner does in an open page that a restart would cut off: watching a demo video, dictating. */
 export type OwnerHold = 'video' | 'voice';
 
@@ -1966,6 +1988,8 @@ export type ServerMessage =
   | { type: 'restart'; restart: PendingRestart | null }
   /** On connect and whenever it changes: the newer version of the app there is to install, if any. */
   | { type: 'update'; update: AppUpdate | null }
+  /** On connect and whenever it changes: new commits on the upstream of the checkout Obeya runs from, if any. */
+  | { type: 'source'; source: SourceUpdate | null }
   /** On connect and whenever it changes: how many cards on each canvas need the owner, by canvas id. */
   | { type: 'waiting'; waiting: Record<string, number> }
   /** Whenever a canvas starts, stops, or changes its name or repositories while Obeya runs. */

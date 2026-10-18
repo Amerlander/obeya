@@ -9,6 +9,7 @@ import type { Command } from './commands';
 import { Store } from './db';
 import { AppUpdates } from './app-update';
 import { Restarter } from './self-update';
+import { SourceUpdates } from './source-update';
 import type { NarrationHost } from './narration';
 import { serve, serveNarration } from './server';
 import { artifact, asOwner, FakeRuntime, gitRepo, identify, noForge, until } from './testing';
@@ -848,6 +849,42 @@ describe('a newer version of the app', () => {
     // the bar leads to Obeya's releases only, whoever reports another address
     await post('/api/app-update', JSON.stringify({ version: '9.9.9', download: 'https://example.com/obeya.deb' }));
     expect(updates.current()).toEqual({ version: '9.9.9' });
+  });
+});
+
+describe('new commits on the upstream of the checkout Obeya runs from', () => {
+  test('show on the canvas, and the owner pulls them into the checkout', async () => {
+    const up = join(dir, 'up');
+    gitRepo(up, { 'src/a.ts': 'a\n' });
+    const clone = join(dir, 'clone');
+    git(dir, 'clone', '--quiet', up, clone);
+    writeFileSync(join(up, 'src/a.ts'), 'b\n');
+    identify(up);
+    git(up, 'commit', '--quiet', '-am', 'Faster');
+    const sources = new SourceUpdates(clone);
+    server.stop(true);
+    server = serve([canvas], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, sources);
+    const messages: ServerMessage[] = [];
+    const ws = new WebSocket(new URL(api('/ws'), server.url.href.replace('http', 'ws')));
+    ws.onmessage = (e) => messages.push(JSON.parse(e.data));
+    const shown = () => messages.filter((m): m is Extract<ServerMessage, { type: 'source' }> => m.type === 'source');
+    await until(() => shown().length === 1);
+    expect(shown()[0]!.source).toBeNull();
+    await sources.check();
+    await until(() => shown().length === 2);
+    expect(shown()[1]!.source).toMatchObject({ upstream: 'origin/main', count: 1, commits: [{ subject: 'Faster' }] });
+    expect(await (await post('/api/source-update/pull', '')).json()).toEqual({ source: null });
+    expect(git(clone, 'rev-parse', 'HEAD')).toBe(git(up, 'rev-parse', 'HEAD'));
+    await until(() => shown().length === 3);
+    expect(shown()[2]!.source).toBeNull();
+    // nothing left to pull
+    expect(await codeOf(post('/api/source-update/pull', ''))).toBe('invalid');
+    ws.close();
+  });
+
+  test('an Obeya that runs from no checkout has none', async () => {
+    expect((await post('/api/source-update/pull', '')).status).toBe(404);
+    expect(await (await fetch(new URL('/api/source-update', server.url))).json()).toBeNull();
   });
 });
 

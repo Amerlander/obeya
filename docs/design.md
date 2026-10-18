@@ -44,7 +44,7 @@ Contents:
   main branch, Lesestand, plan docs, repository settings, the Konfiguration dialog, live
   configuration, language
 - [Running Obeya](#running-obeya) — server, setup assistant, setting up git in a folder,
-  self-update, stopping
+  self-update, pulling from the upstream, stopping
 - [Distribution](#distribution) — one file, app, builds, app updates, site, hero video
 - [Data](#data)
 - [Open questions](#open-questions)
@@ -4948,6 +4948,28 @@ of every scrolled box in them, the drafts in their text fields and where the dem
 plays on only in a tab in sight); the new page opens them again without flights or unfold and puts
 positions and drafts back while their content loads (`src/ui/keep.ts`). The camera is kept anyway.
 
+#### Pulling from the upstream
+
+Obeya from a clone of its repository (README: From source) moves only when its owner pulls. So the
+supervised server fetches the upstream of the branch its checkout is on (`origin/main`, as a rule) at
+the start and every hour (`src/server/source-update.ts`; only that branch into its remote-tracking
+ref, no `FETCH_HEAD`, as the Lesestand does; a fetch that fails goes to the log and is tried again
+next hour). While the upstream has commits the checkout lacks and they change code (the same test as
+for the restart: docs alone do not count), the bar shows them beside where the app shows its
+updates: "Update: 12 neue Commits", their subjects and dates on hover (the newest ten), and a
+"git pull" button. The click fetches once more and fast-forwards the checkout to the upstream (`git
+merge --ff-only`); the restart for new code follows as after a landing, waiting for the workers and
+the owner, and the bar shows that wait instead. Where Obeya cannot fast-forward, there is no button
+and the hover says why and what to do: the checkout has commits of its own (a contributor's), or
+uncommitted changes to files the new commits change (named). Whatever else git refuses (an untracked
+file in the way, say) stays on the hover with git's message until a pull goes through.
+
+A branch without upstream (a card's, in a worktree) or a detached HEAD has nothing to pull, and
+neither has an Obeya with `--dev` (it does not restart for new code) or the app and the compiled
+binary (no checkout; the app has its own updates). The owner's Obeya here runs from the checkout work
+lands on, which is ahead of `origin` rather than behind, and shows it only when `main` was pushed
+from elsewhere.
+
 ### Stopping
 
 Ctrl-C, SIGTERM or `POST /api/stop` (the app; Windows has no SIGTERM), with or without `--dev`,
@@ -5233,7 +5255,8 @@ in its old version.
 
 A .deb is not replaced by the app (dpkg needs root): its bar offers the release to download instead.
 No update is offered for an Obeya the app did not start in this run (it would not see it end), nor
-from a checkout, which follows its git. `bun scripts/check-update.ts` checks it on the machine it
+from a checkout, which follows its git (its bar offers the upstream's new commits instead, see
+Pulling from the upstream). `bun scripts/check-update.ts` checks it on the machine it
 runs on: it builds the app as 0.0.1 and 0.0.2 with a key pair and a local release made for the
 check, installs the first, and has it find, download and install the second and start again. It
 passed on macOS arm64 and on GitHub's Windows x64 and Ubuntu x64 runners (2026-10-09).

@@ -24,6 +24,7 @@ import type { MachineSetup } from './machine';
 import type { VoiceSetup } from './voice-setup';
 import { ShellReports } from './push-key';
 import { AppUpdates } from './app-update';
+import type { SourceUpdates } from './source-update';
 import { oldLinuxBun } from './repo';
 import { Store } from './db';
 import { Access } from './remote';
@@ -124,6 +125,8 @@ export function serve(
   access = new Access({ store: new Store(':memory:'), tailscale: new Tailscale(null) }),
   /** What goes to the devices that turned notifications on. */
   push = new Push({ store: access.store }),
+  /** New commits on the upstream of the checkout Obeya runs from; none for the app or the compiled binary. */
+  sources?: SourceUpdates,
 ) {
   const canvases = Array.isArray(served) ? { all: () => served } : served;
   const byId = new Map<string, CanvasRuntime>();
@@ -170,6 +173,7 @@ export function serve(
     for (const id of byId.keys()) sendTo(id, { type: 'restart', restart: pending(id) });
   });
   updates.onChange(() => everyone(JSON.stringify({ type: 'update', update: updates.current() } satisfies ServerMessage)));
+  sources?.onChange(() => everyone(JSON.stringify({ type: 'source', source: sources.current() } satisfies ServerMessage)));
   /** What stops sending each canvas's changes to its pages. */
   const detach = new Map<string, () => void>();
   const attach = (c: CanvasRuntime) => {
@@ -673,6 +677,10 @@ export function serve(
             return { updating: true };
           }),
       },
+      // new commits on the upstream of the checkout Obeya runs from
+      '/api/source-update': { GET: () => Response.json(sources?.current() ?? null) },
+      // the owner pulls them: a fast-forward of the checkout, after which the self-update restarts Obeya once the workers paused
+      '/api/source-update/pull': { POST: needs(sources, async (s) => (await s.pull(), { source: s.current() })) },
       // where the owner was last in a page: the shell's command goes there
       '/api/focus': { GET: () => Response.json(lastFocus()) },
       // a demo as a file to pass on, where the repository has no share target (`?as=zip|html`)
@@ -823,6 +831,7 @@ export function serve(
         ws.send(JSON.stringify({ type: 'snapshot', snapshot: c.board.snapshot() } satisfies ServerMessage));
         ws.send(JSON.stringify({ type: 'restart', restart: pending(c.id) } satisfies ServerMessage));
         ws.send(JSON.stringify({ type: 'update', update: updates.current() } satisfies ServerMessage));
+        ws.send(JSON.stringify({ type: 'source', source: sources?.current() ?? null } satisfies ServerMessage));
         ws.send(waitingMessage());
         // a page that reloads within a command's undo window offers "Rückgängig" again
         for (const n of c.commander.undoable()) ws.send(JSON.stringify({ type: 'notice', ...n } satisfies ServerMessage));
