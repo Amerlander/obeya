@@ -258,7 +258,9 @@ function Conversation({ talk, fresh, items, onOpen, draft }: { talk: Talk[]; fre
 function WaitLine({ talk, wait }: { talk: number; wait: TalkWait }) {
   return (
     <div className="hint wait-line">
-      <ClockMark /> {t.koordinator.waits(wait.title, wait.state)}
+      <span>
+        <ClockMark /> {t.koordinator.waits(wait.title, wait.state)}
+      </span>
       <button className="btn small" title={t.koordinator.unwaitHint} onClick={() => void api.unwait(talk, wait.card).catch(() => {})}>
         {t.koordinator.unwait}
       </button>

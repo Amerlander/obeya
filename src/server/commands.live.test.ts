@@ -272,20 +272,21 @@ async function later(text: string) {
   k.due(board.snapshot().items);
   for (const end = Date.now() + 120_000; !notices.length && Date.now() < end; ) await new Promise((r) => setTimeout(r, 100));
   await new Promise((r) => setTimeout(r, 20));
-  return { now, confirm: heard.confirm, on: wait.title, then: wait.then, after: executed.slice(made), notice: notices[0] };
+  const body = executed.flatMap((c) => (c.do === 'newCard' ? [c.body] : [])).join(' ');
+  return { now, confirm: heard.confirm, on: wait.title, then: wait.then, body, after: executed.slice(made), notice: notices[0] };
 }
 
 test.skipIf(!process.env.OBEYA_LIVE)(
   'a step that can only follow once a card is done is waited for, and taken by itself once it is',
   async () => {
-    const results = await Promise.all(LATER.flatMap((c) => [c, c]).map(async ([text, want, on]) => ({ text, want, on, got: await later(text) })));
+    const results = await Promise.all(LATER.flatMap((c) => [c, c, c]).map(async ([text, want, on]) => ({ text, want, on, got: await later(text) })));
     const configured = (r: (typeof results)[number]) =>
       r.want.includes('newCard')
         ? r.got.after?.some((c) => c.do === 'configure' && c.canvases.some((x) => x.repos.some((y) => y.path.includes('leserina'))))
         : r.got.after?.some((c) => c.do === 'start');
     const wrong = results.filter((r) => JSON.stringify(r.got.now) !== JSON.stringify(r.want) || (r.on !== null && r.got.on !== r.on) || !configured(r));
     for (const r of results)
-      console.log(`${wrong.includes(r) ? '✗' : '✓'} „${r.text}“ → ${r.got.now.join(', ')} · ${r.got.confirm} · waits on: ${r.got.on}, then: ${r.got.then} → ${r.got.after?.map((c) => c.do).join(', ')} · ${r.got.notice}`);
+      console.log(`${wrong.includes(r) ? '✗' : '✓'} „${r.text}“ → ${r.got.now.join(', ')} · ${r.got.confirm} · body: ${r.got.body} · waits on: ${r.got.on}, then: ${r.got.then} → ${r.got.after?.map((c) => c.do).join(', ')} · ${r.got.notice}`);
     expect(wrong.map((r) => r.text)).toEqual([]);
   },
   300_000,

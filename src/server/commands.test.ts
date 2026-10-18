@@ -1152,7 +1152,7 @@ describe('a step the Koordinator takes once a card gets somewhere', () => {
     const { heard, session } = await say(k, 'Leg eine Aufgabe an, die das Repo erstellt, und dann die Leinwand', 'act', {
       actions: [
         { do: 'new_card', title: 'Repository ~/dev/leserina anlegen', body: 'git init in ~/dev/leserina' },
-        { do: 'wait_for', title: 'Repository ~/dev/leserina anlegen', text: 'Start „Leserina einrichten“ (K1).' },
+        { do: 'wait_for', on: 'Repository ~/dev/leserina anlegen', text: 'Start K1.' },
       ],
       confirm: 'Neue Aufgabe „Repository ~/dev/leserina anlegen“; sobald sie erledigt ist, starte ich „Leserina einrichten“.',
     });
@@ -1164,7 +1164,7 @@ describe('a step the Koordinator takes once a card gets somewhere', () => {
 
     // the next command knows what it waits on
     const next = await say(k, 'was läuft?', 'reply', { confirm: 'Das Repository wird angelegt.' });
-    expect(next.brief).toMatch(/Cards you wait on.*\n- K\d "Repository ~\/dev\/leserina anlegen" until it is done \(since .*\), then: Start „Leserina einrichten“ \(K1\)\./);
+    expect(next.brief).toMatch(/Cards you wait on.*\n- K\d "Repository ~\/dev\/leserina anlegen" until it is done \(since .*\), then: Start "Leserina einrichten"\./);
 
     // still at work: nothing happens
     board.work(card.id, { state: 'working' });
@@ -1179,7 +1179,7 @@ describe('a step the Koordinator takes once a card gets somewhere', () => {
     const brief = runtime.last.inbox.at(-1)!;
     expect(brief).toContain("No words of the owner's this time");
     expect(brief).toContain('the card "Repository ~/dev/leserina anlegen" is done');
-    expect(brief).toContain('to then: Start „Leserina einrichten“ (K1).');
+    expect(brief).toContain('to then: Start "Leserina einrichten".');
     const [, , after] = board.snapshot().talk;
     // the exchange stands with what became of the card in place of the owner's words
     expect(after).toMatchObject({ said: '', after: { title: card.title, state: 'done', met: 'reached', from: board.snapshot().talk[0]!.id } });
@@ -1201,7 +1201,7 @@ describe('a step the Koordinator takes once a card gets somewhere', () => {
     board.work(a.id, { state: 'working' });
     const k = making();
     const { heard } = await say(k, 'wenn Export wartet, sag ihm, es soll CSV nehmen', 'act', {
-      actions: [{ do: 'wait_for', card: 'K1', state: 'waits_for_owner', text: 'Tell its agent to use CSV (note).' }],
+      actions: [{ do: 'wait_for', on: 'K1', state: 'waits_for_owner', text: 'Tell its agent to use CSV (note).' }],
       confirm: 'Sobald „Export“ auf dich wartet, sage ich ihm, es soll CSV nehmen.',
     });
     k.arm(heard.token!);
@@ -1228,8 +1228,8 @@ describe('a step the Koordinator takes once a card gets somewhere', () => {
       actions: [
         { do: 'new_card', title: 'Erste', body: '' },
         { do: 'new_card', title: 'Zweite', body: '' },
-        { do: 'wait_for', title: 'erste', text: 'Tell the owner Erste is done.' },
-        { do: 'wait_for', title: 'Erste', state: 'waits_for_owner', text: 'Pass on: use CSV.' },
+        { do: 'wait_for', on: 'erste', text: 'Tell the owner Erste is done.' },
+        { do: 'wait_for', on: 'Erste', state: 'waits_for_owner', text: 'Pass on: use CSV.' },
       ],
       confirm: 'Zwei Aufgaben; danach melde ich mich.',
     });
@@ -1246,7 +1246,7 @@ describe('a step the Koordinator takes once a card gets somewhere', () => {
     const a = board.create({ title: 'Export', x: 0, y: 0 });
     board.work(a.id, { state: 'working' });
     const k = making();
-    const { heard } = await say(k, 'wenn Export wartet, sag Bescheid', 'act', { actions: [{ do: 'wait_for', card: 'K1', state: 'waits_for_owner', text: 'Tell the owner.' }], confirm: 'Gut.' });
+    const { heard } = await say(k, 'wenn Export wartet, sag Bescheid', 'act', { actions: [{ do: 'wait_for', on: 'K1', state: 'waits_for_owner', text: 'Tell the owner.' }], confirm: 'Gut.' });
     k.arm(heard.token!);
     await until(() => board.snapshot().talk[0]!.waits);
     board.work(a.id, { state: 'live' });
@@ -1261,7 +1261,7 @@ describe('a step the Koordinator takes once a card gets somewhere', () => {
     const b = board.create({ title: 'Login', x: 0, y: 0 });
     board.work(a.id, { state: 'working' });
     const k = making();
-    const { heard } = await say(k, 'wenn Export fertig ist, starte Login', 'act', { actions: [{ do: 'wait_for', card: 'K1', text: 'Start „Login“.' }], confirm: 'Mache ich.' });
+    const { heard } = await say(k, 'wenn Export fertig ist, starte Login', 'act', { actions: [{ do: 'wait_for', on: 'K1', text: 'Start „Login“.' }], confirm: 'Mache ich.' });
     k.arm(heard.token!);
     await until(() => board.snapshot().talk[0]!.waits);
     board.work(a.id, { state: 'live' });
@@ -1286,20 +1286,20 @@ describe('a step the Koordinator takes once a card gets somewhere', () => {
     const k = making();
     const s = k.hear('wenn Export fertig ist, starte Login', {});
     await settle();
-    expect(String(runtime.last.call('act', { actions: [{ do: 'wait_for', card: 'K1', text: 'start K2' }], confirm: 'x' }))).toContain('is done already: take the step now');
-    expect(String(runtime.last.call('act', { actions: [{ do: 'wait_for', card: 'K2' }], confirm: 'x' }))).toContain('the step you take then is missing');
-    expect(String(runtime.last.call('act', { actions: [{ do: 'wait_for', title: 'Gibt es nicht', text: 'x' }], confirm: 'x' }))).toContain('title the title of a new_card in this act');
+    expect(String(runtime.last.call('act', { actions: [{ do: 'wait_for', on: 'K1', text: 'start K2' }], confirm: 'x' }))).toContain('is done already: take the step now');
+    expect(String(runtime.last.call('act', { actions: [{ do: 'wait_for', on: 'K2' }], confirm: 'x' }))).toContain('the step you take then is missing');
+    expect(String(runtime.last.call('act', { actions: [{ do: 'wait_for', on: 'Gibt es nicht', text: 'x' }], confirm: 'x' }))).toContain('no card Gibt es nicht: give with on the tag of the card to wait on');
     expect(String(runtime.last.call('act', { actions: [{ do: 'stop_waiting', card: 'K2' }], confirm: 'x' }))).toContain('you do not wait on K2');
-    runtime.last.call('act', { actions: [{ do: 'wait_for', card: 'K2', text: 'Tell the owner Login is done.' }], confirm: 'Ich sage dir, wenn Login fertig ist.' });
+    runtime.last.call('act', { actions: [{ do: 'wait_for', on: 'K2', text: 'Tell the owner Login is done.' }], confirm: 'Ich sage dir, wenn Login fertig ist.' });
     runtime.last.emit({ type: 'idle' });
     k.arm((await s).token!);
     await until(() => board.snapshot().talk[0]!.waits);
 
-    const { heard } = await say(k, 'vergiss das mit Login', 'act', { actions: [{ do: 'stop_waiting', card: 'K2' }], confirm: 'Ich warte nicht mehr auf „Login“.' });
+    const { heard } = await say(k, 'vergiss das mit Login', 'act', { actions: [{ do: 'stop_waiting', on: 'K2' }], confirm: 'Ich warte nicht mehr auf „Login“.' });
     k.arm(heard.token!);
     await until(() => !board.snapshot().talk[0]!.waits);
 
-    const again = await say(k, 'doch, sag Bescheid', 'act', { actions: [{ do: 'wait_for', card: 'K2', text: 'Tell the owner Login is done.' }], confirm: 'Gut.' });
+    const again = await say(k, 'doch, sag Bescheid', 'act', { actions: [{ do: 'wait_for', on: 'K2', text: 'Tell the owner Login is done.' }], confirm: 'Gut.' });
     k.arm(again.heard.token!);
     await until(() => board.snapshot().talk[2]!.waits);
     const talk = board.snapshot().talk[2]!.id;

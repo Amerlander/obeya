@@ -390,7 +390,7 @@ describe('the Koordinator waits on a card', () => {
     k.call('act', {
       actions: [
         { do: 'new_card', title: 'Repository anlegen', body: 'git init', start: false },
-        { do: 'wait_for', title: 'Repository anlegen', text: 'New card „Leinwand anlegen“, not started.' },
+        { do: 'wait_for', on: 'Repository anlegen', text: 'New card „Leinwand anlegen“, not started.' },
       ],
       confirm: 'Neue Aufgabe „Repository anlegen“; sobald sie erledigt ist, lege ich „Leinwand anlegen“ an.',
     });
@@ -400,6 +400,8 @@ describe('the Koordinator waits on a card', () => {
     const repo = board().snapshot().items.find((i) => i.title === 'Repository anlegen')!;
     expect(board().snapshot().talk[0]!.waits).toEqual([{ card: repo.id, title: 'Repository anlegen', state: 'done' }]);
 
+    // its agent, asking Obeya for the step itself, hears that Obeya takes it
+    expect(await canvas.forward(repo.id, 'Lege die Leinwand an.')).toContain('Obeya itself takes these steps once your card is done: New card „Leinwand anlegen“, not started. If you asked for one of them, it is not missing');
     // done: the board's change wakes the Koordinator, without the owner saying anything
     board().work(repo.id, { state: 'done' });
     await until(() => k.inbox.length === 2);

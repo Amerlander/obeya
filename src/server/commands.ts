@@ -228,6 +228,7 @@ const ACTION = z.object({
   idea: z.boolean().optional(),
   until: z.string().optional(),
   state: z.enum(['done', 'waits_for_owner']).optional(),
+  on: z.string().optional(),
 });
 type ActionArgs = z.infer<typeof ACTION>;
 
@@ -544,6 +545,11 @@ export class Commander {
     return this.o.board.waitingTalk().flatMap(({ waiting, ...talk }) => waiting.map((wait) => ({ talk, wait })));
   }
 
+  /** The steps the Koordinator waits to take once the card gets somewhere. */
+  waitsOn(card: string): TalkWaitRow[] {
+    return this.waits().flatMap(({ wait }) => (wait.card === card ? [wait] : []));
+  }
+
   /** Waits after the exchange `talk` until the card gets there (`waitFor`); a new card of the same command by the id it got. */
   private waitFor(c: Extract<Command, { do: 'waitFor' }>, talk: number | undefined, made: Map<string, string>) {
     const id = c.card ?? (c.newCard !== undefined ? made.get(c.newCard) : undefined);
@@ -686,7 +692,7 @@ export class Commander {
             '- feedback: text as feedback on work waiting for review (demo or summary), a question about that work included; its agent takes it in while the work still waits for approval, and hands over anew when it changes something.',
             '- approve: approve work waiting for review; direct: true when the owner wants it straight onto main without a pull request („ohne PR“, „direkt auf main“), which a repository whose work goes out as a pull request allows only where the list of repositories says so. accept: take a proposed card and start it (a proposed idea: its discussion opens; the open questions on it go along); idea: true when the owner wants a proposed task discussed as an idea first rather than built („als Idee“, „erst besprechen“). dismiss: discard a proposed card, or one its agent withdrew or replaced since (the list says so; it goes, its worker stopped). keep: keep such a withdrawn or replaced card as it is. revise: text what the owner wants changed in a proposed card, or their thoughts on it (added, dropped, decided, put differently); an agent rewrites its text and questions by it in a minute or so, and accepting it waits for that (by a click once it is there).',
             '- pause: pause the agent on a card at once, only while it is working on something (the card list says so): a worker at work, or in any other state while the list says its agent is working on something; an idea\'s agent working on its reply; a Question card\'s agent reading. Nothing of it runs, its session stays, and it goes on where it stopped with resume, or with what the owner says to it, which it goes on with („halt mal an“, „pausier …“, „warte mal kurz“). resume: let a paused agent go on („mach weiter“, „lass ihn weitermachen“). stop: end the agent on a card for good, which plans the card again („stopp“, „brich ab“).',
-            "- wait_for: a step you take once a card gets somewhere, and not before (add a canvas once the task that creates its repository is done, start a card once another has landed, pass the owner's words on once a card waits for them): card the tag of the card to wait on (in „starte Login, sobald Export fertig ist“ that is Export, not Login), or title the title of a new_card in this same act to wait on; state done (the default: its work is on main, or it was closed without a change) or waits_for_owner (it asks the owner or hands its work over); text the step, standing on its own, with what the owner asked for (names, paths, values), cards by their titles (tags may change by then). Obeya wakes you once the card gets there, or no longer can (stopped, removed), with this text and what became of the card, and you take the step then; confirm says that you will. Nothing else wakes you for a step you say you take later. stop_waiting: you no longer wait on the card (card), when the owner no longer wants that step.",
+            "- wait_for: a step you take later, once a card gets somewhere (add a canvas once the task that creates its repository is done; start a card once another has landed; pass the owner's words on once a card waits for them). on: the card to wait on, its tag, or the title of a new_card in this same act (in „starte Login, sobald Export fertig ist“: Export). state: done (the default: its work is on main, or it was closed without a change) or waits_for_owner (it asks the owner or hands its work over). text: the step, standing on its own, with what the owner asked for (names, paths, values) and cards by their titles (tags may change by then). Obeya wakes you once that card gets there, or no longer can (stopped, removed), and you take the step then; confirm says that you will. Nothing else wakes you for a later step. A new card you wait on gets in its body only its agent's part, without your step: its agent would try that step itself, and Obeya would refuse it. stop_waiting: you no longer wait on the card (on), when the owner no longer wants that step.",
             '- snooze: set a card aside until a point in time („stell das bis morgen früh zurück“, „erinner mich Montag daran“, „das später“), on a card at work (its agent stops until then, as on a pause, and goes on at the time) or one waiting for the owner (it leaves their list until then; nothing goes to its agent); on a snoozed card it changes the time. until: the local time as YYYY-MM-DDTHH:MM, from Now above („heute Abend“ 18:00, „morgen früh“ 08:00, „Montag“ 08:00 next Monday). wake: a snoozed card now („hol … zurück“, „weck … auf“).',
             `- new_idea: a new idea to think through with an exploration agent before anything is planned ("Ich will über … nachdenken", "Idee: …"). title short and precise, body what the owner said about it, in their words${repos.length > 1 ? ', repo as for new_card' : ''}.`,
             `- remember (no card): a rule the owner wants kept for all future work („Merk dir: …“, „ab jetzt immer …“). text: the rule, short and general, in ${LANGUAGE_NAMES[language]}; replaces: the number of a rule of the owner it changes or contradicts, also when it moves that rule into a CLAUDE.md. It goes to one of two places. The owner's rules, for how the agents work with the owner through Obeya whatever the repository (what to ask and what to decide alone, how to report, hand over and demo): leave repos out; it applies at once. A repository's CLAUDE.md, for anything about a repository (its conventions, product, tools, how its code is written, tested and landed, its UI and wording, taste in code even when it holds in every repository): repos the ids of the repositories it concerns (usually the open card's; every one when it holds in all of them); it goes into the repository's card ${t.quote(t.claudeMd.title)}, whose worker writes it into the CLAUDE.md. confirm says where it goes (${say.remember}).`,
@@ -861,26 +867,32 @@ export class Commander {
     // taken out before: it opens a draft, it does not run
     if (a.do === 'wish') return 'a wish is no action that runs';
     if (a.do === 'wait_for') {
-      const then = a.text?.trim();
+      // cards by their titles: the tags of this session may name others by then
+      const then = a.text?.trim().replace(/\bK\d+\b/g, (tag) => {
+        const named = this.o.board.item(s.tags.get(tag) ?? '');
+        return named ? `"${named.title}"` : tag;
+      });
       if (!then) return 'the step you take then is missing (text)';
       const state: AwaitedState = a.state === 'waits_for_owner' ? 'waitsForOwner' : 'done';
-      if (!a.card) {
-        const title = a.title?.trim().toLowerCase();
+      const on = (a.on ?? a.card ?? a.title)?.trim();
+      const id = on ? s.tags.get(on) : undefined;
+      if (!id) {
+        const title = on?.toLowerCase();
         const newCard = title ? all.find((x) => x.do === 'new_card' && x.title?.trim().toLowerCase() === title)?.title?.trim() : undefined;
-        if (!newCard) return 'name the card with card (its tag), or with title the title of a new_card in this act';
+        if (!newCard) return `${on ? `no card ${on}` : 'no card named'}: give with on the tag of the card to wait on, or the title of a new_card in this act`;
         return { do: 'waitFor', newCard, state, then };
       }
-      const id = s.tags.get(a.card);
-      const card = id ? this.o.board.item(id) : undefined;
-      if (!card) return `unknown tag ${a.card}`;
+      const card = this.o.board.item(id);
+      if (!card) return `unknown tag ${on}`;
       const met = awaited(card, state);
       if (met === 'reached') return `the card ${state === 'done' ? 'is done' : 'waits for the owner'} already: take the step now`;
       if (met) return `the card no longer gets there by itself (${met}): reply to the owner instead`;
       return { do: 'waitFor', card: card.id, state, then };
     }
     if (a.do === 'stop_waiting') {
-      const id = a.card ? s.tags.get(a.card) : undefined;
-      if (!id || !this.waits().some(({ wait }) => wait.card === id)) return `you do not wait on ${a.card ?? '(no card named)'}; the cards you wait on are in the message`;
+      const on = a.on ?? a.card;
+      const id = on ? s.tags.get(on) : undefined;
+      if (!id || !this.waits().some(({ wait }) => wait.card === id)) return `you do not wait on ${on ?? '(no card named)'}; the cards you wait on are in the message`;
       return { do: 'stopWaiting', card: id };
     }
     if (a.do === 'remember') {

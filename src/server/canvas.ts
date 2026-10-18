@@ -1036,7 +1036,10 @@ export class CanvasRuntime {
     // what nobody said (words in a file it read, say) has nothing to pass on
     const before = this.said.has(cardId) ? undefined : this.board.events(cardId).findLast((e) => e.author === 'owner' && e.kind !== 'state' && e.text.trim());
     const said = this.said.get(cardId) ?? (before && { text: before.text, spoken: false });
-    if (!said) return "Nothing passed on: the owner has said nothing on your card. to_obeya passes on the owner's own words.";
+    // a step Obeya waits to take on this card itself, which its agent read in its task
+    const steps = this.commander.waitsOn(cardId);
+    const later = steps.length ? ` Obeya itself takes these steps once your card ${steps.map((w) => `${w.state === 'done' ? 'is done' : 'waits for the owner'}: ${w.then.replace(/[.\s]+$/, '')}`).join('; ')}. If you asked for one of them, it is not missing: leave it to Obeya.` : '';
+    if (!said) return `Nothing passed on: the owner has said nothing on your card. to_obeya passes on the owner's own words.${later}`;
     const h = await this.commander.forward(cardId, request, said);
     if (h.token) this.commander.arm(h.token);
     this.board.notify({ cardId, text: h.confirm, ...(h.token ? { token: h.token, undoMs: this.commander.delayMs } : {}), ...(h.wish ? { wish: h.wish } : {}) });

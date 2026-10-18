@@ -2927,10 +2927,13 @@ and spoken words reach the agent with the remark that speech recognition may hav
 
 What can only follow once a card gets somewhere (a canvas for the repository a new task creates,
 starting „Login“ once „Export“ has landed, passing words on once a card waits for the owner) the
-Koordinator waits for, as a worker snoozes on another card: `wait_for` in the same act, on a card
+Koordinator waits for, as a worker snoozes on another card: `wait_for` in the same act, `on` a card
 by its tag or on a new card of the same act by its title, until it is done (the default) or waits
 for the owner (`awaited` in `src/core/types.ts`), with the step written out so it stands on its own
-(`then`). A card already there is refused (the step is due now), as is a step without text. The
+(`then`, its card tags written as titles, since another session tags cards anew). A card already
+there is refused (the step is due now), as is a step without text. The agent of the card waited on
+may read the step in its task and ask Obeya for it (`to_obeya`); without words of the owner's on
+the card nothing is passed on, and the answer tells it that Obeya takes that step itself. The
 wait stands on the exchange whose reply announced it (`talk.waits`), so it outlives a restart; the
 Koordinator sees its waits with every command and drops one on the owner's word (`stop_waiting`).
 
