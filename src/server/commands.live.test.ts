@@ -1,7 +1,8 @@
 // The Koordinator's prompt against the real model: requests the agent of an open card passes on from
 // the owner's words, in each state an agent is on; sentences said or typed with a card open that no
 // agent works on; new tasks that start or wait; questions with no card open (an opinion becomes
-// an idea, a fact stays in the conversation); and requests Obeya cannot do, or words for its makers.
+// an idea, a fact stays in the conversation, work on the machine such as a new repository is a task);
+// and requests Obeya cannot do, or words for its makers.
 // Runs only with OBEYA_LIVE=1 (it uses the machine's
 // Claude login and takes about a minute): `OBEYA_LIVE=1 bun test src/server/commands.live.test.ts`.
 
@@ -11,9 +12,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Board } from './board';
 import { type Command, Commander } from './commands';
+import { Config } from './config';
 import { Store } from './db';
 import { AGENT_DEFAULTS } from '../core/types';
 import { type AgentRuntime, sdkRuntime, withAgentSetting } from './runtime';
+import { gitRepo } from './testing';
 
 // the sessions need the machine's Claude login, which the test setup hides behind a scratch config
 const scratch = process.env.CLAUDE_CONFIG_DIR;
@@ -146,6 +149,8 @@ const NO_CARD: [string, boolean, Command['do'][]][] = [
   ['Was hältst du davon, die Exporte nachts laufen zu lassen?', false, ['newIdea']],
   ['Was steht im Plan zu den Exporten?', true, []],
   ['Was ist seit gestern passiert?', false, []],
+  ['Kannst du mir ein neues repo in ~/dev/kassenbuch und einen entsprechenden Obeya canvas anlegen? Privater account, erstmal nicht nach GitHub.', true, ['newCard']],
+  ['Installier mir ffmpeg auf dem Rechner', false, ['newCard']],
 ];
 
 /** What the Koordinator makes of one sentence with no card open. */
@@ -156,7 +161,11 @@ async function noCard(text: string, typed: boolean) {
   board.create({ title: 'Zählerstände nachtragen', x: 0, y: 0 });
   const executed: Command[] = [];
   const runtime = withAgentSetting(sdkRuntime, () => AGENT_DEFAULTS.koordinator);
-  const k = new Commander({ board, runtime, cwd: cwd(), execute: (c) => void executed.push(c), delayMs: 1 });
+  // the configuration as Obeya serves it, one canvas on a repository that exists
+  const home = cwd();
+  const started = [{ name: 'C', repos: [{ path: gitRepo(join(home, 'home')) }] }];
+  const config = new Config({ file: join(home, 'canvases.json'), source: 'file', started, store: new Store(':memory:'), running: () => ['c'], server: { port: 4417, home, permissionMode: 'auto' } });
+  const k = new Commander({ board, runtime, cwd: cwd(), config, execute: (c) => void executed.push(c), delayMs: 1 });
   const heard = await k.hear(text, {}, [], typed ? { typed: true } : {});
   if (heard.token) k.arm(heard.token);
   await new Promise((r) => setTimeout(r, 20));
@@ -164,7 +173,7 @@ async function noCard(text: string, typed: boolean) {
 }
 
 test.skipIf(!process.env.OBEYA_LIVE)(
-  'with no card open, a question for an opinion becomes an idea and a question of fact stays in the conversation',
+  'with no card open, a question for an opinion becomes an idea, a question of fact stays in the conversation, and work on the machine is a task',
   async () => {
     const results = await Promise.all(NO_CARD.map(async ([text, typed, want]) => ({ text, want, got: await noCard(text, typed) })));
     const wrong = results.filter((r) => JSON.stringify(r.got.did) !== JSON.stringify(r.want));

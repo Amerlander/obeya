@@ -2870,6 +2870,15 @@ später“, „noch nicht starten“): then it stays planned. Left to its own ju
 kept about one in five plainly asked-for tasks planned („Tipjar should split the bill …“), so the
 `start` field of `new_card` says this outright, and left out it counts as starting.
 
+Work on the machine that is no change to code (creating a repository, installing a tool, converting
+files) is a new card too: its agent has the shell and does it with the owner's permission, in its
+repository or outside it. The Koordinator's prompt says what a card's agent can do; without that, it
+read „leg mir ein Repo in ~/dev/… an und eine Leinwand dafür“ against the `config` tool, found that
+a canvas needs a repository that exists, and told the owner to run `git init` themselves, flagged as
+something Obeya cannot do (2026-10-18). What only Obeya does after the work (the canvas on the new
+repository) still needs the owner to ask again once the card is done. `commands.live.test.ts`
+checks such requests with the configuration in reach, as Obeya runs.
+
 A new card or idea (not a follow-up, which goes below the card it follows) lands in view: centred on
 where the pointer was on the canvas when the owner stopped speaking (or sent the typed words), else
 in the middle of the view, moved to the nearest free spot wholly in view (`freeSpotNear` with the
