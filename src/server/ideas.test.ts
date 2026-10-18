@@ -1048,7 +1048,7 @@ describe('a prototype', () => {
     expect(item(i.id).idea!.split).toBeUndefined();
     expect(item(p1!.id).state).toBe('working');
     expect(board().decisions(null).at(-1)).toMatchObject({ card_id: i.id, answer: 'Teilaufgabe abtrennen: „Lese-Lern-App: Spiel und Lernlogik“.' });
-    expect(board().events(i.id).some((e) => e.text === 'Teilaufgabe abtrennen: „Lese-Lern-App: Spiel und Lernlogik“ ist jetzt eine eigene Aufgabe; das Offene bleibt hier.')).toBe(true);
+    expect(board().events(i.id).some((e) => e.text === 'Teilaufgabe abgetrennt: „Lese-Lern-App: Spiel und Lernlogik“ ist jetzt eine eigene Aufgabe; das Offene bleibt hier.')).toBe(true);
     // its agent hears what became of the part, and trims the brief to what is open
     const told = explorer();
     expect(told.inbox.at(-1)).toContain('the part you marked as settled is now the task “Lese-Lern-App: Spiel und Lernlogik”');
