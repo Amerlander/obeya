@@ -2841,8 +2841,14 @@ prototypes' workers and exploration agents (`src/server/to-obeya.ts`), whose ins
 paragraph what Obeya does for them through it. The Koordinator reads the request with the owner's
 own words beside it, spoken or typed (the newest on the card when Obeya restarted since), and the
 card in focus, as it reads any command (`Commander.forward`). Where the owner has said nothing on
-the card, nothing is passed on: words an agent read in a file or a pull request comment are no
-request of the owner's, and the Koordinator would have taken them for one. Otherwise: actions with a confirmation and „Rückgängig“ (above the mic, as a notice that
+the card yet, the card's task stands in for their words when the owner gave it (typed it, or the
+Koordinator wrote it from what they said to Obeya): "lege ein Repo und einen Canvas dafür an"
+becomes a task that ends with asking Obeya for the canvas, and the Koordinator takes that step
+(unless it waits on the card to take a step itself, see A step once a card gets somewhere: then
+that step is Obeya's). An
+agent's proposal the owner accepted unchanged is no such task (`Board.accept` keeps that it was one),
+and there nothing is passed on: words an agent read in a proposal, a file or a pull request comment
+are no request of the owner's, and the Koordinator would have taken them for one. Otherwise: actions with a confirmation and „Rückgängig“ (above the mic, as a notice that
 reaches every open page, and in the card's conversation), a reply, or a look-up. Its confirmation or
 reply is the tool's result. It passes nothing back to that agent as a note, an answer, feedback or
 talk: the agent has the words already (refused if it tries). An agent at work probably sees the
@@ -2933,7 +2939,7 @@ for the owner (`awaited` in `src/core/types.ts`), with the step written out so i
 (`then`, its card tags written as titles, since another session tags cards anew). A card already
 there is refused (the step is due now), as is a step without text. The agent of the card waited on
 may read the step in its task and ask Obeya for it (`to_obeya`); without words of the owner's on
-the card nothing is passed on, and the answer tells it that Obeya takes that step itself. The
+the card nothing is passed on (the task does not stand in for them here), and the answer tells it that Obeya takes that step itself. The
 wait stands on the exchange whose reply announced it (`talk.waits`), so it outlives a restart; the
 Koordinator sees its waits with every command and drops one on the owner's word (`stop_waiting`).
 

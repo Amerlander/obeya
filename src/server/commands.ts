@@ -129,6 +129,8 @@ export interface Input {
   typed?: boolean;
   field?: Field;
   forwarded?: string;
+  /** The owner's words beside a forwarded request are the card's task, which the owner gave: they said nothing on the card since. */
+  task?: boolean;
   /** The message of the open card's conversation the words reply to, or with no card open the message of the sheet (`TalkRef`). */
   replyTo?: number | TalkRef;
   /** The place in the open card's demo video the words are about; only its agent hears of it. */
@@ -435,8 +437,8 @@ export class Commander {
    * A request the agent of `card` passes on from the owner's words to it (`to_obeya`): read like a
    * command, with the card in focus and the owner's own words beside the agent's, as they were said or typed.
    */
-  forward(card: string, request: string, said?: { text: string; spoken: boolean }): Promise<Heard> {
-    return this.hear(said?.text ?? request, { card }, [], { typed: !said?.spoken, forwarded: request });
+  forward(card: string, request: string, said?: { text: string; spoken: boolean; task?: boolean }): Promise<Heard> {
+    return this.hear(said?.text ?? request, { card }, [], { typed: !said?.spoken, forwarded: request, ...(said?.task ? { task: true } : {}) });
   }
 
   /** How long a command waits for undo once armed. */
@@ -1233,7 +1235,11 @@ export class Commander {
         : input.forwarded
         ? [
             `The agent of the open card passes on a request from what the owner told it, asking Obeya for something: "${input.forwarded}"`,
-            input.forwarded === transcript ? '' : `The owner's own words to it, ${input.typed ? 'typed (as written, no recognition errors)' : 'spoken (speech recognition, may contain errors)'}: "${transcript}"`,
+            input.forwarded === transcript
+              ? ''
+              : input.task
+                ? `The owner said nothing on the card yet; its task is the owner's own words, typed or written from what they said to you: "${transcript}"`
+                : `The owner's own words to it, ${input.typed ? 'typed (as written, no recognition errors)' : 'spoken (speech recognition, may contain errors)'}: "${transcript}"`,
           ].filter(Boolean)
         : [
             input.typed
