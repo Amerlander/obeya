@@ -71,6 +71,10 @@ function keyboardResizes() {
   if (meta && !meta.content.includes('interactive-widget')) meta.content += ', interactive-widget=resizes-content';
 }
 
+/** Whether the element is a text field: one the keyboard comes up for. */
+const typesText = (el: unknown): el is HTMLTextAreaElement | HTMLInputElement =>
+  el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && !['button', 'checkbox', 'file', 'radio', 'range'].includes(el.type));
+
 /** How much shorter than the tallest seen the screen gets while the keyboard is up; a browser's bars sliding in and out take less. */
 const KEYBOARD_PX = 150;
 
@@ -88,9 +92,7 @@ function watchKeyboard() {
     const w = Math.round(innerWidth);
     const top = Math.max(tallest.get(w) ?? 0, h);
     tallest.set(w, top);
-    const el = document.activeElement;
-    const typing = el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && !['button', 'checkbox', 'file', 'radio', 'range'].includes(el.type));
-    document.documentElement.classList.toggle('ph-kb', typing && h < top - KEYBOARD_PX);
+    document.documentElement.classList.toggle('ph-kb', typesText(document.activeElement) && h < top - KEYBOARD_PX);
   };
   check();
   vv?.addEventListener('resize', check);
@@ -106,6 +108,48 @@ function watchKeyboard() {
   };
 }
 
+/** Longer than this, or moved further, a touch is no tap: a long press selects, a swipe scrolls. */
+const TAP_MS = 400;
+const TAP_PX = 10;
+
+/**
+ * A tap into a text field while the keyboard is down only puts the cursor where the finger was and
+ * brings the keyboard up. Left to Chrome, a tap on a word marked misspelled also opened its menu of
+ * suggestions, and on the phone that closed the keyboard it had just begun to open. With the
+ * keyboard up the tap is Chrome's again, and the suggestions open above it.
+ */
+function tapOpensKeyboard() {
+  let down: { x: number; y: number; at: number; field: HTMLTextAreaElement | HTMLInputElement } | null = null;
+  const start = (e: TouchEvent) => {
+    const field = e.target instanceof Element ? e.target.closest('textarea, input') : null;
+    const finger = e.touches[0];
+    down =
+      finger && e.touches.length === 1 && typesText(field) && !field.readOnly && !field.disabled && !document.documentElement.classList.contains('ph-kb')
+        ? { x: finger.clientX, y: finger.clientY, at: e.timeStamp, field }
+        : null;
+  };
+  const end = (e: TouchEvent) => {
+    const tap = down;
+    down = null;
+    const finger = e.changedTouches[0];
+    if (!tap || !finger || e.touches.length || e.timeStamp - tap.at > TAP_MS) return;
+    if (Math.hypot(finger.clientX - tap.x, finger.clientY - tap.y) > TAP_PX) return;
+    e.preventDefault();
+    const { field } = tap;
+    const at = document.caretPositionFromPoint?.(finger.clientX, finger.clientY);
+    // the keyboard closed with the phone's own button left the focus in the field: focusing it anew brings the keyboard up
+    if (document.activeElement === field) field.blur();
+    field.focus();
+    if (at?.offsetNode === field) field.setSelectionRange(at.offset, at.offset);
+  };
+  addEventListener('touchstart', start, { capture: true, passive: true });
+  addEventListener('touchend', end, { capture: true, passive: false });
+  return () => {
+    removeEventListener('touchstart', start, { capture: true });
+    removeEventListener('touchend', end, { capture: true });
+  };
+}
+
 /** When something began: the time today, else the day. */
 const when = (iso: string | number) => (new Date(iso).toDateString() === new Date().toDateString() ? clock(iso) : shortDay(iso));
 
@@ -118,6 +162,7 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
     keyboardResizes();
   });
   useEffect(watchKeyboard, []);
+  useEffect(tapOpensKeyboard, []);
   const [canvases, setCanvases] = useState(loaded);
   // the canvases it last had, while the server did not answer: the list the server sends once it does
   useEffect(() => setCanvases(loaded), [loaded]);

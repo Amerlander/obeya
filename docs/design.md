@@ -4716,7 +4716,12 @@ the field, so the keyboard stays up and the field does not move away under the f
 tap only closed the keyboard and the picker needed a second one), and back from the picker the field
 takes the focus anew, which brings the keyboard up again. A tap on Send leaves the cursor in the
 field the same way and sends at once, and the keyboard stays up for the next message (until
-2026-10-17 the first tap only closed the keyboard and the second sent). The texts that name the space bar name the microphone
+2026-10-17 the first tap only closed the keyboard and the second sent). A tap into a text field
+while the keyboard is down only puts the cursor where the finger was and brings the keyboard up
+(`tapOpensKeyboard` in `src/ui/phone.tsx`); with the keyboard up the tap is Chrome's again, and on a
+word marked misspelled it opens the suggestions above the keyboard. Until 2026-10-18 Chrome took
+that first tap too: on such a word its suggestions opened, and on the owner's phone they closed the
+keyboard that had just begun to open. The texts that name the space bar name the microphone
 there (`forTouch`). Enter breaks the line in a field there, and only Send sends
 (`enterBreaksLines` in `src/ui/composer.tsx`): the keyboard's Enter key is where a phone types a
 line break, and a message sent half written cannot be taken back; the line under a dictating field
