@@ -868,10 +868,15 @@ export class Commander {
     if (a.do === 'wish') return 'a wish is no action that runs';
     if (a.do === 'wait_for') {
       // cards by their titles: the tags of this session may name others by then
-      const then = a.text?.trim().replace(/\bK\d+\b/g, (tag) => {
-        const named = this.o.board.item(s.tags.get(tag) ?? '');
-        return named ? `"${named.title}"` : tag;
-      });
+      const then = a.text
+        ?.trim()
+        // a tag beside the title it names goes; a bare one becomes that title
+        .replace(/\s*\(K\d+\)/g, '')
+        .replace(/\bK\d+\s+(?=["„“])/g, '')
+        .replace(/\bK\d+\b/g, (tag) => {
+          const named = this.o.board.item(s.tags.get(tag) ?? '');
+          return named ? `"${named.title}"` : tag;
+        });
       if (!then) return 'the step you take then is missing (text)';
       const state: AwaitedState = a.state === 'waits_for_owner' ? 'waitsForOwner' : 'done';
       const on = (a.on ?? a.card ?? a.title)?.trim();

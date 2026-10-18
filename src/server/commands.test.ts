@@ -1152,7 +1152,7 @@ describe('a step the Koordinator takes once a card gets somewhere', () => {
     const { heard, session } = await say(k, 'Leg eine Aufgabe an, die das Repo erstellt, und dann die Leinwand', 'act', {
       actions: [
         { do: 'new_card', title: 'Repository ~/dev/leserina anlegen', body: 'git init in ~/dev/leserina' },
-        { do: 'wait_for', on: 'Repository ~/dev/leserina anlegen', text: 'Start K1.' },
+        { do: 'wait_for', on: 'Repository ~/dev/leserina anlegen', text: 'Start K1, then tell K1 “Leserina einrichten” and „Leserina einrichten“ (K1).' },
       ],
       confirm: 'Neue Aufgabe „Repository ~/dev/leserina anlegen“; sobald sie erledigt ist, starte ich „Leserina einrichten“.',
     });
@@ -1164,7 +1164,7 @@ describe('a step the Koordinator takes once a card gets somewhere', () => {
 
     // the next command knows what it waits on
     const next = await say(k, 'was läuft?', 'reply', { confirm: 'Das Repository wird angelegt.' });
-    expect(next.brief).toMatch(/Cards you wait on.*\n- K\d "Repository ~\/dev\/leserina anlegen" until it is done \(since .*\), then: Start "Leserina einrichten"\./);
+    expect(next.brief).toMatch(/Cards you wait on.*\n- K\d "Repository ~\/dev\/leserina anlegen" until it is done \(since .*\), then: Start "Leserina einrichten", then tell “Leserina einrichten” and „Leserina einrichten“\./);
 
     // still at work: nothing happens
     board.work(card.id, { state: 'working' });
@@ -1179,7 +1179,7 @@ describe('a step the Koordinator takes once a card gets somewhere', () => {
     const brief = runtime.last.inbox.at(-1)!;
     expect(brief).toContain("No words of the owner's this time");
     expect(brief).toContain('the card "Repository ~/dev/leserina anlegen" is done');
-    expect(brief).toContain('to then: Start "Leserina einrichten".');
+    expect(brief).toContain('to then: Start "Leserina einrichten", then tell “Leserina einrichten” and „Leserina einrichten“.');
     const [, , after] = board.snapshot().talk;
     // the exchange stands with what became of the card in place of the owner's words
     expect(after).toMatchObject({ said: '', after: { title: card.title, state: 'done', met: 'reached', from: board.snapshot().talk[0]!.id } });
