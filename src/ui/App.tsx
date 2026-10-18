@@ -1140,9 +1140,13 @@ function Canvas({
     } else if (e.key === 'Tab') {
       e.preventDefault();
       nextAttention();
-    } else if (e.key === 'n') createAtCentre();
-    else if (e.key === 'c') toggleKoordinator();
-    else if (e.key === 'a') toggleArchive();
+    } else if (e.key === 'n' || e.key === 'c' || e.key === 'a') {
+      // the key is the shortcut's alone: its character would land in the field the shortcut focuses (the archive's filter)
+      e.preventDefault();
+      if (e.key === 'n') createAtCentre();
+      else if (e.key === 'c') toggleKoordinator();
+      else toggleArchive();
+    }
   };
   useEffect(() => {
     const h = (e: KeyboardEvent) => keys.current(e);
