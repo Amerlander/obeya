@@ -6,7 +6,7 @@ import { agentListens, answering, askable, type BackgroundTask, buildableOn, typ
 import { mockPage } from '../core/frame';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
 import { answerText, toggle } from './answer';
-import { ApiError, api, at, type Field, holdRestart, onCardEvent, onCardEventGone } from './api';
+import { ApiError, api, cardAt, type Field, holdRestart, onCardEvent, onCardEventGone } from './api';
 import { useCopy } from './copy';
 import { firstOpening } from './demoSeen';
 import { know, known } from './known';
@@ -1471,7 +1471,7 @@ function DemoView({
   const demo = earlier.find((d) => d.n === shownN) ?? latest;
   const all = [...earlier, latest];
   const shownAt = all.indexOf(demo);
-  const src = (f: string) => at(demo === latest ? `/cards/${cardId}/demo/${f}` : `/cards/${cardId}/demos/${(demo as EarlierDemo).n}/${f}`);
+  const src = (f: string) => cardAt(cardId, demo === latest ? `/demo/${f}` : `/demos/${(demo as EarlierDemo).n}/${f}`);
   // where the demo shown next plays from, when a comment on a place in it took the owner there
   const playFrom = useRef<number | null>(null);
   const show = (d: Demo) => setShownN(d === latest ? null : (d as EarlierDemo).n);

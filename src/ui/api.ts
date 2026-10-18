@@ -66,6 +66,22 @@ export function setCanvas(id: string) {
 }
 /** A path in the shown canvas's API. */
 export const at = (path: string) => `/api/c/${encodeURIComponent(canvasId)}${path}`;
+/**
+ * The canvas each card is on, where the page shows the cards of several (the phone view). A call
+ * about a card goes to its canvas even once another is in view: the card closing puts Obeya's in
+ * view before the card's last calls (its held comments released, say) go out.
+ */
+const canvasOfCard = new Map<string, string>();
+export function cardsOn(canvas: string, cards: string[]) {
+  for (const id of cards) canvasOfCard.set(id, canvas);
+}
+/** A path in the API of the card's canvas, about the card or project `id`. */
+export const cardAt = (id: string, path = '') => `/api/c/${encodeURIComponent(canvasOfCard.get(id) ?? canvasId)}/cards/${id}${path}`;
+/** A path in the API of the canvas of what the words are about, else of the shown one. */
+const whereAt = (where: Where, path: string) => {
+  const id = where && ('card' in where ? where.card : where.project);
+  return id ? `/api/c/${encodeURIComponent(canvasOfCard.get(id) ?? canvasId)}${path}` : at(path);
+};
 /** Where a looked-up answer's file is served; `download` to save it. */
 export const answerFile = (thread: number, name: string, download = false) =>
   at(`/threads/${thread}/files/${name.split('/').map(encodeURIComponent).join('/')}${download ? '?download' : ''}`);
@@ -171,25 +187,25 @@ export const api = {
   adapterSetup: (canvas: string, repo: string) => call<Item>('POST', `/api/c/${encodeURIComponent(canvas)}/adapter-setup`, { repo }),
   preparePlanDoc: (canvas: string, repo: string, file: string) => call<Item>('POST', `/api/c/${encodeURIComponent(canvas)}/prepare-plan-doc`, { repo, file }),
   /** Downloads a card's demo as a ZIP of its page with the files, or as one HTML file. */
-  exportDemo: (id: string, as: 'zip' | 'html', demo?: number) => download(at(`/cards/${id}/export?as=${as}${demo === undefined ? '' : `&demo=${demo}`}`), `demo.${as}`),
+  exportDemo: (id: string, as: 'zip' | 'html', demo?: number) => download(cardAt(id, `/export?as=${as}${demo === undefined ? '' : `&demo=${demo}`}`), `demo.${as}`),
   /** The size of a card's demo video in bytes, the latest one or earlier one `n`; null when unknown. */
   demoSize: async (id: string, n?: number) => {
-    const res = await fetch(at(n === undefined ? `/cards/${id}/demo/demo.mp4` : `/cards/${id}/demos/${n}/demo.mp4`), { headers: { range: 'bytes=0-0' } });
+    const res = await fetch(cardAt(id, n === undefined ? '/demo/demo.mp4' : `/demos/${n}/demo.mp4`), { headers: { range: 'bytes=0-0' } });
     await res.body?.cancel();
     const total = Number(/\/(\d+)$/.exec(res.headers.get('content-range') ?? '')?.[1]);
     return res.ok && total > 0 ? total : null;
   },
-  patch: (id: string, p: CardPatch) => call<void>('PATCH', at(`/cards/${id}`), p),
-  remove: (id: string) => call<void>('DELETE', at(`/cards/${id}`)),
-  restore: (id: string) => call<void>('POST', at(`/cards/${id}/restore`)),
+  patch: (id: string, p: CardPatch) => call<void>('PATCH', cardAt(id), p),
+  remove: (id: string) => call<void>('DELETE', cardAt(id)),
+  restore: (id: string) => call<void>('POST', cardAt(id, '/restore')),
   /** Takes a finished card off the canvas into the archive. */
-  archive: (id: string) => call<void>('POST', at(`/cards/${id}/archive`)),
-  unarchive: (id: string) => call<void>('POST', at(`/cards/${id}/unarchive`)),
+  archive: (id: string) => call<void>('POST', cardAt(id, '/archive')),
+  unarchive: (id: string) => call<void>('POST', cardAt(id, '/unarchive')),
   /** The archive, the most recently archived first. */
   archived: () => call<Item[]>('GET', at('/archive')),
   /** Archives every finished card of the owner's on the canvas. */
   archiveDone: () => call<{ ids: string[] }>('POST', at('/archive')),
-  act: (id: string, a: CardAction) => call<void>('POST', at(`/cards/${id}/act`), a),
+  act: (id: string, a: CardAction) => call<void>('POST', cardAt(id, '/act'), a),
   /** "Make it a card": a looked-up thread moves onto a Question card, which comes back. */
   threadCard: (thread: number) => call<Item>('POST', at(`/threads/${thread}/card`)),
   /** Opens an answer's file with the system's app, or without `file` the thread's directory. */
@@ -206,17 +222,17 @@ export const api = {
     await refused(res);
     return ((await res.json()) as { id: string }).id;
   },
-  events: (id: string) => call<CardEvent[]>('GET', at(`/cards/${id}/events`)),
+  events: (id: string) => call<CardEvent[]>('GET', cardAt(id, '/events')),
   /** Whether the app in the card's workspace answers now. */
-  appUp: async (id: string) => (await call<{ up: boolean }>('GET', at(`/cards/${id}/app`))).up,
+  appUp: async (id: string) => (await call<{ up: boolean }>('GET', cardAt(id, '/app'))).up,
   /** Where the owner's browser opens the card's app: through Obeya, which keeps it running a while after. */
-  appOpen: (id: string) => at(`/cards/${id}/app/open`),
+  appOpen: (id: string) => cardAt(id, '/app/open'),
   /** What the card's work changes (null: nothing to read, no workspace and not landed); `full`: with the diff itself. */
-  diff: async (id: string, full = false) => (await call<CardDiff | undefined>('GET', at(`/cards/${id}/diff${full ? '?full' : ''}`))) ?? null,
+  diff: async (id: string, full = false) => (await call<CardDiff | undefined>('GET', cardAt(id, `/diff${full ? '?full' : ''}`))) ?? null,
   /** A project's plan doc as written. */
-  planDoc: (id: string) => call<{ file: string; markdown: string }>('GET', at(`/cards/${id}/plan`)),
+  planDoc: (id: string) => call<{ file: string; markdown: string }>('GET', cardAt(id, '/plan')),
   /** A project's decisions and the idea it came from. */
-  history: (id: string) => call<ProjectHistory>('GET', at(`/cards/${id}/history`)),
+  history: (id: string) => call<ProjectHistory>('GET', cardAt(id, '/history')),
   /**
    * What the owner said about the card or project in view, with the screenshots shown with it;
    * `replyTo`: in reply to that message of the card's conversation, or of the sheet; `text`: typed in the field
@@ -244,7 +260,7 @@ export const api = {
       body.set('audio', audio);
       body.set('text', text);
     }
-    const res = await fetch(at(`/voice${query(where)}${q && (where ? '&' : '?')}${q}`), { method: 'POST', body });
+    const res = await fetch(whereAt(where, `/voice${query(where)}${q && (where ? '&' : '?')}${q}`), { method: 'POST', body });
     await refused(res);
     return (await res.json()) as Heard;
   },
@@ -254,7 +270,7 @@ export const api = {
   warmVoice: () => fetch(at('/voice/warm'), { method: 'POST' }).catch(() => {}),
   /** The same, typed; `field`: the field of the open card it was typed into. */
   command: (text: string, where: Where, { images, field, replyTo, spot, place }: { images?: string[]; field?: Field; replyTo?: number | TalkRef; spot?: SpotInput; place?: Place } = {}) =>
-    call<Heard>('POST', at(`/command${query(where)}${place ? `${where ? '&' : '?'}place=${placeParam(place)}` : ''}`), { text, ...(images?.length ? { images } : {}), ...(field ? { field } : {}), ...(replyTo ? { replyTo } : {}), ...(spot ? { spot } : {}) }),
+    call<Heard>('POST', whereAt(where, `/command${query(where)}${place ? `${where ? '&' : '?'}place=${placeParam(place)}` : ''}`), { text, ...(images?.length ? { images } : {}), ...(field ? { field } : {}), ...(replyTo ? { replyTo } : {}), ...(spot ? { spot } : {}) }),
   /** A typed request to the Koordinator of another canvas, about nothing in view there. */
   commandOn: (canvas: string, text: string) => call<Heard>('POST', `/api/c/${encodeURIComponent(canvas)}/command`, { text }),
   undo: (token: string) => call<{ undone: boolean }>('POST', at('/command/undo'), { token }),

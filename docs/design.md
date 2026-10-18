@@ -4780,7 +4780,11 @@ capped at 62 % of the screen's height: a scroll area inside another, where the f
 of the two scrolled, and the page scrolled on past the field to make room for the microphone. Plan docs are not read there and the configuration is not opened from there:
 the links to them do not show. Every call goes to the API of the canvas in view (the open card's,
 else Obeya's), and the list is not on the page while a card is open, so nothing in it loads from
-another canvas's API.
+another canvas's API. A call about a card, and words about it, go to the API of the card's canvas
+(`cardAt`), whichever canvas is in view as they go out: closing a card puts Obeya's canvas in view
+before the card's last calls go, and until 2026-10-18 the release of the comments held back on its
+demo went to that canvas, which knew no such card, whenever it was another; they waited the ten
+minutes then.
 
 The microphone at the bottom is held by a finger (pointer events, no long-press menu, no text
 selected; lifting the finger or the browser taking the gesture ends the recording) and speaks to the

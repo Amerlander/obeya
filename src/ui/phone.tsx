@@ -6,7 +6,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { type CanvasInfo, type CanvasSnapshot, type CardPatch, type Item, needsYou, unreadAnswers } from '../core/types';
-import { api, beforeReload, onNotice, phoneInUse, setCanvas, useCanvas, type Where } from './api';
+import { api, beforeReload, cardsOn, onNotice, phoneInUse, setCanvas, useCanvas, type Where } from './api';
 import { enterBreaksLines } from './composer';
 import { type ActDone, Detail, type Pending, TalkElsewhere, useEvents } from './detail';
 import { cardDraft, fieldOn, focusedDraft, keepDrafts, MIC_DRAFT, obeyaDraft } from './draft';
@@ -311,6 +311,8 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
   };
   // every call goes to the API of the canvas in view: the open card's, else Obeya's
   setCanvas(opened?.canvas.id ?? obeyaId);
+  // and every call about a card to its canvas's
+  for (const c of ordered) cardsOn(c.id, snaps[c.id]!.items.map((i) => i.id));
 
   // ---------------------------------------------------------------- edits of the open card
   const edit = useRef<{ id: string; patch: CardPatch; timer?: ReturnType<typeof setTimeout> } | null>(null);
