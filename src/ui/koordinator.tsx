@@ -4,7 +4,7 @@
 // up to date at once.
 
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
-import type { Item, Preference, RepoRef, Reshare, SettingProposal, Talk, TalkQuote, TalkRef } from '../core/types';
+import type { Item, Preference, RepoRef, Reshare, SettingProposal, Talk, TalkQuote, TalkRef, TalkWait } from '../core/types';
 import { api } from './api';
 import { Inline, plain } from './markdown';
 import { AnswerFiles, Body, Continues, Msg, Quote, Reading, ThreadCard } from './message';
@@ -19,6 +19,7 @@ import { useFitHeight } from './fitHeight';
 import { PageChangeList } from './page-changes';
 import { useStoredState } from './stored';
 import { WishReplyLink } from './wish';
+import { ClockMark } from './snooze';
 
 interface Props {
   on: boolean;
@@ -184,12 +185,19 @@ function Conversation({ talk, fresh, items, onOpen, draft }: { talk: Talk[]; fre
         const card = x.movedTo ? items.find((i) => i.id === x.movedTo) : undefined;
         return (
           <Fragment key={x.id}>
-            <Msg by="owner" who={t.author.owner} at={x.at} ev={talkEv({ talk: x.id, part: 'said' })} onReply={reply('said', 'owner', x.said)}>
-              {x.replyTo && <Quote q={talkQuote(x.replyTo)} />}
-              <Body md={x.said} />
-              <Shots ids={x.images} />
-              {x.continues && <Continues question={x.continues} reading={x.answer === undefined && !card} />}
-            </Msg>
+            {/* Obeya took a step up by itself, once a card it waited on got there: no words of the owner's */}
+            {x.after ? (
+              <div className="note ev-state">
+                {clock(x.at)} · {t.koordinator.after(x.after.title, x.after.met, x.after.state)}
+              </div>
+            ) : (
+              <Msg by="owner" who={t.author.owner} at={x.at} ev={talkEv({ talk: x.id, part: 'said' })} onReply={reply('said', 'owner', x.said)}>
+                {x.replyTo && <Quote q={talkQuote(x.replyTo)} />}
+                <Body md={x.said} />
+                <Shots ids={x.images} />
+                {x.continues && <Continues question={x.continues} reading={x.answer === undefined && !card} />}
+              </Msg>
+            )}
             {x.heldUntil ? (
               <Msg by="koordinator" className="thinking" who={t.author.koordinator}>
                 <div className="hint">{t.koordinator.held(clock(x.heldUntil))}</div>
@@ -208,6 +216,7 @@ function Conversation({ talk, fresh, items, onOpen, draft }: { talk: Talk[]; fre
                 <Body md={x.reply} />
                 {x.wish && !x.undone && <WishReplyLink wish={x.wish} />}
                 {x.undone && <div className="hint">{t.koordinator.undone}</div>}
+                {x.waits?.map((w) => <WaitLine key={w.card} talk={x.id} wait={w} />)}
               </Msg>
             )}
             {/* a line leads to the Question card the thread goes on at */}
@@ -241,6 +250,18 @@ function Conversation({ talk, fresh, items, onOpen, draft }: { talk: Talk[]; fre
           </Fragment>
         );
       })}
+    </div>
+  );
+}
+
+/** Under Obeya's reply: a card it waits on, to take the step it said it would take then; „Nicht mehr warten“ drops that step. */
+function WaitLine({ talk, wait }: { talk: number; wait: TalkWait }) {
+  return (
+    <div className="hint wait-line">
+      <ClockMark /> {t.koordinator.waits(wait.title, wait.state)}
+      <button className="btn small" title={t.koordinator.unwaitHint} onClick={() => void api.unwait(talk, wait.card).catch(() => {})}>
+        {t.koordinator.unwait}
+      </button>
     </div>
   );
 }

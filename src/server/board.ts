@@ -48,6 +48,7 @@ import {
   type PlanDir,
   type Reshare,
   type TalkQuote,
+  type TalkAfter,
   type TalkRef,
   type Thread,
   isTalkRef,
@@ -58,7 +59,7 @@ import {
   type Notice,
   type BackgroundTask,
 } from '../core/types';
-import type { CardRow, DecisionRow, Friction, FrictionNote, GroupRow, HeldTalk, NewRow, RowUpdate, Store } from './db';
+import type { CardRow, DecisionRow, Friction, FrictionNote, GroupRow, HeldTalk, NewRow, RowUpdate, Store, TalkWaitRow } from './db';
 import type { Images } from './images';
 import { clip, oneLine } from '../core/text';
 import type { Wish } from '../core/wish';
@@ -828,8 +829,8 @@ export class Board {
    * Records an exchange with the Koordinator, without its reply (`''`) while it reads the words;
    * returns its id. `replyTo`: the message of the sheet the words reply to.
    */
-  addTalk(said: string, reply: string, cardId: string | null = null, lookUp?: { question: string; about: string | null }, images: string[] = [], replyTo?: TalkRef): number {
-    const id = this.store.addTalk(this.canvas.id, said, reply, cardId, lookUp, images, replyTo);
+  addTalk(said: string, reply: string, cardId: string | null = null, lookUp?: { question: string; about: string | null }, images: string[] = [], replyTo?: TalkRef, after?: TalkAfter): number {
+    const id = this.store.addTalk(this.canvas.id, said, reply, cardId, lookUp, images, replyTo, after);
     this.changed();
     return id;
   }
@@ -859,6 +860,17 @@ export class Board {
   /** The words the usage limit holds, oldest first: after a restart, the Koordinator reads them once it lifts. */
   heldTalk() {
     return this.store.heldTalk(this.canvas.id);
+  }
+
+  /** The cards the Koordinator waits on after the exchange's reply, to take a step once each gets there. */
+  waitTalk(id: number, waits: TalkWaitRow[]) {
+    this.store.waitTalk(id, waits);
+    this.changed();
+  }
+
+  /** The exchanges whose reply said the Koordinator waits on a card. */
+  waitingTalk() {
+    return this.store.waitingTalk(this.canvas.id);
   }
 
   undoTalk(id: number) {

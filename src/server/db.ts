@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { AnswerFile, AnswerRef, CardEvent, DeviceView, CardKind, CardState, Mock, Need, Preference, PreferenceState, ProposedSetting, RepoCommands, SettingProposal, SettingProposalState, Spot, Talk, TalkQuote, TalkRef } from '../core/types';
+import type { AnswerFile, AnswerRef, CardEvent, DeviceView, CardKind, CardState, Mock, Need, Preference, PreferenceState, ProposedSetting, RepoCommands, SettingProposal, SettingProposalState, Spot, Talk, TalkAfter, TalkQuote, TalkRef, TalkWait } from '../core/types';
 import type { Wish } from '../core/wish';
 
 export interface CardRow {
@@ -105,6 +105,11 @@ export interface CardRow {
 export interface HeldTalk {
   until: string;
   reading: unknown;
+}
+
+/** A card the Koordinator waits on (`talk.waits`), and the step it said it takes once the card gets there. */
+export interface TalkWaitRow extends TalkWait {
+  then: string;
 }
 
 export interface GroupRow {
@@ -376,6 +381,8 @@ export const MIGRATIONS = [
   'ALTER TABLE talk ADD COLUMN held TEXT;',
   // a card set aside until a point in time, by its worker or the owner (JSON `Snooze`)
   'ALTER TABLE cards ADD COLUMN snoozed TEXT;',
+  // cards the Koordinator waits on to take a step then (JSON `TalkWaitRow[]`), and the exchange it took that step up in (JSON `TalkAfter`)
+  'ALTER TABLE talk ADD COLUMN waits TEXT; ALTER TABLE talk ADD COLUMN after_wait TEXT;',
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter, wish';
@@ -819,11 +826,11 @@ export class Store {
 
   // ---------------------------------------------------------------- the Koordinator's memory
 
-  addTalk(canvasId: string, said: string, reply: string, cardId: string | null, lookUp?: { question: string; about: string | null }, images: string[] = [], replyTo?: TalkRef): number {
+  addTalk(canvasId: string, said: string, reply: string, cardId: string | null, lookUp?: { question: string; about: string | null }, images: string[] = [], replyTo?: TalkRef, after?: TalkAfter): number {
     return (
       this.db
         .query(
-          'INSERT INTO talk (canvas_id, at, said, reply, card_id, question, about, images, reply_to) VALUES ($c, $at, $said, $reply, $cardId, $question, $about, $images, $replyTo) RETURNING id',
+          'INSERT INTO talk (canvas_id, at, said, reply, card_id, question, about, images, reply_to, after_wait) VALUES ($c, $at, $said, $reply, $cardId, $question, $about, $images, $replyTo, $after) RETURNING id',
         )
         .get({
           c: canvasId,
@@ -835,6 +842,7 @@ export class Store {
           about: lookUp?.about ?? null,
           images: images.length ? JSON.stringify(images) : null,
           replyTo: replyTo ? JSON.stringify({ talk: replyTo.talk, part: replyTo.part }) : null,
+          after: after ? JSON.stringify(after) : null,
         }) as { id: number }
     ).id;
   }
@@ -861,6 +869,16 @@ export class Store {
   /** The words the usage limit holds, oldest first. */
   heldTalk(canvasId: string): (Talk & { held: HeldTalk })[] {
     return (this.db.query('SELECT * FROM talk WHERE canvas_id = $c AND held IS NOT NULL ORDER BY id').all({ c: canvasId }) as TalkRow[]).map((r) => ({ ...toTalk(r), held: JSON.parse(r.held!) as HeldTalk }));
+  }
+
+  /** The cards the Koordinator waits on after the exchange's reply; none once it no longer waits on any. */
+  waitTalk(id: number, waits: TalkWaitRow[]) {
+    this.db.query('UPDATE talk SET waits = $waits WHERE id = $id').run({ id, waits: waits.length ? JSON.stringify(waits) : null });
+  }
+
+  /** The exchanges whose reply said the Koordinator waits on a card, oldest first. */
+  waitingTalk(canvasId: string): (Talk & { waiting: TalkWaitRow[] })[] {
+    return (this.db.query('SELECT * FROM talk WHERE canvas_id = $c AND waits IS NOT NULL ORDER BY id').all({ c: canvasId }) as TalkRow[]).map((r) => ({ ...toTalk(r), waiting: JSON.parse(r.waits!) as TalkWaitRow[] }));
   }
 
   undoTalk(id: number) {
@@ -980,7 +998,7 @@ export class Store {
              WHERE c.canvas_id = $c AND e.author = 'owner' AND e.kind IN ('hint', 'answer', 'talk') AND e.at > $since
              UNION ALL
              SELECT t.at, t.card_id, c.title, 'say', t.said, t.id FROM talk t LEFT JOIN cards c ON c.id = t.card_id
-             WHERE t.canvas_id = $c AND t.undone = 0 AND t.at > $since
+             WHERE t.canvas_id = $c AND t.undone = 0 AND t.after_wait IS NULL AND t.at > $since
            ) ORDER BY at DESC, seq DESC LIMIT $limit`,
         )
         .all({ c: canvasId, since, limit }) as { at: string; cardId: string | null; title: string | null; kind: Utterance['kind']; text: string }[]
@@ -1172,6 +1190,8 @@ interface TalkRow {
   reply_to: string | null;
   wish: string | null;
   held: string | null;
+  waits: string | null;
+  after_wait: string | null;
 }
 
 const toTalk = (r: TalkRow): Talk => ({
@@ -1194,6 +1214,8 @@ const toTalk = (r: TalkRow): Talk => ({
   ...(r.card ? { movedTo: r.card } : {}),
   ...(r.wish ? { wish: JSON.parse(r.wish) as Wish } : {}),
   ...(r.held ? { heldUntil: (JSON.parse(r.held) as HeldTalk).until } : {}),
+  ...(r.waits ? { waits: (JSON.parse(r.waits) as TalkWaitRow[]).map(({ card, title, state }) => ({ card, title, state })) } : {}),
+  ...(r.after_wait ? { after: JSON.parse(r.after_wait) as TalkAfter } : {}),
 });
 
 /**

@@ -2581,6 +2581,14 @@ of the line.
   its reply that it cannot do something, rather than never (nobody would learn where Obeya falls
   short) or by collecting such requests under „Vorschläge“ (late, and without their context). The
   action is called `wish`, since `feedback` is feedback on a card's work.
+- **The Koordinator waits on a card for a step it announced** (2026-10-18). Until then it said
+  „once the repository is there, I'll add the canvas“ when it started a task that creates a
+  repository, and nothing came: no turn of its runs without words of the owner's, who had to say
+  „Task done.“ for the canvas to come. Rejected: having it promise nothing it cannot take by itself
+  (the owner asked for both in one breath, and would have to come back for the second); a
+  follow-up card whose worker adds the canvas (configuration is the Koordinator's, with its check
+  and undo, and the worker would have to pass it back to Obeya anyway); waiting for any condition
+  other than the two a worker waits for on another card, which cover what a card's result shows in.
 - **A card waits rather than risking a collision**; the Koordinator's estimate is taken once, before
   the start, and a waiting card is checked again against what runs when its blockers finish.
 - **A new card does not overtake a queued one it likely conflicts with**: it queues behind it, also
@@ -2856,7 +2864,8 @@ Acting takes one or more actions from one sentence, up to 20: new card, new idea
 card out of the queue, note, answer, feedback, approve, accept, dismiss, revise, stop, remember,
 Arbeitsrückschau, putting cards into a group or out of it, renaming a group, changing the
 configuration (`configure`, see The Konfiguration dialog), a wish for Obeya's makers (`wish`, see
-Wishes for Obeya's makers); on ideas: discuss, build, plan doc (on a
+Wishes for Obeya's makers), waiting on a card to take a step then (`wait_for`, see A step once a
+card gets somewhere); on ideas: discuss, build, plan doc (on a
 planned task of the owner's nobody has worked on too), prototype, park, drop; on prototypes: build
 on it, discard. The actions are checked against the cards' states in the turn, so an action that
 does not fit (a note to a card no agent works on) goes back to the Koordinator, which may reply
@@ -2913,6 +2922,32 @@ their words and the undo window); accepting in the same breath, or while it is r
 since the owner should see what they take. A note, an answer or feedback the Koordinator passes to a
 card's agent (said in its sheet: „sag dem Export, …“) waits for undo like every command to Obeya,
 and spoken words reach the agent with the remark that speech recognition may have misheard them.
+
+#### A step once a card gets somewhere
+
+What can only follow once a card gets somewhere (a canvas for the repository a new task creates,
+starting „Login“ once „Export“ has landed, passing words on once a card waits for the owner) the
+Koordinator waits for, as a worker snoozes on another card: `wait_for` in the same act, on a card
+by its tag or on a new card of the same act by its title, until it is done (the default) or waits
+for the owner (`awaited` in `src/core/types.ts`), with the step written out so it stands on its own
+(`then`). A card already there is refused (the step is due now), as is a step without text. The
+wait stands on the exchange whose reply announced it (`talk.waits`), so it outlives a restart; the
+Koordinator sees its waits with every command and drops one on the owner's word (`stop_waiting`).
+
+Every change of the board, the 15 s timer and every start look for waits whose card got there or no
+longer gets there by itself (stopped, archived, removed, dropped), beside the snoozed cards
+(`Commander.due`, called from `wakeDue`). Such a wait goes, and a new exchange without words of the
+owner's takes it up: the Koordinator hears what it said it would do, what became of the card (its
+state and its worker's summary), and takes the step, or replies what became of the card instead.
+Its reply reaches the owner as a notice, with „Rückgängig“ where it has actions, as for words the
+usage limit held (which also holds this turn, the same way); its actions run after the undo window.
+The exchange stands where the waiting one was: in the sheet, or on the card that was open then.
+
+In the sheet, the reply that announced the step carries a line under it while the wait lasts, „◷
+Wartet, bis „Repository anlegen“ erledigt ist“ (or „… auf dich wartet“), with „Nicht mehr warten“,
+which drops the step at once (the Koordinator hears that with the next command). The exchange that
+took it up starts with a line in place of the owner's words, „„Repository anlegen“ ist erledigt“
+(or what else became of the card), and Obeya's reply under it.
 
 #### Confirmation and undo
 

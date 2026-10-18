@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { needsYou } from '../core/types';
 import { CanvasRuntime } from './canvas';
 import { Store } from './db';
-import { FakeRuntime, type FakeSession, gitRepo, noForge } from './testing';
+import { FakeRuntime, type FakeSession, gitRepo, noForge, until } from './testing';
 
 let dir: string;
 let main: string;
@@ -379,5 +379,37 @@ describe('edges a review found', () => {
     expect(runtime.last.inbox[0]).toContain('Obeya has started again and runs main with your change now.');
     expect(JSON.parse(board().row(id).landed!)).toEqual({ commit: 'abc' });
     expect(item(id).snoozed).toBeUndefined();
+  });
+});
+
+describe('the Koordinator waits on a card', () => {
+  test('a new card of the command is waited on by its id, and its getting done takes the step up by itself', async () => {
+    const heard = canvas.commander.hear('leg eine Aufgabe fürs Repo an, und danach noch eine für die Leinwand', {});
+    await until(() => runtime.sessions.length === 1);
+    const k = runtime.last;
+    k.call('act', {
+      actions: [
+        { do: 'new_card', title: 'Repository anlegen', body: 'git init', start: false },
+        { do: 'wait_for', title: 'Repository anlegen', text: 'New card „Leinwand anlegen“, not started.' },
+      ],
+      confirm: 'Neue Aufgabe „Repository anlegen“; sobald sie erledigt ist, lege ich „Leinwand anlegen“ an.',
+    });
+    k.emit({ type: 'idle' });
+    canvas.commander.arm((await heard).token!);
+    await until(() => board().snapshot().talk[0]!.waits);
+    const repo = board().snapshot().items.find((i) => i.title === 'Repository anlegen')!;
+    expect(board().snapshot().talk[0]!.waits).toEqual([{ card: repo.id, title: 'Repository anlegen', state: 'done' }]);
+
+    // done: the board's change wakes the Koordinator, without the owner saying anything
+    board().work(repo.id, { state: 'done' });
+    await until(() => k.inbox.length === 2);
+    expect(k.inbox[1]).toContain('the card "Repository anlegen" is done');
+    k.call('act', { actions: [{ do: 'new_card', title: 'Leinwand anlegen', body: '', start: false }], confirm: 'Neue Aufgabe „Leinwand anlegen“.' });
+    k.emit({ type: 'idle' });
+    await until(() => board().snapshot().items.some((i) => i.title === 'Leinwand anlegen'));
+    expect(board().snapshot().talk.map((t) => [t.said, t.reply, t.after?.met])).toEqual([
+      ['leg eine Aufgabe fürs Repo an, und danach noch eine für die Leinwand', 'Neue Aufgabe „Repository anlegen“; sobald sie erledigt ist, lege ich „Leinwand anlegen“ an.', undefined],
+      ['', 'Neue Aufgabe „Leinwand anlegen“.', 'reached'],
+    ]);
   });
 });

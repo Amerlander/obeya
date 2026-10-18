@@ -734,6 +734,8 @@ textarea.p-body:focus { border-color: var(--muted); }
 /* the line where the card was snoozed, while it is: with „Jetzt zurückholen“ and „Ändern“ under it */
 .talk .note.snooze-line { display: flex; flex-direction: column; align-items: center; gap: 2px; border-top: 1px dashed var(--line); padding-top: 8px; font-style: normal; }
 .talk .note.snooze-line .clock-mark { vertical-align: -1px; }
+.talk .wait-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 6px; }
+.talk .wait-line .clock-mark { vertical-align: -1px; }
 .snooze-acts { display: flex; gap: 8px; align-items: flex-start; justify-content: center; flex-wrap: wrap; }
 .snooze-acts .btn.small { margin-top: 4px; background: var(--card); border: 1px solid var(--line); color: var(--ink); }
 /* „Später …“ and its menu of times, above the button in a card's action row, below it in the flow on the snooze line */

@@ -3,13 +3,13 @@
 
 import { z } from 'zod';
 import { settingsShape } from '../adapters/schema';
-import { type AgentSetting, agentListens, answering, askable, blocksSaving, type CanvasConfig, finished, handedOver, type Item, type NextStep, type Notice, pausable, plannableAsProject, prototypeWorkstream, snoozable, type Queue, type SpotInput, type TalkQuote, type TalkRef } from '../core/types';
+import { type AgentSetting, agentListens, answering, askable, type Awaited, awaited, type AwaitedState, blocksSaving, type CanvasConfig, finished, handedOver, type Item, type NextStep, type Notice, pausable, plannableAsProject, prototypeWorkstream, snoozable, type Queue, type SpotInput, type Talk, type TalkAfter, type TalkQuote, type TalkRef } from '../core/types';
 import { inQueue } from '../core/queue';
 import { answerTag, fromAnswerTag } from './answers';
 import { BadRequest, type Board, excerpt, replyNote } from './board';
 import type { Place } from '../core/layout';
 import type { Config } from './config';
-import type { Moment } from './db';
+import type { Moment, TalkWaitRow } from './db';
 import { type AgentRuntime, type AgentSession, failureReason, limitLifts } from './runtime';
 import { type Language, LANGUAGE_NAMES } from '../core/locale';
 import { MESSAGES } from '../core/messages';
@@ -47,6 +47,13 @@ export type Command = (
   | { do: 'group'; cards: string[]; name: string }
   | { do: 'ungroup'; cards: string[] }
   | { do: 'renameGroup'; group: string; name: string }
+  /**
+   * The Koordinator waits until the card is done or waits for the owner, and then takes the step
+   * `then`; `newCard`: instead of `card`, the card the command's action of that index creates.
+   */
+  | { do: 'waitFor'; card?: string; newCard?: number; state: AwaitedState; then: string }
+  /** It no longer waits on the card. */
+  | { do: 'stopWaiting'; card: string }
 ) & {
   /** Screenshots that came with the command (image ids), on the actions that take them (`TAKES_IMAGES`). */
   images?: string[];
@@ -128,6 +135,18 @@ export interface Input {
   spot?: SpotInput;
   /** When the owner said the words, read only now since the usage limit held them (ISO time). */
   heldSince?: string;
+  /** No words: a card the Koordinator waited on got there (or no longer can), and it takes up the step it said it would take then. */
+  after?: AfterWait;
+}
+
+/** The step the Koordinator takes up once the card it waited on got there: what it was, and the exchange it said so in. */
+export interface AfterWait extends TalkAfter {
+  card: string;
+  then: string;
+  /** The owner's words and the Koordinator's reply that said it would wait, and when. */
+  said: string;
+  promised: string;
+  at: string;
 }
 
 export interface CommanderOptions {
@@ -190,7 +209,7 @@ type More = { wish?: string; cannot?: boolean };
 type Decision = { commands: Command[]; confirm: string; lookUp?: LookUp } & More;
 
 /** The actions `act` takes, as the Koordinator names them. */
-const ACTIONS = ['new_card', 'new_idea', 'start', 'dequeue', 'note', 'answer', 'feedback', 'approve', 'accept', 'dismiss', 'keep', 'revise', 'stop', 'pause', 'resume', 'snooze', 'wake', 'discuss', 'build', 'plan_doc', 'prototype', 'park', 'drop', 'remember', 'work_retro', 'group', 'ungroup', 'rename_group', 'wish'] as const;
+const ACTIONS = ['new_card', 'new_idea', 'start', 'dequeue', 'note', 'answer', 'feedback', 'approve', 'accept', 'dismiss', 'keep', 'revise', 'stop', 'pause', 'resume', 'snooze', 'wake', 'discuss', 'build', 'plan_doc', 'prototype', 'park', 'drop', 'remember', 'work_retro', 'group', 'ungroup', 'rename_group', 'wait_for', 'stop_waiting', 'wish'] as const;
 
 /** What `act` gets for one action. */
 const ACTION = z.object({
@@ -208,6 +227,7 @@ const ACTION = z.object({
   direct: z.boolean().optional(),
   idea: z.boolean().optional(),
   until: z.string().optional(),
+  state: z.enum(['done', 'waits_for_owner']).optional(),
 });
 type ActionArgs = z.infer<typeof ACTION>;
 
@@ -328,7 +348,7 @@ export class Commander {
     const wish: Wish | undefined = decision.wish ? { said: decision.wish } : decision.cannot && !lookUp ? { said: transcript, answer: confirm } : undefined;
     const drafted = { ...(decision.wish ? { wish: wish! } : {}), ...(wish && !decision.wish ? { cannot: true as const } : {}) };
     // a proposal is reworked by what the owner said of it in their own words, however the Koordinator put them
-    const verbatim = !input.forwarded && decision.commands.length === 1 && decision.commands[0]!.do === 'revise';
+    const verbatim = !input.forwarded && !input.after && decision.commands.length === 1 && decision.commands[0]!.do === 'revise';
     const commands = decision.commands.map((c): Command => {
       // a rule said with a card open has that card as its occasion
       if (c.do === 'remember') return card ? { ...c, card } : c;
@@ -461,7 +481,8 @@ export class Commander {
       // what the owner takes back is not learned from either
       if (w.said) this.o.onOwnerInput?.(w.card, 'command', w.said, w.confirm);
       // in the order the owner said them; one that fails does not hold up the others
-      for (const command of w.commands) await this.run(command);
+      const made: (string | undefined)[] = [];
+      for (const command of w.commands) made.push(await this.run(command, w.talk, made));
       this.waiting.delete(token);
     }, Math.max(0, due - Date.now()));
   }
@@ -479,10 +500,17 @@ export class Commander {
       .map(([token, w]) => ({ text: w.confirm, token, undoMs: w.due! - now, ...(w.card ? { cardId: w.card } : {}) }));
   }
 
-  /** Runs one command; what it throws is logged on its card. */
-  private async run(command: Command) {
+  /**
+   * Runs one command; what it throws is logged on its card. Returns the id of the card a new card
+   * command created, for a wait in the same command (`made`, by index) to name; `talk` is the
+   * exchange the command came from.
+   */
+  private async run(command: Command, talk?: number, made: (string | undefined)[] = []): Promise<string | undefined> {
     try {
-      await this.o.execute(command);
+      if (command.do === 'waitFor') return void this.waitFor(command, talk, made);
+      if (command.do === 'stopWaiting') return void this.stopWaiting(command.card);
+      const r = await this.o.execute(command);
+      return command.do === 'newCard' && typeof r === 'string' ? r : undefined;
     } catch (e) {
       const card = 'card' in command ? command.card : undefined;
       if (card) this.o.board.log(card, 'error', 'obeya', messageOf(e), { code: e instanceof BadRequest ? e.code : undefined });
@@ -506,6 +534,80 @@ export class Commander {
   /** Something the Koordinator hears with the owner's next command: an answer it looked up. */
   tell(text: string) {
     this.news.push(text);
+  }
+
+  /** The cards the Koordinator waits on, each with the exchange whose reply said so. */
+  private waits(): { talk: Talk; wait: TalkWaitRow }[] {
+    return this.o.board.waitingTalk().flatMap(({ waiting, ...talk }) => waiting.map((wait) => ({ talk, wait })));
+  }
+
+  /** Waits after the exchange `talk` until the card gets there (`waitFor`); a new card of the same command by the id it got. */
+  private waitFor(c: Extract<Command, { do: 'waitFor' }>, talk: number | undefined, made: (string | undefined)[]) {
+    const id = c.card ?? (c.newCard !== undefined ? made[c.newCard] : undefined);
+    const card = id ? this.o.board.item(id) : undefined;
+    if (talk === undefined || !card) throw new Error(`the card to wait on is not there: ${c.then}`);
+    const before = this.o.board.waitingTalk().find((x) => x.id === talk)?.waiting ?? [];
+    this.o.board.waitTalk(talk, [...before.filter((w) => w.card !== card.id), { card: card.id, title: card.title, state: c.state, then: c.then }]);
+  }
+
+  /** It no longer waits on the card, after whichever exchange it said so. */
+  private stopWaiting(card: string) {
+    for (const x of this.o.board.waitingTalk()) if (x.waiting.some((w) => w.card === card)) this.o.board.waitTalk(x.id, x.waiting.filter((w) => w.card !== card));
+  }
+
+  /** The owner no longer wants the step the Koordinator waits on the card for, after exchange `talk` („Nicht mehr warten“); false when it no longer waits. */
+  unwait(talk: number, card: string): boolean {
+    const x = this.o.board.waitingTalk().find((t) => t.id === talk);
+    const w = x?.waiting.find((y) => y.card === card);
+    if (!x || !w || this.following.has(`${talk}:${card}`)) return false;
+    this.o.board.waitTalk(talk, x.waiting.filter((y) => y !== w));
+    this.news.push(`The owner told you to stop waiting on „${w.title}“: you do not take the step you would have taken then (${w.then}).`);
+    return true;
+  }
+
+  /** The waits being taken up, by exchange and card. */
+  private following = new Set<string>();
+
+  /**
+   * Takes up the steps the Koordinator said it would take once a card gets somewhere, for the cards
+   * among `items` that got there or no longer can. Called on every change of the board.
+   */
+  due(items: Item[]) {
+    for (const { talk, wait } of this.waits()) {
+      const key = `${talk.id}:${wait.card}`;
+      const met = this.following.has(key) ? null : awaited(items.find((i) => i.id === wait.card), wait.state);
+      if (!met) continue;
+      this.following.add(key);
+      void this.follow(talk, wait, met)
+        .catch((e) => console.error('taking up a wait:', e))
+        .finally(() => this.following.delete(key));
+    }
+  }
+
+  /**
+   * A card the Koordinator waited on got there, or no longer can: it no longer waits on it, and a new
+   * exchange, with no words of the owner's, takes the step up where the waiting one was (the sheet,
+   * or the card open then). Its reply reaches the owner as a notice, with „Rückgängig“ where it has actions.
+   */
+  private async follow(x: Talk, w: TalkWaitRow, met: Awaited) {
+    const card = x.cardId && this.o.board.item(x.cardId) ? x.cardId : undefined;
+    const after: TalkAfter = { title: w.title, state: w.state, met, from: x.id };
+    const left = this.o.board.waitingTalk().find((t) => t.id === x.id)?.waiting.filter((y) => y.card !== w.card) ?? [];
+    this.o.board.waitTalk(x.id, left);
+    const talk = this.o.board.addTalk('', '', card ?? null, undefined, [], undefined, after);
+    const h: Held = {
+      transcript: '',
+      images: [],
+      focus: card ? { card } : {},
+      input: { after: { ...after, card: w.card, then: w.then, said: x.said, promised: x.reply ?? '', at: x.at } },
+      at: new Date().toISOString(),
+    };
+    await this.drain();
+    if (this.held.size) return void this.hold(talk, h);
+    const heard = await this.answer(talk, h);
+    if (!heard) return void this.hold(talk, h);
+    if (heard.token) this.arm(heard.token);
+    this.o.board.notify({ text: heard.confirm, ...(card ? { cardId: card } : { talk }), ...(heard.token ? { token: heard.token, undoMs: this.delayMs } : {}), ...(heard.wish ? { wish: heard.wish } : {}) });
   }
 
   /** Words Whisper should expect: Obeya's own, and the titles on the canvas. */
@@ -563,6 +665,7 @@ export class Commander {
             '- feedback: text as feedback on work waiting for review (demo or summary), a question about that work included; its agent takes it in while the work still waits for approval, and hands over anew when it changes something.',
             '- approve: approve work waiting for review; direct: true when the owner wants it straight onto main without a pull request („ohne PR“, „direkt auf main“), which a repository whose work goes out as a pull request allows only where the list of repositories says so. accept: take a proposed card and start it (a proposed idea: its discussion opens; the open questions on it go along); idea: true when the owner wants a proposed task discussed as an idea first rather than built („als Idee“, „erst besprechen“). dismiss: discard a proposed card, or one its agent withdrew or replaced since (the list says so; it goes, its worker stopped). keep: keep such a withdrawn or replaced card as it is. revise: text what the owner wants changed in a proposed card, or their thoughts on it (added, dropped, decided, put differently); an agent rewrites its text and questions by it in a minute or so, and accepting it waits for that (by a click once it is there).',
             '- pause: pause the agent on a card at once, only while it is working on something (the card list says so): a worker at work, or in any other state while the list says its agent is working on something; an idea\'s agent working on its reply; a Question card\'s agent reading. Nothing of it runs, its session stays, and it goes on where it stopped with resume, or with what the owner says to it, which it goes on with („halt mal an“, „pausier …“, „warte mal kurz“). resume: let a paused agent go on („mach weiter“, „lass ihn weitermachen“). stop: end the agent on a card for good, which plans the card again („stopp“, „brich ab“).',
+            "- wait_for: a step you take once a card gets somewhere, and not before (add a canvas once the task that creates its repository is done, start a card once another has landed, pass the owner's words on once a card waits for them): card the tag of the card to wait on (in „starte Login, sobald Export fertig ist“ that is Export, not Login), or title the title of a new_card in this same act to wait on; state done (the default: its work is on main, or it was closed without a change) or waits_for_owner (it asks the owner or hands its work over); text the step, standing on its own, with what the owner asked for (names, paths, values), cards by their titles (tags may change by then). Obeya wakes you once the card gets there, or no longer can (stopped, removed), with this text and what became of the card, and you take the step then; confirm says that you will. Nothing else wakes you for a step you say you take later. stop_waiting: you no longer wait on the card (card), when the owner no longer wants that step.",
             '- snooze: set a card aside until a point in time („stell das bis morgen früh zurück“, „erinner mich Montag daran“, „das später“), on a card at work (its agent stops until then, as on a pause, and goes on at the time) or one waiting for the owner (it leaves their list until then; nothing goes to its agent); on a snoozed card it changes the time. until: the local time as YYYY-MM-DDTHH:MM, from Now above („heute Abend“ 18:00, „morgen früh“ 08:00, „Montag“ 08:00 next Monday). wake: a snoozed card now („hol … zurück“, „weck … auf“).',
             `- new_idea: a new idea to think through with an exploration agent before anything is planned ("Ich will über … nachdenken", "Idee: …"). title short and precise, body what the owner said about it, in their words${repos.length > 1 ? ', repo as for new_card' : ''}.`,
             `- remember (no card): a rule the owner wants kept for all future work („Merk dir: …“, „ab jetzt immer …“). text: the rule, short and general, in ${LANGUAGE_NAMES[language]}; replaces: the number of a rule of the owner it changes or contradicts, also when it moves that rule into a CLAUDE.md. It goes to one of two places. The owner's rules, for how the agents work with the owner through Obeya whatever the repository (what to ask and what to decide alone, how to report, hand over and demo): leave repos out; it applies at once. A repository's CLAUDE.md, for anything about a repository (its conventions, product, tools, how its code is written, tested and landed, its UI and wording, taste in code even when it holds in every repository): repos the ids of the repositories it concerns (usually the open card's; every one when it holds in all of them); it goes into the repository's card ${t.quote(t.claudeMd.title)}, whose worker writes it into the CLAUDE.md. confirm says where it goes (${say.remember}).`,
@@ -590,7 +693,7 @@ export class Commander {
               problems.push(`action ${n + 1} (${a.do}${a.card ? ` on ${a.card}` : ''}): ${why}`);
             };
             given.forEach((a, n) => {
-              const r = this.command(a, s);
+              const r = this.command(a, s, given);
               if (typeof r === 'string') problem(n, r);
               else commands.push(r);
             });
@@ -733,9 +836,32 @@ export class Commander {
   }
 
   /** One action as a command, or why it cannot be done. */
-  private command(a: ActionArgs, s: Session): Command | string {
+  private command(a: ActionArgs, s: Session, all: ActionArgs[] = [a]): Command | string {
     // taken out before: it opens a draft, it does not run
     if (a.do === 'wish') return 'a wish is no action that runs';
+    if (a.do === 'wait_for') {
+      const then = a.text?.trim();
+      if (!then) return 'the step you take then is missing (text)';
+      const state: AwaitedState = a.state === 'waits_for_owner' ? 'waitsForOwner' : 'done';
+      if (!a.card) {
+        const title = a.title?.trim().toLowerCase();
+        const newCard = title ? all.findIndex((x) => x.do === 'new_card' && x.title?.trim().toLowerCase() === title) : -1;
+        if (newCard < 0) return 'name the card with card (its tag), or with title the title of a new_card in this act';
+        return { do: 'waitFor', newCard, state, then };
+      }
+      const id = s.tags.get(a.card);
+      const card = id ? this.o.board.item(id) : undefined;
+      if (!card) return `unknown tag ${a.card}`;
+      const met = awaited(card, state);
+      if (met === 'reached') return `the card ${state === 'done' ? 'is done' : 'waits for the owner'} already: take the step now`;
+      if (met) return `the card no longer gets there by itself (${met}): reply to the owner instead`;
+      return { do: 'waitFor', card: card.id, state, then };
+    }
+    if (a.do === 'stop_waiting') {
+      const id = a.card ? s.tags.get(a.card) : undefined;
+      if (!id || !this.waits().some(({ wait }) => wait.card === id)) return `you do not wait on ${a.card ?? '(no card named)'}; the cards you wait on are in the message`;
+      return { do: 'stopWaiting', card: id };
+    }
     if (a.do === 'remember') {
       const text = a.text?.trim();
       if (!text) return 'the rule is missing';
@@ -939,6 +1065,12 @@ export class Commander {
     }
   }
 
+  /** The card a wait was on, as it stands now, with its worker's summary; none once it is gone. */
+  private awaitedCard(id: string, items: Item[], describe: (i: Item) => string): string {
+    const card = items.find((i) => i.id === id);
+    return card ? `\nThe card now: ${describe(card)}${this.report(card)}` : '';
+  }
+
   /** What the open card's worker handed over: its summary in full, so a follow-up carries what it is about. */
   private report(card: Item): string {
     const summary = this.o.board.summary(card.id)?.trim();
@@ -1023,7 +1155,8 @@ export class Commander {
                     : t.question
                       ? ' (you were looking it up; no answer came)'
                       : '';
-                return `- ${when(t.at)}${open ? ` (with "${open.title}" open)` : ''} the owner: "${t.said}" → you: "${t.reply}"${t.undone ? ' (the owner took it back)' : ''}${later}`;
+                const words = t.after ? `${became(t.after)}, and you took up the step you had waited on it for` : `the owner: "${t.said}"`;
+                return `- ${when(t.at)}${open ? ` (with "${open.title}" open)` : ''} ${words} → you: "${t.reply}"${t.undone ? ' (the owner took it back)' : ''}${t.waits?.length ? ` (you wait on ${t.waits.map((w) => `"${w.title}"`).join(', ')} for it)` : ''}${later}`;
               })
               .join('\n')}`
           : 'You have not talked with the owner before.',
@@ -1051,7 +1184,15 @@ export class Commander {
       `Now: ${when(now)}.`,
       ...history,
       ...news,
-      ...(input.forwarded
+      ...(input.after
+        ? [
+            `No words of the owner's this time: you take up a step you said you would take. ${when(input.after.at)} the owner ${input.after.said ? `said: "${input.after.said}"` : 'had a step of yours waiting'}, and you answered: "${input.after.promised}", waiting until the card "${input.after.title}" ${until(input.after.state)}, to then: ${input.after.then}`,
+            `Now ${became(input.after)}.${this.awaitedCard(input.after.card, items, describe)}`,
+            input.after.met === 'reached'
+              ? 'Take that step now, with act (and config before configure), as you said you would. Where it no longer fits what happened since (the card\'s summary, the canvas), tell the owner with reply instead. The owner reads your confirm as a notice and can take the actions back.'
+              : 'The step waited for something that did not happen: tell the owner with reply what became of the card and that you did not take the step, unless taking it still makes sense.',
+          ]
+        : input.forwarded
         ? [
             `The agent of the open card passes on a request from what the owner told it, asking Obeya for something: "${input.forwarded}"`,
             input.forwarded === transcript ? '' : `The owner's own words to it, ${input.typed ? 'typed (as written, no recognition errors)' : 'spoken (speech recognition, may contain errors)'}: "${transcript}"`,
@@ -1071,9 +1212,12 @@ export class Commander {
             `The owner attached ${shots === 1 ? 'a screenshot' : `${shots} screenshots`} (shown below). Obeya gives ${shots === 1 ? 'it' : 'them'} to every new_card, new_idea, start, note, answer, feedback and discuss action you take for this message; a title for a new card may say what ${shots === 1 ? 'it shows' : 'they show'}.`,
           ]
         : []),
-      focused ? `The owner has this card open, so "it", "this" and a bare answer refer to it: ${describe(focused)}${this.report(focused)}` : project ? `The owner is looking at the project ${tag(project.id)} "${project.title}".` : 'No card is open: the owner speaks to you.',
+      focused && input.after ? `They said it with this card open: ${describe(focused)}` : focused ? `The owner has this card open, so "it", "this" and a bare answer refer to it: ${describe(focused)}${this.report(focused)}` : project ? `The owner is looking at the project ${tag(project.id)} "${project.title}".` : 'No card is open: the owner speaks to you.',
       `Cards on the canvas now:\n${relevant.map(describe).join('\n') || '(none)'}`,
       ...(projects.length ? [`Projects with workstreams to start:\n${projects.join('\n')}`] : []),
+      ...(this.waits().length
+        ? [`Cards you wait on, to take a step once each gets there (wait_for; stop_waiting drops one):\n${this.waits().map(({ talk, wait }) => `- ${tag(wait.card)} "${wait.title}" until it ${until(wait.state)} (since ${when(talk.at)}), then: ${wait.then}`).join('\n')}`]
+        : []),
       `Groups on the canvas: ${groupList.map((g) => `"${g.name}"`).join(', ') || '(none yet)'}`,
       rules.length
         ? `The owner's rules, which every agent follows (follow them yourself too):\n${rules.map((r, n) => `${n + 1}. ${r.text}`).join('\n')}`
@@ -1117,6 +1261,13 @@ function queued(q: Queue, items: Item[]): string {
 }
 
 
+/** What became of a card the Koordinator waited on, as it reads it. */
+const became = (a: Pick<TalkAfter, 'title' | 'met' | 'state'>) =>
+  `the card "${a.title}" ${{ reached: a.state === 'done' ? 'is done' : 'waits for the owner', gone: 'is gone (removed)', archived: 'was archived', stopped: 'was stopped by the owner (planned again)', dropped: 'was dropped' }[a.met]}`;
+
+/** What the Koordinator waits for a card to reach. */
+const until = (state: AwaitedState) => (state === 'done' ? 'is done' : 'waits for the owner');
+
 /** A time as the Koordinator reads it: local, to the minute, with the weekday. */
 function when(iso: string): string {
   const d = new Date(iso);
@@ -1156,7 +1307,7 @@ You are the Koordinator of Obeya, a canvas on which the owner directs coding age
 This is one ongoing conversation. The owner refers back to it ("the card from before", "no, the other one", "that one too"), and to how the canvas developed: each message says what happened since the previous one, and the first brings your memory of earlier conversations and the canvas's recent history. Card tags (K1, K2, …) stay the same throughout this conversation. No agent works on a planned, live or done card (done: finished without any change to the code, so nothing landed), but a note to a live or done card whose line says so resumes the agent that did its work, to answer; a workstream of a project takes its state from the project's plan doc (checked off there means live).
 
 For each message, call act, reply or look_up once, then end your turn:
-- act, with every action the owner asked for, in their order, on the cards they meant (the open card unless they name another). One sentence may hold several ("gib das frei und mach eine Folgeaufgabe …" is approve and new_card, with the open card as the one it follows up on): leave none out.
+- act, with every action the owner asked for, in their order, on the cards they meant (the open card unless they name another). One sentence may hold several ("gib das frei und mach eine Folgeaufgabe …" is approve and new_card, with the open card as the one it follows up on): leave none out. A step that can only follow once a card gets somewhere (a canvas for the repository a new task creates, a start once another card has landed) is wait_for in the same act: Obeya wakes you when the card gets there, and you take the step then.
 - reply, when the owner asks you a question of fact you can answer from what you know (the cards, their states and history, this conversation), also about the open card, or when nothing fits or it is unclear which card or what is meant.
 - look_up, when the answer needs reading or checking: what an agent would do on a card ("Was würde der Agent hier machen, wenn ich starte?"), what the plan says, how or why something works, what is on the machine or on GitHub (which file is newest, whether a script ran, what a release holds). Never reply that you cannot know or predict it; look it up. The answer follows in a few seconds.
 All three take confirm: one short ${LANGUAGE_NAMES[language]} sentence (two at most for an answer or several actions) the owner hears back, saying what will happen, naming the cards (${CONFIRM[language].act}). No preamble, no questions back unless you use reply.

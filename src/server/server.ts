@@ -815,6 +815,10 @@ export function serve(
       '/api/c/:canvas/reshare/stop': { POST: on((c) => c.sharing.stopResharing()) },
       // the owner has the Koordinator's sheet in view: the answers waiting there are read
       '/api/c/:canvas/talk/read': { POST: on((c) => c.board.readTalk()) },
+      // the owner no longer wants the step the Koordinator waits on a card for („Nicht mehr warten“)
+      '/api/c/:canvas/talk/:id/unwait': {
+        POST: on(async (c, req) => ({ stopped: c.commander.unwait(Number(req.params.id), String(((await req.json().catch(() => ({}))) as { card?: unknown }).card ?? '')) })),
+      },
       '/api/c/:canvas/ws': (req, server) =>
         byId.has(req.params.canvas) && server.upgrade(req, { data: { canvas: req.params.canvas, page: crypto.randomUUID(), device: access.deviceOf(req) } })
           ? undefined

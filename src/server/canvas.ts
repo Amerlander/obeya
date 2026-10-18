@@ -297,9 +297,11 @@ export class CanvasRuntime {
   private wakeSoon: ReturnType<typeof setTimeout> | undefined;
   private unwatch: () => void;
 
-  /** Wakes the snoozed cards whose time has come by `now`, and those whose card they wait on got there (or no longer can). */
+  /** Wakes the snoozed cards whose time has come by `now`, and those whose card they wait on got there (or no longer can); so too the steps the Koordinator waits on cards for. */
   wakeDue(now = Date.now()) {
     const items = this.board.snapshot().items;
+    // and the Koordinator takes up the steps it waited on cards for
+    this.commander.due(items);
     for (const i of items) {
       if (!i.snoozed) continue;
       const on = i.snoozed.on;
@@ -1546,7 +1548,7 @@ export class CanvasRuntime {
     return card;
   }
 
-  /** A voice (or typed) command, once its undo window has passed. */
+  /** A voice (or typed) command, once its undo window has passed; a new card's id, for a wait on it in the same command. */
   run(c: Command) {
     switch (c.do) {
       case 'newCard': {
@@ -1560,7 +1562,7 @@ export class CanvasRuntime {
         });
         this.board.log(card.id, 'state', 'owner', this.board.t.voice.created);
         if (c.start) this.koordinator.request(card.id);
-        return;
+        return card.id;
       }
       case 'newIdea': {
         const card = this.board.create({ idea: true, title: c.title, body: c.body, ...(c.repo ? { repo: c.repo } : {}), ...this.board.freeSpot(c.place ?? this.inView) });

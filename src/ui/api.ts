@@ -280,6 +280,8 @@ export const api = {
   dismissReshare: () => call<void>('DELETE', at('/reshare')),
   /** The owner has the Koordinator's sheet in view: the answers waiting there are read. */
   readTalk: () => call<void>('POST', at('/talk/read')),
+  /** Obeya no longer waits on the card after that exchange, to take the step it said it would. */
+  unwait: (talk: number, card: string) => call<{ stopped: boolean }>('POST', at(`/talk/${talk}/unwait`), { card }),
 };
 
 // Log lines arrive over the canvas's WebSocket; whoever shows a card's log listens here.

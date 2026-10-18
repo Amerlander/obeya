@@ -7,7 +7,7 @@ import type { DiffFile } from '../core/diff';
 import { type Language, languageOf } from '../core/locale';
 import type { PageChangeId } from '../core/page-changes';
 import type { NotAProject } from '../core/plan-doc';
-import { type AgentEffort, type AgentModel, type AgentRole, type CardState, type ConfigProblemCode, type DemoKind, type DemoSettingsProblem, type ErrorCode, EXPORT_HTML_MAX, type NarrationLanguage, type Theme, type VoiceKind, type Idea, type Need, type NextStep, type Queue, type OwnerHold, type RestartReason, type SetupId, type VoiceSetupId, type CloudPreset, type MachineSectionId, type NeededId, type PrId, type Snooze, type AwaitedState, stopped } from '../core/types';
+import { type AgentEffort, type AgentModel, type AgentRole, type CardState, type ConfigProblemCode, type DemoKind, type DemoSettingsProblem, type ErrorCode, EXPORT_HTML_MAX, type NarrationLanguage, type Theme, type VoiceKind, type Idea, type Need, type NextStep, type Queue, type OwnerHold, type RestartReason, type SetupId, type VoiceSetupId, type CloudPreset, type MachineSectionId, type NeededId, type PrId, type Snooze, type Awaited, type AwaitedState, stopped } from '../core/types';
 
 const de = {
   kind: { task: 'Aufgabe', question: 'Frage', project: 'Projekt', workstream: 'Workstream', idea: 'Idee', prototype: 'Prototyp', becomesProject: 'Idee → Projekt', taskBecomesProject: 'Aufgabe → Projekt' },
@@ -701,6 +701,13 @@ const de = {
     lookUpLimited: (time: string) => `Nutzungslimit · schlägt das um ${time} von selbst nach`,
     /** Under words the usage limit keeps Obeya from reading: when it reads them by itself. */
     held: (time: string) => `Nutzungslimit · liest das um ${time} von selbst`,
+    /** Under Obeya's reply: a card it waits on, to take the step it said it would take then. */
+    waits: (title: string, state: AwaitedState) => `Wartet, bis „${title}“ ${state === 'done' ? 'erledigt ist' : 'auf dich wartet'}`,
+    unwait: 'Nicht mehr warten',
+    unwaitHint: 'Obeya lässt dann aus, was es für danach angekündigt hat',
+    /** In place of the owner's words: what became of the card Obeya waited on, which it goes on with. */
+    after: (title: string, met: Awaited, state: AwaitedState) =>
+      `„${title}“ ${{ reached: state === 'done' ? 'ist erledigt' : 'wartet auf dich', gone: 'ist nicht mehr da', archived: 'ist archiviert', stopped: 'wurde gestoppt', dropped: 'wurde verworfen' }[met]}`,
     reshare: {
       outdated: (n: number) => (n === 1 ? 'Eine geteilte Demo ist veraltet' : `${n} geteilte Demos sind veraltet`),
       outdatedHint: 'Erneut teilen erzeugt sie neu, mit derselben Demo und demselben Link; eine nach der anderen. Seit sie geteilt wurden, hat sich an den Seiten geändert:',
@@ -2146,6 +2153,11 @@ const en: Strings = {
     lookingUp: 'looking it up …',
     lookUpLimited: (time: string) => `Usage limit · looks this up by itself at ${time}`,
     held: (time: string) => `Usage limit · reads this by itself at ${time}`,
+    waits: (title: string, state: AwaitedState) => `Waiting until “${title}” ${state === 'done' ? 'is done' : 'waits for you'}`,
+    unwait: 'Stop waiting',
+    unwaitHint: 'Obeya then leaves out what it said it would do afterwards',
+    after: (title: string, met: Awaited, state: AwaitedState) =>
+      `“${title}” ${{ reached: state === 'done' ? 'is done' : 'waits for you', gone: 'is gone', archived: 'was archived', stopped: 'was stopped', dropped: 'was dropped' }[met]}`,
     reshare: {
       outdated: (n: number) => (n === 1 ? 'One shared demo is outdated' : `${n} shared demos are outdated`),
       outdatedHint: 'Sharing again makes them afresh, with the same demo and the same link; one after the other. Since they were shared, the pages changed:',

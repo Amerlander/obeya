@@ -2,7 +2,8 @@
 // the owner's words, in each state an agent is on; sentences said or typed with a card open that no
 // agent works on; new tasks that start or wait; questions with no card open (an opinion becomes
 // an idea, a fact stays in the conversation, work on the machine such as a new repository is a task);
-// and requests Obeya cannot do, or words for its makers.
+// requests Obeya cannot do, or words for its makers; and a step promised for once a card is done,
+// which it waits for and then takes by itself.
 // Runs only with OBEYA_LIVE=1 (it uses the machine's
 // Claude login and takes about a minute): `OBEYA_LIVE=1 bun test src/server/commands.live.test.ts`.
 
@@ -14,7 +15,7 @@ import { Board } from './board';
 import { type Command, Commander } from './commands';
 import { Config } from './config';
 import { Store } from './db';
-import { AGENT_DEFAULTS } from '../core/types';
+import { AGENT_DEFAULTS, type CanvasConfig, type ConfigView } from '../core/types';
 import { type AgentRuntime, sdkRuntime, withAgentSetting } from './runtime';
 import { gitRepo } from './testing';
 
@@ -218,6 +219,73 @@ test.skipIf(!process.env.OBEYA_LIVE)(
     const results = await Promise.all(WISHES.flatMap((c) => [c, c]).map(async ([text, want]) => ({ text, want, ...(await wishOf(text)) })));
     const wrong = results.filter((r) => r.got !== r.want);
     for (const r of results) console.log(`${wrong.includes(r) ? '✗' : '✓'} „${r.text}“ → ${r.got ?? 'neither'} · ${r.confirm}`);
+    expect(wrong.map((r) => r.text)).toEqual([]);
+  },
+  300_000,
+);
+
+/** What the owner asked for a step that can only follow once a card is done, the actions expected now, and the card waited on (null: the new one). */
+const LATER: [string, Command['do'][], string | null][] = [
+  ['Hmm, with my permission you should be able to do that, no? Create a card and let the agent try it', ['newCard', 'waitFor'], null],
+  ['Starte Login, sobald Export als CSV fertig ist', ['waitFor'], 'Export als CSV'],
+];
+
+/**
+ * The owner's request from the conversation before (a repository and a canvas for it), which only a
+ * card's agent can begin: the Koordinator waits on that card, and takes the step once it is done.
+ */
+async function later(text: string) {
+  const board = new Board(new Store(':memory:'), { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => ({ docs: [], dirs: [] }), undefined, undefined, () => 'en');
+  board.work(board.create({ title: 'Export als CSV', x: 0, y: 0 }).id, { state: 'working' });
+  board.create({ title: 'Login', x: 0, y: 0 });
+  board.addTalk(
+    'Kannst du mir ein neues Repo in ~/dev/leserina und einen entsprechenden Obeya canvas anlegen? Privater Account, erstmal nicht nach GitHub.',
+    "I can't create a repository myself; Obeya can only put a canvas on one that already exists. Run `mkdir -p ~/dev/leserina && cd ~/dev/leserina && git init -b main && git commit --allow-empty -m \"Start\"`. Tell me once it's there, and I'll add the canvas “Leserina”.",
+  );
+  const view = { file: '/h/canvases.json', source: 'file', canvases: [{ name: 'Obeya', repos: [{ path: '/r' }] }], running: ['obeya'] } as unknown as ConfigView;
+  const config = { view: () => view, check: async (canvases: unknown) => ({ canvases: canvases as CanvasConfig[], resolved: [], problems: [] }), checkSaved: async () => ({ canvases: view.canvases, resolved: [], problems: [] }) };
+  const executed: Command[] = [];
+  const runtime = withAgentSetting(sdkRuntime, () => AGENT_DEFAULTS.koordinator);
+  const k = new Commander({
+    board,
+    runtime,
+    cwd: cwd(),
+    config,
+    delayMs: 1,
+    execute: (c) => {
+      executed.push(c);
+      if (c.do === 'newCard') return board.create({ title: c.title, x: 0, y: 0 }).id;
+    },
+  });
+  const heard = await k.hear(text, {}, [], { typed: true });
+  if (heard.token) k.arm(heard.token);
+  await new Promise((r) => setTimeout(r, 20));
+  // a wait is the Koordinator's own: it stands on the exchange rather than running
+  const wait = board.waitingTalk()[0]?.waiting[0];
+  const made = executed.length;
+  const now = [...executed.map((c) => c.do), ...(wait ? ['waitFor' as const] : [])];
+  if (!wait) return { now, confirm: heard.confirm };
+  // the card gets done: the Koordinator takes the step by itself
+  board.work(wait.card, { state: 'done' });
+  const notices: string[] = [];
+  board.onNotice((n) => void notices.push(n.text));
+  k.due(board.snapshot().items);
+  for (const end = Date.now() + 120_000; !notices.length && Date.now() < end; ) await new Promise((r) => setTimeout(r, 100));
+  await new Promise((r) => setTimeout(r, 20));
+  return { now, confirm: heard.confirm, on: wait.title, then: wait.then, after: executed.slice(made), notice: notices[0] };
+}
+
+test.skipIf(!process.env.OBEYA_LIVE)(
+  'a step that can only follow once a card is done is waited for, and taken by itself once it is',
+  async () => {
+    const results = await Promise.all(LATER.flatMap((c) => [c, c]).map(async ([text, want, on]) => ({ text, want, on, got: await later(text) })));
+    const configured = (r: (typeof results)[number]) =>
+      r.want.includes('newCard')
+        ? r.got.after?.some((c) => c.do === 'configure' && c.canvases.some((x) => x.repos.some((y) => y.path.includes('leserina'))))
+        : r.got.after?.some((c) => c.do === 'start');
+    const wrong = results.filter((r) => JSON.stringify(r.got.now) !== JSON.stringify(r.want) || (r.on !== null && r.got.on !== r.on) || !configured(r));
+    for (const r of results)
+      console.log(`${wrong.includes(r) ? '✗' : '✓'} „${r.text}“ → ${r.got.now.join(', ')} · ${r.got.confirm} · waits on: ${r.got.on}, then: ${r.got.then} → ${r.got.after?.map((c) => c.do).join(', ')} · ${r.got.notice}`);
     expect(wrong.map((r) => r.text)).toEqual([]);
   },
   300_000,

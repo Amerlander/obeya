@@ -1129,3 +1129,132 @@ describe('snoozing by voice', () => {
     await s;
   });
 });
+
+describe('a step the Koordinator takes once a card gets somewhere', () => {
+  /** Runs commands as the canvas does: a new card is created, and its id comes back for a wait on it. */
+  const making = () =>
+    new Commander({
+      board,
+      runtime,
+      cwd: '/r',
+      delayMs: 20,
+      execute: (c) => {
+        executed.push(c);
+        if (c.do === 'newCard') return board.create({ title: c.title, x: 0, y: 0 }).id;
+      },
+    });
+
+  test('it waits on the new card of the same command, and once that is done takes the step up by itself, with „Rückgängig“', async () => {
+    const other = board.create({ title: 'Leserina einrichten', x: 0, y: 0 });
+    const notices: Notice[] = [];
+    board.onNotice((n) => void notices.push(n));
+    const k = making();
+    const { heard, session } = await say(k, 'Leg eine Aufgabe an, die das Repo erstellt, und dann die Leinwand', 'act', {
+      actions: [
+        { do: 'new_card', title: 'Repository ~/dev/leserina anlegen', body: 'git init in ~/dev/leserina' },
+        { do: 'wait_for', title: 'Repository ~/dev/leserina anlegen', text: 'Start „Leserina einrichten“ (K1).' },
+      ],
+      confirm: 'Neue Aufgabe „Repository ~/dev/leserina anlegen“; sobald sie erledigt ist, starte ich „Leserina einrichten“.',
+    });
+    expect(session.spec.system).toContain('wait_for in the same act');
+    k.arm(heard.token!);
+    await until(() => board.snapshot().talk[0]!.waits);
+    const card = board.snapshot().items.find((i) => i.title === 'Repository ~/dev/leserina anlegen')!;
+    expect(board.snapshot().talk[0]!.waits).toEqual([{ card: card.id, title: card.title, state: 'done' }]);
+
+    // the next command knows what it waits on
+    const next = await say(k, 'was läuft?', 'reply', { confirm: 'Das Repository wird angelegt.' });
+    expect(next.brief).toMatch(/Cards you wait on.*\n- K\d "Repository ~\/dev\/leserina anlegen" until it is done \(since .*\), then: Start „Leserina einrichten“ \(K1\)\./);
+
+    // still at work: nothing happens
+    board.work(card.id, { state: 'working' });
+    k.due(board.snapshot().items);
+    expect(board.snapshot().talk).toHaveLength(2);
+
+    board.work(card.id, { state: 'done' });
+    k.due(board.snapshot().items);
+    // a second look while the step is being taken does not take it twice
+    k.due(board.snapshot().items);
+    await until(() => runtime.last.inbox.length === 3);
+    const brief = runtime.last.inbox.at(-1)!;
+    expect(brief).toContain("No words of the owner's this time");
+    expect(brief).toContain('the card "Repository ~/dev/leserina anlegen" is done');
+    expect(brief).toContain('to then: Start „Leserina einrichten“ (K1).');
+    const [, , after] = board.snapshot().talk;
+    // no longer waiting; the exchange stands with what became of the card in place of the owner's words
+    expect(board.snapshot().talk[0]!.waits).toBeUndefined();
+    expect(after).toMatchObject({ said: '', after: { title: card.title, state: 'done', met: 'reached', from: board.snapshot().talk[0]!.id } });
+    runtime.last.call('act', { actions: [{ do: 'start', card: 'K1' }], confirm: '„Leserina einrichten“ startet.' });
+    runtime.last.emit({ type: 'idle' });
+    await until(() => notices.length);
+    expect(notices[0]).toMatchObject({ text: '„Leserina einrichten“ startet.', talk: after!.id, undoMs: 20 });
+    await until(() => executed.length === 2);
+    expect(executed[1]).toEqual({ do: 'start', card: other.id });
+    expect(board.snapshot().talk).toHaveLength(3);
+    // the owner said none of it: nothing to learn from
+    expect(store.utterances('c', '2000-01-01', 10).map((u) => u.text)).toEqual(['Leg eine Aufgabe an, die das Repo erstellt, und dann die Leinwand', 'was läuft?']);
+  });
+
+  test('a card that no longer gets there wakes it too, to tell the owner; a fresh session remembers the exchange', async () => {
+    const a = board.create({ title: 'Export', x: 0, y: 0 });
+    board.work(a.id, { state: 'working' });
+    const k = making();
+    const { heard } = await say(k, 'wenn Export wartet, sag ihm, es soll CSV nehmen', 'act', {
+      actions: [{ do: 'wait_for', card: 'K1', state: 'waits_for_owner', text: 'Tell its agent to use CSV (note).' }],
+      confirm: 'Sobald „Export“ auf dich wartet, sage ich ihm, es soll CSV nehmen.',
+    });
+    k.arm(heard.token!);
+    await until(() => board.snapshot().talk[0]!.waits);
+    expect(board.snapshot().talk[0]!.waits).toEqual([{ card: a.id, title: 'Export', state: 'waitsForOwner' }]);
+    board.work(a.id, { state: 'planned', branch: 'obeya/export' });
+    k.due(board.snapshot().items);
+    await until(() => runtime.last.inbox.length === 2);
+    expect(runtime.last.inbox.at(-1)).toContain('the card "Export" was stopped by the owner');
+    expect(runtime.last.inbox.at(-1)).toContain('tell the owner with reply');
+    runtime.last.call('reply', { confirm: '„Export“ wurde gestoppt; ich habe ihm nichts gesagt.' });
+    runtime.last.emit({ type: 'idle' });
+    await until(() => board.snapshot().talk[1]?.reply);
+
+    // after a restart, the new session reads the exchange as one it took up by itself
+    const fresh = making();
+    const later = await say(fresh, 'und?', 'reply', { confirm: 'Nichts weiter.' });
+    expect(later.brief).toContain('the card "Export" was stopped by the owner (planned again), and you took up the step you had waited on it for → you: "„Export“ wurde gestoppt; ich habe ihm nichts gesagt."');
+  });
+
+  test('a card there already is refused; stop_waiting and „Nicht mehr warten“ drop the step, and it hears of the latter', async () => {
+    const a = board.create({ title: 'Export', x: 0, y: 0 });
+    const b = board.create({ title: 'Login', x: 0, y: 0 });
+    board.work(a.id, { state: 'live' });
+    board.work(b.id, { state: 'working' });
+    const k = making();
+    const s = k.hear('wenn Export fertig ist, starte Login', {});
+    await settle();
+    expect(String(runtime.last.call('act', { actions: [{ do: 'wait_for', card: 'K1', text: 'start K2' }], confirm: 'x' }))).toContain('is done already: take the step now');
+    expect(String(runtime.last.call('act', { actions: [{ do: 'wait_for', card: 'K2' }], confirm: 'x' }))).toContain('the step you take then is missing');
+    expect(String(runtime.last.call('act', { actions: [{ do: 'wait_for', title: 'Gibt es nicht', text: 'x' }], confirm: 'x' }))).toContain('title the title of a new_card in this act');
+    expect(String(runtime.last.call('act', { actions: [{ do: 'stop_waiting', card: 'K2' }], confirm: 'x' }))).toContain('you do not wait on K2');
+    runtime.last.call('act', { actions: [{ do: 'wait_for', card: 'K2', text: 'Tell the owner Login is done.' }], confirm: 'Ich sage dir, wenn Login fertig ist.' });
+    runtime.last.emit({ type: 'idle' });
+    k.arm((await s).token!);
+    await until(() => board.snapshot().talk[0]!.waits);
+
+    const { heard } = await say(k, 'vergiss das mit Login', 'act', { actions: [{ do: 'stop_waiting', card: 'K2' }], confirm: 'Ich warte nicht mehr auf „Login“.' });
+    k.arm(heard.token!);
+    await until(() => !board.snapshot().talk[0]!.waits);
+
+    const again = await say(k, 'doch, sag Bescheid', 'act', { actions: [{ do: 'wait_for', card: 'K2', text: 'Tell the owner Login is done.' }], confirm: 'Gut.' });
+    k.arm(again.heard.token!);
+    await until(() => board.snapshot().talk[2]!.waits);
+    const talk = board.snapshot().talk[2]!.id;
+    expect(k.unwait(talk, 'nope')).toBe(false);
+    expect(k.unwait(talk, b.id)).toBe(true);
+    expect(board.snapshot().talk[2]!.waits).toBeUndefined();
+    const next = await say(k, 'und?', 'reply', { confirm: 'Nichts.' });
+    expect(next.brief).toContain('The owner told you to stop waiting on „Login“');
+    expect(next.brief).not.toContain('Cards you wait on');
+    board.work(b.id, { state: 'live' });
+    k.due(board.snapshot().items);
+    await settle();
+    expect(board.snapshot().talk).toHaveLength(4);
+  });
+});

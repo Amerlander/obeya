@@ -860,6 +860,25 @@ export interface Talk {
   heldUntil?: string;
   /** The usage limit stopped the agent that looks the question up: it goes on by itself then (ISO time), the answer follows. */
   limitedUntil?: string;
+  /** Cards the Koordinator waits on, as its reply said, to take a step once each gets there (`wait_for`). */
+  waits?: TalkWait[];
+  /** Words of no one: the Koordinator took them up by itself, since a card it waited on got there (or no longer can). */
+  after?: TalkAfter;
+}
+
+/** A card the Koordinator waits on: until it is done or waits for the owner. */
+export interface TalkWait {
+  card: string;
+  title: string;
+  state: AwaitedState;
+}
+
+/** What became of the card the Koordinator waited on, which it took up again with: the exchange it said so in. */
+export interface TalkAfter {
+  title: string;
+  state: AwaitedState;
+  met: Awaited;
+  from: number;
 }
 
 /** A message of Obeya's sheet: one part of an exchange, what the owner said, the Koordinator's reply or the looked-up answer. */
