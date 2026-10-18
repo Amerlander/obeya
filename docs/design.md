@@ -2841,14 +2841,14 @@ prototypes' workers and exploration agents (`src/server/to-obeya.ts`), whose ins
 paragraph what Obeya does for them through it. The Koordinator reads the request with the owner's
 own words beside it, spoken or typed (the newest on the card when Obeya restarted since), and the
 card in focus, as it reads any command (`Commander.forward`). Where the owner has said nothing on
-the card yet, the card's task stands in for their words when the owner gave it (typed it, or the
-Koordinator wrote it from what they said to Obeya): "lege ein Repo und einen Canvas dafür an"
+the card yet, the card's task stands in for their words once the owner gave it (typed it, the
+Koordinator wrote it from what they said to Obeya, or they accepted an agent's proposal and so made
+its words their own): "lege ein Repo und einen Canvas dafür an"
 becomes a task that ends with asking Obeya for the canvas, and the Koordinator takes that step
 (unless it waits on the card to take a step itself, see A step once a card gets somewhere: then
-that step is Obeya's). An
-agent's proposal the owner accepted unchanged is no such task (`Board.accept` keeps that it was one),
-and there nothing is passed on: words an agent read in a proposal, a file or a pull request comment
-are no request of the owner's, and the Koordinator would have taken them for one. Otherwise: actions with a confirmation and „Rückgängig“ (above the mic, as a notice that
+that step is Obeya's). A proposal the owner has not accepted yet is no such task, and there nothing
+is passed on: words an agent read in a proposal, a file or a pull request comment are no request of
+the owner's, and the Koordinator would have taken them for one. Otherwise: actions with a confirmation and „Rückgängig“ (above the mic, as a notice that
 reaches every open page, and in the card's conversation), a reply, or a look-up. Its confirmation or
 reply is the tool's result. It passes nothing back to that agent as a note, an answer, feedback or
 talk: the agent has the words already (refused if it tries). An agent at work probably sees the

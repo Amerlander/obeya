@@ -1037,10 +1037,11 @@ export class CanvasRuntime {
     const before = this.said.has(cardId) ? undefined : this.board.events(cardId).findLast((e) => e.author === 'owner' && e.kind !== 'state' && e.text.trim());
     // a step Obeya waits to take on this card itself, which its agent read in its task
     const steps = this.commander.waitsOn(cardId);
-    // without them, the card's task when the owner gave it (typed, or the Koordinator wrote it from
-    // their words), not when an agent proposed it; a step of the task Obeya waits to take is Obeya's
+    // without them, the card's task once the owner gave it (typed it, the Koordinator wrote it from
+    // their words, or they accepted an agent's proposal), not while it is a proposal; a step of the
+    // task Obeya waits to take is Obeya's
     const card = this.board.item(cardId);
-    const task = !steps.length && card && card.state !== 'proposal' && !card.proposed && (card.body.trim() || card.title.trim());
+    const task = !steps.length && card && card.state !== 'proposal' && (card.body.trim() || card.title.trim());
     const said = this.said.get(cardId) ?? (before ? { text: before.text, spoken: false } : task ? { text: task, spoken: false, task: true } : undefined);
     const later = steps.length ? ` Obeya itself takes these steps once your card ${steps.map((w) => `${w.state === 'done' ? 'is done' : 'waits for the owner'}: ${w.then.replace(/[.\s]+$/, '')}`).join('; ')}. If you asked for one of them, it is not missing: leave it to Obeya.` : '';
     if (!said) return `Nothing passed on: the owner has said nothing on your card. to_obeya passes on the owner's own words.${later}`;

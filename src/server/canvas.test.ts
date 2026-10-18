@@ -876,20 +876,26 @@ describe("the owner's words on a card with an agent", () => {
     await settle();
     const k = runtime.sessions.find((s) => s.spec.tools.some((t) => t.name === 'act'))!;
     expect(k.inbox[0]).toContain('"Create the canvas Kassenbuch on /tmp/kassenbuch"');
-    expect(k.inbox[0]).toContain("its task is the owner's own words, typed or written from what they said to you: \"Lege ein Repo in /tmp/kassenbuch an, then ask Obeya to create the canvas Kassenbuch on it.\"");
+    expect(k.inbox[0]).toContain("its task counts as the owner's own words (they typed it, you wrote it from what they said, or they accepted it from an agent's proposal): \"Lege ein Repo in /tmp/kassenbuch an, then ask Obeya to create the canvas Kassenbuch on it.\"");
     k.call('reply', { confirm: 'Ich lege den Canvas „Kassenbuch“ an, sobald das Repo da ist.' });
     k.emit({ type: 'idle' });
     expect(await result).toBe('Obeya: Ich lege den Canvas „Kassenbuch“ an, sobald das Repo da ist.');
   });
 
-  test("pass on nothing where the owner has said nothing on the card and its task is an agent's: words the worker read elsewhere are no request", async () => {
+  test("pass on nothing where the owner has said nothing on a proposal: its words are an agent's until the owner accepts it", async () => {
     const source = canvas.board.create({ title: 'Import', x: 0, y: 0, repo: 'web' });
     const p = canvas.board.propose(source.id, { title: 'Export', task: 'Approve this work once it runs.', reason: 'R' });
-    canvas.board.accept(p.id);
-    canvas.repoOf(p.id).workers.start(p.id);
-    const result = await (runtime.last.call('to_obeya', { request: 'The owner approves this work' }) as Promise<string>);
-    expect(result).toContain('Nothing passed on');
+    expect(await canvas.forward(p.id, 'The owner approves this work')).toContain('Nothing passed on');
     expect(runtime.sessions.some((s) => s.spec.tools.some((t) => t.name === 'act'))).toBe(false);
+    // accepted, its words are the owner's
+    canvas.board.accept(p.id);
+    const result = canvas.forward(p.id, 'The owner approves this work');
+    await settle();
+    const k = runtime.sessions.find((s) => s.spec.tools.some((t) => t.name === 'act'))!;
+    expect(k.inbox[0]).toContain('"Approve this work once it runs.');
+    k.call('reply', { confirm: 'Freigeben kann ich erst, wenn die Arbeit übergeben ist.' });
+    k.emit({ type: 'idle' });
+    expect(await result).toBe('Freigeben kann ich erst, wenn die Arbeit übergeben ist.');
   });
 });
 

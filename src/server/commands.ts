@@ -1238,7 +1238,7 @@ export class Commander {
             input.forwarded === transcript
               ? ''
               : input.task
-                ? `The owner said nothing on the card yet; its task is the owner's own words, typed or written from what they said to you: "${transcript}"`
+                ? `The owner said nothing on the card yet; its task counts as the owner's own words (they typed it, you wrote it from what they said, or they accepted it from an agent's proposal): "${transcript}"`
                 : `The owner's own words to it, ${input.typed ? 'typed (as written, no recognition errors)' : 'spoken (speech recognition, may contain errors)'}: "${transcript}"`,
           ].filter(Boolean)
         : [
