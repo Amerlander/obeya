@@ -34,8 +34,9 @@
     current = queue.shift();
     // about 14 characters a second at rate 1, the pace of a system voice
     left = (current.text.length * 70) / (current.rate || 1);
-    fire(current, 'start');
+    // the timer first: a handler of the event may pause or cancel
     run();
+    fire(current, 'start');
   }
   Object.defineProperties(synth, {
     __silent: { value: true },
@@ -44,7 +45,8 @@
     paused: { get: () => paused },
     speak: {
       value(utterance) {
-        if (!(utterance instanceof SpeechSynthesisUtterance)) throw new TypeError('speak needs a SpeechSynthesisUtterance');
+        // not instanceof: an utterance from another frame of the page is one too
+        if (Object.prototype.toString.call(utterance) !== '[object SpeechSynthesisUtterance]') throw new TypeError('speak needs a SpeechSynthesisUtterance');
         // as Chrome does: a page the user has not interacted with yet may not speak
         if (!navigator.userActivation.hasBeenActive) return void setTimeout(() => fire(utterance, 'error', { error: 'not-allowed' }));
         queue.push(utterance);
@@ -78,8 +80,8 @@
         if (!paused) return;
         paused = false;
         if (!current) return next();
-        fire(current, 'resume');
         run();
+        fire(current, 'resume');
       },
     },
   });

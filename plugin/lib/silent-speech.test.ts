@@ -70,4 +70,29 @@ describe('silent speech', () => {
       ['zwei', 'error', 'canceled'],
     ]);
   });
+
+  test('a start handler may pause or cancel, and an utterance from an iframe speaks too', async () => {
+    const paused = await events(`(() => {
+      const u = new SpeechSynthesisUtterance('Lena');
+      for (const type of ['start', 'pause', 'resume', 'end']) u.addEventListener(type, () => log.push(['Lena', type, 0, 0]));
+      u.onstart = () => { speechSynthesis.pause(); setTimeout(() => speechSynthesis.resume(), 500); };
+      speechSynthesis.speak(u);
+    })()`);
+    expect(paused.map(([, type]) => type)).toEqual(['start', 'pause', 'resume', 'end']);
+    const handled = await events(`(() => {
+      const u = new SpeechSynthesisUtterance('eins');
+      u.onstart = () => speechSynthesis.cancel();
+      u.onerror = (e) => log.push(['eins', 'error', e.error, 0]);
+      u.onend = () => log.push(['eins', 'end', 0, 0]);
+      speechSynthesis.speak(u);
+    })()`);
+    expect(handled.map(([, type, detail]) => [type, detail])).toEqual([['error', 'interrupted']]);
+    const fromFrame = await events(`(() => {
+      const frame = document.body.appendChild(document.createElement('iframe'));
+      const u = new frame.contentWindow.SpeechSynthesisUtterance('drei');
+      u.onend = () => log.push(['drei', 'end', 0, 0]);
+      speechSynthesis.speak(u);
+    })()`);
+    expect(fromFrame.map(([text, type]) => [text, type])).toEqual([['drei', 'end']]);
+  });
 });
