@@ -47,6 +47,9 @@ shows them as projects); when one is done, what lasts moves into `docs/design.md
 - Whatever the owner has entered on a card but not sent yet (text, pasted screenshots, picked answer
   options, comments) survives closing the card, switching canvases and a page reload, for every
   input on the card, not only the text field.
+- What the owner is looking at right now is not flagged to them: a message that arrives in a
+  conversation they have open gets neither a notification nor an unread marker, and an answered
+  question no longer shows as open.
 - Dialogs and text fields use the space the screen offers (the owner works on a tall monitor)
   instead of staying small with a scrollbar of their own; never two scrollbars side by side.
 - A button that is easy to click by accident and sets a lot in motion gets an undo. What is easy
@@ -76,6 +79,8 @@ shows them as projects); when one is done, what lasts moves into `docs/design.md
   voice); the demo settings' `reference` names the one of the narration language. Qwen3 is good
   enough for demos, ElevenLabs marginally better for the site, so the site stays with ElevenLabs
   (owner, 2026-10-12); `scripts/hero-video/qwen.py` renders the hero narration in Qwen3 to compare.
+- Every release also brings the README's text up to date: like the site, it names what the release
+  adds that a newcomer should know (phone remote control, say).
 - gh calls against this repository's GitHub repository go through `bun scripts/gh.ts <gh args…>`:
   it runs gh on the checkout's origin as the account that owns it (`sadilek` for sadilek/obeya),
   since the machine's active gh account may be another without admin rights.
