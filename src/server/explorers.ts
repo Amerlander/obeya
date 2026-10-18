@@ -315,7 +315,7 @@ export class Explorers {
     return current([
       {
         name: 'reply',
-        description: `Your turn in the conversation, shown on the card beside the brief (markdown, in ${OWNER_LANGUAGE}): a few sentences that do not repeat the brief. questions: the questions you ask now, each with its answer options (multiple: true when several may be chosen together); the card shows them under your reply for the owner to pick from, so the reply does not repeat them; pick: the options you would choose yourself if you had to decide (one, or several when multiple), and pick_why: why, in one short sentence in ${OWNER_LANGUAGE}. next: what you would do next in the owner's place, always: answer (the open questions come first), build, buildSettled (with a part marked with plan_split), planDoc, prototype, park or drop, with why in one short sentence in ${OWNER_LANGUAGE}; the card marks that click for the owner. mocks: only when the owner asked to see something the brief has no place for; ${MOCKS}. Call it once per message, then end your turn.`,
+        description: `Your turn in the conversation, shown on the card beside the brief (markdown, in ${OWNER_LANGUAGE}): a few sentences that do not repeat the brief. questions: the questions you ask now, each with its answer options (multiple: true when several may be chosen together); the card shows them under your reply for the owner to pick from, so the reply does not repeat them; pick: the options you would choose yourself if you had to decide (one, or several when multiple), and pick_why: why, in one short sentence in ${OWNER_LANGUAGE}. next: what you would do next in the owner's place, always: answer (the open questions come first), build, splitOff (with a part marked with plan_split), planDoc, prototype, park or drop, with why in one short sentence in ${OWNER_LANGUAGE}; the card marks that click for the owner. mocks: only when the owner asked to see something the brief has no place for; ${MOCKS}. Call it once per message, then end your turn.`,
         schema: {
           text: z.string(),
           questions: z
@@ -364,13 +364,13 @@ export class Explorers {
       },
       {
         name: 'plan_split',
-        description: `When part of the idea is settled and part is still open (to be discussed further, or prototyped), the part to build now: the owner builds it with "${t.buildSettledButton}" as a task of its own, and the idea stays with what is open. title: that task's title, a few words in ${OWNER_LANGUAGE}. brief: its worker's task, in ${OWNER_LANGUAGE} markdown, standing on its own and holding only what is settled; what is still open is no part of it. The whole value each time; both empty when no part is settled apart from the rest any more.`,
+        description: `When part of the idea is settled and part is still open (to be discussed further, or prototyped), the part to build now: the owner splits it off with "${t.splitOffButton}" as a task of its own, which a worker starts on at once, and the idea stays with what is open. title: that task's title, a few words in ${OWNER_LANGUAGE}. brief: its worker's task, in ${OWNER_LANGUAGE} markdown, standing on its own and holding only what is settled; what is still open is no part of it. The whole value each time; both empty when no part is settled apart from the rest any more.`,
         schema: { title: z.string(), brief: z.string() },
         run: ({ title, brief }) => {
           const part = settledPart(title, brief);
           this.o.board.setIdea(cardId, { split: part });
           this.o.board.log(cardId, 'activity', 'explorer', part ? t.plansSplit(part.title) : t.plansNoSplit);
-          return part ? `Marked “${part.title}” as settled to build.` : 'No part marked as settled.';
+          return part ? `Marked “${part.title}” to split off.` : 'No task marked to split off.';
         },
       },
       {
@@ -440,7 +440,7 @@ Tools, within a turn in this order:
 The owner decides on the card whether to build the idea, build its settled part, turn it into a plan doc, have a throwaway prototype built, park it or drop it. With every reply, say through next what you would do in their place if you had to decide, and why; the card marks that click, so the owner sees at a glance where to go on:
 - answer: an open question has to be settled before anything else makes sense. Then give your own pick for each question too, so the owner can follow it or overrule it.
 - build: the brief is clear enough to be one worker's task, and what is still open is a judgement call the worker can make. Building ends this conversation: the brief becomes the task, and the idea's prototypes, planned and running, are dropped.
-- buildSettled: part of the idea is settled and part is still open (to be discussed further, or prototyped). The part you marked with plan_split becomes a task of its own, which a worker starts on at once; the idea stays with this conversation, its open part and its prototypes, planned and running. Without a part marked with plan_split, the card has no such click.
+- splitOff: part of the idea is settled and part is still open (to be discussed further, or prototyped). The part you marked with plan_split becomes a task of its own, which a worker starts on at once; the idea stays with this conversation, its open part and its prototypes, planned and running. Without a part marked with plan_split, the card has no such click.
 - planDoc: it is too big for one card (several workstreams, or an order to work in). The idea's prototypes stay, for the workstream that builds on them.
 - prototype: only seeing it will settle it (a layout, how it feels, a risky approach), and a throwaway build costs less than guessing.
 - park or drop: it is not worth it now, or no longer.
@@ -523,7 +523,7 @@ function nextStep(next: unknown, asked: Question[], split: boolean): NextStep | 
   const n = next as { step?: unknown; why?: unknown } | undefined;
   if (!n || !NEXT_STEPS.includes(n.step as NextStep['step'])) return undefined;
   if (n.step === 'answer' && !asked.length) return undefined;
-  if (n.step === 'buildSettled' && !split) return undefined;
+  if (n.step === 'splitOff' && !split) return undefined;
   return { step: n.step as NextStep['step'], why: clip(String(n.why ?? '').trim(), 400) };
 }
 

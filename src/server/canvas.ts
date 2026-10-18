@@ -1155,8 +1155,8 @@ export class CanvasRuntime {
         return this.build(cardId);
       case 'unbuild':
         return this.unbuild(cardId);
-      case 'buildSettled':
-        return this.buildSettled(cardId);
+      case 'splitOff':
+        return this.splitOff(cardId);
       case 'planDoc':
         return this.planDoc(cardId);
       case 'park':
@@ -1324,27 +1324,27 @@ export class CanvasRuntime {
   }
 
   /**
-   * "Fertiges bauen": the part its agent marked as settled becomes a task of its own beside the idea,
+   * "Teilaufgabe abtrennen": the part its agent marked as settled becomes a task of its own beside the idea,
    * in its group and linked to it, with the screenshots of the discussion, and starts at once. The
    * idea stays open with its conversation and its prototypes; its agent hears what became of the part.
    * Not while the agent works on a reply, which may change the split.
    */
-  private buildSettled(cardId: string) {
+  private splitOff(cardId: string) {
     const idea = this.settledIdea(cardId);
     const { split } = this.board.idea(cardId);
-    if (!split) throw new BadRequest('noSplit', 'the idea’s agent has marked no part as settled to build');
+    if (!split) throw new BadRequest('noSplit', 'the idea’s agent has marked no task to split off');
     const t = this.board.t.idea;
     const shown = this.board.events(cardId).flatMap((e) => (e.kind === 'talk' && e.author === 'owner' ? (e.images ?? []) : []));
     const images = [...new Set([...(idea.images ?? []), ...shown])].slice(-MAX_IMAGES);
     const task = this.board.create({ title: split.title, body: `${split.brief}\n\n${t.settledTask(idea.title)}`, from: cardId, ...(images.length ? { images } : {}) });
     this.board.log(task.id, 'state', 'owner', t.settledFrom(idea.title));
     this.board.setIdea(cardId, { split: undefined });
-    this.board.decide({ project_id: null, card_id: cardId, question: t.howOn(idea.title), answer: t.buildSettledAnswer(split.title), by: 'owner' });
-    this.board.log(cardId, 'state', 'owner', t.buildSettledLog(split.title));
+    this.board.decide({ project_id: null, card_id: cardId, question: t.howOn(idea.title), answer: t.splitOffAnswer(split.title), by: 'owner' });
+    this.board.log(cardId, 'state', 'owner', t.splitOffLog(split.title));
     this.koordinator.request(task.id);
     this.explorers.tell(
       cardId,
-      `The owner clicked "${t.buildSettledButton}": the part you marked as settled is now the task “${split.title}”, on a card of its own beside this idea, and a worker starts on it. Obeya has cleared the split. This idea stays open, with this conversation and its prototypes, planned and running, for what is still open. Trim the brief to what is open (the built part a line under decisions, as the task “${split.title}”), then reply to the owner in a sentence or two.`,
+      `The owner clicked "${t.splitOffButton}": the part you marked as settled is now the task “${split.title}”, on a card of its own beside this idea, and a worker starts on it. Obeya has cleared the split. This idea stays open, with this conversation and its prototypes, planned and running, for what is still open. Trim the brief to what is open (the built part a line under decisions, as the task “${split.title}”), then reply to the owner in a sentence or two.`,
     );
   }
 
@@ -1615,7 +1615,7 @@ export class CanvasRuntime {
       case 'discard':
         return this.act(c.card, { action: 'discard' });
       case 'build':
-      case 'buildSettled':
+      case 'splitOff':
       case 'planDoc':
       case 'park':
       case 'drop':

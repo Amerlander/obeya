@@ -620,7 +620,7 @@ function IdeaView({ item, act, run, listener, onDelete, onTell }: { item: Item; 
               {idea.brief.trim() ? <Body md={idea.brief} /> : <div className="hint">{t.idea.briefEmpty}</div>}
               <Mocks mocks={idea.mocks} />
             </div>
-            {/* what "Fertiges bauen" would build, as its worker's task */}
+            {/* what "Teilaufgabe abtrennen" would build, as its worker's task */}
             {idea.split && !item.archivedAt && (
               // opened at the bottom of the column, it scrolls into view rather than opening out of sight
               <details className="question brief settled" onToggle={(e) => e.currentTarget.open && e.currentTarget.scrollIntoView({ block: 'nearest', behavior: 'smooth' })}>
@@ -676,12 +676,12 @@ function IdeaView({ item, act, run, listener, onDelete, onTell }: { item: Item; 
             {/* the settled part as a task of its own; the reply may change the split, so it waits for it */}
             {idea.split && (
               <button
-                className={btn('buildSettled')}
+                className={btn('splitOff')}
                 disabled={idea.thinking}
-                title={t.idea.buildSettledHint(idea.split.title)}
-                onClick={() => act({ action: 'buildSettled' }, { close: false })}
+                title={t.idea.splitOffHint(idea.split.title)}
+                onClick={() => act({ action: 'splitOff' }, { close: false })}
               >
-                {t.idea.buildSettled}
+                {t.idea.splitOff}
               </button>
             )}
             {idea.buildAfterReply ? (

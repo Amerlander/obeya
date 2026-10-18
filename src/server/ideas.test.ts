@@ -1014,7 +1014,7 @@ describe('a prototype', () => {
     expect(() => canvas.act(i.id, { action: 'buildPrototype' })).toThrow('not a prototype');
   });
 
-  test('"Fertiges bauen" starts the settled part as a task of its own; the idea stays with its conversation and prototypes', async () => {
+  test('"Teilaufgabe abtrennen" starts the settled part as a task of its own; the idea stays with its conversation and prototypes', async () => {
     canvas.shutdown();
     canvas = open(3);
     const i = idea('Lese-Lern-App');
@@ -1025,18 +1025,18 @@ describe('a prototype', () => {
     s.call('update_brief', { brief: '**Ziel:** Lesen lernen. Die Spiellogik steht, die Bilder sind offen.' });
     s.call('plan_prototypes', { prototypes: [{ approach: 'P1 lokal', show: 'Bilder mit mflux.' }, { approach: 'P2 Cloud', show: 'Bilder mit Gemini.' }] });
     s.call('plan_split', { title: ' Lese-Lern-App:  Spiel und Lernlogik ', brief: '**Ziel:** Das Spiel mit Platzhalterbildern.' });
-    s.call('reply', { text: 'Die Spiellogik kann los.', next: { step: 'buildSettled', why: 'Die Spiellogik steht, die Bilder brauchen Prototypen.' } });
+    s.call('reply', { text: 'Die Spiellogik kann los.', next: { step: 'splitOff', why: 'Die Spiellogik steht, die Bilder brauchen Prototypen.' } });
     s.emit({ type: 'idle' });
     expect(item(i.id).idea).toMatchObject({
       split: { title: 'Lese-Lern-App: Spiel und Lernlogik', brief: '**Ziel:** Das Spiel mit Platzhalterbildern.' },
-      next: { step: 'buildSettled' },
+      next: { step: 'splitOff' },
     });
-    expect(board().events(i.id).some((e) => e.text === 'Markiert als fertig zum Bauen: „Lese-Lern-App: Spiel und Lernlogik“')).toBe(true);
+    expect(board().events(i.id).some((e) => e.text === 'Markiert eine Teilaufgabe zum Abtrennen: „Lese-Lern-App: Spiel und Lernlogik“')).toBe(true);
     // one prototype runs, the other is still only planned
     canvas.act(i.id, { action: 'prototype', variants: ['P1 lokal'] });
     const [p1] = prototypes(i.id);
 
-    canvas.act(i.id, { action: 'buildSettled' });
+    canvas.act(i.id, { action: 'splitOff' });
     const task = board()
       .snapshot()
       .items.find((x) => x.title === 'Lese-Lern-App: Spiel und Lernlogik')!;
@@ -1047,14 +1047,14 @@ describe('a prototype', () => {
     expect(item(i.id).idea!.variants.map((v) => v.approach)).toEqual(['P1 lokal', 'P2 Cloud']);
     expect(item(i.id).idea!.split).toBeUndefined();
     expect(item(p1!.id).state).toBe('working');
-    expect(board().decisions(null).at(-1)).toMatchObject({ card_id: i.id, answer: 'Fertiges bauen: „Lese-Lern-App: Spiel und Lernlogik“.' });
-    expect(board().events(i.id).some((e) => e.text === 'Fertiges bauen: „Lese-Lern-App: Spiel und Lernlogik“ ist jetzt eine eigene Aufgabe; das Offene bleibt hier.')).toBe(true);
+    expect(board().decisions(null).at(-1)).toMatchObject({ card_id: i.id, answer: 'Teilaufgabe abtrennen: „Lese-Lern-App: Spiel und Lernlogik“.' });
+    expect(board().events(i.id).some((e) => e.text === 'Teilaufgabe abtrennen: „Lese-Lern-App: Spiel und Lernlogik“ ist jetzt eine eigene Aufgabe; das Offene bleibt hier.')).toBe(true);
     // its agent hears what became of the part, and trims the brief to what is open
     const told = explorer();
     expect(told.inbox.at(-1)).toContain('the part you marked as settled is now the task “Lese-Lern-App: Spiel und Lernlogik”');
     expect(item(i.id).idea!.thinking).toBe(true);
     turn(told, 'Offen sind die Bilder.', () => told.call('update_brief', { brief: '**Ziel:** Bilder für die Lese-Lern-App.' }));
-    expect(() => canvas.act(i.id, { action: 'buildSettled' })).toThrow(expect.objectContaining({ code: 'noSplit' }));
+    expect(() => canvas.act(i.id, { action: 'splitOff' })).toThrow(expect.objectContaining({ code: 'noSplit' }));
     await settle();
     expect(item(task.id).state).toBe('working');
     expect(workers().some((w) => w.inbox[0]!.includes('**Ziel:** Das Spiel mit Platzhalterbildern.'))).toBe(true);
@@ -1071,25 +1071,25 @@ describe('a prototype', () => {
     expect(s.spec.system).toContain('Building ends this conversation: the brief becomes the task, and the idea\'s prototypes, planned and running, are dropped.');
     expect(s.spec.system).toContain('the idea stays with this conversation, its open part and its prototypes, planned and running');
     expect(s.spec.system).toContain("The idea's prototypes stay, for the workstream that builds on them.");
-    s.call('reply', { text: 'Noch nichts.', next: { step: 'buildSettled', why: '?' } });
+    s.call('reply', { text: 'Noch nichts.', next: { step: 'splitOff', why: '?' } });
     s.emit({ type: 'idle' });
     expect(item(i.id).idea!.next).toBeUndefined();
-    expect(() => canvas.act(i.id, { action: 'buildSettled' })).toThrow(expect.objectContaining({ code: 'noSplit' }));
+    expect(() => canvas.act(i.id, { action: 'splitOff' })).toThrow(expect.objectContaining({ code: 'noSplit' }));
     canvas.act(i.id, { action: 'discuss', text: 'CSV steht, PDF noch nicht.' });
     s = explorer();
     s.emit({ type: 'session', id: 'sess-1' });
     s.call('plan_split', { title: 'CSV-Export', brief: '**Ziel:** CSV.' });
-    expect(() => canvas.act(i.id, { action: 'buildSettled' })).toThrow(expect.objectContaining({ code: 'ideaThinking' }));
-    s.call('reply', { text: 'CSV kann los.', next: { step: 'buildSettled', why: 'CSV steht.' } });
+    expect(() => canvas.act(i.id, { action: 'splitOff' })).toThrow(expect.objectContaining({ code: 'ideaThinking' }));
+    s.call('reply', { text: 'CSV kann los.', next: { step: 'splitOff', why: 'CSV steht.' } });
     s.emit({ type: 'idle' });
-    expect(item(i.id).idea).toMatchObject({ split: { title: 'CSV-Export' }, next: { step: 'buildSettled', why: 'CSV steht.' } });
+    expect(item(i.id).idea).toMatchObject({ split: { title: 'CSV-Export' }, next: { step: 'splitOff', why: 'CSV steht.' } });
     // a split without a brief, or emptied, is none
     canvas.act(i.id, { action: 'discuss', text: 'Doch alles zusammen.' });
     s = explorer();
     s.call('plan_split', { title: 'CSV-Export', brief: ' ' });
     turn(s, 'Dann alles zusammen.');
     expect(item(i.id).idea!.split).toBeUndefined();
-    expect(board().events(i.id).some((e) => e.text === 'Markiert nichts mehr als fertig zum Bauen')).toBe(true);
+    expect(board().events(i.id).some((e) => e.text === 'Markiert keine Teilaufgabe zum Abtrennen mehr')).toBe(true);
   });
 });
 
@@ -1225,16 +1225,16 @@ describe('by voice', () => {
     const i = idea();
     const heard = canvas.commander.hear('bau schon mal, was feststeht', { card: i.id });
     await settle();
-    expect(reader().call('act', { actions: [{ do: 'build_settled', card: 'K1' }], confirm: 'Wird gebaut.' })).toContain('has marked no part of the idea as settled');
-    reader().call('reply', { text: 'Der Agent hat noch nichts als fertig markiert.' });
+    expect(reader().call('act', { actions: [{ do: 'split_off', card: 'K1' }], confirm: 'Wird gebaut.' })).toContain('has marked no task to split off the idea');
+    reader().call('reply', { text: 'Der Agent hat noch keine Teilaufgabe markiert.' });
     reader().emit({ type: 'idle' });
     await heard;
-    board().setIdea(i.id, { split: { title: 'CSV-Export', brief: '**Ziel:** CSV.' }, next: { step: 'buildSettled', why: 'CSV steht.' }, yourTurn: true });
+    board().setIdea(i.id, { split: { title: 'CSV-Export', brief: '**Ziel:** CSV.' }, next: { step: 'splitOff', why: 'CSV steht.' }, yourTurn: true });
     const again = canvas.commander.hear('mach, was du vorschlägst', { card: i.id });
     await settle();
-    expect(reader().inbox.at(-1)).toContain('its agent would build_settled next: CSV steht.');
-    expect(reader().inbox.at(-1)).toContain('part its agent marked as settled to build now (build_settled): "CSV-Export"');
-    reader().call('act', { actions: [{ do: 'build_settled', card: 'K1' }], confirm: '„CSV-Export“ wird gebaut.' });
+    expect(reader().inbox.at(-1)).toContain('its agent would split_off next: CSV steht.');
+    expect(reader().inbox.at(-1)).toContain('task its agent marked to split off now (split_off): "CSV-Export"');
+    reader().call('act', { actions: [{ do: 'split_off', card: 'K1' }], confirm: '„CSV-Export“ wird gebaut.' });
     canvas.commander.arm((await again).token!);
     await settle(30);
     expect(item(i.id).state).toBe('idea');

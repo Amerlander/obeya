@@ -469,7 +469,7 @@ export interface Idea {
   variants: PlannedPrototype[];
   /** How the brief's variants look, one mock each, shown beside it. */
   mocks: Mock[];
-  /** The part that is settled while the rest is open: "Fertiges bauen" builds it as a task of its own. */
+  /** The part that is settled while the rest is open: "Teilaufgabe abtrennen" builds it as a task of its own. */
   split?: SettledPart;
 }
 
@@ -513,7 +513,7 @@ export interface PlannedPrototype {
 
 /**
  * The part of an idea that is settled while the rest is still open, as its agent marks it: what
- * "Fertiges bauen" makes a task of its own, the idea staying with what is open.
+ * "Teilaufgabe abtrennen" makes a task of its own, the idea staying with what is open.
  */
 export interface SettledPart {
   title: string;
@@ -521,7 +521,7 @@ export interface SettledPart {
 }
 
 /** The owner's next click on an idea: answer its questions, or one of the decisions on the card. */
-export const NEXT_STEPS = ['answer', 'build', 'buildSettled', 'planDoc', 'prototype', 'park', 'drop'] as const;
+export const NEXT_STEPS = ['answer', 'build', 'splitOff', 'planDoc', 'prototype', 'park', 'drop'] as const;
 export interface NextStep {
   step: (typeof NEXT_STEPS)[number];
   why: string;
@@ -1059,7 +1059,7 @@ export type CardAction =
    * Ideas: the part its agent marked as settled becomes a task of its own beside the idea, started at
    * once; the idea stays open with its conversation, its agent and its prototypes.
    */
-  | { action: 'buildSettled' }
+  | { action: 'splitOff' }
   /** Ideas, and planned tasks of the owner's nobody has worked on: a planned card whose worker writes a plan doc from the brief or the task. */
   | { action: 'planDoc' }
   | { action: 'park' }

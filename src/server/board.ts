@@ -2032,7 +2032,7 @@ export interface StoredIdea {
   variants?: PlannedPrototype[];
   /** The brief's mocks, as the agent last set them. */
   mocks?: Mock[];
-  /** The settled part "Fertiges bauen" builds, as the agent last marked it. */
+  /** The settled part "Teilaufgabe abtrennen" builds, as the agent last marked it. */
   split?: SettledPart;
   /** Messages a turn ended before answering (the idea parked or dropped, an error, a restart); they go to the agent first next time. */
   unread?: Unread;
