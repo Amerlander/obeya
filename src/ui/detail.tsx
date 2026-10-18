@@ -622,7 +622,8 @@ function IdeaView({ item, act, run, listener, onDelete, onTell }: { item: Item; 
             </div>
             {/* what "Fertiges bauen" would build, as its worker's task */}
             {idea.split && !item.archivedAt && (
-              <details className="question brief settled">
+              // opened at the bottom of the column, it scrolls into view rather than opening out of sight
+              <details className="question brief settled" onToggle={(e) => e.currentTarget.open && e.currentTarget.scrollIntoView({ block: 'nearest', behavior: 'smooth' })}>
                 <summary>{t.idea.settled(idea.split.title)}</summary>
                 <Body md={idea.split.brief} />
               </details>
