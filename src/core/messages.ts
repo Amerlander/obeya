@@ -182,7 +182,7 @@ const de = {
     workstreamOnLog: (prototype: string) => `Auf dem Prototyp „${prototype}“ bauen: Sein Branch ist jetzt der dieses Workstreams.`,
     buildSettledAnswer: (task: string) => `Fertiges bauen: „${task}“.`,
     buildSettledLog: (task: string) => `Fertiges bauen: „${task}“ ist jetzt eine eigene Aufgabe; das Offene bleibt hier.`,
-    /** The task "Fertiges bauen" makes: where it comes from, before the part its agent marked. */
+    /** The task "Fertiges bauen" makes: where it comes from, after the part its agent marked. */
     settledTask: (idea: string) => `Aus der Idee „${idea}“ der Teil, der feststeht. Was dort noch offen ist, bespricht die Idee weiter; es gehört nicht zu dieser Aufgabe.`,
     settledFrom: (idea: string) => `Aus der Idee „${idea}“: Fertiges bauen.`,
     howOn: (idea: string) => `Idee „${idea}“: wie weiter?`,

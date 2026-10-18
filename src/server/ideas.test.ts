@@ -1041,7 +1041,7 @@ describe('a prototype', () => {
       .snapshot()
       .items.find((x) => x.title === 'Lese-Lern-App: Spiel und Lernlogik')!;
     expect(task).toMatchObject({ kind: 'task', state: 'planned', from: i.id, images: [shot], queue: { checking: true } });
-    expect(task.body).toBe('Aus der Idee „Lese-Lern-App“ der Teil, der feststeht. Was dort noch offen ist, bespricht die Idee weiter; es gehört nicht zu dieser Aufgabe.\n\n**Ziel:** Das Spiel mit Platzhalterbildern.');
+    expect(task.body).toBe('**Ziel:** Das Spiel mit Platzhalterbildern.\n\nAus der Idee „Lese-Lern-App“ der Teil, der feststeht. Was dort noch offen ist, bespricht die Idee weiter; es gehört nicht zu dieser Aufgabe.');
     // the idea stays open with its brief, its planned and running prototypes; the split is used up
     expect(item(i.id)).toMatchObject({ state: 'idea', idea: { status: 'open', brief: '**Ziel:** Lesen lernen. Die Spiellogik steht, die Bilder sind offen.' } });
     expect(item(i.id).idea!.variants.map((v) => v.approach)).toEqual(['P1 lokal', 'P2 Cloud']);

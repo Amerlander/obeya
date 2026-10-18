@@ -1336,7 +1336,7 @@ export class CanvasRuntime {
     const t = this.board.t.idea;
     const shown = this.board.events(cardId).flatMap((e) => (e.kind === 'talk' && e.author === 'owner' ? (e.images ?? []) : []));
     const images = [...new Set([...(idea.images ?? []), ...shown])].slice(-MAX_IMAGES);
-    const task = this.board.create({ title: split.title, body: `${t.settledTask(idea.title)}\n\n${split.brief}`, from: cardId, ...(images.length ? { images } : {}) });
+    const task = this.board.create({ title: split.title, body: `${split.brief}\n\n${t.settledTask(idea.title)}`, from: cardId, ...(images.length ? { images } : {}) });
     this.board.log(task.id, 'state', 'owner', t.settledFrom(idea.title));
     this.board.setIdea(cardId, { split: undefined });
     this.board.decide({ project_id: null, card_id: cardId, question: t.howOn(idea.title), answer: t.buildSettledAnswer(split.title), by: 'owner' });

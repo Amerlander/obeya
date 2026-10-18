@@ -265,20 +265,6 @@ bauen" (or accepting its worker's proposal) builds the idea on it, see Deciding.
 "So bauen" makes the brief the card's task and starts it at once, through the Koordinator like
 "Agent starten" (it waits only if it would likely conflict with running work).
 
-"Fertiges bauen", when part of the idea is settled and part still open (the game logic of an app
-settled, its pictures still to be prototyped): the agent marks the settled part (`plan_split`: its
-title and a brief that stands on its own as a worker's task, the whole value each time, empty when
-there is none any more), and only then does the button show, next to "So bauen", with what it would
-build folded under the brief ("Fertig zum Bauen: „…“"). The click makes that part a task of its own
-beside the idea, in its group and linked to it, with the screenshots the owner showed in the
-discussion and a line saying it is the settled part of the idea and the open part is not its, and
-starts it through the Koordinator like "So bauen". The decision log records it on the idea
-("Fertiges bauen: „…“"). The idea stays open with its conversation, its agent and its prototypes,
-planned and running; the split is cleared, and the agent hears that the part is now that task, trims
-the brief to what is open and replies. "So bauen", "Diesen Prototyp bauen" and "Als Projekt planen"
-work on the idea later as before. It is not a second way to break work up beside the plan doc: it
-only separates what is settled from what is open, always into one task and the remaining idea.
-
 "Diesen Prototyp bauen", on a prototype, does the same on that prototype's branch: its workspace and
 branch (renamed for the idea) become the idea's, whose worker hears that the branch holds a
 throwaway prototype, to take over what carries and bring it to production quality (tests, checks,
@@ -298,6 +284,20 @@ project; once it stands, the button builds that workstream (the one nobody has s
 prototypes; the owner picks another, or picks one where the doc names none or several), and it is
 built on the prototype's branch as an idea would be ("Auf Prototyp „…“" in the project's decisions),
 its worker told to take the workstream from the plan doc; the idea's other prototypes are discarded.
+
+"Fertiges bauen", when part of the idea is settled and part still open (the game logic of an app
+settled, its pictures still to be prototyped): the agent marks the settled part (`plan_split`: its
+title and a brief that stands on its own as a worker's task, the whole value each time, empty when
+there is none any more), and only then does the button show, next to "So bauen", with what it would
+build folded under the brief ("Fertig zum Bauen: „…“"). The click makes that part a task of its own
+beside the idea, in its group and linked to it, with the screenshots the owner showed in the
+discussion and a line after it saying it is the settled part of the idea and the open part is not
+its, and starts it through the Koordinator like "So bauen". The decision log records it on the idea
+("Fertiges bauen: „…“"). The idea stays open with its conversation, its agent and its prototypes,
+planned and running; the split is cleared, and the agent hears that the part is now that task, trims
+the brief to what is open and replies. "So bauen", "Diesen Prototyp bauen" and "Als Projekt planen"
+work on the idea later as before. It is not a second way to break work up beside the plan doc: it
+only separates what is settled from what is open, always into one task and the remaining idea.
 
 "Parken" and "Verwerfen" leave the card with its brief; talking to it opens it again. A parked or
 dropped idea can be archived ("Archivieren" in it or its archive button on the canvas, as on a finished card; not
