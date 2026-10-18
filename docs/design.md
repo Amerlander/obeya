@@ -4962,7 +4962,9 @@ merge --ff-only`); the restart for new code follows as after a landing, waiting 
 the owner, and the bar shows that wait instead. Where Obeya cannot fast-forward, there is no button
 and the hover says why and what to do: the checkout has commits of its own (a contributor's), or
 uncommitted changes to files the new commits change (named). Whatever else git refuses (an untracked
-file in the way, say) stays on the hover with git's message until a pull goes through.
+file in the way, say) stays on the hover with git's message until a pull goes through. When the
+owner comes back to the page (from the terminal, where they committed what stood in the way), Obeya
+looks again without fetching.
 
 A branch without upstream (a card's, in a worktree) or a detached HEAD has nothing to pull, and
 neither has an Obeya with `--dev` (it does not restart for new code) or the app and the compiled

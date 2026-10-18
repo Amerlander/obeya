@@ -873,10 +873,20 @@ describe('new commits on the upstream of the checkout Obeya runs from', () => {
     await sources.check();
     await until(() => shown().length === 2);
     expect(shown()[1]!.source).toMatchObject({ upstream: 'origin/main', count: 1, commits: [{ subject: 'Faster' }] });
+    // an edit of the owner's in the way; once they come back from the terminal where they undid it, Obeya looks again
+    writeFileSync(join(clone, 'src/a.ts'), 'mine\n');
+    await sources.check(false);
+    await until(() => shown().length === 3);
+    expect(shown()[2]!.source?.blocked).toEqual({ why: 'local', files: ['src/a.ts'] });
+    expect(await codeOf(post('/api/source-update/pull', ''))).toBe('invalid');
+    git(clone, 'checkout', '--', 'src/a.ts');
+    ws.send(JSON.stringify({ type: 'back' } satisfies ClientMessage));
+    await until(() => shown().length === 4);
+    expect(shown()[3]!.source?.blocked).toBeUndefined();
     expect(await (await post('/api/source-update/pull', '')).json()).toEqual({ source: null });
     expect(git(clone, 'rev-parse', 'HEAD')).toBe(git(up, 'rev-parse', 'HEAD'));
-    await until(() => shown().length === 3);
-    expect(shown()[2]!.source).toBeNull();
+    await until(() => shown().length === 5);
+    expect(shown()[4]!.source).toBeNull();
     // nothing left to pull
     expect(await codeOf(post('/api/source-update/pull', ''))).toBe('invalid');
     ws.close();
