@@ -1369,7 +1369,7 @@ function RepoSettingsBlock({
   };
   const land = value<'main' | 'pr'>('land');
   const planDocs = value<{ dir: string; exclude: string[] }>('planDocs');
-  const language = value<NarrationLanguage | null>('language') ?? undefined;
+  const language = value<NarrationLanguage | null>('language');
   const site = value<DemoSite | null>('site') ?? { title: '', url: '', deploy: '' };
   const setSite = (patch: Partial<DemoSite>) => set('site', { ...site, ...patch });
   // a part of a setting with several fields: its label above it; a wide one takes the whole row
@@ -1449,9 +1449,9 @@ function RepoSettingsBlock({
             'language',
             c.language,
             <div className="seg" role="radiogroup" aria-label={c.language}>
-              {([undefined, ...LANGUAGES] as const).map((x) => (
-                <button key={x ?? 'auto'} type="button" role="radio" aria-checked={language === x} className={language === x ? 'on' : undefined} onClick={() => set('language', x)}>
-                  {c.languages[x ?? 'auto']}
+              {LANGUAGES.map((x) => (
+                <button key={x} type="button" role="radio" aria-checked={language === x} className={language === x ? 'on' : undefined} onClick={() => set('language', x)}>
+                  {c.languages[x]}
                 </button>
               ))}
             </div>,

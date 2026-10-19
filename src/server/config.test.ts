@@ -178,11 +178,13 @@ describe("Obeya's configuration", async () => {
     expect(restarts).toBe(1);
   });
 
-  test("a file from before demo.language reads without its site's language, the site kept", () => {
+  test("a file from before demo.language reads without its site's language, the site kept", async () => {
     const site = { title: 'Demos', url: 'https://demos.example.dev', deploy: 'deploy {dir}' };
     mkdirSync(join(dir, 'home'));
     writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings: { demo: { site: { ...site, language: 'de' } } } }] }]));
     expect(readConfigFile(file)).toEqual([{ repos: [{ path: web, settings: { demo: { site } } }] }]);
+    // so does a draft the dialog kept from before
+    expect((await config('file', []).check([{ repos: [{ path: web, settings: { demo: { site: { ...site, language: 'de' } } } }] }])).problems.map((p) => p.code)).not.toContain('invalid');
   });
 
   test("saved from the file, the running canvases take it over without a restart: settings tidied, canvases and repositories as they come", async () => {
@@ -532,6 +534,9 @@ describe('the configuration over HTTP', () => {
     // a voice being chosen is checked before it is saved
     const draft = await call('POST', '/api/demo-settings/check', { language: 'en', voice: 'qwen3', references: { en: join(dir, 'me.wav') } });
     expect(draft.body).toMatchObject({ person: 'third', problems: [], clips: { en: 'referenceMissing' }, install: { installed: false } });
+    // a draft the dialog kept from before names one clip: that of its language
+    const old = await call('POST', '/api/demo-settings/check', { language: 'en', voice: 'qwen3', reference: join(dir, 'me.wav') });
+    expect(old.body).toMatchObject({ clips: { en: 'referenceMissing' } });
     expect(restarts).toBe(0);
   });
 

@@ -2136,6 +2136,8 @@ export class Workers {
 
   private tools(cardId: string, live: Live, prototype: boolean): AgentTool[] {
     const language = LANGUAGE_NAMES[this.o.board.language()];
+    // the page goes to colleagues: in the language of the repository's demos where it names one
+    const pageLanguage = LANGUAGE_NAMES[this.o.adapter.demo?.language ?? this.o.board.language()];
     const handOver = () => {
       live.handedOver = true;
       live.nudged = false;
@@ -2292,7 +2294,7 @@ export class Workers {
                       .object({ title: z.string(), text: z.string() })
                       .optional()
                       .describe(
-                        `required: the page on which the owner may share the demo (the video, or the HTML artifact below the text) with colleagues, in ${language}. They know the product but have never seen Obeya, this card or the plan doc. title: what changes, in a few words; text: two to five sentences on what changes for the user and why, without findings, tests or internal process`,
+                        `required: the page on which the owner may share the demo (the video, or the HTML artifact below the text) with colleagues, in ${pageLanguage}. They know the product but have never seen Obeya, this card or the plan doc. title: what changes, in a few words; text: two to five sentences on what changes for the user and why, without findings, tests or internal process`,
                       ),
                     follows: z
                       .enum(['replaces', 'supplements'])

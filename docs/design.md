@@ -4283,7 +4283,7 @@ see Where a demo goes). Each repository folds its settings under „Einstellunge
 Repository settings), with the main branch and how work lands in the folded line; the app's
 recipe („So läuft die App“, a large text field), its stop command („Stoppen, solange eine Karte
 wartet“) and, once there is one, its keep condition, the language of its demos („Sprache der
-Demos“: „wie die Demo-Einstellungen“, Deutsch, Englisch) and the demo site („Demo-Site“: title, URL, deploy command, env file, headers as `Name: value` lines, the largest
+Demos“: Deutsch or Englisch, neither chosen where the demo settings' language applies) and the demo site („Demo-Site“: title, URL, deploy command, env file, headers as `Name: value` lines, the largest
 file in MiB) have their fields there like the other settings; „Für alle ins
 Repository übernehmen“ below them takes the values saved for this machine into the repository's
 `.obeya/settings.json`. What is taken over is what is saved: while the dialog has changes not saved

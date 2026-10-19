@@ -175,14 +175,14 @@ export function readConfigFile(file: string): CanvasConfig[] {
 
 /**
  * A file as read, without the settings Obeya no longer has: a repository's share command (its demo
- * site took its place), and its site's language (`demo.language` took its place).
+ * site took its place; `file` only), and its site's language (`demo.language` took its place).
  */
-function withoutGone(made: unknown): unknown {
+function withoutGone(made: unknown, file = true): unknown {
   if (Array.isArray(made))
     for (const c of made)
       for (const r of Array.isArray(c?.repos) ? c.repos : []) {
         if (!r || typeof r !== 'object') continue;
-        delete r.share;
+        if (file) delete r.share;
         if (r.settings && typeof r.settings === 'object') r.settings = goneSettings(r.settings).settings;
       }
   return made;
@@ -235,6 +235,8 @@ const demoShape = z
     url: z.string().optional(),
     voiceName: z.string().optional(),
     references: z.partialRecord(z.enum(LANGUAGES), z.string()).optional(),
+    // the one clip of a draft kept in the dialog from before `references`: `tidyDemoSettings` takes it as its language's
+    reference: z.string().optional(),
     keyFile: z.string().optional(),
   })
   .strict();
@@ -508,7 +510,8 @@ export class Config {
    * blocking the server meanwhile.
    */
   async check(input: unknown): Promise<ConfigChecked> {
-    const parsed = shape.safeParse(input);
+    // a draft the dialog kept from before may hold a site's language (the dialog never sends a share command)
+    const parsed = shape.safeParse(withoutGone(input, false));
     if (!parsed.success) return { canvases: [], resolved: [], problems: [{ code: 'invalid', detail: z.prettifyError(parsed.error) }] };
     const canvases = tidy(parsed.data);
     const expanded = expandConfig(canvases);
