@@ -45,11 +45,13 @@ const PACE_WARN = 0.35;
 
 export function cuesOf(vtt: string): Cue[] {
   const time = (h: string, m: string, s: string, ms: string) => Number(h) * 3600 + Number(m) * 60 + Number(s) + Number(ms) / 1000;
-  return [...vtt.matchAll(/^(\d+):(\d{2}):(\d{2})\.(\d{3}) --> (\d+):(\d{2}):(\d{2})\.(\d{3})[^\n]*\n([\s\S]*?)(?:\n\s*\n|\s*$)/gm)].map((c) => ({
-    start: time(c[1]!, c[2]!, c[3]!, c[4]!),
-    end: time(c[5]!, c[6]!, c[7]!, c[8]!),
-    text: c[9]!.trim(),
-  }));
+  return vtt
+    .replace(/\r\n/g, '\n')
+    .split(/\n\s*\n/)
+    .flatMap((block) => {
+      const c = /^(\d+):(\d{2}):(\d{2})\.(\d{3}) --> (\d+):(\d{2}):(\d{2})\.(\d{3})[^\n]*\n([\s\S]*)$/m.exec(block.trim());
+      return c ? [{ start: time(c[1]!, c[2]!, c[3]!, c[4]!), end: time(c[5]!, c[6]!, c[7]!, c[8]!), text: c[9]!.trim() }] : [];
+    });
 }
 
 /** An entry of an ffconcat list: a frame and how long it is held (the last one: none). */
@@ -176,13 +178,18 @@ export async function revoice(dir: string, language: string | undefined) {
   holdRenderLock(work);
   const here = path.join(work, 'revoice');
   const original = path.join(here, 'original');
-  const kept = fs.existsSync(path.join(original, 'index.html'));
+  // what was kept of an earlier re-voicing holds while the frames are those it was made from; a render since replaced them
+  const keptList = path.join(original, 'frames.txt');
+  if (fs.existsSync(path.join(original, 'index.html')) && !fs.existsSync(keptList)) fs.copyFileSync(list, keptList);
+  const kept = fs.existsSync(keptList) && read(keptList) === read(list);
   const page = reportOf(read(path.join(kept ? original : dir, 'index.html')));
   if (page.language === to) throw new Error(`${dir} is narrated in ${LANGUAGE_NAMES[to]} already`);
   if (!kept) {
     for (const f of RENDERED) if (f !== 'poster.jpg' && !fs.existsSync(path.join(dir, f))) throw new Error(`${f} is missing in ${dir}`);
+    fs.rmSync(original, { recursive: true, force: true });
     fs.mkdirSync(original, { recursive: true });
     for (const f of RENDERED) if (fs.existsSync(path.join(dir, f))) fs.copyFileSync(path.join(dir, f), path.join(original, f));
+    fs.copyFileSync(list, keptList);
   }
   const chapters = cuesOf(read(path.join(original, 'chapters.vtt')));
   const captions = cuesOf(read(path.join(original, 'captions.vtt')));

@@ -19,6 +19,13 @@ describe('re-voicing a demo', () => {
     ]);
   });
 
+  test('a cue of several lines is read whole', () => {
+    expect(cuesOf('WEBVTT\n\n00:00:00.002 --> 00:00:09.000\nVorher:\nkein Vorschlag\n\n00:00:09.000 --> 00:00:12.000\nJetzt\n')).toEqual([
+      { start: 0.002, end: 9, text: 'Vorher:\nkein Vorschlag' },
+      { start: 9, end: 12, text: 'Jetzt' },
+    ]);
+  });
+
   test('a narrated stretch plays as long as its new clip; the rest keeps its length and moves along', () => {
     const at = stretched([
       { from: 10, to: 20, ratio: 1.5 },

@@ -30,7 +30,8 @@ const option = (name: string, fallback: string) => {
 const home = process.env.OBEYA_HOME || join(homedir(), '.obeya');
 const canvas = option('canvas', 'obeya');
 const count = Number(option('count', '30'));
-const language = LANGUAGES.find((l) => l === option('language', 'en'));
+const languageArg = option('language', 'en');
+const language = LANGUAGES.find((l) => l === languageArg);
 const [command, ...ids] = args;
 if (!language || !Number.isInteger(count) || (command !== 'list' && command !== 'publish') || (command === 'publish' && !ids.length)) {
   console.error('usage: bun scripts/revoice-demos.ts list [--canvas obeya] [--count 30] [--language en]\n       bun scripts/revoice-demos.ts publish <card id>… [--canvas obeya]');
@@ -70,7 +71,7 @@ function candidates(): (Row & { dir: string })[] {
   const rows = db
     .query<Row, string[]>(
       `SELECT c.id, c.title, c.demo, c.share, max(e.at) AS approved FROM cards c JOIN events e ON e.card_id = c.id
-       WHERE c.canvas_id = ? AND c.demo IS NOT NULL AND c.prototype_of IS NULL AND e.kind = 'state' AND e.author = 'owner'
+       WHERE c.canvas_id = ? AND c.deleted_at IS NULL AND c.demo IS NOT NULL AND c.prototype_of IS NULL AND e.kind = 'state' AND e.author = 'owner'
          AND e.text IN (${APPROVED.map(() => '?').join(', ')})
        GROUP BY c.id ORDER BY approved DESC`,
     )
