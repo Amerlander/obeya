@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store } from './db';
 import { gitRepo } from './testing';
-import { defaultBranch, git, Workspaces } from './workspaces';
+import { addTrailer, defaultBranch, git, Workspaces } from './workspaces';
 
 let dir: string;
 beforeEach(() => (dir = mkdtempSync(join(tmpdir(), 'obeya-branch-'))));
@@ -71,4 +71,12 @@ describe("a follow-up's temporary worktree", () => {
     const fresh = spaces.followUpTree('card-1234567', 'obeya/gone-def456');
     expect(git(fresh, 'rev-parse', 'HEAD')).toBe(git(checkout, 'rev-parse', 'origin/main'));
   });
+});
+
+test('a trailer goes beside the trailers a commit message ends with, else into a paragraph of its own', () => {
+  const t = 'Demo-Video: https://demos.example.dev/a-1/';
+  expect(addTrailer('Fix\n\nBody.\n\nCo-Authored-By: C <c@x>\n', t)).toBe(`Fix\n\nBody.\n\nCo-Authored-By: C <c@x>\n${t}\n`);
+  expect(addTrailer('Fix\n\nBody: not a trailer, a sentence.\nIt goes on.', t)).toBe(`Fix\n\nBody: not a trailer, a sentence.\nIt goes on.\n\n${t}\n`);
+  // a subject alone is no trailer block, even with a colon
+  expect(addTrailer('Docs: typo', t)).toBe(`Docs: typo\n\n${t}\n`);
 });

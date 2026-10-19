@@ -1286,6 +1286,11 @@ export interface DemoSite {
   headers?: Record<string, string>;
   /** The largest file the host takes, in bytes; 25 MiB without it. */
   maxFile?: number;
+  /**
+   * When a demo goes on the site: `approved`, the card's latest demo as the owner approves its work
+   * (before it lands); without it, only when the owner clicks "Teilen".
+   */
+  publish?: 'approved';
 }
 
 /**
@@ -1384,8 +1389,8 @@ export interface SettingValue<T> {
 export interface RepoCommands {
   /** `app.stop` and `app.keep` of `.obeya/settings.json`, which park a waiting card: one without the other could stop what `keep` keeps. */
   app?: { stop?: string; keep?: string };
-  /** What of `demo.site` the deploy runs with and the live site is read from. */
-  site?: Pick<DemoSite, 'url' | 'deploy' | 'env' | 'headers'>;
+  /** What of `demo.site` the deploy runs with and the live site is read from, and whether it deploys without a click on "Teilen". */
+  site?: Pick<DemoSite, 'url' | 'deploy' | 'env' | 'headers' | 'publish'>;
   /** The repository's own Claude Code configuration by file (everything under `.claude/`, `.mcp.json`): hooks, MCP servers, helpers. */
   claude?: Record<string, ClaudeFile>;
 }

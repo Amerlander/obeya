@@ -185,6 +185,33 @@ async function rebased(ws: string, base: string, upstream: string): Promise<Land
   return null;
 }
 
+/**
+ * Adds `trailer` (`Demo-Video: <url>`) to the message of the workspace's last commit, the one that
+ * lands, unless it has it already (a landing tried before). A commit that cannot be amended lands
+ * without it.
+ */
+async function withTrailer(ws: string, trailer: string | undefined) {
+  if (!trailer) return;
+  const message = await gitAsync(ws, 'log', '-1', '--format=%B');
+  if (message.split('\n').includes(trailer)) return;
+  // the worker's commit as it was, its author kept; its hooks ran when it was made
+  try {
+    await gitAsync(ws, 'commit', '--amend', '--quiet', '--no-verify', '--allow-empty', '--cleanup=verbatim', '-m', addTrailer(message, trailer));
+  } catch (e) {
+    // the link is a convenience: the work lands without it
+    console.error(`landing without ${trailer}:`, messageOf(e));
+  }
+}
+
+/** The commit message with `trailer` in its trailers: beside those it ends with (`Co-Authored-By: …`), else in a paragraph of its own. */
+export function addTrailer(message: string, trailer: string): string {
+  const text = message.trimEnd();
+  const paragraphs = text.split(/\n\s*\n/);
+  const last = paragraphs.at(-1)!.split('\n');
+  const trailers = paragraphs.length > 1 && last.every((l) => /^[\w-]+: /.test(l) || /^\s+\S/.test(l)) && /^[\w-]+: /.test(last[0]!);
+  return `${text}${trailers ? '\n' : '\n\n'}${trailer}\n`;
+}
+
 /** How long free clones found dirty count as dirty before `leasable` looks again. */
 export const RECHECK_MS = 60_000;
 
@@ -457,19 +484,20 @@ export class Workspaces {
    * when only the replay conflicts, squashing) and fast-forwarding. The workspace stays with the
    * card, so its worker can finish what remains; `removeLanded` frees it. Returns what went wrong
    * (`worker` problems are the worker's to fix, the others stop at the Obeya checkout), or how
-   * the default branch moved.
+   * the default branch moved. `trailer` goes into the message of the commit that lands last.
    */
-  landOnMain(cardId: string, branch: string): Promise<LandProblem | Landed> {
-    return oneAtATime(landings, this.o.repoPath, () => this.land(cardId, branch));
+  landOnMain(cardId: string, branch: string, trailer?: string): Promise<LandProblem | Landed> {
+    return oneAtATime(landings, this.o.repoPath, () => this.land(cardId, branch, trailer));
   }
 
-  private async land(cardId: string, branch: string): Promise<LandProblem | Landed> {
+  private async land(cardId: string, branch: string, trailer?: string): Promise<LandProblem | Landed> {
     const ws = this.leasedBy(cardId);
     if (!ws) return { code: 'land', worker: false, detail: 'the card has no workspace' };
     try {
       const base = this.main(ws);
       const problem = await rebased(ws, base, this.upstream(ws, base));
       if (problem) return problem;
+      await withTrailer(ws, trailer);
       if ((await gitAsync(this.o.repoPath, 'branch', '--show-current')) !== base) return { code: 'landCheckout', worker: false, detail: `the Obeya checkout is not on ${base}` };
     } catch (e) {
       return { code: 'land', worker: false, detail: messageOf(e) };
@@ -492,13 +520,14 @@ export class Workspaces {
    * Lands the card's committed branch on the default branch of `origin` without a pull request:
    * rebased (or squashed) onto it as in `landOnMain`, then pushed there, never forced. When the
    * push is turned away because the default branch moved meanwhile, it fetches, rebases and pushes
-   * once more. The Obeya checkout is left as it is; the workspace stays with the card.
+   * once more. The Obeya checkout is left as it is; the workspace stays with the card. `trailer`
+   * as in `landOnMain`.
    */
-  pushToMain(cardId: string): Promise<LandProblem | Landed> {
-    return oneAtATime(landings, this.o.repoPath, () => this.push(cardId));
+  pushToMain(cardId: string, trailer?: string): Promise<LandProblem | Landed> {
+    return oneAtATime(landings, this.o.repoPath, () => this.push(cardId, trailer));
   }
 
-  private async push(cardId: string): Promise<LandProblem | Landed> {
+  private async push(cardId: string, trailer?: string): Promise<LandProblem | Landed> {
     const ws = this.leasedBy(cardId);
     if (!ws) return { code: 'land', worker: false, detail: 'the card has no workspace' };
     for (let attempt = 0; ; attempt++) {
@@ -509,6 +538,7 @@ export class Workspaces {
         const upstream = `origin/${base}`;
         const problem = await rebased(ws, base, upstream);
         if (problem) return problem;
+        await withTrailer(ws, trailer);
         from = await gitAsync(ws, 'rev-parse', upstream);
       } catch (e) {
         return { code: 'landPush', worker: false, detail: messageOf(e) };

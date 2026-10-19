@@ -49,6 +49,12 @@ export interface WorkerOptions {
   repo?: string;
   /** The worker reported the card's pull request: a demo shared before gets its link. */
   onPrOpened?: (cardId: string) => void;
+  /**
+   * The owner approved the card's work (before it lands): its demo goes public where the
+   * repository's site publishes on approval. Returns the trailer for the commit that lands, for a
+   * card with a page (`Demo-Video: <url>`).
+   */
+  onApproval?: (cardId: string) => string | null;
   /** The default branch has moved: the card's pull request was merged, or its work pushed there directly. */
   onMerged?: (cardId: string) => void;
   /** A prototype was handed over: the idea's agent hears the summary. */
@@ -917,6 +923,8 @@ export class Workers {
     // the line the worker reported before handing over is about work that is done
     this.o.board.work(cardId, { state: 'inPr', need: null, detail: null, status_line: null, pr: JSON.stringify(pr) });
     this.o.board.log(cardId, 'state', 'owner', this.o.board.t.worker.approvedPr);
+    // a page that goes out now gets the pull request's link from Obeya once both are there
+    this.o.onApproval?.(cardId);
     // a demo shared later gets its line from Obeya once the pull request is open
     const shared = card.share?.url;
     this.deliver(
@@ -983,7 +991,9 @@ export class Workers {
     const direct = this.landingOf(cardId).land === 'pr';
     // read before landing: the landed branch adds nothing against main
     const added = this.planDocsAdded(cardId);
-    const result = await (direct ? this.o.workspaces.pushToMain(cardId) : this.o.workspaces.landOnMain(cardId, row.branch!));
+    // the demo goes out with the approval, also where it holds for the worker's next handover
+    const trailer = this.o.onApproval?.(cardId) ?? undefined;
+    const result = await (direct ? this.o.workspaces.pushToMain(cardId, trailer) : this.o.workspaces.landOnMain(cardId, row.branch!, trailer));
     if ('code' in result && !result.worker) {
       this.o.board.work(cardId, { approved_at: null });
       throw new BadRequest(result.code, result.detail);
@@ -1046,6 +1056,8 @@ export class Workers {
    * Its worker hears so and may finish what remains, as after a landing.
    */
   private close(cardId: string, by: 'owner' | 'worker', comments?: Comments) {
+    // a demo, an analysis: what the approval was for goes public as any approved demo
+    if (by === 'owner') this.o.onApproval?.(cardId);
     this.bump(cardId);
     this.o.board.work(cardId, { state: 'done', need: null, detail: null, status_line: null, approved_at: null, pr: null, landed: JSON.stringify({ unchanged: true } satisfies LandedState) });
     this.o.board.log(cardId, 'state', by, by === 'owner' ? this.o.board.t.worker.approvedUnchanged : this.o.board.t.worker.doneUnchanged);

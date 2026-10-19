@@ -22,6 +22,10 @@ describe("a repository's commands", () => {
     expect(heldGroups(now, null, { app: { stop: 'x', keep: 'y' }, demo: { site } })).toEqual(['claude']);
     // a stop of this machine's alone leaves the repository's keep held
     expect(heldGroups(now, null, { app: { stop: 'x' } })).toEqual(['app', 'site', 'claude']);
+    // a site that starts publishing every approved demo by itself is held, as a new deploy would be
+    const published = commandsOf({ settings: { demo: { site: { ...site, publish: 'approved' } } } });
+    expect(published.site).toEqual({ url: site.url, deploy: site.deploy, publish: 'approved' });
+    expect(heldGroups(published, now)).toEqual(['site']);
   });
 
   test('held, they go from the settings, the rest of their fields stays', () => {

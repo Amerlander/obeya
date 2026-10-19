@@ -600,6 +600,7 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
       });
       return 'why' in r ? { ...r, why: t.notWithdrawn(r.why) } : r;
     },
+    pageUrl: (slug) => pageUrl(site, slug),
     audit: async (shared) => {
       try {
         const live = await readLive(deployEnv());

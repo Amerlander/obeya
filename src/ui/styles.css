@@ -1176,9 +1176,10 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 .cfg-plan { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; max-width: 640px; }
 /* a setting with several fields (the demo site), each labelled above it */
 .cfg-sub { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 12px; max-width: 640px; }
-.cfg-sub > label { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.cfg-sub > label.wide { grid-column: 1 / -1; }
-.cfg-sub > label > .hint { font-size: 11.5px; }
+.cfg-sub > label, .cfg-sub > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cfg-sub > .wide { grid-column: 1 / -1; }
+.cfg-sub > label > .hint, .cfg-sub > div > .hint { font-size: 11.5px; }
+.cfg-sub > div > .seg { align-self: flex-start; margin-top: 0; }
 .cfg-sub input, .cfg-sub textarea { width: 100%; }
 .cfg-hosts { grid-column: 1 / -1; }
 .cfg-hosts > .hint { display: block; font-size: 11.5px; margin-bottom: 3px; }

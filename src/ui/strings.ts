@@ -963,8 +963,10 @@ const de = {
       siteEnv: 'Datei mit Zugangsdaten (SCHLÜSSEL=Wert), relativ zu Obeyas Verzeichnis',
       siteHeaders: 'Header zum Lesen hinter einem Login, einer pro Zeile',
       siteMaxFile: 'Größte Datei (MiB)',
+      sitePublish: 'Auf die Site kommt eine Demo',
+      sitePublishes: { click: 'beim Klick auf „Teilen“', approved: 'mit der Freigabe' },
       siteHint:
-        'Eine statische Site, auf die „Teilen“ Demos für die Kollegen bringt: Obeya schreibt die Seiten und ihre Übersicht selbst und veröffentlicht sie mit dem Befehl. Die Zugangsdaten bleiben in der Datei auf jedem Rechner; ein Rechner ohne sie exportiert Demos stattdessen. Ohne Site exportiert „Teilen“ eine Datei.',
+        'Eine statische Site, auf die „Teilen“ Demos für die Kollegen bringt: Obeya schreibt die Seiten und ihre Übersicht selbst und veröffentlicht sie mit dem Befehl. Auf Wunsch kommt die neueste Demo einer Aufgabe mit ihrer Freigabe von selbst darauf. Die Zugangsdaten bleiben in der Datei auf jedem Rechner; ein Rechner ohne sie exportiert Demos stattdessen. Ohne Site exportiert „Teilen“ eine Datei.',
       share: {
         label: 'Für alle',
         button: (n: number) => (n === 1 ? 'Für alle ins Repository übernehmen (ein Wert) …' : `Für alle ins Repository übernehmen (${n} Werte) …`),
@@ -2419,8 +2421,10 @@ const en: Strings = {
       siteEnv: 'File with credentials (KEY=value), relative to Obeya’s directory',
       siteHeaders: 'Headers for reading behind a login, one per line',
       siteMaxFile: 'Largest file (MiB)',
+      sitePublish: 'A demo goes on the site',
+      sitePublishes: { click: 'on a click on “Share”', approved: 'with the approval' },
       siteHint:
-        'A static site “Share” puts demos on for colleagues: Obeya writes the pages and their overview itself and publishes them with the command. The credentials stay in the file on each machine; a machine without it exports demos instead. Without a site, “Share” exports a file.',
+        'A static site “Share” puts demos on for colleagues: Obeya writes the pages and their overview itself and publishes them with the command. If you like, a task’s latest demo goes on it by itself with its approval. The credentials stay in the file on each machine; a machine without it exports demos instead. Without a site, “Share” exports a file.',
       share: {
         label: 'For everyone',
         button: (n: number) => (n === 1 ? 'Take over into the repository for everyone (one value) …' : `Take over into the repository for everyone (${n} values) …`),

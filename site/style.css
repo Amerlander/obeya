@@ -63,6 +63,7 @@ section { max-width: var(--wide); margin: 0 auto; padding: 0 24px; }
 .chapters button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .chapters .t { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 32px; }
 .film-note { text-align: center; font-size: 14px; color: var(--muted); margin: 16px 0 0; }
+.film-note + .film-note { margin-top: 6px; }
 
 /* ---------- pillars ---------- */
 .pillars { margin-top: 128px; display: grid; gap: 112px; }

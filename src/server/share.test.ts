@@ -71,9 +71,12 @@ const server = Bun.serve({
 });
 afterAll(() => server.stop(true));
 const SITE_URL = `http://localhost:${server.port}/`;
-const site = (): DemoSite => ({ title: 'Demos', url: SITE_URL, deploy: `${join(dir, 'deploy.ts')} {dir} ${dir}` });
+/** When the site's demos go out: on approval (`approved`), or only on "Teilen". */
+let publish: DemoSite['publish'];
+const site = (): DemoSite => ({ title: 'Demos', url: SITE_URL, deploy: `${join(dir, 'deploy.ts')} {dir} ${dir}`, ...(publish ? { publish } : {}) });
 
 beforeEach(() => {
+  publish = undefined;
   dir = mkdtempSync(join(tmpdir(), 'obeya-share-'));
   writeFileSync(join(dir, 'deploy.ts'), DEPLOY);
   board = new Board(new Store(':memory:'), { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: dir, branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
@@ -674,6 +677,93 @@ describe('sharing many outdated pages again at once', () => {
     await until(() => reshare()?.run?.left === 0);
     expect(reshare()).toEqual({ outdated: 1, changes: changes(1), run: { total: 2, done: 2, failed: [], left: 0 } });
     expect([a, b, c, d].map((x) => !!share(x!.id)!.outdated)).toEqual([false, false, true, false]);
+  });
+});
+
+describe('publishing on approval', () => {
+  beforeEach(() => {
+    publish = 'approved';
+  });
+  /** A later handover's demo, with what its worker said of it. */
+  function later(id: string, handover: number, extra: Record<string, unknown> = {}) {
+    const row = board.row(id);
+    const d = videoDir(join(dir, `demo-${id}-${handover}`));
+    writeFileSync(join(d, 'demo.mp4'), `video ${handover}`);
+    board.work(id, {
+      demos: JSON.stringify([...JSON.parse(row.demos ?? '[]'), JSON.parse(row.demo!)]),
+      demo: JSON.stringify({ kind: 'video', dir: d, chapters: [], page: { title: `Demo ${handover}`, text: 'T.' }, handover, ...extra }),
+    });
+  }
+  const on = (id: string) => (JSON.parse(board.row(id).share!) as { demos: { handover?: number }[] }).demos.map((d) => d.handover);
+
+  test('the latest demo goes on its page, and the trailer names the page before the deploy is done', async () => {
+    const c = card();
+    writeFileSync(join(dir, 'hold'), '');
+    const trailer = sharing.approved(c.id);
+    expect(trailer).toBe(`Demo-Video: ${SITE_URL}${slug(c.id)}/`);
+    expect(share(c.id)).toEqual({ state: 'publishing' });
+    expect(log(c.id)).toContain('Mit der Freigabe geteilt: Die Seite geht online.');
+    rmSync(join(dir, 'hold'));
+    await until(() => share(c.id)?.state === 'shared');
+    expect(share(c.id)!.url).toBe(`${SITE_URL}${slug(c.id)}/`);
+    expect(readFileSync(join(dir, 'deployed', slug(c.id), 'demo.mp4'), 'utf8')).toBe('video');
+    // approved again (a landing that went back to the worker): the page has the demo already
+    expect(sharing.approved(c.id)).toBe(trailer);
+    await Bun.sleep(50);
+    expect(calls()).toHaveLength(1);
+  });
+
+  test('a later demo goes beside the shared ones where its worker said it supplements them, else in their place', async () => {
+    const c = card('Filter bleiben', { handover: 1 });
+    sharing.approved(c.id);
+    await until(() => share(c.id)?.state === 'shared');
+    later(c.id, 2, { follows: 'supplements' });
+    sharing.approved(c.id);
+    expect(log(c.id).at(-1)).toBe('Mit der Freigabe zur Seite dazugenommen: Die Seite bekommt die neueste Demo als Ergänzung dazu.');
+    await until(() => share(c.id)?.state === 'shared' && on(c.id).length === 2);
+    expect(on(c.id)).toEqual([1, 2]);
+    later(c.id, 3, { follows: 'replaces' });
+    sharing.approved(c.id);
+    await until(() => share(c.id)?.state === 'shared' && on(c.id)[0] === 3);
+    expect(on(c.id)).toEqual([3]);
+    // without the worker's word, the latest replaces the page, as "Teilen" offers first
+    later(c.id, 4);
+    sharing.approved(c.id);
+    await until(() => share(c.id)?.state === 'shared' && on(c.id)[0] === 4);
+    expect(on(c.id)).toEqual([4]);
+    expect(log(c.id)).toContain('Mit der Freigabe auf der Seite ersetzt: Die Seite zeigt jetzt die neueste Demo statt der geteilten.');
+  });
+
+  test('a failed deploy goes into the log; the trailer still names the page', async () => {
+    const c = card();
+    writeFileSync(join(dir, 'fail'), '');
+    expect(sharing.approved(c.id)).toBe(`Demo-Video: ${SITE_URL}${slug(c.id)}/`);
+    await until(() => !share(c.id));
+    const err = board.events(c.id).at(-1)!;
+    expect(err.kind).toBe('error');
+    expect(err.text).toContain('Nicht geteilt');
+  });
+
+  test('an artifact is named as a page', async () => {
+    const c = card('Varianten', { kind: 'html' });
+    writeFileSync(join(JSON.parse(board.row(c.id).demo!).dir, 'index.html'), '<!doctype html><html lang="de"><p>Varianten</p></html>');
+    expect(sharing.approved(c.id)).toBe(`Demo-Page: ${SITE_URL}${slug(c.id)}/`);
+    await until(() => share(c.id)?.state === 'shared');
+  });
+
+  test('a site that publishes only on "Teilen" puts nothing out; a page shared before still goes into the trailer', async () => {
+    publish = undefined;
+    const c = card();
+    expect(sharing.approved(c.id)).toBeNull();
+    expect(share(c.id)).toBeUndefined();
+    sharing.share(c.id);
+    await until(() => share(c.id)?.state === 'shared');
+    later(c.id, 2);
+    expect(sharing.approved(c.id)).toBe(`Demo-Video: ${SITE_URL}${slug(c.id)}/`);
+    await Bun.sleep(50);
+    expect(calls()).toHaveLength(1);
+    // a card without a site or without a demo has no page
+    expect(sharing.approved(card('Ohne Site').id)).toBeNull();
   });
 });
 

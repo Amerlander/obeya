@@ -102,6 +102,7 @@ describe('a card whose own branch changes how work lands', () => {
     git(clone, 'add', '.');
     git(clone, 'commit', '--quiet', '-m', 'Obeya settings');
     runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
+    runtime.last.emit({ type: 'idle' });
     return c;
   };
 
@@ -271,6 +272,78 @@ describe('approving directly onto main where work goes out as a pull request', (
     await workers.approve(c.id, { direct: true });
     expect(state(c.id)).toBe('done');
     expect(git(origin, 'log', '--format=%s', 'main')).toBe('init');
+  });
+});
+
+describe('the landed commit names the demo’s page', () => {
+  const PAGE = 'Demo-Video: https://demos.example.dev/zahlerstande-exportieren-1/';
+  /** The cards approved, as the demo site heard of them; a card titled „Ohne Seite“ has no page. */
+  let approvals: string[];
+  function withSite(adapter: Parameters<typeof setup>[0], withOrigin = false) {
+    rmSync(dir, { recursive: true, force: true });
+    setup(adapter, withOrigin);
+    approvals = [];
+    const onApproval = (id: string) => (approvals.push(id), board.item(id)!.title === 'Ohne Seite' ? null : PAGE);
+    setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter, onApproval }));
+  }
+  /** A handed-over card whose last commit has a trailer of its own. */
+  function handedOver(title = 'Zählerstände exportieren', commit = true) {
+    const c = board.create({ title, x: 0, y: 0 });
+    workers.start(c.id);
+    const clone = board.row(c.id).workspace!;
+    if (commit) {
+      writeFileSync(join(clone, 'x.ts'), 'x');
+      git(clone, 'add', '.');
+      git(clone, 'commit', '--quiet', '-m', 'Erste Hälfte');
+      writeFileSync(join(clone, 'y.ts'), 'y');
+      git(clone, 'add', '.');
+      git(clone, 'commit', '--quiet', '-m', 'Zählerstände als CSV\n\nDer Export liest alle Zähler.\n\nCo-Authored-By: Claude <noreply@anthropic.com>');
+    }
+    runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
+    return c;
+  }
+
+  test('landing on main: the last commit gets the trailer beside its own, its author kept', async () => {
+    withSite({ ...generic, land: 'main', workspaces: 'clones' });
+    const c = handedOver();
+    await workers.approve(c.id);
+    expect(state(c.id)).toBe('live');
+    expect(approvals).toEqual([c.id]);
+    expect(git(main, 'log', '-1', '--format=%B')).toBe(`Zählerstände als CSV\n\nDer Export liest alle Zähler.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n${PAGE}`);
+    expect(git(main, 'log', '--format=%s', '-3').split('\n')).toEqual(['Zählerstände als CSV', 'Erste Hälfte', 'init']);
+    expect(git(main, 'log', '-1', '--format=%an <%ae>')).toBe('T <t@example.com>');
+  });
+
+  test('pushed directly onto origin’s main, the same', async () => {
+    withSite({ ...generic, land: 'pr', direct: true, workspaces: 'clones' }, true);
+    const c = handedOver();
+    await workers.approve(c.id, { direct: true });
+    expect(state(c.id)).toBe('live');
+    expect(git(origin, 'log', '-1', '--format=%(trailers:key=Demo-Video)', 'main')).toBe(PAGE);
+  });
+
+  test('a card without a page lands as it was', async () => {
+    withSite({ ...generic, land: 'main', workspaces: 'clones' });
+    const c = handedOver('Ohne Seite');
+    await workers.approve(c.id);
+    expect(state(c.id)).toBe('live');
+    expect(git(main, 'log', '-1', '--format=%B')).toBe('Zählerstände als CSV\n\nDer Export liest alle Zähler.\n\nCo-Authored-By: Claude <noreply@anthropic.com>');
+  });
+
+  test('approved into a pull request, the demo goes out all the same', async () => {
+    withSite({ ...generic, land: 'pr', workspaces: 'clones' });
+    const c = handedOver();
+    await workers.approve(c.id);
+    expect(state(c.id)).toBe('inPr');
+    expect(approvals).toEqual([c.id]);
+  });
+
+  test('with nothing to land, too', async () => {
+    withSite({ ...generic, land: 'main', workspaces: 'clones' });
+    const c = handedOver('Nur eine Analyse', false);
+    await workers.approve(c.id);
+    expect(state(c.id)).toBe('done');
+    expect(approvals).toEqual([c.id]);
   });
 });
 

@@ -286,6 +286,12 @@ const de = {
     unshare: 'Nicht mehr teilen: Die Seite wird zurückgezogen.',
     unshareOne: 'Nicht mehr teilen: Die Seite geht ohne diese Demo wieder online.',
     againWithOthers: 'Erneut teilen, mit anderen geteilten Demos: Die Seite wird mit dem neuen Stand erzeugt.',
+    approved: (how: 'share' | 'replace' | 'add'): string =>
+      how === 'share'
+        ? 'Mit der Freigabe geteilt: Die Seite geht online.'
+        : how === 'add'
+          ? 'Mit der Freigabe zur Seite dazugenommen: Die Seite bekommt die neueste Demo als Ergänzung dazu.'
+          : 'Mit der Freigabe auf der Seite ersetzt: Die Seite zeigt jetzt die neueste Demo statt der geteilten.',
     notAgain: 'Nicht erneut geteilt',
     notLinked: 'Der Link zum Pull Request ist nicht auf die Seite gekommen',
     notShared: 'Nicht geteilt',
@@ -629,6 +635,12 @@ const en: Messages = {
     unshare: 'Stop sharing: the page is withdrawn.',
     unshareOne: 'Stop sharing: the page goes online again without this demo.',
     againWithOthers: 'Share again, with other shared demos: the page is made anew.',
+    approved: (how: 'share' | 'replace' | 'add'): string =>
+      how === 'share'
+        ? 'Shared with the approval: the page goes online.'
+        : how === 'add'
+          ? 'Added to the page with the approval: the page gets the latest demo as an addendum.'
+          : 'Replaced on the page with the approval: the page now shows the latest demo instead of the shared ones.',
     notAgain: 'Not shared again',
     notLinked: 'The link to the pull request did not get onto the page',
     notShared: 'Not shared',

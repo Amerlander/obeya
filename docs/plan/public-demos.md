@@ -118,7 +118,7 @@ automatically. W3 needs both: the English voice from W1 and the site from W2.
   the narrating agent. `scripts/scratch-obeya.ts` takes a stage `language`, else the demo
   language. Obeya's `.obeya/settings.json` gets `demo.language: "en"`, and its `app.run` text asks
   for stages in English. `docs/settings.md` and `docs/design.md` updated.
-- [ ] **W2:** Public demo site with publishing on approval. The Cloudflare Pages project
+- [x] **W2:** Public demo site with publishing on approval. The Cloudflare Pages project
   `obeya-demos` at `demos.obeya.si` as Obeya's `demo.site` (the owner does the Cloudflare login,
   the token and the CNAME at Hostinger). A generic `demo.site.publish: "approved"` with its field
   in the configuration dialog: on approval, before landing, Obeya shares the latest demo

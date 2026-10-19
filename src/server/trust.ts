@@ -14,7 +14,7 @@ export function commandsOf(read: Pick<SharedRead, 'settings' | 'claude'> | undef
   const { stop, keep } = read?.settings?.app ?? {};
   if (stop?.trim() || keep?.trim()) out.app = { ...(stop?.trim() ? { stop } : {}), ...(keep?.trim() ? { keep } : {}) };
   const site = read?.settings?.demo?.site;
-  if (site) out.site = { url: site.url, deploy: site.deploy, ...(site.env !== undefined ? { env: site.env } : {}), ...(site.headers ? { headers: site.headers } : {}) };
+  if (site) out.site = { url: site.url, deploy: site.deploy, ...(site.env !== undefined ? { env: site.env } : {}), ...(site.headers ? { headers: site.headers } : {}), ...(site.publish ? { publish: site.publish } : {}) };
   if (read?.claude && Object.keys(read.claude).length) out.claude = read.claude;
   return out;
 }

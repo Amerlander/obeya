@@ -19,6 +19,9 @@ The video shows Obeya at work in four and a half minutes: an idea is said into t
 agent builds it and records its demo, and the approval lands it on `main` ([watch on
 obeya.si](https://obeya.si/#film), with captions and chapters).
 
+See every feature in action: each change to Obeya comes with the demo its agent recorded, on
+[demos.obeya.si](https://demos.obeya.si).
+
 ## How it works
 
 Each card gets its own agent (Claude Code) in its own clone or worktree of your repository, on

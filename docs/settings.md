@@ -160,7 +160,8 @@ page for something to look at; the worker picks which, and runs the app for it a
     "deploy": "bunx wrangler@4 pages deploy {dir} --project-name demos --branch main --commit-dirty=true",
     "env": "sites/demos/deploy.env",
     "headers": { "CF-Access-Client-Id": "${CF_ID}", "CF-Access-Client-Secret": "${CF_SECRET}" },
-    "maxFile": 26214400
+    "maxFile": 26214400,
+    "publish": "approved"
   }
   ```
 
@@ -169,9 +170,20 @@ page for something to look at; the worker picks which, and runs the app for it a
   Obeya's home with `OBEYA_REPO` set to the repository's checkout (a program given as a path is
   found in the repository; a script runs with Obeya's Bun). Optional: `env`, a file of
   `KEY=value` lines relative to Obeya's home; `headers`, for reading the live site behind a login,
-  `${KEY}` from `env`; `maxFile`, the largest file the host takes in bytes (25 MiB without it).
-  The overview is in the repository's `language`. A `language` of the site, which named the
-  overview's language until 2026-10-19, is no longer read: `demo.language` names it now.
+  `${KEY}` from `env`; `maxFile`, the largest file the host takes in bytes (25 MiB without it);
+  `publish`, when a demo goes on the site: `"approved"` puts a card's latest demo there as you
+  approve its work, without it a demo goes there only when you click "Teilen". The overview is
+  in the repository's `language`. A `language` of the site, which named the overview's language
+  until 2026-10-19, is no longer read: `demo.language` names it now.
+
+  With `publish: "approved"`, approving a card shares its latest demo before its work lands: on a
+  page of its own, or, where the card has a page already, in place of the versions there, or
+  beside them where its worker said the demo only supplements the one before. It goes out like
+  any share; the landing does not wait for it, and a deploy that fails goes into the card's log
+  without holding up the landing. Where work lands on the main branch itself (`land: "main"`, or
+  approved "Direkt auf main"), the commit that lands for a card with a page names it in a trailer,
+  `Demo-Video: <url>` (`Demo-Page: <url>` for an HTML artifact); a pull request gets a line in its
+  description instead.
 
   Obeya keeps the site in `sites/<host and path of url>/site/` under its home, writes each page
   (in its demo's language) and the overview with its own templates, and after each share or
@@ -249,7 +261,8 @@ create a task that fixes it.
 ## Commands you trust
 
 Some fields are commands Obeya runs on your machine itself, or addresses it contacts without a
-click: `app.stop` and `app.keep`, and the demo site's `deploy`, `env`, `url` and `headers`. Beside
+click: `app.stop` and `app.keep`, and the demo site's `deploy`, `env`, `url`, `headers` and
+`publish` (which deploys without a click on "Teilen"). Beside
 them, the agents' sessions run what the repository's own Claude Code configuration names
 (everything under `.claude/` and `.mcp.json`: hooks, MCP servers, helpers) without asking. A repository cloned from someone else, or a change a colleague merged, can change
 them without you noticing, so Obeya holds each of them that is new on the default branch, or

@@ -540,6 +540,7 @@ export class CanvasRuntime {
         this.watchPrs(repo);
         this.sharing.prOpened(cardId);
       },
+      onApproval: (cardId) => this.sharing.approved(cardId),
       onMerged: () => void read.refresh(),
       onPrototype: (prototype, summary, demo) => this.prototypeReady(prototype, summary, demo),
       onPrototypeAnswer: (prototype, question, answer) => this.prototypeAnswered(prototype, question, answer),

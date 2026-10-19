@@ -26,6 +26,7 @@ const site = z
       .optional(),
     headers: z.record(z.string(), z.string()).optional(),
     maxFile: z.number().int().positive().optional(),
+    publish: z.enum(['approved']).optional(),
   })
   .strict();
 const demo = z.object({ site: site.optional(), language: z.enum(LANGUAGES).optional() }).strict();

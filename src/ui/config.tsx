@@ -1491,6 +1491,20 @@ function RepoSettingsBlock({
                   onChange={(e) => setSite({ maxFile: Number(e.target.value) > 0 ? Math.round(Number(e.target.value) * MIB) : undefined })}
                 />,
               )}
+              {/* not a label: a click on its words would press the first button */}
+              <div className="wide">
+                <span className="hint">{c.sitePublish}</span>
+                <div className="seg" role="radiogroup" aria-label={c.sitePublish}>
+                  {(['click', 'approved'] as const).map((x) => {
+                    const on = (site.publish ?? 'click') === x;
+                    return (
+                      <button key={x} type="button" role="radio" aria-checked={on} className={on ? 'on' : undefined} onClick={() => setSite({ publish: x === 'approved' ? x : undefined })}>
+                        {c.sitePublishes[x]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>,
             c.siteHint,
           )}

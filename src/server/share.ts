@@ -90,6 +90,8 @@ export interface ShareTarget {
    * deployment that came in between.
    */
   audit(shared: string[]): Promise<{ gone: Gone[]; missing: string[] }>;
+  /** Where the page of `slug` is, before it is published. */
+  pageUrl(slug: string): string;
   /** Deploys again what this machine has, for the pages `audit` found missing. */
   repair(shared: string[], log?: (text: string) => void): Promise<{ why?: string; said: string; gone?: Gone[] }>;
 }
@@ -154,6 +156,50 @@ export class Sharing {
     const said = !s?.url ? t.share : on ? t.again : add ? t.added : t.newDemo;
     this.o.board.log(cardId, 'state', 'owner', said);
     void serial(() => this.publish(cardId));
+  }
+
+  /**
+   * The owner approved the card's work. Where its repository's site publishes on approval
+   * (`demo.site.publish`), its latest demo goes on its page unless it is there: beside the versions
+   * there where its worker said it only supplements them, else in their place. It goes out through
+   * the queue like any share, so the landing does not wait for it; a failure goes into the card's
+   * log. Returns the trailer for the commit that lands, for a card with a page (`Demo-Video: <url>`,
+   * `Demo-Page:` for an artifact): its URL is known before the deploy is done.
+   */
+  approved(cardId: string): string | null {
+    try {
+      return this.publishApproved(cardId);
+    } catch (e) {
+      // the work lands all the same
+      this.o.board.log(cardId, 'error', 'obeya', `${this.o.board.t.share.notShared}: ${messageOf(e)}`);
+      return null;
+    }
+  }
+
+  private publishApproved(cardId: string): string | null {
+    const card = this.find(cardId);
+    if (!card || card.prototypeOf) return null;
+    const target = this.target(card);
+    const demo = this.demo(cardId);
+    const s = this.stored(cardId);
+    if (target && demo && this.o.sourceFor(card)?.site.publish === 'approved' && !s?.state) {
+      const now: DemoRef[] = s?.url ? sharedDemos(s) : [];
+      const ref = refOf(demo);
+      if (!now.some((d) => sameDemo(d, ref))) {
+        const add = now.length > 0 && demo.follows === 'supplements';
+        this.set(cardId, { ...(s ? atRest(s) : { slug: slugOf(card) }), state: 'publishing', next: (add ? inOrder([...now, ref]) : [ref]).map(refOf) });
+        this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.share.approved(!now.length ? 'share' : add ? 'add' : 'replace'));
+        void serial(() => this.publish(cardId));
+      }
+    }
+    // the page as it is about to be, or as it is
+    const page = this.stored(cardId);
+    if (!page || page.state === 'withdrawing') return null;
+    const first = page.state === 'publishing' && page.next ? page.next[0] : page.url ? sharedDemos(page)[0] : undefined;
+    const url = target ? target.pageUrl(page.slug) : page.url;
+    if (!first || !url) return null;
+    const kind = this.cardDemo(cardId, first)?.kind ?? sharedDemos(page).find((d) => sameDemo(d, first))?.shown.kind;
+    return `${kind === 'html' ? 'Demo-Page' : 'Demo-Video'}: ${url}`;
   }
 
   /**

@@ -1959,7 +1959,9 @@ read from its `hosts.yml` (`ghHosts` in `src/server/repo.ts`, where gh keeps it 
 rather than asked of `gh auth status`, which checks each login over the network. A repository on
 another forge (GitLab, a server of its own) lands on its local main and pushes nothing.
 
-Commits that conflict one by one but not as a whole land squashed into one commit. Uncommitted work
+Commits that conflict one by one but not as a whole land squashed into one commit. The last commit
+that lands for a card with a shared demo names its page in a trailer (`Demo-Video: <url>`, see
+Publishing on approval). Uncommitted work
 or a real conflict sends the card back to its worker with the approval kept: its next handover (no
 new demo needed) lands on its own.
 
@@ -3533,7 +3535,8 @@ Where it goes depends on the repository's demo site: the static site its setting
 complete (`demo.site`, see Static sites; `siteOf` in `src/server/canvas.ts`). With a site, the demo
 is published on a page there. "Teilen" publishes right away, without a hold to take it back: "Nicht mehr
 teilen" withdraws the page just as easily. Once the page is up, the card shows the link (open, copy)
-and "Nicht mehr teilen". Nothing is replaced on its own.
+and "Nicht mehr teilen". Nothing is replaced on its own, unless the site publishes on approval (see
+Publishing on approval).
 
 #### Several versions on one page
 
@@ -3646,6 +3649,40 @@ the link meanwhile; a PR reported while the page is going out gets a second roun
 failure to read or edit the description goes into the card's log; the page stays shared. Withdrawing
 the page leaves the line in the description.
 
+#### Publishing on approval
+
+A site may publish every approved demo by itself (`demo.site.publish: "approved"`; „Auf die Site
+kommt eine Demo: beim Klick auf „Teilen“ / mit der Freigabe“ in Konfiguration): Obeya's own
+repository does, so its feature demos are public on `demos.obeya.si` without anyone clicking
+"Teilen" for each. Without it a demo goes out only on that click, as before.
+
+On approval, before the work lands (`Sharing.approved`, called by the workers through
+`onApproval`), the card's latest demo goes on its page unless it is there already, as the owner's
+click would put it: on a new page; on a page with versions, beside them where its worker said it
+only supplements the one before (`follows: supplements`), else in their place, as „Auf der Seite
+ersetzen“ comes first on the card. A line in the card's log says which („Mit der Freigabe
+geteilt“). It goes through the queue like any share, so the landing does not wait for the deploy;
+a deploy that fails goes into the card's log as an error, the card lands all the same and keeps
+"Teilen" to try again. The same happens for an approval of work that goes out as a pull request
+(the page gets the PR's link once both are there, see The page and the pull request), for work that
+changed nothing (closed as done), and for a held approval when the worker's next handover lands it
+(a newer demo handed over meanwhile is the one that goes out). Prototypes are not shared.
+
+Where a repository lands on `main` directly (`land: main`, or "Direkt auf main"), there is no pull
+request to link the page from, so the commit that lands for a card with a page names it in a git
+trailer: `Demo-Video: <url>` (`Demo-Page: <url>` for an artifact, by the page's first version), in
+English as git trailers are, beside the trailers the message ends with (`Co-Authored-By`), else in
+a paragraph of its own (`addTrailer` in `src/server/workspaces.ts`). A card with a page counts
+whether the page went out on approval or by an earlier click. The page's URL comes from its slug,
+fixed when the card was first shared, so the trailer is written before the deploy is done
+(`ShareTarget.pageUrl`). Obeya amends the last commit of the rebased branch before it lands
+(`--no-verify`: its hooks ran when the worker made it; the author stays), and leaves out what is
+there already, since a landing that went back to the worker comes round again. A commit that
+cannot be amended lands without the trailer. A page withdrawn later leaves the trailer pointing
+nowhere, as it leaves the line in a PR's description. A publish that succeeds for a landing that
+then fails leaves a public page for work not yet on `main`; that was accepted, since the next
+handover lands it.
+
 #### Export without a site
 
 Without a site, "Teilen" exports the same page as a file to pass on (`Sharing.export`, `GET
@@ -3690,7 +3727,8 @@ page is at `url/<slug>/`), the `deploy` command line (`{dir}` stands for the sit
 (credentials, never in git; a path outside the home is refused, and `${KEY}` comes from that file
 alone, not Obeya's environment, as settings from the repository could otherwise send any secret of
 the machine to a URL of their choosing), `headers` for reading the live site behind a login (`${KEY}` from
-`env`) and the largest file the host takes (`maxFile`, 25 MiB without it). The overview is in the
+`env`), the largest file the host takes (`maxFile`, 25 MiB without it) and whether each approved
+demo goes on the site by itself (`publish`, see Publishing on approval). The overview is in the
 repository's `demo.language`, else the demo settings' narration language: until 2026-10-19 the site
 had a `language` of its own, which two settings for one need made redundant; a file that still has
 it reads without it, the site kept, and the configuration names it as a problem of the repository's
@@ -4200,8 +4238,9 @@ other canvases run (`startCanvases`).
 
 Some of what a repository brings Obeya runs on this machine itself, outside Claude Code's
 permission checks, or contacts without a click: `app.stop` and `app.keep` (run when a card is
-parked), `demo.site`'s `deploy` with its `env` file, and its `url` and `headers` (read whenever the
-owner comes back to the page, `Sharing.checkVersions`). The agents' sessions read the repository's
+parked), `demo.site`'s `deploy` with its `env` file, its `url` and `headers` (read whenever the
+owner comes back to the page, `Sharing.checkVersions`), and its `publish` (which deploys with each
+approval, without a click on "Teilen"). The agents' sessions read the repository's
 own Claude Code configuration (everything under `.claude/` and `.mcp.json`, `CLAUDE_PATHS`: the
 hooks, MCP servers and helpers of its settings, and the hooks and MCP servers its skills, commands
 and subagents may declare) and run what it names without asking, read-only agents included: tried on

@@ -104,6 +104,7 @@ function tidySite(s: DemoSite | undefined): DemoSite | undefined {
     ...(s.env?.trim() ? { env: s.env.trim() } : {}),
     ...(headers.length ? { headers: Object.fromEntries(headers.map(([k, v]) => [k.trim(), v.trim()])) } : {}),
     ...(s.maxFile ? { maxFile: s.maxFile } : {}),
+    ...(s.publish ? { publish: s.publish } : {}),
   };
   return out.title || out.url || out.deploy || Object.keys(out).length > 3 ? out : undefined;
 }
