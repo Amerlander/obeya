@@ -420,6 +420,10 @@ describe('an idea', () => {
     expect(item(i.id).body).toContain(`ein Plan-Doc als \`${file}\`, in einem Ordner dieses Rechners außerhalb des Repositorys,`);
     expect(item(i.id).body).not.toContain('Verweis darauf');
     expect(JSON.parse(board().row(i.id).plan_docs!)).toEqual([file]);
+    // another card of the same title, planned before that doc is written, gets a name of its own
+    const twin = board().create({ title: 'Export für Vermieter', x: 0, y: 400 });
+    canvas.act(twin.id, { action: 'planDoc' });
+    expect(item(twin.id).body).toContain('export-fur-vermieter-3.md');
     await settle();
     const worker = runtime.sessions.find((s) => s.spec.tools.some((t) => t.name === 'ready_for_review'))!;
     // the folder is the worker's to write in, as its workspace

@@ -47,7 +47,8 @@ export function onGitHub(url: string, hosts: () => string[] = ghHosts): boolean 
 export function outsidePlanDir(dir: string, home: string = homedir()): string | null {
   const path = dir === '~' ? home : dir.startsWith('~/') || dir.startsWith('~\\') ? join(home, dir.slice(2)) : dir;
   // forward slashes: a plan reference `C:\…` would read as one of the repository `C`
-  return isAbsolute(path) ? path.replaceAll('\\', '/').replace(/(.)\/+$/, '$1') : null;
+  // without a slash at the end, but a root keeps its own (`/`, `C:/`)
+  return isAbsolute(path) ? path.replaceAll('\\', '/').replace(/([^:/])\/+$/, '$1') : null;
 }
 
 /** The plan directory of the repository read at `repoPath`, and the directory its watch reaches up to. */

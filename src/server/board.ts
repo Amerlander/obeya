@@ -1822,12 +1822,20 @@ export class Board {
 
 /**
  * The repository a plan reference belongs to: `<repo>:<path>` for the canvas's other repositories,
- * a bare path for its home repository.
+ * a bare path for its home repository. The path is in the repository, or an absolute one of a plan
+ * folder outside it (`/…`, or `C:/…` on Windows, which is no repository `C`).
  */
 export function repoOfRef(ref: string, home: string): string {
-  const m = /^([\w.-]+):(?!\/)/.exec(ref);
+  const m = REPO_PREFIX.exec(ref);
   return m ? m[1]! : home;
 }
+
+/** A plan reference's path, without the repository before it. */
+export function pathOfRef(ref: string): string {
+  return ref.replace(REPO_PREFIX, '');
+}
+
+const REPO_PREFIX = /^(?![A-Za-z]:\/)([\w.-]+):/;
 
 /** Visible items: projects first, their workstreams in doc order, then manual cards. */
 export function toItems(rows: CardRow[], docs: PlanDoc[], home: string): Item[] {

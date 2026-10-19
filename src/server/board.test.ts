@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { boundsOf, sizeOf } from '../core/layout';
 import type { PlanDoc } from '../core/plan-doc';
-import { BadRequest, Board, type PlanRead } from './board';
+import { BadRequest, Board, pathOfRef, type PlanRead, repoOfRef } from './board';
 import { Store } from './db';
 
 const ws = (key: string, done = false) => ({ key, label: key, title: `Title ${key}`, body: `Body ${key}`, done, inReview: false });
@@ -656,5 +656,19 @@ describe('a demo on the card', () => {
     expect(item.demo).toEqual({ kind: 'video', chapters: [[0, 'Danach']], handover: 2 });
     expect(item.demos).toEqual([{ kind: 'video', chapters: [[0, 'Vorher']], handover: 1, noPoster: true, n: 0 }]);
     for (const d of [bare, framed]) rmSync(d, { recursive: true, force: true });
+  });
+});
+
+describe('a plan reference', () => {
+  test('names its repository before the path, unless it is the home one; an absolute path or a Windows drive is no repository', () => {
+    const refs = ['docs/plan/a.md', 'api:docs/plan/a.md', '/home/jo/plans/a.md', 'api:/home/jo/plans/a.md', 'C:/plans/a.md', 'api:C:/plans/a.md'];
+    expect(refs.map((r) => [repoOfRef(r, 'home'), pathOfRef(r)])).toEqual([
+      ['home', 'docs/plan/a.md'],
+      ['api', 'docs/plan/a.md'],
+      ['home', '/home/jo/plans/a.md'],
+      ['api', '/home/jo/plans/a.md'],
+      ['home', 'C:/plans/a.md'],
+      ['api', 'C:/plans/a.md'],
+    ]);
   });
 });

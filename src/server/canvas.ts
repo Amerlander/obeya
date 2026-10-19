@@ -14,7 +14,7 @@ import type { CardDiff } from '../core/diff';
 import type { Language } from '../core/locale';
 import { AGENT_DEFAULTS, agentListens, type AgentRole, awaited, type Awaited, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, needsYou, snoozable, type PendingRestart, plannableAsProject, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, type SharedSettings, type SpotInput, type TrustGroup } from '../core/types';
 import { inQueue } from '../core/queue';
-import { BadRequest, Board, replyNote } from './board';
+import { BadRequest, Board, pathOfRef, replyNote } from './board';
 import { type Command, Commander } from './commands';
 import type { Config } from './config';
 import type { Store } from './db';
@@ -1497,8 +1497,10 @@ export class CanvasRuntime {
     const dir = outsidePlanDir(r.adapter.planDocs.dir);
     if (!dir) return;
     const name = slug(card.title).slice(0, 60).replace(/^[.-]+|[.-]+$/g, '') || 'plan';
+    // nor one another card was given and has not written yet
+    const given = new Set(this.deps.store.withPlanDocs(this.id).flatMap((row) => (JSON.parse(row.plan_docs!) as string[]).map(pathOfRef)));
     let file = `${dir}/${name}.md`;
-    for (let n = 2; existsSync(file); n++) file = `${dir}/${name}-${n}.md`;
+    for (let n = 2; existsSync(file) || given.has(file); n++) file = `${dir}/${name}-${n}.md`;
     const ref = r.ref.id === this.repos[0]!.ref.id ? file : `${r.ref.id}:${file}`;
     return { file, row: { plan_docs: JSON.stringify([ref]) } };
   }

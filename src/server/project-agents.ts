@@ -5,7 +5,7 @@ import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import type { Item } from '../core/types';
 import { oneAtATime } from '../core/one-at-a-time';
 import { decisionLog, INFORM_RULES, inform, type OwnerAnswer } from './advisor';
-import type { Board } from './board';
+import { type Board, pathOfRef } from './board';
 import { outsidePlanDir } from './repo';
 import type { AgentRuntime } from './runtime';
 
@@ -47,7 +47,7 @@ export class ProjectAgents {
         ...(dir ? { dir } : {}),
         ...(signal ? { signal } : {}),
         ...(this.permissionMode ? { permissionMode: this.permissionMode } : {}),
-        system: `You are the project agent of the project "${project.title}", directed through Obeya. Its plan doc is ${project.plan?.file ?? '(none)'}${project.plan && outsidePlanDir(project.plan.file.replace(/^[\w.-]+:(?!\/)/, '')) ? '' : ' in this repository'}; you know it and the history of its workstreams.\n\n${INFORM_RULES}`,
+        system: `You are the project agent of the project "${project.title}", directed through Obeya. Its plan doc is ${project.plan?.file ?? '(none)'}${project.plan && outsidePlanDir(pathOfRef(project.plan.file)) ? '' : ' in this repository'}; you know it and the history of its workstreams.\n\n${INFORM_RULES}`,
         message: [message, `Decisions taken in this project so far:\n${decisionLog(this.board.decisions(project.id))}`, this.preferences()].filter(Boolean).join('\n\n'),
         language: this.board.language(),
       }),
