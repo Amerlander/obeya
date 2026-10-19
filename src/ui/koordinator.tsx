@@ -207,7 +207,8 @@ function Conversation({ talk, fresh, items, onOpen, draft }: { talk: Talk[]; fre
             ) : (
               <Msg
                 by="koordinator"
-                className={x.undone ? 'undone' : undefined}
+                // what waited unread: the reply, unless an answer to look up follows it
+                className={x.undone ? 'undone' : fresh.includes(x.id) && !x.question ? 'fresh' : undefined}
                 who={t.author.koordinator}
                 at={x.at}
                 ev={talkEv({ talk: x.id, part: 'reply' })}
