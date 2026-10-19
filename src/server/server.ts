@@ -813,6 +813,8 @@ export function serve(
         DELETE: on((c) => c.sharing.dismissResharing()),
       },
       '/api/c/:canvas/reshare/stop': { POST: on((c) => c.sharing.stopResharing()) },
+      // the card's latest demo was narrated anew in its directory (the demo skill's `--revoice`)
+      '/api/c/:canvas/cards/:id/demo-rebuilt': { POST: on((c, req) => c.sharing.rebuilt(req.params.id!)) },
       // the owner has the Koordinator's sheet in view: the answers waiting there are read
       '/api/c/:canvas/talk/read': { POST: on((c) => c.board.readTalk()) },
       // the owner no longer wants the step the Koordinator waits on a card for („Nicht mehr warten“)

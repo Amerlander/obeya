@@ -862,6 +862,44 @@ describe('the link in the pull request', () => {
   });
 });
 
+describe('a demo narrated anew in its directory', () => {
+  /** What `--revoice en` leaves in the demo's directory: the chapters and captions of the English take, the report page in English. */
+  function revoiced(d: string) {
+    writeFileSync(join(d, 'chapters.vtt'), 'WEBVTT\n\n00:00:00.002 --> 00:00:12.000\nBefore\n\n00:00:12.000 --> 00:00:20.000\nNow\n');
+    writeFileSync(join(d, 'captions.vtt'), 'WEBVTT\n\n00:00:00.352 --> 00:00:11.400\nUntil now …\n\n00:00:12.352 --> 00:00:19.000\nNow …\n');
+    writeFileSync(join(d, 'index.html'), '<!doctype html>\n<html lang="en">\n<head><title>Report</title></head></html>');
+  }
+
+  test('the card shows it with its new chapters, and its page is written again in its language when shared', async () => {
+    const c = card('Zählerstände exportieren', { chapters: [[0, 'Vorher'], [9.5, 'Jetzt']] });
+    const d = JSON.parse(board.row(c.id).demo!).dir as string;
+    revoiced(d);
+    sharing.rebuilt(c.id);
+    const demo = JSON.parse(board.row(c.id).demo!);
+    expect(demo.chapters).toEqual([[0, 'Before'], [12, 'Now']]);
+    // the worker's page text spoke of the demo as it was
+    expect(demo.page).toBeUndefined();
+    expect(log(c.id).at(-1)).toBe('Das Demo ist in seinem Verzeichnis neu vertont, auf Englisch: Die Aufgabe zeigt es mit seinen neuen Kapiteln, und der Text seiner Seite wird beim Teilen neu geschrieben.');
+
+    sharing.share(c.id);
+    await until(() => runtime.sessions.length === 1);
+    expect(runtime.last.spec.system).toContain('in English');
+    runtime.last.call('page', { title: 'Meter readings as CSV', text: 'Landlords download meter readings as a CSV file.' });
+    runtime.last.emit({ type: 'idle' });
+    await until(() => share(c.id)?.state === 'shared');
+    expect(meta(c.id)).toMatchObject({ title: 'Meter readings as CSV', chapters: [[0, 'Before'], [12, 'Now']], language: 'en' });
+  });
+
+  test('a demo on a shared page is not changed under it', async () => {
+    const c = card();
+    sharing.share(c.id);
+    await until(() => share(c.id)?.state === 'shared');
+    revoiced(JSON.parse(board.row(c.id).demo!).dir);
+    expect(() => sharing.rebuilt(c.id)).toThrow('stop sharing it first');
+    expect(JSON.parse(board.row(c.id).demo!).chapters).toEqual([[0, 'Vorher']]);
+  });
+});
+
 describe('exporting a demo, where the repository has no demo site', () => {
   /** A demo directory as the demo skill leaves it. */
   function files(c: { id: string }, video = 'MP4DATA') {

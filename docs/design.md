@@ -3391,6 +3391,42 @@ enough to share; text stays legible but flat colours go grainy on a large screen
 `sharp` in its spec: the page at twice the pixels, as on a Retina screen, screencast frames at JPEG
 quality 100 and CRF 18, so it looks as the app does live (the hero video, 2026-10-15).
 
+#### Re-voicing
+
+A demo that kept its frames (`.work/` with `frames/` and `frames.txt`) can be narrated anew in another
+language without recording it again (`node demo.ts --revoice en`, or `node lib/revoice.ts <dir> en`
+for a demo whose script no longer runs): Obeya's past demos went public in English that way while
+their screen stayed German (2026-10-19). It reads what the render left in the directory, not the
+script, so it works on a demo of any director version: the narration from `.work/jobs.json`, the
+chapter titles and scene starts from `chapters.vtt`, where each clip ran from `captions.vtt`, the
+report from `index.html`, `sharp` from the encoder settings x264 notes in `demo.mp4` (CRF 18).
+
+1. The first run writes the words (`.work/revoice/source.json`: title, per scene its chapter title
+   and narration, the report) and asks the agent running the skill for them in the language
+   (`.work/revoice/en.json`, same shape). The agent, not a script, translates: it reads the labels
+   from the stills, since the screen keeps its language and the narration quotes each label as it
+   appears with its meaning after it: „Teilen“ (Share). A translation that drops a scene, an audio tag
+   or an item of the report is refused with what is missing.
+2. The clips are synthesised in the voice for that language (the demo settings' clone of
+   `references.en`, say).
+3. Each scene's narrated stretch (its caption cue) plays as long as its new clip: the frames in it are
+   held longer or shorter by the clip's ratio, so an action timed with `untilSpoken` lands on the same
+   word; the lead before the words, the gap after them, what follows them and the cuts' flashes (a
+   `skip` belongs after the words) keep their length and move along. A frame across a cue's edge
+   takes a share of both. A scene whose words change length by more than a third is flagged for a
+   look at its stills.
+4. `demo.mp4` (encoded as recorded: CRF 30, or 18 when sharp), `captions.vtt`, `chapters.vtt`, the
+   stills, the poster and `index.html` are rebuilt in place by the same code as a render
+   (`assemble` in the director). The demo as recorded stays in `.work/revoice/original/`, which every
+   later run reads from, so a corrected translation re-voices from the original again.
+
+The card then shows it: `POST …/cards/<id>/demo-rebuilt` (`Sharing.rebuilt`) reads the chapters
+again from `chapters.vtt` and drops the page text the worker wrote for the old words, so the share
+writes it again in the language the report page names. A demo on a shared page is not changed under
+the page: it is withdrawn first. `scripts/revoice-demos.ts list` names the latest demo videos of a
+canvas's most recently approved cards that kept their frames and where each stands; `publish` has
+Obeya re-read and share them through its queue.
+
 #### Frames on time
 
 Frames go on the video by the time they were painted, not by when the screencast handed them over:

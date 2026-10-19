@@ -20,6 +20,7 @@ import type { DemoSite } from '../adapters/types';
 import { expandHome, readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
 import { type Gone, siteBase, siteMissing, siteTarget } from './site';
 import { artifactCopy } from './artifact-copy';
+import { rereadChapters } from './demo';
 import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, type DemoPageParts, day, demoFile, demoPageHtml, ON_DISK, PAGE_WORDS, type PageLanguage } from './demo-page';
 import { type Forge, parsePrUrl } from './forge';
 import type { AgentRuntime } from './runtime';
@@ -233,6 +234,24 @@ export class Sharing {
     this.set(cardId, { ...s, state: 'withdrawing' });
     this.o.board.log(cardId, 'state', 'owner', t.unshare);
     void serial(() => this.withdraw(cardId));
+  }
+
+  /**
+   * The card's latest demo video was made anew in its directory, narrated in another language
+   * (the demo skill's `--revoice`): the card shows it with its chapters read again, and its page's
+   * text, written for what it said before, goes, to be written again in its language when it is
+   * shared. A demo on a page is not changed under the page: it is withdrawn first.
+   */
+  rebuilt(cardId: string) {
+    const demo = this.demo(cardId);
+    if (!demo || demo.kind === 'html') throw new BadRequest('noShare', 'the card has no demo video');
+    const s = this.stored(cardId);
+    if (s?.state || (s?.url && sharedDemos(s).some((d) => sameDemo(d, refOf(demo))))) throw new BadRequest('shareBusy', 'the demo is on a shared page; stop sharing it first');
+    const chapters = rereadChapters(demo.dir);
+    if (typeof chapters === 'string') throw new BadRequest('invalid', chapters);
+    const { page: _, ...rest } = demo;
+    this.o.board.work(cardId, { demo: JSON.stringify({ ...rest, chapters }) });
+    this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.share.rebuilt(this.languageOf(demo.dir, this.card(cardId))));
   }
 
   /**

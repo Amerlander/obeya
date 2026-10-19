@@ -73,11 +73,20 @@ export function readChapters(dir: string, titles: string[]): [number, string][] 
   return titles.map((t, i) => [Math.max(0, Math.round((starts[i]! - NARRATION_LEAD) * 100) / 100), t]);
 }
 
-/** The cues of a demo's captions: one per scene, its narration. */
-function cues(dir: string): { start: number; end: number; text: string }[] {
+/**
+ * The chapter marks of a video demo made anew in its directory (re-voiced, say), titles and all,
+ * from its `chapters.vtt` (one cue per scene, its title). Returns what is wrong instead.
+ */
+export function rereadChapters(dir: string): [number, string][] | string {
+  if (!existsSync(join(dir, 'chapters.vtt'))) return `chapters.vtt is missing in ${dir}`;
+  return readChapters(dir, cues(dir, 'chapters.vtt').map((c) => c.text));
+}
+
+/** The cues of a demo's captions (one per scene, its narration), or of another WebVTT file of it. */
+function cues(dir: string, file = 'captions.vtt'): { start: number; end: number; text: string }[] {
   let vtt: string;
   try {
-    vtt = readFileSync(join(dir, 'captions.vtt'), 'utf8');
+    vtt = readFileSync(join(dir, file), 'utf8');
   } catch {
     return [];
   }

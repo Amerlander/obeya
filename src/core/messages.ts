@@ -332,6 +332,8 @@ const de = {
     notRestored: (why: string) => `Die Seite fehlt auf der Site (der Deploy eines anderen Rechners hat sie offline genommen) und ist nicht wieder deployt: ${why}`,
     exported: (zip: boolean, name: string) => `Exportiert als ${zip ? 'ZIP' : 'HTML-Datei'}: ${name}`,
     /** The line in a pull request's description that links its demo. */
+    rebuilt: (language: 'de' | 'en'): string =>
+      `Das Demo ist in seinem Verzeichnis neu vertont, auf ${language === 'en' ? 'Englisch' : 'Deutsch'}: Die Aufgabe zeigt es mit seinen neuen Kapiteln, und der Text seiner Seite wird beim Teilen neu geschrieben.`,
     prLine: (html: boolean): string => (html ? 'Demo-Seite' : 'Demo-Video'),
   },
   /** The first card on the canvas the setup assistant created: what to try. */
@@ -678,6 +680,8 @@ const en: Messages = {
     restored: 'The page was missing on the site: another machine’s deploy had taken it offline. Obeya deployed it again.',
     notRestored: (why: string) => `The page is missing on the site (another machine’s deploy took it offline) and was not deployed again: ${why}`,
     exported: (zip: boolean, name: string) => `Exported as ${zip ? 'ZIP' : 'HTML file'}: ${name}`,
+    rebuilt: (language: 'de' | 'en') =>
+      `The demo was narrated anew in its directory, in ${language === 'en' ? 'English' : 'German'}: the task shows it with its new chapters, and its page’s text is written again when it is shared.`,
     prLine: (html: boolean) => (html ? 'Demo page' : 'Demo video'),
   },
   welcome: {

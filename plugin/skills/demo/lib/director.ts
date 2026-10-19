@@ -4,13 +4,14 @@
 //
 // A demo file default-exports nothing; it calls `runDemo(spec, import.meta.dirname)` and is run
 // with plain `node demo.ts`. Everything lands in the demo file's directory. `node demo.ts --dry`
-// only plays the scenes against the app, to find a scene that fails before a render does.
+// only plays the scenes against the app, to find a scene that fails before a render does;
+// `node demo.ts --revoice en` narrates the rendered demo anew in another language (`revoice.ts`).
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Browser, BrowserContext, Locator, Page } from 'playwright-core';
 import { launchChromium, SILENT_SPEECH } from '../../../lib/chromium.ts';
-import { demoSettingsHere, type NarrationLanguage, withVoice } from './settings.ts';
+import { type DemoSettings, demoSettingsHere, type NarrationLanguage, withVoice } from './settings.ts';
 import { checkSetup, describeSetup } from './setup.ts';
 import { CLOCK, type Cut, type Frame, frameDurations, laterLabel, mmss, onPaintTime, readClock, untagged, videoTime } from './timeline.ts';
 import { ttsArgs, voiceSpec } from './voices.ts';
@@ -78,7 +79,7 @@ const SETTINGS = withVoice(SAVED, process.env.DEMO_VOICE);
 const LANGUAGE: NarrationLanguage = SETTINGS.language;
 const LIB = import.meta.dirname;
 
-interface Clip {
+export interface Clip {
   id: string;
   file: string;
   seconds: number;
@@ -401,7 +402,7 @@ function underNode() {
  * One render per demo at a time: two renders of the same demo (one left running in the background)
  * write the same frames and, through the demo's `login`, reset each other's app.
  */
-function holdRenderLock(work: string) {
+export function holdRenderLock(work: string) {
   const file = path.join(work, 'render.pid');
   const other = fs.existsSync(file) ? Number(fs.readFileSync(file, 'utf8')) : 0;
   if (other && other !== process.pid && alive(other))
@@ -421,21 +422,22 @@ function alive(pid: number) {
   }
 }
 
-function run(cmd: string, args: string[], opts: { cwd?: string } = {}) {
+export function run(cmd: string, args: string[], opts: { cwd?: string } = {}) {
   const r = spawnSync(cmd, args, { cwd: opts.cwd, encoding: 'utf8', maxBuffer: 1 << 26 });
   if (r.status !== 0) throw new Error(`${cmd} failed (${r.status}):\n${r.stderr?.slice(-3000)}`);
   return r.stdout;
 }
 
-function synthesize(scenes: Scene[], dir: string): Clip[] {
-  const jobs = scenes.map((s, i) => ({ id: `s${i + 1}`, text: s.say }));
+/** The scenes' narration (`says`), one clip each, in the voice and language of `settings`; cached in `dir` by voice and text. */
+export function synthesize(says: string[], dir: string, settings: DemoSettings = SETTINGS): Clip[] {
+  const jobs = says.map((say, i) => ({ id: `s${i + 1}`, text: say }));
   const jobsFile = path.join(dir, 'jobs.json');
   fs.writeFileSync(jobsFile, JSON.stringify(jobs));
-  const spec = voiceSpec(SETTINGS);
+  const spec = voiceSpec(settings);
   const specFile = path.join(dir, 'voice.json');
   fs.writeFileSync(specFile, JSON.stringify(spec));
-  console.log(`narration: ${jobs.length} clips, voice ${SETTINGS.voice}, language ${LANGUAGE}`);
-  const args = [...ttsArgs(spec), specFile, LANGUAGE, jobsFile, dir];
+  console.log(`narration: ${jobs.length} clips, voice ${settings.voice}, language ${settings.language}`);
+  const args = [...ttsArgs(spec), specFile, settings.language, jobsFile, dir];
   // tts.py's progress (the voice loading, waiting for the lock) shows as it happens.
   const r = spawnSync('uv', args, { stdio: ['ignore', 'inherit', 'inherit'] });
   if (r.status !== 0) throw new Error(`tts.py failed (${r.error?.message ?? r.status}); its output is above`);
@@ -655,6 +657,8 @@ function vttTime(s: number) {
 export async function runDemo(spec: DemoSpec, demoDir: string) {
   underNode();
   stayAwake();
+  const revoicing = process.argv.indexOf('--revoice');
+  if (revoicing >= 0) return (await import('./revoice.ts')).revoice(demoDir, process.argv[revoicing + 1]);
   const override = process.env.DEMO_VOICE;
   const voiceName = override?.endsWith('.wav') ? path.basename(override, '.wav') : override;
   // The voice of the settings renders next to the script; another one gets its own subdirectory,
@@ -672,7 +676,7 @@ export async function runDemo(spec: DemoSpec, demoDir: string) {
   fs.rmSync(framesDir, { recursive: true, force: true });
   fs.mkdirSync(framesDir, { recursive: true });
 
-  const clips = synthesize(spec.scenes, work);
+  const clips = synthesize(spec.scenes.map((s) => s.say), work);
   if (process.argv.includes('--narration')) {
     console.log(`narration only: ${clips.length} clips cached, ${clips.reduce((t, c) => t + c.seconds, 0).toFixed(0)} s spoken`);
     return;
@@ -683,7 +687,7 @@ export async function runDemo(spec: DemoSpec, demoDir: string) {
   const cast = await startScreencast(ctx, page, framesDir, viewport, scale);
   await d.wait(500);
   const t0 = now();
-  const marks: { title: string; start: number; speechStart: number; speechEnd: number }[] = [];
+  const marks: Mark[] = [];
   for (const [i, scene] of spec.scenes.entries()) {
     const clip = clips[i]!;
     let start = 0;
@@ -718,6 +722,50 @@ export async function runDemo(spec: DemoSpec, demoDir: string) {
   const cut = cast.frames.find((f) => Math.round(f.width) !== viewport.width || Math.round(f.height) !== viewport.height);
   if (cut) console.warn(`screencast frames are ${Math.round(cut.width)}×${Math.round(cut.height)}, not ${viewport.width}×${viewport.height}: part of the page is missing`);
 
+  const list = path.join(work, 'frames.txt');
+  frameList(cast.frames, t0, tEnd, d.cuts, list);
+  assemble({
+    outDir, work, list, clips, marks, total, viewport, sharp: !!spec.sharp,
+    title: spec.title, says: spec.scenes.map((s) => s.say), report: spec.report, language: LANGUAGE,
+  });
+  if (d.cuts.length) console.log(`cut ${d.cuts.length / 2}× (${Math.round(d.cuts.reduce((s, c) => s + c.to - c.from, 0))} s of waiting)`);
+}
+
+/** A scene's place in the video: where it starts, and where its narration does and ends. */
+export interface Mark {
+  title: string;
+  start: number;
+  speechStart: number;
+  speechEnd: number;
+}
+
+/** What a take is made into: its frames (`list`, an ffconcat list), its clips and where each scene and clip sits. */
+export interface Take {
+  /** Where `demo.mp4`, the captions, chapters, stills and the report page go. */
+  outDir: string;
+  /** Where the narration track is mixed. */
+  work: string;
+  list: string;
+  clips: Clip[];
+  marks: Mark[];
+  /** The video's length, in seconds. */
+  total: number;
+  viewport: { width: number; height: number };
+  /** Twice the pixels and gentle compression (`DemoSpec.sharp`). */
+  sharp: boolean;
+  title: string;
+  /** Each scene's narration, for the captions. */
+  says: string[];
+  report: Report;
+  language: NarrationLanguage;
+}
+
+/**
+ * Makes the take into `demo.mp4` with its narration, `captions.vtt`, `chapters.vtt`, a still from
+ * the middle and the end of each scene, the poster and the report page; prints the review table.
+ */
+export function assemble({ outDir, work, list, clips, marks, total, viewport, sharp, title, says, report, language }: Take) {
+  const scale = sharp ? 2 : 1;
   // Narration track: every clip at its scene's offset, levelled once as a whole.
   const narration = path.join(work, 'narration.wav');
   const inputs = clips.flatMap((c) => ['-i', c.file]);
@@ -728,8 +776,6 @@ export async function runDemo(spec: DemoSpec, demoDir: string) {
   const mix = `${clips.map((_, i) => `[a${i}]`).join('')}amix=inputs=${clips.length}:normalize=0,apad,atrim=0:${total.toFixed(3)},loudnorm=I=-16:TP=-1.5[out]`;
   run('ffmpeg', ['-y', '-loglevel', 'error', ...inputs, '-filter_complex', [...delays, mix].join(';'), '-map', '[out]', '-ar', '48000', narration]);
 
-  const list = path.join(work, 'frames.txt');
-  frameList(cast.frames, t0, tEnd, d.cuts, list);
   const video = path.join(outDir, 'demo.mp4');
   run('ffmpeg', [
     '-y', '-loglevel', 'error',
@@ -739,14 +785,14 @@ export async function runDemo(spec: DemoSpec, demoDir: string) {
     '-vf', `fps=30,scale=${viewport.width * scale}:${viewport.height * scale},delogo=x=${scale}:y=${(viewport.height - CLOCK.bottom - CLOCK.cell - 2) * scale}:w=${(CLOCK.bits * CLOCK.cell + 2) * scale}:h=${(CLOCK.cell + 4) * scale},format=yuv420p`,
     // Screen content: CRF 30 keeps text sharp at about 2.5 MB per minute; a public video (`sharp`)
     // gets CRF 18, where no compression shows on the page's flat colours and fine type.
-    '-c:v', 'libx264', '-preset', 'slow', '-crf', spec.sharp ? '18' : '30', '-tune', 'stillimage',
-    '-c:a', 'aac', '-b:a', spec.sharp ? '160k' : '96k',
+    '-c:v', 'libx264', '-preset', 'slow', '-crf', sharp ? '18' : '30', '-tune', 'stillimage',
+    '-c:a', 'aac', '-b:a', sharp ? '160k' : '96k',
     '-movflags', '+faststart', '-shortest',
     video,
   ]);
 
   const vtt = ['WEBVTT', ''];
-  marks.forEach((m, i) => vtt.push(`${vttTime(m.speechStart)} --> ${vttTime(m.speechEnd)}`, untagged(spec.scenes[i]!.say), ''));
+  marks.forEach((m, i) => vtt.push(`${vttTime(m.speechStart)} --> ${vttTime(m.speechEnd)}`, untagged(says[i]!), ''));
   fs.writeFileSync(path.join(outDir, 'captions.vtt'), vtt.join('\n'));
   // The scenes as chapters, for a player outside Obeya (the hero video on obeya.si reads them).
   const chapters = ['WEBVTT', ''];
@@ -767,7 +813,7 @@ export async function runDemo(spec: DemoSpec, demoDir: string) {
   });
   fs.copyFileSync(path.join(reviewDir, '01.jpg'), path.join(outDir, 'poster.jpg'));
 
-  fs.writeFileSync(path.join(outDir, 'index.html'), reportPage(spec, marks));
+  fs.writeFileSync(path.join(outDir, 'index.html'), reportPage(title, report, marks, language));
   console.log(`\n${Math.round(total)} s video → ${path.join(outDir, 'index.html')}`);
   console.log('\nreview:');
   marks.forEach((m, i) => {
@@ -776,7 +822,6 @@ export async function runDemo(spec: DemoSpec, demoDir: string) {
     const idle = silent > SILENCE_WARN ? `  ← ${Math.round(silent)} s without narration: cut it with d.skip where it only waits` : '';
     console.log(`  ${String(i + 1).padStart(2)}  ${mmss(m.start)}  ${m.title.padEnd(32).slice(0, 32)}${idle}`.trimEnd());
   });
-  if (d.cuts.length) console.log(`cut ${d.cuts.length / 2}× (${Math.round(d.cuts.reduce((s, c) => s + c.to - c.from, 0))} s of waiting)`);
   console.log(`stills → ${reviewDir}: NN-mid.jpg (middle of each scene), NN.jpg (its end)`);
 }
 
@@ -805,22 +850,23 @@ const PAGE_WORDS: Record<
   },
 };
 
-function reportPage(spec: DemoSpec, marks: { title: string; start: number }[]) {
-  const r = spec.report;
-  const w = PAGE_WORDS[LANGUAGE];
+function reportPage(title: string, r: Report, marks: { title: string; start: number }[], language: NarrationLanguage) {
+  const w = PAGE_WORDS[language];
   const list = (items: string[]) => (items.length ? `<ul>${items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>` : '<p class="none">—</p>');
   const chapters = marks
     .map((m) => `<li><button data-t="${m.start.toFixed(2)}"><span class="t">${mmss(m.start)}</span>${esc(m.title)}</button></li>`)
     .join('');
-  const meta = Object.entries(r.meta)
+  // a demo script is not type-checked: `meta` given as one line stays one line
+  const rows: [string, string][] = typeof r.meta === 'string' ? [['', r.meta]] : Object.entries(r.meta);
+  const meta = rows
     .map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`)
     .join('');
   return `<!doctype html>
-<html lang="${LANGUAGE}">
+<html lang="${language}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(spec.title)}</title>
+<title>${esc(title)}</title>
 <style>
 :root { --bg:#f7f6f3; --card:#fff; --ink:#1c1b19; --muted:#6b6862; --line:#e4e1da; --accent:#f5a524; --accent-ink:#1c1b19; --warn-bg:#fff6e5; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#161513; --card:#201f1c; --ink:#eeebe5; --muted:#a19d95; --line:#34322e; --warn-bg:#2e2616; } }
@@ -850,12 +896,12 @@ dt { font-weight:600; } dd { margin:0; overflow-wrap:anywhere; }
 </head>
 <body>
 <main>
-<h1>${esc(spec.title)}</h1>
+<h1>${esc(title)}</h1>
 <p class="summary">${esc(r.summary)}</p>
 <div class="player">
   <video id="v" controls preload="metadata" poster="poster.jpg">
     <source src="demo.mp4" type="video/mp4">
-    <track kind="captions" src="captions.vtt" srclang="${LANGUAGE}" label="${w.captions}">
+    <track kind="captions" src="captions.vtt" srclang="${language}" label="${w.captions}">
   </video>
   <ol class="chapters">${chapters}</ol>
 </div>

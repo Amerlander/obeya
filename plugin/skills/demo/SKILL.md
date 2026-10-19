@@ -229,6 +229,22 @@ tool; load it via ToolSearch if it is deferred), and reply in the chat
 with the page path, the length, the open question if any, what the demo caught and fixed, and
 the findings — one line each.
 
+## Re-voicing a demo in another language
+
+A rendered demo that kept its frames (`.work/frames/`, `.work/frames.txt`) can be narrated in
+another language without recording it again: `node demo.ts --revoice en` in its directory, or
+`node ${CLAUDE_SKILL_DIR}/lib/revoice.ts <demo dir> en` where its script no longer runs. The screen
+keeps its language; the narration, chapter titles and report change.
+
+The first run writes the words to translate (`.work/revoice/source.json`) and says where their
+translation goes (`.work/revoice/en.json`, same shape). Translate them yourself: each `say` as it
+should sound, in the same person, its audio tags where they stand; a label on screen quoted as it
+appears with its meaning after it („Teilen“ (Share)); read the labels from `review/`. The next run
+synthesises the clips, stretches each scene's narrated stretch to its new clip so actions stay on
+their words, and rebuilds the video, captions, chapters, stills and report page in place; the demo
+as recorded stays in `.work/revoice/original/`. Check the result as section 6 says, the scenes it
+flags for a changed pace first.
+
 ## 7. Feedback
 
 The owner answers in the chat. Apply the feedback to the change or the demo, re-render, and point
