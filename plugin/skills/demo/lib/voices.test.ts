@@ -44,8 +44,11 @@ describe('voices', () => {
     const stock = voiceSpec({ language: 'de', voice: 'qwen3' }, home);
     expect(stock).toMatchObject({ kind: 'command', heavy: true });
     expect(stock.kind === 'command' && stock.argv).toEqual(expect.arrayContaining(['--speaker', 'ryan', '--language', 'de']));
-    const clone = voiceSpec({ language: 'de', voice: 'qwen3', reference: '/x/me.wav' }, home);
+    const clone = voiceSpec({ language: 'de', voice: 'qwen3', references: { de: '/x/me.wav' } }, home);
     expect(clone.kind === 'command' && clone.argv).toEqual(expect.arrayContaining(['--reference', '/x/me.wav']));
+    // a clip of another language is not cloned: English text is spoken by a speaker
+    const other = voiceSpec({ language: 'en', voice: 'qwen3', references: { de: '/x/me.wav' } }, home);
+    expect(other.kind === 'command' && other.argv).toEqual(expect.arrayContaining(['--speaker', 'ryan', '--language', 'en']));
     const repo = onMlx() ? 'mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-bf16' : 'Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice';
     expect(stock.kind === 'command' && stock.argv).toContain(repo);
     expect(installState({ language: 'de', voice: 'qwen3' }, home).missing).toHaveLength(2);
@@ -58,14 +61,14 @@ describe('voices', () => {
   });
 
   test('Qwen3-TTS stays loaded for a render; Piper, say and the own command run once per clip', () => {
-    for (const s of [{ language: 'de', voice: 'qwen3' }, { language: 'en', voice: 'qwen3', reference: '/x/me.wav' }] as const) {
+    for (const s of [{ language: 'de', voice: 'qwen3' }, { language: 'en', voice: 'qwen3', references: { en: '/x/me.wav' } }] as const) {
       const spec = voiceSpec(s, home);
       if (spec.kind !== 'command' || !spec.argv || !spec.serve) throw new Error('Qwen3-TTS has no serve command');
       // the same voice, model and language as one clip, just without a WAV of its own
       expect(spec.serve).toEqual([...spec.argv.slice(0, -2), '--serve']);
       expect(spec.argv.slice(-2)).toEqual(['--out', '{out}']);
       // what Obeya runs to hold it across renders is the same command
-      expect(spec.host).toEqual('reference' in s ? { reference: '/x/me.wav' } : { speaker: 'ryan' });
+      expect(spec.host).toEqual('references' in s ? { reference: '/x/me.wav' } : { speaker: 'ryan' });
       expect(qwen3Serve(spec.host!, s.language, home)).toEqual(spec.serve);
     }
     for (const voice of ['piper', 'say', 'command'] as const) {

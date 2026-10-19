@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { blocksSaving, type CanvasConfig, type ConfigView, type DemoSettingsView, type LanguageView } from '../core/types';
 import { CanvasRuntime } from './canvas';
-import { Config, demoSettingsProblems, readConfigFile } from './config';
+import { clipProblems, Config, demoSettingsProblems, readConfigFile } from './config';
 import { Store } from './db';
 import { serve } from './server';
 import { ownerLanguage } from './settings';
@@ -178,6 +178,13 @@ describe("Obeya's configuration", async () => {
     expect(restarts).toBe(1);
   });
 
+  test("a file from before demo.language reads without its site's language, the site kept", () => {
+    const site = { title: 'Demos', url: 'https://demos.example.dev', deploy: 'deploy {dir}' };
+    mkdirSync(join(dir, 'home'));
+    writeFileSync(file, JSON.stringify([{ repos: [{ path: web, settings: { demo: { site: { ...site, language: 'de' } } } }] }]));
+    expect(readConfigFile(file)).toEqual([{ repos: [{ path: web, settings: { demo: { site } } }] }]);
+  });
+
   test("saved from the file, the running canvases take it over without a restart: settings tidied, canvases and repositories as they come", async () => {
     mkdirSync(join(dir, 'home'));
     writeFileSync(file, JSON.stringify([{ repos: [{ path: web }] }]));
@@ -190,9 +197,12 @@ describe("Obeya's configuration", async () => {
     (await c.save([{ repos: [{ path: web, settings: {} }] }]));
     expect(readConfigFile(file)).toEqual([{ repos: [{ path: web }] }]);
     expect(c.repoSettings(web)).toBeUndefined();
+    // the language of the repository's demos, beside its site or alone
+    (await c.save([{ repos: [{ path: web, settings: { demo: { language: 'en' } } }] }]));
+    expect(c.repoSettings(web)).toEqual({ demo: { language: 'en' } });
     expect((await c.save([{ repos: [{ path: web, settings: { workspaces: 'clones' } }] }]))).toEqual({ restarting: false, applied: true });
     expect((await c.save([{ repos: [{ path: web, clones: 2 }] }, { name: 'API', repos: [{ path: api }] }]))).toEqual({ restarting: false, applied: true });
-    expect(taken).toEqual([['web'], ['web'], ['web'], ['web', 'api']]);
+    expect(taken).toEqual([['web'], ['web'], ['web'], ['web'], ['web', 'api']]);
     expect(restarts).toBe(0);
     expect(c.view().restarting).toBe(false);
   });
@@ -520,8 +530,8 @@ describe('the configuration over HTTP', () => {
     expect(saved.body).toMatchObject({ settings: { language: 'en', voice: 'command', command: 'speak', ownVoice: true }, check: { person: 'first', problems: [] } });
     expect(JSON.parse(readFileSync(join(dir, 'demo.json'), 'utf8'))).toEqual({ language: 'en', voice: 'command', ownVoice: true, command: 'speak' });
     // a voice being chosen is checked before it is saved
-    const draft = await call('POST', '/api/demo-settings/check', { language: 'en', voice: 'qwen3', reference: join(dir, 'me.wav') });
-    expect(draft.body).toMatchObject({ person: 'third', problems: ['referenceMissing'], install: { installed: false } });
+    const draft = await call('POST', '/api/demo-settings/check', { language: 'en', voice: 'qwen3', references: { en: join(dir, 'me.wav') } });
+    expect(draft.body).toMatchObject({ person: 'third', problems: [], clips: { en: 'referenceMissing' }, install: { installed: false } });
     expect(restarts).toBe(0);
   });
 
@@ -631,10 +641,16 @@ describe('the demo settings', () => {
     expect(demoSettingsProblems({ language: 'de', voice: 'openai', keyFile: missing }, {})).toEqual(['keyFileMissing']);
     writeFileSync(join(dir, 'key'), 'k');
     expect(demoSettingsProblems({ language: 'en', voice: 'elevenlabs', keyFile: join(dir, 'key') }, {})).toEqual([]);
+  });
+
+  test("say which of Qwen3's clips to clone does not work, by its language", () => {
     writeFileSync(join(dir, 'me.wav'), '');
-    expect(demoSettingsProblems({ language: 'de', voice: 'qwen3', reference: join(dir, 'me.wav') }, {})).toEqual(['noTranscript']);
+    const s = { language: 'de', voice: 'qwen3', references: { de: join(dir, 'me.wav'), en: join(dir, 'me-en.wav') } } as const;
+    expect(clipProblems(s)).toEqual({ de: 'noTranscript', en: 'referenceMissing' });
     writeFileSync(join(dir, 'me.txt'), 'Hallo.');
-    expect(demoSettingsProblems({ language: 'de', voice: 'qwen3', reference: join(dir, 'me.wav') }, {})).toEqual([]);
+    expect(clipProblems(s)).toEqual({ en: 'referenceMissing' });
+    // another voice clones nothing
+    expect(clipProblems({ ...s, voice: 'piper' })).toEqual({});
   });
 });
 

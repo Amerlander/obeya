@@ -137,10 +137,17 @@ Each of the three is a setting of its own: this machine may set one and leave th
 repository. `stop` and `keep` from the file run only once you trusted them (see Commands you trust).
 Default: none.
 
-### `demo` — `{ site? }`
+### `demo` — `{ language?, site? }`
 
 Demos: every handover brings one, a narrated video recorded with Obeya's demo skill or an HTML
 page for something to look at; the worker picks which, and runs the app for it as `app.run` says.
+
+- `language`: `"de"` or `"en"`, the language of the repository's demos: their narration, chapters
+  and report, the pages they are shared on and the site's overview. It goes before the narration
+  language of the demo settings (each machine's, in "Konfiguration"), which applies without it. Obeya
+  gives it to its workers as `DEMO_LANGUAGE`, which the demo skill reads; a session without Obeya
+  finds it in the repository's `.obeya/settings.json`. A voice that clones a clip uses the clip of
+  this language, so each machine's demo settings name one per language.
 
 - `site`: a static site Obeya keeps and deploys itself, so that "Teilen" puts a demo on a page for
   colleagues, for a host that takes a directory (Cloudflare Pages, Netlify, an S3 bucket, a
@@ -153,8 +160,7 @@ page for something to look at; the worker picks which, and runs the app for it a
     "deploy": "bunx wrangler@4 pages deploy {dir} --project-name demos --branch main --commit-dirty=true",
     "env": "sites/demos/deploy.env",
     "headers": { "CF-Access-Client-Id": "${CF_ID}", "CF-Access-Client-Secret": "${CF_SECRET}" },
-    "maxFile": 26214400,
-    "language": "en"
+    "maxFile": 26214400
   }
   ```
 
@@ -163,8 +169,9 @@ page for something to look at; the worker picks which, and runs the app for it a
   Obeya's home with `OBEYA_REPO` set to the repository's checkout (a program given as a path is
   found in the repository; a script runs with Obeya's Bun). Optional: `env`, a file of
   `KEY=value` lines relative to Obeya's home; `headers`, for reading the live site behind a login,
-  `${KEY}` from `env`; `maxFile`, the largest file the host takes in bytes (25 MiB without it);
-  `language`, the overview's words (else the demo settings' language).
+  `${KEY}` from `env`; `maxFile`, the largest file the host takes in bytes (25 MiB without it).
+  The overview is in the repository's `language`. A `language` of the site, which named the
+  overview's language until 2026-10-19, is no longer read: `demo.language` names it now.
 
   Obeya keeps the site in `sites/<host and path of url>/site/` under its home, writes each page
   (in its demo's language) and the overview with its own templates, and after each share or
@@ -181,7 +188,7 @@ page for something to look at; the worker picks which, and runs the app for it a
 
 A site from the file is deployed to and read only once you trusted it (see Commands you trust).
 
-Default: no recipe, no site.
+Each of the two is a setting of its own. Default: the demo settings' language, no site.
 
 ### Not in the file: the canvas
 

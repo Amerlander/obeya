@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
 import { readShared, REPO_ADAPTER_DIR, REPO_SETTINGS_FILE } from '../adapters';
-import { settingsShape } from '../adapters/schema';
+import { settingsShape, withoutGone as goneSettings } from '../adapters/schema';
 import { LANGUAGES } from '../core/locale';
 import { blocksSaving, type CanvasConfig, type DemoSite, type ConfigChecked, type ConfigProblem, type ConfigSaved, type ConfigView, type RepoSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type SettingsShared, type SharedSettings, type DemoSettingsProblem, type DemoSettingsView, type DemoVoiceCheck, type ResolvedCanvas, type VoiceInstallJob, layerSettings, type ProposedSetting, type RepoTrust, type RepoValues, settingPatch, commandLines } from '../core/types';
 import {
@@ -65,6 +65,7 @@ function tidySettings(s: z.infer<typeof settingsShape> | undefined): RepoSetting
   const list = (l?: string[]) => l?.map((x) => x.trim()).filter(Boolean);
   const dir = s.planDocs?.dir.trim().replace(/\/+$/, '');
   const site = tidySite(s.demo?.site);
+  const demo = { ...(site ? { site } : {}), ...(s.demo?.language ? { language: s.demo.language } : {}) };
   const app = tidyApp(s.app);
   const out: RepoSettings = {
     ...(s.branch?.trim() ? { branch: s.branch.trim() } : {}),
@@ -77,7 +78,7 @@ function tidySettings(s: z.infer<typeof settingsShape> | undefined): RepoSetting
     ...(s.workspaces ? { workspaces: s.workspaces } : {}),
     ...(s.prNoise ? { prNoise: list(s.prNoise)! } : {}),
     ...(app ? { app } : {}),
-    ...(site ? { demo: { site } } : {}),
+    ...(Object.keys(demo).length ? { demo } : {}),
   };
   return Object.keys(out).length ? out : undefined;
 }
@@ -103,7 +104,6 @@ function tidySite(s: DemoSite | undefined): DemoSite | undefined {
     ...(s.env?.trim() ? { env: s.env.trim() } : {}),
     ...(headers.length ? { headers: Object.fromEntries(headers.map(([k, v]) => [k.trim(), v.trim()])) } : {}),
     ...(s.maxFile ? { maxFile: s.maxFile } : {}),
-    ...(s.language ? { language: s.language } : {}),
   };
   return out.title || out.url || out.deploy || Object.keys(out).length > 3 ? out : undefined;
 }
@@ -173,9 +173,18 @@ export function readConfigFile(file: string): CanvasConfig[] {
   return tidy(shape.parse(withoutGone(JSON.parse(readFileSync(file, 'utf8')))));
 }
 
-/** A file as read, without the settings Obeya no longer has: a repository's share command (its demo site took its place). */
+/**
+ * A file as read, without the settings Obeya no longer has: a repository's share command (its demo
+ * site took its place), and its site's language (`demo.language` took its place).
+ */
 function withoutGone(made: unknown): unknown {
-  if (Array.isArray(made)) for (const c of made) for (const r of Array.isArray(c?.repos) ? c.repos : []) if (r && typeof r === 'object') delete r.share;
+  if (Array.isArray(made))
+    for (const c of made)
+      for (const r of Array.isArray(c?.repos) ? c.repos : []) {
+        if (!r || typeof r !== 'object') continue;
+        delete r.share;
+        if (r.settings && typeof r.settings === 'object') r.settings = goneSettings(r.settings).settings;
+      }
   return made;
 }
 
@@ -225,7 +234,7 @@ const demoShape = z
     command: z.string().optional(),
     url: z.string().optional(),
     voiceName: z.string().optional(),
-    reference: z.string().optional(),
+    references: z.partialRecord(z.enum(LANGUAGES), z.string()).optional(),
     keyFile: z.string().optional(),
   })
   .strict();
@@ -245,7 +254,7 @@ function markHeld(values: RepoValues, trust: RepoTrust | undefined): RepoValues 
   return {
     ...values,
     app: trust.held.includes('app') ? { ...values.app, stop: mark(values.app.stop), keep: mark(values.app.keep) } : values.app,
-    demo: trust.held.includes('site') ? { site: mark(values.demo.site) } : values.demo,
+    demo: trust.held.includes('site') ? { ...values.demo, site: mark(values.demo.site) } : values.demo,
   } as RepoValues;
 }
 
@@ -270,12 +279,20 @@ export function demoSettingsProblems(
     if (s.keyFile && !existsSync(expandHome(s.keyFile))) problems.push('keyFileMissing');
     else if (!s.keyFile && s.voice !== 'http') problems.push('noKey');
   }
-  if (s.voice === 'qwen3' && s.reference) {
-    const clip = expandHome(s.reference);
-    if (!existsSync(clip)) problems.push('referenceMissing');
-    else if (!existsSync(clip.replace(/\.wav$/i, '.txt'))) problems.push('noTranscript');
-  }
   return problems;
+}
+
+/** What keeps each of Qwen3's clips to clone from working, by its language; saving them is allowed all the same. */
+export function clipProblems(s: DemoSettings): DemoVoiceCheck['clips'] {
+  const out: DemoVoiceCheck['clips'] = {};
+  if (s.voice !== 'qwen3') return out;
+  for (const language of LANGUAGES) {
+    const clip = s.references?.[language] && expandHome(s.references[language]);
+    if (!clip) continue;
+    if (!existsSync(clip)) out[language] = 'referenceMissing';
+    else if (!existsSync(clip.replace(/\.wav$/i, '.txt'))) out[language] = 'noTranscript';
+  }
+  return out;
 }
 
 export class Config {
@@ -605,7 +622,7 @@ export class Config {
   }
 
   private voiceCheck(s: DemoSettings): DemoVoiceCheck {
-    return { person: narrationPerson(s), problems: demoSettingsProblems(s), install: installState(s, this.o.server.home) };
+    return { person: narrationPerson(s), problems: demoSettingsProblems(s), clips: clipProblems(s), install: installState(s, this.o.server.home) };
   }
 
   /** A voice as the owner is choosing it, before it is saved. */

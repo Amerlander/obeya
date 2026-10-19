@@ -235,6 +235,13 @@ describe('handing over with a demo', () => {
     expect(runtime.last.inbox[0]).toContain(`recorded with the demo skill (\`${demoSkillName()}\`; if your session does not know it, read its file ${DEMO_SKILL_FILE} and follow that)`);
   });
 
+  test("a repository that names the language of its demos gives it to the worker's demo skill", () => {
+    rmSync(dir, { recursive: true, force: true });
+    setup({ ...generic, land: 'main', workspaces: 'clones', demo: { language: 'en' } });
+    workers.start(manual().id);
+    expect(runtime.last.spec.env).toEqual({ OBEYA_URL: 'http://127.0.0.1:4417', DEMO_LANGUAGE: 'en' });
+  });
+
   test('the card waits with the demo; its files are found; words under it answer its question and leave the demo', () => {
     const c = manual();
     workers.start(c.id);

@@ -71,7 +71,7 @@ const server = Bun.serve({
 });
 afterAll(() => server.stop(true));
 const SITE_URL = `http://localhost:${server.port}/`;
-const site = (): DemoSite => ({ title: 'Demos', url: SITE_URL, deploy: `${join(dir, 'deploy.ts')} {dir} ${dir}`, language: 'de' });
+const site = (): DemoSite => ({ title: 'Demos', url: SITE_URL, deploy: `${join(dir, 'deploy.ts')} {dir} ${dir}` });
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'obeya-share-'));
@@ -93,6 +93,8 @@ function make(repo = dir) {
     home: join(dir, 'home'),
     forge,
     sourceFor: (card) => (card.title.startsWith('Ohne') ? null : { site: site(), repo }),
+    // the repository names English for its demos (`demo.language`) on cards so titled
+    languageFor: (card) => (card.title.startsWith('In English') ? 'en' : undefined),
   });
 }
 
@@ -260,7 +262,7 @@ describe('sharing a demo', () => {
     expect(bodies.get(PR)).toContain(`Demo-Seite: ${share(c.id)!.url} ${DEMO_MARKER}`);
   });
 
-  test("writes the page in the demo's language: its report page's, else the demo settings'", async () => {
+  test("writes the page in the demo's language: its report page's, else the repository's, else the demo settings'", async () => {
     const en = card('English', {}, 'en');
     sharing.share(en.id);
     await until(() => share(en.id)?.state === 'shared');
@@ -279,6 +281,10 @@ describe('sharing a demo', () => {
       await until(() => share(c.id)?.state === 'shared');
       expect(meta(c.id).language).toBe(language);
     }
+    const c = card('In English, without a page that says so', {}, null);
+    sharing.share(c.id);
+    await until(() => share(c.id)?.state === 'shared');
+    expect(meta(c.id).language).toBe('en');
   });
 
   test('only where the repository shares, never twice at once', () => {

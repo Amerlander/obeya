@@ -520,9 +520,9 @@ const VOICE_GROUPS: { group: 'local' | 'service' | 'own'; voices: VoiceKind[] }[
   { group: 'own', voices: ['command', 'http'] },
 ];
 /** The fields each voice reads, in the order the sheet shows them. */
-const VOICE_FIELDS: Record<VoiceKind, ('voiceName' | 'reference' | 'command' | 'url' | 'keyFile')[]> = {
+const VOICE_FIELDS: Record<VoiceKind, ('voiceName' | 'command' | 'url' | 'keyFile')[]> = {
   piper: ['voiceName'],
-  qwen3: ['voiceName', 'reference'],
+  qwen3: ['voiceName'],
   say: ['voiceName'],
   command: ['command'],
   http: ['url', 'keyFile'],
@@ -873,7 +873,7 @@ function DemoBlock({ on }: { on: boolean }) {
       <Head title={d.title} hint={d.hint} file={view.file} />
       <div className="cfg-cols">
         <div>
-          <Field label={d.language}>
+          <Field label={d.language} hint={d.languageHint}>
             <select aria-label={d.language} value={draft.language} onChange={(e) => set('language', e.target.value as NarrationLanguage)}>
               {(Object.keys(d.languages) as NarrationLanguage[]).map((l) => (
                 <option key={l} value={l}>
@@ -903,6 +903,24 @@ function DemoBlock({ on }: { on: boolean }) {
             </select>
           </Field>
           {VOICE_FIELDS[draft.voice].map(field)}
+          {draft.voice === 'qwen3' &&
+            LANGUAGES.map((l) => (
+              <Field key={l} label={d.field.reference(d.languages[l])}>
+                <input
+                  className="c-path"
+                  aria-label={d.field.reference(d.languages[l])}
+                  spellCheck={false}
+                  placeholder={d.placeholder.reference()}
+                  value={draft.references?.[l] ?? ''}
+                  onChange={(e) => {
+                    const { [l]: _, ...others } = draft.references ?? {};
+                    const references = { ...others, ...(e.target.value ? { [l]: e.target.value } : {}) };
+                    set('references', Object.keys(references).length ? references : undefined);
+                  }}
+                />
+                {shown.clips[l] && <p className="p-error">{d.clip[shown.clips[l]]}</p>}
+              </Field>
+            ))}
           <Field label="" hint={d.person[shown.person]}>
             {!STOCK_ONLY.includes(draft.voice) && (
               <label className="c-check">
@@ -932,7 +950,7 @@ function DemoBlock({ on }: { on: boolean }) {
                 {d.problem[p]}
               </p>
             ))}
-            <button className="btn small" disabled={sampling || !shown.install.installed || !!shown.problems.length} onClick={listen}>
+            <button className="btn small" disabled={sampling || !shown.install.installed || !!shown.problems.length || !!shown.clips[draft.language]} onClick={listen}>
               {sampling ? d.sampling : d.listen}
             </button>
           </Field>
@@ -1261,7 +1279,7 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
 }
 
 /** The settings of a repository, set on this machine (`RepoSettings`); those of `app` and `demo` each on its own. */
-type SettingKey = Exclude<keyof RepoSettings, NestedSetting> | 'run' | 'stop' | 'keep' | 'site';
+type SettingKey = Exclude<keyof RepoSettings, NestedSetting> | 'run' | 'stop' | 'keep' | 'site' | 'language';
 
 /** The setting of `app` or `demo` that holds the field `k`, if one does. */
 const nestedOf = (k: SettingKey): NestedSetting | undefined => (Object.keys(NESTED_SETTINGS) as NestedSetting[]).find((n) => (NESTED_SETTINGS[n] as readonly string[]).includes(k));
@@ -1323,7 +1341,7 @@ function RepoSettingsBlock({
     }
     onChange(Object.keys(next).length ? (next as RepoSettings) : undefined);
   };
-  const keys: SettingKey[] = ['branch', 'land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'run', 'stop', 'keep', 'site'];
+  const keys: SettingKey[] = ['branch', 'land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'run', 'stop', 'keep', 'language', 'site'];
   const setHere = keys.filter((k) => own(k) !== undefined).length;
   const fromRepo = keys.filter((k) => own(k) === undefined && base[k].source === 'repository').length;
   const lines = (k: SettingKey) => value<string[]>(k).join('\n');
@@ -1351,6 +1369,7 @@ function RepoSettingsBlock({
   };
   const land = value<'main' | 'pr'>('land');
   const planDocs = value<{ dir: string; exclude: string[] }>('planDocs');
+  const language = value<NarrationLanguage | null>('language') ?? undefined;
   const site = value<DemoSite | null>('site') ?? { title: '', url: '', deploy: '' };
   const setSite = (patch: Partial<DemoSite>) => set('site', { ...site, ...patch });
   // a part of a setting with several fields: its label above it; a wide one takes the whole row
@@ -1427,6 +1446,18 @@ function RepoSettingsBlock({
           {!!value<string>('stop').trim() &&
             row('keep', c.keep, <input className="c-path" aria-label={c.keep} placeholder="grep -q PERSIST=1 .env" spellCheck={false} value={value<string>('keep')} onChange={(e) => set('keep', e.target.value)} />, c.keepHint)}
           {row(
+            'language',
+            c.language,
+            <div className="seg" role="radiogroup" aria-label={c.language}>
+              {([undefined, ...LANGUAGES] as const).map((x) => (
+                <button key={x ?? 'auto'} type="button" role="radio" aria-checked={language === x} className={language === x ? 'on' : undefined} onClick={() => set('language', x)}>
+                  {c.languages[x ?? 'auto']}
+                </button>
+              ))}
+            </div>,
+            c.languageHint,
+          )}
+          {row(
             'site',
             c.site,
             <div className="cfg-sub">
@@ -1459,16 +1490,6 @@ function RepoSettingsBlock({
                   value={site.maxFile ? Math.round(site.maxFile / MIB) : ''}
                   onChange={(e) => setSite({ maxFile: Number(e.target.value) > 0 ? Math.round(Number(e.target.value) * MIB) : undefined })}
                 />,
-              )}
-              {sub(
-                c.siteLanguageLabel,
-                <div className="seg" role="radiogroup" aria-label={c.siteLanguageLabel}>
-                  {([undefined, 'de', 'en'] as const).map((x) => (
-                    <button key={x ?? 'auto'} type="button" role="radio" aria-checked={site.language === x} className={site.language === x ? 'on' : undefined} onClick={() => setSite({ language: x })}>
-                      {c.siteLanguage[x ?? 'auto']}
-                    </button>
-                  ))}
-                </div>,
               )}
             </div>,
             c.siteHint,

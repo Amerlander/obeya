@@ -1,7 +1,10 @@
 // The demo settings: in which language a demo is narrated and by which voice, so the person it
 // speaks in follows. Obeya's settings sheet edits them; they live in `demo.json` under Obeya's home
 // (`OBEYA_HOME`, else `~/.obeya`), where a session without Obeya finds them as well. Missing
-// entries take the defaults; the language without one is the one Obeya speaks to the owner.
+// entries take the defaults; the language without one is the one Obeya speaks to the owner. A
+// repository may name the language of its own demos (`demo.language` of its `.obeya/settings.json`):
+// Obeya gives it to its workers as `DEMO_LANGUAGE`, and a session without Obeya finds it in the
+// repository it runs in.
 //
 // Run on its own (`node settings.ts`), it prints the settings in effect for the agent writing a
 // demo's narration. Plain Node with type stripping, like the director: no imports without
@@ -42,8 +45,12 @@ export interface DemoSettings {
   url?: string;
   /** Which of the provider's voices: a Piper voice, a Qwen3 speaker, a `say` voice, a service's voice. */
   voiceName?: string;
-  /** `qwen3`: a clip to clone (`.wav`, its exact transcript beside it as `.txt`) instead of a speaker. */
-  reference?: string;
+  /**
+   * `qwen3`: a clip to clone per narration language (`.wav`, its exact transcript beside it as
+   * `.txt`) instead of a speaker. A clone speaks best in the language of its clip, so each language
+   * has its own; one without a clip is spoken by a speaker.
+   */
+  references?: Partial<Record<NarrationLanguage, string>>;
   /** A service's API key, in a file; the service's environment variable takes precedence. */
   keyFile?: string;
 }
@@ -58,9 +65,12 @@ export function obeyaHome(): string {
 
 export const expandHome = (p: string) => p.replace(/^~(?=$|[\\/])/, os.homedir());
 
-const TEXT_FIELDS = ['command', 'url', 'voiceName', 'reference', 'keyFile'] as const;
+const TEXT_FIELDS = ['command', 'url', 'voiceName', 'keyFile'] as const;
 
-/** Keeps what is a valid setting, drops the rest; trims texts and leaves out empty ones. */
+/**
+ * Keeps what is a valid setting, drops the rest; trims texts and leaves out empty ones. The one clip
+ * a file from before `references` names (`reference`) is the clip of its language.
+ */
 export function tidyDemoSettings(input: unknown, fallbackLanguage: NarrationLanguage = DEFAULT_DEMO_SETTINGS.language): DemoSettings {
   const o = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
@@ -72,8 +82,14 @@ export function tidyDemoSettings(input: unknown, fallbackLanguage: NarrationLang
     const v = str(o[k]);
     if (v) out[k] = v;
   }
+  const given = (o.references && typeof o.references === 'object' ? o.references : { [language]: o.reference }) as Record<string, unknown>;
+  const references = Object.fromEntries(LANGUAGES.flatMap((l) => (str(given[l]) ? [[l, str(given[l])]] : [])));
+  if (Object.keys(references).length) out.references = references;
   return out;
 }
+
+/** The clip a Qwen3 voice clones for the narration language of these settings; none: a speaker. */
+export const referenceOf = (s: Pick<DemoSettings, 'language' | 'references'>): string | undefined => s.references?.[s.language];
 
 /** The settings as saved, or the defaults where nothing is: then the narration is in Obeya's language. */
 export function readDemoSettings(home = obeyaHome()): DemoSettings {
@@ -87,6 +103,39 @@ export function readDemoSettings(home = obeyaHome()): DemoSettings {
   }
 }
 
+/** Where a repository's language for its demos comes from: Obeya, or the repository's own settings. */
+export type LanguageSource = 'obeya' | 'repository';
+
+/**
+ * The language a repository names for its demos (`demo.language` of its settings): from Obeya,
+ * which gives its workers the one of their card's repository as `DEMO_LANGUAGE`, else from the
+ * `.obeya/settings.json` of the repository the directory `cwd` is in. None where neither names one.
+ */
+export function repositoryLanguage(env: Record<string, string | undefined> = process.env, cwd = process.cwd()): { language: NarrationLanguage; from: LanguageSource; file?: string } | undefined {
+  const given = LANGUAGES.find((l) => l === env.DEMO_LANGUAGE);
+  if (given) return { language: given, from: 'obeya' };
+  for (let dir = path.resolve(cwd); ; dir = path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, '.git'))) {
+      const file = path.join(dir, '.obeya', 'settings.json');
+      try {
+        const language = LANGUAGES.find((l) => l === (JSON.parse(fs.readFileSync(file, 'utf8')) as { demo?: { language?: unknown } }).demo?.language);
+        return language ? { language, from: 'repository', file } : undefined;
+      } catch {
+        return undefined;
+      }
+    }
+    if (path.dirname(dir) === dir) return undefined;
+  }
+}
+
+/** The settings of a demo of the repository: those saved, in the language the repository names for its demos, if it names one. */
+export function inLanguage(s: DemoSettings, language: NarrationLanguage | undefined): DemoSettings {
+  return language && language !== s.language ? { ...s, language } : s;
+}
+
+/** The settings a demo rendered here is narrated with: those saved, in the language of the repository (`repositoryLanguage`). */
+export const demoSettingsHere = (home = obeyaHome()): DemoSettings => inLanguage(readDemoSettings(home), repositoryLanguage()?.language);
+
 export function writeDemoSettings(settings: DemoSettings, home = obeyaHome()) {
   fs.mkdirSync(home, { recursive: true });
   fs.writeFileSync(path.join(home, DEMO_SETTINGS_FILE), `${JSON.stringify(tidyDemoSettings(settings), null, 2)}\n`);
@@ -98,7 +147,7 @@ export function writeDemoSettings(settings: DemoSettings, home = obeyaHome()) {
  */
 export function withVoice(s: DemoSettings, voice: string | undefined): DemoSettings {
   if (!voice || voice === s.voice) return s;
-  if (voice.endsWith('.wav')) return { language: s.language, voice: 'qwen3', reference: voice };
+  if (voice.endsWith('.wav')) return { language: s.language, voice: 'qwen3', references: { [s.language]: voice } };
   const kind = VOICES.find((v) => v === voice);
   if (!kind) throw new Error(`unknown voice "${voice}"; use ${VOICES.join(', ')} or a .wav`);
   // another provider is not the owner's own voice just because the saved one is
@@ -108,24 +157,34 @@ export function withVoice(s: DemoSettings, voice: string | undefined): DemoSetti
 
 /**
  * The narration speaks in the first person only in the owner's own voice; any other voice
- * presents the work without an "I".
+ * presents the work without an "I". A Qwen3 clone without a clip for the language speaks with a
+ * stock speaker, which is nobody's own.
  */
-export const narrationPerson = (s: Pick<DemoSettings, 'ownVoice'>): 'first' | 'third' => (s.ownVoice ? 'first' : 'third');
+export function narrationPerson(s: Partial<DemoSettings>): 'first' | 'third' {
+  if (!s.ownVoice) return 'third';
+  return s.voice === 'qwen3' && !(s.language && s.references?.[s.language]) ? 'third' : 'first';
+}
 
-/** What the agent writing a narration needs to know, in a few lines. */
-export function describeDemoSettings(saved: DemoSettings, override: string | undefined = process.env.DEMO_VOICE): string {
-  const s = withVoice(saved, override);
+/** What the agent writing a narration needs to know, in a few lines; `repo` names the repository's language for its demos. */
+export function describeDemoSettings(saved: DemoSettings, override: string | undefined = process.env.DEMO_VOICE, repo: ReturnType<typeof repositoryLanguage> = undefined): string {
+  const s = withVoice(inLanguage(saved, repo?.language), override);
   const person = narrationPerson(s);
+  const clip = referenceOf(s);
   return [
     `language: ${s.language} — write every \`say\` text, the chapter titles and the report in ${LANGUAGE_NAMES[s.language]}`,
+    ...(repo?.from === 'repository'
+      ? [`  (the repository's demo.language in ${repo.file}; render with DEMO_LANGUAGE=${repo.language} so the voice speaks it too)`]
+      : repo
+        ? [`  (the repository's demo.language, given by Obeya as DEMO_LANGUAGE)`]
+        : []),
     person === 'first'
       ? `person: first — the voice is the owner's own, so the narration speaks as the owner ("I added …")`
       : `person: third — the voice is not the owner's, so the narration presents the work without "I" or "we" ("The card now shows …")`,
-    `voice: ${s.voice}${s.voiceName ? ` (${s.voiceName})` : ''}${s.reference ? ` (clone of ${s.reference})` : ''}`,
+    `voice: ${s.voice}${s.voiceName ? ` (${s.voiceName})` : ''}${clip ? ` (clone of ${clip})` : ''}`,
     `from: ${path.join(obeyaHome(), DEMO_SETTINGS_FILE)}${override ? ' (voice from DEMO_VOICE)' : ''}`,
   ].join('\n');
 }
 
 if (isMain(import.meta.filename)) {
-  console.log(describeDemoSettings(readDemoSettings()));
+  console.log(describeDemoSettings(readDemoSettings(), process.env.DEMO_VOICE, repositoryLanguage()));
 }

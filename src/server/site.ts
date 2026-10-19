@@ -182,6 +182,8 @@ export interface SiteOptions {
   machine?: string;
   /** How long to wait (ms) before each look at the live site after a deploy, until it shows the deployment. */
   checkWaits?: number[];
+  /** The overview's words: the language the repository names for its demos (`demo.language`); without it the narration language of the demo settings. */
+  language?: PageLanguage;
 }
 
 /** About 30 s for a deployment to show: a host or its CDN may serve the earlier one for a moment. */
@@ -195,7 +197,7 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
   const base = siteBase(home, site);
   const dir = join(base, 'site');
   const machine = opts.machine ?? HERE;
-  const overviewLanguage = (): PageLanguage => site.language ?? readDemoSettings(home).language;
+  const overviewLanguage = (): PageLanguage => opts.language ?? readDemoSettings(home).language;
   const root = site.url.replace(/\/+$/, '');
 
   /** The site lives only in its directory: one that lost pages Obeya has as shared would drop them with the next deployment. */

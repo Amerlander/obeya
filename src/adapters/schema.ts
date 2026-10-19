@@ -5,6 +5,7 @@
 // of the settings work.
 
 import { z } from 'zod';
+import { LANGUAGES } from '../core/locale';
 import type { SharedSettings } from '../core/types';
 
 const strings = z.array(z.string());
@@ -25,10 +26,9 @@ const site = z
       .optional(),
     headers: z.record(z.string(), z.string()).optional(),
     maxFile: z.number().int().positive().optional(),
-    language: z.enum(['de', 'en']).optional(),
   })
   .strict();
-const demo = z.object({ site: site.optional() }).strict();
+const demo = z.object({ site: site.optional(), language: z.enum(LANGUAGES).optional() }).strict();
 const app = z.object({ run: z.string().optional(), stop: z.string().optional(), keep: z.string().optional() }).strict();
 
 /** What a repository's settings for this machine may hold (`RepoSettings`): how it works, and its main branch. */
@@ -68,9 +68,22 @@ const KNOWN: Record<string, string[]> = {
  * fields that are wrong, and one line per problem.
  */
 export function checkShared(made: Record<string, unknown>): { settings: SharedSettings; problems: string[] } {
-  const { kept, problems } = checkFields(sharedShape, made, KNOWN);
+  const { settings: current, gone } = withoutGone(made);
+  const { kept, problems } = checkFields(sharedShape, current, KNOWN);
   // the main branch says where the file is read from, so it is set on each machine
-  return { settings: kept as SharedSettings, problems: problems.map((p) => (p.startsWith('branch: ') ? 'branch: the main branch is set on each machine (or detected), not in the repository' : p)) };
+  return { settings: kept as SharedSettings, problems: [...gone, ...problems.map((p) => (p.startsWith('branch: ') ? 'branch: the main branch is set on each machine (or detected), not in the repository' : p))] };
+}
+
+/**
+ * Settings without the fields Obeya no longer has, and a line for each: `demo.site.language` (the
+ * overview's language), which `demo.language` names now along with that of the demos. It goes
+ * alone, so the site stays.
+ */
+export function withoutGone(made: Record<string, unknown>): { settings: Record<string, unknown>; gone: string[] } {
+  const demo = made.demo as { site?: Record<string, unknown> } | undefined;
+  if (!demo?.site || typeof demo.site !== 'object' || !('language' in demo.site)) return { settings: made, gone: [] };
+  const { language: _, ...site } = demo.site;
+  return { settings: { ...made, demo: { ...demo, site } }, gone: ['demo.site.language: no longer read; demo.language names the language of the demos and of the overview'] };
 }
 
 /** `made` without the top-level fields `shape` refuses, and a line for each problem; `known` names the fields of each object, for a guess at a misspelt one. */

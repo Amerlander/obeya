@@ -12,7 +12,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isMain, lib } from './here.ts';
-import { type DemoSettings, readDemoSettings, withVoice } from './settings.ts';
+import { type DemoSettings, demoSettingsHere, withVoice } from './settings.ts';
 import { installState, voiceSpec } from './voices.ts';
 
 /** The Obeya checkout the skill lives in (or the app's resources): Playwright comes from its `node_modules`. */
@@ -230,7 +230,7 @@ export function describeSetup(check: SetupCheck): string {
 }
 
 if (isMain(import.meta.filename)) {
-  const check = await checkSetup(withVoice(readDemoSettings(), process.env.DEMO_VOICE));
+  const check = await checkSetup(withVoice(demoSettingsHere(), process.env.DEMO_VOICE));
   console.log(describeSetup(check));
   process.exitCode = check.items.some((i) => i.state === 'missing') ? 1 : 0;
 }

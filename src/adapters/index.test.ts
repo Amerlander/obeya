@@ -92,10 +92,15 @@ describe('.obeya/settings.json', () => {
     expect(parseShared('[]').problems).toEqual(['.obeya/settings.json holds no JSON object']);
   });
 
-  test('holds the app and the demo site; a field misspelt in them is named and the whole field does not count', () => {
+  test('holds the app, the demo site and language; a field misspelt in them is named and the whole field does not count', () => {
     const app = { run: 'Start it with `bun dev`; the URL is in `.env` under URL.', stop: 'pkill -F .pid', keep: 'test -f .keep' };
-    const site = { title: 'Demos', url: 'https://demos.example.dev', deploy: 'bunx wrangler pages deploy {dir}', env: 'sites/demos.env', headers: { 'X-Key': '${KEY}' }, language: 'de' };
-    expect(parseShared(JSON.stringify({ app, demo: { site } }))).toMatchObject({ settings: { app, demo: { site } }, problems: [] });
+    const site = { title: 'Demos', url: 'https://demos.example.dev', deploy: 'bunx wrangler pages deploy {dir}', env: 'sites/demos.env', headers: { 'X-Key': '${KEY}' } };
+    expect(parseShared(JSON.stringify({ app, demo: { site, language: 'en' } }))).toMatchObject({ settings: { app, demo: { site, language: 'en' } }, problems: [] });
+    expect(parseShared(JSON.stringify({ demo: { language: 'fr' } })).settings).toEqual({});
+    // the site's language from before demo.language goes alone: the site stays
+    const old = parseShared(JSON.stringify({ demo: { site: { ...site, language: 'de' } } }));
+    expect(old.settings).toEqual({ demo: { site } });
+    expect(old.problems).toEqual(['.obeya/settings.json, demo.site.language: no longer read; demo.language names the language of the demos and of the overview']);
     const read = parseShared(JSON.stringify({ app: { ...app, stp: 'x' }, demo: { site, howToRun: 'bun dev' }, stack: { start: 'bun dev' } }));
     expect(read.settings).toEqual({});
     expect(read.problems).toEqual([
@@ -117,7 +122,7 @@ describe('.obeya/settings.json', () => {
       land: { value: 'main', source: 'detected' },
       planDocs: { value: { dir: 'docs/plan' }, source: 'default' },
       app: { run: { value: 'bun dev', source: 'repository' }, stop: { value: 'pkill -F .pid', source: 'repository' }, keep: { value: '', source: 'default' } },
-      demo: { site: { value: null, source: 'default' } },
+      demo: { site: { value: null, source: 'default' }, language: { value: null, source: 'default' } },
     });
   });
 });

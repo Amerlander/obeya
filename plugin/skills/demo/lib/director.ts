@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Browser, BrowserContext, Locator, Page } from 'playwright-core';
 import { launchChromium, SILENT_SPEECH } from '../../../lib/chromium.ts';
-import { type NarrationLanguage, readDemoSettings, withVoice } from './settings.ts';
+import { demoSettingsHere, type NarrationLanguage, withVoice } from './settings.ts';
 import { checkSetup, describeSetup } from './setup.ts';
 import { CLOCK, type Cut, type Frame, frameDurations, laterLabel, mmss, onPaintTime, readClock, untagged, videoTime } from './timeline.ts';
 import { ttsArgs, voiceSpec } from './voices.ts';
@@ -72,7 +72,7 @@ const PAGE_TIMEOUT_SECONDS = 20;
 const STALL_SECONDS = 20;
 /** The director's own once-a-second timer this late: the director stood still, as through a sleep of this computer. */
 const STILL_SECONDS = 5;
-const SAVED = readDemoSettings();
+const SAVED = demoSettingsHere();
 /** The settings of this render: `DEMO_VOICE` names another provider, or a `.wav` to clone. */
 const SETTINGS = withVoice(SAVED, process.env.DEMO_VOICE);
 const LANGUAGE: NarrationLanguage = SETTINGS.language;

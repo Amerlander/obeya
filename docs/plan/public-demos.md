@@ -109,7 +109,7 @@ automatically. W3 needs both: the English voice from W1 and the site from W2.
 
 ## Workstreams
 
-- [ ] **W1:** Narration language per repository. `demo.language` in the repository settings,
+- [x] **W1:** Narration language per repository. `demo.language` in the repository settings,
   overriding `demo.json`'s language for that repository's demos and naming the site overview's
   language; `demo.site.language` removed, with the other repository's settings moved to
   `demo.language` directly. `demo.json` with `references: { de, en }`

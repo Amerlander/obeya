@@ -72,12 +72,12 @@ const SITE = (extra: Partial<DemoSite> = {}): DemoSite => ({
   url: URL_,
   deploy: 'deploy.ts {dir} __OUT__',
   env: 'sites/demos/deploy.env',
-  language: 'de',
   ...extra,
 });
 
-const make = (site: DemoSite, at = home, machine = 'a') =>
-  siteTarget({ ...site, deploy: site.deploy.replace('__OUT__', dir) }, repo, at, MESSAGES.en.share, { machine, checkWaits: [0, 10, 10] });
+// the overview in the language the repository names for its demos (`demo.language`)
+const make = (site: DemoSite, at = home, machine = 'a', language: 'de' | 'en' = 'de') =>
+  siteTarget({ ...site, deploy: site.deploy.replace('__OUT__', dir) }, repo, at, MESSAGES.en.share, { machine, checkWaits: [0, 10, 10], language });
 const siteDir = (at = home) => join(at, 'sites', siteKey(URL_), 'site');
 const deployed = () => join(dir, 'deployed');
 const deploys = () => readFileSync(join(dir, 'deploys'), 'utf8').trim().split('\n');
@@ -162,8 +162,8 @@ describe('a site Obeya keeps', () => {
     expect(readFileSync(join(deployed(), 'index.html'), 'utf8')).toBe(overview());
   });
 
-  test("writes each page in its demo's language and the overview in the site's", async () => {
-    target = make(SITE({ language: 'en' }));
+  test("writes each page in its demo's language and the overview in the repository's", async () => {
+    target = make(SITE(), home, 'a', 'en');
     await target.publish(page('english-abc123', { language: 'en', title: 'An English one' }));
     await target.publish(page('deutsch-def456', { shared: ['english-abc123'] }));
     const en = readFileSync(join(siteDir(), 'english-abc123/index.html'), 'utf8');

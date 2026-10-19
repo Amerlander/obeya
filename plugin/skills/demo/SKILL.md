@@ -125,8 +125,8 @@ Create `~/demos/<repo-dir>-<slug>/demo.ts` (model: the newest demo of the same r
   session's own, or the ones on the PR).
 
 Narration — in the language and person of the demo settings, matter-of-fact. Read them first:
-`node ${CLAUDE_SKILL_DIR}/lib/settings.ts` prints the language (narration, chapter titles, report)
-and the person: the first person only when the voice is the owner's own, otherwise the work
+`node ${CLAUDE_SKILL_DIR}/lib/settings.ts` prints the language (narration, chapter titles, report;
+the repository's own where its settings name one) and the person: the first person only when the voice is the owner's own, otherwise the work
 is presented without "I" or "we".
 - One scene per behaviour, 1–3 sentences each. Say what the viewer sees and why it matters,
   never the implementation. Length follows the size of the change, never padded: a small one

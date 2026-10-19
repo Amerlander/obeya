@@ -7,7 +7,7 @@ import type { DiffFile } from '../core/diff';
 import { type Language, languageOf } from '../core/locale';
 import type { PageChangeId } from '../core/page-changes';
 import type { NotAProject } from '../core/plan-doc';
-import { type AgentEffort, type AgentModel, type AgentRole, type CardState, type ConfigProblemCode, type DemoKind, type DemoSettingsProblem, type ErrorCode, EXPORT_HTML_MAX, type NarrationLanguage, type Theme, type VoiceKind, type Idea, type Need, type NextStep, type Queue, type OwnerHold, type RestartReason, type SetupId, type VoiceSetupId, type CloudPreset, type MachineSectionId, type NeededId, type PrId, type Snooze, type Awaited, type AwaitedState, stopped } from '../core/types';
+import { type AgentEffort, type AgentModel, type AgentRole, type CardState, type ConfigProblemCode, type DemoKind, type ClipProblem, type DemoSettingsProblem, type ErrorCode, EXPORT_HTML_MAX, type NarrationLanguage, type Theme, type VoiceKind, type Idea, type Need, type NextStep, type Queue, type OwnerHold, type RestartReason, type SetupId, type VoiceSetupId, type CloudPreset, type MachineSectionId, type NeededId, type PrId, type Snooze, type Awaited, type AwaitedState, stopped } from '../core/types';
 
 const de = {
   kind: { task: 'Aufgabe', question: 'Frage', project: 'Projekt', workstream: 'Workstream', idea: 'Idee', prototype: 'Prototyp', becomesProject: 'Idee → Projekt', taskBecomesProject: 'Aufgabe → Projekt' },
@@ -953,6 +953,9 @@ const de = {
       stopHint: 'Befehl, mit dem Obeya die App einer Karte anhält, die auf dich wartet, damit sie nur Platte und keinen Speicher kostet; der Agent startet sie wieder, wenn er sie braucht. Leer stoppt Obeya nichts.',
       keep: 'Laufen lassen, wenn dies mit 0 endet',
       keepHint: 'Schützt eine App, die etwas hält, das nicht verloren gehen darf (eine wiederhergestellte Datenbank).',
+      language: 'Sprache der Demos',
+      languages: { auto: 'wie die Demo-Einstellungen', de: 'Deutsch', en: 'Englisch' },
+      languageHint: 'Erzählung, Kapitel und Bericht der Demos dieses Repositorys, ihre geteilten Seiten und die Übersicht seiner Demo-Site. Ohne sie gilt die Sprache der Erzählung aus den Demo-Einstellungen.',
       site: 'Demo-Site',
       siteTitle: 'Titel der Übersicht',
       siteUrl: 'URL',
@@ -960,8 +963,6 @@ const de = {
       siteEnv: 'Datei mit Zugangsdaten (SCHLÜSSEL=Wert), relativ zu Obeyas Verzeichnis',
       siteHeaders: 'Header zum Lesen hinter einem Login, einer pro Zeile',
       siteMaxFile: 'Größte Datei (MiB)',
-      siteLanguageLabel: 'Sprache der Übersicht',
-      siteLanguage: { auto: 'wie die Demos', de: 'Deutsch', en: 'Englisch' },
       siteHint:
         'Eine statische Site, auf die „Teilen“ Demos für die Kollegen bringt: Obeya schreibt die Seiten und ihre Übersicht selbst und veröffentlicht sie mit dem Befehl. Die Zugangsdaten bleiben in der Datei auf jedem Rechner; ein Rechner ohne sie exportiert Demos stattdessen. Ohne Site exportiert „Teilen“ eine Datei.',
       share: {
@@ -1102,6 +1103,7 @@ const de = {
       title: 'Demos',
       hint: 'Wie Agenten ihre Demos vertonen. Gilt ab der nächsten Aufnahme, ohne Neustart.',
       language: 'Sprache der Erzählung',
+      languageHint: 'Ein Repository kann für seine Demos eine andere nennen: „Sprache der Demos“ in seinen Einstellungen.',
       languages: { de: 'Deutsch', en: 'Englisch' } satisfies Record<NarrationLanguage, string>,
       voice: 'Stimme',
       groups: { local: 'Auf diesem Rechner', service: 'Dienst (API-Schlüssel)', own: 'Eigene' },
@@ -1129,7 +1131,7 @@ const de = {
       } satisfies Record<VoiceKind, string>,
       field: {
         voiceName: (v: VoiceKind): string => (v === 'qwen3' ? 'Sprecher' : v === 'elevenlabs' ? 'Voice-ID' : 'Name der Stimme'),
-        reference: () => 'Stimmprobe zum Klonen (.wav, das genaue Transkript als .txt daneben)',
+        reference: (language: string) => `Stimmprobe zum Klonen, ${language} (.wav, das genaue Transkript als .txt daneben)`,
         command: () => 'Befehl',
         url: (v: VoiceKind): string => (v === 'azure' ? 'Region (z. B. westeurope) oder Adresse' : v === 'openai' ? 'Adresse' : 'Adresse des Dienstes'),
         keyFile: (v: VoiceKind) => `Datei mit dem API-Schlüssel${v === 'http' ? ' (optional, als Bearer-Token)' : ''}`,
@@ -1157,10 +1159,12 @@ const de = {
         noUrl: 'Es fehlt die Adresse (bei Azure die Region).',
         noKey: 'Es fehlt der API-Schlüssel: eine Datei, oder die Umgebungsvariable des Dienstes.',
         keyFileMissing: 'Die Datei mit dem API-Schlüssel gibt es nicht.',
-        referenceMissing: 'Die Stimmprobe gibt es nicht.',
-        noTranscript: 'Neben der Stimmprobe fehlt ihr Transkript (gleicher Name, .txt).',
         notHere: '„say“ gibt es nur auf einem Mac.',
       } satisfies Record<DemoSettingsProblem, string>,
+      clip: {
+        referenceMissing: 'Die Stimmprobe gibt es nicht.',
+        noTranscript: 'Neben der Stimmprobe fehlt ihr Transkript (gleicher Name, .txt).',
+      } satisfies Record<ClipProblem, string>,
     },
     setup: {
       title: 'Was Demos auf diesem Rechner brauchen',
@@ -2405,6 +2409,9 @@ const en: Strings = {
       stopHint: 'The command Obeya stops the app of a card that waits for you with, so that it costs disk, not memory; the agent starts it again when it needs it. Left empty, Obeya stops nothing.',
       keep: 'Keep running when this exits 0',
       keepHint: 'Protects an app that holds what must not be lost (a restored database).',
+      language: 'Demo language',
+      languages: { auto: 'as the demo settings', de: 'German', en: 'English' },
+      languageHint: 'Narration, chapters and report of this repository’s demos, their shared pages and its demo site’s overview. Without it, the narration language of the demo settings applies.',
       site: 'Demo site',
       siteTitle: 'Title of the overview',
       siteUrl: 'URL',
@@ -2412,8 +2419,6 @@ const en: Strings = {
       siteEnv: 'File with credentials (KEY=value), relative to Obeya’s directory',
       siteHeaders: 'Headers for reading behind a login, one per line',
       siteMaxFile: 'Largest file (MiB)',
-      siteLanguageLabel: 'Language of the overview',
-      siteLanguage: { auto: 'as the demos', de: 'German', en: 'English' },
       siteHint:
         'A static site “Share” puts demos on for colleagues: Obeya writes the pages and their overview itself and publishes them with the command. The credentials stay in the file on each machine; a machine without it exports demos instead. Without a site, “Share” exports a file.',
       share: {
@@ -2554,6 +2559,7 @@ const en: Strings = {
       title: 'Demos',
       hint: 'How agents narrate their demos. Applies from the next recording, without a restart.',
       language: 'Narration language',
+      languageHint: 'A repository can name another for its demos: “Demo language” in its settings.',
       languages: { de: 'German', en: 'English' },
       voice: 'Voice',
       groups: { local: 'On this machine', service: 'Service (API key)', own: 'Your own' },
@@ -2581,7 +2587,7 @@ const en: Strings = {
       },
       field: {
         voiceName: (v: VoiceKind) => (v === 'qwen3' ? 'Speaker' : v === 'elevenlabs' ? 'Voice ID' : 'Voice name'),
-        reference: () => 'Voice sample to clone (.wav, its exact transcript beside it as .txt)',
+        reference: (language: string) => `Voice sample to clone, ${language} (.wav, its exact transcript beside it as .txt)`,
         command: () => 'Command',
         url: (v: VoiceKind) => (v === 'azure' ? 'Region (e.g. westeurope) or address' : v === 'openai' ? 'Address' : 'Address of the service'),
         keyFile: (v: VoiceKind) => `File with the API key${v === 'http' ? ' (optional, as a bearer token)' : ''}`,
@@ -2609,9 +2615,11 @@ const en: Strings = {
         noUrl: 'The address is missing (for Azure the region).',
         noKey: 'The API key is missing: a file, or the service’s environment variable.',
         keyFileMissing: 'The file with the API key does not exist.',
+        notHere: '“say” exists only on a Mac.',
+      },
+      clip: {
         referenceMissing: 'The voice sample does not exist.',
         noTranscript: 'The voice sample’s transcript is missing beside it (same name, .txt).',
-        notHere: '“say” exists only on a Mac.',
       },
     },
     setup: {

@@ -106,6 +106,8 @@ export interface SharingOptions {
   runtime: AgentRuntime;
   /** Where the card's repository shares demos; null when it shares none. */
   sourceFor: (card: Item) => ShareSource | null;
+  /** The language the card's repository names for its demos (`demo.language` of its settings); none where it names none. */
+  languageFor?: (card: Item) => PageLanguage | undefined;
   /** Obeya's data directory, passed to a site's deploy as `OBEYA_HOME`; the deploy runs in a directory of it (`SHARE_CWD`). */
   home: string;
   /** Where the card's pull request is, for the page's link in its description. */
@@ -414,7 +416,7 @@ export class Sharing {
       slug: s.slug,
       ...first.shown,
       pr,
-      language: this.languageOf(first.dir),
+      language: this.languageOf(first.dir, card),
       dir: first.dir,
       shared: this.others(cardId, target.key),
       ...(later.length ? { more: later.map((d) => ({ ...d.shown, dir: d.dir, ...(d.at ? { at: d.at } : {}) })) } : {}),
@@ -491,7 +493,7 @@ export class Sharing {
     };
     const poster = file('poster.jpg');
     const captions = file('captions.vtt');
-    const language = this.languageOf(demo.dir);
+    const language = this.languageOf(demo.dir, card);
     const parts: Omit<DemoPageParts, 'video' | 'poster'> = {
       title: page.title,
       text: page.text,
@@ -532,7 +534,7 @@ export class Sharing {
     const page = await this.page(card, demo);
     const slug = this.stored(card.id)?.slug ?? slugOf(card);
     const index = readFileSync(join(demo.dir, 'index.html'), 'utf8');
-    const language = this.languageOf(demo.dir);
+    const language = this.languageOf(demo.dir, card);
     const when = PAGE_WORDS[language].demoOf(day(statSync(join(demo.dir, 'index.html')).mtime, language));
     const parts = { title: page.title, text: page.text, pr: this.prOf(card.id), when, tabTitle: page.title, language };
     let out: { name: string; type: string; data: Uint8Array<ArrayBuffer> };
@@ -556,7 +558,7 @@ export class Sharing {
   /** The page's title and text: the worker's, else written now and kept with the demo, so it is not written again. */
   private async page(card: Item, demo: Demo & { dir: string }): Promise<DemoPage> {
     if (demo.page) return demo.page;
-    const page = await this.writePage(card, demo);
+    const page = await this.writePage(card, demo, this.languageOf(demo.dir, card));
     const row = this.o.board.row(card.id);
     const latest = this.demo(card.id);
     if (latest && sameDemo(latest, demo)) this.o.board.work(card.id, { demo: JSON.stringify({ ...latest, page }) });
@@ -569,7 +571,7 @@ export class Sharing {
    * The page's text for a demo handed over without one (its repository did not share then): a short
    * session writes it from the worker's summary. Without one, the card's title and the summary's start stand in.
    */
-  private async writePage(card: Item, demo: Demo): Promise<DemoPage> {
+  private async writePage(card: Item, demo: Demo, language: PageLanguage): Promise<DemoPage> {
     // a card's summary goes with its approval; the log keeps every handover
     const summary = this.o.board.summary(card.id) ?? this.o.board.events(card.id).filter((e) => e.kind === 'review' && e.author === 'worker').at(-1)?.text ?? '';
     const fallback: DemoPage = { title: plainText(card.title), text: plainText(summary).split(/(?<=[.!?])\s+/).slice(0, 4).join(' ') || plainText(card.title) };
@@ -577,11 +579,11 @@ export class Sharing {
     await readSession(this.o.runtime, {
       cwd: this.target(card)?.repo ?? this.o.home,
       role: 'chores',
-      system: pageSystem(LANGUAGE_NAMES[this.o.board.language()]),
+      system: pageSystem(LANGUAGE_NAMES[language]),
       tools: (finish) => [
         {
           name: 'page',
-          description: `The page's title and text, in ${LANGUAGE_NAMES[this.o.board.language()]}.`,
+          description: `The page's title and text, in ${LANGUAGE_NAMES[language]}.`,
           schema: { title: z.string(), text: z.string() },
           run: ({ title, text }) => {
             if (page) return 'Already written.';
@@ -621,7 +623,8 @@ export class Sharing {
   private target(card: Item): ShareTarget | null {
     const src = this.o.sourceFor(card);
     if (!src || siteMissing(this.o.home, src.site)) return null;
-    return siteTarget(src.site, src.repo, this.o.home, this.o.board.t.share);
+    const language = this.o.languageFor?.(card);
+    return siteTarget(src.site, src.repo, this.o.home, this.o.board.t.share, language ? { language } : {});
   }
 
   private card(cardId: string): Item {
@@ -647,15 +650,15 @@ export class Sharing {
 
   /**
    * The language a demo is in: the one its `index.html` names (the report page of a video, which the
-   * director writes in the narration language, or the artifact itself), else the narration
-   * language of the demo settings.
+   * director writes in the narration language, or the artifact itself), else the language the
+   * card's repository names for its demos, else the narration language of the demo settings.
    */
-  private languageOf(dir: string): PageLanguage {
+  private languageOf(dir: string, card: Item): PageLanguage {
     try {
       const lang = /<html\b[^>]*\blang=["']?([a-z]{2})/i.exec(readFileSync(join(dir, 'index.html'), 'utf8').slice(0, 2000))?.[1]?.toLowerCase();
       if (lang === 'de' || lang === 'en') return lang;
     } catch {}
-    return readDemoSettings(this.o.home).language;
+    return this.o.languageFor?.(card) ?? readDemoSettings(this.o.home).language;
   }
 
   /** One of the card's demos a page may show (`cardDemos`), by its handover, else by its directory. */

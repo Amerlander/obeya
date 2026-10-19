@@ -3204,7 +3204,14 @@ a warning when the plugin's manifest or the demo skill is missing.
 The demo settings (`lib/settings.ts`; `demo.json` in Obeya's home, `OBEYA_HOME` else `~/.obeya`)
 give the narration language (German or English: narration, captions, the report page's words;
 without one, the language Obeya speaks to the owner) and the voice, a provider: text in, WAV out
-(`lib/voices.ts` turns the settings into what `lib/tts.py` runs).
+(`lib/voices.ts` turns the settings into what `lib/tts.py` runs). They are the machine's, for every
+canvas; a repository whose demos speak another language says so in its settings (`demo.language`,
+see Repository settings), which goes before them for its demos: Obeya gives it to the repository's
+workers as `DEMO_LANGUAGE`, and the skill (`repositoryLanguage`) reads that, else the
+`.obeya/settings.json` of the repository it runs in. Obeya's own demos are in English (its
+`.obeya/settings.json`, 2026-10-19). `node lib/settings.ts` names where the language came from; run in
+a repository without Obeya, it says to render with `DEMO_LANGUAGE`, since the render runs in the
+demo's directory, outside the repository.
 
 Local voices run once per clip as a command with the text on stdin:
 
@@ -3214,9 +3221,13 @@ Local voices run once per clip as a command with the text on stdin:
 - Qwen3-TTS (1.7B, a stock speaker from the CustomVoice model or a clone of a clip with its
   transcript beside it from the Base model; MLX through mlx-audio on Apple Silicon, PyTorch through
   qwen-tts elsewhere, `lib/qwen3.py`; a clone continues its clip, so a German clip carries German
-  accent and rhythm into English narration: the clip has to be in the narration language, and the
-  settings hold one, since only one language is active at a time (decided 2026-10-12); no open
-  successor model as of 2026-10-07, Qwen-Audio-3.1-TTS of 2026-09 is hosted only);
+  accent and rhythm into English narration: the clip has to be in the narration language, so the
+  settings hold one clip per language (`references: { de, en }`), and a demo clones the one of its
+  language; a language without a clip is spoken by a stock speaker, which is nobody's own voice, so
+  that narration is in the third person. Until 2026-10-19 the settings held one clip, since only
+  one language was active at a time (decided 2026-10-12); with a language per repository two are
+  (a `reference` of a file from before is read as the clip of its language). No open successor
+  model as of 2026-10-07, Qwen-Audio-3.1-TTS of 2026-09 is hosted only);
 - macOS `say` (offered on a Mac only);
 - the owner's own command (through the shell; it writes the WAV to `$DEMO_WAV`).
 
@@ -3245,7 +3256,9 @@ missing and about how large it is first: each in a Python environment of its own
 `voices/` in Obeya's home, Piper's voice files beside it, Qwen3's models in the Hugging Face cache,
 where a model downloaded before counts as installed (`node lib/voices.ts install` does the same
 without Obeya). A render refuses a voice that is not installed and says how to install it. The sheet
-also plays a sentence in the voice being chosen ("Anhören").
+also plays a sentence in the voice being chosen ("Anhören"), in the narration language. For Qwen3-TTS
+it has a field per language for the clip to clone, each with what keeps it from working (no such
+file, no transcript beside it); its narration language says that a repository can name another.
 
 #### A voice that stays loaded
 
@@ -3314,7 +3327,10 @@ instance); without Obeya, `bun lib/recipe.ts` in a repository prints it. The wor
 says how to run the app (Obeya: a scratch instance from the worktree, staged by
 `scripts/scratch-obeya.ts` from a stage file before every take, its workers idle unless the change
 is about agents (`--real-workers`); elsewhere, say, the clone's own app), and hands over the
-directory and chapter titles with `ready_for_review`.
+directory and chapter titles with `ready_for_review`. A scratch Obeya speaks the stage's `language`,
+else the language of the demos where the script runs (`DEMO_LANGUAGE`, else the demo settings'), so
+the screen matches the narration; the stage's card titles and conversations are written in it
+(Obeya's `app.run` asks for English).
 
 Before the first render it runs `node demo.ts --dry`: `login`, `open` and the scenes against the
 app, without narration, setup check, screencast or ffmpeg (`untilSpoken` does not wait), under the
@@ -3661,9 +3677,11 @@ page is at `url/<slug>/`), the `deploy` command line (`{dir}` stands for the sit
 (credentials, never in git; a path outside the home is refused, and `${KEY}` comes from that file
 alone, not Obeya's environment, as settings from the repository could otherwise send any secret of
 the machine to a URL of their choosing), `headers` for reading the live site behind a login (`${KEY}` from
-`env`), the largest file the host takes (`maxFile`, 25 MiB without it) and the overview's `language`
-(else the demo settings' narration language). The Konfiguration dialog has a field for each under
-„Einstellungen“. A site counts once it has a title, an http(s) URL and a deploy command
+`env`) and the largest file the host takes (`maxFile`, 25 MiB without it). The overview is in the
+repository's `demo.language`, else the demo settings' narration language: until 2026-10-19 the site
+had a `language` of its own, which two settings for one need made redundant; a file that still has
+it reads without it, the site kept, and the configuration names it as a problem of the repository's
+settings. The Konfiguration dialog has a field for each under „Einstellungen“. A site counts once it has a title, an http(s) URL and a deploy command
 (`siteIncomplete` in `src/server/share.ts`); until then demos are exported, and a site that cannot
 be used (incomplete, or its deploy program not there: `siteProblem`) is the problem `demoSite` at
 the repository.
@@ -3685,8 +3703,9 @@ hash of the demo's own files, the page's language; `more`, the later versions, e
 and its handover's time, its files in `2/`, `3/` … of the page's directory), plus the overview,
 which dates a page by its newest version; `backup/` holds a page set aside while a deploy runs, put
 back when it fails. Pages are written
-with Obeya's templates, each in its demo's language ("Geteilt am", "Alle Demos"), the overview in
-the site's; a version keeps its date while its demo's own files stay the same (not the copies on the
+with Obeya's templates, each in its demo's language ("Geteilt am", "Alle Demos": the language its
+report page names, else the repository's `demo.language`, else the demo settings'; the page's title
+and text, where Obeya writes them, too), the overview in the repository's; a version keeps its date while its demo's own files stay the same (not the copies on the
 site, which carry what Obeya adds to an artifact). The guard against a directory lacking pages
 Obeya has as shared, and the file limit, refuse before anything is deployed. Which pages a change to
 Obeya's templates leaves outdated says the list of page changes (see Outdated pages).
@@ -4068,7 +4087,8 @@ printed to the console): every worker's brief has it word for word, and its demo
 back to it. Obeya neither starts the app nor looks for its address; the agents do, from the recipe,
 and a worker tells Obeya the address once the app runs, for the owner to open it from the card
 (see Trying the app by hand).
-`demo` has `site` (see Static sites). The fields of `app` and `demo` are each a setting of their
+`demo` has `language`, the language of the repository's demos and of its site's overview (see The
+demo settings and voices), and `site` (see Static sites). The fields of `app` and `demo` are each a setting of their
 own (`NESTED_SETTINGS`): this machine may set `app.stop` and leave `app.run` to the repository, and
 each comes from where it is set. The reference for every
 field is `docs/settings.md`, linked from the README.
@@ -4262,8 +4282,9 @@ does not take it over (empty: the demo site of its settings, shown as „Site: <
 see Where a demo goes). Each repository folds its settings under „Einstellungen“ below its row (see
 Repository settings), with the main branch and how work lands in the folded line; the app's
 recipe („So läuft die App“, a large text field), its stop command („Stoppen, solange eine Karte
-wartet“) and, once there is one, its keep condition, and the demo site („Demo-Site“: title, URL, deploy command, env file, headers as `Name: value` lines, the largest
-file in MiB, the overview's language) have their fields there like the other settings; „Für alle ins
+wartet“) and, once there is one, its keep condition, the language of its demos („Sprache der
+Demos“: „wie die Demo-Einstellungen“, Deutsch, Englisch) and the demo site („Demo-Site“: title, URL, deploy command, env file, headers as `Name: value` lines, the largest
+file in MiB) have their fields there like the other settings; „Für alle ins
 Repository übernehmen“ below them takes the values saved for this machine into the repository's
 `.obeya/settings.json`. What is taken over is what is saved: while the dialog has changes not saved
 yet, the takeover saves them first, all of them like „Speichern“ (the confirmation says so), then

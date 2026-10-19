@@ -1,6 +1,6 @@
 // Shapes shared by the server and the UI.
 
-import type { DemoSettings, VoiceKind } from '../../plugin/skills/demo/lib/settings.ts';
+import type { DemoSettings, NarrationLanguage, VoiceKind } from '../../plugin/skills/demo/lib/settings.ts';
 import type { SetupId, SetupItem } from '../../plugin/skills/demo/lib/setup.ts';
 import type { Language } from './locale';
 import { MESSAGES } from './messages';
@@ -1286,8 +1286,6 @@ export interface DemoSite {
   headers?: Record<string, string>;
   /** The largest file the host takes, in bytes; 25 MiB without it. */
   maxFile?: number;
-  /** The overview's words; without it the narration language of the demo settings. */
-  language?: 'de' | 'en';
 }
 
 /**
@@ -1328,10 +1326,12 @@ export interface RepoSettings {
   /** How the app runs: the recipe in every worker's brief, and how Obeya stops it while a card waits (Parking). */
   app?: AppSettings;
   /**
-   * The static site Obeya keeps and deploys itself to share demos on (`src/server/site.ts`);
-   * without one, "Teilen" exports a demo as a file.
+   * `site`: the static site Obeya keeps and deploys itself to share demos on (`src/server/site.ts`);
+   * without one, "Teilen" exports a demo as a file. `language`: the language of the repository's
+   * demos (narration, captions, report, shared pages) and of its site's overview, over the one of
+   * the demo settings (`demo.json`), which applies without it.
    */
-  demo?: { site?: DemoSite };
+  demo?: { site?: DemoSite; language?: NarrationLanguage };
 }
 
 /**
@@ -1348,7 +1348,7 @@ export type CardLanding = Partial<Pick<RepoSettings, 'land' | 'direct'>>;
 export const SHARED_FIELDS = ['land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'app', 'demo'] as const satisfies readonly (keyof SharedSettings)[];
 
 /** The settings made of fields that are each set, layered and taken over on their own, and their fields. */
-export const NESTED_SETTINGS = { app: ['run', 'stop', 'keep'], demo: ['site'] } as const satisfies { [K in keyof RepoSettings]?: readonly (keyof NonNullable<RepoSettings[K]>)[] };
+export const NESTED_SETTINGS = { app: ['run', 'stop', 'keep'], demo: ['site', 'language'] } as const satisfies { [K in keyof RepoSettings]?: readonly (keyof NonNullable<RepoSettings[K]>)[] };
 export type NestedSetting = keyof typeof NESTED_SETTINGS;
 export const isNested = (field: string): field is NestedSetting => field in NESTED_SETTINGS;
 
@@ -1428,7 +1428,7 @@ export interface RepoValues {
   workspaces: SettingValue<'clones' | 'worktrees'>;
   prNoise: SettingValue<string[]>;
   app: { run: SettingValue<string>; stop: SettingValue<string>; keep: SettingValue<string> };
-  demo: { site: SettingValue<DemoSite | null> };
+  demo: { site: SettingValue<DemoSite | null>; language: SettingValue<NarrationLanguage | null> };
 }
 
 /**
@@ -1617,17 +1617,19 @@ export type DemoSettingsProblem =
   /** A service without its environment variable or a key file. */
   | 'noKey'
   | 'keyFileMissing'
-  /** Qwen3's clip to clone is not there, or its transcript beside it. */
-  | 'referenceMissing'
-  | 'noTranscript'
   /** `say` is macOS only. */
   | 'notHere';
+
+/** What keeps one of Qwen3's clips to clone from working: it is not there, or its transcript beside it. */
+export type ClipProblem = 'referenceMissing' | 'noTranscript';
 
 /** What the settings sheet shows about a voice, saved or not yet. */
 export interface DemoVoiceCheck {
   /** The person the narration speaks in, which follows from whether the voice is the owner's own. */
   person: 'first' | 'third';
   problems: DemoSettingsProblem[];
+  /** The clips to clone that do not work, by their language. */
+  clips: Partial<Record<NarrationLanguage, ClipProblem>>;
   /** What the voice needs installed by Obeya and is missing (Piper, Qwen3-TTS), and about how much that is. */
   install: { installed: boolean; missing: string[]; mb: number };
 }

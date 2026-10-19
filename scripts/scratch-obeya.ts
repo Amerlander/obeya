@@ -26,7 +26,7 @@
 //
 // The stage file (JSON; every field but `cards` optional):
 //   {
-//     "name": "Shop", "canvases": ["Website"],
+//     "name": "Shop", "canvases": ["Website"], "language": "en",
 //     "port": 4480, "dir": "/tmp/obeya-scratch-4480", "clones": 2, "mainBranch": "master",
 //     "poolCheckout": true, "slots": 3,
 //     "hosts": [{ "name": "Workhorse", "ssh": "me@workhorse.local", "clones": 2, "slots": 2 }],
@@ -58,6 +58,11 @@
 //     "settingProposals": [{ "field": "run", "value": "bun run dev", "basis": "…", "cards": ["A", "B"] }],
 //     "talk": [{ "said": "…", "reply": "…", "ago": "2h", "card": "A", "answer": "…" }]
 //   }
+// `language` is the language the scratch Obeya speaks (de or en); without it, the language of the
+// demos where the script runs (`plugin/skills/demo/lib/settings.ts`: `DEMO_LANGUAGE`, which Obeya
+// gives its workers from the repository's `demo.language`, else the demo settings'), so that the
+// screen a demo records matches its narration. Card titles and conversations are not translated:
+// write them in that language.
 // A card is created (x and y default to a free place; `idea`, `repo`, `from` as in
 // POST /api/c/<canvas>/cards) unless it names a plan doc's `project` or `workstream` (label; with
 // several plan docs "docs/plan/x.md#W1"), which exist already. Then its fields are written straight
@@ -100,6 +105,8 @@ import { Database } from 'bun:sqlite';
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, openSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { demoSettingsHere } from '../plugin/skills/demo/lib/settings.ts';
+import { type Language, LANGUAGES } from '../src/core/locale';
 import type { CanvasSnapshot, Item } from '../src/core/types';
 import { loginLink, ownerHeaders } from '../src/server/owner';
 import { findTailscale, type ServeEntry, Tailscale } from '../src/server/tailscale';
@@ -144,6 +151,8 @@ interface Stage {
   setup?: boolean;
   /** Names the canvas the cards go on. */
   name?: string;
+  /** The language the scratch Obeya speaks; the demos' where the script runs without it. */
+  language?: Language;
   /** Further canvases by name, each over a repository of its own, without cards: to switch between canvases. */
   canvases?: string[];
   port?: number;
@@ -220,6 +229,9 @@ const rootOn = (h: { root?: string }) => h.root ?? `${dir}/far`;
 const repo = join(dir, 'repo');
 const mainBranch = stage.mainBranch ?? 'main';
 mkdirSync(home, { recursive: true });
+if (stage.language && !LANGUAGES.includes(stage.language)) fail(`"language" is ${LANGUAGES.join(' or ')}, not ${stage.language}`);
+// the language Obeya speaks to the owner (src/server/settings.ts)
+writeFileSync(join(home, 'settings.json'), `${JSON.stringify({ language: stage.language ?? demoSettingsHere().language })}\n`);
 // the owner's key, made before the server starts, which takes it from the home (owner.ts); code from before it has none and ignores it
 const owner = ownerHeaders(home);
 

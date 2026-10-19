@@ -275,6 +275,7 @@ export class CanvasRuntime {
         const r = this.repoOf(card);
         return r.site ? { site: r.site, repo: r.info.path } : null;
       },
+      languageFor: (card) => this.repoOf(card).adapter.demo?.language,
     });
     this.sharing.resume();
     // snoozed cards wake at their time: one that passed while Obeya was not running, or the machine slept, at once

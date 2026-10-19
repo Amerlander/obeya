@@ -1408,6 +1408,12 @@ export class Workers {
 
   // ---------------------------------------------------------------- sessions
 
+  /** What a worker's environment gets: where Obeya is, and the language the repository names for its demos (`DEMO_LANGUAGE`, read by the demo skill). */
+  private env(): Record<string, string> | undefined {
+    const language = this.o.adapter.demo?.language;
+    return language ? { ...this.o.env, DEMO_LANGUAGE: language } : this.o.env;
+  }
+
   private launch(cardId: string, message: string, resume?: string, images: string[] = []) {
     const row = this.o.board.row(cardId);
     if (!row.workspace) throw new Error(`card ${cardId} has no workspace to work in`);
@@ -1420,6 +1426,7 @@ export class Workers {
     ({ text: message, images } = this.withUnheard(cardId, message, images));
     message = this.withRestart(cardId, live, message);
     live.pending = { text: message, images };
+    const env = this.env();
     live.session = this.o.runtime.start(
       {
         cwd: row.workspace,
@@ -1427,7 +1434,7 @@ export class Workers {
         system: this.system(preferences, !!row.prototype_of),
         tools: this.tools(cardId, live, !!row.prototype_of),
         plugins: [OBEYA_PLUGIN],
-        ...(this.o.env ? { env: this.o.env } : {}),
+        ...(env ? { env } : {}),
         contextUpdate: () =>
           [this.restartStillDue(cardId, live), this.unheardNow(cardId, live), this.preferencesUpdate(live), this.decisionsUpdate(cardId, live)].filter(Boolean).join('\n\n') || undefined,
         askOwner: (request, signal) => this.askOwner(cardId, live, request, signal),

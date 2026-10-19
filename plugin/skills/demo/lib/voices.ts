@@ -18,7 +18,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { isMain, lib } from './here.ts';
-import { type DemoSettings, expandHome, type NarrationLanguage, obeyaHome, readDemoSettings, SERVICES } from './settings.ts';
+import { type DemoSettings, demoSettingsHere, expandHome, type NarrationLanguage, obeyaHome, referenceOf, SERVICES } from './settings.ts';
 
 /** Piper's voices: one per language unless the settings name another. */
 export const PIPER_VOICES: Record<NarrationLanguage, string> = { de: 'de_DE-thorsten-high', en: 'en_US-ryan-high' };
@@ -188,7 +188,7 @@ export function components(s: DemoSettings, home = obeyaHome()): Component[] {
   }
   if (s.voice === 'qwen3') {
     const dir = path.join(voicesHome(home), 'qwen3');
-    const repo = qwen3Model(!!s.reference);
+    const repo = qwen3Model(!!referenceOf(s));
     return [
       onMlx() ? pythonEnv(dir, ['mlx-audio'], 'Qwen3-TTS (MLX)', 450) : pythonEnv(dir, ['qwen-tts'], 'Qwen3-TTS (PyTorch)', 4000),
       {
@@ -236,7 +236,8 @@ export function voiceSpec(s: DemoSettings, home = obeyaHome()): VoiceSpec {
       return { kind: 'command', argv: [python, '-m', 'piper', '-m', onnx, '-f', '{out}'], tag: `piper|${piperVoice(s).name}`, heavy: false };
     }
     case 'qwen3': {
-      const reference = s.reference && expandHome(s.reference);
+      const clip = referenceOf(s);
+      const reference = clip && expandHome(clip);
       const voice = reference ? { reference } : { speaker: s.voiceName || QWEN3_SPEAKER };
       const run = qwen3Command(voice, s.language, home);
       return {
@@ -311,7 +312,7 @@ export function ttsArgs(spec: VoiceSpec, lockFile = TTS_LOCK) {
 export const TTS_LOCK = path.join(os.homedir(), '.cache', 'demo-skill', 'tts.lock');
 
 if (isMain(import.meta.filename)) {
-  const s = readDemoSettings();
+  const s = demoSettingsHere();
   const state = installState(s);
   if (process.argv[2] === 'install') {
     await installVoice(s, (line) => console.log(line));

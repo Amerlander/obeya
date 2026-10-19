@@ -14,7 +14,7 @@ import { PassThrough } from 'node:stream';
 import type { SpawnedProcess, SpawnOptions } from '@anthropic-ai/claude-agent-sdk';
 import { resource } from './resources';
 import { spawnOutput } from './spawn';
-import { expandHome } from '../../plugin/skills/demo/lib/settings.ts';
+import { expandHome, readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
 
 /** Where a workspace on another machine says which machine it is on. */
 const PREFIX = 'ssh://';
@@ -560,7 +560,7 @@ function deferred<T>(ready: Promise<T>, start: (value: T) => ChildProcess): Spaw
 /**
  * What a worker's session needs on a host: the plugins it loads, the `playwright-core` the demo
  * skill imports (found from the plugin's directory there, as in Obeya's checkout), and the owner's
- * demo settings, with the voice reference as a path here: Obeya holds that voice and reads it.
+ * demo settings, with the voice references as paths here: Obeya holds that voice and reads them.
  * The key file of a hosted voice stays here.
  */
 export function sessionFiles(home: string, plugins: string[]): HostFiles {
@@ -570,13 +570,8 @@ export function sessionFiles(home: string, plugins: string[]): HostFiles {
       'demo.json': () => {
         const file = join(home, 'demo.json');
         if (!existsSync(file)) return undefined;
-        try {
-          const { keyFile: _, ...settings } = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
-          if (typeof settings.reference === 'string') settings.reference = expandHome(settings.reference);
-          return JSON.stringify(settings, null, 2);
-        } catch {
-          return undefined;
-        }
+        const { keyFile: _, references, ...settings } = readDemoSettings(home);
+        return JSON.stringify({ ...settings, ...(references ? { references: Object.fromEntries(Object.entries(references).map(([l, clip]) => [l, expandHome(clip)])) } : {}) }, null, 2);
       },
     },
   };
