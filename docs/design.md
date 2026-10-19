@@ -2529,6 +2529,13 @@ follow-up stands under the owner's words with „↳ setzt fort: „…““ (a
 up), so the owner sees which answer Obeya took it for; its answer stands in the sheet or the open
 card's log as any.
 
+A turn that ends while the agent's background work runs (a download, a long query) is no answer
+(`inform` in `src/server/advisor.ts`): the look-up goes on reading, in the sheet or on its Question
+card, until that work wakes the agent and it answers. Should the work never wake it, its last words
+are the answer after all, with the same limits as for a worker (three hours while it runs, ten
+minutes after it ended). Until 2026-10-19 a look-up's turn took its words so far („still
+downloading …“) as the answer and closed the session, which stopped that work.
+
 #### Files with an answer
 
 Every thread has an output directory outside every repository, `~/.obeya/answers/<canvas>/<thread>/`

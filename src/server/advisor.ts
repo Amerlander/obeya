@@ -7,7 +7,7 @@ import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import { type Language, LANGUAGE_NAMES } from '../core/locale';
 import type { AnswerFile, Question } from '../core/types';
-import type { AgentRuntime, AgentTool } from './runtime';
+import { type AgentRuntime, type AgentTool, BACKGROUND_GRACE, BACKGROUND_LIMIT } from './runtime';
 import { clip } from '../core/text';
 
 /** An answer to a question the owner asked, for the card or the sheet, with the files it comes with. */
@@ -39,6 +39,9 @@ export interface Briefing {
   signal?: AbortSignal;
   /** Where the answer shows that it waits for the account's usage limit, until when; nothing once it goes on (`AgentSpec.onLimit`). */
   onLimit: (until: number | undefined) => void;
+  /** How long a turn waits for background work that has ended to wake it, and for work that still runs (ms). */
+  backgroundGrace?: number;
+  backgroundLimit?: number;
 }
 
 /** A turn that answered nothing because it was ended on purpose (`Briefing.signal`). */
@@ -50,18 +53,38 @@ export class Interrupted extends Error {
 
 /**
  * A turn that answers the owner's question, with a worker's tools (the shell, the web) so it can
- * check what it says; a turn that ends without the tool answers with its last words.
+ * check what it says; a turn that ends without the tool answers with its last words. A turn that
+ * ends while its background work runs (a download, a long query) is not over: that work wakes the
+ * agent, which goes on and answers then. Should it never wake it, its last words are the answer
+ * after all, with the workers' limits.
  */
 export function inform(b: Briefing): Promise<OwnerAnswer> {
   return new Promise((resolve, reject) => {
     if (b.signal?.aborted) return reject(new Interrupted());
     let answer: OwnerAnswer | null = null;
     let last = '';
+    let background = 0;
+    let waiting: ReturnType<typeof setTimeout> | undefined;
     const settle = (a: OwnerAnswer) => {
       if (answer) return 'Only the first answer counts.';
       answer = a;
       resolve(a);
       return 'Delivered. End your turn now.';
+    };
+    const close = () => {
+      clearTimeout(waiting);
+      waiting = undefined;
+      session.close();
+    };
+    const over = () => {
+      close();
+      if (answer) return;
+      if (last.trim()) settle({ text: last.trim() });
+      else reject(new Error('no answer'));
+    };
+    const waitForWork = () => {
+      clearTimeout(waiting);
+      waiting = setTimeout(over, background > 0 ? (b.backgroundLimit ?? BACKGROUND_LIMIT) : (b.backgroundGrace ?? BACKGROUND_GRACE));
     };
     const session = b.runtime.start(
       {
@@ -87,17 +110,25 @@ export function inform(b: Briefing): Promise<OwnerAnswer> {
           ...(b.tools ?? []),
         ],
         onEvent: (e) => {
+          if (e.type === 'background') {
+            // a turn waiting for the work waits as long as it runs
+            background = e.tasks.length;
+            if (waiting) waitForWork();
+            return;
+          }
+          // a turn may also start without a message (finished background work)
+          clearTimeout(waiting);
+          waiting = undefined;
           if (e.type === 'session') b.onSession?.(e.id);
           else if (e.type === 'text') last = e.text;
           else if (e.type === 'tool') b.onTool?.(e.name, e.input);
           else if (e.type === 'error' && !answer) {
-            session.close();
+            close();
             reject(new Error(e.message));
           } else if (e.type === 'idle') {
-            session.close();
-            if (answer) return;
-            if (last.trim()) settle({ text: last.trim() });
-            else reject(new Error('no answer'));
+            background = e.background ?? 0;
+            if (!answer && background > 0) waitForWork();
+            else over();
           }
         },
       },
@@ -105,7 +136,7 @@ export function inform(b: Briefing): Promise<OwnerAnswer> {
       b.images,
     );
     b.signal?.addEventListener('abort', () => {
-      session.close();
+      close();
       if (!answer) reject(new Interrupted());
     });
   });

@@ -4,12 +4,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pagePolicy } from '../core/frame';
 import { type Notice, waitingOn } from '../core/types';
+import { inform } from './advisor';
 import { answersDir } from './answers';
 import { CanvasRuntime } from './canvas';
 import { serveAnswerFile } from './demo';
 import type { Focus } from './commands';
 import { Store } from './db';
-import { FakeRuntime, noForge, type FakeSession, gitRepo } from './testing';
+import { FakeRuntime, noForge, type FakeSession, gitRepo, until } from './testing';
 
 let dir: string;
 let main: string;
@@ -186,6 +187,48 @@ describe('a question the Koordinator looks up', () => {
     a.emit({ type: 'error', message: 'boom' });
     await settle();
     expect(board().events(w4.id).at(-1)!.text).toContain('Ich konnte die Frage nicht beantworten (boom)');
+  });
+
+  test('a turn that ends while its background work runs is no answer: the agent answers once that work wakes it', async () => {
+    const login = board().create({ title: 'Login', body: 'Login hängt.', x: 0, y: 0 });
+    await say('wie oft hängt login?', { card: login.id }, 'look_up', { question: 'How often does login hang?', confirm: 'Moment.' });
+    const a = answerer();
+    a.emit({ type: 'background', tasks: [{ id: 'b1', description: 'Download the server logs' }] });
+    a.emit({ type: 'text', text: 'Still downloading the logs.' });
+    a.emit({ type: 'idle', background: 1 });
+    await settle();
+    // its words so far are no answer, and its session runs on with the download
+    expect(a.closed).toBe(false);
+    expect(board().talk().at(-1)!.answer).toBeUndefined();
+    expect(board().events(login.id).at(-1)).toMatchObject({ kind: 'say', author: 'koordinator', text: 'Moment.' });
+    // the download ends and wakes the agent for a turn of its own
+    a.emit({ type: 'background', tasks: [] });
+    a.emit({ type: 'tool', name: 'Bash', input: { command: 'grep -c timeout logs/*.log' } });
+    a.call('answer_owner', { text: '37 Mal im September.' });
+    a.emit({ type: 'idle', background: 0 });
+    await settle();
+    expect(a.closed).toBe(true);
+    expect(board().talk().at(-1)).toMatchObject({ answer: '37 Mal im September.' });
+    expect(board().events(login.id).at(-1)).toMatchObject({ kind: 'say', text: '37 Mal im September.' });
+  });
+
+  test('it waits for its background work no longer than its limit, nor long after that work ended without waking it', async () => {
+    const ask = () => inform({ runtime, cwd: main, system: 'S', message: 'Q?', language: 'de', onLimit: () => {}, backgroundGrace: 5, backgroundLimit: 30 });
+    const one = ask();
+    const a = runtime.last;
+    a.emit({ type: 'text', text: 'Still downloading.' });
+    a.emit({ type: 'idle', background: 1 });
+    a.emit({ type: 'background', tasks: [] });
+    // its last words are the answer after all
+    expect(await one).toEqual({ text: 'Still downloading.' });
+    expect(a.closed).toBe(true);
+    const two = ask();
+    const b = runtime.last;
+    b.emit({ type: 'idle', background: 1 });
+    await settle(15);
+    expect(b.closed).toBe(false);
+    expect(two).rejects.toThrow('no answer');
+    await until(() => b.closed);
   });
 });
 
@@ -501,6 +544,35 @@ describe('a thread on a Question card', () => {
     expect(b.inbox[0]).toContain('The owner paused you');
     expect(b.inbox[0]!.indexOf('und im Oktober?')).toBeLessThan(b.inbox[0]!.indexOf('und November?'));
     expect(board().item(card.id)!.paused).toBeUndefined();
+  });
+
+  test('its agent goes on reading while its background work runs, answers once that work wakes it, and can be paused meanwhile', async () => {
+    const { card } = await moved();
+    canvas.tell(card.id, 'und im Oktober?', [], false);
+    const a = answerer();
+    a.emit({ type: 'background', tasks: [{ id: 'b1', description: 'Query October' }] });
+    a.emit({ type: 'text', text: 'The October query runs.' });
+    a.emit({ type: 'idle', background: 1 });
+    await settle();
+    expect(a.closed).toBe(false);
+    expect(board().item(card.id)!.thread).toMatchObject({ thinking: true, answers: 2 });
+    a.emit({ type: 'background', tasks: [] });
+    a.call('answer_owner', { text: 'Oktober: 12 ct.' });
+    a.emit({ type: 'idle', background: 0 });
+    await settle();
+    expect(a.closed).toBe(true);
+    expect(board().item(card.id)!.thread).toEqual({ talk: card.thread!.talk, answers: 3, files: 1 });
+    expect(board().events(card.id).filter((e) => e.kind === 'talk').at(-1)!.text).toBe('Oktober: 12 ct.');
+
+    // paused while it waits for the work: what it was asked stays for when it goes on
+    canvas.tell(card.id, 'und November?', [], false);
+    const b = answerer();
+    b.emit({ type: 'idle', background: 1 });
+    canvas.act(card.id, { action: 'pause' });
+    expect(b.closed).toBe(true);
+    await settle();
+    expect(board().item(card.id)).toMatchObject({ paused: true, thread: { answers: 3 } });
+    expect(board().thread(card.id).pending).toEqual([expect.objectContaining({ text: expect.stringContaining('und November?') })]);
   });
 
   test('its agent the usage limit stops waits on the card and answers once the limit lifts; paused meanwhile, it waits no more', async () => {

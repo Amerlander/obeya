@@ -17,7 +17,7 @@ import { artifactFiles } from './demo-page';
 import { imageNote } from './images';
 import { outsidePlanDir } from './repo';
 import type { InputContext } from './koordinator';
-import { type AgentEvent, type AgentRuntime, type AgentSession, type AgentTool, failureReason, LIMIT_LIFTED, limitLifts, type PermissionAnswer, type PermissionRequest } from './runtime';
+import { type AgentEvent, type AgentRuntime, type AgentSession, type AgentTool, BACKGROUND_GRACE, BACKGROUND_LIMIT, failureReason, LIMIT_LIFTED, limitLifts, type PermissionAnswer, type PermissionRequest } from './runtime';
 import { TO_OBEYA, toObeyaTool } from './to-obeya';
 import { type Forward, HOST_DIR, hostName, remote } from './hosts';
 import { runAppCommand } from './app-command';
@@ -264,13 +264,6 @@ export interface DueRestart {
 /** What the worker pauses for, as the card's log says it. */
 const pauseOf = (due: DueRestart): Pause => (due.reason === 'stop' ? 'stop' : due.repo ? 'repo' : 'restart');
 
-/** Background work that ended wakes the worker within this; a turn that waits longer without a sign counts as ended. */
-export const BACKGROUND_GRACE = 10 * 60_000;
-/**
- * Background work ends by its own limit well within this (a command run in the background after two
- * hours at most, a watcher after half an hour): it is only for a session that never says the work ended.
- */
-export const BACKGROUND_LIMIT = 3 * 60 * 60_000;
 /** The owner may pause the demo video for a while; a browser gone away leaves no other sign. */
 const HOLD_GRACE = 10 * 60_000;
 /** Closing the card with „Freigeben“ also ends the watching: the approval takes the comments then. */

@@ -11,9 +11,9 @@ import { MESSAGES } from '../core/messages';
 import { type Item, type Mock, NEXT_STEPS, type NextStep, type PlannedPrototype, type Question, type SettledPart } from '../core/types';
 import { type Asked, decisionLog, withPick } from './advisor';
 import { BadRequest, type Board, type Message, replyNote, type Unread } from './board';
-import type { AgentEvent, AgentRuntime, AgentSession, AgentTool } from './runtime';
+import { type AgentEvent, type AgentRuntime, type AgentSession, type AgentTool, BACKGROUND_GRACE, BACKGROUND_LIMIT } from './runtime';
 import { imageNote } from './images';
-import { BACKGROUND_GRACE, BACKGROUND_LIMIT, describeTool, SPOKEN } from './workers';
+import { describeTool, SPOKEN } from './workers';
 import { TO_OBEYA, toObeyaTool } from './to-obeya';
 import { clip } from '../core/text';
 

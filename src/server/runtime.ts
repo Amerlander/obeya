@@ -500,6 +500,14 @@ export function failureReason(message: string, t: Messages): string {
   return t.failure.session(message);
 }
 
+/** Background work that ended wakes the agent within this; a turn that waits longer without a sign counts as ended. */
+export const BACKGROUND_GRACE = 10 * 60_000;
+/**
+ * Background work ends by its own limit well within this (a command run in the background after two
+ * hours at most, a watcher after half an hour): it is only for a session that never says the work ended.
+ */
+export const BACKGROUND_LIMIT = 3 * 60 * 60_000;
+
 /** A foreground command may sleep this long; anything longer keeps the owner's notes from the agent. */
 export const FOREGROUND_SLEEP_LIMIT = 30;
 
