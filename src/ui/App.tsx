@@ -268,14 +268,18 @@ function Canvas({
     setKOn(!kOn);
     if (!kOn && focusRef.current?.type === 'project') closeProject(false);
   };
+  /** The sheet as the owner opens it to talk (its button, `C`): the field under the conversation takes the cursor. */
+  const talkKoordinator = () => {
+    toggleKoordinator();
+    if (!kOn) requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('#ksheet .tell textarea')?.focus({ preventScroll: true }));
+  };
   const toggleArchive = () => setAOn(!aOnRef.current);
   // the configuration is a dialog over the page: what is open behind it stays as it was
   const toggleConfig = () => setCOn(!cOnRef.current);
   // asking Obeya about the configuration: its conversation in place of the dialog, ready to type into
   const talkFromConfig = () => {
     setCOn(false);
-    if (!kOn) toggleKoordinator();
-    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('#ksheet .tell textarea')?.focus({ preventScroll: true }));
+    if (!kOn) talkKoordinator();
   };
   const [helpOn, setHelpOn] = useState(false);
   // „Telefon verbinden“, from the section „Von anderen Geräten“ of the configuration
@@ -1144,7 +1148,7 @@ function Canvas({
       // the key is the shortcut's alone: its character would land in the field the shortcut focuses (the archive's filter)
       e.preventDefault();
       if (e.key === 'n') createAtCentre();
-      else if (e.key === 'c') toggleKoordinator();
+      else if (e.key === 'c') talkKoordinator();
       else toggleArchive();
     }
   };
@@ -1166,7 +1170,7 @@ function Canvas({
   // another parent, so opening and closing the sidebar only changes its colour; in the bar a hidden
   // copy keeps its room
   const talkButton = (
-    <button className={kOn ? 'pill kpill talk-pill on' : 'pill kpill talk-pill'} title={t.koordinator.buttonTitle} aria-label={t.koordinator.button} onClick={toggleKoordinator}>
+    <button className={kOn ? 'pill kpill talk-pill on' : 'pill kpill talk-pill'} title={t.koordinator.buttonTitle} aria-label={t.koordinator.button} onClick={talkKoordinator}>
       <TalkIcon />
       {unread > 0 && (
         <span className="n unread" title={t.koordinator.unreadCount(unread)}>

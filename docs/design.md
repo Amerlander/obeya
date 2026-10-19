@@ -2329,7 +2329,9 @@ Its sheet (button or `C`) gives the conversation with the Koordinator the height
 field to write in under it (the same as a card's, `src/ui/composer.tsx`: one frame as wide as the
 conversation, the text growing with what is written up to 30 % of the window, the screenshot button,
 the microphone that dictates into it (see Voice in) and Send in its bottom corner beside the text's
-scrollbar). Its placeholder shows in full, on two lines where it needs them: it often says what the
+scrollbar). Opened with its button or `C`, the sheet puts the cursor in that field, so the owner
+writes at once (the owner, 2026-10-19); opened with Tab, going through what needs the owner, it does
+not, so the next Tab goes on to the next. Its placeholder shows in full, on two lines where it needs them: it often says what the
 agent does with a message (the owner, 2026-10-17, after it had been cut off with „…“). Beside a short text the
 three buttons stand side by side; once the text is about as high as the three on top of each other
 (three lines on the phone), they stack in a narrow column, screenshot, microphone, Send from top to
