@@ -88,3 +88,5 @@ shows them as projects); when one is done, what lasts moves into `docs/design.md
   not into the docs as a command to copy.
 - Commit directly to `main`; this repo uses no feature branches or pull requests. An Obeya worker
   is the exception: it commits on its card's branch, and Obeya lands that branch on `main`.
+- When a task handles a GitHub issue, its worker closes the issue once the work has landed, with a
+  comment linking the demo video and the commit on `main`.
