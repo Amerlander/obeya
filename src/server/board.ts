@@ -836,9 +836,9 @@ export class Board {
     return id;
   }
 
-  /** The Koordinator's reply to words it has read, the question it looks up for them, and what a draft for Obeya's makers would start from. */
-  replyTalk(id: number, reply: string, lookUp?: { question: string; about: string | null }, wish?: Wish) {
-    this.store.replyTalk(id, reply, lookUp, wish);
+  /** The Koordinator's reply to words it has read, the question it looks up for them, and what a draft for Obeya's makers would start from; `waits`: unread in the sheet until the owner sees it. */
+  replyTalk(id: number, reply: string, lookUp?: { question: string; about: string | null }, wish?: Wish, waits = false) {
+    this.store.replyTalk(id, reply, lookUp, wish, waits);
     this.changed();
   }
 

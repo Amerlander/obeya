@@ -2486,7 +2486,12 @@ answers in orange, the colour of everything that waits for the owner, Obeya coun
 dich" and in the canvas's count in the switcher (`waitingOn`), and Tab goes there too, after the
 cards that need the owner. The answers that waited keep an orange edge until the sheet closes; one
 that comes while the sheet is in view is read as it comes, without the edge. An answer on a card's
-log is read there and does not wait in the sheet.
+log is read there and does not wait in the sheet. The quick turn's own reply waits the same way when
+it only answers (no actions, nothing looked up; also the reply that the words could not be read): a
+long answer takes the quick turn 20 s and more, and the owner may close the sheet or go to another
+canvas meanwhile. Until 2026-10-19 only looked-up answers waited, and such a reply came unmarked,
+with nothing on Obeya's button. A confirmation of actions does not wait: the canvas shows what it
+did, and its line above the mic carries „Rückgängig“.
 
 The Koordinator hears the answer with the next command, in full as the owner saw it (a card it
 offers at the end is one "ja" away), and it is part of its stored memory. A question still open at a

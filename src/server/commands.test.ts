@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
-import type { AgentSetting, CanvasConfig, ConfigProblem, ConfigView, Notice } from '../core/types';
+import { type AgentSetting, type CanvasConfig, type ConfigProblem, type ConfigView, type Notice, waitingOn } from '../core/types';
 import { Board } from './board';
 import { type Command, Commander } from './commands';
 import { Store } from './db';
@@ -466,6 +466,25 @@ describe('the Koordinator remembers', () => {
     runtime.last.emit({ type: 'idle' });
     await heard;
     expect(board.events(a.id).at(-1)!.text).toBe(long);
+  });
+
+  test('a reply that only answers waits in the sheet until the owner sees it; a confirmation of actions and a reply on a card do not', async () => {
+    const a = board.create({ title: 'Export', x: 0, y: 0 });
+    const k = commander();
+    // it may come once the owner has closed the sheet: Obeya's button counts it until they see it
+    await say(k, 'wie zerlegt Obeya Anforderungen?', 'reply', { confirm: 'In Stufen: Idee, Plan-Doc, Projekt.' });
+    expect(board.snapshot().talk.at(-1)).toMatchObject({ reply: 'In Stufen: Idee, Plan-Doc, Projekt.', unread: true });
+    expect(waitingOn(board.snapshot())).toBe(1);
+    board.readTalk();
+    expect(board.snapshot().talk.at(-1)!.unread).toBeUndefined();
+    await say(k, 'starte Export', 'act', { actions: [{ do: 'start', card: 'K1' }], confirm: '„Export“ startet.' });
+    expect(board.snapshot().talk.at(-1)!.unread).toBeUndefined();
+    const heard = k.hear('was macht er?', { card: a.id });
+    await settle();
+    runtime.last.call('reply', { confirm: 'Er wartet.' });
+    runtime.last.emit({ type: 'idle' });
+    await heard;
+    expect(board.talk().at(-1)!.unread).toBeUndefined();
   });
 
   test('words in reply to a message of the sheet stand with its quote, and the Koordinator reads the message whole', async () => {

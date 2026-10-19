@@ -847,11 +847,15 @@ export class Store {
     ).id;
   }
 
-  /** The Koordinator's reply to words it has read, the question it looks up for them, and what a draft for Obeya's makers would start from. */
-  replyTalk(id: number, reply: string, lookUp?: { question: string; about: string | null }, wish?: Wish) {
+  /**
+   * The Koordinator's reply to words it has read, the question it looks up for them, and what a draft
+   * for Obeya's makers would start from; with `waits`, one for the sheet waits there unread, as an
+   * answer that was looked up does.
+   */
+  replyTalk(id: number, reply: string, lookUp?: { question: string; about: string | null }, wish?: Wish, waits = false) {
     this.db
-      .query('UPDATE talk SET reply = $reply, question = $question, about = $about, wish = $wish WHERE id = $id')
-      .run({ id, reply, question: lookUp?.question ?? null, about: lookUp?.about ?? null, wish: wish ? JSON.stringify(wish) : null });
+      .query('UPDATE talk SET reply = $reply, question = $question, about = $about, wish = $wish, unread = $waits AND card_id IS NULL AND card IS NULL WHERE id = $id')
+      .run({ id, reply, question: lookUp?.question ?? null, about: lookUp?.about ?? null, wish: wish ? JSON.stringify(wish) : null, waits: waits ? 1 : 0 });
   }
 
   /** Words the Koordinator was reading when Obeya stopped: they get `reply`; returns them. Words the usage limit holds wait on. */
