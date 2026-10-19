@@ -4,7 +4,7 @@
 import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import type { Item } from '../core/types';
 import { oneAtATime } from '../core/one-at-a-time';
-import { decisionLog, INFORM_RULES, inform, type OwnerAnswer } from './advisor';
+import { type Briefing, decisionLog, INFORM_RULES, inform, type OwnerAnswer } from './advisor';
 import { type Board, pathOfRef } from './board';
 import { outsidePlanDir } from './repo';
 import type { AgentRuntime } from './runtime';
@@ -26,7 +26,8 @@ export class ProjectAgents {
   /**
    * Answers a question the owner asked about the project or one of its workstreams, in the project's
    * session. `dir`: the output directory of the looked-up thread, which the answer's files are in;
-   * `signal` ends the turn at once; `onLimit` shows where it waits for the usage limit.
+   * `signal` ends the turn at once; `onLimit` shows where it waits for the usage limit; `onWaiting`
+   * passes the owner's words in while it waits for its background work (`Briefing.onWaiting`).
    */
   inform(
     project: Item,
@@ -35,6 +36,7 @@ export class ProjectAgents {
     onTool?: (name: string, input: Record<string, unknown>) => void,
     dir?: string,
     signal?: AbortSignal,
+    onWaiting?: Briefing['onWaiting'],
   ): Promise<OwnerAnswer> {
     return this.queued(project, () =>
       inform({
@@ -46,6 +48,7 @@ export class ProjectAgents {
         ...(onTool ? { onTool } : {}),
         ...(dir ? { dir } : {}),
         ...(signal ? { signal } : {}),
+        ...(onWaiting ? { onWaiting } : {}),
         ...(this.permissionMode ? { permissionMode: this.permissionMode } : {}),
         system: `You are the project agent of the project "${project.title}", directed through Obeya. Its plan doc is ${project.plan?.file ?? '(none)'}${project.plan && outsidePlanDir(pathOfRef(project.plan.file)) ? '' : ' in this repository'}; you know it and the history of its workstreams.\n\n${INFORM_RULES}`,
         message: [message, `Decisions taken in this project so far:\n${decisionLog(this.board.decisions(project.id))}`, this.preferences()].filter(Boolean).join('\n\n'),

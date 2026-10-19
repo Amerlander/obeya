@@ -508,6 +508,58 @@ export const BACKGROUND_GRACE = 10 * 60_000;
  */
 export const BACKGROUND_LIMIT = 3 * 60 * 60_000;
 
+/**
+ * A turn of an agent that answers the owner (an idea's, a look-up's) that ended while its background
+ * work runs: that work wakes the agent when it ends, so the turn waits for it, and the owner's words
+ * meanwhile go into the session at once. Without a sign of the agent for a long while
+ * (BACKGROUND_LIMIT while the work runs, BACKGROUND_GRACE after it ended), `over` ends the turn.
+ */
+export class BackgroundWait {
+  /** How many of the agent's background tasks run, as the session last said. */
+  running = 0;
+  private timer: ReturnType<typeof setTimeout> | undefined;
+
+  constructor(
+    private over: () => void,
+    private limits: { grace?: number; limit?: number } = {},
+    /** The turn starts or stops waiting. */
+    private onChange?: (waiting: boolean) => void,
+  ) {}
+
+  get waiting(): boolean {
+    return this.timer !== undefined;
+  }
+
+  /** The turn ended: it waits for the agent's background work to wake it. */
+  start() {
+    const was = this.waiting;
+    clearTimeout(this.timer);
+    this.timer = setTimeout(
+      () => {
+        this.timer = undefined;
+        this.onChange?.(false);
+        this.over();
+      },
+      this.running > 0 ? (this.limits.limit ?? BACKGROUND_LIMIT) : (this.limits.grace ?? BACKGROUND_GRACE),
+    );
+    if (!was) this.onChange?.(true);
+  }
+
+  /** The agent's background work started or ended: a turn waiting for it waits as long as it runs. */
+  changed(running: number) {
+    this.running = running;
+    if (this.waiting) this.start();
+  }
+
+  /** The agent goes on (a message, its work woke it), or its session ends: the turn waits no more. */
+  stop() {
+    if (!this.waiting) return;
+    clearTimeout(this.timer);
+    this.timer = undefined;
+    this.onChange?.(false);
+  }
+}
+
 /** A foreground command may sleep this long; anything longer keeps the owner's notes from the agent. */
 export const FOREGROUND_SLEEP_LIMIT = 30;
 

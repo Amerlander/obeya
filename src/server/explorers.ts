@@ -11,7 +11,7 @@ import { MESSAGES } from '../core/messages';
 import { type Item, type Mock, NEXT_STEPS, type NextStep, type PlannedPrototype, type Question, type SettledPart } from '../core/types';
 import { type Asked, decisionLog, withPick } from './advisor';
 import { BadRequest, type Board, type Message, replyNote, type Unread } from './board';
-import { type AgentEvent, type AgentRuntime, type AgentSession, type AgentTool, BACKGROUND_GRACE, BACKGROUND_LIMIT } from './runtime';
+import { type AgentEvent, type AgentRuntime, type AgentSession, type AgentTool, BackgroundWait } from './runtime';
 import { imageNote } from './images';
 import { describeTool, SPOKEN } from './workers';
 import { TO_OBEYA, toObeyaTool } from './to-obeya';
@@ -54,10 +54,8 @@ interface Live {
   preferences: string;
   /** The agent heard that the owner clicked "So bauen" during its turn. */
   toldBuild?: boolean;
-  /** How many of the agent's background tasks run, as the session last said. */
-  background: number;
-  /** Set while a turn that ended without a reply waits for the agent's background work to wake it. */
-  waiting?: ReturnType<typeof setTimeout>;
+  /** The agent's background work, and a turn that ended without a reply waiting for it to wake the agent. */
+  work: BackgroundWait;
   /** The last words of a turn that ended waiting for its background work: the reply, should it never wake the agent. */
   said?: string;
 }
@@ -148,7 +146,7 @@ export class Explorers {
   close(cardId: string) {
     const live = this.live.get(cardId);
     this.live.delete(cardId);
-    clearTimeout(live?.waiting);
+    live?.work.stop();
     live?.session.close();
     const card = this.o.board.item(cardId);
     if (card?.idea?.thinking) this.o.board.setIdea(cardId, { thinking: false });
@@ -205,10 +203,9 @@ export class Explorers {
     if (live) {
       // queued, it goes in with whatever else came, which may well need a reply
       live.queue.push({ text: message, images, said });
-      // a turn waiting for its background work ended: the message starts the next one at once
-      if (live.waiting) {
-        clearTimeout(live.waiting);
-        live.waiting = undefined;
+      // a turn waiting for its background work ended: the message goes in at once, and the turn answers it too
+      if (live.work.waiting) {
+        live.work.stop();
         this.sendQueued(card.id, live, [...live.current]);
       }
       return;
@@ -237,7 +234,14 @@ export class Explorers {
 
   private launch(card: Item, current: Message[], message: string, resume: string | undefined, images: string[], quiet = false) {
     const preferences = this.o.preferences?.() ?? '';
-    const live: Live = { session: undefined!, current, queue: [], replied: false, lastText: '', quiet, preferences, background: 0 };
+    const live: Live = { session: undefined!, current, queue: [], replied: false, lastText: '', quiet, preferences, work: undefined! };
+    // without a sign of the agent for a long while (the work ended, and nothing woke it), its turn is over
+    live.work = new BackgroundWait(
+      () => {
+        if (this.live.get(card.id) === live) this.turnOver(card.id, live);
+      },
+      { grace: this.o.backgroundGrace, limit: this.o.backgroundLimit },
+    );
     this.live.set(card.id, live);
     live.session = this.o.runtime.start(
       {
@@ -274,10 +278,9 @@ export class Explorers {
 
   private onEvent(cardId: string, live: Live, e: AgentEvent) {
     if (this.live.get(cardId) !== live) return;
-    if (e.type === 'background') return this.backgroundChanged(cardId, live, e.tasks.length);
+    if (e.type === 'background') return live.work.changed(e.tasks.length);
     // a turn may also start without a message from Obeya (a finished background command)
-    clearTimeout(live.waiting);
-    live.waiting = undefined;
+    live.work.stop();
     switch (e.type) {
       case 'session':
         this.o.board.work(cardId, { session_id: e.id });
@@ -297,10 +300,10 @@ export class Explorers {
         this.o.onReplied?.(cardId, false);
         break;
       case 'idle': {
-        live.background = e.background ?? 0;
+        live.work.running = e.background ?? 0;
         // its background work still runs (a download, a watcher), and it wakes the agent when it ends:
         // the idea shows it at work until then, and it goes on from there; its words so far are no reply
-        if (live.background > 0) {
+        if (live.work.running > 0) {
           if (live.replied) {
             // a reply it gave (that it waits for the work, say) answered the turn's messages
             live.current = [];
@@ -310,7 +313,7 @@ export class Explorers {
           live.lastText = '';
           // what the owner said meanwhile goes in now, and the turn answers it too
           if (live.queue.length) this.sendQueued(cardId, live, [...live.current]);
-          else this.waitForWork(cardId, live);
+          else live.work.start();
           return;
         }
         this.turnOver(cardId, live);
@@ -342,27 +345,6 @@ export class Explorers {
       [...queued.map((m) => m.text), this.buildNote(cardId, live)].filter(Boolean).join('\n\n'),
       queued.flatMap((m) => m.images),
     );
-  }
-
-  /**
-   * Waits for the agent's background work to wake it, while the idea shows it at work. Without a
-   * sign of it for a long while (the work ended, and nothing woke the agent), its turn is over.
-   */
-  private waitForWork(cardId: string, live: Live) {
-    clearTimeout(live.waiting);
-    live.waiting = setTimeout(
-      () => {
-        live.waiting = undefined;
-        if (this.live.get(cardId) === live) this.turnOver(cardId, live);
-      },
-      live.background > 0 ? (this.o.backgroundLimit ?? BACKGROUND_LIMIT) : (this.o.backgroundGrace ?? BACKGROUND_GRACE),
-    );
-  }
-
-  /** The agent's background work started or ended: a turn waiting for it waits as long as it runs. */
-  private backgroundChanged(cardId: string, live: Live, running: number) {
-    live.background = running;
-    if (live.waiting) this.waitForWork(cardId, live);
   }
 
   /** The agent's reply stands in the conversation, its mocks and questions below it; the owner is next. */

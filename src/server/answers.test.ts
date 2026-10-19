@@ -575,6 +575,43 @@ describe('a thread on a Question card', () => {
     expect(board().thread(card.id).pending).toEqual([expect.objectContaining({ text: expect.stringContaining('und November?') })]);
   });
 
+  test("while its agent waits for its background work, the owner's words go into its session at once, and its answer answers them too", async () => {
+    const { card } = await moved();
+    canvas.tell(card.id, 'lade die Daten für 2024', [], false);
+    const a = answerer();
+    const sessions = runtime.sessions.length;
+    a.emit({ type: 'background', tasks: [{ id: 'b1', description: 'Download 2024' }] });
+    // what comes while it works on its turn waits, unread
+    canvas.tell(card.id, 'mit Dezember', [], false);
+    expect(board().events(card.id).at(-1)!.unread).toBe(true);
+    expect(a.inbox).toHaveLength(1);
+    // its turn ends waiting for the download: those words go in now
+    a.emit({ type: 'text', text: 'The download runs.' });
+    a.emit({ type: 'idle', background: 1 });
+    await settle();
+    expect(a.inbox).toHaveLength(2);
+    expect(a.inbox[1]).toContain('mit Dezember');
+    expect(board().events(card.id).find((e) => e.text === 'mit Dezember')!.unread).toBeUndefined();
+    // the agent takes them in and waits again; what the owner writes now goes in at once, read
+    a.emit({ type: 'idle', background: 1 });
+    canvas.tell(card.id, 'stopp, nimm 2023', [], false);
+    const stop = board().events(card.id).at(-1)!;
+    expect(stop.unread).toBeFalsy();
+    expect(a.inbox).toHaveLength(3);
+    expect(a.inbox[2]).toContain('stopp, nimm 2023');
+    expect(() => canvas.press(card.id, { action: 'unsay', id: stop.id })).toThrow('read these words already');
+    // one answer answers all of it, in the same session, and nothing waits for another turn
+    a.emit({ type: 'background', tasks: [] });
+    a.call('answer_owner', { text: '2023 mit Dezember: 14 ct.' });
+    a.emit({ type: 'idle', background: 0 });
+    await settle();
+    expect(a.closed).toBe(true);
+    expect(runtime.sessions.length).toBe(sessions);
+    expect(board().item(card.id)!.thread).toEqual({ talk: card.thread!.talk, answers: 3, files: 1 });
+    expect(board().thread(card.id).pending).toEqual([]);
+    expect(board().events(card.id).filter((e) => e.kind === 'talk').map((e) => e.text).slice(-4)).toEqual(['lade die Daten für 2024', 'mit Dezember', 'stopp, nimm 2023', '2023 mit Dezember: 14 ct.']);
+  });
+
   test('its agent the usage limit stops waits on the card and answers once the limit lifts; paused meanwhile, it waits no more', async () => {
     const { card } = await moved();
     canvas.tell(card.id, 'und im Oktober?', [], false);

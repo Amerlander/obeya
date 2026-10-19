@@ -14,7 +14,7 @@ import { oneAtATime } from '../core/one-at-a-time';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { type AnswerFile, type AnswerRef, type CardEvent, type Item, pausable, type Talk } from '../core/types';
-import { INFORM_RULES, inform, Interrupted, type OwnerAnswer } from './advisor';
+import { type Briefing, INFORM_RULES, inform, Interrupted, type OwnerAnswer } from './advisor';
 import { BadRequest, type Board, replyNote } from './board';
 import { imageNote } from './images';
 import type { ProjectAgents } from './project-agents';
@@ -58,6 +58,11 @@ export class Answers {
   private turns = new Map<number, Promise<unknown>>();
   /** Question cards whose agent is in a turn: what the owner asks meanwhile waits for the next, unread until then. */
   private reading = new Set<string>();
+  /**
+   * Question cards whose agent waits for its background work in a turn, each with what passes the
+   * owner's words still pending into its session at once: the turn's answer answers them too.
+   */
+  private waiting = new Map<string, () => void>();
   /** Ends the running turn of a Question card's agent, for the owner's pause. */
   private turnEnds = new Map<string, AbortController>();
   /** Question cards whose agent the owner let go on after a pause: its next turn hears so. */
@@ -119,11 +124,12 @@ export class Answers {
   /**
    * The owner's words to the agent of a Question card, maybe with screenshots and in reply to a
    * message of its conversation; `talk`: asked in Obeya's sheet as a follow-up of its thread, whose
-   * exchange gets the answer too. Words that come while it reads go in with the next turn.
+   * exchange gets the answer too. Words that come while it reads go in with the next turn; while it
+   * waits for its background work, they go in at once.
    */
   ask(cardId: string, text: string, images: string[], spoken: boolean, replyTo?: number, talk?: number) {
     const card = this.questionCard(cardId);
-    const e = this.o.board.log(cardId, 'talk', 'owner', text, { images, replyTo, unread: this.reading.has(cardId) && !talk });
+    const e = this.o.board.log(cardId, 'talk', 'owner', text, { images, replyTo, unread: this.reading.has(cardId) && !this.waiting.has(cardId) && !talk });
     const quoted = replyTo ? this.o.board.quoted(cardId, replyTo) : undefined;
     const said = `${replyNote(quoted, 'koordinator')}${text}${imageNote(images)}`;
     const thread = this.o.board.thread(cardId);
@@ -131,6 +137,7 @@ export class Answers {
     // the owner's words let a paused agent go on, with what it had not answered yet
     if (card.paused) this.goOn(cardId);
     this.o.board.setThread(cardId, { thinking: true, pending });
+    this.waiting.get(cardId)?.();
     this.queue(thread.talk, () => this.cardTurn(card.id));
   }
 
@@ -238,13 +245,14 @@ export class Answers {
   private async cardTurn(cardId: string) {
     const card = this.o.board.item(cardId);
     const stored = card?.kind === 'question' ? this.o.board.thread(cardId) : undefined;
-    const taken = stored?.pending ?? [];
+    const taken = [...(stored?.pending ?? [])];
     // paused while it waited for its turn: it goes on once the owner lets it
     if (!card || !stored || !taken.length || card.paused) return;
     const root = this.o.board.exchange(stored.talk);
     if (!root?.question) return;
     const { by, about, project } = this.agentFor(root);
     const words = taken.map((p) => p.text).join('\n\n');
+    const heard = (p: { said: number[] }) => p.said.some((id) => taken.some((t) => t.said.includes(id)));
     const resumed = this.resumed.delete(cardId) ? `${RESUMED}\n\n` : '';
     this.o.board.readNow(cardId, taken.flatMap((p) => p.said));
     this.reading.add(cardId);
@@ -268,6 +276,19 @@ export class Answers {
         message: `${resumed}${followUp(words, undefined, true)}`,
         fallback: `${this.message(root.said, root.question, about, project)}\n\n${this.history(stored.talk, cardId)}\n\n${followUp(words, undefined, true)}`,
         signal: end.signal,
+        onWaiting: (pass) => {
+          if (!pass) return void this.waiting.delete(cardId);
+          // what the owner said since the turn began goes in now, and the turn answers it too
+          const passOn = () => {
+            const more = (this.o.board.thread(cardId).pending ?? []).filter((p) => !heard(p));
+            if (!more.length) return;
+            taken.push(...more);
+            this.o.board.readNow(cardId, more.flatMap((p) => p.said));
+            pass(meanwhile(more.map((p) => p.text).join('\n\n')), more.flatMap((p) => p.images));
+          };
+          this.waiting.set(cardId, passOn);
+          passOn();
+        },
       });
     } catch (e) {
       // paused: what it was asked stays pending
@@ -275,6 +296,7 @@ export class Answers {
       a = { text: this.o.board.t.answer.failed(messageOf(e)) };
     } finally {
       this.reading.delete(cardId);
+      this.waiting.delete(cardId);
       if (this.turnEnds.get(cardId) === end) this.turnEnds.delete(cardId);
     }
     const text = clip(a.text, 12000);
@@ -282,7 +304,7 @@ export class Answers {
     this.o.board.log(cardId, 'talk', by, text, { answer: answerRef(stored.talk, a.files) });
     const now = this.o.board.row(cardId).thread ? this.o.board.thread(cardId) : undefined;
     if (now) {
-      const left = (now.pending ?? []).slice(taken.length);
+      const left = (now.pending ?? []).filter((p) => !heard(p));
       this.o.board.setThread(cardId, { answers: now.answers + 1, files: now.files + (a.files?.length ?? 0), thinking: left.length > 0, pending: left });
     }
     this.o.board.notify({ cardId, text: clip(text, 300) });
@@ -305,6 +327,8 @@ export class Answers {
     card?: string;
     images?: string[];
     signal?: AbortSignal;
+    /** The turn waits for the agent's background work, or no longer (`Briefing.onWaiting`). */
+    onWaiting?: Briefing['onWaiting'];
     onTool: (name: string, input: Record<string, unknown>) => void;
     onSession: (id: string) => void;
     /** Where it shows that it waits for the usage limit. */
@@ -312,7 +336,7 @@ export class Answers {
   }): Promise<OwnerAnswer> {
     const dir = this.o.dirOf(c.thread);
     mkdirSync(dir, { recursive: true });
-    if (c.by === 'project') return this.o.projectAgent(c.project!).inform(c.project!, `${c.message}\n\n${filesNote(dir)}`, c.onLimit, c.onTool, dir, c.signal);
+    if (c.by === 'project') return this.o.projectAgent(c.project!).inform(c.project!, `${c.message}\n\n${filesNote(dir)}`, c.onLimit, c.onTool, dir, c.signal, c.onWaiting);
     const toObeya = c.card && this.o.toObeya ? this.o.toObeya : undefined;
     const ask = (message: string, resume?: string) =>
       inform({
@@ -330,6 +354,7 @@ export class Answers {
         ...(toObeya ? { tools: [toObeyaTool((request) => toObeya(c.card!, request))] } : {}),
         ...(this.o.permissionMode ? { permissionMode: this.o.permissionMode } : {}),
         ...(c.signal ? { signal: c.signal } : {}),
+        ...(c.onWaiting ? { onWaiting: c.onWaiting } : {}),
       });
     if (!c.resume) return ask(c.fallback ?? c.message);
     return ask(c.message, c.resume).catch((e) => {
@@ -445,6 +470,10 @@ const followUp = (said: string, question: string | undefined, onCard: boolean) =
   ]
     .filter(Boolean)
     .join('\n\n');
+
+/** What the agent of a Question card hears when the owner writes while its turn waits for its background work. */
+const meanwhile = (said: string) =>
+  `While your background work runs, the owner wrote on the card; their words come to you at once:\n\n${said}\n\nYour answer (answer_owner, once, when you have it) answers these words too.`;
 
 /** What the agent of a Question card hears when the owner lets it go on after a pause. */
 const RESUMED =

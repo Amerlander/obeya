@@ -7,7 +7,7 @@ import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import { type Language, LANGUAGE_NAMES } from '../core/locale';
 import type { AnswerFile, Question } from '../core/types';
-import { type AgentRuntime, type AgentTool, BACKGROUND_GRACE, BACKGROUND_LIMIT } from './runtime';
+import { type AgentRuntime, type AgentTool, BackgroundWait } from './runtime';
 import { clip } from '../core/text';
 
 /** An answer to a question the owner asked, for the card or the sheet, with the files it comes with. */
@@ -42,6 +42,11 @@ export interface Briefing {
   /** How long a turn waits for background work that has ended to wake it, and for work that still runs (ms). */
   backgroundGrace?: number;
   backgroundLimit?: number;
+  /**
+   * The turn starts waiting for its background work, with `pass` to put the owner's words into its
+   * session at once (its answer answers them too), or stops waiting (`undefined`): it goes on, or ends.
+   */
+  onWaiting?: (pass: ((text: string, images: string[]) => void) | undefined) => void;
 }
 
 /** A turn that answered nothing because it was ended on purpose (`Briefing.signal`). */
@@ -55,16 +60,14 @@ export class Interrupted extends Error {
  * A turn that answers the owner's question, with a worker's tools (the shell, the web) so it can
  * check what it says; a turn that ends without the tool answers with its last words. A turn that
  * ends while its background work runs (a download, a long query) is not over: that work wakes the
- * agent, which goes on and answers then. Should it never wake it, its last words are the answer
- * after all, with the workers' limits.
+ * agent, which goes on and answers then; the owner's words meanwhile go in at once (`onWaiting`).
+ * Should it never wake it, its last words are the answer after all, with the workers' limits.
  */
 export function inform(b: Briefing): Promise<OwnerAnswer> {
   return new Promise((resolve, reject) => {
     if (b.signal?.aborted) return reject(new Interrupted());
     let answer: OwnerAnswer | null = null;
     let last = '';
-    let background = 0;
-    let waiting: ReturnType<typeof setTimeout> | undefined;
     const settle = (a: OwnerAnswer) => {
       if (answer) return 'Only the first answer counts.';
       answer = a;
@@ -72,8 +75,7 @@ export function inform(b: Briefing): Promise<OwnerAnswer> {
       return 'Delivered. End your turn now.';
     };
     const close = () => {
-      clearTimeout(waiting);
-      waiting = undefined;
+      work.stop();
       session.close();
     };
     const over = () => {
@@ -82,10 +84,11 @@ export function inform(b: Briefing): Promise<OwnerAnswer> {
       if (last.trim()) settle({ text: last.trim() });
       else reject(new Error('no answer'));
     };
-    const waitForWork = () => {
-      clearTimeout(waiting);
-      waiting = setTimeout(over, background > 0 ? (b.backgroundLimit ?? BACKGROUND_LIMIT) : (b.backgroundGrace ?? BACKGROUND_GRACE));
+    const pass = (text: string, images: string[]) => {
+      work.stop();
+      session.send(text, images);
     };
+    const work = new BackgroundWait(over, { grace: b.backgroundGrace, limit: b.backgroundLimit }, (waiting) => b.onWaiting?.(waiting ? pass : undefined));
     const session = b.runtime.start(
       {
         cwd: b.cwd,
@@ -110,15 +113,9 @@ export function inform(b: Briefing): Promise<OwnerAnswer> {
           ...(b.tools ?? []),
         ],
         onEvent: (e) => {
-          if (e.type === 'background') {
-            // a turn waiting for the work waits as long as it runs
-            background = e.tasks.length;
-            if (waiting) waitForWork();
-            return;
-          }
+          if (e.type === 'background') return work.changed(e.tasks.length);
           // a turn may also start without a message (finished background work)
-          clearTimeout(waiting);
-          waiting = undefined;
+          work.stop();
           if (e.type === 'session') b.onSession?.(e.id);
           else if (e.type === 'text') last = e.text;
           else if (e.type === 'tool') b.onTool?.(e.name, e.input);
@@ -126,8 +123,8 @@ export function inform(b: Briefing): Promise<OwnerAnswer> {
             close();
             reject(new Error(e.message));
           } else if (e.type === 'idle') {
-            background = e.background ?? 0;
-            if (!answer && background > 0) waitForWork();
+            work.running = e.background ?? 0;
+            if (!answer && work.running > 0) work.start();
             else over();
           }
         },

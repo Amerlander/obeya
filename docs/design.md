@@ -2534,7 +2534,9 @@ A turn that ends while the agent's background work runs (a download, a long quer
 card, until that work wakes the agent and it answers. Should the work never wake it, its last words
 are the answer after all, with the same limits as for a worker (three hours while it runs, ten
 minutes after it ended). Until 2026-10-19 a look-up's turn took its words so far („still
-downloading …“) as the answer and closed the session, which stopped that work.
+downloading …“) as the answer and closed the session, which stopped that work. Ideas and look-ups
+wait for that work alike (`BackgroundWait` in `src/server/runtime.ts`), and so do the owner's words
+meanwhile: on a Question card they go into the waiting session at once (see Question cards).
 
 #### Files with an answer
 
@@ -2564,8 +2566,8 @@ line „Auf der Karte „…““ in place of each of its answers, which opens 
 asked in the sheet afterwards goes to the card's agent and stands on the card.
 
 On the card the owner's words go straight to that agent (`CanvasRuntime.tell` → `ask`, the shared
-conversation, Send and unsent input), words that come while it reads go in with its next turn, and
-it passes on with `to_obeya` what asks Obeya; a note the Koordinator passes to the card goes there
+conversation, Send and unsent input), words that come while it reads go in with its next turn
+(unread until then, and the owner can take them back), and it passes on with `to_obeya` what asks Obeya; a note the Koordinator passes to the card goes there
 too. It holds answers, not work: its state is `done`, but it has a look of its own (a white card
 with a blue-grey edge, „FRAGE“), shows the number of answers and files and whether its agent reads,
 is not taken by „Erledigte archivieren“, and has no brief and no build, plan, prototype or park
@@ -2573,6 +2575,12 @@ buttons. It has two: „Als Idee besprechen“ (not while its agent reads) makes
 state `idea`) whose exploration agent starts afresh from the thread and its directory, and
 „Erledigt“ archives it. „Als Karte“ on a thread already moved opens its card, back from the archive
 if need be. The Koordinator lists Question cards among the cards it sees.
+
+While its agent's turn waits for its background work (a download, a long query, see Looked-up
+threads), the owner's words go into that session at once, read, as an idea's do, together with what
+waited since the turn began; its answer answers them too, so „stop that, take 2023 instead“ reaches
+it while the download runs. Words that come once it works again wait as before. Until 2026-10-19
+they waited, unread, until the job finished and the agent had answered the question before.
 
 ### Koordinator memory
 
