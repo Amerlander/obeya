@@ -386,8 +386,10 @@ button.pill.help:hover, button.pill.help.on { color: var(--ink); }
 #wish .w-sent { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 #wish .w-sent p { margin: 0; font-size: 15px; line-height: 1.45; }
 #wish .w-sent .btn { align-self: flex-end; margin-top: 10px; }
-/* the quiet link to it: at the foot of Obeya's sidebar, in the legend, under a reply that Obeya cannot do something */
-.wish-link { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; padding: 0; font: inherit; font-size: 12px; color: var(--muted); cursor: pointer; text-align: left; }
+/* the quiet link to it: at the foot of Obeya's sidebar, in the legend, under a reply that Obeya cannot do something;
+   its baseline is its words', not the icon's lower edge, so beside the legend's text both stand on one line */
+.wish-link { display: inline-flex; align-items: baseline; gap: 6px; border: 0; background: none; padding: 0; font: inherit; font-size: 12px; color: var(--muted); cursor: pointer; text-align: left; }
+.wish-link svg { align-self: center; }
 .wish-link .w-text { border-bottom: 1px solid var(--line); }
 .wish-link:hover { color: var(--ink); }
 .wish-link:hover .w-text { border-color: var(--muted); }
