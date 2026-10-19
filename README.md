@@ -194,8 +194,7 @@ How Obeya itself is built, with Obeya, is in [`CONTRIBUTING.md`](CONTRIBUTING.md
 can be reported from inside Obeya ("Report a wish or a bug" in "Configuration"): it drafts a GitHub
 issue for you to send.
 
-If Obeya is useful to you, a star helps others find it; an issue or a pull request for what it
-should do better is just as welcome.
+Issues and pull requests are welcome.
 
 ## License
 

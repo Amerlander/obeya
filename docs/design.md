@@ -150,8 +150,8 @@ on the walls and decisions are made in front of the wall.
   `user-attachments` link, which no API makes and every re-render would have to replace); a link to
   the release asset shows as a download. So the README plays a GIF of the canvas at work (a wall
   arranged, a task said that appears as a card), cut from the hero video (see Hero video), linked to
-  the video on obeya.si (`#film`), which is always the current one; near the end one sentence invites
-  a star, an issue or a pull request (2026-10-19). Until then it showed the video's first frame with
+  the video on obeya.si (`#film`), which is always the current one; near the end one sentence welcomes
+  issues and pull requests, without asking for a star, which read as needy (2026-10-19). Until then it showed the video's first frame with
   the site's play button drawn on it (2026-10-12); a loop above that picture would have shown two
   near-identical canvases in a row, so the loop took its place. `CONTRIBUTING.md` says how Obeya
   is built with Obeya (design doc, plan docs, cards, demos) and what a pull request from outside
