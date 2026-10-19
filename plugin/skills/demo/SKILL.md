@@ -148,10 +148,10 @@ is presented without "I" or "we".
   spend waiting, goes into `d.skip(fn, { quiet: true })`: cut whole, without flash or label.
 - Write large numbers as words ("about fifteen thousand two hundred euros"); small ones as digits
   are fine. Avoid abbreviations the voice would spell out.
-- Audio tags in square brackets (`[short pause]`, `[long pause]`) go to ElevenLabs v3 and v4
-  (`DEMO_ELEVENLABS_MODEL=eleven_v4`), which read them. Every other voice speaks the text between
-  two pause tags on its own and puts silence where they stand (half a second for a short one, a
-  second and a half for a long one, under a second for `[pause]`) and leaves other tags out;
+- Audio tags in square brackets (`[short pause]`, `[long pause]`) go to ElevenLabs v4 (its default
+  model) and v3, which read them. Every other voice speaks the text between two pause tags on its
+  own and puts silence where they stand (half a second for a short one, a second and a half for a
+  long one, under a second for `[pause]`) and leaves other tags out;
   captions leave them out.
 
 Director helpers (`d`): `goto`, `click`, `type` (clears, then types at reading pace; `''`

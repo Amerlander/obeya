@@ -3247,10 +3247,11 @@ Local voices run once per clip as a command with the text on stdin:
 - the owner's own command (through the shell; it writes the WAV to `$DEMO_WAV`).
 
 Hosted ones are HTTP requests from templates in `tts.py`: Gemini, OpenAI (or another base URL with
-the same API), ElevenLabs, Azure, or the owner's own endpoint (POST `{"text", "language"}` as JSON,
-audio back), each with its key from its environment variable or a key file. Whatever comes back
-becomes a mono 16-bit WAV through ffmpeg (a voice command gets its text as UTF-8, with `PYTHONUTF8`:
-on Windows Piper read it in the code page otherwise).
+the same API), ElevenLabs (`eleven_v4` unless `DEMO_ELEVENLABS_MODEL` names another), Azure, or
+the owner's own endpoint (POST `{"text", "language"}` as JSON, audio back), each with its key
+from its environment variable or a key file. Whatever comes back becomes a mono 16-bit WAV
+through ffmpeg (a voice command gets its text as UTF-8, with `PYTHONUTF8`: on Windows Piper read
+it in the code page otherwise).
 
 Voices are not labelled as generated, a clone included: the whole demo is generated, and that is
 clear from where it is shown. The person follows from "Das ist meine eigene Stimme" in the settings:

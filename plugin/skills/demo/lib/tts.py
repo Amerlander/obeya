@@ -67,7 +67,7 @@ GEMINI_MODEL = os.environ.get("DEMO_GEMINI_MODEL", "gemini-3.8-flash-tts")
 #: prefix ("Sprich ruhig: …") gets read aloud.
 GEMINI_NOTES = "### DIRECTOR'S NOTES\nStyle: {style}\n\n#### TRANSCRIPT\n"
 OPENAI_MODEL = os.environ.get("DEMO_OPENAI_MODEL", "gpt-4o-mini-tts")
-ELEVENLABS_MODEL = os.environ.get("DEMO_ELEVENLABS_MODEL", "eleven_multilingual_v2")
+ELEVENLABS_MODEL = os.environ.get("DEMO_ELEVENLABS_MODEL", "eleven_v4")
 #: Each service's voice when the settings name none: calm male voices, like Gemini's Charon.
 DEFAULT_VOICES = {
     "gemini": {"de": "Charon", "en": "Charon"},
