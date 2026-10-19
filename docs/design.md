@@ -3239,6 +3239,13 @@ and speaks nothing: utterances queue, fire `start` and, after about as long as s
 page without a user activation gets `not-allowed`, as in Chrome. So the page goes on as it would,
 which leaving the API out (`--disable-speech-synthesis-api`) would not.
 
+The report page (`index.html` beside the video, for the skill's use without Obeya) holds the title,
+the summary (what the change does, then what the owner needs to know beyond the video: a behaviour
+it leaves out and why, what is open or unverified, a defect found in someone else's change; a few
+short paragraphs), the video with its chapters, the open question when there is one, and the
+provenance (branch, commits, stack). Under Obeya the card shows the video and the handover summary
+instead, and a problem outside the change is a proposal.
+
 Obeya loads the plugin into every worker session (the Agent SDK's `plugins` option, a local plugin),
 so the worker has the skill as `obeya:demo`, which its brief names, and `obeya:settings` (see Repository
 settings). The skill also runs without Obeya: as the plugin, or as a user skill that points to
@@ -3446,7 +3453,8 @@ report from `index.html`, `sharp` from the encoder settings x264 notes in `demo.
    from the stills, since the screen keeps its language and the narration quotes each label as it
    appears with its meaning after it: „Teilen“ (Share), in the narration as an aside („Teilen“, share),
    which Qwen3 spoke more reliably than parentheses. A translation that drops a scene, an audio tag
-   or an item of the report is refused with what is missing.
+   or a paragraph of the report's summary is refused with what is missing. A report page from before
+   2026-10-19 also has lists of what was shown, not shown and noticed; they are left out.
 2. The clips are synthesised in the voice for that language (the demo settings' clone of
    `references.en`, say).
 3. Each scene's narrated stretch (its caption cue) plays as long as its new clip: the frames in it are
@@ -3956,7 +3964,8 @@ the phone.
 - **The demo report has no lists of what was shown, what was not shown and what the worker noticed**
   (2026-10-05): the owner never read the first two, read the findings but rarely made a card of one,
   since most were not for them to act on. What the owner needs to know goes into the summary, kept
-  to a few paragraphs; a problem worth a card is a proposal.
+  to a few paragraphs; a problem worth a card is a proposal. The demo skill and its report page
+  followed on 2026-10-19: until then they still asked for the lists and showed them.
 - **A demo's scratch Obeya is staged by a script from a stage file** rather than by hand
   (2026-10-01): in the 14 card runs before, the demo took longer than the change itself, and every
   worker wrote its own staging (curl, sqlite, server start) with the same mistakes: the wrong API

@@ -49,9 +49,6 @@ await runDemo(
     ],
     report: {
       summary: 'The order list gets a status filter, so open orders can be found without scrolling.',
-      shown: ['The status filter above the list', 'Filtering for open orders'],
-      notShown: ['The filter in the mobile layout: the same component, checked in a test'],
-      findings: [],
       meta: { branch: 'orders-filter (2 commits)', stack: 'local dev server, seeded data' },
     },
   },

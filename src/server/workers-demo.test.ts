@@ -514,7 +514,7 @@ describe('handing over with a demo', () => {
     const a = join(dir, 'auswertung');
     Bun.spawnSync(['mkdir', '-p', a]);
     writeFileSync(join(a, 'index.html'), '<h2>Graph</h2>');
-    const html = { kind: 'html', dir: a, shown: ['Graph'], not_shown: [], findings: [] };
+    const html = { kind: 'html', dir: a };
     workers.message(c.id, 'Bitte als Auswertung.');
     expect(runtime.last.call('ready_for_review', { summary: 'S', demo: html })).toContain('needs its page');
     expect(runtime.last.call('ready_for_review', { summary: 'S', demo: { ...html, page } })).toContain('End your turn');

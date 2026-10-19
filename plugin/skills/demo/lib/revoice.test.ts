@@ -7,7 +7,7 @@ const source: Words = {
     { title: 'Vorher', say: 'Ein Vorschlag. [short pause] Bisher scheiterte das.' },
     { title: 'Jetzt', say: 'Jetzt geht es.' },
   ],
-  report: { summary: 'Geht wieder.', shown: ['Vorher', 'Jetzt'], notShown: [], findings: [], meta: { Zweig: 'x' } },
+  report: { summary: 'Geht wieder.\n\nNicht geprüft: das Telefon.', meta: { Zweig: 'x' } },
 };
 
 describe('re-voicing a demo', () => {
@@ -64,34 +64,52 @@ describe('re-voicing a demo', () => {
 <main>
 <h1>Vorschläge &amp; Ideen</h1>
 <p class="summary">Geht &quot;wieder&quot;.</p>
+<p class="summary">Nicht geprüft: das Telefon &lt;neu&gt;.</p>
 <div class="decision"><h2>Offene Frage</h2>Was nun?</div>
-<div class="grid">
-  <section class="card"><h2>Gezeigt</h2><ul><li>Vorher</li><li>Jetzt &lt;neu&gt;</li></ul></section>
-  <section class="card"><h2>Nicht gezeigt</h2><p class="none">—</p></section>
-  <section class="card"><h2>Auffälligkeiten</h2><ul><li>Eine</li></ul></section>
-</div>
 <dl><dt>0</dt><dd>B</dd><dt>1</dt><dd>r</dd><dt>2</dt><dd> </dd><dt>3</dt><dd>x</dd></dl>
 </main>`;
     expect(reportOf(html)).toEqual({
       language: 'de',
       title: 'Vorschläge & Ideen',
-      report: { summary: 'Geht "wieder".', shown: ['Vorher', 'Jetzt <neu>'], notShown: [], findings: ['Eine'], question: 'Was nun?', meta: { '': 'Br x' } },
+      report: { summary: 'Geht "wieder".\n\nNicht geprüft: das Telefon <neu>.', question: 'Was nun?', meta: { '': 'Br x' } },
     });
   });
 
-  test('a translation keeps the scenes, the audio tags and the report’s lists', () => {
+  test('a page of an earlier director is read without its lists of what was shown, not shown and noticed', () => {
+    const html = `<!doctype html>
+<html lang="de">
+<main>
+<h1>Vorschläge</h1>
+<p class="summary">Geht wieder.</p>
+<div class="grid">
+  <section class="card"><h2>Gezeigt</h2><ul><li>Vorher</li><li>Jetzt</li></ul></section>
+  <section class="card"><h2>Nicht gezeigt</h2><p class="none">—</p></section>
+  <section class="card"><h2>Auffälligkeiten</h2><ul><li>Eine</li></ul></section>
+</div>
+<dl><dt>Zweig</dt><dd>x</dd></dl>
+</main>`;
+    expect(reportOf(html)).toEqual({ language: 'de', title: 'Vorschläge', report: { summary: 'Geht wieder.', meta: { Zweig: 'x' } } });
+  });
+
+  test('a page without a summary is no report page', () => {
+    expect(() => reportOf('<html lang="de"><h1>Logo</h1><p>Drei Entwürfe</p></html>')).toThrow('no report page');
+  });
+
+  test('a translation keeps the scenes, the audio tags and the summary’s paragraphs', () => {
     const good: Words = {
       title: 'Proposals can be accepted',
       scenes: [
         { title: 'Before', say: 'A proposal. [short pause] Until now, that failed.' },
         { title: 'Now', say: 'Now it works.' },
       ],
-      report: { summary: 'Works again.', shown: ['Before', 'Now'], notShown: [], findings: [], meta: { Branch: 'x' } },
+      report: { summary: 'Works again.\n\nNot checked: the phone.', meta: { Branch: 'x' } },
     };
     expect(translationProblems(source, good)).toEqual([]);
     expect(translationProblems(source, { ...good, scenes: [good.scenes[0]!] })).toEqual(['scenes: 2 expected, 1 given']);
     const untagged = { ...good, scenes: [{ title: 'Before', say: 'A proposal. Until now, that failed.' }, good.scenes[1]!] };
     expect(translationProblems(source, untagged)).toEqual(['scene 1: the audio tags differ from the source\'s ([short pause])']);
-    expect(translationProblems(source, { ...good, report: { ...good.report, shown: ['Both'] } })).toEqual(['report.shown: 2 items expected']);
+    expect(translationProblems(source, { ...good, report: { ...good.report, summary: 'Works again. Not checked: the phone.' } })).toEqual([
+      'report.summary: 2 paragraphs expected, separated by a blank line',
+    ]);
   });
 });

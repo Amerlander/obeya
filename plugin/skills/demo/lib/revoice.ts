@@ -115,12 +115,19 @@ export function frameListText(frames: Held[], from: string, to: string): string 
 
 const unesc = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&').trim();
 
-/** The report page the director wrote (`index.html`): its language, title and report. */
+/** The paragraphs of a report's summary, separated by a blank line. */
+const paragraphs = (summary: string) => summary.split(/\n\s*\n/).filter((p) => p.trim());
+
+/**
+ * The report page the director wrote (`index.html`): its language, title and report. A page of a
+ * director before 2026-10-19 also has lists of what was shown, not shown and noticed, which are
+ * left out, as a render leaves them out now.
+ */
 export function reportOf(html: string): { language?: Language; title: string; report: Report } {
   const one = (re: RegExp) => unesc(re.exec(html)?.[1] ?? '');
   const lang = /<html\b[^>]*\blang="([a-z]{2})"/.exec(html)?.[1];
-  const lists = [...html.matchAll(/<section class="card"><h2>[^<]*<\/h2>([\s\S]*?)<\/section>/g)].map((m) => [...m[1]!.matchAll(/<li>([\s\S]*?)<\/li>/g)].map((li) => unesc(li[1]!)));
-  if (lists.length !== 3) throw new Error('index.html is no report page of the director: it lacks the shown, not shown and findings lists');
+  const summary = [...html.matchAll(/<p class="summary">([\s\S]*?)<\/p>/g)].map((m) => unesc(m[1]!));
+  if (!summary.length) throw new Error('index.html is no report page of the director: it has no summary');
   const entries = [...(/<dl>([\s\S]*?)<\/dl>/.exec(html)?.[1] ?? '').matchAll(/<dt>([\s\S]*?)<\/dt><dd>([\s\S]*?)<\/dd>/g)].map((m) => [unesc(m[1]!), m[2]!] as const);
   // a demo whose `meta` was one line rather than an object got a row per character
   const spelt = entries.length > 1 && entries.every(([k], i) => k === String(i));
@@ -129,7 +136,7 @@ export function reportOf(html: string): { language?: Language; title: string; re
   return {
     ...(LANGUAGES.find((l) => l === lang) ? { language: lang as Language } : {}),
     title: one(/<h1>([\s\S]*?)<\/h1>/),
-    report: { summary: one(/<p class="summary">([\s\S]*?)<\/p>/), shown: lists[0]!, notShown: lists[1]!, findings: lists[2]!, ...(question ? { question } : {}), meta },
+    report: { summary: summary.join('\n\n'), ...(question ? { question } : {}), meta },
   };
 }
 
@@ -149,8 +156,8 @@ export function translationProblems(source: Words, t: Partial<Words>): string[] 
   });
   const r = t.report;
   if (!r?.summary?.trim()) problems.push('report.summary is empty');
-  for (const k of ['shown', 'notShown', 'findings'] as const)
-    if (!Array.isArray(r?.[k]) || r[k].length !== source.report[k].length) problems.push(`report.${k}: ${source.report[k].length} items expected`);
+  else if (paragraphs(r.summary).length !== paragraphs(source.report.summary).length)
+    problems.push(`report.summary: ${paragraphs(source.report.summary).length} paragraphs expected, separated by a blank line`);
   if (!!source.report.question !== !!r?.question?.trim()) problems.push(source.report.question ? 'report.question is missing' : 'report.question is not in the source');
   if (!r?.meta || Object.keys(r.meta).length !== Object.keys(source.report.meta).length) problems.push(`report.meta: ${Object.keys(source.report.meta).length} entries expected`);
   return problems;

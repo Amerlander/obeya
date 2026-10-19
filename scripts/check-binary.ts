@@ -197,7 +197,7 @@ await runDemo(
     login: async (page) => { await page.goto(${JSON.stringify(await loginLink(base, home, `/?c=${canvas}`))}); },
     open: async (d) => { await d.goto('/?c=${canvas}'); await d.page.getByText('Configuration').first().waitFor(); },
     scenes: [{ title: 'The canvas', say: 'This canvas is served by the compiled Obeya.', run: async (d) => { await d.untilSpoken(0.5); } }],
-    report: { summary: 'A check render.', shown: ['The canvas'], notShown: [], findings: [], meta: {} },
+    report: { summary: 'A check render.', meta: {} },
   },
   import.meta.dirname,
 );

@@ -637,9 +637,6 @@ await runDemo(
     report: {
       summary:
         'The hero video for obeya.si: on a scratch canvas with the example app Tipjar, the owner groups and moves cards, an idea said into the microphone becomes a task, a message typed, pasted and spoken goes to Obeya in its sidebar, a real agent builds the task and records its demo, and the approval lands the change on main.',
-      shown: ['Canvas with a project and tasks', 'Grouping, moving and zooming', 'An idea by voice', 'Obeya’s sidebar with a mixed message', 'The agent at work', 'Its demo on the card', 'Approval and landing', 'Proposals and ideas'],
-      notShown: [],
-      findings: [],
       meta: { Stack: `Scratch Obeya on port ${PORT} from this checkout, real workers, Obeya and Whisper real` },
     },
   },

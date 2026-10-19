@@ -25,14 +25,12 @@ export interface Scene {
 }
 
 export interface Report {
-  /** What the change does, for someone who has not seen it: two to four sentences. */
+  /**
+   * What the change does, for someone who has not seen it, then what the owner needs to know beyond
+   * the video (what it leaves out and why, what is open or unverified, a defect in someone else's
+   * change): a few short paragraphs, separated by a blank line.
+   */
   summary: string;
-  /** Behaviours the video shows. */
-  shown: string[];
-  /** Behaviours the change has that the video does not show, each with why. */
-  notShown: string[];
-  /** Anything the demo surfaced that the director should know: oddities, rough edges. */
-  findings: string[];
   /**
    * A question only the director can answer — a trade-off, a wording choice, what to do about a
    * finding. Omitted when the only ask is the usual "release or give feedback".
@@ -832,27 +830,20 @@ function esc(s: string) {
 /** The report page's own words, in the narration language. */
 const PAGE_WORDS: Record<
   NarrationLanguage,
-  { captions: string; question: string; shown: string; notShown: string; findings: string }
+  { captions: string; question: string }
 > = {
-  de: {
-    captions: 'Deutsch',
-    question: 'Offene Frage',
-    shown: 'Gezeigt',
-    notShown: 'Nicht gezeigt',
-    findings: 'Auffälligkeiten',
-  },
-  en: {
-    captions: 'English',
-    question: 'Open question',
-    shown: 'Shown',
-    notShown: 'Not shown',
-    findings: 'Findings',
-  },
+  de: { captions: 'Deutsch', question: 'Offene Frage' },
+  en: { captions: 'English', question: 'Open question' },
 };
 
 function reportPage(title: string, r: Report, marks: { title: string; start: number }[], language: NarrationLanguage) {
   const w = PAGE_WORDS[language];
-  const list = (items: string[]) => (items.length ? `<ul>${items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>` : '<p class="none">—</p>');
+  const summary = r.summary
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => `<p class="summary">${esc(p)}</p>`)
+    .join('\n');
   const chapters = marks
     .map((m) => `<li><button data-t="${m.start.toFixed(2)}"><span class="t">${mmss(m.start)}</span>${esc(m.title)}</button></li>`)
     .join('');
@@ -875,8 +866,8 @@ function reportPage(title: string, r: Report, marks: { title: string; start: num
 body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 ui-sans-serif, system-ui, -apple-system, sans-serif; }
 main { max-width:1180px; margin:0 auto; padding:32px 16px 64px; }
 h1 { font-size:28px; line-height:1.2; margin:0 0 8px; letter-spacing:-.01em; }
-.summary { font-size:18px; color:var(--ink); max-width:70ch; margin:0 0 24px; }
-.player { display:grid; grid-template-columns: minmax(0,1fr) 280px; gap:16px; align-items:start; }
+.summary { font-size:18px; color:var(--ink); max-width:70ch; margin:0 0 12px; }
+.player { margin-top:24px; display:grid; grid-template-columns: minmax(0,1fr) 280px; gap:16px; align-items:start; }
 video { width:100%; border-radius:12px; background:#000; display:block; box-shadow:0 10px 30px rgba(0,0,0,.12); }
 .chapters { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:8px; margin:0; list-style:none; }
 .chapters button { all:unset; cursor:pointer; display:flex; gap:10px; width:100%; padding:8px 10px; border-radius:8px; font-size:14px; }
@@ -884,20 +875,15 @@ video { width:100%; border-radius:12px; background:#000; display:block; box-shad
 .chapters .t { color:var(--muted); font-variant-numeric:tabular-nums; min-width:34px; }
 .decision { margin:28px 0; padding:16px 20px; border-radius:12px; background:var(--warn-bg); border:1px solid var(--accent); }
 .decision h2 { margin:0 0 4px; font-size:15px; text-transform:uppercase; letter-spacing:.06em; }
-.grid { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:16px; }
-section.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 20px; }
-section.card h2 { font-size:15px; margin:0 0 8px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
-ul { margin:0; padding-left:20px; } li { margin:4px 0; }
-.none { color:var(--muted); margin:0; }
 dl { display:grid; grid-template-columns:max-content 1fr; gap:4px 16px; font-size:13px; color:var(--muted); margin:28px 0 0; }
 dt { font-weight:600; } dd { margin:0; overflow-wrap:anywhere; }
-@media (max-width: 860px) { .player, .grid { grid-template-columns:1fr; } }
+@media (max-width: 860px) { .player { grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
 <main>
 <h1>${esc(title)}</h1>
-<p class="summary">${esc(r.summary)}</p>
+${summary}
 <div class="player">
   <video id="v" controls preload="metadata" poster="poster.jpg">
     <source src="demo.mp4" type="video/mp4">
@@ -906,11 +892,6 @@ dt { font-weight:600; } dd { margin:0; overflow-wrap:anywhere; }
   <ol class="chapters">${chapters}</ol>
 </div>
 ${r.question ? `<div class="decision"><h2>${w.question}</h2>${esc(r.question)}</div>` : ''}
-<div class="grid">
-  <section class="card"><h2>${w.shown}</h2>${list(r.shown)}</section>
-  <section class="card"><h2>${w.notShown}</h2>${list(r.notShown)}</section>
-  <section class="card"><h2>${w.findings}</h2>${list(r.findings)}</section>
-</div>
 <dl>${meta}</dl>
 </main>
 <script>

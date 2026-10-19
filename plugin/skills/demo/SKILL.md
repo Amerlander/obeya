@@ -1,6 +1,6 @@
 ---
 name: demo
-description: Present finished work to the owner as a narrated screen recording with a one-page report (what it does, shown / not shown, findings, an open question when there is one), so they can approve or give feedback without reading code or clicking through the app. Typically at the end of an implementation session, for the uncommitted and/or unpushed changes; also for any named commit or branch. Use when they ask for a demo, a walkthrough, "führ mir das vor", or /demo.
+description: Present finished work to the owner as a narrated screen recording with a one-page report (what it does, what the owner needs to know beyond the video, an open question when there is one), so they can approve or give feedback without reading code or clicking through the app. Typically at the end of an implementation session, for the uncommitted and/or unpushed changes; also for any named commit or branch. Use when they ask for a demo, a walkthrough, "führ mir das vor", or /demo.
 ---
 
 # /demo — present a change like a team lead presents to a director
@@ -27,8 +27,8 @@ built the change yourself in this session, so nothing you did early on is forgot
 own list of **every user-visible behaviour** the change introduces or alters: the main flow, each
 rule, each guard and edge case (limits, blocked states, what it deliberately does *not* do), and
 where it surfaces (other pages, PDFs, dialogs, e-mails). This list is your working tool, not a
-question for the owner. Each behaviour ends up either shown in the video or listed under "not
-shown" with a reason. Do not show refactors, tests or code.
+question for the owner. Each behaviour ends up in the video; where one cannot be shown, the
+summary says why. Do not show refactors, tests or code.
 
 Every change gets a video, backend changes included. Backend behaviour is shown where the app
 makes it visible — its explorers and inspection views, the API responses behind a page, the
@@ -95,15 +95,15 @@ take `.first()`. Pick seeded data that makes each behaviour visible; create what
 Defects the demo uncovers:
 - In own work, they are part of the session's work: fix the change (with its test), demo the
   fixed state, and say in the chat report what the demo caught.
-- In an existing change, do not touch the code: record the defect in `findings`, with how to
-  reproduce it, and let the owner decide.
+- In an existing change, do not touch the code: say in the summary what the defect is and how
+  to reproduce it, and let the owner decide.
 
-Either way, what needs the owner's judgement — a product or wording question, a trade-off, a
-pre-existing issue outside the change — goes into `findings`.
+A decision that is the owner's (a product or wording question, a trade-off) is the report's
+`question`. A problem outside the change that is worth a task of its own goes, under Obeya, into a
+proposal (`propose_card`); without Obeya, into the summary.
 
 Under Obeya, the card shows the video and the worker's handover summary, not the report page:
-what the owner needs to know goes into that summary, a problem worth a card of its own into a
-proposal (`propose_card`).
+what the report's summary would tell the owner goes into the handover summary.
 
 A later demo of the same card either shows the change afresh or only what was corrected or
 explained since the one before (often after feedback, a short one). Where `ready_for_review` asks
@@ -119,8 +119,11 @@ Create `~/demos/<repo-dir>-<slug>/demo.ts` (model: the newest demo of the same r
 - `login` (unrecorded) and `open` (the opening shot, unrecorded),
 - `scenes`: each has a chapter `title`, the narration `say`, and `run(d)` with the actions shown
   while it is spoken,
-- `report`: `summary`, `shown`, `notShown`, `findings`, `question` only when something needs
-  the owner's call beyond "release or feedback" (a trade-off, what to do about a finding), `meta` (branch and commits,
+- `report`: `summary`, what the change does for someone who has not seen it, then what the owner
+  needs to know beyond the video (a behaviour it leaves out and why, what is open or unverified, a
+  decision taken for them, a defect in an existing change): a few short paragraphs, separated by
+  a blank line; `question` only when something needs the owner's call beyond "release or
+  feedback" (a trade-off, what to do about a defect); `meta` (branch and commits,
   "+ uncommitted changes" when there are any, stack, data; reviews only where some ran — the
   session's own, or the ones on the PR).
 
@@ -226,8 +229,8 @@ the locator it waited for.
 
 Iterate until it is clean. Then `open` the page, send a push notification (the `PushNotification`
 tool; load it via ToolSearch if it is deferred), and reply in the chat
-with the page path, the length, the open question if any, what the demo caught and fixed, and
-the findings — one line each.
+with the page path, the length, the open question if any, and what the demo caught and fixed —
+one line each.
 
 ## Re-voicing a demo in another language
 
