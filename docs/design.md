@@ -2579,7 +2579,8 @@ if need be. The Koordinator lists Question cards among the cards it sees.
 While its agent's turn waits for its background work (a download, a long query, see Looked-up
 threads), the owner's words go into that session at once, read, as an idea's do, together with what
 waited since the turn began; its answer answers them too, so „stop that, take 2023 instead“ reaches
-it while the download runs. Words that come once it works again wait as before. Until 2026-10-19
+it while the download runs. Words that come once it works again, or once that work ended and is about
+to wake it, wait as before; a session that fails after it heard them hands them to the fresh one. Until 2026-10-19
 they waited, unread, until the job finished and the agent had answered the question before.
 
 ### Koordinator memory
