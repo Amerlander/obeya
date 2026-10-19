@@ -13,7 +13,7 @@ import { type Asked, decisionLog, withPick } from './advisor';
 import { BadRequest, type Board, type Message, replyNote, type Unread } from './board';
 import type { AgentEvent, AgentRuntime, AgentSession, AgentTool } from './runtime';
 import { imageNote } from './images';
-import { describeTool, SPOKEN } from './workers';
+import { BACKGROUND_GRACE, BACKGROUND_LIMIT, describeTool, SPOKEN } from './workers';
 import { TO_OBEYA, toObeyaTool } from './to-obeya';
 import { clip } from '../core/text';
 
@@ -34,6 +34,10 @@ export interface ExplorerOptions {
   onReplied?: (cardId: string, replied: boolean) => void;
   /** Passes on to the Koordinator what the owner's words to the idea's agent ask of Obeya (`to_obeya`); without it the agent has no such tool. */
   toObeya?: (cardId: string, request: string) => Promise<string>;
+  /** How long an ended turn waits for a sign of the agent once none of its background work runs (any more). */
+  backgroundGrace?: number;
+  /** How long an ended turn waits at most while the agent's background work still runs. */
+  backgroundLimit?: number;
 }
 
 interface Live {
@@ -50,6 +54,12 @@ interface Live {
   preferences: string;
   /** The agent heard that the owner clicked "So bauen" during its turn. */
   toldBuild?: boolean;
+  /** How many of the agent's background tasks run, as the session last said. */
+  background: number;
+  /** Set while a turn that ended without a reply waits for the agent's background work to wake it. */
+  waiting?: ReturnType<typeof setTimeout>;
+  /** The last words of a turn that ended waiting for its background work: the reply, should it never wake the agent. */
+  said?: string;
 }
 
 export class Explorers {
@@ -138,6 +148,7 @@ export class Explorers {
   close(cardId: string) {
     const live = this.live.get(cardId);
     this.live.delete(cardId);
+    clearTimeout(live?.waiting);
     live?.session.close();
     const card = this.o.board.item(cardId);
     if (card?.idea?.thinking) this.o.board.setIdea(cardId, { thinking: false });
@@ -194,6 +205,12 @@ export class Explorers {
     if (live) {
       // queued, it goes in with whatever else came, which may well need a reply
       live.queue.push({ text: message, images, said });
+      // a turn waiting for its background work ended: the message starts the next one at once
+      if (live.waiting) {
+        clearTimeout(live.waiting);
+        live.waiting = undefined;
+        this.sendQueued(card.id, live, [...live.current]);
+      }
       return;
     }
     const row = this.o.board.row(card.id);
@@ -220,7 +237,7 @@ export class Explorers {
 
   private launch(card: Item, current: Message[], message: string, resume: string | undefined, images: string[], quiet = false) {
     const preferences = this.o.preferences?.() ?? '';
-    const live: Live = { session: undefined!, current, queue: [], replied: false, lastText: '', quiet, preferences };
+    const live: Live = { session: undefined!, current, queue: [], replied: false, lastText: '', quiet, preferences, background: 0 };
     this.live.set(card.id, live);
     live.session = this.o.runtime.start(
       {
@@ -257,6 +274,10 @@ export class Explorers {
 
   private onEvent(cardId: string, live: Live, e: AgentEvent) {
     if (this.live.get(cardId) !== live) return;
+    if (e.type === 'background') return this.backgroundChanged(cardId, live, e.tasks.length);
+    // a turn may also start without a message from Obeya (a finished background command)
+    clearTimeout(live.waiting);
+    live.waiting = undefined;
     switch (e.type) {
       case 'session':
         this.o.board.work(cardId, { session_id: e.id });
@@ -276,27 +297,72 @@ export class Explorers {
         this.o.onReplied?.(cardId, false);
         break;
       case 'idle': {
-        // a turn without reply still said something: that is the reply, unless the turn was for the brief only
-        if (!live.replied && !live.quiet && live.lastText.trim()) this.answer(cardId, live.lastText.trim());
-        live.replied = false;
-        live.lastText = '';
-        live.quiet = false;
-        live.current = [];
-        if (live.queue.length) {
-          const queued = live.queue.splice(0);
-          live.current = queued;
-          this.o.board.readNow(cardId, queued.flatMap((m) => m.said));
-          live.session.send(
-            [...queued.map((m) => m.text), this.buildNote(cardId, live)].filter(Boolean).join('\n\n'),
-            queued.flatMap((m) => m.images),
-          );
+        live.background = e.background ?? 0;
+        // its background work still runs (a download, a watcher), and it wakes the agent when it ends:
+        // the idea shows it at work until then, and it goes on from there; its words so far are no reply
+        if (live.background > 0) {
+          if (live.replied) {
+            // a reply it gave (that it waits for the work, say) answered the turn's messages
+            live.current = [];
+            live.said = undefined;
+            live.replied = false;
+          } else if (live.lastText.trim()) live.said = live.lastText.trim();
+          live.lastText = '';
+          // what the owner said meanwhile goes in now, and the turn answers it too
+          if (live.queue.length) this.sendQueued(cardId, live, [...live.current]);
+          else this.waitForWork(cardId, live);
           return;
         }
-        this.close(cardId);
-        this.o.onReplied?.(cardId, true);
+        this.turnOver(cardId, live);
         break;
       }
     }
+  }
+
+  /** The agent's turn is over: what it said last is the reply, and the owner is next, unless more waits for it. */
+  private turnOver(cardId: string, live: Live) {
+    // a turn without reply still said something: that is the reply, unless the turn was for the brief only
+    const said = live.lastText.trim() || live.said;
+    if (!live.replied && !live.quiet && said) this.answer(cardId, said);
+    live.replied = false;
+    live.lastText = '';
+    live.said = undefined;
+    live.quiet = false;
+    if (live.queue.length) return this.sendQueued(cardId, live, []);
+    this.close(cardId);
+    this.o.onReplied?.(cardId, true);
+  }
+
+  /** What the owner said during the turn starts the next one, which answers it after `unanswered`. */
+  private sendQueued(cardId: string, live: Live, unanswered: Message[]) {
+    const queued = live.queue.splice(0);
+    live.current = [...unanswered, ...queued];
+    this.o.board.readNow(cardId, queued.flatMap((m) => m.said));
+    live.session.send(
+      [...queued.map((m) => m.text), this.buildNote(cardId, live)].filter(Boolean).join('\n\n'),
+      queued.flatMap((m) => m.images),
+    );
+  }
+
+  /**
+   * Waits for the agent's background work to wake it, while the idea shows it at work. Without a
+   * sign of it for a long while (the work ended, and nothing woke the agent), its turn is over.
+   */
+  private waitForWork(cardId: string, live: Live) {
+    clearTimeout(live.waiting);
+    live.waiting = setTimeout(
+      () => {
+        live.waiting = undefined;
+        if (this.live.get(cardId) === live) this.turnOver(cardId, live);
+      },
+      live.background > 0 ? (this.o.backgroundLimit ?? BACKGROUND_LIMIT) : (this.o.backgroundGrace ?? BACKGROUND_GRACE),
+    );
+  }
+
+  /** The agent's background work started or ended: a turn waiting for it waits as long as it runs. */
+  private backgroundChanged(cardId: string, live: Live, running: number) {
+    live.background = running;
+    if (live.waiting) this.waitForWork(cardId, live);
   }
 
   /** The agent's reply stands in the conversation, its mocks and questions below it; the owner is next. */

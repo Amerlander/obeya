@@ -198,7 +198,12 @@ straight to the agent, as on every card an agent listens on (see Voice in), spok
 the speech recognition has written them down (picked options too, with the words beside them). The
 agent passes on with `to_obeya` what asks Obeya for something (build it, plan it, a prototype, park,
 drop, anything about another card). The reply stands in the panel. What the agent read and thought
-on the way to a reply folds away under that reply ("Verlauf"), for whoever wants to follow it.
+on the way to a reply folds away under that reply ("Verlauf"), for whoever wants to follow it. A turn
+that ends while the agent's background work runs (a download, a watcher) does not hand the idea to
+the owner: it shows the agent at work, with its words so far (a reply that it waits for the work
+among them), until that work wakes it and it goes on, and what the owner says meanwhile goes to it at
+once. Should the work never wake it, its last words are the reply after all, with the same limits as
+for a worker (three hours while it runs, ten minutes after it ended).
 
 With every reply the agent also says what it would do in the owner's place: the option it would pick
 for each of its questions ("Würde ich nehmen", with why), and the next step ("Nächster Schritt, wenn

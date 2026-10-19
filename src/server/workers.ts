@@ -265,12 +265,12 @@ export interface DueRestart {
 const pauseOf = (due: DueRestart): Pause => (due.reason === 'stop' ? 'stop' : due.repo ? 'repo' : 'restart');
 
 /** Background work that ended wakes the worker within this; a turn that waits longer without a sign counts as ended. */
-const BACKGROUND_GRACE = 10 * 60_000;
+export const BACKGROUND_GRACE = 10 * 60_000;
 /**
  * Background work ends by its own limit well within this (a command run in the background after two
  * hours at most, a watcher after half an hour): it is only for a session that never says the work ended.
  */
-const BACKGROUND_LIMIT = 3 * 60 * 60_000;
+export const BACKGROUND_LIMIT = 3 * 60 * 60_000;
 /** The owner may pause the demo video for a while; a browser gone away leaves no other sign. */
 const HOLD_GRACE = 10 * 60_000;
 /** Closing the card with „Freigeben“ also ends the watching: the approval takes the comments then. */

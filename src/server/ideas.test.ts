@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CanvasRuntime } from './canvas';
 import { Store } from './db';
-import { FakeRuntime, noForge, type FakeSession, gitRepo, identify } from './testing';
+import { Explorers } from './explorers';
+import { FakeRuntime, noForge, type FakeSession, gitRepo, identify, until } from './testing';
 import { git } from './workspaces';
 
 let dir: string;
@@ -211,6 +212,95 @@ describe('an idea', () => {
     // a turn that ends without words leaves nothing to answer
     explorer().emit({ type: 'idle' });
     expect(item(i.id).idea).toMatchObject({ thinking: false, yourTurn: false, questions: [] });
+  });
+
+  test('a turn that ends while its agent’s background work runs is no reply: the agent works on once that work wakes it', () => {
+    const i = idea();
+    canvas.act(i.id, { action: 'discuss', text: 'Rechne das nach.' });
+    const s = explorer();
+    s.emit({ type: 'session', id: 'sess-1' });
+    s.emit({ type: 'background', tasks: [{ id: 'b1', description: 'Download market data' }] });
+    s.emit({ type: 'text', text: 'Still downloading the market data.' });
+    s.emit({ type: 'idle', background: 1 });
+    // its words show as it works on, and the owner is not next
+    expect(s.closed).toBe(false);
+    expect(item(i.id).idea).toMatchObject({ thinking: true, yourTurn: false });
+    expect(talk(i.id)).toEqual([['owner', 'Rechne das nach.']]);
+    expect(board().events(i.id).at(-1)).toMatchObject({ kind: 'say', text: 'Still downloading the market data.' });
+    // what the owner says meanwhile goes in at once, and the turn answers it too
+    canvas.act(i.id, { action: 'discuss', text: 'Nimm auch 2023.' });
+    expect(s.inbox.at(-1)).toContain('Nimm auch 2023.');
+    expect(board().events(i.id).at(-1)!.unread).toBeFalsy();
+    s.emit({ type: 'idle', background: 1 });
+    expect(s.closed).toBe(false);
+    // the download ends and wakes the agent for a turn of its own
+    s.emit({ type: 'background', tasks: [] });
+    s.emit({ type: 'tool', name: 'Bash', input: { command: 'python3 sim.py' } });
+    s.call('reply', { text: 'Mit 2023: 12 % weniger Ausgleichsenergie.' });
+    s.emit({ type: 'idle', background: 0 });
+    expect(s.closed).toBe(true);
+    expect(item(i.id).idea).toMatchObject({ thinking: false, yourTurn: true });
+    expect(talk(i.id)).toEqual([
+      ['owner', 'Rechne das nach.'],
+      ['owner', 'Nimm auch 2023.'],
+      ['explorer', 'Mit 2023: 12 % weniger Ausgleichsenergie.'],
+    ]);
+  });
+
+  test('a reply that it waits for its background work leaves the agent at work, and it replies again once that work wakes it', () => {
+    const i = idea();
+    canvas.act(i.id, { action: 'discuss', text: 'Hol die Preise.' });
+    const s = explorer();
+    s.emit({ type: 'session', id: 'sess-1' });
+    s.call('reply', { text: 'Der Download läuft im Hintergrund; ich melde mich, sobald er fertig ist.' });
+    s.emit({ type: 'idle', background: 1 });
+    expect(s.closed).toBe(false);
+    expect(item(i.id).idea).toMatchObject({ thinking: true });
+    s.emit({ type: 'background', tasks: [] });
+    s.emit({ type: 'text', text: 'Die Preise sind da.' });
+    s.call('reply', { text: '1284 Preise, im Schnitt 4,37 €.' });
+    s.emit({ type: 'idle', background: 0 });
+    expect(s.closed).toBe(true);
+    expect(item(i.id).idea).toMatchObject({ thinking: false, yourTurn: true });
+    expect(talk(i.id).slice(1)).toEqual([
+      ['explorer', 'Der Download läuft im Hintergrund; ich melde mich, sobald er fertig ist.'],
+      ['explorer', '1284 Preise, im Schnitt 4,37 €.'],
+    ]);
+    expect(board().idea(i.id).unread).toBeUndefined();
+  });
+
+  test('paused while it waits for its background work, the agent keeps what it has not answered', () => {
+    const i = idea();
+    canvas.act(i.id, { action: 'discuss', text: 'Rechne das nach.' });
+    const s = explorer();
+    s.emit({ type: 'session', id: 'sess-1' });
+    s.emit({ type: 'idle', background: 1 });
+    canvas.act(i.id, { action: 'pause' });
+    expect(s.closed).toBe(true);
+    expect(board().idea(i.id).unread).toMatchObject({ why: 'paused', messages: [{ text: expect.stringContaining('Rechne das nach.') }] });
+  });
+
+  test('its agent waits for its background work no longer than its limit, nor long after that work ended without waking it', async () => {
+    const explorers = new Explorers({ board: board(), runtime, pathFor: () => main, backgroundGrace: 5, backgroundLimit: 30 });
+    const one = idea();
+    explorers.discuss(one.id, 'Rechne das nach.');
+    const s = runtime.last;
+    s.emit({ type: 'text', text: 'Still downloading.' });
+    s.emit({ type: 'idle', background: 1 });
+    s.emit({ type: 'background', tasks: [] });
+    await settle(20);
+    // its last words are the reply after all
+    expect(s.closed).toBe(true);
+    expect(item(one.id).idea).toMatchObject({ thinking: false, yourTurn: true });
+    expect(talk(one.id).at(-1)).toEqual(['explorer', 'Still downloading.']);
+    const two = idea();
+    explorers.discuss(two.id, 'Und das?');
+    const t = runtime.last;
+    t.emit({ type: 'idle', background: 1 });
+    await settle(15);
+    expect(t.closed).toBe(false);
+    await until(() => t.closed);
+    expect(item(two.id).idea).toMatchObject({ thinking: false, yourTurn: false });
   });
 
   test('its agent asks with answer options, which stand until the owner says something', () => {
