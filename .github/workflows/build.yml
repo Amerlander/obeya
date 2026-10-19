@@ -147,6 +147,7 @@ jobs:
             not signed: SmartScreen warns about the installer ("More info", then "Run anyway"). Every
             file's SHA-256 is in `SHA256SUMS`: `sha256sum --check --ignore-missing SHA256SUMS` beside
             the download, or `Get-FileHash Obeya-Windows-x64-setup.exe` in PowerShell.
+            [Code signing policy](https://obeya.si/code-signing/)
         run: |
           { printf '%s\n\n' "$NOTES"; cat notes.md; } > body.md
           gh release create "$GITHUB_REF_NAME" --draft --latest --verify-tag --title "Obeya ${GITHUB_REF_NAME#v}" --notes-file body.md release/*

@@ -77,8 +77,9 @@ The app needs neither Bun nor a checkout. On its first start it checks the machi
 needs ([Claude Code](https://claude.com/claude-code) with your login, git), what can wait (the
 [GitHub CLI](https://cli.github.com) for pull requests, voice, demos). It installs what it can
 without admin rights and shows the command for the rest, then opens your first canvas on one of
-your repositories. The Windows installer is not signed yet: SmartScreen warns about it, and "More
-info" → "Run anyway" goes on. On Linux, make the AppImage executable (`chmod +x`) first.
+your repositories. The Windows installer is not signed yet (applied for at the SignPath
+Foundation): SmartScreen warns about it, and "More info" → "Run anyway" goes on ([code signing
+policy](https://obeya.si/code-signing/)). On Linux, make the AppImage executable (`chmod +x`) first.
 The app keeps itself up to date: a new release shows in its bar, and installing it waits until
 the agents have paused, then the app restarts with it (a .deb is updated by installing the next
 one).

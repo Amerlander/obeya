@@ -204,6 +204,15 @@ pre { margin: 0; background: var(--ink); color: #efe9dc; border-radius: 3px; pad
 pre code { font-size: inherit; }
 pre .c { color: #948b7a; }
 
+/* ---------- the code signing policy, a page of its own ---------- */
+.policy { max-width: 760px; margin-top: 56px; margin-bottom: 96px; }
+.policy h1 { font-size: clamp(34px, 4vw, 46px); }
+.policy h2 { font-size: 24px; margin: 40px 0 0; }
+.policy p, .policy ul { margin: 14px 0 0; }
+.policy ul { padding-left: 1.2em; display: grid; gap: 8px; }
+.policy .lead { font-family: var(--serif); font-size: 21px; margin-top: 22px; }
+.policy a { color: var(--blue); }
+
 footer { max-width: var(--wide); margin: 0 auto; padding: 28px 24px 48px; display: flex; gap: 18px; align-items: center;
   font-size: 14px; color: var(--muted); border-top: 1px solid var(--line); }
 footer span { margin-right: auto; }

@@ -5459,7 +5459,10 @@ would not open. Notarised on the owner's Mac and on GitHub's runners for both Ma
 Apple accepted Bun's binary with the JIT entitlements; Apple answered within 35–40 s.
 
 Windows and Linux are not signed: the release notes say how to check a download against
-`SHA256SUMS`, and the site and the README what SmartScreen shows. The maintainer's steps (agreement,
+`SHA256SUMS`, and the site and the README what SmartScreen shows. For Windows, Obeya has applied to
+the SignPath Foundation (2026-10-19); its conditions bring a code signing policy, a page of the site
+(`site/code-signing/`) that the site's download section and footer, the README and every release's
+notes link (`docs/release.md` § The SignPath Foundation). The maintainer's steps (agreement,
 certificate, API key, the updater's key, a release) are in `docs/release.md`.
 
 #### Making a release
@@ -5544,6 +5547,10 @@ From the top:
 - getting started with the downloads, `bun start` from the checkout and GitHub (not the design doc,
   which is written for the agents working on Obeya).
 
+A second page, `site/code-signing/` ("Code signing policy"), linked under the downloads and in the
+footer, is what the SignPath Foundation asks of a project it signs for: who signs what, the team's
+roles and what Obeya sends where. It shares the stylesheet.
+
 It has Obeya's palette and type (see Visual identity): Newsreader, IBM Plex Sans Condensed and the
 three characters of 大部屋 (Noto Serif JP) are served from `site/fonts/` with their OFL licences, not
 from Google Fonts; logo and wordmark are copies from `src/ui/logo/`. The screenshots show the
@@ -5609,7 +5616,11 @@ without the chapters file there is no list.
   release, since macOS will not open an unnotarised download without a detour through the system
   settings; Windows and Linux unsigned, with checksums. SmartScreen warns about a new installer
   signed or not until it has a reputation, so a Windows certificate comes after the first release
-  (SignPath Foundation, free for open-source projects).
+  (SignPath Foundation, free for open-source projects). Applied for after v0.5.0 (2026-10-19),
+  disclosing that the server has Anthropic's proprietary Agent SDK compiled in, which SignPath's
+  terms exclude: dropping the SDK would leave Obeya tracking Claude Code's undocumented control
+  protocol itself, for no gain to users, so SignPath decides first; a certificate in the owner's
+  name is the fallback.
 - **A release is a project skill with a status script**, not a script alone and not left to each
   session (2026-10-13): the steps were spread over three documents, and v0.1.0 ran into three
   problems nobody had written down (GitHub's main 35 commits behind, `site-media` the latest

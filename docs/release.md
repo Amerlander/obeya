@@ -4,7 +4,8 @@ How a version of the app goes out, and the owner's steps it depends on. The buil
 in `docs/design.md` (Builds, App updates).
 
 The Mac apps are signed with a Developer ID and notarised; the Windows installer and the Linux
-packages are not signed, and the release lists the SHA-256 of every file in `SHA256SUMS`.
+packages are not signed (Windows: the SignPath Foundation, applied for), and the release lists the
+SHA-256 of every file in `SHA256SUMS`.
 
 ## A release
 
@@ -157,6 +158,46 @@ bun run build:app
 ## Windows and Linux
 
 Not signed. SmartScreen warns about the Windows installer until it has a reputation ("More
-info", then "Run anyway"), which the site and the README say; a certificate comes later
-(SignPath Foundation, free for open-source projects, once a release with some reputation is
-out). The release notes say how to check a download against `SHA256SUMS`.
+info", then "Run anyway"), which the site and the README say. The release notes say how to check a
+download against `SHA256SUMS`.
+
+### The SignPath Foundation
+
+The Windows certificate is to come from the SignPath Foundation: free for open-source projects,
+issued in the Foundation's name, the key in SignPath's HSM, each release signed from a GitHub
+Actions build after an approver has approved its signing request. The owner decided on
+2026-10-19 to apply right after v0.5.0. Its conditions
+(<https://signpath.org/terms>) as they bear on Obeya:
+
+- **Every component under an OSI licence, nothing proprietary.** The server (`obeya.exe` in the
+  installer) has Anthropic's Claude Agent SDK compiled into it, whose licence is "© Anthropic PBC.
+  All rights reserved"; Claude Code itself is not shipped. The application says so up front. If
+  SignPath declines because of it, Obeya would have to talk to the machine's Claude Code without
+  the SDK (its stream-json control protocol, undocumented, which the SDK tracks for each Claude
+  Code version), or take a certificate of its own (below).
+- **Reputation** for downloadable programs: SignPath's judgement, without a threshold. At the
+  application: the repository two weeks old, 7 stars, a handful of downloads per release.
+- **A code signing policy** on the home page and the download and release pages, under that
+  name: `site/code-signing/index.html` (obeya.si/code-signing/), linked from the site's download
+  section and footer, the README's download section and the notes of every release
+  (`build.yml`). It has the sentence SignPath prescribes ("Free code signing provided by
+  SignPath.io, certificate by SignPath Foundation"), the team's roles and the privacy statement:
+  what Obeya connects to and when. It says the Windows installer is not signed until the
+  application is accepted; that sentence goes once a signed release is out.
+- **Multi-factor authentication** for every team member, on GitHub and on SignPath.
+- **Signed are only our own builds**, made from the repository by GitHub Actions; product name and
+  version are set on every signed file and enforced by SignPath's artifact configuration.
+
+After an acceptance: SignPath creates an account for the applicant (turn on MFA there), then the
+build workflow submits the unsigned installer and the programs in it through SignPath's GitHub
+action (`signpath/github-action-submit-signing-request`) and waits for the approved, signed
+result, before the updater's signature is made over it. `obeya.exe` carries Bun's metadata unless
+`bun build --compile` sets its own (`--windows-title`, `--windows-version` …). The sentence on the
+policy page, the site, the README and the release notes about the unsigned installer go.
+
+If SignPath declines: a certificate in the owner's name. Microsoft's Artifact Signing ($10 a month)
+takes individuals only in the US and Canada (2026); Certum's "Open Source Code Signing" in its
+SimplySign cloud costs €49 a year, shows "Open Source Developer, Daniel Sadilek", and asks for a
+code from its phone app for every signing session, which makes signing in GitHub Actions awkward;
+CAs with CI signing cost about €200–500 a year. SmartScreen's reputation has to grow with any new
+certificate.
