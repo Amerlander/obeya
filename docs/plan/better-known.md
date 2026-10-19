@@ -119,7 +119,7 @@ Reading the drafts, the launch day, ten minutes a week for the post.
   and github.com/sadilek/obeya written without https://; downloads the `demo.mp4` that shows the
   week best. Writes `post.md` and the clip to `~/demos/weekly-post-<date>/`, posts nothing; a week
   without demos gets no draft. Tried once on the past week, the draft shown to the owner.
-- [ ] **W3:** Launch kit. Waits for the task “GitHub page that gets found”. An essay page on
+- [x] **W3:** Launch kit. Waits for the task “GitHub page that gets found”. An essay page on
   obeya.si under `site/` with the thesis "Stop testing your agents' work: watch the demo", linked
   from the navigation and footer of `site/index.html`. Drafts, outside git and handed over as an
   HTML artifact: the Show HN title and first comment, an r/ClaudeAI post, a LinkedIn launch post,

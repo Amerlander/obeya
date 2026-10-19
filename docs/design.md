@@ -5801,6 +5801,15 @@ A second page, `site/code-signing/` ("Code signing policy"), linked under the do
 footer, is what the SignPath Foundation asks of a project it signs for: who signs what, the team's
 roles and what Obeya sends where. It shares the stylesheet.
 
+A third, `site/watch-the-demo/` ("Why demos" in the navigation and the footer), is an essay in the
+owner's first person with the thesis "Stop testing your agents' work. Watch the demo.": the agents
+outpace whoever tests their work by hand; a director has the work shown in a launch review; what a
+demo is and the rules that make it evidence (the code under review, every behaviour shown or listed
+as not shown, backend through a view, a page where there is something to look at); recording it is
+an end-to-end test the agent runs on its own work; what is left for the owner; three objections; the
+demos as a record. It is what a launch post links when it argues rather than shows, and carries its
+own Open Graph tags, with the demo screenshot as its picture (2026-10-19).
+
 It has Obeya's palette and type (see Visual identity): Newsreader, IBM Plex Sans Condensed and the
 three characters of 大部屋 (Noto Serif JP) are served from `site/fonts/` with their OFL licences, not
 from Google Fonts; logo and wordmark are copies from `src/ui/logo/`. The screenshots show the
