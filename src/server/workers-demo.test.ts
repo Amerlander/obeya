@@ -354,6 +354,38 @@ describe('handing over with a demo', () => {
     expect(board.item(c.id)!.answered).toBeUndefined();
   });
 
+  test('words its worker never answers do not read as answered, though it answered the ones before', async () => {
+    const c = manual();
+    workers.start(c.id);
+    runtime.last.call('ready_for_review', { summary: 'S', demo: { dir: demoDir(), chapters: ['Vorher', 'Nachher'] } });
+    runtime.last.emit({ type: 'idle' });
+    workers.message(c.id, 'Warum zwei Spalten?');
+    runtime.last.emit({ type: 'tool', name: 'Read', input: {} });
+    runtime.last.call('reply', { text: 'Weil die Tabelle sonst zu breit wird.' });
+    runtime.last.emit({ type: 'idle' });
+    expect(board.item(c.id)!.answered).toBe(true);
+    // a turn that breaks off with an error, without a word for the owner
+    workers.message(c.id, 'Stimmen die Werte?');
+    runtime.last.emit({ type: 'error', message: 'API Error: 500' });
+    runtime.last.emit({ type: 'idle' });
+    expect(state(c.id)).toBe('waiting:demo');
+    expect(board.item(c.id)!.answered).toBeUndefined();
+    expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', author: 'obeya', text: board.t.worker.unanswered });
+    // a session that ends before its turn does
+    workers.message(c.id, 'Und jetzt?');
+    runtime.last.close();
+    await until(() => !board.item(c.id)!.answering);
+    expect(state(c.id)).toBe('waiting:demo');
+    expect(board.item(c.id)!.answered).toBeUndefined();
+    expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', text: board.t.worker.unanswered });
+    expect(needsYou(board.item(c.id)!)).toBe(true);
+    // words that end the turn answer it, without a reply
+    workers.message(c.id, 'Und jetzt?');
+    runtime.last.emit({ type: 'text', text: 'Ja, sie stimmen.' });
+    runtime.last.emit({ type: 'idle' });
+    expect(board.item(c.id)!.answered).toBe(true);
+  });
+
   test('a worker that a background command wakes after it answered is at work again until its turn ends', () => {
     const c = manual();
     workers.start(c.id);

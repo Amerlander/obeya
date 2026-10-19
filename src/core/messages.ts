@@ -124,6 +124,7 @@ const de = {
     hostLost: (host: string) => `Die Verbindung zu ${host} ist weg; der Agent macht weiter, sobald ${host} wieder erreichbar ist.`,
     hostBack: (host: string) => `${host} ist wieder erreichbar; der Agent macht weiter.`,
     stalled: 'Der Agent hat angehalten, ohne fertig zu sein.',
+    unanswered: 'Der Agent hat aufgehört, ohne auf deine Nachricht zu antworten. Schreib noch einmal, dann macht er weiter.',
     remainsUndone: (reason: string) => `${reason} Was nach der Landung noch zu tun war, ist nicht erledigt; „Stoppen“ schließt die Karte ohne den Rest ab.`,
     tryAgain: 'Nochmal versuchen',
     /** A tool call refused without asking anyone: what it was, who refused it, and their words when they gave any. */
@@ -474,6 +475,7 @@ const en: Messages = {
     hostLost: (host: string) => `The connection to ${host} is gone; the agent goes on once ${host} can be reached again.`,
     hostBack: (host: string) => `${host} can be reached again; the agent goes on.`,
     stalled: 'The agent stopped without being done.',
+    unanswered: 'The agent stopped without answering your message. Write again and it goes on.',
     remainsUndone: (reason: string) => `${reason} What was left to do after the landing is not done; “Stop” closes the card without the rest.`,
     tryAgain: 'Try again',
     denied: (what: string, by: string, reason?: string) => `Not allowed (${by}): ${what}${reason ? ` — ${reason}` : ''}`,

@@ -191,6 +191,8 @@ interface Live {
   handedOver: boolean;
   /** Whether the worker answered the owner with `reply` in the current turn. */
   answered?: boolean;
+  /** Whether the worker had words for the owner in the current turn: said something, replied, or passed their words on to Obeya. */
+  spoke?: boolean;
   /** Whether the worker snoozed in the current turn: its session ends with the turn, and its closing words repeat the snooze. */
   snoozed?: boolean;
   /** The worker's words since its reply: its words once a step follows them, its closing words at the turn's end. */
@@ -1665,7 +1667,7 @@ export class Workers {
     if (e.type === 'text' || e.type === 'tool') {
       // a turn of its own (a finished background command woke it) after it answered the owner's
       // words on its handover: it works on towards what it told them, so the card is at work again
-      if (!live.acted && this.o.board.item(cardId)?.answered) this.takingIn(cardId);
+      if (!live.acted && this.o.board.item(cardId)?.answered) this.takingIn(cardId, true);
       this.resumed(cardId, live);
       this.unlimited(cardId, live);
       live.failed = undefined;
@@ -1686,6 +1688,7 @@ export class Workers {
         // conversation leaves them out; after a reply its words wait to see whether work follows them
         // or they close the turn, repeating the reply
         if (live.handedOver || live.snoozed) break;
+        live.spoke = true;
         if (live.answered) live.held = clip(e.text, 12000);
         else this.o.board.log(cardId, 'say', 'worker', clip(e.text, 12000));
         break;
@@ -1745,8 +1748,10 @@ export class Workers {
     const acted = live.acted || waited;
     const closing = live.held;
     const snoozed = live.snoozed;
+    const spoke = !!live.spoke;
     live.handedOver = false;
     live.answered = false;
+    live.spoke = false;
     // a snooze holds across a turn a message from Obeya still starts (a restart notice): its session ends after that one
     if (!more) live.snoozed = false;
     live.held = undefined;
@@ -1776,7 +1781,7 @@ export class Workers {
       if (this.restart && live.toldRestart && !handedOver) return this.pausedForRestart(cardId, live);
       // the usage limit cut it off: it goes on by itself once the limit lifts, still taking in the answer
       if (live.limited && !handedOver) return this.waitForLimit(cardId, live, live.limited);
-      this.answerTaken(cardId, true);
+      this.answerTaken(cardId, spoke);
     }
     if (handedOver) {
       // work the owner approved already lands once its worker handed over what stood in the way
@@ -1847,22 +1852,31 @@ export class Workers {
     this.toOwner(cardId, { text: t.worker.remainsUndone(`${reason}${/[.!?]$/.test(reason) ? '' : '.'}`), options: [t.worker.tryAgain], stuck: true });
   }
 
-  /** The worker takes in the owner's words on its handover: the card is at work meanwhile, and still waits for approval. */
-  private takingIn(cardId: string) {
+  /**
+   * The worker takes in the owner's words on its handover: the card is at work meanwhile, and still
+   * waits for approval. New words are not answered yet; a worker that its background work woke
+   * after it answered (`woke`) works on towards that answer, which stands.
+   */
+  private takingIn(cardId: string, woke = false) {
     const detail = this.o.board.row(cardId).detail;
-    this.o.board.work(cardId, { detail: JSON.stringify({ ...(detail ? (JSON.parse(detail) as Record<string, unknown>) : {}), answering: true }) });
+    const { answered, ...rest } = detail ? (JSON.parse(detail) as Record<string, unknown>) : {};
+    this.o.board.work(cardId, { detail: JSON.stringify({ ...rest, ...(woke && answered ? { answered } : {}), answering: true }) });
   }
 
   /**
    * The worker has taken in the owner's words on its handover: work still waiting is the owner's
-   * again, `answered` when its turn ended with words for them rather than a new demo.
+   * again, `answered` when its turn ended with words for them rather than a new demo (or a turn
+   * before did, `takingIn`). Without any (its session ended, its turn broke off) the owner hears
+   * that their words went unanswered.
    */
-  private answerTaken(cardId: string, answered = false) {
+  private answerTaken(cardId: string, spoke = false) {
     const { detail } = this.o.board.row(cardId);
-    if (detail) {
-      const { answering, ...rest } = JSON.parse(detail) as Record<string, unknown>;
-      if (answering) this.o.board.work(cardId, { detail: JSON.stringify({ ...rest, ...(answered ? { answered: true } : {}) }) });
-    }
+    if (!detail) return;
+    const { answering, answered: before, ...rest } = JSON.parse(detail) as Record<string, unknown>;
+    if (!answering) return;
+    const answered = spoke || !!before;
+    this.o.board.work(cardId, { detail: JSON.stringify({ ...rest, ...(answered ? { answered: true } : {}) }) });
+    if (!answered) this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.unanswered);
   }
 
   /**
@@ -2171,6 +2185,7 @@ export class Workers {
           if (!s) return 'Not shown: the reply is empty.';
           this.o.board.log(cardId, 'talk', 'worker', s);
           live.answered = true;
+          live.spoke = true;
           return 'Shown to the owner.';
         },
       },
@@ -2470,7 +2485,15 @@ export class Workers {
             } satisfies AgentTool,
           ]
         : []),
-      ...(this.o.toObeya ? [toObeyaTool((request) => this.o.toObeya!(cardId, request))] : []),
+      ...(this.o.toObeya
+        ? [
+            toObeyaTool((request) => {
+              // what Obeya does or replies is shown to the owner as the answer to their words
+              live.spoke = true;
+              return this.o.toObeya!(cardId, request);
+            }),
+          ]
+        : []),
     ]);
   }
 

@@ -473,7 +473,11 @@ words call for comes as a new handover. A worker whose words asked Obeya for som
 frei, a follow-up) passes them on (`to_obeya`), and once its turn ends the card is the owner's
 again. A turn that ends without a new demo (a reply, a handover that keeps the demo) leaves the card
 reading „Agent hat geantwortet, wartet auf dich“ (`answered`) instead of „Demo bereit“, whether or
-not the owner had watched the demo; a new demo reads „Demo bereit“ again. A worker that a background
+not the owner had watched the demo; a new demo reads „Demo bereit“ again. Only words for the owner
+answer them: a reply, what the worker says, or Obeya's result of `to_obeya`; an answer to earlier
+words does not count. A turn that ends without any (it broke off with an error, its session ended)
+leaves the card at „Demo bereit“, and the conversation says the agent stopped without answering, so
+the owner writes again. A worker that a background
 command wakes after such a turn (a test run it said a new handover waits for) works on towards what
 it told the owner: from its first step the card is at work again, as while it took the words in,
 until its turn ends.
@@ -712,6 +716,10 @@ Projekt“) is linked the same way.
   original, and a comment on a place in it played the new video from that time.
 - **A turn without a new demo reads „Agent hat geantwortet“** (2026-10-15). Until then the card read
   „Demo bereit“ after any answer.
+- **Only words for the owner count as an answer** (2026-10-19). Until then any end of a turn on
+  their words counted, and a session that ended without one left the answer to the words before
+  standing: the card read „Agent hat geantwortet, wartet auf dich“ under a question no agent had
+  seen.
 - **The demo zooms within the window** (2026-10-12): full screen was too much on a large monitor and
   hid where the owner was; before, the owner zoomed in with the operating system.
 - **Space and the arrows reach the video** (2026-10-14). Before, the microphone flickered at every
