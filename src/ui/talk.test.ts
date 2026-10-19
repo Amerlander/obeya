@@ -495,11 +495,11 @@ test('the snooze is a line, with what the agent did before it closed above it, a
   expect(pausable({ kind: 'task', state: 'working', inTurn: true, snoozed: { until: '2026-10-18T00:05:00Z', by: 'agent' } })).toBe(false);
 });
 
-test('the phone opens a card at work, or one whose questions offer options, with its conversation up', () => {
+test('the phone opens a card at work, or one with a question open, with its conversation up', () => {
   expect(opensWithTalk({ state: 'working' } as Item)).toBe(true);
   expect(opensWithTalk({ state: 'working', archivedAt: '2026-10-17T10:00:00Z' } as Item)).toBe(false);
   expect(opensWithTalk({ state: 'waiting', need: 'question', question: { text: 'A oder B?', options: ['A', 'B'] } } as Item)).toBe(true);
-  expect(opensWithTalk({ state: 'waiting', need: 'question', question: { text: 'Welcher Name?', options: [] as string[] } } as Item)).toBe(false);
+  expect(opensWithTalk({ state: 'waiting', need: 'question', question: { text: 'Welcher Name?', options: [] as string[] } } as Item)).toBe(true);
   expect(opensWithTalk({ state: 'planned' } as Item)).toBe(false);
   expect(opensWithTalk({ state: 'done' } as Item)).toBe(false);
 });

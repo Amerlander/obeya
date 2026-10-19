@@ -4889,10 +4889,11 @@ with two handovers showed 81, and its address is `?card=<id>&talk`. Every card k
 gets there the same way: the talk column of `Split` (and the Question card's conversation) goes into
 the panel through a context the phone view provides (`TalkElsewhere` in `src/ui/detail.tsx`, a React
 portal), so the canvas is untouched and no card kind has code of its own for it. A card at work
-(`working`) and one that waits for answers to its questions (options to pick) open with the panel
-up (`opensWithTalk` in `src/ui/talk.ts`): what its agent says, or what it asks, is what the owner
-opened it for; otherwise the page shows first. Until 2026-10-17 a working card opened on its page
-too, and the owner missed its conversation there. On a working card the panel is a half sheet, as
+(`working`) and one that waits for answers to its questions (with options to pick or without) open
+with the panel up (`opensWithTalk` in `src/ui/talk.ts`): what its agent says, or what it asks, is
+what the owner opened it for; otherwise the page shows first. Until 2026-10-17 a working card opened
+on its page too, and the owner missed its conversation there; until 2026-10-19 so did a card whose
+question had no options, its „Frage an dich“ on the page and the question behind the button. On a working card the panel is a half sheet, as
 beside a demo video (below), so the title, state line and buttons stay in view above what its agent
 says. While the conversation shows an agent at work (`agentWorks`, or Obeya reading the owner's
 words on the card; for Obeya's own conversation, Obeya reading or looking a question up,

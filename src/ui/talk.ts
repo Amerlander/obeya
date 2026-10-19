@@ -346,9 +346,10 @@ export const runs = (i: Item) =>
 
 /**
  * Whether the phone opens a card with its conversation up: while its agent works on it, what the
- * agent says is what there is to see, and a card that waits for answers to its questions shows them.
+ * agent says is what there is to see, and a card that waits for answers to its questions shows them,
+ * with options to pick or without. Until 2026-10-19 a question without options opened on the page.
  */
-export const opensWithTalk = (i: Item) => (i.state === 'working' && !i.archivedAt) || openQuestions(i).some((q) => q.options.length > 0);
+export const opensWithTalk = (i: Item) => (i.state === 'working' && !i.archivedAt) || openQuestions(i).length > 0;
 
 /**
  * The messages of a card's conversation the owner has not seen: those it shows (`talk`, not the words
