@@ -55,9 +55,10 @@
     <h2>What the agent hands over</h2>
     <p>In <a href="../">Obeya</a>, the tool I built for this, an agent does not hand over without a demo: a narrated
       screen recording of the change in the running app, with chapters. A fix gets 30 to 60 seconds, the broken
-      behaviour and then the fixed one. A feature gets one and a half to three minutes. Beside the video is a
-      one-page report. It says what the change does, what the video shows, what it leaves out and why, what the
-      agent noticed along the way, and the one question it needs answered, if there is one.</p>
+      behaviour and then the fixed one. A feature gets one and a half to three minutes. With the video comes a short handover note,
+      a few sentences on what the video cannot tell me: what is left open or unverified, a decision the agent took
+      for me. A question it cannot settle itself it asks on the card, and a problem it noticed outside its task
+      comes back as a proposal for a new card.</p>
     <figure class="essay-shot">
       <a href="https://demos.obeya.si"><img src="../img/demo.png" width="1360" height="950" loading="lazy"
         alt="A card unfolded with the demo video of a tip calculator, its chapters and the approve button"></a>
@@ -66,8 +67,8 @@
     <p>A few rules make a demo evidence rather than a sales pitch:</p>
     <ul>
       <li>The app in the video runs the code under review, not yesterday's build.</li>
-      <li>Every behaviour the change adds or alters is either in the video or on the "not shown" list with a
-        reason. "Covered by tests" does not count as a reason.</li>
+      <li>Every behaviour the change adds or alters, edge cases included, is in the video, or the handover says
+        why not. "Covered by tests" is no reason to leave one out.</li>
       <li>Backend changes get a demo too, through whatever view of the app makes them visible. If no view does,
         the agent adds one.</li>
       <li>When the result is something to look at rather than something that happens, such as a layout or three
@@ -77,9 +78,9 @@
     <h2>Recording the demo tests the change</h2>
     <p>To record a demo, the agent has to start the app, create the data, go through the flow and look at what
       the screen shows. That is an end-to-end test of its own work, run before I see anything. A walkthrough
-      that will not record is a bug the agent finds before I do. The agent also watches its video before handing
-      it over, and a label that is cut off or a button that does nothing shows up there.</p>
-    <p>Tests, type checks and CI still run before every handover. The demo does not replace them. It replaces the
+      that will not record is a bug the agent finds before I do. Before handing over, the agent also looks through
+      stills of every scene of its video, and a label that is cut off or a button that does nothing shows up there.</p>
+    <p>The repository's tests and type checks still run before every handover. The demo does not replace them. It replaces the
       part where I click through the app myself.</p>
 
     <h2>What is left for me</h2>
@@ -92,7 +93,7 @@
 
     <h2>Objections</h2>
     <p><b>A demo can be staged.</b> So can a launch review. A demo is the agent's case, and I read it like any
-      case. What is on the "not shown" list? Did it show the empty state, the error, the very long name? I know
+      case. What does the video leave out? Did it show the empty state, the error, the very long name? I know
       where my product tends to break, so I ask for exactly that, and the next demo shows it. My attention goes to
       what is missing, not to repeating what worked.</p>
     <p><b>Recording takes time.</b> It takes the agent's time, not mine. The agent records in the background while
@@ -104,9 +105,8 @@
 
     <h2>A record of every change</h2>
     <p>Every change that lands comes with its demo. Obeya is built with Obeya, agents wrote all of its code, and
-      its changes are on
-      <a href="https://demos.obeya.si">demos.obeya.si</a>, each with the recording its agent made. That page is the
-      changelog, and it is watchable. A colleague who missed a change watches its demo instead of asking for a
+      each change I approve goes on <a href="https://demos.obeya.si">demos.obeya.si</a> with the recording its
+      agent made. That page is the changelog, and it is watchable. A colleague who missed a change watches its demo instead of asking for a
       meeting.</p>
 
     <h2>Try it</h2>

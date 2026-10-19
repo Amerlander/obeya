@@ -5804,8 +5804,9 @@ roles and what Obeya sends where. It shares the stylesheet.
 A third, `site/watch-the-demo/` ("Why demos" in the navigation and the footer), is an essay in the
 owner's first person with the thesis "Stop testing your agents' work. Watch the demo.": the agents
 outpace whoever tests their work by hand; a director has the work shown in a launch review; what a
-demo is and the rules that make it evidence (the code under review, every behaviour shown or listed
-as not shown, backend through a view, a page where there is something to look at); recording it is
+demo is (the video and the worker's handover note, no report) and the rules that make it evidence
+(the code under review, every behaviour in the video or the handover saying why not, backend through
+a view, a page where there is something to look at); recording it is
 an end-to-end test the agent runs on its own work; what is left for the owner; three objections; the
 demos as a record. It is what a launch post links when it argues rather than shows, and carries its
 own Open Graph tags, with the demo screenshot as its picture (2026-10-19).
