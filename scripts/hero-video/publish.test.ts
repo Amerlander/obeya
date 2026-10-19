@@ -73,8 +73,8 @@ test.skipIf(process.platform === 'win32')('creates the release when it is missin
   expect(calls.at(-1)).toBe('[token-of-alice] [alice/obeya] workflow run pages.yml');
 });
 
-test.skipIf(process.platform === 'win32')('--poster-only takes the poster and the README\'s picture, and uploads nothing', () => {
-  expect(publish(false, '--poster-only')).toEqual(['uv run --with pillow python poster.py demo.mp4 hero-poster.jpg video.jpg']);
+test.skipIf(process.platform === 'win32')('--poster-only takes the poster and uploads nothing', () => {
+  expect(publish(false, '--poster-only')).toEqual(['uv run --with pillow python poster.py demo.mp4 hero-poster.jpg']);
 });
 
 test.skipIf(process.platform === 'win32')('names the scene the loop needs when the render has none of that name', () => {

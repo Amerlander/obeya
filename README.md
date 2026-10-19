@@ -10,12 +10,10 @@ team. Every task and every project is a card on one canvas. Agents do the work i
 background; you keep every essential decision — made by voice, from a narrated demo of the
 finished work, without reading code or cycling through terminals. At your desk or from your phone.
 
-<a href="https://obeya.si/#film"><img src="https://obeya.si/media/hero.loop.gif" alt="The canvas at work: cards lassoed into a group, a card dragged beside another group, and a task said into the microphone that appears as a new card"></a>
-
 *Obeya* is Japanese for "big room": in lean management, the room where every project hangs
 visibly on the walls. More on [obeya.si](https://obeya.si).
 
-[![The demo video: an idea said into the microphone, built by an agent that records its own demo, approved and landed on main](docs/images/video.jpg)](https://obeya.si/#film)
+<a href="https://obeya.si/#film"><img src="https://obeya.si/media/hero.loop.gif" alt="The canvas at work: cards lassoed into a group, a card dragged beside another group, and a task said into the microphone that appears as a new card"></a>
 
 The video shows Obeya at work in four and a half minutes: an idea is said into the microphone, an
 agent builds it and records its demo, and the approval lands it on `main` ([watch on

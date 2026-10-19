@@ -142,18 +142,18 @@ on the walls and decisions are made in front of the wall.
 - **Agents may propose cards.**
 - **Open source** under the MIT licence, copyright Daniel Sadilek (`LICENSE`, the README,
   `package.json`), in a public repository on GitHub (2026-10-06). Code, tests and docs name no other
-  work projects. The README is written for strangers: the idea, a loop of the canvas at work, the hero video, the site's screenshots of
+  work projects. The README is written for strangers: the idea, a loop of the canvas at work linked to the hero video, the site's screenshots of
   the canvas and of the phone view (`site/img/canvas.png`, `phone.png`, `phone-demo.png`, taken
   again at every release, so the README shows no picture of its own that could go stale; until
   2026-10-17 it had `docs/images/canvas.png`, taken once), the status, requirements, a quick start,
   how to connect a phone, a link to obeya.si. GitHub plays a video in a README only when it was uploaded through its web page (a
   `user-attachments` link, which no API makes and every re-render would have to replace); a link to
-  the release asset shows as a download. So the README shows the video's first frame with the site's
-  play button drawn on it (`docs/images/video.jpg`, made with the poster), linked to the video on
-  obeya.si (`#film`), which is always the current one (2026-10-12). Above it, under the first
-  paragraph, a GIF plays the canvas at work (a wall arranged, a task said that appears as a card),
-  cut from the hero video (see Hero video), since a GIF is what GitHub plays in a README; near the end
-  one sentence invites a star, an issue or a pull request (2026-10-19). `CONTRIBUTING.md` says how Obeya
+  the release asset shows as a download. So the README plays a GIF of the canvas at work (a wall
+  arranged, a task said that appears as a card), cut from the hero video (see Hero video), linked to
+  the video on obeya.si (`#film`), which is always the current one; near the end one sentence invites
+  a star, an issue or a pull request (2026-10-19). Until then it showed the video's first frame with
+  the site's play button drawn on it (2026-10-12); a loop above that picture would have shown two
+  near-identical canvases in a row, so the loop took its place. `CONTRIBUTING.md` says how Obeya
   is built with Obeya (design doc, plan docs, cards, demos) and what a pull request from outside
   brings.
 - **The repository on GitHub is made to be found** (2026-10-19): its homepage is obeya.si, and its
@@ -5607,8 +5607,7 @@ the video that is out. The loop is cut from the video at each publish, by the ti
 fast, its last frame held a moment, 1280 px wide at 12 frames a second, about 18 s and 3 MB.
 
 On the page it is a `<video>` with English captions and a poster (`site/img/hero-poster.jpg`, the
-first frame without a play button, in git; `poster.py` makes the README's picture of the video
-beside it), loading nothing before a click (`preload="none"`); opened from the file, the site shows
+first frame without a play button, in git, made by `poster.py`), loading nothing before a click (`preload="none"`); opened from the file, the site shows
 the poster alone. A few lines of script put a big play button (a real `<button>`) over the poster
 and show the browser's controls once it plays; without JavaScript the controls are there from the
 start and the button stays hidden. Under the video its scenes are listed as on a card's demo (time

@@ -37,13 +37,13 @@ machine's active account may lack the admin rights a workflow run or a rerun nee
      comments, which the script passes over), into `site/img/`: the
      desktop ones and the two of the phone view (`phone.png`, `phone-demo.png`), which the README
      shows too (`canvas.png` and the phone's);
-   - the poster and the README's picture of the video, `node scripts/hero-video/publish.ts --poster-only`
+   - the video's poster, `node scripts/hero-video/publish.ts --poster-only`
      (it uploads nothing);
    - a copy of `demo.mp4`, `captions.vtt`, `chapters.vtt` and `review/` in `~/demos/obeya-v<version>/`,
      so that what goes out in step 8 is the video that was looked at, even if the hero video is
      rendered again meanwhile.
 4. The version in `package.json` (the app, its settings and the release take it from there),
-   committed with the poster, the README's picture and the screenshots. Landing it restarts a
+   committed with the poster and the screenshots. Landing it restarts a
    running Obeya (`package.json` counts as code).
 5. `git push origin main`. The tag's commit has to be on GitHub, and the README and the site
    come from `main`.

@@ -67,8 +67,8 @@ workflow fetches into `site/media/` before it publishes. One call puts a render 
 
 ```sh
 node scripts/hero-video/publish.ts            # uploads demo.mp4, captions.vtt and chapters.vtt as hero.mp4, hero.vtt and hero.chapters.vtt, with the README's loop hero.loop.gif cut from the video, then runs the Pages workflow
-node scripts/hero-video/publish.ts --poster   # also takes the poster and the README's picture again from the new video
-node scripts/hero-video/publish.ts --poster-only  # only takes the poster and the README's picture; uploads nothing (a release, before its approval)
+node scripts/hero-video/publish.ts --poster   # also takes the poster again from the new video
+node scripts/hero-video/publish.ts --poster-only  # only takes the poster; uploads nothing (a release, before its approval)
 ```
 
 It reads the render from `~/demos/obeya-hero/` (or `HERO_OUT`), creates the release the first
@@ -78,9 +78,9 @@ token of its gh login) without switching the account gh has active.
 
 The poster (`site/img/hero-poster.jpg`) is the video's first frame, slightly dimmed, without a
 play button: the big play button over it is a `<button>` in `site/index.html`, whose script
-starts the video (without JavaScript the browser's controls do). The repository's README shows
-the same frame with that play button drawn on it (`docs/images/video.jpg`), linked to the video on
-obeya.si, since GitHub plays no video from a link. Above it the README plays a GIF of the canvas at
-work, `hero.loop.gif`, which `publish.ts` cuts from the video by the titles of two scenes (`LOOP`
-there: rename them when the scenes are renamed). The poster and the README's picture are in git:
-when the opening changes, publish with `--poster`, then commit them and push `main`, which publishes the poster.
+starts the video (without JavaScript the browser's controls do). The poster is in git: when the
+opening changes, publish with `--poster`, then commit it and push `main`, which publishes it.
+
+GitHub plays no video in a README, so the repository's README plays a GIF of the canvas at work,
+`hero.loop.gif`, linked to the video on obeya.si. `publish.ts` cuts it from the video by the titles
+of two scenes (`LOOP` there: rename them when the scenes are renamed).
