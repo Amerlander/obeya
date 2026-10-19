@@ -3395,8 +3395,10 @@ quality 100 and CRF 18, so it looks as the app does live (the hero video, 2026-1
 
 A demo that kept its frames (`.work/` with `frames/` and `frames.txt`) can be narrated anew in another
 language without recording it again (`node demo.ts --revoice en`, or `node lib/revoice.ts <dir> en`
-for a demo whose script no longer runs): Obeya's past demos went public in English that way while
-their screen stayed German (2026-10-19). It reads what the render left in the directory, not the
+for a demo whose script no longer runs). When Obeya's demos went public in English (2026-10-19),
+the latest demos of its 30 most recently approved cards that kept their frames went public too,
+re-voiced while their screen stayed German; the older ones stay private, and the hero and release
+videos have their own. It reads what the render left in the directory, not the
 script, so it works on a demo of any director version: the narration from `.work/jobs.json`, the
 chapter titles and scene starts from `chapters.vtt`, where each clip ran from `captions.vtt`, the
 report from `index.html`, `sharp` from the encoder settings x264 notes in `demo.mp4` (CRF 18).
