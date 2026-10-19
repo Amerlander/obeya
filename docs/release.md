@@ -31,8 +31,9 @@ machine's active account may lack the admin rights a workflow run or a rerun nee
 3. The video, rendered whole from the release's code, with a real agent, about ten minutes
    (`scripts/hero-video/README.md`), and its stills checked for the three failures the README
    names. Then from the same render, in the release's checkout:
-   - the site's screenshots, `bun scripts/site-shots.ts --demo <dir>` with the Tipjar demo the
-     render's agent left (the newest `~/demos/tipjar-split-the-bill*`), into `site/img/`: the
+   - the site's screenshots, `bun scripts/site-shots.ts`, with the first Tipjar demo the render's
+     agent left (`~/demos/tipjar-split-the-bill*`; the newest is its shorter second demo, on the
+     comments, which the script passes over), into `site/img/`: the
      desktop ones and the two of the phone view (`phone.png`, `phone-demo.png`), which the README
      shows too (`canvas.png` and the phone's);
    - the poster and the README's picture of the video, `node scripts/hero-video/publish.ts --poster-only`

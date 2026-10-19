@@ -6,8 +6,9 @@
 //   bun scripts/site-shots.ts [--demo <dir>] [--keep | --stage-only]
 //
 // --demo names a Tipjar demo to put on that card (a directory with demo.mp4 and poster.jpg); without
-// it the newest ~/demos/tipjar-split-the-bill* is taken, which every render of the hero video leaves
-// behind (its agent's demo of splitting the bill); its chapters come from its chapters.vtt. The scratch Obeya runs on port 4740 and is stopped
+// it the agent's first demo of splitting the bill from the newest render of the hero video is taken
+// (~/demos/tipjar-split-the-bill*; the render leaves a second, shorter one on the owner's comments a
+// few minutes later); its chapters come from its chapters.vtt. The scratch Obeya runs on port 4740 and is stopped
 // at the end; --keep leaves it running for a look, --stage-only stages it and takes nothing. Needs
 // Google Chrome.
 
@@ -36,7 +37,9 @@ function newestDemo(): string {
         .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)
     : [];
   if (!found[0]) throw new Error('No Tipjar demo found in ~/demos: render the hero video first, or name one with --demo.');
-  return found[0];
+  // the newest render's demos lie within minutes of each other; the first of them shows the whole change
+  const newest = statSync(found[0]).mtimeMs;
+  return found.filter((d) => newest - statSync(d).mtimeMs < 10 * 60_000).at(-1)!;
 }
 const demo = arg('--demo') ?? newestDemo();
 
