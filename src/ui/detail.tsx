@@ -6,7 +6,7 @@ import { agentListens, answering, askable, type BackgroundTask, buildableOn, typ
 import { mockPage } from '../core/frame';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
 import { answerText, toggle } from './answer';
-import { ApiError, api, cardAt, type Field, holdRestart, onCardEvent, onCardEventGone } from './api';
+import { ApiError, api, cardAt, type Field, holdRestart, onCardEvent, onCardEventGone, onReconnect } from './api';
 import { useCopy } from './copy';
 import { firstOpening } from './demoSeen';
 import { know, known } from './known';
@@ -2432,39 +2432,50 @@ function Questions(p: { questions: Question[]; heading: string; picks: string[][
   );
 }
 
-/** A card's log, live; null while the history loads. */
+/** A card's log, live; null while the history loads. It loads anew once the connection is back: what was pushed meanwhile never came. */
 export function useEvents(cardId: string): CardEvent[] | null {
   const [events, setEvents] = useState<CardEvent[] | null>(null);
   useEffect(() => {
     let alive = true;
-    let loaded = false;
     // lines pushed while the history loads are merged in afterwards, without those taken out meanwhile
-    const early: CardEvent[] = [];
-    const gone = new Set<number>();
+    let loading: { early: CardEvent[]; gone: Set<number> } | null = null;
+    const load = () => {
+      const now = { early: [] as CardEvent[], gone: new Set<number>() };
+      loading = now;
+      api.events(cardId).then(
+        (list) => {
+          if (!alive || loading !== now) return;
+          loading = null;
+          // what came meanwhile is newer than what the history says of the same line
+          const fresh = new Map(now.early.map((e) => [e.id, e]));
+          const seen = new Set(list.map((e) => e.id));
+          setEvents([...list.map((e) => fresh.get(e.id) ?? e), ...now.early.filter((e) => !seen.has(e.id))].filter((e) => !now.gone.has(e.id)));
+        },
+        () => {
+          // the connection went again: the next one loads it
+          if (loading === now) loading = null;
+        },
+      );
+    };
     const off = onCardEvent((e) => {
       if (e.cardId !== cardId) return;
       // a line comes again once it changed (the agent read the owner's words)
       const known = (list: CardEvent[]) => [...list.filter((x) => x.id !== e.id), e].sort((a, b) => a.id - b.id);
-      if (!loaded) early.push(e);
-      else setEvents((cur) => cur && (cur.some((x) => x.id === e.id) ? known(cur) : [...cur, e]));
+      loading?.early.push(e);
+      setEvents((cur) => cur && (cur.some((x) => x.id === e.id) ? known(cur) : [...cur, e]));
     });
     const offGone = onCardEventGone((c, id) => {
       if (c !== cardId) return;
-      if (!loaded) gone.add(id);
-      else setEvents((cur) => cur && cur.filter((x) => x.id !== id));
+      loading?.gone.add(id);
+      setEvents((cur) => cur && cur.filter((x) => x.id !== id));
     });
-    api.events(cardId).then((list) => {
-      if (!alive) return;
-      loaded = true;
-      // what came meanwhile is newer than what the history says of the same line
-      const fresh = new Map(early.map((e) => [e.id, e]));
-      const seen = new Set(list.map((e) => e.id));
-      setEvents([...list.map((e) => fresh.get(e.id) ?? e), ...early.filter((e) => !seen.has(e.id))].filter((e) => !gone.has(e.id)));
-    });
+    const offBack = onReconnect(load);
+    load();
     return () => {
       alive = false;
       off();
       offGone();
+      offBack();
     };
   }, [cardId]);
   return events;

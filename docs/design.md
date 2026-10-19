@@ -1124,6 +1124,11 @@ when that is empty, else they are gone, since newer words stand there (`giveBack
 `src/ui/draft.ts`, shared with the demo comments Obeya holds back). It takes effect at once, without
 undo: the words are back in the field, or were meant to go.
 
+That a line was read reaches an open card as the line again, over the canvas's WebSocket, like a new
+line. A page whose connection was lost meanwhile (a phone locked, a network switched) never got it:
+each open card's log (`useEvents`) loads anew once the connection is back, else the words would stay
+„Noch nicht gelesen“ below the reply that answered them.
+
 When an agent reads them:
 
 - A worker: with the result of its next tool step, through the hook that passes it preferences and

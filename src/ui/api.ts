@@ -307,6 +307,14 @@ export function onCardEvent(fn: (e: CardEvent) => void): () => void {
   return () => eventListeners.delete(fn);
 }
 
+// A canvas's WebSocket is open again after it was lost: what was pushed meanwhile never arrived, so
+// whoever shows a card's log loads it anew (the agent may have read the owner's words meanwhile).
+const reconnectListeners = new Set<() => void>();
+export function onReconnect(fn: () => void): () => void {
+  reconnectListeners.add(fn);
+  return () => reconnectListeners.delete(fn);
+}
+
 // A line taken out of a card's log (a comment deleted before it went to the worker).
 const goneListeners = new Set<(cardId: string, id: number) => void>();
 export function onCardEventGone(fn: (cardId: string, id: number) => void): () => void {
@@ -452,6 +460,8 @@ export function useCanvas(id = canvasId): {
     let closed = false;
     let server: string | undefined;
     let hidden = document.visibilityState !== 'visible';
+    /** The socket was open before: one that opens now opens again. */
+    let opened = false;
     const connect = () => {
       ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/c/${encodeURIComponent(id)}/ws`);
       sockets.set(id, ws);
@@ -466,6 +476,8 @@ export function useCanvas(id = canvasId): {
       setTimeout(() => opening.readyState === WebSocket.CONNECTING && opening.close(), GIVE_UP_MS);
       ws.onopen = () => {
         if (document.visibilityState === 'visible') sendHere();
+        if (opened) for (const fn of reconnectListeners) fn();
+        opened = true;
         setOnline(true);
         setOfflineSince(null);
         delay = 500;
