@@ -180,26 +180,35 @@ export class Sharing {
     const card = this.find(cardId);
     if (!card || card.prototypeOf) return null;
     const target = this.target(card);
-    const demo = this.demo(cardId);
-    const s = this.stored(cardId);
-    if (target && demo && this.o.sourceFor(card)?.site.publish === 'approved' && !s?.state) {
-      const now: DemoRef[] = s?.url ? sharedDemos(s) : [];
-      const ref = refOf(demo);
-      if (!now.some((d) => sameDemo(d, ref))) {
-        const add = now.length > 0 && demo.follows === 'supplements';
-        this.set(cardId, { ...(s ? atRest(s) : { slug: slugOf(card) }), state: 'publishing', next: (add ? inOrder([...now, ref]) : [ref]).map(refOf) });
-        this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.share.approved(!now.length ? 'share' : add ? 'add' : 'replace'));
-        void serial(() => this.publish(cardId));
-      }
+    if (target && this.o.sourceFor(card)?.site.publish === 'approved') {
+      // a share under way (one the owner chose) goes out first; the latest demo after it
+      if (this.stored(cardId)?.state === 'publishing') void serial(async () => this.onPage(cardId));
+      else this.onPage(cardId);
     }
     // the page as it is about to be, or as it is
     const page = this.stored(cardId);
     if (!page || page.state === 'withdrawing') return null;
     const first = page.state === 'publishing' && page.next ? page.next[0] : page.url ? sharedDemos(page)[0] : undefined;
-    const url = target ? target.pageUrl(page.slug) : page.url;
+    // a page going out is where the site has it then; one at rest where it was published
+    const url = page.state === 'publishing' && target ? target.pageUrl(page.slug) : page.url;
     if (!first || !url) return null;
     const kind = this.cardDemo(cardId, first)?.kind ?? sharedDemos(page).find((d) => sameDemo(d, first))?.shown.kind;
     return `${kind === 'html' ? 'Demo-Page' : 'Demo-Video'}: ${url}`;
+  }
+
+  /** The card's latest demo goes on its page as an approval puts it there, unless it is there already or the page is busy. */
+  private onPage(cardId: string) {
+    const card = this.find(cardId);
+    const demo = this.demo(cardId);
+    const s = this.stored(cardId);
+    if (!card || !demo || s?.state) return;
+    const now: DemoRef[] = s?.url ? sharedDemos(s) : [];
+    const ref = refOf(demo);
+    if (now.some((d) => sameDemo(d, ref))) return;
+    const add = now.length > 0 && demo.follows === 'supplements';
+    this.set(cardId, { ...(s ? atRest(s) : { slug: slugOf(card) }), state: 'publishing', next: (add ? inOrder([...now, ref]) : [ref]).map(refOf) });
+    this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.share.approved(!now.length ? 'share' : add ? 'add' : 'replace'));
+    void serial(() => this.publish(cardId));
   }
 
   /**

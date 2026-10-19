@@ -208,7 +208,7 @@ export function addTrailer(message: string, trailer: string): string {
   const text = message.trimEnd();
   const paragraphs = text.split(/\n\s*\n/);
   const last = paragraphs.at(-1)!.split('\n');
-  const trailers = paragraphs.length > 1 && last.every((l) => /^[\w-]+: /.test(l) || /^\s+\S/.test(l)) && /^[\w-]+: /.test(last[0]!);
+  const trailers = paragraphs.length > 1 && last.every((l) => /^[\w-]+:/.test(l) || /^\s+\S/.test(l)) && /^[\w-]+:/.test(last[0]!);
   return `${text}${trailers ? '\n' : '\n\n'}${trailer}\n`;
 }
 

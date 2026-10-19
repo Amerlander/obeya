@@ -77,6 +77,8 @@ test('a trailer goes beside the trailers a commit message ends with, else into a
   const t = 'Demo-Video: https://demos.example.dev/a-1/';
   expect(addTrailer('Fix\n\nBody.\n\nCo-Authored-By: C <c@x>\n', t)).toBe(`Fix\n\nBody.\n\nCo-Authored-By: C <c@x>\n${t}\n`);
   expect(addTrailer('Fix\n\nBody: not a trailer, a sentence.\nIt goes on.', t)).toBe(`Fix\n\nBody: not a trailer, a sentence.\nIt goes on.\n\n${t}\n`);
+  // a trailer needs no space after its colon
+  expect(addTrailer('Fix\n\nCo-Authored-By:C <c@x>', t)).toBe(`Fix\n\nCo-Authored-By:C <c@x>\n${t}\n`);
   // a subject alone is no trailer block, even with a colon
   expect(addTrailer('Docs: typo', t)).toBe(`Docs: typo\n\n${t}\n`);
 });

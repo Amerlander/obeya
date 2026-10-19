@@ -734,6 +734,21 @@ describe('publishing on approval', () => {
     expect(log(c.id)).toContain('Mit der Freigabe auf der Seite ersetzt: Die Seite zeigt jetzt die neueste Demo statt der geteilten.');
   });
 
+  test('a share under way goes out first, the latest demo after it', async () => {
+    publish = undefined;
+    const c = card('Filter bleiben', { handover: 1 });
+    later(c.id, 2);
+    writeFileSync(join(dir, 'hold'), '');
+    // the owner shares the first demo, then approves while it goes out
+    sharing.share(c.id, { demo: 1 });
+    publish = 'approved';
+    expect(sharing.approved(c.id)).toBe(`Demo-Video: ${SITE_URL}${slug(c.id)}/`);
+    rmSync(join(dir, 'hold'));
+    await until(() => share(c.id)?.state === 'shared' && on(c.id)[0] === 2);
+    expect(on(c.id)).toEqual([2]);
+    expect(calls()).toHaveLength(2);
+  });
+
   test('a failed deploy goes into the log; the trailer still names the page', async () => {
     const c = card();
     writeFileSync(join(dir, 'fail'), '');

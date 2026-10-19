@@ -3660,8 +3660,8 @@ On approval, before the work lands (`Sharing.approved`, called by the workers th
 `onApproval`), the card's latest demo goes on its page unless it is there already, as the owner's
 click would put it: on a new page; on a page with versions, beside them where its worker said it
 only supplements the one before (`follows: supplements`), else in their place, as „Auf der Seite
-ersetzen“ comes first on the card. A line in the card's log says which („Mit der Freigabe
-geteilt“). It goes through the queue like any share, so the landing does not wait for the deploy;
+ersetzen“ comes first on the card; a share the owner started that is still going out goes first,
+the latest demo after it. A line in the card's log says which („Mit der Freigabe geteilt“). It goes through the queue like any share, so the landing does not wait for the deploy;
 a deploy that fails goes into the card's log as an error, the card lands all the same and keeps
 "Teilen" to try again. The same happens for an approval of work that goes out as a pull request
 (the page gets the PR's link once both are there, see The page and the pull request), for work that
@@ -3673,9 +3673,9 @@ request to link the page from, so the commit that lands for a card with a page n
 trailer: `Demo-Video: <url>` (`Demo-Page: <url>` for an artifact, by the page's first version), in
 English as git trailers are, beside the trailers the message ends with (`Co-Authored-By`), else in
 a paragraph of its own (`addTrailer` in `src/server/workspaces.ts`). A card with a page counts
-whether the page went out on approval or by an earlier click. The page's URL comes from its slug,
+whether the page went out on approval or by an earlier click. The URL of a page going out comes from its slug,
 fixed when the card was first shared, so the trailer is written before the deploy is done
-(`ShareTarget.pageUrl`). Obeya amends the last commit of the rebased branch before it lands
+(`ShareTarget.pageUrl`); a page at rest gives the URL it was published at. Obeya amends the last commit of the rebased branch before it lands
 (`--no-verify`: its hooks ran when the worker made it; the author stays), and leaves out what is
 there already, since a landing that went back to the worker comes round again. A commit that
 cannot be amended lands without the trailer. A page withdrawn later leaves the trailer pointing
