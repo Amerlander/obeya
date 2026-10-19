@@ -3527,6 +3527,11 @@ and only the card's left column scrolls. The frame's height is the reported one,
 its border (and the report counts a scrollbar across the page's foot), and once the page has
 reported, the frame does not scroll (up to its cap of 30,000 px).
 
+A worker often renders a new handover's demo into the directory of the one before, so the addresses
+the card loads its demo from carry the handover (`?v=<handover>`): a card left open while a new one
+arrives loads the new video or page; until 2026-10-19 it kept showing the old one until it was
+closed and opened again.
+
 A handover without a demo is refused, unless the card has one from an earlier handover, which then
 stands. Artifacts stay in `~/demos/`, never in git; a pull
 request links a demo only once it is shared (see Sharing a demo).

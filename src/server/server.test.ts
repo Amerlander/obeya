@@ -192,6 +192,27 @@ describe('who may', () => {
     expect((await at(api(`/cards/${c.id}/demos/1/index.html`), {})).status).toBe(404);
     for (const d of [earlier, latest]) rmSync(d.dir, { recursive: true, force: true });
   });
+
+  test("a new handover's artifact rendered into the same directory loads afresh at the address with its handover", async () => {
+    const c = card();
+    const demo = artifact();
+    board.work(c.id, { state: 'waiting', need: 'review', demo: JSON.stringify({ ...demo, handover: 1 }) });
+    const page = async (path: string) => {
+      const first = await at(api(path), { 'sec-fetch-site': 'same-origin', 'sec-fetch-dest': 'iframe' }, { redirect: 'manual' });
+      expect(first.status).toBe(302);
+      const capped = first.headers.get('location')!;
+      // the handover stays in the address the frame ends up at
+      expect(capped).toEndWith(new URL(path, 'http://x').search);
+      const res = await at(capped, { 'sec-fetch-site': 'same-origin', 'sec-fetch-dest': 'iframe' });
+      expect(res.headers.get('cache-control')).toBe('no-cache');
+      return res.text();
+    };
+    expect(await page(`/cards/${c.id}/demo/index.html?v=1`)).toStartWith('<p>Ergebnis</p>');
+    writeFileSync(join(demo.dir, 'index.html'), '<p>Neu</p>');
+    board.work(c.id, { demo: JSON.stringify({ ...demo, handover: 2 }) });
+    expect(await page(`/cards/${c.id}/demo/index.html?v=2`)).toStartWith('<p>Neu</p>');
+    rmSync(demo.dir, { recursive: true, force: true });
+  });
 });
 
 describe('only the owner', () => {

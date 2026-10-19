@@ -1471,7 +1471,8 @@ function DemoView({
   const demo = earlier.find((d) => d.n === shownN) ?? latest;
   const all = [...earlier, latest];
   const shownAt = all.indexOf(demo);
-  const src = (f: string) => cardAt(cardId, demo === latest ? `/demo/${f}` : `/demos/${(demo as EarlierDemo).n}/${f}`);
+  // a new handover often renders into the same directory: its handover in the address makes a card left open load it afresh
+  const src = (f: string) => cardAt(cardId, `${demo === latest ? `/demo/${f}` : `/demos/${(demo as EarlierDemo).n}/${f}`}${demo.handover === undefined ? '' : `?v=${demo.handover}`}`);
   // where the demo shown next plays from, when a comment on a place in it took the owner there
   const playFrom = useRef<number | null>(null);
   const show = (d: Demo) => setShownN(d === latest ? null : (d as EarlierDemo).n);
