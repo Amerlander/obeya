@@ -142,7 +142,7 @@ on the walls and decisions are made in front of the wall.
 - **Agents may propose cards.**
 - **Open source** under the MIT licence, copyright Daniel Sadilek (`LICENSE`, the README,
   `package.json`), in a public repository on GitHub (2026-10-06). Code, tests and docs name no other
-  work projects. The README is written for strangers: the idea, the hero video, the site's screenshots of
+  work projects. The README is written for strangers: the idea, a loop of the canvas at work, the hero video, the site's screenshots of
   the canvas and of the phone view (`site/img/canvas.png`, `phone.png`, `phone-demo.png`, taken
   again at every release, so the README shows no picture of its own that could go stale; until
   2026-10-17 it had `docs/images/canvas.png`, taken once), the status, requirements, a quick start,
@@ -150,9 +150,20 @@ on the walls and decisions are made in front of the wall.
   `user-attachments` link, which no API makes and every re-render would have to replace); a link to
   the release asset shows as a download. So the README shows the video's first frame with the site's
   play button drawn on it (`docs/images/video.jpg`, made with the poster), linked to the video on
-  obeya.si (`#film`), which is always the current one (2026-10-12); `CONTRIBUTING.md` says how Obeya
+  obeya.si (`#film`), which is always the current one (2026-10-12). Above it, under the first
+  paragraph, a GIF plays the canvas at work (a wall arranged, a task said that appears as a card),
+  cut from the hero video (see Hero video), since a GIF is what GitHub plays in a README; near the end
+  one sentence invites a star, an issue or a pull request (2026-10-19). `CONTRIBUTING.md` says how Obeya
   is built with Obeya (design doc, plan docs, cards, demos) and what a pull request from outside
   brings.
+- **The repository on GitHub is made to be found** (2026-10-19): its homepage is obeya.si, and its
+  topics are a dozen that people search for and that have active topic pages (`claude-code`,
+  `ai-agents`, `coding-agents`, `agent-orchestration`, `developer-tools`, `git-worktree`,
+  `voice-control`, `infinite-canvas` and the like; `spatial-canvas` had 15 repositories and was left
+  out). Its social preview, the picture a shared link shows, is the wordmark and the site's
+  headline beside the site's screenshot of the canvas, 1280×640, made by
+  `bun scripts/social-preview.ts`; GitHub's API cannot set it, so the owner uploads it (Settings →
+  General → Social preview) when the canvas has changed enough to need it.
 - **Agents run only through the user's own installation of Claude Code and its login**: Obeya starts
   that installation and never uses the subscription's token itself. Tools that used the token
   against the API themselves were blocked; tools that start the official installation appear to be
@@ -5585,13 +5596,15 @@ owner's ElevenLabs voice clone (see CLAUDE.md), tried out first in the Qwen3 clo
 The directory holds the narration, the scenes, the stage and the render; its README says how to
 change, re-render and publish it.
 
-The video is not in git: it, its captions and its chapters are the assets `hero.mp4`, `hero.vtt` and
-`hero.chapters.vtt` of the GitHub release `site-media` (a pre-release, so that it never becomes the
+The video is not in git: it, its captions, its chapters and the README's loop are the assets
+`hero.mp4`, `hero.vtt`, `hero.chapters.vtt` and `hero.loop.gif` of the GitHub release `site-media` (a pre-release, so that it never becomes the
 latest release, whose installers the README and the site link), which the Pages workflow fetches
 into `site/media/` before it publishes, so obeya.si serves them itself (no third party, no
 tracking). `publish.ts` replaces them and runs the workflow again; the chapters come from the render
 (the demo pipeline writes the scenes as `chapters.vtt` beside the captions), so they always match
-the video that is out.
+the video that is out. The loop is cut from the video at each publish, by the titles of its scenes
+("Your wall" to "The agent starts"), so a release's new render brings a new loop too: 1.5 times as
+fast, its last frame held a moment, 1280 px wide at 12 frames a second, about 18 s and 3 MB.
 
 On the page it is a `<video>` with English captions and a poster (`site/img/hero-poster.jpg`, the
 first frame without a play button, in git; `poster.py` makes the README's picture of the video

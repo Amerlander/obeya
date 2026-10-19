@@ -10,6 +10,8 @@ team. Every task and every project is a card on one canvas. Agents do the work i
 background; you keep every essential decision — made by voice, from a narrated demo of the
 finished work, without reading code or cycling through terminals. At your desk or from your phone.
 
+<a href="https://obeya.si/#film"><img src="https://obeya.si/media/hero.loop.gif" alt="The canvas at work: cards lassoed into a group, a card dragged beside another group, and a task said into the microphone that appears as a new card"></a>
+
 *Obeya* is Japanese for "big room": in lean management, the room where every project hangs
 visibly on the walls. More on [obeya.si](https://obeya.si).
 
@@ -193,6 +195,9 @@ after a change only once you have trusted them again.
 How Obeya itself is built, with Obeya, is in [`CONTRIBUTING.md`](CONTRIBUTING.md). A wish or a bug
 can be reported from inside Obeya ("Report a wish or a bug" in "Configuration"): it drafts a GitHub
 issue for you to send.
+
+If Obeya is useful to you, a star helps others find it; an issue or a pull request for what it
+should do better is just as welcome.
 
 ## License
 
