@@ -29,6 +29,9 @@ export const PAGE_WORDS: Record<
     /** A page with several demo versions: the first one's name in the list at the top, and the heading of each later one. */
     first: string;
     addendum: (at: string, timeZone?: string) => string;
+    /** The line every page and the overview end in, before the link to Obeya's site; the overview's link to its feed. */
+    recordedWith: string;
+    feed: string;
   }
 > = {
   de: {
@@ -47,6 +50,8 @@ export const PAGE_WORDS: Record<
       const t = timeParts(at, 'de-DE', 'numeric', timeZone);
       return `Ergänzung vom ${t.day}.${t.month}., ${t.hour}:${t.minute}`;
     },
+    recordedWith: 'Aufgenommen mit',
+    feed: 'Feed abonnieren',
   },
   en: {
     locale: 'en-US',
@@ -64,6 +69,8 @@ export const PAGE_WORDS: Record<
       const t = timeParts(at, 'en-US', 'short', timeZone);
       return `Addendum of ${t.month} ${t.day} at ${t.hour}:${t.minute}`;
     },
+    recordedWith: 'Recorded with',
+    feed: 'Subscribe to the feed',
   },
 };
 
@@ -107,7 +114,8 @@ export interface DemoPageParts extends PageParts {
 }
 
 export const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-const paragraphs = (text: string) =>
+/** The text's paragraphs as HTML. */
+export const paragraphs = (text: string) =>
   text
     .split(/\n\s*\n/)
     .map((p) => p.trim())
@@ -157,6 +165,14 @@ export const PAGE_STYLE = `
   body.alone .artifact { margin: 0; border: 0; border-radius: 0; }
   body.alone .artifact iframe { height: 100vh; }
   .links { margin-top: 10px; font-size: 14px; display: flex; gap: 18px; }
+  .credit { margin-top: 48px; font-size: 13px; color: var(--muted); }
+`;
+
+/** Obeya's site, which every page and the overview link at their end. */
+export const OBEYA_URL = 'https://obeya.si';
+
+/** The line every page and the overview end in: what made them, linking Obeya's site. */
+export const credit = (language: PageLanguage) => `<footer class="credit">${PAGE_WORDS[language].recordedWith} <a href="${OBEYA_URL}">Obeya</a></footer>
 `;
 
 // the cues of captions held in the page, for a page opened from disk
@@ -228,7 +244,7 @@ export function artifactPageHtml(p: ArtifactPageParts): string {
     p.pr ? `<a href="${esc(p.pr)}">${w.pr}</a>` : '',
   ].filter(Boolean);
   return `${pageStart(p, language, pagePolicy(ON_DISK))}${links.length ? `<div class="links">${links.join('')}</div>\n` : ''}<div class="artifact">${frame}</div>
-</main>
+${credit(language)}</main>
 <script>
   // an artifact as high as its window (100vh plus a margin) would grow with each step: it stops after a few
   const f = document.querySelector('.artifact iframe');${
@@ -274,7 +290,7 @@ export function demoPageHtml(p: DemoPageParts): string {
   <div class="player"><video controls preload="metadata"${src}${p.poster ? ` poster="${esc(p.poster)}"` : ''}>${track}</video><button class="start" aria-label="${w.play}"><span><svg viewBox="0 0 24 24"><path d="M6 4l15 8-15 8z"/></svg></span></button></div>
   <div>${chapters}${p.pr ? `<div class="pr"><a href="${esc(p.pr)}">${w.pr}</a></div>` : ''}</div>
 </div>
-</main>
+${credit(language)}</main>
 ${'vtt' in p.captions ? `<script type="text/vtt" id="captions">${inScript(p.captions.vtt)}</script>\n` : ''}${'base64' in p.video ? `<script type="application/octet-stream" id="video">${p.video.base64}</script>\n` : ''}<script>
   const v = document.querySelector('video'), bs = [...document.querySelectorAll('ol button')];${'base64' in p.video ? `${BLOB}  const seekable = Promise.resolve();\n` : SEEKABLE(p.video.src)}${'vtt' in p.captions ? CUES(language) : ''}
   bs.forEach((b) => b.addEventListener('click', () => seekable.then(() => { v.currentTime = Number(b.dataset.at); v.play(); })));
@@ -353,7 +369,7 @@ ${block(d, i + 1)}
 </section>`,
   )
   .join('\n')}
-</main>
+${credit(language)}</main>
 <script>
   // each video: seekable on a host without byte ranges, its chapters, its big play button
   for (const g of document.querySelectorAll('.grid')) {

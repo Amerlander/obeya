@@ -3765,6 +3765,12 @@ button in the corner. It does not start on its own: browsers play sound only aft
 page (in Obeya, the click that opens the card), so it could only start muted, which the owner did
 not want.
 
+Every page, exported or on a site, and every site's overview end in a small line saying what made
+them, „Aufgenommen mit Obeya“ ("Recorded with Obeya") in the page's language, linking
+https://obeya.si: a viewer who likes a demo finds where it came from. It has no setting to turn it
+off: settings stay few, and a static credit line is common practice. An artifact shown alone
+(`?alone`) leaves it out with the rest of the page.
+
 #### Static sites
 
 A static host takes the site as a directory, deployed whole with each change: Obeya keeps it in a
@@ -3808,7 +3814,14 @@ or withdrawal, one directory per page with the demo's files, its `index.html` an
 (kind, title, text, chapters, PR, when first shared and when its video or artifact last changed, a
 hash of the demo's own files, the page's language; `more`, the later versions, each with the same
 and its handover's time, its files in `2/`, `3/` … of the page's directory), plus the overview,
-which dates a page by its newest version; `backup/` holds a page set aside while a deploy runs, put
+which dates a page by its newest version, and the site's Atom feed (`feed.xml`), written with the
+overview from the same pages: one entry per page in the overview's order, with its title, its text
+(the first sentence as summary, all of it as content), its address as link and id, and the
+overview's date as updated, its language as the entry's. The overview links the feed under its
+heading („Feed abonnieren“) and in its head (`<link rel="alternate">`), so feed readers find it.
+Since every change writes both and deploys the whole directory, the feed is as current as the
+overview, pages pulled from another machine included; a site behind a login has a feed only those
+with the login can read. `backup/` holds a page set aside while a deploy runs, put
 back when it fails. Pages are written
 with Obeya's templates, each in its demo's language ("Geteilt am", "Alle Demos": the language its
 report page names, else the repository's `demo.language`, else the demo settings'; the page's title

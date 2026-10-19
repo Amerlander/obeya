@@ -627,6 +627,7 @@ const de = {
         'Sicherheitskorrektur: „In eigenem Fenster öffnen“ zeigt das Artefakt allein auf seiner Seite statt seiner eigenen Datei, die dort ohne Sandbox lief, mit den Rechten der Demo-Site; Fenster, die das Artefakt öffnet, bleiben in seiner Sandbox.',
       '2026-10-16-offline':
         'Sicherheitskorrektur: Das Artefakt lädt nur noch seine eigenen Dateien und sendet nichts an andere Server, weder per fetch noch als Bild, Formular oder Link; Fenster öffnet es keine mehr.',
+      '2026-10-19-credit': 'Jede Seite endet mit „Aufgenommen mit Obeya“, verlinkt auf obeya.si.',
     } satisfies Record<PageChangeId, string>,
     pages: (n: number) => (n === 1 ? 'eine Seite' : `${n} Seiten`),
   },
@@ -2101,6 +2102,7 @@ const en: Strings = {
         'Security fix: “Open in its own window” shows the artifact alone on its page instead of its own file, which ran there outside the sandbox, with the demo site’s rights; windows the artifact opens stay in its sandbox.',
       '2026-10-16-offline':
         'Security fix: the artifact loads only its own files and sends nothing to other servers, by fetch, an image, a form or a link alike; it opens no windows any more.',
+      '2026-10-19-credit': 'Every page ends in “Recorded with Obeya”, linking obeya.si.',
     },
     pages: (n: number) => (n === 1 ? 'one page' : `${n} pages`),
   },

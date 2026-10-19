@@ -41,7 +41,7 @@ import { dirname, join, resolve, sep } from 'node:path';
 import type { DemoSite } from '../adapters/types';
 import type { Messages } from '../core/messages';
 import { readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
-import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, day, demoFile, demoPageHtml, esc, PAGE_STYLE, PAGE_WORDS, type PageLanguage, type StackedDemo, stackedPageHtml } from './demo-page';
+import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, credit, day, demoFile, demoPageHtml, esc, OBEYA_URL, PAGE_STYLE, paragraphs, PAGE_WORDS, type PageLanguage, type StackedDemo, stackedPageHtml } from './demo-page';
 import { artifactCopy } from './artifact-copy';
 import { pagePolicy, sealed, withHeightReport } from '../core/frame';
 import { DEMO_FILES, OWN_CONNECTIONS } from './demo';
@@ -390,10 +390,12 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
     return null;
   };
 
-  /** Writes the overview from the pages in the directory, and the headers of the artifacts' files. */
+  /** Writes the overview and the feed from the pages in the directory, and the headers of the artifacts' files. */
   const writeOverview = () => {
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, 'index.html'), overviewHtml(site, readPages(dir), overviewLanguage()));
+    const pages = readPages(dir);
+    writeFileSync(join(dir, 'index.html'), overviewHtml(site, pages, overviewLanguage()));
+    writeFileSync(join(dir, FEED), feedXml(site, pages, overviewLanguage()));
     writeFileSync(join(dir, HEADERS), artifactHeaders(site));
   };
 
@@ -746,21 +748,67 @@ function readPages(dir: string): (Meta & { slug: string })[] {
     .sort((a, b) => newest(b).localeCompare(newest(a)));
 }
 
+/** The site's Atom feed, at its root beside the overview. */
+export const FEED = 'feed.xml';
+
+/** The first sentence of a page's text, as the overview shows it. */
+const firstSentence = (t: string) => (t.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? t).slice(0, 240);
+
 /** Every page on the site, the most recently shared first, in the site's language. */
 function overviewHtml(site: DemoSite, pages: (Meta & { slug: string })[], language: PageLanguage): string {
   const w = PAGE_WORDS[language];
-  const first = (t: string) => (t.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? t).slice(0, 240);
   return `<!doctype html>
 <html lang="${language}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(site.title)}</title><style>${PAGE_STYLE}</style></head>
+<title>${esc(site.title)}</title><link rel="alternate" type="application/atom+xml" title="${esc(site.title)}" href="${FEED}"><style>${PAGE_STYLE}</style></head>
 <body><main>
 <h1>${esc(site.title)}</h1>
-<div class="when">${esc(w.overview)}</div>
+<div class="when">${esc(w.overview)} · <a href="${FEED}">${esc(w.feed)}</a></div>
 ${
   pages.length
-    ? `<ul class="demos">${pages.map((d) => `<li><a href="${d.slug}/"><b>${esc(d.title)}</b><span>${day(newest(d), language)} · ${esc(first(d.text))}</span></a></li>`).join('\n')}</ul>`
+    ? `<ul class="demos">${pages.map((d) => `<li><a href="${d.slug}/"><b>${esc(d.title)}</b><span>${day(newest(d), language)} · ${esc(firstSentence(d.text))}</span></a></li>`).join('\n')}</ul>`
     : `<p>${esc(w.noDemos)}</p>`
 }
-</main></body></html>
+${credit(language)}</main></body></html>
+`;
+}
+
+/** Text without the control characters XML 1.0 does not allow. */
+const printable = (s: string) => s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, '');
+/** Text in XML. */
+const xml = (s: string) => esc(printable(s));
+
+/**
+ * The site's pages as an Atom feed, in the order and with the dates of the overview: each page's
+ * title, its text, its address as link and id. The feed is as old as its newest page; a site
+ * without pages dates it now.
+ */
+function feedXml(site: DemoSite, pages: (Meta & { slug: string })[], language: PageLanguage): string {
+  const base = `${site.url.replace(/\/+$/, '')}/`;
+  const updated = pages.length ? newest(pages[0]!) : new Date().toISOString();
+  const entry = (d: Meta & { slug: string }) => {
+    const url = xml(pageUrl(site, d.slug));
+    const plain = printable(d.text);
+    return `<entry xml:lang="${d.language}">
+<title type="text">${xml(d.title)}</title>
+<link rel="alternate" type="text/html" href="${url}"/>
+<id>${url}</id>
+<published>${xml(d.first)}</published>
+<updated>${xml(newest(d))}</updated>
+<summary type="text">${xml(firstSentence(plain))}</summary>
+<content type="html">${xml(paragraphs(plain))}</content>
+</entry>
+`;
+  };
+  return `<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="${language}">
+<title type="text">${xml(site.title)}</title>
+<subtitle type="text">${xml(PAGE_WORDS[language].overview)}</subtitle>
+<link rel="self" type="application/atom+xml" href="${xml(base + FEED)}"/>
+<link rel="alternate" type="text/html" href="${xml(base)}"/>
+<id>${xml(base)}</id>
+<updated>${xml(updated)}</updated>
+<author><name>${xml(site.title)}</name></author>
+<generator uri="${OBEYA_URL}">Obeya</generator>
+${pages.map(entry).join('')}</feed>
 `;
 }

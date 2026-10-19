@@ -104,7 +104,7 @@ Reading the drafts, the launch day, ten minutes a week for the post.
 
 ## Workstreams
 
-- [ ] **W1:** Demo sites point back to Obeya. A footer line "Recorded with Obeya" (in the page's
+- [x] **W1:** Demo sites point back to Obeya. A footer line "Recorded with Obeya" (in the page's
   language, through `PAGE_WORDS`) linking https://obeya.si on the overview and on every page
   `src/server/demo-page.ts` and `src/server/site.ts` write; an entry in `src/core/page-changes.ts`
   and the new `PAGES_HASH`. An Atom feed `feed.xml` at each site's root, written with the overview

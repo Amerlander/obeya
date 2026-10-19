@@ -125,6 +125,54 @@ const page = (slug: string, extra: Partial<SharePage> = {}): SharePage => ({
 });
 const meta = (slug: string) => JSON.parse(readFileSync(join(siteDir(), slug, 'meta.json'), 'utf8')) as { at: string; first: string; kind?: string; language?: string };
 const overview = () => readFileSync(join(siteDir(), 'index.html'), 'utf8');
+const CREDIT_DE = '<footer class="credit">Aufgenommen mit <a href="https://obeya.si">Obeya</a></footer>\n';
+const CREDIT_EN = '<footer class="credit">Recorded with <a href="https://obeya.si">Obeya</a></footer>\n';
+
+/** An element of a parsed XML document: its name, attributes, child elements and text. */
+interface XmlNode {
+  name: string;
+  attrs: Record<string, string>;
+  children: XmlNode[];
+  text: string;
+}
+
+/** Parses an XML document and throws where it is not well-formed: tags that do not match, a raw `<` or `&`, an unknown entity. */
+function parseXml(source: string): XmlNode {
+  const entity = (s: string) =>
+    s.replace(/&(#x[0-9a-f]+|#\d+|\w+);|&/gi, (_, e: string | undefined) => {
+      if (!e) throw new Error(`a raw & in ${JSON.stringify(s)}`);
+      if (e[0] === '#') return String.fromCodePoint(e[1] === 'x' ? Number.parseInt(e.slice(2), 16) : Number(e.slice(1)));
+      const known: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+      if (!(e in known)) throw new Error(`an unknown entity &${e};`);
+      return known[e]!;
+    });
+  const doc = source.replace(/^<\?xml [^?]*\?>\s*/, '');
+  const root: XmlNode = { name: '', attrs: {}, children: [], text: '' };
+  const stack = [root];
+  for (const part of doc.split(/(<[^<>]*>)/)) {
+    const top = stack.at(-1)!;
+    if (!part.startsWith('<')) {
+      if (part.includes('<') || part.includes('>')) throw new Error(`a raw < or > in ${JSON.stringify(part)}`);
+      top.text += entity(part);
+      continue;
+    }
+    const close = part.match(/^<\/([\w:]+)>$/);
+    if (close) {
+      if (close[1] !== top.name) throw new Error(`</${close[1]}> closes <${top.name}>`);
+      stack.pop();
+      continue;
+    }
+    const open = part.match(/^<([\w:]+)((?:\s+[\w:]+="[^"]*")*)\s*(\/?)>$/);
+    if (!open) throw new Error(`not a tag: ${part}`);
+    const attrs = Object.fromEntries([...open[2]!.matchAll(/([\w:]+)="([^"]*)"/g)].map((a) => [a[1]!, entity(a[2]!)]));
+    const node: XmlNode = { name: open[1]!, attrs, children: [], text: '' };
+    top.children.push(node);
+    if (!open[3]) stack.push(node);
+  }
+  if (stack.length !== 1 || root.children.length !== 1 || root.text.trim()) throw new Error('not one root element');
+  return root.children[0]!;
+}
+const child = (n: XmlNode, name: string) => n.children.find((c) => c.name === name);
 const manifest = (at = siteDir()) => JSON.parse(readFileSync(join(at, MANIFEST), 'utf8')) as { deploy: string; pages: Record<string, { rev: number; machine: string; withdrawn?: true }> };
 /** A file of a page as an earlier Obeya wrote it: here, on the site, and in both manifests. */
 const earlier = (path: string, text: string) => {
@@ -140,7 +188,7 @@ const earlier = (path: string, text: string) => {
 describe('a site Obeya keeps', () => {
   test('publishes a page with the video, lists it in the overview, and deploys the whole site with the env file', async () => {
     const r = await target.publish(page('csv-export-abc123', { pr: 'https://github.com/o/r/pull/7' }));
-    expect(r).toEqual({ url: `${URL_}csv-export-abc123/`, said: 'Uploaded 4 entries', gone: [] });
+    expect(r).toEqual({ url: `${URL_}csv-export-abc123/`, said: 'Uploaded 5 entries', gone: [] });
     expect(readdirSync(join(siteDir(), 'csv-export-abc123')).sort()).toEqual(['captions.vtt', 'demo.mp4', 'index.html', 'meta.json', 'poster.jpg']);
     const html = readFileSync(join(siteDir(), 'csv-export-abc123/index.html'), 'utf8');
     expect(html).toContain('<h1>Titel csv-export-abc123</h1>');
@@ -152,13 +200,16 @@ describe('a site Obeya keeps', () => {
     // a host without byte ranges: the page loads the video whole to seek in it
     expect(html).toContain("Range: 'bytes=0-'");
     expect(html).toContain('href="https://github.com/o/r/pull/7"');
-    expect(deploys()).toEqual(['_headers csv-export-abc123 index.html obeya-site.json token=secret-1']);
+    // every page ends in a line saying what made it, linking Obeya's site
+    expect(html).toContain(`${CREDIT_DE}</main>`);
+    expect(deploys()).toEqual(['_headers csv-export-abc123 feed.xml index.html obeya-site.json token=secret-1']);
     expect(readFileSync(join(deployed(), 'csv-export-abc123/demo.mp4'), 'utf8')).toBe('video');
 
     expect('url' in (await target.publish(page('zweite-def456', { shared: ['csv-export-abc123'] })))).toBe(true);
     // the most recently shared first
     expect(overview().indexOf('Titel zweite-def456')).toBeLessThan(overview().indexOf('Titel csv-export-abc123'));
     expect(overview()).toContain('<h1>Team demos</h1>');
+    expect(overview()).toContain(`${CREDIT_DE}</main>`);
     expect(readFileSync(join(deployed(), 'index.html'), 'utf8')).toBe(overview());
   });
 
@@ -173,8 +224,48 @@ describe('a site Obeya keeps', () => {
     expect(meta('english-abc123').language).toBe('en');
     const de = readFileSync(join(siteDir(), 'deutsch-def456/index.html'), 'utf8');
     expect(de).toContain('href="../">Alle Demos');
+    expect(en).toContain(`${CREDIT_EN}</main>`);
+    expect(de).toContain(`${CREDIT_DE}</main>`);
     expect(overview()).toContain('<html lang="en">');
-    expect(overview()).toContain('Videos and analyses of changes, the newest first.');
+    expect(overview()).toContain('Videos and analyses of changes, the newest first. · <a href="feed.xml">Subscribe to the feed</a>');
+    expect(overview()).toContain(`${CREDIT_EN}</main>`);
+  });
+
+  test('writes an Atom feed beside the overview: each page with its title, text, address and date, the newest first', async () => {
+    const empty = make(SITE());
+    await empty.publish(page('a-111111', { title: 'Fish & <Chips> "quoted"', text: 'First <b>bold</b> & more.\u0007\n\nSecond paragraph.' }));
+    await empty.publish(page('b-222222', { language: 'en', shared: ['a-111111'] }));
+    expect(overview()).toContain('<link rel="alternate" type="application/atom+xml" title="Team demos" href="feed.xml">');
+    const text = readFileSync(join(siteDir(), 'feed.xml'), 'utf8');
+    expect(readFileSync(join(deployed(), 'feed.xml'), 'utf8')).toBe(text);
+    const feed = parseXml(text);
+    expect(feed.name).toBe('feed');
+    expect(feed.attrs).toEqual({ xmlns: 'http://www.w3.org/2005/Atom', 'xml:lang': 'de' });
+    expect(child(feed, 'title')?.text).toBe('Team demos');
+    expect(child(feed, 'id')?.text).toBe(URL_);
+    expect(feed.children.filter((c) => c.name === 'link').map((l) => l.attrs)).toEqual([
+      { rel: 'self', type: 'application/atom+xml', href: `${URL_}feed.xml` },
+      { rel: 'alternate', type: 'text/html', href: URL_ },
+    ]);
+    expect(child(feed, 'author')?.children.map((c) => c.text)).toEqual(['Team demos']);
+    const entries = feed.children.filter((c) => c.name === 'entry');
+    // the newest first, dated as the overview dates them; the feed as new as its newest
+    expect(entries.map((e) => child(e, 'id')?.text)).toEqual([`${URL_}b-222222/`, `${URL_}a-111111/`]);
+    expect(entries.map((e) => child(e, 'link')?.attrs.href)).toEqual([`${URL_}b-222222/`, `${URL_}a-111111/`]);
+    expect(entries.map((e) => child(e, 'updated')?.text)).toEqual([meta('b-222222').at, meta('a-111111').at]);
+    expect(child(feed, 'updated')?.text).toBe(meta('b-222222').at);
+    for (const e of [feed, ...entries]) expect(new Date(child(e, 'updated')!.text).toISOString()).toBe(child(e, 'updated')!.text);
+    expect(entries.map((e) => e.attrs['xml:lang'])).toEqual(['en', 'de']);
+    // the title and text come out as they went in, without what XML does not allow
+    const [, a] = entries as [XmlNode, XmlNode];
+    expect(child(a, 'title')?.text).toBe('Fish & <Chips> "quoted"');
+    expect(child(a, 'summary')?.text).toBe('First <b>bold</b> & more.');
+    expect(child(a, 'content')?.attrs.type).toBe('html');
+    expect(child(a, 'content')?.text).toBe('<p>First &lt;b&gt;bold&lt;/b&gt; &amp; more.</p>\n<p>Second paragraph.</p>');
+    expect(text).not.toContain('\u0007');
+    // withdrawn, a page leaves the feed too
+    await empty.withdraw('a-111111', ['b-222222']);
+    expect(parseXml(readFileSync(join(siteDir(), 'feed.xml'), 'utf8')).children.filter((c) => c.name === 'entry')).toHaveLength(1);
   });
 
   test('publishes an HTML artifact: its files beside the page, in a sandboxed frame that grows to it', async () => {
@@ -210,6 +301,7 @@ describe('a site Obeya keeps', () => {
     expect(html).toContain('<a href="?alone" target="_blank"');
     expect(html).not.toContain('escape-sandbox');
     expect(html).not.toContain('<video');
+    expect(html).toContain(`${CREDIT_DE}</main>`);
     expect(overview()).toContain('Titel auswertung-abc123');
     // published again unchanged it keeps its date; an artifact without its page is refused
     const first = meta('auswertung-abc123');
@@ -263,11 +355,11 @@ describe('a site Obeya keeps', () => {
     expect(existsSync(join(siteDir(), 'a-111111/demo.mp4'))).toBe(true);
     expect(overview()).toContain('Titel a-111111');
     rmSync(join(dir, 'fail'));
-    expect(await target.withdraw('a-111111', ['b-222222'])).toEqual({ said: 'Uploaded 4 entries', gone: [] });
+    expect(await target.withdraw('a-111111', ['b-222222'])).toEqual({ said: 'Uploaded 5 entries', gone: [] });
     expect(existsSync(join(siteDir(), 'a-111111'))).toBe(false);
     expect(overview()).not.toContain('Titel a-111111');
-    expect(deploys().at(-1)).toBe('_headers b-222222 index.html obeya-site.json token=secret-1');
-    expect(readdirSync(deployed()).sort()).toEqual(['_headers', 'b-222222', 'index.html', MANIFEST]);
+    expect(deploys().at(-1)).toBe('_headers b-222222 feed.xml index.html obeya-site.json token=secret-1');
+    expect(readdirSync(deployed()).sort()).toEqual(['_headers', 'b-222222', 'feed.xml', 'index.html', MANIFEST]);
     expect(readdirSync(join(siteDir(), '../backup'))).toEqual([]);
   });
 
@@ -295,7 +387,7 @@ describe('a site Obeya keeps', () => {
     const { env: _, ...without } = SITE();
     expect(siteMissing(home, without)).toBeNull();
     expect(await make(without).publish(page('d-444444'))).toMatchObject({ url: `${URL_}d-444444/` });
-    expect(deploys()).toEqual(['_headers d-444444 index.html obeya-site.json token=']);
+    expect(deploys()).toEqual(['_headers d-444444 feed.xml index.html obeya-site.json token=']);
   });
 
   test('its pages are the ones the page changes account for', () => {
@@ -332,6 +424,7 @@ describe('a site Obeya keeps', () => {
     expect(html).toContain('src="3/demo.mp4"');
     expect(html).toContain('poster="poster.jpg"');
     expect(html).not.toContain('poster="3/poster.jpg"');
+    expect(html).toContain(`${CREDIT_DE}</main>`);
     // the page lets its frames show nothing but its own files, as an artifact's page does
     expect(html).toContain(`<meta http-equiv="Content-Security-Policy" content="default-src 'self' file: data: blob:;`);
     const meta = JSON.parse(readFileSync(join(at, 'meta.json'), 'utf8'));
@@ -388,13 +481,13 @@ describe('several machines publishing to one site', () => {
     expect(await b.publish(page('b-222222'), (l) => said.push(l))).toMatchObject({ url: `${URL_}b-222222/` });
     expect(said).toEqual([expect.stringMatching(/^Downloading a page other machines shared from the site \(0\.0 MiB\)/)]);
     expect(readFileSync(join(siteDir(other), 'a-111111/demo.mp4'), 'utf8')).toBe('video');
-    expect(readdirSync(deployed()).sort()).toEqual(['_headers', 'a-111111', 'b-222222', 'index.html', MANIFEST]);
+    expect(readdirSync(deployed()).sort()).toEqual(['_headers', 'a-111111', 'b-222222', 'feed.xml', 'index.html', MANIFEST]);
     expect(live().pages).toMatchObject({ 'a-111111': { rev: 1, machine: 'a' }, 'b-222222': { rev: 1, machine: 'b' } });
     // the first machine gets the second one's page with its next share, and nothing it has already
     const again: string[] = [];
     await target.publish(page('c-333333'), (l) => again.push(l));
     expect(again).toEqual([expect.stringContaining('Downloading a page')]);
-    expect(readdirSync(deployed()).sort()).toEqual(['_headers', 'a-111111', 'b-222222', 'c-333333', 'index.html', MANIFEST]);
+    expect(readdirSync(deployed()).sort()).toEqual(['_headers', 'a-111111', 'b-222222', 'c-333333', 'feed.xml', 'index.html', MANIFEST]);
     expect(readFileSync(join(deployed(), 'index.html'), 'utf8')).toContain('Titel b-222222');
     // a page published again comes over with its new revision
     writeFileSync(join(demo, 'demo.mp4'), 'another video');
@@ -414,7 +507,7 @@ describe('several machines publishing to one site', () => {
     expect(await b.audit!(['a-111111'])).toEqual({ gone: [{ slug: 'a-111111', machine: 'a' }], missing: [] });
     expect(await b.publish(page('b-222222', { shared: ['a-111111'] }))).toMatchObject({ url: `${URL_}b-222222/`, gone: [{ slug: 'a-111111', machine: 'a' }] });
     expect(existsSync(join(siteDir(other), 'a-111111'))).toBe(false);
-    expect(readdirSync(deployed()).sort()).toEqual(['_headers', 'b-222222', 'index.html', MANIFEST]);
+    expect(readdirSync(deployed()).sort()).toEqual(['_headers', 'b-222222', 'feed.xml', 'index.html', MANIFEST]);
     expect(live().pages['a-111111']).toMatchObject({ withdrawn: true });
     expect(await b.audit!([])).toEqual({ gone: [], missing: [] });
     // shared again, it is back for both
@@ -436,7 +529,7 @@ describe('several machines publishing to one site', () => {
     expect(await make(SITE({ headers: { 'X-Token': '${NOPE}' } })).publish(page('a-111111'))).toMatchObject({ why: 'The site’s header X-Token needs NOPE, which the site’s env file lacks.' });
     const behind = make(SITE({ headers: { 'X-Token': '${TOKEN}' } }));
     expect(await behind.publish(page('a-111111'))).toMatchObject({ url: `${URL_}a-111111/` });
-    expect(await behind.withdraw('a-111111', [])).toMatchObject({ said: 'Uploaded 3 entries' });
+    expect(await behind.withdraw('a-111111', [])).toMatchObject({ said: 'Uploaded 4 entries' });
     expect(live().pages['a-111111']).toMatchObject({ withdrawn: true });
   });
 
@@ -461,7 +554,7 @@ describe('several machines publishing to one site', () => {
     const r = await target.publish(page('c-333333', { shared: ['a-111111'] }), (l) => said.push(l));
     expect(r).toMatchObject({ url: `${URL_}c-333333/` });
     expect(said).toContain('Another machine’s deploy came in between; one more round.');
-    expect(readdirSync(deployed()).sort()).toEqual(['_headers', 'a-111111', 'b-222222', 'c-333333', 'index.html', MANIFEST]);
+    expect(readdirSync(deployed()).sort()).toEqual(['_headers', 'a-111111', 'b-222222', 'c-333333', 'feed.xml', 'index.html', MANIFEST]);
 
     writeFileSync(join(dir, 'race'), `${snapshot('other-2')}\n${snapshot('other-3')}`);
     expect(await target.publish(page('d-444444', { shared: ['a-111111', 'c-333333'] }))).toMatchObject({
@@ -488,7 +581,7 @@ describe('several machines publishing to one site', () => {
     const deploysBefore = deploys().length;
     expect(await target.publish(page('c-333333'))).toMatchObject({ url: `${URL_}c-333333/` });
     expect(deploys().length).toBe(deploysBefore + 1);
-    expect(readdirSync(deployed()).sort()).toEqual(['_headers', 'a-111111', 'b-222222', 'b2-222222', 'c-333333', 'index.html', MANIFEST]);
+    expect(readdirSync(deployed()).sort()).toEqual(['_headers', 'a-111111', 'b-222222', 'b2-222222', 'c-333333', 'feed.xml', 'index.html', MANIFEST]);
   });
 
   test('a page another machine’s late deploy took offline is found missing and deployed again', async () => {
@@ -498,8 +591,8 @@ describe('several machines publishing to one site', () => {
     // the other machine pulled before c and deployed after this machine had checked
     lands(pulled);
     expect(await target.audit!(['a-111111', 'c-333333'])).toEqual({ gone: [], missing: ['c-333333'] });
-    expect(await target.repair!(['a-111111', 'c-333333'])).toMatchObject({ said: 'Uploaded 5 entries', gone: [] });
-    expect(readdirSync(deployed()).sort()).toEqual(['_headers', 'a-111111', 'c-333333', 'index.html', MANIFEST]);
+    expect(await target.repair!(['a-111111', 'c-333333'])).toMatchObject({ said: 'Uploaded 6 entries', gone: [] });
+    expect(readdirSync(deployed()).sort()).toEqual(['_headers', 'a-111111', 'c-333333', 'feed.xml', 'index.html', MANIFEST]);
     expect(await target.audit!(['a-111111', 'c-333333'])).toEqual({ gone: [], missing: [] });
   });
 
@@ -508,7 +601,7 @@ describe('several machines publishing to one site', () => {
     writeFileSync(join(dir, 'lag'), '');
     expect(await target.publish(page('b-222222', { shared: ['a-111111'] }))).toMatchObject({
       url: `${URL_}b-222222/`,
-      said: 'Uploaded 5 entries\nThe site does not show the new state yet; the next deploy checks again.',
+      said: 'Uploaded 6 entries\nThe site does not show the new state yet; the next deploy checks again.',
     });
   });
 });
@@ -544,7 +637,7 @@ describe('sharing to a site', () => {
     const shared = await settled(id, 'shared');
     expect(shared).toMatchObject({ state: 'shared', url: expect.stringMatching(new RegExp(`^${URL_}export-als-csv-[0-9a-z]+/$`)) });
     expect(readFileSync(join(deployed(), 'index.html'), 'utf8')).toContain('CSV-Export');
-    expect(board.events(id).map((e) => e.text)).toContain('Uploaded 4 entries');
+    expect(board.events(id).map((e) => e.text)).toContain('Uploaded 5 entries');
     sharing.unshare(id);
     await settled(id, undefined);
     expect(board.item(id)!.share).toBeUndefined();
@@ -571,7 +664,7 @@ describe('sharing to a site', () => {
     await settled(three, 'shared');
     expect(board.item(two)!.share).toBeUndefined();
     expect(board.events(two).map((e) => e.text)).toContain('Die Seite wurde auf einem anderen Rechner (laptop) zurückgezogen; der Link ist weg.');
-    expect(readdirSync(deployed()).sort()).toEqual(['_headers', slugOf(three), 'index.html', MANIFEST]);
+    expect(readdirSync(deployed()).sort()).toEqual(['_headers', slugOf(three), 'feed.xml', 'index.html', MANIFEST]);
   });
 
   test('a page another machine’s deploy took offline: deployed again when the owner comes back, with a line on its card', async () => {
