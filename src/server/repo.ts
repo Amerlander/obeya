@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync, watch } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, isAbsolute, join, parse } from 'node:path';
 import type { RepoAdapter, RepoInfo } from '../adapters/types';
 import { type OtherDoc, type PlanDoc, parsePlanDoc } from '../core/plan-doc';
 import { defaultBranch, gitOrNull } from './workspaces';
@@ -40,18 +40,37 @@ export function onGitHub(url: string, hosts: () => string[] = ghHosts): boolean 
 }
 
 /**
- * The docs in the plan directory of the working tree: those that describe a project, and the others
- * with the reason they are not one (none without the directory).
+ * The plan directory where it is a folder of this machine outside the repository (an absolute path,
+ * or one from `~`), as an absolute path with forward slashes, which is how its docs are referred to;
+ * null for a directory in the repository.
+ */
+export function outsidePlanDir(dir: string, home: string = homedir()): string | null {
+  const path = dir === '~' ? home : dir.startsWith('~/') || dir.startsWith('~\\') ? join(home, dir.slice(2)) : dir;
+  // forward slashes: a plan reference `C:\…` would read as one of the repository `C`
+  return isAbsolute(path) ? path.replaceAll('\\', '/').replace(/(.)\/+$/, '$1') : null;
+}
+
+/** The plan directory of the repository read at `repoPath`, and the directory its watch reaches up to. */
+function planDirOf(repoPath: string, adapter: RepoAdapter): { dir: string; root: string } {
+  const outside = outsidePlanDir(adapter.planDocs.dir);
+  return outside ? { dir: outside, root: parse(outside).root } : { dir: join(repoPath, adapter.planDocs.dir), root: repoPath };
+}
+
+/**
+ * The docs in the plan directory of the working tree, or of the folder outside the repository it
+ * names: those that describe a project, and the others with the reason they are not one (none
+ * without the directory).
  */
 export function readPlanDocs(repoPath: string, adapter: RepoAdapter): { docs: PlanDoc[]; others: OtherDoc[] } {
-  const dir = join(repoPath, adapter.planDocs.dir);
+  const { dir } = planDirOf(repoPath, adapter);
+  const named = outsidePlanDir(adapter.planDocs.dir) ?? adapter.planDocs.dir;
   const docs: PlanDoc[] = [];
   const others: OtherDoc[] = [];
   if (!existsSync(dir)) return { docs, others };
   for (const f of readdirSync(dir)
     .filter((f) => f.endsWith('.md') && !adapter.planDocs.exclude.includes(f))
     .sort()) {
-    const file = `${adapter.planDocs.dir}/${f}`;
+    const file = `${named}/${f}`;
     let markdown: string;
     try {
       markdown = readFileSync(join(dir, f), 'utf8');
@@ -78,7 +97,7 @@ export function watchPlanDocs(
   fn: () => void,
   { watches = true, poll = safetyNetPoll }: { watches?: boolean; poll?: number } = {},
 ): () => void {
-  const dir = join(repoPath, adapter.planDocs.dir);
+  const { dir, root } = planDirOf(repoPath, adapter);
   /** The open watches, by directory and what of it they report. */
   const open = new Map<string, () => void>();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -99,7 +118,7 @@ export function watchPlanDocs(
     : undefined;
   const arm = () => {
     if (!watches) return;
-    for (let d = dir; d.length > repoPath.length; d = dirname(d)) if (!existsSync(d) && watchedInodes.has(d)) recreated.add(d);
+    for (let d = dir; d.length > root.length; d = dirname(d)) if (!existsSync(d) && watchedInodes.has(d)) recreated.add(d);
     const wanted = new Map<string, () => () => void>();
     if (existsSync(dir))
       wanted.set(`${dir}/*.md`, () =>
@@ -108,10 +127,10 @@ export function watchPlanDocs(
           fire();
         }),
       );
-    // the nearest directory above, within the repository, for the next step down to the plan directory
+    // the nearest directory above, within the repository (or the folder's drive), for the next step down to the plan directory
     let below = dir;
     let above = dirname(dir);
-    while (!existsSync(above) && above.length > repoPath.length) [below, above] = [above, dirname(above)];
+    while (!existsSync(above) && above.length > root.length) [below, above] = [above, dirname(above)];
     const name = basename(below);
     wanted.set(below, () =>
       watchDir(above, (file) => {

@@ -9,7 +9,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { defaultsFor, parseShared, REPO_ADAPTER_DIR, REPO_SETTINGS_FILE, withSettings } from '../../../../src/adapters/index.ts';
 import { allTicked, type NotAProject } from '../../../../src/core/plan-doc.ts';
-import { readPlanDocs, repoInfo } from '../../../../src/server/repo.ts';
+import { outsidePlanDir, readPlanDocs, repoInfo } from '../../../../src/server/repo.ts';
 import { siteProblem } from '../../../../src/server/share.ts';
 
 const repo = repoInfo(process.cwd());
@@ -31,7 +31,7 @@ const problems = [
 const plans = readPlanDocs(repo.path, adapter);
 const why: Record<NotAProject, string> = { noWorkstreams: 'no `## Workstreams` section', noChecklist: 'no checklist under `## Workstreams`' };
 const name = (file: string) => file.slice(file.lastIndexOf('/') + 1);
-const planLines = !existsSync(join(repo.path, adapter.planDocs.dir))
+const planLines = !existsSync(outsidePlanDir(adapter.planDocs.dir) ?? join(repo.path, adapter.planDocs.dir))
   ? [`plan docs: ${adapter.planDocs.dir}/ does not exist yet; the first plan doc ("Als Projekt planen" on an idea or task card) creates it`]
   : [
       `plan docs in ${adapter.planDocs.dir}/: ${plans.docs.length} ${plans.docs.length === 1 ? 'is a project' : 'are projects'}${plans.docs.length ? ` (${plans.docs.map((d) => `${name(d.file)}${allTicked(d) ? ', done: archived' : ''}`).join('; ')})` : ''}, ${plans.others.length} ${plans.others.length === 1 ? 'is not' : 'are not'}`,

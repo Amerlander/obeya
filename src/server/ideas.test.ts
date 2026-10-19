@@ -405,6 +405,45 @@ describe('an idea', () => {
     expect(() => canvas.act(worked.id, { action: 'planDoc' })).toThrow(expect.objectContaining({ code: 'notPlannable' }));
   });
 
+  test('with its plan folder outside the repository, the worker writes the doc there under the name Obeya gives, and the project takes the idea’s place once approved', async () => {
+    const plans = join(dir, 'private-plans');
+    mkdirSync(plans);
+    writeFileSync(join(plans, 'export-fur-vermieter.md'), '# Schon da\n');
+    canvas.shutdown();
+    canvas = new CanvasRuntime(
+      { repos: [{ path: main, clones: 1, settings: { land: 'pr', planDocs: { dir: plans, exclude: [] } } }] },
+      { store, home: dir, runtime, forge: noForge, commandDelayMs: 10, permissionMode: 'acceptEdits', limitMargin: 10 },
+    );
+    const i = idea();
+    canvas.act(i.id, { action: 'planDoc' });
+    const file = `${plans.replaceAll('\\', '/')}/export-fur-vermieter-2.md`;
+    expect(item(i.id).body).toContain(`ein Plan-Doc als \`${file}\`, in einem Ordner dieses Rechners außerhalb des Repositorys,`);
+    expect(item(i.id).body).not.toContain('Verweis darauf');
+    expect(JSON.parse(board().row(i.id).plan_docs!)).toEqual([file]);
+    await settle();
+    const worker = runtime.sessions.find((s) => s.spec.tools.some((t) => t.name === 'ready_for_review'))!;
+    // the folder is the worker's to write in, as its workspace
+    expect(worker.spec.dirs).toEqual([plans.replaceAll('\\', '/')]);
+    writeFileSync(file, '# Export\n\n## Ziel\n\nExport.\n\n## Workstreams\n\n- [ ] **W1:** CSV. Zuerst.\n');
+    board().docsChanged();
+    // read at once, the doc is a project, but the idea stays until the owner approves it
+    const project = board().snapshot().items.find((x) => x.kind === 'project' && x.title === 'Export')!;
+    expect(project.plan!.file).toBe(file);
+    expect(project.origin).toBeUndefined();
+    const demo = join(dir, 'demo');
+    mkdirSync(demo);
+    writeFileSync(join(demo, 'index.html'), '<p>Plan</p>');
+    worker.call('ready_for_review', { summary: 'Plan geschrieben.', demo: { dir: demo, kind: 'html', page: { title: 'Export', text: 'Ein Plan.' } } });
+    worker.emit({ type: 'idle' });
+    await canvas.act(i.id, { action: 'approve' });
+    // nothing is in the branch: approved, the card is done without a pull request
+    expect(board().row(i.id).state).toBe('done');
+    worker.emit({ type: 'idle' });
+    expect(board().item(project.id)!.origin).toBe(i.id);
+    expect(board().item(i.id)).toBeUndefined();
+    expect(board().projectOf(i.id)!.id).toBe(project.id);
+  });
+
   test('parked or dropped it keeps its brief; talking to it opens it again', () => {
     const i = idea();
     board().setIdea(i.id, { brief: 'Stand.' });

@@ -2,7 +2,7 @@
 // workers, project agents and PR watcher), the board, the Koordinator and the voice commands.
 
 import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
-import { mkdirSync, realpathSync } from 'node:fs';
+import { existsSync, mkdirSync, realpathSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { defaultsFor, hasAdapterModule, readingAdapterModule, readingShared, readShared, repoValues, type SharedRead, withSettings } from '../adapters';
 import { Answers, answersDir, answerTag } from './answers';
@@ -27,7 +27,7 @@ import { PrWatcher } from './pr-watcher';
 import { branchCommit, defaultBranchCommit, ReadTree } from './read-tree';
 import { Revisions } from './revisions';
 import { ProjectAgents } from './project-agents';
-import { readPlanDocs, watchPlanDocs } from './repo';
+import { outsidePlanDir, readPlanDocs, watchPlanDocs } from './repo';
 import { boundsOf, GAP, type Place, unionBounds } from '../core/layout';
 import { type AgentRuntime, withAgentSetting, withLimitWait, withRepoTrust } from './runtime';
 import { commandsOf, heldGroups, withoutHeld } from './trust';
@@ -1440,14 +1440,16 @@ export class CanvasRuntime {
     const card = this.settledIdea(cardId);
     const idea = this.board.idea(cardId);
     const dir = this.repoOf(card).adapter.planDocs.dir;
+    const outside = this.outsidePlanDoc(card);
     const prototypes = this.board.snapshot().items.filter((i) => i.prototypeOf === cardId);
     const t = this.board.t.idea;
     this.explorers.close(cardId);
     this.board.work(cardId, {
       state: 'planned',
       becomes_project: 1,
+      ...outside?.row,
       body: [
-        t.planDocTask(dir),
+        t.planDocTask(dir, false, outside?.file),
         t.planDocIdea(card.title),
         idea.brief.trim() || card.body.trim(),
         prototypes.length
@@ -1477,10 +1479,28 @@ export class CanvasRuntime {
       throw new BadRequest('notPlannable', 'only an idea, or a planned task of your own nobody has worked on yet, can be planned as a project');
     const t = this.board.t.idea;
     const dir = this.repoOf(card).adapter.planDocs.dir;
-    this.board.work(card.id, { becomes_project: 1, body: [t.planDocTask(dir, true), t.planDocCard(card.title), card.body.trim()].filter(Boolean).join('\n\n') });
+    const outside = this.outsidePlanDoc(card);
+    this.board.work(card.id, { becomes_project: 1, ...outside?.row, body: [t.planDocTask(dir, true, outside?.file), t.planDocCard(card.title), card.body.trim()].filter(Boolean).join('\n\n') });
     this.board.decide({ project_id: null, card_id: card.id, question: t.howOnTask(card.title), answer: t.planDocAnswer, by: 'owner' });
     this.board.log(card.id, 'state', 'owner', t.planDocTaskLog);
     this.koordinator.request(card.id);
+  }
+
+  /**
+   * The doc a card planned as a project writes where the plan directory is a folder outside the
+   * repository: named after the card, beside the docs there. Nothing of that folder lands, so the
+   * card names its doc from the start (`plan_docs`), and the project takes its place once the
+   * owner has approved the card (`linkOrigins`). None for a plan directory in the repository.
+   */
+  private outsidePlanDoc(card: Item): { file: string; row: { plan_docs: string } } | undefined {
+    const r = this.repoOf(card);
+    const dir = outsidePlanDir(r.adapter.planDocs.dir);
+    if (!dir) return;
+    const name = slug(card.title).slice(0, 60).replace(/^[.-]+|[.-]+$/g, '') || 'plan';
+    let file = `${dir}/${name}.md`;
+    for (let n = 2; existsSync(file); n++) file = `${dir}/${name}-${n}.md`;
+    const ref = r.ref.id === this.repos[0]!.ref.id ? file : `${r.ref.id}:${file}`;
+    return { file, row: { plan_docs: JSON.stringify([ref]) } };
   }
 
   /** Parked or dropped, the idea stays on the canvas with its brief; what its agent has not answered yet waits for the conversation to go on. */

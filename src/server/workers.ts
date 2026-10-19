@@ -15,6 +15,7 @@ import { type Asked, decisionLog, toQuestion, withPick } from './advisor';
 import { checkArtifact, DEMO_SKILL, DEMO_SKILL_FILE, demoSkillName, OBEYA_PLUGIN, placeIn, readChapters } from './demo';
 import { artifactFiles } from './demo-page';
 import { imageNote } from './images';
+import { outsidePlanDir } from './repo';
 import type { InputContext } from './koordinator';
 import { type AgentEvent, type AgentRuntime, type AgentSession, type AgentTool, failureReason, LIMIT_LIFTED, limitLifts, type PermissionAnswer, type PermissionRequest } from './runtime';
 import { TO_OBEYA, toObeyaTool } from './to-obeya';
@@ -1103,7 +1104,8 @@ export class Workers {
 
   /** The plan docs the card's branch adds, as plan references of the canvas. */
   private planDocsAdded(cardId: string): string[] {
-    if (!this.o.board.row(cardId).idea) return [];
+    // a plan folder outside the repository has nothing in the branch: such a card named its doc when it started
+    if (!this.o.board.row(cardId).idea || outsidePlanDir(this.o.adapter.planDocs.dir)) return [];
     const home = !this.o.repo || this.o.repo === this.o.board.home;
     return this.o.workspaces
       .addedFiles(cardId, this.o.adapter.planDocs.dir)
@@ -1441,10 +1443,13 @@ export class Workers {
     message = this.withRestart(cardId, live, message);
     live.pending = { text: message, images };
     const env = this.env();
+    // a plan folder outside the repository is the worker's to tick its workstream in, on this machine
+    const plans = live.host ? null : outsidePlanDir(this.o.adapter.planDocs.dir);
     live.session = this.o.runtime.start(
       {
         cwd: row.workspace,
         role: 'worker',
+        ...(plans ? { dirs: [plans] } : {}),
         system: this.system(preferences, !!row.prototype_of),
         tools: this.tools(cardId, live, !!row.prototype_of),
         plugins: [OBEYA_PLUGIN],

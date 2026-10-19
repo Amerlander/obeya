@@ -1766,7 +1766,8 @@ export class Board {
    */
   private linkOrigins(docs: PlanDoc[]): boolean {
     const origin = new Map<string, string>();
-    for (const r of this.store.withPlanDocs(this.canvas.id)) for (const ref of JSON.parse(r.plan_docs!) as string[]) origin.set(ref, r.id);
+    // a card writing its doc in a plan folder outside the repository names it from the start: it is its origin once approved
+    for (const r of this.store.withPlanDocs(this.canvas.id)) if (r.landed || r.state === 'live' || r.state === 'done') for (const ref of JSON.parse(r.plan_docs!) as string[]) origin.set(ref, r.id);
     if (!origin.size) return false;
     let linked = false;
     for (const r of this.store.projects(this.canvas.id)) {
@@ -1810,7 +1811,8 @@ export class Board {
    */
   private retire(ideaId: string): boolean {
     const r = this.store.card(ideaId);
-    if (!r || r.deleted_at || r.archived_at || r.state !== 'live' || (r.landed && r.workspace)) return false;
+    // `done`: approved without a change, its doc written in a plan folder outside the repository
+    if (!r || r.deleted_at || r.archived_at || (r.state !== 'live' && r.state !== 'done') || (r.landed && r.workspace)) return false;
     if (!this.store.projects(this.canvas.id).some((p) => p.from_id === ideaId && !p.archived_at)) return false;
     this.store.update(ideaId, { archived_at: new Date().toISOString() });
     this.log(ideaId, 'state', 'obeya', r.idea ? this.t.idea.becameProject : this.t.idea.taskBecameProject);

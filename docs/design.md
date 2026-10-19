@@ -4046,7 +4046,8 @@ on it (`landCheckout`).
 ### Lesestand
 
 Every repository of a canvas has a directory on its default branch that its plan docs are read from
-(the canvas, „Plandokument lesen“, the last state kept on a project) and that the agents that answer
+(the canvas, „Plandokument lesen“, the last state kept on a project; unless they are in a folder
+outside the repository, see Plan docs) and that the agents that answer
 or judge rather than work on a card run in (`src/server/read-tree.ts`): project agents, ideas'
 exploration agents, the Koordinator (and its look-ups, learner and Rückschau), the Arbeitsrückschau
 and the voice commands' session.
@@ -4084,6 +4085,21 @@ their workstream in the doc as part of their change.
 A plan card gets a stored row the first time it is seen, so the owner's placement persists; its
 title, text and state always come from the doc. Each read also keeps the doc's last state on the
 project (title, goal, workstreams with key, label, title, text and state).
+
+#### A plan folder outside the repository
+
+Some keep their plans out of the repository (gitignored, or in a folder of their own). The plan
+directory is then an absolute path, or one from `~`, set on this machine in the configuration
+(`outsidePlanDir` in `src/server/repo.ts`): Obeya reads and watches the docs there as they are, not
+from the Lesestand, and refers to each by its absolute path with forward slashes (so a Windows drive
+does not read as a repository's id), which is what the agents are given too. Workers on this machine
+have the folder as a directory of their own (`dirs`): one ticks its workstream there, which takes
+effect at once and goes into no commit; the card's work in progress still wins over the box until
+it lands. A doc that „Als Projekt planen“ writes there cannot land, so Obeya names it at the start
+(the card's title as a file name, beside the docs there, with `-2` where that one exists) and keeps
+it on the card as the doc it adds (`plan_docs`); the doc shows as a project as soon as it is
+written, and the project takes the card's place once the owner has approved it (the card is `done`
+without a change). Workers on other machines do not reach the folder.
 
 #### Docs that are no projects
 
@@ -4549,6 +4565,12 @@ of what the owner may say.
   all clones (which state counts would be chance). The fetch rides on the PR watcher's rounds and
   the merge, without a timer of its own. Until 2026-10-07 a Lesestand directory that could not be
   removed ended the server.
+- **Plans outside the repository are a folder set by its path, not detected** (2026-10-19, the
+  owner's decision, from GitHub issue #1: a repository whose `docs/plan` is gitignored showed no
+  projects, since the Lesestand has only what is committed). An absolute plan directory is read
+  where it is, and workers reach it by its path. Rejected: noticing that the plan directory is
+  gitignored and linking it from the checkout into the Lesestand and every workspace (too much
+  magic), and a line in the repository's CLAUDE.md alone (Obeya itself has to know the folder).
 - **Plan docs as projects, by a checklist under `## Workstreams`.** Plan-doc sync stays open (see
   Open questions).
 - **The other `*.md` in the plan directory are not hidden** (2026-10-12). Before, such a doc was

@@ -45,7 +45,9 @@ Find out, from the files rather than by guessing:
   first paragraph under `## Goal` (or `## Ziel`). A doc in that directory without such a checklist
   shows on the canvas as one that is not a project, with "Als Projekt aufbereiten", which has an
   agent add the checklist in the doc's own style. Design notes and ADRs that plan nothing belong
-  elsewhere, or in `planDocs.exclude`.
+  elsewhere, or in `planDocs.exclude`. Plans that git ignores are not on the default branch Obeya
+  reads: their folder's absolute path goes into the owner's configuration on their machine
+  (Plan-Dokumente), not into the file.
 
 ## 2. Ask what the repository does not tell
 

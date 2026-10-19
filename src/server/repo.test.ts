@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmdirSync, rmSync, unlinkSync, watch, writeFile
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { generic } from '../adapters/generic';
-import { ghHosts, oldLinuxBun, onGitHub, readPlanDocs, remoteHost, watchPlanDocs } from './repo';
+import { ghHosts, oldLinuxBun, onGitHub, outsidePlanDir, readPlanDocs, remoteHost, watchPlanDocs } from './repo';
 
 const DOC = '# P\n\n## Workstreams\n\n- [ ] **W1:** One.\n';
 
@@ -26,6 +26,41 @@ describe('readPlanDocs', () => {
       ]);
     } finally {
       rmSync(repo, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('a plan folder outside the repository', () => {
+  test('is an absolute path or one from ~, referred to with forward slashes; a path in the repository is none', () => {
+    expect(outsidePlanDir('docs/plan', '/home/jo')).toBeNull();
+    expect(outsidePlanDir('/home/jo/plans/', '/home/jo')).toBe('/home/jo/plans');
+    expect(outsidePlanDir('~/plans/shop', '/home/jo')).toBe('/home/jo/plans/shop');
+    expect(outsidePlanDir('~', '/home/jo')).toBe('/home/jo');
+    expect(outsidePlanDir('~other/plans', '/home/jo')).toBeNull();
+  });
+
+  test('is read where it is, not from the repository, its docs by their absolute path; and watched there', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'obeya-outside-'));
+    try {
+      const repo = join(root, 'repo');
+      const plans = join(root, 'private', 'plans');
+      mkdirSync(join(repo, 'docs/plan'), { recursive: true });
+      writeFileSync(join(repo, 'docs/plan/shared.md'), DOC);
+      const adapter = { ...generic, planDocs: { dir: plans, exclude: [] } };
+      expect(readPlanDocs(repo, adapter)).toEqual({ docs: [], others: [] });
+      let calls = 0;
+      const stop = watchPlanDocs(repo, adapter, () => calls++, { watches: false, poll: 20 });
+      try {
+        mkdirSync(plans, { recursive: true });
+        writeFileSync(join(plans, 'mine.md'), DOC);
+        for (let t = 0; !calls && t < 100; t++) await new Promise((r) => setTimeout(r, 20));
+        expect(calls).toBeGreaterThan(0);
+      } finally {
+        stop();
+      }
+      expect(readPlanDocs(repo, adapter).docs.map((d) => d.file)).toEqual([`${plans.replaceAll('\\', '/')}/mine.md`]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 });

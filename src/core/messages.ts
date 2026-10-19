@@ -193,8 +193,9 @@ const de = {
     planDocTaskLog: 'Als Projekt: Ein Agent schreibt das Plan-Doc; ist es gelandet, tritt das Projekt an die Stelle der Aufgabe.',
     dropped: 'Verworfen.',
     parked: 'Geparkt.',
-    planDocTask: (dir: string, task = false) =>
-      `Schreibe aus ${task ? 'dieser Aufgabe' : 'dem Stand dieser Idee'} ein Plan-Doc in \`${dir}/\`, nach den Konventionen des Repositorys (vorhandene Plan-Docs als Vorbild). Es braucht ein \`## Ziel\` (oder \`## Goal\`) und eine Checkliste unter \`## Workstreams\` (\`- [ ] **W1:** Titel. Details\`), in Pakete geschnitten, die einzeln landen können; dann zeigt Obeya es als Projekt, das an die Stelle dieser ${task ? 'Aufgabe' : 'Idee'} tritt. Baue nichts davon; nur das Plan-Doc (und ein Verweis darauf, wo das Repository Plan-Docs verlinkt).`,
+    /** `file`: the doc to write, where the plan directory is a folder outside the repository. */
+    planDocTask: (dir: string, task = false, file?: string) =>
+      `Schreibe aus ${task ? 'dieser Aufgabe' : 'dem Stand dieser Idee'} ein Plan-Doc ${file ? `als \`${file}\`, in einem Ordner dieses Rechners außerhalb des Repositorys,` : `in \`${dir}/\`,`} nach den Konventionen des Repositorys (vorhandene Plan-Docs als Vorbild). Es braucht ein \`## Ziel\` (oder \`## Goal\`) und eine Checkliste unter \`## Workstreams\` (\`- [ ] **W1:** Titel. Details\`), in Pakete geschnitten, die einzeln landen können; dann zeigt Obeya es als Projekt, das an die Stelle dieser ${task ? 'Aufgabe' : 'Idee'} tritt. Baue nichts davon; nur das Plan-Doc${file ? '' : ' (und ein Verweis darauf, wo das Repository Plan-Docs verlinkt)'}.`,
     planDocIdea: (title: string) => `Idee: „${title}“`,
     planDocCard: (title: string) => `Aufgabe: „${title}“`,
     planDocPrototypes: (n: number) =>
@@ -547,8 +548,8 @@ const en: Messages = {
     planDocTaskLog: 'As a project: an agent writes the plan doc; once it has landed, the project takes the task’s place.',
     dropped: 'Dropped.',
     parked: 'Parked.',
-    planDocTask: (dir: string, task = false) =>
-      `Write a plan doc in \`${dir}/\` from ${task ? 'this task' : 'where this idea stands'}, following the repository’s conventions (existing plan docs as the model). It needs a \`## Goal\` (or \`## Ziel\`) and a checklist under \`## Workstreams\` (\`- [ ] **W1:** Title. Details\`), cut into packages that can land one by one; then Obeya shows it as a project that takes the place of this ${task ? 'task' : 'idea'}. Build none of it; only the plan doc (and a link to it where the repository links plan docs).`,
+    planDocTask: (dir: string, task = false, file?: string) =>
+      `Write a plan doc ${file ? `as \`${file}\`, in a folder of this machine outside the repository,` : `in \`${dir}/\``} from ${task ? 'this task' : 'where this idea stands'}, following the repository’s conventions (existing plan docs as the model). It needs a \`## Goal\` (or \`## Ziel\`) and a checklist under \`## Workstreams\` (\`- [ ] **W1:** Title. Details\`), cut into packages that can land one by one; then Obeya shows it as a project that takes the place of this ${task ? 'task' : 'idea'}. Build none of it; only the plan doc${file ? '' : ' (and a link to it where the repository links plan docs)'}.`,
     planDocIdea: (title: string) => `Idea: “${title}”`,
     planDocCard: (title: string) => `Task: “${title}”`,
     planDocPrototypes: (n: number) =>
