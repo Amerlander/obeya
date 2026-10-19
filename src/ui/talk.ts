@@ -69,7 +69,7 @@ const place = (e: CardEvent, prev: CardEvent | undefined): 'owner' | 'agent' | '
     case 'denied':
       return 'line';
     case 'state':
-      return e.author === 'explorer' || (e.author === 'obeya' && !MILESTONE.test(e.text) && !limitLine(e) && !wokeLine(e)) ? 'step' : 'line';
+      return e.author === 'explorer' || (e.author === 'obeya' && !MILESTONE.test(e.text) && !limitLine(e) && !wokeLine(e) && !unansweredLine(e)) ? 'step' : 'line';
     default:
       return 'step';
   }
@@ -194,6 +194,9 @@ export const snoozeLine = (e: CardEvent) => e.kind === 'state' && (e.author === 
 
 /** The line that a snoozed card woke, and why (or, until 2026-10-17, who had snoozed it: „Wieder da (vom Agenten zurückgestellt)“). */
 const wokeLine = (e: CardEvent) => e.kind === 'state' && LANGUAGES.some((l) => e.text.startsWith(MESSAGES[l].worker.woke('\0').split('\0')[0]!) || e.text.startsWith(`${MESSAGES[l].worker.woke('').replace(/: $/, '')} (`));
+
+/** Obeya's line that the agent stopped without answering the owner's words: they write again. */
+const unansweredLine = (e: CardEvent) => e.kind === 'state' && e.author === 'obeya' && LANGUAGES.some((l) => e.text === MESSAGES[l].worker.unanswered);
 
 /** Obeya's line that the usage limit stopped the agent's turn, and when it goes on. */
 const limitLine = (e: CardEvent) =>

@@ -1450,6 +1450,8 @@ export class Workers {
     live.session.done.then(() => {
       if (this.live.get(cardId) !== live) return;
       this.live.delete(cardId);
+      // the card no longer shows its worker in a turn (an error after its turn ended counted as one)
+      this.o.board.changed();
       // a session that ended without ending its turn takes in no answer any more
       this.answerTaken(cardId);
     });

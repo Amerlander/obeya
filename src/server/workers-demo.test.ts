@@ -379,6 +379,15 @@ describe('handing over with a demo', () => {
     expect(board.item(c.id)!.answered).toBeUndefined();
     expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', text: board.t.worker.unanswered });
     expect(needsYou(board.item(c.id)!)).toBe(true);
+    // an error after the turn ended (a session that cannot be resumed reports it twice) leaves no worker shown in a turn
+    workers.message(c.id, 'Noch da?');
+    const gone = runtime.last;
+    gone.emit({ type: 'error', message: 'No conversation found' });
+    gone.emit({ type: 'idle' });
+    gone.emit({ type: 'error', message: 'Claude Code returned an error result: No conversation found' });
+    gone.close();
+    await until(() => !board.item(c.id)!.inTurn);
+    expect(board.item(c.id)!.answered).toBeUndefined();
     // words that end the turn answer it, without a reply
     workers.message(c.id, 'Und jetzt?');
     runtime.last.emit({ type: 'text', text: 'Ja, sie stimmen.' });

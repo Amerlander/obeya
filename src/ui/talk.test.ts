@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { type CardEvent, formatQuestion, type Item, needsYou, pausable } from '../core/types';
 import { agentWorks, demoHandover, koordinatorReads, obeyaWorks, openQuestions, opensWithTalk, ownerField, parseQuestion, runs, split, talkAlone, talkTurns, unseen, unseenTurns, withoutOpen } from './talk';
+import { MESSAGES } from '../core/messages';
 
 let id = 0;
 const ev = (kind: CardEvent['kind'], author: CardEvent['author'], text: string): CardEvent => ({ id: ++id, cardId: 'c', at: '2026-10-01T10:00:00Z', kind, author, text });
@@ -525,4 +526,14 @@ test("Obeya's conversation shows it at work while it reads the owner's words or 
   expect(obeyaWorks([{ ...asked, answer: 'In src/export.ts.' }])).toBe(false);
   expect(obeyaWorks([{ ...asked, limitedUntil: '2026-10-17T12:00:00Z' }])).toBe(false);
   expect(obeyaWorks([{ ...asked, movedTo: 'q1' }])).toBe(false);
+});
+
+test('the line that the agent stopped without answering stands, not as a step of an agent at work', () => {
+  const asked = ev('hint', 'owner', 'Und im Westen?');
+  const failed = ev('error', 'obeya', 'No conversation found');
+  const unanswered = ev('state', 'obeya', MESSAGES.de.worker.unanswered);
+  const t = talkTurns([asked, failed, unanswered], { over: true });
+  expect(t.shown.map((x) => x.e)).toEqual([asked, failed, unanswered]);
+  expect(t.shown[2]).toMatchObject({ line: true });
+  expect(t.pending).toEqual([]);
 });
