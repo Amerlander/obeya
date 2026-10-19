@@ -112,7 +112,7 @@ export class Answers {
           ? {
               resume,
               message: followUp(t.said, t.question!, false),
-              fallback: `${fresh}\n\n${this.history(thread)}\n\n${followUp(t.said, t.question!, false)}`,
+              fallback: () => ({ message: `${fresh}\n\n${this.history(thread)}\n\n${followUp(t.said, t.question!, false)}` }),
             }
           : { message: fresh }),
       })
@@ -253,6 +253,7 @@ export class Answers {
     const { by, about, project } = this.agentFor(root);
     const words = taken.map((p) => p.text).join('\n\n');
     const heard = (p: { said: number[] }) => p.said.some((id) => taken.some((t) => t.said.includes(id)));
+    const intro = this.message(root.said, root.question, about, project);
     const resumed = this.resumed.delete(cardId) ? `${RESUMED}\n\n` : '';
     this.o.board.readNow(cardId, taken.flatMap((p) => p.said));
     this.reading.add(cardId);
@@ -274,7 +275,11 @@ export class Answers {
         onLimit: (until) => this.o.board.waitsForLimit({ card: cardId }, until),
         resume: this.o.board.row(cardId).session_id ?? undefined,
         message: `${resumed}${followUp(words, undefined, true)}`,
-        fallback: `${this.message(root.said, root.question, about, project)}\n\n${this.history(stored.talk, cardId)}\n\n${followUp(words, undefined, true)}`,
+        // with the words passed in meanwhile, which the session that failed had heard
+        fallback: () => ({
+          message: `${intro}\n\n${this.history(stored.talk, cardId)}\n\n${followUp(taken.map((p) => p.text).join('\n\n'), undefined, true)}`,
+          images: taken.flatMap((p) => p.images),
+        }),
         signal: end.signal,
         onWaiting: (pass) => {
           if (!pass) return void this.waiting.delete(cardId);
@@ -323,7 +328,7 @@ export class Answers {
     project: Item | undefined;
     message: string;
     resume?: string | undefined;
-    fallback?: string;
+    fallback?: () => { message: string; images?: string[] };
     card?: string;
     images?: string[];
     signal?: AbortSignal;
@@ -338,7 +343,7 @@ export class Answers {
     mkdirSync(dir, { recursive: true });
     if (c.by === 'project') return this.o.projectAgent(c.project!).inform(c.project!, `${c.message}\n\n${filesNote(dir)}`, c.onLimit, c.onTool, dir, c.signal, c.onWaiting);
     const toObeya = c.card && this.o.toObeya ? this.o.toObeya : undefined;
-    const ask = (message: string, resume?: string) =>
+    const ask = (message: string, images: string[] | undefined, resume?: string) =>
       inform({
         runtime: this.o.runtime,
         cwd: this.o.pathFor(c.about),
@@ -350,16 +355,20 @@ export class Answers {
         onLimit: c.onLimit,
         language: this.o.board.language(),
         ...(resume ? { resume } : {}),
-        ...(c.images?.length ? { images: c.images } : {}),
+        ...(images?.length ? { images } : {}),
         ...(toObeya ? { tools: [toObeyaTool((request) => toObeya(c.card!, request))] } : {}),
         ...(this.o.permissionMode ? { permissionMode: this.o.permissionMode } : {}),
         ...(c.signal ? { signal: c.signal } : {}),
         ...(c.onWaiting ? { onWaiting: c.onWaiting } : {}),
       });
-    if (!c.resume) return ask(c.fallback ?? c.message);
-    return ask(c.message, c.resume).catch((e) => {
+    const fresh = () => {
+      const f = c.fallback?.() ?? { message: c.message, images: c.images };
+      return ask(f.message, f.images);
+    };
+    if (!c.resume) return fresh();
+    return ask(c.message, c.images, c.resume).catch((e) => {
       if (e instanceof Interrupted) throw e;
-      return ask(c.fallback ?? c.message);
+      return fresh();
     });
   }
 
@@ -414,7 +423,8 @@ export class Answers {
     const lines = cardId
       ? this.o.board
           .events(cardId)
-          .filter(inConversation)
+          // words not read yet come with a later turn
+          .filter((e) => inConversation(e) && !e.unread)
           .map((e) => said(e))
       : this.o.board
           .threadTalk(thread)

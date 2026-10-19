@@ -68,6 +68,7 @@ export function inform(b: Briefing): Promise<OwnerAnswer> {
     if (b.signal?.aborted) return reject(new Interrupted());
     let answer: OwnerAnswer | null = null;
     let last = '';
+    let closed = false;
     const settle = (a: OwnerAnswer) => {
       if (answer) return 'Only the first answer counts.';
       answer = a;
@@ -75,6 +76,7 @@ export function inform(b: Briefing): Promise<OwnerAnswer> {
       return 'Delivered. End your turn now.';
     };
     const close = () => {
+      closed = true;
       work.stop();
       session.close();
     };
@@ -88,7 +90,9 @@ export function inform(b: Briefing): Promise<OwnerAnswer> {
       work.stop();
       session.send(text, images);
     };
-    const work = new BackgroundWait(over, { grace: b.backgroundGrace, limit: b.backgroundLimit }, (waiting) => b.onWaiting?.(waiting ? pass : undefined));
+    // words go in while the work runs; once it ended, it is about to wake the agent, and they wait for the next turn
+    const told = () => b.onWaiting?.(work.waiting && work.running > 0 ? pass : undefined);
+    const work = new BackgroundWait(over, { grace: b.backgroundGrace, limit: b.backgroundLimit }, told);
     const session = b.runtime.start(
       {
         cwd: b.cwd,
@@ -113,7 +117,13 @@ export function inform(b: Briefing): Promise<OwnerAnswer> {
           ...(b.tools ?? []),
         ],
         onEvent: (e) => {
-          if (e.type === 'background') return work.changed(e.tasks.length);
+          // what a failed session still reports after its error
+          if (closed) return;
+          if (e.type === 'background') {
+            work.changed(e.tasks.length);
+            if (work.waiting) told();
+            return;
+          }
           // a turn may also start without a message (finished background work)
           work.stop();
           if (e.type === 'session') b.onSession?.(e.id);
@@ -124,7 +134,8 @@ export function inform(b: Briefing): Promise<OwnerAnswer> {
             reject(new Error(e.message));
           } else if (e.type === 'idle') {
             work.running = e.background ?? 0;
-            if (!answer && work.running > 0) work.start();
+            // a message still to come (words passed in as the agent woke) starts the turn that answers
+            if (!answer && (work.running > 0 || e.more)) work.start();
             else over();
           }
         },

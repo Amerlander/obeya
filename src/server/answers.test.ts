@@ -612,6 +612,46 @@ describe('a thread on a Question card', () => {
     expect(board().events(card.id).filter((e) => e.kind === 'talk').map((e) => e.text).slice(-4)).toEqual(['lade die Daten für 2024', 'mit Dezember', 'stopp, nimm 2023', '2023 mit Dezember: 14 ct.']);
   });
 
+  test('words wait for the next turn once the work ended, and a session that fails after it heard them hands them to the fresh one', async () => {
+    const { card } = await moved();
+    canvas.tell(card.id, 'lade die Daten für 2024', [], false);
+    const a = answerer();
+    a.emit({ type: 'idle', background: 1 });
+    canvas.tell(card.id, 'stopp, nimm 2023', [], false);
+    expect(a.inbox).toHaveLength(2);
+    // the work ended and is about to wake the agent: what comes now waits for its turn, unread
+    a.emit({ type: 'idle', background: 1 });
+    a.emit({ type: 'background', tasks: [] });
+    canvas.tell(card.id, 'und Dezember?', [], false);
+    expect(board().events(card.id).at(-1)!.unread).toBe(true);
+    expect(a.inbox).toHaveLength(2);
+    // a message still to come keeps the turn going
+    a.emit({ type: 'idle', background: 0, more: true });
+    await settle();
+    expect(a.closed).toBe(false);
+    // the resumed session fails, and reports more after its error: the fresh session gets what the failed one heard
+    const sessions = runtime.sessions.length;
+    a.emit({ type: 'error', message: 'boom' });
+    a.emit({ type: 'idle', background: 1 });
+    await settle();
+    expect(runtime.sessions.length).toBe(sessions + 1);
+    const b = answerer();
+    expect(b.spec.resume).toBeUndefined();
+    expect(b.inbox[0]).toContain('lade die Daten für 2024');
+    expect(b.inbox[0]).toContain('stopp, nimm 2023');
+    expect(b.inbox[0]).not.toContain('und Dezember?');
+    canvas.tell(card.id, 'und Januar?', [], false);
+    expect(a.inbox).toHaveLength(2);
+    expect(board().events(card.id).at(-1)!.unread).toBe(true);
+    b.call('answer_owner', { text: '2023: 14 ct.' });
+    b.emit({ type: 'idle', background: 0 });
+    await settle();
+    // what waited goes in with the next turn
+    const c = answerer();
+    expect(c.inbox[0]).toContain('und Dezember?');
+    expect(c.inbox[0]).toContain('und Januar?');
+  });
+
   test('its agent the usage limit stops waits on the card and answers once the limit lifts; paused meanwhile, it waits no more', async () => {
     const { card } = await moved();
     canvas.tell(card.id, 'und im Oktober?', [], false);
