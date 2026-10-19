@@ -239,7 +239,8 @@ keeps its language; the narration, chapter titles and report change.
 The first run writes the words to translate (`.work/revoice/source.json`) and says where their
 translation goes (`.work/revoice/en.json`, same shape). Translate them yourself: each `say` as it
 should sound, in the same person, its audio tags where they stand; a label on screen quoted as it
-appears with its meaning after it („Teilen“ (Share)); read the labels from `review/`. The next run
+appears with its meaning after it, in a `say` as an aside („Teilen“, share, …: a voice drops
+parentheses at times), elsewhere „Teilen“ (Share); read the labels from `review/`. The next run
 synthesises the clips, stretches each scene's narrated stretch to its new clip so actions stay on
 their words, and rebuilds the video, captions, chapters, stills and report page in place; the demo
 as recorded stays in `.work/revoice/original/`. Check the result as section 6 says, the scenes it

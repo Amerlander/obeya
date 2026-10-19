@@ -3405,7 +3405,8 @@ report from `index.html`, `sharp` from the encoder settings x264 notes in `demo.
    and narration, the report) and asks the agent running the skill for them in the language
    (`.work/revoice/en.json`, same shape). The agent, not a script, translates: it reads the labels
    from the stills, since the screen keeps its language and the narration quotes each label as it
-   appears with its meaning after it: „Teilen“ (Share). A translation that drops a scene, an audio tag
+   appears with its meaning after it: „Teilen“ (Share), in the narration as an aside („Teilen“, share),
+   which Qwen3 spoke more reliably than parentheses. A translation that drops a scene, an audio tag
    or an item of the report is refused with what is missing.
 2. The clips are synthesised in the voice for that language (the demo settings' clone of
    `references.en`, say).
