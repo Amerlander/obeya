@@ -2588,7 +2588,13 @@ clipboard (as PNG). The link stays under 8000 characters: a longer body is cut, 
 cut, and without a screenshot waiting there the whole body goes on the clipboard. Then the draft is
 gone, and the dialog says what is on the clipboard. Until then the draft (title, body, screenshots)
 is kept per tab and canvas like every input, and so is what stands in its field. A wish that comes
-while a draft stands does not replace it: the dialog offers to discard it and write the new one.
+while a draft with something of the owner's in it stands (text in its body, screenshots) does not
+replace it: at the top of the dialog, above that draft, stand the words the new one is to be written
+from and the offer to discard the draft and write the new one; opening the draft on GitHub writes
+the new one too. A draft with nothing more than a title gives way at once (until 2026-10-19 it held
+the new wish back too, and the owner, who saw only that draft open with a line below it, took the
+wish for lost). The draft remembers the wish it was written from, so the link under that reply opens
+it again as it stands rather than offering to replace it with itself.
 
 The Koordinator's `reply` carries the flag `wish` when it says Obeya cannot do what the owner asked
 because Obeya has no such feature: not when it is unclear what they mean, when something failed just

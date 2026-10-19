@@ -6,7 +6,7 @@
 // owner to submit under their own account. The draft is kept per tab and canvas, like every input.
 
 import { useEffect, useRef, useSyncExternalStore } from 'react';
-import { issueUrl, type Wish } from '../core/wish';
+import { issueUrl, type Wish, withoutFooter } from '../core/wish';
 import { api, ApiError } from './api';
 import { Composer } from './composer';
 import { WISH_DRAFT } from './draft';
@@ -25,6 +25,8 @@ interface Issue {
    * `until` (ISO time), reworking the draft before them (`base`), unless the owner edits it first.
    */
   again?: { wish: Wish; images: string[]; until: string; base: { title: string; body: string } | null };
+  /** The wish the draft was written from, when it started from one: its link opens this draft again. */
+  from?: Wish;
 }
 
 interface WishState {
@@ -64,7 +66,7 @@ function writeAgain() {
   const a = state.issue?.again;
   if (!a) return;
   again = setTimeout(() => {
-    if (state.issue?.again === a && !state.writing) void write(a.wish, a.images, a.base);
+    if (state.issue?.again === a && !state.writing) void write(a.wish, a.images, { base: a.base });
   }, Math.min(Math.max(0, Date.parse(a.until) - Date.now()), 2 ** 31 - 1));
 }
 
@@ -88,28 +90,39 @@ export const useWish = () =>
     () => state,
   );
 
+/** The dialog's state as it stands, outside React. */
+export const wishNow = () => state;
+
 /** Whether a draft waits to be opened on GitHub. */
 export const useWishDraft = () => !!useWish().issue;
 
+const same = (a: Wish | undefined, b: Wish) => !!a && a.said === b.said && a.answer === b.answer;
+
+/** Whether the draft holds something of the owner's to lose: text in its body, or screenshots. A title alone does not count. */
+const holds = (issue: Issue) => !!withoutFooter(issue.body).trim() || issue.images.length > 0;
+
 /**
  * Opens the dialog; with `seed` (what the owner wants the makers told, or a request Obeya could not
- * do and its answer) the job writes a draft from it, unless a draft stands already: then the owner decides.
+ * do and its answer) the job writes a draft from it. A draft written from that seed opens as it
+ * stands; another one with something in it stays, and the owner decides; one without goes.
  */
 export function openWish(seed?: Wish) {
-  if (!seed) return set({ open: true, sent: undefined });
-  if (state.issue) return set({ open: true, sent: undefined, pending: seed });
-  set({ open: true, sent: undefined, pending: undefined });
-  void write(seed, []);
+  if (!seed || same(state.issue?.from, seed)) return set({ open: true, sent: undefined });
+  if (state.writing || (state.issue && holds(state.issue))) return set({ open: true, sent: undefined, pending: seed });
+  set({ open: true, sent: undefined, pending: undefined, issue: null });
+  void write(seed, [], { seed: true });
 }
 
 export const closeWish = () => set({ open: false, sent: undefined });
 
 /**
  * The job writes the issue from the owner's words, reworking the draft that stands; `base`: the
- * draft it reworks instead, for words the usage limit kept it from writing up, whose screenshots stand already.
+ * draft it reworks instead, for words the usage limit kept it from writing up, whose screenshots
+ * stand already; `seed`: the words are a wish the draft starts from.
  */
-async function write(w: Wish, images: string[], base?: { title: string; body: string } | null) {
+async function write(w: Wish, images: string[], { base, seed }: { base?: { title: string; body: string } | null; seed?: true } = {}) {
   const before = base === undefined ? state.issue : base;
+  const from = seed ? w : state.issue?.from;
   set({ writing: true, error: '' });
   try {
     const out = await api.writeWish({
@@ -121,7 +134,7 @@ async function write(w: Wish, images: string[], base?: { title: string; body: st
     });
     const shots = base === undefined ? [...(state.issue?.images ?? []), ...images] : (state.issue?.images ?? images);
     const limited = out.limitedUntil ? { again: { wish: w, images, until: out.limitedUntil, base: before ? { title: before.title, body: before.body } : null } } : {};
-    set({ writing: false, issue: { title: out.title, body: out.body, images: shots, ...(out.raw ? { raw: true as const } : {}), ...limited } });
+    set({ writing: false, issue: { title: out.title, body: out.body, images: shots, ...(out.raw ? { raw: true as const } : {}), ...limited, ...(from ? { from } : {}) } });
   } catch (e) {
     set({ writing: false, error: e instanceof ApiError ? errorText(e.code) : t.offlineError });
   }
@@ -130,7 +143,7 @@ async function write(w: Wish, images: string[], base?: { title: string; body: st
 function discard() {
   const next = state.pending;
   set({ issue: null, pending: undefined, error: '' });
-  if (next) void write(next, []);
+  if (next) void write(next, [], { seed: true });
 }
 
 /** An image as PNG, the one kind every clipboard takes. */
@@ -148,7 +161,8 @@ async function png(id: string): Promise<Blob> {
 /**
  * Opens the prefilled issue in the browser (in the app the shell hands it to the system's), with
  * the first screenshot on the clipboard, or without one the whole text when the link had to cut it.
- * The clipboard is filled before the browser takes the focus; then the draft goes.
+ * The clipboard is filled before the browser takes the focus; then the draft goes, and a wish that
+ * waited for it is written.
  */
 async function send(issue: Issue) {
   const { url, trimmed } = issueUrl(issue.title.trim(), issue.body.trim(), t.wish.cut);
@@ -166,7 +180,9 @@ async function send(issue: Issue) {
     lines.push(t.wish.clipFailed);
   }
   window.open(url, '_blank', 'noopener');
-  set({ issue: null, sent: lines, pending: undefined });
+  const next = state.pending;
+  set({ issue: null, sent: next ? [...lines, t.wish.sentNext] : lines, pending: undefined });
+  if (next) void write(next, [], { seed: true });
 }
 
 /** The dialog over the page; a click beside it, Esc or ✕ closes it, and the draft stays. */
@@ -192,15 +208,17 @@ export function WishDialog() {
           </div>
         ) : (
           <>
-            {issue && <IssueFields issue={issue} disabled={w.writing} />}
             {w.pending && (
-              <p className="w-pending">
-                {t.wish.pending}{' '}
-                <button className="btn small" onClick={discard}>
+              <div className="w-pending">
+                <p>{t.wish.pending}</p>
+                <blockquote>{short(w.pending.said)}</blockquote>
+                <p>{t.wish.pendingThen}</p>
+                <button className="btn small" disabled={w.writing} onClick={discard}>
                   {t.wish.replace}
                 </button>
-              </p>
+              </div>
             )}
+            {issue && <IssueFields issue={issue} disabled={w.writing} />}
             {w.writing && <p className="hint w-writing">{t.wish.writing}</p>}
             {w.error && <p className="p-error">{w.error}</p>}
             <Composer
@@ -233,6 +251,12 @@ export function WishDialog() {
     </div>
   );
 }
+
+/** The owner's words of a waiting wish, as the dialog quotes them. */
+const short = (said: string) => {
+  const one = said.replace(/\s+/g, ' ').trim();
+  return one.length > 160 ? `${one.slice(0, 159).trimEnd()} …` : one;
+};
 
 /** Title and body exactly as they go out, for the owner to edit; the screenshots that go on GitHub by hand below them. */
 function IssueFields({ issue, disabled }: { issue: Issue; disabled: boolean }) {
