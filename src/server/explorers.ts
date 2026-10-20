@@ -350,13 +350,16 @@ export class Explorers {
   }
 
   /**
-   * The agent's reply stands in the conversation, its mocks and questions below it; the owner is next.
+   * The agent's reply stands in the conversation, its mocks and questions below it; the owner is next,
+   * unless the reply asks nothing while a prototype of the idea is still being built: then the owner
+   * waits for that, and the agent's reply to its result gives them the turn.
    * Its questions stand in the conversation too, and stay there once answered, with the options picked.
    */
   private answer(cardId: string, text: string, questions: Question[] = [], next?: NextStep, mocks: Mock[] = []) {
     this.o.board.log(cardId, 'talk', 'explorer', text, { mocks });
     for (const q of questions) this.o.board.log(cardId, 'question', 'explorer', formatQuestion(q, this.o.board.language()));
-    this.o.board.setIdea(cardId, { yourTurn: true, questions, next });
+    const building = this.o.board.snapshot().items.some((i) => i.prototypeOf === cardId && (i.state === 'planned' || i.state === 'working'));
+    this.o.board.setIdea(cardId, { yourTurn: questions.length > 0 || !building, questions, next });
   }
 
   private tools(cardId: string, live: Live): AgentTool[] {

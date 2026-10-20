@@ -863,6 +863,14 @@ describe('a prototype', () => {
     expect(item(i.id).state).toBe('idea');
     // while the prototype is built, the owner waits for it, not the idea for the owner
     expect(item(i.id).idea).toMatchObject({ yourTurn: false, thinking: false });
+    // a reply to the owner meanwhile leaves them waiting for the prototype, unless it asks them something
+    canvas.act(i.id, { action: 'discuss', text: 'Die Spalten stehen schon fest.' });
+    turn(explorer(), 'Notiert. Jetzt zählt, was der Prototyp zeigt.');
+    expect(item(i.id).idea).toMatchObject({ yourTurn: false, thinking: false });
+    canvas.act(i.id, { action: 'discuss', text: 'Und das Format?' });
+    explorer().call('reply', { text: 'Dazu eine Frage.', questions: [{ question: 'Auch Excel?', options: ['Ja', 'Nein'] }] });
+    explorer().emit({ type: 'idle' });
+    expect(item(i.id).idea).toMatchObject({ yourTurn: true, thinking: false });
     const w = worker();
     expect(w.inbox[0]).toContain('throwaway prototype');
     expect(w.inbox[0]).toContain('**Ziel:** CSV-Export.');
