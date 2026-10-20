@@ -254,6 +254,8 @@ export interface Item {
   demos?: EarlierDemo[];
   /** The demo's page for colleagues, once the owner shared it (or is about to). */
   share?: Share;
+  /** Where the repository's site publishes on approval: the owner unticked „Mit der Freigabe teilen“, so approving shares nothing. */
+  notOnApproval?: true;
   /** The card it comes from: a proposal's source, a prototype's idea, or the card a follow-up follows up on. */
   from?: string;
   /** A card the Arbeitsrückschau proposed: the cards and the friction on them it rests on. */
@@ -740,6 +742,8 @@ export interface RepoRef {
   share?: boolean;
   /** The demo site of its settings needs an env file this machine lacks (as the settings name it, relative to Obeya's home): demos are exported meanwhile. */
   shareNeeds?: { site: string; file: string };
+  /** With `share`: its site publishes each approved card's latest demo by itself (`demo.site.publish`), unless the card opts out. */
+  shareOnApproval?: true;
   /** Its approved work goes out as a pull request (else it lands on the default branch of the Obeya checkout). */
   pullRequests?: boolean;
   /** With `pullRequests`: the owner may have approved work pushed directly onto the default branch instead (`direct` of its settings). */
@@ -1086,6 +1090,8 @@ export type CardAction =
   | { action: 'share'; demo?: number; add?: boolean }
   /** Takes the demo with handover `demo` off the page, the page down with its last one; without `demo`, the whole page. */
   | { action: 'unshare'; demo?: number }
+  /** „Mit der Freigabe teilen“, where the repository's site publishes on approval: whether approving the card shares its latest demo. */
+  | { action: 'shareOnApproval'; on: boolean }
   /** Question cards: the owner's words to the agent that looked the answers up. */
   | { action: 'ask'; text: string; spoken?: boolean; images?: string[]; replyTo?: number }
   /** Question cards: the thread becomes an idea, whose exploration agent starts from it. */

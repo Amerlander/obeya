@@ -766,6 +766,32 @@ describe('publishing on approval', () => {
     await until(() => share(c.id)?.state === 'shared');
   });
 
+  test('unticked „Mit der Freigabe teilen“ keeps the approval from sharing, through sharing now and withdrawing', async () => {
+    const c = card('Filter bleiben', { handover: 1 });
+    sharing.onApproval(c.id, false);
+    expect(board.card(c.id).notOnApproval).toBe(true);
+    expect(sharing.approved(c.id)).toBeNull();
+    expect(share(c.id)).toBeUndefined();
+    expect(log(c.id).at(-1)).toBe('Mit der Freigabe nicht geteilt: „Mit der Freigabe teilen“ war abgewählt.');
+    // shared now, before the approval: the page goes out, and a later demo waits for the owner
+    sharing.share(c.id);
+    await until(() => share(c.id)?.state === 'shared');
+    later(c.id, 2);
+    expect(sharing.approved(c.id)).toBe(`Demo-Video: ${SITE_URL}${slug(c.id)}/`);
+    await Bun.sleep(50);
+    expect(calls()).toHaveLength(1);
+    expect(on(c.id)).toEqual([1]);
+    sharing.unshare(c.id);
+    await until(() => !share(c.id));
+    expect(board.card(c.id).notOnApproval).toBe(true);
+    // ticked again, the approval shares as before
+    sharing.onApproval(c.id, true);
+    expect(board.card(c.id).notOnApproval).toBeUndefined();
+    sharing.approved(c.id);
+    await until(() => share(c.id)?.state === 'shared');
+    expect(on(c.id)).toEqual([2]);
+  });
+
   test('a site that publishes only on "Teilen" puts nothing out; a page shared before still goes into the trailer', async () => {
     publish = undefined;
     const c = card();

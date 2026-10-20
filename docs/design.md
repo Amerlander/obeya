@@ -3746,6 +3746,16 @@ kommt eine Demo: beim Klick auf „Teilen“ / mit der Freigabe“ in Konfigurat
 repository does, so its feature demos are public on `demos.obeya.si` without anyone clicking
 "Teilen" for each. Without it a demo goes out only on that click, as before.
 
+The owner decides per card: until the card is approved, its latest demo not on the page has a
+checkbox „Mit der Freigabe teilen“ ("Share on approval", ticked) beside the button, which reads
+„Jetzt teilen“ ("Share now") there. Unticked, approving shares nothing, and the card's log says so
+(„Mit der Freigabe nicht geteilt“); a demo the owner wants to discuss with colleagues or have them
+review before approving goes out with „Jetzt teilen“. Both are needed: until 2026-10-20 such a card
+had only "Teilen", and approving always shared. The choice stays with the card across handovers,
+sharing and withdrawing (`notOnApproval` in its stored share, `onApproval` in `src/server/share.ts`,
+the card action `shareOnApproval`); the repository says it publishes on approval in its
+`shareOnApproval`. It takes effect at once, without an undo: a click ticks it again.
+
 On approval, before the work lands (`Sharing.approved`, called by the workers through
 `onApproval`), the card's latest demo goes on its page unless it is there already, as the owner's
 click would put it: on a new page; on a page with versions, beside them where its worker said it

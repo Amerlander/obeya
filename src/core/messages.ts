@@ -293,6 +293,7 @@ const de = {
         : how === 'add'
           ? 'Mit der Freigabe zur Seite dazugenommen: Die Seite bekommt die neueste Demo als Ergänzung dazu.'
           : 'Mit der Freigabe auf der Seite ersetzt: Die Seite zeigt jetzt die neueste Demo statt der geteilten.',
+    notOnApproval: 'Mit der Freigabe nicht geteilt: „Mit der Freigabe teilen“ war abgewählt.',
     notAgain: 'Nicht erneut geteilt',
     notLinked: 'Der Link zum Pull Request ist nicht auf die Seite gekommen',
     notShared: 'Nicht geteilt',
@@ -644,6 +645,7 @@ const en: Messages = {
         : how === 'add'
           ? 'Added to the page with the approval: the page gets the latest demo as an addendum.'
           : 'Replaced on the page with the approval: the page now shows the latest demo instead of the shared ones.',
+    notOnApproval: 'Not shared with the approval: “Share on approval” was unticked.',
     notAgain: 'Not shared again',
     notLinked: 'The link to the pull request did not get onto the page',
     notShared: 'Not shared',

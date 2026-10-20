@@ -175,7 +175,7 @@ export function Detail(p: Props) {
   // about the demo shown, the latest or an earlier one
   const sharing = !!item.demo && !item.prototypeOf;
   const shareBox = (demo: Demo) =>
-    shares?.share || item.share ? <ShareBox item={item} demo={demo} act={act} /> : <ExportBox item={item} demo={demo} run={run} needs={shares?.shareNeeds} />;
+    shares?.share || item.share ? <ShareBox item={item} demo={demo} act={act} onApproval={!!shares?.shareOnApproval} /> : <ExportBox item={item} demo={demo} run={run} needs={shares?.shareNeeds} />;
   // a prototype is discarded or its idea built on it, never approved or deleted; built once the idea's agent has taken in what changed
   const ideaTitle = plain(item.ideaTitle ?? p.from?.title ?? '');
   // once the idea has become a project, one of its workstreams is built on the prototype instead
@@ -1930,9 +1930,11 @@ function PrBox({ pr }: { pr: PullRequest }) {
  * "Nicht mehr teilen" for this demo. A demo not on the page yet goes onto it beside the versions
  * there („Zur Seite dazunehmen“; an earlier demo in its place by handover) or, the latest, in their place
  * („Auf der Seite ersetzen“), the worker's word on it first; "Erneut teilen" once the site writes pages
- * differently than when it published this one.
+ * differently than when it published this one. Where the site publishes on approval (`onApproval`),
+ * the latest demo not on the page has „Mit der Freigabe teilen“ until the card is approved, and
+ * "Teilen" reads „Jetzt teilen“: the owner may share it before approving, or not on approving.
  */
-function ShareBox({ item, demo, act }: { item: Item; demo: Demo; act: (a: CardAction, done: ActDone) => Promise<void> }) {
+function ShareBox({ item, demo, act, onApproval }: { item: Item; demo: Demo; act: (a: CardAction, done: ActDone) => Promise<void>; onApproval: boolean }) {
   const [copied, copy] = useCopy(2000);
   const s = item.share;
   const all = [...(item.demos ?? []), ...(item.demo ? [item.demo] : [])];
@@ -1945,6 +1947,14 @@ function ShareBox({ item, demo, act }: { item: Item; demo: Demo; act: (a: CardAc
   const onPage = numbers.length ? t.share.demos(numbers) : null;
   // a latest demo from before handovers were kept is on the page unless the page shows an earlier one
   const here = !!s?.url && (demo.handover !== undefined ? !!s.on?.includes(demo.handover) : latest && !s.stale);
+  // approving would put this demo on the page: the owner may opt out, or share it now
+  const later = onApproval && latest && !here && !busy && !item.landing && (item.state === 'working' || item.state === 'waiting');
+  const approval = later && (
+    <label className="share-check" title={t.share.onApprovalHint}>
+      <input type="checkbox" checked={!item.notOnApproval} onChange={(e) => go({ action: 'shareOnApproval', on: e.target.checked })} />
+      {t.share.onApproval}
+    </label>
+  );
   const replace = (first: boolean) => (
     <button key="replace" className={first ? 'btn primary' : 'btn'} title={t.share.replaceHint} onClick={() => go({ action: 'share', ...which })}>
       {t.share.replace}
@@ -1972,10 +1982,13 @@ function ShareBox({ item, demo, act }: { item: Item; demo: Demo; act: (a: CardAc
       {busy ? (
         <span className="share-busy">{s.state === 'publishing' ? t.share.publishing : t.share.withdrawing}</span>
       ) : !s?.url ? (
-        <button className="btn share-go" title={demo.kind === 'html' ? t.share.shareHintHtml : t.share.shareHint} onClick={() => go({ action: 'share', ...which })}>
-          <ShareIcon />
-          {t.share.share}
-        </button>
+        <div className="share-row">
+          {approval}
+          <button className="btn share-go" title={later ? t.share.shareNowHint : demo.kind === 'html' ? t.share.shareHintHtml : t.share.shareHint} onClick={() => go({ action: 'share', ...which })}>
+            <ShareIcon />
+            {later ? t.share.shareNow : t.share.share}
+          </button>
+        </div>
       ) : here ? (
         <>
           <div className="share-row">
@@ -2011,6 +2024,7 @@ function ShareBox({ item, demo, act }: { item: Item; demo: Demo; act: (a: CardAc
             {/* the worker's word comes first; without it „Auf der Seite ersetzen“, as the latest demo always went out before */}
             {!latest ? add(false) : demo.follows === 'supplements' ? [add(true), replace(false)] : [replace(true), add(false)]}
           </div>
+          {approval && <div className="share-row">{approval}</div>}
         </>
       )}
     </div>

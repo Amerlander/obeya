@@ -182,8 +182,10 @@ export class Sharing {
     if (!card || card.prototypeOf) return null;
     const target = this.target(card);
     if (target && this.o.sourceFor(card)?.site.publish === 'approved') {
+      const s = this.stored(cardId);
+      if (s?.notOnApproval) this.notOnPage(cardId);
       // a share under way (one the owner chose) goes out first; the latest demo after it
-      if (this.stored(cardId)?.state === 'publishing') void serial(async () => this.onPage(cardId));
+      else if (s?.state === 'publishing') void serial(async () => this.onPage(cardId));
       else this.onPage(cardId);
     }
     // the page as it is about to be, or as it is
@@ -195,6 +197,25 @@ export class Sharing {
     if (!first || !url) return null;
     const kind = this.cardDemo(cardId, first)?.kind ?? sharedDemos(page).find((d) => sameDemo(d, first))?.shown.kind;
     return `${kind === 'html' ? 'Demo-Page' : 'Demo-Video'}: ${url}`;
+  }
+
+  /**
+   * „Mit der Freigabe teilen“, where the card's site publishes on approval: whether approving the
+   * card puts its latest demo on its page. It stays with the card across handovers.
+   */
+  onApproval(cardId: string, on: boolean) {
+    const card = this.card(cardId);
+    if (card.prototypeOf) throw new BadRequest('noShare', 'prototypes are not shared');
+    const { notOnApproval: _, ...s } = this.stored(cardId) ?? { slug: slugOf(card) };
+    this.set(cardId, on ? s : { ...s, notOnApproval: true });
+  }
+
+  /** The approval of a card whose owner unticked „Mit der Freigabe teilen“: the log says so where it would have shared. */
+  private notOnPage(cardId: string) {
+    const demo = this.demo(cardId);
+    const s = this.stored(cardId);
+    if (!demo || (s?.url && sharedDemos(s).some((d) => sameDemo(d, refOf(demo))))) return;
+    this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.share.notOnApproval);
   }
 
   /** The card's latest demo goes on its page as an approval puts it there, unless it is there already or the page is busy. */
@@ -499,7 +520,7 @@ export class Sharing {
     this.lost(target.key, r.gone);
     if ('why' in r) return back(r.why, r.said);
     const { url } = r;
-    this.set(cardId, { slug: s.slug, url, demos, ...(pr ? { pr } : {}), version: pagesVersion() });
+    this.set(cardId, { slug: s.slug, url, demos, ...(pr ? { pr } : {}), version: pagesVersion(), ...kept(s) });
     if (r.said) this.o.board.log(cardId, 'activity', 'obeya', r.said);
     this.o.board.log(cardId, 'state', 'obeya', s.again ? t.sharedAgain(url) : s.refresh ? t.linksPr(url) : t.shared(url));
     if (pr) this.linkPr(cardId, pr, url, target.repo, first.shown.kind);
@@ -539,7 +560,7 @@ export class Sharing {
     const r = await target.withdraw(s.slug, this.others(cardId, target.key), (text) => this.o.board.log(cardId, 'activity', 'obeya', text));
     this.lost(target.key, r.gone);
     if (r.why) return back(r.why, r.said);
-    this.set(cardId, { slug: s.slug });
+    this.set(cardId, { slug: s.slug, ...kept(s) });
     if (r.said) this.o.board.log(cardId, 'activity', 'obeya', r.said);
     this.o.board.log(cardId, 'state', 'obeya', t.withdrawn);
   }
@@ -770,6 +791,9 @@ Then end your turn. Read code only if the summary leaves unclear what the change
 function atRest({ state: _, refresh: __, again: ___, next: ____, ...s }: StoredShare): StoredShare {
   return s;
 }
+
+/** What a share keeps of the owner's choices when its page is made anew or withdrawn. */
+const kept = (s: StoredShare): Pick<StoredShare, 'notOnApproval'> => (s.notOnApproval ? { notOnApproval: true } : {});
 
 /** What names a demo among the card's: its handover, and its directory. */
 const refOf = (d: DemoRef): DemoRef => ({ ...(d.handover !== undefined ? { handover: d.handover } : {}), dir: d.dir });

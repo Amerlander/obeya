@@ -1180,6 +1180,9 @@ export class CanvasRuntime {
         return this.sharing.share(cardId, { demo: Number.isInteger(a.demo) ? a.demo : undefined, add: a.add === true });
       case 'unshare':
         return this.sharing.unshare(cardId, Number.isInteger(a.demo) ? a.demo : undefined);
+      case 'shareOnApproval':
+        if (typeof a.on !== 'boolean') throw new BadRequest('invalid', 'on must be true or false');
+        return this.sharing.onApproval(cardId, a.on);
       default:
         throw new BadRequest('invalid', 'unknown action');
     }
@@ -1970,16 +1973,17 @@ function siteOf(adapter: RepoAdapter): DemoSite | null {
 }
 
 /** What the canvas tells the UI about it: a site to share on here, or the env file the site lacks on this machine. */
-function shareRef(site: DemoSite | null, home: string): Pick<RepoRef, 'share' | 'shareNeeds'> {
+function shareRef(site: DemoSite | null, home: string): Pick<RepoRef, 'share' | 'shareNeeds' | 'shareOnApproval'> {
   if (!site) return {};
   const missing = siteMissing(home, site);
-  return missing ? { shareNeeds: { site: siteName(site), file: missing } } : { share: true };
+  return missing ? { shareNeeds: { site: siteName(site), file: missing } } : { share: true, ...(site.publish === 'approved' ? { shareOnApproval: true as const } : {}) };
 }
 
 /** Tells the UI about sharing on the repository what `share` says, in place of what it was told before. */
-function setShare(ref: RepoRef, share: Pick<RepoRef, 'share' | 'shareNeeds'>) {
+function setShare(ref: RepoRef, share: Pick<RepoRef, 'share' | 'shareNeeds' | 'shareOnApproval'>) {
   delete ref.share;
   delete ref.shareNeeds;
+  delete ref.shareOnApproval;
   Object.assign(ref, share);
 }
 

@@ -559,6 +559,8 @@ textarea.p-body:focus { border-color: var(--muted); }
 .share.wide { flex: 1 1 100%; align-items: stretch; }
 .share .btn { padding: 7px 14px; }
 .share-go { display: inline-flex; align-items: center; gap: 7px; }
+.share-check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.share-check input { margin: 0; }
 .share-go svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .share-row { display: flex; gap: 8px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
 .share-row > .hint { flex: 1 1 240px; }

@@ -144,6 +144,8 @@ export interface StoredShare {
   version?: string;
   /** While `publishing` (with `refresh`): the page goes out again as it is, one of many the owner shares again at once. */
   again?: true;
+  /** The owner unticked „Mit der Freigabe teilen“: where the site publishes on approval, approving the card shares nothing. */
+  notOnApproval?: true;
 }
 
 /** The demo versions on a stored page, in order of handover. */
@@ -1945,6 +1947,7 @@ function work(r: CardRow): Partial<Item> {
   const scope = r.scope ? (JSON.parse(r.scope) as { files: string[] }).files : undefined;
   const pr = r.pr ? (JSON.parse(r.pr) as PrState) : undefined;
   const share = shareOf(r);
+  const notOnApproval = r.share ? (JSON.parse(r.share) as StoredShare).notOnApproval : undefined;
   const landed = r.landed ? (JSON.parse(r.landed) as { followUp?: boolean; needsClone?: boolean }) : null;
   return {
     ...(scope?.length ? { scope } : {}),
@@ -1963,6 +1966,7 @@ function work(r: CardRow): Partial<Item> {
     ...(demo ? { demo } : {}),
     ...(earlier.length ? { demos: earlier } : {}),
     ...(share ? { share } : {}),
+    ...(notOnApproval ? { notOnApproval } : {}),
     ...(r.from_id ? { from: r.from_id } : {}),
     ...(r.branch ? { branch: r.branch } : {}),
     // a workspace on another machine as ssh and scp write it
