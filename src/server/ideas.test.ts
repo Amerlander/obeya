@@ -921,6 +921,9 @@ describe('a prototype', () => {
     expect(new Set(all.map((p) => p.y)).size).toBe(1);
     expect(all[1]!.x - all[0]!.x).toBeGreaterThan(200);
     handOver(workers()[0]!, 'Wortmarke.', 'a');
+    // the reply to one result, the others still built, leaves the owner waiting for them
+    turn(explorer(), 'Die Wortmarke trägt.');
+    expect(item(i.id).idea).toMatchObject({ yourTurn: false, thinking: false });
     handOver(workers()[1]!, 'Bildmarke.', 'b');
     expect(item(i.id).prototypes!.map((p) => [p.title, !!p.demo])).toEqual([
       ['Prototyp: Logo für Obeya – Wortmarke', true],

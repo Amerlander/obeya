@@ -269,8 +269,10 @@ none running; without planned variants, an empty field is the idea as it stands.
 
 The idea shows the demos of all its prototypes, each under its title, and its exploration agent
 hears what each found. While one is built, the idea no longer needs the owner; the agent's reply to
-its result makes it their turn again. A reply meanwhile (to something the owner said) gives them the
-turn only when it asks them something: otherwise they still wait for the prototype. A prototype's worker asks on its own card, and the questions
+the result of the last one built makes it their turn again. A reply meanwhile (to something the
+owner said, to an earlier prototype's result) gives them the turn only when it asks them something:
+otherwise they still wait for the prototypes, and a prototype that has handed over needs them on its
+own card. A prototype's worker asks on its own card, and the questions
 with the owner's answers also go to the exploration agent, which takes them into the brief without
 replying, so the idea does not ask them again. It makes no cards: instead of `propose_card` it has
 `propose_build`, a proposal on its card to build the idea on it.
