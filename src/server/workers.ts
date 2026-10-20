@@ -969,12 +969,12 @@ export class Workers {
       cardId,
       'state',
       'owner',
-      [t.undone(report.undone.length), report.changedSince.length ? t.undoChangedSince(files(report.changedSince)) : '', report.lost.length ? t.undoLost(files(report.lost)) : ''].filter(Boolean).join(' '),
+      [t.undone(report.undone.filter((p) => !p.endsWith('/')).length), report.changedSince.length ? t.undoChangedSince(files(report.changedSince)) : '', report.lost.length ? t.undoLost(files(report.lost)) : ''].filter(Boolean).join(' '),
     );
     const row = this.o.board.row(cardId);
     const detail = row.detail ? (JSON.parse(row.detail) as Record<string, unknown>) : {};
     const told = [
-      `The owner discarded your changes in the folder: Obeya put back ${report.undone.length === 1 ? 'one file' : `${report.undone.length} files`} as they were before your card changed them.`,
+      `The owner discarded your changes in the folder: Obeya put back what your card changed (${report.undone.join(', ') || 'nothing'}) as it was before.`,
       report.changedSince.length ? `Left as they are, since someone changed them after you: ${files(report.changedSince)}.` : '',
       report.lost.length ? `Left as they are, since no copy from before your change was kept: ${files(report.lost)}.` : '',
       'The card still waits for the owner.',
@@ -1106,6 +1106,8 @@ export class Workers {
     this.o.board.work(cardId, { state: 'done', need: null, detail: null, status_line: null, approved_at: null, pr: null, landed: JSON.stringify({ unchanged: true } satisfies LandedState) });
     const t = this.o.board.t.worker;
     const folder = !!this.folder && this.o.workspaces.hasWork(cardId);
+    // what it changed in the folder stays: nothing of it is undone any more
+    this.folder?.done(cardId);
     this.o.board.log(cardId, 'state', by, by === 'owner' ? (folder ? t.approvedFolder : t.approvedUnchanged) : t.doneUnchanged);
     // the worker that closed it is told by the tool's result, and its turn's end finishes it
     if (by === 'owner')

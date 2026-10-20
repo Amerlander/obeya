@@ -936,6 +936,16 @@ textarea.p-body:focus { border-color: var(--muted); }
 .d-add { color: var(--approved); font-variant-numeric: tabular-nums; }
 .d-del { color: var(--error); font-variant-numeric: tabular-nums; }
 .diff-size { font-size: inherit; }
+/* what a card changed in a folder without git */
+.f-box { margin: 10px 0 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; max-width: 760px; font-size: 12.5px; }
+.f-box p { margin: 6px 0 0; }
+.f-list { list-style: none; margin: 6px 0 0; padding: 0; }
+.f-list li { padding: 1px 0; overflow-wrap: anywhere; }
+.f-list button.link { text-align: left; font: inherit; }
+.f-mark { display: inline-block; width: 1.2em; text-align: center; color: var(--muted); }
+.f-left { color: var(--muted); font-style: italic; }
+.f-undo.partial { color: var(--muted); }
+.f-discarding { align-self: center; }
 .link.copied { color: var(--approved); font-weight: 600; }
 .diff-view { position: fixed; inset: 0; z-index: 1000; background: var(--dim); display: flex; justify-content: center;
   padding: 3vh 3vw; animation: fade .15s ease-out; }
@@ -1526,6 +1536,11 @@ button.link:hover { text-decoration: underline; }
 .git-setup { margin: 8px 0; }
 .git-setup > b { display: block; margin-top: 4px; }
 .git-setup p { margin: 4px 0; }
+/* a folder without git: use it as it is, or set up git there; each with what it means */
+.git-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; max-width: 720px; margin: 6px 0; }
+.git-choice { display: grid; gap: 3px; align-content: start; text-align: left; font: inherit; color: inherit; background: none; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+.git-choice:hover:not(:disabled) { border-color: var(--ink); }
+.git-choice .hint { font-size: 11.5px; }
 .git-entries { list-style: none; margin: 6px 0; padding: 0; max-width: 640px; columns: 2 260px; column-gap: 24px; }
 .git-entries li { display: flex; justify-content: space-between; gap: 12px; padding: 2px 0; break-inside: avoid; }
 .git-setup code { font: 12.5px var(--mono); background: none; border: 0; padding: 0; }

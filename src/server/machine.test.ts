@@ -184,6 +184,15 @@ describe('the first canvas', () => {
     expect(existsSync(join(home, 'canvases.json'))).toBe(false);
   });
 
+  test('a folder without git becomes a canvas of its own kind, where the owner keeps it without git', async () => {
+    const docs = join(dir, 'Dokumente');
+    mkdirSync(docs);
+    writeFileSync(join(docs, 'Scan.pdf'), '%PDF');
+    expect(await setup().canvas({ path: docs, git: false })).toEqual({ canvas: 'dokumente', branch: '', opens: true });
+    expect(JSON.parse(readFileSync(join(home, 'canvases.json'), 'utf8'))).toEqual([{ repos: [{ path: docs, git: false }] }]);
+    expect(existsSync(join(docs, '.git'))).toBe(false);
+  });
+
   test('a folder without git becomes a canvas once git is set up there', async () => {
     const shop = join(dir, 'shop');
     mkdirSync(join(shop, 'node_modules'), { recursive: true });

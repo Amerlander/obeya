@@ -30,8 +30,8 @@ Contents:
   screenshots, marking screenshots, questions go to the owner
 - [The canvas](#the-canvas) — the bar, creating cards, cards on the canvas, moving around, unfolding
   a card, sheets, visual identity, groups on the canvas, refusals
-- [Agents and workspaces](#agents-and-workspaces) — agents, models and effort, workspaces, parking,
-  hosts
+- [Agents and workspaces](#agents-and-workspaces) — agents, models and effort, workspaces, folders
+  without git, parking, hosts
 - [Landing](#landing) — how work lands, PR loop, after landing
 - [The Koordinator](#the-koordinator) — scheduling, learning the owner's rules, the Koordinator's
   sheet, Arbeitsrückschau, looked-up questions, looked-up threads, Koordinator memory, wishes for
@@ -1843,6 +1843,76 @@ changes the board, so they ride on its updates. Worktrees are never short: a rep
 shows a dot per slot, solid while a worker is at work, and none without slots, so a canvas of only
 those without slots shows no pill.
 
+### Folders without git
+
+A repository on a canvas may be a folder that is not a git repository and is to stay one: a
+family's document archive in a cloud drive, say, where a `.git` would mean sync conflicts and
+thousands of small files, and git would copy every scan into its object store and every card's
+worktree. Its entry in the configuration says so (`"git": false`, `RepoConfig.git`); the first
+canvas and „+ Repository“ offer it beside setting up git (see Setting up git in a folder). Such a
+repository has no branch, no landing, no pull requests, no prototypes, no hosts and no clones; the
+UI offers none of them there (the configuration dialog shows neither main branch nor landing,
+workspaces, clones, slots or hosts, and „Für alle ins Repository übernehmen“ is left out: the
+folder's `.obeya/settings.json` is written there like any other file).
+
+**Workspaces.** `FolderWorkspaces` (`src/server/folder.ts`) gives every card the folder itself, any
+number at once; nothing lands, and approving makes the card `done` („Freigegeben. Die Änderungen
+bleiben im Ordner: erledigt.“), as for a card with nothing to land. A finished card's question runs
+in the folder too. The worker's instructions say it works directly in a folder others work in at the
+same time, and that the card lists what it changed; a handover needs a demo only where something
+can be seen (an HTML artifact for a draft or an overview), since the change list shows the rest.
+
+**Each card's changes.** Obeya keeps a manifest of the folder (each file's and directory's path,
+size, mtime, ctime and inode; skipped: what Finder, Drive and office suites keep for themselves,
+`.DS_Store`, `.tmp.drive*`, `~$…` lock files and the like). Every tool call of a card's agent that
+may write (not Read, Grep, Glob and the like) opens a window from its `PreToolUse` hook to its
+`PostToolUse` hook (`AgentSpec.watch`, waited for: the agent goes on once its change is recorded);
+then Obeya reads the folder again and gives each change to the cards whose windows were open when it
+happened, by its ctime, which no tool sets (a deleted file by its directory's). So a change is a
+card's own even while other cards, the owner, a scanner or the sync client change the folder at the
+same time; a change outside every window is no card's. An editing tool (Edit, Write, NotebookEdit)
+takes only its own file, and the folder is read only there; a script's call reads all of it (on the
+owner's document folder, 4,615 files: 0.3 s). Background work keeps a window open while it runs;
+the end of a turn closes any window whose end the hooks never told. A file only in the cloud (a
+dataless file of a file provider: no blocks on disk) is never read, hashed or copied, which would
+download it. What a card changed is one entry per path, from before its first change to after its
+last (added, changed, moved, deleted; a moved directory is one move), with a hash of what it wrote;
+kept in `folder_cards`, and after the card is done too. Agents that only read (the Koordinator,
+project agents) are not followed.
+
+The card shows the list in the place of its branch („Im Ordner geändert: 4 Dateien +12 −1 ·
+Rückgängig: vollständig“) and below it beside the handover (↪ moved, ＋ added, ✎ changed, ✕ deleted),
+and „Ansehen“ shows it over the page with the diffs of text files whose earlier version Obeya kept
+(`git diff --no-index`; a file counts as text up to 1 MB without a NUL byte in its first 8,000).
+
+**Undo.** „Änderungen verwerfen“ on a card waiting for approval puts back what it changed, after
+eight seconds in which „Doch nicht“ takes the click back: putting files back cannot itself be taken
+back. Before a card's first call that may write, Obeya makes its undo ready under its home
+(`undo/<canvas>/<repo>/<card>`):
+
+- where the file system clones (APFS `clonefile` on a Mac, reflink on btrfs and XFS; probed by
+  cloning one file with `COPYFILE_FICLONE_FORCE`), a clone of the whole folder: it shares the bytes
+  until a file changes (measured on the 8.1 GB folder: 0.86 s, no space taken, 0.39 s to remove), so
+  it grows only by the old versions of what changed meanwhile. The card's undo is full.
+- where it does not (Obeya's home on another volume, NTFS, ext4, and so far Windows' ReFS and Dev
+  Drive, which Bun reaches no clone call for), copies of the folder's text files. The card's undo is
+  partial.
+
+Either way, an editing tool's file is copied just before it writes it the first time. Undo puts back
+only what the card changed, from the copy that matches the file as it was before the card's first
+change (size and mtime): moves are moved back, added files deleted, changed and deleted ones put back
+(written beside and renamed over). A file someone changed after the card (its size and mtime, else
+its hash, differ from what the card left) is left alone, and so is one no copy was kept of (a script
+overwrote or deleted it under a partial undo); the card's log names both, its list keeps them, and
+its worker hears what happened with its next message. The card says which undo it has, and each
+entry of its list what discarding would do with it, before the owner decides. The undo goes when
+the card is done or its changes are discarded (and is made afresh if its worker goes on).
+
+**Lesestand and settings.** The folder is its own Lesestand; its plan docs and `.obeya/settings.json`
+(and its Claude Code configuration, for the trust check) are read from it as they are
+(`isFolder`, `readSharedFiles`). A plan doc „Als Projekt planen“ writes is named at the start, as
+for a plan folder outside the repository: nothing of it lands.
+
 ### Parking
 
 A card that waits for the owner (handed over, asked, its pull request open), its worker without a
@@ -1964,6 +2034,14 @@ Intel Macs, so those went into the user's home there by their own installers.
   Before, the question failed with an error when no clean clone was free, and nothing waited.
   Rejected: queuing every such question at once (clones are often held for days by cards in review
   or in a pull request), and answering in the Lesestand (other agents read there at the same time).
+- **A folder may stay without git** (2026-10-20): a document archive in a cloud drive (8.1 GB, 4,615
+  files, 2,289 of them PDFs, 327 plain text) cannot take a `.git` without sync conflicts and copies of
+  every scan, so the only offer, setting up git, ruled it out. Cards work in the folder itself, several
+  at once with the Koordinator's overlap check on files and directories; each card's changes are told
+  apart by the ctime of what changed during its tool calls; undo is full from a clone of the folder
+  where the file system clones, partial elsewhere. Rejected: a shadow git outside the folder (it copies
+  every file into git and the whole folder into each card's worktree), and a copy per card applied on
+  approval (cheap only where cloning works; working in place in parallel was chosen).
 - **An unreachable host fails fast** (2026-10-12). Until then each look for a free clone asked an
   unreachable host twice per clone there, with five clones there almost a minute in which Obeya
   answered nothing, at every change of the board while a card waited.
@@ -1971,6 +2049,9 @@ Intel Macs, so those went into the user's home there by their own installers.
 ## Landing
 
 ### How work lands
+
+In a folder without git nothing lands: what a card changed is in the folder already, and approving
+makes the card `done` (see Folders without git). Elsewhere:
 
 As the repository's `.obeya/settings.json` or the owner for this machine set it (see Repository
 settings), read at each approval:
@@ -2243,7 +2324,13 @@ owner's rules.
 ### Scheduling
 
 Before a card starts the Koordinator estimates the files the card will change and judges whether
-running it next to the cards in progress likely ends in merge conflicts. Cards queued before it
+running it next to the cards in progress likely ends in merge conflicts. In a folder without git
+(see Folders without git) it estimates the files and directories the card will touch and judges
+whether it would get in the way of a card in progress: the same files changed, moved or deleted, a
+directory reorganised that the other works in; working side by side in one directory does not
+count. For a card in progress it sees its change list where a branch has its changed lines, and no
+paths are soft. A card waits there as anywhere, and „Trotzdem starten“ starts it at the owner's own
+risk. Cards queued before it
 count too: a card likely to conflict with one of them waits behind it rather than overtaking it, and
 once that one has started, until it has landed (fairer, at the cost of some parallelism). A card
 judged again sees only the cards queued before it, so no two cards wait for each other.
@@ -4139,7 +4226,8 @@ on it (`landCheckout`).
 
 ### Lesestand
 
-Every repository of a canvas has a directory on its default branch that its plan docs are read from
+A folder without git is its own Lesestand, read as it is (see Folders without git). Every git
+repository of a canvas has a directory on its default branch that its plan docs are read from
 (the canvas, „Plandokument lesen“, the last state kept on a project; unless they are in a folder
 outside the repository, see Plan docs) and that the agents that answer
 or judge rather than work on a card run in (`src/server/read-tree.ts`): project agents, ideas'
@@ -5228,8 +5316,9 @@ true` in its stage file starts like a first start.
 ### Setting up git in a folder
 
 Where the first canvas or "+ Repository" in the configuration is given a folder in which git finds
-no repository, it offers "Hier ein git-Repository einrichten" (`src/server/git-setup.ts`, shown by
-one component, `GitSetup` in `src/ui/setup.tsx`). It first shows what the first commit would hold
+no repository, it offers two ways on, each with a line on what it means (one component, `GitSetup`
+in `src/ui/setup.tsx`): „Ohne git verwenden“ (the folder stays without git, `"git": false` in its
+entry; see Folders without git), and „Hier ein git-Repository einrichten“ (`src/server/git-setup.ts`). It first shows what the first commit would hold
 (`POST /api/setup/git-preview`): the folder's own entries with their files counted and their sizes,
 files from 1 MB on listed apart as large, what stays out, and the default `.gitignore` (build
 output, dependencies, secrets: `node_modules/`, `dist/`, `.env*` but `.env.example`, keys) that
@@ -5749,6 +5838,7 @@ Persistent (SQLite):
   chapters, kind) and the pull request it links, the newest page change it was published after, and
   whether it is publishing or withdrawing; sharing many outdated pages again: the cards still to go,
   how many are out and which failed, and the newest change when the owner put the notice away;
+- what each card changed in a folder without git, and the undo it has there (`folder_cards`);
 - card events (the log, with an error code where the UI words it, the owner's screenshots, an idea
   agent's mocks, and on Obeya's reply what a draft for its makers starts from), a card's own screenshots, workspaces and their leases;
 - decision log, preferences;
@@ -5775,7 +5865,7 @@ owner's screenshots (`images/<canvas>/`), the configuration (`canvases.json`), t
 (`settings.json`, `demo.json`, `voice.json`), where the running Obeya answers (`server.json`), the
 `tailscale serve` entry Obeya made (`tailscale-serve.json`), the key it signs pushes with
 (`vapid.json`), the app's server log (`app.log`), voices and models (`voices/`), the workers' clones and worktrees
-(`workspaces/`), the Lesestand's worktrees (`read/`), the files of looked-up answers
+(`workspaces/`), the Lesestand's worktrees (`read/`), the cards' undo in folders without git (`undo/`), the files of looked-up answers
 (`answers/<canvas>/<thread>/`), the static sites Obeya keeps (`sites/<key>/`), the env files their
 repositories' settings name (relative to the home, `sites/demos/deploy.env`, say), and `share/`,
 the directory deploys run in.

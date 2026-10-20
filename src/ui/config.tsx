@@ -1194,7 +1194,9 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
   }, [focus]);
   // a path without a repository that is a folder: git can be set up there
   const noGit = useFolderWithoutGit(problems.some((p) => p.code === 'notRepo') ? repo.path.trim() : '');
-  const clones = resolved?.workspaces === 'clones' || !!repo.clones || !!repo.workspaces?.length;
+  // a folder without git has neither clones nor slots: every card works in the folder itself
+  const folder = repo.git === false;
+  const clones = !folder && (resolved?.workspaces === 'clones' || !!repo.clones || !!repo.workspaces?.length);
   const without = <K extends keyof RepoConfig>(k: K, v: RepoConfig[K] | undefined): RepoConfig => {
     const next = { ...repo };
     if (v === undefined) delete next[k];
@@ -1205,9 +1207,13 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
   return (
     <>
       <div className="cfg-cell">
-        <input className="c-path" aria-label={t.config.path} value={repo.path} placeholder={t.config.path} spellCheck={false} onChange={(e) => onChange({ ...repo, path: e.target.value })} />
+        <input className="c-path" aria-label={t.config.path} value={repo.path} placeholder={t.config.path} spellCheck={false} onChange={(e) => {
+            // another folder: whether it goes without git is chosen for it anew
+            const { git: _, ...rest } = repo;
+            onChange({ ...rest, path: e.target.value });
+          }} />
         {resolved && (
-          <span className="hint">{`${resolved.id}${home ? ` · ${t.config.home}` : ''} · ${resolved.workspaces === 'clones' ? t.config.clonesMode : t.config.worktrees}`}</span>
+          <span className="hint">{`${resolved.id}${home ? ` · ${t.config.home}` : ''} · ${folder ? t.config.folderMode : resolved.workspaces === 'clones' ? t.config.clonesMode : t.config.worktrees}`}</span>
         )}
       </div>
       <button className="c-del" title={t.config.removeRepo} onClick={() => onChange(null)}>
@@ -1240,7 +1246,7 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
           <Hosts hosts={repo.hosts ?? []} onChange={(hosts) => onChange(without('hosts', hosts.length ? hosts : undefined))} />
         </div>
       )}
-      {!clones && resolved && (
+      {!clones && !folder && resolved && (
         <div ref={clonesBox} className={flash ? 'cfg-span cfg-clones flash' : 'cfg-span cfg-clones'}>
           <label className="cfg-slots cfg-has-info">
             <span className="hint">
@@ -1253,6 +1259,7 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
       {resolved && (
         <RepoSettingsBlock
           show={focus?.field === 'settings' ? focus : undefined}
+          folder={folder}
           repo={repo}
           values={resolved.values}
           shareTo={resolved.shareTo}
@@ -1264,12 +1271,12 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
       {problems.map((p, k) => (
         <div key={k} className="cfg-span">
           <Problem problem={p} where={where} ask={ask} />
-          {p.code === 'notRepo' && noGit && <GitSetup key={noGit} path={noGit} confirm={t.setup.git.confirm} onDone={onRecheck} />}
+          {p.code === 'notRepo' && noGit && <GitSetup key={noGit} path={noGit} confirm={t.setup.git.confirm} onDone={onRecheck} onFolder={() => onChange({ path: repo.path, git: false, ...(repo.settings ? { settings: repo.settings } : {}) })} />}
           {p.code === 'untrusted' && resolved?.trust && <TrustCommands path={repo.path} trust={resolved.trust} onDone={onRecheck} />}
         </div>
       ))}
       {/* a repository without settings of its own, or with an adapter module that said them: a card on its canvas writes them */}
-      {canvasId && resolved && (resolved.adapterGone || !fromRepository(resolved.values)) && (
+      {canvasId && resolved && !folder && (resolved.adapterGone || !fromRepository(resolved.values)) && (
         <div className="cfg-span">
           <AdapterSetup canvas={canvasId} repo={resolved.id} />
         </div>
@@ -1291,6 +1298,7 @@ const nestedOf = (k: SettingKey): NestedSetting | undefined => (Object.keys(NEST
  */
 function RepoSettingsBlock({
   show,
+  folder,
   repo,
   values,
   shareTo,
@@ -1300,6 +1308,8 @@ function RepoSettingsBlock({
 }: {
   /** The setting to fold open, scroll to and mark: the dialog was opened from a proposal for it. */
   show: ConfigFocus | undefined;
+  /** A folder without git: what is about branches, landing and workspaces does not apply. */
+  folder: boolean;
   repo: RepoConfig;
   values: RepoValues;
   shareTo: 'main' | 'pr';
@@ -1385,14 +1395,14 @@ function RepoSettingsBlock({
         <span className="cfg-caret" aria-hidden="true" />
         {c.open}
         <span className="hint">
-          {[value<string>('branch'), c.lands[land], ...(setHere ? [c.setHere(setHere)] : []), ...(fromRepo ? [c.fromRepo(fromRepo)] : [])].join(' · ')}
+          {[...(folder ? [] : [value<string>('branch'), c.lands[land]]), ...(setHere ? [c.setHere(setHere)] : []), ...(fromRepo ? [c.fromRepo(fromRepo)] : [])].join(' · ')}
         </span>
       </button>
       {open && (
         <div className="cfg-settings-body">
           <p className="hint">{c.hint}</p>
-          {row('branch', c.branch, <input className="c-path" aria-label={c.branch} spellCheck={false} value={value<string>('branch')} onChange={(e) => set('branch', e.target.value)} />, c.branchHint)}
-          {row(
+          {!folder && row('branch', c.branch, <input className="c-path" aria-label={c.branch} spellCheck={false} value={value<string>('branch')} onChange={(e) => set('branch', e.target.value)} />, c.branchHint)}
+          {!folder && row(
             'land',
             c.land,
             <div className="seg" role="radiogroup" aria-label={c.land}>
@@ -1404,7 +1414,7 @@ function RepoSettingsBlock({
             </div>,
             c.landHint,
           )}
-          {land === 'pr' &&
+          {!folder && land === 'pr' &&
             row(
               'direct',
               c.direct,
@@ -1424,8 +1434,8 @@ function RepoSettingsBlock({
             </div>,
             c.planDocsHint,
           )}
-          {row('softPaths', c.softPaths, <textarea rows={Math.max(2, value<string[]>('softPaths').length + 1)} spellCheck={false} aria-label={c.softPaths} value={lines('softPaths')} onChange={(e) => set('softPaths', e.target.value.split('\n'))} />, c.softPathsHint)}
-          {row(
+          {!folder && row('softPaths', c.softPaths, <textarea rows={Math.max(2, value<string[]>('softPaths').length + 1)} spellCheck={false} aria-label={c.softPaths} value={lines('softPaths')} onChange={(e) => set('softPaths', e.target.value.split('\n'))} />, c.softPathsHint)}
+          {!folder && row(
             'workspaces',
             c.workspaces,
             base.workspaces.source === 'clones' ? (
@@ -1441,7 +1451,7 @@ function RepoSettingsBlock({
             ),
             base.workspaces.source === 'clones' ? undefined : c.workspacesHint,
           )}
-          {land === 'pr' && row('prNoise', c.prNoise, <textarea rows={2} spellCheck={false} aria-label={c.prNoise} value={lines('prNoise')} onChange={(e) => set('prNoise', e.target.value.split('\n'))} />, c.prNoiseHint)}
+          {!folder && land === 'pr' && row('prNoise', c.prNoise, <textarea rows={2} spellCheck={false} aria-label={c.prNoise} value={lines('prNoise')} onChange={(e) => set('prNoise', e.target.value.split('\n'))} />, c.prNoiseHint)}
           {row('run', c.run, <textarea rows={Math.max(6, Math.ceil(value<string>('run').length / 70) + 1)} aria-label={c.run} placeholder={c.runPlaceholder} value={value<string>('run')} onChange={(e) => set('run', e.target.value)} />, c.runHint)}
           {row('stop', c.stop, <input className="c-path" aria-label={c.stop} placeholder="docker compose down" spellCheck={false} value={value<string>('stop')} onChange={(e) => set('stop', e.target.value)} />, c.stopHint)}
           {!!value<string>('stop').trim() &&
@@ -1509,7 +1519,8 @@ function RepoSettingsBlock({
             </div>,
             c.siteHint,
           )}
-          <ShareSettings repo={repo} values={values} branch={value<string>('branch')} shareTo={shareTo} shareDirect={shareDirect} takeover={takeover} />
+          {/* the folder's settings file is written there like any other file; there is no commit or pull request to make */}
+          {!folder && <ShareSettings repo={repo} values={values} branch={value<string>('branch')} shareTo={shareTo} shareDirect={shareDirect} takeover={takeover} />}
         </div>
       )}
     </div>

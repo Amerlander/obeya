@@ -461,11 +461,12 @@ function FirstCanvas({ view, ready, onView }: { view: MachineView; ready: boolea
       failed(e);
     }
   };
-  const create = async () => {
+  /** `withoutGit`: the folder stays without git, its cards working in it directly. */
+  const create = async (withoutGit = false) => {
     setBusy(true);
     setStatus('');
     try {
-      const out = await api.setupCanvas(mode === 'folder' ? { path } : { clone, into });
+      const out = await api.setupCanvas(mode === 'folder' ? { path, ...(withoutGit ? { git: false as const } : {}) } : { clone, into });
       if ('canvas' in out) setSaved(out);
       else onView(out);
     } catch (e) {
@@ -510,7 +511,7 @@ function FirstCanvas({ view, ready, onView }: { view: MachineView; ready: boolea
                 </span>
               </label>
               {branch && <p className="hint setup-branch">{s.first.branch(branch)}</p>}
-              {noGit && <GitSetup key={path.trim()} path={path.trim()} confirm={s.git.confirmCanvas} onDone={create} />}
+              {noGit && <GitSetup key={path.trim()} path={path.trim()} confirm={s.git.confirmCanvas} onDone={() => create()} onFolder={() => create(true)} />}
             </>
           ) : (
             <>
@@ -530,7 +531,7 @@ function FirstCanvas({ view, ready, onView }: { view: MachineView; ready: boolea
             </p>
           ) : (
             <div className="c-actions">
-              <button className="btn primary" disabled={!can || busy} onClick={create}>
+              <button className="btn primary" disabled={!can || busy} onClick={() => create()}>
                 {mode === 'folder' ? s.first.create : s.first.cloneCreate}
               </button>
             </div>
@@ -561,12 +562,13 @@ export const useFolderWithoutGit = (path: string) => (useFolder(path)?.noGit ? p
 const IGNORED_SHOWN = 12;
 
 /**
- * Sets up git in a folder that has none: the offer, then what the first commit holds (the folder's
- * entries with their sizes, large files marked, what stays out, the `.gitignore` Obeya writes), and
- * only once the owner confirms, the repository with its first commit. The first canvas and
- * "+ Repository" in the configuration both show it.
+ * A folder that has no git: the two ways on, each with what it means. Using it without git
+ * (`onFolder`), or setting up git there: what the first commit holds (the folder's entries with
+ * their sizes, large files marked, what stays out, the `.gitignore` Obeya writes), and only once the
+ * owner confirms, the repository with its first commit. The first canvas and "+ Repository" in the
+ * configuration both show it.
  */
-export function GitSetup({ path, confirm, onDone }: { path: string; confirm: string; onDone: (branch: string) => void }) {
+export function GitSetup({ path, confirm, onDone, onFolder }: { path: string; confirm: string; onDone: (branch: string) => void; onFolder: () => void }) {
   const [preview, setPreview] = useState<GitSetupPreview | null>(null);
   const [busy, setBusy] = useState<'looking' | 'working' | null>(null);
   const [error, setError] = useState('');
@@ -599,9 +601,16 @@ export function GitSetup({ path, confirm, onDone }: { path: string; confirm: str
       {!p ? (
         <>
           <p className="hint">{s.none}</p>
-          <button className="btn small" disabled={!!busy} onClick={look}>
-            {busy === 'looking' ? s.looking : s.offer}
-          </button>
+          <div className="git-choices">
+            <button className="git-choice" disabled={!!busy} onClick={onFolder}>
+              <b>{s.folder}</b>
+              <span className="hint">{s.folderHint}</span>
+            </button>
+            <button className="git-choice" disabled={!!busy} onClick={look}>
+              <b>{busy === 'looking' ? s.looking : s.offer}</b>
+              <span className="hint">{s.offerHint}</span>
+            </button>
+          </div>
         </>
       ) : (
         <>

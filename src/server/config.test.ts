@@ -80,6 +80,18 @@ describe("Obeya's configuration", async () => {
     expect(await mode({ settings: { workspaces: 'worktrees' }, clones: 1 })).toBe('clones');
   });
 
+  test('a folder without git is checked as a folder, and keeps neither clones nor hosts', async () => {
+    const c = config('file', []);
+    const docs = join(dir, 'Dokumente');
+    mkdirSync(join(docs, '.obeya'), { recursive: true });
+    writeFileSync(join(docs, '.obeya', 'settings.json'), '{ "checks": ["true"] }');
+    const checked = await c.check([{ repos: [{ path: docs, git: false, clones: 2, hosts: [{ name: 'h', ssh: 'h', root: '~', clones: 1 }] }] }]);
+    expect(checked.problems).toEqual([]);
+    expect(checked.canvases[0]!.repos[0]).toEqual({ path: docs, git: false });
+    expect(checked.resolved[0]!.repos[0]).toMatchObject({ id: 'dokumente', folder: true, values: { checks: { value: ['true'], source: 'repository' } } });
+    expect((await c.check([{ repos: [{ path: join(dir, 'nowhere'), git: false }] }])).problems.map((p) => p.code)).toEqual(['noFolder']);
+  });
+
   test('finds what keeps a configuration from working, by canvas and repository', async () => {
     const c = config('file', []);
     const { problems } = (await c.check([

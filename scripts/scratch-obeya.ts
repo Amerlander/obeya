@@ -90,7 +90,8 @@
 // and `row` for any other column of `cards` (objects are stored as JSON). Times: "90s", "15m", "2h",
 // "3d" ago. `mainBranch` is the branch the repositories are on (default `main`). `"setup": true` serves no canvas (no configuration, no repository given): the first start,
 // which shows the setup assistant; the repository is still made, for the assistant to pick, and
-// `cards` may be empty. The repository has settings of its own where `files` hold `.obeya/settings.json` (a demo site among them, say). `poolCheckout` makes the repository's checkout a workspace of the pool too
+// `cards` may be empty. `"git": false` makes the repository a folder without git (a card's `workspace: true` then
+// is the folder itself), and `copy` copies a directory into it first (documents, binaries). The repository has settings of its own where `files` hold `.obeya/settings.json` (a demo site among them, say). `poolCheckout` makes the repository's checkout a workspace of the pool too
 // (`workspaces` in the configuration), as a pool of clones often has it, with a bare origin in
 // <dir>; with it, the server
 // starts from a configuration file in <dir>. `slots` caps the workers busy at once on this machine
@@ -116,7 +117,7 @@
 
 import { Database } from 'bun:sqlite';
 import { spawn, spawnSync } from 'node:child_process';
-import { copyFileSync, cpSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { demoSettingsHere } from '../plugin/skills/demo/lib/settings.ts';
 import { type Language, LANGUAGES } from '../src/core/locale';
@@ -182,6 +183,10 @@ interface Stage {
   hosts?: { name: string; ssh: string; root?: string; clones: number; slots?: number; gone?: boolean }[];
   files?: Record<string, string>;
   plans?: Record<string, string>;
+  /** `false`: the repository is a folder without git (design: Folders without git). */
+  git?: false;
+  /** A directory whose contents go into the repository first (a small folder of documents, binaries included). */
+  copy?: string;
   cards: StageCard[];
   preferences?: { key?: string; text: string; state?: string; card?: string; quote?: string; review?: boolean; replaces?: string; target?: string }[];
   groups?: { name: string; cards: string[] }[];
@@ -282,12 +287,15 @@ const owner = ownerHeaders(home);
 
 // the repository
 const files = { ...(stage.files ?? {}), ...(stage.plans ?? {}) };
-if (!Object.keys(files).length) files['README.md'] = '# Scratch\n';
+mkdirSync(repo, { recursive: true });
+if (stage.copy) cpSync(resolve(stage.copy), repo, { recursive: true, preserveTimestamps: true });
+if (!Object.keys(files).length && !stage.copy) files['README.md'] = '# Scratch\n';
 for (const [path, text] of Object.entries(files)) {
   mkdirSync(dirname(join(repo, path)), { recursive: true });
   writeFileSync(join(repo, path), text);
 }
-initRepo(repo);
+const folder = stage.git === false;
+if (!folder) initRepo(repo);
 // a workspace of the pool is a clone of the repository's origin, the checkout included
 if (stage.poolCheckout || stage.hosts?.length) {
   run('git', ['clone', '-q', '--bare', repo, join(dir, 'scratch.git')], dir);
@@ -339,7 +347,7 @@ const supervised = args.includes('--restarts');
 const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'OBEYA_SUPERVISED')), OBEYA_HOME: home };
 // a pool's workspaces live in the configuration, which the command line cannot give
 const configFile = join(dir, 'canvases.json');
-const configured = !!stage.poolCheckout || stage.slots !== undefined || !!stage.hosts?.length || !!stage.name || further.length > 0;
+const configured = folder || !!stage.poolCheckout || stage.slots !== undefined || !!stage.hosts?.length || !!stage.name || further.length > 0;
 if (configured)
   writeFileSync(
     configFile,
@@ -350,6 +358,7 @@ if (configured)
           repos: [
             {
               path: repo,
+              ...(folder ? { git: false } : {}),
               ...(stage.clones ? { clones: stage.clones } : {}),
               ...(stage.poolCheckout ? { workspaces: [repo] } : {}),
               ...(stage.slots !== undefined ? { slots: stage.slots } : {}),
@@ -468,7 +477,16 @@ for (const [i, c] of stage.cards.entries()) {
     };
   if (c.scope !== undefined) row.scope = { files: c.scope, reason: '' };
   if (c.branch !== undefined) row.branch = c.branch;
-  if (c.workspace) {
+  if (c.workspace && folder) {
+    // every card works in the folder itself, with a record of what it changed there (folder.ts)
+    row.workspace = repo;
+    row.branch = c.branch ?? `obeya/${id.slice(0, 6)}`;
+    db.query('INSERT INTO folder_cards (card_id, folder, state) VALUES ($id, $f, $s) ON CONFLICT(card_id) DO NOTHING').run({
+      id,
+      f: realpathSync(repo),
+      s: JSON.stringify({ held: true, undo: null, changes: [] }),
+    });
+  } else if (c.workspace) {
     const free = db.query('SELECT path FROM workspaces WHERE card_id IS NULL ORDER BY path').get() as { path: string } | null;
     // no clones: the repository works in worktrees, one per card under Obeya's home
     const tree = !free && !!c.branch && !stage.clones;

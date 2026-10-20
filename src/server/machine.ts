@@ -476,8 +476,8 @@ export class MachineSetup {
 
   /** The first canvas: a repository's folder, saved at once; or a clone of one, in the background. */
   async canvas(input: unknown): Promise<FirstCanvas | MachineView> {
-    const { path, clone, into } = (input ?? {}) as { path?: unknown; clone?: unknown; into?: unknown };
-    if (typeof path === 'string' && path.trim()) return this.add(resolve(expandHome(path.trim())));
+    const { path, clone, into, git } = (input ?? {}) as { path?: unknown; clone?: unknown; into?: unknown; git?: unknown };
+    if (typeof path === 'string' && path.trim()) return this.add(resolve(expandHome(path.trim())), git === false);
     if (typeof clone !== 'string' || !clone.trim()) throw new BadRequest('invalid', 'a folder or a repository to clone');
     this.idle();
     const spec = clone.trim();
@@ -503,12 +503,12 @@ export class MachineSetup {
     );
   }
 
-  /** Adds the repository as a canvas of its own and saves the configuration; Obeya runs it at once. */
-  private async add(path: string): Promise<FirstCanvas> {
-    let next = [...this.o.config.current(), { repos: [{ path }] }];
+  /** Adds the repository as a canvas of its own and saves the configuration; Obeya runs it at once. `folder`: a folder that stays without git. */
+  private async add(path: string, folder = false): Promise<FirstCanvas> {
+    let next = [...this.o.config.current(), { repos: [{ path, ...(folder ? { git: false as const } : {}) }] }];
     let { problems, resolved } = await this.o.config.check(next);
     // a repository whose settings say clones gets two, so two cards can be worked on at once
-    if (resolved.at(-1)?.repos[0]?.workspaces === 'clones') {
+    if (!folder && resolved.at(-1)?.repos[0]?.workspaces === 'clones') {
       next = [...next.slice(0, -1), { repos: [{ path, clones: CLONES }] }];
       ({ problems, resolved } = await this.o.config.check(next));
     }
@@ -517,6 +517,6 @@ export class MachineSetup {
     const canvas = resolved.at(-1)!.id;
     writeFileSync(join(this.o.home, WELCOME_FILE), canvas);
     const { restarting, applied } = await this.o.config.save(next);
-    return { canvas, branch: repoInfo(path).branch, opens: restarting || !!applied };
+    return { canvas, branch: folder ? '' : repoInfo(path).branch, opens: restarting || !!applied };
   }
 }

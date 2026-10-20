@@ -583,6 +583,7 @@ export class Config {
             return {
             id: ref.id,
             workspaces: adapter.workspaces,
+            ...(got.info.folder ? { folder: true as const } : {}),
             ...(got.adapterModule ? { adapterGone: true } : {}),
             values: markHeld(values(), trust),
             ...(trust ? { trust } : {}),

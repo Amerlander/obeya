@@ -1524,6 +1524,8 @@ export interface ResolvedCanvas {
   repos: {
     id: string;
     workspaces: 'clones' | 'worktrees';
+    /** A folder without git (`RepoConfig.git` false): no branch, landing, clones or hosts. */
+    folder?: true;
     /**
      * It still has a `.obeya/adapter/` on its main branch, which Obeya no longer reads: its values
      * belong in `.obeya/settings.json` (problem `adapterGone`).

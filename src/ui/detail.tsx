@@ -11,6 +11,7 @@ import { useCopy } from './copy';
 import { firstOpening } from './demoSeen';
 import { know, known } from './known';
 import { Branch } from './diff';
+import { DiscardChanges, FolderBox, FolderLine, useFolderDiff } from './folder';
 import { landedRef, shownTitle } from './parts';
 import { inQueue } from '../core/queue';
 import { useQueueMove } from './queue';
@@ -99,6 +100,9 @@ export function Detail(p: Props) {
     }
   };
   const act = (a: CardAction, done: ActDone) => run(() => api.act(item.id, a), done);
+  // in a folder without git the card's change list takes the place of its branch
+  const inFolder = !!p.repos.find((r) => r.id === item.repo)?.folder;
+  const changes = useFolderDiff(item, inFolder && item.kind === 'task' && !!item.branch);
   // Obeya reads what is typed here when no agent listens on the card: the field says so, as the microphone does
   const listener = agentListens(item) ? undefined : t.voice.card(plain(item.title));
   const tell = (field: Field) => async (text: string, images?: string[], replyTo?: number) => p.onTell(text, images, field, replyTo);
@@ -140,7 +144,7 @@ export function Detail(p: Props) {
         {kind && <div className="p-kind">{kind}</div>}
         {item.archivedAt ? <div className="p-title">{shownTitle(item)}</div> : <ManualTitle item={item} onEdit={p.onEdit} />}
         <SupersededBox item={item} all={all} act={act} onDelete={p.onDelete} />
-        <IdeaView item={item} act={act} run={run} listener={listener} onDelete={p.onDelete} onTell={p.onTell} />
+        <IdeaView item={item} act={act} run={run} listener={listener} onDelete={p.onDelete} onTell={p.onTell} prototypes={!inFolder} />
         {error && <p className="p-error">{error}</p>}
       </>
     );
@@ -237,9 +241,16 @@ export function Detail(p: Props) {
   // where work goes out as a pull request, the button says so, and where the settings allow it the
   // owner may have it pushed onto main directly instead; a card's own branch may change both
   const repoRef = p.repos.find((r) => r.id === item.repo);
-  const pr = !item.noChange && (item.lands?.land ?? (repoRef?.pullRequests ? 'pr' : 'main')) === 'pr';
+  const pr = !inFolder && !item.noChange && (item.lands?.land ?? (repoRef?.pullRequests ? 'pr' : 'main')) === 'pr';
   const direct = pr && (item.lands?.direct ?? !!repoRef?.direct);
-  const approveButton = (
+  const approveButton = inFolder ? (
+    <>
+      <button className="btn primary" title={item.noChange ? undefined : t.folder.approveHint} onClick={() => act({ action: 'approve' }, item.noChange ? { close: true, ack: t.approvedNoChange } : { close: true, ack: t.folder.approved })}>
+        {item.noChange ? t.approveNoChange : t.approve}
+      </button>
+      <DiscardChanges diff={changes.diff} act={act} onDone={changes.reload} />
+    </>
+  ) : (
     <>
       <button className="btn primary" onClick={() => act({ action: 'approve' }, item.noChange ? { close: true, ack: t.approvedNoChange } : { close: true, ack: t.approved, pending: t.approving })}>
         {item.noChange ? t.approveNoChange : pr ? t.approvePr : t.approve}
@@ -265,7 +276,7 @@ export function Detail(p: Props) {
   const planSource = parent?.plan && <PlanSource file={parent.plan.file} onRead={readPlan ? () => readPlan(parent, item.label) : undefined} />;
   const where = (
     <p className="p-src">
-      <Branch item={item} />
+      {inFolder ? <FolderLine item={item} diff={changes.diff} /> : <Branch item={item} />}
       {parent?.plan && (
         <>
           {' · '}
@@ -429,6 +440,8 @@ export function Detail(p: Props) {
       {item.state === 'planned' && !worked && !waits && <Scope files={item.scope} />}
 
       {worked && where}
+      {/* what the card changed in a folder without git stays in view, whatever else the card shows */}
+      {worked && inFolder && <FolderBox item={item} diff={changes.diff} />}
       {waits ? (
         <Split
           main={
@@ -531,7 +544,7 @@ export function Detail(p: Props) {
           )}
         </div>
       )}
-      {review && item.noChange && !item.prototypeOf && <p className="hint">{t.noChangeHint}</p>}
+      {review && item.noChange && !item.prototypeOf && <p className="hint">{inFolder ? t.folder.noChangeHint : t.noChangeHint}</p>}
       {review && direct && !item.prototypeOf && <p className="hint">{t.directHint}</p>}
 
       {error && <p className="p-error">{error}</p>}
@@ -595,7 +608,8 @@ function SupersededBox({ item, all, act, onDelete }: { item: Item; all: Item[]; 
   );
 }
 
-function IdeaView({ item, act, run, listener, onDelete, onTell }: { item: Item; act: (a: CardAction, done: ActDone) => Promise<void>; run: Run; listener?: string; onDelete: () => void; onTell: Tell }) {
+/** `prototypes`: the idea's repository can have them (a folder without git has no branch to build one on). */
+function IdeaView({ item, act, run, listener, onDelete, onTell, prototypes }: { item: Item; act: (a: CardAction, done: ActDone) => Promise<void>; run: Run; listener?: string; onDelete: () => void; onTell: Tell; prototypes: boolean }) {
   const idea = item.idea!;
   const [prototyping, setPrototyping] = useState(false);
   const answer = usePicks(item.id, idea.questions);
@@ -695,9 +709,11 @@ function IdeaView({ item, act, run, listener, onDelete, onTell }: { item: Item; 
             <button className={btn('planDoc')} disabled={idea.thinking} onClick={() => act({ action: 'planDoc' }, { close: true, ack: t.idea.planned })}>
               {t.idea.planDoc}
             </button>
-            <button className={btn('prototype')} onClick={() => setPrototyping(true)}>
-              {t.idea.prototype}
-            </button>
+            {prototypes && (
+              <button className={btn('prototype')} onClick={() => setPrototyping(true)}>
+                {t.idea.prototype}
+              </button>
+            )}
             {idea.status !== 'parked' && (
               <button className={btn('park')} onClick={() => act({ action: 'park' }, { close: true, ack: t.idea.parked })}>
                 {t.idea.park}

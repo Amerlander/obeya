@@ -487,6 +487,14 @@ export class FolderWorkspaces implements CardWorkspaces {
     return this.landOnMain();
   }
 
+  /** The owner approved the card: its undo goes at once, though its worker may still finish in the folder. */
+  done(cardId: string) {
+    const rec = this.rec(cardId);
+    if (!rec || rec.done) return;
+    this.save(cardId, { ...rec, done: true, undo: null });
+    this.dropUndo(cardId);
+  }
+
   /** The card's work is over: its undo goes; what it changed stays its record. */
   removeLanded(cardId: string) {
     const rec = this.rec(cardId);

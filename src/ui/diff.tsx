@@ -9,6 +9,7 @@ import type { Item } from '../core/types';
 import { api } from './api';
 import { useCopy } from './copy';
 import { plain } from './markdown';
+import { ChangeLine, shownChanges } from './folder';
 import { t } from './strings';
 
 /** A file with more lines than this starts folded, so a generated file does not bury the rest. */
@@ -102,8 +103,8 @@ function CopyPath({ path }: { path: string }) {
   );
 }
 
-/** The whole diff over the page, file by file; Esc, the × or a click beside it closes it. */
-function DiffView({ item, onClose, onRead }: { item: Item; onClose: () => void; onRead: (d: CardDiff) => void }) {
+/** The whole diff over the page, file by file; Esc, the × or a click beside it closes it. In a folder without git, the card's change list and its text files' diffs. */
+export function DiffView({ item, onClose, onRead }: { item: Item; onClose: () => void; onRead: (d: CardDiff) => void }) {
   const [diff, setDiff] = useState<CardDiff | null | 'failed'>(null);
   useEffect(() => {
     let gone = false;
@@ -125,7 +126,9 @@ function DiffView({ item, onClose, onRead }: { item: Item; onClose: () => void; 
     return () => removeEventListener('keydown', h);
   }, [onClose]);
   const got = diff === 'failed' ? null : diff;
-  const parts = got ? splitDiff(got.patch ?? '') : [];
+  const folder = got?.folder;
+  // in a folder, only text files whose earlier version Obeya kept have lines to show
+  const parts = got ? splitDiff(got.patch ?? '').filter((p) => !folder || p.lines.some((l) => l.startsWith('@@'))) : [];
   const size = got && diffSize(got.files);
   const go = (file: string) => document.getElementById(anchor(file))?.scrollIntoView({ block: 'start' });
   return createPortal(
@@ -134,7 +137,8 @@ function DiffView({ item, onClose, onRead }: { item: Item; onClose: () => void; 
         <div className="d-head">
           <h2>{t.diff.title(plain(item.title))}</h2>
           <span className="hint">
-            <code>{item.branch}</code>
+            {got?.source === 'folder' ? t.folder.changed : <code>{item.branch}</code>}
+            {folder?.undo && ` · ${t.folder.undo[folder.undo]}`}
             {got?.source === 'landed' && ` · ${t.diff.landed}`}
             {size && (
               <>
@@ -150,9 +154,25 @@ function DiffView({ item, onClose, onRead }: { item: Item; onClose: () => void; 
         <div className="d-body">
           {diff === null && <p className="hint">{t.diff.loading}</p>}
           {diff === 'failed' && <p className="hint">{t.diff.failed}</p>}
+          {folder && folder.undo && <p className="hint">{t.folder.undoHint[folder.undo]}</p>}
+          {folder && (
+            <ul className="f-list d-files">
+              {shownChanges(folder.changes).map((c) => (
+                <li key={`${c.kind}:${c.from ?? ''}:${c.path}`}>
+                  {parts.some((p) => p.file === c.path) ? (
+                    <button className="link" onClick={() => go(c.path)}>
+                      <ChangeLine c={c} />
+                    </button>
+                  ) : (
+                    <ChangeLine c={c} />
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
           {got && (
             <>
-              <table className="d-files">
+              {!folder && <table className="d-files">
                 <tbody>
                   {got.files.map((f) => (
                     <tr key={f.file}>
@@ -167,7 +187,7 @@ function DiffView({ item, onClose, onRead }: { item: Item; onClose: () => void; 
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table>}
               {parts.map((p) => (
                 <FileDiff key={p.file} part={p} />
               ))}
@@ -184,7 +204,7 @@ function DiffView({ item, onClose, onRead }: { item: Item; onClose: () => void; 
 const anchor = (file: string) => `diff-${file}`;
 
 /** Lines added and removed, green and red. */
-function Lines({ n }: { n: { added: number; removed: number } }) {
+export function Lines({ n }: { n: { added: number; removed: number } }) {
   return (
     <>
       <span className="d-add">+{n.added}</span> <span className="d-del">−{n.removed}</span>

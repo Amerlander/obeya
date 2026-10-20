@@ -433,8 +433,8 @@ export class CanvasRuntime {
    * repositories' (`resolveCanvas`): those of a repository new here as its read has them.
    */
   private resolve(config: CanvasConfig) {
-    return resolveCanvas(config, this.deps.store, this.settingsOf, this.sharedOf, (path) => {
-      const read = readRepo(path);
+    return resolveCanvas(config, this.deps.store, this.settingsOf, this.sharedOf, (path, folder) => {
+      const read = readRepo(path, folder);
       if (read && !this.shared.has(path)) this.shared.set(path, read.shared);
       if (read) this.adapterModules.set(path, read.adapterModule);
       return read;

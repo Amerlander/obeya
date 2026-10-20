@@ -316,7 +316,7 @@ for (const c of canvases.all()) {
   console.log(`  ${c.board.canvas.name} (?c=${c.id})`);
   for (const r of c.repos)
     console.log(
-      `    ${r.ref.id}: ${r.info.path} (${r.adapter.workspaces === 'worktrees' ? 'a worktree per card' : `clones: ${r.workspaces.list().map((w) => w.path).join(', ') || 'none (--workspace or --clones)'}`})`,
+      `    ${r.ref.id}: ${r.info.path} (${r.info.folder ? 'a folder without git: every card works in it' : r.adapter.workspaces === 'worktrees' ? 'a worktree per card' : `clones: ${r.workspaces.list().map((w) => w.path).join(', ') || 'none (--workspace or --clones)'}`})`,
     );
 }
 const plugin = checkPlugin();
