@@ -231,7 +231,7 @@ export class Explorers {
     if (row.session_id) return this.launch(card, current, text, row.session_id, all, quiet);
     // a planned card that became an idea brings the screenshots of its task
     const shots = this.o.imageFiles?.(card.images) ?? [];
-    this.launch(card, current, `${this.briefing(card, shots)}\n\n${text}`, undefined, [...shots, ...all], quiet);
+    this.launch(card, current, `${this.briefing(card, shots, current.flatMap((m) => m.said))}\n\n${text}`, undefined, [...shots, ...all], quiet);
   }
 
   private launch(card: Item, current: Message[], message: string, resume: string | undefined, images: string[], quiet = false) {
@@ -445,15 +445,45 @@ export class Explorers {
     ]);
   }
 
-  private briefing(card: Item, shots: string[]): string {
+  /**
+   * The first message of a session from scratch: the card and the decisions, and for an idea discussed
+   * before (its session gone, pruned after weeks, say) where it stands: the brief, its mocks, the
+   * prototypes planned and built, and the conversation so far up to the messages this turn answers (`said`).
+   */
+  private briefing(card: Item, shots: string[], said: number[] = []): string {
     return [
       `The idea: “${card.title}”.`,
       card.body.trim(),
       shots.length ? `The owner attached ${shots.length === 1 ? 'a screenshot' : `${shots.length} screenshots`} to the card (shown with this message; files: ${shots.join(', ')}).` : '',
       `Decisions on cards without a project so far:\n${decisionLog(this.o.board.decisions(null))}`,
+      this.standing(card, said),
     ]
       .filter(Boolean)
       .join('\n\n');
+  }
+
+  /** Where an idea discussed before stands, for a session that starts without its earlier ones; empty for a new idea. */
+  private standing(card: Item, said: number[]): string {
+    const { brief, mocks = [], variants = [], split } = this.o.board.idea(card.id);
+    const talk = this.o.board
+      .events(card.id)
+      .filter((e) => (e.kind === 'talk' || e.kind === 'question') && !said.includes(e.id))
+      .slice(-EARLIER_MESSAGES)
+      .map((e) => `${e.author === 'owner' ? 'Owner' : 'You'}${e.kind === 'question' ? ' (question)' : ''}: ${clip(e.text, 2000)}`);
+    const prototypes = card.prototypes ?? [];
+    const parts = [
+      brief.trim() ? `The brief as you left it:\n\n${brief.trim()}` : '',
+      mocks.length ? `The brief's mocks, shown under it (update_brief without mocks keeps them): ${mocks.map((m) => `“${m.title}”`).join(', ')}.` : '',
+      variants.length ? `The prototypes you planned (plan_prototypes):\n${variants.map((v) => `- ${v.approach}: ${v.show}`).join('\n')}` : '',
+      split ? `The part you marked to split off (plan_split): “${split.title}”.\n\n${split.brief}` : '',
+      prototypes.length ? `The idea's prototypes:\n${prototypes.map((p) => `- “${p.title}”, ${prototypeState(p)}${p.summary ? `. Its summary: ${clip(p.summary, 2000)}` : ''}`).join('\n')}` : '',
+      talk.length ? `The conversation so far${talk.length === EARLIER_MESSAGES ? ' (its latest messages)' : ''}:\n\n${talk.join('\n\n')}` : '',
+    ].filter(Boolean);
+    if (!parts.length) return '';
+    return [
+      'This idea was discussed before, in a session of yours that is gone. Where it stands, as Obeya keeps it; go on from there, and keep in the brief what still holds:',
+      ...parts,
+    ].join('\n\n');
   }
 
   private idea(id: string): Item {
@@ -516,6 +546,18 @@ const MAX_VARIANTS = 6;
 const mocks = (language: string) =>
   `each with a title (the variant in a few words, in ${language}) and html: a few lines of self-contained HTML with inline styles (no files, no network), shown in a sandboxed frame that may leave it only 240 px of width, so nothing in it is wider`;
 const MOCK_SCHEMA = z.array(z.object({ title: z.string(), html: z.string() })).max(MAX_VARIANTS).optional();
+
+/** How many messages of the conversation so far a session from scratch reads. */
+const EARLIER_MESSAGES = 20;
+
+/** A prototype's state, as a session from scratch hears it. */
+function prototypeState(p: Item): string {
+  if (p.prototypeEnd === 'discarded') return 'discarded';
+  if (p.prototypeEnd === 'built') return 'the idea was built on it';
+  if (p.state === 'planned' || p.state === 'working') return 'being built';
+  if (p.state === 'waiting' && (p.need === 'demo' || p.need === 'review')) return 'handed over';
+  return p.state;
+}
 
 /** How the agent opens the discussion of an idea the owner wrote, or one a worker proposed. */
 const OPENING =

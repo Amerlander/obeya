@@ -139,6 +139,36 @@ describe('an idea', () => {
     expect(later.inbox).toEqual(['The owner says:\n\nDrittens.']);
   });
 
+  test('a session from scratch of an idea discussed before hears where it stands: the brief, its mocks, its prototypes and the conversation so far', () => {
+    const i = idea();
+    canvas.act(i.id, { action: 'discuss', text: 'Lass uns das durchdenken.' });
+    // a new idea has nothing to go on from
+    expect(explorer().inbox[0]).not.toContain('discussed before');
+    turn(explorer(), 'CSV oder PDF?', () => {
+      explorer().call('update_brief', { brief: '**Varianten:** A CSV, B PDF.', mocks: [{ title: 'A CSV', html: '<pre>a;b</pre>' }] });
+      explorer().call('plan_prototypes', { prototypes: [{ approach: 'B PDF', show: 'Ein PDF mit Zählerständen.' }] });
+    });
+    canvas.act(i.id, { action: 'prototype', text: 'Den Export-Knopf.' });
+    const [prototype] = board()
+      .snapshot()
+      .items.filter((x) => x.prototypeOf === i.id);
+    // the session is gone (Claude pruned it after weeks, say)
+    board().work(i.id, { session_id: null });
+    canvas.act(i.id, { action: 'discuss', text: 'Eher CSV.' });
+    const s = explorer();
+    expect(s.spec.resume).toBeUndefined();
+    const first = s.inbox[0]!;
+    expect(first).toContain('The idea: “Export für Vermieter”.');
+    expect(first).toContain('The brief as you left it:\n\n**Varianten:** A CSV, B PDF.');
+    expect(first).toContain('“A CSV”');
+    expect(first).toContain('- B PDF: Ein PDF mit Zählerständen.');
+    expect(first).toContain(`- “${prototype!.title}”, being built`);
+    expect(first).toContain('Owner: Lass uns das durchdenken.\n\nYou: CSV oder PDF?');
+    // what the owner says now comes once, after where the idea stands
+    expect(first.endsWith('The owner says:\n\nEher CSV.')).toBe(true);
+    expect(first).not.toContain('Owner: Eher CSV.');
+  });
+
   test('what the owner says in reply to a message of the discussion points the agent at it', () => {
     const i = idea();
     canvas.act(i.id, { action: 'discuss', text: 'Erstens.' });
