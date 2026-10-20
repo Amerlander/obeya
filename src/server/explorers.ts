@@ -8,7 +8,7 @@ import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { type Language, LANGUAGE_NAMES } from '../core/locale';
 import { MESSAGES } from '../core/messages';
-import { type Item, type Mock, NEXT_STEPS, type NextStep, type PlannedPrototype, type Question, type SettledPart } from '../core/types';
+import { formatQuestion, type Item, type Mock, NEXT_STEPS, type NextStep, type PlannedPrototype, type Question, type SettledPart } from '../core/types';
 import { type Asked, decisionLog, withPick } from './advisor';
 import { BadRequest, type Board, type Message, replyNote, type Unread } from './board';
 import { type AgentEvent, type AgentRuntime, type AgentSession, type AgentTool, BackgroundWait } from './runtime';
@@ -347,9 +347,13 @@ export class Explorers {
     );
   }
 
-  /** The agent's reply stands in the conversation, its mocks and questions below it; the owner is next. */
+  /**
+   * The agent's reply stands in the conversation, its mocks and questions below it; the owner is next.
+   * Its questions stand in the conversation too, and stay there once answered, with the options picked.
+   */
   private answer(cardId: string, text: string, questions: Question[] = [], next?: NextStep, mocks: Mock[] = []) {
     this.o.board.log(cardId, 'talk', 'explorer', text, { mocks });
+    for (const q of questions) this.o.board.log(cardId, 'question', 'explorer', formatQuestion(q, this.o.board.language()));
     this.o.board.setIdea(cardId, { yourTurn: true, questions, next });
   }
 

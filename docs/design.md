@@ -204,7 +204,11 @@ trade-offs and says what they would cost.
 
 Its questions come with answer options, shown under its reply as radio buttons, or checkboxes when
 several fit together; the owner picks, may add their own words, and both go out as one message that
-names each question. The owner types in the panel or holds Space with the idea open; both go
+names each question. The questions stand in the conversation as the agent's messages, like a worker's;
+while they wait for the owner they stand at its end, where they are answered, and once answered they
+stay where they were asked, the options picked ticked on them, the alternatives beside, and the owner's
+message under them holds only their own words (until 2026-10-20 an answered question stood only as a
+bold line of the owner's message, without the alternatives). The owner types in the panel or holds Space with the idea open; both go
 straight to the agent, as on every card an agent listens on (see Voice in), spoken words as soon as
 the speech recognition has written them down (picked options too, with the words beside them). The
 agent passes on with `to_obeya` what asks Obeya for something (build it, plan it, a prototype, park,
@@ -1060,8 +1064,10 @@ Every card shows its exchanges as a conversation („Gespräch“), the way an i
 
 - what the owner says (notes, answers, feedback, spoken or typed, with screenshots, standing once as
   the agent got them);
-- the worker's questions with their options and the pick (marked on the question only: the owner's
-  message under it holds just their own words, and a pick alone is no message of its own);
+- the agent's questions (a worker's, an idea's, a proposal's) with their options and the pick
+  (marked on the question only: the owner's message under it holds just their own words, and a pick
+  alone is no message of its own; an idea's and a proposal's answer names its questions in its
+  text, `answerText`, which the conversation reads back, `readAnswer`);
 - its replies;
 - its handovers (the one a demo came with carries its report's question, muted once answered; a
   later handover that keeps the demo leaves it there). A later handover that follows the worker's

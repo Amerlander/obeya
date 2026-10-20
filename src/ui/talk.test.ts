@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { type CardEvent, formatQuestion, type Item, needsYou, pausable } from '../core/types';
-import { agentWorks, demoHandover, koordinatorReads, obeyaWorks, openQuestions, opensWithTalk, ownerField, parseQuestion, runs, split, talkAlone, talkTurns, unseen, unseenTurns, withoutOpen } from './talk';
+import { answerText } from './answer';
+import { agentWorks, cardTalk, demoHandover, koordinatorReads, obeyaWorks, openQuestions, opensWithTalk, ownerField, parseQuestion, runs, split, talkAlone, talkTurns, unseen, unseenTurns, withoutOpen } from './talk';
 import { MESSAGES } from '../core/messages';
 
 let id = 0;
@@ -383,6 +384,47 @@ test("the Koordinator reads the owner's words on a card until its confirmation f
   expect(koordinatorReads([said, ev('say', 'koordinator', '„Export“ startet.')])).toBe(false);
   expect(koordinatorReads([said, ev('state', 'koordinator', 'Überarbeitet.')])).toBe(false);
   expect(koordinatorReads([ev('hint', 'owner', 'Und die Tests?')])).toBe(false);
+});
+
+test('the options an idea’s or a proposal’s answer names stand on their questions, the owner’s message keeps their own words', () => {
+  const format = { text: 'Welches Format?', options: ['CSV', 'Excel'] };
+  const whom = { text: 'Für wen?', options: ['Vermieter', 'Verwalter'], multiple: true };
+  const reply = ev('talk', 'explorer', 'Zwei Fragen, siehe Brief.');
+  const q1 = ev('question', 'explorer', formatQuestion(format, 'de'));
+  const q2 = ev('question', 'explorer', formatQuestion(whom, 'de'));
+  const a = ev('talk', 'owner', answerText([format, whom], [['Excel'], ['Vermieter', 'Verwalter']], 'Und bitte bald.'));
+  expect(talkTurns([reply, q1, q2, a]).shown).toEqual([
+    { e: reply, steps: [] },
+    { e: q1, steps: [], picks: ['Excel'] },
+    { e: q2, steps: [], picks: ['Vermieter', 'Verwalter'] },
+    { e: a, steps: [], words: 'Und bitte bald.' },
+  ]);
+  // picks alone are no message of their own; words alone pick nothing
+  const picksOnly = ev('talk', 'owner', answerText([format], [['CSV']], ''));
+  expect(talkTurns([q1, picksOnly]).shown).toEqual([{ e: q1, steps: [], picks: ['CSV'] }]);
+  const words = ev('talk', 'owner', 'Erklär mir das.');
+  expect(talkTurns([q1, words]).shown).toEqual([{ e: q1, steps: [] }, { e: words, steps: [] }]);
+  // a proposal's question asked again is answered where it was asked last; a note after it does not take it back
+  const p1 = ev('question', 'worker', formatQuestion(format, 'de'));
+  const p2 = ev('question', 'worker', formatQuestion(format, 'de'));
+  const said = ev('say', 'owner', answerText([format], [['CSV']], ''));
+  const note = ev('hint', 'owner', 'Danke.');
+  expect(talkTurns([p1, p2, said, note]).shown).toEqual([
+    { e: p1, steps: [] },
+    { e: p2, steps: [], picks: ['CSV'] },
+    { e: note, steps: [] },
+  ]);
+});
+
+test("an idea's open questions stand at its conversation's end, where they are answered; answered ones where they were asked", () => {
+  const format = { text: 'Welches Format?', options: ['CSV', 'Excel'] };
+  const reply = ev('talk', 'explorer', 'Eine Frage.');
+  const q = ev('question', 'explorer', formatQuestion(format, 'de'));
+  const idea = { state: 'idea', idea: { status: 'open', questions: [format], yourTurn: true } } as unknown as Item;
+  expect(cardTalk(idea, [reply, q]).shown.map((x) => x.e)).toEqual([reply]);
+  expect(cardTalk({ ...idea, idea: { ...idea.idea!, questions: [] } }, [reply, q]).shown.map((x) => x.e)).toEqual([reply, q]);
+  // an archived idea is read only: nothing is answered at its end
+  expect(cardTalk({ ...idea, archivedAt: '2026-10-20' }, [reply, q], true).shown.map((x) => x.e)).toEqual([reply, q]);
 });
 
 test("a proposal's open questions leave where they were asked; settled ones stay there", () => {

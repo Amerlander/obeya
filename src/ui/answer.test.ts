@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { answerText, toggle } from './answer';
+import { answerText, readAnswer, toggle } from './answer';
 
 const format = { text: 'Welches Format?', options: ['CSV', 'PDF', 'Excel'] };
 const whom = { text: 'Für wen?\nKurz.', options: ['Vermieter', 'Verwalter'], multiple: true };
@@ -17,6 +17,20 @@ describe('an answer', () => {
     );
     expect(answerText([format, whom], [[], ['Verwalter']], '')).toBe('**Für wen? Kurz.** Verwalter');
     expect(answerText([format, whom], [[], []], '')).toBe('');
+  });
+
+  test('reads back as the options picked for each question it names, and the owner’s words', () => {
+    expect(readAnswer(answerText([format, whom], [['PDF'], ['Verwalter', 'Vermieter']], 'Danke.\n\nSonst nichts.'), [whom, format])).toEqual({
+      picks: [['Verwalter', 'Vermieter'], ['PDF']],
+      words: 'Danke.\n\nSonst nichts.',
+    });
+    expect(readAnswer(answerText([format, whom], [[], ['Verwalter']], ''), [format, whom])).toEqual({ picks: [undefined, ['Verwalter']], words: '' });
+    // an option that starts like another, followed by a comma
+    const later = { text: 'Wann?', options: ['Jetzt', 'Jetzt, aber leise'] };
+    expect(readAnswer('**Wann?** Jetzt, aber leise', [later]).picks).toEqual([['Jetzt, aber leise']]);
+    // words of their own, a question asked nowhere, an option it does not have: nothing picked
+    for (const text of ['Lieber JSON.', '**Welches Format?** JSON', '**Wie viele?** 3\n\nGenau.', '**Welches Format?** CSV\nUnd PDF.'])
+      expect(readAnswer(text, [format])).toEqual({ picks: [], words: text });
   });
 
   test('picks one option of a single choice, several of a multiple choice in their order', () => {

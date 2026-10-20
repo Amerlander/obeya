@@ -4,6 +4,7 @@ import { LANGUAGES } from '../core/locale';
 import { MESSAGES } from '../core/messages';
 import { inQueue } from '../core/queue';
 import { answering, askable, type CardEvent, type Demo, finishingUp, type Item, needsYou, ownWords, pausable, type Question, started, type Talk as Exchange } from '../core/types';
+import { readAnswer } from './answer';
 import type { Field } from './api';
 
 /** One entry of the conversation: a message, with how the agent got to it folded under it, or a small line. */
@@ -153,7 +154,9 @@ export function talkTurns(all: CardEvent[], opts: { asking?: Question; over?: bo
       if (toAgent(e)) open = true;
     }
   });
-  for (const turn of shown) if (turn.e.kind === 'question') Object.assign(turn, outcome(events, turn.e));
+  named(shown);
+  // a worker's question is answered on its own; an idea's and a proposal's in the owner's words
+  for (const turn of shown) if (turn.e.kind === 'question' && turn.e.author === 'worker' && !turn.picks) Object.assign(turn, outcome(events, turn.e));
   marked(shown);
   const asked = opts.asking ? openQuestion(shown) : undefined;
   if (asked) shown.splice(shown.indexOf(asked), 1);
@@ -165,7 +168,7 @@ export function talkTurns(all: CardEvent[], opts: { asking?: Question; over?: bo
 }
 
 /**
- * A card's conversation as it shows: its question waiting for the owner at the end, a proposal's open
+ * A card's conversation as it shows: its question waiting for the owner at the end, a proposal's and an idea's open
  * questions where they are answered, and steps without a message settled once nobody works on it
  * (`past`: nobody does any more).
  */
@@ -173,7 +176,8 @@ export function cardTalk(item: Item, events: CardEvent[], past = false): Talk {
   const asking = item.state === 'waiting' && item.need === 'question' ? item.question : undefined;
   const working = !past && agentWorks(item);
   const paused = !past && !!item.paused && !item.snoozed;
-  const open = item.state === 'proposal' && !working ? (item.proposal?.questions ?? []) : [];
+  // the questions open now stand at the end, where they are answered
+  const open = item.state === 'proposal' && !working ? (item.proposal?.questions ?? []) : item.state === 'idea' && !item.archivedAt ? (item.idea?.questions ?? []) : [];
   return talkTurns(withoutOpen(events, open), { asking, over: !working && !paused, paused });
 }
 
@@ -236,7 +240,7 @@ function closed(steps: CardEvent[]): Turn | undefined {
   return own ? { e: own, steps, quiet: true } : undefined;
 }
 
-/** A proposal's conversation without where its open questions were asked: the last time each was. */
+/** A proposal's or an idea's conversation without where its open questions were asked: the last time each was. */
 export function withoutOpen(events: CardEvent[], open: Question[]): CardEvent[] {
   if (!open.length) return events;
   const asked = new Set(open.map((q) => events.findLast((e) => e.kind === 'question' && parseQuestion(e.text).text === q.text)?.id));
@@ -285,12 +289,32 @@ function outcome(events: CardEvent[], q: CardEvent): Pick<Turn, 'answer' | 'pick
  * owner's own words, and an answer that was nothing but a pick stands as no message of its own.
  */
 function marked(shown: Turn[]) {
-  for (const q of shown.filter((x) => x.picks)) {
+  for (const q of shown.filter((x) => x.picks && x.answer !== undefined)) {
     const i = shown.findIndex((x, j) => j > shown.indexOf(q) && x.e.kind === 'answer');
     const a = shown[i];
     if (!a?.e.picks) continue;
     a.words = ownWords(a.e);
     if (!a.words && !a.e.images?.length) shown.splice(i, 1);
+  }
+}
+
+/**
+ * The options the owner's words picked for an idea's or a proposal's questions, which they name
+ * (`answerText`), stand marked on each question too: the message keeps the owner's own words, and one
+ * that was nothing but picks stands as no message of its own. Until 2026-10-20 an idea's questions
+ * stood in its conversation only while open, and the picks in the owner's message only.
+ */
+function named(shown: Turn[]) {
+  for (let i = 0; i < shown.length; i++) {
+    const a = shown[i]!;
+    if (a.line || a.e.author !== 'owner' || a.e.picks || !a.e.text.startsWith('**')) continue;
+    // the questions asked so far, the last time each was
+    const asked = [...new Map(shown.slice(0, i).filter((x) => x.e.kind === 'question').map((x) => [parseQuestion(x.e.text).text, x])).values()];
+    const { picks, words } = readAnswer(a.e.text, asked.map((x) => parseQuestion(x.e.text)));
+    if (!picks.length) continue;
+    picks.forEach((p, k) => p && (asked[k]!.picks = p));
+    a.words = words;
+    if (!words && !a.e.images?.length) shown.splice(i--, 1);
   }
 }
 

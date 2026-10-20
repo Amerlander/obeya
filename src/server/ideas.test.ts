@@ -303,7 +303,7 @@ describe('an idea', () => {
     expect(item(two.id).idea).toMatchObject({ thinking: false, yourTurn: false });
   });
 
-  test('its agent asks with answer options, which stand until the owner says something', () => {
+  test('its agent asks with answer options, which stand until the owner says something, and in its conversation after', () => {
     const i = idea();
     canvas.act(i.id, { action: 'discuss', text: 'Los.' });
     const s = explorer();
@@ -327,6 +327,11 @@ describe('an idea', () => {
     });
     expect(item(i.id).idea!.questions[0]!.multiple).toBeUndefined();
     expect(item(i.id).idea!.questions[2]!.multiple).toBeUndefined();
+    expect(board().events(i.id).filter((e) => e.kind === 'question').map((e) => [e.author, e.text])).toEqual([
+      ['explorer', 'Welches Format?\n– CSV\n– PDF'],
+      ['explorer', 'Für wen? (Mehrfachauswahl)\n– Vermieter\n– Verwalter'],
+      ['explorer', 'Wann?'],
+    ]);
     canvas.act(i.id, { action: 'discuss', text: '- **Welches Format?** CSV' });
     expect(item(i.id).idea).toMatchObject({ yourTurn: false, questions: [] });
     expect(explorer().inbox.at(-1)).toContain('- **Welches Format?** CSV');
