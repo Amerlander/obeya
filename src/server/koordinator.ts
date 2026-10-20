@@ -10,7 +10,7 @@ import { ACTIVE, BadRequest, type Board } from './board';
 import type { Utterance } from './db';
 import { type AgentRuntime, type AgentTool, waitQuietly } from './runtime';
 import type { Workers } from './workers';
-import { type Change, RECHECK_MS, shortageOf, type Workspaces } from './workspaces';
+import { type CardWorkspaces, type Change, RECHECK_MS, shortageOf } from './workspaces';
 import { LANGUAGE_NAMES } from '../core/locale';
 import { clip, messageOf } from '../core/text';
 
@@ -49,10 +49,12 @@ export interface Scope {
 /** What the Koordinator needs of the repository a card belongs to. */
 export interface RepoHands {
   workers: Workers;
-  workspaces: Workspaces;
+  workspaces: CardWorkspaces;
   adapter: RepoAdapter;
   /** Where the Koordinator reads (scopes, questions): the repository's Lesestand. */
   path: string;
+  /** A folder without git: its cards all work in the folder itself, with no branches to merge. */
+  folder?: boolean;
 }
 
 export interface KoordinatorOptions {
@@ -663,7 +665,7 @@ export class Koordinator {
       cwd: this.o.repoFor(card).path,
       role: 'koordinator',
       onLimit,
-      system: SYSTEM(this.language),
+      system: this.o.repoFor(card).folder ? FOLDER_SYSTEM(this.language) : SYSTEM(this.language),
       tools: (finish) => [
         {
           name: 'scope',
@@ -697,7 +699,7 @@ export class Koordinator {
       onLimit: (until) => {
         for (const w of batch) this.o.board.waitsForLimit({ card: w.id }, until);
       },
-      system: SCHEDULE_SYSTEM(this.language),
+      system: this.o.repoFor(project).folder ? FOLDER_SCHEDULE_SYSTEM(this.language) : SCHEDULE_SYSTEM(this.language),
       tools: (finish) => [
         {
           name: 'schedule',
@@ -756,7 +758,10 @@ export class Koordinator {
 
   /** The cards in progress and queued ahead, as a turn of the Koordinator reads them. */
   private others(card: Item, active: Item[], ahead: Item[], tags: Map<string, string>): string[] {
-    const soft = this.o.repoFor(card).adapter.softPaths;
+    const folder = !!this.o.repoFor(card).folder;
+    // in a folder nothing is merged later: every path counts
+    const soft = folder ? [] : this.o.repoFor(card).adapter.softPaths;
+    const described = folder ? (c: Change) => `${c.file} (${c.regions[0] ?? 'changed'})` : describe;
     const hard = (f: string) => !soft.some((s) => overlaps(normalize(f), s));
     return [
       active.length
@@ -767,7 +772,7 @@ export class Koordinator {
               return [
                 `- ${tag}: "${a.title}"${a.body ? ` — ${a.body.split('\n')[0]!.slice(0, 200)}` : ''}`,
                 `  expected to change: ${(a.scope ?? []).filter(hard).join(', ') || '(no estimate)'}`,
-                `  changed so far: ${changed.length ? changed.slice(0, 60).map(describe).join(', ') : '(nothing yet)'}`,
+                `  changed so far: ${changed.length ? changed.slice(0, 60).map(described).join(', ') : '(nothing yet)'}`,
               ].join('\n');
             })
             .join('\n')}`
@@ -821,6 +826,33 @@ Read what you need in the repository (you cannot change files), then call scope 
 - conflicts_with: the tags of cards in progress or queued ahead whose changes will likely conflict with this card's on merge; empty when none. When in doubt, leave a card out: a conflict that happens anyway goes back to its worker to resolve.
 - reason: one sentence in ${language} for the owner: with a conflict, where the two cards change the same code; without one, which files they share, if any, and why that is fine. The owner does not know the tags: name cards by their title.
 Keep it quick: this runs every time a card starts.
+`.trim();
+
+const FOLDER_SYSTEM = (language: string) => `
+You are the Koordinator of Obeya, a canvas on which the owner directs agents; the owner knows you simply as Obeya. Several workers work at the same time, all directly in one folder that is not a git repository: what one changes is there at once for the others, and nothing is merged afterwards. Your job here: before a card starts, estimate which files and directories it will touch, and judge whether running it next to the cards in progress is likely to get in their way. Only those keep it waiting; everything else should run in parallel. Cards queued ahead of it count too: they came first and start before it, so a card likely to collide with one of them waits behind it rather than overtaking it.
+
+Working in the same directory is not a collision: cards that add or edit different files there run side by side. A collision is likely when both change, move, rename or delete the same files; when one moves, renames or reorganises a directory the other works in; or when one sorts or rewrites files the other creates or reads. For a card in progress you see what it is expected to touch and what it has changed so far (each path, and whether it was added, changed, moved or deleted); look in the folder when you need to.
+
+Read what you need in the folder (you cannot change files), then call scope exactly once:
+- files: paths relative to the folder that the card will most likely touch; a path ending in "/" stands for a directory. Be concrete; list new files where you expect them.
+- conflicts_with: the tags of cards in progress or queued ahead it would likely collide with; empty when none. Leave out a card that only works beside it.
+- reason: one sentence in ${language} for the owner: with a collision, which files or directories both touch; without one, what they share, if anything, and why that is fine. The owner does not know the tags: name cards by their title.
+Keep it quick: this runs every time a card starts.
+`.trim();
+
+const FOLDER_SCHEDULE_SYSTEM = (language: string) => `
+You are the Koordinator of Obeya, a canvas on which the owner directs agents; the owner knows you simply as Obeya. Several workers work at the same time, all directly in one folder that is not a git repository: what one changes is there at once for the others, and nothing is merged afterwards. The owner started all open workstreams of a project at once; you decide how they go. Read the plan doc and what you need in the folder (you cannot change files).
+
+A workstream waits for another when:
+- it depends on it: it builds on files, an overview, data or a decision that the other one makes, or the plan says it comes after it. It then waits until that one is done.
+- running both at once likely collides: both change, move, rename or delete the same files, one reorganises a directory the other works in, or one sorts or rewrites files the other creates or reads. Working in the same directory is not a collision.
+Everything else starts now and runs in parallel; parallel work is the point. Cards in progress and queued ahead count as for any start: a workstream likely to collide with one of them waits for it.
+
+Call schedule exactly once, with every workstream once, in the order they should go (what starts now first, then each one after what it waits for):
+- card: its tag.
+- files: paths relative to the folder it will most likely touch; a path ending in "/" stands for a directory.
+- waits_for: the tags of cards it waits for: cards in progress, queued ahead, or workstreams earlier in your order. Empty: it starts now. A workstream that waits starts by itself once what it waits for is done.
+- reason: one sentence in ${language} for the owner: why it waits (the dependency, or where the changes collide), or, starting now, why it can run beside the others. The owner does not know the tags: name cards by their label or title.
 `.trim();
 
 const SCHEDULE_SYSTEM = (language: string) => `

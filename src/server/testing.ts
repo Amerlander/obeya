@@ -44,6 +44,14 @@ export class FakeSession implements AgentSession {
   call(name: string, args: Record<string, unknown>) {
     return this.spec.tools.find((t) => t.name === name)!.run(args);
   }
+  /** A tool call of the agent that does `act` in its workspace, with the hooks that watch it before and after. */
+  async use(name: string, input: Record<string, unknown>, act: () => unknown = () => {}) {
+    const call = { id: `call-${++FakeSession.calls}`, name, input };
+    await this.spec.watch?.before(call);
+    await act();
+    await this.spec.watch?.after(call);
+  }
+  private static calls = 0;
   /** A tool step of the agent: what the session hands it with the step's result. */
   toolStep(): string | undefined {
     return this.spec.contextUpdate?.();

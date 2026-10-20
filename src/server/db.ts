@@ -383,6 +383,12 @@ export const MIGRATIONS = [
   'ALTER TABLE cards ADD COLUMN snoozed TEXT;',
   // cards the Koordinator waits on to take a step then (JSON `TalkWaitRow[]`), and the exchange it took that step up in (JSON `TalkAfter`)
   'ALTER TABLE talk ADD COLUMN waits TEXT; ALTER TABLE talk ADD COLUMN after_wait TEXT;',
+  // what a card changed in a folder without git, and the undo it has there (JSON `FolderCard`, folder.ts)
+  `CREATE TABLE folder_cards (
+    card_id TEXT PRIMARY KEY,
+    folder TEXT NOT NULL,
+    state TEXT NOT NULL
+  );`,
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter, wish';
@@ -1122,6 +1128,28 @@ export class Store {
     this.db
       .query('INSERT INTO trusted_commands (repo, commands, at) VALUES ($repo, $commands, $at) ON CONFLICT(repo) DO UPDATE SET commands = $commands, at = $at')
       .run({ repo: path, commands: JSON.stringify(commands), at: now() });
+  }
+
+  // ---------------------------------------------------------------- folders without git
+
+  /** What the card changed in the folder without git it works in, as `folder.ts` keeps it (JSON); null where it has no record. */
+  folderCard(cardId: string): string | null {
+    const row = this.db.query('SELECT state FROM folder_cards WHERE card_id = $c').get({ c: cardId }) as { state: string } | null;
+    return row?.state ?? null;
+  }
+
+  /** The cards with a record in the folder at `folder`. */
+  folderCards(folder: string): { card_id: string; state: string }[] {
+    return this.db.query('SELECT card_id, state FROM folder_cards WHERE folder = $f').all({ f: folder }) as { card_id: string; state: string }[];
+  }
+
+  /** Keeps the card's record in the folder; null removes it. */
+  setFolderCard(cardId: string, folder: string, state: string | null) {
+    if (state === null) this.db.query('DELETE FROM folder_cards WHERE card_id = $c').run({ c: cardId });
+    else
+      this.db
+        .query('INSERT INTO folder_cards (card_id, folder, state) VALUES ($c, $f, $s) ON CONFLICT(card_id) DO UPDATE SET folder = $f, state = $s')
+        .run({ c: cardId, f: folder, s: state });
   }
 
   // ---------------------------------------------------------------- devices

@@ -10,8 +10,10 @@ export interface RepoInfo {
   path: string;
   /** `origin` URL, if any. */
   remote: string | null;
-  /** Its main branch, where cards start from and work lands (`defaultBranch`). */
+  /** Its main branch, where cards start from and work lands (`defaultBranch`); empty in a folder without git. */
   branch: string;
+  /** A folder without git (`RepoConfig.git` false): cards work in it directly. */
+  folder?: true;
 }
 
 /** The repository's settings in front of Obeya's defaults: a field with a default is always there. */

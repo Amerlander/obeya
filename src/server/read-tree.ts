@@ -5,7 +5,7 @@
 // Obeya's home, kept on the default branch as `origin` has it.
 
 import { existsSync, realpathSync, rmSync } from 'node:fs';
-import { addDetachedTree, branchSetting, type Branches, detectingBranch, GIT, type GitSteps, gitOrNull, gitStepsSync, readingBranches } from './workspaces';
+import { addDetachedTree, branchSetting, type Branches, detectingBranch, GIT, type GitSteps, gitOrNull, gitStepsSync, isFolder, readingBranches } from './workspaces';
 
 const gitIn =
   (path: string) =>
@@ -18,6 +18,8 @@ const gitIn =
  * with neither.
  */
 export function defaultBranchCommit(repoPath: string): { branch: string; commit: string } {
+  // a folder without git has neither
+  if (isFolder(repoPath)) return { branch: '', commit: '' };
   return gitStepsSync(repoPath, readingDefaultBranch(repoPath));
 }
 

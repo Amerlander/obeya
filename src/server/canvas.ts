@@ -2,7 +2,7 @@
 // workers, project agents and PR watcher), the board, the Koordinator and the voice commands.
 
 import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
-import { existsSync, mkdirSync, realpathSync } from 'node:fs';
+import { existsSync, mkdirSync, realpathSync, statSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { defaultsFor, hasAdapterModule, readingAdapterModule, readingShared, readShared, repoValues, type SharedRead, withSettings } from '../adapters';
 import { Answers, answersDir, answerTag } from './answers';
@@ -35,7 +35,8 @@ import { changesCode, RESTART_PATIENCE_MS, whenIdle } from './self-update';
 import { Sharing, siteIncomplete } from './share';
 import { siteMissing, siteName } from './site';
 import { type DueRestart, Workers } from './workers';
-import { branchSetting, defaultBranch, detectingBranch, gitCalls, gitOrNull, type GitSteps, gitStepsSync, type Landed, readingBranches, together, useBranchSetting, Workspaces } from './workspaces';
+import { branchSetting, type CardWorkspaces, defaultBranch, detectingBranch, gitCalls, gitOrNull, type GitSteps, gitStepsSync, type Landed, markFolder, readingBranches, together, useBranchSetting, Workspaces } from './workspaces';
+import { FolderWorkspaces } from './folder';
 import { claudeToken, githubToken, hostName, registerHost } from './hosts';
 import { messageOf } from '../core/text';
 import { type WishDraft, type WishInput, writeWish } from './wish';
@@ -95,7 +96,7 @@ export interface RepoRuntime {
   site: DemoSite | null;
   /** Its Lesestand: the default branch, where plan docs are read and the agents that only read work. */
   read: ReadTree;
-  workspaces: Workspaces;
+  workspaces: CardWorkspaces;
   workers: Workers;
   projectAgents: ProjectAgents;
 }
@@ -222,7 +223,7 @@ export class CanvasRuntime {
       home: () => this.repos[0]!.read.path,
       repoFor: (card) => {
         const r = this.repoOf(card);
-        return { workers: r.workers, workspaces: r.workspaces, adapter: r.adapter, path: r.read.path };
+        return { workers: r.workers, workspaces: r.workspaces, adapter: r.adapter, path: r.read.path, folder: !!r.info.folder };
       },
       imageFiles: this.imageFiles,
     }));
@@ -479,31 +480,40 @@ export class CanvasRuntime {
     const repo = { config: rc, stops } as Repo;
     repo.problemSources = this.problemSources(info.path, this.adapterModules.get(info.path));
     // where work lands on the local main, the checkout is the Lesestand; otherwise it is a pool clone on a card's branch
+    const folder = !!info.folder;
     const read = new ReadTree({
       repoPath: info.path,
-      dir: adapter.land === 'main' ? null : join(deps.home, 'read', resolved.id, ref.id),
-      remote: !!info.remote,
+      // a folder without git is read as it is
+      dir: folder || adapter.land === 'main' ? null : join(deps.home, 'read', resolved.id, ref.id),
+      remote: !folder && !!info.remote,
       onChange: () => {
         board.lesestandMoved(repo.ref.id, read.head());
         if (this.moved(repo) === 'follow') this.follow();
       },
     });
     stops.push(() => read.stop());
-    const remoteHosts = info.remote && adapter.workspaces === 'clones' && adapter.land !== 'main' ? (rc.hosts ?? []) : [];
+    const remoteHosts = !folder && info.remote && adapter.workspaces === 'clones' && adapter.land !== 'main' ? (rc.hosts ?? []) : [];
     // the workers set up below say how many are busy where
     let workers!: Workers;
-    const workspaces = new Workspaces(deps.store, resolved.id, {
-      mode: adapter.workspaces,
-      repoPath: info.path,
-      dir: isHome ? join(deps.home, 'workspaces', resolved.id) : join(deps.home, 'workspaces', resolved.id, ref.id),
-      repo: isHome ? null : ref.id,
-      machines: [{ host: null, ...(rc.slots !== undefined ? { slots: rc.slots } : {}) }, ...remoteHosts.map((h) => ({ host: h.name, ...(h.slots !== undefined ? { slots: h.slots } : {}) }))],
-      busy: (host) => workers.busyOn(host),
-    });
-    // a clone registered for this repository must be one of it
-    for (const w of rc.workspaces ?? []) workspaces.register(resolve(w), [info.remote, info.path].filter((x): x is string => !!x));
-    // landing on main needs clones that see the local main; otherwise they track the remote
-    if (rc.clones) workspaces.ensureClones(adapter.land === 'main' || !info.remote ? info.path : info.remote, rc.clones);
+    let workspaces: CardWorkspaces;
+    if (folder)
+      // every card works in the folder itself; what each changed, and its undo, under Obeya's home
+      workspaces = new FolderWorkspaces(deps.store, { path: info.path, dir: join(deps.home, 'undo', resolved.id, ref.id) });
+    else {
+      const git = new Workspaces(deps.store, resolved.id, {
+        mode: adapter.workspaces,
+        repoPath: info.path,
+        dir: isHome ? join(deps.home, 'workspaces', resolved.id) : join(deps.home, 'workspaces', resolved.id, ref.id),
+        repo: isHome ? null : ref.id,
+        machines: [{ host: null, ...(rc.slots !== undefined ? { slots: rc.slots } : {}) }, ...remoteHosts.map((h) => ({ host: h.name, ...(h.slots !== undefined ? { slots: h.slots } : {}) }))],
+        busy: (host) => workers.busyOn(host),
+      });
+      // a clone registered for this repository must be one of it
+      for (const w of rc.workspaces ?? []) git.register(resolve(w), [info.remote, info.path].filter((x): x is string => !!x));
+      // landing on main needs clones that see the local main; otherwise they track the remote
+      if (rc.clones) git.ensureClones(adapter.land === 'main' || !info.remote ? info.path : info.remote, rc.clones);
+      workspaces = git;
+    }
     // clones on other machines, made in the background: a host that is off now gets them once it answers
     if (remoteHosts.length) {
       const token = githubToken(info.path, info.remote!);
@@ -516,7 +526,7 @@ export class CanvasRuntime {
         // the log tells what goes wrong once, not at every try while the host stays off
         let told: string | null = null;
         const ensure = async () => {
-          const wrong = await workspaces.ensureHostClones(host, h.root, info.remote!, h.clones, token);
+          const wrong = await (workspaces as Workspaces).ensureHostClones(host, h.root, info.remote!, h.clones, token);
           if (stopped) return;
           if (!wrong) {
             if (told) console.log(`clones on ${h.name}: in place`);
@@ -833,7 +843,7 @@ export class CanvasRuntime {
       r.problemSources = sources;
       r.ref.configRev = (r.ref.configRev ?? 0) + 1;
     }
-    const workIn = namesClones(r.config) ? 'clones' : (layerSettings<RepoSettings>(this.sharedOf(path)(), this.settingsOf(r.config)())?.workspaces ?? defaultsFor(r.info).workspaces);
+    const workIn = r.info.folder ? 'folder' : namesClones(r.config) ? 'clones' : (layerSettings<RepoSettings>(this.sharedOf(path)(), this.settingsOf(r.config)())?.workspaces ?? defaultsFor(r.info).workspaces);
     if (workIn !== r.workspaces.mode) {
       this.due([path], shared ? 'repository' : 'config');
       return 'due';
@@ -888,7 +898,7 @@ export class CanvasRuntime {
       for (const k of ['pullRequests', 'direct'] as const) delete r.ref[k];
       Object.assign(r.ref, settled(r.info, r.adapter));
       // where work lands on the local main, the checkout is the Lesestand; otherwise a worktree on the default branch
-      r.read.retarget(r.adapter.land === 'main' ? null : join(this.deps.home, 'read', this.id, r.ref.id));
+      r.read.retarget(r.info.folder || r.adapter.land === 'main' ? null : join(this.deps.home, 'read', this.id, r.ref.id));
       this.watch(r);
     }
     this.board.docsChanged();
@@ -1146,6 +1156,8 @@ export class CanvasRuntime {
         return this.repoOf(cardId).workers.answer(cardId, text.trim(), images, !!a.spoken, replyTo, picks);
       case 'approve':
         return this.repoOf(cardId).workers.approve(cardId, { direct: !!a.direct });
+      case 'undo':
+        return this.repoOf(cardId).workers.undo(cardId);
       case 'accept':
         return this.accept(cardId, a.picks, a.start !== false, a.idea);
       case 'unaccept':
@@ -1509,13 +1521,16 @@ export class CanvasRuntime {
    */
   private outsidePlanDoc(card: Item): { file: string; row: { plan_docs: string } } | undefined {
     const r = this.repoOf(card);
-    const dir = outsidePlanDir(r.adapter.planDocs.dir);
+    const outside = outsidePlanDir(r.adapter.planDocs.dir);
+    // in a folder without git nothing lands either: the doc is there as soon as it is written
+    const dir = outside ?? (r.info.folder ? r.adapter.planDocs.dir.replace(/[/\\]+$/, '') : null);
     if (!dir) return;
+    const at = (file: string) => (outside ? file : join(r.info.path, file));
     const name = slug(card.title).slice(0, 60).replace(/^[.-]+|[.-]+$/g, '') || 'plan';
     // nor one another card was given and has not written yet
     const given = new Set(this.deps.store.withPlanDocs(this.id).flatMap((row) => (JSON.parse(row.plan_docs!) as string[]).map(pathOfRef)));
     let file = `${dir}/${name}.md`;
-    for (let n = 2; existsSync(file) || given.has(file); n++) file = `${dir}/${name}-${n}.md`;
+    for (let n = 2; existsSync(at(file)) || given.has(file); n++) file = `${dir}/${name}-${n}.md`;
     const ref = r.ref.id === this.repos[0]!.ref.id ? file : `${r.ref.id}:${file}`;
     return { file, row: { plan_docs: JSON.stringify([ref]) } };
   }
@@ -1538,6 +1553,8 @@ export class CanvasRuntime {
    */
   private prototype(cardId: string, what: string, chosen?: string[]) {
     const card = this.ideaCard(cardId);
+    // a prototype is a branch thrown away or built on: a folder without git has none
+    if (this.repoOf(card).info.folder) throw new BadRequest('inFolder', 'a folder without git has no prototypes: its cards change the folder itself');
     const { variants = [] } = this.board.idea(cardId);
     const t = this.board.t.idea;
     const running = new Set(this.board.snapshot().items.flatMap((i) => (i.prototypeOf === cardId && i.variant ? [i.variant] : [])));
@@ -1870,8 +1887,13 @@ export interface RepoRead {
   shared: SharedRead;
 }
 
-/** Reads a repository for `resolveCanvas`, as git steps; null where `path` is no git repository. */
-export function* readingRepo(path: string): GitSteps<RepoRead | null> {
+/**
+ * Reads a repository for `resolveCanvas`, as git steps; null where `path` is no git repository. A
+ * folder without git (`folder`) is read as it is, without git: null where it is no directory.
+ */
+export function* readingRepo(path: string, folder = false): GitSteps<RepoRead | null> {
+  markFolder(path, folder);
+  if (folder) return readFolder(path);
   const [[remote], branches] = yield* together(gitCalls(['remote', 'get-url', 'origin']), readingBranches());
   if (branches == null) return null;
   const detected = yield* detectingBranch(branches);
@@ -1881,8 +1903,18 @@ export function* readingRepo(path: string): GitSteps<RepoRead | null> {
   return { info: { path, remote: remote ?? null, branch }, detected, adapterModule, shared };
 }
 
-/** Reads a repository for `resolveCanvas`, the server waiting; null where `path` is no git repository. */
-export const readRepo = (path: string): RepoRead | null => gitStepsSync(path, readingRepo(path));
+/** Reads a repository for `resolveCanvas`, the server waiting; null where `path` is no git repository (no directory, for a `folder`). */
+export const readRepo = (path: string, folder = false): RepoRead | null => gitStepsSync(path, readingRepo(path, folder));
+
+/** A folder without git as `resolveCanvas` reads it: no remote, no branch, its `.obeya/settings.json` as the folder has it. */
+function readFolder(path: string): RepoRead | null {
+  try {
+    if (!statSync(path).isDirectory()) return null;
+  } catch {
+    return null;
+  }
+  return { info: { path, remote: null, branch: '', folder: true }, detected: '', adapterModule: false, shared: readShared(path) };
+}
 
 /**
  * What a canvas's configuration amounts to, without touching anything: its repositories (home
@@ -1898,12 +1930,13 @@ export function resolveCanvas(
   store: Store,
   settings: (r: RepoConfig) => () => RepoSettings | undefined = (r) => () => r.settings,
   shared?: (path: string) => () => SharedSettings | undefined,
-  read: (path: string) => RepoRead | null = readRepo,
+  read: (path: string, folder: boolean) => RepoRead | null = readRepo,
 ) {
   if (!config.repos.length) throw new ConfigError('noRepo', 'a canvas needs at least one repository');
   const reads = config.repos.map((r, i) => {
-    const got = read(resolve(r.path));
-    if (!got) throw new ConfigError('notRepo', `${r.path} is not a git repository`, i);
+    const folder = r.git === false;
+    const got = read(resolve(r.path), folder);
+    if (!got) throw folder ? new ConfigError('noFolder', `${r.path} is no folder`, i) : new ConfigError('notRepo', `${r.path} is not a git repository`, i);
     return got;
   });
   // a repository runs once on a canvas: twice, it would have two of everything, its plan docs' note too
@@ -1971,7 +2004,8 @@ function uniqueRefs(infos: RepoInfo[], adapters: RepoAdapter[]): RepoRef[] {
 }
 
 /** What a repository's ref says of its settings, which may change while the canvas runs: its main branch, how work lands. */
-function settled(info: RepoInfo, adapter: RepoAdapter): Pick<RepoRef, 'branch' | 'pullRequests' | 'direct'> {
+function settled(info: RepoInfo, adapter: RepoAdapter): Pick<RepoRef, 'branch' | 'pullRequests' | 'direct' | 'folder'> {
+  if (info.folder) return { branch: '', folder: true };
   return {
     branch: info.branch,
     ...(adapter.land === 'pr' ? { pullRequests: true, ...(adapter.direct ? { direct: true } : {}) } : {}),

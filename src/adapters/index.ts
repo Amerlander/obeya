@@ -1,7 +1,9 @@
 import { defaultBranchCommit } from '../server/read-tree';
 import { onGitHub } from '../server/repo';
 import { type ClaudeFile, isNested, SHARED_FIELDS, type NESTED_SETTINGS, type NestedSetting, type RepoSettings, type RepoValues, type SharedSettings } from '../core/types';
-import { detectedBranch, type GitSteps, gitStepsSync } from '../server/workspaces';
+import { detectedBranch, type GitSteps, gitStepsSync, isFolder } from '../server/workspaces';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { generic } from './generic';
 import { checkShared } from './schema';
 import type { RepoAdapter, RepoInfo } from './types';
@@ -111,7 +113,31 @@ export function parseShared(text: string): SharedRead {
  * the time; nothing where the default branch has no such file.
  */
 export function readShared(repoPath: string, commit = defaultBranchCommit(repoPath).commit): SharedRead {
+  if (isFolder(repoPath)) return readSharedFiles(repoPath);
   return gitStepsSync(repoPath, readingShared(commit));
+}
+
+/** `readShared` of a folder without git: its `.obeya/settings.json` and Claude Code configuration as the folder has them. */
+export function readSharedFiles(dir: string): SharedRead {
+  const file = join(dir, REPO_SETTINGS_FILE);
+  const read: SharedRead = existsSync(file) ? parseShared(readFileSync(file, 'utf8')) : { problems: [] };
+  const files: string[] = [];
+  const add = (rel: string) => {
+    const abs = join(dir, rel);
+    try {
+      if (statSync(abs).isDirectory()) for (const name of readdirSync(abs)) add(`${rel}/${name}`);
+      else files.push(rel);
+    } catch {}
+  };
+  for (const p of CLAUDE_PATHS) add(p);
+  if (!files.length) return read;
+  const claude = Object.fromEntries(
+    files.sort().map((f) => {
+      const text = readFileSync(join(dir, f), 'utf8');
+      return [f, { id: Bun.hash(text).toString(16), text }];
+    }),
+  );
+  return { ...read, claude };
 }
 
 /** `readShared` at `commit` as git steps, with the repository's Claude Code configuration beside it. */
@@ -144,6 +170,7 @@ export function* readingShared(commit: string): GitSteps<SharedRead> {
  * what its settings say now, which Obeya no longer reads (problem `adapterGone`).
  */
 export function hasAdapterModule(repoPath: string, commit = defaultBranchCommit(repoPath).commit): boolean {
+  if (isFolder(repoPath)) return false;
   return gitStepsSync(repoPath, readingAdapterModule(commit));
 }
 

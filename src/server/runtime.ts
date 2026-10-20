@@ -20,6 +20,7 @@ import type { z } from 'zod';
 import { mediaType } from './images';
 import { COMPILED } from './resources';
 import type { Messages } from '../core/messages';
+import type { ToolCall, ToolWatch } from './folder';
 import type { AgentEffort, AgentRole, AgentSetting } from '../core/types';
 import { messageOf } from '../core/text';
 
@@ -112,6 +113,11 @@ export interface AgentSpec {
    * that step's result without being stopped; nothing when nothing did. Asking takes it: it is read.
    */
   contextUpdate?: () => string | undefined;
+  /**
+   * Told before and after each tool call of the agent and its subagents, and waited for: what a
+   * call changes in a folder without git becomes the card's (`FolderWorkspaces.watch`).
+   */
+  watch?: ToolWatch;
   /**
    * Asked when a tool call needs a person's permission; settles with their answer. Without it such a
    * call is refused, as in any session without someone to ask.
@@ -276,6 +282,8 @@ export const sdkRuntime: AgentRuntime = {
     });
     const ownTools = spec.tools.map((t) => `mcp__obeya__${t.name}`);
     const claude = there ? 'claude' : claudeExecutable();
+    // a watched call's end is waited for before the agent goes on
+    const watched = spec.watch ? [{ hooks: [async (input: HookInput) => (await spec.watch!.after(toolCall(input)), {})] }] : [];
     const q = query({
       prompt: inbox,
       options: {
@@ -310,6 +318,7 @@ export const sdkRuntime: AgentRuntime = {
         hooks: {
           PreToolUse: [
             { matcher: 'mcp__obeya__.*', hooks: [async () => ownToolAllowed] },
+            ...(spec.watch ? [{ hooks: [async (input: HookInput) => (await spec.watch!.before(toolCall(input)), {})] }] : []),
             {
               matcher: 'Bash',
               hooks: [
@@ -323,8 +332,14 @@ export const sdkRuntime: AgentRuntime = {
             },
           ],
           // a subagent's step would pass it to the subagent, which the agent may never hear of
-          PostToolUse: [{ hooks: [async (input) => withContext('PostToolUse', input.agent_id ? undefined : spec.contextUpdate?.())] }],
-          PostToolUseFailure: [{ hooks: [async (input) => withContext('PostToolUseFailure', input.agent_id ? undefined : spec.contextUpdate?.())] }],
+          PostToolUse: [
+            ...watched,
+            { hooks: [async (input) => withContext('PostToolUse', input.agent_id ? undefined : spec.contextUpdate?.())] },
+          ],
+          PostToolUseFailure: [
+            ...watched,
+            { hooks: [async (input) => withContext('PostToolUseFailure', input.agent_id ? undefined : spec.contextUpdate?.())] },
+          ],
         },
       },
     });
@@ -587,6 +602,12 @@ export function refuseForegroundWait(input: HookInput): HookJSONOutput {
 }
 
 /** Obeya's own tools run without asking anyone. */
+/** A tool call as the hooks of `AgentSpec.watch` hear of it. */
+function toolCall(input: HookInput): ToolCall {
+  const i = input as { tool_use_id?: string; tool_name?: string; tool_input?: unknown };
+  return { id: i.tool_use_id ?? '', name: i.tool_name ?? '', input: (i.tool_input ?? {}) as Record<string, unknown> };
+}
+
 const ownToolAllowed: HookJSONOutput = { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow' } };
 
 function withContext(event: 'PostToolUse' | 'PostToolUseFailure', text: string | undefined): HookJSONOutput {

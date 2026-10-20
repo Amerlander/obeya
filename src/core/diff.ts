@@ -1,11 +1,16 @@
 // What a card's work changes in its repository, as `git diff` shows it: the server sums it up for
 // the line beside the card's branch, the UI shows it file by file.
 
-/** A card's change: the branch in its workspace so far, or what landed. */
+/** A card's change: the branch in its workspace so far, or what landed; in a folder without git, what the card changed there. */
 export interface CardDiff {
-  /** `branch`: the workspace's branch against the default branch, committed or not; `landed`: what the landing put on the default branch. */
-  source: 'branch' | 'landed';
+  /**
+   * `branch`: the workspace's branch against the default branch, committed or not; `landed`: what
+   * the landing put on the default branch; `folder`: what the card changed in a folder without git
+   * (`folder` holds the list, `patch` the text files' diffs).
+   */
+  source: 'branch' | 'landed' | 'folder';
   files: DiffFile[];
+  folder?: FolderChanges;
   /** The whole diff, when it was asked for; cut off at `PATCH_LIMIT` characters (`truncated`). */
   patch?: string;
   truncated?: true;
@@ -20,6 +25,37 @@ export interface DiffFile {
   added: number;
   removed: number;
   binary?: true;
+}
+
+/** What a card changed in a folder without git (design: Folders without git), as its change list shows it. */
+export interface FolderChanges {
+  /**
+   * Which undo the card has: `full` from a clone of the folder taken at its start (where the file
+   * system clones), `partial` from copies of what its editing tools overwrote and of the folder's
+   * text files; null once nothing can be undone (the card is done).
+   */
+  undo: 'full' | 'partial' | null;
+  changes: FolderChange[];
+}
+
+export interface FolderChange {
+  kind: 'added' | 'modified' | 'deleted' | 'moved';
+  /** Relative to the folder, with `/`; where it is now (for a deleted one, where it was). */
+  path: string;
+  /** A moved one: where it was. */
+  from?: string;
+  dir?: true;
+  /** A moved file the card also changed. */
+  changed?: true;
+  /** Lines added and removed, for a text file whose earlier version Obeya kept. */
+  added?: number;
+  removed?: number;
+  /**
+   * What undoing the card does with it: puts it back (`yes`); cannot, as no copy of it from before
+   * the card's change is kept (`lost`); or leaves it as it is, since someone changed it after the
+   * card (`changedSince`). None once nothing can be undone.
+   */
+  undo?: 'yes' | 'lost' | 'changedSince';
 }
 
 /** How much of a diff goes to the page: beyond it, it is cut off at a file's end. */

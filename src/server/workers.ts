@@ -22,7 +22,8 @@ import { TO_OBEYA, toObeyaTool } from './to-obeya';
 import { type Forward, HOST_DIR, hostName, remote } from './hosts';
 import { runAppCommand } from './app-command';
 import { readingShared } from '../adapters';
-import { branchName, gitStepsSync, type Landed, shortageOf, together, WorkspaceError, type Workspaces } from './workspaces';
+import { branchName, type CardWorkspaces, gitStepsSync, type Landed, shortageOf, together, WorkspaceError } from './workspaces';
+import type { FolderWorkspaces, UndoReport } from './folder';
 import type { PrState, Shipped } from './board';
 import type { CardRow } from './db';
 import { parsePrUrl } from './forge';
@@ -32,7 +33,7 @@ import { inQueue } from '../core/queue';
 export interface WorkerOptions {
   board: Board;
   runtime: AgentRuntime;
-  workspaces: Workspaces;
+  workspaces: CardWorkspaces;
   adapter: RepoAdapter;
   /**
    * The settings the owner set for the repository on this machine, in front of its
@@ -415,6 +416,11 @@ const AFTER_RESTART = 'If something that remains needs Obeya to run your change,
 const AFTER_LANDING =
   'Your workspace and this session stay until you end a turn with nothing left to wait for (a question, the restart); then both end. Commits you make here no longer land.';
 
+const AFTER_DONE = 'This session stays until you end a turn with nothing left to wait for (a question, say); then it ends.';
+
+const FOLLOW_UP_FOLDER =
+  "Answer with reply (ask, for a decision that is the owner's). What you change in the folder now counts as this card's, as before, but can no longer be undone from the card: a change the owner's words call for that is more than a small correction becomes a card of its own (propose_card). The session ends once you end a turn with nothing left to wait for.";
+
 const FOLLOW_UP =
   "Answer with reply (ask, for a decision that is the owner's). Commits you make here do not land: a change to the code the owner's words call for becomes a card of its own (propose_card). Workspace and session end once you end a turn with nothing left to wait for.";
 
@@ -456,6 +462,11 @@ export class Workers {
     });
   }
 
+  /** The folder without git the cards work in, where the repository is one (design: Folders without git). */
+  private get folder(): FolderWorkspaces | null {
+    return this.o.workspaces.mode === 'folder' ? (this.o.workspaces as FolderWorkspaces) : null;
+  }
+
   /** Whether a video demo here may go to a page for colleagues, which the worker then writes. */
   private get shares(): boolean {
     return this.o.shares ? this.o.shares() : !!this.o.adapter.demo?.site;
@@ -478,7 +489,7 @@ export class Workers {
     if (row.session_id) this.o.board.log(card.id, 'state', 'obeya', this.o.board.t.worker.restarted(this.o.board.t.worker.earlierRun(row.session_id)));
     // a fresh session knows of no app that was stopped
     this.o.board.work(card.id, { state: 'working', need: null, detail: null, status_line: null, workspace: path, branch, session_id: null, pr: null, approved_at: null, parked: null, paused: null, snoozed: null, app: null });
-    this.o.board.log(card.id, 'state', 'obeya', this.o.board.t.worker.started(branch));
+    this.o.board.log(card.id, 'state', 'obeya', this.folder ? this.o.board.t.worker.startedInFolder : this.o.board.t.worker.started(branch));
     this.launch(card.id, this.briefing(card, branch, !!row.branch), undefined, this.taskImages(card));
   }
 
@@ -583,9 +594,11 @@ export class Workers {
     this.o.board.log(card.id, 'hint', 'owner', text, { images: images.slice(stills.length), replyTo, spot: place });
     if (text) this.o.onOwnerInput?.(card, 'note', text);
     const message = [
-      `The owner asks about this card${spoken ? ` (${SPOKEN})` : ''}. ${card.state === 'done' ? 'It was closed without a change to the repository' : `Its work is on main${commit ? ` (${commit.slice(0, 7)})` : ''}`}, and your session had ended; it goes on in a fresh workspace ${worktree ? 'at the head of' : 'on'} the branch ${row.branch}, where main may have moved on since.`,
+      this.folder
+        ? `The owner asks about this card${spoken ? ` (${SPOKEN})` : ''}. It is done, and your session had ended; it goes on in the folder ${path}, which other cards and the owner may have changed since.`
+        : `The owner asks about this card${spoken ? ` (${SPOKEN})` : ''}. ${card.state === 'done' ? 'It was closed without a change to the repository' : `Its work is on main${commit ? ` (${commit.slice(0, 7)})` : ''}`}, and your session had ended; it goes on in a fresh workspace ${worktree ? 'at the head of' : 'on'} the branch ${row.branch}, where main may have moved on since.`,
       this.words(card.id, text, images.slice(stills.length), replyTo, place),
-      FOLLOW_UP,
+      this.folder ? FOLLOW_UP_FOLDER : FOLLOW_UP,
       ...(worktree ? [IN_WORKTREE] : []),
     ].join('\n\n');
     // a card that never reported a session: a new one needs the card first
@@ -907,8 +920,9 @@ export class Workers {
       : undefined;
     // a prototype never lands: approving it is having seen enough
     if (card.prototypeOf) return this.endPrototype(cardId, 'discarded');
-    // work that changed nothing (a demo, an analysis) has nothing to land and no pull request to open
-    if (!this.o.workspaces.hasWork(cardId)) return this.close(cardId, 'owner', comments);
+    // work that changed nothing (a demo, an analysis) has nothing to land and no pull request to open;
+    // in a folder without git, what it changed is in the folder already
+    if (this.folder || !this.o.workspaces.hasWork(cardId)) return this.close(cardId, 'owner', comments);
     if (lands.land === 'main' || direct) {
       // the click ends the owner's turn: while the work lands, the card no longer needs them
       this.o.board.work(cardId, { approved_at: new Date().toISOString() });
@@ -936,6 +950,40 @@ export class Workers {
       comments?.images,
       true,
     );
+  }
+
+  /**
+   * „Änderungen verwerfen“ in a folder without git, on a card waiting for approval: what its worker
+   * changed there is put back as it was (`FolderWorkspaces.undo`), but what someone changed since
+   * and what no copy was kept of. The card goes on waiting for the owner, its log says what was put
+   * back and what not, and its worker hears it with its next message.
+   */
+  async undo(cardId: string): Promise<UndoReport> {
+    const card = this.card(cardId);
+    if (!this.folder) throw new BadRequest('notFolder', 'only the changes of a card in a folder without git are undone');
+    if (!handedOver(card) || this.landing.has(cardId)) throw new BadRequest('notReady', 'only a card waiting for approval has its changes discarded');
+    const report = await this.folder.undo(cardId);
+    const t = this.o.board.t.worker;
+    const files = (list: string[]) => list.join(', ');
+    this.o.board.log(
+      cardId,
+      'state',
+      'owner',
+      [t.undone(report.undone.length), report.changedSince.length ? t.undoChangedSince(files(report.changedSince)) : '', report.lost.length ? t.undoLost(files(report.lost)) : ''].filter(Boolean).join(' '),
+    );
+    const row = this.o.board.row(cardId);
+    const detail = row.detail ? (JSON.parse(row.detail) as Record<string, unknown>) : {};
+    const told = [
+      `The owner discarded your changes in the folder: Obeya put back ${report.undone.length === 1 ? 'one file' : `${report.undone.length} files`} as they were before your card changed them.`,
+      report.changedSince.length ? `Left as they are, since someone changed them after you: ${files(report.changedSince)}.` : '',
+      report.lost.length ? `Left as they are, since no copy from before your change was kept: ${files(report.lost)}.` : '',
+      'The card still waits for the owner.',
+    ];
+    this.o.board.work(cardId, {
+      detail: JSON.stringify({ ...detail, noChange: !this.o.workspaces.hasWork(cardId) || undefined }),
+      unheard: JSON.stringify([...this.unheard(cardId), { said: [], text: told.filter(Boolean).join(' '), images: [] }] satisfies Unheard[]),
+    });
+    return report;
   }
 
   /**
@@ -1056,12 +1104,14 @@ export class Workers {
     if (by === 'owner') this.o.onApproval?.(cardId);
     this.bump(cardId);
     this.o.board.work(cardId, { state: 'done', need: null, detail: null, status_line: null, approved_at: null, pr: null, landed: JSON.stringify({ unchanged: true } satisfies LandedState) });
-    this.o.board.log(cardId, 'state', by, by === 'owner' ? this.o.board.t.worker.approvedUnchanged : this.o.board.t.worker.doneUnchanged);
+    const t = this.o.board.t.worker;
+    const folder = !!this.folder && this.o.workspaces.hasWork(cardId);
+    this.o.board.log(cardId, 'state', by, by === 'owner' ? (folder ? t.approvedFolder : t.approvedUnchanged) : t.doneUnchanged);
     // the worker that closed it is told by the tool's result, and its turn's end finishes it
     if (by === 'owner')
       this.afterLanding(
         cardId,
-        `The owner approved your work. It changed nothing in the repository, so nothing lands and there is no pull request: the card is done.${comments ? `\n\n${comments.text}` : ''}\n\n${AFTER_LANDING}`,
+        `${folder ? 'The owner approved your work. Your changes stay in the folder as they are, and the card is done: they can no longer be undone from the card.' : 'The owner approved your work. It changed nothing in the repository, so nothing lands and there is no pull request: the card is done.'}${comments ? `\n\n${comments.text}` : ''}\n\n${this.folder ? AFTER_DONE : AFTER_LANDING}`,
         comments?.images,
         true,
       );
@@ -1492,6 +1542,7 @@ export class Workers {
         contextUpdate: () =>
           [this.restartStillDue(cardId, live), this.unheardNow(cardId, live), this.preferencesUpdate(live), this.decisionsUpdate(cardId, live)].filter(Boolean).join('\n\n') || undefined,
         askOwner: (request, signal) => this.askOwner(cardId, live, request, signal),
+        ...(this.folder ? { watch: this.folder.watch(cardId) } : {}),
         ...(resume ? { resume } : {}),
         ...(this.o.permissionMode ? { permissionMode: this.o.permissionMode } : {}),
         onEvent: (e) => this.onEvent(cardId, live, e),
@@ -1798,6 +1849,8 @@ export class Workers {
    * is, so the landing of its work, told while the worker ended its reply, is not lost with the session.
    */
   private turnEnded(cardId: string, live: Live, background: number, waited = false, more = false) {
+    // calls whose end its hooks never heard of (refused, cut off) end with the turn
+    void this.folder?.settle(cardId);
     const handedOver = live.handedOver;
     const acted = live.acted || waited;
     const closing = live.held;
@@ -1953,6 +2006,8 @@ export class Workers {
   /** The worker's background work started or ended: an ended turn waiting for it waits as long as it runs. */
   private backgroundChanged(cardId: string, live: Live, running: { id: string; description: string }[]) {
     live.background = running.length;
+    // what it changes in a folder without git meanwhile is the card's
+    this.folder?.background(cardId, running.length > 0);
     const now = Date.now();
     live.tasks = new Map(running.map((t) => [t.id, { description: t.description, since: live.tasks.get(t.id)?.since ?? now }]));
     // the card shows what runs while the worker is in a turn
@@ -2390,7 +2445,8 @@ export class Workers {
             const answered = !d && !!row.detail && !!(JSON.parse(row.detail) as { answering?: boolean }).answering;
             // without a new demo, the one on the card stands
             const kept = !d && !!row.demo;
-            if (!d && !kept && !approved)
+            // in a folder without git the card's change list shows what changed, where often nothing can be shown on screen
+            if (!d && !kept && !approved && !this.folder)
               return `Not handed over: every handover brings a demo. Record it with ${this.demoSkill(cardId)}, or make an HTML artifact when the result is something to look at, then call ready_for_review again with it.`;
             let demoJson: string | undefined;
             if (d) {
@@ -2645,20 +2701,29 @@ export class Workers {
 
   private system(preferences: string, prototype = false): string {
     const language = LANGUAGE_NAMES[this.o.board.language()];
+    const folder = !!this.folder;
     return `
-You are a worker agent directed through Obeya, a canvas on which the owner directs coding agents like an engineering director directs a team. You work on exactly one card, in a workspace of the repository (a clone or worktree) that belongs to that card, on your own branch. Other workers may work on other cards at the same time in their own workspaces.
+You are a worker agent directed through Obeya, a canvas on which the owner directs coding agents like an engineering director directs a team. ${
+      folder
+        ? 'You work on exactly one card, directly in a folder that is not a git repository. Other workers may work on other cards in the same folder at the same time, and so may the owner.'
+        : 'You work on exactly one card, in a workspace of the repository (a clone or worktree) that belongs to that card, on your own branch. Other workers may work on other cards at the same time in their own workspaces.'
+    }
 
 The owner does not watch you work and does not read code. They see your card's conversation: your status lines, questions, replies and handovers. Talk to them only through the Obeya tools:
 - report: a short status line at milestones.
 - reply: your answer to a note or feedback from the owner, in a sentence or two: what you change because of it, or why nothing.
 - ask: a decision that is not yours (product behaviour, trade-offs, anything irreversible or external). Make routine judgement calls yourself. After ask, end your turn; the answer arrives as the next message.
 ${prototype ? '- propose_build: propose that the idea be built on your prototype, once it convinced. You make no other cards; mention other problems you noticed in your summary.' : '- propose_card: a separate problem or idea you noticed, as a card for the agent who will take it on; do not widen your task. withdraw_proposal takes back one of yours that turned out wrong.'}
-- ready_for_review: the work is committed and the checks pass. Then end your turn.${this.o.toObeya ? '\n- to_obeya: what the owner\'s words ask of Obeya rather than you.' : ''}
+- ready_for_review: ${folder ? 'the work is done' : 'the work is committed'} and the checks pass. Then end your turn.${this.o.toObeya ? '\n- to_obeya: what the owner\'s words ask of Obeya rather than you.' : ''}
 
-Obeya's messages tell you what happened: feedback, an answer, a note from the owner, a landing that failed, your work landing. What to do about it is yours to judge. Approved work lands (or goes out as a pull request) and Obeya tells you once it is on main; your session ends with the turn after that, so whatever was waiting for the landing can still be done then. Work that changed nothing in the repository (the task needed only a demo, an analysis or an answer) lands nothing: approving it makes the card done, and Obeya tells you so the same way.
+${
+      folder
+        ? "Obeya's messages tell you what happened: feedback, an answer, a note from the owner, your changes discarded, the approval. What to do about it is yours to judge. What you change in the folder is there at once. Obeya records which files your card changed (added, changed, moved, deleted) from your tool calls; the owner sees that list on the card and may discard your changes before approving. Approving makes the card done, and Obeya tells you so; your session ends with the turn after that."
+        : "Obeya's messages tell you what happened: feedback, an answer, a note from the owner, a landing that failed, your work landing. What to do about it is yours to judge. Approved work lands (or goes out as a pull request) and Obeya tells you once it is on main; your session ends with the turn after that, so whatever was waiting for the landing can still be done then. Work that changed nothing in the repository (the task needed only a demo, an analysis or an answer) lands nothing: approving it makes the card done, and Obeya tells you so the same way."
+    }
 ${this.o.toObeya ? `\n${TO_OBEYA}\n` : ''}
 Rules:
-- Commit your work on your branch in this workspace. Do not push, do not open pull requests, do not switch branches.
+${folder ? '- Others work in the same folder at the same time: leave what your card is not about as it is.' : '- Commit your work on your branch in this workspace. Do not push, do not open pull requests, do not switch branches.'}
 - Follow the repository's own instructions (CLAUDE.md and docs).
 - Owner-facing text (report, reply, ask, ${prototype ? 'propose_build' : 'propose_card'}, ready_for_review) is in ${language}, short and concrete. What you write between tool calls also shows on the card for the owner, folded under your next message: keep it brief and in ${language} too.
 - Wait for anything external (a deploy, a CI run, a process to finish) in the background: run_in_background or Monitor, then end your turn; Obeya wakes you when it finishes or fires. A point in time further off than a background command can wait (two hours), or another card getting somewhere (its fix on main), you snooze until (snooze). Never wait with sleep or a polling loop in the foreground: a note from the owner reaches you only once the running command is done.
@@ -2727,6 +2792,7 @@ ${idea.idea.brief}` : '',
         `A part of this workstream has landed already${what ? ` (${what})` : ''}, but the plan doc keeps the workstream open. Look at what landed and do the rest.`,
       );
     }
+    if (this.folder) return this.folderBriefing(card.id, parts, resumed);
     parts.push(
       card.builtOn
         ? `You are on branch ${branch}, which holds the prototype's commits (and any earlier work on this card): look at its log and diff first.`
@@ -2748,6 +2814,25 @@ ${idea.idea.brief}` : '',
         `Usually that is a video of the change, recorded with ${this.demoSkill(card.id)} as its instructions say (directory, chapter titles). Its length follows the size of the change, never padded: 30–60 s for a small one (a fix: the broken behaviour, then the fixed one), 1½–3 min for a larger one. Skip the skill's last steps (opening the page, the notification, the chat reply): Obeya shows the demo on the card.${this.shares ? ' The owner may share the demo, a video or an HTML artifact, with colleagues of the team on a page of its own: hand it over with that page (title, text), written for them.' : ''} ${run?.trim() ? 'Run the app for it as the recipe above says.' : "The repository's settings say nothing yet about how to run the app: find it out from the repository (README, scripts, configuration) and say in your summary how you ran it."}`,
         "When the result is something to look at rather than something that happens (drafts of a logo or a layout side by side, a comparison of variants, an analysis, an answer), make an HTML artifact instead: an index.html in a new directory under ~/demos/ (never in git), self-contained or with the files it loads beside it, made for the owner to decide on, and hand it over with kind 'html'. It shows in a sandboxed frame on the card, about 800 px wide, without Obeya's API.",
         'Where either would do, record the video: watching the work happen is what the owner enjoys most.',
+      ].join(' '),
+    );
+    return parts.join('\n\n');
+  }
+
+  /** The end of the briefing in a folder without git: where the card works, and how it hands over without a branch. */
+  private folderBriefing(cardId: string, parts: string[], resumed: boolean): string {
+    const changed = this.folder!.changes(cardId).length;
+    parts.push(
+      `You work directly in the folder ${this.o.board.row(cardId).workspace}, which is not a git repository: what you change there is there at once, for everyone.${resumed && changed ? ` Your card changed ${changed === 1 ? 'one file' : `${changed} files`} there before; the card lists them.` : ''}`,
+    );
+    if (this.o.adapter.setup) parts.push(`First run \`${this.o.adapter.setup}\` in the folder.`);
+    const run = this.o.adapter.app?.run?.trim();
+    if (run) parts.push(`How to run the app: ${run} Once it runs and opens in a browser, give its address with app_running, so the owner can try it by hand from the card.`);
+    if (this.o.adapter.checks?.length) parts.push(`Before ready_for_review, run: ${this.o.adapter.checks.map((c) => `\`${c}\``).join(', ')}.`);
+    parts.push(
+      [
+        'Then hand it over with ready_for_review: your summary says what you did and what the owner needs to know. The card shows the owner what you changed in the folder, file by file (added, changed, moved, deleted, with the changed lines of text files), and they may discard those changes before approving.',
+        `A demo is needed only where something can be seen: a draft or an overview to look at as an HTML artifact (an index.html in a new directory under ~/demos/, outside the folder, self-contained or with the files it loads beside it, made for the owner to decide on), handed over with kind 'html'; something that happens on screen as a video, recorded with ${this.demoSkill(cardId)}.`,
       ].join(' '),
     );
     return parts.join('\n\n');

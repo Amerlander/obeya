@@ -738,6 +738,8 @@ export interface RepoRef {
   name: string;
   path: string;
   branch: string;
+  /** A folder without git: cards work in it directly, with no branches, landing, pull requests, prototypes or hosts. */
+  folder?: true;
   /** It has a share target: demos go to a page outside Obeya (the configuration's command, or the `demo.site` of the repository's settings); without one they are exported as a file. */
   share?: boolean;
   /** The demo site of its settings needs an env file this machine lacks (as the settings name it, relative to Obeya's home): demos are exported meanwhile. */
@@ -1029,6 +1031,8 @@ export type CardAction =
   | { action: 'unsay'; id: number }
   /** `direct`: onto the default branch at once, without a pull request, where the repository allows it (`RepoRef.direct`). */
   | { action: 'approve'; direct?: boolean }
+  /** In a folder without git, on a card waiting for approval: what it changed there is put back as it was before („Änderungen verwerfen“). */
+  | { action: 'undo' }
   /** Start a queued card although it may collide. */
   | { action: 'force' }
   /** On a project: takes back a start of all its workstreams while the Koordinator has not planned them yet. */
@@ -1136,6 +1140,9 @@ export type ErrorCode =
   | 'notHeld'
   /** Approving directly onto main: the card's repository lands approved work only through a pull request. */
   | 'noDirect'
+  /** What only a folder without git has (discarding a card's changes), or what it has not (prototypes, pull requests). */
+  | 'notFolder'
+  | 'inFolder'
   | 'notProposal'
   | 'notSuperseded'
   | 'revising'
@@ -1237,6 +1244,11 @@ export type ErrorCode =
 /** A repository on a canvas, as Obeya's configuration lists it (`canvases.json`). */
 export interface RepoConfig {
   path: string;
+  /**
+   * `false`: a folder without git that is to stay one (a document archive, say): every card works in
+   * the folder itself, nothing lands, and each card lists what it changed (design: Folders without git).
+   */
+  git?: false;
   /** Clones to register as workspaces (adapters that use clones). */
   workspaces?: string[];
   /** Clones to create under Obeya's home (adapters that use clones). */
@@ -1549,6 +1561,8 @@ export type ConfigProblemCode =
   | 'noRepo'
   /** A path that is no git repository. */
   | 'notRepo'
+  /** A folder without git (`RepoConfig.git` false) whose path is no folder. */
+  | 'noFolder'
   /** A repository the canvas has already, under this path or another. */
   | 'sameRepo'
   /** The repository still has a `.obeya/adapter/`, which Obeya no longer reads: its values belong in `.obeya/settings.json`. */

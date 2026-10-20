@@ -118,6 +118,7 @@ const shape = z.array(
         z
           .object({
             path: z.string(),
+            git: z.literal(false).optional(),
             workspaces: z.array(z.string()).optional(),
             clones: z.number().int().min(0).max(20).optional(),
             slots: z.number().int().min(0).max(20).optional(),
@@ -157,6 +158,8 @@ function tidy(canvases: z.infer<typeof shape>): CanvasConfig[] {
       // a host without a name or a machine is a row still being filled in
       const hosts = (r.hosts ?? []).map((h) => ({ name: h.name.trim(), ssh: h.ssh.trim(), root: h.root.trim() || '~/obeya', clones: h.clones, ...(h.slots !== undefined ? { slots: h.slots } : {}) })).filter((h) => h.name && h.ssh);
       const settings = tidySettings(r.settings);
+      // a folder without git has neither clones nor other machines: its cards all work in it
+      if (r.git === false) return { path: r.path.trim(), git: false as const, ...(settings ? { settings } : {}) };
       return {
         path: r.path.trim(),
         ...(workspaces.length ? { workspaces } : {}),
@@ -519,10 +522,12 @@ export class Config {
     const repos = expanded.flatMap((c) => c.repos);
     // a workspace needs only to be a repository; one that is also a repository of the configuration is read as that
     const paths = new Set(repos.map((r) => resolve(r.path)));
+    // a folder without git is read as it is
+    const folders = new Set(repos.filter((r) => r.git === false).map((r) => resolve(r.path)));
     const workspaces = new Set(repos.flatMap((r) => (r.workspaces ?? []).map((w) => resolve(w))).filter((w) => !paths.has(w)));
     const branches = repos.flatMap((r) => (r.settings?.branch && existsSync(r.path) ? [{ path: resolve(r.path), branch: r.settings.branch }] : []));
     const [reads, clones, found] = await Promise.all([
-      Promise.all([...paths].map(async (p) => [p, await gitSteps(p, readingRepo(p))] as const)).then((x) => new Map(x)),
+      Promise.all([...paths].map(async (p) => [p, await gitSteps(p, readingRepo(p, folders.has(p)))] as const)).then((x) => new Map(x)),
       Promise.all([...workspaces].map(async (w) => [w, (await gitSteps(w, gitCalls(['rev-parse', '--git-dir'])))[0] != null] as const)).then((x) => new Map(x)),
       Promise.all(branches.map(async (b) => [`${b.path}\0${b.branch}`, await hasBranch(b.path, b.branch)] as const)).then((x) => new Map(x)),
     ]);

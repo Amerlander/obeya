@@ -242,7 +242,37 @@ const SHORT_CODE = { none: 'noWorkspace', dirty: 'dirtyWorkspaces', slots: 'noSl
 export const shortageOf = (code: string) => (Object.keys(SHORT_CODE) as WorkspaceShortage[]).find((s) => SHORT_CODE[s] === code);
 const SHORT_TEXT = { none: 'no workspace registered or all are leased', dirty: 'every free workspace has uncommitted changes', slots: 'every machine with a free workspace has as many busy workers as it has slots' };
 
-export class Workspaces {
+/**
+ * Where a repository's cards work, as the workers, the Koordinator and the canvas use it: clones or
+ * worktrees of a git repository (`Workspaces`), or the folder itself where it has no git
+ * (`FolderWorkspaces` in `folder.ts`, which has no branches and lands nothing).
+ */
+export interface CardWorkspaces {
+  readonly mode: 'clones' | 'worktrees' | 'folder';
+  readonly dir: string;
+  readonly pooled: boolean;
+  list(): { path: string; card_id: string | null }[];
+  leasedBy(cardId: string): string | null;
+  lease(cardId: string, branch: string, o?: { overSlots?: boolean }): string;
+  leasable(overSlots?: boolean): boolean;
+  pool(busy: string[]): PoolHost[];
+  hasWork(cardId: string): boolean;
+  release(cardId: string): void;
+  forkPoint(cardId: string): { ws: string; base: string } | null;
+  addedFiles(cardId: string, dir: string): string[];
+  landOnMain(cardId: string, branch: string, trailer?: string): Promise<LandProblem | Landed>;
+  pushToMain(cardId: string, trailer?: string): Promise<LandProblem | Landed>;
+  removeLanded(cardId: string, branch: string): void;
+  discard(cardId: string, branch: string): void;
+  transfer(from: string, to: string, branch: string, rename?: string): { path: string; branch: string };
+  followUpTree(cardId: string, branch: string): string;
+  removeFollowUpTree(path: string): void;
+  changes(cardId: string): Change[];
+  diff(cardId: string, full: boolean): Promise<CardDiff | null>;
+  landedDiff(base: string, commit: string, full: boolean): Promise<CardDiff | null>;
+}
+
+export class Workspaces implements CardWorkspaces {
   /** What `leasable` last looked at (the free clones on machines with room, or on any with `overSlots`) when it found them all dirty, and when. */
   private dirty = new Map<boolean, { key: string; at: number }>();
 
@@ -252,7 +282,7 @@ export class Workspaces {
     private o: WorkspaceOptions,
   ) {}
 
-  get mode() {
+  get mode(): 'clones' | 'worktrees' {
     return this.o.mode;
   }
 
@@ -793,10 +823,27 @@ export function useBranchSetting(repoPath: string, branch: () => string | undefi
 /** The main branch the owner set on this machine for the repository at `path`; none where they set none. */
 export const branchSetting = (path: string): string | undefined => branchSettings.get(resolve(path))?.()?.trim() || undefined;
 
-/** The repository's main branch: the one the owner set for it on this machine, else the one detected (`detectedBranch`). */
+/** The repository's main branch: the one the owner set for it on this machine, else the one detected (`detectedBranch`); none in a folder without git. */
 export function defaultBranch(path: string): string {
+  if (isFolder(path)) return '';
   return branchSetting(path) || detectedBranch(path);
 }
+
+/**
+ * The folders without git in the configuration (`RepoConfig.git` false), by path: they have no
+ * branch, and what Obeya reads of them (`.obeya/settings.json`, plan docs) it reads as the folder has
+ * it. Marked whenever a configuration is resolved.
+ */
+const folders = new Set<string>();
+
+/** Marks the path as a folder without git, or as a repository again. */
+export function markFolder(path: string, folder: boolean) {
+  if (folder) folders.add(resolve(path));
+  else folders.delete(resolve(path));
+}
+
+/** Whether the path is a folder without git in the configuration. */
+export const isFolder = (path: string): boolean => folders.has(resolve(path));
 
 /**
  * The repository's main branch as git tells it, where cards start from and work lands: `origin`'s HEAD where the

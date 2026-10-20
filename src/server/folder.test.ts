@@ -1,0 +1,142 @@
+import { beforeEach, describe, expect, test } from 'bun:test';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Store } from './db';
+import { compare, FolderWorkspaces, merge, type Manifest, type ToolCall, walk } from './folder';
+
+let dir: string;
+let folder: string;
+let store: Store;
+let ws: FolderWorkspaces;
+
+const bytes = (n: number, seed: number) => Uint8Array.from({ length: n }, (_, i) => (i * seed + 7) % 251);
+
+beforeEach(async () => {
+  dir = mkdtempSync(join(tmpdir(), 'obeya-folder-'));
+  folder = join(dir, 'Dokumente');
+  mkdirSync(join(folder, 'Steuer'), { recursive: true });
+  mkdirSync(join(folder, 'Nachlass'), { recursive: true });
+  writeFileSync(join(folder, 'Sortierung.md'), 'eins\nzwei\n');
+  writeFileSync(join(folder, 'Scan.pdf'), bytes(5000, 3));
+  writeFileSync(join(folder, 'Nachlass', 'Liste.txt'), 'Konten\n');
+  writeFileSync(join(folder, 'Zähler.png'), bytes(3000, 5));
+  store = new Store(':memory:');
+  ws = new FolderWorkspaces(store, { path: folder, dir: join(dir, 'undo') });
+  await ws.read;
+});
+
+let calls = 0;
+/** A tool call of the card's agent: the hooks around it, and what it does in between. */
+async function call(cardId: string, name: string, input: Record<string, unknown>, act: () => void | Promise<void>) {
+  const c: ToolCall = { id: `t${++calls}`, name, input };
+  const w = ws.watch(cardId);
+  await w.before(c);
+  await act();
+  await w.after(c);
+}
+
+const kinds = async (cardId: string) => (await ws.diff(cardId, false))!.folder!.changes.map((c) => `${c.kind} ${c.from ? `${c.from} → ` : ''}${c.path}`);
+
+describe('the manifest', () => {
+  test('a moved directory is one move, a renamed file another', async () => {
+    const before = await walk(folder);
+    renameSync(join(folder, 'Nachlass'), join(folder, 'Erbe'));
+    renameSync(join(folder, 'Scan.pdf'), join(folder, 'Steuer', '2025-Scan.pdf'));
+    const after = await walk(folder);
+    const changes = compare(before, after).map((c) => `${c.kind} ${c.from} → ${c.path}`);
+    expect(changes.sort()).toEqual(['moved Nachlass → Erbe', 'moved Scan.pdf → Steuer/2025-Scan.pdf']);
+  });
+
+  test('a file written twice and then deleted by the card is no change of it', () => {
+    const e = { size: 1, mtime: 1, ctime: 1, ino: 9 };
+    const list: Parameters<typeof merge>[0] = [];
+    merge(list, { kind: 'added', path: 'a', after: e, at: 1 });
+    merge(list, { kind: 'modified', path: 'a', before: e, after: { ...e, size: 2 }, at: 2 });
+    merge(list, { kind: 'deleted', path: 'a', before: e, at: 3 });
+    expect(list).toEqual([]);
+    const m: Manifest = new Map();
+    expect(compare(m, m)).toEqual([]);
+  });
+});
+
+describe('two cards at once', () => {
+  test("each card's list holds its own changes, not the other card's nor the owner's", async () => {
+    ws.lease('a');
+    ws.lease('b');
+    // both run at the same time: a's script while b edits a file
+    const ca: ToolCall = { id: 'x1', name: 'Bash', input: { command: 'mv Scan.pdf Steuer/' } };
+    const cb: ToolCall = { id: 'x2', name: 'Edit', input: { file_path: join(folder, 'Sortierung.md') } };
+    await ws.watch('a').before(ca);
+    await ws.watch('b').before(cb);
+    renameSync(join(folder, 'Scan.pdf'), join(folder, 'Steuer', 'Scan.pdf'));
+    writeFileSync(join(folder, 'Sortierung.md'), 'eins\nzwei\ndrei\n');
+    await ws.watch('b').after(cb);
+    await ws.watch('a').after(ca);
+    // the owner, between the cards' calls
+    writeFileSync(join(folder, 'Nachlass', 'Liste.txt'), 'Konten und Depots\n');
+    // not within the millisecond the next call starts in, which counts as the call's
+    await Bun.sleep(3);
+    await call('b', 'Bash', { command: 'touch Nachlass/Brief.docx' }, () => writeFileSync(join(folder, 'Nachlass', 'Brief.docx'), bytes(100, 2)));
+    expect(await kinds('a')).toEqual(['moved Scan.pdf → Steuer/Scan.pdf']);
+    expect(await kinds('b')).toEqual(['modified Sortierung.md', 'added Nachlass/Brief.docx']);
+    const d = (await ws.diff('b', true))!;
+    expect(d.files.find((f) => f.file === 'Sortierung.md')).toMatchObject({ added: 1, removed: 0 });
+    expect(d.patch).toContain('+drei');
+    expect(ws.changes('a')).toEqual([{ file: 'Steuer/Scan.pdf', regions: ['moved from Scan.pdf'] }]);
+  });
+});
+
+describe('undo', () => {
+  test('puts back an overwritten binary and a deleted file, and leaves what someone changed since', async () => {
+    ws.lease('a');
+    await call('a', 'Bash', { command: 'convert' }, () => {
+      writeFileSync(join(folder, 'Zähler.png'), bytes(4000, 11));
+      rmSync(join(folder, 'Scan.pdf'));
+      writeFileSync(join(folder, 'Nachlass', 'Liste.txt'), 'neu\n');
+      mkdirSync(join(folder, 'Neu'));
+      writeFileSync(join(folder, 'Neu', 'Brief.txt'), 'Hallo\n');
+    });
+    // the owner edits one of them afterwards
+    await Bun.sleep(5);
+    writeFileSync(join(folder, 'Nachlass', 'Liste.txt'), 'vom Owner\n');
+    const view = (await ws.diff('a', false))!.folder!;
+    const undo = Object.fromEntries(view.changes.map((c) => [c.path, c.undo]));
+    expect(view.undo).toMatch(/full|partial/);
+    expect(undo['Nachlass/Liste.txt']).toBe('changedSince');
+    expect(undo['Neu/Brief.txt']).toBe('yes');
+    const report = await ws.undo('a');
+    expect(readFileSync(join(folder, 'Nachlass', 'Liste.txt'), 'utf8')).toBe('vom Owner\n');
+    expect(report.changedSince).toEqual(['Nachlass/Liste.txt']);
+    expect(existsSync(join(folder, 'Neu'))).toBe(false);
+    if (view.undo === 'full') {
+      // a clone of the folder has the binaries
+      expect(new Uint8Array(readFileSync(join(folder, 'Zähler.png')))).toEqual(bytes(3000, 5));
+      expect(existsSync(join(folder, 'Scan.pdf'))).toBe(true);
+    } else expect(report.lost.sort()).toEqual(['Scan.pdf', 'Zähler.png']);
+    // what was left stays the card's
+    expect(await kinds('a')).toEqual(['modified Nachlass/Liste.txt']);
+  });
+
+  test('without a clone, moves, what the editing tools overwrite and the text files come back; a script\'s binary does not', async () => {
+    ws = new FolderWorkspaces(store, { path: folder, dir: join(dir, 'undo'), clone: false });
+    await ws.read;
+    ws.lease('a');
+    writeFileSync(join(folder, 'Brief.docx'), bytes(800, 13));
+    await Bun.sleep(3);
+    await call('a', 'Write', { file_path: 'Brief.docx' }, () => writeFileSync(join(folder, 'Brief.docx'), bytes(900, 17)));
+    await call('a', 'Bash', { command: 'mv Nachlass Erbe' }, () => {
+      renameSync(join(folder, 'Nachlass'), join(folder, 'Erbe'));
+      writeFileSync(join(folder, 'Sortierung.md'), 'neu\n');
+      writeFileSync(join(folder, 'Zähler.png'), bytes(10, 1));
+    });
+    expect((await ws.diff('a', false))!.folder!.undo).toBe('partial');
+    expect(await kinds('a')).toEqual(['modified Brief.docx', 'moved Nachlass → Erbe', 'modified Sortierung.md', 'modified Zähler.png']);
+    const report = await ws.undo('a');
+    expect(new Uint8Array(readFileSync(join(folder, 'Brief.docx')))).toEqual(bytes(800, 13));
+    expect(readFileSync(join(folder, 'Sortierung.md'), 'utf8')).toBe('eins\nzwei\n');
+    expect(existsSync(join(folder, 'Nachlass', 'Liste.txt'))).toBe(true);
+    expect(report.lost).toEqual(['Zähler.png']);
+    expect(await kinds('a')).toEqual(['modified Zähler.png']);
+  });
+});
