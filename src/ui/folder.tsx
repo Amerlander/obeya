@@ -12,7 +12,7 @@ import { t } from './strings';
 
 /** How often an open card at work reads its change list again: its agent changes the folder as it goes. */
 const LOOK_MS = 5000;
-/** How long „Änderungen verwerfen“ waits for „Rückgängig“ before it goes ahead: putting the files back cannot be taken back. */
+/** How long „Änderungen verwerfen“ waits for a second click that calls it off before it goes ahead: putting the files back cannot be taken back. */
 const DISCARD_WAIT_S = 8;
 /** How many changes the list beside the handover shows before „und N weitere“. */
 const SHOWN = 8;
@@ -156,7 +156,7 @@ export function FolderBox({ item, diff }: { item: Item; diff: CardDiff | null })
 
 /**
  * „Änderungen verwerfen“ on a card waiting for approval: puts back what it changed in the folder.
- * That cannot be taken back once done, so the button first counts down, with „Rückgängig“ beside it.
+ * That cannot be taken back once done, so the button first counts down, and a second click on it (or its ×) calls it off.
  */
 export function DiscardChanges({ diff, act, onDone }: { diff: CardDiff | null; act: (a: CardAction, done: ActDone) => Promise<void>; onDone: () => void }) {
   const [left, setLeft] = useState<number | null>(null);
@@ -172,16 +172,26 @@ export function DiscardChanges({ diff, act, onDone }: { diff: CardDiff | null; a
     return () => clearTimeout(h);
   }, [left]);
   if (!undoable && left === null) return null;
-  return left === null ? (
-    <button className="btn" title={t.folder.discardHint(undoable)} onClick={() => setLeft(DISCARD_WAIT_S)}>
-      {t.folder.discard}
-    </button>
-  ) : (
+  // the button stays itself while it counts down: a second click on it, or its ×, calls it off
+  const counting = left !== null;
+  return (
     <>
-      <button className="btn" title={t.folder.takeBackHint} onClick={() => setLeft(null)}>
-        {t.undo}
+      <button
+        className={counting ? 'btn f-discard counting' : 'btn f-discard'}
+        title={counting ? t.folder.cancelHint : t.folder.discardHint(undoable)}
+        onClick={() => setLeft(counting ? null : DISCARD_WAIT_S)}
+      >
+        {t.folder.discard}
+        {counting && (
+          <>
+            <span className="f-count">{t.folder.seconds(left)}</span>
+            <span className="f-cancel" aria-label={t.folder.cancel}>
+              ×
+            </span>
+          </>
+        )}
       </button>
-      <span className="f-discarding">{t.folder.discarding(left)}</span>
+      {counting && <span className="f-discarding">{t.folder.clickToCancel}</span>}
     </>
   );
 }
