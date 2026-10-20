@@ -3403,7 +3403,14 @@ is about agents (`--real-workers`); elsewhere, say, the clone's own app), and ha
 directory and chapter titles with `ready_for_review`. A scratch Obeya speaks the stage's `language`,
 else the language of the demos where the script runs (`DEMO_LANGUAGE`, else the demo settings'), so
 the screen matches the narration; the stage's card titles and conversations are written in it
-(Obeya's `app.run` asks for English).
+(Obeya's `app.run` asks for English). What happens while an agent works (a line arriving in an open
+conversation, an artifact handed over again) the script makes happen without one: `--say` and
+`--artifact` act as a staged card's agent through the server, which runs that agent's own tools
+for it (`Workers.standIn`, `POST …/cards/<id>/stand-in`, offered only with `--idle-workers`), so the
+page gets the change as from a real agent. A card staged at work has no session; it gets a stand-in
+for one, its tools working as a session's would, with no turn begun or ended. A staged HTML artifact
+is a copy in the scratch directory, which `--artifact` rewrites, so a take never changes the stage's
+own files.
 
 Before the first render it runs `node demo.ts --dry`: `login`, `open` and the scenes against the
 app, without narration, setup check, screencast or ffmpeg (`untilSpoken` does not wait), under the

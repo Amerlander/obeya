@@ -42,7 +42,7 @@ import { checkPlugin } from './demo';
 import { Store, UnusableDatabase } from './db';
 import { ghForge } from './forge';
 import { NarrationHost } from './narration';
-import { claudeExecutable, idleRuntime, sdkRuntime } from './runtime';
+import { claudeExecutable, sdkRuntime } from './runtime';
 import { claim, release, restarting, running } from './instance';
 import { MachineSetup, welcome } from './machine';
 import { extendPath } from './path';
@@ -241,7 +241,7 @@ canvases = new Canvases(
     store,
     home,
     runtime: sdkRuntime,
-    ...(values['idle-workers'] ? { workerRuntime: idleRuntime } : {}),
+    ...(values['idle-workers'] ? { idleWorkers: true } : {}),
     forge: ghForge,
     permissionMode: values['permission-mode'] as 'auto',
     watch: true,

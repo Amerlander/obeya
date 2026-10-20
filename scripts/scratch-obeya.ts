@@ -6,11 +6,24 @@
 //   bun scripts/scratch-obeya.ts <stage.json> [--port <n>] [--code <commit> | --binary <obeya>] [--real-workers] [--restarts]
 //   bun scripts/scratch-obeya.ts --stop <port>
 //   bun scripts/scratch-obeya.ts --login <port>
+//   bun scripts/scratch-obeya.ts --say <port> <card key> <say|report|talk|question|review> <text>
+//   bun scripts/scratch-obeya.ts --artifact <port> <card key> <file> [<summary>]
 //
 // Prints one JSON line, also kept in <dir>/staged.json:
 //   { "url", "port", "dir", "canvas", "pid", "log", "cards": { "<key>": "<card id>" } }
 // `url` signs browsers in (design: Who may talk to it), until the scratch Obeya stops; --login
 // prints it again. The script itself talks to the API with the owner's key of the scratch home.
+//
+// With idle workers, --say and --artifact act as a card's agent (by its key in staged.json), for a
+// check of what the owner sees while an agent works: through the server, which runs the agent's own
+// tools (`Workers.standIn`), so an open page gets the line at once, unread marker and notification
+// as from a real agent. --say adds a line of the kind a stage file's `events` give: `say` (the
+// agent's words between its steps), `report` (its status line), `talk` (a reply), `question` (it
+// asks, and the card waits for the owner), `review` (a handover that keeps the card's demo).
+// --artifact copies the file into the card's HTML artifact (<dir>/artifacts/<key>, where staging
+// put a copy of the stage's) and hands it over again, as an agent does after rewriting it, with the
+// summary given or "Updated the artifact."; a card without one starts it with an index.html. Each
+// prints what the agent would have read back, and fails on a refusal ("Not handed over: …").
 //
 // The server runs with --dev (it does not restart when the checkout commits; with --restarts it is
 // supervised like a real Obeya and restarts once the configuration is saved, PUT /api/config, and
@@ -103,8 +116,8 @@
 
 import { Database } from 'bun:sqlite';
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, openSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { copyFileSync, cpSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
 import { demoSettingsHere } from '../plugin/skills/demo/lib/settings.ts';
 import { type Language, LANGUAGES } from '../src/core/locale';
 import type { CanvasSnapshot, Item } from '../src/core/types';
@@ -196,6 +209,14 @@ const fail = (msg: string): never => {
   process.exit(1);
 };
 const scratchDir = (port: number) => `/tmp/obeya-scratch-${port}`;
+/** What --say has the card's agent do for each kind of its lines in the conversation (as in a stage file's `events`). */
+const SAYS = {
+  say: (text: string) => ({ say: text }),
+  report: (status: string) => ({ tool: 'report', args: { status } }),
+  talk: (text: string) => ({ tool: 'reply', args: { text } }),
+  question: (question: string) => ({ tool: 'ask', args: { question } }),
+  review: (summary: string) => ({ tool: 'ready_for_review', args: { summary } }),
+};
 
 const stopPort = opt('stop');
 if (stopPort) {
@@ -212,8 +233,32 @@ if (loginPort) {
   process.exit(0);
 }
 
+const sayPort = opt('say');
+if (sayPort) {
+  const [key, kind, ...words] = args.slice(args.indexOf('--say') + 2).filter((a, i, all) => !a.startsWith('--') && all[i - 1] !== '--dir');
+  const text = words.join(' ');
+  const act = SAYS[kind as keyof typeof SAYS];
+  if (!key || !act || !text.trim()) fail(`usage: bun scripts/scratch-obeya.ts --say <port> <card key> <${Object.keys(SAYS).join('|')}> <text>`);
+  console.log(await standIn(Number(sayPort), key!, act!(text)));
+  process.exit(0);
+}
+const artifactPort = opt('artifact');
+if (artifactPort) {
+  const [key, from, ...words] = args.slice(args.indexOf('--artifact') + 2).filter((a, i, all) => !a.startsWith('--') && all[i - 1] !== '--dir');
+  if (!key || !from || !existsSync(from)) fail('usage: bun scripts/scratch-obeya.ts --artifact <port> <card key> <file> [<summary>]');
+  const d = opt('dir') ?? scratchDir(Number(artifactPort));
+  const to = artifactDir(d, key!);
+  mkdirSync(to, { recursive: true });
+  copyFileSync(from!, join(to, basename(from!)));
+  // the page it may be shared on stays as the card's demo had it
+  const { page } = (await stagedCard(Number(artifactPort), key!)).demo ?? {};
+  const summary = words.join(' ').trim() || 'Updated the artifact.';
+  console.log(await standIn(Number(artifactPort), key!, { tool: 'ready_for_review', args: { summary, demo: { kind: 'html', dir: to, ...(page ? { page } : {}) } } }));
+  process.exit(0);
+}
+
 const file = args.find((a, i) => !a.startsWith('--') && !args[i - 1]?.match(/^--(port|code|dir|binary)$/));
-if (!file) fail('usage: bun scripts/scratch-obeya.ts <stage.json> [--port <n>] [--code <commit> | --binary <obeya>] [--real-workers] [--restarts] | --stop <port> | --login <port>');
+if (!file) fail('usage: bun scripts/scratch-obeya.ts <stage.json> [--port <n>] [--code <commit> | --binary <obeya>] [--real-workers] [--restarts] | --stop <port> | --login <port> | --say <port> … | --artifact <port> …');
 const stage = JSON.parse(readFileSync(file!, 'utf8')) as Stage;
 const port = Number(opt('port') ?? stage.port ?? fail('no port: give "port" in the stage file or --port'));
 const dir = resolve(opt('dir') ?? stage.dir ?? scratchDir(port));
@@ -412,7 +457,9 @@ for (const [i, c] of stage.cards.entries()) {
   if (c.statusLine !== undefined) row.status_line = c.statusLine;
   if (c.summary !== undefined) row.detail = { summary: c.summary };
   if (c.question !== undefined) row.detail = { question: { options: [], ...c.question } };
-  if (c.demo !== undefined) row.demo = { kind: 'video', ...c.demo };
+  // an HTML artifact is shown from a copy in <dir>, which --artifact may rewrite
+  const demo = c.demo && (c.demo.kind === 'html' ? { ...c.demo, dir: copyArtifact(String(c.demo.dir), artifactDir(dir, c.key ?? String(i))) } : c.demo);
+  if (demo !== undefined) row.demo = { kind: 'video', ...demo };
   if (c.queue !== undefined)
     row.queue = {
       ...c.queue,
@@ -471,13 +518,13 @@ for (const [i, c] of stage.cards.entries()) {
     if (e.spot) spots.push([Number(lastInsertRowid), e.spot]);
   }
   // the earlier demos (`row.demos`) and then the demo go with the handovers among the events, in order; a spot's `demo` names one of them by its place in that order
-  if (reviews.length && (c.demo || c.row?.demos)) {
+  if (reviews.length && (demo || c.row?.demos)) {
     const earlier = (c.row?.demos ?? []) as Record<string, unknown>[];
     const handed = (d: Record<string, unknown>, i: number) => (reviews[i] ? { ...d, kind: d.kind ?? 'video', handover: reviews[i].id, at: reviews[i].at } : d);
     db.query('UPDATE cards SET demos = $demos, demo = $demo WHERE id = $id').run({
       id,
       demos: earlier.length ? JSON.stringify(earlier.map(handed)) : null,
-      demo: c.demo ? JSON.stringify(handed({ kind: 'video', ...c.demo }, earlier.length)) : null,
+      demo: demo ? JSON.stringify(handed({ kind: 'video', ...demo }, earlier.length)) : null,
     });
   }
   for (const [event, { demo, ...spot }] of spots)
@@ -626,4 +673,47 @@ function ago(s: string): string {
   const m = /^(\d+(?:\.\d+)?)([smhd])$/.exec(s) ?? fail(`"${s}" is no time ago (like "15m", "2h", "3d")`);
   const unit = { s: 1, m: 60, h: 3600, d: 86400 }[m[2] as 's' | 'm' | 'h' | 'd'];
   return new Date(Date.now() - Number(m[1]) * unit * 1000).toISOString();
+}
+
+/** Where the card of `key` keeps its HTML artifact in the scratch Obeya of `d`. */
+function artifactDir(d: string, key: string) {
+  return join(d, 'artifacts', key);
+}
+
+function copyArtifact(from: string, to: string) {
+  if (!existsSync(join(from, 'index.html'))) fail(`${from} holds no index.html for an HTML artifact`);
+  cpSync(from, to, { recursive: true });
+  return to;
+}
+
+/** The scratch Obeya on `port` as its staged.json has it, and the owner's key of its home. */
+function scratchAt(port: number) {
+  const d = opt('dir') ?? scratchDir(port);
+  if (!existsSync(join(d, 'staged.json'))) fail(`no scratch Obeya staged in ${d}`);
+  const staged = JSON.parse(readFileSync(join(d, 'staged.json'), 'utf8')) as { canvas: string; cards: Record<string, string> };
+  return { base: `http://127.0.0.1:${port}/api/c/${staged.canvas}`, cards: staged.cards, headers: ownerHeaders(join(d, 'home')) };
+}
+
+function cardOf(port: number, key: string) {
+  const s = scratchAt(port);
+  return { ...s, id: s.cards[key] ?? fail(`no card ${key} staged (${Object.keys(s.cards).join(', ')})`) };
+}
+
+async function stagedCard(port: number, key: string): Promise<Item> {
+  const { base, headers, id } = cardOf(port, key);
+  const r = await fetch(`${base}/canvas`, { headers }).catch(() => fail(`no scratch Obeya answers on port ${port}`));
+  return ((await r.json()) as CanvasSnapshot).items.find((i) => i.id === id) ?? fail(`card ${key} is not on the canvas`);
+}
+
+/** The card's agent says or does `act`, through the server (`Workers.standIn`); returns what the agent would have read back. */
+async function standIn(port: number, key: string, act: { say: string } | { tool: string; args: Record<string, unknown> }): Promise<string> {
+  const { base, headers, id } = cardOf(port, key);
+  const r = await fetch(`${base}/cards/${id}/stand-in`, { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(act) }).catch(() =>
+    fail(`no scratch Obeya answers on port ${port}`),
+  );
+  const body = (await r.json()) as { result?: string; error?: string };
+  if (!r.ok) fail(`card ${key}: ${body.error ?? r.status}`);
+  // a tool's refusal ("Not shown: …", "Not handed over: …")
+  if (/^Not [a-z ]+:/.test(body.result!)) fail(`card ${key}: ${body.result}`);
+  return body.result!;
 }

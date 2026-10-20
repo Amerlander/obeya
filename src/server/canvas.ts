@@ -29,7 +29,7 @@ import { Revisions } from './revisions';
 import { ProjectAgents } from './project-agents';
 import { outsidePlanDir, readPlanDocs, watchPlanDocs } from './repo';
 import { boundsOf, GAP, type Place, unionBounds } from '../core/layout';
-import { type AgentRuntime, withAgentSetting, withLimitWait, withRepoTrust } from './runtime';
+import { type AgentRuntime, idleRuntime, withAgentSetting, withLimitWait, withRepoTrust } from './runtime';
 import { commandsOf, heldGroups, withoutHeld } from './trust';
 import { changesCode, RESTART_PATIENCE_MS, whenIdle } from './self-update';
 import { Sharing, siteIncomplete } from './share';
@@ -49,6 +49,11 @@ export interface CanvasDeps {
   runtime: AgentRuntime;
   /** Runs the cards' workers; `runtime` when left out. */
   workerRuntime?: AgentRuntime;
+  /**
+   * No agent works on a started card (`idleRuntime`, for a scratch Obeya): a script stands in for a
+   * card's agent instead (`standIn`).
+   */
+  idleWorkers?: boolean;
   forge: Forge;
   permissionMode?: PermissionMode;
   /** Watch plan docs and pull requests; off in tests. */
@@ -177,7 +182,8 @@ export class CanvasRuntime {
     const agents = deps.agents ?? ((role: AgentRole) => AGENT_DEFAULTS[role]);
     // the agents other than workers and Obeya's chat wait for the usage limit through it, each where it shows
     const runtime = (r: AgentRuntime) => withLimitWait(withRepoTrust(withAgentSetting(r, agents), this.claudeHeld), deps.limitMargin);
-    deps = { ...deps, runtime: runtime(deps.runtime), ...(deps.workerRuntime ? { workerRuntime: runtime(deps.workerRuntime) } : {}) };
+    const workerRuntime = deps.workerRuntime ?? (deps.idleWorkers ? idleRuntime : undefined);
+    deps = { ...deps, runtime: runtime(deps.runtime), ...(workerRuntime ? { workerRuntime: runtime(workerRuntime) } : {}) };
     this.deps = deps;
     // the main branch the owner set counts from the start: the repository's id, its settings and its Lesestand go by it
     for (const r of config.repos) this.useBranch(r);
@@ -1062,6 +1068,12 @@ export class CanvasRuntime {
   }
 
   /** The owner clicks in the card's panel: a click without words the learner reads counts towards the Rückschau. */
+  /** A script acts as the card's agent, in a scratch Obeya whose workers are idle (`Workers.standIn`). */
+  standIn(cardId: string, act: Parameters<Workers['standIn']>[1]) {
+    if (!this.deps.idleWorkers) throw new BadRequest('invalid', 'only an Obeya with idle workers (--idle-workers) lets a script stand in for an agent');
+    return this.repoOf(cardId).workers.standIn(cardId, act);
+  }
+
   press(cardId: string, a: CardAction) {
     // the options picked on a proposal go to its reviser without the Koordinator, which would have logged them
     const r = this.act(cardId, a, true);

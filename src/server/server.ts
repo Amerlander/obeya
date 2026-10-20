@@ -573,6 +573,8 @@ export function serve(
       // the archive, newest first; posting archives every finished card of the owner's
       '/api/c/:canvas/archive': { GET: on((c) => c.board.archived()), POST: on((c) => ({ ids: c.board.archiveDone() })) },
       '/api/c/:canvas/cards/:id/act': { POST: on(async (c, req) => c.press(req.params.id!, (await req.json()) as CardAction)) },
+      // a script acting as the card's agent, in a scratch Obeya whose workers are idle (scripts/scratch-obeya.ts --say)
+      '/api/c/:canvas/cards/:id/stand-in': { POST: on(async (c, req) => ({ result: await c.standIn(req.params.id!, (await req.json()) as Parameters<typeof c.standIn>[1]) })) },
       '/api/c/:canvas/cards/:id/events': { GET: on((c, req) => c.board.events(req.params.id!)) },
       // a screenshot for a message: uploaded first, the message then names it by id
       '/api/c/:canvas/images': {

@@ -239,6 +239,8 @@ interface Live {
   preferences: string;
   /** The project the card is a workstream of, and the last of its decisions the worker has heard of. */
   project?: { id: string; decision: number };
+  /** Stands in for the agent of a card that has no session (`standIn`): its tools run all the same. */
+  standIn?: true;
   /** A tool call waits for the owner's permission, the question the card waits on: settles it with their answer. */
   permission?: (answer: PermissionAnswer) => void;
   /** The permission asked last, which the next one waits for: the card holds one question at a time. */
@@ -1245,6 +1247,46 @@ export class Workers {
   }
 
   /**
+   * A scratch Obeya's idle workers (`--idle-workers`): a script acts as the card's agent
+   * (`scripts/scratch-obeya.ts --say`), for a check of what the owner sees while one works. Its
+   * words go into the conversation as an agent's text does, and its tools (report, reply, ask,
+   * ready_for_review, …) run as the agent's do, through the same code; no turn starts or ends. A
+   * card without a session (one staged at work) gets a stand-in for it. Returns what the agent would
+   * have read as the tool's result.
+   */
+  async standIn(cardId: string, act: { say: string } | { tool: string; args?: Record<string, unknown> }): Promise<string> {
+    const card = this.card(cardId);
+    const live = this.live.get(cardId);
+    if ('say' in act) {
+      const text = String(act.say).trim();
+      if (!text) throw new BadRequest('emptyText', 'say must be a non-empty string');
+      if (live) this.onEvent(cardId, live, { type: 'text', text });
+      else this.o.board.log(cardId, 'say', 'worker', clip(text, 12000));
+      return 'Shown on the card.';
+    }
+    const stand: Live = live ?? {
+      session: undefined!,
+      host: null,
+      handedOver: false,
+      acted: true,
+      nudged: false,
+      lastText: '',
+      busy: false,
+      background: 0,
+      tasks: new Map(),
+      stalled: false,
+      preferences: '',
+      standIn: true,
+    };
+    const tool = this.tools(cardId, stand, !!card.prototypeOf).find((t) => t.name === act.tool);
+    if (!tool) throw new BadRequest('invalid', `the card's agent has no tool ${act.tool}`);
+    // as the SDK checks a call against the tool's schema
+    const args = z.object(tool.schema).safeParse(act.args ?? {});
+    if (!args.success) throw new BadRequest('invalid', `${act.tool}: ${args.error.message}`);
+    return await tool.run(args.data);
+  }
+
+  /**
    * The card of the canvas a worker means by `title`, to wait on: the one by that title (the open
    * one, of several), else the one whose title holds it, if only one does; else why there is none.
    */
@@ -2175,7 +2217,7 @@ export class Workers {
     };
     // a session the owner stopped or replaced may still call its tools: those calls change nothing
     const current = (tools: AgentTool[]): AgentTool[] =>
-      tools.map((t) => ({ ...t, run: (args) => (this.live.get(cardId) === live ? t.run(args) : 'This session has ended. Stop working and end your turn.') }));
+      tools.map((t) => ({ ...t, run: (args) => (this.live.get(cardId) === live || live.standIn ? t.run(args) : 'This session has ended. Stop working and end your turn.') }));
     return current([
       {
         name: 'report',
