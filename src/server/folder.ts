@@ -9,7 +9,7 @@
 
 import { constants, realpathSync, type Stats } from 'node:fs';
 import { copyFile, lstat, mkdir, open, readdir, rename, rm, rmdir, stat, unlink, utimes } from 'node:fs/promises';
-import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { CardDiff, DiffFile, FolderChange, FolderChanges } from '../core/diff';
 import { cardDiff } from '../core/diff';
 import type { PoolHost } from '../core/types';
@@ -95,6 +95,8 @@ export interface RawChange {
   kind: 'added' | 'modified' | 'deleted' | 'moved';
   path: string;
   from?: string;
+  /** A file a moved directory took along: where it was. */
+  was?: string;
   dir?: true;
   before?: Entry;
   after?: Entry;
@@ -164,7 +166,11 @@ export function compare(last: Manifest, next: Manifest, only?: Iterable<string>)
   }
   const dirMoves = moves.filter((m) => m.dir);
   const along = (m: RawChange) => dirMoves.some((d) => d !== m && under(m.from!, d.from!) && m.path === d.path + m.from!.slice(d.from!.length));
-  return [...moves.filter((m) => !along(m)), ...out, ...added, ...deleted];
+  // what a moved directory took along is its move; what changed in it besides is a change of its own, where it is now
+  const carried = moves.filter(along);
+  for (const m of carried)
+    if (!m.dir && (m.before!.size !== m.after!.size || m.before!.mtime !== m.after!.mtime)) out.push({ kind: 'modified', path: m.path, was: m.from!, before: m.before!, after: m.after!, at: m.at });
+  return [...moves.filter((m) => !carried.includes(m)), ...out, ...added, ...deleted];
 }
 
 /** How much of a file is read to tell text from binary, as git does: a NUL byte in it makes it binary. */
@@ -238,6 +244,10 @@ interface Tracked {
   dir?: true;
   /** Moved, and its contents changed too. */
   changed?: true;
+  /** Where it was before a directory the card moved took it along: its copies are kept by that path. */
+  was?: string;
+  /** Another card's call ran when it changed too: whose change it was cannot be told, so undo leaves it. */
+  shared?: true;
   before?: Entry;
   after?: Entry;
 }
@@ -254,7 +264,17 @@ export interface FolderCard {
 }
 
 /** Folds a change into a card's list: one entry per thing it changed, from before its first change to after its last. */
-export function merge(list: Tracked[], c: RawChange) {
+export function merge(list: Tracked[], c: RawChange, shared = false) {
+  const before = list.length;
+  mergeOne(list, c);
+  // whatever entry the change went into is no longer this card's alone
+  if (shared) {
+    const t = list.find((x) => x.path === c.path && !!x.dir === !!c.dir) ?? (list.length > before ? list.at(-1) : undefined);
+    if (t) t.shared = true;
+  }
+}
+
+function mergeOne(list: Tracked[], c: RawChange) {
   const at = (path: string) => list.findIndex((t) => t.path === path && !!t.dir === !!c.dir);
   const dir = c.dir ? { dir: true as const } : {};
   if (c.kind === 'added') {
@@ -268,7 +288,7 @@ export function merge(list: Tracked[], c: RawChange) {
   } else if (c.kind === 'modified') {
     const i = at(c.path);
     const t = list[i];
-    if (!t) list.push({ kind: 'modified', path: c.path, before: c.before!, after: c.after! });
+    if (!t) list.push({ kind: 'modified', path: c.path, ...(c.was ? { was: c.was } : {}), before: c.before!, after: c.after! });
     else {
       t.after = c.after!;
       if (t.kind === 'moved') t.changed = true;
@@ -283,7 +303,12 @@ export function merge(list: Tracked[], c: RawChange) {
   } else {
     const from = c.from!;
     // what the card changed in a directory goes along with it
-    if (c.dir) for (const t of list) if (under(t.path, from)) t.path = c.path + t.path.slice(from.length);
+    if (c.dir)
+      for (const t of list)
+        if (under(t.path, from)) {
+          if (t.kind !== 'moved' && t.was === undefined) t.was = t.path;
+          t.path = c.path + t.path.slice(from.length);
+        }
     const i = at(from);
     const t = list[i];
     const changed = !c.dir && (c.before!.size !== c.after!.size || c.before!.mtime !== c.after!.mtime);
@@ -302,8 +327,11 @@ export function merge(list: Tracked[], c: RawChange) {
 async function unchanged(path: string, e: Entry | undefined, now: Entry | null): Promise<boolean> {
   if (!e || !now || !!e.dir !== !!now.dir) return false;
   if (e.dir) return true;
-  if (e.size === now.size && Math.abs(e.mtime - now.mtime) < 1) return true;
-  return !!e.hash && e.size === now.size && (await hashFile(path, now.size)) === e.hash;
+  // nothing touched it since: its ctime is the system's alone
+  if (now.ctime === e.ctime && now.ino === e.ino) return true;
+  // touched: its contents tell, where they were read; else its size and time
+  if (e.hash && !now.cloud) return e.size === now.size && (await hashFile(path, now.size)) === e.hash;
+  return e.size === now.size && Math.abs(e.mtime - now.mtime) < 1;
 }
 
 /** A tool call of an agent, as the session's hooks see it before and after it runs. */
@@ -351,6 +379,8 @@ export interface UndoReport {
   changedSince: string[];
   /** No copy from before the card's change was kept: left as they are. */
   lost: string[];
+  /** Another card's call ran when they changed, so they may be its: left as they are. */
+  shared: string[];
 }
 
 export interface FolderOptions {
@@ -383,8 +413,8 @@ export class FolderWorkspaces implements CardWorkspaces {
   private records = new Map<string, FolderCard | null>();
   /** Undo under way, by card: a second click waits for the first. */
   private undoing = new Map<string, Promise<UndoReport>>();
-  /** While an undo puts things back, and until the folder is read after it: what changed then is no card's. */
-  private quiet: { start: number; end?: number } | null = null;
+  /** What an undo put back, until the folder is read after it: those changes are no card's. */
+  private quiet = new Set<string>();
 
   constructor(
     private store: Store,
@@ -552,6 +582,8 @@ export class FolderWorkspaces implements CardWorkspaces {
           if (file) await this.scan([...only]);
           if (file && !rec.done) await this.keepBefore(cardId, file);
         }
+        // nor is what changed since the folder was last read, before a call that may write anywhere
+        else await this.scanAll();
         this.windows.push({ card: cardId, id: call.id, start: Date.now(), ...(only ? { only } : {}) });
       },
       after: async (call) => {
@@ -590,8 +622,17 @@ export class FolderWorkspaces implements CardWorkspaces {
   /** A path of a tool's input inside the folder, relative to it; null for one outside. */
   private inside(given: unknown): string | null {
     if (typeof given !== 'string' || !given) return null;
+    const named = isAbsolute(given) ? resolve(given) : resolve(this.o.path, given);
+    // a link is written through: what changes is where it points (a file not there yet, in its directory)
+    let abs = named;
+    try {
+      abs = realpathSync(named);
+    } catch {
+      try {
+        abs = join(realpathSync(join(named, '..')), basename(named));
+      } catch {}
+    }
     for (const base of [this.root, resolve(this.o.path)]) {
-      const abs = isAbsolute(given) ? resolve(given) : resolve(this.o.path, given);
       const rel = relative(base, abs);
       if (rel && !rel.startsWith('..') && !isAbsolute(rel)) return rel.split(sep).join('/');
     }
@@ -644,7 +685,7 @@ export class FolderWorkspaces implements CardWorkspaces {
       for (const card of cards) {
         const rec = this.rec(card);
         if (!rec) continue;
-        merge(rec.changes, c);
+        merge(rec.changes, c, cards.length > 1);
         this.save(card, rec);
         touched.add(card);
       }
@@ -656,7 +697,7 @@ export class FolderWorkspaces implements CardWorkspaces {
   private cardsFor(c: RawChange): string[] {
     const coarse = c.at % 1000 === 0 ? 1000 : 0;
     const inside = (w: { start: number; end?: number }) => w.start - coarse <= c.at && (w.end === undefined || c.at <= w.end + SLACK_MS + coarse);
-    if (this.quiet && inside(this.quiet)) return [];
+    if (this.quiet.has(c.path) || (c.from !== undefined && this.quiet.has(c.from))) return [];
     const during = this.windows.filter(inside);
     const claims = during.filter((w) => w.only && (w.only.has(c.path) || (c.from !== undefined && w.only.has(c.from))));
     const by = claims.length ? claims : during.filter((w) => !w.only);
@@ -730,6 +771,7 @@ export class FolderWorkspaces implements CardWorkspaces {
 
   /** What undoing the change would do now. */
   private async undoable(cardId: string, t: Tracked): Promise<FolderChange['undo']> {
+    if (t.shared) return 'shared';
     const here = join(this.root, t.path);
     const now = await entryAt(here);
     switch (t.kind) {
@@ -737,10 +779,10 @@ export class FolderWorkspaces implements CardWorkspaces {
         return t.dir || (await unchanged(here, t.after, now)) ? 'yes' : 'changedSince';
       case 'modified':
         if (!(await unchanged(here, t.after, now))) return 'changedSince';
-        return (await this.copyOf(cardId, [t.path], t.before)) ? 'yes' : 'lost';
+        return (await this.copyOf(cardId, [t.was, t.path], t.before)) ? 'yes' : 'lost';
       case 'deleted':
         if (now) return t.dir ? 'yes' : 'changedSince';
-        return t.dir || (await this.copyOf(cardId, [t.path], t.before)) ? 'yes' : 'lost';
+        return t.dir || (await this.copyOf(cardId, [t.was, t.path], t.before)) ? 'yes' : 'lost';
       case 'moved':
         if (!(await unchanged(here, t.after, now)) || (await entryAt(join(this.root, t.from!)))) return 'changedSince';
         return !t.changed || (await this.copyOf(cardId, [t.from, t.path], t.before)) ? 'yes' : 'lost';
@@ -764,41 +806,84 @@ export class FolderWorkspaces implements CardWorkspaces {
   private async undoNow(cardId: string): Promise<UndoReport> {
     await this.baseline;
     const rec = this.rec(cardId);
-    const report: UndoReport = { undone: [], changedSince: [], lost: [] };
+    const report: UndoReport = { undone: [], changedSince: [], lost: [], shared: [] };
     if (!rec) return report;
     if (rec.done) throw new WorkspaceError('the card is done: nothing of it is undone any more');
     await this.ready.get(cardId);
-    this.quiet = { start: Date.now() };
     try {
       return await this.putBack(cardId, rec, report);
     } finally {
-      this.quiet = null;
+      this.quiet.clear();
     }
   }
 
   private async putBack(cardId: string, rec: FolderCard, report: UndoReport): Promise<UndoReport> {
     const left: Tracked[] = [];
-    const keep = (t: Tracked, why: 'changedSince' | 'lost') => {
+    const keep = (t: Tracked, why: 'changedSince' | 'lost' | 'shared') => {
       left.push(t);
       report[why].push(t.kind === 'moved' ? `${t.from} → ${t.path}` : t.path);
     };
+    // what undo changes, and the directories it makes on the way
+    const touch = (...paths: string[]) => {
+      for (const p of paths) for (const x of [p, ...ancestors(p)]) if (x) this.quiet.add(x);
+    };
     const put = async (copy: string, path: string) => {
+      touch(path);
       const dst = join(this.root, path);
       const tmp = join(dst, '..', `.obeya-restore-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
       await copyKeeping(copy, tmp);
       await rename(tmp, dst);
     };
-    // later moves first, so a file moved twice goes back the way it came
+    // contents first, where they are now (in a directory the card moved, say), then the moves back
+    // deepest first, so a directory is empty once its contents went
+    const depth = (t: Tracked) => t.path.split('/').length;
+    const rest = rec.changes.filter((t) => t.kind !== 'moved');
+    for (const t of rest.filter((x) => x.kind === 'added' && !x.dir)) {
+      const why = await this.undoable(cardId, t);
+      if (why !== 'yes') {
+        keep(t, why!);
+        continue;
+      }
+      touch(t.path);
+      await unlink(join(this.root, t.path)).catch(() => {});
+      report.undone.push(t.path);
+    }
+    for (const t of rest.filter((x) => (x.kind === 'deleted' && x.dir) || (x.kind !== 'added' && !x.dir)).sort((a, b) => depth(a) - depth(b))) {
+      const why = await this.undoable(cardId, t);
+      if (why !== 'yes') {
+        keep(t, why!);
+        continue;
+      }
+      try {
+        touch(t.path);
+        if (t.dir) await mkdir(join(this.root, t.path), { recursive: true });
+        else {
+          await mkdir(join(this.root, parentOf(t.path)), { recursive: true });
+          await put((await this.copyOf(cardId, [t.was, t.path], t.before))!, t.path);
+        }
+        report.undone.push(t.path);
+      } catch (e) {
+        console.error(`putting back ${t.path}:`, messageOf(e));
+        keep(t, 'lost');
+      }
+    }
+    // later moves first, so what moved twice goes back the way it came; what a directory took along
+    // is where the directory goes back to
     const moves = rec.changes.filter((t) => t.kind === 'moved').reverse();
+    const along = (from: string, to: string) => {
+      for (const x of [...moves, ...left]) if (under(x.path, from)) x.path = to + x.path.slice(from.length);
+    };
     for (const t of moves) {
       const why = await this.undoable(cardId, t);
-      if (why === 'changedSince') {
+      if (why === 'changedSince' || why === 'shared') {
         keep(t, why);
         continue;
       }
       try {
+        touch(t.path, t.from!);
         await mkdir(join(this.root, parentOf(t.from!)), { recursive: true });
         await rename(join(this.root, t.path), join(this.root, t.from!));
+        if (t.dir) along(t.path, t.from!);
         if (t.changed) {
           const copy = await this.copyOf(cardId, [t.from, t.path], t.before);
           if (copy) await put(copy, t.from!);
@@ -814,38 +899,13 @@ export class FolderWorkspaces implements CardWorkspaces {
         keep(t, 'changedSince');
       }
     }
-    const rest = rec.changes.filter((t) => t.kind !== 'moved');
-    // deepest first, so a directory is empty once its contents went
-    const depth = (t: Tracked) => t.path.split('/').length;
-    for (const t of rest.filter((x) => x.kind === 'added' && !x.dir)) {
-      const why = await this.undoable(cardId, t);
-      if (why !== 'yes') {
-        keep(t, why!);
-        continue;
-      }
-      await unlink(join(this.root, t.path)).catch(() => {});
-      report.undone.push(t.path);
-    }
-    for (const t of rest.filter((x) => (x.kind === 'deleted' && x.dir) || (x.kind !== 'added' && !x.dir)).sort((a, b) => depth(a) - depth(b))) {
-      const why = await this.undoable(cardId, t);
-      if (why !== 'yes') {
-        keep(t, why!);
-        continue;
-      }
-      try {
-        if (t.dir) await mkdir(join(this.root, t.path), { recursive: true });
-        else {
-          await mkdir(join(this.root, parentOf(t.path)), { recursive: true });
-          await put((await this.copyOf(cardId, [t.path], t.before))!, t.path);
-        }
-        report.undone.push(t.path);
-      } catch (e) {
-        console.error(`putting back ${t.path}:`, messageOf(e));
-        keep(t, 'lost');
-      }
-    }
     for (const t of rest.filter((x) => x.kind === 'added' && x.dir).sort((a, b) => depth(b) - depth(a))) {
+      if (t.shared) {
+        keep(t, 'shared');
+        continue;
+      }
       try {
+        touch(t.path);
         await rmdir(join(this.root, t.path));
         report.undone.push(`${t.path}/`);
       } catch {
@@ -856,7 +916,6 @@ export class FolderWorkspaces implements CardWorkspaces {
     this.save(cardId, { ...rec, changes: left, undo: null });
     this.dropUndo(cardId);
     // what undo did is no card's change
-    this.quiet!.end = Date.now();
     await this.scanNow();
     this.o.onChange?.(cardId);
     return report;

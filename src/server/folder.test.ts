@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store } from './db';
@@ -138,5 +138,72 @@ describe('undo', () => {
     expect(existsSync(join(folder, 'Nachlass', 'Liste.txt'))).toBe(true);
     expect(report.lost).toEqual(['Zähler.png']);
     expect(await kinds('a')).toEqual(['modified Zähler.png']);
+  });
+
+  test('a directory the card moved goes back with what the card changed in it', async () => {
+    ws.lease('a');
+    await call('a', 'Bash', { command: 'mv Nachlass Erbe && echo neu > Erbe/Liste.txt' }, () => {
+      renameSync(join(folder, 'Nachlass'), join(folder, 'Erbe'));
+      writeFileSync(join(folder, 'Erbe', 'Liste.txt'), 'neu\n');
+    });
+    expect(await kinds('a')).toEqual(['moved Nachlass → Erbe', 'modified Erbe/Liste.txt']);
+    const report = await ws.undo('a');
+    expect(report).toMatchObject({ changedSince: [], lost: [] });
+    expect(readFileSync(join(folder, 'Nachlass', 'Liste.txt'), 'utf8')).toBe('Konten\n');
+    expect(existsSync(join(folder, 'Erbe'))).toBe(false);
+  });
+
+  test('what changed while two cards ran scripts at once is left alone by either undo', async () => {
+    ws.lease('a');
+    ws.lease('b');
+    const ca: ToolCall = { id: 's1', name: 'Bash', input: {} };
+    const cb: ToolCall = { id: 's2', name: 'Bash', input: {} };
+    await ws.watch('a').before(ca);
+    await ws.watch('b').before(cb);
+    writeFileSync(join(folder, 'a.txt'), 'a\n');
+    writeFileSync(join(folder, 'b.txt'), 'b\n');
+    await ws.watch('a').after(ca);
+    await ws.watch('b').after(cb);
+    const view = (await ws.diff('a', false))!.folder!.changes;
+    expect(view.map((c) => [c.path, c.undo])).toEqual([
+      ['a.txt', 'shared'],
+      ['b.txt', 'shared'],
+    ]);
+    const report = await ws.undo('a');
+    expect(report.shared).toEqual(['a.txt', 'b.txt']);
+    expect(existsSync(join(folder, 'b.txt'))).toBe(true);
+  });
+
+  test("the owner's change just before a script's call is not the card's, nor put back over", async () => {
+    ws.lease('a');
+    await call('a', 'Bash', { command: 'true' }, () => {});
+    // the owner edits the list, then the card's script appends to it
+    writeFileSync(join(folder, 'Nachlass', 'Liste.txt'), 'vom Owner\n');
+    await Bun.sleep(3);
+    await call('a', 'Bash', { command: 'echo mehr >> Nachlass/Liste.txt' }, () => writeFileSync(join(folder, 'Nachlass', 'Liste.txt'), 'vom Owner\nmehr\n'));
+    const report = await ws.undo('a');
+    // its copy from the start is older than what the card changed: nothing to put back from
+    expect(report.lost).toEqual(['Nachlass/Liste.txt']);
+    expect(readFileSync(join(folder, 'Nachlass', 'Liste.txt'), 'utf8')).toBe('vom Owner\nmehr\n');
+  });
+
+  test('a file replaced since with other bytes of the same size and time is left alone', async () => {
+    ws.lease('a');
+    await call('a', 'Bash', { command: 'edit' }, () => writeFileSync(join(folder, 'Sortierung.md'), 'AAAA\n'));
+    const { mtime } = statSync(join(folder, 'Sortierung.md'));
+    await Bun.sleep(3);
+    writeFileSync(join(folder, 'Sortierung.md'), 'BBBB\n');
+    utimesSync(join(folder, 'Sortierung.md'), mtime, mtime);
+    const report = await ws.undo('a');
+    expect(report.changedSince).toEqual(['Sortierung.md']);
+    expect(readFileSync(join(folder, 'Sortierung.md'), 'utf8')).toBe('BBBB\n');
+  });
+
+  test('an edit through a link is a change of the file it points to', async () => {
+    symlinkSync('Sortierung.md', join(folder, 'Link.md'));
+    await call('x', 'Bash', { command: 'true' }, () => {});
+    ws.lease('a');
+    await call('a', 'Edit', { file_path: 'Link.md' }, () => writeFileSync(join(folder, 'Link.md'), 'drei\n'));
+    expect(await kinds('a')).toEqual(['modified Sortierung.md']);
   });
 });

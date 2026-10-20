@@ -64,7 +64,7 @@ export function ChangeLine({ c }: { c: FolderChange }) {
         </>
       )}
       {c.undo && c.undo !== 'yes' && (
-        <span className="f-left" title={c.undo === 'lost' ? t.folder.lostHint : t.folder.changedSinceHint}>
+        <span className="f-left" title={c.undo === 'lost' ? t.folder.lostHint : c.undo === 'shared' ? t.folder.sharedHint : t.folder.changedSinceHint}>
           {' '}
           · {t.folder.state[c.undo]}
         </span>

@@ -402,7 +402,7 @@ export function Detail(p: Props) {
           {planSource}
           {!item.queue && (
             <div className="actions">
-              <button className="btn primary" title={t.startHint} onClick={() => act({ action: 'start' }, { close: false })}>
+              <button className="btn primary" title={inFolder ? t.folder.startHint : t.startHint} onClick={() => act({ action: 'start' }, { close: false })}>
                 {t.start}
               </button>
               {prototypeActions}

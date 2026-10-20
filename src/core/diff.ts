@@ -53,9 +53,10 @@ export interface FolderChange {
   /**
    * What undoing the card does with it: puts it back (`yes`); cannot, as no copy of it from before
    * the card's change is kept (`lost`); or leaves it as it is, since someone changed it after the
-   * card (`changedSince`). None once nothing can be undone.
+   * card (`changedSince`), or since another card's agent was at work when it changed and it may be
+   * that card's (`shared`). None once nothing can be undone.
    */
-  undo?: 'yes' | 'lost' | 'changedSince';
+  undo?: 'yes' | 'lost' | 'changedSince' | 'shared';
 }
 
 /** How much of a diff goes to the page: beyond it, it is cut off at a file's end. */

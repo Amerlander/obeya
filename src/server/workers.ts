@@ -969,7 +969,7 @@ export class Workers {
       cardId,
       'state',
       'owner',
-      [t.undone(report.undone.filter((p) => !p.endsWith('/')).length), report.changedSince.length ? t.undoChangedSince(files(report.changedSince)) : '', report.lost.length ? t.undoLost(files(report.lost)) : ''].filter(Boolean).join(' '),
+      [t.undone(report.undone.filter((p) => !p.endsWith('/')).length), report.changedSince.length ? t.undoChangedSince(files(report.changedSince)) : '', report.lost.length ? t.undoLost(files(report.lost)) : '', report.shared.length ? t.undoShared(files(report.shared)) : ''].filter(Boolean).join(' '),
     );
     const row = this.o.board.row(cardId);
     const detail = row.detail ? (JSON.parse(row.detail) as Record<string, unknown>) : {};
@@ -977,6 +977,7 @@ export class Workers {
       `The owner discarded your changes in the folder: Obeya put back what your card changed (${report.undone.join(', ') || 'nothing'}) as it was before.`,
       report.changedSince.length ? `Left as they are, since someone changed them after you: ${files(report.changedSince)}.` : '',
       report.lost.length ? `Left as they are, since no copy from before your change was kept: ${files(report.lost)}.` : '',
+      report.shared.length ? `Left as they are, since another card's agent was at work when they changed: ${files(report.shared)}.` : '',
       'The card still waits for the owner.',
     ];
     this.o.board.work(cardId, {

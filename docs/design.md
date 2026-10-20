@@ -1870,9 +1870,12 @@ may write (not Read, Grep, Glob and the like) opens a window from its `PreToolUs
 then Obeya reads the folder again and gives each change to the cards whose windows were open when it
 happened, by its ctime, which no tool sets (a deleted file by its directory's). So a change is a
 card's own even while other cards, the owner, a scanner or the sync client change the folder at the
-same time; a change outside every window is no card's. An editing tool (Edit, Write, NotebookEdit)
-takes only its own file, and the folder is read only there; a script's call reads all of it (on the
-owner's document folder, 4,615 files: 0.3 s). Background work keeps a window open while it runs;
+same time; a change outside every window is no card's. Before the window opens, the folder is read
+too, so what the owner changed just before is not the call's. An editing tool (Edit, Write,
+NotebookEdit) takes only its own file (through a link, the file it points to), and the folder is
+read only there; a script's call reads all of it, before and after (on the owner's document folder,
+4,615 files: 0.3 s; 45,717 entries: 0.5 s). A change that happened while calls of two cards ran
+cannot be told apart: both cards list it, and neither undo touches it. Background work keeps a window open while it runs;
 the end of a turn closes any window whose end the hooks never told. A file only in the cloud (a
 dataless file of a file provider: no blocks on disk) is never read, hashed or copied, which would
 download it. What a card changed is one entry per path, from before its first change to after its
@@ -1900,13 +1903,15 @@ back. Before a card's first call that may write, Obeya makes its undo ready unde
 
 Either way, an editing tool's file is copied just before it writes it the first time. Undo puts back
 only what the card changed, from the copy that matches the file as it was before the card's first
-change (size and mtime): moves are moved back, added files deleted, changed and deleted ones put back
-(written beside and renamed over). A file someone changed after the card (its size and mtime, else
-its hash, differ from what the card left) is left alone, and so is one no copy was kept of (a script
-overwrote or deleted it under a partial undo); the card's log names both, its list keeps them, and
-its worker hears what happened with its next message. The card says which undo it has, and each
-entry of its list what discarding would do with it, before the owner decides. The undo goes when
-the card is done or its changes are discarded (and is made afresh if its worker goes on).
+change (size and mtime): added files are deleted, changed and deleted ones put back (written beside
+and renamed over), then moves moved back, so a directory the card moved takes back what the card
+changed in it. Left alone are a file someone changed after the card (its ctime and inode are no
+longer what the card left, and its hash where Obeya read it, else its size and mtime, differ), one
+no copy was kept of (a script overwrote or deleted it under a partial undo), and a change two cards'
+calls shared; the card's log names them, its list keeps them, and its worker hears what happened
+with its next message. The card says which undo it has, and each entry of its list what discarding
+would do with it, before the owner decides. The undo goes when the card is done or its changes are
+discarded (and is made afresh if its worker goes on).
 
 **Lesestand and settings.** The folder is its own Lesestand; its plan docs and `.obeya/settings.json`
 (and its Claude Code configuration, for the trust check) are read from it as they are
