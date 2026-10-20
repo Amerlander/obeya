@@ -2714,7 +2714,7 @@ export class Workers {
   private system(preferences: string, prototype = false, card?: Item): string {
     // a task the owner wrote is their first words to the worker; one an agent or a plan doc wrote is not
     const by = card?.body.trim() ? taskAuthor(card) : undefined;
-    const language = by === 'owner' ? ownersLanguage(this.o.board.conversation(), "the card's task, which they wrote themselves") : `${ownersLanguage(this.o.board.conversation())}${by ? ` ${TASK_BY[by]}` : ''}`;
+    const language = by === 'owner' ? ownersLanguage(this.o.board.conversation(), "the card's task") : `${ownersLanguage(this.o.board.conversation())}${by ? ` ${TASK_BY[by]}` : ''}`;
     const folder = !!this.folder;
     return `
 You are a worker agent directed through Obeya, a canvas on which the owner directs coding agents like an engineering director directs a team. ${
@@ -2785,6 +2785,8 @@ ${idea.idea.brief}` : '',
           .join('\n\n'),
       );
     if (card.body.trim()) parts.push(card.body.trim());
+    // the owner's own words: the language the worker writes them in until they say more (`ownersLanguage`)
+    if (card.body.trim() && taskAuthor(card) === 'owner') parts.push('The owner wrote this task themselves: write to them in its language.');
     if (card.mocks?.length) parts.push(mocksText(card.mocks));
     if (card.builtOn) parts.push(this.builtOnPrototype(card.builtOn, !!card.parent));
     const from = card.from && !card.prototypeOf ? this.o.board.item(card.from) ?? this.o.board.archived().find((i) => i.id === card.from) : undefined;
