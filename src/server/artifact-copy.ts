@@ -1,14 +1,18 @@
 // The copy of an HTML artifact on a shared page (a site's page, a ZIP). There the artifact runs in
 // a sandboxed frame whose origin is `null`, so what it loads in CORS mode (a module script, a
-// `fetch()` of a file beside it, a font) needs the site to answer with `Access-Control-Allow-Origin`;
-// behind a login (Cloudflare Access, say) those requests carry no cookie and get the login page, and
-// from a ZIP opened from disk none of them loads at all. Inside Obeya the files are served under a
-// keyed address instead (`keyed` in demo.ts); a static site cannot do that. So the copy makes no
-// such request: its module scripts are bundled into the page, its stylesheets carry their fonts,
-// and the files its scripts may fetch go into the page, answered by `fetch` and `XMLHttpRequest`
-// without asking the site. Images, media, classic scripts and stylesheets load without CORS and stay
-// files beside it. Nor does the copy load anything from elsewhere or send anything there: it starts
-// with the policy of a shared artifact (`sealed` in src/core/frame.ts).
+// `fetch()` of a file beside it, a font) needs the site to answer with `Access-Control-Allow-Origin`,
+// and from a ZIP opened from disk none of them loads at all. Behind a login (Cloudflare Access, say)
+// no request of the frame for a file beside it gets through: the browser sends them as cross-site,
+// without the login's cookie (Firefox never, Chrome where the cookie is not `SameSite=None`), and
+// the login answers with its own page, an image as much as a module script. Inside Obeya the files
+// are served under a keyed address instead (`keyed` in demo.ts); a static site cannot do that. So
+// the copy's pages load no file beside them: their module scripts are bundled into the page, the
+// files they name (an image, a stylesheet with what it loads in turn, a classic script, a font,
+// media) go in as `data:` URLs, and the files their scripts may fetch go into the page, answered by
+// `fetch` and `XMLHttpRequest` without asking the site. Only the frame's own navigation (a link to
+// another page or to an image) still asks the site, and that one carries the cookie. Nor does the
+// copy load anything from elsewhere or send anything there: it starts with the policy of a shared
+// artifact (`sealed` in src/core/frame.ts).
 //
 // What goes into the copy comes from the artifact's directory only: a file there that is a link to
 // elsewhere, or a module import that leads out of it, would publish a file of this machine.
@@ -18,8 +22,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import { sealed, withHeightReport } from '../core/frame';
 import { demoFile } from './demo-page';
 
-const FONTS = /\.(?:woff2?|ttf|otf|eot)$/i;
-/** What a page loads without CORS (or the copy inlines), so it stays out of the page. */
+/** What a page names in its markup or its styles, which the copy inlines there, so it stays out of the table of files to fetch. */
 const LOADED = /\.(?:[cm]?js|css|woff2?|ttf|otf|eot|png|jpe?g|gif|webp|avif|bmp|ico|mp4|webm|mov|m4v|mp3|wav|ogg|oga|m4a|flac)$/i;
 
 /** A file of the artifact's directory, read where its real path lies inside it, else null. */
@@ -29,27 +32,21 @@ function read(dir: string, f: string): Buffer | null {
 }
 
 /**
- * The artifact's files whose copy differs from the artifact's own: its `index.html` always (with
- * the height report, see `withHeightReport`, and the policy that lets it load its own files alone,
- * those at `own`), its other pages (with that policy too: the artifact may open one in its frame),
- * and stylesheets that load fonts.
+ * The artifact's files whose copy differs from the artifact's own: its `index.html` (with the height
+ * report, see `withHeightReport`, and the policy that lets it load its own files alone, those at
+ * `own`) and its other pages (with that policy too: the artifact may open one in its frame), each
+ * with the files it names inside it.
  */
 export async function artifactCopy(dir: string, files: string[], own: string): Promise<Map<string, string>> {
   const copy = new Map<string, string>();
-  for (const f of files) if (f.endsWith('.css')) {
-    const css = read(dir, f)?.toString('utf8');
-    if (css === undefined) continue;
-    const inlined = withFonts(css, dir, dirname(f));
-    if (inlined !== css) copy.set(f, inlined);
-  }
   for (const f of files) if (f !== 'index.html' && /\.html?$/i.test(f)) {
     const page = read(dir, f);
-    if (page) copy.set(f, sealed(page.toString('utf8'), own));
+    if (page) copy.set(f, sealed(withData(page.toString('utf8'), dir, dirname(f)), own));
   }
   const embedded = files.filter((f) => f !== 'index.html' && !LOADED.test(f));
   const index = read(dir, 'index.html');
   if (!index) throw new Error(`${join(dir, 'index.html')} is no file of the artifact`);
-  let html = withFonts(await withModules(index.toString('utf8'), dir), dir, '.');
+  let html = withData(await withModules(index.toString('utf8'), dir), dir, '.');
   if (embedded.length) html = withFiles(html, dir, embedded);
   copy.set('index.html', sealed(withHeightReport(html), own));
   return copy;
@@ -67,13 +64,82 @@ function inside(dir: string, from: string, ref: string): string | null {
   return path && !path.startsWith('..') ? path.split('\\').join('/') : null;
 }
 
-/** CSS with its fonts of the artifact's directory as `data:` URLs (`from` is where the CSS sits). */
-function withFonts(css: string, dir: string, from: string): string {
-  return css.replace(/url\(\s*(['"]?)([^'")\s]+)\1\s*\)/g, (all, _q, ref: string) => {
-    const path = FONTS.test(ref.replace(/[?#].*$/, '')) && inside(dir, from, ref);
-    const data = path && read(dir, path);
-    return data ? `url("data:${Bun.file(path).type.split(';')[0]};base64,${data.toString('base64')}")` : all;
-  });
+/**
+ * A file of the artifact's directory as a `data:` URL, named by `ref` from `from` (where the page or
+ * stylesheet naming it sits); null for one that is not there. A stylesheet comes with what it names
+ * inside it in turn (`outer`: the stylesheets it is named from, so one that names itself ends).
+ */
+function dataUrl(dir: string, from: string, ref: string, outer: string[] = []): string | null {
+  const path = inside(dir, from, ref);
+  const data = path && !outer.includes(path) ? read(dir, path) : null;
+  if (!path || !data) return null;
+  const css = /\.css$/i.test(path) ? Buffer.from(withStyleData(data.toString('utf8'), dir, dirname(path), [...outer, path])) : data;
+  return `data:${Bun.file(path).type};base64,${css.toString('base64')}`;
+}
+
+/** CSS with the files of the directory it names (`url()`, `@import`) as `data:` URLs; one has no quote, space or parenthesis to end the text around it early. */
+function withStyleData(css: string, dir: string, from: string, outer: string[] = []): string {
+  return css
+    .replace(/(@import\s+)(['"])([^'"]+)\2/g, (all, at: string, _q, ref: string) => {
+      const url = dataUrl(dir, from, ref, outer);
+      return url ? `${at}url(${url})` : all;
+    })
+    .replace(/url\(\s*(['"]?)([^'")\s]+)\1\s*\)/g, (all, q: string, ref: string) => {
+      const url = dataUrl(dir, from, ref, outer);
+      return url ? `url(${q}${url}${q})` : all;
+    });
+}
+
+/** A `srcset`'s candidates with their files of the directory as `data:` URLs. */
+const srcsetData = (srcset: string, dir: string, from: string) =>
+  srcset
+    .split(/\s*,\s+|\s*,(?=\S)/)
+    .map((candidate) => {
+      const [ref = '', ...size] = candidate.trim().split(/\s+/);
+      return [dataUrl(dir, from, ref) ?? ref, ...size].join(' ');
+    })
+    .join(', ');
+
+/** What a page names as a file to load, by element and attribute (a module script's comes bundled, see `withModules`). */
+const NAMED: [string, string][] = [
+  ['img', 'src'],
+  ['img', 'srcset'],
+  ['source', 'src'],
+  ['source', 'srcset'],
+  ['video', 'src'],
+  ['video', 'poster'],
+  ['audio', 'src'],
+  ['track', 'src'],
+  ['input', 'src'],
+  ['embed', 'src'],
+  ['object', 'data'],
+  ['image', 'href'],
+  ['image', 'xlink:href'],
+  ['script', 'src'],
+  ['link', 'href'],
+];
+
+/** `<link rel>` values that load the file they name. */
+const LINKED = /^(?:stylesheet|icon|apple-touch-icon|preload|prefetch)$/i;
+
+/**
+ * A page with the files of the directory it names as `data:` URLs: in its markup (an image, a
+ * classic script, a stylesheet, media), in its styles (a `<style>`, a `style` attribute) and in its
+ * scripts' text where it reads as a CSS `url()`. `from` is where the page sits.
+ */
+function withData(html: string, dir: string, from: string): string {
+  const rewriter = new HTMLRewriter();
+  for (const [element, attribute] of NAMED)
+    rewriter.on(`${element}[${attribute.replace(':', '\\:')}]`, {
+      element(el) {
+        if (element === 'script' && el.getAttribute('type')?.trim().toLowerCase() === 'module') return;
+        if (element === 'link' && !(el.getAttribute('rel') ?? '').split(/\s+/).some((rel) => LINKED.test(rel))) return;
+        const value = el.getAttribute(attribute)!;
+        const url = attribute === 'srcset' ? srcsetData(value, dir, from) : dataUrl(dir, from, value);
+        if (url && url !== value) el.setAttribute(attribute, url);
+      },
+    });
+  return rewriter.transform(withStyleData(html, dir, from));
 }
 
 /** Text inside a `<script>` element must not close it. */

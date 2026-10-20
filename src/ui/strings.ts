@@ -664,6 +664,8 @@ const de = {
         'Sicherheitskorrektur: Das Artefakt lädt nur noch seine eigenen Dateien und sendet nichts an andere Server, weder per fetch noch als Bild, Formular oder Link; Fenster öffnet es keine mehr.',
       '2026-10-19-credit': 'Jede Seite endet mit „Aufgenommen mit Obeya“, verlinkt auf obeya.si.',
       '2026-10-20-by': 'Jede Seite nennt, wer sie geteilt hat („Geteilt von … am …“), die Übersicht ebenso.',
+      '2026-10-20-inline':
+        'Bilder, Stylesheets und Skripte des Artefakts stecken in seiner Seite: hinter einem Login (Cloudflare Access) fehlten sie in Firefox, das sie ohne das Login-Cookie anfragte.',
     } satisfies Record<PageChangeId, string>,
     pages: (n: number) => (n === 1 ? 'eine Seite' : `${n} Seiten`),
   },
@@ -2187,6 +2189,8 @@ const en: Strings = {
         'Security fix: the artifact loads only its own files and sends nothing to other servers, by fetch, an image, a form or a link alike; it opens no windows any more.',
       '2026-10-19-credit': 'Every page ends in “Recorded with Obeya”, linking obeya.si.',
       '2026-10-20-by': 'Every page names who shared it (“Shared by … on …”), and so does the overview.',
+      '2026-10-20-inline':
+        'The artifact’s images, stylesheets and scripts are inside its page: behind a login (Cloudflare Access) Firefox showed none of them, as it asked for them without the login’s cookie.',
     },
     pages: (n: number) => (n === 1 ? 'one page' : `${n} pages`),
   },

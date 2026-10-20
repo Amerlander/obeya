@@ -105,16 +105,45 @@ describe('artifactCopy', () => {
     expect(index).not.toMatch(/^\/\/ /m);
   });
 
-  test('fonts go into the stylesheets that load them, images stay files', async () => {
+  test('the files a page names go into it, so it asks the site for none of them', async () => {
     const { copy } = await copyOf({
-      'index.html': '<style>@font-face { font-family: T; src: url("fonts/t.woff2") format("woff2"); } body { background: url(bg.png); }</style><link rel="stylesheet" href="css/site.css">',
-      'css/site.css': "@font-face { font-family: U; src: url('../fonts/t.woff2?v=2'); }",
+      'index.html': `<style>@font-face { font-family: T; src: url("fonts/t.woff2") format("woff2"); } body { background: url(bg.png); }</style>
+<link rel="stylesheet" href="css/site.css" media="print"><link rel="icon" href="bg.png"><link rel="canonical" href="bg.png">
+<img src="shots/a%20b.png?v=1" alt="A"><img srcset="bg.png 1x,shots/a%20b.png 2x" src="missing.png">
+<div style="background: url('bg.png')"></div><svg><image xlink:href="bg.png"/></svg>
+<video src="clip.mp4" poster="bg.png"></video><script src="app.js" defer></script>
+<script>el.style.background = 'url(bg.png)';</script><a href="bg.png">full size</a>`,
+      'css/site.css': "@import 'more.css'; @font-face { font-family: U; src: url('../fonts/t.woff2?v=2'); }",
+      'css/more.css': "@import 'site.css'; p { background: url(../bg.png) }",
       'fonts/t.woff2': 'wOF2',
       'bg.png': 'png',
+      'shots/a b.png': 'shot',
+      'clip.mp4': 'mp4',
+      'app.js': 'var classic = 1;',
+      'more/second.html': '<img src="../bg.png"><img src="bg.png">',
+      'more/bg.png': 'more',
     });
-    expect(copy.get('index.html')).toContain('src: url("data:font/woff2;base64,d09GMg==") format("woff2")');
-    expect(copy.get('index.html')).toContain('url(bg.png)');
-    expect(copy.get('css/site.css')).toBe('@font-face { font-family: U; src: url("data:font/woff2;base64,d09GMg=="); }');
+    const index = copy.get('index.html')!;
+    const png = 'data:image/png;base64,cG5n';
+    const shot = 'data:image/png;base64,c2hvdA==';
+    expect(index).toContain(`src: url("data:font/woff2;base64,d09GMg==") format("woff2")`);
+    expect(index).toContain(`body { background: url(${png}); }`);
+    // a stylesheet with what it names, the stylesheets it imports too, but not one that imports itself again
+    const css = /<link rel="stylesheet" href="data:text\/css;charset=utf-8;base64,([^"]+)" media="print">/.exec(index)![1]!;
+    const site = Buffer.from(css, 'base64').toString();
+    expect(site).toEndWith("@font-face { font-family: U; src: url('data:font/woff2;base64,d09GMg=='); }");
+    const more = Buffer.from(/^@import url\(data:text\/css;charset=utf-8;base64,([^)]+)\);/.exec(site)![1]!, 'base64').toString();
+    expect(more).toBe(`@import 'site.css'; p { background: url(${png}) }`);
+    expect(index).toContain(`<link rel="icon" href="${png}"><link rel="canonical" href="bg.png">`);
+    expect(index).toContain(`<img src="${shot}" alt="A"><img srcset="${png} 1x, ${shot} 2x" src="missing.png">`);
+    expect(index).toContain(`<div style="background: url('${png}')"></div><svg><image xlink:href="${png}" /></svg>`);
+    expect(index).toContain(`<video src="data:video/mp4;base64,bXA0" poster="${png}"></video><script src="data:text/javascript;charset=utf-8;base64,dmFyIGNsYXNzaWMgPSAxOw==" defer></script>`);
+    expect(index).toContain(`<script>el.style.background = 'url(${png})';</script>`);
+    // a link navigates the frame, which carries the login's cookie
+    expect(index).toContain('<a href="bg.png">full size</a>');
+    // another page names its files from where it sits
+    expect(copy.get('more/second.html')).toEndWith(`<img src="${png}"><img src="data:image/png;base64,bW9yZQ==">`);
+    expect(copy.has('css/site.css')).toBe(false);
   });
 
   test('answers fetch and XMLHttpRequest for the files beside the page from inside it', async () => {

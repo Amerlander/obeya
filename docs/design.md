@@ -3705,25 +3705,34 @@ no window at all now: a window may go to any server (`allow-popups`, until 2026-
 
 The frame's origin is `null` there too, and a static site cannot answer the way Obeya does (a keyed
 address, see The demo on the card): Cloudflare Pages sends `Access-Control-Allow-Origin: *`, other
-hosts nothing, and behind a login (Cloudflare Access) the frame's CORS requests carry no cookie and
-get the login page; from a ZIP opened from disk none of them loads. From disk Chrome loads nothing
-at all beside a sandboxed page, not even its stylesheets and images, so the ZIP's page lets the
-frame keep the page's origin when it is opened from disk (`file:`; there is no site to keep it
-from) and sandboxes it as the site does when served. So the copy of the artifact on
-the page makes none (`artifactCopy` in `src/server/artifact-copy.ts`, for the site and the ZIP
-alike): its module scripts are bundled into its `index.html` (`Bun.build`; imports from a CDN or a
-package stay imports, a script that does not bundle stays as it is, and the comments naming the
-modules' paths on this machine go), its stylesheets carry their fonts as `data:` URLs, and the files
-its scripts may fetch (all but images, media, scripts, stylesheets and fonts, which load without
-CORS) go into the page, where `fetch` and `XMLHttpRequest` get a GET for them answered without
-asking the site. All of it comes from the artifact's directory: a file goes in only where its real
+hosts nothing; from a ZIP opened from disk no CORS request loads. Behind a login (Cloudflare Access)
+no request of the frame for a file gets through at all, an image as much as a module script: the
+browser sends it as cross-site, without the login's cookie (Firefox never sends it there, its Total
+Cookie Protection keeps a sandboxed frame's requests apart; Chrome where the cookie is not
+`SameSite=None`), and the login answers with its own page on another host, which the policy
+blocks. The frame's own navigation (its page, a link to another page or an image) carries the
+cookie. From disk Chrome loads nothing at all beside a sandboxed page, not even its stylesheets and
+images, so the ZIP's page lets the frame keep the page's origin when it is opened from disk
+(`file:`; there is no site to keep it from) and sandboxes it as the site does when served. So the
+pages of the artifact's copy load no file beside them (`artifactCopy` in
+`src/server/artifact-copy.ts`, for the site and the ZIP alike): its module scripts are bundled into
+its `index.html` (`Bun.build`; imports from a CDN or a package stay imports, a script that does not
+bundle stays as it is, and the comments naming the modules' paths on this machine go); the files
+its pages name (an image and its `srcset`, a poster, media, a classic script, a stylesheet with
+what it imports and names in turn, a font, an icon, a CSS `url()` in a `<style>`, a `style`
+attribute or a script's text) go in as `data:` URLs; and the files its scripts may fetch (all but
+images, media, scripts, stylesheets and fonts) go into the page, where `fetch` and `XMLHttpRequest`
+get a GET for them answered without asking the site. A page with many large images gets large with
+them (a third more than the files), and the host's limit for one file (25 MiB without `maxFile`)
+holds for it. All of it comes from the artifact's directory: a file goes in only where its real
 path lies there (`demoFile`), so a link to elsewhere stays out, and a module script stays as it is
 where its bundle took in a module whose real path lies outside (a path out of it, a link, a path a
 `tsconfig.json` maps a package to; the build's metafile names them); macros (`import … with
 { type: 'macro' }`, code of the artifact run at the build) are off. Otherwise a worker steered by
 what it read could put a file of the owner's into a page that goes public with „Teilen“. What still
 cannot load in the frame: a Web Worker's script, an `import()` of a path computed at run time, a
-font set from a script.
+font set from a script, and behind a login a file a script names at run time (an image's `src` it
+sets).
 
 A shared page sends nothing to the internet either, under the rule a worker's page has inside Obeya
 (see The demo on the card): until 2026-10-16 its artifact could still load from and send to any
@@ -4171,6 +4180,14 @@ the phone.
   read the files of a card whose id it knows, and an answer's files sit under a thread's plain
   number. The frame's requests carry no `Referer` in Chrome, so only their address can tell them
   apart.
+- **A shared artifact's pages load no file beside them** (2026-10-20). Until then images,
+  stylesheets and classic scripts stayed files beside the page, which load without CORS: in Firefox
+  a colleague saw only the images' alt texts on a page behind Cloudflare Access, as Firefox sent
+  the frame's requests for them without the login's cookie and the login answered with its page.
+  Giving the frame `allow-same-origin` would have let the artifact's scripts read every other page
+  of the site with the viewer's cookie; having the page around it fetch the files and hand them to
+  the frame would have left the artifact's markup without its images until a script of the copy
+  put them in.
 - **A shared artifact's copy loads nothing in CORS mode** (2026-10-16). Until then a shared page
   showed an artifact whose module script, fetched JSON or font did not load: the site, behind
   Cloudflare Access, answered the frame's cookieless requests with its login page, and a ZIP from

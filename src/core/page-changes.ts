@@ -23,6 +23,7 @@ export const PAGE_CHANGES = [
   { id: '2026-10-16-offline', kinds: ['html'] },
   { id: '2026-10-19-credit', kinds: ['video', 'html'] },
   { id: '2026-10-20-by', kinds: ['video', 'html'] },
+  { id: '2026-10-20-inline', kinds: ['html'] },
 ] as const satisfies readonly PageChange[];
 
 export type KnownChange = (typeof PAGE_CHANGES)[number];
