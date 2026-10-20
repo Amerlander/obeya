@@ -65,40 +65,73 @@ function inside(dir: string, from: string, ref: string): string | null {
 }
 
 /**
- * A file of the artifact's directory as a `data:` URL, named by `ref` from `from` (where the page or
- * stylesheet naming it sits); null for one that is not there. A stylesheet comes with what it names
- * inside it in turn (`outer`: the stylesheets it is named from, so one that names itself ends).
+ * How much of `data:` URLs one page may carry: stylesheets that import each other several times
+ * over would otherwise grow it beyond any memory. Past it the files left stay the URLs they were,
+ * and a page this large is refused by the host's limit for one file anyway.
  */
-function dataUrl(dir: string, from: string, ref: string, outer: string[] = []): string | null {
-  const path = inside(dir, from, ref);
-  const data = path && !outer.includes(path) ? read(dir, path) : null;
+const DATA_BUDGET = 64 * 1024 * 1024;
+
+/** What inlining one page goes by: the artifact's directory and what is left of the page's budget. */
+interface Inlining {
+  dir: string;
+  left: number;
+}
+
+/**
+ * A file of the artifact's directory as a `data:` URL (with the reference's `#` part, which names a
+ * part of an SVG, say), named by `ref` from `from` (where the page or stylesheet naming it sits);
+ * null for one that is not there. A stylesheet comes with what it names inside it in turn
+ * (`outer`: the stylesheets it is named from, so one that names itself ends).
+ */
+function dataUrl(at: Inlining, from: string, ref: string, outer: string[] = []): string | null {
+  const path = inside(at.dir, from, ref);
+  const data = path && !outer.includes(path) && at.left > 0 ? read(at.dir, path) : null;
   if (!path || !data) return null;
-  const css = /\.css$/i.test(path) ? Buffer.from(withStyleData(data.toString('utf8'), dir, dirname(path), [...outer, path])) : data;
-  return `data:${Bun.file(path).type};base64,${css.toString('base64')}`;
+  const bytes = /\.css$/i.test(path) ? Buffer.from(withStyleData(data.toString('utf8'), at, dirname(path), [...outer, path])) : data;
+  const url = `data:${Bun.file(path).type};base64,${bytes.toString('base64')}${/#.*$/.exec(ref)?.[0] ?? ''}`;
+  // past the budget nothing more goes in: a page grown this far goes out too large anyway
+  at.left = url.length > at.left ? 0 : at.left - url.length;
+  return at.left > 0 ? url : null;
 }
 
 /** CSS with the files of the directory it names (`url()`, `@import`) as `data:` URLs; one has no quote, space or parenthesis to end the text around it early. */
-function withStyleData(css: string, dir: string, from: string, outer: string[] = []): string {
+function withStyleData(css: string, at: Inlining, from: string, outer: string[] = []): string {
   return css
-    .replace(/(@import\s+)(['"])([^'"]+)\2/g, (all, at: string, _q, ref: string) => {
-      const url = dataUrl(dir, from, ref, outer);
-      return url ? `${at}url(${url})` : all;
+    .replace(/(@import\s+)(['"])([^'"]+)\2/gi, (all, start: string, _q, ref: string) => {
+      const url = dataUrl(at, from, ref, outer);
+      return url ? `${start}url(${url})` : all;
     })
-    .replace(/url\(\s*(['"]?)([^'")\s]+)\1\s*\)/g, (all, q: string, ref: string) => {
-      const url = dataUrl(dir, from, ref, outer);
-      return url ? `url(${q}${url}${q})` : all;
+    .replace(/url\(\s*(?:(['"])([^'"]*)\1|([^'")\s]+))\s*\)/gi, (all, q: string | undefined, quoted: string | undefined, bare: string | undefined) => {
+      const url = dataUrl(at, from, quoted ?? bare ?? '', outer);
+      return url ? `url(${q ?? ''}${url}${q ?? ''})` : all;
     });
 }
 
-/** A `srcset`'s candidates with their files of the directory as `data:` URLs. */
-const srcsetData = (srcset: string, dir: string, from: string) =>
-  srcset
-    .split(/\s*,\s+|\s*,(?=\S)/)
-    .map((candidate) => {
-      const [ref = '', ...size] = candidate.trim().split(/\s+/);
-      return [dataUrl(dir, from, ref) ?? ref, ...size].join(' ');
-    })
-    .join(', ');
+/**
+ * A `srcset`'s candidates with their files of the directory as `data:` URLs, read as browsers read
+ * it: a candidate's URL runs to the next white space (a `data:` URL's comma included), its
+ * descriptors to the next comma.
+ */
+function srcsetData(srcset: string, at: Inlining, from: string): string {
+  const out: string[] = [];
+  let i = 0;
+  while (i < srcset.length) {
+    while (i < srcset.length && /[\s,]/.test(srcset[i]!)) i++;
+    if (i >= srcset.length) break;
+    const start = i;
+    while (i < srcset.length && !/\s/.test(srcset[i]!)) i++;
+    let ref = srcset.slice(start, i);
+    let size = '';
+    if (ref.endsWith(',')) ref = ref.replace(/,+$/, '');
+    else {
+      const end = srcset.indexOf(',', i);
+      size = srcset.slice(i, end < 0 ? srcset.length : end).trim();
+      i = end < 0 ? srcset.length : end + 1;
+    }
+    out.push([dataUrl(at, from, ref) ?? ref, size].filter(Boolean).join(' '));
+  }
+  return out.join(', ');
+}
 
 /** What a page names as a file to load, by element and attribute (a module script's comes bundled, see `withModules`). */
 const NAMED: [string, string][] = [
@@ -125,9 +158,21 @@ const LINKED = /^(?:stylesheet|icon|apple-touch-icon|preload|prefetch)$/i;
 /**
  * A page with the files of the directory it names as `data:` URLs: in its markup (an image, a
  * classic script, a stylesheet, media), in its styles (a `<style>`, a `style` attribute) and in its
- * scripts' text where it reads as a CSS `url()`. `from` is where the page sits.
+ * scripts' text where it reads as a CSS `url()`. `from` is where the page sits; a `<base>` of the
+ * page moves it, and one that leads out of the directory or to another server leaves the page as
+ * it is.
  */
 function withData(html: string, dir: string, from: string): string {
+  const base = /<base\b[^>]*?\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(html);
+  if (base) {
+    const folder = (base[1] ?? base[2] ?? base[3] ?? '').replace(/[^/]*$/, '');
+    if (folder) {
+      const file = inside(dir, from, `${folder}x`);
+      if (file === null) return html;
+      from = dirname(file);
+    }
+  }
+  const at: Inlining = { dir, left: DATA_BUDGET };
   const rewriter = new HTMLRewriter();
   for (const [element, attribute] of NAMED)
     rewriter.on(`${element}[${attribute.replace(':', '\\:')}]`, {
@@ -135,11 +180,11 @@ function withData(html: string, dir: string, from: string): string {
         if (element === 'script' && el.getAttribute('type')?.trim().toLowerCase() === 'module') return;
         if (element === 'link' && !(el.getAttribute('rel') ?? '').split(/\s+/).some((rel) => LINKED.test(rel))) return;
         const value = el.getAttribute(attribute)!;
-        const url = attribute === 'srcset' ? srcsetData(value, dir, from) : dataUrl(dir, from, value);
+        const url = attribute === 'srcset' ? srcsetData(value, at, from) : dataUrl(at, from, value);
         if (url && url !== value) el.setAttribute(attribute, url);
       },
     });
-  return rewriter.transform(withStyleData(html, dir, from));
+  return rewriter.transform(withStyleData(html, at, from));
 }
 
 /** Text inside a `<script>` element must not close it. */

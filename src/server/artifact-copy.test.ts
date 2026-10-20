@@ -146,6 +146,40 @@ describe('artifactCopy', () => {
     expect(copy.has('css/site.css')).toBe(false);
   });
 
+  test('reads a srcset as browsers do, keeps the part a # names, and finds a URL in quotes with a space', async () => {
+    const { copy } = await copyOf({
+      'index.html': `<img srcset="data:image/png;base64,eA== 1x, a.png 2x,b.png, a.png  300w">
+<style>p { filter: URL("fx.svg#blur"); background: url( 'a b.png' ) }</style>`,
+      'a.png': 'a',
+      'b.png': 'b',
+      'fx.svg': '<svg/>',
+      'a b.png': 'ab',
+    });
+    const index = copy.get('index.html')!;
+    expect(index).toContain('<img srcset="data:image/png;base64,eA== 1x, data:image/png;base64,YQ== 2x, data:image/png;base64,Yg==, data:image/png;base64,YQ== 300w">');
+    expect(index).toContain(`filter: url("data:image/svg+xml;base64,${Buffer.from('<svg/>').toString('base64')}#blur")`);
+    expect(index).toContain("background: url('data:image/png;base64,YWI=')");
+  });
+
+  test('names files from where a <base> of the page puts them, and leaves a page whose <base> leads elsewhere as it is', async () => {
+    const { copy } = await copyOf({
+      'index.html': '<base href="assets/"><img src="logo.png">',
+      'logo.png': 'root',
+      'assets/logo.png': 'assets',
+      'away.html': '<base href="https://elsewhere.example/"><img src="logo.png">',
+    });
+    expect(copy.get('index.html')).toContain(`<img src="data:image/png;base64,${Buffer.from('assets').toString('base64')}">`);
+    expect(copy.get('away.html')).toEndWith('<img src="logo.png">');
+  });
+
+  test('stylesheets that import each other many times over stop growing the page', async () => {
+    const files: Record<string, string> = { 'index.html': '<link rel="stylesheet" href="s0.css">' };
+    for (let i = 0; i < 14; i++) files[`s${i}.css`] = `@import "s${i + 1}.css"; @import "s${i + 1}.css"; @import "s${i + 1}.css"; @import "s${i + 1}.css";`;
+    files['s14.css'] = `p { content: "${'x'.repeat(1000)}" }`;
+    const { copy } = await copyOf(files);
+    expect(copy.get('index.html')!.length).toBeLessThan(70 * 1024 * 1024);
+  });
+
   test('answers fetch and XMLHttpRequest for the files beside the page from inside it', async () => {
     const { copy } = await copyOf({
       'index.html': '<!doctype html><html lang="en"><head><title>T</title><script>first()</script></head><body></body></html>',

@@ -3722,9 +3722,12 @@ its pages name (an image and its `srcset`, a poster, media, a classic script, a 
 what it imports and names in turn, a font, an icon, a CSS `url()` in a `<style>`, a `style`
 attribute or a script's text) go in as `data:` URLs; and the files its scripts may fetch (all but
 images, media, scripts, stylesheets and fonts) go into the page, where `fetch` and `XMLHttpRequest`
-get a GET for them answered without asking the site. A page with many large images gets large with
-them (a third more than the files), and the host's limit for one file (25 MiB without `maxFile`)
-holds for it. All of it comes from the artifact's directory: a file goes in only where its real
+get a GET for them answered without asking the site. A `<base>` of the page is heeded (one leading
+out of the directory or to another server leaves the page as it is), a `#` part kept (a part of an
+SVG), and a `srcset` read as browsers read it. A page with many large images gets large with them
+(a third more than the files), and the host's limit for one file (25 MiB without `maxFile`) holds
+for it; stylesheets that import each other many times over stop at 64 MiB of `data:` URLs a page
+(`DATA_BUDGET`), past which the files left stay URLs. All of it comes from the artifact's directory: a file goes in only where its real
 path lies there (`demoFile`), so a link to elsewhere stays out, and a module script stays as it is
 where its bundle took in a module whose real path lies outside (a path out of it, a link, a path a
 `tsconfig.json` maps a package to; the build's metafile names them); macros (`import … with
