@@ -230,7 +230,11 @@ export class Director {
     const hidden: boolean[] = await this.evaluate((els) => window.__demo.hidden(els), handles);
     const behind = [targets].flat().filter((_, i) => hidden[i]);
     if (behind.length) throw new Error(`cannot highlight what lies hidden behind another part of the page (another match of the locator?): ${behind.join(', ')}`);
-    await this.evaluate(([els, l]) => window.__demo.highlight(els, l), [handles, label] as const);
+    const ringed = await this.evaluate(([els, l]) => window.__demo.highlight(els, l), [handles, label] as const);
+    if (ringed?.same !== undefined)
+      throw new Error(
+        `highlight${label ? ` "${label}"` : ''} rings what the highlight${ringed.same ? ` "${ringed.same}"` : ''} of this scene rings already: its locator probably matched another element than meant (a text that also stands inside a longer one, say). To give the same element another label, clearHighlights() first.`,
+      );
     await this.wait(400);
   }
 

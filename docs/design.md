@@ -3606,6 +3606,11 @@ One layer dims the rest of the page for all rings together, with a hole for each
 clip path. Until 2026-10-15 the holes were cut by an SVG mask over the whole page: each time the
 mask's layer went, Chrome stalled for about 0.27 s, a jerk in the video wherever a ring was cleared
 (a card being dragged, a new card appearing), on a quiet machine too.
+A highlight on just the elements a ring of the scene has already stops the scene with an error
+naming both labels: its locator has mostly matched another element than meant. A demo of
+2026-10-20 ringed the interface language's row a second time for the conversation language, whose
+locator also matched the first row's hint, and the video showed the label on the wrong row. To
+relabel an element, a scene clears its highlights first.
 
 ### The demo on the card
 

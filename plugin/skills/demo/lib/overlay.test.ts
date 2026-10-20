@@ -66,6 +66,26 @@ describe('the demo overlay', () => {
     expect(await page.evaluate((e) => (window as any).__demo.hidden(e), els)).toEqual([true, false]);
   });
 
+  test("a ring on what another ring of the scene has already is refused with that ring's label", async () => {
+    const button = await page.locator('#b').elementHandle();
+    const edge = await page.locator('#edge').elementHandle();
+    const answers = await page.evaluate(
+      ([b, e]) => {
+        // biome-ignore lint: the overlay is untyped browser script
+        const demo = (window as any).__demo;
+        demo.clearHighlights();
+        const first = demo.highlight([b], 'Interface');
+        const again = demo.highlight([b], 'Conversation');
+        // one element more is another ring
+        const both = demo.highlight([b, e], 'Both');
+        const rings = [...document.querySelectorAll('div')].filter((d) => ['Interface', 'Conversation', 'Both'].includes(d.textContent ?? '') && !d.children.length).map((d) => d.textContent);
+        return { first, again, both, rings };
+      },
+      [button, edge] as const,
+    );
+    expect(answers).toEqual({ first: undefined, again: { same: 'Interface' }, both: undefined, rings: ['Interface', 'Both'] });
+  });
+
   test('a label stays inside the window when its ring is at the edge', async () => {
     const button = await page.locator('#edge').elementHandle();
     const label = 'A label much longer than the button it belongs to';

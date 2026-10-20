@@ -223,8 +223,13 @@
       });
       setTimeout(() => dot.remove(), 600);
     },
+    // Rings the elements, unless a ring has just these already: then it returns that ring's label
+    // (or ''), and the director stops the scene, since a locator that hits what another one did
+    // has mostly matched another element than meant.
     highlight(elements, label) {
       ensureRoot();
+      const same = rings.find((r) => r.elements.length === elements.length && r.elements.every((e) => elements.includes(e)));
+      if (same) return { same: same.tag ? same.tag.textContent : '' };
       const box = document.createElement('div');
       box.style.cssText =
         `position:absolute;border:3px solid ${ACCENT};border-radius:12px;` +
