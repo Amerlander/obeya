@@ -17,7 +17,7 @@ describe('the demo overlay', () => {
       fetch: (req) =>
         new URL(req.url).pathname === '/frame'
           ? html('<p id="inside">inside</p>')
-          : html('<button id="b">Go</button><button id="edge" style="position:fixed;right:4px;top:2px">Send</button><iframe src="/frame"></iframe><iframe sandbox="allow-scripts" src="/frame"></iframe>'),
+          : html('<p id="under">behind the sheet</p><div id="sheet" style="position:fixed;left:0;top:0;right:0;height:40px;background:#eee"></div><button id="b">Go</button><button id="edge" style="position:fixed;right:4px;top:2px">Send</button><iframe src="/frame"></iframe><iframe sandbox="allow-scripts" src="/frame"></iframe>'),
     });
     browser = await launchChromium();
     const ctx = await browser.newContext({ viewport: { width: 800, height: 600 } });
@@ -58,6 +58,12 @@ describe('the demo overlay', () => {
       return { pointer: !!document.querySelector('svg path'), label: text.includes('Here'), caption: text.includes('An image'), image: !!document.querySelector('img') };
     }, button);
     expect(shown).toEqual({ pointer: true, label: true, caption: true, image: true });
+  });
+
+  test('tells an element hidden behind another part of the page from one that shows', async () => {
+    const els = await Promise.all(['#under', '#b'].map((s) => page.locator(s).elementHandle()));
+    // biome-ignore lint: the overlay is untyped browser script
+    expect(await page.evaluate((e) => (window as any).__demo.hidden(e), els)).toEqual([true, false]);
   });
 
   test('a label stays inside the window when its ring is at the edge', async () => {

@@ -219,10 +219,17 @@ export class Director {
     await this.wait(900);
   }
 
-  /** Rings one or more elements; the rings follow scrolling and last until the next scene. */
+  /**
+   * Rings one or more elements; the rings follow scrolling and last until the next scene. An element
+   * hidden behind another part of the page fails the scene: its ring would stand around something
+   * else, mostly another match of the same locator that the page shows.
+   */
   async highlight(targets: Locator | Locator[], label?: string) {
     const handles = [];
     for (const t of [targets].flat()) handles.push(await t.elementHandle());
+    const hidden: boolean[] = await this.evaluate((els) => window.__demo.hidden(els), handles);
+    const behind = [targets].flat().filter((_, i) => hidden[i]);
+    if (behind.length) throw new Error(`cannot highlight what lies hidden behind another part of the page (another match of the locator?): ${behind.join(', ')}`);
     await this.evaluate(([els, l]) => window.__demo.highlight(els, l), [handles, label] as const);
     await this.wait(400);
   }

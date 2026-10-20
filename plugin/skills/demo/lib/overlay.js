@@ -181,7 +181,27 @@
     requestAnimationFrame(track);
   }
 
+  // Whether each of the elements is hidden behind another part of the page where it can be seen
+  // (a panel over it, a sheet that slid up): no point of it on a grid over its visible part is its
+  // own. A ring around the brief's line under a card's conversation panel stood beside the question
+  // the narration was about, which says the same words (2026-10-20). The overlay's own layer lets
+  // the pointer through, so it covers nothing; an element out of sight is not hidden, it may be
+  // scrolled to.
+  function hidden(elements) {
+    return elements.map((el) => {
+      const r = el && el.isConnected && visibleRect(el);
+      if (!r) return false;
+      for (const fx of [0.1, 0.5, 0.9])
+        for (const fy of [0.1, 0.5, 0.9]) {
+          const hit = document.elementFromPoint(r.left + (r.right - r.left) * fx, r.top + (r.bottom - r.top) * fy);
+          if (hit && (el === hit || el.contains(hit))) return false;
+        }
+      return true;
+    });
+  }
+
   window.__demo = {
+    hidden,
     moveTo(x, y, instant = false) {
       ensureRoot();
       pointer = { x, y };
