@@ -8,7 +8,7 @@ import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { type Language, ownersLanguage, repositoryLanguage } from '../core/locale';
 import { MESSAGES } from '../core/messages';
-import { formatQuestion, type Item, type Mock, NEXT_STEPS, type NextStep, type PlannedPrototype, type Question, type SettledPart } from '../core/types';
+import { type CardEvent, formatQuestion, type Item, type Mock, NEXT_STEPS, type NextStep, type PlannedPrototype, type Question, type SettledPart } from '../core/types';
 import { type Asked, decisionLog, withPick } from './advisor';
 import { BadRequest, type Board, type Message, replyNote, type Unread } from './board';
 import { type AgentEvent, type AgentRuntime, type AgentSession, type AgentTool, BackgroundWait } from './runtime';
@@ -462,28 +462,38 @@ export class Explorers {
       .join('\n\n');
   }
 
-  /** Where an idea discussed before stands, for a session that starts without its earlier ones; empty for a new idea. */
+  /**
+   * Where an idea discussed before stands, for a session that starts without its earlier ones; empty
+   * for an idea its agent has not taken up yet (new, or a Question card just turned into one).
+   */
   private standing(card: Item, said: number[]): string {
     const { brief, mocks = [], variants = [], split } = this.o.board.idea(card.id);
+    // in the order the agent read them: words it read later stand after the reply it read them at
+    const place = (e: CardEvent) => (e.readAfter ? e.readAfter + 0.5 : e.id);
     const talk = this.o.board
-      .events(card.id)
-      .filter((e) => (e.kind === 'talk' || e.kind === 'question') && !said.includes(e.id))
+      .talkOf(card.id, EARLIER_MESSAGES + said.length)
+      .filter((e) => !said.includes(e.id))
       .slice(-EARLIER_MESSAGES)
-      .map((e) => `${e.author === 'owner' ? 'Owner' : 'You'}${e.kind === 'question' ? ' (question)' : ''}: ${clip(e.text, 2000)}`);
+      .sort((a, b) => place(a) - place(b) || a.id - b.id);
     const prototypes = card.prototypes ?? [];
-    const parts = [
+    const shown = prototypes.slice(-MAX_VARIANTS);
+    if (!brief.trim() && !mocks.length && !variants.length && !split && !prototypes.length && !talk.some((e) => e.author === 'explorer')) return '';
+    const who = (e: CardEvent) => (e.author === 'owner' ? 'Owner' : e.author === 'explorer' ? 'You' : 'Obeya');
+    return [
+      'This idea was discussed before, in a session of yours that is gone. Where it stands, as Obeya keeps it; go on from there, and keep in the brief what still holds:',
       brief.trim() ? `The brief as you left it:\n\n${brief.trim()}` : '',
       mocks.length ? `The brief's mocks, shown under it (update_brief without mocks keeps them): ${mocks.map((m) => `“${m.title}”`).join(', ')}.` : '',
       variants.length ? `The prototypes you planned (plan_prototypes):\n${variants.map((v) => `- ${v.approach}: ${v.show}`).join('\n')}` : '',
       split ? `The part you marked to split off (plan_split): “${split.title}”.\n\n${split.brief}` : '',
-      prototypes.length ? `The idea's prototypes:\n${prototypes.map((p) => `- “${p.title}”, ${prototypeState(p)}${p.summary ? `. Its summary: ${clip(p.summary, 2000)}` : ''}`).join('\n')}` : '',
-      talk.length ? `The conversation so far${talk.length === EARLIER_MESSAGES ? ' (its latest messages)' : ''}:\n\n${talk.join('\n\n')}` : '',
-    ].filter(Boolean);
-    if (!parts.length) return '';
-    return [
-      'This idea was discussed before, in a session of yours that is gone. Where it stands, as Obeya keeps it; go on from there, and keep in the brief what still holds:',
-      ...parts,
-    ].join('\n\n');
+      shown.length
+        ? `The idea's prototypes${prototypes.length > shown.length ? ` (the latest ${shown.length} of ${prototypes.length})` : ''}:\n${shown.map((p) => `- “${p.title}”, ${prototypeState(p)}${p.summary ? `. Its summary: ${clip(p.summary, 2000)}` : ''}`).join('\n')}`
+        : '',
+      talk.length
+        ? `The conversation so far${talk.length === EARLIER_MESSAGES ? ' (its latest messages)' : ''}:\n\n${talk.map((e) => `${who(e)}${e.kind === 'question' ? ' (question)' : ''}: ${clip(e.text, 2000)}`).join('\n\n')}`
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n');
   }
 
   private idea(id: string): Item {

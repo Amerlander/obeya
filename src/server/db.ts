@@ -661,6 +661,14 @@ export class Store {
     return { ...e, id, at };
   }
 
+  /** The latest messages of the card's conversation (`talk`, `question`), however many other lines came between them, oldest first. */
+  talkOf(cardId: string, limit: number): CardEvent[] {
+    const rows = this.db
+      .query(`SELECT ${EVENT_COLUMNS} FROM events WHERE card_id = $c AND kind IN ('talk', 'question') ORDER BY id DESC LIMIT $limit`)
+      .all({ c: cardId, limit }) as EventRow[];
+    return rows.reverse().map(eventOf);
+  }
+
   events(cardId: string, limit = 500): CardEvent[] {
     const rows = this.db
       .query(`SELECT ${EVENT_COLUMNS} FROM events WHERE card_id = $c ORDER BY id DESC LIMIT $limit`)

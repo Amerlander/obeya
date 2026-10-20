@@ -485,6 +485,12 @@ export class Board {
     return e && QUOTABLE.includes(e.kind) ? e : undefined;
   }
 
+  /** The latest `limit` messages of the card's conversation, oldest first. */
+  talkOf(cardId: string, limit: number): CardEvent[] {
+    this.own(cardId);
+    return this.store.talkOf(cardId, limit);
+  }
+
   events(cardId: string): CardEvent[] {
     this.own(cardId);
     return this.store.events(cardId);

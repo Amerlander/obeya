@@ -703,6 +703,8 @@ describe('a thread on a Question card', () => {
     expect(explorer.inbox[0]).toContain('Obeya: Hier die Tabelle.');
     expect(explorer.inbox[0]).toContain('numbers.xlsx – Die Viertelstunden');
     expect(explorer.inbox[0]).toContain(answersDir(dir, canvas.id, first));
+    // the thread is where it starts, once: it is no idea discussed before
+    expect(explorer.inbox[0]).not.toContain('discussed before');
 
     const other = await lookedUp('noch eine frage', 'Another?', 'Ja.', 'look-9');
     const done = canvas.answers.toCard(other);

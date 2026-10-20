@@ -198,10 +198,11 @@ Obeya stopped is planned again.
 The unfolded idea is a conversation with its exploration agent: a session on the repository's
 Lesestand (code, plan docs, the decision log, the preferences) resumed for every message, days later
 too. Should that session be gone (Claude prunes old ones, after weeks), a new one starts with where
-the idea stands: the brief, the titles of its mocks, the prototypes planned, running and ended (with
-their summaries), the part marked to split off and the latest twenty messages of the conversation, so
-the agent goes on from there instead of writing the brief afresh (until 2026-10-20 it heard only the
-card's title and text). It has a worker's tools in the workers' permission mode, so what the discussion depends on
+the idea stands: the brief, the titles of its mocks, the prototypes planned, the latest six of those
+built (running or ended, with their summaries), the part marked to split off and the latest twenty
+messages of the conversation, in the order the agent read them, so it goes on from there instead of
+writing the brief afresh (until 2026-10-20 it heard only the card's title and text). An idea its agent
+has not taken up yet (a new one, a Question card just turned into one) starts without it. It has a worker's tools in the workers' permission mode, so what the discussion depends on
 beyond the text (the git history, file dates, a release or CI run with gh, the web) it checks
 instead of guessing. What it does itself starts no work. It asks back, shows variants with their
 trade-offs and says what they would cost.

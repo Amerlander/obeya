@@ -147,7 +147,12 @@ describe('an idea', () => {
     turn(explorer(), 'CSV oder PDF?', () => {
       explorer().call('update_brief', { brief: '**Varianten:** A CSV, B PDF.', mocks: [{ title: 'A CSV', html: '<pre>a;b</pre>' }] });
       explorer().call('plan_prototypes', { prototypes: [{ approach: 'B PDF', show: 'Ein PDF mit Zählerständen.' }] });
+      // said during the turn, it is read after the reply
+      canvas.act(i.id, { action: 'discuss', text: 'Und für Mieter?' });
     });
+    turn(explorer(), 'Mieter später.');
+    // however much the agents did since
+    for (let n = 0; n < 600; n++) board().log(i.id, 'activity', 'explorer', `Liest Datei ${n}`);
     canvas.act(i.id, { action: 'prototype', text: 'Den Export-Knopf.' });
     const [prototype] = board()
       .snapshot()
@@ -163,7 +168,7 @@ describe('an idea', () => {
     expect(first).toContain('“A CSV”');
     expect(first).toContain('- B PDF: Ein PDF mit Zählerständen.');
     expect(first).toContain(`- “${prototype!.title}”, being built`);
-    expect(first).toContain('Owner: Lass uns das durchdenken.\n\nYou: CSV oder PDF?');
+    expect(first).toContain('Owner: Lass uns das durchdenken.\n\nYou: CSV oder PDF?\n\nOwner: Und für Mieter?\n\nYou: Mieter später.');
     // what the owner says now comes once, after where the idea stands
     expect(first.endsWith('The owner says:\n\nEher CSV.')).toBe(true);
     expect(first).not.toContain('Owner: Eher CSV.');
