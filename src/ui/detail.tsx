@@ -2,7 +2,7 @@
 
 import { createContext, Fragment, type ReactNode, type RefObject, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { agentListens, answering, askable, type BackgroundTask, buildableOn, type CardAction, chapterAt, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, type EarlierDemo, EXPORT_HTML_MAX, finished, finishedArchivable, finishingUp, handedOver, type Item, type Mock, type NextStep, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, snoozable, type Spot, started, stopped, stoppedArchivable } from '../core/types';
+import { agentListens, answering, askable, type BackgroundTask, buildableOn, type CardAction, chapterAt, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, type EarlierDemo, EXPORT_HTML_MAX, finished, finishedArchivable, finishingUp, handedOver, type Item, type Mock, type NextStep, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, snoozable, type Spot, started, stopped, stoppedArchivable, taskAuthor } from '../core/types';
 import { mockPage } from '../core/frame';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
 import { answerText, toggle } from './answer';
@@ -1055,7 +1055,7 @@ function Conversation({
   // the line that it started; a decided idea's task is its brief, and its conversation goes on
   const task = (isWorked(item) || !!item.prototypeEnd) && item.brief === undefined && (!!item.body.trim() || !!item.images?.length);
   const seed = task ? (
-    <Seed item={item} by={opening(item)} who={`${t.talk.opening[opening(item)]} · ${t.task}`}>
+    <Seed item={item} by={taskAuthor(item)} who={`${t.talk.opening[taskAuthor(item)]} · ${t.task}`}>
       <Scope files={item.scope} />
     </Seed>
   ) : (
@@ -1190,8 +1190,6 @@ const takeBack = (cardId: string, e: CardEvent) =>
     .catch(() => {});
 
 /** Who wrote the task an agent started on: the owner, a plan doc, the Arbeitsrückschau, an agent's proposal, or a prototype's idea. */
-const opening = (item: Item): 'owner' | 'plan' | 'koordinator' | 'proposal' | 'idea' =>
-  item.source === 'plan' ? 'plan' : item.prototypeOf ? 'idea' : item.retro ? 'koordinator' : item.proposed ? 'proposal' : 'owner';
 
 /** Where a conversation starts, as its first message: what was said to an idea, the task an agent started on; long ones folded. */
 function Seed({ item, by, who, children }: { item: Item; by: string; who: string; children?: ReactNode }) {

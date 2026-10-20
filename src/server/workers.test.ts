@@ -481,6 +481,16 @@ describe('workers', () => {
     expect(words(d.id).at(-1)).toBe('say: Weiter mit den Tests.');
   });
 
+  test("a task the owner wrote tells the worker the language they talk in; one from a plan doc tells nothing", () => {
+    const c = board.create({ title: 'Contributing guide', body: 'Add a CONTRIBUTING.md.', x: 0, y: 0 });
+    workers.start(c.id);
+    expect(runtime.last.inbox[0]).toContain('Add a CONTRIBUTING.md.\n\nThe owner wrote this task themselves: until they say more, answer them in its language.');
+    workers.stop(c.id);
+    const w = board.snapshot().items.find((i) => i.label === 'W1')!;
+    workers.start(w.id);
+    expect(runtime.last.inbox[0]).toContain("This task comes from the project's plan doc: its language tells nothing about the owner's.");
+  });
+
   test("a workstream's question goes straight to the owner, too", () => {
     const w = board.snapshot().items.find((i) => i.label === 'W1')!;
     workers.start(w.id);

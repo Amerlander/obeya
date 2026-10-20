@@ -199,6 +199,16 @@ export const unreadAnswers = (talk: Talk[]) => talk.filter((x) => x.unread).leng
 export const waitingOn = (s: Pick<CanvasSnapshot, 'items' | 'talk'>) => s.items.filter(needsYou).length + (unreadAnswers(s.talk) ? 1 : 0);
 
 /** One item on the canvas as the UI sees it: a stored card merged with what its plan doc says. */
+/**
+ * Who wrote a card's task: the owner (also through the Koordinator, from their words), the plan doc
+ * of its workstream, Obeya (the Arbeitsrückschau), the idea a prototype is for, or a worker whose
+ * proposal the owner accepted. A decided idea's task is its brief, the idea's agent's.
+ */
+export type TaskAuthor = 'owner' | 'plan' | 'koordinator' | 'idea' | 'proposal';
+
+export const taskAuthor = (item: Pick<Item, 'source' | 'prototypeOf' | 'retro' | 'proposed' | 'brief'>): TaskAuthor =>
+  item.source === 'plan' ? 'plan' : item.prototypeOf || item.brief !== undefined ? 'idea' : item.retro ? 'koordinator' : item.proposed ? 'proposal' : 'owner';
+
 export interface Item {
   id: string;
   kind: CardKind;

@@ -4720,8 +4720,10 @@ spoken, also where what it works on is English; words that tell no language (an 
 "Sprache der Gespräche" (`conversationLanguage` in the same `settings.json`; the Board's
 `conversation`), which follows the interface language until chosen. The rule is an instruction in
 the prompts (`ownersLanguage` in `src/core/locale.ts`, whose tools then say "in the owner's
-language"), not detection code. A worker's task and the docs it reads are not the owner's words: a
-task often comes from a plan doc or another agent. Agents with no words of the owner to go by (the
+language"), not detection code. A task the owner wrote (`taskAuthor`: typed, or put in by the
+Koordinator from their words) counts as their first words to its worker; one from a plan doc, a
+proposal, an idea's brief or the Arbeitsrückschau tells nothing, and the docs a worker reads neither
+(the owner, 2026-10-20: a task written in English and answered in German looked wrong). Agents with no words of the owner to go by (the
 Koordinator's conflict reasons, the rules it proposes) write the conversation language; the card
 namer writes the language of the task it names. The Koordinator knows the owner's words for its cards
 in both languages, takes examples in the conversation language and names Obeya's own cards („CLAUDE.md
