@@ -45,20 +45,19 @@
       whether the app now does what I meant.</p>
 
     <h2>How a director does it</h2>
-    <p>An engineering director with forty people does not install every build. In a launch review, the team shows
-      what it built, running, on realistic data, with the edge cases. The director asks questions, sends it back
-      or says ship it. Showing that the work works is the job of whoever did it. The people closest to the work are
-      best placed to show it, and the director's attention is the part that does not scale.</p>
+    <p>An engineering director with dozens of people does not install every build and test manually. Instead, in a launch review, the team shows
+      what it built. The director asks questions and sends it back
+      or says ship it. Showing that the work works is the job of whoever did it.</p>
     <p>Agents can work the same way. What most agent workflows lack is not more autonomy. It is the presentation
       at the end.</p>
 
     <h2>What the agent hands over</h2>
-    <p>In <a href="../">Obeya</a>, the tool I built for this, an agent does not hand over without a demo: a narrated
-      screen recording of the change in the running app, with chapters. A fix gets 30 to 60 seconds, the broken
+    <p>In <a href="../">Obeya</a>, the tool I built for this, an agent always hands over with a demo: a narrated
+      screen recording of the change in the running app, with chapters. A fix gets 30 to 60 seconds, showing the broken
       behaviour and then the fixed one. A feature gets one and a half to three minutes. With the video comes a short handover note,
       a few sentences on what the video cannot tell me: what is left open or unverified, a decision the agent took
-      for me. A question it cannot settle itself it asks on the card, and a problem it noticed outside its task
-      comes back as a proposal for a new card.</p>
+      for me. A question it cannot settle itself it asks in the chat, and a problem it noticed outside its task
+      it proposes as a new task.</p>
     <figure class="essay-shot">
       <a href="https://demos.obeya.si"><img src="../img/demo.png" width="1360" height="950" loading="lazy"
         alt="A card unfolded with the demo video of a tip calculator, its chapters and the approve button"></a>
@@ -66,9 +65,8 @@
     </figure>
     <p>A few rules make a demo evidence rather than a sales pitch:</p>
     <ul>
-      <li>The app in the video runs the code under review, not yesterday's build.</li>
-      <li>Every behaviour the change adds or alters, edge cases included, is in the video, or the handover says
-        why not. "Covered by tests" is no reason to leave one out.</li>
+      <li>The app in the video runs the code under review.</li>
+      <li>Every behaviour the change adds or alters, edge cases included, is in the video.</li>
       <li>Backend changes get a demo too, through whatever view of the app makes them visible. If no view does,
         the agent adds one.</li>
       <li>When the result is something to look at rather than something that happens, such as a layout or three
@@ -77,9 +75,8 @@
 
     <h2>Recording the demo tests the change</h2>
     <p>To record a demo, the agent has to start the app, create the data, go through the flow and look at what
-      the screen shows. That is an end-to-end test of its own work, run before I see anything. A walkthrough
-      that will not record is a bug the agent finds before I do. Before handing over, the agent also looks through
-      stills of every scene of its video, and a label that is cut off or a button that does nothing shows up there.</p>
+      the screen shows. That is an end-to-end test of its own work, run before I see anything, often letting the agent catch mistakes that automated code reviews missed. Before handing over, the agent also looks through
+      stills of every scene of its video, so it can also catch visual issues like a label that is cut off.</p>
     <p>The repository's tests and type checks still run before every handover. The demo does not replace them. It replaces the
       part where I click through the app myself.</p>
 
@@ -89,19 +86,7 @@
       not the subtotal." What I say goes to the agent with that frame and the sentence the narrator was speaking.
       The agent goes another round and comes back with a new demo. When it is right, I approve and Obeya lands it
       on main.</p>
-    <p>My job changes from testing to deciding, and the deciding stays with me.</p>
-
-    <h2>Objections</h2>
-    <p><b>A demo can be staged.</b> So can a launch review. A demo is the agent's case, and I read it like any
-      case. What does the video leave out? Did it show the empty state, the error, the very long name? I know
-      where my product tends to break, so I ask for exactly that, and the next demo shows it. My attention goes to
-      what is missing, not to repeating what worked.</p>
-    <p><b>Recording takes time.</b> It takes the agent's time, not mine. The agent records in the background while
-      the other agents keep working. I spend a minute watching instead of the setup, the clicking and the
-      restarting.</p>
-    <p><b>I would rather read the code.</b> Reading code tells you how well a change is built. A demo tells you
-      whether it is the right change and whether it works. Both have their place; the demo is the one I cannot
-      skip.</p>
+    <p>My job changes from testing to deciding.</p>
 
     <h2>A record of every change</h2>
     <p>Every change that lands comes with its demo. Obeya is built with Obeya, agents wrote all of its code, and
@@ -112,8 +97,7 @@
     <h2>Try it</h2>
     <p>Obeya is an open-source canvas for directing coding agents. Every task is a card, each agent works in its
       own clone or worktree, and every handover is a demo. It runs on your machine and starts the agents through
-      your own Claude Code installation and login. The apps for macOS are signed; the Windows installer is not
-      signed yet.</p>
+      your own Claude Code installation and login.</p>
     <div class="cta">
       <a class="btn primary" href="../#start">Get started</a>
       <a class="btn" href="https://github.com/sadilek/obeya">View on GitHub</a>
