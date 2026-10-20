@@ -2,15 +2,16 @@ import { type RefObject, type UIEvent, useEffect, useRef } from 'react';
 
 /**
  * Keeps a conversation's newest message in view, on a card and in the Koordinator's sheet alike.
- * A change of `newest` (something new was said) takes the box to its end; while it stands there it
- * stays there as the messages grow after they are in (a comment's video frame loading, text
- * wrapping anew once the font is in), as rows come without a new message, or as the box shrinks,
- * unless the owner scrolled up to read further back. `content` is what the box shows. `start`: the
- * message the box opens at instead of its end, once its content is in, at its top as far as the box
- * scrolls; it stays there in the same way until the owner scrolls or something new is said.
+ * While the box stands at its end it stays there as the conversation grows (a new message, an
+ * agent's next step, a question, a comment's video frame loading, text wrapping anew once the font
+ * is in) or as the box shrinks; scrolled up to read further back, the owner stays where they are.
+ * A change of `said` (the owner said something) takes the box to its end. `content` is what the box
+ * shows. `start`: the message the box opens at instead of its end, once its content is in, at its
+ * top as far as the box scrolls; it stays there in the same way until the owner scrolls or says
+ * something, and when it stood at the end, what is said after it is followed there.
  * Returns the box's onScroll.
  */
-export function useStickToEnd(box: RefObject<HTMLElement | null>, newest: unknown, content: unknown, start?: (box: HTMLElement) => HTMLElement | null) {
+export function useStickToEnd(box: RefObject<HTMLElement | null>, said: unknown, content: unknown, start?: (box: HTMLElement) => HTMLElement | null) {
   const atEnd = useRef(true);
   const seen = useRef<unknown>(undefined);
   const anchor = useRef<HTMLElement | null>(null);
@@ -19,25 +20,27 @@ export function useStickToEnd(box: RefObject<HTMLElement | null>, newest: unknow
   // when it arrives after the box shrank on (a panel coming up), which would read as scrolled up
   const put = useRef<number | null>(null);
   const place = (el: HTMLElement) => {
-    if (anchor.current?.isConnected) el.scrollTop += anchor.current.getBoundingClientRect().top - el.getBoundingClientRect().top - 8;
-    else if (atEnd.current) el.scrollTop = el.scrollHeight;
+    if (anchor.current?.isConnected) {
+      el.scrollTop += anchor.current.getBoundingClientRect().top - el.getBoundingClientRect().top - 8;
+      atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 4;
+    } else if (atEnd.current) el.scrollTop = el.scrollHeight;
     else return;
     put.current = el.scrollTop;
   };
   useEffect(() => {
     const el = box.current;
     if (!el) return;
-    if (newest !== seen.current) {
+    if (said !== seen.current) {
       atEnd.current = true;
       anchor.current = null;
-    }
-    seen.current = newest;
+    } else if (anchor.current && atEnd.current) anchor.current = null;
+    seen.current = said;
     if (content && !started.current) {
       started.current = true;
       anchor.current = start?.(el) ?? null;
     }
     place(el);
-  }, [newest, content, box.current]);
+  }, [said, content, box.current]);
   useEffect(() => {
     const el = box.current;
     if (!el) return;

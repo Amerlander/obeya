@@ -1107,6 +1107,13 @@ phone. Until 2026-10-17 only the phone kept what was seen, for its button's coun
 was marked; that day the marks came, at first also on messages that came while the conversation was
 open, which the owner had watched arrive.
 
+A conversation that stands at its end stays there as it grows: the agent's next step, a message, a
+question, a frame loading. Scrolled up to read further back, the owner stays where they are, however
+much comes meanwhile; only their own words (a note, an answer, a comment, an action like a pause)
+take it to its end (`useStickToEnd` in `src/ui/stickToEnd.ts`, which Obeya's sheet shares). Until
+2026-10-20 every step of a working agent took a card's conversation back to its end, so the owner
+could not read up while it worked.
+
 ### Reading order
 
 A conversation shows things in the order the agent saw them, on every card the same way. The owner's

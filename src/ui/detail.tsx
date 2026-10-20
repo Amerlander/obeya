@@ -1015,7 +1015,8 @@ function Conversation({
     const from = Math.max(seen, events.findLast((e) => e.author === 'owner')?.id ?? -1);
     return [...el.querySelectorAll<HTMLElement>('[data-ev]')].find((m) => Number(m.dataset.ev) > from) ?? null;
   };
-  const onScroll = useStickToEnd(box, `${events?.at(-1)?.id}|${working}|${paused}|${asked}`, events, unseenFrom);
+  // what the agents say and do follows at the end only while the owner stands there, so they can read further up meanwhile
+  const onScroll = useStickToEnd(box, events?.findLast((e) => e.author === 'owner')?.id, events, unseenFrom);
   // a proposal's open questions stand at the end, where they are answered, rather than where they were asked
   const openKey = JSON.stringify(proposal && !working ? (item.proposal?.questions ?? []) : []);
   const turns = useMemo(() => (events ? cardTalk(item, events, past) : null), [events, asked, working, paused, openKey]);
