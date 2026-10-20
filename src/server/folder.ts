@@ -7,7 +7,7 @@
 // where the file system clones (APFS, btrfs, XFS), else from copies of what its editing tools
 // overwrote and of the folder's text files.
 
-import { constants, realpathSync, type Stats } from 'node:fs';
+import { constants, mkdirSync, realpathSync, statSync, type Stats, writeFileSync } from 'node:fs';
 import { copyFile, lstat, mkdir, open, readdir, rename, rm, rmdir, stat, unlink, utimes } from 'node:fs/promises';
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { CardDiff, DiffFile, FolderChange, FolderChanges } from '../core/diff';
@@ -584,7 +584,7 @@ export class FolderWorkspaces implements CardWorkspaces {
         }
         // nor is what changed since the folder was last read, before a call that may write anywhere
         else await this.scanAll();
-        this.windows.push({ card: cardId, id: call.id, start: Date.now(), ...(only ? { only } : {}) });
+        this.windows.push({ card: cardId, id: call.id, start: this.clock(), ...(only ? { only } : {}) });
       },
       after: async (call) => {
         const w = this.windows.find((x) => x.card === cardId && x.id === call.id && x.end === undefined);
@@ -600,8 +600,30 @@ export class FolderWorkspaces implements CardWorkspaces {
    */
   background(cardId: string, running: boolean) {
     const open = this.windows.find((x) => x.card === cardId && x.id === 'background' && x.end === undefined);
-    if (running && !open && this.rec(cardId)) this.windows.push({ card: cardId, id: 'background', start: Date.now() });
+    if (running && !open && this.rec(cardId)) this.windows.push({ card: cardId, id: 'background', start: this.clock() });
     else if (!running && open) void this.close(open);
+  }
+
+  /**
+   * The time as the file system stamps a change's ctime, read off a file of Obeya's own written
+   * now. Linux stamps it from a coarse clock, up to a tick (1 to 10 ms) behind Date.now(), and
+   * Windows may too: by Date.now(), a change right after a window opened would come before it.
+   * Read at once, so nothing happens between the reading and the window's opening.
+   */
+  private clock(): number {
+    const now = Date.now();
+    const file = join(this.o.dir, 'clock');
+    try {
+      try {
+        writeFileSync(file, 'x');
+      } catch {
+        mkdirSync(this.o.dir, { recursive: true });
+        writeFileSync(file, 'x');
+      }
+      return Math.min(now, statSync(file).ctimeMs);
+    } catch {
+      return now;
+    }
   }
 
   /** The card's turn is over: calls whose end the hooks never told (refused, cut off) end now. */

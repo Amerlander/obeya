@@ -115,7 +115,7 @@ describe('undo', () => {
       expect(existsSync(join(folder, 'Scan.pdf'))).toBe(true);
     } else expect(report.lost.sort()).toEqual(['Scan.pdf', 'Zähler.png']);
     // what was left stays the card's
-    expect(await kinds('a')).toEqual(['modified Nachlass/Liste.txt']);
+    expect(await kinds('a')).toEqual([...(view.undo === 'full' ? [] : ['modified Zähler.png', 'deleted Scan.pdf']), 'modified Nachlass/Liste.txt']);
   });
 
   test('without a clone, moves, what the editing tools overwrite and the text files come back; a script\'s binary does not', async () => {

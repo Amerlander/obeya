@@ -1873,7 +1873,10 @@ may write (not Read, Grep, Glob and the like) opens a window from its `PreToolUs
 then Obeya reads the folder again and gives each change to the cards whose windows were open when it
 happened, by its ctime, which no tool sets (a deleted file by its directory's). So a change is a
 card's own even while other cards, the owner, a scanner or the sync client change the folder at the
-same time; a change outside every window is no card's. Before the window opens, the folder is read
+same time; a change outside every window is no card's. A window opens at the time as the file
+system stamps a ctime, read off a file of Obeya's own written then: Linux stamps it from a coarse
+clock up to a tick (1 to 10 ms) behind the system's, and by the system's time a change right after
+the window opened would have come before it. Before the window opens, the folder is read
 too, so what the owner changed just before is not the call's. An editing tool (Edit, Write,
 NotebookEdit) takes only its own file (through a link, the file it points to), and the folder is
 read only there; a script's call reads all of it, before and after (on the owner's document folder,
