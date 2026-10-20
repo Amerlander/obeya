@@ -520,7 +520,8 @@ export class Config {
     if (!parsed.success) return { canvases: [], resolved: [], problems: [{ code: 'invalid', detail: z.prettifyError(parsed.error) }] };
     const canvases = tidy(parsed.data);
     const expanded = expandConfig(canvases);
-    const repos = expanded.flatMap((c) => c.repos);
+    // a repository whose path is still empty is read nowhere (`resolveCanvas` finds its path missing)
+    const repos = expanded.flatMap((c) => c.repos).filter((r) => r.path);
     // a workspace needs only to be a repository; one that is also a repository of the configuration is read as that
     const paths = new Set(repos.map((r) => resolve(r.path)));
     // a folder without git is read as it is

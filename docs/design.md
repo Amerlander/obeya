@@ -4638,9 +4638,11 @@ rather than centred beside the field and its hint. Renaming a running canvas kee
 the file), so its cards stay.
 
 Problems (no git repository, a repository the canvas has already under this or another path, two
-canvases with one id, a canvas's home repository left out) show at the field while editing and keep it from being saved; where a path without a
+canvases with one id, a canvas's home repository left out, a path still empty) show at the field while editing and keep it from being saved; where a path without a
 repository is a folder, the problem offers to set up git there (see Setting up git in a folder),
-after which it goes. Problems in a repository's settings for everyone (`repoSettings`: a field of
+after which it goes. An empty path is read nowhere (resolved, it would be the server's own working
+directory, its repository and commands shown for the new canvas): it is only the problem `noPath`.
+Problems in a repository's settings for everyone (`repoSettings`: a field of
 its `.obeya/settings.json` unknown or of the wrong type; `demoSite`: a demo site that cannot be
 used; `adapterGone`: a `.obeya/adapter/` left on its default branch; see Problems in the settings)
 show at the repository with what is wrong, and keep nothing from being saved, since they are fixed

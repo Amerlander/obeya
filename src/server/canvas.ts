@@ -1939,6 +1939,8 @@ export function resolveCanvas(
 ) {
   if (!config.repos.length) throw new ConfigError('noRepo', 'a canvas needs at least one repository');
   const reads = config.repos.map((r, i) => {
+    // an empty path names nothing: resolved, it would be the server's own working directory
+    if (!r.path.trim()) throw new ConfigError('noPath', 'a repository needs a path', i);
     const folder = r.git === false;
     const got = read(resolve(r.path), folder);
     if (!got) throw folder ? new ConfigError('noFolder', `${r.path} is no folder`, i) : new ConfigError('notRepo', `${r.path} is not a git repository`, i);

@@ -1065,6 +1065,7 @@ const de = {
     problem: {
       noCanvas: 'Obeya braucht mindestens eine Leinwand.',
       noRepo: 'Eine Leinwand braucht mindestens ein Repository.',
+      noPath: 'Hier fehlt noch der Pfad.',
       notRepo: 'Unter diesem Pfad liegt kein git-Repository.',
       noFolder: 'Unter diesem Pfad liegt kein Ordner.',
       sameRepo: 'Dieses Repository hat die Leinwand schon, weiter oben.',
@@ -2575,6 +2576,7 @@ const en: Strings = {
     problem: {
       noCanvas: 'Obeya needs at least one canvas.',
       noRepo: 'A canvas needs at least one repository.',
+      noPath: 'The path is missing.',
       notRepo: 'There is no git repository at this path.',
       noFolder: 'There is no folder at this path.',
       sameRepo: 'The canvas has this repository already, further up.',

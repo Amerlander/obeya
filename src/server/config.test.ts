@@ -114,6 +114,26 @@ describe("Obeya's configuration", async () => {
     expect((await c.check({})).problems.map((p) => p.code)).toEqual(['invalid']);
   });
 
+  test("a repository whose path is still empty reads nothing, the server's working directory least of all", async () => {
+    // the server runs in a repository with settings and commands of its own
+    const own = gitRepo(join(dir, 'server'), { '.obeya/settings.json': JSON.stringify({ checks: ['make check'] }) });
+    const cwd = process.cwd();
+    process.chdir(own);
+    try {
+      const c = config('file', []);
+      for (const path of ['', '  ']) {
+        const checked = await c.check([{ repos: [{ path: web }] }, { repos: [{ path }] }, { repos: [{ path, git: false }] }]);
+        expect(checked.problems).toEqual([
+          { code: 'noPath', canvas: 1, repo: 0, detail: 'a repository needs a path' },
+          { code: 'noPath', canvas: 2, repo: 0, detail: 'a repository needs a path' },
+        ]);
+        expect(checked.resolved.map((r) => r?.name ?? null)).toEqual(['web', null, null]);
+      }
+    } finally {
+      process.chdir(cwd);
+    }
+  });
+
   test("a repository's share command, which went, is dropped from the file as it is read", async () => {
     mkdirSync(join(dir, 'home'));
     writeFileSync(file, JSON.stringify([{ name: 'Web', repos: [{ path: web, share: 'share.ts', clones: 2 }] }]));

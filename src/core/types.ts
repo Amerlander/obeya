@@ -1577,6 +1577,8 @@ export type ConfigProblemCode =
   /** No canvas at all. */
   | 'noCanvas'
   | 'noRepo'
+  /** A repository whose path is empty. */
+  | 'noPath'
   /** A path that is no git repository. */
   | 'notRepo'
   /** A folder without git (`RepoConfig.git` false) whose path is no folder. */
