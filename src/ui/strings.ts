@@ -338,7 +338,7 @@ const de = {
   folder: {
     changed: 'Im Ordner geändert',
     files: (n: number) => (n === 1 ? '1 Datei' : `${n} Dateien`),
-    none: 'noch nichts geändert',
+    none: 'nichts',
     undo: { full: 'Rückgängig: vollständig', partial: 'Rückgängig: teilweise' },
     undoHint: {
       full: 'Obeya hat den Ordner beim Start der Karte geklont (das kostet keinen Platz, bis sich Dateien ändern). „Änderungen verwerfen“ setzt alles zurück, was die Karte geändert hat.',
@@ -1873,7 +1873,7 @@ const en: Strings = {
   folder: {
     changed: 'Changed in the folder',
     files: (n: number) => (n === 1 ? '1 file' : `${n} files`),
-    none: 'nothing changed yet',
+    none: 'nothing',
     undo: { full: 'Undo: full', partial: 'Undo: partial' },
     undoHint: {
       full: 'Obeya cloned the folder when the card started (which takes no space until files change). “Discard changes” puts back everything the card changed.',
