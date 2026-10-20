@@ -464,16 +464,16 @@ export class Config {
   }
 
   /**
-   * The owner confirmed the commands of the repository at `path` (as the configuration names it)
-   * that the dialog showed them: the groups `held` of `seen` (`RepoTrust`), which count from now on,
-   * as long as its default branch has them so. Commands that changed there since are refused (`trustChanged`).
+   * The owner confirmed the commands of the repository at `path` (as the configuration names it,
+   * saved or still in the dialog's draft, a new canvas's say) that the dialog showed them: the
+   * groups `held` of `seen` (`RepoTrust`), which count from now on, as long as its default branch
+   * has them so. Commands that changed there since are refused (`trustChanged`).
    */
   trust(input: unknown) {
-    const parsed = z.object({ path: z.string(), seen: z.unknown(), held: z.array(z.enum(['app', 'site', 'claude'])) }).safeParse(input);
+    const parsed = z.object({ path: z.string().min(1), seen: z.unknown(), held: z.array(z.enum(['app', 'site', 'claude'])) }).safeParse(input);
     if (!parsed.success) throw new BadRequest('invalid', 'expected { path, seen, held }');
-    const at = locate(this.current(), (r) => r.path === parsed.data.path);
-    if (!at) throw new BadRequest('invalid', `no repository ${parsed.data.path} in the configuration`);
-    const repoPath = resolve(expandHome(at.r.path));
+    const repoPath = resolve(expandHome(parsed.data.path));
+    if (!existsSync(repoPath)) throw new BadRequest('invalid', `no repository at ${parsed.data.path}`);
     const now = commandsOf(readShared(repoPath));
     if (canonical(now) !== canonical(parsed.data.seen)) throw new BadRequest('trustChanged', `${repoPath}: its commands changed on the default branch since they were shown`);
     // only the groups the dialog showed: one this machine's values (saved or in the draft) stand in for it did not

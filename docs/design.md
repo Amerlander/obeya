@@ -4548,7 +4548,8 @@ bar's button like the others: what each group does and that it waits, its lines 
 against those on the default branch now as a diff, and „Diesen Befehlen vertrauen“, which trusts
 what the dialog showed, the held groups alone (`POST /api/config/trust` with them; ones that
 changed on the default branch meanwhile are refused, `trustChanged`; a group this machine's values
-stand in for was not shown and stays untrusted) and has the canvases follow at once (`settingsChanged`). The
+stand in for was not shown and stays untrusted; a repository the dialog's draft adds, a new canvas's
+say, can be trusted before it is saved) and has the canvases follow at once (`settingsChanged`). The
 values held show „aus dem Repository, noch nicht vertraut“ as their source. Whenever the canvas
 reads the settings again (`moved`), it works out what is held again; a change there counts in
 `configRev`, so the page reads the problems again.

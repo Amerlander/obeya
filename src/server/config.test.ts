@@ -291,6 +291,17 @@ describe("Obeya's configuration", async () => {
     expect(store.trustedCommands(own)).toEqual({ app: { stop: app.stop }, claude: { '.mcp.json': { id: expect.any(String), text: '{"mcpServers":{"x":{}}}' } } });
   });
 
+  test("a new canvas's repository, still only in the dialog's draft, can be trusted before the canvas is saved", async () => {
+    const own = gitRepo(join(dir, 'shop'), { '.obeya/settings.json': JSON.stringify({ app: { run: 'bun dev', stop: 'pkill -F .dev.pid' } }) });
+    const c = config('file', []);
+    const draft = [{ repos: [{ path: own }] }];
+    const trust = (await c.check(draft)).resolved[0]!.repos[0]!.trust!;
+    expect(trust.held).toEqual(['app']);
+    c.trust({ path: own, seen: trust.now, held: trust.held });
+    expect((await c.check(draft)).problems).toEqual([]);
+    expect(() => c.trust({ path: join(dir, 'nowhere'), seen: {}, held: [] })).toThrow(expect.objectContaining({ code: 'invalid' }));
+  });
+
   test("commands this machine's values put into the repository's settings are the owner's own: no trust step for them", async () => {
     mkdirSync(join(dir, 'home'));
     const settings = { app: { stop: 'make stop' } };
