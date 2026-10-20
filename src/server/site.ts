@@ -70,6 +70,8 @@ interface Meta {
   /** A hash of the video or the artifact's files as the demo has them. */
   source: string;
   language: PageLanguage;
+  /** Who shared it: git's name (`user.name`) in the repository of the Obeya that published it; absent on pages from before (until 2026-10-20) or where git has none. */
+  by?: string;
   /** The later demo versions on the page, in order of handover, each in a directory of the page's (`dir`). */
   more?: MoreMeta[];
 }
@@ -184,6 +186,18 @@ export interface SiteOptions {
   checkWaits?: number[];
   /** The overview's words: the language the repository names for its demos (`demo.language`); without it the narration language of the demo settings. */
   language?: PageLanguage;
+  /** Who the pages published from here say shared them; git's name (`user.name`) in the repository without it. */
+  by?: string;
+}
+
+/** git's name in the repository (its own `user.name`, else the global one); undefined where it has none. */
+function gitName(repo: string): string | undefined {
+  try {
+    const r = Bun.spawnSync(['git', '-C', repo, 'config', '--get', 'user.name'], { stdin: 'ignore', stdout: 'pipe', stderr: 'ignore' });
+    return r.exitCode === 0 ? r.stdout.toString().trim() || undefined : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** About 30 s for a deployment to show: a host or its CDN may serve the earlier one for a moment. */
@@ -548,6 +562,8 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
             // a version keeps its date while its demo's own files stay the same, wherever it was on the page
             const dated = new Map<string, string>(before ? [[before.source, before.at], ...(before.more ?? []).map((m) => [m.source, m.at] as [string, string])] : []);
             const now = new Date().toISOString();
+            // the one whose Obeya publishes it now; a machine whose git has no name keeps whom the page named
+            const by = opts.by ?? gitName(repo) ?? before?.by;
             const written = ready.map(({ d, html, files, copy }) => {
               const into = join(target, d.sub, html ? ARTIFACT_DIR : '');
               mkdirSync(into, { recursive: true });
@@ -570,6 +586,7 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
               at: first.at,
               source: first.source,
               language: p.language,
+              ...(by ? { by } : {}),
               ...(later.length
                 ? {
                     more: later.map(({ d, html, source, at }) => ({
@@ -672,6 +689,7 @@ export function pagesHash(): { video: string; html: string; stacked: string } {
     at,
     source: '',
     language: 'de',
+    by: 'Ada Lovelace',
   };
   const hash = (pages: string[]) => createHash('sha256').update(pages.join('\0')).digest('hex').slice(0, 12);
   const languages: PageLanguage[] = ['de', 'en'];
@@ -719,7 +737,7 @@ function pageHtml(site: DemoSite, m: Meta, poster: (dir: string) => boolean, tim
     title: m.title,
     text: m.text,
     pr: m.pr,
-    when: w.sharedOn(day(m.at, language)),
+    when: w.sharedOn(day(m.at, language), m.by),
     tabTitle: `${m.title} · ${site.title}`,
     language,
     top: { href: '../', text: w.allDemos },
@@ -765,7 +783,7 @@ function overviewHtml(site: DemoSite, pages: (Meta & { slug: string })[], langua
 <div class="when">${esc(w.overview)} · <a href="${FEED}">${esc(w.feed)}</a></div>
 ${
   pages.length
-    ? `<ul class="demos">${pages.map((d) => `<li><a href="${d.slug}/"><b>${esc(d.title)}</b><span>${day(newest(d), language)} · ${esc(firstSentence(d.text))}</span></a></li>`).join('\n')}</ul>`
+    ? `<ul class="demos">${pages.map((d) => `<li><a href="${d.slug}/"><b>${esc(d.title)}</b><span>${[day(newest(d), language), ...(d.by ? [w.by(d.by)] : []), firstSentence(d.text)].map(esc).join(' · ')}</span></a></li>`).join('\n')}</ul>`
     : `<p>${esc(w.noDemos)}</p>`
 }
 ${credit(language)}</main></body></html>
@@ -794,7 +812,7 @@ function feedXml(site: DemoSite, pages: (Meta & { slug: string })[], language: P
 <id>${url}</id>
 <published>${xml(d.first)}</published>
 <updated>${xml(newest(d))}</updated>
-<summary type="text">${xml(firstSentence(plain))}</summary>
+${d.by ? `<author><name>${xml(d.by)}</name></author>\n` : ''}<summary type="text">${xml(firstSentence(plain))}</summary>
 <content type="html">${xml(paragraphs(plain))}</content>
 </entry>
 `;

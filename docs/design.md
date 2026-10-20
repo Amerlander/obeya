@@ -3969,12 +3969,12 @@ The site lives in `sites/<key>/` under Obeya's home, the key made of the URL's h
 clones and repositories naming the same site share it: `site/` is deployed whole with each publish
 or withdrawal, one directory per page with the demo's files, its `index.html` and a `meta.json`
 (kind, title, text, chapters, PR, when first shared and when its video or artifact last changed, a
-hash of the demo's own files, the page's language; `more`, the later versions, each with the same
+hash of the demo's own files, the page's language, who shared it; `more`, the later versions, each with the same
 and its handover's time, its files in `2/`, `3/` … of the page's directory), plus the overview,
 which dates a page by its newest version, and the site's Atom feed (`feed.xml`), written with the
 overview from the same pages: one entry per page in the overview's order, with its title, its text
 (the first sentence as summary, all of it as content), its address as link and id, and the
-overview's date as updated, its language as the entry's. The overview links the feed under its
+overview's date as updated, its language as the entry's, who shared it as its author. The overview links the feed under its
 heading („Feed abonnieren“) and in its head (`<link rel="alternate">`), so feed readers find it.
 Since every change writes both and deploys the whole directory, the feed is as current as the
 overview, pages pulled from another machine included; a site behind a login has a feed only those
@@ -3986,6 +3986,16 @@ and text, where Obeya writes them, too), the overview in the repository's; a ver
 site, which carry what Obeya adds to an artifact). The guard against a directory lacking pages
 Obeya has as shared, and the file limit, refuse before anything is deployed. Which pages a change to
 Obeya's templates leaves outdated says the list of page changes (see Outdated pages).
+
+Each page names who shared it, under its title („Geteilt von Ada Lovelace am 20. Oktober 2026“,
+"Shared by Ada Lovelace on October 20, 2026"), and the overview names them after the date („von Ada
+Lovelace“): several colleagues publish to one site, each from their own Obeya. The name is git's
+(`user.name` in the card's repository, which the setup asks for as the name for commits), read when
+the page goes out (`by` in `meta.json`); a machine whose git has none leaves the name out. Pages
+published before (until 2026-10-20) name nobody until they are shared again (change
+`2026-10-20-by`). Rejected: a name of its own in Obeya's settings (one more thing to fill in for the
+name the agents already commit under) and the machine's host name the manifest keeps (it names a
+computer, not a person).
 
 A machine without the site's `env` file has no target there: "Teilen" exports, with a line under the
 buttons naming the file („Zum Veröffentlichen auf demos.example.dev braucht dieser Rechner

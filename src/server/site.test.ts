@@ -76,8 +76,9 @@ const SITE = (extra: Partial<DemoSite> = {}): DemoSite => ({
 });
 
 // the overview in the language the repository names for its demos (`demo.language`)
-const make = (site: DemoSite, at = home, machine = 'a', language: 'de' | 'en' = 'de') =>
-  siteTarget({ ...site, deploy: site.deploy.replace('__OUT__', dir) }, repo, at, MESSAGES.en.share, { machine, checkWaits: [0, 10, 10], language });
+// the one who shares: git's name on that machine
+const make = (site: DemoSite, at = home, machine = 'a', language: 'de' | 'en' = 'de', by = 'Ada Lovelace') =>
+  siteTarget({ ...site, deploy: site.deploy.replace('__OUT__', dir) }, repo, at, MESSAGES.en.share, { machine, checkWaits: [0, 10, 10], language, by });
 const siteDir = (at = home) => join(at, 'sites', siteKey(URL_), 'site');
 const deployed = () => join(dir, 'deployed');
 const deploys = () => readFileSync(join(dir, 'deploys'), 'utf8').trim().split('\n');
@@ -196,7 +197,7 @@ describe('a site Obeya keeps', () => {
     expect(html).toContain('data-at="12.5"');
     expect(html).toContain('<title>Titel csv-export-abc123 · Team demos</title>');
     expect(html).toContain('href="../">Alle Demos');
-    expect(html).toMatch(/Geteilt am \d+\. \S+ \d{4}/);
+    expect(html).toMatch(/Geteilt von Ada Lovelace am \d+\. \S+ \d{4}/);
     // a host without byte ranges: the page loads the video whole to seek in it
     expect(html).toContain("Range: 'bytes=0-'");
     expect(html).toContain('href="https://github.com/o/r/pull/7"');
@@ -220,7 +221,7 @@ describe('a site Obeya keeps', () => {
     const en = readFileSync(join(siteDir(), 'english-abc123/index.html'), 'utf8');
     expect(en).toContain('<html lang="en">');
     expect(en).toContain('href="../">All demos');
-    expect(en).toMatch(/Shared on [A-Z][a-z]+ \d+, \d{4}/);
+    expect(en).toMatch(/Shared by Ada Lovelace on [A-Z][a-z]+ \d+, \d{4}/);
     expect(meta('english-abc123').language).toBe('en');
     const de = readFileSync(join(siteDir(), 'deutsch-def456/index.html'), 'utf8');
     expect(de).toContain('href="../">Alle Demos');
@@ -458,7 +459,7 @@ describe('several machines publishing to one site', () => {
     other = join(dir, 'other');
     mkdirSync(join(other, 'sites/demos'), { recursive: true });
     writeFileSync(join(other, 'sites/demos/deploy.env'), 'TOKEN=secret-2\n');
-    b = make(SITE(), other, 'b');
+    b = make(SITE(), other, 'b', 'de', 'Grace Hopper');
   });
   const live = () => manifest(deployed());
   // a snapshot of what the site shows now, as another machine's deployment that lacks what comes next
@@ -495,6 +496,23 @@ describe('several machines publishing to one site', () => {
     await b.publish(page('b-222222'));
     expect(readFileSync(join(siteDir(other), 'a-111111/demo.mp4'), 'utf8')).toBe('another video');
     expect(live().pages['a-111111']!.rev).toBe(2);
+  });
+
+  test('each page names who shared it, on the page, in the overview and in the feed', async () => {
+    await target.publish(page('a-111111'));
+    await b.publish(page('b-222222', { language: 'en' }));
+    const html = (slug: string) => readFileSync(join(deployed(), slug, 'index.html'), 'utf8');
+    expect(html('a-111111')).toMatch(/<div class="when">Geteilt von Ada Lovelace am \d+\. \S+ \d{4}<\/div>/);
+    expect(html('b-222222')).toMatch(/<div class="when">Shared by Grace Hopper on [A-Z][a-z]+ \d+, \d{4}<\/div>/);
+    const shown = readFileSync(join(deployed(), 'index.html'), 'utf8');
+    expect(shown).toMatch(/<span>\d+\. \S+ \d{4} · von Grace Hopper · Erster Satz/);
+    expect(shown).toMatch(/<span>\d+\. \S+ \d{4} · von Ada Lovelace · Erster Satz/);
+    const entries = parseXml(readFileSync(join(deployed(), 'feed.xml'), 'utf8')).children.filter((c) => c.name === 'entry');
+    expect(entries.map((e) => child(e, 'author')?.children.map((c) => c.text))).toEqual([['Grace Hopper'], ['Ada Lovelace']]);
+    // a machine whose git has no name names nobody
+    await make(SITE(), other, 'b', 'de', '').publish(page('c-333333', { shared: ['a-111111', 'b-222222'] }));
+    expect(readFileSync(join(deployed(), 'index.html'), 'utf8')).toMatch(/<a href="c-333333\/"><b>Titel c-333333<\/b><span>\d+\. \S+ \d{4} · Erster Satz/);
+    expect(html('c-333333')).toMatch(/<div class="when">Geteilt am \d+\. \S+ \d{4}<\/div>/);
   });
 
   test('a page withdrawn on one machine stays withdrawn: the other removes it and says so', async () => {

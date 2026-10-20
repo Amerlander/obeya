@@ -21,9 +21,11 @@ export const PAGE_WORDS: Record<
     pr: string;
     ownWindow: string;
     demoOf: (day: string) => string;
-    /** A page on a site (`site.ts`): when it was shared, the link to the overview; the overview's own words. */
-    sharedOn: (day: string) => string;
+    /** A page on a site (`site.ts`): when it was shared and by whom (git's name of the one whose Obeya shared it), the link to the overview; the overview's own words. */
+    sharedOn: (day: string, by?: string) => string;
     allDemos: string;
+    /** On the overview, after a page's date: who shared it. */
+    by: (name: string) => string;
     overview: string;
     noDemos: string;
     /** A page with several demo versions: the first one's name in the list at the top, and the heading of each later one. */
@@ -41,8 +43,9 @@ export const PAGE_WORDS: Record<
     pr: 'Pull Request ansehen',
     ownWindow: 'In eigenem Fenster öffnen',
     demoOf: (day) => `Demo vom ${day}`,
-    sharedOn: (day) => `Geteilt am ${day}`,
+    sharedOn: (day, by) => (by ? `Geteilt von ${by} am ${day}` : `Geteilt am ${day}`),
     allDemos: 'Alle Demos',
+    by: (name) => `von ${name}`,
     overview: 'Videos und Auswertungen zu Änderungen, die neuesten zuerst.',
     noDemos: 'Noch keine Demos geteilt.',
     first: 'Demo',
@@ -60,8 +63,9 @@ export const PAGE_WORDS: Record<
     pr: 'View pull request',
     ownWindow: 'Open in its own window',
     demoOf: (day) => `Demo from ${day}`,
-    sharedOn: (day) => `Shared on ${day}`,
+    sharedOn: (day, by) => (by ? `Shared by ${by} on ${day}` : `Shared on ${day}`),
     allDemos: 'All demos',
+    by: (name) => `by ${name}`,
     overview: 'Videos and analyses of changes, the newest first.',
     noDemos: 'No demos shared yet.',
     first: 'Demo',
@@ -91,7 +95,7 @@ interface PageParts {
   /** Paragraphs separated by blank lines. */
   text: string;
   pr: string | null;
-  /** The line under the title (when it was shared). */
+  /** The line under the title (when it was shared, and by whom). */
   when: string;
   /** The browser tab's title. */
   tabTitle: string;
