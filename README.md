@@ -180,7 +180,9 @@ narrated by its voice. How it works is under "Hosts" in [`docs/design.md`](docs/
 
 ### Setting up a repository
 
-Obeya works on any git repository. How a project's app starts, which checks a change must pass,
+Obeya works on any git repository, and on a folder that is to stay without git (a document
+archive in a cloud drive, say): there cards work in the folder itself, each listing what it
+changed, and "Discard changes" puts it back. How a project's app starts, which checks a change must pass,
 how approved work lands and how a demo is recorded, the repository says in its settings,
 `.obeya/settings.json`; [`docs/settings.md`](docs/settings.md) describes them. "Configuration" shows
 them, changes them for one machine and takes them over into the repository for everyone, and offers
