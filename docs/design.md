@@ -1889,7 +1889,7 @@ and „Ansehen“ shows it over the page with the diffs of text files whose earl
 (`git diff --no-index`; a file counts as text up to 1 MB without a NUL byte in its first 8,000).
 
 **Undo.** „Änderungen verwerfen“ on a card waiting for approval puts back what it changed, after
-eight seconds in which „Doch nicht“ takes the click back: putting files back cannot itself be taken
+eight seconds in which „Rückgängig“ beside the countdown takes the click back: putting files back cannot itself be taken
 back. Before a card's first call that may write, Obeya makes its undo ready under its home
 (`undo/<canvas>/<repo>/<card>`):
 

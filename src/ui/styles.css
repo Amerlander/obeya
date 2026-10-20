@@ -945,7 +945,7 @@ textarea.p-body:focus { border-color: var(--muted); }
 .f-mark { display: inline-block; width: 1.2em; text-align: center; color: var(--muted); }
 .f-left { color: var(--muted); font-style: italic; }
 .f-undo.partial { color: var(--muted); }
-.f-discarding { align-self: center; }
+.f-discarding { align-self: center; font-weight: 600; color: var(--ink); }
 .link.copied { color: var(--approved); font-weight: 600; }
 .diff-view { position: fixed; inset: 0; z-index: 1000; background: var(--dim); display: flex; justify-content: center;
   padding: 3vh 3vw; animation: fade .15s ease-out; }
