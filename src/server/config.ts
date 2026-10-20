@@ -77,6 +77,7 @@ function tidySettings(s: z.infer<typeof settingsShape> | undefined): RepoSetting
     ...(s.softPaths ? { softPaths: list(s.softPaths)! } : {}),
     ...(s.workspaces ? { workspaces: s.workspaces } : {}),
     ...(s.prNoise ? { prNoise: list(s.prNoise)! } : {}),
+    ...(s.language ? { language: s.language } : {}),
     ...(app ? { app } : {}),
     ...(Object.keys(demo).length ? { demo } : {}),
   };

@@ -39,7 +39,7 @@
 //
 // The stage file (JSON; every field but `cards` optional):
 //   {
-//     "name": "Shop", "canvases": ["Website"], "language": "en",
+//     "name": "Shop", "canvases": ["Website"], "language": "en", "conversation": "de",
 //     "port": 4480, "dir": "/tmp/obeya-scratch-4480", "clones": 2, "mainBranch": "master",
 //     "poolCheckout": true, "slots": 3,
 //     "hosts": [{ "name": "Workhorse", "ssh": "me@workhorse.local", "clones": 2, "slots": 2 }],
@@ -75,7 +75,8 @@
 // demos where the script runs (`plugin/skills/demo/lib/settings.ts`: `DEMO_LANGUAGE`, which Obeya
 // gives its workers from the repository's `demo.language`, else the demo settings'), so that the
 // screen a demo records matches its narration. Card titles and conversations are not translated:
-// write them in that language.
+// write them in that language. `language` is the interface's; `conversation`, the language agents
+// write the owner in before the owner's words say otherwise, follows it where left out.
 // A card is created (x and y default to a free place; `idea`, `repo`, `from` as in
 // POST /api/c/<canvas>/cards) unless it names a plan doc's `project` or `workstream` (label; with
 // several plan docs "docs/plan/x.md#W1"), which exist already. Then its fields are written straight
@@ -165,8 +166,10 @@ interface Stage {
   setup?: boolean;
   /** Names the canvas the cards go on. */
   name?: string;
-  /** The language the scratch Obeya speaks; the demos' where the script runs without it. */
+  /** The language of the scratch Obeya's interface; the demos' where the script runs without it. */
   language?: Language;
+  /** The owner's conversation language; the interface's without it. */
+  conversation?: Language;
   /** Further canvases by name, each over a repository of its own, without cards: to switch between canvases. */
   canvases?: string[];
   port?: number;
@@ -279,9 +282,9 @@ const rootOn = (h: { root?: string }) => h.root ?? `${dir}/far`;
 const repo = join(dir, 'repo');
 const mainBranch = stage.mainBranch ?? 'main';
 mkdirSync(home, { recursive: true });
-if (stage.language && !LANGUAGES.includes(stage.language)) fail(`"language" is ${LANGUAGES.join(' or ')}, not ${stage.language}`);
-// the language Obeya speaks to the owner (src/server/settings.ts)
-writeFileSync(join(home, 'settings.json'), `${JSON.stringify({ language: stage.language ?? demoSettingsHere().language })}\n`);
+for (const k of ['language', 'conversation'] as const) if (stage[k] && !LANGUAGES.includes(stage[k])) fail(`"${k}" is ${LANGUAGES.join(' or ')}, not ${stage[k]}`);
+// the languages of Obeya's interface and of its agents' conversation with the owner (src/server/settings.ts)
+writeFileSync(join(home, 'settings.json'), `${JSON.stringify({ language: stage.language ?? demoSettingsHere().language, ...(stage.conversation ? { conversationLanguage: stage.conversation } : {}) })}\n`);
 // the owner's key, made before the server starts, which takes it from the home (owner.ts); code from before it has none and ignores it
 const owner = ownerHeaders(home);
 

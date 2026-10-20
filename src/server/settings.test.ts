@@ -6,7 +6,7 @@ import { languageOf } from '../core/locale';
 import { AGENT_DEFAULTS, type AgentSetting } from '../core/types';
 import { withAgentSetting } from './runtime';
 import { OWNER_SETTINGS_FILE as SETTINGS_FILE, systemLanguage } from '../../plugin/skills/demo/lib/language.ts';
-import { agentSetting, agentsView, pushKeyChoice, saveAgents, saveLanguage, savePushKey, saveTheme, themeView } from './settings';
+import { agentSetting, agentsView, conversationLanguage, languageView, ownerLanguage, pushKeyChoice, saveAgents, saveLanguage, savePushKey, saveTheme, themeView } from './settings';
 import { FakeRuntime } from './testing';
 
 const homes: string[] = [];
@@ -33,6 +33,25 @@ test('the system language: the Mac interface first, else the locale variables in
   expect(systemLanguage({ LANG: 'de_DE.UTF-8' }, 'darwin', none)).toBe('de');
   // the Mac's preference is only asked on a Mac
   expect(systemLanguage({ LANG: 'en_US.UTF-8' }, 'linux', () => 'de-DE')).toBe('en');
+});
+
+test('the conversation language follows the interface until chosen, each saved on its own beside the other settings', () => {
+  const home = scratchHome();
+  expect(languageView(home, 'de')).toMatchObject({ chosen: null, language: 'de', conversationChosen: null, conversation: 'de' });
+  saveLanguage(home, { language: 'en' });
+  expect(languageView(home, 'de')).toMatchObject({ chosen: 'en', language: 'en', conversationChosen: null, conversation: 'en' });
+  expect(conversationLanguage(home)).toBe('en');
+  saveLanguage(home, { conversation: 'de' });
+  expect(languageView(home, 'de')).toMatchObject({ chosen: 'en', language: 'en', conversationChosen: 'de', conversation: 'de' });
+  expect([ownerLanguage(home), conversationLanguage(home)]).toEqual(['en', 'de']);
+  // the interface switched back and forth leaves the conversation where it is
+  saveLanguage(home, { language: 'de' });
+  saveLanguage(home, { language: 'en' });
+  expect(conversationLanguage(home)).toBe('de');
+  expect(JSON.parse(readFileSync(join(home, SETTINGS_FILE), 'utf8'))).toEqual({ language: 'en', conversationLanguage: 'de' });
+  saveLanguage(home, { conversation: null });
+  expect(conversationLanguage(home)).toBe('en');
+  for (const bad of [{}, { conversation: 'fr' }, { language: 'de', conversation: 'fr' }, null]) expect(() => saveLanguage(home, bad)).toThrow();
 });
 
 test("the model and effort per group of agents: preset, chosen one group at a time beside the language, the file keeping only what differs", () => {

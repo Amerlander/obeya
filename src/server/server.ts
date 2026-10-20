@@ -460,7 +460,7 @@ export function serve(
             return { stopping: true };
           }),
       },
-      // the language Obeya speaks to the owner: chosen in the settings, else the system's
+      // the interface language (chosen in the settings, else the system's) and the conversation language (chosen, else the interface's)
       '/api/language': {
         GET: needs(config, (c) => languageView(c.home)),
         PUT: needs(config, async (c, req) => saveLanguage(c.home, await req.json())),

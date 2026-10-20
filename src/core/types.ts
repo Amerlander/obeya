@@ -1346,6 +1346,11 @@ export interface RepoSettings {
   workspaces?: 'clones' | 'worktrees';
   /** Accounts whose pull request comments are not review feedback (deploy bots and the like). */
   prNoise?: string[];
+  /**
+   * The language of what lands in the repository and lasts (code, comments, commit messages, docs,
+   * plan docs, CLAUDE.md), whatever language the owner talks to its agents in; English where left out.
+   */
+  language?: Language;
   /** How the app runs: the recipe in every worker's brief, and how Obeya stops it while a card waits (Parking). */
   app?: AppSettings;
   /**
@@ -1368,7 +1373,7 @@ export type SharedSettings = Omit<RepoSettings, 'branch'>;
 export type CardLanding = Partial<Pick<RepoSettings, 'land' | 'direct'>>;
 
 /** The fields of `SharedSettings`, in the dialog's order. */
-export const SHARED_FIELDS = ['land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'app', 'demo'] as const satisfies readonly (keyof SharedSettings)[];
+export const SHARED_FIELDS = ['land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'language', 'app', 'demo'] as const satisfies readonly (keyof SharedSettings)[];
 
 /** The settings made of fields that are each set, layered and taken over on their own, and their fields. */
 export const NESTED_SETTINGS = { app: ['run', 'stop', 'keep'], demo: ['site', 'language'] } as const satisfies { [K in keyof RepoSettings]?: readonly (keyof NonNullable<RepoSettings[K]>)[] };
@@ -1450,6 +1455,7 @@ export interface RepoValues {
   softPaths: SettingValue<string[]>;
   workspaces: SettingValue<'clones' | 'worktrees'>;
   prNoise: SettingValue<string[]>;
+  language: SettingValue<Language>;
   app: { run: SettingValue<string>; stop: SettingValue<string>; keep: SettingValue<string> };
   demo: { site: SettingValue<DemoSite | null>; language: SettingValue<NarrationLanguage | null> };
 }
@@ -1683,16 +1689,20 @@ export interface DemoSettingsView {
   platform: string;
 }
 
-/** The language Obeya speaks to the owner (`src/server/settings.ts`): chosen in the settings, else the system's. */
+/** The owner's languages (`src/server/settings.ts`): the interface's, chosen else the system's, and the conversation's, chosen else the interface's. */
 export interface LanguageView {
   /** The file it is saved in, under Obeya's home. */
   file: string;
-  /** What the owner chose; `null` follows the system. */
+  /** The interface language the owner chose; `null` follows the system. */
   chosen: Language | null;
   /** The system's language, or the fallback when Obeya does not speak it. */
   system: Language;
   /** The one that applies. */
   language: Language;
+  /** The conversation language the owner chose; `null` follows the interface's. */
+  conversationChosen: Language | null;
+  /** The conversation language that applies: agents write the owner in it until the owner's words say otherwise. */
+  conversation: Language;
 }
 
 /** The look Obeya's pages take (`src/server/settings.ts`): light or dark as chosen in the settings, else as the system's. */

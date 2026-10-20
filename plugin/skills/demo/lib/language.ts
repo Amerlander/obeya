@@ -1,6 +1,8 @@
-// The language Obeya speaks to the owner: chosen in its configuration dialog (`settings.json` under
-// Obeya's home), else the system's. The server speaks it; a demo is narrated in it unless the demo
-// settings name another. Plain Node, like the director: it runs without Obeya too.
+// The languages of Obeya's owner, both chosen in its configuration dialog (`settings.json` under
+// Obeya's home): the interface's, else the system's, which the server's own words are in; and the
+// conversation's, else the interface's, which agents write the owner in until the owner's words
+// say otherwise and a demo is narrated in unless the demo settings name another. Plain Node, like
+// the director: it runs without Obeya too.
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -9,11 +11,16 @@ import { FALLBACK_LANGUAGE, type Language, LANGUAGES, languageOf } from './local
 
 export const OWNER_SETTINGS_FILE = 'settings.json';
 
-/** The language the owner chose in the configuration dialog, if they did. */
-export function chosenLanguage(home: string): Language | undefined {
+/** The interface language the owner chose in the configuration dialog, if they did. */
+export const chosenLanguage = (home: string): Language | undefined => chosen(home, 'language');
+
+/** The conversation language the owner chose in the configuration dialog, if they did. */
+export const chosenConversationLanguage = (home: string): Language | undefined => chosen(home, 'conversationLanguage');
+
+function chosen(home: string, key: 'language' | 'conversationLanguage'): Language | undefined {
   try {
     const o = JSON.parse(fs.readFileSync(path.join(home, OWNER_SETTINGS_FILE), 'utf8')) as Record<string, unknown>;
-    return LANGUAGES.find((l) => l === o.language);
+    return LANGUAGES.find((l) => l === o[key]);
   } catch {
     return undefined;
   }
@@ -45,5 +52,8 @@ function appleLanguage(): string | undefined {
   return apple ?? undefined;
 }
 
-/** The language that applies: the owner's choice, else the system's. */
+/** The interface language that applies: the owner's choice, else the system's. */
 export const ownerLanguageIn = (home: string): Language => chosenLanguage(home) ?? systemLanguage();
+
+/** The conversation language that applies: the owner's choice, else the interface language. */
+export const conversationLanguageIn = (home: string): Language => chosenConversationLanguage(home) ?? ownerLanguageIn(home);

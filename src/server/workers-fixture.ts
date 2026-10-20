@@ -31,12 +31,15 @@ export let origin: string;
 /** The cards `onMerged` was called for. */
 export let merged: string[];
 
-/** The language Obeya speaks to the owner in these tests. */
+/** The language of Obeya's interface in these tests. */
 export let language: 'de' | 'en';
+/** The owner's conversation language in these tests; the interface's where none is set. */
+export let conversation: 'de' | 'en' | undefined;
 
 export const setWorkers = (w: Workers) => void (workers = w);
 export const setDocs = (d: PlanDoc[]) => void (docs = d);
 export const setLanguage = (l: 'de' | 'en') => void (language = l);
+export const setConversation = (l: 'de' | 'en') => void (conversation = l);
 
 /** `withOrigin`: clones come from a bare `origin`, as from a remote, instead of from the checkout. */
 export function setup(adapter: RepoAdapter, withOrigin = false) {
@@ -50,7 +53,8 @@ export function setup(adapter: RepoAdapter, withOrigin = false) {
   // the checkout is the Lesestand: work lands on its main
   const holds = (_repo: string, commit: string) => Bun.spawnSync([GIT, '-C', main, 'merge-base', '--is-ancestor', commit, 'HEAD'], { stderr: 'ignore' }).exitCode === 0;
   language = 'de';
-  board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: main, branch: 'main' }] }, () => ({ docs, dirs: [] }), undefined, holds, () => language);
+  conversation = undefined;
+  board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: main, branch: 'main' }] }, () => ({ docs, dirs: [] }), undefined, holds, () => language, () => conversation ?? language);
   const workspaces = new Workspaces(store, 'c', { mode: adapter.workspaces, repoPath: main, dir: join(dir, 'ws') });
   spaces = workspaces;
   if (adapter.workspaces === 'clones') {

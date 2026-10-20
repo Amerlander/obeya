@@ -126,13 +126,15 @@ export const api = {
   shareSettings: (path: string, direct = false) => call<SettingsShared>('POST', '/api/config/share-settings', { path, direct }),
   /** The owner confirms the repository's commands the dialog showed them (the groups `held` of `now`): they count from now on. */
   trustCommands: (path: string, trust: RepoTrust) => call<object>('POST', '/api/config/trust', { path, seen: trust.now, held: trust.held }),
-  /** The language Obeya speaks to the owner: chosen, or the system's. */
+  /** The interface language (chosen, or the system's) and the conversation language (chosen, or the interface's). */
   language: () => call<LanguageView>('GET', '/api/language'),
   /** The push-to-talk key in another app, and the app's shell that hears it. */
   pushKey: () => call<PushKeyView>('GET', '/api/push-to-talk'),
   savePushKey: (key: string | null) => call<PushKeyView>('PUT', '/api/push-to-talk', { key }),
   /** Saves the owner's choice; `null` follows the system again. */
   saveLanguage: (language: Language | null) => call<LanguageView>('PUT', '/api/language', { language }),
+  /** The language agents write the owner in until the owner's words say otherwise; `null` follows the interface's. */
+  saveConversationLanguage: (conversation: Language | null) => call<LanguageView>('PUT', '/api/language', { conversation }),
   /** Light or dark as the owner chose, or `null` for the system's. */
   theme: () => call<ThemeView>('GET', '/api/theme'),
   // other devices reaching Obeya: the section „Von anderen Geräten“ and „Telefon verbinden“

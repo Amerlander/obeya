@@ -9,9 +9,11 @@ beforeEach(() => (home = mkdtempSync(join(tmpdir(), 'obeya-demo-settings-'))));
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
 describe('demo settings', () => {
-  test('without a file, a demo is narrated by Piper in the language Obeya speaks to the owner', () => {
+  test("without a file, a demo is narrated by Piper in the owner's conversation language, else the interface's", () => {
     writeFileSync(join(home, 'settings.json'), JSON.stringify({ language: 'de' }));
     expect(readDemoSettings(home)).toEqual({ language: 'de', voice: 'piper' });
+    writeFileSync(join(home, 'settings.json'), JSON.stringify({ language: 'de', conversationLanguage: 'en' }));
+    expect(readDemoSettings(home)).toEqual({ language: 'en', voice: 'piper' });
     writeFileSync(join(home, 'settings.json'), JSON.stringify({ language: 'en' }));
     expect(readDemoSettings(home)).toEqual({ language: 'en', voice: 'piper' });
     // a file without a language takes it from there too

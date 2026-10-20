@@ -9,7 +9,7 @@ import { Images } from './images';
 import { Restarter } from './self-update';
 import { artifact } from './testing';
 import { Workers } from './workers';
-import { board, dir, eachTest, flush, main, manual, runtime, setLanguage, setWorkers, spaces, state, workers } from './workers-fixture';
+import { board, dir, eachTest, flush, main, manual, runtime, setConversation, setLanguage, setWorkers, spaces, state, workers } from './workers-fixture';
 import { git } from './workspaces';
 
 eachTest();
@@ -24,17 +24,29 @@ describe('workers', () => {
     expect(runtime.last.inbox[0]).toContain('This card follows up on the card “Zählerstände exportieren”. Its worker handed it over with this summary:\n\nCSV-Export gebaut; Excel fehlt noch.');
   });
 
-  test('in English, the worker writes the owner in English, and the log says what happens in English', () => {
+  test('with an English interface and a German conversation, the worker writes the owner in German until their words say otherwise, commits in English, and the log says what happens in English', () => {
     setLanguage('en');
+    setConversation('de');
     const c = manual();
     workers.start(c.id);
-    expect(runtime.last.spec.system).toContain('ready_for_review) is in English');
-    expect(runtime.last.spec.tools.find((t) => t.name === 'ask')!.description).toContain('Write the question in English');
+    expect(runtime.last.spec.system).toContain("ready_for_review) is in the owner's language");
+    expect(runtime.last.spec.system).toContain("The owner's language is the one of their most recent words to you, typed or spoken");
+    expect(runtime.last.spec.system).toContain('until they have said anything, German.');
+    expect(runtime.last.spec.system).toContain('What you commit (code, comments, commit messages, docs, plan docs, CLAUDE.md) is in English, whatever language the owner talks to you in.');
+    expect(runtime.last.spec.tools.find((t) => t.name === 'ask')!.description).toContain("Write the question in the owner's language");
     expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', text: `Agent started on ${board.row(c.id).branch}.` });
     runtime.last.call('ask', { question: 'Which columns?', options: ['Date', 'Reading'], multiple: true });
     expect(board.events(c.id).at(-1)!.text).toBe('Which columns? (multiple choice)\n– Date\n– Reading');
     workers.stop(c.id);
     expect(board.events(c.id).at(-1)!.text).toBe('Stopped.');
+  });
+
+  test("a repository that names German for what lands in it has its worker commit in German, whatever the owner's language", () => {
+    setConversation('en');
+    setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones', language: 'de' } }));
+    workers.start(manual().id);
+    expect(runtime.last.spec.system).toContain('until they have said anything, English.');
+    expect(runtime.last.spec.system).toContain('What you commit (code, comments, commit messages, docs, plan docs, CLAUDE.md) is in German');
   });
 
   test('start leases a clean clone, branches and briefs the worker', () => {

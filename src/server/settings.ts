@@ -1,5 +1,5 @@
 // Obeya's own settings, in `settings.json` under its home beside `canvases.json` and `demo.json`:
-// the language Obeya speaks to the owner, light or dark, the model and effort of each group of
+// the language of Obeya's interface and the one its agents talk to the owner in, light or dark, the model and effort of each group of
 // agents, the key that records a command from anywhere on the machine (heard by the app's shell),
 // and how other devices reach Obeya (remote.ts). The owner chooses them in the settings sheet;
 // until then the system's language and look apply, the agents run as `AGENT_DEFAULTS` says, and
@@ -9,14 +9,17 @@
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { chosenLanguage, OWNER_SETTINGS_FILE as SETTINGS_FILE, ownerLanguageIn, systemLanguage } from '../../plugin/skills/demo/lib/language.ts';
+import { chosenConversationLanguage, chosenLanguage, conversationLanguageIn, OWNER_SETTINGS_FILE as SETTINGS_FILE, ownerLanguageIn, systemLanguage } from '../../plugin/skills/demo/lib/language.ts';
 import { type Language, LANGUAGES } from '../core/locale';
 import { AGENT_DEFAULTS, AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentRole, type AgentSetting, type AgentsView, type LanguageView, type RemoteSetting, type Theme, THEMES, type ThemeView } from '../core/types';
 import { defaultPushKey, parsePushKey } from '../core/push-key';
 import { BadRequest } from './board';
 
 interface Settings {
+  /** The interface's: Obeya's own words. */
   language?: Language;
+  /** The agents' to the owner until the owner's words say otherwise; absent, the interface's. */
+  conversationLanguage?: Language;
   /** Light or dark; absent follows the system. */
   theme?: Theme;
   /** Only what differs from `AGENT_DEFAULTS`, so a changed default reaches what the owner left. */
@@ -31,9 +34,10 @@ function read(home: string): Settings {
   try {
     const o = JSON.parse(readFileSync(join(home, SETTINGS_FILE), 'utf8')) as Record<string, unknown>;
     const language = LANGUAGES.find((l) => l === o.language);
+    const conversationLanguage = LANGUAGES.find((l) => l === o.conversationLanguage);
     const theme = THEMES.find((x) => x === o.theme);
     const pushKey = parsePushKey(o.pushKey) ?? undefined;
-    return { ...o, language, theme, agents: agentsOf(o.agents), pushKey, remote: remoteOf(o.remote) ?? undefined };
+    return { ...o, language, conversationLanguage, theme, agents: agentsOf(o.agents), pushKey, remote: remoteOf(o.remote) ?? undefined };
   } catch {
     return {};
   }
@@ -41,17 +45,30 @@ function read(home: string): Settings {
 
 export function languageView(home: string, system = systemLanguage()): LanguageView {
   const chosen = chosenLanguage(home) ?? null;
-  return { file: join(home, SETTINGS_FILE), chosen, system, language: chosen ?? system };
+  const language = chosen ?? system;
+  const conversationChosen = chosenConversationLanguage(home) ?? null;
+  return { file: join(home, SETTINGS_FILE), chosen, system, language, conversationChosen, conversation: conversationChosen ?? language };
 }
 
-/** The language that applies: the owner's choice, else the system's. */
+/** The interface language that applies: the owner's choice, else the system's. */
 export const ownerLanguage = ownerLanguageIn;
 
-/** Saves the owner's choice; `null` follows the system again. Other settings in the file stay. */
+/** The conversation language that applies: the owner's choice, else the interface language. */
+export const conversationLanguage = conversationLanguageIn;
+
+/**
+ * Saves the owner's choice of the interface language (`language`) or the conversation language
+ * (`conversation`), whichever the input names; `null` follows the system, or the interface, again.
+ * Other settings in the file stay.
+ */
 export function saveLanguage(home: string, input: unknown): LanguageView {
-  const language = (input as { language?: unknown } | null)?.language;
-  if (language !== null && !LANGUAGES.some((l) => l === language)) throw new BadRequest('invalid', `language must be one of ${LANGUAGES.join(', ')} or null`);
-  save(home, 'language', language as Language | null, `language ${language ?? 'of the system'}`);
+  const given = (input && typeof input === 'object' ? input : {}) as { language?: unknown; conversation?: unknown };
+  const valid = (v: unknown) => v === null || LANGUAGES.some((l) => l === v);
+  if (!('language' in given) && !('conversation' in given)) throw new BadRequest('invalid', 'name language or conversation');
+  for (const key of ['language', 'conversation'] as const)
+    if (key in given && !valid(given[key])) throw new BadRequest('invalid', `${key} must be one of ${LANGUAGES.join(', ')} or null`);
+  if ('language' in given) save(home, 'language', given.language as Language | null, `language ${given.language ?? 'of the system'}`);
+  if ('conversation' in given) save(home, 'conversationLanguage', given.conversation as Language | null, `conversation language ${given.conversation ?? 'of the interface'}`);
   return languageView(home);
 }
 
@@ -66,7 +83,7 @@ export function saveTheme(home: string, input: unknown): ThemeView {
 }
 
 /** Saves one of the owner's choices, or with `null` takes it out; the other settings in the file stay. */
-function save<K extends 'language' | 'theme' | 'pushKey' | 'remote'>(home: string, key: K, value: Settings[K] | null, what: string) {
+function save<K extends 'language' | 'conversationLanguage' | 'theme' | 'pushKey' | 'remote'>(home: string, key: K, value: Settings[K] | null, what: string) {
   write(home, { ...read(home), [key]: value ?? undefined });
   console.log(`Obeya: ${what} saved to ${join(home, SETTINGS_FILE)}`);
 }

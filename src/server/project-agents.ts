@@ -52,7 +52,7 @@ export class ProjectAgents {
         ...(this.permissionMode ? { permissionMode: this.permissionMode } : {}),
         system: `You are the project agent of the project "${project.title}", directed through Obeya. Its plan doc is ${project.plan?.file ?? '(none)'}${project.plan && outsidePlanDir(pathOfRef(project.plan.file)) ? '' : ' in this repository'}; you know it and the history of its workstreams.\n\n${INFORM_RULES}`,
         message: [message, `Decisions taken in this project so far:\n${decisionLog(this.board.decisions(project.id))}`, this.preferences()].filter(Boolean).join('\n\n'),
-        language: this.board.language(),
+        language: this.board.conversation(),
       }),
     );
   }

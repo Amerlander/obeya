@@ -97,6 +97,9 @@ describe('.obeya/settings.json', () => {
     const site = { title: 'Demos', url: 'https://demos.example.dev', deploy: 'bunx wrangler pages deploy {dir}', env: 'sites/demos.env', headers: { 'X-Key': '${KEY}' } };
     expect(parseShared(JSON.stringify({ app, demo: { site, language: 'en' } }))).toMatchObject({ settings: { app, demo: { site, language: 'en' } }, problems: [] });
     expect(parseShared(JSON.stringify({ demo: { language: 'fr' } })).settings).toEqual({});
+    // the language of what lands in the repository stands beside that of its demos
+    expect(parseShared(JSON.stringify({ language: 'de', demo: { language: 'en' } })).settings).toEqual({ language: 'de', demo: { language: 'en' } });
+    expect(parseShared(JSON.stringify({ language: 'fr' })).problems).toHaveLength(1);
     // the site's language from before demo.language goes alone: the site stays
     const old = parseShared(JSON.stringify({ demo: { site: { ...site, language: 'de' } } }));
     expect(old.settings).toEqual({ demo: { site } });
@@ -122,8 +125,12 @@ describe('.obeya/settings.json', () => {
       land: { value: 'main', source: 'detected' },
       planDocs: { value: { dir: 'docs/plan' }, source: 'default' },
       app: { run: { value: 'bun dev', source: 'repository' }, stop: { value: 'pkill -F .pid', source: 'repository' }, keep: { value: '', source: 'default' } },
+      language: { value: 'en', source: 'default' },
       demo: { site: { value: null, source: 'default' }, language: { value: null, source: 'default' } },
     });
+    // a repository that names German for what lands in it
+    expect(withSettings(defaultsFor(repoInfo(repo)), () => ({ language: 'de' })).language).toBe('de');
+    expect(repoValues(repoInfo(repo), false, { language: 'de' }).language).toEqual({ value: 'de', source: 'repository' });
   });
 });
 

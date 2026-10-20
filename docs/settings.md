@@ -29,6 +29,7 @@ in `package.json`, work landing through pull requests on GitHub, demos shared on
   "softPaths": ["docs/"],
   "workspaces": "clones",
   "prNoise": ["vercel[bot]", "codecov[bot]"],
+  "language": "en",
   "app": {
     "run": "Start it in your clone with `docker compose up -d db && pnpm dev`, then `pnpm db:migrate && pnpm db:seed`. The page reloads by itself after a frontend change; after an API change, `pnpm --filter api restart`. Once it runs, `.dev-urls` holds the frontend's URL (WEB_URL) and the API's (API_URL). Log in as demo@shop.test with the password `demo` (created by the seed); the seed also makes three orders to show.",
     "stop": "docker compose down && pkill -F .dev.pid"
@@ -111,6 +112,14 @@ whatever the settings say.
 Accounts whose pull request comments are not review feedback (deploy previews, coverage bots):
 their comments do not go to the worker. Default: none.
 
+### `language` — `"en"` or `"de"`
+
+The language of what lands in the repository and lasts: code, comments, commit messages, docs,
+plan docs, the CLAUDE.md lines the Arbeitsrückschau proposes. Workers and idea agents are told it
+beside the language they talk to the owner in, so a German conversation does not make German docs.
+What agents write to the owner follows the owner instead (their latest words, else the conversation
+language of the Konfiguration), and demos follow `demo.language`. Default: `en`.
+
 ### `app` — `{ run?, stop?, keep? }`
 
 How the app runs, for any kind of app (a web app with or without hot reload, a frontend that needs
@@ -175,7 +184,7 @@ page for something to look at; the worker picks which, and runs the app for it a
   `${KEY}` from `env`; `maxFile`, the largest file the host takes in bytes (25 MiB without it);
   `publish`, when a demo goes on the site: `"approved"` puts a card's latest demo there as you
   approve its work, without it a demo goes there only when you click "Teilen". The overview is
-  in the repository's `language`. A `language` of the site, which named the overview's language
+  in `demo.language`. A `language` of the site, which named the overview's language
   until 2026-10-19, is no longer read: `demo.language` names it now.
 
   With `publish: "approved"`, approving a card shares its latest demo before its work lands: on a

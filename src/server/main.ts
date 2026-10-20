@@ -61,7 +61,7 @@ import { VoiceSetup } from './voice-setup';
 import { useLib } from '../../plugin/skills/demo/lib/here.ts';
 import { expandHome } from '../../plugin/skills/demo/lib/settings.ts';
 import { qwen3Serve } from '../../plugin/skills/demo/lib/voices.ts';
-import { agentSetting, ownerLanguage } from './settings';
+import { agentSetting, conversationLanguage, ownerLanguage } from './settings';
 import { loginLink } from './owner';
 
 const { values, positionals } = parseArgs({
@@ -250,6 +250,7 @@ canvases = new Canvases(
     workerEnv: { OBEYA_URL: narrationUrl, OBEYA_NARRATION_URL: narrationUrl },
     ...(process.env.OBEYA_PARK_GRACE ? { parkGrace: Number(process.env.OBEYA_PARK_GRACE) * 1000 } : {}),
     language: () => ownerLanguage(home),
+    conversation: () => conversationLanguage(home),
     agents: (role) => agentSetting(home, role),
     settings: (path) => config.repoSettings(path),
   },

@@ -6,7 +6,7 @@
 
 import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import { type Language, LANGUAGE_NAMES } from '../core/locale';
+import { type Language, ownersLanguage, repositoryLanguage } from '../core/locale';
 import { MESSAGES } from '../core/messages';
 import { formatQuestion, type Item, type Mock, NEXT_STEPS, type NextStep, type PlannedPrototype, type Question, type SettledPart } from '../core/types';
 import { type Asked, decisionLog, withPick } from './advisor';
@@ -22,6 +22,8 @@ export interface ExplorerOptions {
   runtime: AgentRuntime;
   /** The checkout the agent works in: the one of the idea's repository. */
   pathFor: (card: Item) => string;
+  /** The language of what lands in the idea's repository (`language` of its settings); English when left out. */
+  repoLanguage?: (card: Item) => Language;
   /** The workers' permission mode: the agent has their tools and runs as they do. */
   permissionMode?: PermissionMode;
   /** The owner's recorded preferences, as agents read them. */
@@ -248,7 +250,7 @@ export class Explorers {
         cwd: this.o.pathFor(card),
         role: 'explorer',
         ...(this.o.permissionMode ? { permissionMode: this.o.permissionMode } : {}),
-        system: system(this.o.board.language(), !!this.o.toObeya) + (preferences ? `\n\n${preferences}` : ''),
+        system: system(this.o.board.conversation(), this.o.board.language(), this.o.repoLanguage?.(card) ?? 'en', !!this.o.toObeya) + (preferences ? `\n\n${preferences}` : ''),
         tools: this.tools(card.id, live),
         contextUpdate: () => [this.buildNote(card.id, live), this.preferencesUpdate(live)].filter(Boolean).join('\n\n') || undefined,
         ...(resume ? { resume } : {}),
@@ -360,10 +362,11 @@ export class Explorers {
   private tools(cardId: string, live: Live): AgentTool[] {
     const current = (tools: AgentTool[]): AgentTool[] =>
       tools.map((t) => ({ ...t, run: (args) => (this.live.get(cardId) === live ? t.run(args) : 'This conversation has ended. End your turn.') }));
-    const language = this.o.board.language();
-    const OWNER_LANGUAGE = LANGUAGE_NAMES[language];
-    const MOCKS = mocks(language);
-    const t = MESSAGES[language].idea;
+    // the examples in the language the owner talks in by default, the names of the card's parts in the interface's
+    const language = this.o.board.conversation();
+    const OWNER_LANGUAGE = "the owner's language";
+    const MOCKS = mocks(OWNER_LANGUAGE);
+    const t = this.o.board.t.idea;
     return current([
       {
         name: 'reply',
@@ -464,7 +467,7 @@ const WORDS: Record<Language, { parts: [string, string, string, string, string, 
   en: { parts: ['Goal', 'Today', 'Variants', 'Decisions', 'Open questions', 'Effort'], changed: 'Added variants A to C', pointer: 'Two open questions, see the brief', approach: '"A Plasma fields"' },
 };
 
-const system = (language: Language, toObeya: boolean) => {
+const system = (language: Language, ui: Language, repository: Language, toObeya: boolean) => {
   const w = WORDS[language];
   const [goal, today, variants, decisions, open, effort] = w.parts.map((p) => `**${p}**`);
   return `
@@ -472,7 +475,7 @@ You are the exploration agent of one idea on Obeya, a canvas on which the owner 
 
 Your sources are the code, the repository's docs and plan docs, and what the messages give you (decisions taken so far, the owner's preferences). You have the tools a worker has: what the discussion depends on beyond the text (the git history, files on this machine and their dates, a release, pull request or CI run on GitHub with gh, a page on the web), check rather than guess. Nothing you do yourself starts work.${toObeya ? `\n\n${TO_OBEYA}` : ''}
 
-The card shows the brief ("${MESSAGES[language].idea.briefName}") and the conversation side by side. The brief holds the substance, the conversation only the turns: nothing stands in both.
+The card shows the brief ("${MESSAGES[ui].idea.briefName}") and the conversation side by side. The brief holds the substance, the conversation only the turns: nothing stands in both.
 
 How to work:
 - Put what you find and propose into the brief, not into your reply: what the code does today, variants with their trade-offs and what each would cost (what it touches, roughly how much agent work, the risks), decisions, open questions, effort.
@@ -497,7 +500,7 @@ The owner decides on the card whether to build the idea, build its settled part,
 - prototype: only seeing it will settle it (a layout, how it feels, a risky approach), and a throwaway build costs less than guessing.
 - park or drop: it is not worth it now, or no longer.
 Give your pick on every question with options, whatever next is. Do not hold the idea back with questions you could settle as well as the owner: settle them in the brief and say so. Several prototypes may try different approaches side by side, one per variant you planned with plan_prototypes; you hear each one's result, and the questions their workers asked with the owner's answers, which belong in the brief like answers given here. Once one convinces, the owner builds the idea on that prototype's branch.
-Owner-facing text is in ${LANGUAGE_NAMES[language]}.
+Owner-facing text (your replies, the brief, its mocks, prototypes and split-off part, the decisions you record) is in the owner's language. ${ownersLanguage(language)} ${repositoryLanguage(repository)}
 `.trim();
 };
 
@@ -507,8 +510,8 @@ const OWN_TOOLS = ['reply', 'update_brief', 'plan_prototypes', 'plan_split', 're
 const MAX_VARIANTS = 6;
 
 /** How a mock is written, for both tools that take them. */
-const mocks = (language: Language) =>
-  `each with a title (the variant in a few words, in ${LANGUAGE_NAMES[language]}) and html: a few lines of self-contained HTML with inline styles (no files, no network), shown in a sandboxed frame that may leave it only 240 px of width, so nothing in it is wider`;
+const mocks = (language: string) =>
+  `each with a title (the variant in a few words, in ${language}) and html: a few lines of self-contained HTML with inline styles (no files, no network), shown in a sandboxed frame that may leave it only 240 px of width, so nothing in it is wider`;
 const MOCK_SCHEMA = z.array(z.object({ title: z.string(), html: z.string() })).max(MAX_VARIANTS).optional();
 
 /** How the agent opens the discussion of an idea the owner wrote, or one a worker proposed. */

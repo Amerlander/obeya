@@ -32,23 +32,37 @@ beforeEach(() => {
 });
 
 describe("the owner's language", () => {
-  test('the Koordinator confirms in the language Obeya speaks, in a new session once it changed', async () => {
+  test("the Koordinator confirms in the language of the owner's words, else the conversation language; Obeya's own words follow the interface; either changed takes a new session", async () => {
     let language: 'de' | 'en' = 'en';
-    board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => ({ docs: [], dirs: [] }), undefined, undefined, () => language);
+    let conversation: 'de' | 'en' = 'en';
+    board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => ({ docs: [], dirs: [] }), undefined, undefined, () => language, () => conversation);
     board.create({ title: 'Export', x: 0, y: 0 });
     const k = commander();
     const first = await say(k, 'start the export', 'act', { actions: [{ do: 'start', card: 'K1' }], confirm: 'Starting “Export”.' });
-    expect(first.session.spec.system).toContain('one short English sentence');
+    expect(first.session.spec.system).toContain("one short sentence in the owner's language");
+    expect(first.session.spec.system).toContain('until they have said anything, English.');
+    expect(first.session.spec.system).toContain('"New task “Meter readings as CSV”');
+    // it knows the owner's words for its cards in either language
     expect(first.session.spec.system).toContain('a card is a “task”');
+    expect(first.session.spec.system).toContain('a card is an „Aufgabe“');
+    expect(first.session.spec.system).toContain('the repository\'s card “Add to CLAUDE.md”');
     // a turn without a decision is not understood, in English
     const heard = k.hear('hm', {});
     await settle();
     runtime.last.emit({ type: 'idle' });
     expect((await heard).confirm).toBe('I did not understand that.');
-    language = 'de';
+    conversation = 'de';
     const second = await say(k, 'starte Export', 'reply', { confirm: 'Schon gestartet.' });
     expect(second.session).not.toBe(first.session);
-    expect(second.session.spec.system).toContain('one short German sentence');
+    expect(second.session.spec.system).toContain('until they have said anything, German.');
+    expect(second.session.spec.system).toContain('"Neue Aufgabe „Zählerstände als CSV“');
+    // the interface stays English: Obeya's own words and the names of its cards
+    expect(second.session.spec.system).toContain('the repository\'s card “Add to CLAUDE.md”');
+    expect(k.vocabulary()).toStartWith('Obeya, task');
+    language = 'de';
+    const third = await say(k, 'starte Export', 'reply', { confirm: 'Schon gestartet.' });
+    expect(third.session).not.toBe(second.session);
+    expect(third.session.spec.system).toContain('the repository\'s card „CLAUDE.md ergänzen“');
     expect(k.vocabulary()).toStartWith('Obeya, Aufgabe');
   });
 });

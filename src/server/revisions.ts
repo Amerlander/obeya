@@ -4,7 +4,7 @@
 // passes on what asks Obeya for something (`to_obeya`).
 
 import { z } from 'zod';
-import { LANGUAGE_NAMES } from '../core/locale';
+import { ownersLanguage } from '../core/locale';
 import { formatQuestion, type Item, type Question } from '../core/types';
 import { BadRequest, type Board } from './board';
 import type { AgentRuntime } from './runtime';
@@ -114,7 +114,7 @@ export class Revisions {
         {
           name: 'revise_proposal',
           description: [
-            `The whole proposal as it is to stand now, in ${LANGUAGE_NAMES[this.o.board.language()]}.`,
+            `The whole proposal as it is to stand now, in the owner's language. ${ownersLanguage(this.o.board.conversation())}`,
             `title: short and precise. ${proposalTask('the card it came from nor this conversation')}`,
             `reason: for the owner only, why it is proposed, a sentence or two (keep it unless what the owner said changes it). idea: true for something to think through with the owner before anyone builds it.`,
             `questions: what the owner still has to decide, each with up to four short options; keep them out of task. A question the owner's words settle goes, and its decision goes into task.`,

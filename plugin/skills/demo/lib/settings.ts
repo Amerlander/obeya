@@ -1,7 +1,7 @@
 // The demo settings: in which language a demo is narrated and by which voice, so the person it
 // speaks in follows. Obeya's settings sheet edits them; they live in `demo.json` under Obeya's home
 // (`OBEYA_HOME`, else `~/.obeya`), where a session without Obeya finds them as well. Missing
-// entries take the defaults; the language without one is the one Obeya speaks to the owner. A
+// entries take the defaults; the language without one is the owner's conversation language. A
 // repository may name the language of its own demos (`demo.language` of its `.obeya/settings.json`):
 // Obeya gives it to its workers as `DEMO_LANGUAGE`, and a session without Obeya finds it in the
 // repository it runs in.
@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { isMain } from './here.ts';
-import { ownerLanguageIn } from './language.ts';
+import { conversationLanguageIn } from './language.ts';
 import { type Language, LANGUAGE_NAMES, LANGUAGES } from './locale.ts';
 
 /** The language a demo is narrated in: one Obeya speaks. */
@@ -91,10 +91,10 @@ export function tidyDemoSettings(input: unknown, fallbackLanguage: NarrationLang
 /** The clip a Qwen3 voice clones for the narration language of these settings; none: a speaker. */
 export const referenceOf = (s: Pick<DemoSettings, 'language' | 'references'>): string | undefined => s.references?.[s.language];
 
-/** The settings as saved, or the defaults where nothing is: then the narration is in Obeya's language. */
+/** The settings as saved, or the defaults where nothing is: then the narration is in the owner's conversation language. */
 export function readDemoSettings(home = obeyaHome()): DemoSettings {
   const file = path.join(home, DEMO_SETTINGS_FILE);
-  const language = ownerLanguageIn(home);
+  const language = conversationLanguageIn(home);
   if (!fs.existsSync(file)) return { ...DEFAULT_DEMO_SETTINGS, language };
   try {
     return tidyDemoSettings(JSON.parse(fs.readFileSync(file, 'utf8')), language);

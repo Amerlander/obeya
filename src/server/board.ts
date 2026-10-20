@@ -302,15 +302,23 @@ export class Board {
     private images?: Pick<Images, 'resolve'>,
     /** Whether the Lesestand of the repository holds the commit; without it, every commit counts as held. */
     private holds?: (repo: string, commit: string) => boolean,
-    /** The language Obeya speaks to the owner now (`ownerLanguage`); the tests speak German. */
+    /** The language of Obeya's interface now (`ownerLanguage`): what the server writes itself; the tests speak German. */
     readonly language: () => Language = () => 'de',
+    /**
+     * The owner's conversation language now (`conversationLanguage`): what agents write the owner
+     * in until the owner's words say otherwise; the interface's when left out.
+     */
+    conversation?: () => Language,
   ) {
+    this.conversation = conversation ?? language;
     store.ensureCanvas(canvas.id, canvas.name);
     // a new card whose page closed before anything was written in it was never wanted
     store.sweepUntitled(canvas.id, new Date(Date.now() - UNTITLED_GRACE_MS).toISOString());
   }
 
-  /** What Obeya says to the owner, in their language. */
+  readonly conversation: () => Language;
+
+  /** What Obeya says to the owner, in the interface language. */
   get t(): Messages {
     return MESSAGES[this.language()];
   }

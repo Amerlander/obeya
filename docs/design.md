@@ -1317,8 +1317,8 @@ decided reaches its workstreams' workers instead: a worker's task holds its proj
 ("Decisions taken in this project so far") beside the pointer to the plan doc, and a decision
 recorded while it runs reaches it once at its next tool call, the way a learned preference does.
 Answers given in the owner's name before then stay in the decision logs, marked "(an agent)", and
-show on their cards as before. Owner-facing text from agents is in the owner's language
-(`src/core/locale.ts`).
+show on their cards as before. Owner-facing text from agents is in the owner's language: that of
+their latest words, else the conversation language (see Language).
 
 ### Decisions
 
@@ -3368,7 +3368,7 @@ a warning when the plugin's manifest or the demo skill is missing.
 
 The demo settings (`lib/settings.ts`; `demo.json` in Obeya's home, `OBEYA_HOME` else `~/.obeya`)
 give the narration language (German or English: narration, captions, the report page's words;
-without one, the language Obeya speaks to the owner) and the voice, a provider: text in, WAV out
+without one, the owner's conversation language) and the voice, a provider: text in, WAV out
 (`lib/voices.ts` turns the settings into what `lib/tts.py` runs). They are the machine's, for every
 canvas; a repository whose demos speak another language says so in its settings (`demo.language`,
 see Repository settings), which goes before them for its demos: Obeya gives it to the repository's
@@ -4385,7 +4385,7 @@ and `settings` of the repository's entry in `canvases.json` (`RepoSettings`), se
 in the configuration dialog without a line of code, which holds the main branch too.
 
 The fields: `land`, `direct`, `checks`, `setup`, `planDocs`, `softPaths`, `workspaces`, `prNoise`,
-`app` and `demo`. `app` has `run`, `stop` and `keep`. Only what Obeya itself acts on is a command:
+`language` (of what lands in the repository; see Language), `app` and `demo`. `app` has `run`, `stop` and `keep`. Only what Obeya itself acts on is a command:
 `stop` and `keep` park a waiting card (see Parking). `run` is prose, for any kind of app (a web app
 with or without hot reload, a frontend that needs a reload, a CLI, a desktop or mobile app, a URL
 printed to the console): every worker's brief has it word for word, and its demo paragraph points
@@ -4564,7 +4564,7 @@ it; what was open behind it stays as it was, and a draft not saved yet stays, wr
 as it changes, so a reload, Obeya's restart included, brings it back) and lists its sections on the
 left: Leinwände, Modelle und Effort, Spracheingabe (with the push-to-talk key), Demos (the narration
 beside what demos need on this machine), Von anderen Geräten (see Other devices) and Allgemein
-(language, light or dark, the server); under the list stand „Einrichtung prüfen“ and the link
+(the interface and conversation languages, light or dark, the server); under the list stand „Einrichtung prüfen“ and the link
 „Wunsch oder Fehler melden“ (see Wishes for Obeya's makers). One
 section shows at a time, the last one chosen per tab, so a save's restart or a new language comes
 back to it; Leinwände marks a draft not saved yet and counts its problems in red.
@@ -4588,7 +4588,8 @@ does not take it over (empty: the demo site of its settings, shown as „Site: <
 see Where a demo goes). Each repository folds its settings under „Einstellungen“ below its row (see
 Repository settings), with the main branch and how work lands in the folded line; the app's
 recipe („So läuft die App“, a large text field), its stop command („Stoppen, solange eine Karte
-wartet“) and, once there is one, its keep condition, the language of its demos („Sprache der
+wartet“) and, once there is one, its keep condition, the language of what lands in it („Sprache des
+Repositorys“: Deutsch or Englisch, English by default), the language of its demos („Sprache der
 Demos“: Deutsch or Englisch, neither chosen where the demo settings' language applies) and the demo site („Demo-Site“: title, URL, deploy command, env file, headers as `Name: value` lines, the largest
 file in MiB) have their fields there like the other settings; „Für alle ins
 Repository übernehmen“ below them takes the values saved for this machine into the repository's
@@ -4685,29 +4686,61 @@ canvas.
 
 ### Language
 
-Obeya speaks German or English to the owner. The owner chooses it in the Konfiguration dialog; until
-then the system's applies: on a Mac the language of its interface (`AppleLanguages`), elsewhere
-`LC_ALL`, `LC_MESSAGES`, `LANG` in that order, then what the runtime reports; a language Obeya does
-not speak gives English. The choice lives in `settings.json` in Obeya's home
-(`src/server/settings.ts`; the system's language is worked out in
+Obeya keeps three languages apart, each German or English: the interface's, the conversation's and
+the repository's. The interface is the owner's to switch at will (to test both, say) without the
+agents switching with it; the conversation follows the language the owner talks in; what lands in
+git stays in the repository's language whatever the owner talks in. A card may so show English UI
+around a German conversation about an English plan doc: that is intended.
+
+**The interface language** covers Obeya's own words only. The owner chooses it in the Konfiguration
+dialog ("Sprache der Oberfläche"); until then the system's applies: on a Mac the language of its
+interface (`AppleLanguages`), elsewhere `LC_ALL`, `LC_MESSAGES`, `LANG` in that order, then what the
+runtime reports; a language Obeya does not speak gives English. The choice lives in `settings.json`
+in Obeya's home (`src/server/settings.ts`; the system's language is worked out in
 `plugin/skills/demo/lib/language.ts`, which the demo skill shares), which the server reads whenever
-it needs the language (`ownerLanguage`) and the UI asks for before its first render
-(`/api/language`).
+it needs the language (`ownerLanguage`, the Board's `language`) and the UI asks for before its first
+render (`/api/language`).
 
 The UI strings are two tables of one shape in `src/ui/strings.ts`, so a missing English text is a
 type error; both call the Koordinator „Obeya“; dates and numbers follow the language, in the
 browser's own variant of it (`en-GB` writes the day first; a variant `Intl` refuses, such as
 `en-US@posix` from a Linux browser with the POSIX locale, gives the usual one). Choosing another
 language takes effect at once: the page loads again, keeping what was open, as after a restart.
+What the server writes into a card's log itself, the fixed parts it adds to an agent's question
+("(Mehrfachauswahl)"), push notifications and its own pages are two tables of one shape in
+`src/core/messages.ts` (the Board's `t`, read when a line is written, which then stays in that
+language; the UI recognises the few lines it treats specially in either).
 
-Behind the interface the same setting decides: what the server writes into a card's log, the
-questions it puts to the owner are two tables of one shape in `src/core/messages.ts` (the Board's
-`t`, read when a line is written, which then stays in that language; the UI recognises the few lines
-it treats specially in either); the Koordinator's replies and confirmations (its session starts
-afresh once the language changed), and the language every prompt asks agents to write the owner in
-(`LANGUAGE_NAMES`), with examples in it where they shape the owner's text. A demo is narrated in it
-until the demo settings name a language. Prompts only agents read stay English with German examples
-of what the owner may say.
+**The conversation language** is what agents write the owner in: reports, questions, replies,
+handovers, idea briefs and replies, card titles, Question-card answers and their files, proposals
+and their revisions, Arbeitsrückschau notes and reasons, the Koordinator's replies and
+confirmations. Each agent answers in the language of the owner's most recent words to it, typed or
+spoken, also where what it works on is English; words that tell no language (an option's letter,
+"ok") change nothing. Before the owner has said anything to it, it uses the owner's setting
+"Sprache der Gespräche" (`conversationLanguage` in the same `settings.json`; the Board's
+`conversation`), which follows the interface language until chosen. The rule is an instruction in
+the prompts (`ownersLanguage` in `src/core/locale.ts`, whose tools then say "in the owner's
+language"), not detection code. A worker's task and the docs it reads are not the owner's words: a
+task often comes from a plan doc or another agent. Agents with no words of the owner to go by (the
+Koordinator's conflict reasons, the rules it proposes) write the conversation language; the card
+namer writes the language of the task it names. The Koordinator knows the owner's words for its cards
+in both languages, takes examples in the conversation language and names Obeya's own cards („CLAUDE.md
+ergänzen“) as the interface does; its session starts afresh once either language changed. An
+analysis on a card is owner-facing, so it is in the conversation language; one a worker commits is
+repository content.
+
+**The repository language** is that of everything that lands in git and lasts: code, comments,
+commit messages, design and plan docs, the CLAUDE.md lines the Arbeitsrückschau proposes. It is
+`language` in the repository's settings, English where left out (see Repository settings), shown as
+„Sprache des Repositorys“ among its settings. Workers and idea agents are told both languages
+explicitly (`repositoryLanguage`: "What you commit … is in English, whatever language the owner
+talks to you in"), so a German conversation does not make German docs.
+
+**Demos** keep their own language per repository (`demo.language`), else the narration language of
+the demo settings, else the conversation language; their shared pages follow it (see The demo
+settings and voices). Obeya's own repository says English, since its approved demos go public.
+
+Prompts only agents read stay English with German examples of what the owner may say.
 
 ### Decisions
 
@@ -4842,6 +4875,16 @@ of what the owner may say.
   the canvas stays where it was.
 - **A locale `Intl` refuses gives the usual one** (2026-10-07): until then the page stayed blank on
   it.
+- **Interface, conversation and repository each have a language** (2026-10-20, the owner's
+  decision). Until then one owner setting decided the UI strings, the server's log lines and every
+  prompt's language for the owner, and what workers committed followed only the repository's
+  CLAUDE.md: switching the UI to English to test it turned every agent English. Now the interface
+  language covers Obeya's own words, agents answer in the language of the owner's latest words
+  (else the conversation language, which follows the interface until chosen), and git content
+  follows the repository's `language`, English by default. Dropped: two machine-wide settings
+  (interface, agents), which follow neither the language the owner speaks nor keep git content
+  English in a German conversation; and a personal override per canvas, which mirroring the
+  owner's words covers.
 
 ## Running Obeya
 

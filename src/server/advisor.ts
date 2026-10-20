@@ -5,7 +5,7 @@ import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { existsSync, statSync } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { z } from 'zod';
-import { type Language, LANGUAGE_NAMES } from '../core/locale';
+import { type Language, ownersLanguage } from '../core/locale';
 import type { AnswerFile, Question } from '../core/types';
 import { type AgentRuntime, type AgentTool, BackgroundWait } from './runtime';
 import { clip } from '../core/text';
@@ -25,7 +25,7 @@ export interface Briefing {
   onSession?: (id: string) => void;
   /** What the agent reads, as it reads it. */
   onTool?: (name: string, input: Record<string, unknown>) => void;
-  /** The owner's language, which the answer is in. */
+  /** The owner's conversation language: the answer's, unless the owner's words are in another (`ownersLanguage`). */
   language: Language;
   /** The workers' permission mode: the answering agent has their tools and runs as they do. */
   permissionMode?: PermissionMode;
@@ -100,12 +100,12 @@ export function inform(b: Briefing): Promise<OwnerAnswer> {
         ...(b.permissionMode ? { permissionMode: b.permissionMode } : {}),
         ...(b.resume ? { resume: b.resume } : {}),
         ...(b.dir ? { dirs: [b.dir] } : {}),
-        system: b.system,
+        system: `${b.system}\n\n${ownersLanguage(b.language)}`,
         onLimit: b.onLimit,
         tools: [
           {
             name: 'answer_owner',
-            description: `Your answer to the owner, in ${LANGUAGE_NAMES[b.language]}: text in full (markdown, short paragraphs or a list; it stands in the card's log).${b.dir ? ` files: files of yours in ${b.dir} the answer comes with, each with its path and a one-line caption in ${LANGUAGE_NAMES[b.language]}; the owner sees them under the text (a page or an image shown inline, any other file to open).` : ''}`,
+            description: `Your answer to the owner, in the owner's language: text in full (markdown, short paragraphs or a list; it stands in the card's log).${b.dir ? ` files: files of yours in ${b.dir} the answer comes with (in the owner's language too), each with its path and a one-line caption in the owner's language; the owner sees them under the text (a page or an image shown inline, any other file to open).` : ''}`,
             schema: b.dir ? { text: z.string(), files: z.array(z.object({ path: z.string(), caption: z.string() })).max(MAX_FILES).optional() } : { text: z.string() },
             run: ({ text, files }) => {
               if (!b.dir || files === undefined) return settle({ text: String(text).trim() });

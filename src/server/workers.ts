@@ -5,7 +5,7 @@ import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import type { RepoAdapter } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
-import { LANGUAGE_NAMES, LANGUAGES } from '../core/locale';
+import { LANGUAGE_NAMES, LANGUAGES, ownersLanguage, repositoryLanguage } from '../core/locale';
 import { MESSAGES, type Messages, type Pause } from '../core/messages';
 import { basename } from 'node:path';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
@@ -2261,9 +2261,10 @@ export class Workers {
   // ---------------------------------------------------------------- the worker's tools
 
   private tools(cardId: string, live: Live, prototype: boolean): AgentTool[] {
-    const language = LANGUAGE_NAMES[this.o.board.language()];
+    // the system prompt says which language that is (`ownersLanguage`)
+    const language = "the owner's language";
     // the page goes to colleagues: in the language of the repository's demos where it names one
-    const pageLanguage = LANGUAGE_NAMES[this.o.adapter.demo?.language ?? this.o.board.language()];
+    const pageLanguage = LANGUAGE_NAMES[this.o.adapter.demo?.language ?? this.o.board.conversation()];
     const handOver = () => {
       live.handedOver = true;
       live.nudged = false;
@@ -2403,7 +2404,7 @@ export class Workers {
       },
       {
         name: 'ready_for_review',
-        description: `Hand the finished work to the owner, after committing it, running the checks and making the demo. The summary (in ${language}) is what this handover tells the owner beyond what the card's conversation already holds: on your first handover, what changed from the user's point of view and what they really need to know (something left open or not verified, a decision you took for them), in a few short paragraphs at most; on a later one, only what your last handover and your replies since have not said yet, often a sentence. Obeya keeps your handovers and replies together as the card's report for whoever reads it later. A problem you noticed outside the task goes to propose_card, not into the summary. The demo: a video's directory and chapter titles in scene order, or an HTML artifact's directory, with its report (in ${language}); without a new one, the demo already on the card stands. Then end your turn.`,
+        description: `Hand the finished work to the owner, after committing it, running the checks and making the demo. The summary (in ${language}) is what this handover tells the owner beyond what the card's conversation already holds: on your first handover, what changed from the user's point of view and what they really need to know (something left open or not verified, a decision you took for them), in a few short paragraphs at most; on a later one, only what your last handover and your replies since have not said yet, often a sentence. Obeya keeps your handovers and replies together as the card's report for whoever reads it later. A problem you noticed outside the task goes to propose_card, not into the summary. The demo: a video's directory and chapter titles in scene order, or an HTML artifact's directory, with its report (in the language of its narration); without a new one, the demo already on the card stands. Then end your turn.`,
         schema: {
           summary: z.string(),
           demo: z
@@ -2703,7 +2704,6 @@ export class Workers {
   // ---------------------------------------------------------------- prompts
 
   private system(preferences: string, prototype = false): string {
-    const language = LANGUAGE_NAMES[this.o.board.language()];
     const folder = !!this.folder;
     return `
 You are a worker agent directed through Obeya, a canvas on which the owner directs coding agents like an engineering director directs a team. ${
@@ -2728,7 +2728,8 @@ ${this.o.toObeya ? `\n${TO_OBEYA}\n` : ''}
 Rules:
 ${folder ? '- Others work in the same folder at the same time: leave what your card is not about as it is.' : '- Commit your work on your branch in this workspace. Do not push, do not open pull requests, do not switch branches.'}
 - Follow the repository's own instructions (CLAUDE.md and docs).
-- Owner-facing text (report, reply, ask, ${prototype ? 'propose_build' : 'propose_card'}, ready_for_review) is in ${language}, short and concrete. What you write between tool calls also shows on the card for the owner, folded under your next message: keep it brief and in ${language} too.
+- Owner-facing text (report, reply, ask, ${prototype ? 'propose_build' : 'propose_card'}, ready_for_review) is in the owner's language, short and concrete. What you write between tool calls also shows on the card for the owner, folded under your next message: keep it brief and in the owner's language too. ${ownersLanguage(this.o.board.conversation())} The card's task and the docs you read do not count as the owner's words.
+- ${repositoryLanguage(this.o.adapter.language)}
 - Wait for anything external (a deploy, a CI run, a process to finish) in the background: run_in_background or Monitor, then end your turn; Obeya wakes you when it finishes or fires. A point in time further off than a background command can wait (two hours), or another card getting somewhere (its fix on main), you snooze until (snooze). Never wait with sleep or a polling loop in the foreground: a note from the owner reaches you only once the running command is done.
 - When a note or feedback from the owner arrives, answer it with reply. If it is unclear what they want, ask.
 `.trim() + (preferences ? `\n\n${preferences}` : '');

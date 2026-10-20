@@ -31,6 +31,8 @@ export interface WorkRetroOptions {
   ramp?: number[];
   /** The values of a repository's settings a retrospective may propose, as they apply now; none where they cannot be read. */
   settingsFor?: (repo: string) => Record<ProposedSetting, string | string[]> | undefined;
+  /** The language of what lands in a repository (`language` of its settings), by its id; English when left out. */
+  repoLanguage?: (repo: string) => Language;
 }
 
 /** A card whose work ended, as read at that moment: what follows may delete or archive it. */
@@ -126,7 +128,7 @@ export class WorkRetro {
     const settings = this.settingsText(card.repo);
     await readSession(this.o.runtime, {
       cwd: this.o.pathFor(card.repo),
-      system: NOTES_SYSTEM(LANGUAGE_NAMES[this.o.board.language()]),
+      system: NOTES_SYSTEM(LANGUAGE_NAMES[this.o.board.conversation()]),
       role: 'chores',
       // nobody waits for it
       onLimit: waitQuietly,
@@ -134,7 +136,7 @@ export class WorkRetro {
       tools: (finish): AgentTool[] => [
         {
           name: 'note',
-          description: `Note one piece of friction worth preventing (in ${LANGUAGE_NAMES[this.o.board.language()]}, a sentence each): what went wrong, what it cost, what would have prevented it.`,
+          description: `Note one piece of friction worth preventing (in ${LANGUAGE_NAMES[this.o.board.conversation()]}, a sentence each): what went wrong, what it cost, what would have prevented it.`,
           schema: { what: z.string(), cost: z.string(), fix: z.string() },
           run: ({ what, cost, fix }) => {
             if (notes.length >= MAX_NOTES) return finish(`At most ${MAX_NOTES} notes. End your turn now.`);
@@ -200,7 +202,7 @@ export class WorkRetro {
     };
     await readSession(this.o.runtime, {
       cwd: this.o.pathFor(repo),
-      system: RETRO_SYSTEM(b.language()),
+      system: RETRO_SYSTEM(b.conversation(), b.language(), this.o.repoLanguage?.(repo) ?? 'en'),
       role: 'chores',
       onLimit: waitQuietly,
       brief: [
@@ -216,7 +218,7 @@ export class WorkRetro {
         return [
           {
             name: 'card',
-            description: `Propose a feature card that prevents the friction: a script, a skill, a fix to a tool. title, body and basis in ${LANGUAGE_NAMES[b.language()]}; cards: the tags of the cards it rests on (at least two).`,
+            description: `Propose a feature card that prevents the friction: a script, a skill, a fix to a tool. title, body and basis in ${LANGUAGE_NAMES[b.conversation()]}; cards: the tags of the cards it rests on (at least two).`,
             schema: { title: z.string(), body: z.string(), basis: z.string(), cards: z.array(z.string()) },
             run: ({ title, body, basis, cards }) => {
               if (made >= WORK_RETRO_PROPOSALS) return f(`At most ${WORK_RETRO_PROPOSALS} proposals. End your turn now.`);
@@ -233,7 +235,7 @@ export class WorkRetro {
           },
           {
             name: 'rule',
-            description: `Propose a line for the repository's CLAUDE.md, for knowledge the workers lacked: rule short and in ${LANGUAGE_NAMES[b.language()]}; basis in ${LANGUAGE_NAMES[b.language()]}; cards: the tags of the cards it rests on (at least two).`,
+            description: `Propose a line for the repository's CLAUDE.md, for knowledge the workers lacked: rule short and in ${LANGUAGE_NAMES[this.o.repoLanguage?.(repo) ?? 'en']}, the repository's language; basis in ${LANGUAGE_NAMES[b.conversation()]}; cards: the tags of the cards it rests on (at least two).`,
             schema: { rule: z.string(), basis: z.string(), cards: z.array(z.string()) },
             run: ({ rule, basis, cards }) => {
               if (made >= WORK_RETRO_PROPOSALS) return f(`At most ${WORK_RETRO_PROPOSALS} proposals. End your turn now.`);
@@ -249,7 +251,7 @@ export class WorkRetro {
           },
           {
             name: 'setting',
-            description: `Propose a value for one of the repository's settings that Obeya gives every worker: ${PROPOSED_SETTINGS.join(', ')}. value: a string for setup and run, a list of strings for checks and softPaths; basis in ${LANGUAGE_NAMES[b.language()]}; cards: the tags of the cards it rests on (at least two).`,
+            description: `Propose a value for one of the repository's settings that Obeya gives every worker: ${PROPOSED_SETTINGS.join(', ')}. value: a string for setup and run, a list of strings for checks and softPaths; basis in ${LANGUAGE_NAMES[b.conversation()]}; cards: the tags of the cards it rests on (at least two).`,
             schema: { field: z.enum(PROPOSED_SETTINGS), value: z.union([z.string(), z.array(z.string())]), basis: z.string(), cards: z.array(z.string()) },
             run: ({ field, value, basis, cards }) => {
               if (made >= WORK_RETRO_PROPOSALS) return f(`At most ${WORK_RETRO_PROPOSALS} proposals. End your turn now.`);
@@ -345,7 +347,7 @@ Not friction: a test or type check failing on the change being made and then fix
 Note 0 to 3, the costliest first; most runs have one or none. Call note for each: what (concretely: the command, the file, the error), cost (the steps or time it took, a wrong turn), fix (what would have prevented it: a script, a skill, a line in the CLAUDE.md, a clearer error message; concretely). In ${language}, a sentence each: the owner reads them on the card. You may read the repository (you cannot change it) to check whether that already exists. Then call done.
 `.trim();
 
-const RETRO_SYSTEM = (language: Language) => `
+const RETRO_SYSTEM = (language: Language, ui: Language, repository: Language) => `
 You are the Koordinator of Obeya, a canvas on which the owner directs coding agents; the owner knows you simply as Obeya. Each worker works on one card in its own workspace of a repository. This is the Arbeitsrückschau for the repository you are in (you cannot change it): you get the friction noted on its workers' runs since the last one, card by card, and propose what would make future runs cheaper.
 
 Look for friction that recurs on at least two different cards, the same detour taken again and again, and that a change to the repository would prevent:
@@ -358,7 +360,7 @@ Read the repository first: its CLAUDE.md, its docs, scripts and skills. Propose 
 
 Propose at most ${WORK_RETRO_PROPOSALS}, only for patterns on at least two cards and only what you expect the owner to take; most of the time that is fewer, or none.
 - card: a feature card. title in ${LANGUAGE_NAMES[language]}, naming what it builds: ${language === 'de' ? '„Skript \`scripts/x.ts\` für …“, „Skill für …“' : '“Script \`scripts/x.ts\` for …”, “Skill for …”'}. body in ${LANGUAGE_NAMES[language]}: what to build and how to verify it, so a worker needs no other context, and the friction it prevents. basis: one sentence in ${LANGUAGE_NAMES[language]} for the owner, naming the cards it rests on and what went wrong on them. cards: the tags of those cards.
-- rule: a line for the CLAUDE.md: rule short, general, in ${LANGUAGE_NAMES[language]}; basis and cards as for card. It waits for the owner and goes into the CLAUDE.md through the card ${MESSAGES[language].quote(MESSAGES[language].claudeMd.title)}.
+- rule: a line for the CLAUDE.md: rule short, general, in ${LANGUAGE_NAMES[repository]} (the language of what lands in the repository, whatever the owner's); basis and cards as for card. It waits for the owner and goes into the CLAUDE.md through the card ${MESSAGES[ui].quote(MESSAGES[ui].claudeMd.title)}.
 - setting: field and the whole value it should have (it replaces the one now), from what the notes show works, checked against the repository: for run a recipe a worker can follow without searching (the commands, what to do after a change, where the app's address is, how to get past a login, what to stage); basis and cards as for card. The owner takes it on their machine or into the repository's .obeya/settings.json for everyone.
 The owner does not know the tags: name cards by their titles in basis. Do not propose again what was proposed before, above all what the owner dismissed, in other words either. Then call done.
 `.trim();

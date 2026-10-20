@@ -68,6 +68,7 @@ export function repoValues(repo: RepoInfo, clones = false, shared: SharedSetting
     softPaths: value(a.softPaths, 'softPaths'),
     workspaces: clones ? { value: 'clones', source: 'clones' } : value(a.workspaces, 'workspaces'),
     prNoise: value(a.prNoise ?? [], 'prNoise'),
+    language: value(a.language, 'language'),
     app: { run: nested('app', 'run', ''), stop: nested('app', 'stop', ''), keep: nested('app', 'keep', '') },
     demo: { site: nested('demo', 'site', null), language: nested('demo', 'language', null) },
   };

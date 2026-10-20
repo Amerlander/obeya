@@ -71,8 +71,10 @@ export interface CanvasDeps {
   workerEnv?: Record<string, string>;
   /** How long a waiting card's app runs on before it is stopped (Parking); five minutes when left out. */
   parkGrace?: number;
-  /** The language Obeya speaks to the owner now (`ownerLanguage`); German when left out (the tests). */
+  /** The language of Obeya's interface now (`ownerLanguage`): its own words; German when left out (the tests). */
   language?: () => Language;
+  /** The owner's conversation language now (`conversationLanguage`): the agents', until the owner's words say otherwise; the interface's when left out. */
+  conversation?: () => Language;
   /** How long after the usage limit lifts the agents that wait for it go on; ten seconds when left out. */
   limitMargin?: number;
   /** The model and effort of a group of agents (`agentSetting`), asked whenever one starts; the defaults when left out. */
@@ -200,6 +202,7 @@ export class CanvasRuntime {
       images,
       (repo, commit) => !!this.repos.find((r) => r.ref.id === repo)?.read.holds(commit),
       deps.language,
+      deps.conversation,
     );
     const board = this.board;
     if (!stored) deps.store.setSetting(id, 'home_repo', repos[0]!.ref.id);
@@ -209,6 +212,7 @@ export class CanvasRuntime {
       runtime: deps.runtime,
       pathFor: (repo) => (this.repos.find((r) => r.ref.id === repo) ?? this.repos[0]!).read.path,
       settingsFor: this.settingsNow,
+      repoLanguage: (repo) => (this.repos.find((r) => r.ref.id === repo) ?? this.repos[0]!).adapter.language,
     });
     board.showSettings(this.settingsNow);
     // the Koordinator needs the workers, and the workers ask it: it is set right after them
@@ -235,6 +239,7 @@ export class CanvasRuntime {
       runtime: deps.runtime,
       preferences: this.preferences,
       pathFor: (card) => this.repoOf(card).read.path,
+      repoLanguage: (card) => this.repoOf(card).adapter.language,
       onOwnerInput: (card, text) => koordinator.learn(card, 'idea', text),
       imageFiles: this.imageFiles,
       onReplied: (cardId, replied) => this.replied(cardId, replied),

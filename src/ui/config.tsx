@@ -534,7 +534,10 @@ const VOICE_FIELDS: Record<VoiceKind, ('voiceName' | 'command' | 'url' | 'keyFil
 /** A stock voice of a model or service is nobody's own. */
 const STOCK_ONLY: VoiceKind[] = ['piper', 'say'];
 
-/** The language Obeya speaks to the owner: saved on its own, and the page loads again in it. */
+/**
+ * The interface language, saved on its own, the page loading again in it; and the conversation
+ * language, which agents write the owner in, saved on its own and taking effect with their next words.
+ */
 function LanguageBlock({ on }: { on: boolean }) {
   const [view, setView] = useState<LanguageView | null>(null);
   const [status, setStatus] = useState('');
@@ -557,12 +560,30 @@ function LanguageBlock({ on }: { on: boolean }) {
       setBusy(false);
     }
   };
+  const converse = async (conversation: Language | null) => {
+    setStatus('');
+    try {
+      setView(await api.saveConversationLanguage(conversation));
+    } catch (e) {
+      setStatus(failText(e));
+    }
+  };
   return (
     <>
-      <Head sub title={l.title} hint={l.hint} file={view.file} />
-      <Field label={l.title}>
+      <Head sub title={l.heading} file={view.file} />
+      <Field label={l.title} hint={l.hint}>
         <select aria-label={l.title} value={view.chosen ?? ''} disabled={busy} onChange={(e) => choose((e.target.value || null) as Language | null)}>
           <option value="">{l.system(l.names[view.system])}</option>
+          {LANGUAGES.map((x) => (
+            <option key={x} value={x}>
+              {l.names[x]}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label={l.conversation} hint={l.conversationHint}>
+        <select aria-label={l.conversation} value={view.conversationChosen ?? ''} disabled={busy} onChange={(e) => converse((e.target.value || null) as Language | null)}>
+          <option value="">{l.asInterface(l.names[view.language])}</option>
           {LANGUAGES.map((x) => (
             <option key={x} value={x}>
               {l.names[x]}
@@ -1285,11 +1306,19 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
   );
 }
 
-/** The settings of a repository, set on this machine (`RepoSettings`); those of `app` and `demo` each on its own. */
-type SettingKey = Exclude<keyof RepoSettings, NestedSetting> | 'run' | 'stop' | 'keep' | 'site' | 'language';
+/**
+ * The settings of a repository, set on this machine (`RepoSettings`); those of `app` and `demo` each
+ * on its own, `demo.language` as `demoLanguage` beside the repository's own `language`.
+ */
+type SettingKey = Exclude<keyof RepoSettings, NestedSetting> | 'run' | 'stop' | 'keep' | 'site' | 'demoLanguage';
 
-/** The setting of `app` or `demo` that holds the field `k`, if one does. */
-const nestedOf = (k: SettingKey): NestedSetting | undefined => (Object.keys(NESTED_SETTINGS) as NestedSetting[]).find((n) => (NESTED_SETTINGS[n] as readonly string[]).includes(k));
+/** The setting of `app` or `demo` that holds `k`, and its field there, if one does. */
+function nestedOf(k: SettingKey): [NestedSetting, string] | undefined {
+  if (k === 'demoLanguage') return ['demo', 'language'];
+  if (k === 'language') return undefined;
+  const n = (Object.keys(NESTED_SETTINGS) as NestedSetting[]).find((n) => (NESTED_SETTINGS[n] as readonly string[]).includes(k));
+  return n && [n, k];
+}
 
 /**
  * A repository's settings for this machine, folded under „Einstellungen“ below its row: each shows
@@ -1333,25 +1362,26 @@ function RepoSettingsBlock({
   const c = t.config.settings;
   const s = repo.settings ?? {};
   const { app: _, demo: __, ...flat } = values;
-  const base: Record<SettingKey, SettingValue<unknown>> = { ...flat, ...values.app, ...values.demo };
+  const base: Record<SettingKey, SettingValue<unknown>> = { ...flat, ...values.app, site: values.demo.site, demoLanguage: values.demo.language };
   const own = (k: SettingKey): unknown => {
     const n = nestedOf(k);
-    return n ? (s[n] as Record<string, unknown> | undefined)?.[k] : s[k as keyof RepoSettings];
+    return n ? (s[n[0]] as Record<string, unknown> | undefined)?.[n[1]] : s[k as keyof RepoSettings];
   };
   const value = <T,>(k: SettingKey) => (own(k) ?? base[k].value) as T;
   const set = (k: SettingKey, v: unknown) => {
     const next: Record<string, unknown> = { ...s };
     const n = nestedOf(k);
-    const at: Record<string, unknown> = n ? { ...s[n] } : next;
-    if (v === undefined) delete at[k];
-    else at[k] = v;
+    const at: Record<string, unknown> = n ? { ...s[n[0]] } : next;
+    const field = n?.[1] ?? k;
+    if (v === undefined) delete at[field];
+    else at[field] = v;
     if (n) {
-      if (Object.keys(at).length) next[n] = at;
-      else delete next[n];
+      if (Object.keys(at).length) next[n[0]] = at;
+      else delete next[n[0]];
     }
     onChange(Object.keys(next).length ? (next as RepoSettings) : undefined);
   };
-  const keys: SettingKey[] = ['branch', 'land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'run', 'stop', 'keep', 'language', 'site'];
+  const keys: SettingKey[] = ['branch', 'land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'language', 'run', 'stop', 'keep', 'demoLanguage', 'site'];
   const setHere = keys.filter((k) => own(k) !== undefined).length;
   const fromRepo = keys.filter((k) => own(k) === undefined && base[k].source === 'repository').length;
   const lines = (k: SettingKey) => value<string[]>(k).join('\n');
@@ -1379,7 +1409,8 @@ function RepoSettingsBlock({
   };
   const land = value<'main' | 'pr'>('land');
   const planDocs = value<{ dir: string; exclude: string[] }>('planDocs');
-  const language = value<NarrationLanguage | null>('language');
+  const language = value<Language>('language');
+  const demoLanguage = value<NarrationLanguage | null>('demoLanguage');
   const site = value<DemoSite | null>('site') ?? { title: '', url: '', deploy: '' };
   const setSite = (patch: Partial<DemoSite>) => set('site', { ...site, ...patch });
   // a part of a setting with several fields: its label above it; a wide one takes the whole row
@@ -1452,10 +1483,6 @@ function RepoSettingsBlock({
             base.workspaces.source === 'clones' ? undefined : c.workspacesHint,
           )}
           {!folder && land === 'pr' && row('prNoise', c.prNoise, <textarea rows={2} spellCheck={false} aria-label={c.prNoise} value={lines('prNoise')} onChange={(e) => set('prNoise', e.target.value.split('\n'))} />, c.prNoiseHint)}
-          {row('run', c.run, <textarea rows={Math.max(6, Math.ceil(value<string>('run').length / 70) + 1)} aria-label={c.run} placeholder={c.runPlaceholder} value={value<string>('run')} onChange={(e) => set('run', e.target.value)} />, c.runHint)}
-          {row('stop', c.stop, <input className="c-path" aria-label={c.stop} placeholder="docker compose down" spellCheck={false} value={value<string>('stop')} onChange={(e) => set('stop', e.target.value)} />, c.stopHint)}
-          {!!value<string>('stop').trim() &&
-            row('keep', c.keep, <input className="c-path" aria-label={c.keep} placeholder="grep -q PERSIST=1 .env" spellCheck={false} value={value<string>('keep')} onChange={(e) => set('keep', e.target.value)} />, c.keepHint)}
           {row(
             'language',
             c.language,
@@ -1467,6 +1494,22 @@ function RepoSettingsBlock({
               ))}
             </div>,
             c.languageHint,
+          )}
+          {row('run', c.run, <textarea rows={Math.max(6, Math.ceil(value<string>('run').length / 70) + 1)} aria-label={c.run} placeholder={c.runPlaceholder} value={value<string>('run')} onChange={(e) => set('run', e.target.value)} />, c.runHint)}
+          {row('stop', c.stop, <input className="c-path" aria-label={c.stop} placeholder="docker compose down" spellCheck={false} value={value<string>('stop')} onChange={(e) => set('stop', e.target.value)} />, c.stopHint)}
+          {!!value<string>('stop').trim() &&
+            row('keep', c.keep, <input className="c-path" aria-label={c.keep} placeholder="grep -q PERSIST=1 .env" spellCheck={false} value={value<string>('keep')} onChange={(e) => set('keep', e.target.value)} />, c.keepHint)}
+          {row(
+            'demoLanguage',
+            c.demoLanguage,
+            <div className="seg" role="radiogroup" aria-label={c.demoLanguage}>
+              {LANGUAGES.map((x) => (
+                <button key={x} type="button" role="radio" aria-checked={demoLanguage === x} className={demoLanguage === x ? 'on' : undefined} onClick={() => set('demoLanguage', x)}>
+                  {c.languages[x]}
+                </button>
+              ))}
+            </div>,
+            c.demoLanguageHint,
           )}
           {row(
             'site',

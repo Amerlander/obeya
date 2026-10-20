@@ -73,9 +73,9 @@ export interface KoordinatorOptions {
 }
 
 export class Koordinator {
-  /** The language its agents write the owner in. */
+  /** The language its agents write the owner in: the owner's conversation language, since no words of the owner's go to them. */
   private get language() {
-    return LANGUAGE_NAMES[this.o.board.language()];
+    return LANGUAGE_NAMES[this.o.board.conversation()];
   }
 
   /** Decisions to start are taken one at a time, so two colliding cards cannot both slip through. */
@@ -640,7 +640,7 @@ export class Koordinator {
       tools: (finish) => [
         {
           name: 'title',
-          description: `The card's title, in ${this.language}.`,
+          description: `The card's title, in the language the task is written in (${this.language} where it tells none, as with screenshots alone).`,
           schema: { title: z.string() },
           run: (a) => {
             if (title !== null) return 'Already named.';
@@ -814,7 +814,7 @@ export class Koordinator {
   }
 }
 
-const NAME_SYSTEM = (language: string) => `You name a card on Obeya, a canvas on which the owner directs coding agents. The owner wrote the card's task (below) without a title. Give it one with the tool title: in ${language}, short and precise like a ticket title (at most about 70 characters), saying what the task changes or achieves; no quotes, no full stop at the end. Then end your turn.`;
+const NAME_SYSTEM = (language: string) => `You name a card on Obeya, a canvas on which the owner directs coding agents. The owner wrote the card's task (below) without a title. Give it one with the tool title: in the language the task is written in (${language} where it tells none), short and precise like a ticket title (at most about 70 characters), saying what the task changes or achieves; no quotes, no full stop at the end. Then end your turn.`;
 
 const SYSTEM = (language: string) => `
 You are the Koordinator of Obeya, a canvas on which the owner directs coding agents; the owner knows you simply as Obeya. Several workers work at the same time, each in its own workspace, and their branches are rebased onto the main branch one after the other. Your job here: before a card starts, estimate which files it will change, and judge whether running it next to the cards in progress is likely to end in merge conflicts. Only those keep it waiting; everything else should run in parallel. Cards queued ahead of it count too: they came first and start before it, so a card likely to conflict with one of them waits behind it rather than overtaking it.

@@ -353,7 +353,7 @@ export class Answers {
         onTool: c.onTool,
         onSession: c.onSession,
         onLimit: c.onLimit,
-        language: this.o.board.language(),
+        language: this.o.board.conversation(),
         ...(resume ? { resume } : {}),
         ...(images?.length ? { images } : {}),
         ...(toObeya ? { tools: [toObeyaTool((request) => toObeya(c.card!, request))] } : {}),
