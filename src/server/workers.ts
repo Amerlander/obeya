@@ -2729,7 +2729,7 @@ Rules:
 ${folder ? '- Others work in the same folder at the same time: leave what your card is not about as it is.' : '- Commit your work on your branch in this workspace. Do not push, do not open pull requests, do not switch branches.'}
 - Follow the repository's own instructions (CLAUDE.md and docs).
 - Owner-facing text (report, reply, ask, ${prototype ? 'propose_build' : 'propose_card'}, ready_for_review) is in the owner's language, short and concrete. What you write between tool calls also shows on the card for the owner, folded under your next message: keep it brief and in the owner's language too. ${ownersLanguage(this.o.board.conversation())} The card's task and the docs you read do not count as the owner's words.
-- ${repositoryLanguage(this.o.adapter.language)}
+- ${repositoryLanguage(this.o.adapter.language)} A demo (its narration, report, or an HTML artifact's words) is in the language the demo skill's settings name, whatever language the owner talks in.
 - Wait for anything external (a deploy, a CI run, a process to finish) in the background: run_in_background or Monitor, then end your turn; Obeya wakes you when it finishes or fires. A point in time further off than a background command can wait (two hours), or another card getting somewhere (its fix on main), you snooze until (snooze). Never wait with sleep or a polling loop in the foreground: a note from the owner reaches you only once the running command is done.
 - When a note or feedback from the owner arrives, answer it with reply. If it is unclear what they want, ask.
 `.trim() + (preferences ? `\n\n${preferences}` : '');

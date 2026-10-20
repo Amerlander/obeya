@@ -4734,7 +4734,8 @@ commit messages, design and plan docs, the CLAUDE.md lines the Arbeitsrückschau
 `language` in the repository's settings, English where left out (see Repository settings), shown as
 „Sprache des Repositorys“ among its settings. Workers and idea agents are told both languages
 explicitly (`repositoryLanguage`: "What you commit … is in English, whatever language the owner
-talks to you in"), so a German conversation does not make German docs.
+talks to you in"), so a German conversation does not make German docs; and that a demo is in the
+language the demo skill's settings name.
 
 **Demos** keep their own language per repository (`demo.language`), else the narration language of
 the demo settings, else the conversation language; their shared pages follow it (see The demo
