@@ -484,11 +484,11 @@ describe('workers', () => {
   test("a task the owner wrote tells the worker the language they talk in; one from a plan doc tells nothing", () => {
     const c = board.create({ title: 'Contributing guide', body: 'Add a CONTRIBUTING.md.', x: 0, y: 0 });
     workers.start(c.id);
-    expect(runtime.last.inbox[0]).toContain('Add a CONTRIBUTING.md.\n\nThe owner wrote this task themselves: until they say more, answer them in its language.');
+    expect(runtime.last.spec.system).toContain("until they have said anything, the language of the card's task, which they wrote themselves (German where it tells none).");
     workers.stop(c.id);
     const w = board.snapshot().items.find((i) => i.label === 'W1')!;
     workers.start(w.id);
-    expect(runtime.last.inbox[0]).toContain("This task comes from the project's plan doc: its language tells nothing about the owner's.");
+    expect(runtime.last.spec.system).toContain("until they have said anything, German. What you write to the owner is in the owner's language, also where what you work on is in another. The card's task comes from the project's plan doc, not from the owner: its language tells nothing about theirs.");
   });
 
   test("a workstream's question goes straight to the owner, too", () => {

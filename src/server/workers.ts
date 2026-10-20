@@ -171,13 +171,12 @@ const retractedText = (r: Retracted, replaced: boolean): string => {
   }
 };
 
-/** What a worker hears of who wrote its card's task: a task the owner wrote tells the language they talk in (`ownersLanguage`). */
-const TASK_BY: Record<TaskAuthor, string> = {
-  owner: 'The owner wrote this task themselves: until they say more, answer them in its language.',
-  plan: "This task comes from the project's plan doc: its language tells nothing about the owner's.",
-  koordinator: "Obeya's Arbeitsrückschau wrote this task: its language tells nothing about the owner's.",
-  idea: "The idea's agent wrote this task: its language tells nothing about the owner's.",
-  proposal: "A worker proposed this task and the owner took it on: its language tells nothing about the owner's.",
+/** What a worker hears of a card's task someone else than the owner wrote: its language tells nothing of the owner's (`ownersLanguage`). */
+const TASK_BY: Record<Exclude<TaskAuthor, 'owner'>, string> = {
+  plan: "The card's task comes from the project's plan doc, not from the owner: its language tells nothing about theirs.",
+  koordinator: "Obeya's Arbeitsrückschau wrote the card's task, not the owner: its language tells nothing about theirs.",
+  idea: "The idea's agent wrote the card's task, not the owner: its language tells nothing about theirs.",
+  proposal: "A worker proposed the card's task and the owner took it on: its language tells nothing about theirs.",
 };
 
 export const proposalTask = (unseen: string) =>
@@ -1547,7 +1546,7 @@ export class Workers {
         cwd: row.workspace,
         role: 'worker',
         ...(plans ? { dirs: [plans] } : {}),
-        system: this.system(preferences, !!row.prototype_of),
+        system: this.system(preferences, !!row.prototype_of, this.o.board.item(cardId)),
         tools: this.tools(cardId, live, !!row.prototype_of),
         plugins: [OBEYA_PLUGIN],
         ...(env ? { env } : {}),
@@ -2712,7 +2711,10 @@ export class Workers {
 
   // ---------------------------------------------------------------- prompts
 
-  private system(preferences: string, prototype = false): string {
+  private system(preferences: string, prototype = false, card?: Item): string {
+    // a task the owner wrote is their first words to the worker; one an agent or a plan doc wrote is not
+    const by = card?.body.trim() ? taskAuthor(card) : undefined;
+    const language = by === 'owner' ? ownersLanguage(this.o.board.conversation(), "the card's task, which they wrote themselves") : `${ownersLanguage(this.o.board.conversation())}${by ? ` ${TASK_BY[by]}` : ''}`;
     const folder = !!this.folder;
     return `
 You are a worker agent directed through Obeya, a canvas on which the owner directs coding agents like an engineering director directs a team. ${
@@ -2737,7 +2739,7 @@ ${this.o.toObeya ? `\n${TO_OBEYA}\n` : ''}
 Rules:
 ${folder ? '- Others work in the same folder at the same time: leave what your card is not about as it is.' : '- Commit your work on your branch in this workspace. Do not push, do not open pull requests, do not switch branches.'}
 - Follow the repository's own instructions (CLAUDE.md and docs).
-- Owner-facing text (report, reply, ask, ${prototype ? 'propose_build' : 'propose_card'}, ready_for_review) is in the owner's language, short and concrete. What you write between tool calls also shows on the card for the owner, folded under your next message: keep it brief and in the owner's language too. ${ownersLanguage(this.o.board.conversation())} The card's task counts as the owner's words where your task says they wrote it themselves; the docs you read do not.
+- Owner-facing text (report, reply, ask, ${prototype ? 'propose_build' : 'propose_card'}, ready_for_review) is in the owner's language, short and concrete. What you write between tool calls also shows on the card for the owner, folded under your next message: keep it brief and in the owner's language too. ${language} The docs you read do not count as the owner's words.
 - ${repositoryLanguage(this.o.adapter.language)} A demo (its narration, report, or an HTML artifact's words) is in the language the demo skill's settings name, whatever language the owner talks in.
 - Wait for anything external (a deploy, a CI run, a process to finish) in the background: run_in_background or Monitor, then end your turn; Obeya wakes you when it finishes or fires. A point in time further off than a background command can wait (two hours), or another card getting somewhere (its fix on main), you snooze until (snooze). Never wait with sleep or a polling loop in the foreground: a note from the owner reaches you only once the running command is done.
 - When a note or feedback from the owner arrives, answer it with reply. If it is unclear what they want, ask.
@@ -2782,7 +2784,7 @@ ${idea.idea.brief}` : '',
           .filter(Boolean)
           .join('\n\n'),
       );
-    if (card.body.trim()) parts.push(card.body.trim(), TASK_BY[taskAuthor(card)]);
+    if (card.body.trim()) parts.push(card.body.trim());
     if (card.mocks?.length) parts.push(mocksText(card.mocks));
     if (card.builtOn) parts.push(this.builtOnPrototype(card.builtOn, !!card.parent));
     const from = card.from && !card.prototypeOf ? this.o.board.item(card.from) ?? this.o.board.archived().find((i) => i.id === card.from) : undefined;
