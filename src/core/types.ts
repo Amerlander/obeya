@@ -146,6 +146,20 @@ export function titleFrom(body: string): string {
 }
 
 /**
+ * The questions on a card that wait for the owner's answer: its idea agent's while the idea is open
+ * and the agent is not at work on a reply (which may settle them), its proposal's while it is not
+ * reworked, its worker's, its demo report's. The one place where each kind of card says which of its
+ * questions are open: its conversation shows them at its end with the field under it set to answer
+ * them, the canvas card and the phone's count show them, the Koordinator hears of them.
+ */
+export function openQuestions(i: Pick<Item, 'archivedAt' | 'state' | 'need' | 'question' | 'idea' | 'proposal'>): Question[] {
+  if (i.archivedAt) return [];
+  if (i.state === 'idea') return i.idea?.status === 'open' && !i.idea.thinking ? i.idea.questions : [];
+  if (i.state === 'proposal') return i.proposal && !i.proposal.revising ? i.proposal.questions : [];
+  return i.state === 'waiting' && (i.need === 'question' || i.need === 'demo') && i.question ? [i.question] : [];
+}
+
+/**
  * A card needs the owner: it waits (but not while its worker takes in what the owner wrote on its
  * handover, nor once they approved it and its work lands), is a proposal or an accepted one its agent withdrew or
  * replaced since, has a pull request that only waits for the owner's merge, or is an open idea whose agent has replied

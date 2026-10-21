@@ -2,7 +2,7 @@
 
 import { createContext, Fragment, type ReactNode, type RefObject, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { agentListens, answering, askable, type BackgroundTask, buildableOn, type CardAction, chapterAt, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, type EarlierDemo, EXPORT_HTML_MAX, finished, finishedArchivable, finishingUp, handedOver, type Item, type Mock, type NextStep, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, snoozable, type Spot, started, stopped, stoppedArchivable, taskAuthor } from '../core/types';
+import { agentListens, answering, askable, type BackgroundTask, buildableOn, type CardAction, chapterAt, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, type EarlierDemo, EXPORT_HTML_MAX, finished, finishedArchivable, finishingUp, handedOver, type Item, type Mock, type NextStep, openQuestions, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, snoozable, type Spot, started, stopped, stoppedArchivable, taskAuthor } from '../core/types';
 import { mockPage } from '../core/frame';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
 import { answerText, toggle } from './answer';
@@ -29,7 +29,7 @@ import { dismissPlace, type Place, seekTo, showsVersions, usePlace, videoOf, wat
 import { cameInView, useSeen } from './seen';
 import { SnoozeLine, SnoozeMenu, snoozeWho } from './snooze';
 import { becomesLabel, clock as time, errorText, failText, shortDay, stateLabel, t } from './strings';
-import { agentWorks, cardTalk, demoHandover, koordinatorReads, ownerField, parseQuestion, snoozeLine, talkAlone, type Turn, unseenTurns, waitsFirstStart, worked as isWorked } from './talk';
+import { agentWorks, cardTalk, demoHandover, talkState, koordinatorReads, ownerField, parseQuestion, snoozeLine, talkAlone, type Turn, unseenTurns, waitsFirstStart, worked as isWorked } from './talk';
 import { PageChangeList } from './page-changes';
 import { WishReplyLink } from './wish';
 
@@ -612,7 +612,6 @@ function SupersededBox({ item, all, act, onDelete }: { item: Item; all: Item[]; 
 function IdeaView({ item, act, run, listener, onDelete, onTell, prototypes }: { item: Item; act: (a: CardAction, done: ActDone) => Promise<void>; run: Run; listener?: string; onDelete: () => void; onTell: Tell; prototypes: boolean }) {
   const idea = item.idea!;
   const [prototyping, setPrototyping] = useState(false);
-  const answer = usePicks(item.id, idea.questions);
   // what the agent would do in the owner's place is the marked click; without a suggestion, building is
   const next = idea.status === 'open' && !idea.thinking ? idea.next : undefined;
   const btn = (step: NextStep['step']) => (next ? (next.step === step ? 'btn primary suggested' : 'btn') : step === 'build' ? 'btn primary' : 'btn');
@@ -652,9 +651,6 @@ function IdeaView({ item, act, run, listener, onDelete, onTell, prototypes }: { 
           ) : (
             <Talk
               item={item}
-              questions={idea.questions}
-              heading={idea.questions.length > 1 ? t.ask.questions : t.ask.question}
-              picks={answer}
               field={{
                 placeholder: t.idea.compose,
                 listener,
@@ -808,9 +804,8 @@ function ProposalView({
   onRevise: (text: string, images?: string[], replyTo?: number) => Promise<void>;
   children: ReactNode;
 }) {
-  const questions = item.proposal?.questions ?? [];
   const revising = item.proposal?.revising;
-  const answer = usePicks(item.id, questions);
+  const answer = useOpenQuestions(item);
   const idea = !!item.proposal?.idea;
   const armed = item.proposal?.acceptAfterRevision;
   // while it is reworked, the click waits for the new text in view; else the panel closes on the accepted card
@@ -834,9 +829,6 @@ function ProposalView({
         talk={
           <Talk
             item={item}
-            questions={questions}
-            heading={t.proposalQuestions}
-            picks={answer}
             // while it is reworked, the owner's words wait for the rework after it, unread until then
             field={{
               placeholder: t.compose.revise,
@@ -872,7 +864,7 @@ function ProposalView({
         </button>
         <Later item={item} act={act} />
       </div>
-      {questions.length > 0 && !revising && <p className="hint">{t.proposalQuestionsHint}</p>}
+      {answer.questions.length > 0 && <p className="hint">{t.proposalQuestionsHint}</p>}
     </>
   );
 }
@@ -1014,14 +1006,9 @@ function Conversation({
   const idea = item.state === 'idea' && !!item.idea;
   const question = item.kind === 'question';
   const proposal = item.state === 'proposal';
-  const asking = item.state === 'waiting' && item.need === 'question' ? item.question : undefined;
-  const working = !past && agentWorks(item);
-  // the card waits on the owner's answer (its worker's question, its demo report's): the question
-  // stands, also while the worker's background work keeps its turn open
-  const waits = item.state === 'waiting' && !!item.question;
-  // a paused agent's steps stay where they were, in its bubble standing still
-  const paused = !past && !!item.paused && !item.snoozed;
-  const asked = JSON.stringify(item.idea?.questions ?? asking ?? []);
+  // a paused agent's steps stay where they were, in its bubble standing still; the questions open
+  // stand at the end, also while a worker's background work keeps its turn open
+  const { working, paused, key } = talkState(item, past);
   // what the owner had not seen when the conversation came into view stays marked until it goes, what comes in view is seen
   const { seen, came } = useSeen(item.id, events?.at(-1)?.id);
   // on the phone the conversation opens at the first message the owner has not seen
@@ -1033,9 +1020,7 @@ function Conversation({
   };
   // what the agents say and do follows at the end only while the owner stands there, so they can read further up meanwhile
   const onScroll = useStickToEnd(box, events?.findLast((e) => e.author === 'owner')?.id, events, unseenFrom);
-  // a proposal's open questions stand at the end, where they are answered, rather than where they were asked
-  const openKey = JSON.stringify(proposal && !working ? (item.proposal?.questions ?? []) : []);
-  const turns = useMemo(() => (events ? cardTalk(item, events, past) : null), [events, asked, working, paused, openKey]);
+  const turns = useMemo(() => (events ? cardTalk(item, events, past) : null), [events, key]);
   const byId = useMemo(() => new Map(events?.map((e) => [e.id, e])), [events]);
   const fresh = useMemo(
     () => new Set(turns && events ? unseenTurns(turns, events, seen).filter((x) => !cameInView(came, x.e.id)).map((x) => x.e.id) : []),
@@ -1044,7 +1029,8 @@ function Conversation({
   const replyKnown = useReplyKnown();
   if (!events || !turns) return null;
   if (hideEmpty && !turns.shown.length && !turns.pending.length) return null;
-  const agent = idea ? t.author.explorer : question ? t.author.koordinator : t.author.worker;
+  const by = idea ? 'explorer' : question ? 'koordinator' : 'worker';
+  const agent = t.author[by];
   // no agent's message ever closes a proposal's rounds: its rework shows only what came after the owner's latest words
   const since = proposal && turns.shown.length ? events.indexOf(turns.shown.at(-1)!.e) : -1;
   const pending = proposal ? turns.pending.filter((s) => events.indexOf(s) > since) : turns.pending;
@@ -1091,7 +1077,7 @@ function Conversation({
   // the agent at work, with a pause beside its name; paused, it stands still with Resume
   const bubble = (
     <Msg
-      by={idea ? 'explorer' : question ? 'koordinator' : 'worker'}
+      by={by}
       className={paused ? 'paused' : 'thinking'}
       who={proposal ? t.revising : `${agent} ${paused ? t.pause.paused : idea ? t.idea.thinking : question ? t.answer.reading : t.talk.working}`}
       head={
@@ -1123,13 +1109,14 @@ function Conversation({
       ? turns.shown.findIndex((x, i) => i >= seedAt && x.e.id > stopped)
       : turns.shown.findLastIndex((x) => x.e.kind === 'state' && x.e.author === 'owner');
   const stillAt = after >= seedAt ? after : turns.shown.length;
-  // how the worker came to the question it waits on, or the steps no message came after
+  // how the agent came to the questions it waits on, or the steps no message came after
+  const askedAt = turns.asked.at(-1)?.e.at;
   const askedSteps = (steps: CardEvent[]) =>
     steps.length > 0 && (
-      <div className={`msg by-${idea ? 'explorer' : 'worker'}`}>
-        {turns.asked && (
+      <div className={`msg by-${by}`}>
+        {askedAt && (
           <div className="who">
-            {agent} · {t.talk.question} <span className="t">{time(turns.asked.e.at)}</span>
+            {agent} · {t.talk.question} <span className="t">{time(askedAt)}</span>
           </div>
         )}
         <Steps steps={steps} />
@@ -1139,7 +1126,7 @@ function Conversation({
     <>
       <h4 className="p-h">{t.talk.heading}</h4>
       <div className={onReply && !replyKnown ? 'talk conv reply-new' : 'talk conv'} ref={box} onScroll={onScroll}>
-        {turns.shown.length === 0 && !turns.unread.length && !working && !turns.asked && !seed && <div className="hint">{idea ? t.idea.talkEmpty : question ? t.question.empty : proposal ? t.reviseHint : t.talk.empty}</div>}
+        {turns.shown.length === 0 && !turns.unread.length && !working && !turns.asked.length && !seed && <div className="hint">{idea ? t.idea.talkEmpty : question ? t.question.empty : proposal ? t.reviseHint : t.talk.empty}</div>}
         {turns.shown.slice(0, seedAt).map(line)}
         {seed}
         {turns.shown.slice(seedAt, stillAt).map(line)}
@@ -1147,17 +1134,13 @@ function Conversation({
         {turns.shown.slice(stillAt).map(line)}
         {working ? (
           <>
-            {/* the question it waits on, and below it the background work the worker still runs */}
-            {waits && (
-              <>
-                {turns.asked && askedSteps(turns.asked.steps)}
-                {questions}
-              </>
-            )}
+            {/* the questions it waits on, and below them the background work the worker still runs */}
+            {askedSteps(turns.asked.flatMap((x) => x.steps))}
+            {questions}
             {bubble}
           </>
         ) : (
-          !paused && (turns.pending.length > 0 || (turns.asked?.steps.length ?? 0) > 0) && askedSteps([...(turns.asked?.steps ?? []), ...turns.pending])
+          !paused && askedSteps([...turns.asked.flatMap((x) => x.steps), ...turns.pending])
         )}
         {/* what the agent has not read yet stands below its work, until it reads it; comments on the
             demo video held back, until they are sent */}
@@ -2245,14 +2228,9 @@ function TaskTalk({
 }) {
   const field = ownerField(item);
   const key = JSON.stringify(item.question ?? null);
-  const questions = useMemo(() => ((field === 'answer' || field === 'demo') && item.question ? [item.question] : []), [field, key]);
-  const picks = usePicks(item.id, questions);
   return (
     <Talk
       item={item}
-      questions={questions}
-      heading={field === 'demo' ? t.demo.question : t.questionFromWorker}
-      picks={picks}
       field={
         field
           ? {
@@ -2322,17 +2300,18 @@ interface TalkField {
  * works on the card any more. Where the field is, the owner can reply to a message of the
  * conversation: it stands quoted above the field, and the words go out with it.
  */
-function Talk({ item, questions = [], heading = t.ask.question, picks, past, field }: { item: Item; questions?: Question[]; heading?: string; picks?: Picks; past?: boolean; field?: TalkField }) {
+function Talk({ item, past, field }: { item: Item; past?: boolean; field?: TalkField }) {
+  const picks = useOpenQuestions(item, past);
+  const { questions, picked } = picks;
   const options = questions.some((q) => q.options.length > 0);
-  const picked = !!picks?.picked;
   const draft = cardDraft(item.id);
   // the demo video stands at a place: the words are about it, where the card's agent hears them
   const place = usePlace(item.id);
   const at = field && !field.listener && !options ? place : null;
   const send = async (words: string, images?: string[], to?: Reply['to']) => {
     const replyTo = typeof to === 'number' ? to : undefined;
-    await (picked ? field!.onPicked(field!.quote ? answerText(questions, picks!.picks, words) : words.trim(), picks!.picks, images, replyTo) : field!.onWords(words, images, replyTo));
-    picks?.clear();
+    await (picked ? field!.onPicked(field!.quote ? answerText(questions, picks.picks, words) : words.trim(), picks.picks, images, replyTo) : field!.onWords(words, images, replyTo));
+    picks.clear();
   };
   return (
     <>
@@ -2340,7 +2319,7 @@ function Talk({ item, questions = [], heading = t.ask.question, picks, past, fie
         item={item}
         past={past}
         onReply={field ? (e) => setReply(draft, { to: e.id, quote: eventQuote(e) }) : undefined}
-        questions={picks && <Questions questions={questions} heading={heading} {...picks} />}
+        questions={<Questions {...picks} />}
       />
       {field && (
         <Composer
@@ -2399,14 +2378,16 @@ function SpotLink({ cardId, spot }: { cardId: string; spot: Spot }) {
   );
 }
 
-type Picks = ReturnType<typeof usePicks>;
-
 /**
- * The options the owner picked for each question; they start over when the questions change. They
- * stand in the card's draft beside its words, so they outlive closing the card and a page load.
+ * The questions the card waits on (`openQuestions`, none once nobody works on it: `past`), and the
+ * options the owner picked for each; they start over when the questions change. They stand in the
+ * card's draft beside its words, so they outlive closing the card and a page load. While the questions
+ * are not open (the agent works on a reply), the picks wait in the draft until they are again.
  */
-function usePicks(cardId: string, questions: Question[]) {
-  const draft = cardDraft(cardId);
+function useOpenQuestions(item: Item, past = false) {
+  const json = JSON.stringify(past ? [] : openQuestions(item));
+  const questions = useMemo(() => JSON.parse(json) as Question[], [json]);
+  const draft = cardDraft(item.id);
   const key = questionsKey(questions);
   const saved = useDraft(draft).picks;
   const picks = saved?.of === key ? saved.picks : [];
@@ -2416,15 +2397,15 @@ function usePicks(cardId: string, questions: Question[]) {
       return { picks: { of: key, picks: questions.map((q, j) => (j === i ? toggle(q, was[j] ?? [], o) : (was[j] ?? []))) } };
     });
   const clear = () => updateDraft(draft, { picks: undefined });
-  return { picks, choose, clear, picked: picks.some((x) => x.length > 0) };
+  return { questions, picks, choose, clear, picked: picks.some((x) => x.length > 0) };
 }
 
 /** An agent's questions, each with its options as radio buttons, or checkboxes when several may be chosen. */
-function Questions(p: { questions: Question[]; heading: string; picks: string[][]; choose: (i: number, option: string) => void }) {
+function Questions(p: { questions: Question[]; picks: string[][]; choose: (i: number, option: string) => void }) {
   if (!p.questions.length) return null;
   return (
     <div className="question ask">
-      <h4>{p.heading}</h4>
+      <h4>{p.questions.length > 1 ? t.ask.questions : t.ask.question}</h4>
       {p.questions.map((q, i) => (
         <div key={i} className="ask-q">
           <div className="q-text">

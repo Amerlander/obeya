@@ -324,7 +324,7 @@ describe('the Koordinator remembers', () => {
     const heard = k.hear('ja zum Archiv', {});
     await settle();
     const s = runtime.last;
-    expect(s.inbox[0]).toContain('[waiting: demo] "Archiv" — open question in its demo report: Alte Projekte nachtragen?');
+    expect(s.inbox[0]).toContain('[waiting: demo] "Archiv" — open question in its demo report: "Alte Projekte nachtragen?"');
     expect(await s.call('act', { actions: [{ do: 'answer', card: 'K1', text: 'ja' }], confirm: 'Antwort an „Archiv“.' })).toContain('Done');
     s.emit({ type: 'idle' });
     k.arm((await heard).token!);
@@ -353,7 +353,7 @@ describe('the Koordinator remembers', () => {
     await again;
   });
 
-    test("an idea's suggested next step, with its agent's own answers, is in its line: „mach, was du vorschlägst“ takes it", async () => {
+    test("an idea's suggested next step, and its open questions with its agent's picks, are in its line: „mach, was du vorschlägst“ takes it", async () => {
     const a = board.create({ idea: true, title: 'Export', x: 0, y: 0 });
     board.setIdea(a.id, {
       yourTurn: true,
@@ -363,7 +363,7 @@ describe('the Koordinator remembers', () => {
     const k = commander();
     const { brief } = await say(k, 'mach, was du vorschlägst', 'act', { actions: [{ do: 'discuss', card: 'K1', text: 'CSV' }], confirm: 'An „Export“: CSV.' });
     expect(brief).toContain(
-      '"Export" — its agent would have the owner answer its open questions (discuss) next: Das Format entscheidet den Rest. (its own answers: "Welches Format?" → CSV)',
+      '"Export" — open question: "Welches Format?" (its agent would pick: CSV) — its agent would have the owner answer its open questions (discuss) next: Das Format entscheidet den Rest.',
     );
     board.setIdea(a.id, { questions: [], next: { step: 'prototype', why: 'Erst sehen.' } });
     const second = await say(k, 'und?', 'reply', { confirm: '…' });

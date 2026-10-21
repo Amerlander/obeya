@@ -1110,6 +1110,21 @@ had something to do. Until 2026-10-17 an answered question kept its
 orange edge, which also marks the messages new to the owner, so it looked as if it still waited. A card that was an idea
 continues the idea's conversation in the same list.
 
+Which questions are open is one rule for every kind of card (`openQuestions` in `src/core/types.ts`):
+an open idea's while its agent is not at work on a reply, a proposal's while it is not reworked, a
+worker's while the card waits for its answer, the one in a demo report while it is not answered. A
+reply being worked on may settle them, so meanwhile nothing is answered; a parked or dropped idea
+waits for nobody. Whatever shows a question as open reads that rule: the conversation takes each out
+of where it was last asked and puts it at its end under „Frage an dich“ („Fragen an dich“ for
+several) with its options, the field under it reads „Eigene Antwort oder Anmerkung – optional“ and
+„Antworten“ only while they stand there, and the canvas card's line, the phone's count and the
+Koordinator's view of the cards name the same questions. Until 2026-10-21 each kind of card decided
+this on its own, in up to six places: the field under an idea or a proposal being reworked offered
+to answer questions it did not show, a parked idea's questions stood to be answered at its end while
+the phone counted none, a proposal's face named no question, the Koordinator saw an idea's questions
+only where its agent had picked an option, and the heading read „Frage an dich“, „Offene Fragen“,
+„Frage des Agenten“ or „Offene Frage“ depending on the card.
+
 The messages new to the owner keep an orange edge until the conversation goes (the card closes, on
 the phone its panel), as the answers that waited do in Obeya's sheet: those after the last event
 they had in view and after their own last words (`unseenTurns` in `src/ui/talk.ts`, the messages the

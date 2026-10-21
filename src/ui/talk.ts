@@ -3,7 +3,7 @@
 import { LANGUAGES } from '../core/locale';
 import { MESSAGES } from '../core/messages';
 import { inQueue } from '../core/queue';
-import { answering, askable, type CardEvent, type Demo, finishingUp, type Item, needsYou, ownWords, pausable, type Question, started, type Talk as Exchange } from '../core/types';
+import { answering, askable, type CardEvent, type Demo, finishingUp, type Item, needsYou, openQuestions, ownWords, pausable, type Question, started, type Talk as Exchange } from '../core/types';
 import { readAnswer } from './answer';
 import type { Field } from './api';
 
@@ -37,8 +37,8 @@ export interface Talk {
   pending: CardEvent[];
   /** What the owner said that the agent has not read yet, in the order said: it stands below its work, until it reads it. */
   unread: CardEvent[];
-  /** The question the card waits on, with the steps that led to it: it stands at the end, to be answered. */
-  asked?: Turn;
+  /** The questions the card waits on (`openQuestions`), each with the steps that led to it: they stand at the end, to be answered. */
+  asked: Turn[];
 }
 
 /** Obeya's lines that mark where the work stands, or why an idea clicked to build was not; its other notes (restarts, sessions, what happens on the pull request) fold away. */
@@ -89,10 +89,10 @@ export function demoHandover(demo: Demo, shown: Turn[]): Turn | undefined {
  * state changes between them. The agent's steps before it read the owner's words close above them
  * (`closed`). What the owner says to a worker that does not `reply` is answered by the first words
  * it says after it; words before its reply are steps on the way to it. What the agent has not read yet stands apart (`unread`).
- * `asking`: the question the card waits on. `over`: no agent works on the card, so no message will
+ * `open`: the questions the card waits on, which leave where they were last asked. `over`: no agent works on the card, so no message will
  * come for the steps without one (`settle`). `paused`: the agent is paused now, at the last line that says so.
  */
-export function talkTurns(all: CardEvent[], opts: { asking?: Question; over?: boolean; paused?: boolean } = {}): Talk {
+export function talkTurns(all: CardEvent[], opts: { open?: Question[]; over?: boolean; paused?: boolean } = {}): Talk {
   const shown: Turn[] = [];
   let steps: CardEvent[] = [];
   // the owner said something to the agent, and the worker has not answered yet
@@ -158,28 +158,35 @@ export function talkTurns(all: CardEvent[], opts: { asking?: Question; over?: bo
   // a worker's question is answered on its own; an idea's and a proposal's in the owner's words
   for (const turn of shown) if (turn.e.kind === 'question' && turn.e.author === 'worker' && !turn.picks) Object.assign(turn, outcome(events, turn.e));
   marked(shown);
-  const asked = opts.asking ? openQuestion(shown) : undefined;
-  if (asked) shown.splice(shown.indexOf(asked), 1);
-  if (opts.over && !asked) {
+  const asked = askedLast(shown, opts.open ?? []);
+  for (const x of asked) shown.splice(shown.indexOf(x), 1);
+  if (opts.over && !asked.length) {
     settle(shown, steps, events);
     steps = [];
   }
-  return { shown, pending: steps, unread: all.filter((e) => e.unread), ...(asked ? { asked } : {}) };
+  return { shown, pending: steps, unread: all.filter((e) => e.unread), asked };
 }
 
 /**
- * A card's conversation as it shows: its question waiting for the owner at the end, a proposal's and an idea's open
- * questions where they are answered, and steps without a message settled once nobody works on it
- * (`past`: nobody does any more).
+ * A card's conversation as it shows: the questions it waits on at the end, where they are answered
+ * (`openQuestions`, the same on every kind of card), and steps without a message settled once nobody
+ * works on it (`past`: nobody does any more).
  */
 export function cardTalk(item: Item, events: CardEvent[], past = false): Talk {
-  const asking = item.state === 'waiting' && item.need === 'question' ? item.question : undefined;
+  const { working, paused, open } = talkState(item, past);
+  return talkTurns(events, { open, over: !working && !paused, paused });
+}
+
+/**
+ * What a card's conversation is laid out by, beside its log: whether its agent works (it ends with
+ * the agent at work), is paused (its steps stand still where it stopped), and the questions open
+ * (at the end). `key` changes with any of them.
+ */
+export function talkState(item: Item, past = false) {
   const working = !past && agentWorks(item);
   const paused = !past && !!item.paused && !item.snoozed;
-  // the questions open now stand at the end, where they are answered; while the agent works on its
-  // reply, which may settle them, they stand where they were asked, as nothing is answered then
-  const open = working ? [] : item.state === 'proposal' ? (item.proposal?.questions ?? []) : item.state === 'idea' && !item.archivedAt ? (item.idea?.questions ?? []) : [];
-  return talkTurns(withoutOpen(events, open), { asking, over: !working && !paused, paused });
+  const open = past ? [] : openQuestions(item);
+  return { working, paused, open, key: JSON.stringify([working, paused, open]) };
 }
 
 /** Whether the worker replies after its words at `i`, before the owner says anything more: then those words were a step on the way to the reply. */
@@ -241,11 +248,14 @@ function closed(steps: CardEvent[]): Turn | undefined {
   return own ? { e: own, steps, quiet: true } : undefined;
 }
 
-/** A proposal's or an idea's conversation without where its open questions were asked: the last time each was. */
-export function withoutOpen(events: CardEvent[], open: Question[]): CardEvent[] {
-  if (!open.length) return events;
-  const asked = new Set(open.map((q) => events.findLast((e) => e.kind === 'question' && parseQuestion(e.text).text === q.text)?.id));
-  return events.filter((e) => !asked.has(e.id));
+/**
+ * Where the open questions were asked, the last time each was, unless something answered it there
+ * (on the owner's behalf, say, whatever the card says) or a note took it back: those stand at the
+ * end, to be answered.
+ */
+function askedLast(shown: Turn[], open: Question[]): Turn[] {
+  const asked = new Set(open.map((q) => shown.findLast((x) => x.e.kind === 'question' && parseQuestion(x.e.text).text === q.text)));
+  return shown.filter((x) => asked.has(x) && x.answer === undefined && !x.settled);
 }
 
 /**
@@ -319,12 +329,6 @@ function named(shown: Turn[]) {
   }
 }
 
-/** The card's last question, if it is the one the card waits on: nothing answered it, and no note took it back. */
-function openQuestion(shown: Turn[]): Turn | undefined {
-  const last = shown.findLast((x) => x.e.kind === 'question');
-  return last && last.answer === undefined && !last.settled ? last : undefined;
-}
-
 /** A question as the log holds it (`formatQuestion`): its text and the options after it. */
 export function parseQuestion(text: string): { text: string; options: string[] } {
   const lines = text.split('\n');
@@ -349,15 +353,6 @@ export function ownerField(item: Pick<Item, 'state' | 'need' | 'question' | 'fin
   if (item.state === 'waiting') return item.need === 'question' ? 'answer' : item.need === 'demo' && item.question ? 'demo' : 'feedback';
   // a finished card's agent is resumed for what the owner asks about it; a card waiting to start holds the note for the agent that takes it on
   return item.state === 'working' || item.state === 'inPr' || item.finishing || askable(item) || inQueue(item) ? 'note' : null;
-}
-
-/** The questions on a card that wait for the owner's answer: its idea's, its proposal's, its agent's. */
-export function openQuestions(i: Item): Question[] {
-  if (i.archivedAt) return [];
-  if (i.state === 'idea') return i.idea?.status === 'open' && !i.idea.thinking ? i.idea.questions : [];
-  if (i.state === 'proposal') return i.proposal && !i.proposal.revising ? i.proposal.questions : [];
-  const field = ownerField(i);
-  return (field === 'answer' || field === 'demo') && i.question ? [i.question] : [];
 }
 
 /**

@@ -259,7 +259,6 @@ const de = {
     demo: 'Antwort oder Feedback an den Agenten',
     revise: 'Was soll anders werden? – oder halte die Leertaste',
   },
-  questionFromWorker: 'Frage des Agenten',
   ask: {
     question: 'Frage an dich',
     questions: 'Fragen an dich',
@@ -271,7 +270,6 @@ const de = {
     pickWhy: (why: string) => `Der Agent würde so entscheiden: ${why}`,
   },
   proposedBy: (title: string) => `Vorgeschlagen vom Agenten der Aufgabe „${title}“.`,
-  proposalQuestions: 'Offene Fragen',
   proposalQuestionsHint: 'Mit „Antworten“ schreibt ein Agent den Vorschlag nach deiner Wahl neu. Übernimmst du gleich, steht deine Wahl als entschieden im Text; der Rest geht als offene Frage mit.',
   proposedByRetro: (basis: string) => `Aus der Arbeitsrückschau: ${basis}`,
   revisingShort: 'wird überarbeitet',
@@ -578,7 +576,7 @@ const de = {
         .filter(Boolean)
         .join(' · '),
   },
-  demo: { question: 'Offene Frage', kept: 'Die Demo bleibt hier abrufbar.', again: 'Die Demo der letzten Übergabe. Der Agent arbeitet wieder an der Aufgabe.',
+  demo: { kept: 'Die Demo bleibt hier abrufbar.', again: 'Die Demo der letzten Übergabe. Der Agent arbeitet wieder an der Aufgabe.',
     artifact: 'HTML-Artefakt des Agenten',
     play: 'Abspielen',
     zoom: 'Größer zeigen (Z)',
@@ -1816,7 +1814,6 @@ const en: Strings = {
     demo: 'Answer or feedback to the agent',
     revise: 'What should change? – or hold the space bar',
   },
-  questionFromWorker: 'The agent asks',
   ask: {
     question: 'Question for you',
     questions: 'Questions for you',
@@ -1827,7 +1824,6 @@ const en: Strings = {
     pickWhy: (why: string) => `The agent would decide this way: ${why}`,
   },
   proposedBy: (title: string) => `Proposed by the agent of the task “${title}”.`,
-  proposalQuestions: 'Open questions',
   proposalQuestionsHint: 'With “Answer” an agent rewrites the proposal by your choice. If you accept it right away, your choice goes into the text as decided; the rest goes along as an open question.',
   proposedByRetro: (basis: string) => `From the work retrospective: ${basis}`,
   revisingShort: 'being reworked',
@@ -2110,7 +2106,7 @@ const en: Strings = {
         .filter(Boolean)
         .join(' · '),
   },
-  demo: { question: 'Open question', kept: 'The demo stays available here.', again: 'The demo of the last handover. The agent is working on the task again.',
+  demo: { kept: 'The demo stays available here.', again: 'The demo of the last handover. The agent is working on the task again.',
     artifact: 'The agent’s HTML artifact',
     play: 'Play',
     zoom: 'Show larger (Z)',
