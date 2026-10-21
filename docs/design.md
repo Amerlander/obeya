@@ -1725,10 +1725,12 @@ let go, gliding after it so a press far from the view does not jump.
 Opening a card takes 300 ms: a 130 ms flight brings it to the middle, then it unfolds in 170 ms;
 closing runs the same in reverse. Fast enough not to wait on, long enough to keep the context.
 
-An unfolded card is as tall as its content, up to a limit per state beyond which it scrolls, and
-follows its content while open. Where its bottom lies under the microphone, the content gets that
-much room below it, so the last row (an idea's „Parken“, „Verwerfen“) scrolls up past the microphone
-instead of staying under it. A card's row of decisions at its end stays in view at the panel's foot
+An unfolded card is as tall as its content, up to the room from 12 px below the window's top edge
+down to the microphone, beyond which it scrolls, and follows its content while open: a planned card
+or workstream with a long text uses a tall monitor's height instead of scrolling in a small box.
+Only a window too low for a panel of 320 px lets it reach under the microphone; where its bottom
+lies under the microphone, the content gets that much room below it, so the last row scrolls up
+past the microphone instead of staying under it. A card's row of decisions at its end stays in view at the panel's foot
 (above the microphone) while a long text scrolls under it, with a line above it while there is more
 to scroll to: a planned workstream whose plan-doc text runs past the panel shows „Agent starten“
 without scrolling, as its card on the canvas shows its play button. A task whose conversation
