@@ -1016,7 +1016,7 @@ export class Commander {
       }
       case 'start':
         if (card.kind === 'project') {
-          if (!this.o.board.snapshot().items.some((i) => i.parent === card.id && i.state === 'planned' && !i.queue && !i.snoozed))
+          if (!this.o.board.snapshot().items.some((i) => i.parent === card.id && i.state === 'planned' && !i.queue))
             return 'the project has no planned workstream left that is not already with Obeya';
           break;
         }
@@ -1229,7 +1229,7 @@ export class Commander {
     // projects with workstreams to start: start on one hands them all to the Koordinator
     const projects = items.flatMap((p) => {
       if (p.kind !== 'project') return [];
-      const open = items.filter((i) => i.parent === p.id && i.state === 'planned' && !i.queue && !i.snoozed);
+      const open = items.filter((i) => i.parent === p.id && i.state === 'planned' && !i.queue);
       return open.length ? [`${tag(p.id)} [project] "${p.title}" — planned workstreams not yet started: ${open.map((i) => i.label ?? i.title).join(', ')}`] : [];
     });
     return [

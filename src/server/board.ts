@@ -1173,11 +1173,13 @@ export class Board {
       this.keepDocs(all, docs);
       if (read) this.reopen(all);
     }
-    let items = toItems(this.store.cards(this.canvas.id), docs, this.home);
+    let rows = this.store.cards(this.canvas.id);
+    let items = toItems(rows, docs, this.home);
     if (this.placeNew(docs, items, all)) {
       // projects seen for the first time keep their doc too
       this.keepDocs(all, docs);
-      items = toItems(this.store.cards(this.canvas.id), docs, this.home);
+      rows = this.store.cards(this.canvas.id);
+      items = toItems(rows, docs, this.home);
     }
     items = this.withPrototypes(items);
     const inTurn = new Map([...this.turns].flatMap((f) => [...f()]));
@@ -1185,7 +1187,7 @@ export class Board {
       const background = inTurn.get(i.id);
       return background ? { ...i, inTurn: true, ...(background.length ? { background } : {}) } : i;
     });
-    items = this.withoutStaleSnoozes(items);
+    items = this.withoutStaleSnoozes(items, rows);
     items = this.withWaitingSince(items);
     const limited = (key: string) => {
       const until = this.limits.get(key);
@@ -1219,9 +1221,13 @@ export class Board {
   /**
    * A card the owner snoozed while it waited for them that no longer waits for them (they answered
    * it after all, its proposal is reworked, its idea parked) is snoozed no longer; nor is a planned
-   * card snoozed to start later that is no longer planned to start (started, made an idea, archived).
+   * card snoozed to start later that is no longer planned to start (started, made an idea, archived),
+   * or no longer on the canvas (a workstream whose plan doc went or was ticked off): coming back after
+   * its time, it would start unasked.
    */
-  private withoutStaleSnoozes(items: Item[]): Item[] {
+  private withoutStaleSnoozes(items: Item[], rows: CardRow[]): Item[] {
+    const shown = new Set(items.map((i) => i.id));
+    for (const r of rows) if (r.snoozed && !shown.has(r.id) && (JSON.parse(r.snoozed) as Snooze).start) this.store.update(r.id, { snoozed: null });
     return items.map((i) => {
       if (!i.snoozed?.waiting && !i.snoozed?.start) return i;
       const { snoozed: _, ...awake } = i;

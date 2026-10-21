@@ -709,7 +709,7 @@ describe('Koordinator starts all workstreams of a project', () => {
     expect(item(w3.id).queue).toMatchObject({ checking: true });
   });
 
-  test('a workstream snoozed to start later stays so when its plan doc changes, and the project’s start passes over it', async () => {
+  test('a workstream snoozed to start later stays so when its plan doc changes, and the project’s start takes it along', async () => {
     const { p, w2, w3, w4 } = project();
     const until = new Date(Date.now() + 86_400_000).toISOString();
     board.snooze(w2.id, { until, by: 'owner', start: true });
@@ -717,10 +717,22 @@ describe('Koordinator starts all workstreams of a project', () => {
     board.docsChanged();
     expect(item(w2.id)).toMatchObject({ state: 'planned', body: 'Text W2, neu', snoozed: { until, start: true } });
     k.request(p.id);
-    expect(item(w2.id).queue).toBeUndefined();
-    expect([w3, w4].map((w) => item(w.id).queue)).toEqual([0, 1].map(() => expect.objectContaining({ checking: true, together: p.id })));
-    await settle();
-    expect(schedules()[0]!.inbox[0]).not.toContain('Titel W2');
+    // a workstream that builds on it can wait for it
+    expect(item(w2.id).snoozed).toBeUndefined();
+    expect([w2, w3, w4].map((w) => item(w.id).queue)).toEqual([0, 1, 2].map(() => expect.objectContaining({ checking: true, together: p.id })));
+  });
+
+  test('a workstream snoozed to start later whose plan doc goes is snoozed no longer when the doc comes back', () => {
+    const { w2 } = project();
+    board.snooze(w2.id, { until: new Date(Date.now() + 86_400_000).toISOString(), by: 'owner', start: true });
+    const kept = docs;
+    docs = [];
+    board.docsChanged();
+    board.snapshot();
+    docs = kept;
+    board.docsChanged();
+    expect(item(w2.id)).toMatchObject({ state: 'planned' });
+    expect(item(w2.id).snoozed).toBeUndefined();
   });
 
   test('a workstream waits only for what comes before it, and every one has to be scheduled', async () => {

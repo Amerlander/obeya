@@ -1005,10 +1005,12 @@ at work, on any card that waits for the owner, and on any planned task not yet w
 - A planned card („erst am Montag starten“) starts at the time instead of now (`Snooze.start`):
   it goes to the Koordinator then as if the owner had started it, queue and all, and its worker hears
   with its task that the card was set to start then. „Starten“ (on the card or by voice) and „Jetzt
-  zurückholen“ start it at once; „Alle starten“ on its project passes over it. So does an agent's
+  zurückholen“ start it at once, as does „Alle starten“ on its project (so a workstream that builds
+  on it can wait for it). So does an agent's
   proposal with a start time once accepted (see A proposal that starts later). A card that is no
-  longer planned to start (made an idea or a project, archived, started some other way) is snoozed
-  no longer, and a change to its plan doc leaves a workstream's snooze as it is.
+  longer planned to start (made an idea or a project, archived, started some other way, a workstream
+  whose plan doc went) is snoozed no longer, so it never starts unasked when it comes back; a change
+  to its plan doc leaves a workstream's snooze as it is.
 
 Waking: a timer (every 15 s), every change on the board (so a card that only passes through the
 state waited for, asked and answered at once, counts) and every start of Obeya look for snoozed

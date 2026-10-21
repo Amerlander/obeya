@@ -70,8 +70,7 @@ const PlayIcon = ({ size }: { size: number }) => (
 );
 
 /** How many of a project's workstreams its button starts: those planned and in no queue. */
-// a workstream snoozed to start later waits for its time
-const startableIn = (kids: Item[]) => kids.filter((k) => k.state === 'planned' && !k.queue && !k.snoozed).length;
+const startableIn = (kids: Item[]) => kids.filter((k) => k.state === 'planned' && !k.queue).length;
 
 const sameBounds = (a: Bounds, b: Bounds) => a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
 
