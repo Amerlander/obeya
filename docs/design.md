@@ -3742,6 +3742,15 @@ and speaks nothing: utterances queue, fire `start` and, after about as long as s
 page without a user activation gets `not-allowed`, as in Chrome. So the page goes on as it would,
 which leaving the API out (`--disable-speech-synthesis-api`) would not.
 
+Both browsers show scrollbars as the machine's browser does: Playwright's headless launch adds
+`--hide-scrollbars`, and `lib/chromium.ts` leaves it out (`ignoreDefaultArgs`), so a list that
+scrolls in a fixed height, or two scrollbars side by side, shows in a video and a screenshot. On
+Windows and Linux these are classic scrollbars that take width; on a Mac set to overlay scrollbars
+(the default with a trackpad) a bar shows while a box scrolls and fades a second later, as in the
+owner's Chrome, so a still shows it only where the scene just scrolled. Permanent ones on such a Mac
+were possible only by starting Chrome without Playwright (which refuses `-AppleShowScrollBars
+Always`) and were not wanted (owner, 2026-10-21).
+
 The report page (`index.html` beside the video, for the skill's use without Obeya) holds the title,
 the summary (what the change does, then what the owner needs to know beyond the video: a behaviour
 it leaves out and why, what is open or unverified, a defect found in someone else's change; a few
