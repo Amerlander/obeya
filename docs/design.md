@@ -1829,9 +1829,20 @@ page), a wave runs out from where it was assigned (else from the cards' middle),
 one after the other, and their territory springs out a little too far and settles; a light runs once
 along the new edge. The wave is over in 0.9 s: see the decision on large animations below.
 
-Assigning: Shift + drag on the canvas draws a lasso (without Shift it pans as before), a right click
-on a card takes that card (a workstream: its project); either opens a ring of colour balls at the
-pointer with the groups, "+" (a new group, named in place) and "∅" (none). Each group's name stands
+Marking: Shift + drag on the canvas draws a lasso (without Shift it pans as before), Shift + click on
+a card takes it in or out (a workstream: its project, as in the lasso; Shift + click beside a
+project's workstreams marks the project); a lasso adds what it caught to what is marked
+(`src/ui/selection.ts`). Marked cards carry drifting dashes, and over their top right corner (below
+their bottom where the bar leaves no room) a line says how many are marked, with the button „Gruppe …“
+for the colour ring. Dragging a marked card moves all marked ones by as much, each saved where it
+lands; dragging an unmarked one moves it alone and leaves the marks. A click on the empty canvas or
+Esc lets go of them; a click on a card opens it as ever. Two hints teach it, each until used once:
+after a card was moved alone, for a few seconds where it was let go, how to mark several; beside two or
+more marked cards, that dragging one moves them all.
+
+Assigning: the button over the marked cards, or a right click on a card, which takes that card (a
+workstream: its project), or all marked ones when it is one of them; either opens a ring of colour
+balls with the groups, "+" (a new group, named in place) and "∅" (none). Each group's name stands
 outside its ball, so all show at once, with how many of its cards are still to be done (not
 finished, archived or a dropped idea; a project counts by its workstreams): a group at 0 goes pale,
 a candidate for deleting. Behind the ring and the names the canvas steps back under a frosted halo
@@ -1879,6 +1890,11 @@ generic one for anything else.
   render again every frame) and when the wave ended (then 1.5 s). Now the canvas holds still behind
   the open ring and the wave lasts 0.9 s. Dropping the halo's blur would also have closed the first
   gap, but left the cards' text readable behind the ring's names.
+- **The lasso marks cards instead of opening the colour ring** (owner, 2026-10-21). A colleague
+  wanted to move several cards together (Shift + click, a frame), and the lasso went straight to
+  the ring, so cards could only be grouped, not marked. Keeping the lasso's ring and letting a drag
+  on a marked card close it was the other option; the owner chose marking first, as in Figma or
+  Miro, with grouping a click away, so the ring and its halo do not come up on every move.
 - **A group ends with its last card**: it is made by putting cards into it, so there is never an
   empty group to clean up. Deleting one ends it at once by taking its cards out, for a group whose
   last cards sit in the archive, out of reach of the ring (2026-10-06).

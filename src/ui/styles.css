@@ -1498,6 +1498,19 @@ button.link:hover { text-decoration: underline; }
 #lasso .lline { fill: none; stroke: var(--working); stroke-width: 2; stroke-dasharray: 7 6; stroke-linejoin: round; animation: halo-drift 3s linear infinite; }
 #lasso .lhead { fill: var(--working); }
 
+/* over the top right corner of what is marked: how many and the button for the colour ring */
+#marked { position: fixed; z-index: 40; transform: translate(-100%, calc(-100% - 12px)); display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+#marked.below { transform: translate(-100%, 12px); }
+#marked .mrow { display: flex; align-items: center; gap: 8px; padding: 3px 3px 3px 10px; border-radius: 3px; background: var(--card); box-shadow: var(--shadow); white-space: nowrap; }
+#marked .mcount { font: 500 13px/1 var(--cond); color: var(--muted); }
+#marked .mgroup { display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 7px; border: 0; border-radius: 3px; background: transparent; color: var(--ink); font: 600 13px/1 var(--cond); cursor: pointer; }
+#marked .mgroup:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.ricon circle { fill: hsl(var(--h) 75% 55%); }
+#marked .mhint, #markhint { max-width: 300px; margin: 0; padding: 6px 10px; border-radius: 3px; background: var(--ink); color: var(--bg); font: 13px/1.35 var(--cond); text-align: left; }
+/* after a card was moved alone, for a few seconds beside where it was let go */
+#markhint { position: fixed; z-index: 40; pointer-events: none; transform: translate(14px, 14px); animation: markhint 7s both; }
+@keyframes markhint { 0% { opacity: 0; } 6% { opacity: 1; } 88% { opacity: 1; } 100% { opacity: 0; } }
+
 #ringback { position: fixed; inset: 0; z-index: 70; cursor: crosshair; }
 #ringback .ring { position: absolute; width: 0; height: 0; }
 /* the canvas behind the ring and its names steps back under a frosted halo that fades out at its

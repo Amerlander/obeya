@@ -62,11 +62,12 @@ node $B input "dbl:700,400" "drag:@.card,900,500" "wheel:700,400,0,-300" "wheel:
 node $B input "down:Space" "wait:3000" "up:Space" "eval:document.title"   # hold a key (push-to-talk)
 ```
 
-Steps: `click:X,Y`, `dbl:X,Y`, `drag:X1,Y1,X2,Y2`, `wheel:X,Y,DX,DY[,ctrl]`, `key:NAME`,
+Steps: `click:X,Y`, `dbl:X,Y`, `drag:X1,Y1,X2,Y2[,X3,Y3…]` (more points: a path through them), `wheel:X,Y,DX,DY[,ctrl]`, `key:NAME`,
 `down:NAME`, `up:NAME` (a character, Enter, Escape, Tab, Space, Backspace, ArrowUp, ArrowDown,
-ArrowLeft, ArrowRight), `type:TEXT`, `wait:MS`, `shot:FILE.png`, `eval:JS`. `click`, `dbl` and the
+ArrowLeft, ArrowRight, Shift, Control, Alt, Meta), `type:TEXT`, `wait:MS`, `shot:FILE.png`, `eval:JS`. `click`, `dbl` and the
 start of `drag` (`drag:@sel,X2,Y2`) also take `@<css selector>` (the centre of the first match,
-scrolled into view); `wheel` and a drag's end take numbers only.
+scrolled into view); `wheel` and a drag's end take numbers only. A modifier held with `down:` goes
+with the clicks, drags and keys after it until its `up:` (`"down:Shift" "click:@.a" "up:Shift"`).
 
 For pages that record audio, `start --fake-mic speech.wav` grants the microphone and plays the WAV
 in a loop as its input. The page has to be a secure context (`https`, or `localhost` /

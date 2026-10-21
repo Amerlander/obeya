@@ -218,7 +218,13 @@ const KEYS: Record<string, { code: string; key: string; vk: number }> = {
   ArrowDown: { code: 'ArrowDown', key: 'ArrowDown', vk: 40 },
   ArrowLeft: { code: 'ArrowLeft', key: 'ArrowLeft', vk: 37 },
   ArrowRight: { code: 'ArrowRight', key: 'ArrowRight', vk: 39 },
+  Shift: { code: 'ShiftLeft', key: 'Shift', vk: 16 },
+  Control: { code: 'ControlLeft', key: 'Control', vk: 17 },
+  Alt: { code: 'AltLeft', key: 'Alt', vk: 18 },
+  Meta: { code: 'MetaLeft', key: 'Meta', vk: 91 },
 };
+/** The CDP modifier bit of each modifier key: held with `down:`, it goes with the mouse and key events until `up:`. */
+const MODIFIERS: Record<string, number> = { Alt: 1, Control: 2, Meta: 4, Shift: 8 };
 
 function keyOf(name: string) {
   if (KEYS[name]) return KEYS[name];
@@ -257,8 +263,9 @@ async function runInput(tab: Tab, steps: string[]) {
     if (!p) fail(`No element matches ${sel}`);
     return p;
   };
+  let modifiers = 0;
   const mouse = (type: string, x: number, y: number, extra: object = {}) =>
-    send('Input.dispatchMouseEvent', { type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1, ...extra });
+    send('Input.dispatchMouseEvent', { type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1, modifiers, ...extra });
   for (const step of steps) {
     const colon = step.indexOf(':');
     const cmd = colon < 0 ? step : step.slice(0, colon);
@@ -267,7 +274,7 @@ async function runInput(tab: Tab, steps: string[]) {
       case 'click':
       case 'dbl': {
         const [x = 0, y = 0] = await coords(arg);
-        await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
+        await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, modifiers });
         await mouse('mousePressed', x, y);
         await mouse('mouseReleased', x, y);
         if (cmd === 'dbl') {
@@ -277,20 +284,28 @@ async function runInput(tab: Tab, steps: string[]) {
         break;
       }
       case 'drag': {
-        // `@selector,X2,Y2` or `X1,Y1,X2,Y2`
+        // `@selector,X2,Y2` or `X1,Y1,X2,Y2[,X3,Y3…]`
         const parts = arg.startsWith('@') ? [...(await coords(arg.slice(0, arg.lastIndexOf(',', arg.lastIndexOf(',') - 1)))), ...arg.split(',').slice(-2).map(Number)] : arg.split(',').map(Number);
-        const [x1, y1, x2, y2] = parts as [number, number, number, number];
+        // more points after the end draw a path through them (a lasso), each leg in 10 steps
+        const [x1, y1] = parts as [number, number];
+        let at = [x1, y1];
         await mouse('mousePressed', x1, y1);
-        for (let i = 1; i <= 10; i++) {
-          await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: x1 + ((x2 - x1) * i) / 10, y: y1 + ((y2 - y1) * i) / 10, button: 'left', buttons: 1 });
-          await sleep(16);
+        for (let p = 2; p + 1 < parts.length; p += 2) {
+          const [ax, ay] = at as [number, number];
+          const bx = parts[p]!;
+          const by = parts[p + 1]!;
+          for (let i = 1; i <= 10; i++) {
+            await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: ax + ((bx - ax) * i) / 10, y: ay + ((by - ay) * i) / 10, button: 'left', buttons: 1, modifiers });
+            await sleep(16);
+          }
+          at = [bx, by];
         }
-        await mouse('mouseReleased', x2, y2);
+        await mouse('mouseReleased', at[0]!, at[1]!);
         break;
       }
       case 'wheel': {
         const [x, y, dx, dy, ctrl] = arg.split(',').map(Number) as number[];
-        await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x, y, deltaX: dx, deltaY: dy, modifiers: ctrl ? 2 : 0 });
+        await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x, y, deltaX: dx, deltaY: dy, modifiers: modifiers | (ctrl ? 2 : 0) });
         break;
       }
       case 'key':
@@ -298,8 +313,15 @@ async function runInput(tab: Tab, steps: string[]) {
       case 'up': {
         const k = keyOf(arg);
         const text = k.key.length === 1 ? k.key : k.code === 'Enter' ? '\r' : undefined;
-        if (cmd !== 'up') await send('Input.dispatchKeyEvent', { type: 'keyDown', key: k.key, code: k.code, windowsVirtualKeyCode: k.vk, ...(text ? { text } : {}) });
-        if (cmd !== 'down') await send('Input.dispatchKeyEvent', { type: 'keyUp', key: k.key, code: k.code, windowsVirtualKeyCode: k.vk });
+        const bit = MODIFIERS[k.key] ?? 0;
+        if (cmd !== 'up') {
+          modifiers |= bit;
+          await send('Input.dispatchKeyEvent', { type: 'keyDown', key: k.key, code: k.code, windowsVirtualKeyCode: k.vk, modifiers, ...(text ? { text } : {}) });
+        }
+        if (cmd !== 'down') {
+          modifiers &= ~bit;
+          await send('Input.dispatchKeyEvent', { type: 'keyUp', key: k.key, code: k.code, windowsVirtualKeyCode: k.vk, modifiers });
+        }
         break;
       }
       case 'type':

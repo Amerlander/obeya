@@ -212,6 +212,52 @@ export function Lasso({ pts }: { pts: Pt[] }) {
   );
 }
 
+// ------------------------------------------------------------------ marked cards
+
+/** Three colour balls, as in the ring. */
+const RingIcon = () => (
+  <svg className="ricon" width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+    {[200, 30, 140].map((h, n) => (
+      <circle key={h} cx={8 + 4.6 * Math.sin((n * 2 * Math.PI) / 3)} cy={8.6 - 4.6 * Math.cos((n * 2 * Math.PI) / 3)} r={3} style={hue(h)} />
+    ))}
+  </svg>
+);
+
+/**
+ * Over the top right corner of what is marked (`at`, screen; `below` its bottom right one): how many, the button that opens the
+ * colour ring for them and, until the owner has once moved several together, how that goes.
+ */
+export function Marked({ at, below, count, hint, onGroup }: { at: Pt; below: boolean; count: number; hint: boolean; onGroup: (at: Pt) => void }) {
+  return (
+    <div id="marked" className={below ? 'below' : undefined} style={{ left: at.x, top: at.y }}>
+      <div className="mrow">
+        <span className="mcount">{t.marked.count(count)}</span>
+        <button
+          className="mgroup"
+          title={t.marked.groupTip}
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            onGroup({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+          }}
+        >
+          <RingIcon />
+          {t.marked.group}
+        </button>
+      </div>
+      {hint && <p className="mhint">{t.marked.move}</p>}
+    </div>
+  );
+}
+
+/** After the owner moved a single card, until they have once marked cards: how to move several at once, at `at` (screen). */
+export function MarkHint({ at }: { at: Pt }) {
+  return (
+    <p id="markhint" style={{ left: at.x, top: at.y }}>
+      {t.marked.howTo}
+    </p>
+  );
+}
+
 /** Whether `p` lies inside the polygon. */
 export function inside(p: Pt, poly: Pt[]) {
   let c = false;

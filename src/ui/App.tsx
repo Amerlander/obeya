@@ -5,7 +5,7 @@ import { flushSync } from 'react-dom';
 import { type Bounds, boundsOf, CARD_SIZE, centre, type Place, PROJECT_HEAD, PROJECT_PAD, unionBounds } from '../core/layout';
 import { type CanvasInfo, type CanvasSnapshot, type CardPatch, finished, type Group, type Item, nameless, needsYou, openPerGroup, type PendingRestart, type PlanDir, START_ALL_HOLD_MS, titleFrom, type AppUpdate, type SourceUpdate, unreadAnswers } from '../core/types';
 import { api, ApiError, beforeReload, onNotice, quietAtStart, reportFocus, setCanvas, useCanvas } from './api';
-import { GroupNames, growFrom, inside, Lasso, Ring, TerritoryLayer, useTerritories } from './groups';
+import { GroupNames, growFrom, inside, Lasso, MarkHint, Marked, Ring, TerritoryLayer, useTerritories } from './groups';
 import { besideSheet, BOTTOM, type Cam, camFor, centreOn, chase, dragLimit, edgeScroll, FAR, flying, flyTo, keepInView, MAX_ZOOM, MIN_ZOOM, overviewCam, placeIn, shows, stopFlight, TOP, toWorld } from './camera';
 import { plain } from './markdown';
 import { type ActDone, Detail, type Pending } from './detail';
@@ -25,6 +25,7 @@ import { collect, keep, type Kept, restore, type SideSheet, takeKept } from './k
 import { Sign, Wordmark } from './logo';
 import { DOUBLE_CLICK_KNOWN, Help, HelpButton, HELP_KEY_KNOWN, NewCardHint } from './help';
 import { know, known } from './known';
+import { addAll, MARK_KNOWN, markable, MOVE_MARKED_KNOWN, movesWith, shifted, toggle } from './selection';
 import { closeWish, keepWish, openWish, useWish, WishDialog } from './wish';
 import { PlanDirNote, planDirBoxes, useHiddenEmptyNotes } from './planDirs';
 import { attachTo, imageFiles } from './shots';
@@ -110,6 +111,9 @@ type Pos = { x: number; y: number };
 
 // opening a card takes FLY_MS + UNFOLD_MS (300 ms) and closing the same: fast, yet still a visible move
 const FLY_MS = 130;
+/** The room the line for what is marked takes above or below the marked cards, and its least width. */
+const MARKED_ROOM = 90;
+const MARKED_W = 270;
 const UNFOLD_MS = 170;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** What `get` returns once it returns something, within `ms`. */
@@ -157,7 +161,8 @@ function Canvas({
     setMoved((m) => {
       const keep = Object.entries(m).filter(([id, p]) => {
         const i = byId.get(id);
-        return i && (dragRef.current?.id === id || i.x !== p.x || i.y !== p.y);
+        const d = dragRef.current;
+        return i && (d?.id === id || d?.with.some((w) => w.id === id) || i.x !== p.x || i.y !== p.y);
       });
       return keep.length === Object.keys(m).length ? m : Object.fromEntries(keep);
     });
@@ -825,23 +830,52 @@ function Canvas({
 
   // ---------------------------------------------------------------- pointer: pan, drag, click
   const viewportRef = useRef<HTMLDivElement>(null);
-  const panRef = useRef<{ x: number; y: number } | null>(null);
+  // `from`: where the press began; one that went nowhere is a click on the empty canvas
+  const panRef = useRef<{ x: number; y: number; from: Pos } | null>(null);
   // a dragged card follows the world point it was picked up at, also while the view scrolls under it
   // (or the note on a plan directory, by its repository, with where it is now)
-  type Drag = { id: string; note?: string; to?: Pos; x: number; y: number; px: number; py: number; grab: Pos; start: Pos; limit: Bounds; moved: boolean; frame: number; last: number };
+  // `with`: the other marked cards, which move by as much; `shift`: a Shift + click marks the card instead of opening it
+  type Drag = { id: string; note?: string; to?: Pos; with: { id: string; start: Pos }[]; shift: boolean; x: number; y: number; px: number; py: number; grab: Pos; start: Pos; limit: Bounds; moved: boolean; frame: number; last: number };
   const dragRef = useRef<Drag | null>(null);
   const [panning, setPanning] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
+  const [dragWith, setDragWith] = useState<string[]>([]);
   // the card the pointer is on, for the waits around it
   const [hoverId, setHoverId] = useState<string | null>(null);
-  // Shift + drag on the canvas draws a lasso; the colour ring then puts what it caught into a group
+  // Shift + drag on the canvas draws a lasso, Shift + click on a card takes it in or out: what is marked
+  // moves together and goes into a group at once through the colour ring
   const lassoRef = useRef<Pos[] | null>(null);
   const [lasso, setLasso] = useState<Pos[]>([]);
+  const [selection, setSelection] = useState<string[]>([]);
+  const marked = selection.filter((id) => placed.some((p) => p.item.id === id));
+  // how to mark shows after a card was moved alone, until the owner has marked cards; how to move them beside them, until they have
+  const [markKnown, setMarkKnown] = useState(() => known(MARK_KNOWN));
+  const [moveKnown, setMoveKnown] = useState(() => known(MOVE_MARKED_KNOWN));
+  const [markHint, setMarkHint] = useState<{ at: Pos; key: number } | null>(null);
+  useEffect(() => {
+    if (!marked.length || markKnown) return;
+    know(MARK_KNOWN);
+    setMarkKnown(true);
+    setMarkHint(null);
+  }, [marked.length]);
+  useEffect(() => {
+    if (!markHint) return;
+    const h = setTimeout(() => setMarkHint(null), 7000);
+    return () => clearTimeout(h);
+  }, [markHint]);
   const [ring, setRing] = useState<{ at: Pos; ids: string[] } | null>(null);
+  const markedBox = unionBounds(placed.filter((p) => marked.includes(p.item.id)).map((p) => p.b));
+  /** Where the line for what is marked stands: over its top right corner, below it where the bar leaves no room, always in view. */
+  const markedAt = (b: Bounds) => {
+    const c = cam;
+    const top = c.y + b.y * c.s;
+    const below = top < TOP + MARKED_ROOM;
+    const y = below ? c.y + (b.y + b.h) * c.s : top;
+    return { at: { x: Math.min(innerWidth - sideNow() - 12, Math.max(MARKED_W, c.x + (b.x + b.w) * c.s)), y: Math.min(innerHeight - MARKED_ROOM, Math.max(TOP + MARKED_ROOM, y)) }, below };
+  };
   async function assignGroup(to: { group: string | null } | { name: string }) {
     const r = ring!;
     setRing(null);
-    setLasso([]);
     // the territory grows from the pointer, or from the one card it is for
     const one = r.ids.length === 1 ? placed.find((p) => p.item.id === r.ids[0])?.b : undefined;
     growFrom(r.ids, one ? centre(one) : toWorld(camRef.current, r.at.x, r.at.y));
@@ -855,7 +889,6 @@ function Canvas({
   /** The × on a group's name in the colour ring: its cards belong to none, with a moment to undo. */
   async function deleteGroup(g: Group) {
     setRing(null);
-    setLasso([]);
     try {
       const gone = await api.deleteGroup(g.id);
       showAck(t.groups.removed(g.name), () => api.createGroup(gone.group.name, gone.cards, gone.group.hue));
@@ -863,7 +896,7 @@ function Canvas({
       fail(e);
     }
   }
-  /** A right click on a card opens the colour ring for it; a workstream's is its project's. */
+  /** A right click on a card opens the colour ring for it (a workstream's is its project's), on a marked one for all marked. */
   function onContextMenu(e: React.MouseEvent) {
     if (focusRef.current) return;
     const el = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('.item');
@@ -871,7 +904,7 @@ function Canvas({
     if (i?.parent) i = byId(i.parent);
     if (!i) return;
     e.preventDefault();
-    setRing({ at: { x: e.clientX, y: e.clientY }, ids: [i.id] });
+    setRing({ at: { x: e.clientX, y: e.clientY }, ids: marked.includes(i.id) ? marked : [i.id] });
   }
   // the sheet docked on the right; the canvas, its edge indicators, the bar and the microphone keep to its left
   const side = sideNow();
@@ -940,23 +973,31 @@ function Canvas({
       const b = notes[planDirs!.findIndex((d) => d.repo === repo)]!;
       const content = unionBounds(placed.map((p) => p.b)) ?? b;
       const grab = toWorld(camRef.current, e.clientX, e.clientY);
-      dragRef.current = { id: `note:${repo}`, note: repo, x: e.clientX, y: e.clientY, px: e.clientX, py: e.clientY, grab, start, limit: dragLimit(content, b), moved: false, frame: 0, last: 0 };
+      dragRef.current = { id: `note:${repo}`, note: repo, with: [], shift: false, x: e.clientX, y: e.clientY, px: e.clientX, py: e.clientY, grab, start, limit: dragLimit(content, b), moved: false, frame: 0, last: 0 };
     } else if (el && (!el.classList.contains('project') || (e.target as Element).closest('.head'))) {
       const i = byId(el.dataset.id!);
       if (!i) return;
-      // the view scrolls as far as the rest of the canvas reaches, plus room to drop the card beside it
-      const rest = itemsRef.current.filter((x) => x.id !== i.id);
-      const b = bounds(i);
+      // a marked card takes the other marked ones along
+      const along = movesWith(marked, i.id).flatMap((id) => {
+        const x = byId(id);
+        return x ? [{ id, start: { x: x.x, y: x.y } }] : [];
+      });
+      const moving = new Set([i.id, ...along.map((a) => a.id)]);
+      // the view scrolls as far as the rest of the canvas reaches, plus room to drop the cards beside it
+      const rest = itemsRef.current.filter((x) => !moving.has(x.id));
+      const b = unionBounds([...moving].map((id) => bounds(byId(id)!)))!;
       const content = unionBounds(rest.map((x) => boundsOf(x, rest))) ?? b;
       const grab = toWorld(camRef.current, e.clientX, e.clientY);
-      dragRef.current = { id: i.id, x: e.clientX, y: e.clientY, px: e.clientX, py: e.clientY, grab, start: { x: i.x, y: i.y }, limit: dragLimit(content, b), moved: false, frame: 0, last: 0 };
+      // Shift + press would otherwise extend the page's text selection up to the pointer
+      if (e.shiftKey) e.preventDefault();
+      dragRef.current = { id: i.id, with: along, shift: e.shiftKey, x: e.clientX, y: e.clientY, px: e.clientX, py: e.clientY, grab, start: { x: i.x, y: i.y }, limit: dragLimit(content, b), moved: false, frame: 0, last: 0 };
     } else if (e.shiftKey) {
       // Shift + press would otherwise extend the page's text selection up to the pointer
       e.preventDefault();
       lassoRef.current = [{ x: e.clientX, y: e.clientY }];
       setLasso(lassoRef.current);
     } else {
-      panRef.current = { x: e.clientX, y: e.clientY };
+      panRef.current = { x: e.clientX, y: e.clientY, from: { x: e.clientX, y: e.clientY } };
       setPanning(true);
     }
     viewportRef.current!.setPointerCapture(e.pointerId);
@@ -972,7 +1013,8 @@ function Canvas({
     }
     // workstreams stay inside their project
     if (byId(d.id)?.parent) p = { x: Math.max(PROJECT_PAD, p.x), y: Math.max(PROJECT_HEAD, p.y) };
-    setMoved((m) => ({ ...m, [d.id]: p }));
+    const by = { x: p.x - d.start.x, y: p.y - d.start.y };
+    setMoved((m) => ({ ...m, [d.id]: p, ...shifted(d.with, by) }));
   }
 
   /** While a card is dragged, scrolls the view when the pointer is near an edge. */
@@ -1004,6 +1046,7 @@ function Canvas({
       if (!d.moved && Math.hypot(d.px - d.x, d.py - d.y) < 5) return;
       if (!d.moved) {
         setDragId(d.id);
+        setDragWith(d.with.map((w) => w.id));
         d.moved = true;
         d.frame = requestAnimationFrame(edgeTick);
       }
@@ -1023,13 +1066,18 @@ function Canvas({
     const l = lassoRef.current;
     if (l) {
       lassoRef.current = null;
+      setLasso([]);
       const c = camRef.current;
+      // a Shift + click on a project beside its workstreams marks the project
+      if (l.every((p) => Math.hypot(p.x - l[0]!.x, p.y - l[0]!.y) < 5)) {
+        const el = document.elementFromPoint(l[0]!.x, l[0]!.y)?.closest<HTMLElement>('.item');
+        const i = el && byId(el.dataset.id!);
+        if (i) setSelection((sel) => toggle(sel, markable(i)));
+        return;
+      }
       // what the lasso caught: each card whose middle lies inside, a workstream as its project
-      const ids = [
-        ...new Set(placed.filter(({ b }) => inside({ x: c.x + (b.x + b.w / 2) * c.s, y: c.y + (b.y + b.h / 2) * c.s }, l)).map(({ item }) => item.parent ?? item.id)),
-      ];
-      if (ids.length) setRing({ at: { x: e.clientX, y: e.clientY }, ids });
-      else setLasso([]);
+      const ids = [...new Set(placed.filter(({ b }) => inside({ x: c.x + (b.x + b.w / 2) * c.s, y: c.y + (b.y + b.h / 2) * c.s }, l)).map(({ item }) => markable(item)))];
+      setSelection((sel) => addAll(sel, ids));
       return;
     }
     const d = dragRef.current;
@@ -1037,6 +1085,7 @@ function Canvas({
       cancelAnimationFrame(d.frame);
       dragRef.current = null;
       setDragId(null);
+      setDragWith([]);
       const repo = d.note;
       if (repo) {
         if (d.moved && d.to)
@@ -1048,16 +1097,26 @@ function Canvas({
       }
       const i = byId(d.id);
       if (!i) return;
-      if (d.moved)
-        api.patch(i.id, { x: i.x, y: i.y }).catch((err) => {
-          console.error(err);
-          setMoved(({ [i.id]: _, ...rest }) => rest);
-        });
+      if (d.moved) {
+        for (const x of [i, ...d.with.flatMap((w) => byId(w.id) ?? [])])
+          api.patch(x.id, { x: x.x, y: x.y }).catch((err) => {
+            console.error(err);
+            setMoved(({ [x.id]: _, ...rest }) => rest);
+          });
+        if (d.with.length && !moveKnown) {
+          know(MOVE_MARKED_KNOWN);
+          setMoveKnown(true);
+        }
+        if (!d.with.length && !markKnown) setMarkHint({ at: { x: e.clientX, y: e.clientY }, key: Date.now() });
+      } else if (d.shift) setSelection((sel) => toggle(sel, markable(i)));
       else open(i);
       return;
     }
+    const p = panRef.current;
     panRef.current = null;
     setPanning(false);
+    // a click on the empty canvas lets go of what is marked
+    if (p && Math.hypot(e.clientX - p.from.x, e.clientY - p.from.y) < 5) setSelection([]);
   }
 
   function onDoubleClick(e: React.MouseEvent) {
@@ -1183,6 +1242,8 @@ function Canvas({
       if (quoting) return setReply(quoting, null);
       // the archive's list closes after a card unfolded from it
       if (f?.type !== 'card' && aOnRef.current) return setAOn(false);
+      // what is marked lets go before a sheet closes, once the colour ring for it has closed
+      if (f?.type !== 'card' && !typing && !ring && marked.length) return setSelection([]);
       if (typing) (e.target as HTMLElement).blur();
       if (f?.type === 'card') closeCard();
       else if (kOnRef.current) setKOn(false);
@@ -1264,7 +1325,7 @@ function Canvas({
           onContextMenu={onContextMenu}
         >
           <div id="world" style={{ transform: `translate(${cam.x}px,${cam.y}px) scale(${cam.s})` }}>
-            <TerritoryLayer {...territories} selected={ring ? placed.filter((p) => ring.ids.includes(p.item.id)).map((p) => p.b) : []} />
+            <TerritoryLayer {...territories} selected={placed.filter((p) => (ring ? ring.ids : marked).includes(p.item.id)).map((p) => p.b)} />
             <Links placed={placed} />
             {deps && <DepLinks placed={placed} edges={deps.edges} />}
             {placed.map(({ item, b }) =>
@@ -1276,7 +1337,7 @@ function Canvas({
                   item={item}
                   b={b}
                   lifted={item.id === openId}
-                  dragging={item.id === dragId}
+                  dragging={item.id === dragId || dragWith.includes(item.id)}
                   pop={item.id === popId}
                   prototyped={prototyped.has(item.id)}
                   showRepo={snapshot.canvas.repos.length > 1}
@@ -1321,6 +1382,15 @@ function Canvas({
           </div>
         )}
         {!ring && <Lasso pts={lasso} />}
+        {markedBox && !ring && !dragId && !lasso.length && focus?.type !== 'card' && (
+          <Marked
+            {...markedAt(markedBox)}
+            count={marked.length}
+            hint={!moveKnown && marked.length > 1}
+            onGroup={(at) => setRing({ at, ids: marked })}
+          />
+        )}
+        {markHint && <MarkHint key={markHint.key} at={markHint.at} />}
         {ring && (
           <Ring
             at={ring.at}
@@ -1330,7 +1400,7 @@ function Canvas({
             onPick={(group) => assignGroup({ group })}
             onCreate={(name) => assignGroup({ name })}
             onDelete={deleteGroup}
-            onClose={() => (setRing(null), setLasso([]))}
+            onClose={() => setRing(null)}
           />
         )}
         {(!focus || focus.type === 'project') && <Edges cam={cam} targets={edgeTargets} rightReserve={side} onOpen={open} />}
