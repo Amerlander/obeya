@@ -48,13 +48,13 @@ export interface ShownFile {
 /**
  * The files of a card's change that get a tab, in order: those its worker named as the result, then
  * the others it made or changed that can be shown, documents before text and code. A deleted file or a directory gets none, nor does
- * one that is no document and no text (a `__pycache__/*.pyc`): it stays in the change list.
+ * one that is no document and no text (a `__pycache__/*.pyc`), or one gone from the folder since: it stays in the change list.
  */
 export function shownFiles(diff: CardDiff | null, named: CardFile[] = []): ShownFile[] {
   const changed: ShownFile[] = [];
   if (diff?.folder) {
     for (const c of diff.folder.changes) {
-      if (c.kind === 'deleted' || c.dir) continue;
+      if (c.kind === 'deleted' || c.dir || c.gone) continue;
       const lines = c.added !== undefined && c.added + c.removed! > 0;
       const added = c.kind === 'added' || (c.kind === 'moved' && !c.changed);
       changed.push({ path: c.path, kind: fileKind(c.path, c.added !== undefined || TEXT.test(c.path)), added, diff: lines && !added });

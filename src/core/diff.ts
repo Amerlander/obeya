@@ -47,6 +47,8 @@ export interface FolderChange {
   dir?: true;
   /** A moved file the card also changed. */
   changed?: true;
+  /** A file the card made or changed that is no longer where it left it: someone deleted or moved it since. */
+  gone?: true;
   /** Lines added and removed, for a text file whose earlier version Obeya kept. */
   added?: number;
   removed?: number;

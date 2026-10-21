@@ -1315,8 +1315,9 @@ first, then the files its worker named as the result at its handover (`ready_for
 each with its path and a one-line caption, marked ★, the caption on hover), then the other files it
 made or changed that can be shown, documents before text and code (`shownFiles` in
 `src/core/files.ts`). Six get a tab beside the named ones; the rest are under „N weitere ▾“. A
-deleted file, a directory and a file that is neither a document nor text (a `__pycache__/*.pyc`)
-get none and stay in the change list. Each file shows by its kind:
+deleted file, a directory, a file that is neither a document nor text (a `__pycache__/*.pyc`) and,
+in a folder, one that is no longer where the card left it (deleted or moved since, `gone`) get none
+and stay in the change list. Each file shows by its kind:
 
 - Markdown formatted (`Doc`), with the images it shows from beside it (`![…](bild.png)`)
 - a PDF in the browser's own viewer
@@ -1337,9 +1338,14 @@ tab so far, so the card does not shrink and move under the tabs; a PDF's viewer 
 column shows, so that scrolled to it, its own scrollbar is the only one. A video demo left under
 another tab stops playing.
 
-A card whose worker named files, or a folder's card handed over without a demo that changed
-something there, has a result for the left column even without a demo (`Item.files`, an empty list
-for the latter), so it is laid out as a split.
+A card whose worker named files, or a folder's card handed over without a demo whose change has
+files to show, has a result for the left column even without a demo (`Item.files`, an empty list
+for the latter), so it is laid out as a split. The server decides that at the handover, as it reads
+the change then, so the card is laid out at once and not only once the page has read its change
+(a folder card whose change shows nothing, only deleted files say, stays its conversation alone,
+with the change list above it). Folder cards handed over before Obeya kept this (on the canvas or
+archived, waiting, done) get their list at Obeya's start, while files of their change are still
+there to show (`listFiles`). A git card has no such case: its handovers bring a demo.
 
 Obeya serves a file of the card's work (`GET …/cards/:id/files/<path>`, `Workers.file`) only when
 it is one the card made or changed (`changedFiles`: its change list in a folder; on a branch git's
@@ -2160,7 +2166,7 @@ its result, Markdown formatted, a PDF as a PDF (see The files beside the demo); 
 those that are the result for the owner when it hands over. A click on a file's name in the list
 beside the handover opens its tab there, a click on its lines (+N −M) its diff alone, with „Ganzes
 Diff ansehen“ beside it for the rest, as the lines in the line under the title open the whole diff.
-Where the card shows no files beside its conversation (before a handover with a demo or files), the name opens the diff too,
+Where the card shows no files beside its conversation (before its first handover, or with nothing of its change to show), the name opens the diff too,
 as it does in the list over the page.
 
 **Undo.** „Änderungen verwerfen“ on a card waiting for approval puts back what it changed, after

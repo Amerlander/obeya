@@ -9,7 +9,7 @@ import { LANGUAGE_NAMES, LANGUAGES, ownersLanguage, repositoryLanguage } from '.
 import { MESSAGES, type Messages, type Pause } from '../core/messages';
 import { realpathSync } from 'node:fs';
 import { basename, isAbsolute } from 'node:path';
-import { type CardFile, docImages, fileKind, isImage, normalPath } from '../core/files';
+import { type CardFile, docImages, fileKind, isImage, normalPath, shownFiles } from '../core/files';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
 import { answering, askable, type Awaited, AWAITED_STATES, awaited, type BackgroundTask, pausable, type CardLanding, type DemoKind, type DemoPage, finished, formatQuestion, handedOver, type Item, type TaskAuthor, taskAuthor, type Mock, ownWords, pickedAnswer, type Question, type RepoSettings, type RestartReason, type Snooze, type Spot, type Superseded, type SpotInput, started } from '../core/types';
 import { BadRequest, type Board, replyNote, type Retracted, type StoredDemo, titleKey } from './board';
@@ -1546,6 +1546,29 @@ export class Workers {
     }
     // what stood taken for good before the restart is freed now, not only at the next change
     this.settleLeases();
+    void this.listFiles();
+  }
+
+  /**
+   * A folder's cards handed over without a demo before Obeya kept which of them have files to show
+   * (`files` empty), on the canvas or archived: those whose change still has some get the list.
+   */
+  private async listFiles() {
+    if (!this.folder) return;
+    const cards = [...this.o.board.snapshot().items, ...this.o.board.archived()].filter(
+      (i) => i.kind === 'task' && (!this.o.repo || i.repo === this.o.repo) && !i.files && !i.demo && i.state !== 'working',
+    );
+    for (const i of cards) {
+      if (!this.o.board.events(i.id).some((e) => e.kind === 'review')) continue;
+      if (!(await this.showsFiles(i.id))) continue;
+      const row = this.o.board.row(i.id);
+      if (!row.files && !row.demo) this.o.board.work(i.id, { files: '[]' });
+    }
+  }
+
+  /** Whether the card's change has files its left column shows (`shownFiles`), beside the ones its worker named. */
+  private async showsFiles(cardId: string): Promise<boolean> {
+    return shownFiles(await this.diff(cardId, false).catch(() => null)).length > 0;
   }
 
   /** Settles the leases once the change that called is through, not in the middle of it. */
@@ -2614,7 +2637,7 @@ export class Workers {
         run: ({ summary, demo, files }) => {
           type Demo = { kind?: DemoKind; dir: string; chapters?: string[]; question?: string; page?: DemoPage; follows?: 'replaces' | 'supplements' };
           const given = demo as Demo | undefined;
-          const handOverWork = (d: Demo | undefined, named?: CardFile[]): string => {
+          const handOverWork = (d: Demo | undefined, named: CardFile[] | undefined, shows: boolean): string => {
             const s = clip(String(summary), 6000);
             const row = this.o.board.row(cardId);
             if (row.landed) return 'Not handed over: your work is on main already.';
@@ -2665,12 +2688,12 @@ export class Workers {
               detail: JSON.stringify({ summary: report, ...(this.o.workspaces.hasWork(cardId) ? (own ? { lands: own } : {}) : { noChange: true }), ...(answered && !approved ? { answered: true } : {}) }),
               ...(demoJson ? { demo: demoJson } : {}),
               ...(demos ? { demos } : {}),
-              // the files named stand until a later handover names others; a folder's card handed over without a demo shows what it changed
-              // (an empty list named clears them)
+              // the files named stand until a later handover names others (an empty list named clears them); a folder's card handed
+              // over without a demo shows what it changed, while there are files of it to show
               ...(named?.length
                 ? { files: JSON.stringify(named) }
-                : (named || !row.files) && this.folder && !d && !kept && this.o.workspaces.hasWork(cardId)
-                  ? { files: '[]' }
+                : this.folder && !d && !kept && (named || !row.files || row.files === '[]')
+                  ? { files: shows ? '[]' : null }
                   : named
                     ? { files: null }
                     : {}),
@@ -2686,9 +2709,11 @@ export class Workers {
               return this.demoHere(cardId, given.dir).then((here) =>
                 'wrong' in here
                   ? `Not handed over: the demo could not be copied to the owner's machine (${here.wrong}). Check the directory, then call ready_for_review again.`
-                  : handOverWork({ ...given, dir: here.dir }, named),
+                  : handOverWork({ ...given, dir: here.dir }, named, false),
               );
-            return handOverWork(given, named);
+            // in a folder, what the change has to show decides whether a handover without a demo shows it beside the conversation
+            if (this.folder && !given) return this.showsFiles(cardId).then((shows) => handOverWork(given, named, shows));
+            return handOverWork(given, named, false);
           };
           // the files named as the result, checked against what the card changed before anything is handed over
           if (files !== undefined)

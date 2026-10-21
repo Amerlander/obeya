@@ -141,6 +141,63 @@ describe('a canvas over a folder without git', () => {
     expect(await file('../Documents/Estate/Inventory.md')).toBeNull();
   });
 
+  test('a handover whose change has nothing to show leaves the conversation alone; a file gone since gets no tab', async () => {
+    const tidy = canvas.board.create({ title: 'Tidy up', x: 0, y: 0 });
+    const workers = canvas.repoOf(tidy.id).workers;
+    workers.start(tidy.id);
+    const a = runtime.last;
+    await a.use('Bash', { command: 'rm .obeya-note.txt' }, () => rmSync(join(docs, '.obeya-note.txt')));
+    expect(await a.call('ready_for_review', { summary: 'Tidied.' })).toContain('Recorded');
+    expect(item(tidy.id).files).toBeUndefined();
+
+    workers.message(tidy.id, 'Write it down.');
+    await a.use('Write', { file_path: join(docs, 'Tidied.md') }, () => writeFileSync(join(docs, 'Tidied.md'), '# Tidied\n'));
+    expect(await a.call('ready_for_review', { summary: 'Written.' })).toContain('Recorded');
+    expect(item(tidy.id).files).toEqual([]);
+    // the owner deletes it before handing over again: nothing of the change is left to show
+    rmSync(join(docs, 'Tidied.md'));
+    expect((await canvas.diff(tidy.id, false))!.folder!.changes.find((c) => c.path === 'Tidied.md')).toMatchObject({ kind: 'added', gone: true });
+    workers.message(tidy.id, 'Again.');
+    expect(await a.call('ready_for_review', { summary: 'Again.' })).toContain('Recorded');
+    expect(item(tidy.id).files).toBeUndefined();
+  });
+
+  test('cards handed over without a demo before Obeya kept their list get it at the start, archived ones too, while their files are there', async () => {
+    const handed = async (title: string, file: string) => {
+      const card = canvas.board.create({ title, x: 0, y: 0 });
+      canvas.repoOf(card.id).workers.start(card.id);
+      const a = runtime.last;
+      await a.use('Write', { file_path: join(docs, file) }, () => writeFileSync(join(docs, file), `# ${title}\n`));
+      expect(await a.call('ready_for_review', { summary: 'Done.' })).toContain('Recorded');
+      // as an Obeya before kept it
+      canvas.board.work(card.id, { files: null });
+      return { id: card.id, a };
+    };
+    const finish = async (card: { id: string }) => {
+      await canvas.act(card.id, { action: 'approve' });
+      return card.id;
+    };
+    const waiting = (await handed('Waiting', 'Waiting.md')).id;
+    const done = await finish(await handed('Done', 'Done.md'));
+    const archived = await finish(await handed('Archived', 'Archived.md'));
+    canvas.board.work(archived, { archived_at: new Date().toISOString() });
+    const gone = (await handed('Gone', 'Gone.md')).id;
+    rmSync(join(docs, 'Gone.md'));
+    // a card at work that never handed over waits for its handover
+    const working = canvas.board.create({ title: 'Working', x: 0, y: 0 });
+    canvas.repoOf(working).workers.start(working.id);
+    await runtime.last.use('Write', { file_path: join(docs, 'Working.md') }, () => writeFileSync(join(docs, 'Working.md'), '# Working\n'));
+
+    canvas.repoOf(waiting).workers.resumeAll();
+    const files = (id: string) => canvas.board.card(id)!.files;
+    for (let n = 0; n < 100 && !files(archived); n++) await new Promise((r) => setTimeout(r, 10));
+    expect(files(waiting)).toEqual([]);
+    expect(files(done)).toEqual([]);
+    expect(files(archived)).toEqual([]);
+    expect(files(gone)).toBeUndefined();
+    expect(files(working.id)).toBeUndefined();
+  });
+
   test('has no prototypes', () => {
     const idea = canvas.board.create({ idea: true, title: 'Ordnung', x: 0, y: 0 });
     expect(() => canvas.act(idea.id, { action: 'prototype', text: 'so' })).toThrow('no prototypes');
