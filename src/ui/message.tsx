@@ -69,9 +69,13 @@ export function Msg({
 /** Under the owner's words while the Koordinator reads them, in the sheet and on a card alike. */
 export const Reading = () => <Msg by="koordinator" className="thinking" who={`${t.author.koordinator} ${t.talk.reading}`} />;
 
-/** Scrolls the conversation to a message (`ev` in `Msg`), which lights up once, so the eye finds it. */
-export function goToMessage(ev: number | string) {
-  const el = document.querySelector<HTMLElement>(`.talk [data-ev="${ev}"]`);
+/**
+ * Scrolls the conversation to a message (`ev` in `Msg`), which lights up once, so the eye finds it;
+ * one that does not stand there as a message goes to `orElse` instead (a question asked again that
+ * waits at the end, among the questions for the owner).
+ */
+export function goToMessage(ev: number | string, orElse?: string) {
+  const el = document.querySelector<HTMLElement>(`.talk [data-ev="${ev}"]`) ?? (orElse ? document.querySelector<HTMLElement>(`.talk ${orElse}`) : null);
   if (!el) return;
   el.scrollIntoView({ block: 'center', behavior: 'smooth' });
   el.classList.remove('flash');

@@ -1304,7 +1304,7 @@ function Message({
         </ul>
       )}
       {turn.end === 'again' ? (
-        <button className="hint q-end" title={t.talk.toQuoted} onMouseDown={(m) => m.preventDefault()} onClick={() => goToMessage(turn.next!)}>
+        <button className="hint q-end" title={t.talk.toQuoted} onMouseDown={(m) => m.preventDefault()} onClick={() => goToMessage(turn.next!, '.question.ask')}>
           {t.talk.again} ↓
         </button>
       ) : (
