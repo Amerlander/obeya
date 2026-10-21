@@ -876,6 +876,8 @@ describe('a prototype', () => {
   };
   const workers = () => runtime.sessions.filter((s) => s.spec.tools.some((t) => t.name === 'ready_for_review'));
   const worker = () => workers()[0]!;
+  /** The worker of a card: workers start once git has prepared their workspaces, in no set order. */
+  const workerOf = (cardId: string) => workers().find((w) => w.spec.cwd === board().row(cardId).workspace)!;
   const prototypes = (ideaId: string) =>
     board()
       .snapshot()
@@ -962,11 +964,11 @@ describe('a prototype', () => {
     // side by side below the idea, not on top of each other
     expect(new Set(all.map((p) => p.y)).size).toBe(1);
     expect(all[1]!.x - all[0]!.x).toBeGreaterThan(200);
-    handOver(workers()[0]!, 'Wortmarke.', 'a');
+    handOver(workerOf(all[0]!.id), 'Wortmarke.', 'a');
     // the reply to one result, the others still built, leaves the owner waiting for them
     turn(explorer(), 'Die Wortmarke trägt.');
     expect(item(i.id).idea).toMatchObject({ yourTurn: false, thinking: false });
-    handOver(workers()[1]!, 'Bildmarke.', 'b');
+    handOver(workerOf(all[1]!.id), 'Bildmarke.', 'b');
     expect(item(i.id).prototypes!.map((p) => [p.title, !!p.demo])).toEqual([
       ['Prototyp: Logo für Obeya – Wortmarke', true],
       ['Prototyp: Logo für Obeya – Bildmarke', true],
@@ -1014,7 +1016,7 @@ describe('a prototype', () => {
     ]);
     // each builds its own variant only
     expect(prototypes(i.id)[0]!.body).toBe('Gebiete als Metaballs.\n\nNur diese Variante: B Territorien, C Konturen bauen eigene Prototypen.');
-    expect(workers().find((w) => w.spec.cwd === board().row(prototypes(i.id)[1]!.id).workspace)!.inbox[0]).toContain('Gebiete als Hüllen.');
+    expect(workerOf(prototypes(i.id)[1]!.id).inbox[0]).toContain('Gebiete als Hüllen.');
     expect(board().events(i.id).at(-1)!.text).toBe('Prototypen gestartet: „Prototyp: Leinwand ordnen – A Plasma-Felder“, „Prototyp: Leinwand ordnen – C Konturen“.');
     // without a choice (a spoken command): the planned ones that have none yet
     canvas.act(i.id, { action: 'prototype' });
@@ -1038,7 +1040,7 @@ describe('a prototype', () => {
     canvas.act(i.id, { action: 'prototype', text: 'Menü' });
     await settle();
     const [chosen, other] = prototypes(i.id);
-    const [w, wOther] = workers();
+    const [w, wOther] = [workerOf(chosen!.id), workerOf(other!.id)];
     commit(chosen!.id, 'knopf.txt');
     commit(other!.id, 'menu.txt');
     // the chosen one's worker asked the owner something on its card
@@ -1145,7 +1147,7 @@ describe('a prototype', () => {
     canvas.act(i.id, { action: 'prototype', text: 'Manifest' });
     await settle();
     const [film, manifest] = prototypes(i.id);
-    const [w] = workers();
+    const w = workerOf(film!.id);
     commit(film!.id, 'film.html');
     handOver(w!, 'Ruhige Seite mit großem Video oben.');
     explorer().emit({ type: 'idle' });
