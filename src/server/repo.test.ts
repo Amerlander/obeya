@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmdirSync, rmSync, unlinkSync, watch, writeFile
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { generic } from '../adapters/generic';
-import { ghHosts, oldLinuxBun, onGitHub, outsidePlanDir, readPlanDocs, remoteHost, watchPlanDocs } from './repo';
+import { ghHosts, oldLinuxBun, onGitHub, outsidePlanDir, readPlanDocs, remoteHost, sameRemote, watchPlanDocs } from './repo';
 
 const DOC = '# P\n\n## Workstreams\n\n- [ ] **W1:** One.\n';
 
@@ -243,6 +243,16 @@ describe('a remote on GitHub', () => {
     expect(onGitHub('https://gitlab.com/acme/shop.git', () => [])).toBe(false);
     expect(onGitHub('https://git.acme.com/acme/shop.git', () => ['git.acme.com'])).toBe(true);
     expect(onGitHub('/srv/git/shop', () => ['github.com'])).toBe(false);
+  });
+
+  test('is the same repository over https and ssh, in every form git takes', () => {
+    const forms = ['https://github.com/acme/shop.git', 'https://github.com/Acme/shop/', 'ssh://git@GitHub.com:22/acme/shop.git', 'git@github.com:acme/shop.git', 'github.com:acme/shop'];
+    for (const a of forms) for (const b of forms) expect(sameRemote(a, b)).toBe(true);
+    expect(sameRemote('git@github.com:acme/shop.git', 'https://github.com/acme/shop-api.git')).toBe(false);
+    expect(sameRemote('git@github.com:acme/shop.git', 'https://gitlab.com/acme/shop.git')).toBe(false);
+    expect(sameRemote('git@github.com:acme/shop.git', 'https://github.com/other/shop.git')).toBe(false);
+    expect(sameRemote('/srv/git/shop', '/srv/git/shop.git/')).toBe(true);
+    expect(sameRemote('/srv/git/shop', 'git@github.com:srv/git/shop')).toBe(false);
   });
 
   test("on another host counts where the GitHub CLI is logged into it, by its hosts.yml where gh keeps it", () => {

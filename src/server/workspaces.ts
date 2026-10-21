@@ -16,6 +16,7 @@ import { HostError, hostName, onHost, remote, sh as shWord, type SshHost, TOKEN_
 import { messageOf } from '../core/text';
 import { oneAtATime } from '../core/one-at-a-time';
 import { demoFile } from './demo-page';
+import { sameRemote } from './repo';
 import { spawnOutput } from './spawn';
 
 export class WorkspaceError extends Error {
@@ -314,16 +315,15 @@ export class Workspaces implements CardWorkspaces {
     return this.o.dir;
   }
 
-  /** Registers a clone; with `origins`, only when its `origin` is one of them. */
+  /** Registers a clone; with `origins`, only when its `origin` is one of them (or it is the repository itself). */
   register(path: string, origins?: string[]) {
     git(path, 'rev-parse', '--git-dir');
-    if (origins?.length) {
+    if (origins?.length && resolve(path) !== resolve(this.o.repoPath)) {
       let origin = '';
       try {
         origin = git(path, 'remote', 'get-url', 'origin');
       } catch {}
-      const norm = (u: string) => u.replace(/\.git$/, '').replace(/\/+$/, '').toLowerCase();
-      if (!origins.some((o) => norm(o) === norm(origin))) throw new WorkspaceError(`${path} is not a clone of ${origins.join(' or ')} (its origin is ${origin || 'unset'})`);
+      if (!origins.some((o) => sameRemote(o, origin))) throw new WorkspaceError(`${path} is not a clone of ${origins.join(' or ')} (its origin is ${origin || 'unset'})`);
     }
     this.store.addWorkspace(this.canvasId, path, this.o.repo ?? null);
   }

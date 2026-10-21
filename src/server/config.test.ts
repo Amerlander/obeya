@@ -114,6 +114,26 @@ describe("Obeya's configuration", async () => {
     expect((await c.check({})).problems.map((p) => p.code)).toEqual(['invalid']);
   });
 
+  test('a listed clone is one of the repository, whether its origin is over https or ssh', async () => {
+    const c = config('file', []);
+    git(web, 'remote', 'add', 'origin', 'https://github.com/acme/web.git');
+    const clone = (name: string, origin: string) => {
+      const path = join(dir, name);
+      git(dir, 'clone', '--quiet', web, path);
+      git(path, 'remote', 'set-url', 'origin', origin);
+      return path;
+    };
+    const ssh = clone('web-ssh', 'git@github.com:acme/web.git');
+    const https = clone('web-https', 'https://github.com/acme/web');
+    const local = join(dir, 'web-local');
+    git(dir, 'clone', '--quiet', web, local);
+    const other = clone('api-clone', 'git@github.com:acme/api.git');
+    const check = async (workspaces: string[]) => (await c.check([{ repos: [{ path: web, workspaces }] }])).problems;
+    expect(await check([web, ssh, https, local])).toEqual([]);
+    expect(await check([ssh, other])).toMatchObject([{ code: 'otherClone', canvas: 0, repo: 0, detail: expect.stringContaining(other) }]);
+    expect((await check([other])).filter(blocksSaving)).toHaveLength(1);
+  });
+
   test("a repository whose path is still empty reads nothing, the server's working directory least of all", async () => {
     // the server runs in a repository with settings and commands of its own
     const own = gitRepo(join(dir, 'server'), { '.obeya/settings.json': JSON.stringify({ checks: ['make check'] }) });
@@ -484,6 +504,8 @@ describe("Obeya's configuration", async () => {
 
   test('a check reads each repository once, all of them at once, and never makes the server wait for git', async () => {
     const c = config('file', []);
+    const clone = join(dir, 'web-clone');
+    git(dir, 'clone', '--quiet', web, clone);
     const calls: string[] = [];
     const { spawn, spawnSync } = Bun;
     const bun = Bun as unknown as Record<'spawn' | 'spawnSync', (cmd: string[], ...rest: unknown[]) => unknown>;
@@ -491,8 +513,8 @@ describe("Obeya's configuration", async () => {
     bun.spawnSync = (cmd, ...rest) => (calls.push(`waits: ${cmd.join(' ')}`), (spawnSync as (...a: unknown[]) => unknown)(cmd, ...rest));
     let checked;
     try {
-      // web is a repository of two canvases and a workspace of its own
-      checked = await c.check([{ repos: [{ path: web, workspaces: [web, api] }] }, { name: 'Zwei', repos: [{ path: web }, { path: api, settings: { branch: 'main' } }] }]);
+      // web is a repository of two canvases and a workspace of its own, beside a clone of it
+      checked = await c.check([{ repos: [{ path: web, workspaces: [web, clone] }] }, { name: 'Zwei', repos: [{ path: web }, { path: api, settings: { branch: 'main' } }] }]);
     } finally {
       Object.assign(Bun, { spawn, spawnSync });
     }

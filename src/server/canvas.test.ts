@@ -731,8 +731,25 @@ test('a clone registered for a repository must be one of it', () => {
   git(dir, 'clone', '--quiet', api, join(dir, 'api-clone'));
   const deps = { store: new Store(':memory:'), home: dir, runtime: new FakeRuntime(), forge: noForge };
   expect(() => new CanvasRuntime({ repos: [{ path: web, workspaces: [join(dir, 'api-clone')] }] }, deps)).toThrow('is not a clone of');
-  canvas = new CanvasRuntime({ repos: [{ path: api, workspaces: [join(dir, 'api-clone')] }] }, deps);
-  expect(canvas.repos[0]!.workspaces.list()).toHaveLength(1);
+  // the repository itself counts too, though it has no origin
+  canvas = new CanvasRuntime({ repos: [{ path: api, workspaces: [api, join(dir, 'api-clone')] }] }, deps);
+  expect(canvas.repos[0]!.workspaces.list()).toHaveLength(2);
+});
+
+test('clones of the repository count as its own whether their origin is over https or ssh', () => {
+  fresh();
+  const shop = repo('shop', 'Shop');
+  git(shop, 'remote', 'add', 'origin', 'https://github.com/acme/shop.git');
+  const clones = ['https', 'ssh', 'scp'].map((name) => {
+    const path = join(dir, `shop-${name}`);
+    git(dir, 'clone', '--quiet', shop, path);
+    return path;
+  });
+  git(clones[0]!, 'remote', 'set-url', 'origin', 'https://github.com/acme/shop');
+  git(clones[1]!, 'remote', 'set-url', 'origin', 'ssh://git@github.com/acme/shop.git');
+  git(clones[2]!, 'remote', 'set-url', 'origin', 'git@github.com:acme/shop.git');
+  canvas = new CanvasRuntime({ repos: [{ path: shop, workspaces: clones, settings: { land: 'pr' } }] }, { store: new Store(':memory:'), home: dir, runtime: new FakeRuntime(), forge: noForge });
+  expect(canvas.repos[0]!.workspaces.list()).toHaveLength(3);
 });
 
 test('canvas ids read well', () => {

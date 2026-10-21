@@ -20,6 +20,21 @@ export function remoteHost(url: string): string | null {
 }
 
 /**
+ * Whether two git remote URLs name the same repository, in whichever form git takes each: https,
+ * `ssh://` and `user@host:path` of one repository are the same (user, port, `.git` and case aside);
+ * paths of this machine are compared as they are written.
+ */
+export function sameRemote(a: string, b: string): boolean {
+  const key = (url: string) => {
+    const u = url.trim();
+    const host = remoteHost(u);
+    const path = host ? u.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]*/i, '').replace(/^[^/\\:]*:/, '') : u;
+    return `${host ?? ''}|${path.replace(/\/+$/, '').replace(/\.git$/, '').replace(/^\/+/, host ? '' : '/')}`.toLowerCase();
+  };
+  return key(a) === key(b);
+}
+
+/**
  * The hosts the GitHub CLI is logged into, from its `hosts.yml` (its config directory as gh finds
  * it: `GH_CONFIG_DIR`, `XDG_CONFIG_HOME/gh`, on Windows `%AppData%\GitHub CLI`, else `~/.config/gh`).
  * Read from the file rather than asked of `gh auth status`, which checks each login over the network.

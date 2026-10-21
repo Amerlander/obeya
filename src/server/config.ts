@@ -30,6 +30,7 @@ import { BadRequest } from './board';
 import { ConfigError, readingRepo, resolveCanvas } from './canvas';
 import type { Store } from './db';
 import { freshPath } from './path';
+import { sameRemote } from './repo';
 import type { Forge } from './forge';
 import { commitShared, proposeShared, pushShared } from './shared-settings';
 import { gitCalls, gitSteps } from './workspaces';
@@ -531,10 +532,17 @@ export class Config {
     const branches = repos.flatMap((r) => (r.settings?.branch && existsSync(r.path) ? [{ path: resolve(r.path), branch: r.settings.branch }] : []));
     const [reads, clones, found] = await Promise.all([
       Promise.all([...paths].map(async (p) => [p, await gitSteps(p, readingRepo(p, folders.has(p)))] as const)).then((x) => new Map(x)),
-      Promise.all([...workspaces].map(async (w) => [w, (await gitSteps(w, gitCalls(['rev-parse', '--git-dir'])))[0] != null] as const)).then((x) => new Map(x)),
+      Promise.all(
+        [...workspaces].map(async (w) => {
+          const [dir, origin] = await gitSteps(w, gitCalls(['rev-parse', '--git-dir'], ['remote', 'get-url', 'origin']));
+          return [w, dir != null ? { origin: origin ?? null } : null] as const;
+        }),
+      ).then((x) => new Map(x)),
       Promise.all(branches.map(async (b) => [`${b.path}\0${b.branch}`, await hasBranch(b.path, b.branch)] as const)).then((x) => new Map(x)),
     ]);
-    const isRepo = (path: string) => clones.get(path) ?? !!reads.get(path);
+    const isRepo = (path: string) => !!(clones.get(path) ?? reads.get(path));
+    /** The `origin` of a workspace that is a git repository. */
+    const originOf = (path: string) => clones.get(path)?.origin ?? reads.get(path)?.info.remote ?? null;
     const read = (path: string) => reads.get(path) ?? null;
     const problems: ConfigProblem[] = [];
     if (!canvases.length) problems.push({ code: 'noCanvas', detail: 'Obeya needs at least one canvas' });
@@ -543,7 +551,16 @@ export class Config {
     const resolved = expanded.map((c, canvas): ResolvedCanvas | null => {
       c.repos.forEach((r, repo) =>
         (r.workspaces ?? []).forEach((w) => {
-          if (!isRepo(resolve(w))) problems.push({ code: 'notClone', canvas, repo, detail: `workspace ${w} is not a git repository` });
+          if (!isRepo(resolve(w))) {
+            problems.push({ code: 'notClone', canvas, repo, detail: `workspace ${w} is not a git repository` });
+            return;
+          }
+          // the repository itself, or a clone of it: its origin is the repository's, or the repository (as `Workspaces.register` has it)
+          const own = read(resolve(r.path))?.info;
+          const origins = [own?.remote, own?.path].filter((x): x is string => !!x);
+          const origin = originOf(resolve(w)) ?? '';
+          if (own && !own.folder && resolve(w) !== own.path && !origins.some((o) => sameRemote(o, origin)))
+            problems.push({ code: 'otherClone', canvas, repo, detail: `${w} is not a clone of ${origins.join(' or ')} (its origin is ${origin || 'unset'})` });
         }),
       );
       c.repos.forEach((r, repo) => {

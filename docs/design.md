@@ -5004,7 +5004,14 @@ saying they come on top of the existing ones, in Obeya's directory), the slots, 
 clones that makes on this machine („Zusammen 4 Klone auf diesem Rechner (2 vorhandene, 2 neue)“),
 and the other machines; Worktrees only the slots. Until 2026-10-21 the number came first, labelled
 „Klone anlegen“, with no sum: a colleague took it for the number of clones to work in, typed 2
-beside their 2 existing ones and got 4. Switching sets this machine's `workspaces` setting where the repository's says otherwise;
+beside their 2 existing ones and got 4. An existing clone is one of the repository when it is the
+repository itself or its `origin` is the repository's (or the repository's path): the same
+repository over https, `ssh://` or `user@host:path`, user, port, a trailing `.git` and case aside.
+One of another repository is a problem of the dialog's check („Ein Klon in der Liste ist ein Klon
+eines anderen Repositorys“) that keeps it from being saved. Until 2026-10-21 origins were compared
+as written: a colleague's clones, some with an https origin and some with ssh, counted as clones of
+another repository, and since the check did not look at origins, the configuration was saved and
+its canvas did not start. Switching sets this machine's `workspaces` setting where the repository's says otherwise;
 switching to worktrees takes the clones the entry names out of it (they would keep it in clones)
 and a switch back while the dialog is open brings them back. A repository added in the dialog that
 is in clones gets as many as the first canvas's, two, filled in once its path is checked and

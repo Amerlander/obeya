@@ -1688,6 +1688,8 @@ export type ConfigProblemCode =
   | 'homeMissing'
   /** A clone listed as a workspace that is no git repository. */
   | 'notClone'
+  /** A clone listed as a workspace whose origin is another repository's. */
+  | 'otherClone'
   /** The demo site the repository's settings name cannot be used: a field is missing, or its deploy command names a program that is not there. */
   | 'demoSite'
   /** A host that cannot work for the repository: its workers use worktrees, or its work does not go out through a remote. */
