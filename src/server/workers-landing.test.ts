@@ -496,7 +496,8 @@ describe('a workstream whose plan doc keeps it open after its work landed', () =
     expect(board.row(w.id).branch).toEndWith(`-${commit.slice(0, 7)}`);
     expect(git(board.row(w.id).workspace!, 'rev-parse', 'HEAD')).toBe(commit);
     expect(runtime.last.inbox[0]).toContain(`A part of this workstream has landed already (commit ${commit.slice(0, 7)})`);
-    expect(w1().landedPart).toBeUndefined();
+    // what landed stays on the card while the rest is done
+    expect(w1().landedPart).toEqual({ commit });
   });
 });
 

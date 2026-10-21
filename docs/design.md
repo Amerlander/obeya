@@ -4543,7 +4543,12 @@ plan docs are read again and the Lesestand has that commit while the workstream 
 only a part of it is done: the card is stored as `planned` again, with the line „Teil gelandet, im
 Plan-Doc weiter offen.“ in its log, and shows „Teil gelandet · PR #821“ (or the commit). Its log and
 handover stay; its pull request moves into `shipped`, and its branch goes, so a new run starts on a
-fresh branch from main and hears what landed. Cards that landed before the commit was kept count as
+fresh branch from main and hears what landed. Unfolded, it lays out as a card an agent worked on, not
+as one nobody has touched: what landed (the line with its pull request, the demo of its last
+handover) beside the conversation, which opens with what the doc still holds open, and „Rest
+starten“ below. Until 2026-10-21 it showed only the doc's text and „Agent starten“, with the
+handover far down, so what was done and what remained could not be told apart. „Teil gelandet“
+stays on the card while a new run does the rest, until that lands. Cards that landed before the commit was kept count as
 landed in the Lesestand. A worker still finishing after the landing keeps its card live until it is
 done. A workstream in its pull request whose box the doc on the default branch ticks off counts as
 merged, whether or not the pull request's watcher saw the merge (it may fail on that pull request

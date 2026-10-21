@@ -1988,7 +1988,8 @@ export function toItems(rows: CardRow[], docs: PlanDoc[], home: string): Item[] 
     const derived = w.done ? 'live' : w.inReview ? 'inPr' : 'planned';
     // work in progress wins over the doc: a ticked-off workstream may still wait for its merge
     const state = r.state && ACTIVE.includes(r.state) ? r.state : derived === 'live' ? 'live' : (r.state ?? derived);
-    const shipped = state === 'planned' && r.shipped ? (JSON.parse(r.shipped) as Shipped) : null;
+    // what landed of a workstream planned again, also while a new run does the rest; once that lands, the card is live
+    const shipped = (state === 'planned' || ACTIVE.includes(state)) && r.shipped ? (JSON.parse(r.shipped) as Shipped) : null;
     workstreams.push({
       order,
       item: {

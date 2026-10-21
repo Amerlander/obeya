@@ -174,6 +174,9 @@ describe('plan docs', () => {
     // reading again changes nothing more
     board.docsChanged();
     expect(board.events(w2.id)).toHaveLength(1);
+    // what landed stays on the card while a new run does the rest
+    board.work(w2.id, { state: 'working', branch: 'obeya/w2-rest' });
+    expect(board.item(w2.id)).toMatchObject({ state: 'working', landedPart: { pr: { number: 821 } } });
   });
 
   test('plan cards are read-only apart from placement and state', () => {

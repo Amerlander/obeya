@@ -445,8 +445,12 @@ export const koordinatorReads = (events: CardEvent[]) => {
 export const obeyaWorks = (talk: Exchange[]) =>
   talk.some((x) => (x.reply === undefined && !x.heldUntil) || (x.question !== undefined && x.answer === undefined && !x.movedTo && !x.limitedUntil));
 
-/** A task an agent has worked on, stopped ones included: what came of it stands beside its conversation. */
-export const worked = (i: Pick<Item, 'state' | 'branch'>) => i.state !== 'idea' && i.state !== 'proposal' && !!i.branch;
+/**
+ * A task an agent has worked on, stopped ones included: what came of it stands beside its
+ * conversation. A workstream planned again after a part of it landed has no branch until its rest
+ * starts, and still shows what landed.
+ */
+export const worked = (i: Pick<Item, 'state' | 'branch' | 'landedPart'>) => i.state !== 'idea' && i.state !== 'proposal' && (!!i.branch || !!i.landedPart);
 
 /** What decides a card's layout. */
 type Laid = Pick<Item, 'state' | 'branch' | 'prototypeEnd' | 'demo' | 'pr' | 'landedPart' | 'finishing' | 'brief' | 'prototypes' | 'queue'>;
@@ -466,7 +470,7 @@ export const result = (i: Laid) =>
 export const split = (i: Laid) => i.state === 'idea' || i.state === 'proposal' || waitsFirstStart(i) || ((!!i.prototypeEnd || worked(i)) && result(i));
 
 /** A task waiting in the queue for its first start: no agent has worked on it yet. */
-export const waitsFirstStart = (i: Pick<Item, 'state' | 'branch' | 'queue'>) => inQueue(i) && !worked(i);
+export const waitsFirstStart = (i: Pick<Item, 'state' | 'branch' | 'landedPart' | 'queue'>) => inQueue(i) && !worked(i);
 
 /** A task an agent works or worked on without a result yet: its conversation stands alone, the card only as wide as it. */
 export const talkAlone = (i: Laid) => (!!i.prototypeEnd || worked(i)) && !result(i);

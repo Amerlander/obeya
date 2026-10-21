@@ -194,6 +194,8 @@ const de = {
   landedPart: {
     short: 'Teil gelandet',
     long: 'Ein Teil ist schon gelandet, das Plan-Doc hält den Workstream aber offen. Ein neuer Lauf macht den Rest.',
+    start: 'Rest starten',
+    startHint: 'Ein neuer Agent beginnt auf frischem Branch und macht, was das Plan-Doc noch offen hält. Was gelandet ist, bleibt hier sichtbar.',
   },
   stop: 'Stoppen',
   stopHint: 'Beendet den Agenten: die Aufgabe ist wieder geplant, ein neuer Start beginnt mit einer neuen Sitzung. Committete Arbeit bleibt auf dem Branch.',
@@ -1772,6 +1774,8 @@ const en: Strings = {
   landedPart: {
     short: 'Part landed',
     long: 'A part has landed already, but the plan doc keeps the workstream open. A new run does the rest.',
+    start: 'Start the rest',
+    startHint: 'A new agent starts on a fresh branch and does what the plan doc still keeps open. What landed stays in view here.',
   },
   stop: 'Stop',
   stopHint: 'Ends the agent: the task is planned again, and starting it again begins a new session. Committed work stays on the branch.',

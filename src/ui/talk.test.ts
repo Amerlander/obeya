@@ -323,6 +323,18 @@ test('a task an agent works on shows its conversation alone until there is a res
   expect(talkAlone({ state: 'idea' })).toBe(false);
 });
 
+test('a workstream planned again after a part of it landed keeps what landed beside its conversation', () => {
+  const landedPart = { pr: { url: 'https://github.com/acme/app/pull/821', number: 821 } };
+  const demo = { kind: 'video' as const, chapters: [] };
+  // its branch went with the landing; the demo of the part that landed stays, in the queue too
+  expect(split({ state: 'planned', landedPart, demo })).toBe(true);
+  expect(split({ state: 'planned', landedPart })).toBe(true);
+  expect(split({ state: 'planned', landedPart, queue: { checking: true, since: '2026-10-16T10:00:00Z' } })).toBe(true);
+  expect(talkAlone({ state: 'planned', landedPart })).toBe(false);
+  // and while a new run does the rest
+  expect(split({ state: 'working', branch: 'obeya/x-4f2a9c1', landedPart })).toBe(true);
+});
+
 test('the conversation ends with the agent at work exactly while its agent works on something, whatever the card\'s state', () => {
   const task = { kind: 'task' } as const;
   // a worker in a turn: at work, taking in the owner's words on its handover, on its pull request, after the landing

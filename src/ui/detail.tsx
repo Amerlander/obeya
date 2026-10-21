@@ -271,15 +271,17 @@ export function Detail(p: Props) {
   const archivable = finishedArchivable(item);
   // a stopped task starts again, or goes into the archive with its conversation, from the row below it
   const halted = stopped(item) && !item.queue;
+  // a workstream planned again after a part of it landed starts its rest from the same row
+  const rest = item.state === 'planned' && !!item.landedPart && !item.branch && !item.queue;
   // an archived project's doc is gone
   const readPlan = parent && !parent.archivedAt && p.onReadPlan;
   const planSource = parent?.plan && <PlanSource file={parent.plan.file} onRead={readPlan ? () => readPlan(parent, item.label) : undefined} />;
   const where = (
     <p className="p-src">
-      {inFolder ? <FolderLine item={item} diff={changes.diff} /> : <Branch item={item} />}
+      {inFolder ? <FolderLine item={item} diff={changes.diff} /> : item.branch && <Branch item={item} />}
       {parent?.plan && (
         <>
-          {' · '}
+          {item.branch && ' · '}
           <code>{parent.plan.file}</code>{' '}
           {readPlan && (
             <button className="link" onClick={() => readPlan(parent, item.label)}>
@@ -354,6 +356,12 @@ export function Detail(p: Props) {
           <span className="p-status"> · {snoozeWho(item.snoozed)}</span>
         ) : (
           item.statusLine && (item.state === 'working' || item.state === 'inPr' || item.finishing || answering(item)) && <span className="p-status"> · {item.statusLine}</span>
+        )}
+        {item.landedPart && (
+          <span className="p-status">
+            {' · '}
+            {t.landedPart.short} · {landedRef(item.landedPart)}
+          </span>
         )}
         <Limited item={item} />
         {archivedOn(item)}
@@ -473,6 +481,17 @@ export function Detail(p: Props) {
           main={
             !talkAlone(item) && (
               <>
+                {/* what landed of a workstream the plan doc keeps open comes first: the demo below shows it */}
+                {item.landedPart && (
+                  <p className="hint">
+                    {t.landedPart.long}{' '}
+                    {item.landedPart.pr ? (
+                      <a href={item.landedPart.pr.url} target="_blank" rel="noreferrer">
+                        {t.pr.title(item.landedPart.pr.number)} ↗
+                      </a>
+                    ) : (
+                      <code>{landedRef(item.landedPart)}</code>
+                    )}
                 {/* the last handover's demo stays while the agent works on the card again; a new handover replaces it */}
                 {item.demo && (
                   <DemoView
@@ -493,16 +512,6 @@ export function Detail(p: Props) {
                 )}
                 {item.pr && (item.state === 'inPr' || item.state === 'waiting') && <PrBox pr={item.pr} />}
                 {item.state === 'inPr' && !item.pr && <p className="hint">{t.pr.opening}</p>}
-                {item.landedPart && (
-                  <p className="hint">
-                    {t.landedPart.long}{' '}
-                    {item.landedPart.pr ? (
-                      <a href={item.landedPart.pr.url} target="_blank" rel="noreferrer">
-                        {t.pr.title(item.landedPart.pr.number)} ↗
-                      </a>
-                    ) : (
-                      <code>{landedRef(item.landedPart)}</code>
-                    )}
                   </p>
                 )}
                 {item.finishing && finished(item.state) && <p className="hint">{item.followUp ? t.followingUpLong : item.state === 'done' ? t.finishingDoneLong : t.finishingLong}</p>}
@@ -533,8 +542,13 @@ export function Detail(p: Props) {
       )}
 
       {/* the decisions go below both columns, as on an idea or a proposal */}
-      {worked && (running || archivable || halted || snoozable(item)) && (
+      {worked && (running || archivable || halted || rest || snoozable(item)) && (
         <div className="actions">
+          {rest && (
+            <button className="btn primary" title={t.landedPart.startHint} onClick={() => act({ action: 'start' }, { close: false })}>
+              {t.landedPart.start}
+            </button>
+          )}
           {halted && !item.archivedAt && (
             <button className="btn primary" title={t.startAgainHint} onClick={() => act({ action: 'start' }, { close: false })}>
               {t.startAgain}
