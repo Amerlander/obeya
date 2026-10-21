@@ -956,8 +956,6 @@ const de = {
     repoAt: (path: string) => `Repository ${path}`,
     fixRequest: (where: string, problem: string, detail: string) =>
       `Die Konfiguration meldet ein Problem${where ? ` (${where})` : ''}: ${problem} Technisch: ${detail}. Lege eine Aufgabe an, die es behebt.`,
-    worktrees: 'Agenten arbeiten in Worktrees',
-    clonesMode: 'Agenten arbeiten in Klonen',
     folderMode: 'Ordner ohne git: Agenten arbeiten direkt darin',
     clones: 'Klone anlegen',
     workspaces: 'Vorhandene Klone, einer pro Zeile',
@@ -1005,7 +1003,6 @@ const de = {
       workspaces: 'Agenten arbeiten in',
       workIn: { worktrees: 'Worktrees', clones: 'Klonen' },
       workspacesHint: 'Ändern startet die Agenten dieses Repositorys neu, sobald keiner mitten in einem Schritt ist; Obeya und alle anderen arbeiten weiter.',
-      workspacesClones: 'In Klonen, weil oben Klone eingetragen sind.',
       prNoise: 'Konten ohne Review',
       prNoiseHint: 'Konten, deren Kommentare an Pull Requests kein Review sind (Deploy-Bots), eines pro Zeile.',
       run: 'So läuft die App',
@@ -2482,8 +2479,6 @@ const en: Strings = {
     repoAt: (path: string) => `repository ${path}`,
     fixRequest: (where: string, problem: string, detail: string) =>
       `The configuration reports a problem${where ? ` (${where})` : ''}: ${problem} Technically: ${detail}. Create a task that fixes it.`,
-    worktrees: 'Agents work in worktrees',
-    clonesMode: 'Agents work in clones',
     folderMode: 'Folder without git: agents work directly in it',
     clones: 'Create clones',
     workspaces: 'Existing clones, one per line',
@@ -2531,7 +2526,6 @@ const en: Strings = {
       workspaces: 'Agents work in',
       workIn: { worktrees: 'worktrees', clones: 'clones' },
       workspacesHint: "Changing it restarts this repository's agents once none is in the middle of a step; Obeya and everyone else work on.",
-      workspacesClones: 'In clones, since clones are listed above.',
       prNoise: 'Accounts without review',
       prNoiseHint: 'Accounts whose pull request comments are not review feedback (deploy bots), one per line.',
       run: 'How to run the app',

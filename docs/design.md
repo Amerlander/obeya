@@ -2147,7 +2147,9 @@ Intel Macs, so those went into the user's home there by their own installers.
 - **Worktrees by default** (2026-10-14). Until then Obeya's defaults (then the generic adapter),
   and so every new canvas of a repository that did not say otherwise, used clones; a canvas set up then has `clones` in its
   configuration and keeps them. Until 2026-10-14 nothing capped the workers of a repository in
-  worktrees.
+  worktrees. Until 2026-10-21 the choice sat only among the folded settings and the clone fields
+  showed only once a repository was in clones, so a new canvas in worktrees offered no way to name
+  existing clones that could be seen.
 - **A finished card's question takes a temporary worktree when no clone is free** (2026-10-15).
   Before, the question failed with an error when no clean clone was free, and nothing waited.
   Rejected: queuing every such question at once (clones are often held for days by cards in review
@@ -4649,7 +4651,9 @@ has one keeps it for the pull requests still open), where demos are shared is wo
 (`siteOf`: the site once it is complete), and the page shows
 the main branch and how work lands. `workspaces` is the exception: clones or worktrees are set up
 when a repository's agents start, so changing it restarts that repository's agents, as the dialog
-says at the field; where the configuration names clones it shows that instead. The Koordinator's
+says at the field. That field is not among the folded settings but in the repository's row (see
+Leinwände), where the clones are; where the configuration names clones its source is „Klone
+eingetragen“. The Koordinator's
 `configure` keeps and changes them like the rest of the entry.
 
 #### `.obeya/settings.json`
@@ -4804,9 +4808,15 @@ as a browser tooltip with a wait on plain text.
 #### Leinwände
 
 Each canvas is a heading line (number, name, id, whether it runs) over a table of its repositories:
-its path, one row each. Each repository shows its id and whether workers use clones or worktrees (a
-repository added in the dialog whose settings say clones gets as many as the first canvas's, two,
-filled in once its path is checked and changeable before saving). The command that shares its demos
+its path, one row each. Each repository shows its id and, right under its path, where its workers
+work („Agenten arbeiten in“: Worktrees or Klonen, with where that comes from), so that clones are
+found without opening its settings: Klonen shows the clones to make („Klone anlegen“), the existing
+ones („Vorhandene Klone, einer pro Zeile“), the slots and the other machines; Worktrees only the
+slots. Switching sets this machine's `workspaces` setting where the repository's says otherwise;
+switching to worktrees takes the clones the entry names out of it (they would keep it in clones)
+and a switch back while the dialog is open brings them back. A repository added in the dialog that
+is in clones gets as many as the first canvas's, two, filled in once its path is checked and
+changeable before saving. The command that shares its demos
 is a row of its settings, for this machine only, since it often needs credentials, so „Für alle“
 does not take it over (empty: the demo site of its settings, shown as „Site: <url>“, or an export;
 see Where a demo goes). Each repository folds its settings under „Einstellungen“ below its row (see

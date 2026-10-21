@@ -1217,13 +1217,35 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
   const noGit = useFolderWithoutGit(problems.some((p) => p.code === 'notRepo') ? repo.path.trim() : '');
   // a folder without git has neither clones nor slots: every card works in the folder itself
   const folder = repo.git === false;
-  const clones = !folder && (resolved?.workspaces === 'clones' || !!repo.clones || !!repo.workspaces?.length);
-  const without = <K extends keyof RepoConfig>(k: K, v: RepoConfig[K] | undefined): RepoConfig => {
-    const next = { ...repo };
+  // clones the configuration names (to make, existing ones, on hosts) put the repository in clones whatever its settings say
+  const named = !!repo.clones || !!repo.workspaces?.length || !!repo.hosts?.length;
+  const base = resolved?.values.workspaces;
+  // what the repository's settings say without this machine's, where the check could tell it apart from the clones named
+  const known = base && base.source !== 'clones' ? base.value : undefined;
+  const own = repo.settings?.workspaces;
+  const workIn = named ? 'clones' : (own ?? known ?? resolved?.workspaces ?? 'worktrees');
+  const clones = !folder && workIn === 'clones';
+  // the clones named, put aside while the owner switches to worktrees, back with a switch to clones
+  const parked = useRef<Pick<RepoConfig, 'clones' | 'workspaces' | 'hosts'>>({});
+  const without = <K extends keyof RepoConfig>(k: K, v: RepoConfig[K] | undefined, from: RepoConfig = repo): RepoConfig => {
+    const next = { ...from };
     if (v === undefined) delete next[k];
     else next[k] = v;
     return next;
   };
+  // „Agenten arbeiten in“: this machine's setting where the repository's says otherwise; worktrees put the clones named aside
+  const setWorkIn = (mode: 'clones' | 'worktrees') => {
+    if (mode === workIn) return;
+    const { workspaces: _, ...others } = repo.settings ?? {};
+    const settings = known === mode ? others : { ...others, workspaces: mode };
+    let next = without('settings', Object.keys(settings).length ? settings : undefined);
+    if (mode === 'worktrees') {
+      parked.current = { ...(repo.clones !== undefined ? { clones: repo.clones } : {}), ...(repo.workspaces ? { workspaces: repo.workspaces } : {}), ...(repo.hosts ? { hosts: repo.hosts } : {}) };
+      next = without('hosts', undefined, without('workspaces', undefined, without('clones', undefined, next)));
+    } else next = { ...next, ...parked.current };
+    onChange(next);
+  };
+  const source = named ? t.config.settings.source.clones : own !== undefined ? t.config.settings.source.machine : base ? t.config.settings.source[base.source] : undefined;
   // one row of the canvas's table of repositories; what only some have (clones, problems) spans the row below it
   return (
     <>
@@ -1233,48 +1255,61 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
             const { git: _, ...rest } = repo;
             onChange({ ...rest, path: e.target.value });
           }} />
-        {resolved && (
-          <span className="hint">{`${resolved.id}${home ? ` · ${t.config.home}` : ''} · ${folder ? t.config.folderMode : resolved.workspaces === 'clones' ? t.config.clonesMode : t.config.worktrees}`}</span>
-        )}
+        {resolved && <span className="hint">{`${resolved.id}${home ? ` · ${t.config.home}` : ''}${folder ? ` · ${t.config.folderMode}` : ''}`}</span>}
       </div>
       <button className="c-del" title={t.config.removeRepo} onClick={() => onChange(null)}>
         ✕
       </button>
-      {clones && (
+      {!folder && (resolved || clones) && (
         <div ref={clonesBox} className={flash ? 'cfg-span cfg-clones flash' : 'cfg-span cfg-clones'}>
-          <label className="cfg-clone-count">
-            <span className="hint">{t.config.clones}</span>
-            <input type="number" min={0} max={20} placeholder="0" value={repo.clones ?? ''} onChange={(e) => onChange(without('clones', Number(e.target.value) || undefined))} />
-          </label>
-          <label className="cfg-slots cfg-has-info">
+          <div className="cfg-work-in cfg-has-info">
             <span className="hint">
-              {t.config.slots} <Info text={t.config.slotsHint} />
+              {t.config.settings.workspaces}
+              {source && <span className={source === t.config.settings.source.machine ? 'cfg-source here' : 'cfg-source'}>{source}</span>}
+              <Info text={t.config.settings.workspacesHint} />
             </span>
-            <input type="number" min={0} max={20} aria-label={t.config.slots} placeholder={t.config.slotsAll} value={repo.slots ?? ''} onChange={(e) => onChange(without('slots', slotsOf(e.target.value)))} />
-          </label>
-          <label>
-            <span className="hint">{t.config.workspaces}</span>
-            <textarea
-              rows={2}
-              spellCheck={false}
-              value={(repo.workspaces ?? []).join('\n')}
-              onChange={(e) => {
-                const list = e.target.value.split('\n');
-                onChange(without('workspaces', list.some((w) => w.trim()) ? list : undefined));
-              }}
-            />
-          </label>
-          <Hosts hosts={repo.hosts ?? []} onChange={(hosts) => onChange(without('hosts', hosts.length ? hosts : undefined))} />
-        </div>
-      )}
-      {!clones && !folder && resolved && (
-        <div ref={clonesBox} className={flash ? 'cfg-span cfg-clones flash' : 'cfg-span cfg-clones'}>
-          <label className="cfg-slots cfg-has-info">
-            <span className="hint">
-              {t.config.slots} <Info text={t.config.slotsWorktreesHint} />
-            </span>
-            <input type="number" min={0} max={20} aria-label={t.config.slots} placeholder={t.config.slotsAny} value={repo.slots ?? ''} onChange={(e) => onChange(without('slots', slotsOf(e.target.value)))} />
-          </label>
+            <div className="seg" role="radiogroup" aria-label={t.config.settings.workspaces}>
+              {(['worktrees', 'clones'] as const).map((x) => (
+                <button key={x} type="button" role="radio" aria-checked={workIn === x} className={workIn === x ? 'on' : undefined} onClick={() => setWorkIn(x)}>
+                  {t.config.settings.workIn[x]}
+                </button>
+              ))}
+            </div>
+          </div>
+          {clones ? (
+            <>
+              <label className="cfg-clone-count">
+                <span className="hint">{t.config.clones}</span>
+                <input type="number" min={0} max={20} placeholder="0" value={repo.clones ?? ''} onChange={(e) => onChange(without('clones', Number(e.target.value) || undefined))} />
+              </label>
+              <label className="cfg-slots cfg-has-info">
+                <span className="hint">
+                  {t.config.slots} <Info text={t.config.slotsHint} />
+                </span>
+                <input type="number" min={0} max={20} aria-label={t.config.slots} placeholder={t.config.slotsAll} value={repo.slots ?? ''} onChange={(e) => onChange(without('slots', slotsOf(e.target.value)))} />
+              </label>
+              <label>
+                <span className="hint">{t.config.workspaces}</span>
+                <textarea
+                  rows={2}
+                  spellCheck={false}
+                  value={(repo.workspaces ?? []).join('\n')}
+                  onChange={(e) => {
+                    const list = e.target.value.split('\n');
+                    onChange(without('workspaces', list.some((w) => w.trim()) ? list : undefined));
+                  }}
+                />
+              </label>
+              <Hosts hosts={repo.hosts ?? []} onChange={(hosts) => onChange(without('hosts', hosts.length ? hosts : undefined))} />
+            </>
+          ) : (
+            <label className="cfg-slots cfg-has-info">
+              <span className="hint">
+                {t.config.slots} <Info text={t.config.slotsWorktreesHint} />
+              </span>
+              <input type="number" min={0} max={20} aria-label={t.config.slots} placeholder={t.config.slotsAny} value={repo.slots ?? ''} onChange={(e) => onChange(without('slots', slotsOf(e.target.value)))} />
+            </label>
+          )}
         </div>
       )}
       {resolved && (
@@ -1381,7 +1416,7 @@ function RepoSettingsBlock({
     }
     onChange(Object.keys(next).length ? (next as RepoSettings) : undefined);
   };
-  const keys: SettingKey[] = ['branch', 'land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'language', 'run', 'stop', 'keep', 'demoLanguage', 'site'];
+  const keys: SettingKey[] = ['branch', 'land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'prNoise', 'language', 'run', 'stop', 'keep', 'demoLanguage', 'site'];
   const setHere = keys.filter((k) => own(k) !== undefined).length;
   const fromRepo = keys.filter((k) => own(k) === undefined && base[k].source === 'repository').length;
   const lines = (k: SettingKey) => value<string[]>(k).join('\n');
@@ -1466,22 +1501,6 @@ function RepoSettingsBlock({
             c.planDocsHint,
           )}
           {!folder && row('softPaths', c.softPaths, <textarea rows={Math.max(2, value<string[]>('softPaths').length + 1)} spellCheck={false} aria-label={c.softPaths} value={lines('softPaths')} onChange={(e) => set('softPaths', e.target.value.split('\n'))} />, c.softPathsHint)}
-          {!folder && row(
-            'workspaces',
-            c.workspaces,
-            base.workspaces.source === 'clones' ? (
-              <span>{c.workspacesClones}</span>
-            ) : (
-              <div className="seg" role="radiogroup" aria-label={c.workspaces}>
-                {(['worktrees', 'clones'] as const).map((x) => (
-                  <button key={x} type="button" role="radio" aria-checked={value('workspaces') === x} className={value('workspaces') === x ? 'on' : undefined} onClick={() => set('workspaces', x)}>
-                    {c.workIn[x]}
-                  </button>
-                ))}
-              </div>
-            ),
-            base.workspaces.source === 'clones' ? undefined : c.workspacesHint,
-          )}
           {!folder && land === 'pr' && row('prNoise', c.prNoise, <textarea rows={2} spellCheck={false} aria-label={c.prNoise} value={lines('prNoise')} onChange={(e) => set('prNoise', e.target.value.split('\n'))} />, c.prNoiseHint)}
           {row(
             'language',
