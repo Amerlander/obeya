@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import type { HookInput, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { type AgentEvent, askOwner, BOUNDED_WAITS, Inbox, backgroundWork, deniedBy, claudeExecutable, cleanEnv, FOREGROUND_SLEEP_LIMIT, failureReason, foregroundSleep, refuseForegroundWait, resetIn, resultFailure, usageLimit, withLimitWait } from './runtime';
+import { type AgentEvent, askOwner, BOUNDED_WAITS, Inbox, backgroundWork, deniedBy, claudeExecutable, cleanEnv, FOREGROUND_SLEEP_LIMIT, failureReason, foregroundSleep, refuseForegroundWait, resetIn, resultFailure, spawnHere, endAgentsHere, usageLimit, withLimitWait, withStderr } from './runtime';
 import { FakeRuntime } from './testing';
 import { MESSAGES } from '../core/messages';
 
@@ -222,4 +222,24 @@ test('a message sent while a turn ends is still to come; one the turn took mid-w
   // a CLI that lists nothing is taken at its word
   inbox.push('More.');
   expect(inbox.taken({})).toBe(true);
+});
+
+test.skipIf(process.platform === 'win32')("Claude Code here runs out of the terminal's process group: Ctrl-C reaches Obeya alone, which ends it and what it runs as it stops", async () => {
+  let stderr = '';
+  // the agent and a command it runs, each saying its process group
+  const p = spawnHere((t) => (stderr += t))({ command: 'sh', args: ['-c', 'echo "$(ps -o pgid= -p $$) $$"; sh -c \'echo "$(ps -o pgid= -p $$)"; sleep 30\' & echo "not logged in" >&2; wait'], env: { PATH: process.env.PATH }, cwd: process.cwd(), signal: new AbortController().signal });
+  const out: string[] = [];
+  p.stdout.setEncoding('utf8').on('data', (d: string) => out.push(...d.split('\n').filter(Boolean)));
+  while (out.length < 2) await Bun.sleep(20);
+  const [group = '', pid] = out[0]!.trim().split(/\s+/);
+  expect(group).toBe(pid!);
+  expect(group).not.toBe(Bun.spawnSync(['ps', '-o', 'pgid=', '-p', String(process.pid)]).stdout.toString().trim());
+  expect(out[1]!.trim()).toBe(group);
+  const exited = new Promise<string | null>((r) => p.once('exit', (_code: number | null, signal: NodeJS.Signals | null) => r(signal)));
+  endAgentsHere();
+  expect(await exited).toBe('SIGTERM');
+  // the command it ran went with it
+  expect(() => process.kill(-Number(group), 0)).toThrow();
+  expect(withStderr('Claude Code process exited with code 1', stderr)).toBe('Claude Code process exited with code 1. stderr: not logged in');
+  expect(withStderr('x. stderr: not logged in', stderr)).toBe('x. stderr: not logged in');
 });

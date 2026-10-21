@@ -43,7 +43,7 @@ import { Store, UnusableDatabase } from './db';
 import { ghForge, routedForge } from './forge';
 import { forgejoForge, originOf } from './forgejo';
 import { NarrationHost } from './narration';
-import { claudeExecutable, sdkRuntime } from './runtime';
+import { claudeExecutable, endAgentsHere, sdkRuntime } from './runtime';
 import { claim, release, restarting, running } from './instance';
 import { MachineSetup, welcome } from './machine';
 import { extendPath } from './path';
@@ -275,6 +275,7 @@ const machine = new MachineSetup({ home, config, voice: voiceSetup, shells });
 welcome(home, canvases.all());
 const shutdown = (code: number) => {
   canvases?.shutdown();
+  endAgentsHere();
   awake.stop();
   access.release();
   transcriber.stop();

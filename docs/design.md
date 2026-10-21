@@ -5931,6 +5931,16 @@ it stops by ending their stdin, which they finish as a normal end after the requ
 Windows, where a detached process would open a console window for every program it starts, the
 Python sidecars ignore Ctrl-C instead.
 
+So do the agents' Claude Code processes on this machine, the `ssh` that runs a session or a forward
+on another, and the process that keeps the machine awake: in the terminal's group, Ctrl-C reached
+every agent in the middle of its turn, which broke off at once (the CLI's `[ede_diagnostic]`
+error), and with all of them idle Obeya ended within a second instead of waiting for them to pause.
+Out of that group, they hear of the stop from Obeya and pause at a safe point, and the commands they
+run go on meanwhile. When Obeya ends (they paused, the second Ctrl-C, the 15 minutes passed), it
+sends SIGTERM to each agent's process group, so no agent goes on with a turn nobody hears and what it
+ran goes with it. On Windows the agents stay in the console and a Ctrl-C there still reaches them;
+a stop through `POST /api/stop` (the app) waits for them all the same.
+
 ### Decisions
 
 - **The machine stays awake while a worker works, or always where the owner switches it so**

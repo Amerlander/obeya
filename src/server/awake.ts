@@ -6,6 +6,8 @@
 // end with Obeya by themselves), `SetThreadExecutionState` on Windows, which holds as long as the
 // process does. SSH hosts keep their own power settings.
 
+import { OWN_GROUP } from './spawn';
+
 /** An assertion taken: it holds until released, or until whatever holds it has gone. */
 export interface Held {
   release(): void;
@@ -20,9 +22,9 @@ export type Hold = () => Held;
 
 const WHY = 'Other devices reach Obeya';
 
-/** A process that keeps the assertion while it runs. */
+/** A process that keeps the assertion while it runs, also while Obeya waits for its workers after a Ctrl-C (`OWN_GROUP`). */
 function holdingProcess(argv: string[]): Held {
-  const p = Bun.spawn(argv, { stdin: 'ignore', stdout: 'ignore', stderr: 'pipe' });
+  const p = Bun.spawn(argv, { stdin: 'ignore', stdout: 'ignore', stderr: 'pipe', detached: OWN_GROUP });
   let stderr = '';
   void new Response(p.stderr).text().then((t) => (stderr = t.trim()));
   return {

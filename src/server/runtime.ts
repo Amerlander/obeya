@@ -9,8 +9,11 @@ import {
   type SDKRateLimitInfo,
   type SDKResultMessage,
   type SDKUserMessage,
+  type SpawnedProcess,
+  type SpawnOptions,
   tool,
 } from '@anthropic-ai/claude-agent-sdk';
+import { type ChildProcess, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
@@ -19,6 +22,7 @@ import { localBin, which } from './path';
 import type { z } from 'zod';
 import { mediaType } from './images';
 import { COMPILED } from './resources';
+import { OWN_GROUP } from './spawn';
 import type { Messages } from '../core/messages';
 import type { ToolCall, ToolWatch } from './folder';
 import type { AgentEffort, AgentRole, AgentSetting } from '../core/types';
@@ -284,21 +288,22 @@ export const sdkRuntime: AgentRuntime = {
     const claude = there ? 'claude' : claudeExecutable();
     // a watched call's end is waited for before the agent goes on
     const watched = spec.watch ? [{ hooks: [async (input: HookInput) => (await spec.watch!.after(toolCall(input)), {})] }] : [];
+    // what Claude Code here last said on stderr, for a session that ends with an error
+    let stderr = '';
     const q = query({
       prompt: inbox,
       options: {
         cwd: there ? there.path : spec.cwd,
         abortController: abort,
         ...(claude ? { pathToClaudeCodeExecutable: claude } : {}),
-        ...(there && files
-          ? {
-              spawnClaudeCodeProcess: there.host.session({
+        spawnClaudeCodeProcess:
+          there && files
+            ? there.host.session({
                 cwd: there.path,
                 files,
                 onExit: (code) => (lost = code === LOST && !abort.signal.aborted),
-              }),
-            }
-          : {}),
+              })
+            : spawnHere((text) => (stderr = (stderr + text).slice(-STDERR_TAIL))),
         systemPrompt: { type: 'preset', preset: 'claude_code', append: spec.system },
         mcpServers: { obeya },
         ...(spec.plugins?.length ? { plugins: spec.plugins.map((path) => ({ type: 'local' as const, path })) } : {}),
@@ -378,7 +383,7 @@ export const sdkRuntime: AgentRuntime = {
           }
         }
       } catch (e) {
-        if (!abort.signal.aborted && !lost) spec.onEvent({ type: 'error', message: messageOf(e) });
+        if (!abort.signal.aborted && !lost) spec.onEvent({ type: 'error', message: withStderr(messageOf(e), stderr) });
       }
       if (lost && !abort.signal.aborted) spec.onEvent({ type: 'lost', message: `the connection to ${there!.host.name} was lost` });
     })();
@@ -392,6 +397,49 @@ export const sdkRuntime: AgentRuntime = {
     };
   },
 };
+
+/** Claude Code processes started on this machine that still run. */
+const here = new Set<ChildProcess>();
+
+/** How much of what Claude Code said last on stderr a session that ended with an error reports. */
+const STDERR_TAIL = 2000;
+
+/**
+ * Starts Claude Code on this machine as the SDK would, but out of the terminal's process group
+ * (`OWN_GROUP`), so that Ctrl-C reaches Obeya alone, which waits for the agent to pause. Its stderr
+ * goes to `stderr`, which the SDK reads only from a process it started itself.
+ */
+export function spawnHere(stderr: (text: string) => void): (o: SpawnOptions) => SpawnedProcess {
+  return (o) => {
+    const p = spawn(o.command, o.args, { cwd: o.cwd, env: o.env, signal: o.signal, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, detached: OWN_GROUP });
+    here.add(p);
+    p.once('exit', () => here.delete(p));
+    p.stderr!.setEncoding('utf8').on('data', stderr);
+    return p as SpawnedProcess;
+  };
+}
+
+/** A session's error with what Claude Code said last on stderr, unless the error names it already. */
+export function withStderr(message: string, stderr: string): string {
+  const tail = stderr.trim();
+  return tail && !message.includes(tail) ? `${message}. stderr: ${tail}` : message;
+}
+
+/**
+ * Ends the Claude Code processes started on this machine, and what each runs, as Obeya stops: once
+ * they paused for it, or at once when the owner would not wait. Without a terminal's Ctrl-C reaching
+ * them, they would otherwise go on with a turn that nobody hears any more.
+ */
+export function endAgentsHere() {
+  for (const p of here) {
+    try {
+      if (OWN_GROUP && p.pid) process.kill(-p.pid, 'SIGTERM');
+      else p.kill('SIGTERM');
+    } catch {
+      // gone already
+    }
+  }
+}
 
 /**
  * What made a turn fail, or nothing when it did not. A turn that failed on the API (not logged in,

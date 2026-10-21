@@ -13,7 +13,7 @@ import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { PassThrough } from 'node:stream';
 import type { SpawnedProcess, SpawnOptions } from '@anthropic-ai/claude-agent-sdk';
 import { resource } from './resources';
-import { spawnOutput } from './spawn';
+import { OWN_GROUP, spawnOutput } from './spawn';
 import { expandHome, readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
 
 /** Where a workspace on another machine says which machine it is on. */
@@ -367,6 +367,7 @@ export class SshHost {
         stdin: 'pipe',
         stdout: 'ignore',
         stderr: 'pipe',
+        detached: OWN_GROUP,
       });
       void child.exited.then(() => (alive = false));
       void new Response(child.stderr as ReadableStream).text().then((text) => text.trim() && console.error(`${this.name}: ${text.trim()}`));
@@ -422,7 +423,7 @@ export class SshHost {
           env: true,
           ...(here ? { forward: `127.0.0.1:${there}:127.0.0.1:${here}` } : {}),
         });
-        const child = spawn(argv[0]!, argv.slice(1), { stdio: ['pipe', 'pipe', 'pipe'] });
+        const child = spawn(argv[0]!, argv.slice(1), { stdio: ['pipe', 'pipe', 'pipe'], detached: OWN_GROUP });
         // with Obeya reachable, a voice it holds loaded narrates from Obeya's machine (OBEYA_HOLDS_VOICE: no need to install it here)
         const { OBEYA_URL: _, OBEYA_NARRATION_URL: __, ...own } = s.env;
         const env = { ...own, OBEYA_HOME: dir, ...(here ? { OBEYA_URL: `http://127.0.0.1:${there}`, OBEYA_HOLDS_VOICE: '1' } : {}), ...(token ? { CLAUDE_CODE_OAUTH_TOKEN: token } : {}) };

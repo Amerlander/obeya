@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { LANGUAGES } from '../core/locale';
 import type { ListenBackend } from '../core/types';
 import { resource } from './resources';
+import { OWN_GROUP } from './spawn';
 import { cloudInUse, transcribeInCloud } from './voice-cloud';
 
 /**
@@ -75,17 +76,9 @@ export function listenBackend(env: Record<string, string | undefined> = process.
 }
 
 /**
- * A helper process in a process group of its own (POSIX): Ctrl-C in the terminal goes to the whole
- * foreground group, and a sidecar it reached died with a traceback while Obeya still waited for its
- * workers. Not on Windows, where a detached process has no console and every console program it
- * starts (ffmpeg) opens a window; the Python sidecars ignore Ctrl-C there themselves.
- */
-const OWN_GROUP = process.platform !== 'win32';
-
-/**
  * How a Python helper process starts (the transcription sidecar, the narration voice): UTF-8 on
  * stdin and stdout, also where Python would take the code page (Windows), and out of the
- * terminal's process group, so its Ctrl-C reaches Obeya alone, which ends the helper itself.
+ * terminal's process group (`OWN_GROUP`). The Python sidecars ignore Ctrl-C on Windows themselves.
  */
 export const pythonSpawn = () => ({ env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' }, detached: OWN_GROUP });
 
