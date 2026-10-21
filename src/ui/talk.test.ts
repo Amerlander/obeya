@@ -323,6 +323,13 @@ test('a task an agent works on shows its conversation alone until there is a res
   expect(talkAlone({ state: 'idea' })).toBe(false);
 });
 
+test("a workstream an agent works on keeps its plan doc's text beside the conversation", () => {
+  expect(talkAlone({ state: 'working', branch: 'obeya/x', source: 'plan' })).toBe(false);
+  expect(split({ state: 'working', branch: 'obeya/x', source: 'plan' })).toBe(true);
+  expect(split({ state: 'live', branch: 'obeya/x', source: 'plan' })).toBe(true);
+  expect(split({ state: 'planned', source: 'plan' })).toBe(false);
+});
+
 test('a workstream planned again after a part of it landed keeps what landed beside its conversation', () => {
   const landedPart = { pr: { url: 'https://github.com/acme/app/pull/821', number: 821 } };
   const demo = { kind: 'video' as const, chapters: [] };

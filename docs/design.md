@@ -1272,12 +1272,13 @@ A task's conversation starts with the task: once the agent starts, the card's te
 stand as its first message, above the line that the agent started, the way an idea's starting point
 does (`Seed` in `src/ui/detail.tsx`), so the conversation reads from the start: what was asked, what
 the agent did, what the owner added. Its label says where the text comes from: „Du“ on the owner's
-own card (typed or spoken), „Plan-Doc“ for a workstream, „Idee“ for a prototype, „Vorschlag“ for an
+own card (typed or spoken), „Idee“ for a prototype, „Vorschlag“ for an
 agent's proposal the owner accepted (the card keeps that it was one, `proposed`), „Obeya“ for one
 from the Arbeitsrückschau. A long text shows its first eight lines or so, with „mehr“ for the rest
 (an idea's starting point too), and „Voraussichtlich betroffen“ folds under it. A card that was an
 idea has no such message: its brief stands on the left, and its conversation goes on from the
-idea's.
+idea's. Nor has a workstream: its text in the plan doc stands on the left under „Plan-Doc“, folded
+the same way, in every state (see Plan docs).
 
 ### Card layout
 
@@ -4729,9 +4730,8 @@ only a part of it is done: the card is stored as `planned` again, with the line 
 Plan-Doc weiter offen.“ in its log, and shows „Teil gelandet · PR #821“ (or the commit). Its log and
 handover stay; its pull request moves into `shipped`, and its branch goes, so a new run starts on a
 fresh branch from main and hears what landed. Unfolded, it lays out as a card an agent worked on, not
-as one nobody has touched: what landed (the line with its pull request, the demo of its last
-handover) beside the conversation, which opens with what the doc still holds open, and „Rest
-starten“ below. Until 2026-10-21 it showed only the doc's text and „Agent starten“, with the
+as one nobody has touched: what the doc still holds open, what landed (the line with its pull
+request, the demo of its last handover) beside the conversation, and „Rest starten“ below. Until 2026-10-21 it showed only the doc's text and „Agent starten“, with the
 handover far down, so what was done and what remained could not be told apart. „Teil gelandet“
 stays on the card while a new run does the rest, until that lands. Cards that landed before the commit was kept count as
 landed in the Lesestand. A worker still finishing after the landing keeps its card live until it is
@@ -4747,6 +4747,16 @@ The project's sheet lists each workstream with its label, its title and, under i
 the rest of its item in the doc (its text and sub-items), then its state: a title alone is often too
 short to tell what a workstream is, and the owner should not have to search the doc for it
 (2026-10-21). Details a doc keeps elsewhere than in the item (a section of its own) stay in the doc.
+
+A workstream's card shows the same text in every state, and names its doc at the top: under its
+state, the line with the doc's path and „Im Plandokument lesen“ (after the branch, once an agent has
+worked on it). Planned, the text is what the card shows; queued, it stands beside the conversation;
+once an agent works on it, it stands on the left under „Plan-Doc“, folded to its first eight lines
+or so, above what came of the work (what landed, the demo, the pull request), with the conversation
+beside it, even before there is a result. Until 2026-10-21 a started workstream showed its text only
+as the conversation's first message, which a long conversation scrolled out of view, and the doc's
+line moved from the bottom to the top of the card as it started: a colleague could not tell any more
+what a running or delivered workstream was meant to do.
 
 The owner reads a plan doc where the project is: "Plandokument lesen" in the project's sheet widens
 it and shows the doc as written, rendered, kept current with the file; a workstream's card opens it

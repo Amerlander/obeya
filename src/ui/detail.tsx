@@ -278,13 +278,13 @@ export function Detail(p: Props) {
   const rest = item.state === 'planned' && !!item.landedPart && !item.branch && !item.queue;
   // an archived project's doc is gone
   const readPlan = parent && !parent.archivedAt && p.onReadPlan;
-  const planSource = parent?.plan && <PlanSource file={parent.plan.file} onRead={readPlan ? () => readPlan(parent, item.label) : undefined} />;
-  const where = (
+  // a workstream names its plan doc at the top in every state, an agent's work its branch beside it
+  const where = (worked || parent?.plan) && (
     <p className="p-src">
-      {inFolder ? <FolderLine item={item} diff={changes.diff} /> : item.branch && <Branch item={item} />}
+      {worked && (inFolder ? <FolderLine item={item} diff={changes.diff} /> : item.branch && <Branch item={item} />)}
       {parent?.plan && (
         <>
-          {item.branch && ' · '}
+          {worked && item.branch && ' · '}
           <code>{parent.plan.file}</code>{' '}
           {readPlan && (
             <button className="link" onClick={() => readPlan(parent, item.label)}>
@@ -369,6 +369,7 @@ export function Detail(p: Props) {
         <Limited item={item} />
         {archivedOn(item)}
       </div>
+      {where}
 
       <SupersededBox item={item} all={all} act={act} onDelete={p.onDelete} />
 
@@ -417,13 +418,11 @@ export function Detail(p: Props) {
               <Shots ids={item.images} />
             </>
           )}
-          {planSource}
         </>
       )}
 
       {item.state === 'planned' && !worked && !waits && <Scope files={item.scope} />}
 
-      {worked && where}
       {/* what the card changed in a folder without git stays in view, whatever else the card shows */}
       {worked && inFolder && <FolderBox item={item} diff={changes.diff} onTab={talkAlone(item) ? undefined : setTab} />}
       {waits ? (
@@ -433,7 +432,6 @@ export function Detail(p: Props) {
               {queueBox}
               <Body md={item.body} />
               <Shots ids={item.images} />
-              {planSource}
               <Scope files={item.scope} />
             </>
           }
@@ -446,6 +444,16 @@ export function Detail(p: Props) {
           main={
             !talkAlone(item) && (
               <>
+                {/* a workstream's text in its plan doc stays in view in every state: the task it is, ahead of what came of it */}
+                {item.source === 'plan' && (
+                  <div className="p-plan">
+                    <h4 className="p-h">{t.talk.opening.plan}</h4>
+                    <Fold>
+                      <Body md={item.body} />
+                    </Fold>
+                    <Scope files={item.scope} />
+                  </div>
+                )}
                 {/* what landed of a workstream the plan doc keeps open comes first: the demo below shows it */}
                 {item.landedPart && (
                   <p className="hint">
@@ -502,7 +510,6 @@ export function Detail(p: Props) {
             <>
               <Body md={item.body} />
               <Shots ids={item.images} />
-              {planSource}
             </>
           )}
           {/* a card nobody worked on shows its conversation once there is something, such as a talk with the Koordinator */}
@@ -1108,7 +1115,8 @@ function Conversation({
   const handover = item.demo?.question && !(item.state === 'waiting' && item.need === 'demo' && item.question) ? demoHandover(item.demo, turns.shown) : undefined;
   // where the conversation starts: what was said to an idea, or the task an agent started on, above
   // the line that it started; a decided idea's task is its brief, and its conversation goes on
-  const task = (isWorked(item) || !!item.prototypeEnd) && item.brief === undefined && (!!item.body.trim() || !!item.images?.length);
+  // a workstream's task is its text in the plan doc, which stands beside the conversation
+  const task = (isWorked(item) || !!item.prototypeEnd) && item.brief === undefined && item.source !== 'plan' && (!!item.body.trim() || !!item.images?.length);
   const seed = task ? (
     <Seed item={item} by={taskAuthor(item)} who={`${t.talk.opening[taskAuthor(item)]} · ${t.task}`}>
       <Scope files={item.scope} />
@@ -2186,19 +2194,6 @@ function ArchiveButton({ item, run, className = 'btn', label = t.archive.archive
     <button className={className} disabled={held} title={held ? t.archive.holdsWork : hint} onClick={() => run(() => api.archive(item.id), { close: true, ack: t.archive.archived(title), undo: () => api.unarchive(item.id) })}>
       {label}
     </button>
-  );
-}
-
-function PlanSource({ file, onRead }: { file: string; onRead?: () => void }) {
-  return (
-    <p className="p-src">
-      {t.fromPlan} <code>{file}</code>{' '}
-      {onRead && (
-        <button className="link" onClick={onRead}>
-          {t.plan.readAt}
-        </button>
-      )}
-    </p>
   );
 }
 

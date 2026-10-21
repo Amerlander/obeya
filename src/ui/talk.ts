@@ -453,16 +453,22 @@ export const obeyaWorks = (talk: Exchange[]) =>
 export const worked = (i: Pick<Item, 'state' | 'branch' | 'landedPart'>) => i.state !== 'idea' && i.state !== 'proposal' && (!!i.branch || !!i.landedPart);
 
 /** What decides a card's layout. */
-type Laid = Pick<Item, 'state' | 'branch' | 'prototypeEnd' | 'demo' | 'files' | 'pr' | 'landedPart' | 'finishing' | 'brief' | 'prototypes' | 'queue'>;
+type Laid = Pick<Item, 'state' | 'branch' | 'prototypeEnd' | 'demo' | 'files' | 'pr' | 'landedPart' | 'finishing' | 'brief' | 'prototypes' | 'queue'> & Partial<Pick<Item, 'source'>>;
 
 /**
  * What a task an agent worked on shows beside its conversation: a demo, the files it named as the
  * result (or, in a folder, the files it changed there), a pull request, what landed, what remains
- * after the landing, a decided idea's brief.
+ * after the landing, a decided idea's brief, a workstream's text in its plan doc.
  */
 export const result = (i: Laid) =>
   !!i.demo ||
-  !!i.files || i.state === 'inPr' || (!!i.pr && i.state === 'waiting') || !!i.landedPart || finishingUp(i) || (i.brief !== undefined && (!!i.brief.trim() || !!i.prototypes?.length));
+  !!i.files ||
+  i.state === 'inPr' ||
+  (!!i.pr && i.state === 'waiting') ||
+  !!i.landedPart ||
+  finishingUp(i) ||
+  (i.brief !== undefined && (!!i.brief.trim() || !!i.prototypes?.length)) ||
+  i.source === 'plan';
 
 /**
  * A card laid out with its conversation beside what it is about (`Split` in detail.tsx): an idea, a
