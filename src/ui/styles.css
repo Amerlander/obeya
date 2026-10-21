@@ -622,7 +622,7 @@ textarea.p-body:focus { border-color: var(--muted); }
 /* a workstream's text in its plan doc, above what came of it (detail.tsx) */
 .p-plan { margin-bottom: 18px; }
 .split-main .p-plan .p-h { margin-top: 0; }
-.p-plan .fold > :first-child { margin-top: 0; }
+.p-plan .p-h + *, .p-plan .fold > :first-child { margin-top: 0; }
 .split .split-talk .talk { flex: 1; min-height: 0; max-height: none; max-width: none; }
 .split-talk .composer { margin-top: 10px; max-width: none; }
 /* a proposal's text box grows with the text (detail.tsx) and leaves the reason below it in view */

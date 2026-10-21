@@ -448,10 +448,14 @@ export function Detail(p: Props) {
                 {item.source === 'plan' && (
                   <div className="p-plan">
                     <h4 className="p-h">{t.talk.opening.plan}</h4>
-                    {/* beside a demo or the files it made, a few lines: what came of the work stays in view below */}
-                    <Fold lines={item.demo || item.files ? 3 : undefined}>
+                    {/* in full, the column scrolls; above a demo or the files it made a few lines, so what came of the work stays in view below */}
+                    {item.demo || item.files ? (
+                      <Fold lines={3}>
+                        <Body md={item.body} />
+                      </Fold>
+                    ) : (
                       <Body md={item.body} />
-                    </Fold>
+                    )}
                     <Scope files={item.scope} />
                   </div>
                 )}

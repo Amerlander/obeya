@@ -4751,10 +4751,10 @@ short to tell what a workstream is, and the owner should not have to search the 
 A workstream's card shows the same text in every state, and names its doc at the top: under its
 state, the line with the doc's path and „Im Plandokument lesen“ (after the branch, once an agent has
 worked on it). Planned, the text is what the card shows; queued, it stands beside the conversation;
-once an agent works on it, it stands on the left under „Plan-Doc“, folded to its first eight lines
-or so (three beside a demo or the files the work made, which then stay in view below it), above what
-came of the work (what landed, the demo, the pull request), with the conversation beside it, even
-before there is a result. Until 2026-10-21 a started workstream showed its text only
+once an agent works on it, it stands on the left under „Plan-Doc“, above what came of the work
+(what landed, the demo, the pull request), with the conversation beside it, even before there is a
+result. It stands there in full, the column scrolling where it runs long; above a demo or the files
+the work made it shows its first three lines, with „mehr“ for the rest, so they stay in view below. Until 2026-10-21 a started workstream showed its text only
 as the conversation's first message, which a long conversation scrolled out of view, and the doc's
 line moved from the bottom to the top of the card as it started: a colleague could not tell any more
 what a running or delivered workstream was meant to do.
