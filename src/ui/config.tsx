@@ -1416,7 +1416,7 @@ function RepoSettingsBlock({
     }
     onChange(Object.keys(next).length ? (next as RepoSettings) : undefined);
   };
-  const keys: SettingKey[] = ['branch', 'land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'prNoise', 'language', 'run', 'stop', 'keep', 'demoLanguage', 'site'];
+  const keys: SettingKey[] = ['branch', 'land', 'direct', 'autoMerge', 'checks', 'setup', 'planDocs', 'softPaths', 'prNoise', 'language', 'run', 'stop', 'keep', 'demoLanguage', 'site'];
   const setHere = keys.filter((k) => own(k) !== undefined).length;
   const fromRepo = keys.filter((k) => own(k) === undefined && base[k].source === 'repository').length;
   const lines = (k: SettingKey) => value<string[]>(k).join('\n');
@@ -1488,6 +1488,16 @@ function RepoSettingsBlock({
                 <input type="checkbox" checked={value<boolean>('direct')} onChange={(e) => set('direct', e.target.checked)} />
                 {c.directLabel}
               </label>,
+            )}
+          {!folder && land === 'pr' &&
+            row(
+              'autoMerge',
+              c.autoMerge,
+              <label className="c-check">
+                <input type="checkbox" checked={value<boolean>('autoMerge')} onChange={(e) => set('autoMerge', e.target.checked)} />
+                {c.autoMergeLabel}
+              </label>,
+              c.autoMergeHint,
             )}
           {row('checks', c.checks, <textarea rows={Math.max(2, value<string[]>('checks').length + 1)} spellCheck={false} aria-label={c.checks} value={lines('checks')} onChange={(e) => set('checks', e.target.value.split('\n'))} />, c.checksHint)}
           {row('setup', c.setup, <input className="c-path" aria-label={c.setup} spellCheck={false} value={value<string>('setup')} onChange={(e) => set('setup', e.target.value)} />, c.setupHint)}

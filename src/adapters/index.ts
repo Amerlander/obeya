@@ -62,6 +62,7 @@ export function repoValues(repo: RepoInfo, clones = false, shared: SharedSetting
     branch: { value: detected, source: 'detected' },
     land: value(a.land, 'land'),
     direct: value(!!a.direct, 'direct'),
+    autoMerge: value(a.autoMerge ?? true, 'autoMerge'),
     checks: value(a.checks ?? [], 'checks'),
     setup: value(a.setup ?? '', 'setup'),
     planDocs: value(a.planDocs, 'planDocs'),

@@ -659,7 +659,8 @@ worker as about the earlier demo video, one a later handover of its replaced.
 Where work lands through pull requests, the approve button reads "Freigeben (PR)", and approval
 puts the card `in PR`: its worker opens the PR (until it reports one, the card reads „Freigegeben ·
 Agent öffnet den PR“ with the worker's status line, not "in PR" without a link) and Obeya carries it through the merge, which it does itself (see
-PR loop). Review comments, failed checks and conflicts go to the worker; only what needs judgement —
+PR loop), unless the repository's settings leave the merge to the people on the forge (`autoMerge`
+off). Review comments, failed checks and conflicts go to the worker; only what needs judgement —
 a review comment that questions a decision, a conflict with product meaning — comes back to the
 owner as a question on the card, and the answer returns it to the PR. A PR closed without a merge
 asks the owner whether to open it again or drop the work.
@@ -799,6 +800,10 @@ Projekt“) is linked the same way.
 - **Approval covers the PR, its monitoring and the merge** (2026-10-05): the owner approves the
   demo, not the code, so a second click on GitHub once checks and review are through added nothing
   but waiting. At first Obeya left the merge to the owner.
+- **A repository may leave the merge to its team** (`autoMerge`, 2026-10-21): a colleague asked
+  for it, where pull requests are reviewed and merged by people on GitHub. A ready PR then waits for
+  the owner like one Obeya could not merge, rather than a mode where Obeya stops watching: review
+  comments and failed checks still go to the worker, and the merge still makes the card live.
 - **An approve click folds the card at once.** Before, the card stayed open with nothing to show the
   click had registered until the push was through.
 - **Work without a change to the code ends in a state of its own**, `done` ("Erledigt"), not `live`
@@ -2308,6 +2313,13 @@ merge API with the first allowed style and `head_commit_id`) and the card is
 wanting a human approval, say), the card says why ("Obeya konnte nicht mergen: …") and needs the
 owner, who merges on GitHub; Obeya tries again each round, so it goes through once the reason is
 gone. Anything new for the worker takes the readiness back.
+
+A repository whose team merges its pull requests itself (after a colleague's review on GitHub, say)
+turns that off in its settings (`autoMerge: false`, „Automatisch mergen“ under „Freigegebene
+Arbeit … als Pull Request“): a ready PR is not merged by Obeya, the card needs the owner ("Bereit
+zum Mergen", the card saying that Obeya does not merge in this repository), and the merge on the forge
+makes it `live` as any merge does. The worker hears on approval that the people on the forge merge it.
+The setting is read each round, so a change applies to the pull requests already open.
 
 #### The PR on the card
 
@@ -4614,7 +4626,7 @@ are values, in two layers: `.obeya/settings.json` in the repository (`SharedSett
 and `settings` of the repository's entry in `canvases.json` (`RepoSettings`), set for this machine
 in the configuration dialog without a line of code, which holds the main branch too.
 
-The fields: `land`, `direct`, `checks`, `setup`, `planDocs`, `softPaths`, `workspaces`, `prNoise`,
+The fields: `land`, `direct`, `autoMerge`, `checks`, `setup`, `planDocs`, `softPaths`, `workspaces`, `prNoise`,
 `language` (of what lands in the repository; see Language), `app` and `demo`. `app` has `run`, `stop` and `keep`. Only what Obeya itself acts on is a command:
 `stop` and `keep` park a waiting card (see Parking). `run` is prose, for any kind of app (a web app
 with or without hot reload, a frontend that needs a reload, a CLI, a desktop or mobile app, a URL

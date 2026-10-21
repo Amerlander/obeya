@@ -1963,7 +1963,7 @@ function PrBox({ pr }: { pr: PullRequest }) {
         </a>
       </h4>
       {pr.conflict && <div className="q-text">{t.pr.conflict}</div>}
-      {pr.ready && <div className="q-text">{pr.held ? t.pr.held(pr.held.score, pr.held.by) : t.pr.ready(pr.mergeError ?? '')}</div>}
+      {pr.ready && <div className="q-text">{pr.held ? t.pr.held(pr.held.score, pr.held.by) : pr.manual ? t.pr.manual : t.pr.ready(pr.mergeError ?? '')}</div>}
       {pr.checks.length > 0 ? (
         <ul className="checks">
           {pr.checks.map((c) => (

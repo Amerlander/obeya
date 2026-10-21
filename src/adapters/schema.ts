@@ -38,6 +38,7 @@ export const settingsShape = z
     branch: z.string().optional(),
     land: z.enum(['main', 'pr']).optional(),
     direct: z.boolean().optional(),
+    autoMerge: z.boolean().optional(),
     checks: strings.optional(),
     setup: z.string().optional(),
     planDocs: planDocs.optional(),

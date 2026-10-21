@@ -63,7 +63,7 @@ an environment variable), never itself.
 ## 3. Write `.obeya/settings.json`
 
 Start from the example in the reference and keep only the fields that differ from Obeya's
-defaults: `setup`, `checks`, `land`, `direct`, `planDocs`, `softPaths`, `workspaces`, `prNoise`,
+defaults: `setup`, `checks`, `land`, `direct`, `autoMerge`, `planDocs`, `softPaths`, `workspaces`, `prNoise`,
 `app` with `run`, `stop` and `keep`, and `demo` with `site`.
 
 `app.run` is the part that decides whether workers can run and show their work. Write it for a

@@ -634,7 +634,7 @@ export class CanvasRuntime {
   private watchPrs(r: Repo) {
     if (!this.deps.watch || r.prs) return;
     const board = this.board;
-    r.prs = new PrWatcher(board, r.workers, this.deps.forge, (cardId) => localDir(board.row(cardId).workspace) ?? r.info.path, () => r.adapter.prNoise ?? [], r.ref.id, () => void r.read.refresh());
+    r.prs = new PrWatcher(board, r.workers, this.deps.forge, (cardId) => localDir(board.row(cardId).workspace) ?? r.info.path, () => r.adapter, r.ref.id, () => void r.read.refresh());
     r.prs.start();
   }
 

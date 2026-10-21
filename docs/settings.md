@@ -23,6 +23,7 @@ in `package.json`, work landing through pull requests on GitHub, demos shared on
 {
   "land": "pr",
   "direct": false,
+  "autoMerge": true,
   "checks": ["pnpm lint", "pnpm typecheck", "pnpm test"],
   "setup": "pnpm install",
   "planDocs": { "dir": "docs/plan", "exclude": ["TEMPLATE.md"] },
@@ -90,6 +91,14 @@ else `main`, since a pull request needs somewhere to go.
 With `land: "pr"`: the owner may approve a card "Direkt auf main" instead, without a pull request.
 Obeya rebases onto `origin`'s default branch and pushes there (never forced); a protected branch
 refuses it and the card stays in review. Default: `false`.
+
+### `autoMerge` — boolean
+
+With `land: "pr"`: whether Obeya merges a pull request itself once nothing is left for the worker
+(checks green, review threads resolved, reviewers answered on the latest commit). `false` leaves
+the merge to the people on the forge, for a team that reviews and merges pull requests itself: the
+card then waits for the owner, ready to merge, and turns live once someone merges it there.
+Review comments and failing checks still go to the worker either way. Default: `true`.
 
 ### `softPaths` — paths
 

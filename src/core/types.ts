@@ -576,11 +576,13 @@ export interface PullRequest {
   /**
    * Nothing is left for the worker (checks green, threads resolved, reviewers answered), and GitHub
    * refused Obeya's merge for `mergeError`, or the reviewer's confidence is too low for Obeya to
-   * merge (`held`, Greptile's 3/5 say): the owner merges, or tells the worker what is missing.
+   * merge (`held`, Greptile's 3/5 say), or the repository's settings leave the merge to the people
+   * on the forge (`manual`, `autoMerge` off): the owner merges, or tells the worker what is missing.
    */
   ready?: boolean;
   mergeError?: string;
   held?: { score: string; by: string };
+  manual?: boolean;
   /** The review as last seen, oldest first (`reviewOf` in the server's forge). */
   review?: PrReviewEntry[];
 }
@@ -1375,6 +1377,12 @@ export interface RepoSettings {
    * there (never forced); review and the CI of a pull request are skipped.
    */
   direct?: boolean;
+  /**
+   * With `land: 'pr'`: Obeya merges a pull request itself once nothing is left for the worker
+   * (checks green, threads resolved, reviewers answered). `false` leaves the merge to the people
+   * on the forge: the card then waits for the owner, ready to merge. Default: `true`.
+   */
+  autoMerge?: boolean;
   /** Checks a worker runs before it reports the card ready for review. */
   checks?: string[];
   /** Command a worker runs first in a fresh clone (dependencies). */
@@ -1417,7 +1425,7 @@ export type SharedSettings = Omit<RepoSettings, 'branch'>;
 export type CardLanding = Partial<Pick<RepoSettings, 'land' | 'direct'>>;
 
 /** The fields of `SharedSettings`, in the dialog's order. */
-export const SHARED_FIELDS = ['land', 'direct', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'language', 'app', 'demo'] as const satisfies readonly (keyof SharedSettings)[];
+export const SHARED_FIELDS = ['land', 'direct', 'autoMerge', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'language', 'app', 'demo'] as const satisfies readonly (keyof SharedSettings)[];
 
 /** The settings made of fields that are each set, layered and taken over on their own, and their fields. */
 export const NESTED_SETTINGS = { app: ['run', 'stop', 'keep'], demo: ['site', 'language'] } as const satisfies { [K in keyof RepoSettings]?: readonly (keyof NonNullable<RepoSettings[K]>)[] };
@@ -1493,6 +1501,7 @@ export interface RepoValues {
   branch: SettingValue<string>;
   land: SettingValue<'main' | 'pr'>;
   direct: SettingValue<boolean>;
+  autoMerge: SettingValue<boolean>;
   checks: SettingValue<string[]>;
   setup: SettingValue<string>;
   planDocs: SettingValue<{ dir: string; exclude: string[] }>;

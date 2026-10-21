@@ -1,7 +1,9 @@
 // Watches the open pull requests of a canvas and passes what happens on them to the card's
 // worker: new review comments, failed checks, conflicts. Once nothing is left for the worker, Obeya
-// merges it (the owner's approval covered that); a merge makes the card live.
+// merges it (the owner's approval covered that), unless the repository's settings leave the merge
+// to the people on the forge (`autoMerge` off); a merge makes the card live.
 
+import type { RepoAdapter } from '../adapters/types';
 import type { Board, PrState } from './board';
 import { confidence, lastAsked, readyToMerge, reviewOf, reviewStale, type Forge, type PrStatus } from './forge';
 
@@ -24,8 +26,11 @@ export class PrWatcher {
     private forge: Forge,
     /** Where the forge's calls run for a card (its workspace, else the Obeya checkout). */
     private cwd: (cardId: string) => string,
-    /** Accounts whose comments are not review feedback, asked each round: they may change while the watcher runs. */
-    private noiseOf: () => string[] = () => [],
+    /**
+     * The repository's settings, asked each round since they may change while the watcher runs:
+     * accounts whose comments are not review feedback (`prNoise`), and whether Obeya merges (`autoMerge`).
+     */
+    private settings: () => Pick<RepoAdapter, 'prNoise' | 'autoMerge'> = () => ({}),
     /** On a canvas with several repositories: the one whose pull requests this watches. */
     private repo?: string,
     /** Called at the end of every round (the Lesestand fetches then). */
@@ -89,7 +94,8 @@ export class PrWatcher {
 
   private react(cardId: string, state: string, pr: PrState, s: PrStatus) {
     if (s.state === 'MERGED') return this.workers.merged(cardId, s.mergeCommit);
-    const noise = this.noiseOf();
+    const settings = this.settings();
+    const noise = settings.prNoise ?? [];
     const next: PrState = { ...pr, checks: s.checks, review: reviewOf(s, noise) };
     // while the owner is being asked, news waits: it is passed on once the card is back in the PR
     if (state === 'inPr') {
@@ -147,10 +153,19 @@ export class PrWatcher {
         next.readyHead = s.head;
         next.held = held;
         delete next.mergeError;
+        delete next.manual;
+      } else if (ready && settings.autoMerge === false) {
+        // the repository leaves the merge to the people on the forge: the owner merges there
+        if (pr.readyHead !== s.head || pr.held || !pr.manual) this.board.log(cardId, 'state', 'obeya', this.board.t.pr.readyManual);
+        next.readyHead = s.head;
+        next.manual = true;
+        delete next.held;
+        delete next.mergeError;
       } else if (ready) {
-        if (pr.readyHead !== s.head || pr.held) this.board.log(cardId, 'state', 'obeya', this.board.t.pr.ready);
+        if (pr.readyHead !== s.head || pr.held || pr.manual) this.board.log(cardId, 'state', 'obeya', this.board.t.pr.ready);
         next.readyHead = s.head;
         delete next.held;
+        delete next.manual;
         // the owner's approval covered the merge: Obeya merges, and tries again each round while the forge refuses
         try {
           const commit = this.forge.merge(this.cwd(cardId), pr.url!, s.head);
@@ -166,6 +181,7 @@ export class PrWatcher {
         delete next.readyHead;
         delete next.mergeError;
         delete next.held;
+        delete next.manual;
       }
     }
     this.save(cardId, next);

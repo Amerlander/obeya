@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { generic } from '../adapters/generic';
+import type { RepoAdapter } from '../adapters/types';
 import { needsYou } from '../core/types';
 import { Board } from './board';
 import { Store } from './db';
@@ -23,6 +24,8 @@ let merges: string[];
 let refuse: string | undefined;
 /** A reason in `unreadable` makes reading the PR fail. */
 let unreadable: string | undefined;
+/** The repository's settings, as the workers and each round of the watcher read them. */
+let settings: RepoAdapter;
 /** Cards whose PR the worker reported, as the canvas passes them to sharing. */
 let opened: string[];
 const URL_ = 'https://github.com/acme/app/pull/42';
@@ -37,7 +40,8 @@ beforeEach(() => {
   workspaces.ensureClones(main, 1);
   runtime = new FakeRuntime();
   opened = [];
-  workers = new Workers({ board, runtime, workspaces, adapter: { ...generic, land: 'pr', workspaces: 'clones' }, onPrOpened: (id) => opened.push(id) });
+  settings = { ...generic, land: 'pr', workspaces: 'clones', prNoise: ['deploy-bot'] };
+  workers = new Workers({ board, runtime, workspaces, adapter: settings, onPrOpened: (id) => opened.push(id) });
   status = { state: 'OPEN', mergeable: 'MERGEABLE', mergeState: 'CLEAN', head: 'aaa', author: 'owner', checks: [], comments: [] };
   merges = [];
   refuse = undefined;
@@ -56,7 +60,7 @@ beforeEach(() => {
       status.state = 'MERGED';
     },
   };
-  watcher = new PrWatcher(board, workers, forge, () => main, () => ['deploy-bot']);
+  watcher = new PrWatcher(board, workers, forge, () => main, () => settings);
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -249,6 +253,39 @@ describe('watching', () => {
     watcher.poll();
     expect(merges).toEqual(['aaa']);
     expect(state(id)).toBe('live');
+  });
+
+  test('a repository that does not merge automatically leaves a ready PR to the owner, who merges it on the forge', async () => {
+    settings.autoMerge = false;
+    const id = await inPr();
+    runtime.last.call('pr_opened', { url: URL_ });
+    runtime.last.emit({ type: 'idle' });
+    runtime.last.emit({ type: 'idle' });
+    watcher.poll();
+    expect(merges).toEqual([]);
+    expect(state(id)).toBe('inPr');
+    expect(board.item(id)!.pr).toMatchObject({ ready: true, manual: true });
+    expect(needsYou(board.item(id)!)).toBe(true);
+    expect(board.events(id).at(-1)!.text).toBe('Bereit zum Mergen: Checks grün, alle Anmerkungen erledigt, das Review ist durch. In diesem Repository mergt Obeya nicht selbst: bitte selbst mergen.');
+    // said once
+    const events = board.events(id).length;
+    watcher.poll();
+    expect(board.events(id).length).toBe(events);
+    // new work for the worker takes the readiness back
+    status.comments.push({ id: 'i3', author: 'lead', body: 'One more thing.', at: '2026-10-02T09:00:00Z' });
+    watcher.poll();
+    expect(board.item(id)!.pr?.ready).toBeUndefined();
+    // the owner merges on the forge: the card is live
+    status.state = 'MERGED';
+    watcher.poll();
+    expect(merges).toEqual([]);
+    expect(state(id)).toBe('live');
+  });
+
+  test('the worker hears who merges its pull request', async () => {
+    settings.autoMerge = false;
+    await inPr();
+    expect(runtime.last.inbox.at(-1)).toContain('Do not merge it: the people on the forge merge it once its checks have passed');
   });
 
   test('a merge GitHub refuses leaves it to the owner, tried again each round; new work takes that back', async () => {

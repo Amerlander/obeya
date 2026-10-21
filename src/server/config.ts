@@ -71,6 +71,7 @@ function tidySettings(s: z.infer<typeof settingsShape> | undefined): RepoSetting
     ...(s.branch?.trim() ? { branch: s.branch.trim() } : {}),
     ...(s.land ? { land: s.land } : {}),
     ...(s.direct !== undefined ? { direct: s.direct } : {}),
+    ...(s.autoMerge !== undefined ? { autoMerge: s.autoMerge } : {}),
     ...(s.checks ? { checks: list(s.checks)! } : {}),
     ...(s.setup !== undefined ? { setup: s.setup.trim() } : {}),
     ...(dir ? { planDocs: { dir, exclude: list(s.planDocs!.exclude)! } } : {}),
