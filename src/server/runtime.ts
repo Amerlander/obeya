@@ -428,13 +428,15 @@ export function withStderr(message: string, stderr: string): string {
 /**
  * Ends the Claude Code processes started on this machine, and what each runs, as Obeya stops: once
  * they paused for it, or at once when the owner would not wait. Without a terminal's Ctrl-C reaching
- * them, they would otherwise go on with a turn that nobody hears any more.
+ * them, they would otherwise go on with a turn that nobody hears any more. Not on Windows, where they
+ * stay in the console (`OWN_GROUP`) and a kill would end them at once, before they end what they run:
+ * there they end as before, with their stdin.
  */
 export function endAgentsHere() {
+  if (!OWN_GROUP) return;
   for (const p of here) {
     try {
-      if (OWN_GROUP && p.pid) process.kill(-p.pid, 'SIGTERM');
-      else p.kill('SIGTERM');
+      if (p.pid) process.kill(-p.pid, 'SIGTERM');
     } catch {
       // gone already
     }

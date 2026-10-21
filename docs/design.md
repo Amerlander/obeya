@@ -5938,7 +5938,8 @@ error), and with all of them idle Obeya ended within a second instead of waiting
 Out of that group, they hear of the stop from Obeya and pause at a safe point, and the commands they
 run go on meanwhile. When Obeya ends (they paused, the second Ctrl-C, the 15 minutes passed), it
 sends SIGTERM to each agent's process group, so no agent goes on with a turn nobody hears and what it
-ran goes with it. On Windows the agents stay in the console and a Ctrl-C there still reaches them;
+ran goes with it. On Windows the agents stay in the console and a Ctrl-C there still reaches them
+(Obeya ends them as before, by ending their stdin);
 a stop through `POST /api/stop` (the app) waits for them all the same.
 
 ### Decisions
