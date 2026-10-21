@@ -998,11 +998,16 @@ export class Board {
    * The owner wants a proposal changed: an agent reworks it by their words, and it waits for that.
    * Words said while it is reworked wait for the rework after it. Returns whether they wait.
    */
-  revising(id: string, words: string, spoken: boolean, said?: number): boolean {
+  revising(id: string, words: string, spoken: boolean, said?: number, images: string[] = []): boolean {
     const row = this.own(id);
     if (row.state !== 'proposal') throw new BadRequest('notProposal', 'not a proposal');
     const proposal = storedProposal(row) ?? { questions: [] };
-    const these: Revising = { words: words.slice(0, 20000), ...(spoken ? { spoken } : {}), ...(said ? { said: [said] } : {}) };
+    const these: Revising = {
+      words: words.slice(0, 20000),
+      ...(spoken ? { spoken } : {}),
+      ...(said ? { said: [said] } : {}),
+      ...(images.length ? { images: images.map((f) => basename(f)) } : {}),
+    };
     const revising = proposal.revising ? { ...proposal.revising, next: [...(proposal.revising.next ?? []), these] } : these;
     this.store.update(id, { proposal: JSON.stringify({ ...proposal, revising } satisfies Proposal) });
     this.changed();
@@ -1044,10 +1049,11 @@ export class Board {
 
   /**
    * The reworked proposal takes the place of the old one, or, without one (the agent failed), the
-   * old one stands as it was. Accepting it after the revision stays for the caller to settle.
-   * False when the card is no proposal any more (dismissed meanwhile).
+   * old one stands as it was; `images`, when given, are the screenshots that go with its task now.
+   * Accepting it after the revision stays for the caller to settle. False when the card is no
+   * proposal any more (dismissed meanwhile).
    */
-  revised(id: string, p?: { title: string; task: string; reason?: string; idea?: boolean; questions: Question[] }): boolean {
+  revised(id: string, p?: { title: string; task: string; reason?: string; idea?: boolean; questions: Question[]; images?: string[] }): boolean {
     const row = this.store.card(id);
     if (!row || row.canvas_id !== this.canvas.id || row.deleted_at || row.state !== 'proposal') return false;
     const { revising: done, ...was } = storedProposal(row) ?? { questions: [] };
@@ -1055,7 +1061,11 @@ export class Board {
     const next = done?.next?.length ? { revising: merged(done.next) } : {};
     // when it starts is the owner's to change, not the reviser's
     const proposal: Proposal = p ? { ...proposalOf({ ...p, startAt: was.startAt }), ...(was.acceptAfterRevision ? { acceptAfterRevision: was.acceptAfterRevision } : {}) } : was;
-    this.store.update(id, { ...(p ? { title: p.title.slice(0, 200), body: p.task.slice(0, 20000) } : {}), proposal: JSON.stringify({ ...proposal, ...next } satisfies Proposal) });
+    this.store.update(id, {
+      ...(p ? { title: p.title.slice(0, 200), body: p.task.slice(0, 20000) } : {}),
+      ...(p?.images ? { images: p.images.length ? JSON.stringify(p.images) : null } : {}),
+      proposal: JSON.stringify({ ...proposal, ...next } satisfies Proposal),
+    });
     this.changed();
     return true;
   }
@@ -2119,6 +2129,7 @@ const merged = (said: Revising[]): Revising => ({
   words: said.map((r) => r.words).join('\n\n'),
   ...(said.some((r) => r.spoken) ? { spoken: true } : {}),
   said: said.flatMap((r) => r.said ?? []),
+  ...(said.some((r) => r.images?.length) ? { images: said.flatMap((r) => r.images ?? []) } : {}),
 });
 
 const storedProposal = (r: CardRow): Proposal | undefined => (r.proposal ? (JSON.parse(r.proposal) as Proposal) : undefined);

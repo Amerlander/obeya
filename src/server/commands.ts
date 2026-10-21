@@ -84,7 +84,7 @@ const asks = (i: Item) => {
 };
 
 /** The actions a command's screenshots go with: those that create a card, start one or say something to its agent. */
-const TAKES_IMAGES: Command['do'][] = ['newCard', 'newIdea', 'start', 'force', 'note', 'answer', 'feedback', 'discuss'];
+const TAKES_IMAGES: Command['do'][] = ['newCard', 'newIdea', 'start', 'force', 'note', 'answer', 'feedback', 'discuss', 'revise'];
 
 /** Actions whose text goes to an agent: a card's, or the one that reworks a proposal. */
 const TO_AGENT: Command['do'][] = ['note', 'answer', 'feedback', 'discuss', 'revise'];
@@ -1265,7 +1265,7 @@ export class Commander {
         : []),
       ...(shots
         ? [
-            `The owner attached ${shots === 1 ? 'a screenshot' : `${shots} screenshots`} (shown below). Obeya gives ${shots === 1 ? 'it' : 'them'} to every new_card, new_idea, start, note, answer, feedback and discuss action you take for this message; a title for a new card may say what ${shots === 1 ? 'it shows' : 'they show'}.`,
+            `The owner attached ${shots === 1 ? 'a screenshot' : `${shots} screenshots`} (shown below). Obeya gives ${shots === 1 ? 'it' : 'them'} to every new_card, new_idea, start, note, answer, feedback, discuss and revise action you take for this message; a title for a new card may say what ${shots === 1 ? 'it shows' : 'they show'}.`,
           ]
         : []),
       focused && input.after ? `They said it with this card open: ${describe(focused)}` : focused ? `The owner has this card open, so "it", "this" and a bare answer refer to it: ${describe(focused)}${this.report(focused)}` : project ? `The owner is looking at the project ${tag(project.id)} "${project.title}".` : 'No card is open: the owner speaks to you.',

@@ -45,8 +45,8 @@ function proposal(): Item {
 }
 
 /** Says `text` with the proposal open; the Koordinator acts with `actions` (its tags looked up by title). */
-async function say(text: string, card: Item, actions: (tag: string) => Record<string, unknown>[], typed = false) {
-  const heard = canvas.commander.hear(text, { card: card.id }, [], typed ? { typed: true, field: 'revise' } : {});
+async function say(text: string, card: Item, actions: (tag: string) => Record<string, unknown>[], typed = false, images: string[] = []) {
+  const heard = canvas.commander.hear(text, { card: card.id }, images, typed ? { typed: true, field: 'revise' } : {});
   await settle();
   const s = runtime.sessions.filter(isKoordinator).at(-1)!;
   const brief = s.inbox.at(-1)!;
@@ -360,6 +360,85 @@ describe('a proposal reworked by what the owner says', () => {
     canvas = open();
     expect(runtime.sessions.length).toBe(before + 1);
     expect(reviser()!.inbox[0]).toContain('Excel auch');
+  });
+});
+
+describe("screenshots in a proposal's conversation", () => {
+  const shot = (n: number) => canvas.images.save(new Uint8Array([n]), 'image/png');
+
+  test('they stand with the words, reach the reviser, and those it keeps go with the accepted task', async () => {
+    const p = proposal();
+    const a = shot(1);
+    canvas.tell(p.id, 'So sieht der Export in Excel aus', [a], false);
+    expect(board().events(p.id).at(-1)).toMatchObject({ kind: 'say', author: 'owner', images: [a] });
+    const r = reviser()!;
+    expect(r.images[0]).toEqual([canvas.images.path(a)!]);
+    expect(r.inbox[0]).toContain(`The owner attached a screenshot (shown below; files: ${a})`);
+    expect(r.inbox[0]).toContain("No screenshot goes with the card's task now.");
+    expect(r.spec.tools.find((t) => t.name === 'revise_proposal')!.description).toContain('images:');
+    r.call('revise_proposal', { title: p.title, task: p.body, reason: 'Beim Export aufgefallen.', questions: p.proposal!.questions.map((q) => ({ question: q.text, options: q.options })), reply: 'Der Screenshot geht mit.', images: [a, 'unknown.png'] });
+    r.emit({ type: 'idle' });
+    await settle();
+    expect(board().item(p.id)!.images).toEqual([a]);
+    // what goes with it changed, so the proposal reads otherwise
+    expect(board().events(p.id).at(-1)).toMatchObject({ kind: 'state', text: 'Vorschlag überarbeitet.' });
+    canvas.act(p.id, { action: 'accept', start: false });
+    expect(board().item(p.id)).toMatchObject({ state: 'planned', images: [a] });
+  });
+
+  test('one the reviser leaves out stays only in the conversation; one it kept before it may drop', async () => {
+    const p = proposal();
+    const [a, b] = [shot(1), shot(2)];
+    canvas.tell(p.id, 'So ist es heute', [a], false);
+    reviser()!.call('revise_proposal', { title: p.title, task: p.body, questions: [], reply: 'Das Bild geht mit.', images: [a] });
+    reviser()!.emit({ type: 'idle' });
+    await settle();
+    canvas.tell(p.id, 'Das alte Bild stimmt nicht mehr, so ist es jetzt', [b], false);
+    const r = reviser()!;
+    // the words' screenshot first, then the task's
+    expect(r.images[0]).toEqual([canvas.images.path(b)!, canvas.images.path(a)!]);
+    expect(r.inbox[0]).toContain(`Screenshots that go with the card's task now: ${a}.`);
+    r.call('revise_proposal', { title: p.title, task: p.body, questions: [], reply: 'Nur noch das neue.', images: [b] });
+    r.emit({ type: 'idle' });
+    await settle();
+    expect(board().item(p.id)!.images).toEqual([b]);
+
+    // the next rework sees the one it dropped as shown earlier; leaving the list out keeps what goes with the task
+    canvas.tell(p.id, 'Und der Titel kürzer', [], false);
+    const next = reviser()!;
+    expect(next.inbox[0]).toContain(`Screenshots that go with the card's task now: ${b}.`);
+    expect(next.inbox[0]).toContain(`which do not go with it: ${a}.`);
+    next.call('revise_proposal', { title: 'CSV-Export', task: p.body, questions: [], reply: 'Kürzer.' });
+    next.emit({ type: 'idle' });
+    await settle();
+    expect(board().item(p.id)!.images).toEqual([b]);
+  });
+
+  test('words that wait for the next rework bring their screenshots to it', async () => {
+    const p = proposal();
+    canvas.tell(p.id, 'Nimm UTF-8.', [], false);
+    const first = reviser()!;
+    const a = shot(1);
+    canvas.tell(p.id, 'Und so soll es aussehen', [a], false);
+    expect(board().item(p.id)!.proposal?.revising?.next).toEqual([{ words: 'Und so soll es aussehen', said: [board().events(p.id).at(-1)!.id], images: [a] }]);
+    first.call('revise_proposal', { title: p.title, task: p.body, questions: [], reply: 'UTF-8.' });
+    first.emit({ type: 'idle' });
+    await settle();
+    const next = reviser()!;
+    expect(next).not.toBe(first);
+    expect(next.images[0]).toEqual([canvas.images.path(a)!]);
+    expect(next.inbox[0]).toContain(`files: ${a}`);
+  });
+
+  test('said to the Koordinator, they go with the revise action to the reviser', async () => {
+    const p = proposal();
+    const a = shot(1);
+    const { heard } = await say('Schau, so sieht es aus', p, (tag) => [{ do: 'revise', card: tag, text: 'So sieht es aus' }], false, [a]);
+    canvas.commander.arm(heard.token!);
+    await settle(30);
+    expect(board().item(p.id)!.proposal?.revising).toMatchObject({ images: [a] });
+    expect(reviser()!.images[0]).toEqual([canvas.images.path(a)!]);
+    expect(board().events(p.id).find((e) => e.author === 'owner')).toMatchObject({ kind: 'say', images: [a] });
   });
 });
 

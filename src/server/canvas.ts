@@ -276,7 +276,15 @@ export class CanvasRuntime {
     board.interruptTalk();
     this.commander.resume();
     this.answers.resumeAll();
-    this.revisions = new Revisions({ board, runtime: deps.runtime, preferences: this.preferences, pathFor: (card) => this.repoOf(card).read.path, toObeya: this.toObeya, onRevised: (cardId, revised) => this.revised(cardId, revised) });
+    this.revisions = new Revisions({
+      board,
+      runtime: deps.runtime,
+      preferences: this.preferences,
+      pathFor: (card) => this.repoOf(card).read.path,
+      imageFiles: this.imageFiles,
+      toObeya: this.toObeya,
+      onRevised: (cardId, revised) => this.revised(cardId, revised),
+    });
     this.revisions.resume();
     this.sharing = new Sharing({
       board,
@@ -1051,9 +1059,8 @@ export class CanvasRuntime {
     if (card.kind === 'question') return this.act(cardId, { action: 'ask', ...said });
     if (card.state === 'idea') return this.act(cardId, { action: 'discuss', ...said });
     if (card.state === 'proposal') {
-      // a proposal's field takes no screenshots: the words alone
       this.koordinator.learn(card, 'note', text.trim());
-      return this.act(cardId, { action: 'revise', text, spoken, ...(replyTo ? { replyTo } : {}) }, true);
+      return this.act(cardId, { action: 'revise', ...said }, true);
     }
     if (card.state === 'waiting' && card.need === 'question') return this.act(cardId, { action: 'answer', ...said });
     return this.act(cardId, { action: 'message', ...said, ...(spot ? { spot } : {}) });
@@ -1192,8 +1199,8 @@ export class CanvasRuntime {
       case 'revise': {
         // said while it is reworked, they wait for the next rework, unread until then
         const later = !!this.board.item(cardId)?.proposal?.revising;
-        const said = log ? this.board.log(cardId, 'say', 'owner', text.trim(), { replyTo, unread: later }).id : undefined;
-        return this.revisions.revise(cardId, `${replyNote(this.board.quoted(cardId, replyTo), 'koordinator')}${text.trim()}`, !!a.spoken, said);
+        const said = log ? this.board.log(cardId, 'say', 'owner', text.trim(), { images, replyTo, unread: later }).id : undefined;
+        return this.revisions.revise(cardId, `${replyNote(this.board.quoted(cardId, replyTo), 'koordinator')}${text.trim()}`, !!a.spoken, said, images);
       }
       case 'discuss':
         return this.explorers.discuss(cardId, text.trim(), !!a.spoken, images, replyTo);
@@ -1713,7 +1720,7 @@ export class CanvasRuntime {
       case 'answer':
         return this.act(c.card, { action: 'answer', text: c.text, spoken: c.spoken ?? true, ...(c.images ? { images: c.images } : {}) });
       case 'revise':
-        return this.act(c.card, { action: 'revise', text: c.text, spoken: c.spoken ?? true });
+        return this.act(c.card, { action: 'revise', text: c.text, spoken: c.spoken ?? true, ...(c.images ? { images: c.images } : {}) });
       case 'approve':
         return this.act(c.card, { action: 'approve', ...(c.direct ? { direct: true } : {}) });
       case 'accept':

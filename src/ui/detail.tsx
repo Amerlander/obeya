@@ -363,7 +363,14 @@ export function Detail(p: Props) {
 
       {item.state === 'proposal' && (
         <ProposalView item={item} from={p.from} act={act} listener={listener} onRevise={tell('revise')}>
-          {editable ? <ManualFields item={item} repos={p.repos} onEdit={p.onEdit} grow /> : <Body md={item.body} />}
+          {editable ? (
+            <ManualFields item={item} repos={p.repos} onEdit={p.onEdit} grow />
+          ) : (
+            <>
+              <Body md={item.body} />
+              <Shots ids={item.images} />
+            </>
+          )}
         </ProposalView>
       )}
 
@@ -829,6 +836,8 @@ function ProposalView({
         main={
           <>
             {children}
+            {/* which of the owner's screenshots go with the task, by their hand or the reviser's pick */}
+            {!!item.images?.length && <p className="hint">{t.proposalShots}</p>}
             {!idea && <StartAt item={item} act={act} />}
             {from && <p className="hint">{t.proposedBy(plain(from.title))}{item.proposal?.reason && <> {item.proposal.reason}</>}</p>}
             {item.retro && <p className="hint">{t.proposedByRetro(item.retro)}</p>}
@@ -841,10 +850,9 @@ function ProposalView({
             field={{
               placeholder: t.compose.revise,
               listener,
-              noImages: true,
               quote: true,
-              onWords: (words, _, replyTo) => onRevise(words, undefined, replyTo),
-              onPicked: (text, _, __, replyTo) => act({ action: 'revise', text, ...(replyTo ? { replyTo } : {}) }, { close: false }),
+              onWords: (words, images, replyTo) => onRevise(words, images, replyTo),
+              onPicked: (text, _, images, replyTo) => act({ action: 'revise', text, images, ...(replyTo ? { replyTo } : {}) }, { close: false }),
             }}
           />
         }

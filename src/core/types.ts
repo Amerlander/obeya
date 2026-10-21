@@ -369,7 +369,10 @@ export interface Item {
    * handover): approving lands it as the branch says, not as the repository does until then.
    */
   lands?: CardLanding;
-  /** Screenshots the owner attached to the card's task; its worker gets them at the start. */
+  /**
+   * Screenshots the owner attached to the card's task; its worker gets them at the start. On a
+   * proposal, those that go with its task once it is accepted (the owner's or its reviser's pick).
+   */
   images?: string[];
   /** A card that was an idea and has been decided: the brief it was decided on. */
   brief?: string;
@@ -458,11 +461,12 @@ export interface Superseded {
   why?: string;
 }
 
-/** The owner's words a proposal is reworked by. */
+/** The owner's words a proposal is reworked by, with the screenshots that came with them (image ids). */
 export interface Revising {
   words: string;
   spoken?: boolean;
   said?: number[];
+  images?: string[];
 }
 
 /** A decision taken on a card: an answer to a worker's question, or the owner's call on an idea. */
@@ -1088,8 +1092,8 @@ export type CardAction =
   | { action: 'dismiss' }
   /** A card whose agent withdrew or replaced it since: the owner keeps it, and the mark goes. */
   | { action: 'keep' }
-  /** A proposal: an agent reworks its text, reason and questions by what the owner said (`text`). */
-  | { action: 'revise'; text: string; spoken?: boolean; replyTo?: number }
+  /** A proposal: an agent reworks its text, reason and questions by what the owner said (`text`) and showed (`images`). */
+  | { action: 'revise'; text: string; spoken?: boolean; images?: string[]; replyTo?: number }
   /** Ideas: talk to the exploration agent; `spoken` gets a short spoken summary back. */
   | { action: 'discuss'; text: string; spoken?: boolean; images?: string[]; replyTo?: number }
   /**

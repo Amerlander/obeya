@@ -479,6 +479,16 @@ words that only did that leave the proposal as it was. Said of a proposal that i
 Koordinator reads the words as `revise`. What the words only ask („Was würdest du nehmen?“) the
 reviser answers and leaves the proposal as it was there.
 
+The words may carry screenshots, as on any card (see Screenshots), typed or spoken, also when they
+wait for the next rework; they stand with the words in the conversation. The reviser sees them,
+those that go with the proposal's task already, and those the owner showed earlier in its
+conversation (at most twelve, newest first), each by its file name, and names in `revise_proposal`
+those that go with the task (`images`; left out, they stay as they were). It may drop one it kept
+before, once the owner's words make it obsolete. Those it names are the proposal's own screenshots
+(`Item.images`): they show with its text, in the field when it is editable, with „Die Screenshots
+beim Text gehen mit der Aufgabe mit.“ under it, and accepted, the task (or idea) has them like a
+typed task's. The others stay only in the conversation. A change of them alone reads as revised.
+
 As with an idea, the conversation about it stands beside the proposal, its open questions at the end
 of it and the field under it; a question stands where it was asked once it is settled (or while the
 proposal is reworked), so the owner still sees what they answered, and how it ended when they picked
@@ -1318,7 +1328,7 @@ which a stack in a clone here may need when it starts again.
 
 ### Screenshots
 
-What the owner writes on a card (a note, feedback, an answer, talk to an idea) may carry
+What the owner writes on a card (a note, feedback, an answer, talk to an idea, words on a proposal) may carry
 screenshots: pasted (⌘V), dropped or picked in the text field, scaled down in the browser to at most
 2000 px, and uploaded at once. They show as thumbnails in the field and in the card's log or
 conversation, and reach the agent as images in the message, with their file paths. A click on a
@@ -1333,7 +1343,7 @@ owner showed in its discussion).
 
 A command typed in the Koordinator's sheet may carry screenshots too: the Koordinator sees them, and
 they go with every action of the command that creates or concerns a card (new card or idea, start,
-note, answer, feedback, talk to an idea); said with a start, they join the card's task. A spoken
+note, answer, feedback, talk to an idea, words a proposal is reworked by); said with a start, they join the card's task. A spoken
 command carries screenshots the same way: those in the field of the open card, or of Obeya's sidebar
 when no card is open, go with the next recording (see Voice in: one draft per field). Dropped on the
 microphone or pasted (⌘V) anywhere outside a text field, they land in that field. Only where no
