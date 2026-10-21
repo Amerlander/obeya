@@ -6,9 +6,10 @@
 // into the archive with it, and comes back to its place when the doc returns. A workstream that
 // leaves its doc stays stored but is not shown.
 
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { type Bounds, boundsOf, CARD_SIZE, freeSpotNear, GAP, type Place, PROJECT_HEAD, placeProjects, planDirNoteBox, placeWorkstreams, projectSize, sizeOf, unionBounds } from '../core/layout';
+import { arrangeWorkstreams, type Bounds, boundsOf, CARD_SIZE, freeSpotNear, GAP, type Place, PROJECT_HEAD, placeProjects, planDirNoteBox, placeWorkstreams, projectSize, sizeOf, unionBounds } from '../core/layout';
 import type { CardFile } from '../core/files';
 import type { Language } from '../core/locale';
 import { MESSAGES, type Messages, snoozeTerm } from '../core/messages';
@@ -109,6 +110,25 @@ export interface Shipped {
   /** The merge commit is not known: the Lesestand's commit after the next fetch stands in for it. */
   fetch?: true;
 }
+
+/**
+ * Which workstream of a project builds on which (`CardRow.deps`), as the Koordinator read it from
+ * the plan doc: `on` by workstream key, for the doc's workstreams as they stood then (`sig`,
+ * `depsSig`). `reading` while it reads them: `auto` for a project just come, which it arranges by
+ * them unless the owner moved one of its cards first; `owner` when they asked to arrange it.
+ */
+export interface StoredDeps {
+  sig?: string;
+  on?: Record<string, string[]>;
+  reading?: 'auto' | 'owner';
+}
+
+/** The workstreams of a plan doc as what builds on what is read from them: a reading holds while this is the same. */
+export const depsSig = (doc: PlanDoc) =>
+  createHash('sha256')
+    .update(JSON.stringify(doc.workstreams.map((w) => [w.key, w.title, w.body])))
+    .digest('hex')
+    .slice(0, 16);
 
 /** A demo version on a card's shared page, with what the page says of it, so it can be published again as it is. */
 export interface SharedDemo {
@@ -1805,6 +1825,62 @@ export class Board {
     })();
   }
 
+  /** What the Koordinator read of a project's plan doc about which workstream builds on which, and whether it is reading it now. */
+  deps(projectId: string): StoredDeps & { current: boolean } {
+    const row = this.own(projectId);
+    if (row.kind !== 'project' || !row.plan) throw new BadRequest('invalid', 'not a project');
+    const d = row.deps ? (JSON.parse(row.deps) as StoredDeps) : {};
+    return { ...d, current: !!d.on && d.sig === depsSig(JSON.parse(row.plan) as PlanDoc) };
+  }
+
+  /** The Koordinator starts reading which workstream builds on which (`reading`), or has read it (`on`, for the doc as it stands now). */
+  setDeps(projectId: string, d: { reading: NonNullable<StoredDeps['reading']> } | { on: Record<string, string[]> } | { failed: true }) {
+    const row = this.own(projectId);
+    const was = row.deps ? (JSON.parse(row.deps) as StoredDeps) : {};
+    const next: StoredDeps =
+      'reading' in d ? { ...was, reading: d.reading } : 'on' in d ? { sig: depsSig(JSON.parse(row.plan!) as PlanDoc), on: d.on } : { ...was, reading: undefined };
+    this.store.update(projectId, { deps: JSON.stringify(next) });
+    this.changed();
+  }
+
+  /** The workstream key of each of the project's workstreams, by card. */
+  workstreamKeys(projectId: string): Map<string, string> {
+    return new Map(this.store.children([projectId]).flatMap((k) => (k.plan_ref?.includes('#') ? [[k.id, k.plan_ref.slice(k.plan_ref.indexOf('#') + 1)]] : [])));
+  }
+
+  /** Whether none of the project's workstreams stands anywhere but where it was placed when the project came (`placeNew`). */
+  untouched(projectId: string): boolean {
+    const row = this.own(projectId);
+    const doc = JSON.parse(row.plan!) as PlanDoc;
+    const first = placeWorkstreams(doc.workstreams);
+    const kids = this.store.children([projectId]);
+    return kids.every((k) => {
+      const n = doc.workstreams.findIndex((w) => `${doc.file}#${w.key}` === k.plan_ref);
+      return n >= 0 && first[n]!.x === k.x && first[n]!.y === k.y;
+    });
+  }
+
+  /**
+   * Puts the project's workstreams in columns by what builds on what (`arrangeWorkstreams`). A
+   * project that grows into another card or project moves to the nearest spot clear of everything.
+   */
+  arrange(projectId: string) {
+    const items = this.snapshot().items;
+    const project = items.find((i) => i.id === projectId);
+    if (project?.kind !== 'project') throw new BadRequest('invalid', 'not a project on the canvas');
+    const kids = items.filter((i) => i.parent === projectId);
+    const at = arrangeWorkstreams(kids);
+    const moved = kids.map((k) => ({ ...k, ...at.get(k.id)! }));
+    const [w, h] = projectSize(moved);
+    const others = items.filter((i) => !i.parent && i.id !== projectId).map((i) => boundsOf(i, items));
+    const overlaps = others.some((b) => project.x < b.x + b.w && b.x < project.x + w && project.y < b.y + b.h && b.y < project.y + h);
+    this.store.db.transaction(() => {
+      for (const k of moved) this.store.update(k.id, { x: k.x, y: k.y });
+      if (overlaps) this.store.update(projectId, freeSpotNear(project, [w, h], others));
+    })();
+    this.changed();
+  }
+
   /**
    * Stores a row for every project and workstream seen for the first time. A doc whose work was
    * done before Obeya first saw it (among `all`, not `docs`) gets its rows too, placed after the
@@ -1845,6 +1921,8 @@ export class Board {
     const at = placeProjects(unionBounds([...top.map((i) => boundsOf(i, items)), ...notes]), layouts.map((l) => l.size));
     layouts.forEach(({ doc, pos }, n) => {
       const [project] = this.store.insert([{ canvas_id: c, kind: 'project', plan_ref: doc.file, ...at[n]! }]);
+      // a project just come stands arranged by what builds on what, once the Koordinator has read that
+      if (docs.includes(doc) && doc.workstreams.filter((w) => !w.done).length > 1) this.store.update(project!.id, { deps: JSON.stringify({ reading: 'auto' } satisfies StoredDeps) });
       this.store.insert(
         doc.workstreams.map((w, k) => ({ canvas_id: c, kind: 'task' as const, parent_id: project!.id, plan_ref: `${doc.file}#${w.key}`, ...pos[k]! })),
       );
@@ -1935,6 +2013,9 @@ export function toItems(rows: CardRow[], docs: PlanDoc[], home: string): Item[] 
   const docByFile = new Map(docs.map((d) => [d.file, d]));
   // a project's group covers its workstreams
   const groupOf = new Map(rows.flatMap((r) => (r.kind === 'project' && r.group_id ? [[r.id, r.group_id]] : [])));
+  // what each workstream builds on, by its project's reading of the doc
+  const depsOf = new Map(rows.flatMap((r) => (r.kind === 'project' && r.deps ? [[r.id, JSON.parse(r.deps) as StoredDeps]] : [])));
+  const idOfRef = new Map(rows.flatMap((r) => (r.plan_ref ? [[r.plan_ref, r.id]] : [])));
   const projects: Item[] = [];
   const workstreams: { item: Item; order: number }[] = [];
   const manual: Item[] = [];
@@ -1979,6 +2060,7 @@ export function toItems(rows: CardRow[], docs: PlanDoc[], home: string): Item[] 
         source: 'plan',
         repo: repoOfRef(doc.file, home),
         plan: { file: doc.file, goal: doc.goal },
+        ...(depsOf.get(r.id)?.reading ? { arranging: true as const } : {}),
         ...(r.from_id ? { origin: r.from_id } : {}),
         ...(r.group_id ? { group: r.group_id } : {}),
       });
@@ -1993,6 +2075,7 @@ export function toItems(rows: CardRow[], docs: PlanDoc[], home: string): Item[] 
     const state = r.state && ACTIVE.includes(r.state) ? r.state : derived === 'live' ? 'live' : (r.state ?? derived);
     // what landed of a workstream planned again, also while a new run does the rest; once that lands, the card is live
     const shipped = (state === 'planned' || ACTIVE.includes(state)) && r.shipped ? (JSON.parse(r.shipped) as Shipped) : null;
+    const buildsOn = (depsOf.get(r.parent_id)?.on?.[key] ?? []).flatMap((k) => idOfRef.get(`${doc.file}#${k}`) ?? []);
     workstreams.push({
       order,
       item: {
@@ -2011,6 +2094,7 @@ export function toItems(rows: CardRow[], docs: PlanDoc[], home: string): Item[] 
         ...work(r),
         ...(shipped ? { landedPart: { ...(shipped.commit ? { commit: shipped.commit } : {}), ...(shipped.pr ? { pr: shipped.pr } : {}) } } : {}),
         ...(r.built_on ? { builtOn: r.built_on } : {}),
+        ...(buildsOn.length ? { buildsOn } : {}),
         ...(groupOf.get(r.parent_id) ? { group: groupOf.get(r.parent_id)! } : {}),
       },
     });

@@ -42,3 +42,13 @@ test('a loop ends', () => {
   expect([...d.before]).toEqual(['Y']);
   expect([...d.after]).toEqual(['Y']);
 });
+
+test('a workstream waits for the open ones it builds on, started or not; a delivered one is no wait', () => {
+  const ws = (id: string, state: Item['state'], buildsOn: string[] = []) => ({ ...card(id), state, parent: 'p', buildsOn }) as Item;
+  const all = [ws('W1', 'live'), ws('W2', 'planned', ['W1']), ws('W3', 'planned', ['W2', 'W1']), ws('W4', 'working')];
+  const d = depsOf('W2', all)!;
+  expect([...d.after]).toEqual(['W3']);
+  expect(d.before.size).toBe(0);
+  expect(d.edges).toEqual([['W2', 'W3']]);
+  expect(depsOf('W1', all)).toBeUndefined();
+});

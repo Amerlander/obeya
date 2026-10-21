@@ -101,12 +101,15 @@ h1, h2, .cfg-head h3, .p-title, .project > .head .ttl, .timeline .a-ttl { font-f
   overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .project > .head .kind { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
 .project > .head .progress { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
-/* starts all planned workstreams; quiet until the pointer is on it */
-.project > .head .start-all { display: flex; align-items: center; gap: 6px; flex: none; padding: 4px 11px 4px 9px; border-radius: 3px;
+/* arranges the workstreams by their dependencies, starts all planned ones; quiet until the pointer is on one */
+.project > .head .head-btn { display: flex; align-items: center; gap: 6px; flex: none; padding: 4px 11px 4px 9px; border-radius: 3px;
   font: inherit; font-size: 12px; font-weight: 500; color: var(--working); background: var(--card); border: 1px solid var(--line);
   cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
-.project > .head .start-all:hover { background: var(--working); border-color: var(--working); color: var(--on-ink); }
-.z-far .project .start-all { display: none; }
+.project > .head .head-btn:hover:not(:disabled) { background: var(--working); border-color: var(--working); color: var(--on-ink); }
+.project > .head .arrange { color: var(--muted); }
+.project > .head .arrange:disabled { cursor: default; animation: arranging 1.4s ease-in-out infinite; }
+@keyframes arranging { 50% { opacity: .45; } }
+.z-far .project .head-btn { display: none; }
 
 /* an index card pinned to the wall: card stock with nearly square corners, a short hard shadow, the state as a
    rule across the top; title in a serif, the small print in a condensed sans */
@@ -1102,6 +1105,9 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 .sheet .start-all { margin-top: 10px; }
 .sheet .start-all .btn { padding: 7px 14px; font-size: 13px; }
 .sheet .start-all .hint { margin: 6px 0 0; font-size: 12px; }
+.sheet .arrange { margin-top: 10px; }
+.sheet .arrange .btn { display: inline-flex; align-items: center; gap: 7px; padding: 7px 14px; font-size: 13px; }
+.sheet .arrange .hint { margin: 6px 0 0; font-size: 12px; }
 
 /* Obeya's configuration: a dialog over the page, nearly as large as the window, its sections listed
    on the left and the one chosen on the right; settings as rows of label and control, without boxes */

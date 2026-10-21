@@ -247,6 +247,10 @@ export interface Item {
   plan?: { file: string; goal: string };
   /** Projects only: the idea their plan doc was written from. */
   origin?: string;
+  /** Projects only: the Koordinator reads from the plan doc which workstream builds on which, to arrange them. */
+  arranging?: true;
+  /** Workstreams only: the workstreams of its project it builds on, as the Koordinator read them from the plan doc. */
+  buildsOn?: string[];
   /** The worker's latest `report`. */
   statusLine?: string;
   /**
@@ -1090,6 +1094,11 @@ export type CardAction =
   | { action: 'force' }
   /** On a project: takes back a start of all its workstreams while the Koordinator has not planned them yet. */
   | { action: 'dequeue' }
+  /**
+   * On a project: its workstreams in columns by what builds on what, which the Koordinator reads
+   * from the plan doc unless it has for the doc as it stands. Answers once they stand there.
+   */
+  | { action: 'arrange' }
   /** A waiting card one place earlier or later in the queue, past a card it has no wait with. */
   | { action: 'reorder'; earlier: boolean }
   /**
@@ -1240,6 +1249,8 @@ export type ErrorCode =
   | 'variantsRunning'
   /** A project has no planned workstream left that is not already with the Koordinator. */
   | 'nothingToStart'
+  /** The Koordinator could not read from a project's plan doc which workstream builds on which, so it arranged nothing. */
+  | 'arrangeFailed'
   /** The action is for a prototype on the canvas, and the card is none. */
   | 'notPrototype'
   /** A discarded or built prototype stays in the archive; a new attempt is a new prototype. */

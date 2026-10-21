@@ -656,6 +656,28 @@ function Canvas({
     }
   }, []);
 
+  /**
+   * The project's „Anordnen“, on its card and in its sheet: its workstreams in columns by what builds
+   * on what, once Obeya has read that from the plan doc. It takes effect at once; „Rückgängig“ puts
+   * the cards (and the project, which may have made room for itself) back where they stood.
+   */
+  const arrange = useCallback(async (p: Item) => {
+    const before = [p, ...itemsRef.current.filter((i) => i.parent === p.id)].map(({ id, x, y }) => ({ id, x, y }));
+    try {
+      await api.act(p.id, { action: 'arrange' });
+      showAck(t.plan.arranged, async () => {
+        try {
+          await Promise.all(before.map(({ id, x, y }) => api.patch(id, { x, y })));
+          showAck(t.plan.arrangeUndone);
+        } catch (e) {
+          fail(e);
+        }
+      });
+    } catch (e) {
+      fail(e);
+    }
+  }, []);
+
   /** "Als Projekt aufbereiten" on the note on a plan directory: a card whose agent prepares the doc, started at once. */
   const preparePlanDoc = useCallback(async (dir: PlanDir, file: string) => {
     try {
@@ -1247,7 +1269,7 @@ function Canvas({
             {deps && <DepLinks placed={placed} edges={deps.edges} />}
             {placed.map(({ item, b }) =>
               item.kind === 'project' ? (
-                <ProjectView key={item.id} item={item} b={b} kids={kidsOf.get(item.id) ?? []} onStartAll={startAll} />
+                <ProjectView key={item.id} item={item} b={b} kids={kidsOf.get(item.id) ?? []} onStartAll={startAll} onArrange={arrange} />
               ) : (
                 <CardView
                   key={item.id}
@@ -1459,6 +1481,7 @@ function Canvas({
           onOpen={open}
           onRead={(r) => sheetProject && readPlan(sheetProject, r)}
           onStartAll={startAll}
+          onArrange={arrange}
           els={sheetEls}
           version={snapshot}
         />

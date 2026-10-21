@@ -1218,3 +1218,95 @@ test('overlaps', () => {
   expect(overlaps('src/a.ts', 'src/ab.ts')).toBe(false);
   expect(overlaps('src', 'src/a.ts')).toBe(false);
 });
+
+describe('Koordinator arranges a project by what builds on what', () => {
+  const ws = (key: string, done = false) => ({ key, label: key, title: `Titel ${key}`, body: `Text ${key}`, done, inReview: false });
+  const readings = () => runtime.sessions.filter((s) => s.spec.tools.some((t) => t.name === 'dependencies'));
+  /** A project with W1 live and W2 to W4 planned, just come. */
+  function project() {
+    docs = [{ file: 'docs/plan/p.md', title: 'P', goal: 'Ziel P', workstreams: [ws('W1', true), ws('W2'), ws('W3'), ws('W4')], markdown: '' }];
+    board.docsChanged();
+    const [p, w1, w2, w3, w4] = board.snapshot().items;
+    return { p: p!, w1: w1!, w2: w2!, w3: w3!, w4: w4! };
+  }
+  /** Answers the latest open reading: what each tag builds on. */
+  async function read(on: Record<string, string[]>) {
+    await settle();
+    const s = readings().at(-1)!;
+    const r = s.call('dependencies', { workstreams: Object.entries(on).map(([card, builds_on]) => ({ card, builds_on })) });
+    s.emit({ type: 'idle' });
+    await settle();
+    return r;
+  }
+
+  test('a project just come is read and stands in columns: what can start at once on the left', async () => {
+    const { p, w1, w2, w3, w4 } = project();
+    expect(item(p.id).arranging).toBe(true);
+    await settle();
+    expect(readings()).toHaveLength(1);
+    const brief = readings()[0]!.inbox[0]!;
+    expect(brief).toContain('plan doc docs/plan/p.md');
+    expect(brief).toContain('- K1 (delivered): W1 "Titel W1"');
+    expect(brief).toContain('- K3: W3 "Titel W3" — Text W3');
+    // W2 builds on W4, W3 on W2 and on the delivered W1
+    await read({ K2: ['K4'], K3: ['K2', 'K1'], K4: [] });
+    expect(item(p.id).arranging).toBeUndefined();
+    expect(item(w2.id).buildsOn).toEqual([w4.id]);
+    expect(item(w3.id).buildsOn).toEqual([w2.id, w1.id]);
+    const x = (id: string) => item(id).x;
+    expect(x(w4.id)).toBeLessThan(x(w2.id));
+    expect(x(w2.id)).toBeLessThan(x(w3.id));
+    expect(item(w1.id).y).toBeLessThan(item(w4.id).y);
+  });
+
+  test('every open workstream once: a reading that leaves one out is asked again', async () => {
+    project();
+    await settle();
+    expect(readings()[0]!.call('dependencies', { workstreams: [{ card: 'K2', builds_on: [] }] })).toContain('missing K3, K4');
+  });
+
+  test('a card the owner moved before the reading came keeps its place; the reading is kept', async () => {
+    const { p, w2, w3, w4 } = project();
+    board.patch(w3.id, { x: 900, y: 500 });
+    await read({ K2: ['K4'], K3: [], K4: [] });
+    expect(item(w3.id)).toMatchObject({ x: 900, y: 500 });
+    expect(item(w2.id).x).toBe(w2.x);
+    expect(item(w2.id).buildsOn).toEqual([w4.id]);
+    expect(board.deps(p.id).current).toBe(true);
+  });
+
+  test('asked to arrange, it uses what it read for the doc as it stands, and reads again once the doc changed', async () => {
+    const { p, w2, w3, w4 } = project();
+    board.patch(w2.id, { x: 900, y: 500 });
+    await read({ K2: ['K4'], K3: [], K4: [] });
+    await k.arrange(p.id);
+    expect(readings()).toHaveLength(1);
+    expect(item(w2.id).x).toBeGreaterThan(item(w4.id).x);
+
+    docs = [{ ...docs[0]!, workstreams: [ws('W1', true), ws('W2'), ws('W3'), { ...ws('W4'), body: 'Baut auf W3 auf.' }] }];
+    board.docsChanged();
+    expect(board.deps(p.id).current).toBe(false);
+    const done = k.arrange(p.id);
+    expect(item(p.id).arranging).toBe(true);
+    await read({ K2: ['K4'], K3: [], K4: ['K3'] });
+    await done;
+    expect(readings()).toHaveLength(2);
+    // W3, then W4, then W2: three columns
+    expect(item(w4.id).x).toBeGreaterThan(item(w3.id).x);
+    expect(item(w2.id).x).toBeGreaterThan(item(w4.id).x);
+  });
+
+  test('a reading that fails leaves the cards where they are and says so', async () => {
+    const { p, w2 } = project();
+    board.patch(w2.id, { x: 900, y: 500 });
+    await settle();
+    readings()[0]!.emit({ type: 'error', message: 'kaputt' });
+    await settle();
+    expect(item(p.id).arranging).toBeUndefined();
+    const done = k.arrange(p.id);
+    await settle();
+    readings()[1]!.emit({ type: 'error', message: 'kaputt' });
+    await expect(done).rejects.toMatchObject({ code: 'arrangeFailed' });
+    expect(item(w2.id)).toMatchObject({ x: 900, y: 500 });
+  });
+});

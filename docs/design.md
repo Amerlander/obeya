@@ -1666,6 +1666,30 @@ On the canvas, a planned card and one waiting in the queue show a play button wh
 on them; it starts the card (the queued one anyway) without unfolding it. While the pointer is on a
 card, the waits around it show (see Scheduling).
 
+#### A project arranged by its dependencies
+
+A project's workstreams can stand in columns by what builds on what: on the left what can start at
+once, right of it what builds on it, each column a step further along the longest chain of open
+workstreams it builds on (`arrangeWorkstreams` in `src/core/layout.ts`). Delivered workstreams are
+no step on a chain and stay in rows of chips above. Within a column the cards follow the rows of what
+they build on, so the arrows cross little, else the plan's order; a column holds four cards, more of
+one step go on in a column beside it, with a wider gap before the next step for the arrows.
+
+Which workstream builds on which, the Koordinator reads from the plan doc in a turn of its own (plan
+docs say it in prose: "Needs W1", "after W2", or only in what a workstream uses): for each open
+workstream the ones it builds on directly, delivered ones included. The reading is kept on the
+project (`deps`) for the doc's workstreams as they stood (keys, titles and texts), and a workstream
+waits, while the pointer is on a card, for the open ones it builds on as for those it waits for in
+the queue (see Scheduling). The project's sheet lists the workstreams in the arranged order and
+says what each builds on.
+
+A project that comes with two open workstreams or more is read at once, and arranged once the reading
+is there, unless the owner has moved one of its cards meanwhile; after that "Anordnen" in the
+project's head ("Nach Abhängigkeiten anordnen" in its sheet) arranges it again, at once when the
+reading holds for the doc as it stands, else after a new reading ("Ordnet an …" on the button
+meanwhile). It takes effect at once, with „Rückgängig“ in the line above the microphone. A project
+that grows into another card or project with it moves to the nearest spot clear of everything.
+
 ### Moving around
 
 A card dragged to an edge of the view scrolls it that way, faster the nearer the edge, but only as
@@ -2616,7 +2640,9 @@ ahead when one is judged again.
 
 While the pointer is on a card, the waits around it show over every step, both ways
 (`src/ui/deps.ts`): the cards it waits for ("kommt zuerst"), those waiting for it ("wartet darauf"),
-each with a ring and an arrow from the card waited for to the card waiting.
+each with a ring and an arrow from the card waited for to the card waiting. A workstream not
+delivered yet also waits for the open workstreams it builds on as read for its project's arrangement
+(see A project arranged by its dependencies), started or not.
 
 #### Starting a whole project
 

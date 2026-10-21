@@ -94,6 +94,84 @@ export function placeWorkstreams(ws: { done: boolean }[], startY = PROJECT_HEAD)
   return out;
 }
 
+/** What arranging a project's workstreams needs of each, in the plan's order. */
+export type Arrangeable = Pick<Item, 'id' | 'kind' | 'state' | 'parent' | 'finishing' | 'buildsOn'>;
+
+/** Between two columns of workstreams there is room for the arrows from one to the next. */
+const COLUMN_GAP = 70;
+/** A column holds this many cards; more of one depth go into a second column beside it. */
+const ROWS_PER_COLUMN = 4;
+
+/**
+ * A project's open workstreams in columns by their dependencies (`layers`: the columns of each
+ * depth). A workstream's depth is the length of the longest chain of open workstreams it builds on,
+ * so what can start at once stands left and what builds on it right of it. Within a column the cards follow the rows of what they
+ * build on, so arrows cross little, else the plan's order. Delivered ones (chips) are no step on
+ * a chain: they stay in rows above. A cycle (a doc misread) is cut where it closes.
+ */
+export function dependencyColumns(ws: Arrangeable[]): { chips: string[]; layers: string[][][] } {
+  const open = ws.filter((w) => shapeOf(w) !== 'chip');
+  const byId = new Map(open.map((w) => [w.id, w]));
+  const on = (w: Arrangeable) => (w.buildsOn ?? []).filter((d) => d !== w.id && byId.has(d));
+  const depth = new Map<string, number>();
+  const visiting = new Set<string>();
+  const depthOf = (w: Arrangeable): number => {
+    const known = depth.get(w.id);
+    if (known !== undefined) return known;
+    visiting.add(w.id);
+    let d = 0;
+    for (const b of on(w)) if (!visiting.has(b)) d = Math.max(d, depthOf(byId.get(b)!) + 1);
+    visiting.delete(w.id);
+    depth.set(w.id, d);
+    return d;
+  };
+  const layers: Arrangeable[][] = [];
+  for (const w of open) (layers[depthOf(w)] ??= []).push(w);
+  const row = new Map<string, number>();
+  const arranged = layers
+    .filter(Boolean)
+    .map((layer) => {
+      const mean = (w: Arrangeable) => {
+        const rows = on(w).flatMap((b) => (row.has(b) ? [row.get(b)!] : []));
+        return rows.length ? rows.reduce((a, b) => a + b, 0) / rows.length : Infinity;
+      };
+      const sorted = layer.map((w, n) => ({ w, n, m: mean(w) })).sort((a, b) => (a.m === b.m ? a.n - b.n : a.m - b.m)).map((x) => x.w);
+      sorted.forEach((w, n) => row.set(w.id, n % ROWS_PER_COLUMN));
+      // a depth with more cards than a column holds goes on in a column beside it
+      return Array.from({ length: Math.ceil(sorted.length / ROWS_PER_COLUMN) }, (_, n) => sorted.slice(n * ROWS_PER_COLUMN, (n + 1) * ROWS_PER_COLUMN).map((w) => w.id));
+    });
+  return { chips: ws.filter((w) => shapeOf(w) === 'chip').map((w) => w.id), layers: arranged };
+}
+
+/** The workstreams as `dependencyColumns` arranges them, read row by row of chips, then column by column. */
+export function dependencyOrder(ws: Arrangeable[]): string[] {
+  const { chips, layers } = dependencyColumns(ws);
+  return [...chips, ...layers.flat(2)];
+}
+
+/**
+ * Where each workstream of a project stands once arranged by its dependencies (relative to the
+ * project): rows of chips below the head, then the columns of `dependencyColumns`, a wider gap
+ * between one depth and the next for the arrows.
+ */
+export function arrangeWorkstreams(ws: Arrangeable[]): Map<string, { x: number; y: number }> {
+  const { chips, layers } = dependencyColumns(ws);
+  const out = new Map<string, { x: number; y: number }>();
+  const [cw, ch] = CARD_SIZE.chip;
+  chips.forEach((id, n) => out.set(id, { x: PROJECT_PAD + (n % CHIPS_PER_ROW) * (cw + GAP), y: PROJECT_HEAD + Math.floor(n / CHIPS_PER_ROW) * (ch + GAP) }));
+  const top = PROJECT_HEAD + Math.ceil(chips.length / CHIPS_PER_ROW) * (ch + GAP);
+  const [w, h] = CARD_SIZE.task;
+  let x = PROJECT_PAD;
+  for (const layer of layers) {
+    for (const ids of layer) {
+      ids.forEach((id, r) => out.set(id, { x, y: top + r * (h + GAP) }));
+      x += w + GAP;
+    }
+    x += COLUMN_GAP - GAP;
+  }
+  return out;
+}
+
 /**
  * The spot nearest `want` where a card of `size` keeps GAP clear of everything in `taken`. Besides
  * `want` itself, the candidates are the positions flush beside the edges of what is taken; right of

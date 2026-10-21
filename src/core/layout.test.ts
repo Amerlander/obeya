@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { type Bounds, freeSpotNear, GAP, shapeOf } from './layout';
+import { type Arrangeable, arrangeWorkstreams, type Bounds, dependencyColumns, dependencyOrder, freeSpotNear, GAP, PROJECT_HEAD, PROJECT_PAD, shapeOf } from './layout';
 
 const clear = (a: Bounds, b: Bounds) => a.x + a.w + GAP <= b.x || b.x + b.w + GAP <= a.x || a.y + a.h + GAP <= b.y || b.y + b.h + GAP <= a.y;
 
@@ -64,5 +64,50 @@ describe('shapeOf', () => {
 
   test('a card on its own stays a task', () => {
     expect(shapeOf({ kind: 'task', state: 'live' })).toBe('task');
+  });
+});
+
+describe('arranging workstreams by their dependencies', () => {
+  const ws = (id: string, buildsOn: string[] = [], state: Arrangeable['state'] = 'planned'): Arrangeable => ({ id, kind: 'task', state, parent: 'p', buildsOn });
+
+  test('what builds on another stands in a column right of it', () => {
+    const { layers } = dependencyColumns([ws('a'), ws('b', ['a']), ws('c'), ws('d', ['b', 'c'])]);
+    expect(layers).toEqual([[['a', 'c']], [['b']], [['d']]]);
+  });
+
+  test('within a column the cards follow the rows of what they build on', () => {
+    // y builds on b (second row), x on a (first row): x comes first although the plan names y first
+    const { layers } = dependencyColumns([ws('a'), ws('b'), ws('y', ['b']), ws('x', ['a'])]);
+    expect(layers[1]).toEqual([['x', 'y']]);
+  });
+
+  test('delivered workstreams stay above, and what builds on them alone can start at once', () => {
+    const r = dependencyColumns([ws('done', [], 'live'), ws('a', ['done']), ws('b', ['a'])]);
+    expect(r.chips).toEqual(['done']);
+    expect(r.layers).toEqual([[['a']], [['b']]]);
+    expect(dependencyOrder([ws('a', ['done']), ws('done', [], 'live'), ws('b', ['a'])])).toEqual(['done', 'a', 'b']);
+  });
+
+  test('a cycle is cut where it closes', () => {
+    expect(dependencyColumns([ws('a', ['b']), ws('b', ['a'])]).layers.flat(2).sort()).toEqual(['a', 'b']);
+  });
+
+  test('a depth with more cards than a column holds goes on in a column beside it', () => {
+    const many = ['a', 'b', 'c', 'd', 'e'].map((id) => ws(id));
+    const pos = arrangeWorkstreams([...many, ws('z', ['e'])]);
+    expect(pos.get('a')).toEqual({ x: PROJECT_PAD, y: PROJECT_HEAD });
+    expect(pos.get('e')).toEqual({ x: PROJECT_PAD + 300 + GAP, y: PROJECT_HEAD });
+    // the next depth after a wider gap than between the two columns of one
+    expect(pos.get('z')!.x - pos.get('e')!.x).toBeGreaterThan(300 + GAP);
+  });
+
+  test('cards and chips never overlap', () => {
+    const all = [ws('d1', [], 'live'), ws('d2', [], 'done'), ws('a'), ws('b', ['a']), ws('c', ['a']), ws('d', ['b'])];
+    const pos = arrangeWorkstreams(all);
+    const boxes = all.map((w) => {
+      const [width, height] = shapeOf(w) === 'chip' ? [196, 64] : [300, 136];
+      return { ...pos.get(w.id)!, w: width, h: height };
+    });
+    for (const [i, a] of boxes.entries()) for (const b of boxes.slice(i + 1)) expect(clear(a, b)).toBe(true);
   });
 });

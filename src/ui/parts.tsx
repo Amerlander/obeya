@@ -1,7 +1,7 @@
 // Presentational pieces of the canvas. State and camera live in App.tsx.
 
 import { memo, type ReactNode, useEffect, useRef, useState } from 'react';
-import { type Bounds, shapeOf } from '../core/layout';
+import { type Bounds, dependencyOrder, shapeOf } from '../core/layout';
 import { clip } from '../core/text';
 import { answering, type AppUpdate, type CanvasInfo, type ClonePool, finished, finishedArchivable, finishingUp, type Item, needsYou, openQuestions, type PendingRestart, type PoolHost, type ProjectHistory, type SourceUpdate, stoppedArchivable, titleFrom } from '../core/types';
 import { api } from './api';
@@ -73,6 +73,19 @@ const PlayIcon = ({ size }: { size: number }) => (
 
 /** How many of a project's workstreams its button starts: those planned and in no queue. */
 const startableIn = (kids: Item[]) => kids.filter((k) => k.state === 'planned' && !k.queue).length;
+
+/** A project is worth arranging by its dependencies with two cards or more standing open in it. */
+const arrangeable = (kids: Item[]) => kids.filter((k) => shapeOf(k) !== 'chip').length > 1;
+
+/** The columns mark on the button that arranges a project's workstreams by what builds on what. */
+const ColumnsIcon = ({ size }: { size: number }) => (
+  <svg width={size} height={size} viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2">
+    <rect x="0.6" y="1" width="3.6" height="3" rx="0.5" />
+    <rect x="0.6" y="7" width="3.6" height="3" rx="0.5" />
+    <rect x="7.8" y="4" width="3.6" height="3" rx="0.5" />
+    <path d="M4.2 2.5 L7.8 5.5 M4.2 8.5 L7.8 5.5" />
+  </svg>
+);
 
 const sameBounds = (a: Bounds, b: Bounds) => a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
 
@@ -580,7 +593,19 @@ export function WorkspacesPill({ pools, canvas, items }: { pools: ClonePool[]; c
 }
 
 export const ProjectView = memo(
-  function ProjectView({ item, b, kids, onStartAll }: { item: Item; b: Bounds; kids: Item[]; onStartAll: (project: Item, count: number) => void }) {
+  function ProjectView({
+    item,
+    b,
+    kids,
+    onStartAll,
+    onArrange,
+  }: {
+    item: Item;
+    b: Bounds;
+    kids: Item[];
+    onStartAll: (project: Item, count: number) => void;
+    onArrange: (project: Item) => void;
+  }) {
     const live = kids.filter((k) => finished(k.state)).length;
     const waiting = kids.filter(needsYou).length;
     const startable = startableIn(kids);
@@ -590,9 +615,24 @@ export const ProjectView = memo(
           <span className="ttl">{plain(item.title)}</span>
           <span className="kind">{t.kind.project}</span>
           <span className="progress">{t.progress(live, kids.length)}</span>
+          {(item.arranging || arrangeable(kids)) && (
+            <button
+              className="head-btn arrange"
+              disabled={item.arranging}
+              title={`${t.plan.arrangeLong}. ${t.plan.arrangeHint}`}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onArrange(item);
+              }}
+            >
+              <ColumnsIcon size={11} />
+              {item.arranging ? t.plan.arranging : t.plan.arrange}
+            </button>
+          )}
           {startable > 0 && (
             <button
-              className="start-all"
+              className="head-btn start-all"
               title={`${t.plan.startAll(startable)}. ${t.plan.startAllHint}`}
               // the canvas would take the press as the start of a drag or a click that opens the project
               onPointerDown={(e) => e.stopPropagation()}
@@ -610,7 +650,7 @@ export const ProjectView = memo(
       </div>
     );
   },
-  (a, b) => a.item === b.item && a.onStartAll === b.onStartAll && sameBounds(a.b, b.b) && a.kids.length === b.kids.length && a.kids.every((k, i) => k === b.kids[i]),
+  (a, b) => a.item === b.item && a.onStartAll === b.onStartAll && a.onArrange === b.onArrange && sameBounds(a.b, b.b) && a.kids.length === b.kids.length && a.kids.every((k, i) => k === b.kids[i]),
 );
 
 /**
@@ -699,6 +739,7 @@ export function Sheet({
   onOpen,
   onRead,
   onStartAll,
+  onArrange,
   els,
   version,
 }: {
@@ -713,6 +754,8 @@ export function Sheet({
   onRead: (r: { mark?: string } | null) => void;
   /** Hands all planned workstreams to the Koordinator, which orders them. */
   onStartAll: (project: Item, count: number) => void;
+  /** Puts the workstreams in columns by what builds on what. */
+  onArrange: (project: Item) => void;
   /** Where the cards opened from the sheet unfold from (an archived project's are not on the canvas). */
   els: Map<string, HTMLElement>;
   /** Changes when the canvas does, so the decisions are read again. */
@@ -746,6 +789,8 @@ export function Sheet({
   const markEl = useRef<HTMLElement | null>(null);
   const shown = reading && doc?.id === project?.id ? doc : null;
   const startable = startableIn(kids);
+  // once Obeya has read what builds on what, the workstreams in the order they stand arranged in
+  const inOrder = kids.some((k) => k.buildsOn) ? dependencyOrder(kids).map((id) => kids.find((k) => k.id === id)!) : kids;
   // the doc opens at its top, or at the workstream it was opened for
   useEffect(() => {
     if (!shown || !box.current) return;
@@ -798,6 +843,15 @@ export function Sheet({
               <p className="hint">{t.plan.startAllHint}</p>
             </div>
           )}
+          {!project.archivedAt && (project.arranging || arrangeable(kids)) && (
+            <div className="arrange">
+              <button className="btn" disabled={project.arranging} onClick={() => onArrange(project)}>
+                <ColumnsIcon size={12} />
+                {project.arranging ? t.plan.arranging : t.plan.arrangeLong}
+              </button>
+              <p className="hint">{t.plan.arrangeHint}</p>
+            </div>
+          )}
           {history?.origin && (
             <button className="origin" ref={ref(history.origin.id)} onClick={() => onOpen(history.origin!)}>
               <span className="hint">{t.fromIdea}</span>
@@ -805,7 +859,7 @@ export function Sheet({
             </button>
           )}
           <ol>
-            {kids.map((k) => (
+            {inOrder.map((k) => (
               <li key={k.id} ref={ref(k.id)} className={`s-${k.state}`} onClick={() => onOpen(k)}>
                 <span className="dot" />
                 <span className="w">{k.label}</span>
@@ -819,7 +873,9 @@ export function Sheet({
                     </div>
                   )}
                   <span className="hint">
-                    {k.queue && 'behind' in k.queue ? t.queue.behind(waitedOn(k.queue.behind, all, (id) => sibling(id, kids, all))) : stateLabel(k)}
+                    {k.queue && 'behind' in k.queue
+                      ? t.queue.behind(waitedOn(k.queue.behind, all, (id) => sibling(id, kids, all)))
+                      : [stateLabel(k), !finished(k.state) && k.buildsOn?.length && t.plan.buildsOn(k.buildsOn.map((id) => sibling(id, kids, all)))].filter(Boolean).join(' · ')}
                   </span>
                 </span>
               </li>

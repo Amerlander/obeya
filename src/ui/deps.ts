@@ -1,7 +1,8 @@
 // What a card in the queue waits for, and what waits for a card, over every step: shown while the
-// pointer is on a card.
+// pointer is on a card. A workstream not delivered yet also waits for the open workstreams it builds
+// on, as the Koordinator read them from the plan doc, started or not.
 
-import type { Item } from '../core/types';
+import { finished, type Item } from '../core/types';
 
 export interface Deps {
   /** The cards the hovered one waits for, directly or through others. */
@@ -12,13 +13,15 @@ export interface Deps {
   edges: [from: string, to: string][];
 }
 
-const behind = (i: Item) => (i.queue && 'behind' in i.queue ? i.queue.behind : []);
+const queued = (i: Item) => (i.queue && 'behind' in i.queue ? i.queue.behind : []);
 
 /** The waits around `id` among `items`, both ways; undefined when there are none or `id` is gone
  *  (a card archived under the pointer stays hovered). */
 export function depsOf(id: string, items: Item[]): Deps | undefined {
   const byId = new Map(items.map((i) => [i.id, i]));
   if (!byId.has(id)) return undefined;
+  const open = (x: string | undefined) => !!x && byId.has(x) && !finished(byId.get(x)!.state);
+  const behind = (i: Item) => [...new Set([...queued(i), ...(open(i.id) ? (i.buildsOn ?? []).filter(open) : [])])];
   const waiters = new Map<string, string[]>();
   for (const i of items) for (const b of behind(i)) if (byId.has(b)) waiters.set(b, [...(waiters.get(b) ?? []), i.id]);
   const edges = new Map<string, [string, string]>();

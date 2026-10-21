@@ -101,6 +101,8 @@ export interface CardRow {
   snoozed: string | null;
   /** JSON: the files its worker named as the result at its latest handover that named any (`CardFile[]`). */
   files: string | null;
+  /** JSON, projects only: which workstream builds on which, as the Koordinator read it from the plan doc (`StoredDeps` in board.ts). */
+  deps: string | null;
 }
 
 /** Words the usage limit keeps the Koordinator from reading (`talk.held`): until when, and how it reads them then (`Commander`'s). */
@@ -393,6 +395,8 @@ export const MIGRATIONS = [
   );`,
   // the files a card's worker named as its result at its handover (JSON `CardFile[]`)
   'ALTER TABLE cards ADD COLUMN files TEXT;',
+  // which workstream of a project builds on which, read from its plan doc to arrange them (JSON `StoredDeps`)
+  'ALTER TABLE cards ADD COLUMN deps TEXT;',
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter, wish';

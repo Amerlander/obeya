@@ -91,8 +91,14 @@ export class Koordinator {
   /** Cards being named now: asked again, the same session answers. */
   private naming = new Map<string, Promise<void>>();
 
+  /** The projects whose plan doc it reads now for which workstream builds on which. */
+  private readingDeps = new Map<string, Promise<void>>();
+
   constructor(private o: KoordinatorOptions) {
-    o.board.onChange(() => this.scheduleDrain());
+    o.board.onChange(() => {
+      this.scheduleDrain();
+      this.readPendingDeps();
+    });
   }
 
   /** After a restart: decide again on cards the Koordinator was checking, and start what is free. */
@@ -105,6 +111,7 @@ export class Koordinator {
     }
     for (const p of together) this.serial(() => this.decideAll(p));
     this.scheduleDrain();
+    this.readPendingDeps();
   }
 
   shutdown() {
@@ -136,6 +143,98 @@ export class Koordinator {
     open.forEach((w, n) => this.o.board.work(w.id, { queue: JSON.stringify({ checking: true, together: project.id, since: new Date(now + n).toISOString() }) }));
     this.o.board.log(project.id, 'state', 'owner', this.o.board.t.koordinator.allStarted(open.map((w) => w.label ?? w.title).join(', ')));
     setTimeout(() => this.serial(() => this.decideAll(project.id)), this.o.holdMs ?? START_ALL_HOLD_MS);
+  }
+
+  /**
+   * The owner wants the project's workstreams arranged by what builds on what: at once when it has
+   * read that for the doc as it stands, else once it has.
+   */
+  async arrange(projectId: string): Promise<void> {
+    if (this.o.board.deps(projectId).current) return this.o.board.arrange(projectId);
+    this.o.board.setDeps(projectId, { reading: 'owner' });
+    // the reading arranges the project once it has it
+    await this.readDeps(projectId).catch((e) => {
+      throw new BadRequest('arrangeFailed', messageOf(e));
+    });
+  }
+
+  /** Projects waiting for their reading (one just come, or one asked for before a restart): it starts. */
+  private readPendingDeps() {
+    for (const p of this.o.board.snapshot().items) if (p.kind === 'project' && p.arranging && !this.readingDeps.has(p.id)) void this.readDeps(p.id).catch(() => {});
+  }
+
+  /**
+   * Reads from the plan doc which workstream builds on which, and arranges the project by it when
+   * the owner asked for that, or when it just came and the owner has moved none of its cards since.
+   */
+  private readDeps(projectId: string): Promise<void> {
+    const running = this.readingDeps.get(projectId);
+    if (running) return running;
+    const run = (async () => {
+      const project = this.o.board.item(projectId);
+      if (!project) return;
+      const kids = this.o.board.snapshot().items.filter((i) => i.parent === projectId);
+      let on: Record<string, string[]>;
+      try {
+        on = await this.dependencies(project, kids);
+      } catch (e) {
+        this.o.board.log(projectId, 'error', 'obeya', this.o.board.t.koordinator.arrangeFailed(messageOf(e)));
+        this.o.board.setDeps(projectId, { failed: true });
+        throw e;
+      }
+      if (!this.o.board.item(projectId)) return;
+      const by = this.o.board.deps(projectId).reading;
+      this.o.board.setDeps(projectId, { on });
+      if (by === 'owner' || (by === 'auto' && this.o.board.untouched(projectId))) this.o.board.arrange(projectId);
+    })().finally(() => this.readingDeps.delete(projectId));
+    this.readingDeps.set(projectId, run);
+    return run;
+  }
+
+  /** One turn reads from the plan doc which workstream builds on which: the keys of those each builds on, by key. */
+  private async dependencies(project: Item, kids: Item[]): Promise<Record<string, string[]>> {
+    const keys = this.o.board.workstreamKeys(project.id);
+    const tags = new Map(kids.map((k, n) => [`K${n + 1}`, k.id]));
+    let on: Record<string, string[]> | undefined;
+    const error = await readSession(this.o.runtime, {
+      cwd: this.o.repoFor(project).path,
+      role: 'koordinator',
+      system: DEPS_SYSTEM,
+      tools: (finish) => [
+        {
+          name: 'dependencies',
+          description: 'Report every open workstream once: its tag and the tags of the workstreams it builds on (empty when it builds on none).',
+          schema: { workstreams: z.array(z.object({ card: z.string(), builds_on: z.array(z.string()) })) },
+          run: (a) => {
+            if (on) return 'Already reported.';
+            const found: Record<string, string[]> = {};
+            for (const w of a.workstreams as { card: string; builds_on: string[] }[]) {
+              const id = tags.get(w.card);
+              if (!id) continue;
+              found[keys.get(id)!] = w.builds_on.flatMap((t) => {
+                const b = tags.get(t);
+                return b && b !== id ? [keys.get(b)!] : [];
+              });
+            }
+            const missing = kids.filter((k) => !finished(k.state) && !(keys.get(k.id)! in found));
+            if (missing.length) return `Every open workstream once, please: missing ${missing.map((k) => tagOf(tags, k.id)).join(', ')}. Call dependencies again with all of them.`;
+            on = found;
+            return finish('Recorded. End your turn now.');
+          },
+        },
+      ],
+      brief: [
+        `The project: "${project.title}"${project.plan ? `; plan doc ${project.plan.file}` : ''}.`,
+        project.plan?.goal ? `Goal: ${project.plan.goal}` : '',
+        `Its workstreams, in the plan's order:\n${kids
+          .map((k) => `- ${tagOf(tags, k.id)}${finished(k.state) ? ' (delivered)' : ''}: ${k.label ? `${k.label} ` : ''}"${k.title}"${k.body ? ` — ${k.body.replace(/\s+/g, ' ').slice(0, 600)}` : ''}`)
+          .join('\n')}`,
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
+    });
+    if (!on) throw new Error(error ?? 'no dependencies');
+    return on;
   }
 
   /** The workstreams of a project's start that the Koordinator has not planned yet. */
@@ -899,6 +998,14 @@ Read what you need in the folder (you cannot change files), then call scope exac
 - builds_on: for a workstream, the tags of the workstreams of its project it builds on, whether in progress, queued or not started; empty when none, and for any other card.
 - reason: one sentence in ${language} for the owner: with a dependency, what it builds on; with a collision, which files or directories both touch; without either, what they share, if anything, and why that is fine. The owner does not know the tags: name cards by their title.
 Keep it quick: this runs every time a card starts.
+`.trim();
+
+const DEPS_SYSTEM = `
+You are the Koordinator of Obeya, a canvas on which the owner directs coding agents. The owner wants the workstreams of a project arranged by what builds on what: what can start at once on the left, what builds on it to the right of it. Read the plan doc (and the repository only where the doc leaves it open; you cannot change files) and say for each open workstream which workstreams it builds on.
+
+A workstream builds on another when it needs code, an API, data, a document or a decision that the other one introduces, or when the plan says it comes after it, needs it or waits for it. Name only direct dependencies: when C builds on B and B on A, C names B, not A. Two workstreams that merely touch the same files, or that the plan lists one after the other without saying one needs the other, do not build on each other. A workstream may build on a delivered one.
+
+Call dependencies exactly once, with every open workstream once.
 `.trim();
 
 const FOLDER_SCHEDULE_SYSTEM = (language: string) => `
