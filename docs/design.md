@@ -2159,7 +2159,8 @@ project agents) are not followed.
 
 The card shows the list in the place of its branch („Im Ordner geändert: 4 Dateien +12 −1 ·
 Rückgängig: vollständig“) and below it beside the handover (↪ moved, ＋ added, ✎ changed, ✕ deleted;
-the lines added and removed in columns of their own, never broken off the path), and „Ansehen“ shows
+the lines added and removed in columns of their own, never broken off the path; all of them, a list
+longer than about ten lines scrolling in that height, its scrollbar always shown), and „Ansehen“ shows
 it over the page with the diffs of text files whose earlier version Obeya kept (`git diff --no-index`;
 a file counts as text up to 1 MB without a NUL byte in its first 8,000). Beside the conversation, the files it changed show as
 its result, Markdown formatted, a PDF as a PDF (see The files beside the demo); its worker names

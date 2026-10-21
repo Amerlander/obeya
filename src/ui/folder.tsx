@@ -15,8 +15,6 @@ import { t } from './strings';
 const LOOK_MS = 5000;
 /** How long „Änderungen verwerfen“ waits for a second click that calls it off before it goes ahead: putting the files back cannot be taken back. */
 const DISCARD_WAIT_S = 8;
-/** How many changes the list beside the handover shows before „und N weitere“. */
-const SHOWN = 8;
 
 /** The card's change list in its folder, read again as the card moves on, while its agent works, and on `reload`. */
 export function useFolderDiff(item: Item, on: boolean): { diff: CardDiff | null; reload: () => void } {
@@ -199,16 +197,18 @@ export function FolderBox({ item, diff, onTab }: { item: Item; diff: CardDiff | 
   return (
     <div className="f-box">
       <b>{t.folder.changed}</b>
-      <ChangeTable
-        changes={changes.slice(0, SHOWN)}
-        diffed={(c) => !!(c.added || c.removed)}
-        onFile={setOpen}
-        lines
-        tabbed={(c) => files.some((f) => f.path === c.path)}
-        onTab={onTab}
-      />
+      {/* all of them, a long list scrolling in a few lines' height of its own */}
+      <div className="f-scroll">
+        <ChangeTable
+          changes={changes}
+          diffed={(c) => !!(c.added || c.removed)}
+          onFile={setOpen}
+          lines
+          tabbed={(c) => files.some((f) => f.path === c.path)}
+          onTab={onTab}
+        />
+      </div>
       <p className="hint">
-        {changes.length > SHOWN && `${t.folder.more(changes.length - SHOWN)} · `}
         <button className="link" onClick={() => setOpen(true)}>
           {t.folder.show}
         </button>

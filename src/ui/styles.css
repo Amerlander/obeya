@@ -1019,6 +1019,11 @@ button.q-end:hover { color: var(--ink); text-decoration: underline; }
 /* what a card changed in a folder without git */
 .f-box { margin: 10px 0 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; max-width: 760px; font-size: 12.5px; }
 .f-box p { margin: 6px 0 0; }
+/* about ten lines; a longer list scrolls, its scrollbar always shown so that it says there is more */
+.f-scroll { max-height: 15em; overflow-y: auto; }
+.f-scroll::-webkit-scrollbar { width: 8px; }
+.f-scroll::-webkit-scrollbar-track { background: var(--chip); border-radius: 4px; }
+.f-scroll::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 4px; }
 .f-list { border-collapse: collapse; margin: 6px 0 0; }
 .d-body > .f-list { margin-bottom: 10px; font-size: 13px; }
 .f-list td { padding: 1px 0; vertical-align: top; }
