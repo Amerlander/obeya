@@ -2,7 +2,7 @@
 // of their own, on a card's action row and as „Ändern“ on the snooze line of its conversation, and
 // that line with „Jetzt zurückholen“. One component for every kind of card.
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CardEvent, Item, Snooze } from '../core/types';
 import { api } from './api';
 import { useMenuClose } from './queue';
@@ -74,6 +74,9 @@ export function SnoozeMenu({
   const [picking, setPicking] = useState(false);
   const [value, setValue] = useState('');
   const box = useRef<HTMLDivElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  // in the conversation the menu may reach past its end, the more once the date and time to pick open in it
+  useEffect(() => void (inline && menu.current?.scrollIntoView({ block: 'nearest' })), [open, picking]);
   const close = () => {
     setOpen(false);
     setPicking(false);
@@ -92,7 +95,7 @@ export function SnoozeMenu({
         {mark && <ClockMark />} {label}
       </button>
       {open && (
-        <div className="snooze-menu" role="menu" ref={(el) => void (inline && el?.scrollIntoView({ block: 'nearest' }))}>
+        <div className="snooze-menu" role="menu" ref={menu}>
           <div className="snooze-h">{heading}</div>
           {snoozePresets(now).map((p) => (
             <button key={p.label} className="snooze-opt" role="menuitem" onClick={() => go(p.at)}>

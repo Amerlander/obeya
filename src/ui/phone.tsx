@@ -71,9 +71,12 @@ function keyboardResizes() {
   if (meta && !meta.content.includes('interactive-widget')) meta.content += ', interactive-widget=resizes-content';
 }
 
+/** The kinds of input the keyboard comes up for; a date or a time opens the phone's own picker instead. */
+const TYPED = new Set(['text', 'search', 'email', 'url', 'tel', 'password', 'number']);
+
 /** Whether the element is a text field: one the keyboard comes up for. */
 const typesText = (el: unknown): el is HTMLTextAreaElement | HTMLInputElement =>
-  el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && !['button', 'checkbox', 'file', 'radio', 'range'].includes(el.type));
+  el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && TYPED.has(el.type));
 
 /** How much shorter than the tallest seen the screen gets while the keyboard is up; a browser's bars sliding in and out take less. */
 const KEYBOARD_PX = 150;

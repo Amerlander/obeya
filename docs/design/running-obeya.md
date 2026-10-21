@@ -205,7 +205,8 @@ A tap on a button next to a field acts at the first tap: the screenshot button a
 cursor in the field, so the keyboard stays up, and back from the image picker the field takes the
 focus again. A tap into a field while the keyboard is down only places the cursor and brings the
 keyboard up; otherwise Chrome's spelling suggestions, opened by that tap, closed the keyboard just
-opening. Texts that name the space bar name the microphone. Enter breaks the line and only Send sends
+opening. That holds only for fields one types into: a tap on a date and time field stays the
+browser's and opens the phone's own picker (taken over too, it did nothing). Texts that name the space bar name the microphone. Enter breaks the line and only Send sends
 (a phone's Enter is its line break, and a half-written message cannot be taken back). The screenshot
 button offers photo library and camera, and marking a screenshot works with a finger. Drafts are kept
 per tab apart from the canvas's, the field of Obeya's conversation one per canvas.
