@@ -1014,6 +1014,8 @@ button.q-end:hover { color: var(--ink); text-decoration: underline; }
 .f-list td.d-add, .f-list td.d-del { padding-left: 10px; white-space: nowrap; text-align: right; }
 .f-path { overflow-wrap: anywhere; }
 .f-list button.link { text-align: left; font: inherit; }
+.f-list button.f-lines { color: inherit; }
+.f-list tr:has(.f-lines:hover) .f-lines { text-decoration: underline; }
 .f-list .f-mark { width: 1.2em; padding-right: 4px; text-align: center; color: var(--muted); }
 .f-left { color: var(--muted); font-style: italic; }
 .f-undo.partial { color: var(--muted); }

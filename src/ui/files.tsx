@@ -40,12 +40,12 @@ function useChange(item: Item, given: CardDiff | null | undefined): CardDiff | n
 /**
  * The card's left column with its files: the tabs, the demo (`demo`) under the first, a file's view
  * under each other. Without files to show it is the demo alone. `diff`: the card's change where the
- * card has read it already.
+ * card has read it already. `tab`: the path of the tab picked (`''` the demo), in the column or in
+ * the change list beside the handover; null for the first.
  */
-export function ResultFiles({ item, diff, demo }: { item: Item; diff?: CardDiff | null; demo: ReactNode }) {
+export function ResultFiles({ item, diff, demo, tab, onTab }: { item: Item; diff?: CardDiff | null; demo: ReactNode; tab: string | null; onTab: (path: string) => void }) {
   const change = useChange(item, diff);
   const files = shownFiles(change, item.files);
-  const [tab, setTab] = useState<string | null>(null);
   const [more, setMore] = useState(false);
   const demoBox = useRef<HTMLDivElement>(null);
   // what the shown files are as of now: the change read and the latest handover
@@ -57,14 +57,18 @@ export function ResultFiles({ item, diff, demo }: { item: Item; diff?: CardDiff 
     const h = box.current?.offsetHeight ?? 0;
     if (h > tallest) setTallest(h);
   });
-  if (!files.length) return demo || (item.files && change ? <p className="hint">{t.files.none}</p> : null);
-  const current = tab !== null && (tab === DEMO ? !!demo : files.some((f) => f.path === tab)) ? tab : demo ? DEMO : files[0]!.path;
-  const pick = (path: string) => {
-    // a video left playing under another tab would go on talking
-    if (path !== DEMO) demoBox.current?.querySelectorAll('video').forEach((v) => v.pause());
-    setTab(path);
+  const current = tab !== null && (tab === DEMO ? !!demo : files.some((f) => f.path === tab)) ? tab : demo ? DEMO : (files[0]?.path ?? DEMO);
+  // a video left playing under another tab would go on talking; a file picked in the change list comes into view
+  const shown = useRef(current);
+  useEffect(() => {
+    if (shown.current === current) return;
+    shown.current = current;
+    if (current !== DEMO) demoBox.current?.querySelectorAll('video').forEach((v) => v.pause());
     setMore(false);
-  };
+    box.current?.querySelector('.r-tabs')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [current]);
+  if (!files.length) return demo || (item.files && change ? <p className="hint">{t.files.none}</p> : null);
+  const pick = onTab;
   // the files named and the first others get a tab; one picked from the rest gets one while it is shown
   const tabbed = files.filter((f, i) => i < TABS || f.caption !== undefined || f.path === current);
   const rest = files.filter((f) => !tabbed.includes(f));

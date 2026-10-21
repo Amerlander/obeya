@@ -2135,10 +2135,13 @@ The card shows the list in the place of its branch („Im Ordner geändert: 4 Da
 Rückgängig: vollständig“) and below it beside the handover (↪ moved, ＋ added, ✎ changed, ✕ deleted;
 the lines added and removed in columns of their own, never broken off the path), and „Ansehen“ shows
 it over the page with the diffs of text files whose earlier version Obeya kept (`git diff --no-index`;
-a file counts as text up to 1 MB without a NUL byte in its first 8,000). A click on such a file in the
-list opens its diff alone, with „Ganzes Diff ansehen“ beside it for the rest. Beside the conversation, the files it changed show as
+a file counts as text up to 1 MB without a NUL byte in its first 8,000). Beside the conversation, the files it changed show as
 its result, Markdown formatted, a PDF as a PDF (see The files beside the demo); its worker names
-those that are the result for the owner when it hands over.
+those that are the result for the owner when it hands over. A click on a file's name in the list
+beside the handover opens its tab there, a click on its lines (+N −M) its diff alone, with „Ganzes
+Diff ansehen“ beside it for the rest, as the lines in the line under the title open the whole diff.
+Where the card shows no files beside its conversation (before a handover with a demo or files), the name opens the diff too,
+as it does in the list over the page.
 
 **Undo.** „Änderungen verwerfen“ on a card waiting for approval puts back what it changed, after
 eight seconds in which the button counts down in itself („Änderungen verwerfen 7 s ×“, the × in red,

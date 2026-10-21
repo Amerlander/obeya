@@ -104,6 +104,8 @@ export function Detail(p: Props) {
   // in a folder without git the card's change list takes the place of its branch
   const inFolder = !!p.repos.find((r) => r.id === item.repo)?.folder;
   const changes = useFolderDiff(item, inFolder && item.kind === 'task' && !!item.branch);
+  // the tab the left column shows: a file picked there or in the change list beside the handover
+  const [tab, setTab] = useState<string | null>(null);
   // Obeya reads what is typed here when no agent listens on the card: the field says so, as the microphone does
   const listener = agentListens(item) ? undefined : t.voice.card(plain(item.title));
   const tell = (field: Field) => async (text: string, images?: string[], replyTo?: number) => p.onTell(text, images, field, replyTo);
@@ -423,7 +425,7 @@ export function Detail(p: Props) {
 
       {worked && where}
       {/* what the card changed in a folder without git stays in view, whatever else the card shows */}
-      {worked && inFolder && <FolderBox item={item} diff={changes.diff} />}
+      {worked && inFolder && <FolderBox item={item} diff={changes.diff} onTab={talkAlone(item) ? undefined : setTab} />}
       {waits ? (
         <Split
           main={
@@ -460,6 +462,8 @@ export function Detail(p: Props) {
                 {/* the last handover's demo stays while the agent works on the card again; a new handover replaces it. Beside it, the files the work made or changed */}
                 <ResultFiles
                   item={item}
+                  tab={tab}
+                  onTab={setTab}
                   {...(inFolder ? { diff: changes.diff } : {})}
                   demo={
                     item.demo && (

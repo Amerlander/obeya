@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { type CardDiff, diffSize, type FolderChange } from '../core/diff';
+import { shownFiles } from '../core/files';
 import type { CardAction, Item } from '../core/types';
 import { api } from './api';
 import { useCopy } from './copy';
@@ -49,32 +50,67 @@ export function shownChanges(changes: FolderChange[]): FolderChange[] {
 
 /**
  * The changes as a table: what happened to which path, the lines of a text file in columns of their
- * own (never broken), and what discarding would leave. A path `diffed` names opens its diff with `onFile`.
+ * own (never broken), and what discarding would leave. A path `diffed` names opens its diff with
+ * `onFile` on a click on it, and with `lines` on a click on its lines too; where `onTab` opens the
+ * tabs of the files beside it, a click on a path `tabbed` names opens its tab instead.
  */
-export function ChangeTable({ changes, diffed, onFile }: { changes: FolderChange[]; diffed: (c: FolderChange) => boolean; onFile: (path: string) => void }) {
+export function ChangeTable({
+  changes,
+  diffed,
+  onFile,
+  lines,
+  tabbed,
+  onTab,
+}: {
+  changes: FolderChange[];
+  diffed: (c: FolderChange) => boolean;
+  onFile: (path: string) => void;
+  lines?: boolean;
+  tabbed?: (c: FolderChange) => boolean;
+  onTab?: (path: string) => void;
+}) {
   return (
     <table className="f-list">
       <tbody>
-        {changes.map((c) => (
-          <ChangeRow key={`${c.kind}:${c.from ?? ''}:${c.path}`} c={c} onFile={diffed(c) ? () => onFile(c.path) : undefined} />
-        ))}
+        {changes.map((c) => {
+          const diff = diffed(c) ? () => onFile(c.path) : undefined;
+          const tab = onTab && tabbed?.(c) ? () => onTab(c.path) : undefined;
+          return (
+            <ChangeRow
+              key={`${c.kind}:${c.from ?? ''}:${c.path}`}
+              c={c}
+              onName={onTab ? tab : diff}
+              nameTitle={onTab ? t.files.showTab : t.diff.showFile}
+              onLines={lines ? diff : undefined}
+            />
+          );
+        })}
       </tbody>
     </table>
   );
 }
 
-function ChangeRow({ c, onFile }: { c: FolderChange; onFile?: () => void }) {
+function ChangeRow({ c, onName, nameTitle, onLines }: { c: FolderChange; onName?: () => void; nameTitle: string; onLines?: () => void }) {
   const name = (p: string) => (c.dir ? `${p}/` : p);
   const path = c.kind === 'moved' ? `${name(c.from!)} → ${name(c.path)}` : name(c.path);
   const lines = c.added !== undefined && (c.added > 0 || c.removed! > 0);
+  // the lines added and removed are one link in two columns
+  const count = (text: string) =>
+    onLines ? (
+      <button className="link f-lines" title={t.diff.showFile} onClick={onLines}>
+        {text}
+      </button>
+    ) : (
+      text
+    );
   return (
     <tr>
       <td className="f-mark" aria-label={c.kind}>
         {MARK[c.kind]}
       </td>
       <td className="f-path">
-        {onFile ? (
-          <button className="link" title={t.diff.showFile} onClick={onFile}>
+        {onName ? (
+          <button className="link" title={nameTitle} onClick={onName}>
             {path}
           </button>
         ) : (
@@ -88,8 +124,8 @@ function ChangeRow({ c, onFile }: { c: FolderChange; onFile?: () => void }) {
           </span>
         )}
       </td>
-      <td className="d-add">{lines && `+${c.added}`}</td>
-      <td className="d-del">{lines && `−${c.removed}`}</td>
+      <td className="d-add">{lines && count(`+${c.added}`)}</td>
+      <td className="d-del">{lines && count(`−${c.removed}`)}</td>
     </tr>
   );
 }
@@ -149,16 +185,28 @@ export function FolderLine({ item, diff }: { item: Item; diff: CardDiff | null }
   );
 }
 
-/** What the card changed in the folder, beside its handover: each change as a line, the undo it has, a text file's diff on a click on it, and the whole list with the text diffs. */
-export function FolderBox({ item, diff }: { item: Item; diff: CardDiff | null }) {
+/**
+ * What the card changed in the folder, beside its handover: each change as a line, the undo it has,
+ * the whole list with the text diffs, and on a click on a file its tab in the left column (`onTab`,
+ * where the column shows), on a click on its lines its diff.
+ */
+export function FolderBox({ item, diff, onTab }: { item: Item; diff: CardDiff | null; onTab?: (path: string) => void }) {
   // the whole list (`true`) or one file's diff
   const [open, setOpen] = useState<string | boolean>(false);
   const changes = shownChanges(diff?.folder?.changes ?? []);
   if (!changes.length) return null;
+  const files = shownFiles(diff, item.files);
   return (
     <div className="f-box">
       <b>{t.folder.changed}</b>
-      <ChangeTable changes={changes.slice(0, SHOWN)} diffed={(c) => !!(c.added || c.removed)} onFile={setOpen} />
+      <ChangeTable
+        changes={changes.slice(0, SHOWN)}
+        diffed={(c) => !!(c.added || c.removed)}
+        onFile={setOpen}
+        lines
+        tabbed={(c) => files.some((f) => f.path === c.path)}
+        onTab={onTab}
+      />
       <p className="hint">
         {changes.length > SHOWN && `${t.folder.more(changes.length - SHOWN)} · `}
         <button className="link" onClick={() => setOpen(true)}>
