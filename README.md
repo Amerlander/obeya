@@ -30,8 +30,10 @@ decision and hands over with a demo: a narrated screen recording of the change, 
 at when the result is a layout or variants side by side. You approve it or say what to change, also
 about one moment of the video: what you type or say while it stands there goes to the agent with
 that frame and the narration's sentence. Approved work lands on `main` or goes out as a pull
-request that Obeya carries to the merge; beside the branch the card shows how large the change is,
-and a click shows the diff. "Share" puts a demo on a page of its own on your repository's demo
+request on GitHub, Forgejo or Gitea (Codeberg, say) that Obeya carries to the merge, or up to it
+where your team merges itself; beside the branch the card shows how large the change is, and a
+click shows the diff. A report or another file the agent made for you shows beside its
+conversation. "Share" puts a demo on a page of its own on your repository's demo
 site, for colleagues to watch; the site can also take every approved demo by itself.
 
 You talk to Obeya itself, spoken or typed: it takes your instructions, queues cards whose changes
@@ -40,7 +42,7 @@ thought through on its card with an agent of its own, which keeps a brief of var
 questions and can have throwaway prototypes built; deciding builds it or plans it as a project,
 or splits off the part that is settled as a task while the rest stays open. Larger work is planned
 in plan docs, in the repository or in a folder of your own beside it, which show as projects with
-a card per workstream. Each product you build gets a canvas of its own, over one repository or
+a card per workstream and a project agent to ask about the plan. Each product you build gets a canvas of its own, over one repository or
 several, and one Obeya runs them all.
 
 ![An Obeya canvas: a project with its workstreams, one at work and one in the queue; beside it a demo and a question waiting for you, a task at work, an approved and a live one, and an idea](site/img/canvas.png)

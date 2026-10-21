@@ -28,7 +28,7 @@ export function writeStage(file: string) {
     plans,
     cards: [
       { key: 'P', project: 'docs/plan/tipjar-2.md', x: 60, y: 120 },
-      { key: 'D', title: 'Dark mode', body: 'Tipjar follows the system’s dark mode.', state: 'live', x: 960, y: 100, createdAgo: '1d' },
+      { key: 'D', title: 'Dark mode', body: 'Tipjar follows the system’s dark mode.', state: 'live', x: 1030, y: 110, createdAgo: '1d' },
       // hangs off Dark mode with a dashed line, where Obeya puts a proposal: right below the card it came from
       {
         key: 'Q',
@@ -47,19 +47,19 @@ export function writeStage(file: string) {
         // archived until the video brings it back while the approved card lands (`unarchive`), so the
         // opening shows the wall without it
         archivedAgo: '1m',
-        x: 1340,
+        x: 1460,
         y: 330,
         row: { retro: 'On three cards the agent first searched for how to serve the app before it recorded its demo.' },
       },
       // working without an agent: no workspace, so a scratch Obeya with real workers leaves it be
-      { key: 'C', title: 'Run the tests on every push', body: 'A GitHub Actions workflow runs bun test on every push and pull request.', state: 'working', statusLine: 'Writing the workflow', scope: ['.github/workflows/test.yml'], x: -40, y: 520 },
-      { key: 'I', title: 'App icon', body: 'An icon for the home screen.', state: 'waiting', need: 'question', question: { text: 'Which of the three drafts should become the icon?', options: ['The jar', 'The coin', 'The receipt'] }, scope: ['icon.svg'], x: 280, y: 560 },
+      { key: 'C', title: 'Run the tests on every push', body: 'A GitHub Actions workflow runs bun test on every push and pull request.', state: 'working', statusLine: 'Writing the workflow', scope: ['.github/workflows/test.yml'], x: 610, y: 110 },
+      { key: 'I', title: 'App icon', body: 'An icon for the home screen.', state: 'waiting', need: 'question', question: { text: 'Which of the three drafts should become the icon?', options: ['The jar', 'The coin', 'The receipt'] }, scope: ['icon.svg'], x: 610, y: 290 },
       {
         key: 'T',
         title: 'Settle up after a trip',
         body: 'Several bills over a weekend, several people: who owes whom at the end.',
         state: 'idea',
-        x: 650,
+        x: 620,
         y: 560,
         // the discussion so far, which the video shows when it opens the idea
         events: [
@@ -92,7 +92,7 @@ export function writeStage(file: string) {
       { text: 'Solve rebase conflicts yourself.' },
       { text: 'Every change to the bill gets a test with cents that do not split evenly.', state: 'proposed', card: 'C', quote: 'Test it with an odd amount, like 100 split three ways.' },
     ],
-    // Launch's App icon is the card the video drags up beside Look and feel, the group it makes with a lasso
+    // Launch's App icon is the card the video drags beside Look and feel, the group it makes with a lasso
     groups: [
       { name: 'Tipjar 2.0', cards: ['P'] },
       { name: 'Launch', cards: ['C', 'I'] },

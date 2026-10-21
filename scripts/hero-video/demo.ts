@@ -108,7 +108,9 @@ async function bringIntoView(d: Director, target: Locator) {
   const dx = box.x + box.width / 2 - view.width / 2;
   const dy = box.y + box.height / 2 - (view.height - 120) / 2;
   if (Math.hypot(dx, dy) < 80) return;
-  await pointer(d, view.width / 2, view.height / 2 - 60);
+  // off to the side: in the middle it ended on the target, whose waits then showed as arrows for the
+  // whole pan
+  await pointer(d, view.width - 120, view.height - 200);
   const steps = 30;
   for (let i = 0; i < steps; i++) {
     await d.page.mouse.wheel(dx / steps, dy / steps);
@@ -176,7 +178,7 @@ async function pointer(d: Director, x: number, y: number) {
   await d.page.evaluate(([px, py]) => (window as unknown as { __demo: { moveTo: (x: number, y: number, i: boolean) => void } }).__demo.moveTo(px!, py!, true), [x, y]);
 }
 
-/** Shift + drag in a loop round `cards`: the lasso that opens the colour ring at its end. */
+/** Shift + drag in a loop round `cards`: the lasso that marks them. */
 async function lasso(d: Director, cards: Locator[]) {
   const boxes = await Promise.all(cards.map(async (c) => (await c.boundingBox())!));
   const x0 = Math.min(...boxes.map((b) => b.x));
@@ -190,18 +192,18 @@ async function lasso(d: Director, cards: Locator[]) {
   // from the left, clockwise round, ending a little past the start so the loop closes
   const at = (a: number) => [cx - rx * Math.cos(a), cy - ry * Math.sin(a)] as const;
   await d.page.evaluate(([x, y]) => (window as unknown as { __demo: { moveTo: (x: number, y: number) => void } }).__demo.moveTo(x!, y!), at(0));
-  await d.wait(750);
+  await d.wait(400);
   await d.page.mouse.move(...at(0));
   await d.page.keyboard.down('Shift');
   await d.page.mouse.down();
-  const steps = 45;
+  const steps = 36;
   for (let i = 1; i <= steps; i++) {
     await pointer(d, ...at((i / steps) * Math.PI * 2.08));
-    await d.wait(15);
+    await d.wait(10);
   }
   await d.page.mouse.up();
   await d.page.keyboard.up('Shift');
-  await d.wait(500);
+  await d.wait(250);
 }
 
 /** Zooms by `steps` turns of the wheel with Ctrl at (x, y): out for positive steps, in for negative. */
@@ -254,6 +256,37 @@ async function pasteShot(d: Director) {
   }, png);
 }
 
+/**
+ * The phone view of the same canvas (`?view=phone`) at an iPhone's size, in a phone's frame over the
+ * dimmed wall: laid in hidden and loaded, so that `.on` fades it in at once.
+ */
+async function phone(d: Director) {
+  // notifications on, as on a paired phone: the view does not ask for them
+  await d.page.context().grantPermissions(['notifications'], { origin: base });
+  await d.page.evaluate((src) => {
+    const style = document.createElement('style');
+    style.textContent = `
+      #hero-phone { position: fixed; inset: 0; z-index: 100000; display: grid; place-items: center; opacity: 0; pointer-events: none;
+        background: rgba(40, 34, 28, 0.32); backdrop-filter: blur(3px) grayscale(0.4); transition: opacity 0.6s ease; }
+      #hero-phone.on { opacity: 1; pointer-events: auto; }
+      #hero-phone .frame { box-sizing: content-box; width: 393px; height: 852px; padding: 12px; border-radius: 64px; background: #111;
+        box-shadow: 0 0 0 2px #3a3a3c, 0 30px 80px rgba(0, 0, 0, 0.45); transform: scale(0.9); }
+      #hero-phone .screen { display: flex; flex-direction: column; height: 100%; border-radius: 52px; overflow: hidden; background: #ece5d8; }
+      #hero-phone .status { flex: none; height: 54px; display: flex; align-items: center; justify-content: space-between; padding: 0 34px 0 46px;
+        font: 600 16px/1 -apple-system, system-ui, sans-serif; color: #1d1b18; }
+      #hero-phone .island { width: 122px; height: 36px; border-radius: 18px; background: #000; }
+      #hero-phone .bars { display: flex; gap: 5px; align-items: center; }
+      #hero-phone .bars i { display: block; width: 26px; height: 12px; border: 1.5px solid #1d1b18; border-radius: 4px; position: relative; }
+      #hero-phone .bars i::after { content: ''; position: absolute; inset: 1.5px; right: 5px; background: #1d1b18; border-radius: 1.5px; }
+      #hero-phone iframe { flex: 1; display: block; width: 100%; border: 0; }`;
+    const veil = document.createElement('div');
+    veil.id = 'hero-phone';
+    veil.innerHTML = `<div class="frame"><div class="screen"><div class="status"><span>9:41</span><span class="island"></span><span class="bars"><i></i></span></div><iframe src="${src}"></iframe></div></div>`;
+    document.body.append(style, veil);
+  }, '/?c=tipjar&view=phone');
+  await d.page.frameLocator('#hero-phone iframe').locator('.ph-card', { hasText: 'Settle up after a trip' }).waitFor({ timeout: 30_000 });
+}
+
 const scenes: Scene[] = [
   {
     title: 'One canvas',
@@ -282,14 +315,22 @@ const scenes: Scene[] = [
     run: async (d) => {
       const say = narration.arrange;
       await saying(d, say, 'Draw a lasso');
+      // the lasso marks the cards; the button over them opens the colour ring
       await lasso(d, [card(d, 'Dark mode'), card(d, 'Remember the last tip')]);
+      await d.click(d.page.locator('#marked .mgroup'));
       await d.click(d.page.locator('.ball.new'));
-      await d.page.locator('.rname').pressSequentially('Look and feel', { delay: 60 });
-      await d.wait(300);
+      await d.page.locator('.rname').pressSequentially('Look and feel', { delay: 40 });
+      await d.wait(200);
       await d.page.locator('.rname').press('Enter');
-      // App icon, of the group Launch, goes up beside Look and feel, whose territory makes way
+      await d.wait(200);
+      // grouped: the marks let go, so the card dragged next moves alone
+      await d.page.keyboard.press('Escape');
+      // App icon, of the group Launch, goes beside Look and feel, below its proposal, whose
+      // territory makes way
       await saying(d, say, 'Drag cards');
-      await d.drag(card(d, 'App icon'), { x: 1215, y: 628 }, 2000);
+      const below = (await card(d, 'Remember the last tip').boundingBox())!;
+      const icon = (await card(d, 'App icon').boundingBox())!;
+      await d.drag(card(d, 'App icon'), { x: below.x + below.width / 2, y: below.y + below.height + 70 + icon.height / 2 }, 1500);
       await d.untilSpoken(1);
     },
   },
@@ -444,11 +485,16 @@ const scenes: Scene[] = [
       await d.wait(1200);
       const play = d.page.locator('.player button.start');
       if (await play.isVisible()) await d.click(play);
-      await saying(d, narration.demo, 'and a short report');
-      await d.highlight(d.page.locator('.talk.conv').first(), 'report');
-      await saying(d, narration.demo, 'You judge');
+      // the card opens about when the narration names the demo: each ring stands at least two
+      // seconds, else the demo's went by in a blink
+      await saying(d, narration.demo, 'a narrated demo');
+      await d.highlight(d.page.locator('.player').first(), 'narrated demo');
+      await Promise.all([saying(d, narration.demo, 'and a short report'), d.wait(2000)]);
       await d.clearHighlights();
+      await d.highlight(d.page.locator('.talk.conv').first(), 'report');
       await d.untilSpoken(1);
+      await d.wait(600);
+      await d.clearHighlights();
     },
   },
   {
@@ -573,10 +619,19 @@ const scenes: Scene[] = [
     title: 'The big room',
     say: narration.room,
     run: async (d) => {
+      const say = narration.room;
       await d.page.keyboard.press('Escape');
       await d.wait(900);
       // a step back from the wall, where the groups' names show
       await zoom(d, 720, 450, 8);
+      await phone(d);
+      await saying(d, say, 'And it comes with you');
+      await d.page.evaluate(() => document.querySelector('#hero-phone')!.classList.add('on'));
+      // what waits for the owner, and one of it opened on the phone, with its decisions
+      await saying(d, say, 'You watch the demo');
+      await d.click(d.page.frameLocator('#hero-phone iframe').locator('.ph-card', { hasText: 'Settle up after a trip' }));
+      await saying(d, say, 'Of course');
+      await d.page.evaluate(() => document.querySelector('#hero-phone')!.classList.remove('on'));
       await d.untilSpoken(1);
     },
   },
@@ -632,12 +687,29 @@ await runDemo(
       const snap = (await (await fetch(`${base}/api/c/tipjar/canvas`, { headers: owner() })).json()) as { preferences: { id: number; state: string }[] };
       const proposed = snap.preferences.filter((p) => p.state === 'proposed').map((p) => p.id);
       await d.page.addInitScript((ids) => localStorage.setItem('obeya-ksheet-tipjar', JSON.stringify({ proposalsClosed: ids })), proposed);
-      // an owner who knows double-click and `?`: the bar's New task and ? buttons have gone (`help.tsx`)
+      // an owner who knows double-click, `?` and moving marked cards: the bar's New task and ? buttons
+      // have gone (`help.tsx`), and no hint stands beside the cards the lasso marks
       await d.page.addInitScript(() => {
         localStorage.setItem('obeya-double-click-known', '1');
         localStorage.setItem('obeya-help-key-known', '1');
+        localStorage.setItem('obeya-move-marked-known', '1');
       });
       await d.goto('/?c=tipjar');
+      await d.page.addStyleTag({ content: 'bun-hmr { display: none !important; }' });
+      for (const name of Object.keys(clips)) await d.page.evaluate((n) => (window as unknown as Mic).__load(n, `/__demo/${n}.wav`), name);
+      await card(d, 'App icon').waitFor();
+      // a step back from the wall, with the room the groups' territories take, once the Koordinator
+      // has arranged the project: the camera as saved, zoomed around the middle and a little up, so
+      // that the idea at the bottom stays clear of the microphone, and the page again
+      await d.page.getByText('Arranging …').waitFor({ state: 'detached', timeout: 120_000 });
+      await d.wait(600);
+      await d.page.evaluate(() => {
+        const k = 0.86;
+        const [cx, cy] = [innerWidth / 2, innerHeight / 2 + 30];
+        const c = JSON.parse(localStorage.getItem('obeya-cam-tipjar') ?? 'null') as { s: number; x: number; y: number } | null;
+        if (c) localStorage.setItem('obeya-cam-tipjar', JSON.stringify({ s: c.s * k, x: cx - (cx - c.x) * k, y: cy - (cy - c.y) * k - 25 }));
+      });
+      await d.page.reload();
       await d.page.addStyleTag({ content: 'bun-hmr { display: none !important; }' });
       for (const name of Object.keys(clips)) await d.page.evaluate((n) => (window as unknown as Mic).__load(n, `/__demo/${n}.wav`), name);
       await card(d, 'App icon').waitFor();

@@ -87,6 +87,15 @@ const base = `http://127.0.0.1:${PORT}`;
 await fetch(`${base}/api/language`, { method: 'PUT', headers: ownerHeaders(join(staged.dir, 'home')), body: JSON.stringify({ language: 'en' }) });
 console.log('staged', staged.url);
 
+// the Koordinator reads the new project's plan doc for what builds on what and arranges it: until
+// then its head says "Arranging …", which a shot taken at once showed
+const settled = Date.now() + 3 * 60_000;
+while (Date.now() < settled) {
+  const snap = (await (await fetch(`${base}/api/c/tipjar/canvas`, { headers: ownerHeaders(join(staged.dir, 'home')) })).json()) as { items: { kind: string; arranging?: true }[] };
+  if (!snap.items.some((i) => i.kind === 'project' && i.arranging)) break;
+  await new Promise((r) => setTimeout(r, 1000));
+}
+
 if (process.argv.includes('--stage-only')) process.exit(0);
 
 // a fake microphone, so that holding Space lights it as it does for the owner

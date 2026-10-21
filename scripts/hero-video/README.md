@@ -5,7 +5,8 @@ small tip calculator, the wall arranged (a lasso into a group, a card dragged be
 idea said into the microphone, a bug report typed, pasted and spoken in Obeya's
 sidebar, a real agent building the idea and recording its demo, two comments said into that video and the
 agent's new demo on them, the approval landing it on main,
-proposals from an agent and from Obeya's work retrospective, an idea discussed with its agent.
+proposals from an agent and from Obeya's work retrospective, an idea discussed with its agent, and the
+phone view of the same wall in a phone's frame.
 About four minutes, in English, in the owner's ElevenLabs voice, recorded at twice the pixels
 (2880×1800, as the app looks on a Retina screen) with gentle compression (`sharp` in the spec).
 
