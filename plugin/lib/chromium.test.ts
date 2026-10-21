@@ -3,7 +3,9 @@ import type { Browser } from 'playwright-core';
 import { launchChromium } from './chromium.ts';
 
 let browser: Browser | undefined;
-afterAll(() => browser?.close());
+// Chrome takes about 1.5 s to exit after Playwright asks it to close, and several times that while
+// the other test files run alongside: more than a hook's default 5 s.
+afterAll(() => browser?.close(), 30_000);
 
 // A box that scrolls shows its scrollbar in a screenshot: classic on Windows and Linux, on a Mac
 // with overlay scrollbars while it scrolls (hence the wheel just before).
