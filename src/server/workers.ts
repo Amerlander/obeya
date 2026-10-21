@@ -24,7 +24,7 @@ import { TO_OBEYA, toObeyaTool } from './to-obeya';
 import { type Forward, HOST_DIR, hostName, remote } from './hosts';
 import { runAppCommand } from './app-command';
 import { readingShared } from '../adapters';
-import { branchName, type CardWorkspaces, type FileAt, gitStepsSync, type Landed, shortageOf, together, WorkspaceError } from './workspaces';
+import { branchName, type CardWorkspaces, type FileAt, gitStepsSync, type Landed, type Lease, shortageOf, together, WorkspaceError } from './workspaces';
 import type { FolderWorkspaces, UndoReport } from './folder';
 import type { PrState, Shipped } from './board';
 import type { CardRow } from './db';
@@ -453,6 +453,13 @@ export class Workers {
   private live = new Map<string, Live>();
   /** Cards whose approved work is landing: the server answers meanwhile, but approving again is refused, and a restart waits. */
   private landing = new Set<string>();
+  /**
+   * Cards whose workspace git is making ready before their worker goes on (`whenReady`), with the
+   * machine it is on: the server answers meanwhile, the card holds a slot there, and a restart waits.
+   */
+  private preparing = new Map<string, { host: string | null; done: Promise<void> }>();
+  /** Whether these workers were shut down: a workspace made ready afterwards starts no worker. */
+  private shut = false;
   /** Bumped whenever a card's work starts, stops or ends: replies and tool calls from before are stale. */
   private generation = new Map<string, number>();
   /** The restart that waits for workers, if one does. */
@@ -504,7 +511,12 @@ export class Workers {
 
   // ---------------------------------------------------------------- owner actions
 
-  start(cardId: string) {
+  /**
+   * Starts the card's worker. The card is at work at once, its workspace taken; the worker starts
+   * once git has made that ready, which the promise waits for. Refusals (`notPlanned`, no workspace
+   * free) throw at once.
+   */
+  start(cardId: string): Promise<void> {
     const card = this.card(cardId);
     if (card.kind === 'project') throw new BadRequest('project', 'a project is worked on through its workstreams');
     if (card.state !== 'planned') throw new BadRequest('notPlanned', 'only a planned card can be started');
@@ -513,14 +525,66 @@ export class Workers {
     // a workstream planned again after a part landed: the branch of that part may still be in a clone
     const shipped = row.shipped ? (JSON.parse(row.shipped) as Shipped) : null;
     const branch = row.branch ?? `${branchName(card.title, card.id)}${shipped ? `-${shipped.commit?.slice(0, 7) ?? 'rest'}` : ''}`;
-    const path = asBadRequest(() => this.o.workspaces.lease(card.id, branch));
+    const { path, ready } = asBadRequest(() => this.o.workspaces.lease(card.id, branch));
     this.bump(card.id);
     // the run before is not resumed, but the Arbeitsrückschau still reads it
     if (row.session_id) this.o.board.log(card.id, 'state', 'obeya', this.o.board.t.worker.restarted(this.o.board.t.worker.earlierRun(row.session_id)));
     // a fresh session knows of no app that was stopped
     this.o.board.work(card.id, { state: 'working', need: null, detail: null, status_line: null, workspace: path, branch, session_id: null, pr: null, approved_at: null, parked: null, paused: null, snoozed: null, app: null });
     this.o.board.log(card.id, 'state', 'obeya', this.folder ? this.o.board.t.worker.startedInFolder : this.o.board.t.worker.started(branch));
-    this.launch(card.id, this.briefing(card, branch, !!row.branch), undefined, this.taskImages(card));
+    return this.whenReady(
+      card.id,
+      ready,
+      () => this.launch(card.id, this.briefing(card, branch, !!row.branch), undefined, this.taskImages(card)),
+      // planned again, as before the start
+      () => this.o.board.work(card.id, { state: 'planned', workspace: null, branch: row.branch, paused: null, snoozed: null }),
+    );
+  }
+
+  /**
+   * Runs `go` (the worker starts, or goes on) once git has made the card's workspace ready
+   * (`Lease.ready`; at once when it is), unless the card was stopped, snoozed or started anew
+   * meanwhile; until then its status line says that its workspace is being prepared. Where git
+   * fails, `undo` puts the card back as it was, whatever came meanwhile, as long as the card still
+   * names the workspace, and its conversation says why.
+   */
+  private whenReady(cardId: string, ready: Promise<void> | null, go: () => void, undo: () => void): Promise<void> {
+    if (!ready) {
+      go();
+      return Promise.resolve();
+    }
+    const generation = this.generation.get(cardId);
+    const line = this.o.board.t.worker.preparingWorkspace;
+    const path = this.o.board.row(cardId).workspace;
+    const settle = (then: () => void, always = false) => {
+      if (this.preparing.get(cardId)?.done === done) this.preparing.delete(cardId);
+      // Obeya stopped meanwhile: a new run takes the card on
+      if (this.shut) return;
+      // a deleted card keeps its row, to be restored
+      if (this.o.board.row(cardId).status_line === line) this.o.board.work(cardId, { status_line: null });
+      else this.o.board.changed();
+      // what was given back meanwhile (the card deleted, say) is freed now
+      this.settleLater();
+      if (!this.o.board.item(cardId) || !(always || this.generation.get(cardId) === generation)) return;
+      try {
+        then();
+      } catch (e) {
+        console.error(`starting the worker of ${cardId}:`, e);
+        this.o.board.log(cardId, 'error', 'obeya', messageOf(e));
+      }
+    };
+    const done: Promise<void> = ready.then(
+      () => settle(go),
+      (e: unknown) =>
+        settle(() => {
+          if (this.o.board.row(cardId).workspace !== path) return;
+          undo();
+          this.o.board.log(cardId, 'error', 'obeya', this.o.board.t.worker.workspaceFailed(messageOf(e)));
+        }, true),
+    );
+    this.preparing.set(cardId, { host: hostName(path), done });
+    this.o.board.work(cardId, { status_line: line });
+    return done;
   }
 
   /**
@@ -604,18 +668,19 @@ export class Workers {
    */
   private followUp(card: Item, text: string, images: string[], spoken: boolean, replyTo?: number, place?: Spot) {
     const row = this.o.board.row(card.id);
-    let path: string;
+    let lease: Lease;
     let worktree = false;
     try {
       // the owner's question does not wait for a slot
-      path = this.o.workspaces.lease(card.id, row.branch!, { overSlots: true });
+      lease = this.o.workspaces.lease(card.id, row.branch!, { overSlots: true });
     } catch (e) {
       if (!(e instanceof WorkspaceError)) throw e;
       if (!shortageOf(e.code)) throw new BadRequest(e.code, e.message);
       // nor for a clone: a worktree takes none
-      path = asBadRequest(() => this.o.workspaces.followUpTree(card.id, row.branch!));
+      lease = asBadRequest(() => this.o.workspaces.followUpTree(card.id, row.branch!));
       worktree = true;
     }
+    const { path, ready } = lease;
     this.bump(card.id);
     const commit = row.shipped ? (JSON.parse(row.shipped) as Shipped).commit : undefined;
     const landed: LandedState = { ...(card.state === 'done' ? { unchanged: true } : commit ? { commit } : {}), followUp: true, ...(worktree ? { worktree } : {}) };
@@ -631,9 +696,20 @@ export class Workers {
       this.folder ? FOLLOW_UP_FOLDER : FOLLOW_UP,
       ...(worktree ? [IN_WORKTREE] : []),
     ].join('\n\n');
-    // a card that never reported a session: a new one needs the card first
-    if (row.session_id) this.launch(card.id, message, row.session_id, images);
-    else this.launch(card.id, `You worked on the card „${card.title}“:\n\n${card.body}\n\n${message}`, undefined, [...this.taskImages(card), ...images]);
+    void this.whenReady(
+      card.id,
+      ready,
+      () => {
+        // a card that never reported a session: a new one needs the card first
+        if (row.session_id) this.launch(card.id, message, row.session_id, images);
+        else this.launch(card.id, `You worked on the card „${card.title}“:\n\n${card.body}\n\n${message}`, undefined, [...this.taskImages(card), ...images]);
+      },
+      // the question stands in the conversation, without a workspace to answer it in
+      () => {
+        this.o.workspaces.release(card.id);
+        this.o.board.work(card.id, { workspace: null, landed: row.landed });
+      },
+    );
   }
 
   /** Whether the card's follow-up waits for a full clone, its worker without a workspace. */
@@ -664,18 +740,24 @@ export class Workers {
   takeClone(cardId: string): boolean {
     if (!this.waitsForClone(cardId)) return false;
     const row = this.o.board.row(cardId);
-    let path: string;
+    let lease: Lease;
     try {
-      path = this.o.workspaces.lease(cardId, row.branch!, { overSlots: true });
+      lease = this.o.workspaces.lease(cardId, row.branch!, { overSlots: true });
     } catch (e) {
       if (!(e instanceof WorkspaceError && shortageOf(e.code))) console.error(`a clone for the follow-up on ${cardId}:`, e);
       return false;
     }
     const { needsClone: _, ...landed } = landedOf(row)!;
     this.bump(cardId);
-    this.o.board.work(cardId, { workspace: path, landed: JSON.stringify(landed), status_line: null, app: null });
+    this.o.board.work(cardId, { workspace: lease.path, landed: JSON.stringify(landed), status_line: null, app: null });
     this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.cloneFree);
-    this.deliver(cardId, `A clone is free now: you go on in it, a full clone on the branch ${row.branch}. Answer the owner's question there.\n\n${FOLLOW_UP}`);
+    void this.whenReady(
+      cardId,
+      lease.ready,
+      () => this.deliver(cardId, `A clone is free now: you go on in it, a full clone on the branch ${row.branch}. Answer the owner's question there.\n\n${FOLLOW_UP}`),
+      // it waits for the next free clone again
+      () => this.o.board.work(cardId, { workspace: null, landed: row.landed, status_line: this.o.board.t.worker.waitsForWorkspace }),
+    );
     return true;
   }
 
@@ -687,11 +769,7 @@ export class Workers {
   /** Removes a follow-up's temporary worktree; one left behind does no harm. */
   private removeTree(path: string | null) {
     if (!path) return;
-    try {
-      this.o.workspaces.removeFollowUpTree(path);
-    } catch (e) {
-      console.error(`removing the follow-up worktree ${path}:`, e);
-    }
+    this.o.workspaces.removeFollowUpTree(path).catch((e: unknown) => console.error(`removing the follow-up worktree ${path}:`, e));
   }
 
   /**
@@ -1595,7 +1673,8 @@ export class Workers {
   private settleLeases() {
     if (this.folder) return;
     for (const { path, card_id: id } of this.o.workspaces.list()) {
-      if (!id || this.kept.has(path)) continue;
+      // a workspace being made ready is freed once git is done
+      if (!id || this.kept.has(path) || this.preparing.has(id)) continue;
       const ended = this.o.board.leaseEnded(id, path);
       if (!ended) continue;
       if (ended === 'merged') {
@@ -1646,9 +1725,14 @@ export class Workers {
     this.launch(card.id, l.restarts ? `${repo ? 'Obeya runs' : 'Obeya has started again and runs'} main with your change now. ${restarted}` : restarted, session);
   }
 
-  /** The cards whose worker is in a turn, each holding a slot on its machine. */
+  /** Settles once the workspaces git is making ready now are ready (or failed), their workers started: for a start begun elsewhere (the Koordinator, the owner's question). */
+  async prepared(): Promise<void> {
+    while (this.preparing.size) await Promise.all([...this.preparing.values()].map((p) => p.done));
+  }
+
+  /** The cards whose worker is in a turn, and those whose workspace is made ready for it, each holding a slot on its machine. */
   inTurn(): string[] {
-    return [...this.live].filter(([, l]) => l.busy).map(([id]) => id);
+    return [...new Set([...[...this.live].filter(([, l]) => l.busy).map(([id]) => id), ...this.preparing.keys()])];
   }
 
   /** The cards whose worker is in a turn, each with its background work that runs. */
@@ -1658,12 +1742,16 @@ export class Workers {
 
   /** How many of these workers are in a turn on a machine (null: the one Obeya runs on). */
   busyOn(host: string | null): number {
-    return [...this.live.values()].filter((l) => l.busy && l.host === host).length;
+    const on = (id: string) => {
+      const live = this.live.get(id);
+      return live ? live.host : this.preparing.get(id)!.host;
+    };
+    return this.inTurn().filter((id) => on(id) === host).length;
   }
 
   /**
    * The cards whose worker is in the middle of a turn (or whose ended turn waits for its background
-   * work), and those whose work is landing: a restart would cut off git midway.
+   * work), and those whose workspace is being made ready or whose work is landing: a restart would cut off git midway.
    */
   busyCards(): string[] {
     return [...new Set([...this.inTurn(), ...this.landing])];
@@ -1691,6 +1779,7 @@ export class Workers {
   shutdown() {
     // workers of a repository started afresh are its new ones: these settle no lease any more
     this.unwatch();
+    this.shut = true;
     for (const id of [...this.live.keys()]) this.end(id);
     for (const timer of this.reconnecting.values()) clearTimeout(timer);
     this.reconnecting.clear();
@@ -1790,7 +1879,8 @@ export class Workers {
       });
       return;
     }
-    if (said.length && this.takesLater(cardId)) {
+    // its worker starts once its workspace is ready and hears them then, or, should git fail, the next start's does
+    if ((said.length && this.takesLater(cardId)) || this.preparingFor(cardId)) {
       this.o.board.work(cardId, { unheard: JSON.stringify([...this.unheard(cardId), { said, text, images }] satisfies Unheard[]) });
       return;
     }
@@ -1823,8 +1913,14 @@ export class Workers {
 
   /** Whether the worker is in the middle of a turn, so that the owner's words wait for its next step. */
   private takesLater(cardId: string): boolean {
+    if (this.preparingFor(cardId)) return true;
     const live = this.live.get(cardId);
     return !!live && live.busy && !live.waiting && !this.stopping.has(cardId) && !this.pausedOf(cardId);
+  }
+
+  /** Whether the card's worker waits for git to make its workspace ready, without a session yet. */
+  private preparingFor(cardId: string): boolean {
+    return this.preparing.has(cardId) && !this.live.has(cardId);
   }
 
   private unheard(cardId: string): Unheard[] {

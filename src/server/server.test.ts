@@ -1082,9 +1082,9 @@ describe('landing approved work', () => {
     const pushed = new CanvasRuntime({ repos: [{ path: repo, clones: 2, settings: { land: 'pr', direct: true, workspaces: 'clones' } }] }, { store: new Store(':memory:'), home: join(dir, 'home2'), runtime, forge: noForge });
     server.stop(true);
     server = serve([canvas, pushed], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0);
-    const handedOver = (title: string) => {
+    const handedOver = async (title: string) => {
       const c = pushed.board.create({ title, x: 0, y: 0 });
-      pushed.repoOf(c.id).workers.start(c.id);
+      await pushed.repoOf(c.id).workers.start(c.id);
       const session = runtime.last;
       const clone = pushed.board.row(c.id).workspace!;
       identify(clone);
@@ -1095,8 +1095,8 @@ describe('landing approved work', () => {
       session.emit({ type: 'idle' });
       return c;
     };
-    const a = handedOver('A');
-    const b = handedOver('B');
+    const a = await handedOver('A');
+    const b = await handedOver('B');
     const approve = (id: string) => post(`/api/c/${pushed.board.canvas.id}/cards/${id}/act`, JSON.stringify({ action: 'approve', direct: true }));
 
     let answered = 0;
@@ -1114,6 +1114,59 @@ describe('landing approved work', () => {
     expect(pushed.board.item(b.id)!.state).toBe('live');
     expect(git(origin, 'log', '--format=%s', 'main').split('\n').sort()).toEqual(['A', 'B', 'init']);
     pushed.shutdown();
+  }, 15_000);
+});
+
+describe('starting a card', () => {
+  test('while git makes its worktree or clone ready, slowly, the server answers and the card says so', async () => {
+    // git that takes its time: adding a worktree (a large repository), fetching into a clone (a slow network)
+    const marks = join(dir, 'marks');
+    mkdirSync(marks);
+    const slow = (mark: string, then = '') => `#!/bin/sh\ntouch '${join(marks, mark)}'\nsleep 2\n${then}`;
+    const trees = gitRepo(join(dir, 'trees'));
+    mkdirSync(join(trees, '.git/hooks'), { recursive: true });
+    writeFileSync(join(trees, '.git/hooks/post-checkout'), slow('worktree'), { mode: 0o755 });
+    const cloned = gitRepo(join(dir, 'cloned'));
+    const uploadPack = join(dir, 'slow-upload-pack');
+    writeFileSync(uploadPack, slow('fetch', 'exec git-upload-pack "$@"\n'), { mode: 0o755 });
+    const deps = (home: string) => ({ store: new Store(':memory:'), home: join(dir, home), runtime, forge: noForge });
+    const worktrees = new CanvasRuntime({ name: 'Worktrees', repos: [{ path: trees, settings: { workspaces: 'worktrees' } }] }, deps('home-trees'));
+    const clones = new CanvasRuntime({ name: 'Clones', repos: [{ path: cloned, clones: 1, settings: { workspaces: 'clones' } }] }, deps('home-clones'));
+    const [clone] = clones.repos[0]!.workspaces.list();
+    git(clone!.path, 'config', 'remote.origin.uploadpack', uploadPack);
+    server.stop(true);
+    server = serve([canvas, worktrees, clones], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0);
+
+    const starts = [worktrees, clones].map((c) => {
+      const card = c.board.create({ title: 'Langsamer Start', x: 0, y: 0 });
+      const before = Date.now();
+      const started = c.repos[0]!.workers.start(card.id);
+      // the start takes the workspace and returns; git goes on in the background
+      expect(Date.now() - before).toBeLessThan(1000);
+      return { c, card, started };
+    });
+    await until(() => existsSync(join(marks, 'worktree')) && existsSync(join(marks, 'fetch')));
+    for (const { c, card } of starts) {
+      const before = Date.now();
+      const res = await fetch(new URL(`/api/c/${c.board.canvas.id}/canvas`, server.url));
+      expect(res.status).toBe(200);
+      expect(Date.now() - before).toBeLessThan(1000);
+      const shown = ((await res.json()) as { items: { id: string; state: string; statusLine?: string }[] }).items.find((i) => i.id === card.id);
+      expect(shown).toMatchObject({ state: 'working', statusLine: c.board.t.worker.preparingWorkspace });
+      // its worker waits for the workspace
+      expect(runtime.sessions.some((s) => s.spec.cwd === c.board.row(card.id).workspace)).toBe(false);
+    }
+    expect((await fetch(new URL(api('/canvas'), server.url))).status).toBe(200);
+
+    for (const { c, card, started } of starts) {
+      await started;
+      const ws = c.board.row(card.id).workspace!;
+      expect(git(ws, 'branch', '--show-current')).toBe(c.board.row(card.id).branch!);
+      expect(runtime.sessions.find((s) => s.spec.cwd === ws)!.inbox[0]).toContain('Langsamer Start');
+      expect(c.board.item(card.id)!.statusLine).toBeUndefined();
+    }
+    worktrees.shutdown();
+    clones.shutdown();
   }, 15_000);
 });
 

@@ -172,6 +172,8 @@ const de = {
     waitsForWorkspace: 'Wartet auf Workspace',
     waitsForClone: 'Die Nachfrage wartet auf den nächsten freien Klon und geht dann von selbst weiter.',
     cloneFree: 'Ein Klon ist frei: Der Agent antwortet dort weiter.',
+    preparingWorkspace: 'Bereitet den Workspace vor …',
+    workspaceFailed: (detail: string) => `Der Workspace ließ sich nicht vorbereiten: ${detail}`,
   },
   pr: {
     checkFailed: (names: string) => `Check fehlgeschlagen: ${names}. Der Agent sieht nach.`,
@@ -543,6 +545,8 @@ const en: Messages = {
     waitsForWorkspace: 'Waiting for a workspace',
     waitsForClone: 'The follow-up waits for the next free clone and then goes on by itself.',
     cloneFree: 'A clone is free: the agent goes on answering there.',
+    preparingWorkspace: 'Preparing the workspace …',
+    workspaceFailed: (detail: string) => `The workspace could not be prepared: ${detail}`,
   },
   pr: {
     checkFailed: (names: string) => `Check failed: ${names}. The agent looks into it.`,

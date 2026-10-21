@@ -16,7 +16,7 @@ import type { PoolHost } from '../core/types';
 import { messageOf } from '../core/text';
 import type { Store } from './db';
 import { spawnOutput } from './spawn';
-import { type CardWorkspaces, type Change, type FileAt, GIT, ownFile, type LandProblem, type Landed, WorkspaceError } from './workspaces';
+import { type CardWorkspaces, type Change, type FileAt, GIT, ownFile, type LandProblem, type Landed, type Lease, WorkspaceError } from './workspaces';
 
 /** A file or directory as the manifest has it. */
 export interface Entry {
@@ -473,11 +473,11 @@ export class FolderWorkspaces implements CardWorkspaces {
   }
 
   /** The folder itself, for any number of cards at once; the card's undo is made ready meanwhile. */
-  lease(cardId: string): string {
+  lease(cardId: string): Lease {
     const rec = this.rec(cardId) ?? { undo: null, changes: [] };
     this.save(cardId, { ...rec, held: true });
     if (!rec.done) void this.prepare(cardId);
-    return this.o.path;
+    return { path: this.o.path, ready: null };
   }
 
   leasable(): boolean {
@@ -553,11 +553,11 @@ export class FolderWorkspaces implements CardWorkspaces {
     throw new WorkspaceError('a folder without git has no branch to build on');
   }
 
-  followUpTree(cardId: string): string {
+  followUpTree(cardId: string): Lease {
     return this.lease(cardId);
   }
 
-  removeFollowUpTree() {}
+  async removeFollowUpTree() {}
 
   async landedDiff(): Promise<CardDiff | null> {
     return null;

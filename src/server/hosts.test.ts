@@ -214,9 +214,11 @@ describe('clones on a host', () => {
     // the system's helper (macOS's keychain) reset by an empty one, then the token's
     expect(Bun.spawnSync(['git', '-C', join(dir, 'far', '1'), 'config', '--local', '--get-all', 'credential.helper']).stdout.toString()).toMatch(/^\n!f\(\).*GH_TOKEN/);
     const [a, b] = [board.create({ title: 'A', x: 0, y: 0 }).id, board.create({ title: 'B', x: 0, y: 0 }).id];
-    expect(spaces.lease(a, 'obeya/a')).toBe(join(dir, 'ws', '1'));
+    const here = spaces.lease(a, 'obeya/a');
+    expect(here.path).toBe(join(dir, 'ws', '1'));
     const far = spaces.lease(b, 'obeya/b');
-    expect(far).toBe(onHost(name, join(dir, 'far', '1')));
+    expect(far.path).toBe(onHost(name, join(dir, 'far', '1')));
+    await Promise.all([here.ready, far.ready]);
     expect(spaces.hasWork(b)).toBe(false);
     const local = join(dir, 'far', '1');
     identify(local);
@@ -246,10 +248,10 @@ describe('clones on a host', () => {
     const runtime = new FakeRuntime();
     workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, workspaces: 'clones', land: 'pr' } });
     const [a, b, c] = ['A', 'B', 'C'].map((title) => board.create({ title, x: 0, y: 0 }).id) as [string, string, string];
-    workers.start(a);
+    await workers.start(a);
     expect(board.row(a).workspace).toBe(join(dir, 'ws', '1'));
     // the slot here is taken by A at work, though a clone here is free
-    workers.start(b);
+    await workers.start(b);
     expect(board.row(b).workspace).toBe(onHost(name, join(dir, 'far', '1')));
     expect(() => workers.start(c)).toThrow(expect.objectContaining({ code: 'noSlot' }));
     expect(spaces.leasable()).toBe(false);
@@ -262,11 +264,13 @@ describe('clones on a host', () => {
     await sa.call('ask', { question: 'Welche Farbe?' });
     sa.emit({ type: 'idle' });
     expect(spaces.leasable()).toBe(true);
-    workers.start(c);
+    await workers.start(c);
     expect(board.row(c).workspace).toBe(join(dir, 'ws', '2'));
     // the owner's question to a card whose work is over does not wait for a slot
     const d = board.create({ title: 'D', x: 0, y: 0 }).id;
-    expect(spaces.lease(d, 'obeya/d', { overSlots: true })).toBe(onHost(name, join(dir, 'far', '2')));
+    const lease = spaces.lease(d, 'obeya/d', { overSlots: true });
+    expect(lease.path).toBe(onHost(name, join(dir, 'far', '2')));
+    await lease.ready;
     workers.shutdown();
   }, 30_000);
 
@@ -301,7 +305,7 @@ describe('clones on a host', () => {
   test('fewer of them in the configuration: the others leave the pool once a card no longer holds them, and their folders go', async () => {
     expect(await spaces.ensureHostClones(host, join(dir, 'far'), origin, 3, () => undefined)).toBeNull();
     const a = board.create({ title: 'A', x: 0, y: 0 }).id;
-    spaces.lease(a, 'obeya/a');
+    await spaces.lease(a, 'obeya/a').ready;
     writeFileSync(join(dir, 'far', '3', 'notes.txt'), 'mine\n');
     expect(await spaces.ensureHostClones(host, join(dir, 'far'), origin, 0, () => undefined)).toBeNull();
     expect(spaces.list().map((w) => w.path)).toEqual([onHost(name, join(dir, 'far', '1'))]);
@@ -339,7 +343,7 @@ describe('a worker on a host', () => {
     const runtime = new FakeRuntime();
     const workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, workspaces: 'clones', land: 'pr' }, reconnectMs: 20 });
     const card = board.create({ title: 'Weit weg', x: 0, y: 0 });
-    workers.start(card.id);
+    await workers.start(card.id);
     const first = runtime.last;
     expect(first.spec.cwd).toBe(onHost(name, join(dir, 'far', '1')));
     first.emit({ type: 'session', id: 's1' });
@@ -399,7 +403,7 @@ describe('a worker on a host', () => {
     const runtime = new FakeRuntime();
     const workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, workspaces: 'clones', land: 'pr' }, reconnectMs: 20 });
     const card = board.create({ title: 'Weit weg', body: 'Eine Wochenansicht.', x: 0, y: 0 });
-    workers.start(card.id);
+    await workers.start(card.id);
     // the host goes before the session reports an id: getting it ready failed
     writeFileSync(join(dir, 'net', 'down'), '');
     runtime.last.emit({ type: 'lost', message: 'the connection was lost' });
@@ -449,7 +453,7 @@ describe('the app of a card on a host', () => {
 
   test('opens through a forward of its port, which ends once the card no longer offers it', async () => {
     const card = board.create({ title: 'Weit weg', x: 0, y: 0 });
-    workers.start(card.id);
+    await workers.start(card.id);
     expect(runtime.last.inbox[0]).toContain("Obeya forwards that address's port, and only that one");
     const first = app('erste');
     runtime.last.call('app_running', { url: `${first}seite?x=1` });
@@ -482,7 +486,7 @@ describe('the app of a card on a host', () => {
 
   test('is forwarded again after its connection dropped, on the same port, and not while the host does not answer', async () => {
     const card = board.create({ title: 'Weit weg', x: 0, y: 0 });
-    workers.start(card.id);
+    await workers.start(card.id);
     runtime.last.call('app_running', { url: app('da') });
     const opened = (await workers.openApp(card.id))!;
     process.kill(forwards()[0]!, 'SIGTERM');
@@ -501,7 +505,7 @@ describe('the app of a card on a host', () => {
     workers.shutdown();
     workers = new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, workspaces: 'clones', land: 'pr', app: { run: 'true', stop: 'true' } }, parkGrace: 10, tryGrace: 0 });
     const card = board.create({ title: 'Weit weg', x: 0, y: 0 });
-    workers.start(card.id);
+    await workers.start(card.id);
     runtime.last.call('app_running', { url: app('da') });
     const opened = (await workers.openApp(card.id))!;
     expect(await answers(opened)).toBe('da');

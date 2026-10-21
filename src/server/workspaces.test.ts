@@ -50,8 +50,29 @@ describe('the main branch', () => {
   });
 });
 
+describe('a leased clone', () => {
+  test('git fails to make ready is given back, and not taken again at once', async () => {
+    const repo = gitRepo(join(dir, 'repo'));
+    const store = new Store(':memory:');
+    const board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: repo, branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
+    const spaces = new Workspaces(store, 'c', { mode: 'clones', repoPath: repo, dir: join(dir, 'ws') });
+    const [clone] = spaces.ensureClones(repo, 1);
+    // its origin is gone: the fetch fails
+    git(clone!, 'remote', 'set-url', 'origin', join(dir, 'gone'));
+    const [a, b] = [board.create({ title: 'A', x: 0, y: 0 }).id, board.create({ title: 'B', x: 0, y: 0 }).id];
+    const lease = spaces.lease(a, 'obeya/a');
+    // taken at once, while git fetches
+    expect(spaces.leasedBy(a)).toBe(clone!);
+    expect(spaces.leasable()).toBe(false);
+    await expect(lease.ready!).rejects.toThrow('fetch');
+    expect(spaces.leasedBy(a)).toBeNull();
+    expect(spaces.leasable()).toBe(false);
+    expect(() => spaces.lease(b, 'obeya/b')).toThrow(expect.objectContaining({ code: 'noWorkspace' }));
+  });
+});
+
 describe("a follow-up's temporary worktree", () => {
-  test("is at origin's copy of the card's branch where no clone here holds it, else at the default branch, and goes without a trace", () => {
+  test("is at origin's copy of the card's branch where no clone here holds it, else at the default branch, and goes without a trace", async () => {
     const origin = gitRepo(join(dir, 'origin'));
     git(origin, 'checkout', '--quiet', '-b', 'obeya/pushed-abc123');
     git(origin, 'commit', '--quiet', '--allow-empty', '-m', 'pushed');
@@ -60,16 +81,18 @@ describe("a follow-up's temporary worktree", () => {
     const checkout = join(dir, 'checkout');
     git(dir, 'clone', '--quiet', origin, checkout);
     const spaces = new Workspaces(new Store(':memory:'), 'c', { mode: 'clones', repoPath: checkout, dir: join(dir, 'ws') });
-    const tree = spaces.followUpTree('card-1234567', 'obeya/pushed-abc123');
+    const { path: tree, ready } = spaces.followUpTree('card-1234567', 'obeya/pushed-abc123');
+    await ready;
     expect(tree).toBe(join(dir, 'ws', 'follow-up', 'card-123'));
     expect(git(tree, 'rev-parse', 'HEAD')).toBe(pushed);
     // the checkout stays as it was: clean, on its branch
     expect(git(checkout, 'status', '--porcelain')).toBe('');
     expect(git(checkout, 'branch', '--show-current')).toBe('main');
-    spaces.removeFollowUpTree(tree);
+    await spaces.removeFollowUpTree(tree);
     expect(existsSync(tree)).toBe(false);
     expect(git(checkout, 'worktree', 'list').split('\n')).toHaveLength(1);
-    const fresh = spaces.followUpTree('card-1234567', 'obeya/gone-def456');
+    const { path: fresh, ready: again } = spaces.followUpTree('card-1234567', 'obeya/gone-def456');
+    await again;
     expect(git(fresh, 'rev-parse', 'HEAD')).toBe(git(checkout, 'rev-parse', 'origin/main'));
   });
 });
@@ -182,7 +205,9 @@ describe('clones the configuration no longer names', () => {
     await Bun.sleep(150);
     expect(spaces.ensureClones(origin, 1)).toEqual([path]);
     const a = board.create({ title: 'A', x: 0, y: 0 }).id;
-    expect(spaces.lease(a, 'obeya/a')).toBe(path);
+    const lease = spaces.lease(a, 'obeya/a');
+    expect(lease.path).toBe(path);
+    await lease.ready;
     writeFileSync(join(path, 'new.txt'), 'work\n');
     await Bun.sleep(600);
     expect(readFileSync(join(path, 'new.txt'), 'utf8')).toBe('work\n');
@@ -223,7 +248,9 @@ describe('clones the configuration no longer names', () => {
   test('a clone a card holds stays with it until the card gives it back, then goes', async () => {
     const { spaces, paths } = make(2);
     const a = board.create({ title: 'A', x: 0, y: 0 }).id;
-    expect(spaces.lease(a, 'obeya/a')).toBe(paths[0]!);
+    const lease = spaces.lease(a, 'obeya/a');
+    expect(lease.path).toBe(paths[0]!);
+    await lease.ready;
     spaces.keepOnly(null, []);
     expect(spaces.list().map((w) => w.path)).toEqual([paths[0]!]);
     expect(spaces.leasedBy(a)).toBe(paths[0]!);

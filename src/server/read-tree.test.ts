@@ -236,7 +236,7 @@ describe("a repository's settings for everyone", () => {
     const c = openWatched(repo, runtime);
     const land = async (title: string, files: Record<string, string>) => {
       const card = c.board.create({ title, x: 0, y: 0 });
-      c.repos[0]!.workers.start(card.id);
+      await c.repos[0]!.workers.start(card.id);
       runtime.last.emit({ type: 'session', id: `session-${title}` });
       const ws = c.board.row(card.id).workspace!;
       for (const [f, text] of Object.entries(files)) {
@@ -285,7 +285,7 @@ describe("a repository's settings for everyone", () => {
     const workers = c.repos[0]!.workers;
     const pushed = async (title: string, file: string, text: string) => {
       const card = c.board.create({ title, x: 0, y: 0 });
-      workers.start(card.id);
+      await workers.start(card.id);
       const ws = c.board.row(card.id).workspace!;
       mkdirSync(join(ws, file, '..'), { recursive: true });
       writeFileSync(join(ws, file), text);

@@ -31,7 +31,11 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-const settle = (ms = 5) => new Promise((r) => setTimeout(r, ms));
+// the timers' work done, and the workers it started at work in their workspaces
+const settle = async (ms = 5) => {
+  await new Promise((r) => setTimeout(r, ms));
+  await Promise.all(canvas.repos.map((r) => r.workers.prepared()));
+};
 /** A plan doc lands on main, and Obeya reads it from there. */
 const landDoc = async (file: string, text: string) => {
   writeFileSync(join(main, file), text);
@@ -139,7 +143,7 @@ describe('an idea', () => {
     expect(later.inbox).toEqual(['The owner says:\n\nDrittens.']);
   });
 
-  test('a session from scratch of an idea discussed before hears where it stands: the brief, its mocks, its prototypes and the conversation so far', () => {
+  test('a session from scratch of an idea discussed before hears where it stands: the brief, its mocks, its prototypes and the conversation so far', async () => {
     const i = idea();
     canvas.act(i.id, { action: 'discuss', text: 'Lass uns das durchdenken.' });
     // a new idea has nothing to go on from
@@ -154,6 +158,7 @@ describe('an idea', () => {
     // however much the agents did since
     for (let n = 0; n < 600; n++) board().log(i.id, 'activity', 'explorer', `Liest Datei ${n}`);
     canvas.act(i.id, { action: 'prototype', text: 'Den Export-Knopf.' });
+    await settle();
     const [prototype] = board()
       .snapshot()
       .items.filter((x) => x.prototypeOf === i.id);
@@ -887,12 +892,13 @@ describe('a prototype', () => {
   const handOver = (s: FakeSession, summary: string, demo = 'demo') =>
     s.call('ready_for_review', { summary, demo: { dir: demoDir(demo), chapters: ['Knopf'] } });
 
-  test('builds a throwaway prototype whose demo shows on the idea; discarded, it goes into the archive', () => {
+  test('builds a throwaway prototype whose demo shows on the idea; discarded, it goes into the archive', async () => {
     const i = idea();
     board().setIdea(i.id, { brief: '**Ziel:** CSV-Export.', mocks: [{ title: 'Knopf', html: '<button>Export</button>' }] });
     canvas.act(i.id, { action: 'discuss', text: 'Zeig mal.' });
     turn(explorer(), 'Ein Prototyp hilft.');
     canvas.act(i.id, { action: 'prototype', text: 'Den Export-Knopf. Oben rechts in der Leiste.' });
+    await settle();
     const [prototype] = prototypes(i.id);
     expect(prototype).toMatchObject({ state: 'working', title: 'Prototyp: Export für Vermieter – Den Export-Knopf', from: i.id, body: 'Den Export-Knopf. Oben rechts in der Leiste.' });
     expect(item(i.id).state).toBe('idea');
@@ -942,13 +948,14 @@ describe('a prototype', () => {
     expect(board().events(i.id).at(-1)!.text).toContain('verworfen');
   });
 
-  test('several run side by side, each with its approach, and the idea shows every demo', () => {
+  test('several run side by side, each with its approach, and the idea shows every demo', async () => {
     canvas.shutdown();
     canvas = open(3);
     const i = idea('Logo für Obeya');
     canvas.act(i.id, { action: 'prototype', text: 'Wortmarke: der Name in eigener Schrift' });
     canvas.act(i.id, { action: 'prototype', text: 'Bildmarke' });
     canvas.act(i.id, { action: 'prototype' });
+    await settle();
     const all = prototypes(i.id);
     expect(all.map((p) => p.title)).toEqual(['Prototyp: Logo für Obeya – Wortmarke', 'Prototyp: Logo für Obeya – Bildmarke', 'Prototyp: Logo für Obeya']);
     expect(all.every((p) => p.state === 'working')).toBe(true);
@@ -970,17 +977,19 @@ describe('a prototype', () => {
     expect(() => board().archive([i.id])).toThrow(expect.objectContaining({ code: 'prototypeRunning' }));
   });
 
-  test('a second prototype with the same approach is numbered', () => {
+  test('a second prototype with the same approach is numbered', async () => {
     canvas.shutdown();
     canvas = open(2);
     const i = idea();
     canvas.act(i.id, { action: 'prototype', text: 'Knopf' });
+    await settle();
     canvas.act(prototypes(i.id)[0]!.id, { action: 'discard' });
     canvas.act(i.id, { action: 'prototype', text: 'Knopf' });
+    await settle();
     expect(prototypes(i.id).map((p) => p.title)).toEqual(['Prototyp: Export für Vermieter – Knopf (2)']);
   });
 
-  test('the variants its agent planned start at once, one prototype each, and none twice', () => {
+  test('the variants its agent planned start at once, one prototype each, and none twice', async () => {
     canvas.shutdown();
     canvas = open(4);
     const i = idea('Leinwand ordnen');
@@ -998,21 +1007,24 @@ describe('a prototype', () => {
     expect(item(i.id).idea!.variants.map((v) => v.approach)).toEqual(['A Plasma-Felder', 'B Territorien', 'C Konturen']);
     // the owner leaves one out
     canvas.act(i.id, { action: 'prototype', variants: ['A Plasma-Felder', 'C Konturen'] });
+    await settle();
     expect(prototypes(i.id).map((p) => [p.title, p.variant, p.state])).toEqual([
       ['Prototyp: Leinwand ordnen – A Plasma-Felder', 'A Plasma-Felder', 'working'],
       ['Prototyp: Leinwand ordnen – C Konturen', 'C Konturen', 'working'],
     ]);
     // each builds its own variant only
     expect(prototypes(i.id)[0]!.body).toBe('Gebiete als Metaballs.\n\nNur diese Variante: B Territorien, C Konturen bauen eigene Prototypen.');
-    expect(workers()[1]!.inbox[0]).toContain('Gebiete als Hüllen.');
+    expect(workers().find((w) => w.spec.cwd === board().row(prototypes(i.id)[1]!.id).workspace)!.inbox[0]).toContain('Gebiete als Hüllen.');
     expect(board().events(i.id).at(-1)!.text).toBe('Prototypen gestartet: „Prototyp: Leinwand ordnen – A Plasma-Felder“, „Prototyp: Leinwand ordnen – C Konturen“.');
     // without a choice (a spoken command): the planned ones that have none yet
     canvas.act(i.id, { action: 'prototype' });
+    await settle();
     expect(prototypes(i.id).map((p) => p.variant)).toEqual(['A Plasma-Felder', 'C Konturen', 'B Territorien']);
     expect(() => canvas.act(i.id, { action: 'prototype' })).toThrow(expect.objectContaining({ code: 'variantsRunning' }));
     // a discarded variant can be tried again
     canvas.act(prototypes(i.id)[0]!.id, { action: 'discard' });
     canvas.act(i.id, { action: 'prototype' });
+    await settle();
     expect(prototypes(i.id).at(-1)!.title).toBe('Prototyp: Leinwand ordnen – A Plasma-Felder (2)');
     expect(() => canvas.act(i.id, { action: 'prototype', variants: ['D Gibt es nicht'] })).toThrow(expect.objectContaining({ code: 'invalid' }));
   });
@@ -1024,6 +1036,7 @@ describe('a prototype', () => {
     board().setIdea(i.id, { brief: '**Ziel:** CSV-Export.' });
     canvas.act(i.id, { action: 'prototype', text: 'Knopf' });
     canvas.act(i.id, { action: 'prototype', text: 'Menü' });
+    await settle();
     const [chosen, other] = prototypes(i.id);
     const [w, wOther] = workers();
     commit(chosen!.id, 'knopf.txt');
@@ -1076,9 +1089,10 @@ describe('a prototype', () => {
     expect(builder.spec.tools.some((t) => t.name === 'propose_card')).toBe(true);
   });
 
-  test("a prototype's worker proposes building the idea on it instead of making cards", () => {
+  test("a prototype's worker proposes building the idea on it instead of making cards", async () => {
     const i = idea();
     canvas.act(i.id, { action: 'prototype', text: 'Knopf' });
+    await settle();
     const [prototype] = prototypes(i.id);
     const w = worker();
     expect(w.spec.tools.some((t) => t.name === 'propose_card')).toBe(false);
@@ -1097,6 +1111,7 @@ describe('a prototype', () => {
     canvas.act(i.id, { action: 'discuss', text: 'Los.' });
     turn(explorer(), 'Ein Prototyp?');
     canvas.act(i.id, { action: 'prototype', text: 'Knopf' });
+    await settle();
     const [prototype] = prototypes(i.id);
     worker().call('ask', { question: 'Welche Farbe?', options: ['Blau', 'Grün'] });
     canvas.act(prototype!.id, { action: 'answer', text: 'Blau' });
@@ -1111,9 +1126,10 @@ describe('a prototype', () => {
     expect(talk(i.id).at(-1)).toEqual(['explorer', 'Ein Prototyp?']);
   });
 
-  test('"So bauen" discards the prototypes still on the canvas', () => {
+  test('"So bauen" discards the prototypes still on the canvas', async () => {
     const i = idea();
     canvas.act(i.id, { action: 'prototype', text: 'Knopf' });
+    await settle();
     const [prototype] = prototypes(i.id);
     canvas.act(i.id, { action: 'build' });
     expect(archived(prototype!.id)).toMatchObject({ prototypeEnd: 'discarded' });
@@ -1127,6 +1143,7 @@ describe('a prototype', () => {
     board().setIdea(i.id, { brief: '**Ziel:** Eine Seite. Über die Variante entscheiden die Prototypen.' });
     canvas.act(i.id, { action: 'prototype', text: 'Film zuerst' });
     canvas.act(i.id, { action: 'prototype', text: 'Manifest' });
+    await settle();
     const [film, manifest] = prototypes(i.id);
     const [w] = workers();
     commit(film!.id, 'film.html');
@@ -1190,9 +1207,10 @@ describe('a prototype', () => {
     expect(brief).toContain('This is workstream W2 of the project “Webseite”.');
   });
 
-  test('deleting a prototype discards it into the archive, workspace and all', () => {
+  test('deleting a prototype discards it into the archive, workspace and all', async () => {
     const i = idea();
     canvas.act(i.id, { action: 'prototype', text: 'Knopf' });
+    await settle();
     const [prototype] = prototypes(i.id);
     canvas.remove(prototype!.id);
     expect(archived(prototype!.id)).toMatchObject({ prototypeEnd: 'discarded' });
@@ -1220,6 +1238,7 @@ describe('a prototype', () => {
     expect(board().events(i.id).some((e) => e.text === 'Markiert eine Teilaufgabe zum Abtrennen: „Lese-Lern-App: Spiel und Lernlogik“')).toBe(true);
     // one prototype runs, the other is still only planned
     canvas.act(i.id, { action: 'prototype', variants: ['P1 lokal'] });
+    await settle();
     const [p1] = prototypes(i.id);
 
     canvas.act(i.id, { action: 'splitOff' });
@@ -1356,9 +1375,10 @@ describe('by voice', () => {
     expect(item(i.id)).toMatchObject({ state: 'planned', body: '**Ziel:** CSV und PDF.' });
   });
 
-  test('"bau diesen Prototyp" waits for the reply of its idea’s agent', () => {
+  test('"bau diesen Prototyp" waits for the reply of its idea’s agent', async () => {
     const i = idea();
     canvas.act(i.id, { action: 'prototype', text: 'Knopf' });
+    await settle();
     const prototype = board()
       .snapshot()
       .items.find((x) => x.prototypeOf === i.id)!;
@@ -1369,6 +1389,7 @@ describe('by voice', () => {
   test('"bau diesen Prototyp" on a prototype builds its idea on it', async () => {
     const i = idea();
     canvas.act(i.id, { action: 'prototype', text: 'Knopf' });
+    await settle();
     const prototype = board()
       .snapshot()
       .items.find((x) => x.prototypeOf === i.id)!;
@@ -1385,6 +1406,7 @@ describe('by voice', () => {
   test('"bau diesen Prototyp" builds the workstream its plan doc names once its idea is a project', async () => {
     const i = idea('Webseite');
     canvas.act(i.id, { action: 'prototype', text: 'Film zuerst' });
+    await settle();
     const prototype = board()
       .snapshot()
       .items.find((x) => x.prototypeOf === i.id)!;

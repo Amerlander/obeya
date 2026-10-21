@@ -228,10 +228,10 @@ describe('Arbeitsrückschau', () => {
   test('a card started again from scratch keeps its earlier run, and its work ending reads both', async () => {
     files = { s1: SAMPLE, s2: SAMPLE };
     const c = board.create({ title: 'Neu gestartet', x: 0, y: 0 });
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.emit({ type: 'session', id: 's1' });
     workers.stop(c.id);
-    workers.start(c.id);
+    await workers.start(c.id);
     expect(board.events(c.id).some((e) => e.text.includes('(Sitzung s1) bleibt für die Arbeitsrückschau erhalten'))).toBe(true);
     const worker = runtime.last;
     worker.emit({ type: 'session', id: 's2' });

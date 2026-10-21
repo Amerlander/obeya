@@ -38,9 +38,9 @@ const HOUR = 60 * 60_000;
 const later = (ms: number) => new Date(Date.now() + ms).toISOString();
 
 /** A card at work, its session known as `sess-1`. */
-function atWork(): { id: string; s: FakeSession } {
+async function atWork(): Promise<{ id: string; s: FakeSession }> {
   const c = board().create({ title: 'Lüftertest', x: 0, y: 0 });
-  workers().start(c.id);
+  await workers().start(c.id);
   const s = runtime.last;
   s.emit({ type: 'session', id: 'sess-1' });
   s.emit({ type: 'tool', name: 'Bash', input: { command: 'ha automation reload' } });
@@ -48,8 +48,8 @@ function atWork(): { id: string; s: FakeSession } {
 }
 
 describe('the agent snoozes itself', () => {
-  test('its session ends with its turn, the card holds no slot and needs nobody, and a restart touches nothing', () => {
-    const { id, s } = atWork();
+  test('its session ends with its turn, the card holds no slot and needs nobody, and a restart touches nothing', async () => {
+    const { id, s } = await atWork();
     const until = later(30 * HOUR);
     expect(s.call('snooze', { until, why: 'Testergebnis prüfen' })).toContain('End your turn now');
     expect(item(id).snoozed).toEqual({ until: new Date(until).toISOString(), by: 'agent', why: 'Testergebnis prüfen' });
@@ -79,8 +79,8 @@ describe('the agent snoozes itself', () => {
     expect(workers().busyCards()).toEqual([id]);
   });
 
-  test('a note from the owner wakes it early, and so does what Obeya has for it', () => {
-    const { id, s } = atWork();
+  test('a note from the owner wakes it early, and so does what Obeya has for it', async () => {
+    const { id, s } = await atWork();
     s.call('snooze', { until: later(10 * HOUR), why: 'Prüfen' });
     s.emit({ type: 'idle' });
     workers().message(id, 'Schau jetzt schon mal nach.');
@@ -98,8 +98,8 @@ describe('the agent snoozes itself', () => {
     expect(board().events(id).some((e) => e.text === 'Wieder da: Neues für den Agenten')).toBe(true);
   });
 
-  test('the owner moves the time it snoozed until: woken then, it hears so', () => {
-    const { id, s } = atWork();
+  test('the owner moves the time it snoozed until: woken then, it hears so', async () => {
+    const { id, s } = await atWork();
     s.call('snooze', { until: later(10 * HOUR), why: 'Prüfen' });
     s.emit({ type: 'idle' });
     const soon = later(HOUR);
@@ -116,8 +116,8 @@ describe('the agent snoozes itself', () => {
     expect(runtime.last.inbox[0]).toContain('the owner wakes you early');
   });
 
-  test('a time that passed, or no time, is refused; a question in the same turn wins over the snooze', () => {
-    const { id, s } = atWork();
+  test('a time that passed, or no time, is refused; a question in the same turn wins over the snooze', async () => {
+    const { id, s } = await atWork();
     expect(s.call('snooze', { until: later(-HOUR), why: 'x' })).toContain('has passed');
     expect(s.call('snooze', { until: 'morgen früh', why: 'x' })).toContain('ISO 8601');
     expect(item(id).snoozed).toBeUndefined();
@@ -131,8 +131,8 @@ describe('the agent snoozes itself', () => {
     expect(s.call('snooze', { until: later(HOUR * 5), why: 'x' })).toContain('Not snoozed');
   });
 
-  test('stopping a snoozed card plans it again, not snoozed', () => {
-    const { id, s } = atWork();
+  test('stopping a snoozed card plans it again, not snoozed', async () => {
+    const { id, s } = await atWork();
     s.call('snooze', { until: later(HOUR * 5), why: 'x' });
     s.emit({ type: 'idle' });
     canvas.act(id, { action: 'stop' });
@@ -149,9 +149,9 @@ describe('the agent snoozes until another card gets somewhere', () => {
     return c.id;
   };
 
-  test('until that card is done: it wakes once its work is on main, and hears so', () => {
+  test('until that card is done: it wakes once its work is on main, and hears so', async () => {
     const fix = other();
-    const { id, s } = atWork();
+    const { id, s } = await atWork();
     expect(s.call('snooze', { card: 'tests auf linux grün machen', why: 'Tag verschieben' })).toContain('Snoozed until the card “Tests auf Linux grün machen” is done');
     expect(item(id).snoozed).toEqual({ on: { card: fix, title: 'Tests auf Linux grün machen', state: 'done' }, by: 'agent', why: 'Tag verschieben' });
     expect(last(id)).toMatchObject({ kind: 'state', author: 'worker', text: 'Zurückgestellt bis „Tests auf Linux grün machen“ erledigt ist · Tag verschieben' });
@@ -171,9 +171,9 @@ describe('the agent snoozes until another card gets somewhere', () => {
     expect(last(id)).toMatchObject({ author: 'obeya', text: 'Wieder da: „Tests auf Linux grün machen“ ist erledigt' });
   });
 
-  test('until it waits for the owner, at the latest at a time: whichever comes first wakes it', () => {
+  test('until it waits for the owner, at the latest at a time: whichever comes first wakes it', async () => {
     other('Demo des Exports');
-    const { id, s } = atWork();
+    const { id, s } = await atWork();
     const until = later(5 * HOUR);
     s.call('snooze', { card: 'Export', state: 'waits_for_owner', until, why: 'Vergleichen' });
     expect(last(id).text).toMatch(/^Zurückgestellt bis „Demo des Exports“ auf dich wartet, spätestens .* · Vergleichen$/);
@@ -183,9 +183,9 @@ describe('the agent snoozes until another card gets somewhere', () => {
     expect(runtime.last.inbox[0]).toContain('has not got there yet');
   });
 
-  test('a card that asks the owner is one that waits for them', () => {
+  test('a card that asks the owner is one that waits for them', async () => {
     const demo = other('Demo des Exports');
-    const { s } = atWork();
+    const { s } = await atWork();
     s.call('snooze', { card: 'Demo des Exports', state: 'waits_for_owner', why: 'Vergleichen' });
     s.emit({ type: 'idle' });
     board().work(demo, { state: 'waiting', need: 'question' });
@@ -195,7 +195,7 @@ describe('the agent snoozes until another card gets somewhere', () => {
 
   test('a state the card passes through between two ticks wakes it all the same', async () => {
     const demo = other('Demo des Exports');
-    const { s } = atWork();
+    const { s } = await atWork();
     s.call('snooze', { card: 'Demo des Exports', state: 'waits_for_owner', why: 'Vergleichen' });
     s.emit({ type: 'idle' });
     board().work(demo, { state: 'waiting', need: 'question' });
@@ -204,10 +204,10 @@ describe('the agent snoozes until another card gets somewhere', () => {
     expect(runtime.last.inbox[0]).toContain('waits for the owner now');
   });
 
-  test('an idea whose questions wait for the owner waits for them', () => {
+  test('an idea whose questions wait for the owner waits for them', async () => {
     const idea = board().create({ idea: true, title: 'Export-Formate', body: 'Welche?', x: 0, y: 0 });
     board().work(idea.id, { idea: JSON.stringify({ status: 'open', brief: '', yourTurn: false, thinking: true, questions: [] }) });
-    const { s } = atWork();
+    const { s } = await atWork();
     s.call('snooze', { card: 'Export-Formate', state: 'waits_for_owner', why: 'x' });
     s.emit({ type: 'idle' });
     board().work(idea.id, { idea: JSON.stringify({ status: 'open', brief: '', yourTurn: true, questions: [] }) });
@@ -215,9 +215,9 @@ describe('the agent snoozes until another card gets somewhere', () => {
     expect(runtime.last.inbox[0]).toContain('waits for the owner now');
   });
 
-  test('the card stopped, archived or removed: it wakes, as that card no longer gets there', () => {
+  test('the card stopped, archived or removed: it wakes, as that card no longer gets there', async () => {
     const fix = other();
-    const { s } = atWork();
+    const { s } = await atWork();
     s.call('snooze', { card: 'Tests auf Linux grün machen', why: 'x' });
     s.emit({ type: 'idle' });
     board().work(fix, { state: 'planned' });
@@ -232,12 +232,12 @@ describe('the agent snoozes until another card gets somewhere', () => {
     expect(runtime.last.inbox[0]).toContain('The card “Weg damit” is gone from the canvas.');
   });
 
-  test('a card nobody can find, one done already, several alike, or neither card nor time is refused', () => {
+  test('a card nobody can find, one done already, several alike, or neither card nor time is refused', async () => {
     other('Linux-Tests');
     other('Linux-Build');
     const done = board().create({ title: 'Fertig', x: 0, y: 0 });
     board().work(done.id, { state: 'live' });
-    const { id, s } = atWork();
+    const { id, s } = await atWork();
     expect(s.call('snooze', { card: 'Windows', why: 'x' })).toContain('no card on the canvas is called “Windows”');
     expect(s.call('snooze', { card: 'Linux', why: 'x' })).toContain('several cards have “Linux” in their title');
     // a finished card makes no part of a title ambiguous
@@ -250,8 +250,8 @@ describe('the agent snoozes until another card gets somewhere', () => {
 });
 
 describe('the owner snoozes a card', () => {
-  test('at work: its worker stops at once as on a pause, Obeya’s messages wait, and at the time it goes on with them', () => {
-    const { id, s } = atWork();
+  test('at work: its worker stops at once as on a pause, Obeya’s messages wait, and at the time it goes on with them', async () => {
+    const { id, s } = await atWork();
     const until = later(14 * HOUR);
     canvas.act(id, { action: 'snooze', until });
     expect(s.closed).toBe(true);
@@ -273,8 +273,8 @@ describe('the owner snoozes a card', () => {
     expect(last(id).text).toBe('Wieder da: Zeitpunkt erreicht');
   });
 
-  test('waiting for them: it leaves them and comes back at the time; nothing goes to its agent', () => {
-    const { id, s } = atWork();
+  test('waiting for them: it leaves them and comes back at the time; nothing goes to its agent', async () => {
+    const { id, s } = await atWork();
     s.call('ask', { question: 'CSV oder Excel?' });
     s.emit({ type: 'idle' });
     expect(needsYou(item(id))).toBe(true);
@@ -297,8 +297,8 @@ describe('the owner snoozes a card', () => {
     expect(s.inbox.length).toBe(inbox);
   });
 
-  test('waiting for them, answered all the same: snoozed no longer', () => {
-    const { id, s } = atWork();
+  test('waiting for them, answered all the same: snoozed no longer', async () => {
+    const { id, s } = await atWork();
     s.call('ask', { question: 'CSV oder Excel?' });
     s.emit({ type: 'idle' });
     canvas.act(id, { action: 'snooze', until: later(3 * HOUR) });
@@ -307,8 +307,8 @@ describe('the owner snoozes a card', () => {
     expect(item(id).snoozed).toBeUndefined();
   });
 
-  test('„Jetzt zurückholen“ wakes it at once, whoever snoozed it', () => {
-    const { id, s } = atWork();
+  test('„Jetzt zurückholen“ wakes it at once, whoever snoozed it', async () => {
+    const { id, s } = await atWork();
     s.call('snooze', { until: later(30 * HOUR), why: 'Prüfen' });
     s.emit({ type: 'idle' });
     canvas.act(id, { action: 'wake' });
@@ -337,8 +337,8 @@ describe('the owner snoozes a card', () => {
 });
 
 describe('edges a review found', () => {
-  test('a restart notice that comes after the snooze keeps it: the session ends after the turn the notice starts, background work or not', () => {
-    const { id, s } = atWork();
+  test('a restart notice that comes after the snooze keeps it: the session ends after the turn the notice starts, background work or not', async () => {
+    const { id, s } = await atWork();
     s.call('snooze', { until: later(10 * HOUR), why: 'x' });
     s.emit({ type: 'idle', more: true });
     expect(s.closed).toBe(false);
@@ -348,8 +348,8 @@ describe('edges a review found', () => {
     expect(item(id).snoozed).toBeDefined();
   });
 
-  test('its pull request closed while the agent snoozes: the question reaches the owner, snoozed no longer', () => {
-    const { id, s } = atWork();
+  test('its pull request closed while the agent snoozes: the question reaches the owner, snoozed no longer', async () => {
+    const { id, s } = await atWork();
     board().work(id, { state: 'inPr', pr: JSON.stringify({ url: 'https://github.com/acme/app/pull/7', number: 7, seen: [], reported: [] }) });
     s.call('snooze', { until: later(10 * HOUR), why: 'x' });
     s.emit({ type: 'idle' });
@@ -359,8 +359,8 @@ describe('edges a review found', () => {
     expect(needsYou(item(id))).toBe(true);
   });
 
-  test('snoozing a card that waits for the owner leaves its background work running, and its pause offered', () => {
-    const { id, s } = atWork();
+  test('snoozing a card that waits for the owner leaves its background work running, and its pause offered', async () => {
+    const { id, s } = await atWork();
     s.call('ask', { question: 'CSV?' });
     s.emit({ type: 'idle', background: 1 });
     canvas.act(id, { action: 'snooze', until: later(HOUR * 3) });
@@ -370,8 +370,8 @@ describe('edges a review found', () => {
     expect(s.closed).toBe(true);
   });
 
-  test('a worker that waited for the restart after the landing and snoozed hears of the restart, which wakes it', () => {
-    const { id, s } = atWork();
+  test('a worker that waited for the restart after the landing and snoozed hears of the restart, which wakes it', async () => {
+    const { id, s } = await atWork();
     board().work(id, { state: 'live', landed: JSON.stringify({ commit: 'abc', restarts: true, waits: true }) });
     s.call('snooze', { until: later(10 * HOUR), why: 'x' });
     s.emit({ type: 'idle' });
@@ -418,12 +418,16 @@ describe('the Koordinator waits on a card', () => {
 });
 
 describe('a card that starts later', () => {
-  const settle = () => new Promise((r) => setTimeout(r, 5));
+  // the timers' work done, and the workers it started at work in their workspaces
+  const settle = async () => {
+    await new Promise((r) => setTimeout(r, 5));
+    await Promise.all(canvas.repos.map((r) => r.workers.prepared()));
+  };
   const DAY = 24 * HOUR;
   const worker = () => runtime.sessions.findLast((x) => x.spec.role === 'worker')!;
 
   test('proposed with a start time: accepted, it is planned and snoozed until then, survives a restart, and starts at the time through the Koordinator', async () => {
-    const { id: src, s } = atWork();
+    const { id: src, s } = await atWork();
     const at = later(14 * DAY);
     expect(s.call('propose_card', { title: 'NV prüfen', task: 'Prüfen, ob die Bank die NV erfasst hat.', reason: 'Erst in zwei Wochen sichtbar.', start_at: at })).toContain('Proposed');
     const p = board().snapshot().items.find((i) => i.state === 'proposal')!;
@@ -482,8 +486,8 @@ describe('a card that starts later', () => {
     expect(item(r.id).snoozed).toBeUndefined();
   });
 
-  test('propose_card refuses a start time that has passed or is no time', () => {
-    const { s } = atWork();
+  test('propose_card refuses a start time that has passed or is no time', async () => {
+    const { s } = await atWork();
     expect(s.call('propose_card', { title: 'X', task: 'T', reason: 'R', start_at: later(-HOUR) })).toContain('has passed');
     expect(s.call('propose_card', { title: 'X', task: 'T', reason: 'R', start_at: 'in zwei Wochen' })).toContain('ISO 8601');
     expect(board().snapshot().items.some((i) => i.state === 'proposal')).toBe(false);

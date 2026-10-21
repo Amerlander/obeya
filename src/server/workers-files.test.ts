@@ -17,7 +17,7 @@ async function reportCard() {
   git(main, 'add', '-A');
   git(main, 'commit', '--quiet', '-m', 'chart');
   const c = manual();
-  workers.start(c.id);
+  await workers.start(c.id);
   const ws = board.row(c.id).workspace!;
   writeFileSync(join(ws, 'docs', 'report.md'), '# Report\n\n![Chart](chart.png)\n');
   writeFileSync(join(ws, 'README.md'), 'hello again\n');

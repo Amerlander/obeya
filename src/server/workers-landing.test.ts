@@ -19,7 +19,7 @@ describe('landing through a pull request', () => {
 
   test('approval starts the PR phase: the branch stays in the clone, main is left alone', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const clone = board.row(c.id).workspace!;
     writeFileSync(join(clone, 'x.ts'), '');
     git(clone, 'add', '.');
@@ -37,7 +37,7 @@ describe('landing through a pull request', () => {
 
   test('approving work that changed nothing makes the card done: no pull request, the worker hears so and finishes', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const s = runtime.last;
     s.call('ready_for_review', { summary: 'Demo aufgenommen, keine Code-Änderung.', demo: artifact() });
     // the owner sees before approving that approval ends the card
@@ -68,7 +68,7 @@ describe('landing through a pull request', () => {
 
   test('a worker whose approved work turns out to change nothing closes the card itself instead of opening a pull request', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const s = runtime.last;
     expect(s.call('close_unchanged', {})).toContain('only work the owner approved');
     const clone = board.row(c.id).workspace!;
@@ -93,9 +93,9 @@ describe('landing through a pull request', () => {
 });
 
 describe('a card whose own branch changes how work lands', () => {
-  const settingUp = (settings: object) => {
+  const settingUp = async (settings: object) => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const clone = board.row(c.id).workspace!;
     mkdirSync(join(clone, '.obeya'), { recursive: true });
     writeFileSync(join(clone, '.obeya/settings.json'), JSON.stringify(settings));
@@ -109,7 +109,7 @@ describe('a card whose own branch changes how work lands', () => {
   test('lands as the branch says: on main where the repository still has pull requests, which the owner sees before approving', async () => {
     rmSync(dir, { recursive: true, force: true });
     setup({ ...generic, land: 'pr', workspaces: 'clones' });
-    const c = settingUp({ land: 'main' });
+    const c = await settingUp({ land: 'main' });
     expect(board.item(c.id)!.lands).toEqual({ land: 'main' });
     await workers.approve(c.id);
     expect(state(c.id)).toBe('live');
@@ -118,7 +118,7 @@ describe('a card whose own branch changes how work lands', () => {
   });
 
   test('as a pull request where the repository still lands on main', async () => {
-    const c = settingUp({ land: 'pr' });
+    const c = await settingUp({ land: 'pr' });
     expect(board.item(c.id)!.lands).toEqual({ land: 'pr' });
     await workers.approve(c.id);
     expect(state(c.id)).toBe('inPr');
@@ -129,7 +129,7 @@ describe('a card whose own branch changes how work lands', () => {
     rmSync(dir, { recursive: true, force: true });
     setup({ ...generic, land: 'pr', workspaces: 'clones' });
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'pr', workspaces: 'clones' }, machineSettings: () => ({ land: 'pr' }) }));
-    const c = settingUp({ land: 'main', checks: ['bun test'] });
+    const c = await settingUp({ land: 'main', checks: ['bun test'] });
     expect(board.item(c.id)!.lands).toBeUndefined();
     await workers.approve(c.id);
     expect(state(c.id)).toBe('inPr');
@@ -155,15 +155,15 @@ describe('approving directly onto main where work goes out as a pull request', (
     commitIn(other, file, msg);
     git(other, 'push', '--quiet', 'origin', 'main');
   };
-  const handedOver = (title = 'Zählerstände exportieren') => {
+  const handedOver = async (title = 'Zählerstände exportieren') => {
     const c = board.create({ title, x: 0, y: 0 });
-    workers.start(c.id);
+    await workers.start(c.id);
     const session = runtime.last;
     return { c, session, clone: board.row(c.id).workspace! };
   };
 
   test('Obeya pushes the work onto origin/main itself: no pull request, the card is live, the Obeya checkout stays', async () => {
-    const { c, session, clone } = handedOver();
+    const { c, session, clone } = await handedOver();
     commitIn(clone, 'x.ts', 'X');
     session.call('ready_for_review', { summary: 'S', demo: artifact() });
     session.emit({ type: 'idle' });
@@ -187,7 +187,7 @@ describe('approving directly onto main where work goes out as a pull request', (
   });
 
   test('main moved on: the work is rebased onto it, also when it moves again between fetch and push', async () => {
-    const { c, session, clone } = handedOver();
+    const { c, session, clone } = await handedOver();
     commitIn(clone, 'x.ts', 'X');
     session.call('ready_for_review', { summary: 'S', demo: artifact() });
     pushElsewhere('y.ts', 'Y');
@@ -206,7 +206,7 @@ describe('approving directly onto main where work goes out as a pull request', (
   });
 
   test('a conflict goes back to the worker with the approval kept: its next handover is pushed directly too', async () => {
-    const { c, session, clone } = handedOver();
+    const { c, session, clone } = await handedOver();
     commitIn(clone, 'same.ts', 'A');
     session.call('ready_for_review', { summary: 'S', demo: artifact() });
     pushElsewhere('same.ts', 'B');
@@ -228,7 +228,7 @@ describe('approving directly onto main where work goes out as a pull request', (
   });
 
   test('a push the remote turns away (a protected branch) stays with the owner, who approves again', async () => {
-    const { c, session, clone } = handedOver();
+    const { c, session, clone } = await handedOver();
     commitIn(clone, 'x.ts', 'X');
     session.call('ready_for_review', { summary: 'S', demo: artifact() });
     writeFileSync(join(origin, 'hooks/pre-receive'), '#!/bin/sh\necho "protected branch" >&2\nexit 1\n', { mode: 0o755 });
@@ -248,7 +248,7 @@ describe('approving directly onto main where work goes out as a pull request', (
 
   test('without `direct` in the settings the approval is refused; where work lands on main anyway it is a plain approval', async () => {
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'pr', workspaces: 'clones' } }));
-    const { c, session, clone } = handedOver();
+    const { c, session, clone } = await handedOver();
     commitIn(clone, 'x.ts', 'X');
     session.call('ready_for_review', { summary: 'S', demo: artifact() });
     const err = await workers.approve(c.id, { direct: true }).catch((e) => e);
@@ -258,7 +258,7 @@ describe('approving directly onto main where work goes out as a pull request', (
 
     rmSync(dir, { recursive: true, force: true });
     setup({ ...generic, land: 'main', workspaces: 'clones' });
-    const d = handedOver('Logo');
+    const d = await handedOver('Logo');
     commitIn(d.clone, 'logo.svg', 'Logo');
     d.session.call('ready_for_review', { summary: 'S', demo: artifact() });
     await workers.approve(d.c.id, { direct: true });
@@ -267,7 +267,7 @@ describe('approving directly onto main where work goes out as a pull request', (
   });
 
   test('work that changed nothing closes as done, approved directly or not', async () => {
-    const { c, session } = handedOver();
+    const { c, session } = await handedOver();
     session.call('ready_for_review', { summary: 'Nur eine Analyse.', demo: artifact() });
     await workers.approve(c.id, { direct: true });
     expect(state(c.id)).toBe('done');
@@ -287,9 +287,9 @@ describe('the landed commit names the demo’s page', () => {
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter, onApproval }));
   }
   /** A handed-over card whose last commit has a trailer of its own. */
-  function handedOver(title = 'Zählerstände exportieren', commit = true) {
+  async function handedOver(title = 'Zählerstände exportieren', commit = true) {
     const c = board.create({ title, x: 0, y: 0 });
-    workers.start(c.id);
+    await workers.start(c.id);
     const clone = board.row(c.id).workspace!;
     if (commit) {
       writeFileSync(join(clone, 'x.ts'), 'x');
@@ -305,7 +305,7 @@ describe('the landed commit names the demo’s page', () => {
 
   test('landing on main: the last commit gets the trailer beside its own, its author kept', async () => {
     withSite({ ...generic, land: 'main', workspaces: 'clones' });
-    const c = handedOver();
+    const c = await handedOver();
     await workers.approve(c.id);
     expect(state(c.id)).toBe('live');
     expect(approvals).toEqual([c.id]);
@@ -316,7 +316,7 @@ describe('the landed commit names the demo’s page', () => {
 
   test('pushed directly onto origin’s main, the same', async () => {
     withSite({ ...generic, land: 'pr', direct: true, workspaces: 'clones' }, true);
-    const c = handedOver();
+    const c = await handedOver();
     await workers.approve(c.id, { direct: true });
     expect(state(c.id)).toBe('live');
     expect(git(origin, 'log', '-1', '--format=%(trailers:key=Demo-Video)', 'main')).toBe(PAGE);
@@ -324,7 +324,7 @@ describe('the landed commit names the demo’s page', () => {
 
   test('a card without a page lands as it was', async () => {
     withSite({ ...generic, land: 'main', workspaces: 'clones' });
-    const c = handedOver('Ohne Seite');
+    const c = await handedOver('Ohne Seite');
     await workers.approve(c.id);
     expect(state(c.id)).toBe('live');
     expect(git(main, 'log', '-1', '--format=%B')).toBe('Zählerstände als CSV\n\nDer Export liest alle Zähler.\n\nCo-Authored-By: Claude <noreply@anthropic.com>');
@@ -332,7 +332,7 @@ describe('the landed commit names the demo’s page', () => {
 
   test('approved into a pull request, the demo goes out all the same', async () => {
     withSite({ ...generic, land: 'pr', workspaces: 'clones' });
-    const c = handedOver();
+    const c = await handedOver();
     await workers.approve(c.id);
     expect(state(c.id)).toBe('inPr');
     expect(approvals).toEqual([c.id]);
@@ -340,7 +340,7 @@ describe('the landed commit names the demo’s page', () => {
 
   test('with nothing to land, too', async () => {
     withSite({ ...generic, land: 'main', workspaces: 'clones' });
-    const c = handedOver('Nur eine Analyse', false);
+    const c = await handedOver('Nur eine Analyse', false);
     await workers.approve(c.id);
     expect(state(c.id)).toBe('done');
     expect(approvals).toEqual([c.id]);
@@ -348,11 +348,11 @@ describe('the landed commit names the demo’s page', () => {
 });
 
 describe('a prototype built on in a clone', () => {
-  test('the idea takes over the clone and the branch, renamed; the clone is busy until it is done', () => {
+  test('the idea takes over the clone and the branch, renamed; the clone is busy until it is done', async () => {
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' } }));
     const idea = board.create({ idea: true, title: 'Logo', x: 0, y: 0 });
     const prototype = board.addPrototype(idea.id, 'Prototyp: Logo', 'zeigen');
-    workers.start(prototype.id);
+    await workers.start(prototype.id);
     const path = board.row(prototype.id).workspace!;
     const old = board.row(prototype.id).branch!;
     writeFileSync(join(path, 'logo.svg'), '<svg/>');
@@ -375,9 +375,9 @@ describe('a prototype built on in a clone', () => {
 describe('a workstream whose plan doc keeps it open after its work landed', () => {
   const w1 = () => board.snapshot().items.find((i) => i.label === 'W1')!;
   /** Starts W1, commits a file in its clone and hands it over. */
-  const handOver = () => {
+  const handOver = async () => {
     const w = w1();
-    workers.start(w.id);
+    await workers.start(w.id);
     const clone = board.row(w.id).workspace!;
     writeFileSync(join(clone, 'config.ts'), 'export {}\n');
     git(clone, 'add', '.');
@@ -388,7 +388,7 @@ describe('a workstream whose plan doc keeps it open after its work landed', () =
   };
 
   test('landed and ticked off in the doc: live', async () => {
-    const w = handOver();
+    const w = await handOver();
     // the worker ticked it off on its branch
     setDocs([{ ...doc, workstreams: [{ ...ws('W1'), done: true }, ws('W2')] }]);
     await workers.approve(w.id);
@@ -399,7 +399,7 @@ describe('a workstream whose plan doc keeps it open after its work landed', () =
   });
 
   test('the last workstream ticked off: the project stays while its worker finishes, then goes into the archive', async () => {
-    const w = handOver();
+    const w = await handOver();
     const project = board.snapshot().items.find((i) => i.kind === 'project')!;
     setDocs([{ ...doc, workstreams: [{ ...ws('W1'), done: true }] }]);
     await workers.approve(w.id);
@@ -411,7 +411,7 @@ describe('a workstream whose plan doc keeps it open after its work landed', () =
   });
 
   test('the last workstream lands and its doc goes: the project stays while its worker finishes, then goes into the archive', async () => {
-    const w = handOver();
+    const w = await handOver();
     const project = board.snapshot().items.find((i) => i.kind === 'project')!;
     // the landing takes the done doc away
     setDocs([]);
@@ -430,7 +430,7 @@ describe('a workstream whose plan doc keeps it open after its work landed', () =
     /** Lands W1 with its doc gone; its worker waits for the restart. */
     const landWaiting = async () => {
       setWorkers(restarting(board));
-      const w = handOver();
+      const w = await handOver();
       runtime.last.emit({ type: 'session', id: 'sess-1' });
       setDocs([]);
       await workers.approve(w.id);
@@ -477,7 +477,7 @@ describe('a workstream whose plan doc keeps it open after its work landed', () =
   });
 
   test('landed on main, the box still empty: once its worker is done, the card is planned again and starts for the rest', async () => {
-    const w = handOver();
+    const w = await handOver();
     await workers.approve(w.id);
     // its worker still finishes: the card stays live until then
     board.docsChanged();
@@ -490,7 +490,7 @@ describe('a workstream whose plan doc keeps it open after its work landed', () =
     // the handover stays in the log, the summary with it
     expect(board.events(w.id).some((e) => e.text.includes('Freigegeben'))).toBe(true);
 
-    workers.start(w.id);
+    await workers.start(w.id);
     expect(state(w.id)).toBe('working');
     // a fresh branch from main, not the landed one
     expect(board.row(w.id).branch).toEndWith(`-${commit.slice(0, 7)}`);
@@ -511,7 +511,7 @@ describe('a workstream merged as a pull request, its box still empty', () => {
   /** W1 in its pull request #821, its worker idle. */
   const inPr = async () => {
     const w = w1();
-    workers.start(w.id);
+    await workers.start(w.id);
     const clone = board.row(w.id).workspace!;
     writeFileSync(join(clone, 'config.ts'), 'export {}\n');
     git(clone, 'add', '.');
@@ -543,7 +543,7 @@ describe('a workstream merged as a pull request, its box still empty', () => {
     expect(w1().landedPart).toEqual({ commit, pr: { url: 'https://github.com/acme/app/pull/821', number: 821 } });
     // the pull request is history now: starting again opens a new one
     expect(w1().pr).toBeUndefined();
-    workers.start(w.id);
+    await workers.start(w.id);
     expect(runtime.last.inbox[0]).toContain('pull request #821 (https://github.com/acme/app/pull/821)');
   });
 
@@ -562,8 +562,8 @@ describe('a workstream merged as a pull request, its box still empty', () => {
 describe('a workspace its card will not work in again goes back to the pool', () => {
   const w1 = () => board.snapshot().items.find((i) => i.label === 'W1')!;
   /** Starts the card, commits a file in its clone and stops it: the clone stays the card's. */
-  const stoppedWithWork = (id: string) => {
-    workers.start(id);
+  const stoppedWithWork = async (id: string) => {
+    await workers.start(id);
     const clone = board.row(id).workspace!;
     writeFileSync(join(clone, 'config.ts'), 'export {}\n');
     git(clone, 'add', '.');
@@ -579,7 +579,7 @@ describe('a workspace its card will not work in again goes back to the pool', ()
 
   test('a stopped workstream the plan doc ticks off frees its clone; its branch stays there', async () => {
     const w = w1();
-    const clone = stoppedWithWork(w.id);
+    const clone = await stoppedWithWork(w.id);
     const branch = board.row(w.id).branch!;
     expect(spaces.leasable()).toBe(false);
     ticked();
@@ -592,9 +592,9 @@ describe('a workspace its card will not work in again goes back to the pool', ()
     expect(spaces.leasable()).toBe(true);
   });
 
-  test('one left taken before Obeya started is freed when it starts', () => {
+  test('one left taken before Obeya started is freed when it starts', async () => {
     const w = w1();
-    stoppedWithWork(w.id);
+    await stoppedWithWork(w.id);
     // the doc was ticked off while an Obeya ran that did not free it; this one starts on the same database
     const fresh = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: main, branch: 'main' }] }, () => ({ docs: [{ ...doc, workstreams: [{ ...ws('W1'), done: true }, ws('W2')] }], dirs: [] }));
     new Workers({ board: fresh, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' } }).resumeAll();
@@ -604,7 +604,7 @@ describe('a workspace its card will not work in again goes back to the pool', ()
 
   test('a workstream still open in its doc keeps the clone it was stopped with', async () => {
     const w = w1();
-    const clone = stoppedWithWork(w.id);
+    const clone = await stoppedWithWork(w.id);
     board.docsChanged();
     await flush();
     expect(spaces.leasedBy(w.id)).toBe(clone);
@@ -613,7 +613,7 @@ describe('a workspace its card will not work in again goes back to the pool', ()
 
   test('a deleted card frees its clone; restored, it takes the clone back while that is free', async () => {
     const c = manual();
-    const clone = stoppedWithWork(c.id);
+    const clone = await stoppedWithWork(c.id);
     board.showPools(() => [{ repo: 'home', hosts: spaces.pool([]) }]);
     const taken = () => board.snapshot().workspaces![0]!.hosts[0]!.cards;
     expect(taken()).toEqual([c.id]);
@@ -627,17 +627,17 @@ describe('a workspace its card will not work in again goes back to the pool', ()
     workers.restored(c.id);
     expect(spaces.leasedBy(c.id)).toBe(clone);
     expect(taken()).toEqual([c.id]);
-    workers.start(c.id);
+    await workers.start(c.id);
     expect(git(clone, 'log', '--format=%s', '-1')).toBe('Config');
   });
 
   test('restored after another card took its clone, it starts in the next free one', async () => {
     const c = manual();
-    stoppedWithWork(c.id);
+    await stoppedWithWork(c.id);
     board.remove(c.id);
     await flush();
     const other = manual();
-    workers.start(other.id);
+    await workers.start(other.id);
     board.restore(c.id);
     workers.restored(c.id);
     expect(board.row(c.id).workspace).toBeNull();
@@ -645,7 +645,7 @@ describe('a workspace its card will not work in again goes back to the pool', ()
 
   test('a stopped workstream its plan doc no longer has frees its clone; its branch stays there', async () => {
     const w = w1();
-    const clone = stoppedWithWork(w.id);
+    const clone = await stoppedWithWork(w.id);
     const branch = board.row(w.id).branch!;
     setDocs([{ ...doc, workstreams: [ws('W2')] }]);
     board.docsChanged();
@@ -659,7 +659,7 @@ describe('a workspace its card will not work in again goes back to the pool', ()
 
   test('so does one whose plan doc went from the default branch', async () => {
     const w = w1();
-    stoppedWithWork(w.id);
+    await stoppedWithWork(w.id);
     setDocs([]);
     board.docsChanged();
     await flush();
@@ -674,9 +674,9 @@ describe('a workspace its card will not work in again goes back to the pool', ()
     return fresh;
   };
 
-  test('a finished card whose worker is done gives back the clone the pool still counts taken, at the latest when Obeya starts', () => {
+  test('a finished card whose worker is done gives back the clone the pool still counts taken, at the latest when Obeya starts', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     // closed as done, its worker through, and only the lease left behind (by an Obeya before this one)
     store.update(c.id, { state: 'done', landed: null });
     expect(spaces.leasable()).toBe(false);
@@ -686,9 +686,9 @@ describe('a workspace its card will not work in again goes back to the pool', ()
     expect(spaces.leasable()).toBe(true);
   });
 
-  test('a lease its card knows nothing of goes back to the pool; the card keeps what it names', () => {
+  test('a lease its card knows nothing of goes back to the pool; the card keeps what it names', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     store.update(c.id, { state: 'planned', workspace: null });
     restart();
     expect(spaces.leasedBy(c.id)).toBeNull();
@@ -697,7 +697,7 @@ describe('a workspace its card will not work in again goes back to the pool', ()
 
   test('a card whose worker still finishes after the landing keeps its clone', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const clone = board.row(c.id).workspace!;
     runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
     runtime.last.emit({ type: 'idle' });
@@ -713,7 +713,7 @@ describe('a workspace its card will not work in again goes back to the pool', ()
     rmSync(dir, { recursive: true, force: true });
     setup({ ...generic, land: 'pr', workspaces: 'clones' });
     const w = w1();
-    workers.start(w.id);
+    await workers.start(w.id);
     const clone = board.row(w.id).workspace!;
     writeFileSync(join(clone, 'config.ts'), 'export {}\n');
     git(clone, 'add', '.');

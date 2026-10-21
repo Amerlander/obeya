@@ -37,14 +37,16 @@ beforeEach(() => {
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 /**
- * Lets the Koordinator go on until it waits for an estimate or has decided: before an estimate,
- * git reads the branches of the cards in progress, which takes a moment.
+ * Lets the Koordinator go on until it waits for an estimate or has decided, and the cards it started
+ * have their workspace: before an estimate, git reads the branches of the cards in progress, which takes a moment.
  */
 async function settle() {
   await Bun.sleep(5);
   const asking = () => runtime.sessions.some((s) => !s.closed && s.spec.tools.some((t) => t.name === 'scope' || t.name === 'schedule'));
   const judging = () => board.snapshot().items.some((i) => i.queue && 'checking' in i.queue) && !asking();
   for (const end = Date.now() + 1000; judging() && Date.now() < end; ) await Bun.sleep(2);
+  // the workers it started at work in their workspaces
+  await workers.prepared();
 }
 const card = (title: string) => board.create({ title, x: 0, y: 0 });
 const item = (id: string) => board.item(id)!;
@@ -512,7 +514,7 @@ describe('Koordinator waits for a free workspace', () => {
   test("a follow-up whose agent needs a full clone takes the next free one, before a queued card", async () => {
     pool(1);
     const f = card('F');
-    workers.start(f.id);
+    await workers.start(f.id);
     workerOf(f.id).emit({ type: 'session', id: 'sess-f' });
     workerOf(f.id).call('ready_for_review', { summary: 'S', demo: artifact() });
     workerOf(f.id).emit({ type: 'idle' });
@@ -528,6 +530,7 @@ describe('Koordinator waits for a free workspace', () => {
     expect(item(b.id)).toMatchObject({ state: 'planned', queue: { workspace: 'none' } });
 
     workers.message(f.id, 'Läuft die Demo?');
+    await workers.prepared();
     expect(board.row(f.id).workspace).not.toBe(clones[0]!);
     workerOf(f.id).call('need_clone', {});
     workerOf(f.id).emit({ type: 'idle' });
@@ -1084,7 +1087,7 @@ describe('preference memory', () => {
       onOwnerInput: (_c, kind, text) => heard.push(`${kind}:${text}`),
     });
     const a = card('A');
-    w.start(a.id);
+    await w.start(a.id);
     const s = workerOf(a.id);
     expect(s.spec.system).toContain('Tests immer auf Deutsch benennen.');
     s.call('ask', { question: 'Q?' });

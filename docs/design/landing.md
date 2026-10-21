@@ -55,6 +55,25 @@ whose work is landing refuses another approval (`notReady`), and a restart of Ob
 like for a worker in the middle of a turn. The approval's answer still waits for the landing, and
 its refusals (`landPush`, say) come back as before.
 
+Starting a card does not block the server either. `Workspaces.lease` takes the workspace at once,
+so no other card gets it and the Koordinator's slots and queue see it taken: a clone is chosen and
+leased, a worktree registered under its path. Git then makes it ready in the background
+(`Lease.ready`): `git worktree add` for a worktree (a minute in a repository of thousands of files
+on Windows), `fetch` and the checkout of the card's branch for a clone (over SSH for one on another
+machine), the temporary worktree of a finished card's question likewise. Meanwhile the card is at
+work with its workspace and branch in the board, its status line „Bereitet den Workspace vor …“; it
+holds a slot on its machine, a restart waits for it as for a landing, and the owner's words wait
+unread for the worker, which hears them with its task once git is done (`Workers.whenReady`). A
+card stopped meanwhile gives the workspace back once git is done; a temporary worktree removed
+meanwhile goes once git has added it; a prototype's branch is not built on while it is prepared.
+Where git fails, the workspace is given back, the card goes back to where it was (planned, its
+snooze gone, the words for the next start; a question waiting for a clone waits again) and its
+conversation says why; a clone git failed on is not taken again within `RECHECK_MS`, as one found
+dirty, so that a fetch that keeps failing does not take it over and over. `Workers.start` returns
+once the worker has started; refusals (`notPlanned`, no workspace free) still throw at once, so the
+Koordinator queues the card as before. A clone's `git status`, which tells a clean one from a
+dirty one, still runs on the server's thread.
+
 The click ends the owner's turn at once: Obeya records the approval (`approved_at`) before it lands,
 and the card, still `waiting`, is `landing` (“wird freigegeben …” in the approved colour), no longer
 counted in "brauchen dich" nor reached by Tab. A refusal, or a restart that cut the landing off,

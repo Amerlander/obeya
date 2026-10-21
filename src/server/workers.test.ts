@@ -15,20 +15,20 @@ import { git } from './workspaces';
 eachTest();
 
 describe('workers', () => {
-  test("a follow-up's worker hears which card it comes from and that card's summary", () => {
+  test("a follow-up's worker hears which card it comes from and that card's summary", async () => {
     const src = manual();
     board.work(src.id, { state: 'live', detail: JSON.stringify({ summary: 'CSV-Export gebaut; Excel fehlt noch.' }) });
     const c = board.create({ title: 'Excel-Export', body: 'Excel fehlt.', from: src.id });
-    workers.start(c.id);
+    await workers.start(c.id);
     expect(runtime.last.inbox[0]).toContain('Excel fehlt.');
     expect(runtime.last.inbox[0]).toContain('This card follows up on the card “Zählerstände exportieren”. Its worker handed it over with this summary:\n\nCSV-Export gebaut; Excel fehlt noch.');
   });
 
-  test('with an English interface and a German conversation, the worker writes the owner in German until their words say otherwise, commits in English, and the log says what happens in English', () => {
+  test('with an English interface and a German conversation, the worker writes the owner in German until their words say otherwise, commits in English, and the log says what happens in English', async () => {
     setLanguage('en');
     setConversation('de');
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     expect(runtime.last.spec.system).toContain("ready_for_review) is in the owner's language");
     expect(runtime.last.spec.system).toContain("The owner's language is the one of their most recent words to you, typed or spoken");
     expect(runtime.last.spec.system).toContain('until they have said anything, German.');
@@ -41,17 +41,17 @@ describe('workers', () => {
     expect(board.events(c.id).at(-1)!.text).toBe('Stopped.');
   });
 
-  test("a repository that names German for what lands in it has its worker commit in German, whatever the owner's language", () => {
+  test("a repository that names German for what lands in it has its worker commit in German, whatever the owner's language", async () => {
     setConversation('en');
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones', language: 'de' } }));
-    workers.start(manual().id);
+    await workers.start(manual().id);
     expect(runtime.last.spec.system).toContain('until they have said anything, English.');
     expect(runtime.last.spec.system).toContain('What you commit (code, comments, commit messages, docs, plan docs, CLAUDE.md) is in German');
   });
 
-  test('start leases a clean clone, branches and briefs the worker', () => {
+  test('start leases a clean clone, branches and briefs the worker', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const row = board.row(c.id);
     expect(state(c.id)).toBe('working');
     expect(row.branch).toMatch(/^obeya\/zahlerstande-exportieren-/);
@@ -68,19 +68,19 @@ describe('workers', () => {
     expect(() => workers.start(d.id)).toThrow(BadRequest);
   });
 
-  test('the screenshots of the task go with it when the worker starts', () => {
+  test('the screenshots of the task go with it when the worker starts', async () => {
     const images = new Images(join(dir, 'images'));
     const shot = images.save(new Uint8Array([1, 2, 3]), 'image/png');
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: generic, imageFiles: (ids = []) => ids.flatMap((i) => images.path(i) ?? []) }));
     const c = board.create({ title: 'Seite bricht um', x: 0, y: 0, images: [shot] });
-    workers.start(c.id);
+    await workers.start(c.id);
     expect(runtime.last.images[0]).toEqual([images.path(shot)!]);
     expect(runtime.last.inbox[0]).toContain(`The owner attached a screenshot to the card (shown with this message; files: ${images.path(shot)})`);
   });
 
-  test('a worker is busy from a message to the end of the turn it starts', () => {
+  test('a worker is busy from a message to the end of the turn it starts', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     expect(workers.busyCards().length).toBeGreaterThan(0);
     expect(workers.busyCards()).toEqual([c.id]);
     runtime.last.call('ask', { question: 'CSV oder Excel?' });
@@ -100,17 +100,17 @@ describe('workers', () => {
     expect(workers.busyCards().length).toBeGreaterThan(0);
   });
 
-  test("the worker's words stand whole in the log: the last of a turn may be its answer to the owner", () => {
+  test("the worker's words stand whole in the log: the last of a turn may be its answer to the owner", async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const long = `Nach dem Plan bleibt wenig zu tun. ${'Ein Satz, der weitergeht. '.repeat(60)}Das ist alles.`;
     runtime.last.emit({ type: 'text', text: long });
     expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'say', author: 'worker', text: long });
   });
 
-  test('a due restart is announced to busy workers, who pause for it instead of being nudged', () => {
+  test('a due restart is announced to busy workers, who pause for it instead of being nudged', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const busy = runtime.last;
     busy.emit({ type: 'text', text: 'Ich lasse die Tests laufen.' });
     workers.restartDue({ reason: 'code', deadline: Date.now() + 15 * 60_000 });
@@ -128,9 +128,9 @@ describe('workers', () => {
     expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', text: 'Pausiert bis zum Neustart von Obeya.' });
   });
 
-  test('a worker that paused for the restart with its render still running hears, when the render wakes it, that Obeya still waits', () => {
+  test('a worker that paused for the restart with its render still running hears, when the render wakes it, that Obeya still waits', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const busy = runtime.last;
     busy.emit({ type: 'text', text: 'Das Video rendert.' });
     workers.restartDue({ reason: 'code', deadline: Date.now() + 15 * 60_000 });
@@ -159,9 +159,9 @@ describe('workers', () => {
     expect(busy.toolStep()).toBeUndefined();
   });
 
-  test('a status line the worker reports as it pauses for the restart gives way to the one from before: it goes on after the restart', () => {
+  test('a status line the worker reports as it pauses for the restart gives way to the one from before: it goes on after the restart', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const busy = runtime.last;
     busy.call('report', { status: 'Backend steht, jetzt die UI' });
     workers.restartDue({ reason: 'code', deadline: Date.now() + 15 * 60_000 });
@@ -170,9 +170,9 @@ describe('workers', () => {
     expect(board.item(c.id)!.statusLine).toBe('Backend steht, jetzt die UI');
   });
 
-  test('stopping Obeya is announced like a restart, and the worker pauses until Obeya runs again', () => {
+  test('stopping Obeya is announced like a restart, and the worker pauses until Obeya runs again', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const busy = runtime.last;
     workers.restartDue({ reason: 'stop', deadline: Date.now() + 15 * 60_000 });
     expect(busy.inbox.at(-1)).toContain('Obeya is about to stop (the owner is shutting it down)');
@@ -186,7 +186,7 @@ describe('workers', () => {
 
   test('a restart goes ahead once the workers it announced itself to have paused', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     let gone = 0;
     const restarter = new Restarter({ busy: () => workers.busyCards().map((card) => ({ canvas: 'c', card })), go: () => gone++, intervalMs: 5 });
     restarter.onChange(() => {
@@ -202,9 +202,9 @@ describe('workers', () => {
     expect(gone).toBe(1);
   });
 
-  test('an answer tells the worker the options picked apart from the owner’s own words', () => {
+  test('an answer tells the worker the options picked apart from the owner’s own words', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('ask', { question: 'CSV oder Excel?', options: ['CSV', 'Excel'] });
     runtime.last.emit({ type: 'idle' });
     // an option the question does not offer is dropped
@@ -219,9 +219,9 @@ describe('workers', () => {
     expect(runtime.last.inbox.at(-1)).toEndWith('They picked „Nein“.');
   });
 
-  test('a turn that starts while a restart is due hears of it with its message', () => {
+  test('a turn that starts while a restart is due hears of it with its message', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('ask', { question: 'CSV oder Excel?' });
     runtime.last.emit({ type: 'idle' });
     // not in a turn: nothing to pause
@@ -242,33 +242,33 @@ describe('workers', () => {
     expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', text: 'Pausiert bis zum Neustart von Obeya.' });
   });
 
-  test('a worker started while a restart is due hears of it in its briefing', () => {
+  test('a worker started while a restart is due hears of it in its briefing', async () => {
     workers.restartDue({ reason: 'code', deadline: Date.now() + 10 * 60_000 });
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     expect(runtime.last.inbox[0]).toContain('Zählerstände exportieren');
     expect(runtime.last.inbox[0]).toContain('Obeya is about to restart');
   });
 
-  test('without a restart due, a turn that ends without handing over is nudged as before', () => {
+  test('without a restart due, a turn that ends without handing over is nudged as before', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     workers.restartDue(null);
     runtime.last.emit({ type: 'idle' });
     expect(runtime.last.inbox.at(-1)).toContain('ready_for_review');
   });
 
-  test('report shows on the card and in the log', () => {
+  test('report shows on the card and in the log', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('report', { status: 'Tests grün' });
     expect(board.item(c.id)!.statusLine).toBe('Tests grün');
     expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'report', text: 'Tests grün' });
   });
 
-  test('a standalone card asks the owner; the answer goes back to the worker', () => {
+  test('a standalone card asks the owner; the answer goes back to the worker', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     expect(runtime.last.inbox[0]).not.toContain('Decisions taken');
     runtime.last.call('ask', { question: 'CSV oder Excel?', options: ['CSV', 'Excel'] });
     expect(state(c.id)).toBe('waiting:question');
@@ -278,17 +278,17 @@ describe('workers', () => {
     expect(runtime.last.inbox.at(-1)).toContain('CSV');
   });
 
-  test('a long option reaches the owner whole', () => {
+  test('a long option reaches the owner whole', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const long = 'Die Prototypen bleiben stehen, „Diesen Prototyp bauen“ gibt es nach der Umwandlung aber nicht mehr. Sie lassen sich nur noch ansehen und verwerfen.';
     runtime.last.call('ask', { question: 'Was passiert mit den Prototypen?', options: [long, 'Verwerfen'] });
     expect(board.item(c.id)!.question!.options).toEqual([long, 'Verwerfen']);
   });
 
-  test('a long question reaches the owner whole', () => {
+  test('a long question reaches the owner whole', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const script = Array.from({ length: 40 }, (_, i) => `${i + 1} Szene: „Ein Satz für den Sprecher, lang genug zum Gegenlesen.“`).join('\n\n');
     expect(script.length).toBeGreaterThan(2000);
     runtime.last.call('ask', { question: `Hier das Sprechskript:\n\n${script}`, options: ['Passt'] });
@@ -296,9 +296,9 @@ describe('workers', () => {
     expect(board.events(c.id).at(-1)!.text).toContain('40 Szene');
   });
 
-  test('a question may let the owner choose several options', () => {
+  test('a question may let the owner choose several options', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('ask', { question: 'Welche Spalten?', options: ['Datum', 'Stand', 'Zähler'], multiple: true });
     expect(board.item(c.id)!.question).toEqual({ text: 'Welche Spalten?', options: ['Datum', 'Stand', 'Zähler'], multiple: true });
     expect(board.events(c.id).at(-1)!.text).toContain('Mehrfachauswahl');
@@ -306,9 +306,9 @@ describe('workers', () => {
     expect(runtime.last.inbox.at(-1)).toContain('Datum, Stand');
   });
 
-  test('a note instead of an answer takes the question back: the worker goes on or asks anew', () => {
+  test('a note instead of an answer takes the question back: the worker goes on or asks anew', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('ask', { question: 'CSV oder Excel?', options: ['CSV', 'Excel'] });
     runtime.last.emit({ type: 'idle' });
     workers.message(c.id, 'Exportier erst mal gar nichts, ich kläre das.');
@@ -321,9 +321,9 @@ describe('workers', () => {
     expect(() => workers.answer(c.id, 'CSV')).toThrow(BadRequest);
   });
 
-  test('reply answers a note in the conversation, and the worker works on', () => {
+  test('reply answers a note in the conversation, and the worker works on', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     workers.message(c.id, 'Bitte auch Excel.');
     expect(runtime.last.toolStep()).toContain('Bitte auch Excel.');
     expect(runtime.last.call('reply', { text: 'Mache ich: Excel kommt als zweites Format dazu.' })).toBe('Shown to the owner.');
@@ -336,9 +336,9 @@ describe('workers', () => {
     expect(runtime.last.inbox.length).toBe(before + 1);
   });
 
-  test('a note during a turn waits, unread, for the next step, and stands where the worker read it', () => {
+  test('a note during a turn waits, unread, for the next step, and stands where the worker read it', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const s = runtime.last;
     s.emit({ type: 'tool', name: 'Read', input: { file_path: 'export.ts' } });
     workers.message(c.id, 'Bitte auch Excel.', ['/tmp/shot.png']);
@@ -359,9 +359,9 @@ describe('workers', () => {
     expect(s.toolStep()).toBeUndefined();
   });
 
-  test('a note the turn ended before taking in starts the next turn', () => {
+  test('a note the turn ended before taking in starts the next turn', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const s = runtime.last;
     s.emit({ type: 'text', text: 'Fertig mit dem Export.' });
     workers.message(c.id, 'Und die Spaltennamen auf Deutsch.');
@@ -379,9 +379,9 @@ describe('workers', () => {
     expect(board.events(c.id).at(-1)!.unread).toBeUndefined();
   });
 
-  test('a note not read yet can be taken back: the worker never hears it', () => {
+  test('a note not read yet can be taken back: the worker never hears it', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const s = runtime.last;
     workers.message(c.id, 'Bitte auch Excel.');
     workers.message(c.id, 'Und PDF.');
@@ -395,9 +395,9 @@ describe('workers', () => {
     expect(() => workers.unsay(c.id, pdf!.id)).toThrow(BadRequest);
   });
 
-  test('notes not read when the session ends go to it when it goes on', () => {
+  test('notes not read when the session ends go to it when it goes on', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.emit({ type: 'session', id: 'sess-1' });
     workers.message(c.id, 'Bitte auch Excel.');
     workers.pause(c.id);
@@ -407,9 +407,9 @@ describe('workers', () => {
     expect(board.events(c.id).find((e) => e.text === 'Bitte auch Excel.')!.unread).toBeUndefined();
   });
 
-  test('a note in reply to a message points the worker at it, and the conversation keeps which one', () => {
+  test('a note in reply to a message points the worker at it, and the conversation keeps which one', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('reply', { text: `Ich exportiere die Zählerstände als CSV mit Semikolon als Trenner, wie Excel es in Deutschland erwartet. ${'Mehr dazu. '.repeat(30)}` });
     const replied = board.events(c.id).at(-1)!;
     workers.message(c.id, 'Lieber Komma.', [], false, replied.id);
@@ -429,10 +429,10 @@ describe('workers', () => {
     expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'answer', replyTo: asked.id });
   });
 
-  test('a reply to a step, a state line or another card is the words alone', () => {
+  test('a reply to a step, a state line or another card is the words alone', async () => {
     const c = manual();
     const other = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const line = board.events(c.id).findLast((e) => e.kind === 'state')!;
     const elsewhere = board.log(other.id, 'say', 'koordinator', 'Anderswo.');
     for (const id of [line.id, elsewhere.id, 99999]) {
@@ -445,9 +445,9 @@ describe('workers', () => {
 
   const words = (id: string) => board.events(id).filter((e) => e.author === 'worker' && ['say', 'talk', 'closing'].includes(e.kind)).map((e) => `${e.kind}: ${e.text}`);
 
-  test("after a reply on a card waiting for review, the worker's closing words are logged as such, to fold under the reply; after a handover they are left out", () => {
+  test("after a reply on a card waiting for review, the worker's closing words are logged as such, to fold under the reply; after a handover they are left out", async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('ready_for_review', { summary: 'Export gebaut.', demo: artifact() });
     // those after a handover repeat it
     runtime.last.emit({ type: 'text', text: 'Übergeben: Export gebaut.' });
@@ -466,9 +466,9 @@ describe('workers', () => {
     ]);
   });
 
-  test("after a reply on a card at work, the worker's words before its next step are its words, its turn's last its closing words", () => {
+  test("after a reply on a card at work, the worker's words before its next step are its words, its turn's last its closing words", async () => {
     const d = manual();
-    workers.start(d.id);
+    await workers.start(d.id);
     workers.message(d.id, 'Bitte auch Excel.');
     runtime.last.call('reply', { text: 'Mache ich.' });
     runtime.last.emit({ type: 'text', text: 'Now the Excel export.' });
@@ -481,21 +481,21 @@ describe('workers', () => {
     expect(words(d.id).at(-1)).toBe('say: Weiter mit den Tests.');
   });
 
-  test("a task the owner wrote tells the worker the language they talk in; one from a plan doc tells nothing", () => {
+  test("a task the owner wrote tells the worker the language they talk in; one from a plan doc tells nothing", async () => {
     const c = board.create({ title: 'Contributing guide', body: 'Add a CONTRIBUTING.md.', x: 0, y: 0 });
-    workers.start(c.id);
+    await workers.start(c.id);
     expect(runtime.last.spec.system).toContain("until they have said anything, the language the card's task is written in, since the owner wrote it themselves: they told you their language with it (only where it tells none, German).");
     expect(runtime.last.inbox[0]).toContain('Add a CONTRIBUTING.md.\n\nThe owner wrote this task themselves: write to them in its language.');
     workers.stop(c.id);
     const w = board.snapshot().items.find((i) => i.label === 'W1')!;
-    workers.start(w.id);
+    await workers.start(w.id);
     expect(runtime.last.spec.system).toContain("until they have said anything, German. What you write to the owner is in the owner's language, also where what you work on is in another. The card's task comes from the project's plan doc, not from the owner: its language tells nothing about theirs.");
     expect(runtime.last.inbox[0]).not.toContain('The owner wrote this task themselves');
   });
 
-  test("a workstream's question goes straight to the owner, too", () => {
+  test("a workstream's question goes straight to the owner, too", async () => {
     const w = board.snapshot().items.find((i) => i.label === 'W1')!;
-    workers.start(w.id);
+    await workers.start(w.id);
     runtime.last.call('ask', { question: 'Darf ich den Dienst X buchen?', options: ['Ja', 'Nein'] });
     expect(state(w.id)).toBe('waiting:question');
     expect(board.item(w.id)!.question).toEqual({ text: 'Darf ich den Dienst X buchen?', options: ['Ja', 'Nein'] });
@@ -505,9 +505,9 @@ describe('workers', () => {
     expect(board.decisions(board.item(w.id)!.parent!).at(-1)).toMatchObject({ question: expect.stringContaining('Dienst X'), answer: 'Nein', by: 'owner' });
   });
 
-  test("the worker's own pick goes with its question, and the owner still decides", () => {
+  test("the worker's own pick goes with its question, and the owner still decides", async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('ask', { question: 'CSV oder Excel?', options: ['CSV', 'Excel'], pick: ['Excel'], pick_why: 'Die Buchhaltung arbeitet in Excel.' });
     expect(state(c.id)).toBe('waiting:question');
     expect(board.item(c.id)!.question).toEqual({ text: 'CSV oder Excel?', options: ['CSV', 'Excel'], pick: { options: ['Excel'], why: 'Die Buchhaltung arbeitet in Excel.' } });
@@ -521,12 +521,12 @@ describe('workers', () => {
     expect(board.item(c.id)!.question!.pick).toEqual({ options: ['Ja'], why: '' });
   });
 
-  test("a workstream's worker gets its project's decisions, and those taken while it works once", () => {
+  test("a workstream's worker gets its project's decisions, and those taken while it works once", async () => {
     const w = board.snapshot().items.find((i) => i.label === 'W1')!;
     const project = w.parent!;
     // the project's other cards: here the project itself stands in for them
     board.decide({ project_id: project, card_id: project, question: 'Welche Spalten?', answer: 'Alle.', by: 'owner' });
-    workers.start(w.id);
+    await workers.start(w.id);
     const s = runtime.last;
     expect(s.inbox[0]).toContain('Decisions taken in this project so far:\n- Welche Spalten? → Alle. (owner)');
     expect(s.toolStep()).toBeUndefined();
@@ -540,9 +540,9 @@ describe('workers', () => {
     expect(s.toolStep()).toBeUndefined();
   });
 
-  test('a turn that ends without handing over is nudged once, then goes to the owner', () => {
+  test('a turn that ends without handing over is nudged once, then goes to the owner', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.emit({ type: 'text', text: 'Ich komme nicht an die Datenbank.' });
     runtime.last.emit({ type: 'idle' });
     expect(state(c.id)).toBe('working');
@@ -552,9 +552,9 @@ describe('workers', () => {
     expect(board.item(c.id)!.question!.text).toBe('Ich komme nicht an die Datenbank.');
   });
 
-  test('a session that fails again after the nudge goes to the owner with the reason', () => {
+  test('a session that fails again after the nudge goes to the owner with the reason', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.emit({ type: 'text', text: 'Ich fange an.' });
     runtime.last.emit({ type: 'error', message: 'Not logged in · Please run /login' });
     runtime.last.emit({ type: 'idle' });
@@ -568,7 +568,7 @@ describe('workers', () => {
   test('a worker the usage limit stopped goes on by itself once the limit lifts', async () => {
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, limitMargin: 30 }));
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('report', { status: 'Exporter steht' });
     runtime.last.emit({ type: 'text', text: 'Ich schreibe die Tests.' });
     const hit = "You've hit your session limit · resets 2:40pm (Europe/Berlin)";
@@ -597,7 +597,7 @@ describe('workers', () => {
   test("a worker the usage limit stopped while it took in the owner's words on its handover stays at them and goes on once it lifts", async () => {
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, limitMargin: 30 }));
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('ready_for_review', { summary: 'Studie fertig.', demo: artifact() });
     runtime.last.emit({ type: 'idle' });
     workers.message(c.id, 'Und wenn wir früher handeln?');
@@ -623,7 +623,7 @@ describe('workers', () => {
   test('a worker the usage limit stopped while its background work runs says so, and goes on once it lifts', async () => {
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, limitMargin: 30 }));
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('report', { status: 'Rendere das Demo-Video' });
     runtime.last.emit({ type: 'background', tasks: [{ id: 'render', description: 'node demo.ts' }] });
     runtime.last.emit({ type: 'error', message: "You've hit your session limit", limit: { resetsAt: Date.now() + 20 } });
@@ -643,7 +643,7 @@ describe('workers', () => {
   test('a worker the usage limit stopped is no longer busy once its background work stopped counting', async () => {
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, backgroundLimit: 10 }));
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.emit({ type: 'background', tasks: [{ id: 'watch', description: 'watch the deploy' }] });
     runtime.last.emit({ type: 'error', message: "You've hit your session limit", limit: { resetsAt: Date.now() + 60_000 } });
     runtime.last.emit({ type: 'idle', background: 1 });
@@ -658,7 +658,7 @@ describe('workers', () => {
   test('a worker the usage limit stopped is not woken once stopped', async () => {
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, limitMargin: 10 }));
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.emit({ type: 'error', message: "You've hit your session limit", limit: { resetsAt: Date.now() + 20 } });
     runtime.last.emit({ type: 'idle' });
     const session = runtime.last;
@@ -672,7 +672,7 @@ describe('workers', () => {
   test('a turn in which the worker did nothing does not use up its nudge', async () => {
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, backgroundGrace: 5, backgroundLimit: 5 }));
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const before = runtime.last.inbox.length;
     // a resumed session first ends a turn over what the previous one left, before the worker's own
     runtime.last.emit({ type: 'idle' });
@@ -690,7 +690,7 @@ describe('workers', () => {
   test('a turn in which the worker did nothing counts as ended after a while', async () => {
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, backgroundGrace: 5 }));
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.emit({ type: 'idle' });
     await Bun.sleep(20);
     expect(runtime.last.inbox.at(-1)).toContain('ready_for_review');
@@ -698,9 +698,9 @@ describe('workers', () => {
     expect(state(c.id)).toBe('waiting:question');
   });
 
-  test('a turn that ends while background work runs waits for it, not for the owner', () => {
+  test('a turn that ends while background work runs waits for it, not for the owner', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.emit({ type: 'text', text: 'Das Video rendert noch, ich warte darauf.' });
     const before = runtime.last.inbox.length;
     runtime.last.emit({ type: 'idle', background: 1 });
@@ -719,7 +719,7 @@ describe('workers', () => {
   test('background work that ends without waking the worker counts as an ended turn after a while', async () => {
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, backgroundGrace: 5 }));
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.emit({ type: 'text', text: 'Ich warte auf den Server.' });
     runtime.last.emit({ type: 'idle', background: 1 });
     await Bun.sleep(20);
@@ -741,7 +741,7 @@ describe('workers', () => {
   test('background work the session never reports as ended counts as an ended turn after a long while', async () => {
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, backgroundGrace: 1000, backgroundLimit: 5 }));
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.emit({ type: 'text', text: 'Ich warte auf den Server.' });
     runtime.last.emit({ type: 'idle', background: 1 });
     await Bun.sleep(20);
@@ -751,7 +751,7 @@ describe('workers', () => {
   test('a worker that asks while its background work runs counts as busy until the work wakes it', async () => {
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, backgroundGrace: 5, backgroundLimit: 5 }));
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('ask', { question: 'Soll das Video Ton haben?' });
     runtime.last.emit({ type: 'idle', background: 1 });
     // the question reaches the owner at once, but a restart now would cut the render off
@@ -766,7 +766,7 @@ describe('workers', () => {
   test('the card shows the background work that keeps its worker in a turn, each since it started, until it ends', async () => {
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, backgroundGrace: 1000, backgroundLimit: 1000 }));
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const s = runtime.last;
     const t0 = Date.now();
     s.emit({ type: 'background', tasks: [{ id: 'b1', description: 'Run the test suite' }] });
@@ -798,7 +798,7 @@ describe('workers', () => {
   test('a note to a worker waiting for its background work starts a turn of its own', async () => {
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, backgroundGrace: 5 }));
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.emit({ type: 'idle', background: 1 });
     const before = runtime.last.inbox.length;
     workers.message(c.id, 'Nimm die dunkle Variante.');
@@ -808,11 +808,11 @@ describe('workers', () => {
     expect(workers.busyCards().length).toBeGreaterThan(0);
   });
 
-  test('a preference learned while a worker runs reaches it once, with its next tool step', () => {
+  test('a preference learned while a worker runs reaches it once, with its next tool step', async () => {
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, preferences: () => board.preferencesText() }));
     board.addPreference('Antworten auf Deutsch.');
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const s = runtime.last;
     expect(s.spec.system).toContain('- Antworten auf Deutsch.');
     expect(s.spec.system).toContain('Never wait with sleep or a polling loop in the foreground');
@@ -827,9 +827,9 @@ describe('workers', () => {
     expect(s.inbox).toHaveLength(1);
   });
 
-  test('a worker that stopped and then works on by itself takes its question back', () => {
+  test('a worker that stopped and then works on by itself takes its question back', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.emit({ type: 'text', text: 'Ich komme nicht weiter.' });
     runtime.last.emit({ type: 'idle' });
     runtime.last.emit({ type: 'idle' });
@@ -842,9 +842,9 @@ describe('workers', () => {
     expect(state(c.id)).toBe('waiting:question');
   });
 
-  test('handing over ends the turn without a nudge', () => {
+  test('handing over ends the turn without a nudge', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('ask', { question: 'Q?' });
     const before = runtime.last.inbox.length;
     runtime.last.emit({ type: 'idle' });
@@ -853,7 +853,7 @@ describe('workers', () => {
 
   test('review, feedback, approval: the work lands on main and the clone is free again', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const clone = board.row(c.id).workspace!;
     writeFileSync(join(clone, 'export.ts'), 'export {}\n');
     git(clone, 'add', '.');
@@ -884,13 +884,13 @@ describe('workers', () => {
     runtime.last.emit({ type: 'idle' });
     expect(runtime.last.closed).toBe(true);
     const d = manual();
-    workers.start(d.id);
+    await workers.start(d.id);
     expect(board.row(d.id).workspace).toBe(clone);
   });
 
-  test("a handover after feedback says what changed; the card's report keeps the first one with the replies and handovers after it", () => {
+  test("a handover after feedback says what changed; the card's report keeps the first one with the replies and handovers after it", async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const clone = board.row(c.id).workspace!;
     writeFileSync(join(clone, 'export.ts'), 'export {}\n');
     git(clone, 'add', '.');
@@ -910,7 +910,7 @@ describe('workers', () => {
 
     // started afresh, the worker hands over in full again
     workers.stop(c.id);
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('ready_for_review', { summary: 'CSV- und Excel-Export gebaut.', demo: artifact() });
     expect(board.summary(c.id)).toBe('CSV- und Excel-Export gebaut.');
   });
@@ -918,7 +918,7 @@ describe('workers', () => {
   test('the diff: the branch so far, committed or not, with new files; once landed, what the landing put on main', async () => {
     const c = manual();
     expect(await workers.diff(c.id, false)).toBeNull();
-    workers.start(c.id);
+    await workers.start(c.id);
     expect(await workers.diff(c.id, false)).toEqual({ source: 'branch', files: [] });
     const clone = board.row(c.id).workspace!;
     writeFileSync(join(clone, 'export.ts'), 'export {}\n');
@@ -957,7 +957,7 @@ describe('workers', () => {
 
   test('approval with uncommitted work sends the worker back', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     writeFileSync(join(board.row(c.id).workspace!, 'loose.ts'), '');
     runtime.last.call('ready_for_review', { summary: 'Fertig.', demo: artifact() });
     await workers.approve(c.id);
@@ -965,9 +965,9 @@ describe('workers', () => {
     expect(runtime.last.inbox.at(-1)).toContain('uncommitted changes');
   });
 
-  test('stop releases the clone and plans the card again', () => {
+  test('stop releases the clone and plans the card again', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     workers.stop(c.id);
     expect(state(c.id)).toBe('planned');
     expect(runtime.last.closed).toBe(true);
@@ -975,9 +975,9 @@ describe('workers', () => {
     expect(() => workers.start(d.id)).not.toThrow();
   });
 
-  test('stopping keeps committed work: the clone stays with the card, starting again goes on on the same branch', () => {
+  test('stopping keeps committed work: the clone stays with the card, starting again goes on on the same branch', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const { workspace, branch } = board.row(c.id);
     writeFileSync(join(workspace!, 'work.ts'), 'x');
     git(workspace!, 'add', '.');
@@ -985,15 +985,15 @@ describe('workers', () => {
     workers.stop(c.id);
     expect(board.row(c.id).workspace).toBe(workspace);
     board.patch(c.id, { title: 'Neuer Titel' });
-    workers.start(c.id);
+    await workers.start(c.id);
     expect(board.row(c.id)).toMatchObject({ workspace, branch });
     expect(git(workspace!, 'log', '--format=%s', '-1')).toBe('Work');
     expect(runtime.last.inbox[0]).toContain('already holds earlier work');
   });
 
-  test("a stopped session's tool call changes nothing", () => {
+  test("a stopped session's tool call changes nothing", async () => {
     const w = board.snapshot().items.find((i) => i.label === 'W1')!;
-    workers.start(w.id);
+    await workers.start(w.id);
     const old = runtime.last;
     workers.stop(w.id);
     expect(state(w.id)).toBe('planned');
@@ -1003,9 +1003,9 @@ describe('workers', () => {
     expect(board.item(w.id)!.question).toBeUndefined();
   });
 
-  test('after a restart, a worker that never reported a session starts again with its card', () => {
+  test('after a restart, a worker that never reported a session starts again with its card', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     workers.shutdown();
     const n = runtime.sessions.length;
     workers.resumeAll();
@@ -1014,9 +1014,9 @@ describe('workers', () => {
     expect(runtime.last.inbox[0]).toContain('Zählerstände exportieren');
   });
 
-  test('after a restart that cut off a landing, the card waits for the owner to approve again', () => {
+  test('after a restart that cut off a landing, the card waits for the owner to approve again', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
     board.work(c.id, { approved_at: new Date().toISOString() });
     expect(needsYou(board.item(c.id)!)).toBe(false);
@@ -1026,9 +1026,9 @@ describe('workers', () => {
     expect(needsYou(board.item(c.id)!)).toBe(true);
   });
 
-  test('a proposal lands below its source card', () => {
+  test('a proposal lands below its source card', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('propose_card', {
       title: 'Falsches Label',
       task: 'Der Knopf „Export“ heißt in src/ui/strings.ts noch „Exportieren“.',
@@ -1052,9 +1052,9 @@ describe('workers', () => {
     expect(board.item(p.id)!.body).toBe('Der Knopf „Export“ heißt in src/ui/strings.ts noch „Exportieren“.\n\nOffene Fragen:\n- Welches Wort? (Export / Exportieren)');
   });
 
-  test('a worker withdraws its open proposal: it goes at once, and not as a dismissal of the owner’s', () => {
+  test('a worker withdraws its open proposal: it goes at once, and not as a dismissal of the owner’s', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const since = new Date(Date.now() - 1000).toISOString();
     runtime.last.call('propose_card', { title: 'Lange Schnitte', task: 'T', reason: 'R' });
     const p = board.snapshot().items.find((i) => i.state === 'proposal')!;
@@ -1072,9 +1072,9 @@ describe('workers', () => {
     expect(board.snapshot().items.filter((i) => i.title === 'Gleich').map((i) => i.body)).toEqual(['Neu']);
   });
 
-  test('a new proposal that replaces an accepted one marks it, and the owner removes or keeps it', () => {
+  test('a new proposal that replaces an accepted one marks it, and the owner removes or keeps it', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('propose_card', { title: 'Lange Schnitte', task: 'T', reason: 'R' });
     const old = board.snapshot().items.find((i) => i.state === 'proposal')!;
     board.accept(old.id);
@@ -1090,9 +1090,9 @@ describe('workers', () => {
     expect(() => board.keep(old.id)).toThrow(BadRequest);
   });
 
-  test('withdrawing a proposal names the worker’s proposals when the title matches none, and leaves finished ones', () => {
+  test('withdrawing a proposal names the worker’s proposals when the title matches none, and leaves finished ones', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('propose_card', { title: 'Lange Schnitte', task: 'T', reason: 'R' });
     const p = board.snapshot().items.find((i) => i.state === 'proposal')!;
     expect(runtime.last.call('withdraw_proposal', { title: 'Kurze Schnitte', why: 'W' })).toBe('No proposal of yours is called so; nothing was withdrawn. Yours: „Lange Schnitte“ (proposal).');
@@ -1104,9 +1104,9 @@ describe('workers', () => {
     expect(board.item(p.id)!.superseded).toBeUndefined();
   });
 
-  test('a delivery to a worker that never reported a session starts one with the card', () => {
+  test('a delivery to a worker that never reported a session starts one with the card', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('ask', { question: 'Q?' });
     workers.shutdown();
     workers.answer(c.id, 'A');
@@ -1115,9 +1115,9 @@ describe('workers', () => {
     expect(runtime.last.inbox[0]).toContain('Answer to your question');
   });
 
-  test('after a restart a working card resumes its session; a delivery to an ended session resumes it', () => {
+  test('after a restart a working card resumes its session; a delivery to an ended session resumes it', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.emit({ type: 'session', id: 'sess-1' });
     workers.shutdown();
     workers.resumeAll();
@@ -1131,9 +1131,9 @@ describe('workers', () => {
 });
 
 describe('tool calls the settings refuse or want confirmed', () => {
-  test('a refused tool call stands in the conversation with who refused it and why', () => {
+  test('a refused tool call stands in the conversation with who refused it and why', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.emit({ type: 'tool', name: 'Bash', input: { command: 'rm -rf build' } });
     runtime.last.emit({ type: 'denied', name: 'Bash', input: { command: 'rm -rf build' }, by: 'classifier', reason: 'Löscht Dateien außerhalb der Aufgabe' });
     runtime.last.emit({ type: 'denied', name: 'Bash', input: { command: 'psql -c "delete from t"' }, by: 'rule' });
@@ -1147,7 +1147,7 @@ describe('tool calls the settings refuse or want confirmed', () => {
 
   test('a tool call that needs confirmation becomes the question the card waits on, and runs once the owner allows it', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const answer = runtime.last.permission('Bash', { command: 'bun scripts/remote-psql.ts -c "update meters set …"' }, 'Schreibzugriff');
     await flush();
     expect(state(c.id)).toBe('waiting:question');
@@ -1168,7 +1168,7 @@ describe('tool calls the settings refuse or want confirmed', () => {
 
   test("refused, the call's result carries the owner's words; allowed with words, the next message does", async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const first = runtime.last.permission('Bash', { command: 'git push --force' });
     await flush();
     workers.answer(c.id, 'Ablehnen\n\nKein Force-Push, mach einen neuen Commit.');
@@ -1183,7 +1183,7 @@ describe('tool calls the settings refuse or want confirmed', () => {
 
   test('words without a pick refuse the call, with the words', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const answer = runtime.last.permission('Write', { file_path: '/repo/.env' });
     await flush();
     expect(board.item(c.id)!.question!.text).toContain('Schreibt repo/.env');
@@ -1193,7 +1193,7 @@ describe('tool calls the settings refuse or want confirmed', () => {
 
   test('a note instead of an answer refuses the call, and the worker reads the note with it', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const answer = runtime.last.permission('Bash', { command: 'bun run migrate' });
     await flush();
     workers.message(c.id, 'Erst nach dem Backup.');
@@ -1205,7 +1205,7 @@ describe('tool calls the settings refuse or want confirmed', () => {
 
   test('two calls that need confirmation at once are asked one after the other', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const a = runtime.last.permission('Bash', { command: 'one' });
     const b = runtime.last.permission('Bash', { command: 'two' });
     await flush();
@@ -1220,7 +1220,7 @@ describe('tool calls the settings refuse or want confirmed', () => {
 
   test('allowed after a restart, the worker hears it when it goes on, and the call runs without asking again', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.emit({ type: 'session', id: 's1' });
     void runtime.last.permission('Bash', { command: 'bun run migrate' });
     await flush();
@@ -1244,16 +1244,16 @@ describe('tool calls the settings refuse or want confirmed', () => {
 
 describe('pausing: the owner halts a worker and lets it go on', () => {
   /** A card at work, its session known as `sess-1`. */
-  const atWork = () => {
+  const atWork = async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.emit({ type: 'session', id: 'sess-1' });
     runtime.last.emit({ type: 'tool', name: 'Bash', input: { command: 'bun test' } });
     return c;
   };
 
-  test('pausing ends the session at once and keeps card, workspace and session; resuming goes on in that session', () => {
-    const c = atWork();
+  test('pausing ends the session at once and keeps card, workspace and session; resuming goes on in that session', async () => {
+    const c = await atWork();
     const { workspace, branch } = board.row(c.id);
     const session = runtime.last;
     workers.pause(c.id);
@@ -1276,8 +1276,8 @@ describe('pausing: the owner halts a worker and lets it go on', () => {
     expect(() => workers.resume(c.id)).toThrow(BadRequest);
   });
 
-  test("a note to a paused worker lets it go on with the note", () => {
-    const c = atWork();
+  test("a note to a paused worker lets it go on with the note", async () => {
+    const c = await atWork();
     workers.pause(c.id);
     workers.message(c.id, 'Nimm lieber CSV.');
     expect(runtime.last.spec.resume).toBe('sess-1');
@@ -1286,8 +1286,8 @@ describe('pausing: the owner halts a worker and lets it go on', () => {
     expect(board.item(c.id)!.paused).toBeUndefined();
   });
 
-  test("what Obeya has for a paused worker waits until it goes on, and so does a message it had not taken in", () => {
-    const c = atWork();
+  test("what Obeya has for a paused worker waits until it goes on, and so does a message it had not taken in", async () => {
+    const c = await atWork();
     workers.message(c.id, 'Und Excel?');
     workers.pause(c.id);
     const n = runtime.sessions.length;
@@ -1301,8 +1301,8 @@ describe('pausing: the owner halts a worker and lets it go on', () => {
     expect(first).toContain('A check of your pull request failed: test.');
   });
 
-  test('a paused worker stays paused across a restart of Obeya', () => {
-    const c = atWork();
+  test('a paused worker stays paused across a restart of Obeya', async () => {
+    const c = await atWork();
     workers.pause(c.id);
     workers.shutdown();
     const n = runtime.sessions.length;
@@ -1313,21 +1313,21 @@ describe('pausing: the owner halts a worker and lets it go on', () => {
     expect(runtime.last.spec.resume).toBe('sess-1');
   });
 
-  test('stopping a paused worker plans the card again, and a new start is not paused', () => {
-    const c = atWork();
+  test('stopping a paused worker plans the card again, and a new start is not paused', async () => {
+    const c = await atWork();
     workers.pause(c.id);
     workers.stop(c.id);
     expect(state(c.id)).toBe('planned');
     expect(board.item(c.id)!.paused).toBeUndefined();
-    workers.start(c.id);
+    await workers.start(c.id);
     expect(board.item(c.id)!.paused).toBeUndefined();
     expect(workers.busyCards().length).toBeGreaterThan(0);
   });
 
-  test('only a worker in a turn can be paused: one that asked and ended its turn has nothing running', () => {
+  test('only a worker in a turn can be paused: one that asked and ended its turn has nothing running', async () => {
     const c = manual();
     expect(() => workers.pause(c.id)).toThrow(BadRequest);
-    workers.start(c.id);
+    await workers.start(c.id);
     expect(board.item(c.id)!.inTurn).toBe(true);
     runtime.last.call('ask', { question: 'CSV oder Excel?' });
     runtime.last.emit({ type: 'idle' });
@@ -1335,8 +1335,8 @@ describe('pausing: the owner halts a worker and lets it go on', () => {
     expect(() => workers.pause(c.id)).toThrow(BadRequest);
   });
 
-  test('a card in its pull request offers a pause only while its worker is in a turn', () => {
-    const c = atWork();
+  test('a card in its pull request offers a pause only while its worker is in a turn', async () => {
+    const c = await atWork();
     board.work(c.id, { state: 'inPr', pr: JSON.stringify({ url: 'https://github.com/acme/app/pull/7', number: 7, seen: [], reported: [] }) });
     runtime.last.emit({ type: 'idle' });
     // the pull request waits for review: nothing runs, nothing to pause
@@ -1354,8 +1354,8 @@ describe('pausing: the owner halts a worker and lets it go on', () => {
     expect(board.item(c.id)!.inTurn).toBe(true);
   });
 
-  test("a worker taking in the owner's words on its handover can be paused: the card still waits for approval, and it finishes taking them in once it goes on", () => {
-    const c = atWork();
+  test("a worker taking in the owner's words on its handover can be paused: the card still waits for approval, and it finishes taking them in once it goes on", async () => {
+    const c = await atWork();
     const clone = board.row(c.id).workspace!;
     writeFileSync(join(clone, 'export.ts'), 'export {}\n');
     git(clone, 'add', '.');
@@ -1385,8 +1385,8 @@ describe('pausing: the owner halts a worker and lets it go on', () => {
     expect(board.item(c.id)!.answering).toBeUndefined();
   });
 
-  test('a note to a worker paused on its handover lets it go on with the note', () => {
-    const c = atWork();
+  test('a note to a worker paused on its handover lets it go on with the note', async () => {
+    const c = await atWork();
     const clone = board.row(c.id).workspace!;
     writeFileSync(join(clone, 'export.ts'), 'export {}\n');
     git(clone, 'add', '.');

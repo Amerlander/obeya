@@ -80,7 +80,7 @@ function commit(cardId: string) {
 /** A card through review and approval, with its PR reported. */
 async function inPr() {
   const c = board.create({ title: 'Export', x: 0, y: 0 });
-  workers.start(c.id);
+  await workers.start(c.id);
   commit(c.id);
   runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
   await workers.approve(c.id);
@@ -109,7 +109,7 @@ describe('the PR phase', () => {
 
   test('a demo shared before approval is linked in the PR by the worker; pr_opened passes the PR on', async () => {
     const c = board.create({ title: 'Export', x: 0, y: 0 });
-    workers.start(c.id);
+    await workers.start(c.id);
     commit(c.id);
     runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
     board.work(c.id, { share: JSON.stringify({ slug: 'export', url: 'https://demos.example/export/', dir: '/d' }) });
@@ -119,9 +119,9 @@ describe('the PR phase', () => {
     expect(opened).toEqual([c.id]);
   });
 
-  test('pr_opened before approval is refused', () => {
+  test('pr_opened before approval is refused', async () => {
     const c = board.create({ title: 'X', x: 0, y: 0 });
-    workers.start(c.id);
+    await workers.start(c.id);
     expect(runtime.last.call('pr_opened', { url: URL_ })).toContain('not approved');
   });
 
@@ -338,7 +338,7 @@ describe('watching', () => {
     workers.stop(id);
     expect(board.item(id)!.pr).toBeUndefined();
     expect(board.events(id).at(-1)!.text).toContain('#42 bleibt offen');
-    workers.start(id);
+    await workers.start(id);
     runtime.last.call('ask', { question: 'Neu?' });
     workers.answer(id, 'Ja.');
     expect(state(id)).toBe('working');

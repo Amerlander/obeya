@@ -43,9 +43,9 @@ describe('a canvas over a folder without git', () => {
     const sort = canvas.board.create({ title: 'Sort the scans', x: 0, y: 0 });
     const letter = canvas.board.create({ title: 'Draft the letter', x: 400, y: 0 });
     const workers = canvas.repoOf(sort.id).workers;
-    workers.start(sort.id);
+    await workers.start(sort.id);
     const a = runtime.last;
-    workers.start(letter.id);
+    await workers.start(letter.id);
     const b = runtime.last;
     expect(canvas.board.row(sort.id).workspace).toBe(docs);
     expect(a.spec.cwd).toBe(docs);
@@ -116,7 +116,7 @@ describe('a canvas over a folder without git', () => {
   test('a card shows the files it changed as its result: those its worker names first, served from the folder, no other file of it', async () => {
     const plan = canvas.board.create({ title: 'Pension plan', x: 0, y: 0 });
     const workers = canvas.repoOf(plan.id).workers;
-    workers.start(plan.id);
+    await workers.start(plan.id);
     const a = runtime.last;
     await a.use('Write', { file_path: join(docs, 'Estate', 'Plan.md') }, () => writeFileSync(join(docs, 'Estate', 'Plan.md'), '# Plan\n\n![Scan](../Scans/scan-1.pdf)\n'));
     await a.use('Bash', { command: 'python3 model.py' }, () => {
@@ -144,7 +144,7 @@ describe('a canvas over a folder without git', () => {
   test('a handover whose change has nothing to show leaves the conversation alone; a file gone since gets no tab', async () => {
     const tidy = canvas.board.create({ title: 'Tidy up', x: 0, y: 0 });
     const workers = canvas.repoOf(tidy.id).workers;
-    workers.start(tidy.id);
+    await workers.start(tidy.id);
     const a = runtime.last;
     await a.use('Bash', { command: 'rm .obeya-note.txt' }, () => rmSync(join(docs, '.obeya-note.txt')));
     expect(await a.call('ready_for_review', { summary: 'Tidied.' })).toContain('Recorded');
@@ -165,7 +165,7 @@ describe('a canvas over a folder without git', () => {
   test('a handover the owner stopped the session under, while its change was read, changes nothing', async () => {
     const card = canvas.board.create({ title: 'Write it', x: 0, y: 0 });
     const workers = canvas.repoOf(card.id).workers;
-    workers.start(card.id);
+    await workers.start(card.id);
     const a = runtime.last;
     await a.use('Write', { file_path: join(docs, 'Note.md') }, () => writeFileSync(join(docs, 'Note.md'), '# Note\n'));
     const handover = a.call('ready_for_review', { summary: 'Written.' });
@@ -178,7 +178,7 @@ describe('a canvas over a folder without git', () => {
   test('cards handed over without a demo before Obeya kept their list get it at the start, archived ones too, while their files are there', async () => {
     const handed = async (title: string, file: string) => {
       const card = canvas.board.create({ title, x: 0, y: 0 });
-      canvas.repoOf(card.id).workers.start(card.id);
+      await canvas.repoOf(card.id).workers.start(card.id);
       const a = runtime.last;
       await a.use('Write', { file_path: join(docs, file) }, () => writeFileSync(join(docs, file), `# ${title}\n`));
       expect(await a.call('ready_for_review', { summary: 'Done.' })).toContain('Recorded');
@@ -198,7 +198,7 @@ describe('a canvas over a folder without git', () => {
     rmSync(join(docs, 'Gone.md'));
     // a card at work that never handed over waits for its handover
     const working = canvas.board.create({ title: 'Working', x: 0, y: 0 });
-    canvas.repoOf(working).workers.start(working.id);
+    await canvas.repoOf(working).workers.start(working.id);
     await runtime.last.use('Write', { file_path: join(docs, 'Working.md') }, () => writeFileSync(join(docs, 'Working.md'), '# Working\n'));
 
     canvas.repoOf(waiting).workers.resumeAll();

@@ -668,7 +668,8 @@ export class Koordinator {
     const card = this.o.board.item(cardId);
     if (!card) return;
     try {
-      this.o.repoFor(card).workers.start(cardId);
+      // git makes its workspace ready in the background; what goes wrong there its card says itself
+      this.o.repoFor(card).workers.start(cardId).catch((e: unknown) => this.o.board.log(cardId, 'error', 'obeya', messageOf(e)));
     } catch (e) {
       const shortage = e instanceof BadRequest ? shortageOf(e.code) : undefined;
       if (!shortage) return this.o.board.log(cardId, 'error', 'obeya', messageOf(e), { code: e instanceof BadRequest ? e.code : undefined });

@@ -1766,7 +1766,7 @@ export class CanvasRuntime {
         taken.add(title);
         const prototype = this.board.addPrototype(cardId, title, run.task, run.variant || undefined);
         try {
-          this.repoOf(prototype).workers.start(prototype.id);
+          void this.repoOf(prototype).workers.start(prototype.id).catch((e: unknown) => this.board.log(prototype.id, 'error', 'obeya', messageOf(e)));
         } catch (e) {
           this.board.remove(prototype.id);
           throw e;

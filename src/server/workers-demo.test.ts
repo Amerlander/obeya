@@ -26,9 +26,9 @@ describe('parking: the app of a card that waits for the owner', () => {
     }));
   };
   const stopped = (id: string) => existsSync(join(board.row(id).workspace!, 'parked.log'));
-  const handOver = () => {
+  const handOver = async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('ready_for_review', { summary: 'Fertig.', demo: artifact() });
     runtime.last.emit({ type: 'idle' });
     return c;
@@ -36,7 +36,7 @@ describe('parking: the app of a card that waits for the owner', () => {
 
   test('a card that waits has its app stopped after the grace, and its worker hears so with the next message', async () => {
     parking();
-    const c = handOver();
+    const c = await handOver();
     expect(state(c.id)).toBe('waiting:demo');
     expect(runtime.last.inbox[0]).toContain('While the card waits for the owner, Obeya stops the app in your workspace');
     await until(() => board.row(c.id).parked);
@@ -55,7 +55,7 @@ describe('parking: the app of a card that waits for the owner', () => {
 
   test('without a recipe, the worker still hears that the app stops while the card waits', async () => {
     parking({ run: undefined });
-    const c = handOver();
+    const c = await handOver();
     expect(runtime.last.inbox[0]).not.toContain('How to run the app:');
     expect(runtime.last.inbox[0]).toContain('While the card waits for the owner, Obeya stops the app in your workspace');
     await until(() => board.row(c.id).parked);
@@ -66,7 +66,7 @@ describe('parking: the app of a card that waits for the owner', () => {
   test('a paused worker has its app stopped like a waiting card, and hears so when it goes on', async () => {
     parking();
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     workers.pause(c.id);
     await until(() => board.row(c.id).parked);
     expect(stopped(c.id)).toBe(true);
@@ -78,7 +78,7 @@ describe('parking: the app of a card that waits for the owner', () => {
   test('an answer within the grace keeps the app running', async () => {
     parking({}, 60);
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('ask', { question: 'Welche Spalten?' });
     runtime.last.emit({ type: 'idle' });
     workers.answer(c.id, 'Datum und Stand.');
@@ -90,7 +90,7 @@ describe('parking: the app of a card that waits for the owner', () => {
   test('a worker whose background work still runs keeps its app', async () => {
     parking();
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('ready_for_review', { summary: 'Fertig.', demo: artifact() });
     runtime.last.emit({ type: 'idle', background: 1 });
     await Bun.sleep(60);
@@ -100,7 +100,7 @@ describe('parking: the app of a card that waits for the owner', () => {
   test('a card still at work keeps its app', async () => {
     parking();
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.emit({ type: 'text', text: 'Weiter.' });
     runtime.last.emit({ type: 'idle' });
     await Bun.sleep(60);
@@ -109,7 +109,7 @@ describe('parking: the app of a card that waits for the owner', () => {
 
   test('an app that holds what must stay keeps running, and the owner hears why', async () => {
     parking({ keep: 'exit 0' });
-    const c = handOver();
+    const c = await handOver();
     await until(() => board.events(c.id).at(-1)!.text === board.t.worker.parkKept);
     expect(stopped(c.id)).toBe(false);
     expect(board.row(c.id).parked).toBeNull();
@@ -117,14 +117,14 @@ describe('parking: the app of a card that waits for the owner', () => {
 
   test('an app that does not need keeping is stopped', async () => {
     parking({ keep: 'exit 1' });
-    const c = handOver();
+    const c = await handOver();
     await until(() => board.row(c.id).parked);
     expect(stopped(c.id)).toBe(true);
   });
 
   test('a stop that fails is an error on the card, and the worker is not told of a stopped app', async () => {
     parking({ stop: 'echo "no pid file" >&2; exit 3' });
-    const c = handOver();
+    const c = await handOver();
     await until(() => board.events(c.id).at(-1)!.kind === 'error');
     expect(board.events(c.id).at(-1)!.text).toBe(board.t.worker.parkFailed('no pid file'));
     expect(board.row(c.id).parked).toBeNull();
@@ -134,7 +134,7 @@ describe('parking: the app of a card that waits for the owner', () => {
 
   test('a message while the stop runs reaches the worker once the app is stopped', async () => {
     parking({ stop: 'sleep 0.3; echo stopped >> parked.log' });
-    const c = handOver();
+    const c = await handOver();
     await Bun.sleep(80);
     const before = runtime.last.inbox.length;
     workers.message(c.id, 'Noch etwas.');
@@ -148,7 +148,7 @@ describe('parking: the app of a card that waits for the owner', () => {
   test('after a restart, a card that waits is parked; its worker hears so when the session resumes', async () => {
     parking();
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.emit({ type: 'session', id: 'sess-1' });
     runtime.last.call('ask', { question: 'Welche Spalten?' });
     workers.shutdown();
@@ -163,7 +163,7 @@ describe('parking: the app of a card that waits for the owner', () => {
   test('the app the worker says runs is offered on the card until Obeya stops it', async () => {
     parking({}, 40);
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     expect(runtime.last.inbox[0]).toContain('give its address with app_running');
     expect(runtime.last.call('app_running', { url: 'localhost:5173' })).toContain('Not recorded');
     runtime.last.call('app_running', { url: 'http://localhost:5173/' });
@@ -181,7 +181,7 @@ describe('parking: the app of a card that waits for the owner', () => {
   test('the owner opening the app keeps it running past the grace', async () => {
     parking({}, 10, 150);
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('app_running', { url: 'http://localhost:5173/' });
     runtime.last.call('ready_for_review', { summary: 'Fertig.', demo: artifact() });
     runtime.last.emit({ type: 'idle' });
@@ -195,7 +195,7 @@ describe('parking: the app of a card that waits for the owner', () => {
   test('the app counts as running while it answers at its address', async () => {
     parking();
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     expect(await workers.appUp(c.id)).toBe(false);
     const app = Bun.serve({ port: 0, fetch: () => new Response('nicht gefunden', { status: 404 }) });
     runtime.last.call('app_running', { url: `http://localhost:${app.port}/` });
@@ -205,7 +205,7 @@ describe('parking: the app of a card that waits for the owner', () => {
   });
 
   test('without a stop in the settings nothing is stopped', async () => {
-    const c = handOver();
+    const c = await handOver();
     await Bun.sleep(30);
     expect(board.row(c.id).parked).toBeNull();
   });
@@ -222,11 +222,11 @@ describe('handing over with a demo', () => {
   };
   const demo = (d: string, chapters = ['Vorher', 'Nachher']) => ({ dir: d, chapters, question: 'Semikolon oder Komma?' });
 
-  test('the worker gets the demo skill from the plugin that comes with Obeya, its brief names it, and it knows where Obeya is', () => {
+  test('the worker gets the demo skill from the plugin that comes with Obeya, its brief names it, and it knows where Obeya is', async () => {
     rmSync(dir, { recursive: true, force: true });
     setup({ ...generic, land: 'main', workspaces: 'clones', app: { run: 'bun start' } });
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     expect(runtime.last.spec.plugins).toEqual([OBEYA_PLUGIN]);
     // a demo's narration finds Obeya, which holds the voice across renders
     expect(runtime.last.spec.env).toEqual({ OBEYA_URL: 'http://127.0.0.1:4417' });
@@ -235,16 +235,16 @@ describe('handing over with a demo', () => {
     expect(runtime.last.inbox[0]).toContain(`recorded with the demo skill (\`${demoSkillName()}\`; if your session does not know it, read its file ${DEMO_SKILL_FILE} and follow that)`);
   });
 
-  test("a repository that names the language of its demos gives it to the worker's demo skill", () => {
+  test("a repository that names the language of its demos gives it to the worker's demo skill", async () => {
     rmSync(dir, { recursive: true, force: true });
     setup({ ...generic, land: 'main', workspaces: 'clones', demo: { language: 'en' } });
-    workers.start(manual().id);
+    await workers.start(manual().id);
     expect(runtime.last.spec.env).toEqual({ OBEYA_URL: 'http://127.0.0.1:4417', DEMO_LANGUAGE: 'en' });
   });
 
-  test('the card waits with the demo; its files are found; words under it answer its question and leave the demo', () => {
+  test('the card waits with the demo; its files are found; words under it answer its question and leave the demo', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const d = demoDir();
     expect(runtime.last.call('ready_for_review', { summary: 'S', demo: demo(d) })).toContain('End your turn');
     expect(state(c.id)).toBe('waiting:demo');
@@ -262,9 +262,9 @@ describe('handing over with a demo', () => {
     expect(board.item(c.id)!.demo!.chapters).toHaveLength(2);
   });
 
-  test('the question in the demo report is answered on the card; the demo still waits for approval', () => {
+  test('the question in the demo report is answered on the card; the demo still waits for approval', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir()) });
     runtime.last.emit({ type: 'idle' });
     expect(board.item(c.id)!.question).toEqual({ text: 'Semikolon oder Komma?', options: [] });
@@ -289,9 +289,9 @@ describe('handing over with a demo', () => {
     expect(() => workers.answer(c.id, 'Komma.')).toThrow(BadRequest);
   });
 
-  test('a handover that keeps the demo leaves its answered question with the handover it came with', () => {
+  test('a handover that keeps the demo leaves its answered question with the handover it came with', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir()) });
     runtime.last.emit({ type: 'idle' });
     const first = board.events(c.id).findLast((e) => e.kind === 'review')!.id;
@@ -303,9 +303,9 @@ describe('handing over with a demo', () => {
     expect(board.item(c.id)!.demo).toMatchObject({ question: 'Semikolon oder Komma?', answer: 'Semikolon.', handover: first });
   });
 
-  test('a worker that reworks its demo after the answer hands over anew; until then the card is at work', () => {
+  test('a worker that reworks its demo after the answer hands over anew; until then the card is at work', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir()) });
     runtime.last.emit({ type: 'idle' });
     workers.answer(c.id, 'Komma, bitte.');
@@ -322,9 +322,9 @@ describe('handing over with a demo', () => {
     expect(needsYou(board.item(c.id)!)).toBe(true);
   });
 
-  test('an answer to the owner\'s words without a new demo marks the card answered; a new demo is a demo again', () => {
+  test('an answer to the owner\'s words without a new demo marks the card answered; a new demo is a demo again', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('ready_for_review', { summary: 'S', demo: { dir: demoDir(), chapters: ['Vorher', 'Nachher'] } });
     runtime.last.emit({ type: 'idle' });
     expect(board.item(c.id)!.answered).toBeUndefined();
@@ -356,7 +356,7 @@ describe('handing over with a demo', () => {
 
   test('words its worker never answers do not read as answered, though it answered the ones before', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('ready_for_review', { summary: 'S', demo: { dir: demoDir(), chapters: ['Vorher', 'Nachher'] } });
     runtime.last.emit({ type: 'idle' });
     workers.message(c.id, 'Warum zwei Spalten?');
@@ -395,9 +395,9 @@ describe('handing over with a demo', () => {
     expect(board.item(c.id)!.answered).toBe(true);
   });
 
-  test('a worker that a background command wakes after it answered is at work again until its turn ends', () => {
+  test('a worker that a background command wakes after it answered is at work again until its turn ends', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('ready_for_review', { summary: 'S', demo: { dir: demoDir(), chapters: ['Vorher', 'Nachher'] } });
     runtime.last.emit({ type: 'idle' });
     workers.message(c.id, 'Auf dem Telefon geht es nicht.');
@@ -423,7 +423,7 @@ describe('handing over with a demo', () => {
 
   test('a worker taking in an answer resumes after a restart; a session that ends gives the demo back to the owner', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.emit({ type: 'session', id: 'sess-1' });
     runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir()) });
     runtime.last.emit({ type: 'idle' });
@@ -438,9 +438,9 @@ describe('handing over with a demo', () => {
     expect(needsYou(board.item(c.id)!)).toBe(true);
   });
 
-  test('a worker taking in an answer that pauses for a restart is resumed by it', () => {
+  test('a worker taking in an answer that pauses for a restart is resumed by it', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.emit({ type: 'session', id: 'sess-1' });
     runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir()) });
     runtime.last.emit({ type: 'idle' });
@@ -460,11 +460,11 @@ describe('handing over with a demo', () => {
     expect(runtime.last.spec.resume).toBe('sess-1');
   });
 
-  test('after feedback, the worker may hand over again without a new demo: the one on the card stands', () => {
+  test('after feedback, the worker may hand over again without a new demo: the one on the card stands', async () => {
     rmSync(dir, { recursive: true, force: true });
     setup({ ...generic, land: 'main', workspaces: 'clones', app: { run: 'bun start' } });
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir()) });
     workers.message(c.id, 'Nur den Text ändern.');
     expect(runtime.last.call('ready_for_review', { summary: 'Text geändert.' })).toContain('End your turn');
@@ -473,9 +473,9 @@ describe('handing over with a demo', () => {
     expect(board.item(c.id)!.demo!.chapters).toHaveLength(2);
   });
 
-  test('a new demo keeps the one it replaces for the owner to go back to, while its files are on disk', () => {
+  test('a new demo keeps the one it replaces for the owner to go back to, while its files are on disk', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const first = artifact();
     runtime.last.call('ready_for_review', { summary: 'S', demo: first });
     const handover = board.events(c.id).findLast((e) => e.kind === 'review')!;
@@ -498,11 +498,11 @@ describe('handing over with a demo', () => {
     expect(board.item(c.id)!.demos).toBeUndefined();
   });
 
-  test('where demos are shared, a video or an artifact comes with its page for colleagues, kept with the demo', () => {
+  test('where demos are shared, a video or an artifact comes with its page for colleagues, kept with the demo', async () => {
     rmSync(dir, { recursive: true, force: true });
     setup({ ...generic, land: 'main', workspaces: 'clones', app: { run: 'bun start' }, demo: { site: { title: 'Demos', url: 'https://demos.example.dev', deploy: 'deploy {dir}' } } });
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     expect(runtime.last.inbox[0]).toContain('share the demo, a video or an HTML artifact, with colleagues');
     const d = demoDir();
     expect(runtime.last.call('ready_for_review', { summary: 'S', demo: demo(d) })).toContain('needs its page');
@@ -522,23 +522,23 @@ describe('handing over with a demo', () => {
     expect(board.item(c.id)!.demo).toMatchObject({ kind: 'html', page, single: true });
   });
 
-  test('a broken demo or a missing one is refused, and the worker keeps the card', () => {
+  test('a broken demo or a missing one is refused, and the worker keeps the card', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     expect(runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir(), ['Nur eins']) })).toContain('Not handed over');
     expect(state(c.id)).toBe('working');
     rmSync(dir, { recursive: true, force: true });
     setup({ ...generic, land: 'main', workspaces: 'clones', app: { run: 'bun start' } });
     const d = manual();
-    workers.start(d.id);
+    await workers.start(d.id);
     expect(runtime.last.inbox[0]).toContain('How to run the app: bun start');
     expect(runtime.last.call('ready_for_review', { summary: 'S' })).toContain(`every handover brings a demo. Record it with the demo skill (\`${demoSkillName()}\`; if your session does not know it, read its file ${DEMO_SKILL_FILE} and follow that)`);
     expect(state(d.id)).toBe('working');
   });
 
-  test('an HTML artifact instead of a video: it needs its page', () => {
+  test('an HTML artifact instead of a video: it needs its page', async () => {
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     const d = join(dir, 'logos');
     Bun.spawnSync(['mkdir', '-p', join(d, 'img')]);
     const html = { kind: 'html', dir: d };
@@ -552,11 +552,11 @@ describe('handing over with a demo', () => {
     expect(board.demoFiles(c.id)).toEqual({ dir: d, kind: 'html' });
   });
 
-  test('every handover brings a demo: one without is refused; without a recipe the worker finds out how to run the app', () => {
+  test('every handover brings a demo: one without is refused; without a recipe the worker finds out how to run the app', async () => {
     rmSync(dir, { recursive: true, force: true });
     setup({ ...generic, land: 'main', workspaces: 'clones' });
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     expect(runtime.last.inbox[0]).toContain('Then show the owner the result with a demo');
     expect(runtime.last.inbox[0]).toContain("The repository's settings say nothing yet about how to run the app: find it out from the repository");
     expect(runtime.last.inbox[0]).not.toContain('How to run the app:');
@@ -576,7 +576,7 @@ describe('handing over with a demo', () => {
 describe('comments on places in the demo video', () => {
   let images: Images;
   /** A card waiting with a demo of two scenes, the second narrated in two sentences. */
-  const waiting = (question?: string) => {
+  const waiting = async (question?: string) => {
     images = new Images(join(dir, 'images'));
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: generic, imageFiles: (ids = []) => ids.flatMap((i) => images.path(i) ?? []), releaseDelay: 5, holdGrace: 60_000 }));
     const d = join(dir, 'demo');
@@ -584,7 +584,7 @@ describe('comments on places in the demo video', () => {
     writeFileSync(join(d, 'demo.mp4'), 'x');
     writeFileSync(join(d, 'captions.vtt'), 'WEBVTT\n\n00:00:00.350 --> 00:00:05.000\nDie Liste.\n\n00:00:06.350 --> 00:00:16.350\nJetzt der Export. Die Datei hat eine Kopfzeile.\n');
     const c = manual();
-    workers.start(c.id);
+    await workers.start(c.id);
     runtime.last.call('ready_for_review', { summary: 'S', demo: { dir: d, chapters: ['Liste', 'Export'], ...(question ? { question } : {}) } });
     runtime.last.emit({ type: 'idle' });
     return c;
@@ -592,7 +592,7 @@ describe('comments on places in the demo video', () => {
   const still = () => images.save(new Uint8Array([1, 2, 3]), 'image/jpeg');
 
   test('stand in the conversation at once, and reach the worker together once the owner has finished watching', async () => {
-    const c = waiting();
+    const c = await waiting();
     const n = runtime.last.inbox.length;
     const frame = still();
     workers.message(c.id, 'Hier fehlt die Kopfzeile.', [], false, undefined, { at: 7.24, still: frame });
@@ -627,8 +627,8 @@ describe('comments on places in the demo video', () => {
     expect(runtime.last.inbox).toHaveLength(n + 1);
   });
 
-  test('sent by the owner, they go at once; one deleted before leaves the conversation and never reaches the worker', () => {
-    const c = waiting();
+  test('sent by the owner, they go at once; one deleted before leaves the conversation and never reaches the worker', async () => {
+    const c = await waiting();
     const n = runtime.last.inbox.length;
     const gone: number[] = [];
     board.onEventGone((_, id) => gone.push(id));
@@ -649,8 +649,8 @@ describe('comments on places in the demo video', () => {
     expect(() => workers.unsay(c.id, second!.id)).toThrow(BadRequest);
   });
 
-  test('stand below what the worker does meanwhile until sent, then where they went', () => {
-    const c = waiting();
+  test('stand below what the worker does meanwhile until sent, then where they went', async () => {
+    const c = await waiting();
     const comment = (workers.message(c.id, 'Zu schnell.', [], false, undefined, { at: 2 }), board.events(c.id).at(-1)!);
     expect(comment.unread).toBe(true);
     // the worker still takes in earlier words on its handover
@@ -663,7 +663,7 @@ describe('comments on places in the demo video', () => {
   });
 
   test('all deleted, nothing goes, also once the wait is over', async () => {
-    const c = waiting();
+    const c = await waiting();
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: generic, holdGrace: 10 }));
     const n = runtime.last.inbox.length;
     workers.message(c.id, 'Doch nicht.', [], false, undefined, { at: 1 });
@@ -673,8 +673,8 @@ describe('comments on places in the demo video', () => {
     expect(runtime.last.inbox).toHaveLength(n);
   });
 
-  test('words without a place take the comments along in one message; a comment does not answer the demo report’s question', () => {
-    const c = waiting('Semikolon oder Komma?');
+  test('words without a place take the comments along in one message; a comment does not answer the demo report’s question', async () => {
+    const c = await waiting('Semikolon oder Komma?');
     const n = runtime.last.inbox.length;
     workers.message(c.id, 'Hier ruckelt es.', [], false, undefined, { at: 2 });
     expect(board.item(c.id)!.question).toEqual({ text: 'Semikolon oder Komma?', options: [] });
@@ -687,7 +687,7 @@ describe('comments on places in the demo video', () => {
   });
 
   test('go without a sign from the owner once the last one has waited long enough, also after a restart', async () => {
-    const c = waiting();
+    const c = await waiting();
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: generic, holdGrace: 10 }));
     const n = runtime.last.inbox.length;
     workers.message(c.id, 'Hier.', [], false, undefined, { at: 1 });
@@ -699,7 +699,7 @@ describe('comments on places in the demo video', () => {
   });
 
   test('an approval takes them, also one clicked as the card closes', async () => {
-    const c = waiting();
+    const c = await waiting();
     workers.message(c.id, 'Etwas kleiner.', [], false, undefined, { at: 1 });
     // the card folds with the click: its video stops being watched while the approval is on its way
     workers.released(c.id);
@@ -711,8 +711,8 @@ describe('comments on places in the demo video', () => {
     expect(told.at(-1)).toContain('Before approving, the owner watched your demo video. A comment on places in your demo video:\n\n[Demo video at 0:01, chapter „Liste“, narration: „Die Liste.“]\nEtwas kleiner.\n\nThey approved the work as it is all the same');
   });
 
-  test('one on a demo a later handover replaced is placed in that demo, and the worker hears which', () => {
-    const c = waiting();
+  test('one on a demo a later handover replaced is placed in that demo, and the worker hears which', async () => {
+    const c = await waiting();
     const first = board.events(c.id).findLast((e) => e.kind === 'review')!.id;
     const d = join(dir, 'demo-2');
     mkdirSync(d, { recursive: true });
@@ -732,8 +732,8 @@ describe('comments on places in the demo video', () => {
     expect(runtime.last.inbox.at(-1)).toContain('[Demo video at 0:01, chapter „Zeile“');
   });
 
-  test('while the worker works, one goes to it at once, with its place and frame', () => {
-    const c = waiting();
+  test('while the worker works, one goes to it at once, with its place and frame', async () => {
+    const c = await waiting();
     // at work again, after a note say
     board.work(c.id, { state: 'working', need: null });
     const frame = still();
