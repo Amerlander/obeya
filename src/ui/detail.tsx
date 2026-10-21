@@ -27,8 +27,8 @@ import { AttachButton, imageUrl, ShotStrip, Shots, useShotInput } from './shots'
 import { useStickToEnd } from './stickToEnd';
 import { dismissPlace, type Place, seekTo, showsVersions, usePlace, videoOf, watch } from './spot';
 import { cameInView, useSeen } from './seen';
-import { SnoozeLine, SnoozeMenu, snoozeWho } from './snooze';
-import { becomesLabel, clock as time, errorText, failText, shortDay, stateLabel, t } from './strings';
+import { ClockMark, SnoozeLine, SnoozeMenu, snoozeWho } from './snooze';
+import { becomesLabel, clock as time, errorText, failText, shortDay, snoozeWhen, stateLabel, t } from './strings';
 import { agentWorks, cardTalk, demoHandover, talkState, koordinatorReads, ownerField, parseQuestion, snoozeLine, talkAlone, type Turn, unseenTurns, waitsFirstStart, worked as isWorked } from './talk';
 import { PageChangeList } from './page-changes';
 import { WishReplyLink } from './wish';
@@ -402,9 +402,13 @@ export function Detail(p: Props) {
           {planSource}
           {!item.queue && (
             <div className="actions">
-              <button className="btn primary" title={inFolder ? t.folder.startHint : t.startHint} onClick={() => act({ action: 'start' }, { close: false })}>
-                {t.start}
-              </button>
+              {/* one snoozed to start later starts now with „Jetzt zurückholen“ on its line in the conversation */}
+              {!item.snoozed && (
+                <button className="btn primary" title={inFolder ? t.folder.startHint : t.startHint} onClick={() => act({ action: 'start' }, { close: false })}>
+                  {t.start}
+                </button>
+              )}
+              <Later item={item} act={act} />
               {prototypeActions}
               {item.source === 'manual' && !item.prototypeOf && (
                 <>
@@ -808,6 +812,7 @@ function ProposalView({
   const answer = useOpenQuestions(item);
   const idea = !!item.proposal?.idea;
   const armed = item.proposal?.acceptAfterRevision;
+  const later = !idea && !!item.proposal?.startAt;
   // while it is reworked, the click waits for the new text in view; else the panel closes on the accepted card
   const accept = (start: boolean, asIdea = false) =>
     act(
@@ -822,6 +827,7 @@ function ProposalView({
         main={
           <>
             {children}
+            {!idea && <StartAt item={item} act={act} />}
             {from && <p className="hint">{t.proposedBy(plain(from.title))}{item.proposal?.reason && <> {item.proposal.reason}</>}</p>}
             {item.retro && <p className="hint">{t.proposedByRetro(item.retro)}</p>}
           </>
@@ -846,13 +852,16 @@ function ProposalView({
         {armed ? (
           <Armed label={t.acceptWaits(idea || armed === 'idea')} undo={t.unaccept} onUndo={() => act({ action: 'unaccept' }, { close: false })} />
         ) : (
-          <button className="btn primary" onClick={() => accept(true)}>
-            {idea ? t.acceptIdea : t.accept}
+          // one to start later is planned and waits until then: taking it on is all there is to it
+          <button className="btn primary" title={later ? t.startAt.accept : undefined} onClick={() => accept(true)}>
+            {idea ? t.acceptIdea : later ? t.acceptOnly : t.accept}
           </button>
         )}
-        <button className="btn" disabled={!!revising} onClick={() => accept(false)}>
-          {idea ? t.acceptAsTask : t.acceptOnly}
-        </button>
+        {!later && (
+          <button className="btn" disabled={!!revising} onClick={() => accept(false)}>
+            {idea ? t.acceptAsTask : t.acceptOnly}
+          </button>
+        )}
         {/* a task the owner would rather think through first */}
         {!idea && (
           <button className="btn" disabled={!!armed} title={t.acceptAsIdeaHint} onClick={() => accept(false, true)}>
@@ -866,6 +875,30 @@ function ProposalView({
       </div>
       {answer.questions.length > 0 && <p className="hint">{t.proposalQuestionsHint}</p>}
     </>
+  );
+}
+
+/** When a proposed task starts once accepted, with „Ändern“: another time, or none, so it starts at once. */
+function StartAt({ item, act }: { item: Item; act: (a: CardAction, done: ActDone) => Promise<void> }) {
+  const at = item.proposal?.startAt;
+  if (!at) return null;
+  const set = (to: string | null) => void act({ action: 'startAt', at: to }, { close: false });
+  return (
+    <div className="start-at">
+      <ClockMark /> {t.startAt.line(snoozeWhen(at))} ·{' '}
+      <SnoozeMenu
+        label={t.snooze.change}
+        className="link"
+        mark={false}
+        inline
+        heading={t.startAt.heading}
+        hint={t.startAt.accept}
+        set={t.startAt.set}
+        at={new Date(at)}
+        clear={{ label: t.startAt.none, hint: t.startAt.noneHint, onClear: () => set(null) }}
+        onSnooze={set}
+      />
+    </div>
   );
 }
 
@@ -1052,7 +1085,8 @@ function Conversation({
   // deleted, and under the last the owner can send them without watching to the end
   const held = item.held ?? [];
   // the line where the card was snoozed, while it still is, offers to wake it or change the time
-  const snoozedAt = item.snoozed && !past ? turns.shown.findLast((x) => snoozeLine(x.e))?.e.id : undefined;
+  // (a planned card's conversation is a past one until it starts)
+  const snoozedAt = item.snoozed && (!past || item.snoozed.start) ? turns.shown.findLast((x) => snoozeLine(x.e))?.e.id : undefined;
   const line = (turn: Turn) => (
     <Fragment key={turn.e.id}>
       <Line
@@ -2241,7 +2275,7 @@ function TaskTalk({
         field
           ? {
               key: `${item.state}:${item.need ?? ''}:${field}:${key}`,
-              placeholder: { note: item.snoozed && !item.snoozed.waiting ? t.snooze.compose : item.paused ? t.pause.compose : askable(item) || item.followUp ? t.compose.followUp : agentWorks(item) ? t.compose.working : inQueue(item) ? t.compose.queued : t.compose.idle, answer: t.compose.question, feedback: t.compose.review, demo: t.compose.demo, discuss: '', revise: t.compose.revise }[field],
+              placeholder: { note: item.snoozed && !item.snoozed.waiting && !item.snoozed.start ? t.snooze.compose : item.paused ? t.pause.compose : askable(item) || item.followUp ? t.compose.followUp : agentWorks(item) ? t.compose.working : inQueue(item) ? t.compose.queued : t.compose.idle, answer: t.compose.question, feedback: t.compose.review, demo: t.compose.demo, discuss: '', revise: t.compose.revise }[field],
               listener,
               onWords: tell(field),
               onPicked: (text, [picks = []], images, replyTo) => act({ action: 'answer', text, picks, images, ...(replyTo ? { replyTo } : {}) }, { close: false }),

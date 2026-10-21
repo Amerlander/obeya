@@ -756,6 +756,9 @@ textarea.p-body:focus { border-color: var(--muted); }
 .snooze-pick { display: flex; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); margin-top: 2px; align-items: center; }
 .snooze-pick input { font: inherit; font-size: 13px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg); color: var(--ink); }
 .snooze-pick .btn { padding: 6px 12px; }
+/* a proposal its agent wants started later: when, with „Ändern“ */
+.start-at { display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; margin: 10px 0 2px; font-size: 13px; color: var(--ink); }
+.start-at .clock-mark { vertical-align: -1px; color: var(--muted); }
 /* a task's conversation: under the card's demo and pull request, scrolled to its end */
 .talk.conv { max-height: min(520px, 60vh); max-width: 100ch; }
 .talk .msg.by-worker .who { color: var(--ink); }

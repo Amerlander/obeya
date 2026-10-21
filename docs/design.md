@@ -425,6 +425,24 @@ options. The owner may pick options on the proposal before taking it; accepting 
 into the text, those with a pick under "Entschieden:", the others under "Offene Fragen:", so the new
 worker reads what is settled and asks the rest.
 
+#### A proposal that starts later
+
+A follow-up that can only be done later (whether a bank has registered a form, two weeks on) is a
+proposal with a start time, `propose_card`'s `start_at`, not a sentence in a handover where it goes
+under. The worker proposes it while its own card is still open; the owner decides on it now, and
+the card starts by itself at the time, so nobody has to remember it. The proposal reads „◷ Startet
+Mi 4.11., 08:00 · Ändern“ under its text (on the canvas „startet …“ after its state); „Ändern“
+opens the menu of „Später …“ (`SnoozeMenu`), with „Ohne Zeitpunkt“ to take the time away
+(`startAt` on the proposal, the action `startAt`). Its one go is „Übernehmen“: the card is planned
+and snoozed until then by its agent, the proposal's reason as what it does then (`snoozed` with
+`start`), and stands on the canvas like any snoozed card, with „Jetzt zurückholen“ and „Ändern“. At
+the time it starts as a started planned card does, through the Koordinator and its queue (see
+Snoozing a card); a time that has passed when the owner accepts starts it at once. Its worker hears
+with its task when the card was set to start and that it is that time now, so a task that says „in
+two weeks“ reads as due; it checks what it can and asks the owner for what only they can see. The
+reviser keeps the time as it was; accepting it only as planned, or as an idea, drops it. Only a time:
+a card to start once another is done is the plan's order, and a worker's own wait is its `snooze`.
+
 A worker may also propose an idea, for something to think through first: it shows as "✦ Vorschlag ·
 Idee", and "Übernehmen und besprechen" makes it an open idea whose exploration agent opens the
 discussion with the text and its questions; "Als Aufgabe übernehmen" plans it as a task instead.
@@ -823,8 +841,9 @@ A worker has its tools served in-process:
   their own words`; the log keeps both as one text, picks first, for whoever reads it later
   (decision log, Koordinator). An answer leaves the card open, picked or written, and stands in its
   conversation at once.
-- `propose_card(title, task, reason, idea?, questions?, replaces?)` and
-  `withdraw_proposal(title, why, replaced_by?)` (see Proposals).
+- `propose_card(title, task, reason, idea?, questions?, replaces?, start_at?)` and
+  `withdraw_proposal(title, why, replaced_by?)` (see Proposals): something it noticed outside its
+  task, or a follow-up to its own task that can only be done later (`start_at`).
 - `ready_for_review(summary, demo)`, whose summary is the report the owner reads.
 - `app_running(url)`, where the app in its workspace opens in a browser, for the owner to try it by
   hand (see Trying the app by hand); in a workspace on another machine, Obeya forwards its port.
@@ -972,7 +991,8 @@ The owner snoozes with „Später …“ in the card's action row (a visible but
 this evening 18:00 (while that is more than half an hour off), tomorrow 08:00, next Monday 08:00, or
 a date and time to pick (`SnoozeMenu` in `src/ui/snooze.tsx`, one component for every kind of card;
 by voice „stell das bis morgen früh zurück“, `snooze` with the local time). It is offered on any card
-at work and on any card that waits for the owner (`snoozable` in `src/core/types.ts`):
+at work, on any card that waits for the owner, and on any planned task not yet with the Koordinator
+(`snoozable` in `src/core/types.ts`):
 
 - A card at work stops as on a pause (see Pausing an agent): its session ends at once, mid-step if
   need be, and what Obeya has for it meanwhile waits; at the time it goes on where it stopped.
@@ -982,6 +1002,13 @@ at work and on any card that waits for the owner (`snoozable` in `src/core/types
   nothing goes to its agent, and background work its worker still runs (a render it asked beside)
   goes on, with the pause on its bubble. Answering it all the same (or its idea parked, its proposal
   reworked) ends the snooze: it no longer waits for the owner.
+- A planned card („erst am Montag starten“) starts at the time instead of now (`Snooze.start`):
+  it goes to the Koordinator then as if the owner had started it, queue and all, and its worker hears
+  with its task that the card was set to start then. „Starten“ (on the card or by voice) and „Jetzt
+  zurückholen“ start it at once; „Alle starten“ on its project passes over it. So does an agent's
+  proposal with a start time once accepted (see A proposal that starts later). A card that is no
+  longer planned to start (made an idea or a project, archived, started some other way) is snoozed
+  no longer, and a change to its plan doc leaves a workstream's snooze as it is.
 
 Waking: a timer (every 15 s), every change on the board (so a card that only passes through the
 state waited for, asked and answered at once, counts) and every start of Obeya look for snoozed
@@ -1420,6 +1447,15 @@ their latest words, else the conversation language (see Language).
   network gap); conditions besides a time („bis CI grün ist“, which background work covers; another
 card's state came later, see below). German
   wording follows Gmail's „Zurückstellen“, which owners know.
+- **A follow-up due later is a proposal with a start time** (2026-10-21). Until then a worker whose
+  task left a check for two weeks on (whether the bank registered the tax exemption certificates)
+  could only write it into its handover, where it went under: its own snooze ends with the handover,
+  and `propose_card` described itself as being for problems outside the task. Planned cards could
+  not be snoozed, not even by hand. Rejected: the proposal itself coming back at the time (the
+  owner decides twice, and deciding now is what spares them remembering); the worker's card staying
+  open and snoozed after its handover (the approval would hang for two weeks, the card counted as
+  unfinished); a calendar entry (it only reminds, where the card's agent can check part of it
+  itself).
 - **A worker can snooze until another card gets somewhere** (2026-10-17). Until then a release that
   waited for a fix on another card snoozed until a guessed time (an hour on), to look whether the fix
   was on main, and would have snoozed again if not; Obeya knew all along when that card landed. The

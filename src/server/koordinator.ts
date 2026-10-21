@@ -118,13 +118,13 @@ export class Koordinator {
   }
 
   /**
-   * All planned workstreams of the project go to the Koordinator together: one turn sees them all
+   * All planned workstreams of the project (but those snoozed to start later) go to the Koordinator together: one turn sees them all
    * with the plan doc and decides which start now and which wait, for a dependency or a likely
    * conflict, and in which order. They queue in the plan's order until it has, and the turn waits a
    * few seconds, so the owner can take the start back (`dequeue` on the project).
    */
   private requestAll(project: Item): void {
-    const open = this.o.board.snapshot().items.filter((i) => i.parent === project.id && i.state === 'planned' && !i.queue);
+    const open = this.o.board.snapshot().items.filter((i) => i.parent === project.id && i.state === 'planned' && !i.queue && !i.snoozed);
     if (!open.length) throw new BadRequest('nothingToStart', 'the project has no planned workstream left to start');
     const now = Date.now();
     open.forEach((w, n) => this.o.board.work(w.id, { queue: JSON.stringify({ checking: true, together: project.id, since: new Date(now + n).toISOString() }) }));

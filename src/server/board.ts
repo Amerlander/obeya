@@ -57,6 +57,7 @@ import {
   finished,
   formatQuestion,
   needsYou,
+  plannedToStart,
   type Notice,
   type BackgroundTask,
 } from '../core/types';
@@ -590,7 +591,7 @@ export class Board {
    * A card an agent proposes, placed below the card it came from, or at the nearest free spot: its
    * text for the agent that takes it on, and apart from it why and what the owner has to decide.
    */
-  propose(fromId: string, p: { title: string; task: string; reason?: string; idea?: boolean; questions?: Question[] }): Item {
+  propose(fromId: string, p: { title: string; task: string; reason?: string; idea?: boolean; questions?: Question[]; startAt?: string }): Item {
     const items = this.snapshot().items;
     const from = items.find((i) => i.id === fromId);
     const at = from ? this.nearFree(items, below(boundsOf(from, items))) : this.freeSpot();
@@ -1021,6 +1022,15 @@ export class Board {
     return true;
   }
 
+  /** When the proposal starts once accepted (ISO), or at once (`null`). */
+  startAt(id: string, at: string | null) {
+    const row = this.own(id);
+    if (row.state !== 'proposal') throw new BadRequest('notProposal', 'not a proposal');
+    const { startAt: _, ...proposal } = storedProposal(row) ?? { questions: [] };
+    this.store.update(id, { proposal: JSON.stringify({ ...proposal, ...(at ? { startAt: at } : {}) } satisfies Proposal) });
+    this.changed();
+  }
+
   /** "Übernehmen und starten" during a revision (`on`; `idea`: "Als Idee besprechen"), or taken back; false when that was so already. */
   acceptAfterRevision(id: string, on: boolean | 'idea'): boolean {
     const row = this.own(id);
@@ -1043,7 +1053,8 @@ export class Board {
     const { revising: done, ...was } = storedProposal(row) ?? { questions: [] };
     // what the owner said meanwhile is the next rework's
     const next = done?.next?.length ? { revising: merged(done.next) } : {};
-    const proposal: Proposal = p ? { ...proposalOf(p), ...(was.acceptAfterRevision ? { acceptAfterRevision: was.acceptAfterRevision } : {}) } : was;
+    // when it starts is the owner's to change, not the reviser's
+    const proposal: Proposal = p ? { ...proposalOf({ ...p, startAt: was.startAt }), ...(was.acceptAfterRevision ? { acceptAfterRevision: was.acceptAfterRevision } : {}) } : was;
     this.store.update(id, { ...(p ? { title: p.title.slice(0, 200), body: p.task.slice(0, 20000) } : {}), proposal: JSON.stringify({ ...proposal, ...next } satisfies Proposal) });
     this.changed();
     return true;
@@ -1206,13 +1217,14 @@ export class Board {
 
   /**
    * A card the owner snoozed while it waited for them that no longer waits for them (they answered
-   * it after all, its proposal is reworked, its idea parked) is snoozed no longer.
+   * it after all, its proposal is reworked, its idea parked) is snoozed no longer; nor is a planned
+   * card snoozed to start later that is no longer planned to start (started, made an idea, archived).
    */
   private withoutStaleSnoozes(items: Item[]): Item[] {
     return items.map((i) => {
-      if (!i.snoozed?.waiting) return i;
+      if (!i.snoozed?.waiting && !i.snoozed?.start) return i;
       const { snoozed: _, ...awake } = i;
-      if (needsYou(awake)) return i;
+      if (i.snoozed.waiting ? needsYou(awake) : plannedToStart(awake)) return i;
       this.store.update(i.id, { snoozed: null });
       return awake;
     });
@@ -2126,10 +2138,11 @@ export type Retracted =
   | { kind: 'unknown'; mine: { title: string; state: CardState; gone: boolean }[] };
 
 /** A proposal as an agent made it: whether it is an idea, why, and at most five questions. */
-const proposalOf = (p: { reason?: string; idea?: boolean; questions?: Question[] }): Proposal => ({
+const proposalOf = (p: { reason?: string; idea?: boolean; questions?: Question[]; startAt?: string }): Proposal => ({
   ...(p.idea ? { idea: true } : {}),
   ...(p.reason?.trim() ? { reason: p.reason.trim().slice(0, 2000) } : {}),
   questions: (p.questions ?? []).slice(0, 5),
+  ...(p.startAt ? { startAt: p.startAt } : {}),
 });
 
 const toDecision = (d: DecisionRow): Decision => ({ id: d.id, cardId: d.card_id, question: d.question, answer: d.answer, by: d.by, at: d.at });

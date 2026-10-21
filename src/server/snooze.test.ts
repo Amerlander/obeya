@@ -319,7 +319,7 @@ describe('the owner snoozes a card', () => {
     expect(() => canvas.act(id, { action: 'wake' })).toThrow('not snoozed');
   });
 
-  test('an idea whose agent replied, until tomorrow; a planned card or a past time is refused', () => {
+  test('an idea whose agent replied, until tomorrow; a queued card or a past time is refused', () => {
     const i = board().create({ idea: true, title: 'Export', body: 'Vermieter wollen ihn.', x: 0, y: 0 });
     board().work(i.id, { idea: JSON.stringify({ status: 'open', brief: '', yourTurn: true, questions: [] }) });
     expect(needsYou(item(i.id))).toBe(true);
@@ -330,7 +330,8 @@ describe('the owner snoozes a card', () => {
     expect(needsYou(item(i.id))).toBe(true);
 
     const p = board().create({ title: 'Geplant', x: 0, y: 0 });
-    expect(() => canvas.act(p.id, { action: 'snooze', until: later(HOUR) })).toThrow('neither at work nor waiting');
+    canvas.act(p.id, { action: 'start' });
+    expect(() => canvas.act(p.id, { action: 'snooze', until: later(HOUR) })).toThrow('neither planned, at work nor waiting');
     expect(() => canvas.act(i.id, { action: 'snooze', until: later(-HOUR) })).toThrow('within the coming year');
   });
 });
@@ -413,5 +414,112 @@ describe('the Koordinator waits on a card', () => {
       ['leg eine Aufgabe fürs Repo an, und danach noch eine für die Leinwand', 'Neue Aufgabe „Repository anlegen“; sobald sie erledigt ist, lege ich „Leinwand anlegen“ an.', undefined],
       ['', 'Neue Aufgabe „Leinwand anlegen“.', 'reached'],
     ]);
+  });
+});
+
+describe('a card that starts later', () => {
+  const settle = () => new Promise((r) => setTimeout(r, 5));
+  const DAY = 24 * HOUR;
+  const worker = () => runtime.sessions.findLast((x) => x.spec.role === 'worker')!;
+
+  test('proposed with a start time: accepted, it is planned and snoozed until then, survives a restart, and starts at the time through the Koordinator', async () => {
+    const { id: src, s } = atWork();
+    const at = later(14 * DAY);
+    expect(s.call('propose_card', { title: 'NV prüfen', task: 'Prüfen, ob die Bank die NV erfasst hat.', reason: 'Erst in zwei Wochen sichtbar.', start_at: at })).toContain('Proposed');
+    const p = board().snapshot().items.find((i) => i.state === 'proposal')!;
+    expect(p.proposal).toMatchObject({ startAt: new Date(at).toISOString() });
+    // the reviser rewrites the text, not when it starts
+    board().revised(p.id, { title: 'NV prüfen', task: 'Prüfen, ob die Bank beide NV erfasst hat.', reason: 'Erst in zwei Wochen sichtbar.', questions: [] });
+    expect(item(p.id).proposal!.startAt).toBe(new Date(at).toISOString());
+
+    canvas.act(p.id, { action: 'accept' });
+    expect(item(p.id)).toMatchObject({ state: 'planned', snoozed: { until: new Date(at).toISOString(), by: 'agent', start: true, why: 'Erst in zwei Wochen sichtbar.' } });
+    expect(item(p.id).queue).toBeUndefined();
+    expect(needsYou(item(p.id))).toBe(false);
+    expect(last(p.id)).toMatchObject({ kind: 'state', text: expect.stringMatching(/^Zurückgestellt bis .* · Erst in zwei Wochen sichtbar\.$/) });
+
+    // its source card's work is done by then, and the one clone free
+    canvas.act(src, { action: 'stop' });
+    canvas.shutdown();
+    canvas = open();
+    canvas.wakeDue(Date.parse(at) - 1000);
+    expect(item(p.id).queue).toBeUndefined();
+    canvas.wakeDue(Date.parse(at) + 1000);
+    expect(item(p.id).snoozed).toBeUndefined();
+    expect(item(p.id).queue).toMatchObject({ checking: true });
+    expect(board().events(p.id).some((e) => e.text === 'Wieder da: Zeitpunkt erreicht')).toBe(true);
+    await settle();
+    expect(item(p.id).state).toBe('working');
+    // its worker reads the task as due now, not as two weeks off
+    expect(worker().inbox[0]).toContain('The agent that proposed this card set it to start at');
+    expect(worker().inbox[0]).toContain('it is that time now');
+  });
+
+  test('the owner changes the start time or takes it away; a time that has passed when accepting starts it at once', () => {
+    const b = board().create({ title: 'B', x: 0, y: 0 });
+    const p = board().propose(b.id, { title: 'Nachsehen', task: 'T', reason: 'R', startAt: later(3 * DAY) });
+    const sooner = later(DAY);
+    canvas.act(p.id, { action: 'startAt', at: sooner });
+    expect(item(p.id).proposal!.startAt).toBe(new Date(sooner).toISOString());
+    expect(() => canvas.act(p.id, { action: 'startAt', at: later(-HOUR) })).toThrow('within the coming year');
+    canvas.act(p.id, { action: 'startAt', at: null });
+    expect(item(p.id).proposal!.startAt).toBeUndefined();
+    canvas.act(p.id, { action: 'accept' });
+    expect(item(p.id).snoozed).toBeUndefined();
+    expect(item(p.id).queue).toMatchObject({ checking: true });
+
+    const q = board().propose(b.id, { title: 'Verpasst', task: 'T', reason: 'R', startAt: later(-HOUR) });
+    canvas.act(q.id, { action: 'accept' });
+    expect(item(q.id).snoozed).toBeUndefined();
+    expect(item(q.id).queue).toMatchObject({ checking: true });
+
+    // kept as planned only, or taken on as an idea, it waits for no time
+    const r = board().propose(b.id, { title: 'Nur geplant', task: 'T', reason: 'R', startAt: later(DAY) });
+    canvas.act(r.id, { action: 'accept', start: false });
+    expect(item(r.id)).toMatchObject({ state: 'planned' });
+    expect(item(r.id).snoozed).toBeUndefined();
+  });
+
+  test('propose_card refuses a start time that has passed or is no time', () => {
+    const { s } = atWork();
+    expect(s.call('propose_card', { title: 'X', task: 'T', reason: 'R', start_at: later(-HOUR) })).toContain('has passed');
+    expect(s.call('propose_card', { title: 'X', task: 'T', reason: 'R', start_at: 'in zwei Wochen' })).toContain('ISO 8601');
+    expect(board().snapshot().items.some((i) => i.state === 'proposal')).toBe(false);
+  });
+
+  test('a planned card the owner snoozes starts at the time; started or woken earlier, it starts now and its worker hears so', async () => {
+    const c = board().create({ title: 'Montags-Export', body: 'Export bauen.', x: 0, y: 0 });
+    const until = later(2 * DAY);
+    canvas.act(c.id, { action: 'snooze', until });
+    expect(item(c.id)).toMatchObject({ state: 'planned', snoozed: { by: 'owner', start: true, until: new Date(until).toISOString() } });
+    expect(last(c.id)).toMatchObject({ kind: 'state', author: 'owner', text: expect.stringMatching(/^Zurückgestellt bis /) });
+    // the owner changes the time
+    const changed = later(3 * DAY);
+    canvas.act(c.id, { action: 'snooze', until: changed });
+    expect(item(c.id).snoozed).toMatchObject({ by: 'owner', start: true, until: new Date(changed).toISOString() });
+    canvas.wakeDue(Date.parse(until) + 1);
+    expect(item(c.id).queue).toBeUndefined();
+    // „Starten“ on the card starts it now, as „Jetzt zurückholen“ does
+    canvas.act(c.id, { action: 'start' });
+    expect(item(c.id).snoozed).toBeUndefined();
+    expect(item(c.id).queue).toMatchObject({ checking: true });
+    expect(board().events(c.id).some((e) => e.author === 'owner' && e.text === 'Wieder da: von dir zurückgeholt')).toBe(true);
+    await settle();
+    expect(item(c.id).state).toBe('working');
+    expect(worker().inbox[0]).toContain('The owner set this card aside to start at');
+    expect(worker().inbox[0]).toContain('the owner started it earlier, now');
+
+    const d = board().create({ title: 'Zweiter', x: 0, y: 0 });
+    canvas.act(d.id, { action: 'snooze', until: later(DAY) });
+    canvas.act(d.id, { action: 'wake' });
+    expect(item(d.id).snoozed).toBeUndefined();
+    expect(item(d.id).queue).toMatchObject({ checking: true });
+  });
+
+  test('a snoozed planned card that is no longer planned to start is snoozed no longer', () => {
+    const c = board().create({ title: 'Erst Montag', x: 0, y: 0 });
+    canvas.act(c.id, { action: 'snooze', until: later(DAY) });
+    board().work(c.id, { state: 'idea' });
+    expect(item(c.id).snoozed).toBeUndefined();
   });
 });

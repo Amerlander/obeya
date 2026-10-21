@@ -12,7 +12,7 @@ import { repoName } from '../adapters/generic';
 import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
 import type { Language } from '../core/locale';
-import { AGENT_DEFAULTS, agentListens, type AgentRole, awaited, type Awaited, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, needsYou, snoozable, type PendingRestart, plannableAsProject, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, type SharedSettings, type SpotInput, type TrustGroup } from '../core/types';
+import { AGENT_DEFAULTS, agentListens, type AgentRole, awaited, type Awaited, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, needsYou, snoozable, type PendingRestart, plannableAsProject, plannedToStart, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, type SharedSettings, type SpotInput, type TrustGroup } from '../core/types';
 import { inQueue } from '../core/queue';
 import { BadRequest, Board, pathOfRef, replyNote } from './board';
 import { type Command, Commander } from './commands';
@@ -38,7 +38,7 @@ import { type DueRestart, Workers } from './workers';
 import { branchSetting, type CardWorkspaces, defaultBranch, detectingBranch, gitCalls, gitOrNull, type GitSteps, gitStepsSync, type Landed, markFolder, readingBranches, together, useBranchSetting, Workspaces } from './workspaces';
 import { FolderWorkspaces } from './folder';
 import { claudeToken, githubToken, hostName, registerHost } from './hosts';
-import { messageOf } from '../core/text';
+import { clip, messageOf, oneLine } from '../core/text';
 import { type WishDraft, type WishInput, writeWish } from './wish';
 
 export type { CanvasConfig, RepoConfig };
@@ -330,27 +330,38 @@ export class CanvasRuntime {
 
   /**
    * The owner snoozes a card until `until` (ISO): one waiting for them leaves them until then, and
-   * nothing goes to its agent; one at work has its worker stop until then. A snoozed card gets the
-   * new time.
+   * nothing goes to its agent; one at work has its worker stop until then; a planned one starts
+   * then. A snoozed card gets the new time.
    */
   private snooze(cardId: string, until: unknown) {
+    const iso = this.until(until);
+    const card = this.board.item(cardId);
+    if (!card || !snoozable(card)) throw new BadRequest('notSnoozable', 'the card is neither planned, at work nor waiting for the owner');
+    if (card.snoozed?.waiting || (!card.snoozed && needsYou(card))) return this.board.snooze(cardId, { ...(card.snoozed ?? { by: 'owner', waiting: true }), until: iso }, 'owner');
+    if (card.snoozed?.start || (!card.snoozed && plannedToStart(card))) return this.board.snooze(cardId, { ...(card.snoozed ?? { by: 'owner', start: true }), until: iso }, 'owner');
+    this.repoOf(cardId).workers.snooze(cardId, iso);
+  }
+
+  /** A time to snooze until or start at, as ISO: within the coming year. */
+  private until(until: unknown): string {
     const at = typeof until === 'string' ? Date.parse(until) : NaN;
     if (Number.isNaN(at) || at <= Date.now() || at > Date.now() + SNOOZE_LIMIT) throw new BadRequest('snoozeTime', 'until must be a time within the coming year');
-    const card = this.board.item(cardId);
-    if (!card || !snoozable(card)) throw new BadRequest('notSnoozable', 'the card is neither at work nor waiting for the owner');
-    const iso = new Date(at).toISOString();
-    if (card.snoozed?.waiting || (!card.snoozed && needsYou(card))) return this.board.snooze(cardId, { ...(card.snoozed ?? { by: 'owner', waiting: true }), until: iso }, 'owner');
-    this.repoOf(cardId).workers.snooze(cardId, iso);
+    return new Date(at).toISOString();
   }
 
   /**
    * A snoozed card wakes: at its time (`timeUp`), as the card it waits on got there or no longer can
-   * (`met`), or as the owner wakes it now. One that waited for the owner waits for them again; a worker goes on.
+   * (`met`), or as the owner wakes it now. One that waited for the owner waits for them again; a
+   * worker goes on; a planned one goes to the Koordinator as if started now.
    */
   private wake(cardId: string, timeUp: boolean, met?: Awaited) {
     const card = this.board.item(cardId);
     if (!card?.snoozed) throw new BadRequest('notSnoozed', 'the card is not snoozed');
     if (card.snoozed.waiting) return void this.board.unsnooze(cardId, timeUp ? 'time' : 'owner');
+    if (card.snoozed.start) {
+      this.repoOf(cardId).workers.startsNow(cardId, timeUp);
+      return this.koordinator.request(cardId);
+    }
     this.repoOf(cardId).workers.wake(cardId, timeUp, met);
   }
 
@@ -1121,6 +1132,8 @@ export class CanvasRuntime {
       throw new BadRequest('emptyText', 'text must be a non-empty string');
     switch (a.action) {
       case 'start':
+        // one snoozed to start later starts now
+        if (this.board.item(cardId)?.snoozed?.start) return this.wake(cardId, false);
         return this.koordinator.request(cardId);
       case 'name':
         return void this.koordinator.name(cardId);
@@ -1143,6 +1156,8 @@ export class CanvasRuntime {
         return this.snooze(cardId, a.until);
       case 'wake':
         return this.wake(cardId, false);
+      case 'startAt':
+        return this.board.startAt(cardId, a.at === null ? null : this.until(a.at));
       case 'message':
         // a note to a Question card is a question to its agent
         if (this.board.item(cardId)?.kind === 'question') return this.answers.ask(cardId, text.trim(), images, !!a.spoken, replyTo);
@@ -1317,6 +1332,9 @@ export class CanvasRuntime {
     const idea = !!asIdea || (start && !!proposal.idea);
     this.board.accept(cardId, picks, idea);
     if (idea) this.explorers.open(cardId, proposal.idea ? 'idea' : 'task');
+    // one its agent proposed to start later waits until then, unless that time has passed
+    else if (start && proposal.startAt && Date.parse(proposal.startAt) > Date.now())
+      this.board.snooze(cardId, { until: proposal.startAt, by: 'agent', start: true, ...(proposal.reason ? { why: clip(oneLine(proposal.reason), 200) } : {}) });
     else if (start) this.koordinator.request(cardId);
   }
 

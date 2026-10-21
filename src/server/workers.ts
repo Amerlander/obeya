@@ -1391,6 +1391,20 @@ export class Workers {
     this.deliver(cardId, '', [], true, [], timeUp, met);
   }
 
+  /**
+   * A planned card snoozed to start later starts now: at its time (`timeUp`), or because the owner
+   * starts it earlier. Its worker hears with its task when the card was to start, so a task that
+   * says „in two weeks“ is read as due now.
+   */
+  startsNow(cardId: string, timeUp: boolean) {
+    const s = this.o.board.unsnooze(cardId, timeUp ? 'time' : 'owner');
+    if (!s?.until) return;
+    const at = MESSAGES.en.at(Date.parse(s.until));
+    const who = s.by === 'agent' ? 'The agent that proposed this card set it to start' : 'The owner set this card aside to start';
+    const text = timeUp ? `${who} at ${at}, and it is that time now: what the task leaves for later is due now.` : `${who} at ${at}; the owner started it earlier, now.`;
+    this.o.board.work(cardId, { unheard: JSON.stringify([...this.unheard(cardId), { said: [], text, images: [] }] satisfies Unheard[]) });
+  }
+
   /** What the owner's pause holds for the worker, or null when it is not paused. */
   private pausedOf(cardId: string): PausedState | null {
     const paused = this.o.board.row(cardId).paused;
@@ -2343,12 +2357,13 @@ export class Workers {
         : {
             name: 'propose_card',
             description: [
-              `Propose a separate card for something you noticed that is outside your task, instead of doing it here; the owner decides on it.`,
+              `Propose a separate card for something you noticed that is outside your task, instead of doing it here, or for a follow-up to your own task that can only be done later (start_at); the owner decides on it.`,
               `idea: true for something to think through with the owner before anyone builds it (it becomes an idea, discussed with an agent of its own); leave it out for a task that is clear enough to build.`,
               proposalTask('your card nor your session'),
               `reason: for the owner only, why you propose it, a sentence or two; it does not go to that agent.`,
               `questions: what the owner has to decide first (product behaviour, a trade-off), each with up to four short options; keep them out of task. The owner may answer them on the proposal; what they decided and what stays open go to the agent with the task.`,
               `replaces: the title of an earlier proposal of yours this one takes the place of; Obeya takes that one off the canvas, or, if the owner has taken it on already, marks it as replaced and offers to remove it.`,
+              `start_at: when the card is to start, ISO 8601 with your timezone's offset (2026-11-04T08:00:00+01:00), for a task that can only be done later (whether a bank has registered a form two weeks on, say): accepted, it waits until then and starts by itself. Its agent then checks what it can and asks the owner for what only they can see.`,
               `Everything in ${language}.`,
             ].join(' '),
             schema: {
@@ -2358,14 +2373,21 @@ export class Workers {
               idea: z.boolean().optional(),
               questions: PROPOSAL_QUESTIONS.optional(),
               replaces: z.string().optional(),
+              start_at: z.string().optional(),
             },
-            run: ({ title, task, reason, idea, questions, replaces }) => {
+            run: ({ title, task, reason, idea, questions, replaces, start_at }) => {
+              const named = typeof start_at === 'string' && start_at.trim() ? start_at.trim() : undefined;
+              const at = named ? Date.parse(named) : NaN;
+              if (named && Number.isNaN(at)) return 'Not proposed: give start_at as ISO 8601 with your timezone offset (2026-11-04T08:00:00+01:00).';
+              if (named && at <= Date.now()) return `Not proposed: start_at has passed (it is ${new Date().toISOString()} now).`;
+              if (named && at > Date.now() + SNOOZE_LIMIT) return 'Not proposed: start_at lies more than a year ahead.';
               const p = this.o.board.propose(cardId, {
                 title: String(title),
                 task: String(task),
                 reason: String(reason),
                 idea: !!idea,
                 questions: proposalQuestions(questions as z.infer<typeof PROPOSAL_QUESTIONS> | undefined),
+                ...(named ? { startAt: new Date(at).toISOString() } : {}),
               });
               this.o.board.log(cardId, 'activity', 'worker', idea ? this.o.board.t.worker.proposedIdea(p.title) : this.o.board.t.worker.proposedCard(p.title));
               const old = typeof replaces === 'string' && replaces.trim() ? replaces.trim() : undefined;
@@ -2412,7 +2434,7 @@ export class Workers {
       },
       {
         name: 'ready_for_review',
-        description: `Hand the finished work to the owner, after committing it, running the checks and making the demo. The summary (in ${language}) is what this handover tells the owner beyond what the card's conversation already holds: on your first handover, what changed from the user's point of view and what they really need to know (something left open or not verified, a decision you took for them), in a few short paragraphs at most; on a later one, only what your last handover and your replies since have not said yet, often a sentence. Obeya keeps your handovers and replies together as the card's report for whoever reads it later. A problem you noticed outside the task goes to propose_card, not into the summary. The demo: a video's directory and chapter titles in scene order, or an HTML artifact's directory, with its report (in the language of its narration); without a new one, the demo already on the card stands. Then end your turn.`,
+        description: `Hand the finished work to the owner, after committing it, running the checks and making the demo. The summary (in ${language}) is what this handover tells the owner beyond what the card's conversation already holds: on your first handover, what changed from the user's point of view and what they really need to know (something left open or not verified, a decision you took for them), in a few short paragraphs at most; on a later one, only what your last handover and your replies since have not said yet, often a sentence. Obeya keeps your handovers and replies together as the card's report for whoever reads it later. A problem you noticed outside the task goes to propose_card, not into the summary, as does a follow-up to your task that is due only later (start_at). The demo: a video's directory and chapter titles in scene order, or an HTML artifact's directory, with its report (in the language of its narration); without a new one, the demo already on the card stands. Then end your turn.`,
         schema: {
           summary: z.string(),
           demo: z
@@ -2727,7 +2749,7 @@ The owner does not watch you work and does not read code. They see your card's c
 - report: a short status line at milestones.
 - reply: your answer to a note or feedback from the owner, in a sentence or two: what you change because of it, or why nothing.
 - ask: a decision that is not yours (product behaviour, trade-offs, anything irreversible or external). Make routine judgement calls yourself. After ask, end your turn; the answer arrives as the next message.
-${prototype ? '- propose_build: propose that the idea be built on your prototype, once it convinced. You make no other cards; mention other problems you noticed in your summary.' : '- propose_card: a separate problem or idea you noticed, as a card for the agent who will take it on; do not widen your task. withdraw_proposal takes back one of yours that turned out wrong.'}
+${prototype ? '- propose_build: propose that the idea be built on your prototype, once it convinced. You make no other cards; mention other problems you noticed in your summary.' : '- propose_card: a separate problem or idea you noticed, as a card for the agent who will take it on; do not widen your task. A follow-up to your task that is due only later becomes such a card too, with start_at. withdraw_proposal takes back one of yours that turned out wrong.'}
 - ready_for_review: ${folder ? 'the work is done' : 'the work is committed'} and the checks pass. Then end your turn.${this.o.toObeya ? '\n- to_obeya: what the owner\'s words ask of Obeya rather than you.' : ''}
 
 ${

@@ -41,9 +41,35 @@ const fieldValue = (d: Date) => {
 /**
  * The button that snoozes the card („Später …“, „Ändern“) and its menu: the presets, and a date and
  * time to pick. `inline`: the menu opens below the button, scrolled into view (in the conversation,
- * where the line may stand at its top), else above it.
+ * where the line may stand at its top), else above it. A proposal's start time is set with the same
+ * menu (`heading`, `hint`), which can also take the time away (`clear`).
  */
-export function SnoozeMenu({ label, onSnooze, className = 'btn', inline = false }: { label: string; onSnooze: (until: string) => void; className?: string; inline?: boolean }) {
+export function SnoozeMenu({
+  label,
+  onSnooze,
+  className = 'btn',
+  inline = false,
+  heading = t.snooze.heading,
+  hint = t.snooze.hint,
+  set = t.snooze.set,
+  at,
+  clear,
+  mark = true,
+}: {
+  label: string;
+  onSnooze: (until: string) => void;
+  className?: string;
+  inline?: boolean;
+  heading?: string;
+  hint?: string;
+  /** The button that takes the date and time picked. */
+  set?: string;
+  /** The time set now, which the field to pick one starts from. */
+  at?: Date;
+  clear?: { label: string; hint: string; onClear: () => void };
+  /** The clock mark on the button; none where the line beside it has one. */
+  mark?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [picking, setPicking] = useState(false);
   const [value, setValue] = useState('');
@@ -62,12 +88,12 @@ export function SnoozeMenu({ label, onSnooze, className = 'btn', inline = false 
   const valid = !!picked && !Number.isNaN(picked.getTime()) && picked.getTime() > Date.now();
   return (
     <div className={inline ? 'snooze-box inline' : 'snooze-box'} ref={box}>
-      <button className={className} title={t.snooze.hint} aria-expanded={open} onClick={() => (open ? close() : setOpen(true))}>
-        <ClockMark /> {label}
+      <button className={className} title={hint} aria-expanded={open} onClick={() => (open ? close() : setOpen(true))}>
+        {mark && <ClockMark />} {label}
       </button>
       {open && (
         <div className="snooze-menu" role="menu" ref={(el) => void (inline && el?.scrollIntoView({ block: 'nearest' }))}>
-          <div className="snooze-h">{t.snooze.heading}</div>
+          <div className="snooze-h">{heading}</div>
           {snoozePresets(now).map((p) => (
             <button key={p.label} className="snooze-opt" role="menuitem" onClick={() => go(p.at)}>
               {p.label}
@@ -83,7 +109,7 @@ export function SnoozeMenu({ label, onSnooze, className = 'btn', inline = false 
             >
               <input type="datetime-local" value={value} min={fieldValue(now)} onChange={(e) => setValue(e.target.value)} autoFocus />
               <button className="btn primary" disabled={!valid}>
-                {t.snooze.set}
+                {set}
               </button>
             </form>
           ) : (
@@ -91,11 +117,24 @@ export function SnoozeMenu({ label, onSnooze, className = 'btn', inline = false 
               className="snooze-opt more"
               role="menuitem"
               onClick={() => {
-                setValue(fieldValue(snoozePresets(now).at(-1)!.at));
+                setValue(fieldValue(at && at.getTime() > now.getTime() ? at : snoozePresets(now).at(-1)!.at));
                 setPicking(true);
               }}
             >
               {t.snooze.pick}
+            </button>
+          )}
+          {clear && (
+            <button
+              className="snooze-opt more"
+              role="menuitem"
+              title={clear.hint}
+              onClick={() => {
+                close();
+                clear.onClear();
+              }}
+            >
+              {clear.label}
             </button>
           )}
         </div>

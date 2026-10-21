@@ -9,7 +9,7 @@ import type { Cam } from './camera';
 import type { Shape } from './groups';
 import { Doc, Inline, plain } from './markdown';
 import { ClockMark, snoozeWho } from './snooze';
-import { becomesLabel, clock, shortDay, stateLabel, t } from './strings';
+import { becomesLabel, clock, shortDay, snoozeWhen, stateLabel, t } from './strings';
 
 /** The first line of a card's text that says something (not a bare "Ziel" label, as briefs start). */
 const firstLine = (md: string) =>
@@ -70,7 +70,8 @@ const PlayIcon = ({ size }: { size: number }) => (
 );
 
 /** How many of a project's workstreams its button starts: those planned and in no queue. */
-const startableIn = (kids: Item[]) => kids.filter((k) => k.state === 'planned' && !k.queue).length;
+// a workstream snoozed to start later waits for its time
+const startableIn = (kids: Item[]) => kids.filter((k) => k.state === 'planned' && !k.queue && !k.snoozed).length;
 
 const sameBounds = (a: Bounds, b: Bounds) => a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
 
@@ -135,6 +136,7 @@ export function CardFace({ item, where, underway, since }: { item: Item; where?:
         {underway ?? stateLabel(item)}
         {item.landedPart && <span className="landed-part">{t.landedPart.short} · {landedRef(item.landedPart)}</span>}
         {item.buildProposal && ` · ${t.idea.proposesBuild}`}
+        {item.state === 'proposal' && item.proposal?.startAt && !item.proposal.idea && ` · ${t.startAt.short(snoozeWhen(item.proposal.startAt))}`}
         {item.proposal?.revising && ` · ${t.revisingShort}`}
         {item.proposal?.acceptAfterRevision && ` · ${t.acceptsAfterRevision}`}
         {item.idea?.buildAfterReply && ` · ${t.idea.buildsAfterReply}`}

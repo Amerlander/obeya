@@ -1150,8 +1150,21 @@ describe('snoozing by voice', () => {
     expect(executed[1]).toEqual({ do: 'wake', card: a.id });
   });
 
-  test('a time that passed, or a card neither at work nor waiting, is refused', async () => {
-    board.create({ title: 'Export', x: 0, y: 0 });
+  test('„erst am Montag starten“ snoozes a planned card, which the card list then says starts at the time', async () => {
+    const a = board.create({ title: 'Export', x: 0, y: 0 });
+    const k = commander();
+    const { heard } = await say(k, 'Export erst am Montag starten', 'act', { actions: [{ do: 'snooze', card: 'K1', until: '2030-01-07T08:00' }], confirm: '„Export“ startet Montag um 8.' });
+    k.arm(heard.token!);
+    await until(() => executed.length > 0);
+    expect(executed).toEqual([{ do: 'snooze', card: a.id, until: new Date('2030-01-07T08:00').toISOString() }]);
+    board.snooze(a.id, { until: new Date('2030-01-07T08:00').toISOString(), by: 'owner', start: true });
+    const { brief } = await say(k, 'was ist mit Export?', 'reply', { confirm: 'Startet Montag.' });
+    expect(brief).toContain('it starts then; start or wake starts it now');
+  });
+
+  test('a time that passed, or a card neither planned, at work nor waiting, is refused', async () => {
+    const done = board.create({ title: 'Export', x: 0, y: 0 });
+    board.work(done.id, { state: 'live' });
     const k = commander();
     const s = k.hear('stell Export zurück', {});
     await settle();

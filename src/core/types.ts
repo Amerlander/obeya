@@ -199,12 +199,15 @@ export function awaited(card: Item | undefined, state: AwaitedState): Awaited | 
 /** A worker on the card is at work (whether or not in a turn right now): it has started on the card, opens or follows its pull request, finishes after the landing, or takes in the owner's words on its handover. */
 const workerAtWork = (i: Item) => i.kind === 'task' && (i.state === 'working' || i.state === 'inPr' || !!i.finishing || answering(i));
 
+/** A task planned and not with the Koordinator: snoozed, it starts at the time instead of now. */
+export const plannedToStart = (i: Pick<Item, 'kind' | 'state' | 'queue' | 'archivedAt'>) => i.kind === 'task' && i.state === 'planned' && !i.queue && !i.archivedAt;
+
 /**
  * A card the owner can snooze until a point in time („Später …“): one at work (its worker stops
- * until then, as on a pause), or one that waits for them (it leaves them until then); a snoozed
- * card's time can be changed.
+ * until then, as on a pause), one that waits for them (it leaves them until then), or one planned
+ * (it starts then); a snoozed card's time can be changed.
  */
-export const snoozable = (i: Item) => !i.archivedAt && (!!i.snoozed || needsYou(i) || workerAtWork(i));
+export const snoozable = (i: Item) => !i.archivedAt && (!!i.snoozed || needsYou(i) || workerAtWork(i) || plannedToStart(i));
 
 /** Answers in the Koordinator's sheet the owner has not seen yet. */
 export const unreadAnswers = (talk: Talk[]) => talk.filter((x) => x.unread).length;
@@ -397,6 +400,8 @@ export interface Snooze {
   waiting?: true;
   /** The owner changed the time its agent snoozed until: the agent hears so when it wakes. */
   moved?: true;
+  /** It is planned: it starts at the time, through the Koordinator, as if started then. */
+  start?: true;
 }
 
 /**
@@ -434,6 +439,11 @@ export interface Proposal {
   acceptAfterRevision?: true | 'idea';
   /** Its agent withdrew it or replaced it by another proposal of its own (`withdraw_proposal`, `propose_card` with `replaces`). */
   superseded?: Superseded;
+  /**
+   * When it is to start (ISO), for a check that can only be done later (`propose_card` with
+   * `start_at`): accepted, it is planned and snoozed until then, and starts at the time.
+   */
+  startAt?: string;
 }
 
 /**
@@ -1037,8 +1047,10 @@ export type CardAction =
    * owner leaves them until then. On a snoozed card, it changes the time.
    */
   | { action: 'snooze'; until: string }
-  /** A snoozed card wakes now. */
+  /** A snoozed card wakes now; a snoozed planned card starts now. */
   | { action: 'wake' }
+  /** When a proposal starts once accepted (ISO), or `null`: at once. */
+  | { action: 'startAt'; at: string | null }
   /** `images`: ids of screenshots uploaded before (`POST /api/c/<canvas>/images`); with them the text may be empty. */
   /** `spoken`: the words came through speech recognition, which the agent is told. */
   /** `replyTo`: the message of the card's conversation the words reply to (`CardEvent.replyTo`). */
