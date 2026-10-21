@@ -331,10 +331,11 @@ export class Commander {
     const said = input.forwarded ? undefined : transcript;
     const replyTo = card ? this.o.board.quoted(card, input.replyTo)?.id : undefined;
     // a reply that only answers (no actions to take back, no answer to look up) waits in the sheet
-    // until the owner sees it, as a looked-up answer does: it may come once the sheet is closed
+    // until the owner sees it, as a looked-up answer does: it may come once the sheet is closed; on a
+    // card it stands in the conversation, where a confirmation folds away
     const reply = (confirm: string, lookUp?: { question: string; about: string | null }, wish?: Wish, waits = false) => {
       this.o.board.replyTalk(talk, confirm, lookUp, wish, waits);
-      if (card) this.o.board.log(card, 'say', 'koordinator', confirm, wish ? { wish } : {});
+      if (card) this.o.board.log(card, 'say', 'koordinator', confirm, { ...(wish ? { wish } : {}), ...(waits ? { reply: true as const } : {}) });
     };
     let decision: Decision;
     try {
@@ -399,7 +400,7 @@ export class Commander {
     const t = this.o.board.t;
     const confirm = t.voice.held(t.when(this.heldUntil));
     const card = h.focus.card && this.o.board.item(h.focus.card) ? h.focus.card : undefined;
-    if (!this.held.has(talk) && card) this.o.board.log(card, 'say', 'koordinator', confirm);
+    if (!this.held.has(talk) && card) this.o.board.log(card, 'say', 'koordinator', confirm, { reply: true });
     this.held.set(talk, h);
     const until = new Date(this.heldUntil).toISOString();
     for (const [id, { focus, input }] of this.held) this.o.board.holdTalk(id, { until, reading: { focus, input } });

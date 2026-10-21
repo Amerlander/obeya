@@ -403,10 +403,12 @@ export const MIGRATIONS = [
   'ALTER TABLE cards ADD COLUMN collapsed INTEGER NOT NULL DEFAULT 0;',
   // words the owner wrote in a project's sheet, which went straight to its project agent: that project
   'ALTER TABLE talk ADD COLUMN asked_in TEXT;',
+  // Obeya's reply on a card that answers the owner's words without acting on them: it stands in the conversation
+  'ALTER TABLE events ADD COLUMN reply INTEGER;',
 ];
 
-const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter, wish';
-type EventRow = Omit<CardEvent, 'images' | 'mocks' | 'replyTo' | 'spot' | 'answer' | 'picks' | 'unread' | 'readAfter' | 'wish'> & {
+const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter, wish, reply';
+type EventRow = Omit<CardEvent, 'images' | 'mocks' | 'replyTo' | 'spot' | 'answer' | 'picks' | 'unread' | 'readAfter' | 'wish' | 'reply'> & {
   code: CardEvent['code'] | null;
   images: string | null;
   mocks: string | null;
@@ -417,8 +419,9 @@ type EventRow = Omit<CardEvent, 'images' | 'mocks' | 'replyTo' | 'spot' | 'answe
   unread: number | null;
   readAfter: number | null;
   wish: string | null;
+  reply: number | null;
 };
-const eventOf = ({ code, images, mocks, replyTo, spot, answer, picks, unread, readAfter, wish, ...e }: EventRow): CardEvent => ({
+const eventOf = ({ code, images, mocks, replyTo, spot, answer, picks, unread, readAfter, wish, reply, ...e }: EventRow): CardEvent => ({
   ...e,
   ...(code ? { code } : {}),
   ...(images ? { images: JSON.parse(images) as string[] } : {}),
@@ -430,6 +433,7 @@ const eventOf = ({ code, images, mocks, replyTo, spot, answer, picks, unread, re
   ...(unread ? { unread: true as const } : {}),
   ...(readAfter ? { readAfter } : {}),
   ...(wish ? { wish: JSON.parse(wish) as Wish } : {}),
+  ...(reply ? { reply: true as const } : {}),
 });
 
 export type NewRow = Pick<CardRow, 'canvas_id' | 'kind' | 'x' | 'y'> &
@@ -657,7 +661,7 @@ export class Store {
     const at = e.at ?? now();
     const { id } = this.db
       .query(
-        'INSERT INTO events (card_id, at, kind, author, text, code, images, mocks, reply_to, spot, answer, picks, unread, wish) VALUES ($cardId, $at, $kind, $author, $text, $code, $images, $mocks, $replyTo, $spot, $answer, $picks, $unread, $wish) RETURNING id',
+        'INSERT INTO events (card_id, at, kind, author, text, code, images, mocks, reply_to, spot, answer, picks, unread, wish, reply) VALUES ($cardId, $at, $kind, $author, $text, $code, $images, $mocks, $replyTo, $spot, $answer, $picks, $unread, $wish, $reply) RETURNING id',
       )
       .get({
         ...e,
@@ -670,6 +674,7 @@ export class Store {
         picks: e.picks?.length ? JSON.stringify(e.picks) : null,
         unread: e.unread ? 1 : null,
         wish: e.wish ? JSON.stringify(e.wish) : null,
+        reply: e.reply ? 1 : null,
         at,
       }) as { id: number };
     return { ...e, id, at };

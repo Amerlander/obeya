@@ -178,6 +178,14 @@ test("Obeya's answer that it cannot do what the owner asked stands in the conver
   ]);
 });
 
+test("Obeya's reply that answers the owner's question on a card without an agent stands, where a confirmation folds away", () => {
+  const asked = ev('say', 'owner', 'Inwiefern überlappt sich diese Karte mit „Export“?');
+  const answered = { ...ev('say', 'koordinator', 'Beide ändern den Export; diese nur für alte Karten.'), reply: true as const };
+  const start = ev('say', 'owner', 'Starte sie.');
+  const confirm = ev('say', 'koordinator', '„Export für alte Karten“ startet.');
+  expect(talkTurns([asked, answered, start, confirm], { over: true }).shown.map((x) => x.e)).toEqual([asked, answered, start]);
+});
+
 test('a conversation nobody works on ends with its last message or line, the steps without a message where they happened', () => {
   const review = ev('review', 'worker', 'Gesprächsverlauf steht.');
   const approved = ev('state', 'owner', 'Freigegeben und auf main.');

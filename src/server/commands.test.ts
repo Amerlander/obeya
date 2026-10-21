@@ -468,6 +468,31 @@ describe('the Koordinator remembers', () => {
     expect(brief).toContain('(with "Export" open) the owner: "halt ihn an" → you: "„Export“ wird angehalten." (the owner took it back)');
   });
 
+  test("on a card, a reply that only answers is marked to stand in its conversation, a confirmation of actions is not; so is one to a request its agent passed on", async () => {
+    const a = board.create({ title: 'Export', x: 0, y: 0 });
+    const k = commander();
+    const asked = k.hear('überlappt die mit Login?', { card: a.id }, [], { typed: true });
+    await settle();
+    runtime.last.call('reply', { confirm: 'Nein, Login ändert nur die Anmeldung.' });
+    runtime.last.emit({ type: 'idle' });
+    await asked;
+    const started = k.hear('starte sie', { card: a.id }, [], { typed: true });
+    await settle();
+    runtime.last.call('act', { actions: [{ do: 'start', card: 'K1' }], confirm: '„Export“ startet.' });
+    runtime.last.emit({ type: 'idle' });
+    await started;
+    const forwarded = k.forward(a.id, 'Does this overlap with Login?', { text: 'überlappt die mit Login?', spoken: false });
+    await settle();
+    runtime.last.call('reply', { confirm: 'Nein.' });
+    runtime.last.emit({ type: 'idle' });
+    await forwarded;
+    expect(board.events(a.id).filter((e) => e.author === 'koordinator').map((e) => [e.text, !!e.reply])).toEqual([
+      ['Nein, Login ändert nur die Anmeldung.', true],
+      ['„Export“ startet.', false],
+      ['Nein.', true],
+    ]);
+  });
+
   test('a long reply stands whole in the sheet and on the card', async () => {
     const long = `${'Der Chatverlauf steht jetzt in einem eigenen Bereich. '.repeat(12)}Sag mir Bescheid, dann lege ich eine Aufgabe dafür an.`;
     const k = commander();

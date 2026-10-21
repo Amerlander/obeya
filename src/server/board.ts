@@ -442,9 +442,9 @@ export class Board {
     kind: CardEvent['kind'],
     author: CardEvent['author'],
     text: string,
-    extra: Partial<Pick<CardEvent, 'code' | 'images' | 'mocks' | 'replyTo' | 'spot' | 'answer' | 'picks' | 'at' | 'wish'>> & { unread?: boolean } = {},
+    extra: Partial<Pick<CardEvent, 'code' | 'images' | 'mocks' | 'replyTo' | 'spot' | 'answer' | 'picks' | 'at' | 'wish' | 'reply'>> & { unread?: boolean } = {},
   ): CardEvent {
-    const { code, images, mocks, replyTo, spot, answer, picks, at, unread, wish } = extra;
+    const { code, images, mocks, replyTo, spot, answer, picks, at, unread, wish, reply } = extra;
     const e = this.store.addEvent({
       cardId,
       kind,
@@ -460,6 +460,7 @@ export class Board {
       ...(unread ? { unread: true as const } : {}),
       ...(picks?.length ? { picks } : {}),
       ...(wish ? { wish } : {}),
+      ...(reply ? { reply } : {}),
     });
     for (const fn of this.eventListeners) fn(e);
     return e;
@@ -890,7 +891,7 @@ export class Board {
    */
   interruptTalk() {
     const lost = this.store.interruptTalk(this.canvas.id, this.t.voice.interrupted);
-    for (const x of lost) if (x.cardId && this.item(x.cardId)) this.log(x.cardId, 'say', 'koordinator', this.t.voice.interrupted);
+    for (const x of lost) if (x.cardId && this.item(x.cardId)) this.log(x.cardId, 'say', 'koordinator', this.t.voice.interrupted, { reply: true });
     if (lost.length) this.changed();
   }
 

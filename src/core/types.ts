@@ -750,6 +750,11 @@ export interface CardEvent {
   readAfter?: number;
   /** Obeya's reply on the card says it cannot do what the owner asked (or the owner asked to tell its makers): what a draft for them starts from. */
   wish?: Wish;
+  /**
+   * Obeya's reply on the card answers the owner's words without acting on them (no actions to take
+   * back): it stands in the conversation, where the confirmation of actions folds away.
+   */
+  reply?: true;
 }
 
 /** Obeya's line that a worker started on the card afresh: what it handed over before belongs to an earlier run. */

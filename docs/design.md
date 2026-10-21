@@ -3513,7 +3513,11 @@ at once: it changes nothing.
 What the owner said to the Koordinator goes into the conversation of the card that was open, or with
 none open into the sheet, at once (spoken words once the recognition has written them down), with
 „Obeya liest …“ under it until its confirmation follows (on a card folded away), and
-"Zurückgenommen." when taken back. Words the Koordinator was reading when Obeya stopped get a reply
+"Zurückgenommen." when taken back. A reply that answers the words without acting on them (a question
+of the owner's, why Obeya could not read them) is no confirmation: on the card it stands in the
+conversation (`CardEvent.reply`), also for words the card's agent passed on (a proposal's included).
+Until 2026-10-21 it folded away like a confirmation, and the owner's question on a proposal stood
+there without an answer. Words the Koordinator was reading when Obeya stopped get a reply
 that says so (`Board.interruptTalk`).
 
 Words the usage limit keeps the Koordinator from reading wait for it, as a worker does: the reply
