@@ -144,7 +144,8 @@ def respelt(text: str, words: dict[str, str]) -> str:
     terms = sorted(words, key=len, reverse=True)
     # the words of a term may be apart by any space or a hyphen ("Pull-Request")
     pattern = re.compile(r"(?<!\w)(?:" + "|".join(r"[\s-]+".join(map(re.escape, t.split())) for t in terms) + r")(?!\w)", re.IGNORECASE)
-    say = lambda part: pattern.sub(lambda m: words[key(m[0])], part)
+    # a match the regex's case folding finds but `key`'s does not ("İssue") stays as written
+    say = lambda part: pattern.sub(lambda m: words.get(key(m[0]), m[0]), part)
     out, at = [], 0
     for mark in MARK.finditer(text):
         out += [say(text[at:mark.start()]), mark[2]]
