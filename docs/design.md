@@ -1542,14 +1542,15 @@ much room below it, so the last row (an idea's „Parken“, „Verwerfen“) sc
 instead of staying under it. A task whose conversation stands alone is 640 px wide, the
 conversation's widest, and otherwise sized like a split.
 
-A card with a conversation beside what it is about (an idea, a task an agent worked on with a
-result) is up to 1600 px wide instead, the conversation a third of the width (400–560 px), and as
+A card with a conversation beside what it is about (an idea, a proposal, a task an agent worked on
+with a result) is up to 1600 px wide instead, the conversation a third of the width (400–560 px), and as
 tall as its taller column, at least 320 px, up to the room from 12 px below the window's top edge
 down to the microphone; it stands in the middle of the canvas (left of a docked sheet), above the
 microphone, and keeps at least a conversation's 640 px beside a sheet dragged wide. Beyond that room
 what the card is about and the conversation scroll inside their columns, the panel not at all; the
 panel shows no scrollbar of its own. Only a window too low for a split of 320 px lets the panel
-reach under the microphone and scroll. A proposal keeps growing with its text. A card stands below
+reach under the microphone and scroll. A proposal's text box grows with its text up to the room
+that leaves the reason below it in view, then scrolls. A card stands below
 the top bar while it fits there; one that needs more room reaches over the bar, which the dim covers
 while a card is open anyway, up to 12 px below the window's top edge.
 
@@ -1727,6 +1728,10 @@ generic one for anything else.
   than the panel. Before it filled the room it stayed at 1120 × 880 px with the columns 600 px high,
   small on a large screen. Since 2026-10-09 a card may reach over the bar: before, the bar's 64 px
   stayed free, which cost a card on a window of moderate height much of its room.
+- **A proposal grows with its conversation too** (2026-10-21). Before, only its text and questions
+  set its height (up to the screen's), and the conversation filled that height and scrolled in it:
+  a proposal with a short text and a long conversation stayed small with a scrollbar beside unused
+  room on a tall screen.
 - **The sheets are a docked sidebar** (2026-10-06, 2026-10-09). Before, the sheets were rounded
   panels with a shadow floating 14 px from the window's edge over a full-window canvas: cards were
   cut off at their edge, and the microphone and its lines stayed in the window's middle, partly

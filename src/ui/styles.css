@@ -575,7 +575,7 @@ textarea.p-body:focus { border-color: var(--muted); }
 .share-busy { color: var(--muted); }
 .share .hint { margin: 0; }
 .share:not(.wide) > .hint { text-align: right; }
-/* an idea's or a task's split is as tall as its taller column, up to the room down to the microphone
+/* a split (an idea, a proposal, a task) is as tall as its taller column, up to the room down to the microphone
    (panelRect in App.tsx sets that as its max-height); beyond it, the columns scroll */
 .split { display: grid; grid-template-columns: minmax(0, 1fr) clamp(400px, 36%, 560px); grid-template-rows: minmax(0, 1fr);
   gap: 24px; margin-top: 16px; max-height: min(600px, calc(100vh - 370px)); }
@@ -589,12 +589,8 @@ textarea.p-body:focus { border-color: var(--muted); }
 .split-talk .p-h { margin-top: 0; }
 .split .split-talk .talk { flex: 1; min-height: 0; max-height: none; max-width: none; }
 .split-talk .composer { margin-top: 10px; max-width: none; }
-/* a proposal is as tall as its text and questions (up to what the screen holds); its conversation fills that height and scrolls */
-.proposal-grid { max-height: none; grid-template-rows: minmax(min(440px, calc(100vh - 380px)), auto); }
-.proposal-grid .split-main { max-height: calc(100vh - 340px); }
-/* its text box grows with the text (detail.tsx) and leaves the reason below it in view */
+/* a proposal's text box grows with the text (detail.tsx) and leaves the reason below it in view */
 .proposal-grid textarea.p-body { min-height: min(360px, calc(100vh - 440px)); max-height: calc(100vh - 440px); resize: none; }
-.proposal-grid .split-talk { contain: size; }
 .question.brief { border-color: var(--idea); background: color-mix(in srgb, var(--idea) 6%, transparent); }
 /* the settled part "Teilaufgabe abtrennen" builds, folded under the brief */
 .question.brief.settled { margin-top: 10px; }
@@ -1672,9 +1668,6 @@ button.link:hover { text-decoration: underline; }
 .ph-view .split { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; max-height: none; gap: 18px; }
 .ph-view .split:empty { display: none; }
 .ph-view .split-main { overflow: visible; padding-right: 0; }
-.ph-view .proposal-grid { grid-template-rows: none; }
-.ph-view .proposal-grid .split-main { max-height: none; }
-.ph-view .proposal-grid .split-talk { contain: none; }
 .ph-view .proposal-grid textarea.p-body { min-height: 160px; max-height: 50vh; }
 .ph-view .actions { flex-wrap: wrap; }
 .ph-view .actions .btn { min-height: 42px; }

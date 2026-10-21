@@ -1480,9 +1480,9 @@ function panelRect(i: Item, inner: HTMLElement, side: number) {
   // heights unrounded: a content half a pixel higher than its panel scrolls it
   const height = (e: HTMLElement) => e.getBoundingClientRect().height;
   const mic = (document.getElementById('ptt')?.getBoundingClientRect().top ?? innerHeight) - MIC_GAP;
-  // an idea's or a task's split grows with its taller column up to the room from the top of the
-  // window down to the microphone: beyond that its columns scroll, and the panel itself does not
-  const fill = content.querySelector<HTMLElement>('.split:not(.proposal-grid)');
+  // a split (an idea, a proposal, a task) grows with its taller column up to the room from the top
+  // of the window down to the microphone: beyond that its columns scroll, and the panel itself does not
+  const fill = content.querySelector<HTMLElement>('.split');
   if (fill) {
     fill.style.minHeight = fill.style.maxHeight = '';
     if (!matchMedia(NARROW).matches) {
@@ -1495,8 +1495,7 @@ function panelRect(i: Item, inner: HTMLElement, side: number) {
     }
   }
   const need = height(content) + parseFloat(pad.paddingTop) + base;
-  // a proposal grows with its text as far as the screen allows
-  const max = Math.min(i.state === 'proposal' || fill ? Infinity : wide ? 880 : tall ? 760 : i.source === 'manual' ? 480 : 560, innerHeight - PANEL_TOP_OVER - PANEL_BOTTOM);
+  const max = Math.min(fill ? Infinity : wide ? 880 : tall ? 760 : i.source === 'manual' ? 480 : 560, innerHeight - PANEL_TOP_OVER - PANEL_BOTTOM);
   // in the middle of the window below the top bar; a split's panel ends above the microphone, as when
   // it fills the room. A panel too tall for the room below the bar reaches over the bar, which the
   // dim covers while a card is open, so a low window still shows much of the card
@@ -1523,7 +1522,7 @@ const PANEL_TOP = 64;
 const PANEL_TOP_OVER = 12;
 /** Room below a panel without a split at the bottom of the window. */
 const PANEL_BOTTOM = 46;
-/** The least height of an idea's or a task's split: on a low window the panel scrolls past the microphone instead. */
+/** The least height of a split (an idea, a proposal, a task): on a low window the panel scrolls past the microphone instead. */
 const SPLIT_MIN = 320;
 
 /** Room between the panel's content and the microphone. */
