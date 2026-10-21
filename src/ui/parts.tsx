@@ -97,9 +97,10 @@ export const cardClass = (item: Item, underway?: string) =>
 /**
  * What a card says on its face, on the canvas and in the phone view's lists alike: its kind (after
  * `where` it is, its repository or canvas), its title, a line of its text, its state line in its
- * state's colour (`since` after it) and the pin while it needs the owner.
+ * state's colour (`since` after it) and the pin while it needs the owner. A `chip`, a delivered
+ * workstream, shows only its title, after its label, so it still reads as its workstream.
  */
-export function CardFace({ item, where, underway, since }: { item: Item; where?: string; underway?: string; since?: string }) {
+export function CardFace({ item, where, underway, since, chip }: { item: Item; where?: string; underway?: string; since?: string; chip?: boolean }) {
   const kind =
     item.label ??
     (item.parent ? t.kind.workstream : item.kind === 'question' ? t.kind.question : item.idea || item.proposal?.idea ? t.kind.idea : item.becomesProject ? becomesLabel(item) : item.prototypeOf ? t.kind.prototype : item.kind === 'project' ? t.kind.project : '');
@@ -129,7 +130,10 @@ export function CardFace({ item, where, underway, since }: { item: Item; where?:
           <span>{label}</span>
         </div>
       )}
-      <div className={item.title ? 'ttl' : 'ttl untitled'}>{shownTitle(item)}</div>
+      <div className={item.title ? 'ttl' : 'ttl untitled'}>
+        {chip && item.label && <span className="ws-no">{item.label}</span>}
+        {shownTitle(item)}
+      </div>
       {meta && <div className="meta">{meta}</div>}
       <div className="state">
         {item.snoozed && !underway && <ClockMark />}
@@ -173,7 +177,7 @@ export const CardView = memo(
         onPointerLeave={() => onHover(null)}
       >
         {(dep === 'before' || dep === 'after') && <div className="dep-tag">{t.deps[dep]}</div>}
-        <CardFace item={item} where={showRepo ? item.repo : undefined} underway={underway} />
+        <CardFace item={item} where={showRepo ? item.repo : undefined} underway={underway} chip={shape === 'chip'} />
         {startable && (
           <button
             className="play"

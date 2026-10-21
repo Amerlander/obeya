@@ -1582,7 +1582,8 @@ button only teaches the double-click: it opens a note saying so with one "Got it
 
 ### Cards on the canvas
 
-A card has one fixed size; a delivered workstream shrinks to a chip once its agent is done, a
+A card has one fixed size; a delivered workstream shrinks to a chip once its agent is done (its
+title alone, after its label from the plan doc, `W3`, so it still reads as its workstream), a
 project wraps its children, and a workstream cannot be dragged out of its project. New projects are
 placed in a grid below the existing ones. A proposal or follow-up goes below the card it came from,
 or, when something is in the way there (for a workstream: its own project), to the nearest spot
