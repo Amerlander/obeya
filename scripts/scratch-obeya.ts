@@ -92,7 +92,8 @@
 // "3d" ago. `mainBranch` is the branch the repositories are on (default `main`). `"setup": true` serves no canvas (no configuration, no repository given): the first start,
 // which shows the setup assistant; the repository is still made, for the assistant to pick, and
 // `cards` may be empty. `"git": false` makes the repository a folder without git (a card's `workspace: true` then
-// is the folder itself), and `copy` copies a directory into it first (documents, binaries). The repository has settings of its own where `files` hold `.obeya/settings.json` (a demo site among them, say). `poolCheckout` makes the repository's checkout a workspace of the pool too
+// is the folder itself, and its `changes`, as `[{ "kind": "added", "path": "…" }]` with `from` for a move, are what it
+// changed there: the files are as `files` and `copy` leave them, a changed one without a copy from before), and `copy` copies a directory into it first (documents, binaries). The repository has settings of its own where `files` hold `.obeya/settings.json` (a demo site among them, say). `poolCheckout` makes the repository's checkout a workspace of the pool too
 // (`workspaces` in the configuration), as a pool of clones often has it, with a bare origin in
 // <dir>; with it, the server
 // starts from a configuration file in <dir>. `slots` caps the workers busy at once on this machine
@@ -151,6 +152,7 @@ interface StageCard {
   demo?: Record<string, unknown>;
   queue?: { behind?: string[]; reason?: string; since?: string; checking?: true };
   scope?: string[];
+  changes?: { kind: 'added' | 'modified' | 'deleted' | 'moved'; path: string; from?: string }[];
   branch?: string;
   workspace?: boolean;
   /** A prototype of the idea with this key. */
@@ -487,7 +489,7 @@ for (const [i, c] of stage.cards.entries()) {
     db.query('INSERT INTO folder_cards (card_id, folder, state) VALUES ($id, $f, $s) ON CONFLICT(card_id) DO NOTHING').run({
       id,
       f: realpathSync(repo),
-      s: JSON.stringify({ held: true, undo: null, changes: [] }),
+      s: JSON.stringify({ held: true, undo: null, changes: c.changes ?? [] }),
     });
   } else if (c.workspace) {
     const free = db.query('SELECT path FROM workspaces WHERE card_id IS NULL ORDER BY path').get() as { path: string } | null;

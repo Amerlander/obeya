@@ -321,6 +321,7 @@ const de = {
   diff: {
     size: (files: number) => (files === 1 ? 'in 1 Datei' : `in ${files} Dateien`),
     show: 'Ganzes Diff ansehen',
+    showFile: 'Diff dieser Datei ansehen',
     none: 'noch keine Änderung',
     title: (title: string) => `Änderungen von „${title}“`,
     landed: 'wie gelandet',
@@ -1869,6 +1870,7 @@ const en: Strings = {
   diff: {
     size: (files: number) => (files === 1 ? 'in 1 file' : `in ${files} files`),
     show: 'See the whole diff',
+    showFile: 'See the diff of this file',
     none: 'no change yet',
     title: (title: string) => `Changes of “${title}”`,
     landed: 'as landed',

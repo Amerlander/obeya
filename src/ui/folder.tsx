@@ -47,29 +47,50 @@ export function shownChanges(changes: FolderChange[]): FolderChange[] {
   });
 }
 
-/** One change: what happened to which path, the lines of a text file, and what discarding would leave. */
-export function ChangeLine({ c }: { c: FolderChange }) {
-  const name = (p: string) => (c.dir ? `${p}/` : p);
+/**
+ * The changes as a table: what happened to which path, the lines of a text file in columns of their
+ * own (never broken), and what discarding would leave. A path `diffed` names opens its diff with `onFile`.
+ */
+export function ChangeTable({ changes, diffed, onFile }: { changes: FolderChange[]; diffed: (c: FolderChange) => boolean; onFile: (path: string) => void }) {
   return (
-    <>
-      <span className="f-mark" aria-label={c.kind}>
+    <table className="f-list">
+      <tbody>
+        {changes.map((c) => (
+          <ChangeRow key={`${c.kind}:${c.from ?? ''}:${c.path}`} c={c} onFile={diffed(c) ? () => onFile(c.path) : undefined} />
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function ChangeRow({ c, onFile }: { c: FolderChange; onFile?: () => void }) {
+  const name = (p: string) => (c.dir ? `${p}/` : p);
+  const path = c.kind === 'moved' ? `${name(c.from!)} → ${name(c.path)}` : name(c.path);
+  const lines = c.added !== undefined && (c.added > 0 || c.removed! > 0);
+  return (
+    <tr>
+      <td className="f-mark" aria-label={c.kind}>
         {MARK[c.kind]}
-      </span>{' '}
-      <span className="f-path">{c.kind === 'moved' ? `${name(c.from!)} → ${name(c.path)}` : name(c.path)}</span>
-      {c.changed && <span className="hint"> {t.folder.alsoChanged}</span>}
-      {c.added !== undefined && (c.added > 0 || c.removed! > 0) && (
-        <>
-          {' '}
-          <Lines n={{ added: c.added, removed: c.removed! }} />
-        </>
-      )}
-      {c.undo && c.undo !== 'yes' && (
-        <span className="f-left" title={c.undo === 'lost' ? t.folder.lostHint : c.undo === 'shared' ? t.folder.sharedHint : t.folder.changedSinceHint}>
-          {' '}
-          · {t.folder.state[c.undo]}
-        </span>
-      )}
-    </>
+      </td>
+      <td className="f-path">
+        {onFile ? (
+          <button className="link" title={t.diff.showFile} onClick={onFile}>
+            {path}
+          </button>
+        ) : (
+          path
+        )}
+        {c.changed && <span className="hint"> {t.folder.alsoChanged}</span>}
+        {c.undo && c.undo !== 'yes' && (
+          <span className="f-left" title={c.undo === 'lost' ? t.folder.lostHint : c.undo === 'shared' ? t.folder.sharedHint : t.folder.changedSinceHint}>
+            {' '}
+            · {t.folder.state[c.undo]}
+          </span>
+        )}
+      </td>
+      <td className="d-add">{lines && `+${c.added}`}</td>
+      <td className="d-del">{lines && `−${c.removed}`}</td>
+    </tr>
   );
 }
 
@@ -128,28 +149,23 @@ export function FolderLine({ item, diff }: { item: Item; diff: CardDiff | null }
   );
 }
 
-/** What the card changed in the folder, beside its handover: each change as a line, the undo it has, and the whole list with the text diffs. */
+/** What the card changed in the folder, beside its handover: each change as a line, the undo it has, a text file's diff on a click on it, and the whole list with the text diffs. */
 export function FolderBox({ item, diff }: { item: Item; diff: CardDiff | null }) {
-  const [open, setOpen] = useState(false);
+  // the whole list (`true`) or one file's diff
+  const [open, setOpen] = useState<string | boolean>(false);
   const changes = shownChanges(diff?.folder?.changes ?? []);
   if (!changes.length) return null;
   return (
     <div className="f-box">
       <b>{t.folder.changed}</b>
-      <ul className="f-list">
-        {changes.slice(0, SHOWN).map((c) => (
-          <li key={`${c.kind}:${c.from ?? ''}:${c.path}`}>
-            <ChangeLine c={c} />
-          </li>
-        ))}
-      </ul>
+      <ChangeTable changes={changes.slice(0, SHOWN)} diffed={(c) => !!(c.added || c.removed)} onFile={setOpen} />
       <p className="hint">
         {changes.length > SHOWN && `${t.folder.more(changes.length - SHOWN)} · `}
         <button className="link" onClick={() => setOpen(true)}>
           {t.folder.show}
         </button>
       </p>
-      {open && <DiffView item={item} onClose={() => setOpen(false)} onRead={() => {}} />}
+      {open && <DiffView item={item} file={typeof open === 'string' ? open : undefined} onClose={() => setOpen(false)} onRead={() => {}} />}
     </div>
   );
 }

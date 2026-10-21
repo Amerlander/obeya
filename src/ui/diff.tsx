@@ -9,7 +9,7 @@ import type { Item } from '../core/types';
 import { api } from './api';
 import { useCopy } from './copy';
 import { plain } from './markdown';
-import { ChangeLine, shownChanges } from './folder';
+import { ChangeTable, shownChanges } from './folder';
 import { t } from './strings';
 
 /** A file with more lines than this starts folded, so a generated file does not bury the rest. */
@@ -103,9 +103,14 @@ function CopyPath({ path }: { path: string }) {
   );
 }
 
-/** The whole diff over the page, file by file; Esc, the × or a click beside it closes it. In a folder without git, the card's change list and its text files' diffs. */
-export function DiffView({ item, onClose, onRead }: { item: Item; onClose: () => void; onRead: (d: CardDiff) => void }) {
+/**
+ * The whole diff over the page, file by file; Esc, the × or a click beside it closes it. In a folder
+ * without git, the card's change list and its text files' diffs. Opened on one `file`, it shows only
+ * that file's diff, with a link to the whole.
+ */
+export function DiffView({ item, file, onClose, onRead }: { item: Item; file?: string; onClose: () => void; onRead: (d: CardDiff) => void }) {
   const [diff, setDiff] = useState<CardDiff | null | 'failed'>(null);
+  const [only, setOnly] = useState(file);
   useEffect(() => {
     let gone = false;
     api.diff(item.id, true).then(
@@ -128,8 +133,12 @@ export function DiffView({ item, onClose, onRead }: { item: Item; onClose: () =>
   const got = diff === 'failed' ? null : diff;
   const folder = got?.folder;
   // in a folder, only text files whose earlier version Obeya kept have lines to show
-  const parts = got ? splitDiff(got.patch ?? '').filter((p) => !folder || p.lines.some((l) => l.startsWith('@@'))) : [];
-  const size = got && diffSize(got.files);
+  const all = got ? splitDiff(got.patch ?? '').filter((p) => !folder || p.lines.some((l) => l.startsWith('@@'))) : [];
+  // one file's diff while it is there; a file without one (cut off, say) shows the whole
+  const one = only ? all.find((p) => p.file === only) : undefined;
+  const parts = one ? [one] : all;
+  // one file's size stands in its own header
+  const size = !one && got && diffSize(got.files);
   const go = (file: string) => document.getElementById(anchor(file))?.scrollIntoView({ block: 'start' });
   return createPortal(
     <div className="diff-view" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -146,6 +155,14 @@ export function DiffView({ item, onClose, onRead }: { item: Item; onClose: () =>
                 <Lines n={size} />
               </>
             )}
+            {one && (
+              <>
+                {' · '}
+                <button className="link" onClick={() => setOnly(undefined)}>
+                  {t.diff.show}
+                </button>
+              </>
+            )}
           </span>
           <button className="d-close" title={t.diff.close} onClick={onClose}>
             ×
@@ -154,25 +171,11 @@ export function DiffView({ item, onClose, onRead }: { item: Item; onClose: () =>
         <div className="d-body">
           {diff === null && <p className="hint">{t.diff.loading}</p>}
           {diff === 'failed' && <p className="hint">{t.diff.failed}</p>}
-          {folder && folder.undo && <p className="hint">{t.folder.undoHint[folder.undo]}</p>}
-          {folder && (
-            <ul className="f-list d-files">
-              {shownChanges(folder.changes).map((c) => (
-                <li key={`${c.kind}:${c.from ?? ''}:${c.path}`}>
-                  {parts.some((p) => p.file === c.path) ? (
-                    <button className="link" onClick={() => go(c.path)}>
-                      <ChangeLine c={c} />
-                    </button>
-                  ) : (
-                    <ChangeLine c={c} />
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
+          {folder && !one && folder.undo && <p className="hint">{t.folder.undoHint[folder.undo]}</p>}
+          {folder && !one && <ChangeTable changes={shownChanges(folder.changes)} diffed={(c) => all.some((p) => p.file === c.path)} onFile={go} />}
           {got && (
             <>
-              {!folder && <table className="d-files">
+              {!folder && !one && <table className="d-files">
                 <tbody>
                   {got.files.map((f) => (
                     <tr key={f.file}>
