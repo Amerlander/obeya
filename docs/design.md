@@ -2021,6 +2021,13 @@ repository's `clones` or `workspaces` in the configuration, or on the command li
 <path>` or `--clones <n>`; a repository whose configuration names clones (these, or `hosts`) works
 in clones whatever its settings say.
 
+The pool is what the configuration names (`keepOnly` in `workspaces.ts`, when a repository's agents
+start, and for a host once its clones are in place): a clone it no longer names (fewer to make, an
+existing one taken out of the list, a host removed or given fewer) leaves the pool, a free one at
+once, one a card holds once the card gives it back. Nothing goes from disk: a clone keeps its
+branches, and naming it again brings it back. Until 2026-10-21 a clone, once registered, stayed in
+the pool for good: lowering the number to make, or emptying it, changed nothing.
+
 A card that will not work in its workspace again gives it back, which nothing else would do, a
 restart included (`settleLeases` in `workers.ts`, on every change of the board and when Obeya
 starts): a deleted card, and a workstream no worker is on (stopped with work on its branch, say,
@@ -4958,9 +4965,13 @@ as a browser tooltip with a wait on plain text.
 Each canvas is a heading line (number, name, id, whether it runs) over a table of its repositories:
 its path, one row each. Each repository shows its id and, right under its path, where its workers
 work („Agenten arbeiten in“: Worktrees or Klonen, with where that comes from), so that clones are
-found without opening its settings: Klonen shows the clones to make („Klone anlegen“), the existing
-ones („Vorhandene Klone, einer pro Zeile“), the slots and the other machines; Worktrees only the
-slots. Switching sets this machine's `workspaces` setting where the repository's says otherwise;
+found without opening its settings: Klonen shows the existing clones („Vorhandene Klone, einer pro
+Zeile“), below them the clones Obeya makes in addition („Dazu neue Klone anlegen“, its info icon
+saying they come on top of the existing ones, in Obeya's directory), the slots, a line with how many
+clones that makes on this machine („Zusammen 4 Klone auf diesem Rechner (2 vorhandene, 2 neue)“),
+and the other machines; Worktrees only the slots. Until 2026-10-21 the number came first, labelled
+„Klone anlegen“, with no sum: a colleague took it for the number of clones to work in, typed 2
+beside their 2 existing ones and got 4. Switching sets this machine's `workspaces` setting where the repository's says otherwise;
 switching to worktrees takes the clones the entry names out of it (they would keep it in clones)
 and a switch back while the dialog is open brings them back. A repository added in the dialog that
 is in clones gets as many as the first canvas's, two, filled in once its path is checked and

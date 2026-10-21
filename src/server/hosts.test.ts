@@ -298,6 +298,18 @@ describe('clones on a host', () => {
     stop();
   });
 
+  test('fewer of them in the configuration: the others leave the pool once a card no longer holds them', async () => {
+    expect(await spaces.ensureHostClones(host, join(dir, 'far'), origin, 2, () => undefined)).toBeNull();
+    const a = board.create({ title: 'A', x: 0, y: 0 }).id;
+    spaces.lease(a, 'obeya/a');
+    expect(await spaces.ensureHostClones(host, join(dir, 'far'), origin, 0, () => undefined)).toBeNull();
+    expect(spaces.list().map((w) => w.path)).toEqual([onHost(name, join(dir, 'far', '1'))]);
+    spaces.release(a);
+    expect(spaces.list()).toEqual([]);
+    // nothing goes from the host's disk
+    expect(existsSync(join(dir, 'far', '2', '.git'))).toBe(true);
+  });
+
   test('wait for a host that cannot be reached, and say why', async () => {
     writeFileSync(join(dir, 'net', 'down'), '');
     expect(await spaces.ensureHostClones(host, join(dir, 'far'), origin, 1, () => undefined)).toContain('Connection refused');

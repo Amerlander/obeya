@@ -296,6 +296,8 @@ export function ownFile(root: string, path: string): FileAt | null {
 export class Workspaces implements CardWorkspaces {
   /** What `leasable` last looked at (the free clones on machines with room, or on any with `overSlots`) when it found them all dirty, and when. */
   private dirty = new Map<boolean, { key: string; at: number }>();
+  /** Clones the configuration no longer names that a card still holds: they leave the pool once it gives them back (`keepOnly`). */
+  private leaving = new Set<string>();
 
   constructor(
     private store: Store,
@@ -326,14 +328,32 @@ export class Workspaces implements CardWorkspaces {
     this.store.addWorkspace(this.canvasId, path, this.o.repo ?? null);
   }
 
-  /** Makes sure `n` clones of `source` exist and are registered. */
-  ensureClones(source: string, n: number) {
+  /** Makes sure `n` clones of `source` exist and are registered; returns their paths. */
+  ensureClones(source: string, n: number): string[] {
     mkdirSync(this.o.dir, { recursive: true });
+    const paths: string[] = [];
     for (let i = 1; i <= n; i++) {
       const path = join(this.o.dir, String(i));
       if (!existsSync(path)) git(this.o.dir, 'clone', '--quiet', source, path);
       this.register(path);
+      paths.push(path);
     }
+    return paths;
+  }
+
+  /**
+   * Takes the clones on `host` (null: this machine) that are not among `named` out of the pool: the
+   * configuration no longer names them (fewer clones to create, an existing one or a host taken out).
+   * A free one leaves at once; one a card holds stays with it and leaves once the card gives it
+   * back. Nothing on disk goes: a clone keeps its branches, and naming it again brings it back.
+   */
+  keepOnly(host: string | null, named: string[]) {
+    for (const w of this.list()) {
+      if (hostName(w.path) !== host || named.includes(w.path)) continue;
+      if (w.card_id) this.leaving.add(w.path);
+      else this.store.removeWorkspace(w.path);
+    }
+    for (const path of this.leaving) if (named.includes(path)) this.leaving.delete(path);
   }
 
   /**
@@ -359,6 +379,8 @@ export class Workspaces implements CardWorkspaces {
         await host.trust(path);
         this.store.addWorkspace(this.canvasId, onHost(host.name, path), this.o.repo ?? null);
       }
+      // those of fewer clones there, or under another directory, leave the pool
+      this.keepOnly(host.name, Array.from({ length: n }, (_, i) => onHost(host.name, `${dir}/${i + 1}`)));
       return null;
     } catch (e) {
       return messageOf(e);
@@ -499,10 +521,12 @@ export class Workspaces implements CardWorkspaces {
     }
   }
 
-  /** Frees the workspace for other cards; a worktree stays until the card's work has landed. */
+  /** Frees the workspace for other cards; a worktree stays until the card's work has landed. A clone the configuration no longer names leaves the pool. */
   release(cardId: string) {
     const path = this.leasedBy(cardId);
-    if (path) this.store.setLease(path, null);
+    if (!path) return;
+    if (this.leaving.delete(path)) this.store.removeWorkspace(path);
+    else this.store.setLease(path, null);
   }
 
   /**

@@ -999,7 +999,15 @@ const de = {
     fixRequest: (where: string, problem: string, detail: string) =>
       `Die Konfiguration meldet ein Problem${where ? ` (${where})` : ''}: ${problem} Technisch: ${detail}. Lege eine Aufgabe an, die es behebt.`,
     folderMode: 'Ordner ohne git: Agenten arbeiten direkt darin',
-    clones: 'Klone anlegen',
+    clones: 'Dazu neue Klone anlegen',
+    clonesHint:
+      'Wie viele Klone Obeya zusätzlich zu den vorhandenen selbst anlegt, in seinem eigenen Verzeichnis. Leer, wenn die Agenten nur in den vorhandenen arbeiten sollen. Mit weniger verlassen die übrigen Klone den Pool, sobald keine Aufgabe mehr darin arbeitet; ihr Ordner bleibt liegen.',
+    cloneTotal: (existing: number, made: number) =>
+      existing + made === 0
+        ? 'Noch kein Klon auf diesem Rechner: trag vorhandene ein oder lass Obeya welche anlegen.'
+        : existing + made === 1
+          ? 'Ein Klon auf diesem Rechner.'
+          : `Zusammen ${existing + made} Klone auf diesem Rechner${existing && made ? ` (${existing} ${existing === 1 ? 'vorhandener' : 'vorhandene'}, ${made} ${made === 1 ? 'neuer' : 'neue'})` : ''}.`,
     workspaces: 'Vorhandene Klone, einer pro Zeile',
     slots: 'Slots hier',
     slotsAll: 'alle',
@@ -2566,7 +2574,15 @@ const en: Strings = {
     fixRequest: (where: string, problem: string, detail: string) =>
       `The configuration reports a problem${where ? ` (${where})` : ''}: ${problem} Technically: ${detail}. Create a task that fixes it.`,
     folderMode: 'Folder without git: agents work directly in it',
-    clones: 'Create clones',
+    clones: 'Also create new clones',
+    clonesHint:
+      'How many clones Obeya creates itself, in its own directory, in addition to the existing ones. Leave it empty when the agents are to work only in the existing ones. With fewer, the other clones leave the pool once no task works in them any more; their folders stay.',
+    cloneTotal: (existing: number, made: number) =>
+      existing + made === 0
+        ? 'No clone on this machine yet: list existing ones or let Obeya create some.'
+        : existing + made === 1
+          ? 'One clone on this machine.'
+          : `${existing + made} clones on this machine in all${existing && made ? ` (${existing} existing, ${made} new)` : ''}.`,
     workspaces: 'Existing clones, one per line',
     slots: 'Slots here',
     slotsAll: 'all',

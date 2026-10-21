@@ -1278,17 +1278,7 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
           </div>
           {clones ? (
             <>
-              <label className="cfg-clone-count">
-                <span className="hint">{t.config.clones}</span>
-                <input type="number" min={0} max={20} placeholder="0" value={repo.clones ?? ''} onChange={(e) => onChange(without('clones', Number(e.target.value) || undefined))} />
-              </label>
-              <label className="cfg-slots cfg-has-info">
-                <span className="hint">
-                  {t.config.slots} <Info text={t.config.slotsHint} />
-                </span>
-                <input type="number" min={0} max={20} aria-label={t.config.slots} placeholder={t.config.slotsAll} value={repo.slots ?? ''} onChange={(e) => onChange(without('slots', slotsOf(e.target.value)))} />
-              </label>
-              <label>
+              <label className="cfg-existing">
                 <span className="hint">{t.config.workspaces}</span>
                 <textarea
                   rows={2}
@@ -1300,6 +1290,19 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
                   }}
                 />
               </label>
+              <label className="cfg-clone-count cfg-has-info">
+                <span className="hint">
+                  {t.config.clones} <Info text={t.config.clonesHint} />
+                </span>
+                <input type="number" min={0} max={20} aria-label={t.config.clones} placeholder="0" value={repo.clones ?? ''} onChange={(e) => onChange(without('clones', Number(e.target.value) || undefined))} />
+              </label>
+              <label className="cfg-slots cfg-has-info">
+                <span className="hint">
+                  {t.config.slots} <Info text={t.config.slotsHint} />
+                </span>
+                <input type="number" min={0} max={20} aria-label={t.config.slots} placeholder={t.config.slotsAll} value={repo.slots ?? ''} onChange={(e) => onChange(without('slots', slotsOf(e.target.value)))} />
+              </label>
+              <span className="hint cfg-clone-total">{t.config.cloneTotal((repo.workspaces ?? []).filter((w) => w.trim()).length, repo.clones ?? 0)}</span>
               <Hosts hosts={repo.hosts ?? []} onChange={(hosts) => onChange(without('hosts', hosts.length ? hosts : undefined))} />
             </>
           ) : (

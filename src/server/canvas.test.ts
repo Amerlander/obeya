@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { boundsOf, CARD_SIZE } from '../core/layout';
@@ -631,6 +631,27 @@ describe('the configuration changed while the canvas runs', () => {
     expect(a.session.closed).toBe(false);
     expect(w.session.closed).toBe(true);
     expect(workers.last.spec.resume).toBe('sess-W');
+  });
+
+  test('clones the configuration no longer names leave the pool: a free one at once, one a card holds once it gives it back', async () => {
+    const own = join(dir, 'x-own');
+    git(dir, 'clone', '--quiet', web, own);
+    open([{ path: web, settings: { land: 'pr' }, clones: 2, workspaces: [own] }]);
+    expect(canvas.repos[0]!.workspaces.list()).toHaveLength(3);
+    const w = atWork('web', 'W');
+    const held = canvas.repos[0]!.workspaces.leasedBy(w.card.id)!;
+    const [made1, made2] = canvas.repos[0]!.workspaces.list().map((x) => x.path);
+    expect(held).toBe(made1!);
+    const before = canvas.repos[0]!;
+    canvas.apply({ name: 'Produkt', repos: [{ path: web, settings: { land: 'pr' }, workspaces: [own] }] });
+    w.session.emit({ type: 'idle' });
+    await until(() => canvas.repos[0] !== before);
+    const spaces = canvas.repos[0]!.workspaces;
+    expect(spaces.list().map((x) => x.path)).toEqual([held, own]);
+    spaces.release(w.card.id);
+    expect(spaces.list().map((x) => x.path)).toEqual([own]);
+    // the clones Obeya made stay on disk with their branches; naming them again brings them back
+    expect(existsSync(join(made2!, '.git'))).toBe(true);
   });
 
   test('"Jetzt übernehmen" restarts them at once, cutting off the worker in its turn', () => {
