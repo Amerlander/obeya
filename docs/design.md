@@ -5815,7 +5815,8 @@ From the top:
 - five pillars with screenshots (the canvas, with a canvas per product that one Obeya runs side by
   side, which the phone's "across all your canvases" builds on; voice, the demo the owner watches instead of testing
   the change themselves, as in a launch review: the audience reads no code anyway, so the contrast
-  is with testing, not with code review; the order in which cards run: parallel where they can, one
+  is with testing, not with code review, with a line in small print below it pointing to
+  `demos.obeya.si`, the demos of Obeya's own development; the order in which cards run: parallel where they can, one
   after the other where they must; the phone, two screens of the phone view side by side, what
   waits and the demo opened from there, with how the phone reaches Obeya: over the owner's own
   private network, through no service of Obeya's);
