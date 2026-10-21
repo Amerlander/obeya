@@ -18,9 +18,14 @@ message stand where they happened, the agent's last words among them as its mess
 an idea continues the idea's conversation.
 
 Agent words are kept whole up to 12 000 characters (a worker's `reply` is cut at 2000). While the
-worker works, the conversation ends with it at work and its latest step on one line, also while it
-asks during background work. A card that waits on a question ends with it, its options and the
-card's one field.
+worker works, the conversation ends with it at work and its latest step on one line, with its
+background work that runs („Im Hintergrund“, each with how long it has run). Once the card waits for
+the owner (handed over, asked) and the worker's turn has ended, nobody is at work on it, even while
+its background work runs on (the app served for the owner to try): the conversation then shows only
+that work, under „Im Hintergrund“, without the agent at work or its step, and there is nothing to
+pause. Until 2026-10-22 it showed the agent at work as long as such work ran, which read as if it
+were still working on the change while the card waited for the owner. A card that waits on a
+question ends with it, its options and the card's one field.
 
 How a question ended is one rule for every kind of card, read from what came after it: picked
 options stand ticked (an answer in the owner's own words ticks the options it names); asked again in

@@ -11,7 +11,7 @@ import { realpathSync } from 'node:fs';
 import { basename, isAbsolute } from 'node:path';
 import { type CardFile, docImages, fileKind, isImage, normalPath, shownFiles } from '../core/files';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
-import { answering, askable, type Awaited, AWAITED_STATES, awaited, type BackgroundTask, pausable, type CardLanding, type DemoKind, type DemoPage, finished, formatQuestion, handedOver, type Item, type TaskAuthor, taskAuthor, type Mock, ownWords, pickedAnswer, type Question, type RepoSettings, type RestartReason, type Snooze, type Spot, type Superseded, type SpotInput, started } from '../core/types';
+import { answering, askable, type Awaited, AWAITED_STATES, awaited, type BackgroundTask, pausable, type WorkerTurn, type CardLanding, type DemoKind, type DemoPage, finished, formatQuestion, handedOver, type Item, type TaskAuthor, taskAuthor, type Mock, ownWords, pickedAnswer, type Question, type RepoSettings, type RestartReason, type Snooze, type Spot, type Superseded, type SpotInput, started } from '../core/types';
 import { BadRequest, type Board, replyNote, type Retracted, type StoredDemo, titleKey } from './board';
 import { type Asked, decisionLog, toQuestion, withPick } from './advisor';
 import { checkArtifact, DEMO_SKILL, DEMO_SKILL_FILE, demoSkillName, OBEYA_PLUGIN, placeIn, readChapters } from './demo';
@@ -1836,9 +1836,9 @@ export class Workers {
     return [...new Set([...[...this.live].filter(([, l]) => l.busy).map(([id]) => id), ...this.preparing.keys()])];
   }
 
-  /** The cards whose worker is in a turn, each with its background work that runs. */
-  private turnsShown(): Map<string, BackgroundTask[]> {
-    return new Map([...this.live].filter(([, l]) => l.busy).map(([id, l]) => [id, [...l.tasks.values()]]));
+  /** The cards whose worker is in a turn, each with its background work that runs and whether the turn waits only for that work. */
+  private turnsShown(): Map<string, WorkerTurn> {
+    return new Map([...this.live].filter(([, l]) => l.busy).map(([id, l]) => [id, { tasks: [...l.tasks.values()], over: !!l.waiting }]));
   }
 
   /** How many of these workers are in a turn on a machine (null: the one Obeya runs on). */
@@ -1997,8 +1997,7 @@ export class Workers {
     const live = this.live.get(cardId);
     if (live) {
       // the turn this starts reports the background work that is still running
-      clearTimeout(live.waiting);
-      live.waiting = undefined;
+      this.stopWaiting(live);
       clearTimeout(live.lifts);
       live.lifts = undefined;
       this.setBusy(live, true);
@@ -2157,8 +2156,7 @@ export class Workers {
     if (e.type === 'background') return this.backgroundChanged(cardId, live, e.tasks);
     // a turn may also start without a message from Obeya (a finished background command)
     this.setBusy(live, e.type !== 'idle');
-    clearTimeout(live.waiting);
-    live.waiting = undefined;
+    this.stopWaiting(live);
     clearTimeout(live.lifts);
     live.lifts = undefined;
     if (e.type === 'text' || e.type === 'tool') {
@@ -2385,6 +2383,7 @@ export class Workers {
    */
   private waitForWorker(cardId: string, live: Live) {
     this.setBusy(live, true);
+    const began = !live.waiting;
     clearTimeout(live.waiting);
     live.waiting = setTimeout(() => {
       live.waiting = undefined;
@@ -2393,6 +2392,16 @@ export class Workers {
       this.turnEnded(cardId, live, 0, true);
       this.parkLater(cardId);
     }, live.background > 0 ? (this.o.backgroundLimit ?? BACKGROUND_LIMIT) : (this.o.backgroundGrace ?? BACKGROUND_GRACE));
+    // a card waiting for the owner shows nobody at work once only its background work holds the turn
+    if (began && [...this.live.values()].includes(live)) this.o.board.changed();
+  }
+
+  /** The worker gave a sign of life: an ended turn that waited for it is a turn again, which the card shows. */
+  private stopWaiting(live: Live) {
+    if (!live.waiting) return;
+    clearTimeout(live.waiting);
+    live.waiting = undefined;
+    if (live.busy && [...this.live.values()].includes(live)) this.o.board.changed();
   }
 
   /** The worker's background work started or ended: an ended turn waiting for it waits as long as it runs. */

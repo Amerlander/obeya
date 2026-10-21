@@ -1237,6 +1237,12 @@ function Conversation({
         ) : (
           !paused && askedSteps([...turns.asked.flatMap((x) => x.steps), ...turns.pending])
         )}
+        {/* a card that waits for the owner, its worker's turn over: what still runs of it, without the agent at work */}
+        {!working && !paused && !past && !!item.background?.length && (
+          <div className={`msg by-${by} background-only`}>
+            <Background tasks={item.background} />
+          </div>
+        )}
         {/* what the agent has not read yet stands below its work, until it reads it; comments on the
             demo video held back, until they are sent */}
         {turns.unread.map((e) =>

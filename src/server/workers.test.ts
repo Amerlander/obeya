@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { generic } from '../adapters/generic';
-import { needsYou } from '../core/types';
+import { needsYou, pausable } from '../core/types';
 import { BadRequest } from './board';
 import { OBEYA_PLUGIN } from './demo';
 import { Images } from './images';
@@ -714,6 +714,35 @@ describe('workers', () => {
     await runtime.last.call('ready_for_review', { summary: 'Fertig.', demo: artifact() });
     runtime.last.emit({ type: 'idle' });
     expect(state(c.id)).toBe('waiting:demo');
+  });
+
+  test('a card handed over while its app is still served waits for the owner with nobody at work, the serving shown', async () => {
+    const c = manual();
+    await workers.start(c.id);
+    runtime.last.emit({ type: 'background', tasks: [{ id: 'serve', description: 'Serve the app on port 8743 for 4 min' }] });
+    // at work, the serving is part of the turn
+    expect(board.item(c.id)).toMatchObject({ inTurn: true, background: [{ description: 'Serve the app on port 8743 for 4 min' }] });
+    await runtime.last.call('ready_for_review', { summary: 'Fertig.', demo: artifact() });
+    expect(board.item(c.id)!.inTurn).toBe(true);
+    // as the server's push to the page does, the board is read at each change
+    board.onChange(() => board.snapshot());
+    runtime.last.emit({ type: 'idle', background: 1 });
+    expect(state(c.id)).toBe('waiting:demo');
+    // the turn is over: the serving still runs and holds the slot, but nothing is at work or to pause
+    const card = board.item(c.id)!;
+    expect(card.inTurn).toBeUndefined();
+    expect(card.background?.map((b) => b.description)).toEqual(['Serve the app on port 8743 for 4 min']);
+    expect(pausable(card)).toBe(false);
+    expect(workers.busyCards()).toEqual([c.id]);
+    // once it stops, nothing of it shows
+    runtime.last.emit({ type: 'background', tasks: [] });
+    expect(board.item(c.id)!.background).toBeUndefined();
+    // a note from the owner starts a turn again: the agent is at work on it
+    runtime.last.emit({ type: 'background', tasks: [{ id: 'serve', description: 'Serve the app on port 8743 for 4 min' }] });
+    runtime.last.emit({ type: 'idle', background: 1 });
+    expect(board.item(c.id)!.inTurn).toBeUndefined();
+    runtime.last.emit({ type: 'text', text: 'Der Server läuft noch.' });
+    expect(board.item(c.id)!.inTurn).toBe(true);
   });
 
   test('background work that ends without waking the worker counts as an ended turn after a while', async () => {

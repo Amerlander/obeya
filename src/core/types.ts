@@ -56,6 +56,12 @@ export interface BackgroundTask {
   since: number;
 }
 
+/** A card's worker in a turn: its background work that runs, and whether the turn itself ended and only waits for that work to wake it (`over`). */
+export interface WorkerTurn {
+  tasks: BackgroundTask[];
+  over: boolean;
+}
+
 export const pausable = (i: Pick<Item, 'kind' | 'state' | 'idea' | 'thread' | 'inTurn' | 'paused' | 'snoozed'>) =>
   !i.paused && !(i.snoozed && !i.snoozed.waiting) && (i.kind === 'question' ? !!i.thread?.thinking : i.state === 'idea' && i.idea ? i.idea.thinking : !!i.inTurn);
 
@@ -354,9 +360,13 @@ export interface Item {
   followUp?: boolean;
   /** While `followUp`: its agent needs a full clone to answer and waits, without a workspace, for the next free one. */
   waitsForClone?: true;
-  /** Its worker is in a turn right now, its background work included (a render, a watcher): what it does shows, and the owner can pause it. */
+  /**
+   * Its worker is in a turn right now, its background work included (a render, a watcher): what it
+   * does shows, and the owner can pause it. Not on a card that waits for the owner once the turn
+   * itself has ended and only its background work runs (the app served after the handover).
+   */
   inTurn?: true;
-  /** While `inTurn`: the worker's background work that runs (a test run, a render, a watcher), the oldest first. */
+  /** The worker's background work that runs (a test run, a render, a watcher), the oldest first: while `inTurn`, or after the turn on a card that waits for the owner. */
   background?: BackgroundTask[];
   /**
    * The card's agent other than its worker (an idea's, a Question card's, the reviser of a proposal,

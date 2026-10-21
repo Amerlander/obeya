@@ -61,7 +61,7 @@ import {
   needsYou,
   plannedToStart,
   type Notice,
-  type BackgroundTask,
+  type WorkerTurn,
 } from '../core/types';
 import type { CardRow, DecisionRow, Friction, FrictionNote, GroupRow, HeldTalk, Mark, NewRow, RowUpdate, Store, TalkWaitRow } from './db';
 import type { Images } from './images';
@@ -1276,8 +1276,12 @@ export class Board {
     items = this.withPrototypes(items);
     const inTurn = new Map([...this.turns].flatMap((f) => [...f()]));
     if (inTurn.size) items = items.map((i) => {
-      const background = inTurn.get(i.id);
-      return background ? { ...i, inTurn: true, ...(background.length ? { background } : {}) } : i;
+      const turn = inTurn.get(i.id);
+      if (!turn) return i;
+      const background = turn.tasks.length ? { background: turn.tasks } : {};
+      // a turn that ended while its background work runs (the app served, say) holds the worker's slot,
+      // but a card that waits for the owner then has nobody at work on it: only that work runs
+      return turn.over && needsYou(i) ? { ...i, ...background } : { ...i, inTurn: true, ...background };
     });
     items = this.withoutStaleSnoozes(items, rows);
     items = this.withWaitingSince(items);
@@ -1463,10 +1467,10 @@ export class Board {
   }
 
   /** Who says which cards' workers are in a turn, each with its background work: one per repository's workers (`showTurns`). */
-  private turns = new Set<() => Map<string, BackgroundTask[]>>();
+  private turns = new Set<() => Map<string, WorkerTurn>>();
 
   /** Who says which cards' workers are in a turn; a worker's turn starts and ends with `changed`, and so does its background work, so the cache holds. */
-  showTurns(turns: () => Map<string, BackgroundTask[]>) {
+  showTurns(turns: () => Map<string, WorkerTurn>) {
     this.turns.add(turns);
   }
 
