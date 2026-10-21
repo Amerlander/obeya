@@ -985,7 +985,7 @@ button.q-end:hover { color: var(--ink); text-decoration: underline; }
 .talk .msg.seed .p-task { margin-top: 6px; font-size: 13px; }
 .talk .msg.by-plan .who, .talk .msg.by-proposal .who { color: var(--muted); }
 .fold { font-size: 14px; }
-.fold.folded { max-height: calc(8lh + 2px); overflow: hidden; }
+.fold.folded { max-height: calc(var(--fold-lines, 8) * 1lh + 2px); overflow: hidden; }
 .fold.cut { mask-image: linear-gradient(to bottom, #000 75%, transparent); }
 .fold-more { font-size: 12.5px; margin-top: 2px; }
 /* a screenshot shown large (shots.tsx Lightbox): the page greys while it grows out of its thumbnail, and clears as it goes back */

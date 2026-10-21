@@ -4752,8 +4752,9 @@ A workstream's card shows the same text in every state, and names its doc at the
 state, the line with the doc's path and „Im Plandokument lesen“ (after the branch, once an agent has
 worked on it). Planned, the text is what the card shows; queued, it stands beside the conversation;
 once an agent works on it, it stands on the left under „Plan-Doc“, folded to its first eight lines
-or so, above what came of the work (what landed, the demo, the pull request), with the conversation
-beside it, even before there is a result. Until 2026-10-21 a started workstream showed its text only
+or so (three beside a demo or the files the work made, which then stay in view below it), above what
+came of the work (what landed, the demo, the pull request), with the conversation beside it, even
+before there is a result. Until 2026-10-21 a started workstream showed its text only
 as the conversation's first message, which a long conversation scrolled out of view, and the doc's
 line moved from the bottom to the top of the card as it started: a colleague could not tell any more
 what a running or delivered workstream was meant to do.

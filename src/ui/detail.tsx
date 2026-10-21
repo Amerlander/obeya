@@ -1,6 +1,6 @@
 // The unfolded card: what it is, what its worker does, and what the owner decides.
 
-import { createContext, Fragment, type ReactNode, type RefObject, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createContext, type CSSProperties, Fragment, type ReactNode, type RefObject, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { agentListens, answering, askable, type BackgroundTask, buildableOn, type CardAction, chapterAt, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, type EarlierDemo, EXPORT_HTML_MAX, finished, finishedArchivable, finishingUp, handedOver, type Item, type Mock, type NextStep, openQuestions, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, snoozable, type Spot, started, stopped, stoppedArchivable, taskAuthor } from '../core/types';
 import { mockPage } from '../core/frame';
@@ -448,7 +448,8 @@ export function Detail(p: Props) {
                 {item.source === 'plan' && (
                   <div className="p-plan">
                     <h4 className="p-h">{t.talk.opening.plan}</h4>
-                    <Fold>
+                    {/* beside a demo or the files it made, a few lines: what came of the work stays in view below */}
+                    <Fold lines={item.demo || item.files ? 3 : undefined}>
                       <Body md={item.body} />
                     </Fold>
                     <Scope files={item.scope} />
@@ -1265,8 +1266,8 @@ function Seed({ item, by, who, children }: { item: Item; by: string; who: string
   );
 }
 
-/** A text shown to its first eight lines or so, with "more" for the rest. */
-function Fold({ children }: { children: ReactNode }) {
+/** A text shown to its first eight lines or so (or `lines`), with "more" for the rest. */
+function Fold({ children, lines }: { children: ReactNode; lines?: number }) {
   const box = useRef<HTMLDivElement>(null);
   const [long, setLong] = useState(false);
   const [open, setOpen] = useState(false);
@@ -1281,7 +1282,7 @@ function Fold({ children }: { children: ReactNode }) {
   }, [open]);
   return (
     <>
-      <div ref={box} className={`fold${open ? '' : ' folded'}${long && !open ? ' cut' : ''}`}>
+      <div ref={box} className={`fold${open ? '' : ' folded'}${long && !open ? ' cut' : ''}`} style={lines ? ({ '--fold-lines': lines } as CSSProperties) : undefined}>
         {children}
       </div>
       {(long || open) && (
