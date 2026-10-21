@@ -4,12 +4,11 @@
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { type CardDiff, type DiffPart, diffSize, splitDiff } from '../core/diff';
+import { type CardDiff, type DiffPart, diffSize, type FolderChange, shownChanges, splitDiff } from '../core/diff';
 import type { Item } from '../core/types';
 import { api } from './api';
 import { useCopy } from './copy';
 import { plain } from './markdown';
-import { ChangeTable, shownChanges } from './folder';
 import { t } from './strings';
 
 /** A file with more lines than this starts folded, so a generated file does not bury the rest. */
@@ -280,4 +279,56 @@ export function numbered(lines: string[]): Line[] {
     else if (text) out.push({ kind: 'ctx', text, old: old++, new: now++ });
   }
   return out;
+}
+
+/** The sign of what happened to a file: moved, added, changed, deleted. */
+export const MARK: Record<FolderChange['kind'], string> = { moved: '↪', added: '＋', modified: '✎', deleted: '✕' };
+
+/** What else the folder's change list says of a file: that the card also changed one it moved, and what discarding would leave. */
+export function ChangeNote({ c }: { c: Pick<FolderChange, 'changed' | 'undo'> }) {
+  return (
+    <>
+      {c.changed && <span className="hint"> {t.folder.alsoChanged}</span>}
+      {c.undo && c.undo !== 'yes' && (
+        <span className="f-left" title={c.undo === 'lost' ? t.folder.lostHint : c.undo === 'shared' ? t.folder.sharedHint : t.folder.changedSinceHint}>
+          {' '}
+          · {t.folder.state[c.undo]}
+        </span>
+      )}
+    </>
+  );
+}
+
+/** The folder's changes over its whole diff: what happened to which path, the lines in columns of their own; a path `diffed` names goes to its diff. */
+function ChangeTable({ changes, diffed, onFile }: { changes: FolderChange[]; diffed: (c: FolderChange) => boolean; onFile: (path: string) => void }) {
+  return (
+    <table className="f-list">
+      <tbody>
+        {changes.map((c) => {
+          const name = (p: string) => (c.dir ? `${p}/` : p);
+          const path = c.kind === 'moved' ? `${name(c.from!)} → ${name(c.path)}` : name(c.path);
+          const lines = c.added !== undefined && (c.added > 0 || c.removed! > 0);
+          return (
+            <tr key={`${c.kind}:${c.from ?? ''}:${c.path}`}>
+              <td className="f-mark" aria-label={c.kind}>
+                {MARK[c.kind]}
+              </td>
+              <td className="f-path">
+                {diffed(c) ? (
+                  <button className="link" title={t.diff.showFile} onClick={() => onFile(c.path)}>
+                    {path}
+                  </button>
+                ) : (
+                  path
+                )}
+                <ChangeNote c={c} />
+              </td>
+              <td className="d-add">{lines && `+${c.added}`}</td>
+              <td className="d-del">{lines && `−${c.removed}`}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
 }

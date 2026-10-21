@@ -1,8 +1,8 @@
-// The files a card's work made or changed, as its left column shows them beside its demo: which
-// of them get a tab, in which order, and how each one is shown; the paths and images the server
-// checks what it serves against.
+// The files a card's work made or changed, as its left column shows them beside its demo: the
+// change list that picks them, in which order, and how each one is shown; the paths and images the
+// server checks what it serves against.
 
-import type { CardDiff } from './diff';
+import { type CardDiff, type FolderChange, shownChanges } from './diff';
 
 /** A file a card's worker named as its result at its handover: its path in the repository (or folder), with `/`, and a one-line caption. */
 export interface CardFile {
@@ -33,7 +33,7 @@ export function fileKind(path: string, text = TEXT.test(path)): FileKind {
   return text && (TEXT.test(path) || !DOCUMENT.test(path)) ? 'text' : 'other';
 }
 
-/** A file the card's left column has a tab for. */
+/** A file the card's left column can show. */
 export interface ShownFile {
   path: string;
   /** Its worker named it as the result, with this caption. */
@@ -46,9 +46,10 @@ export interface ShownFile {
 }
 
 /**
- * The files of a card's change that get a tab, in order: those its worker named as the result, then
- * the others it made or changed that can be shown, documents before text and code. A deleted file or a directory gets none, nor does
- * one that is no document and no text (a `__pycache__/*.pyc`), or one gone from the folder since: it stays in the change list.
+ * The files of a card's change the left column can show, in order: those its worker named as the
+ * result, then the others it made or changed that can be shown, documents before text and code. A
+ * deleted file or a directory has no view, nor has one that is no document and no text (a
+ * `__pycache__/*.pyc`), or one gone from the folder since: it stays in the change list, greyed.
  */
 export function shownFiles(diff: CardDiff | null, named: CardFile[] = []): ShownFile[] {
   const changed: ShownFile[] = [];
@@ -73,6 +74,47 @@ export function shownFiles(diff: CardDiff | null, named: CardFile[] = []): Shown
   // of the others, documents come before text and code, which is more often what made them
   const rest = changed.filter((c) => shown(c) && !named.some((n) => n.path === c.path));
   return [...first, ...rest.filter((c) => c.kind !== 'text'), ...rest.filter((c) => c.kind === 'text')];
+}
+
+/** A line of a card's change list, which is also how its left column picks the file it shows. */
+export interface ChangeRow {
+  /** Where it is now; for a deleted one, where it was. */
+  path: string;
+  /** A moved or renamed one: where it was. */
+  from?: string;
+  /** What happened to it; none for a file its worker named that the change does not hold. */
+  kind?: FolderChange['kind'];
+  dir?: true;
+  /** Lines added and removed, for a text file whose earlier version is known. */
+  added?: number;
+  removed?: number;
+  /** Its worker named it as the result, with this caption. */
+  caption?: string;
+  /** How the left column shows it; none for one it cannot show (deleted, a directory, a `.pyc`, gone since). */
+  file?: ShownFile;
+  /** In a folder: a moved file the card also changed, one gone since, and what discarding would do with it. */
+  changed?: true;
+  gone?: true;
+  undo?: FolderChange['undo'];
+}
+
+/**
+ * The card's change list, a line per file: first the files the left column can show, in their order
+ * (`shownFiles`), then the rest of the change as it comes, which has no view. On a branch, git's
+ * list of files; in a folder, its changes as the owner reads them.
+ */
+export function changeRows(diff: CardDiff | null, named: CardFile[] = []): ChangeRow[] {
+  const all: ChangeRow[] = diff?.folder
+    ? shownChanges(diff.folder.changes).map(({ kind, path, from, dir, added, removed, changed, gone, undo }) => ({ kind, path, from, dir, added, removed, changed, gone, undo }))
+    : (diff?.files ?? []).map((f) => ({
+        kind: f.status === 'renamed' ? 'moved' : f.status,
+        path: f.file,
+        from: f.from,
+        ...(f.binary ? {} : { added: f.added, removed: f.removed }),
+      }));
+  const strip = (r: ChangeRow) => Object.fromEntries(Object.entries(r).filter(([, v]) => v !== undefined)) as ChangeRow;
+  const shown = shownFiles(diff, named).map((file) => strip({ ...(all.find((r) => r.path === file.path) ?? { path: file.path }), caption: file.caption, file }));
+  return [...shown, ...all.filter((r) => !shown.some((s) => s.path === r.path)).map(strip)];
 }
 
 /** A path as the change list writes it: relative, with `/`, without `.` and `..` steps; null for one that leaves the root. */

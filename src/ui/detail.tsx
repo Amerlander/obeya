@@ -423,8 +423,8 @@ export function Detail(p: Props) {
 
       {item.state === 'planned' && !worked && !waits && <Scope files={item.scope} />}
 
-      {/* what the card changed in a folder without git stays in view, whatever else the card shows */}
-      {worked && inFolder && <FolderBox item={item} diff={changes.diff} onTab={talkAlone(item) ? undefined : setTab} />}
+      {/* what the card changed in a folder without git stays in view: in its left column, or above its conversation where it has none */}
+      {worked && inFolder && talkAlone(item) && <FolderBox item={item} diff={changes.diff} />}
       {waits ? (
         <Split
           main={

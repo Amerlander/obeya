@@ -746,20 +746,30 @@ textarea.p-body:focus { border-color: var(--muted); }
 .answer-page iframe { width: 100%; min-height: 80px; border: 1px solid var(--line); border-radius: 2px; background: #fff; display: block; }
 .answer-image img { display: block; max-width: 100%; max-height: 480px; border: 1px solid var(--line); border-radius: 2px; background: #fff; }
 
-/* a card's result files beside its conversation: a tab each above the view, the demo first */
-.results .r-tabs { display: flex; flex-wrap: wrap; gap: 2px 4px; align-items: flex-end; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
-.r-tab { border: 0; border-bottom: 2px solid transparent; background: none; padding: 5px 8px 6px; margin-bottom: -1px; font: inherit; font-size: 13px;
-  color: var(--muted); cursor: pointer; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.r-tab:hover { color: var(--ink); }
-.r-tab.on { color: var(--ink); font-weight: 600; border-bottom-color: var(--waiting); }
-.r-tab.named::after { content: " ★"; color: var(--waiting); font-size: 10px; }
-.r-more { position: relative; }
-.r-menu { position: absolute; z-index: 5; top: 100%; left: 0; min-width: 260px; max-width: 520px; max-height: 60vh; overflow: auto; padding: 4px;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 3px; box-shadow: var(--lift); display: flex; flex-direction: column; }
-.r-menu button { border: 0; background: none; text-align: left; padding: 5px 8px; font: 12.5px var(--mono); color: var(--ink); cursor: pointer; border-radius: 2px; overflow-wrap: anywhere; }
-.r-menu button:hover { background: var(--chip); }
-.r-head { font-size: 13px; margin-bottom: 4px; overflow-wrap: anywhere; }
-.r-path { font: 12.5px var(--mono); }
+/* a card's result files beside its conversation: the change list above the view picks the file, its line marked */
+.cl-list { margin-bottom: 12px; font-size: 13px; }
+.cl-list table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.results .cl-list table { border-bottom: 1px solid var(--line); }
+.cl-list td { padding: 2px 0; vertical-align: top; }
+.cl-list col.cl-mark { width: 2em; }
+.cl-list col.cl-n { width: 4.5em; }
+.cl-list .f-mark { padding: 2px 4px 2px 6px; text-align: center; color: var(--muted); }
+/* the path takes what the columns of the sign and the lines leave, cut at its front so that the file's name stays */
+.cl-name { display: block; max-width: 100%; border: 0; background: none; padding: 0; font: inherit; color: var(--working); text-align: left;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis; direction: rtl; cursor: pointer; }
+span.cl-name { color: inherit; cursor: default; }
+.cl-note { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.cl-list td.d-add, .cl-list td.d-del { padding-left: 10px; white-space: nowrap; text-align: right; }
+.cl-list td.d-del { padding-right: 6px; }
+.cl-list button.cl-lines { color: inherit; font: inherit; }
+.cl-list tr:has(.cl-lines:hover) .cl-lines { text-decoration: underline; }
+.cl-row { border-left: 3px solid transparent; }
+.cl-list[role="tablist"] .cl-row:not(.off) { cursor: pointer; }
+@media (hover: hover) { .cl-list[role="tablist"] .cl-row:not(.off, .on):hover { background: var(--chip); } }
+.cl-row.on { border-left-color: var(--waiting); background: color-mix(in srgb, var(--waiting) 12%, transparent); }
+.cl-row.on .cl-name { color: var(--ink); font-weight: 600; }
+.cl-row.off { color: var(--muted); }
+.cl-more { margin: 4px 0 0 6px; font-size: 12.5px; }
 .r-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-bottom: 12px; font-size: 13px; }
 .r-mode { display: inline-flex; background: var(--chip); border-radius: 3px; padding: 2px; gap: 2px; }
 .r-mode button { border: 0; background: transparent; border-radius: 2px; padding: 3px 10px; font: inherit; font-size: 12.5px; cursor: pointer; color: var(--muted); }
@@ -1022,20 +1032,13 @@ button.q-end:hover { color: var(--ink); text-decoration: underline; }
 /* what a card changed in a folder without git */
 .f-box { margin: 10px 0 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; max-width: 760px; font-size: 12.5px; }
 .f-box p { margin: 6px 0 0; }
-/* about ten lines; a longer list scrolls, its scrollbar always shown so that it says there is more */
-.f-scroll { max-height: 15em; overflow-y: auto; margin-top: 6px; }
-.f-scroll > .f-list { margin-top: 0; }
-.f-scroll::-webkit-scrollbar { width: 8px; }
-.f-scroll::-webkit-scrollbar-track { background: var(--chip); border-radius: 4px; }
-.f-scroll::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 4px; }
+.f-box .cl-list { margin: 6px 0 0; }
 .f-list { border-collapse: collapse; margin: 6px 0 0; }
 .d-body > .f-list { margin-bottom: 10px; font-size: 13px; }
 .f-list td { padding: 1px 0; vertical-align: top; }
 .f-list td.d-add, .f-list td.d-del { padding-left: 10px; white-space: nowrap; text-align: right; }
 .f-path { overflow-wrap: anywhere; }
 .f-list button.link { text-align: left; font: inherit; }
-.f-list button.f-lines { color: inherit; }
-.f-list tr:has(.f-lines:hover) .f-lines { text-decoration: underline; }
 .f-list .f-mark { width: 1.2em; padding-right: 4px; text-align: center; color: var(--muted); }
 .f-left { color: var(--muted); font-style: italic; }
 .f-undo.partial { color: var(--muted); }
@@ -1803,6 +1806,10 @@ button.link:hover { text-decoration: underline; }
 .ph-view .proposal-grid textarea.p-body { min-height: 160px; max-height: 50vh; }
 .ph-view .actions { flex-wrap: wrap; }
 .ph-view .actions .btn { min-height: 42px; }
+/* the change list's lines a finger's size */
+.ph-view .cl-list { font-size: 14.5px; }
+.ph-view .cl-list td, .ph-view .cl-list .f-mark { padding-top: 10px; padding-bottom: 10px; }
+.ph-view .cl-more { padding: 8px 0; font-size: 14.5px; }
 /* the video plays full width, and full screen from Obeya's button over it (fullscreen.ts); zooming within the page adds nothing on a phone */
 .ph-view .demo-view .zoom, .ph-view .seek-hint { display: none; }
 .ph-view .demo-view .fullscreen { position: absolute; top: 10px; right: 10px; z-index: 1; width: 42px; height: 42px; border: 0; border-radius: 50%;

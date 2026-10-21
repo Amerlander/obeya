@@ -399,7 +399,6 @@ const de = {
       partial:
         'Das Dateisystem kann den Ordner hier nicht klonen. „Änderungen verwerfen“ setzt Verschiebungen zurück, Dateien, die der Agent mit seinen Editier-Werkzeugen geschrieben hat, und Textdateien; was ein Skript sonst überschrieben oder gelöscht hat, nicht.',
     },
-    show: 'Ansehen',
     state: { yes: '', lost: 'nicht rückgängig zu machen', changedSince: 'seitdem geändert, bleibt', shared: 'zugleich mit einer anderen Karte, bleibt' },
     changedSinceHint: 'Jemand hat die Datei nach der Karte geändert: Verwerfen lässt sie, wie sie ist.',
     sharedHint: 'Als sich das änderte, war auch der Agent einer anderen Karte am Werk; von wem es kam, ist nicht zu sagen: Verwerfen lässt es, wie es ist.',
@@ -739,10 +738,9 @@ const de = {
   },
   files: {
     demo: 'Demo',
-    more: (n: number) => `${n} weitere`,
-    moreHint: 'Weitere Dateien, die die Aufgabe angelegt oder geändert hat',
-    showTab: 'Datei in ihrem Tab ansehen',
-    named: (caption: string) => (caption ? `Ergebnis: ${caption}` : 'Ergebnis'),
+    more: (n: number) => `und ${n} weitere`,
+    less: 'weniger',
+    showChanges: 'Zeigt, was sich in der Datei geändert hat',
     formatted: 'Formatiert',
     whole: 'Ganze Datei',
     changes: 'Änderungen',
@@ -757,7 +755,7 @@ const de = {
     noDiff: 'Die Änderungen dieser Datei lassen sich nicht Zeile für Zeile zeigen.',
     cut: (kb: number) => `Gekürzt auf die ersten ${kb} KB.`,
     other: 'Diese Datei lässt sich hier nicht anzeigen.',
-    none: 'Keine Datei, die sich hier zeigen lässt. Die Liste oben nennt alles, was sich geändert hat.',
+    none: 'Keine Datei, die sich hier zeigen lässt.',
   },
   question: {
     reading: 'Agent liest …',
@@ -2045,7 +2043,6 @@ const en: Strings = {
       partial:
         'The file system cannot clone the folder here. “Discard changes” puts back moves, files the agent wrote with its editing tools, and text files; not what a script overwrote or deleted otherwise.',
     },
-    show: 'Show',
     state: { yes: '', lost: 'cannot be undone', changedSince: 'changed since, stays', shared: 'at the same time as another card, stays' },
     changedSinceHint: 'Someone changed the file after the card: discarding leaves it as it is.',
     sharedHint: "When this changed, another card's agent was at work too, and whose change it was cannot be told: discarding leaves it as it is.",
@@ -2363,10 +2360,9 @@ const en: Strings = {
   },
   files: {
     demo: 'Demo',
-    more: (n: number) => `${n} more`,
-    moreHint: 'More files the task made or changed',
-    showTab: 'See the file in its tab',
-    named: (caption: string) => (caption ? `Result: ${caption}` : 'Result'),
+    more: (n: number) => `and ${n} more`,
+    less: 'fewer',
+    showChanges: 'Shows what changed in the file',
     formatted: 'Formatted',
     whole: 'Whole file',
     changes: 'Changes',
@@ -2381,7 +2377,7 @@ const en: Strings = {
     noDiff: 'The changes of this file cannot be shown line by line.',
     cut: (kb: number) => `Cut to the first ${kb} KB.`,
     other: 'This file cannot be shown here.',
-    none: 'No file that can be shown here. The list above names everything that changed.',
+    none: 'No file that can be shown here.',
   },
   question: {
     reading: 'agent reading …',

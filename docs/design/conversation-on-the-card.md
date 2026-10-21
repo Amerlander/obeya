@@ -113,18 +113,25 @@ another machine). The owner rarely reads code, so it stays a quiet line.
 
 #### The files beside the demo
 
-What a card's work made or changed is its result, shown on the left for folder and git cards alike
-as tabs: the demo, then the files the worker named at its handover (`ready_for_review`'s `files`,
-path and caption, marked ★), then other changed files that can be shown, documents first; a handful
-get tabs, the rest „N weitere ▾“. Deleted files, directories and files that are neither documents
-nor text stay in the change list. Markdown shows formatted (with its images), a PDF in the browser's
+What a card's work made or changed is its result, shown on the left for folder and git cards alike.
+The change list at the top of the column is also its row of tabs, so each file shows once: a line
+per file with its sign (＋ added, ✎ changed, ↪ moved or renamed, ✕ deleted), its path cut at the
+front so the name stays, its lines added and removed, and on a folder card what discarding would
+leave. „▶ Demo“ comes first, then the files the worker named at its handover (`ready_for_review`'s
+`files`, the caption under the path), then other changed files that can be shown, documents first;
+last, greyed and not to be picked, deleted files, directories and files that are neither documents
+nor text (their line counts still open their diff). The line picked is marked like a tab; a click on
+a line shows its file below, a click on its line counts its changes there. Past eight lines „und N
+weitere ▾“ unfolds the rest; the file picked stays in view when folded. On a git card the lines are
+the branch's files, on a folder card its change list. The phone shows the same list with lines tall
+enough to tap. Markdown shows formatted (with its images), a PDF in the browser's
 viewer, an image as is, an HTML page as an HTML artifact, text and code as text; anything else as a
 tile with „Auf dem Rechner öffnen“. A changed file first shows „Änderungen“, with „Formatiert“ or
 „Ganze Datei“ beside. „Auf dem Rechner öffnen“ and „Im Ordner zeigen“ act on the machine Obeya runs
 on (a non-document only in its folder, since opening would run it), and only for a request from that
 machine; from another device the file downloads and „Im Ordner zeigen“ says it works only there.
 The column keeps its tallest height so the card does not jump; a PDF's viewer is as high as the
-column shows, so its scrollbar is the only one; a video left under another tab stops.
+column shows, so its scrollbar is the only one; a video left for another file stops.
 
 A card with named files, or a folder card handed over without a demo but with files to show, is a
 split even without a demo; the server decides at the handover so the layout does not jump. A worker
@@ -238,3 +245,7 @@ image.
   Rejected: an open button per change-list entry (no place for the result, Markdown unread in the
   browser), Markdown formatted only in the diff overlay (the result hidden behind „Ansehen“), a
   bundled pdf.js. A file opened from another device downloads; an answer's files do the same.
+- **The change list is the row of tabs** (owner, 2026-10-21): files showed twice before, as a list
+  across the card and as tabs below it. Rejected: tabs alone with the list folded away (what stays
+  before „Änderungen verwerfen“ would no longer show at a glance, files without a view would be
+  hidden) and tabs down the side of the file (they take the document's width).

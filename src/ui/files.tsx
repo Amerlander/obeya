@@ -1,20 +1,21 @@
-// The files a card's work made or changed, as its result on the left beside the conversation: a
-// tab for each above the view (the demo first), Markdown formatted, a PDF in the browser's viewer,
-// an image, a page in the sandboxed frame of an HTML artifact, text as it is, anything else as a
-// tile; each to open on the computer, show in its folder, or download. Folder and git cards alike.
+// The files a card's work made or changed, as its result on the left beside the conversation: the
+// change list above the view, a line each (the demo first), which picks what the view shows;
+// Markdown formatted, a PDF in the browser's viewer, an image, a page in the sandboxed frame of an
+// HTML artifact, text as it is, anything else as a tile; each to open on the computer, show in its
+// folder, or download. Folder and git cards alike.
 
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { type CardDiff, splitDiff } from '../core/diff';
-import { imageAt, type ShownFile, shownFiles } from '../core/files';
+import { type ChangeRow, changeRows, imageAt, type ShownFile } from '../core/files';
 import type { Item } from '../core/types';
 import { api, cardFile } from './api';
-import { FileDiff } from './diff';
+import { ChangeNote, DiffView, FileDiff, MARK } from './diff';
 import { Doc, DocImages } from './markdown';
 import { useReportedHeight } from './message';
 import { t } from './strings';
 
-/** How many files get a tab of their own; the others are a click on „N weitere“ away. */
-const TABS = 6;
+/** How many lines the change list shows before „und N weitere ▾“; the file picked shows too. */
+const FOLD = 8;
 /** How much of a text file the view shows; the rest is a click on „Auf dem Rechner öffnen“ or ↓ away. */
 const TEXT_CAP = 400_000;
 /** The highest a page grows in its frame; a higher one scrolls inside it. */
@@ -38,19 +39,21 @@ function useChange(item: Item, given: CardDiff | null | undefined): CardDiff | n
 }
 
 /**
- * The card's left column with its files: the tabs, the demo (`demo`) under the first, a file's view
- * under each other. Without files to show it is the demo alone. `diff`: the card's change where the
- * card has read it already. `tab`: the path of the tab picked (`''` the demo), in the column or in
- * the change list beside the handover; null for the first.
+ * The card's left column with its files: the change list, the demo (`demo`) under its first line, a
+ * file's view under each line that has one. Without a change it is the demo alone. `diff`: the
+ * card's change where the card has read it already. `tab`: the path of the file picked (`''` the
+ * demo); null for the first.
  */
 export function ResultFiles({ item, diff, demo, tab, onTab }: { item: Item; diff?: CardDiff | null; demo: ReactNode; tab: string | null; onTab: (path: string) => void }) {
   const change = useChange(item, diff);
-  const files = shownFiles(change, item.files);
-  const [more, setMore] = useState(false);
+  const rows = changeRows(change, item.files);
+  const files = rows.flatMap((r) => (r.file ? [r.file] : []));
+  // which files show their changes rather than themselves, where the owner chose; a changed one does at first
+  const [asChanges, setAsChanges] = useState<Record<string, boolean>>({});
   const demoBox = useRef<HTMLDivElement>(null);
   // what the shown files are as of now: the change read and the latest handover
   const rev = revision(`${item.state}:${item.need ?? ''}:${item.summary ?? ''}:${JSON.stringify(change?.files ?? [])}:${JSON.stringify(change?.folder?.changes ?? [])}`);
-  // the column keeps the height of its tallest tab so far: the card does not shrink and move under the tabs
+  // the column keeps the height of its tallest view so far: the card does not shrink and move under the list
   const box = useRef<HTMLDivElement>(null);
   const [tallest, setTallest] = useState(0);
   useLayoutEffect(() => {
@@ -58,66 +61,168 @@ export function ResultFiles({ item, diff, demo, tab, onTab }: { item: Item; diff
     if (h > tallest) setTallest(h);
   });
   const current = tab !== null && (tab === DEMO ? !!demo : files.some((f) => f.path === tab)) ? tab : demo ? DEMO : (files[0]?.path ?? DEMO);
-  // a video left playing under another tab would go on talking; a file picked in the change list comes into view
+  // a video left playing under another file would go on talking
   const shown = useRef(current);
   useEffect(() => {
     if (shown.current === current) return;
     shown.current = current;
     if (current !== DEMO) demoBox.current?.querySelectorAll('video').forEach((v) => v.pause());
-    setMore(false);
-    box.current?.querySelector('.r-tabs')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [current]);
-  if (!files.length) return demo || (item.files && change ? <p className="hint">{t.files.none}</p> : null);
-  const pick = onTab;
-  // the files named and the first others get a tab; one picked from the rest gets one while it is shown
-  const tabbed = files.filter((f, i) => i < TABS || f.caption !== undefined || f.path === current);
-  const rest = files.filter((f) => !tabbed.includes(f));
+  if (!rows.length) return demo || (item.files && change ? <p className="hint">{t.files.none}</p> : null);
   const file = files.find((f) => f.path === current);
   return (
     <div className="results" ref={box} style={tallest ? { minHeight: tallest } : undefined}>
-      <div className="r-tabs" role="tablist">
-        {demo && (
-          <button role="tab" aria-selected={current === DEMO} className={current === DEMO ? 'r-tab on' : 'r-tab'} onClick={() => pick(DEMO)}>
-            ▶ {t.files.demo}
-          </button>
-        )}
-        {tabbed.map((f) => (
-          <button
-            key={f.path}
-            role="tab"
-            aria-selected={current === f.path}
-            className={['r-tab', current === f.path && 'on', f.caption !== undefined && 'named'].filter(Boolean).join(' ')}
-            title={f.caption !== undefined ? `${f.path}\n${t.files.named(f.caption)}` : f.path}
-            onClick={() => pick(f.path)}
-          >
-            {base(f.path)}
-          </button>
-        ))}
-        {rest.length > 0 && (
-          <span className="r-more">
-            <button className="r-tab" title={t.files.moreHint} aria-expanded={more} onClick={() => setMore(!more)}>
-              {t.files.more(rest.length)} ▾
-            </button>
-            {more && (
-              <div className="r-menu" role="menu">
-                {rest.map((f) => (
-                  <button key={f.path} role="menuitem" title={f.path} onClick={() => pick(f.path)}>
-                    {f.path}
-                  </button>
-                ))}
-              </div>
-            )}
-          </span>
-        )}
-      </div>
+      <ChangeList
+        item={item}
+        rows={rows}
+        demo={!!demo}
+        current={current}
+        onPick={(path, changes) => {
+          onTab(path);
+          if (changes !== undefined) setAsChanges({ ...asChanges, [path]: changes });
+        }}
+      />
       {demo && (
         <div ref={demoBox} hidden={current !== DEMO}>
           {demo}
         </div>
       )}
       {/* a new handover (or the work going on) may change the file at the same path: its view is read afresh */}
-      {file && <FileView key={`${file.path}:${rev}`} item={item} file={file} rev={rev} />}
+      {file && (
+        <FileView
+          key={`${file.path}:${rev}`}
+          item={item}
+          file={file}
+          rev={rev}
+          changes={file.diff && (asChanges[file.path] ?? true)}
+          onChanges={(c) => setAsChanges({ ...asChanges, [file.path]: c })}
+        />
+      )}
+      {!file && !demo && <p className="hint">{t.files.none}</p>}
     </div>
+  );
+}
+
+/**
+ * The card's change list, a line per file: its sign, its path (cut at the front, so its name stays),
+ * its lines added and removed, and in a folder what discarding would leave. With `onPick` it picks
+ * what the left column shows: the line `current` marked, a click on a line showing its file (on its
+ * lines, its changes), the demo first where there is one (`demo`), lines without a view greyed. A
+ * line's lines open its diff over the page where it has no view, and without `onPick` its path does
+ * too. Past `FOLD` lines, the rest is a click away.
+ */
+export function ChangeList({
+  item,
+  rows,
+  demo,
+  current,
+  onPick,
+}: {
+  item: Item;
+  rows: ChangeRow[];
+  demo?: boolean;
+  current?: string;
+  onPick?: (path: string, changes?: boolean) => void;
+}) {
+  const [more, setMore] = useState(false);
+  // one file's diff over the page
+  const [open, setOpen] = useState<string | null>(null);
+  const pick = onPick && ((path: string, changes?: boolean) => {
+    setMore(false);
+    onPick(path, changes);
+  });
+  const lines: (ChangeRow | typeof DEMO)[] = [...(demo ? ([DEMO] as const) : []), ...rows];
+  // a line or two past the fold are shown rather than folded
+  const folded = !more && lines.length > FOLD + 2;
+  const at = (l: ChangeRow | typeof DEMO) => (l === DEMO ? DEMO : l.path);
+  const visible = folded ? [...lines.slice(0, FOLD), ...lines.slice(FOLD).filter((l) => at(l) === current)] : lines;
+  return (
+    <div className="cl-list" role={pick ? 'tablist' : undefined}>
+      <table>
+        <colgroup>
+          <col className="cl-mark" />
+          <col />
+          <col className="cl-n" />
+          <col className="cl-n" />
+        </colgroup>
+        <tbody>
+          {visible.map((l) =>
+            l === DEMO ? (
+              <tr key="demo" className={current === DEMO ? 'cl-row on' : 'cl-row'} onClick={() => pick?.(DEMO)}>
+                <td className="f-mark">▶</td>
+                <td className="cl-path">
+                  <button className="cl-name" role="tab" aria-selected={current === DEMO}>
+                    {t.files.demo}
+                  </button>
+                </td>
+                <td />
+                <td />
+              </tr>
+            ) : (
+              <Line
+                key={`${l.kind ?? ''}:${l.from ?? ''}:${l.path}`}
+                row={l}
+                on={current === l.path}
+                onPick={pick && l.file ? (changes) => pick(l.path, changes) : undefined}
+                onDiff={l.added || l.removed ? () => setOpen(l.path) : undefined}
+                tabs={!!pick}
+              />
+            ),
+          )}
+        </tbody>
+      </table>
+      {lines.length > FOLD + 2 && (
+        <button className="link cl-more" aria-expanded={more} onClick={() => setMore(!more)}>
+          {more ? `${t.files.less} ▴` : `${t.files.more(lines.length - visible.length)} ▾`}
+        </button>
+      )}
+      {open !== null && <DiffView item={item} file={open} onClose={() => setOpen(null)} onRead={() => {}} />}
+    </div>
+  );
+}
+
+/** A line of the change list: a file to pick (`onPick`, `tabs`), or one whose diff a click shows (`onDiff`), or neither. */
+function Line({ row, on, onPick, onDiff, tabs }: { row: ChangeRow; on: boolean; onPick?: (changes?: boolean) => void; onDiff?: () => void; tabs: boolean }) {
+  const name = (p: string) => (row.dir ? `${p}/` : p);
+  const path = row.from ? `${name(row.from)} → ${name(row.path)}` : name(row.path);
+  // a file the column cannot show is greyed: its name opens nothing, its lines its diff
+  const byName = tabs ? onPick : onDiff;
+  const lines = row.added !== undefined && (row.added > 0 || row.removed! > 0);
+  const onLines = onPick ? () => onPick(row.file?.diff ? true : undefined) : onDiff;
+  const count = (text: string) =>
+    onLines ? (
+      <button className="link cl-lines" title={onPick ? t.files.showChanges : t.diff.showFile} onClick={(e) => (e.stopPropagation(), onLines())}>
+        {text}
+      </button>
+    ) : (
+      text
+    );
+  const note = row.caption || row.changed || (row.undo && row.undo !== 'yes');
+  return (
+    <tr className={['cl-row', on && 'on', tabs && !onPick && 'off'].filter(Boolean).join(' ')} onClick={onPick && (() => onPick())}>
+      <td className="f-mark" aria-label={row.kind}>
+        {row.kind && MARK[row.kind]}
+      </td>
+      <td className="cl-path">
+        {byName ? (
+          <button className="cl-name" role={tabs ? 'tab' : undefined} aria-selected={tabs ? on : undefined} title={tabs ? path : `${path}\n${t.diff.showFile}`} onClick={(e) => (e.stopPropagation(), byName())}>
+            <bdi>{path}</bdi>
+          </button>
+        ) : (
+          <span className="cl-name" title={path}>
+            <bdi>{path}</bdi>
+          </span>
+        )}
+        {note && (
+          <div className="cl-note">
+            {row.caption}
+            <ChangeNote c={row} />
+          </div>
+        )}
+      </td>
+      <td className="d-add">{lines && count(`+${row.added}`)}</td>
+      <td className="d-del">{lines && count(`−${row.removed}`)}</td>
+    </tr>
   );
 }
 
@@ -131,11 +236,10 @@ function revision(s: string): string {
 }
 
 /**
- * One file of the card's work: its path and caption, how it is shown (a changed one its changes
+ * One file of the card's work (its path and caption stand in its line of the change list): how it is shown (a changed one its changes
  * first, the file as it is a click away), and the ways to the file itself.
  */
-function FileView({ item, file, rev }: { item: Item; file: ShownFile; rev: string }) {
-  const [changes, setChanges] = useState(file.diff);
+function FileView({ item, file, rev, changes, onChanges }: { item: Item; file: ShownFile; rev: string; changes: boolean; onChanges: (changes: boolean) => void }) {
   const [note, setNote] = useState('');
   const url = `${cardFile(item.id, file.path)}?v=${rev}`;
   const open = (show: boolean) => {
@@ -148,19 +252,13 @@ function FileView({ item, file, rev }: { item: Item; file: ShownFile; rev: strin
   };
   return (
     <div className="r-file">
-      <div className="r-head">
-        <span className="r-path" title={file.path}>
-          {file.path}
-        </span>
-        {file.caption && <span className="hint"> · {file.caption}</span>}
-      </div>
       <div className="r-bar">
         {file.diff && (
           <span className="r-mode" role="group">
-            <button className={changes ? '' : 'on'} aria-pressed={!changes} onClick={() => setChanges(false)}>
+            <button className={changes ? '' : 'on'} aria-pressed={!changes} onClick={() => onChanges(false)}>
               {file.kind === 'markdown' || file.kind === 'page' ? t.files.formatted : t.files.whole}
             </button>
-            <button className={changes ? 'on' : ''} aria-pressed={changes} onClick={() => setChanges(true)}>
+            <button className={changes ? 'on' : ''} aria-pressed={changes} onClick={() => onChanges(true)}>
               {t.files.changes}
             </button>
           </span>

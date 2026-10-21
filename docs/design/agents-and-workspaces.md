@@ -141,11 +141,11 @@ moved, deleted; a moved directory is one move), with a hash of what it wrote, ke
 done. Agents that only read (the Koordinator, project agents) are not followed.
 
 The card shows the list in the place of its branch („Im Ordner geändert: 4 Dateien +12 −1 ·
-Rückgängig: vollständig“) and in full beside the handover (↪ moved, ＋ added, ✎ changed, ✕ deleted,
-with lines added and removed). „Ansehen“ shows it over the page with diffs of the text files whose
-earlier version Obeya kept. The changed files the worker names as its result show beside the
-conversation (see The files beside the demo). A click on a file's name opens its tab there (or its
-diff where there is none), on its line counts its diff alone, with „Ganzes Diff ansehen“ beside it.
+Rückgängig: vollständig“), whose size shows it over the page with diffs of the text files whose
+earlier version Obeya kept, and in full as the change list at the top of its left column (see The
+files beside the demo), with what discarding would leave. Where the card shows no files beside its
+conversation (before its first handover), the same list stands above the conversation, a click on a
+file's name or line counts opening its diff, with „Ganzes Diff ansehen“ beside it.
 
 **Undo.** „Änderungen verwerfen“ on a card waiting for approval puts back what the card changed after
 eight seconds in which the button counts down and a hint beside it says a second click calls it

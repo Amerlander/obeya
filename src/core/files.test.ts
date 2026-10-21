@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { CardDiff } from './diff';
-import { docImages, fileKind, imageAt, normalPath, shownFiles } from './files';
+import { changeRows, docImages, fileKind, imageAt, normalPath, shownFiles } from './files';
 
 const folder: CardDiff = {
   source: 'folder',
@@ -69,6 +69,35 @@ describe('the files a card shows as its result', () => {
       'src/app.ts text diff',
     ]);
     expect(shownFiles(null)).toEqual([]);
+  });
+
+  test('the change list: the files to show first, in their order and with their captions, then the rest without a view', () => {
+    const rows = changeRows(folder, [{ path: 'Finanzen/Modell.py', caption: 'Das Modell' }]);
+    expect(rows.map((r) => `${r.kind} ${r.path}${r.file ? '' : ' -'}${r.caption ? ` (${r.caption})` : ''}`)).toEqual([
+      'added Finanzen/Modell.py (Das Modell)',
+      'added Finanzen/Regelungen.md',
+      'modified CLAUDE.md',
+      'modified Steuer.xlsx',
+      'moved Scans/a.pdf',
+      'added Finanzen/__pycache__/Modell.cpython-314.pyc -',
+      'deleted Alt.md -',
+    ]);
+    // the lines stay with the file, and a moved one says where it was
+    expect(rows[0]).toMatchObject({ added: 69, removed: 0 });
+    expect(rows[4]).toMatchObject({ from: 'a.pdf' });
+  });
+
+  test('on a branch, the change list is the list git gives, a named file it does not hold with no sign', () => {
+    const rows = changeRows(branch, [{ path: 'README.md', caption: '' }]);
+    expect(rows.map((r) => `${r.kind ?? '·'} ${r.path}${r.file ? '' : ' -'}${r.added !== undefined ? ` +${r.added} −${r.removed}` : ''}`)).toEqual([
+      '· README.md',
+      'added docs/report.pdf',
+      'moved docs/new-name.md +0 −0',
+      'modified src/app.ts +4 −2',
+      'deleted docs/old.md - +0 −5',
+      'added bin/tool.o -',
+    ]);
+    expect(changeRows(null)).toEqual([]);
   });
 
   test('how a file is shown, by its name', () => {

@@ -61,6 +61,16 @@ export interface FolderChange {
   undo?: 'yes' | 'lost' | 'changedSince' | 'shared';
 }
 
+/** The changes as the owner reads them: a directory the card added shows through what it put in it, a deleted one stands for what it held. */
+export function shownChanges(changes: FolderChange[]): FolderChange[] {
+  const gone = changes.filter((c) => c.dir && c.kind === 'deleted').map((c) => c.path);
+  return changes.filter((c) => {
+    if (gone.some((d) => c.path.startsWith(`${d}/`))) return false;
+    if (c.dir && c.kind === 'added') return !changes.some((x) => x !== c && x.path.startsWith(`${c.path}/`));
+    return true;
+  });
+}
+
 /** How much of a diff goes to the page: beyond it, it is cut off at a file's end. */
 export const PATCH_LIMIT = 2_000_000;
 
