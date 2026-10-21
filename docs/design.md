@@ -210,8 +210,8 @@ trade-offs and says what they would cost.
 Its questions come with answer options, shown under its reply as radio buttons, or checkboxes when
 several fit together; the owner picks, may add their own words, and both go out as one message that
 names each question. The questions stand in the conversation as the agent's messages, like a worker's;
-while they wait for the owner they stand at its end, where they are answered, and once answered they
-stay where they were asked, the options picked ticked on them, the alternatives beside, and the owner's
+while they wait for the owner they stand at its end, where they are answered, and once answered (or
+while the agent works on a reply, which may settle them) they stay where they were asked, the options picked ticked on them, the alternatives beside, and the owner's
 message under them holds only their own words (until 2026-10-20 an answered question stood only as a
 bold line of the owner's message, without the alternatives). The owner types in the panel or holds Space with the idea open; both go
 straight to the agent, as on every card an agent listens on (see Voice in), spoken words as soon as

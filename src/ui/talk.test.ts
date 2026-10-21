@@ -425,6 +425,10 @@ test("an idea's open questions stand at its conversation's end, where they are a
   expect(cardTalk({ ...idea, idea: { ...idea.idea!, questions: [] } }, [reply, q]).shown.map((x) => x.e)).toEqual([reply, q]);
   // an archived idea is read only: nothing is answered at its end
   expect(cardTalk({ ...idea, archivedAt: '2026-10-20' }, [reply, q], true).shown.map((x) => x.e)).toEqual([reply, q]);
+  // while its agent works on a reply (a task split off, the owner's words), nothing is answered at the end: the question stays where it was asked
+  const split = ev('state', 'owner', 'Task split off: “Recording page” is now a task of its own; what is open stays here.');
+  const thinking = { ...idea, idea: { ...idea.idea!, thinking: true } } as Item;
+  expect(cardTalk(thinking, [reply, q, split]).shown.map((x) => x.e)).toEqual([reply, q, split]);
 });
 
 test("a proposal's open questions leave where they were asked; settled ones stay there", () => {

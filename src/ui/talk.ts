@@ -176,8 +176,9 @@ export function cardTalk(item: Item, events: CardEvent[], past = false): Talk {
   const asking = item.state === 'waiting' && item.need === 'question' ? item.question : undefined;
   const working = !past && agentWorks(item);
   const paused = !past && !!item.paused && !item.snoozed;
-  // the questions open now stand at the end, where they are answered
-  const open = item.state === 'proposal' && !working ? (item.proposal?.questions ?? []) : item.state === 'idea' && !item.archivedAt ? (item.idea?.questions ?? []) : [];
+  // the questions open now stand at the end, where they are answered; while the agent works on its
+  // reply, which may settle them, they stand where they were asked, as nothing is answered then
+  const open = working ? [] : item.state === 'proposal' ? (item.proposal?.questions ?? []) : item.state === 'idea' && !item.archivedAt ? (item.idea?.questions ?? []) : [];
   return talkTurns(withoutOpen(events, open), { asking, over: !working && !paused, paused });
 }
 
