@@ -501,6 +501,15 @@ export class FolderWorkspaces implements CardWorkspaces {
     this.dropUndo(cardId);
   }
 
+  /** The folder is no pool: nothing to give back. */
+  abandon(): boolean {
+    return false;
+  }
+
+  retake(cardId: string): boolean {
+    return !!this.leasedBy(cardId);
+  }
+
   forkPoint(): null {
     return null;
   }

@@ -86,6 +86,10 @@ const de = {
     prototypeBuilt: (idea: string) => `Gebaut: Die Idee „${idea}“ wird auf diesem Prototyp gebaut.`,
     prototypeDiscardedOnIdea: (title: string) => `Prototyp „${title}“ verworfen; er liegt mit seiner Demo im Archiv.`,
     merged: 'Pull Request gemergt. Live.',
+    /** A workstream in its pull request whose box the plan doc on the default branch ticks off, though the pull request's watcher saw no merge. */
+    mergedTicked: 'Im Plan-Doc auf dem Hauptbranch abgehakt: Pull Request gilt als gemergt. Live.',
+    /** A workstream no worker was on (stopped) is ticked off in its plan doc: its workspace goes back to the pool. */
+    tickedFreed: 'Im Plan-Doc abgehakt: Workspace freigegeben.',
     prClosed: 'Pull Request ohne Merge geschlossen.',
     prClosedQuestion: 'Der Pull Request wurde geschlossen, ohne gemergt zu werden. Wie geht es weiter?',
     reopen: 'Neu eröffnen',
@@ -463,6 +467,8 @@ const en: Messages = {
     prototypeBuilt: (idea: string) => `Built: the idea “${idea}” is built on this prototype.`,
     prototypeDiscardedOnIdea: (title: string) => `Prototype “${title}” discarded; it is in the archive with its demo.`,
     merged: 'Pull request merged. Live.',
+    mergedTicked: 'Ticked off in the plan doc on the default branch: the pull request counts as merged. Live.',
+    tickedFreed: 'Ticked off in the plan doc: workspace freed.',
     prClosed: 'Pull request closed without a merge.',
     prClosedQuestion: 'The pull request was closed without being merged. How should it go on?',
     reopen: 'Reopen it',

@@ -258,6 +258,8 @@ export interface CardWorkspaces {
   pool(busy: string[]): PoolHost[];
   hasWork(cardId: string): boolean;
   release(cardId: string): void;
+  abandon(cardId: string): boolean;
+  retake(cardId: string, path: string): boolean;
   forkPoint(cardId: string): { ws: string; base: string } | null;
   addedFiles(cardId: string, dir: string): string[];
   landOnMain(cardId: string, branch: string, trailer?: string): Promise<LandProblem | Landed>;
@@ -482,6 +484,36 @@ export class Workspaces implements CardWorkspaces {
   release(cardId: string) {
     const path = this.leasedBy(cardId);
     if (path) this.store.setLease(path, null);
+  }
+
+  /**
+   * Frees the workspace of a card that will not work in it again (deleted, or its workstream done
+   * without it), losing nothing: a clone keeps the card's branch and whatever else it holds, and is
+   * free for other cards (one with uncommitted changes takes none until it is clean); a clean
+   * worktree goes and its branch stays, a worktree with uncommitted changes stays as it is (it
+   * takes no slot). Returns whether it freed it.
+   */
+  abandon(cardId: string): boolean {
+    const ws = this.leasedBy(cardId);
+    if (!ws) return false;
+    if (this.o.mode === 'clones') {
+      this.release(cardId);
+      return true;
+    }
+    if (existsSync(ws)) {
+      if (gitOrNull(ws, 'status', '--porcelain') !== '') return false;
+      if (gitOrNull(this.o.repoPath, 'worktree', 'remove', ws) === null) return false;
+    }
+    this.store.removeWorkspace(ws);
+    return true;
+  }
+
+  /** A deleted card restored takes back the clone it had, while that one is still free; a worktree is made again on its branch. */
+  retake(cardId: string, path: string): boolean {
+    if (this.leasedBy(cardId)) return true;
+    if (this.o.mode !== 'clones' || !this.list().some((w) => w.path === path && !w.card_id)) return false;
+    this.store.setLease(path, cardId);
+    return true;
   }
 
   /**

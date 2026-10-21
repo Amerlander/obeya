@@ -5,7 +5,7 @@ import { generic } from '../adapters/generic';
 import { BadRequest, Board } from './board';
 import { artifact, until } from './testing';
 import { Workers } from './workers';
-import { board, dir, doc, eachTest, main, manual, runtime, setDocs, setup, setWorkers, spaces, state, store, workers, ws } from './workers-fixture';
+import { board, dir, doc, eachTest, flush, main, manual, runtime, setDocs, setup, setWorkers, spaces, state, store, workers, ws } from './workers-fixture';
 import { GIT, git } from './workspaces';
 
 eachTest();
@@ -726,5 +726,35 @@ describe('a worktree per card', () => {
     workers.start(a.id);
     expect(board.row(a.id).workspace).toBe(wa);
     expect(git(wa, 'status', '--porcelain')).toContain('draft.ts');
+  });
+
+  test('a deleted card loses its worktree once nothing in it is uncommitted; its branch stays, and a restored card starts there again', async () => {
+    const a = manual();
+    workers.start(a.id);
+    const wa = board.row(a.id).workspace!;
+    const branch = board.row(a.id).branch!;
+    commitIn(wa, 'a.ts', 'A');
+    workers.stop(a.id);
+    board.remove(a.id);
+    await flush();
+    expect(existsSync(wa)).toBe(false);
+    expect(spaces.leasedBy(a.id)).toBeNull();
+    expect(git(main, 'branch', '--list', branch)).toContain(branch);
+    board.restore(a.id);
+    workers.restored(a.id);
+    workers.start(a.id);
+    expect(git(board.row(a.id).workspace!, 'log', '--format=%s', '-1')).toBe('A');
+  });
+
+  test('a deleted card whose worktree holds uncommitted changes keeps it as it is', async () => {
+    const a = manual();
+    workers.start(a.id);
+    const wa = board.row(a.id).workspace!;
+    writeFileSync(join(wa, 'draft.ts'), 'draft');
+    workers.stop(a.id);
+    board.remove(a.id);
+    await flush();
+    expect(git(wa, 'status', '--porcelain')).toContain('draft.ts');
+    expect(spaces.leasedBy(a.id)).toBe(wa);
   });
 });

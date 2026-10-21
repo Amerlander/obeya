@@ -1163,6 +1163,31 @@ export class Board {
     this.changed();
   }
 
+  /**
+   * Why a card holding a workspace will not work in it again, where it will not: it was deleted, or
+   * it is a workstream no worker is on whose box the plan doc on the default branch ticks off
+   * (`ticked`; `merged` while it is in its pull request, which the doc says has been merged).
+   */
+  leaseEnded(cardId: string): 'deleted' | 'ticked' | 'merged' | null {
+    const row = this.store.card(cardId);
+    if (!row || row.canvas_id !== this.canvas.id || row.landed) return null;
+    if (row.deleted_at) return 'deleted';
+    const hash = row.plan_ref?.indexOf('#') ?? -1;
+    if (hash < 0 || row.state === 'working' || row.state === 'waiting' || row.state === 'approved') return null;
+    if (row.state === 'inPr' && !row.pr) return null;
+    // the docs are read the way the canvas reads them, which plans again a workstream only a part of which landed
+    this.snapshot();
+    const doc = this.docs?.find((d) => d.file === row.plan_ref!.slice(0, hash));
+    if (!doc?.workstreams.find((w) => w.key === row.plan_ref!.slice(hash + 1))?.done) return null;
+    return row.state === 'inPr' ? 'merged' : 'ticked';
+  }
+
+  /** A card's workspace was freed (`leaseEnded`); a deleted card keeps it named, to take it back when it is restored. */
+  freed(cardId: string) {
+    if (this.store.card(cardId)?.deleted_at) return;
+    this.work(cardId, { workspace: null, app: null, parked: null });
+  }
+
   /** A card's landed work is done, its worker gone: a card whose plan doc is a project now gives way to it. */
   workDone(cardId: string) {
     // a workstream its doc keeps open is planned again (reopen) once its worker is done

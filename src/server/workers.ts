@@ -455,6 +455,10 @@ export class Workers {
   private reconnecting = new Map<string, ReturnType<typeof setTimeout>>();
   /** Tool calls the owner allowed after the session that asked was gone (a restart), by card: each runs once, without asking again. */
   private granted = new Map<string, Set<string>>();
+  /** Whether settling the leases is due once the change at hand is through (`settleLater`). */
+  private settling = false;
+  /** Cards done with their worktree that still holds uncommitted changes: it stays theirs (`settleLeases`). */
+  private kept = new Set<string>();
   /** Cards with comments on places in the demo video held back: when they go to the worker without the owner's sign. */
   private holding = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -467,6 +471,7 @@ export class Workers {
         const card = this.o.board.item(id);
         if (card?.app !== f.app || this.o.board.row(id).workspace !== f.workspace) this.unforward(id);
       }
+      this.settleLater();
     });
   }
 
@@ -1223,7 +1228,7 @@ export class Workers {
    * The card's pull request was merged, with `commit` the merge put on the base branch where GitHub
    * said: the work is live, the workspace free.
    */
-  merged(cardId: string, commit?: string) {
+  merged(cardId: string, commit?: string, note = this.o.board.t.worker.merged) {
     this.bump(cardId);
     this.o.board.planDocsLanded(cardId, this.planDocsAdded(cardId));
     const pr = this.o.board.row(cardId).pr;
@@ -1237,7 +1242,7 @@ export class Workers {
       landed: JSON.stringify((commit ? { commit } : {}) satisfies LandedState),
       shipped: JSON.stringify(shipped),
     });
-    this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.merged);
+    this.o.board.log(cardId, 'state', 'obeya', note);
     this.o.onMerged?.(cardId);
     this.afterLanding(cardId, `Your pull request was merged; the card is live.\n\n${AFTER_LANDING}`);
   }
@@ -1468,6 +1473,58 @@ export class Workers {
       // it never reported a session: start one with the card
       else if (i.state === 'working') this.launch(i.id, this.briefing(i, row.branch ?? '', true), undefined, this.taskImages(i));
     }
+    // what stood taken for good before the restart is freed now, not only at the next change
+    this.settleLeases();
+  }
+
+  /** Settles the leases once the change that called is through, not in the middle of it. */
+  private settleLater() {
+    if (this.settling) return;
+    this.settling = true;
+    queueMicrotask(() => {
+      this.settling = false;
+      this.settleLeases();
+    });
+  }
+
+  /**
+   * Frees the workspaces of cards that will not work in them again, which would otherwise stay
+   * taken for good, a restart notwithstanding: a deleted card's, and a workstream's that no worker
+   * is on (stopped, say, and its work merged by hand) once the plan doc on the default branch ticks
+   * it off. A workstream still in its pull request then counts as merged, which its worker hears
+   * as from the pull request's watcher: the doc says so, though the watcher may not see it.
+   */
+  private settleLeases() {
+    if (this.folder) return;
+    for (const { card_id: id } of this.o.workspaces.list()) {
+      if (!id || this.kept.has(id)) continue;
+      const ended = this.o.board.leaseEnded(id);
+      if (!ended) continue;
+      if (ended === 'merged') {
+        this.merged(id, undefined, this.o.board.t.worker.mergedTicked);
+        continue;
+      }
+      let freed = false;
+      try {
+        freed = this.o.workspaces.abandon(id);
+      } catch (e) {
+        console.error('freeing the workspace of a card done with it:', e);
+      }
+      // a worktree with uncommitted changes stays, and is not looked at again until Obeya starts anew
+      if (!freed) {
+        this.kept.add(id);
+        continue;
+      }
+      this.o.board.freed(id);
+      if (ended === 'ticked') this.o.board.log(id, 'state', 'obeya', this.o.board.t.worker.tickedFreed);
+    }
+  }
+
+  /** A deleted card is restored: it takes back the workspace it had, where it can; else its next start takes another. */
+  restored(cardId: string) {
+    const row = this.o.board.row(cardId);
+    this.kept.delete(cardId);
+    if (row.workspace && !this.o.workspaces.retake(cardId, row.workspace)) this.o.board.work(cardId, { workspace: null, app: null, parked: null });
   }
 
   /** After a restart, a paused worker stays paused: a restart it waited for has happened, which it hears once it goes on. */

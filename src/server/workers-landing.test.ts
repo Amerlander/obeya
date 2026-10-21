@@ -6,7 +6,7 @@ import { needsYou } from '../core/types';
 import { artifact, identify, until } from './testing';
 import { Board } from './board';
 import { Workers } from './workers';
-import { board, dir, doc, eachTest, main, manual, merged, origin, runtime, setDocs, setup, setWorkers, spaces, state, store, workers, ws } from './workers-fixture';
+import { board, dir, doc, eachTest, flush, main, manual, merged, origin, runtime, setDocs, setup, setWorkers, spaces, state, store, workers, ws } from './workers-fixture';
 import { git } from './workspaces';
 
 eachTest();
@@ -555,5 +555,109 @@ describe('a workstream merged as a pull request, its box still empty', () => {
     board.lesestandMoved('home', git(main, 'rev-parse', 'HEAD'));
     expect(state(w.id)).toBe('planned');
     expect(w1().landedPart).toEqual({ commit: git(main, 'rev-parse', 'HEAD'), pr: { url: 'https://github.com/acme/app/pull/821', number: 821 } });
+  });
+});
+
+describe('a workspace its card will not work in again goes back to the pool', () => {
+  const w1 = () => board.snapshot().items.find((i) => i.label === 'W1')!;
+  /** Starts the card, commits a file in its clone and stops it: the clone stays the card's. */
+  const stoppedWithWork = (id: string) => {
+    workers.start(id);
+    const clone = board.row(id).workspace!;
+    writeFileSync(join(clone, 'config.ts'), 'export {}\n');
+    git(clone, 'add', '.');
+    git(clone, 'commit', '--quiet', '-m', 'Config');
+    workers.stop(id);
+    expect(spaces.leasedBy(id)).toBe(clone);
+    return clone;
+  };
+  const ticked = () => {
+    setDocs([{ ...doc, workstreams: [{ ...ws('W1'), done: true }, ws('W2')] }]);
+    board.docsChanged();
+  };
+
+  test('a stopped workstream the plan doc ticks off frees its clone; its branch stays there', async () => {
+    const w = w1();
+    const clone = stoppedWithWork(w.id);
+    const branch = board.row(w.id).branch!;
+    expect(spaces.leasable()).toBe(false);
+    ticked();
+    await flush();
+    expect(spaces.leasedBy(w.id)).toBeNull();
+    expect(board.row(w.id).workspace).toBeNull();
+    expect(state(w.id)).toBe('live');
+    expect(board.events(w.id).at(-1)!.text).toBe('Im Plan-Doc abgehakt: Workspace freigegeben.');
+    expect(git(clone, 'branch', '--list', branch)).toContain(branch);
+    expect(spaces.leasable()).toBe(true);
+  });
+
+  test('one left taken before Obeya started is freed when it starts', () => {
+    const w = w1();
+    stoppedWithWork(w.id);
+    // the doc was ticked off while an Obeya ran that did not free it; this one starts on the same database
+    const fresh = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: main, branch: 'main' }] }, () => ({ docs: [{ ...doc, workstreams: [{ ...ws('W1'), done: true }, ws('W2')] }], dirs: [] }));
+    new Workers({ board: fresh, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' } }).resumeAll();
+    expect(spaces.leasedBy(w.id)).toBeNull();
+    expect(fresh.item(w.id)!.state).toBe('live');
+  });
+
+  test('a workstream still open in its doc keeps the clone it was stopped with', async () => {
+    const w = w1();
+    const clone = stoppedWithWork(w.id);
+    board.docsChanged();
+    await flush();
+    expect(spaces.leasedBy(w.id)).toBe(clone);
+    expect(state(w.id)).toBe('planned');
+  });
+
+  test('a deleted card frees its clone; restored, it takes the clone back while that is free', async () => {
+    const c = manual();
+    const clone = stoppedWithWork(c.id);
+    board.remove(c.id);
+    await flush();
+    expect(spaces.leasedBy(c.id)).toBeNull();
+    expect(spaces.leasable()).toBe(true);
+    board.restore(c.id);
+    workers.restored(c.id);
+    expect(spaces.leasedBy(c.id)).toBe(clone);
+    workers.start(c.id);
+    expect(git(clone, 'log', '--format=%s', '-1')).toBe('Config');
+  });
+
+  test('restored after another card took its clone, it starts in the next free one', async () => {
+    const c = manual();
+    stoppedWithWork(c.id);
+    board.remove(c.id);
+    await flush();
+    const other = manual();
+    workers.start(other.id);
+    board.restore(c.id);
+    workers.restored(c.id);
+    expect(board.row(c.id).workspace).toBeNull();
+  });
+
+  test('a workstream in its pull request that the doc on the default branch ticks off counts as merged', async () => {
+    rmSync(dir, { recursive: true, force: true });
+    setup({ ...generic, land: 'pr', workspaces: 'clones' });
+    const w = w1();
+    workers.start(w.id);
+    const clone = board.row(w.id).workspace!;
+    writeFileSync(join(clone, 'config.ts'), 'export {}\n');
+    git(clone, 'add', '.');
+    git(clone, 'commit', '--quiet', '-m', 'Config');
+    runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
+    runtime.last.emit({ type: 'idle' });
+    await workers.approve(w.id);
+    board.work(w.id, { pr: JSON.stringify({ url: 'https://github.com/acme/app/pull/821', number: 821, seen: [], reported: [] }) });
+    runtime.last.emit({ type: 'idle' });
+    expect(state(w.id)).toBe('inPr');
+    ticked();
+    await flush();
+    expect(state(w.id)).toBe('live');
+    expect(merged).toEqual([w.id]);
+    expect(runtime.last.inbox.at(-1)).toContain('Your pull request was merged');
+    runtime.last.emit({ type: 'idle' });
+    expect(spaces.leasedBy(w.id)).toBeNull();
+    expect(board.item(w.id)!.finishing).toBeUndefined();
   });
 });

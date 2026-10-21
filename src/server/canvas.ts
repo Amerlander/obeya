@@ -1282,6 +1282,12 @@ export class CanvasRuntime {
     this.board.remove(cardId);
   }
 
+  /** Brings a deleted card back (the owner's undo), with the workspace it had where that is still free. */
+  restore(cardId: string) {
+    this.board.restore(cardId);
+    this.repoOf(cardId).workers.restored(cardId);
+  }
+
   /**
    * The card whose worker fills in a repository's settings for everyone (`.obeya/settings.json`)
    * with the `settings` skill, for one that has none yet or still has an adapter module; one still

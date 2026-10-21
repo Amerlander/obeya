@@ -1889,6 +1889,18 @@ repository's `clones` or `workspaces` in the configuration, or on the command li
 <path>` or `--clones <n>`; a repository whose configuration names clones (these, or `hosts`) works
 in clones whatever its settings say.
 
+A card that will not work in its workspace again gives it back, which nothing else would do, a
+restart included (`settleLeases` in `workers.ts`, on every change of the board and when Obeya
+starts): a deleted card, and a workstream no worker is on (stopped with work on its branch, say,
+and that work merged by hand) once the plan doc on the default branch ticks it off. Nothing is
+lost: a clone keeps the card's branch and whatever else it holds and is free for other cards (one
+with uncommitted changes takes none until it is clean, as any dirty clone); a worktree goes once it
+holds nothing uncommitted, its branch kept, and stays as it is otherwise (it takes no slot). A
+deleted card brought back with the undo takes its clone back while that is still free, else its
+next start takes another (a worktree is made again on its branch). Until 2026-10-21 such cards held
+their clone for good, with no button to free it: a stopped workstream ticked off showed as done
+while the pool counted its clone taken.
+
 #### Slots
 
 A repository's workers in clones are capped by slots, not by clones: a slot is room for one busy
@@ -4503,7 +4515,10 @@ Plan-Doc weiter offen.“ in its log, and shows „Teil gelandet · PR #821“ (
 handover stay; its pull request moves into `shipped`, and its branch goes, so a new run starts on a
 fresh branch from main and hears what landed. Cards that landed before the commit was kept count as
 landed in the Lesestand. A worker still finishing after the landing keeps its card live until it is
-done. `done` (finished without a change) stays: without a commit the doc has nothing to say about
+done. A workstream in its pull request whose box the doc on the default branch ticks off counts as
+merged, whether or not the pull request's watcher saw the merge (it may fail on that pull request
+for good): its worker hears so as from the watcher and finishes, and its clone goes back to the
+pool. `done` (finished without a change) stays: without a commit the doc has nothing to say about
 it.
 
 #### Reading a plan doc
