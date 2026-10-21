@@ -154,6 +154,34 @@ describe('a workspace git frees', () => {
     expect(git(again.path, 'branch', '--show-current')).toBe('obeya/a');
     expect(git(repo, 'worktree', 'list').split('\n')).toHaveLength(2);
   });
+
+  test('a worktree given back and taken again by its card while git removes it (the card deleted and brought back) is made again once git is done', async () => {
+    const { spaces, card } = setup('worktrees');
+    const a = card('A');
+    const { path, ready } = spaces.lease(a, 'obeya/a');
+    await ready;
+    const abandoned = spaces.abandon(path);
+    const again = spaces.lease(a, 'obeya/a');
+    expect(again.ready).not.toBeNull();
+    expect(await abandoned).toBe(true);
+    expect(await again.ready!).toBe(path);
+    expect(spaces.leasedBy(a)).toBe(path);
+    expect(git(path, 'branch', '--show-current')).toBe('obeya/a');
+  });
+
+  test('a workspace handed over is not, where the card it comes from gave it up while git renamed the branch', async () => {
+    const { repo, spaces, card } = setup('worktrees');
+    const [a, b] = [card('A'), card('B')];
+    const { path, ready } = spaces.lease(a, 'obeya/a');
+    await ready;
+    const handed = spaces.transfer(a, b, 'obeya/a', 'obeya/b');
+    const discarded = spaces.discard(a, 'obeya/a');
+    await expect(handed).rejects.toMatchObject({ message: expect.stringContaining('gave its workspace up meanwhile') });
+    await discarded;
+    expect(spaces.leasedBy(b)).toBeNull();
+    expect(existsSync(path)).toBe(false);
+    expect(git(repo, 'branch', '--list', 'obeya/*')).toBe('');
+  });
 });
 
 describe("a follow-up's temporary worktree", () => {

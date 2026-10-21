@@ -1363,11 +1363,14 @@ export class Workers {
   buildOn(prototypeId: string, idea: Item, into?: string): Promise<{ path: string; branch: string }> {
     const { workspace, branch } = this.o.board.row(prototypeId);
     if (!workspace || !branch) throw new BadRequest('noWorkspace', 'the prototype has no workspace to build on');
-    return asBadRequestAsync(this.o.workspaces.transfer(prototypeId, idea.id, branch, branchName(idea.title, idea.id))).then((moved) => {
+    const built = asBadRequestAsync(this.o.workspaces.transfer(prototypeId, idea.id, branch, branchName(idea.title, idea.id))).then((moved) => {
       this.o.board.work(idea.id, { workspace: moved.path, branch: moved.branch, built_on: prototypeId });
       this.endPrototype(prototypeId, 'built', 'owner', into);
       return moved;
     });
+    // until the card names the workspace, its lease is not settled, and a restart waits for git
+    this.whileFreeing(prototypeId, workspace, built, 'building on a prototype');
+    return built;
   }
 
   /**
@@ -1760,6 +1763,8 @@ export class Workers {
         (freed) => {
           // a worktree with uncommitted changes stays, and is not looked at again until Obeya starts anew
           if (!freed) return void this.kept.add(path);
+          // a deleted card brought back and started meanwhile works there again: its worktree is made anew
+          if (!this.o.board.leaseEnded(id, path)) return;
           this.o.board.freed(id, path);
           if (ended === 'ticked') this.o.board.log(id, 'state', 'obeya', this.o.board.t.worker.tickedFreed);
           if (ended === 'gone') this.o.board.log(id, 'state', 'obeya', this.o.board.t.worker.goneFreed);

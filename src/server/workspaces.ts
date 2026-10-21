@@ -632,6 +632,8 @@ export class Workspaces implements CardWorkspaces {
    */
   lease(cardId: string, branch: string, o: { overSlots?: boolean } = {}): Lease {
     const own = this.leasedBy(cardId);
+    // a worktree git is removing (its card deleted and brought back meanwhile) is added again once git is done
+    if (own && !this.cloned(own) && this.clears.has(own)) return this.leaseWorktree(cardId, branch);
     if (own) {
       // given back while git was making it ready, and taken again before git was done: it stays the card's
       this.releasing.delete(cardId);
@@ -1055,6 +1057,12 @@ export class Workspaces implements CardWorkspaces {
         await gitAsync(repo, 'branch', '-m', branch, rename);
         now = rename;
       }
+      // either card moved on while git renamed the branch (the one it comes from discarded, the one it goes to started): back as it was
+      const moved = this.leasedBy(from) !== path ? 'the card it comes from gave its workspace up meanwhile' : this.leasedBy(to) ? 'the card it goes to took a workspace of its own meanwhile' : null;
+      if (moved) {
+        if (now !== branch) await gitAsync(repo, 'branch', '-m', now, branch).catch(() => {});
+        throw new WorkspaceError(moved);
+      }
       this.store.setLease(path, to);
       return { path, branch: now };
     });
@@ -1304,7 +1312,9 @@ export class Workspaces implements CardWorkspaces {
       path,
       async () => {
         await removing;
-        // one git failed to remove is the card's again
+        // the card's again, where git removed it from the pool meanwhile; one git failed to remove is as it was
+        this.store.addWorkspace(this.canvasId, path, this.o.repo ?? null);
+        this.store.setLease(path, cardId);
         if (existsSync(path)) return path;
         mkdirSync(this.o.dir, { recursive: true });
         if ((await gitAsync(this.o.repoPath, 'branch', '--list', branch)) !== '') await gitAsync(this.o.repoPath, 'worktree', 'add', '--quiet', path, branch);
