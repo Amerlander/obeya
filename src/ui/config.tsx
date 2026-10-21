@@ -13,6 +13,7 @@ import { api, reload } from './api';
 import { keepConfigDraft, keptConfigDraft } from './configDraft';
 import { keep } from './keep';
 import { demoState, GitSetup, platformName, RecognitionDetail, SetupList, useFolderWithoutGit, voiceState } from './setup';
+import { useFitHeight } from './fitHeight';
 import { failText, fileSize, pushKeyLabel, t } from './strings';
 import { applyTheme } from './theme';
 import { WishLink } from './wish';
@@ -1225,6 +1226,9 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
   const own = repo.settings?.workspaces;
   const workIn = named ? 'clones' : (own ?? known ?? resolved?.workspaces ?? 'worktrees');
   const clones = !folder && workIn === 'clones';
+  const existing = useRef<HTMLTextAreaElement>(null);
+  const existingText = (repo.workspaces ?? []).join('\n');
+  useFitHeight(existing, existingText, clones);
   // the clones named, put aside while the owner switches to worktrees, back with a switch to clones
   const parked = useRef<Pick<RepoConfig, 'clones' | 'workspaces' | 'hosts'>>({});
   const without = <K extends keyof RepoConfig>(k: K, v: RepoConfig[K] | undefined, from: RepoConfig = repo): RepoConfig => {
@@ -1281,9 +1285,10 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
               <label className="cfg-existing">
                 <span className="hint">{t.config.workspaces}</span>
                 <textarea
+                  ref={existing}
                   rows={2}
                   spellCheck={false}
-                  value={(repo.workspaces ?? []).join('\n')}
+                  value={existingText}
                   onChange={(e) => {
                     const list = e.target.value.split('\n');
                     onChange(without('workspaces', list.some((w) => w.trim()) ? list : undefined));
