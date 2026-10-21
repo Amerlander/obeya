@@ -7,7 +7,8 @@ import { oneAtATime } from '../core/one-at-a-time';
 import { type Briefing, decisionLog, INFORM_RULES, inform, type OwnerAnswer } from './advisor';
 import { type Board, pathOfRef } from './board';
 import { outsidePlanDir } from './repo';
-import type { AgentRuntime } from './runtime';
+import type { AgentRuntime, AgentTool } from './runtime';
+import { TO_OBEYA } from './to-obeya';
 
 export class ProjectAgents {
   /** Questions about one project are answered one after the other, in one session. */
@@ -28,6 +29,8 @@ export class ProjectAgents {
    * session. `dir`: the output directory of the looked-up thread, which the answer's files are in;
    * `signal` ends the turn at once; `onLimit` shows where it waits for the usage limit; `onWaiting`
    * passes the owner's words in while it waits for its background work (`Briefing.onWaiting`).
+   * `asked`: written in the project's sheet, straight to it: its screenshots, and `to_obeya` for what
+   * the words ask of Obeya rather than of it.
    */
   inform(
     project: Item,
@@ -37,6 +40,7 @@ export class ProjectAgents {
     dir?: string,
     signal?: AbortSignal,
     onWaiting?: Briefing['onWaiting'],
+    asked?: { images: string[]; toObeya?: AgentTool },
   ): Promise<OwnerAnswer> {
     return this.queued(project, () =>
       inform({
@@ -50,7 +54,9 @@ export class ProjectAgents {
         ...(signal ? { signal } : {}),
         ...(onWaiting ? { onWaiting } : {}),
         ...(this.permissionMode ? { permissionMode: this.permissionMode } : {}),
-        system: `You are the project agent of the project "${project.title}", directed through Obeya. Its plan doc is ${project.plan?.file ?? '(none)'}${project.plan && outsidePlanDir(pathOfRef(project.plan.file)) ? '' : ' in this repository'}; you know it and the history of its workstreams.\n\n${INFORM_RULES}`,
+        ...(asked?.images.length ? { images: asked.images } : {}),
+        ...(asked?.toObeya ? { tools: [asked.toObeya] } : {}),
+        system: `You are the project agent of the project "${project.title}", directed through Obeya. Its plan doc is ${project.plan?.file ?? '(none)'}${project.plan && outsidePlanDir(pathOfRef(project.plan.file)) ? '' : ' in this repository'}; you know it and the history of its workstreams.\n\n${INFORM_RULES}${asked?.toObeya ? `\n\n${TO_OBEYA}` : ''}`,
         message: [message, `Decisions taken in this project so far:\n${decisionLog(this.board.decisions(project.id))}`, this.preferences()].filter(Boolean).join('\n\n'),
         language: this.board.conversation(),
       }),

@@ -172,6 +172,11 @@ const de = {
     buildsOn: (names: string[]) => `baut auf ${names.join(', ')} auf`,
     collapse: 'Zuklappen: nur der Kopf des Projekts bleibt auf der Leinwand',
     expand: 'Aufklappen: die Workstreams wieder zeigen',
+    /** The project's conversation with its project agent, in its sheet. */
+    askHead: 'Projekt-Agent',
+    askHint: 'Frag hier den Projekt-Agenten: Er kennt das Plandokument, die Entscheidungen und den Stand jedes Workstreams. Was du Obeya zu diesem Projekt fragst, steht auch hier.',
+    askPlaceholder: 'Frage zum Projekt …',
+    askSend: 'An den Projekt-Agenten senden',
   },
   /** The note on a plan directory beside the projects. */
   planDir: {
@@ -799,6 +804,8 @@ const de = {
     filed: (repo: string) => `In die Aufgabe „CLAUDE.md ergänzen“ für ${repo} aufgenommen.`,
     undone: 'zurückgenommen',
     lookingUp: 'schlägt nach …',
+    /** Under the owner's words written in a project's sheet, which went straight to its project agent. */
+    askedIn: (project: string) => `im Projektblatt „${project}“, an den Projekt-Agenten`,
     /** A look-up the usage limit stopped: when it goes on by itself. */
     lookUpLimited: (time: string) => `Nutzungslimit · schlägt das um ${time} von selbst nach`,
     /** Under words the usage limit keeps Obeya from reading: when it reads them by itself. */
@@ -1802,6 +1809,10 @@ const en: Strings = {
     buildsOn: (names: string[]) => `builds on ${names.join(', ')}`,
     collapse: 'Collapse: only the project’s head stays on the canvas',
     expand: 'Expand: show the workstreams again',
+    askHead: 'Project agent',
+    askHint: 'Ask the project agent here: it knows the plan doc, the decisions and where each workstream stands. What you ask Obeya about this project stands here too.',
+    askPlaceholder: 'A question about the project …',
+    askSend: 'Send to the project agent',
   },
   planDir: {
     notProjects: (dir: string, n: number) => `${dir} · ${n === 1 ? '1 doc is not a project' : `${n} docs are not projects`}`,
@@ -2388,6 +2399,7 @@ const en: Strings = {
     filed: (repo: string) => `Added to the task “Add to CLAUDE.md” for ${repo}.`,
     undone: 'taken back',
     lookingUp: 'looking it up …',
+    askedIn: (project: string) => `in the sheet of “${project}”, to the project agent`,
     lookUpLimited: (time: string) => `Usage limit · looks this up by itself at ${time}`,
     held: (time: string) => `Usage limit · reads this by itself at ${time}`,
     waits: (title: string, state: AwaitedState) => `Waiting until “${title}” ${state === 'done' ? 'is done' : 'waits for you'}`,

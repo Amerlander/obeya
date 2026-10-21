@@ -1434,6 +1434,8 @@ button.link:hover { text-decoration: underline; }
 #ksheet { display: flex; flex-direction: column; }
 #ksheet > * { flex: none; }
 #ksheet > .talk { flex: 1 1 0; min-height: 200px; max-height: none; max-width: none; margin: 0 0 4px; }
+/* a project's conversation with its project agent grows in its sheet, which scrolls: no scrollbar of its own */
+#sheet .p-talk .talk { max-height: none; overflow: visible; margin-bottom: 4px; }
 /* what the owner took back stays, struck through */
 .talk .msg.undone :is(.p-lead, .p-list, .p-table) { text-decoration: line-through; text-decoration-color: var(--muted); }
 .k-rest { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 4px; }

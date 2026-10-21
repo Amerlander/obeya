@@ -13,7 +13,7 @@ import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { oneAtATime } from '../core/one-at-a-time';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { type AnswerFile, type AnswerRef, type CardEvent, type Item, pausable, type Talk } from '../core/types';
+import { type AnswerFile, type AnswerRef, type CardEvent, type Item, pausable, type Talk, type TalkRef } from '../core/types';
 import { type Briefing, INFORM_RULES, inform, Interrupted, type OwnerAnswer } from './advisor';
 import { BadRequest, type Board, replyNote } from './board';
 import { imageNote } from './images';
@@ -94,13 +94,16 @@ export class Answers {
     const follow = t.id !== thread;
     // the session of the answer it continues, else the thread's latest; a thread moved onto a card that is gone has the card's
     const resume = follow ? (this.o.board.threadTalk(thread).findLast((x) => x.session && x.id <= (t.follows ?? t.id))?.session ?? this.cardSession(root)) : undefined;
-    const fresh = this.message(root.said, root.question!, about, project);
+    const fresh = this.message(root.said, root.question!, about, project, root.askedIn);
+    // written in the project's sheet: Obeya did not read the words, so the agent passes on what asks Obeya
+    const asked = t.askedIn ? { images: this.o.imageFiles?.(t.images) ?? [], from: t.askedIn } : undefined;
     this.queue(thread, () =>
       this.consult({
         thread,
         by,
         about,
         project,
+        ...(asked ? { asked } : {}),
         onTool,
         onSession: (id) => this.o.board.talkSession(talkId, id),
         // under the question in the sheet, and in the conversation of the card it was asked on
@@ -111,14 +114,29 @@ export class Answers {
         ...(follow
           ? {
               resume,
-              message: followUp(t.said, t.question!, false),
-              fallback: () => ({ message: `${fresh}\n\n${this.history(thread)}\n\n${followUp(t.said, t.question!, false)}` }),
+              message: followUp(t.said, t.askedIn ? undefined : t.question, false),
+              fallback: () => ({ message: `${fresh}\n\n${this.history(thread)}\n\n${followUp(t.said, t.askedIn ? undefined : t.question, false)}` }),
             }
           : { message: fresh }),
       })
-        .then((a) => this.deliver(talkId, thread, by, t.question!, a, reading))
-        .catch((e) => this.deliver(talkId, thread, by, t.question!, { text: this.o.board.t.answer.failed(messageOf(e)) }, reading)),
+        .then((a) => this.deliver(talkId, thread, by, t.question!, a, reading, project))
+        .catch((e) => this.deliver(talkId, thread, by, t.question!, { text: this.o.board.t.answer.failed(messageOf(e)) }, reading, project)),
     ).finally(() => this.busy.delete(talkId));
+  }
+
+  /**
+   * The owner's words in a project's sheet: a question straight to its project agent, which Obeya
+   * does not read first. In reply to a message there, it follows up on that message's thread, as a
+   * follow-up in Obeya's sheet does. `images`: the screenshots' ids.
+   */
+  askProject(projectId: string, text: string, images: string[], replyTo?: TalkRef): number {
+    const project = this.o.board.item(projectId);
+    if (project?.kind !== 'project' || !project.plan) throw new BadRequest('invalid', 'not a project with a plan doc');
+    const quoted = this.o.board.quotedTalk(replyTo);
+    const talk = this.o.board.addTalk(text, '', null, { question: text, about: projectId }, images, quoted, undefined, projectId);
+    if (quoted && this.o.board.exchange(quoted.talk)?.thread) this.o.board.followTalk(talk, quoted.talk);
+    this.lookUp(talk);
+    return talk;
   }
 
   /**
@@ -215,7 +233,7 @@ export class Answers {
     const answered = rows.filter((r) => r.answer !== undefined);
     const files = answered.reduce((n, r) => n + (r.files?.length ?? 0), 0);
     const session = rows.findLast((r) => r.session)?.session;
-    const card = this.o.board.addQuestion(root.question, { talk: thread, answers: answered.length, files }, session, about?.repo, root.cardId);
+    const card = this.o.board.addQuestion(root.question, { talk: thread, answers: answered.length, files }, session, about?.repo, root.cardId ?? root.askedIn);
     for (const r of rows) {
       this.o.board.log(card.id, 'talk', 'owner', r.said, { images: r.images, at: r.at });
       if (r.answer !== undefined) this.o.board.log(card.id, 'talk', r.answerBy ?? by, r.answer, { answer: answerRef(thread, r.files, r.continues), at: r.at });
@@ -331,6 +349,8 @@ export class Answers {
     fallback?: () => { message: string; images?: string[] };
     card?: string;
     images?: string[];
+    /** Written in a project's sheet (`from`), straight to its project agent, with these screenshot files. */
+    asked?: { images: string[]; from: string };
     signal?: AbortSignal;
     /** The turn waits for the agent's background work, or no longer (`Briefing.onWaiting`). */
     onWaiting?: Briefing['onWaiting'];
@@ -341,7 +361,11 @@ export class Answers {
   }): Promise<OwnerAnswer> {
     const dir = this.o.dirOf(c.thread);
     mkdirSync(dir, { recursive: true });
-    if (c.by === 'project') return this.o.projectAgent(c.project!).inform(c.project!, `${c.message}\n\n${filesNote(dir)}`, c.onLimit, c.onTool, dir, c.signal, c.onWaiting);
+    if (c.by === 'project') {
+      const from = c.asked?.from;
+      const asked = c.asked && { images: c.asked.images, ...(from && this.o.toObeya ? { toObeya: toObeyaTool((request) => this.o.toObeya!(from, request)) } : {}) };
+      return this.o.projectAgent(c.project!).inform(c.project!, `${c.message}\n\n${filesNote(dir)}`, c.onLimit, c.onTool, dir, c.signal, c.onWaiting, asked);
+    }
     const toObeya = c.card && this.o.toObeya ? this.o.toObeya : undefined;
     const ask = (message: string, images: string[] | undefined, resume?: string) =>
       inform({
@@ -394,7 +418,8 @@ export class Answers {
     return oneAtATime(this.turns, thread, fn);
   }
 
-  private deliver(talkId: number, thread: number, by: By, question: string, a: OwnerAnswer, card: string | undefined) {
+  /** `project`: the project whose agent answered, whose sheet shows the answer in full too. */
+  private deliver(talkId: number, thread: number, by: By, question: string, a: OwnerAnswer, card: string | undefined, project: Item | undefined) {
     const text = clip(a.text, 12000);
     const t = this.o.board.exchange(talkId);
     // in the log of the card that was open; with the thread moved onto a Question card meanwhile, there too
@@ -408,7 +433,7 @@ export class Answers {
       this.o.board.setThread(moved, { answers: s.answers + 1, files: s.files + (a.files?.length ?? 0) });
     }
     // above the microphone too, wherever the owner is by now; in full on the card or in the sheet
-    this.o.board.notify({ ...(card || moved ? { cardId: card ?? moved } : { talk: talkId }), text: clip(text, 300) });
+    this.o.board.notify({ ...(card || moved ? { cardId: card ?? moved } : { talk: talkId, ...(by === 'project' && project ? { project: project.id } : {}) }), text: clip(text, 300) });
     this.o.onAnswer?.(talkId, question, text);
   }
 
@@ -440,8 +465,10 @@ export class Answers {
     return i;
   }
 
-  private message(said: string, question: string, about: Item | undefined, project: Item | undefined): string {
-    const parts = [`The owner said: "${said}"`, `The question, as you understood it then: ${question}`];
+  private message(said: string, question: string, about: Item | undefined, project: Item | undefined, askedIn?: string): string {
+    const parts = askedIn
+      ? [`The owner wrote to you in the project's sheet in Obeya, where your answer stands below their words: "${said}"`]
+      : [`The owner said: "${said}"`, `The question, as you understood it then: ${question}`];
     if (about && about.kind !== 'project') {
       const state = about.queue ? 'planned, queued' : about.need ? `${about.state}: ${about.need}` : about.state;
       parts.push(

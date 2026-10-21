@@ -498,6 +498,8 @@ export interface ProjectHistory {
   decisions: Decision[];
   /** The idea the plan doc was written from, wherever it is now (on the canvas or archived). */
   origin: Item | null;
+  /** The questions its project agent answered (asked in its sheet or of Obeya) and their follow-ups, oldest first. */
+  talk: Talk[];
 }
 
 /**
@@ -938,6 +940,11 @@ export interface Talk {
   waits?: TalkWait[];
   /** Words of no one: the Koordinator took them up by itself, since a card it waited on got there (or no longer can). */
   after?: TalkAfter;
+  /**
+   * Written in this project's sheet: the words went straight to its project agent as a question
+   * (`question` is the words), so Obeya has no reply of its own to them.
+   */
+  askedIn?: string;
 }
 
 /** A card the Koordinator waits on: until it is done or waits for the owner. */
@@ -1165,7 +1172,9 @@ export type CardAction =
   /** Question cards: the owner's words to the agent that looked the answers up. */
   | { action: 'ask'; text: string; spoken?: boolean; images?: string[]; replyTo?: number }
   /** Question cards: the thread becomes an idea, whose exploration agent starts from it. */
-  | { action: 'asIdea' };
+  | { action: 'asIdea' }
+  /** Projects: the owner's words in the project's sheet, straight to its project agent, maybe replying to a message there. */
+  | { action: 'consult'; text: string; spoken?: boolean; images?: string[]; replyTo?: TalkRef };
 
 /**
  * Why the server refused a request. The server sends the code and an English detail
@@ -2164,4 +2173,6 @@ export interface Notice {
   wish?: Wish;
   /** The exchange of Obeya's sheet it answers, there in full: a page that shows the sheet needs no line above the microphone. */
   talk?: number;
+  /** The project whose sheet shows that exchange in full too: a page with that sheet open needs no line either. */
+  project?: string;
 }

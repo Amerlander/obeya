@@ -258,8 +258,16 @@ export class CanvasRuntime {
       dirOf: (thread) => answersDir(deps.home, id, thread),
       imageFiles: this.imageFiles,
       toObeya: this.toObeya,
-      onAnswer: (talk, question, answer) =>
-        this.commander.tell(`The answer ${answerTag(talk)} you looked up for the owner's question „${question}“ came in and was shown to them: ${answer}`),
+      onAnswer: (talk, question, answer) => {
+        // asked in a project's sheet, the question went to its project agent without Obeya reading it
+        const sheet = board.exchange(talk)?.askedIn;
+        const project = sheet ? board.item(sheet)?.title : undefined;
+        this.commander.tell(
+          project !== undefined
+            ? `The owner asked the project agent of "${project}" in its sheet: „${question}“. Its answer ${answerTag(talk)} was shown to them there: ${answer}`
+            : `The answer ${answerTag(talk)} you looked up for the owner's question „${question}“ came in and was shown to them: ${answer}`,
+        );
+      },
     });
     this.commander = new Commander({
       board,
@@ -1235,6 +1243,12 @@ export class CanvasRuntime {
         return this.repoOf(this.prototypeCard(cardId)).workers.endPrototype(cardId, 'discarded');
       case 'ask':
         return this.answers.ask(cardId, text.trim(), images, !!a.spoken, replyTo);
+      case 'consult': {
+        // the agent passes a request on in its words; the Koordinator reads the owner's own beside them
+        this.said.set(cardId, { text: text.trim(), spoken: !!a.spoken });
+        const ids = Array.isArray(a.images) ? a.images.filter((i): i is string => typeof i === 'string') : [];
+        return void this.answers.askProject(cardId, text.trim(), ids, a.replyTo);
+      }
       case 'asIdea':
         return this.questionAsIdea(cardId);
       case 'share':

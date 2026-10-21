@@ -107,7 +107,7 @@ on the walls and decisions are made in front of the wall.
 - **Agents**
   - *Worker*, one per card while it is worked on: implementation, local reviews, demo.
   - *Project agent*, one per project, long-lived: knows the plan doc and the history of every
-    workstream.
+    workstream; the owner asks it in the project's sheet, or asks Obeya, which passes the question on.
   - *Exploration agent*, one per idea, long-lived, with a worker's tools: discusses the idea with
     the owner and keeps its brief.
   - *Chief of Staff* (in the code and these docs: *Koordinator*), one per canvas: takes voice input
@@ -732,7 +732,8 @@ read-only, the goal and the workstreams as the doc last stood; each workstream u
 conversation and demo. When the same file comes back, or an open workstream is added to it, the
 project returns to its place.
 
-Every project's sheet, live or archived, lists its decisions and links the idea its plan doc was
+Every project's sheet, live or archived, holds its conversation with its project agent (see Asking
+in a project's sheet), lists its decisions and links the idea its plan doc was
 written from: when an idea decided as a project („Idee → Projekt“) lands and its diff adds a doc in
 the plan directory, the project from that doc remembers the idea, whose card keeps its brief and
 conversation, and the idea's decisions join the project's. The project takes the idea's place, and
@@ -2996,6 +2997,31 @@ waited since the turn began; its answer answers them too, so „stop that, take 
 it while the download runs. Words that come once it works again, or once that work ended and is about
 to wake it, wait as before; a session that fails after it heard them hands them to the fresh one. Until 2026-10-19
 they waited, unread, until the job finished and the agent had answered the question before.
+
+#### Asking in a project's sheet
+
+A project's sheet has a section „Projekt-Agent“ under its workstreams: the conversation with its
+project agent and the shared field under it (text, screenshots, microphone, Send), with a hint of
+what the agent knows while nothing has been asked yet. Until 2026-10-21 the project agent was reached
+only through Obeya (a question Obeya looked up), which the owner did not find from the project
+(a colleague's feedback). Words written there go straight to the project agent as a question
+(`consult` on the project, `Answers.askProject`), not through the Koordinator's quick turn: an
+exchange of `talk` with `askedIn` set to the project, the words as its question, and no reply of
+Obeya's. It is looked up like any question about the project, in the project's session, with the
+screenshots, and the agent has `to_obeya` for what the words ask of Obeya („starte W4“), which the
+Koordinator reads with the project open, as from a card. A reply to a message there follows up on
+that message's thread; other words start a thread of their own, all in the one session of the
+project agent, so it still knows what it was asked before.
+
+The sheet shows every thread the project agent answers: asked there, or asked of Obeya about the
+project or one of its workstreams (`ProjectHistory.talk`), each answer with „Als Karte“, which moves
+its thread onto a Question card beside the project. Obeya's sheet shows the exchanges asked in a
+project's sheet too, with a line naming the project („im Projektblatt „…“, an den Projekt-Agenten“),
+so an answer that comes once the owner has left the project waits there unread as any. With the
+sheet in view (not reading its plan doc) the answers in it are read (`talk/read` with their ids), and
+the notice of one gets no line above the microphone (`Notice.project`). The conversation has no
+scrollbar of its own: it grows in the sheet, which follows what the owner asks and an answer that
+comes while the field is in view.
 
 ### Koordinator memory
 

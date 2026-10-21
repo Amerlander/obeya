@@ -4,6 +4,7 @@ import { memo, type ReactNode, useEffect, useRef, useState } from 'react';
 import { type Bounds, dependencyOrder, shapeOf } from '../core/layout';
 import { clip } from '../core/text';
 import { answering, type AppUpdate, type CanvasInfo, type ClonePool, finished, finishedArchivable, finishingUp, type Item, needsYou, openQuestions, type PendingRestart, type PoolHost, type ProjectHistory, type SourceUpdate, stoppedArchivable, titleFrom } from '../core/types';
+import { ProjectTalk } from './koordinator';
 import { api } from './api';
 import type { Cam } from './camera';
 import type { Shape } from './groups';
@@ -933,6 +934,7 @@ export function Sheet({
               </li>
             ))}
           </ol>
+          <ProjectTalk on={on && !reading} project={project} talk={history?.talk ?? []} items={all} onOpen={onOpen} />
           <h4 className="p-h">{t.decisions}</h4>
           {history && history.decisions.length === 0 && <p className="hint">{t.noDecisions}</p>}
           {history && history.decisions.length > 0 && (

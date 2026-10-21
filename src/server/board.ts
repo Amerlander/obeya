@@ -872,8 +872,8 @@ export class Board {
    * Records an exchange with the Koordinator, without its reply (`''`) while it reads the words;
    * returns its id. `replyTo`: the message of the sheet the words reply to.
    */
-  addTalk(said: string, reply: string, cardId: string | null = null, lookUp?: { question: string; about: string | null }, images: string[] = [], replyTo?: TalkRef, after?: TalkAfter): number {
-    const id = this.store.addTalk(this.canvas.id, said, reply, cardId, lookUp, images, replyTo, after);
+  addTalk(said: string, reply: string, cardId: string | null = null, lookUp?: { question: string; about: string | null }, images: string[] = [], replyTo?: TalkRef, after?: TalkAfter, askedIn?: string): number {
+    const id = this.store.addTalk(this.canvas.id, said, reply, cardId, lookUp, images, replyTo, after, askedIn);
     this.changed();
     return id;
   }
@@ -969,8 +969,9 @@ export class Board {
   }
 
   /** The owner has the Koordinator's sheet in view: its answers are read. */
-  readTalk() {
-    if (this.store.readTalk(this.canvas.id)) this.changed();
+  /** The owner has Obeya's sheet in view, or (`ids`) those exchanges in a project's sheet. */
+  readTalk(ids?: number[]) {
+    if (this.store.readTalk(this.canvas.id, ids)) this.changed();
   }
 
   exchange(id: number) {
@@ -1174,7 +1175,9 @@ export class Board {
     const origin = row.from_id ? this.store.card(row.from_id) : null;
     const fromOrigin = origin && !origin.deleted_at ? this.store.cardDecisions(this.canvas.id, origin.id) : [];
     const decisions = [...fromOrigin, ...own].sort((a, b) => a.at.localeCompare(b.at) || a.id - b.id).map(toDecision);
-    return { decisions, origin: origin && !origin.deleted_at ? (this.card(origin.id) ?? null) : null };
+    // what its project agent answered: about the project or one of its workstreams
+    const talk = this.store.talkAbout(this.canvas.id, [id, ...this.store.children([id]).map((c) => c.id)]);
+    return { decisions, origin: origin && !origin.deleted_at ? (this.card(origin.id) ?? null) : null, talk };
   }
 
   /** The plan docs (plan references) that a card's landed work added; the card becomes their origin. */

@@ -442,7 +442,9 @@ export class Commander {
    * command, with the card in focus and the owner's own words beside the agent's, as they were said or typed.
    */
   forward(card: string, request: string, said?: { text: string; spoken: boolean; task?: boolean }): Promise<Heard> {
-    return this.hear(said?.text ?? request, { card }, [], { typed: !said?.spoken, forwarded: request, ...(said?.task ? { task: true } : {}) });
+    // a project's agent passes on what was written in its sheet: Obeya reads it with the project open
+    const focus = this.o.board.item(card)?.kind === 'project' ? { project: card } : { card };
+    return this.hear(said?.text ?? request, focus, [], { typed: !said?.spoken, forwarded: request, ...(said?.task ? { task: true } : {}) });
   }
 
   /** How long a command waits for undo once armed. */

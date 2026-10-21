@@ -11,7 +11,7 @@ import { AnswerFiles, Body, Continues, Msg, Quote, Reading, ThreadCard } from '.
 import { type Reply, setReply, talkEv, talkQuote, useReplyKnown } from './reply';
 import { clock, failText, t } from './strings';
 import { Composer } from './composer';
-import { OBEYA_DRAFT } from './draft';
+import { cardDraft, OBEYA_DRAFT } from './draft';
 import { Shots } from './shots';
 import { usePageVisible } from './seen';
 import { useStickToEnd } from './stickToEnd';
@@ -106,7 +106,7 @@ export function KoordinatorSheet({ on, canvas, items, preferences, settings, rep
  * so the answers waiting in it are read.
  */
 export function KoordinatorTalk({ on, talk, items, onOpen, onTell, draft = OBEYA_DRAFT }: Pick<Props, 'on' | 'talk' | 'items' | 'onOpen' | 'onTell'> & { draft?: string }) {
-  const fresh = useRead(on, talk);
+  const fresh = useRead(on, talk, () => api.readTalk());
   return (
     <>
       <Conversation talk={talk} fresh={fresh} items={items} onOpen={onOpen} draft={draft} />
@@ -117,11 +117,81 @@ export function KoordinatorTalk({ on, talk, items, onOpen, onTell, draft = OBEYA
 }
 
 /**
- * Answers that came while the owner was elsewhere are read once the sheet is in view (open, and the
- * page not hidden); those that were waiting stay marked until it closes, so the owner sees which.
- * Those that come while it is in view are read as they come, unmarked.
+ * A project's conversation with its project agent, in its sheet: what the owner asked it there or
+ * asked Obeya about the project, and the answers, with the field to ask more (not once the project
+ * is archived). `on`: the conversation is in view.
  */
-function useRead(on: boolean, talk: Talk[]): number[] {
+export function ProjectTalk({ on, project, talk, items, onOpen }: { on: boolean; project: Item; talk: Talk[]; items: Item[]; onOpen: (i: Item) => void }) {
+  const fresh = useRead(on, talk, (ids) => api.readTalk(ids));
+  const draft = cardDraft(project.id);
+  const [error, setError] = useState('');
+  const end = useFollowInSheet(talk);
+  return (
+    <section className="p-talk" ref={end}>
+      <h4 className="p-h">{t.plan.askHead}</h4>
+      {!talk.length && <p className="hint">{t.plan.askHint}</p>}
+      <Conversation talk={talk} fresh={fresh} items={items} onOpen={onOpen} draft={draft} sheetOf={project.id} />
+      {!project.archivedAt && (
+        <Composer
+          className="tell"
+          draft={draft}
+          placeholder={t.plan.askPlaceholder}
+          label={t.plan.askSend}
+          onSend={(text, images, replyTo) => {
+            setError('');
+            return api.act(project.id, { action: 'consult', text, ...(images ? { images } : {}), ...(replyTo && typeof replyTo !== 'number' ? { replyTo } : {}) }).catch((e) => setError(failText(e)));
+          }}
+        />
+      )}
+      {error && <p className="p-error">{error}</p>}
+    </section>
+  );
+}
+
+/**
+ * The project's conversation has no scrollbar of its own: it grows in the sheet, which scrolls. What
+ * the owner just asked, and an answer that comes while the field under the conversation is in view,
+ * is brought into view there: the field stays in view, unless the answer is taller than the sheet,
+ * whose start then stands at the sheet's top. Returns the ref of the conversation's section.
+ */
+function useFollowInSheet(talk: Talk[]) {
+  const box = useRef<HTMLElement>(null);
+  // whether the end of the conversation is in view, as the owner last scrolled the sheet
+  const inView = useRef(true);
+  useEffect(() => {
+    const el = box.current;
+    const sheet = el?.closest('.sheet');
+    if (!el || !sheet) return;
+    const see = new IntersectionObserver(([e]) => void (inView.current = !!e?.isIntersecting), { root: sheet });
+    const field = el.querySelector('.composer') ?? el;
+    see.observe(field);
+    return () => see.disconnect();
+  }, []);
+  const last = talk.at(-1);
+  // what changes once the owner asks and once an answer comes
+  const key = `${last?.id}:${last?.answer !== undefined}`;
+  const seen = useRef(key);
+  useEffect(() => {
+    if (key === seen.current) return;
+    seen.current = key;
+    const el = box.current;
+    const sheet = el?.closest('.sheet');
+    if (!el || !sheet || !inView.current) return;
+    const msgs = el.querySelectorAll('.talk > .msg');
+    const newest = msgs[msgs.length - 1];
+    const tall = !!newest && newest.getBoundingClientRect().height > sheet.clientHeight * 0.8;
+    (tall ? newest : (el.querySelector('.composer') ?? el)).scrollIntoView({ block: tall ? 'start' : 'nearest', behavior: 'smooth' });
+  }, [key]);
+  return box;
+}
+
+/**
+ * Answers that came while the owner was elsewhere are read once the conversation is in view (its
+ * sheet open, and the page not hidden); those that were waiting stay marked until it closes, so the
+ * owner sees which. Those that come while it is in view are read as they come, unmarked. `read`
+ * tells the server, with the ids of those read.
+ */
+function useRead(on: boolean, talk: Talk[], read: (ids: number[]) => Promise<unknown>): number[] {
   const [fresh, setFresh] = useState<number[]>([]);
   const visible = usePageVisible();
   const unread = talk.filter((x) => x.unread).map((x) => x.id);
@@ -132,7 +202,7 @@ function useRead(on: boolean, talk: Talk[]): number[] {
     if (!on) return setFresh([]);
     if (!visible || !unread.length) return;
     if (!was) setFresh((f) => [...f, ...unread.filter((id) => !f.includes(id))]);
-    api.readTalk().catch(() => {});
+    read(unread).catch(() => {});
   }, [on, visible, unread.join()]);
   return fresh;
 }
@@ -159,9 +229,10 @@ function Fold({ kind, head, open, onToggle, children }: { kind?: string; head: s
 /**
  * What the owner said to the Koordinator with no card open, and its replies; newest last. The owner
  * can reply to each message, as on a card: it stands quoted above the field, and above the words
- * that reply to it.
+ * that reply to it. Words written in a project's sheet went straight to its project agent, with no
+ * reply of Obeya's; outside that sheet (`sheetOf`) a line names the project.
  */
-function Conversation({ talk, fresh, items, onOpen, draft }: { talk: Talk[]; fresh: number[]; items: Item[]; onOpen: (i: Item) => void; draft: string }) {
+function Conversation({ talk, fresh, items, onOpen, draft, sheetOf }: { talk: Talk[]; fresh: number[]; items: Item[]; onOpen: (i: Item) => void; draft: string; sheetOf?: string }) {
   const box = useRef<HTMLDivElement>(null);
   // every change on the canvas brings a new snapshot: only what the owner just said takes the
   // conversation back to its end, so they can read further up in the meantime
@@ -183,6 +254,7 @@ function Conversation({ talk, fresh, items, onOpen, draft }: { talk: Talk[]; fre
         // a thread moved onto a Question card goes on there, while the card is on the canvas; once it
         // is done (archived) or deleted, its answers stand here again
         const card = x.movedTo ? items.find((i) => i.id === x.movedTo) : undefined;
+        const asked = x.askedIn && x.askedIn !== sheetOf ? items.find((i) => i.id === x.askedIn) : undefined;
         return (
           <Fragment key={x.id}>
             {/* Obeya took a step up by itself, once a card it waited on got there: no words of the owner's */}
@@ -196,9 +268,10 @@ function Conversation({ talk, fresh, items, onOpen, draft }: { talk: Talk[]; fre
                 <Body md={x.said} />
                 <Shots ids={x.images} />
                 {x.continues && <Continues question={x.continues} reading={x.answer === undefined && !card} />}
+                {asked && <div className="hint">{t.koordinator.askedIn(plain(asked.title))}</div>}
               </Msg>
             )}
-            {x.heldUntil ? (
+            {x.askedIn ? null : x.heldUntil ? (
               <Msg by="koordinator" className="thinking" who={t.author.koordinator}>
                 <div className="hint">{t.koordinator.held(clock(x.heldUntil))}</div>
               </Msg>
@@ -229,7 +302,7 @@ function Conversation({ talk, fresh, items, onOpen, draft }: { talk: Talk[]; fre
               <>
                 {/* a question it looked up: the answer follows the acknowledgement */}
                 {x.question && x.answer === undefined && (
-                  <Msg by="koordinator" className="thinking" who={t.author.koordinator}>
+                  <Msg by={x.askedIn ? 'project' : 'koordinator'} className="thinking" who={t.author[x.askedIn ? 'project' : 'koordinator']}>
                     <div className="hint">{x.limitedUntil ? t.koordinator.lookUpLimited(clock(x.limitedUntil)) : t.koordinator.lookingUp}</div>
                   </Msg>
                 )}

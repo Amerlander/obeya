@@ -297,7 +297,7 @@ describe('the archive of projects', () => {
     board.docsChanged();
     expect(board.archived().find((i) => i.id === b.id)!.origin).toBe(idea.id);
     expect(board.projectHistory(b.id).decisions).toHaveLength(2);
-    expect(board.projectHistory(board.snapshot().items[0]!.id)).toEqual({ decisions: [], origin: null });
+    expect(board.projectHistory(board.snapshot().items[0]!.id)).toEqual({ decisions: [], origin: null, talk: [] });
   });
 
   test('a project takes the place of the idea it was written from; the idea goes once its worker is done', () => {

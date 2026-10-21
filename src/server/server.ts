@@ -848,8 +848,14 @@ export function serve(
       '/api/c/:canvas/reshare/stop': { POST: on((c) => c.sharing.stopResharing()) },
       // the card's latest demo was narrated anew in its directory (the demo skill's `--revoice`)
       '/api/c/:canvas/cards/:id/demo-rebuilt': { POST: on((c, req) => c.sharing.rebuilt(req.params.id!)) },
-      // the owner has the Koordinator's sheet in view: the answers waiting there are read
-      '/api/c/:canvas/talk/read': { POST: on((c) => c.board.readTalk()) },
+      // the owner has the Koordinator's sheet in view: the answers waiting there are read; with `ids`, those a project's sheet shows
+      '/api/c/:canvas/talk/read': {
+        POST: on(async (c, req) => {
+          const { ids } = (await req.json().catch(() => ({}))) as { ids?: unknown };
+          if (ids !== undefined && !(Array.isArray(ids) && ids.every((i) => Number.isInteger(i)))) throw new BadRequest('invalid', 'ids must be a list of exchange ids');
+          c.board.readTalk(ids as number[] | undefined);
+        }),
+      },
       // the owner no longer wants the step the Koordinator waits on a card for („Nicht mehr warten“)
       '/api/c/:canvas/talk/:id/unwait': {
         POST: on(async (c, req) => ({ stopped: c.commander.unwait(Number(req.params.id), String(((await req.json().catch(() => ({}))) as { card?: unknown }).card ?? '')) })),

@@ -401,6 +401,8 @@ export const MIGRATIONS = [
   'ALTER TABLE cards ADD COLUMN deps TEXT;',
   // a project the owner folded to its head
   'ALTER TABLE cards ADD COLUMN collapsed INTEGER NOT NULL DEFAULT 0;',
+  // words the owner wrote in a project's sheet, which went straight to its project agent: that project
+  'ALTER TABLE talk ADD COLUMN asked_in TEXT;',
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter, wish';
@@ -852,11 +854,11 @@ export class Store {
 
   // ---------------------------------------------------------------- the Koordinator's memory
 
-  addTalk(canvasId: string, said: string, reply: string, cardId: string | null, lookUp?: { question: string; about: string | null }, images: string[] = [], replyTo?: TalkRef, after?: TalkAfter): number {
+  addTalk(canvasId: string, said: string, reply: string, cardId: string | null, lookUp?: { question: string; about: string | null }, images: string[] = [], replyTo?: TalkRef, after?: TalkAfter, askedIn?: string): number {
     return (
       this.db
         .query(
-          'INSERT INTO talk (canvas_id, at, said, reply, card_id, question, about, images, reply_to, after_wait) VALUES ($c, $at, $said, $reply, $cardId, $question, $about, $images, $replyTo, $after) RETURNING id',
+          'INSERT INTO talk (canvas_id, at, said, reply, card_id, question, about, images, reply_to, after_wait, asked_in) VALUES ($c, $at, $said, $reply, $cardId, $question, $about, $images, $replyTo, $after, $askedIn) RETURNING id',
         )
         .get({
           c: canvasId,
@@ -869,6 +871,7 @@ export class Store {
           images: images.length ? JSON.stringify(images) : null,
           replyTo: replyTo ? JSON.stringify({ talk: replyTo.talk, part: replyTo.part }) : null,
           after: after ? JSON.stringify(after) : null,
+          askedIn: askedIn ?? null,
         }) as { id: number }
     ).id;
   }
@@ -884,10 +887,13 @@ export class Store {
       .run({ id, reply, question: lookUp?.question ?? null, about: lookUp?.about ?? null, wish: wish ? JSON.stringify(wish) : null, waits: waits ? 1 : 0 });
   }
 
-  /** Words the Koordinator was reading when Obeya stopped: they get `reply`; returns them. Words the usage limit holds wait on. */
+  /**
+   * Words the Koordinator was reading when Obeya stopped: they get `reply`; returns them. Words the
+   * usage limit holds wait on; words asked in a project's sheet the Koordinator never reads.
+   */
   interruptTalk(canvasId: string, reply: string): Talk[] {
-    const rows = this.db.query("SELECT * FROM talk WHERE canvas_id = $c AND reply = '' AND held IS NULL ORDER BY id").all({ c: canvasId }) as TalkRow[];
-    this.db.query("UPDATE talk SET reply = $reply WHERE canvas_id = $c AND reply = '' AND held IS NULL").run({ c: canvasId, reply });
+    const rows = this.db.query("SELECT * FROM talk WHERE canvas_id = $c AND reply = '' AND held IS NULL AND asked_in IS NULL ORDER BY id").all({ c: canvasId }) as TalkRow[];
+    this.db.query("UPDATE talk SET reply = $reply WHERE canvas_id = $c AND reply = '' AND held IS NULL AND asked_in IS NULL").run({ c: canvasId, reply });
     return rows.map(toTalk);
   }
 
@@ -963,9 +969,28 @@ export class Store {
     this.db.query('UPDATE talk SET card = $card, unread = 0 WHERE canvas_id = $c AND (id = $t OR thread = $t)').run({ c: canvasId, t: thread, card });
   }
 
-  /** The owner saw the sheet's answers; whether any was unread. */
-  readTalk(canvasId: string): boolean {
+  /** The owner saw the sheet's answers, or (`ids`) those of a project's sheet; whether any was unread. */
+  readTalk(canvasId: string, ids?: number[]): boolean {
+    if (ids)
+      return this.db.query('UPDATE talk SET unread = 0 WHERE canvas_id = $c AND unread = 1 AND id IN (SELECT value FROM json_each($ids))').run({ c: canvasId, ids: JSON.stringify(ids) }).changes > 0;
     return this.db.query('UPDATE talk SET unread = 0 WHERE canvas_id = $c AND unread = 1').run({ c: canvasId }).changes > 0;
+  }
+
+  /**
+   * The latest exchanges of the threads about any of `about` (a project and its workstreams), oldest
+   * first: those its project agent answers.
+   */
+  talkAbout(canvasId: string, about: string[], limit = 100): Talk[] {
+    return (
+      this.db
+        .query(
+          `SELECT t.* FROM talk t JOIN talk r ON r.id = COALESCE(t.thread, t.id)
+           WHERE t.canvas_id = $c AND r.about IN (SELECT value FROM json_each($about)) ORDER BY t.id DESC LIMIT $limit`,
+        )
+        .all({ c: canvasId, about: JSON.stringify(about), limit }) as TalkRow[]
+    )
+      .reverse()
+      .map((r) => withContinues(this.db, r));
   }
 
   /** The latest exchanges, oldest first; with `withoutCard`, only those without an open card. */
@@ -1244,6 +1269,7 @@ interface TalkRow {
   held: string | null;
   waits: string | null;
   after_wait: string | null;
+  asked_in: string | null;
 }
 
 const toTalk = (r: TalkRow): Talk => ({
@@ -1268,6 +1294,7 @@ const toTalk = (r: TalkRow): Talk => ({
   ...(r.held ? { heldUntil: (JSON.parse(r.held) as HeldTalk).until } : {}),
   ...(r.waits ? { waits: (JSON.parse(r.waits) as TalkWaitRow[]).map(({ card, title, state }) => ({ card, title, state })) } : {}),
   ...(r.after_wait ? { after: JSON.parse(r.after_wait) as TalkAfter } : {}),
+  ...(r.asked_in ? { askedIn: r.asked_in } : {}),
 });
 
 /**

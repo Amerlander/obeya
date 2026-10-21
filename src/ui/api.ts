@@ -111,6 +111,8 @@ export interface Heard {
   wish?: Wish;
   /** The exchange the reply stands in, which the conversation in view may show already. */
   talk?: number;
+  /** The project whose sheet shows that exchange too. */
+  project?: string;
 }
 /** How long "Rückgängig" shows: until shortly before the command stops waiting. */
 export const undoShownMs = (undoMs: number) => Math.max(0, undoMs - 400);
@@ -304,7 +306,8 @@ export const api = {
   /** "Ausblenden": puts away what the finished run says, and the notice of outdated pages until a newer change. */
   dismissReshare: () => call<void>('DELETE', at('/reshare')),
   /** The owner has the Koordinator's sheet in view: the answers waiting there are read. */
-  readTalk: () => call<void>('POST', at('/talk/read')),
+  /** Obeya's sheet is in view, or (`ids`) these exchanges in a project's sheet. */
+  readTalk: (ids?: number[]) => call<void>('POST', at('/talk/read'), ids ? { ids } : undefined),
   /** Obeya no longer waits on the card after that exchange, to take the step it said it would. */
   unwait: (talk: number, card: string) => call<{ stopped: boolean }>('POST', at(`/talk/${talk}/unwait`), { card }),
 };

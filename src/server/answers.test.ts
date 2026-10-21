@@ -715,3 +715,93 @@ describe('a thread on a Question card', () => {
     expect(board().item(done.id)).toBeDefined();
   });
 });
+
+describe("a question asked in a project's sheet", () => {
+  const project = () => board().snapshot().items.find((i) => i.kind === 'project')!;
+  /** Asks in the project's sheet; the project agent answers it in session `session`. */
+  async function asked(text: string, answer: string, session = 'project-1', extra: { images?: string[]; replyTo?: { talk: number; part: 'said' | 'answer' } } = {}) {
+    canvas.press(project().id, { action: 'consult', text, ...extra });
+    await settle();
+    const a = answerer();
+    a.emit({ type: 'session', id: session });
+    a.call('answer_owner', { text: answer });
+    a.emit({ type: 'idle' });
+    await settle();
+    return { a, talk: board().talk().at(-1)! };
+  }
+
+  test('goes straight to its project agent, with its screenshots, and stands in the sheet with the answer', async () => {
+    const shot = canvas.images.save(new Uint8Array([1, 2, 3]), 'image/png');
+    const { a, talk } = await asked('Warum wartet W4 auf das Go?', 'Weil der Shop live geht.', 'project-1', { images: [shot] });
+    // no Koordinator read the words first
+    expect(runtime.sessions.some(isKoordinator)).toBe(false);
+    expect(a.spec.system).toContain('project agent of the project "PR-Loop"');
+    expect(a.spec.tools.map((t) => t.name)).toContain('to_obeya');
+    expect(a.inbox[0]).toContain("The owner wrote to you in the project's sheet in Obeya");
+    expect(a.inbox[0]).toContain('Warum wartet W4 auf das Go?');
+    expect(a.images[0]).toEqual([canvas.images.path(shot)!]);
+    expect(board().row(project().id).session_id).toBe('project-1');
+    expect(talk).toMatchObject({ said: 'Warum wartet W4 auf das Go?', askedIn: project().id, question: 'Warum wartet W4 auf das Go?', answer: 'Weil der Shop live geht.', answerBy: 'project', images: [shot] });
+    expect(talk.reply).toBeUndefined();
+    expect(board().projectHistory(project().id).talk.map((x) => x.id)).toEqual([talk.id]);
+    // the sheet shows it in full: a page with it open needs no line above the microphone
+    expect(notices).toEqual([{ talk: talk.id, project: project().id, text: 'Weil der Shop live geht.' }]);
+    // seen there, it waits nowhere else
+    expect(talk.unread).toBe(true);
+    board().readTalk([talk.id]);
+    expect(board().talk().at(-1)!.unread).toBeUndefined();
+  });
+
+  test("a reply to a message there follows up on its thread, in the project's session; a question asked of Obeya about the project stands there too", async () => {
+    const first = await asked('Was macht W4?', 'Es geht live.');
+    const { a, talk } = await asked('Und wann?', 'Nach dem Go.', 'project-1', { replyTo: { talk: first.talk.id, part: 'answer' } });
+    expect(a.spec.resume).toBe('project-1');
+    expect(a.inbox[0]).toContain('The owner follows up on your answer. They said: "Und wann?"');
+    expect(a.inbox[0]).not.toContain('as Obeya understood it');
+    expect(talk).toMatchObject({ thread: first.talk.id, follows: first.talk.id, replyTo: { talk: first.talk.id, part: 'answer' } });
+
+    // asked of Obeya with the project open, or with one of its workstreams open
+    await say('was sagt der plan zu W1?', { project: project().id }, 'look_up', { question: 'What does the plan say about W1?', confirm: 'Ich schaue im Plan nach.' });
+    const viaObeya = board().talk().at(-1)!;
+    await say('und hier?', { card: workstream().id }, 'look_up', { question: 'What is left on W4?', confirm: 'Moment.' });
+    const onWorkstream = board().talk().at(-1)!;
+    expect(board().projectHistory(project().id).talk.map((x) => x.id)).toEqual([first.talk.id, talk.id, viaObeya.id, onWorkstream.id]);
+    expect(viaObeya.askedIn).toBeUndefined();
+  });
+
+  test("passes on with to_obeya what asks Obeya, which reads it with the project open", async () => {
+    canvas.press(project().id, { action: 'consult', text: 'Starte bitte W4.' });
+    await settle();
+    const a = answerer();
+    const passed = a.call('to_obeya', { request: 'Start W4.' });
+    await settle();
+    const k = runtime.sessions.filter(isKoordinator).at(-1)!;
+    expect(k.inbox.at(-1)).toContain('Starte bitte W4.');
+    k.call('reply', { confirm: 'Mache ich gleich.' });
+    k.emit({ type: 'idle' });
+    expect(await passed).toBe('Obeya: Mache ich gleich.');
+    // Obeya's reply stands in its sheet, not in a card's log
+    expect(board().talk().at(-1)).toMatchObject({ said: 'Starte bitte W4.', reply: 'Mache ich gleich.' });
+    expect(board().talk().at(-1)!.cardId).toBeUndefined();
+  });
+
+  test('still being answered when Obeya restarts, it is asked again; "Make it a card" puts its card beside the project', async () => {
+    canvas.press(project().id, { action: 'consult', text: 'Was fehlt noch?' });
+    await settle();
+    canvas.shutdown();
+    canvas = open();
+    await settle();
+    const talk = board().talk().at(-1)!;
+    // Obeya never read the words, so they get no reply of its own at the restart
+    expect(talk.reply).toBeUndefined();
+    const a = answerer();
+    expect(a.inbox[0]).toContain('Was fehlt noch?');
+    a.call('answer_owner', { text: 'Nur W4.' });
+    a.emit({ type: 'idle' });
+    await settle();
+    const card = canvas.answers.toCard(talk.id);
+    expect(card).toMatchObject({ kind: 'question', title: 'Was fehlt noch?' });
+    const p = project();
+    expect(Math.abs(card.x - p.x) + Math.abs(card.y - p.y)).toBeLessThan(2000);
+  });
+});

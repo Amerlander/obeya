@@ -763,8 +763,14 @@ function Canvas({
     if (h.wish) openWish(h.wish);
     if (h.token && !focusRef.current) newCardWatch.current = { known: new Set(itemsRef.current.map((i) => i.id)), until: Date.now() + 20_000 };
   }
-  // the reply stands in Obeya's sheet, open in front of the owner: no line above the microphone
-  const told = useTold(onHeard, (h) => kOnRef.current && !cOnRef.current && snapshotRef.current.talk.some((x) => x.id === h.talk));
+  // the reply stands in Obeya's sheet, or the answer in the project's sheet, open in front of the owner: no line above the microphone
+  const told = useTold(
+    onHeard,
+    (h) =>
+      !cOnRef.current &&
+      ((kOnRef.current && snapshotRef.current.talk.some((x) => x.id === h.talk)) ||
+        (!!h.project && sheetOnRef.current && !readingRef.current && focusRef.current?.type === 'project' && focusRef.current.id === h.project)),
+  );
   const { tellAbout, tellTyped } = tellers(byId, told, fail, placeNow);
   useEffect(() => {
     const w = newCardWatch.current;
@@ -787,7 +793,7 @@ function Canvas({
       onNotice((n) => {
         const i = itemsRef.current.find((x) => x.id === n.cardId);
         if (n.wish) openWish(n.wish);
-        told.show(i ? { id: i.id, title: plain(i.title) } : undefined, { confirm: n.text, ...(n.token ? { token: n.token } : {}), ...(n.undoMs ? { undoMs: n.undoMs } : {}), ...(n.talk ? { talk: n.talk } : {}) });
+        told.show(i ? { id: i.id, title: plain(i.title) } : undefined, { confirm: n.text, ...(n.token ? { token: n.token } : {}), ...(n.undoMs ? { undoMs: n.undoMs } : {}), ...(n.talk ? { talk: n.talk } : {}), ...(n.project ? { project: n.project } : {}) });
       }),
     [],
   );
@@ -1272,7 +1278,7 @@ function Canvas({
       // a screenshot or demo shown large closes first, a card's diff and the queue's list; the card stays open
       if (document.querySelector('.lightbox, .demo-zoom, .queue-menu, .diff-view')) return;
       // so does the quote of a message the owner was replying to: in the field with the cursor, the open card's, the sidebar's
-      const quoting = [focusedDraft(), f?.type === 'card' ? cardDraft(f.id) : null, kOnRef.current ? OBEYA_DRAFT : null].find((k) => k && fieldOn(k) && replyOn(k));
+      const quoting = [focusedDraft(), f?.type === 'card' || f?.type === 'project' ? cardDraft(f.id) : null, kOnRef.current ? OBEYA_DRAFT : null].find((k) => k && fieldOn(k) && replyOn(k));
       if (quoting) return setReply(quoting, null);
       // the archive's list closes after a card unfolded from it
       if (f?.type !== 'card' && aOnRef.current) return setAOn(false);
