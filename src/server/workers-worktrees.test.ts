@@ -54,12 +54,70 @@ describe('a worktree per card', () => {
     const wa = board.row(a.id).workspace!;
     expect(git(wa, 'log', '--format=%s', '-1')).toBe('Auf master');
     commitIn(wa, 'a.ts', 'A');
-    expect(spaces.changes(a.id).map((c) => c.file)).toEqual(['a.ts']);
+    expect((await spaces.changes(a.id)).map((c) => c.file)).toEqual(['a.ts']);
     runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
     await workers.approve(a.id);
     expect(state(a.id)).toBe('live');
     expect(git(main, 'log', '--format=%s', '-3', 'master').split('\n')).toEqual(['A', 'Auf master', 'init']);
     expect(git(main, 'branch', '--list', 'main')).toBe('');
+  });
+
+  test("a card built on a long-lived branch counts only its own work, not that branch's commits ahead of main", async () => {
+    git(main, 'checkout', '--quiet', '-b', 'feature');
+    for (const n of [1, 2, 3]) commitIn(main, `feature${n}.ts`, `Feature ${n}`);
+    git(main, 'checkout', '--quiet', 'main');
+    const a = manual();
+    workers.start(a.id);
+    const wa = board.row(a.id).workspace!;
+    // the worker goes onto the long-lived branch and builds on it
+    git(wa, 'reset', '--quiet', '--hard', 'feature');
+    commitIn(wa, 'a.ts', 'A');
+    writeFileSync(join(wa, 'feature1.ts'), 'changed by the card');
+    writeFileSync(join(wa, 'new.ts'), 'not added yet');
+    expect((await spaces.changes(a.id)).map((c) => c.file)).toEqual(['a.ts', 'feature1.ts', 'new.ts']);
+    expect((await spaces.diff(a.id, true))!.files.map((f) => f.file)).toEqual(['a.ts', 'feature1.ts', 'new.ts']);
+    expect(await spaces.changedFiles(a.id)).toEqual(['a.ts', 'feature1.ts', 'new.ts']);
+    // main merged into a card's branch since does not count as the card's either
+    commitIn(main, 'main.ts', 'On main');
+    const b = board.create({ title: 'Zweite Karte', x: 0, y: 0 });
+    workers.start(b.id);
+    const wb = board.row(b.id).workspace!;
+    git(wb, 'reset', '--quiet', '--hard', 'HEAD~1');
+    commitIn(wb, 'b.ts', 'B');
+    git(wb, 'merge', '--quiet', '--no-edit', 'main');
+    expect((await spaces.changes(b.id)).map((c) => c.file)).toEqual(['b.ts']);
+    // nor on the card built on the long-lived branch
+    git(wa, 'add', '.');
+    git(wa, 'commit', '--quiet', '-m', 'more');
+    git(wa, 'merge', '--quiet', '--no-edit', 'main');
+    expect((await spaces.changes(a.id)).map((c) => c.file)).toEqual(['a.ts', 'feature1.ts', 'new.ts']);
+    expect((await spaces.diff(a.id, true))!.files.map((f) => f.file)).toEqual(['a.ts', 'feature1.ts', 'new.ts']);
+  });
+
+  test("a card's branch that another card is built on still holds the first card's work", async () => {
+    const a = manual();
+    workers.start(a.id);
+    const wa = board.row(a.id).workspace!;
+    commitIn(wa, 'a.ts', 'A');
+    const b = board.create({ title: 'Zweite Karte', x: 0, y: 0 });
+    workers.start(b.id);
+    const wb = board.row(b.id).workspace!;
+    git(wb, 'reset', '--quiet', '--hard', board.row(a.id).branch!);
+    commitIn(wb, 'b.ts', 'B');
+    expect((await spaces.changes(a.id)).map((c) => c.file)).toEqual(['a.ts']);
+    expect((await spaces.changes(b.id)).map((c) => c.file)).toEqual(['a.ts', 'b.ts']);
+  });
+
+  test('a branch that changes thousands of files gives the Koordinator the changed lines of the first 200', async () => {
+    const a = manual();
+    workers.start(a.id);
+    const wa = board.row(a.id).workspace!;
+    for (let n = 0; n < 250; n++) writeFileSync(join(wa, `f${String(n).padStart(3, '0')}.ts`), 'one\ntwo\n');
+    git(wa, 'add', '.');
+    git(wa, 'commit', '--quiet', '-m', 'many');
+    const changes = await spaces.changes(a.id);
+    expect(changes).toHaveLength(200);
+    expect(changes[199]).toEqual({ file: 'f199.ts', regions: ['1-2'] });
   });
 
   test("an idea built on a prototype takes over its worktree and branch, and lands from there", async () => {

@@ -821,7 +821,7 @@ export class Koordinator {
           },
         },
       ],
-      brief: this.brief(card, active, ahead, pending, tags),
+      brief: await this.brief(card, active, ahead, pending, tags),
     });
     if (!scope) throw new Error(error ?? 'no estimate');
     return scope;
@@ -880,7 +880,7 @@ export class Koordinator {
         `Its workstreams to schedule, in the plan's order:\n${batch
           .map((w) => `- ${tagOf(tags, w.id)}: ${w.label ? `${w.label} ` : ''}"${w.title}"${w.body ? ` — ${w.body.replace(/\s+/g, ' ').slice(0, 600)}` : ''}`)
           .join('\n')}`,
-        ...this.others(project, active, ahead, tags),
+        ...(await this.others(project, active, ahead, tags)),
       ]
         .filter(Boolean)
         .join('\n\n'),
@@ -889,14 +889,14 @@ export class Koordinator {
     return plan;
   }
 
-  private brief(card: Item, active: Item[], ahead: Item[], pending: Item[], tags: Map<string, string>): string {
+  private async brief(card: Item, active: Item[], ahead: Item[], pending: Item[], tags: Map<string, string>): Promise<string> {
     const project = card.parent ? this.o.board.item(card.parent) : undefined;
     const siblings = [...active, ...ahead].filter((a) => a.parent === card.parent).map((a) => tagOf(tags, a.id));
     const lines = [
       `The card to start: ${card.kind} "${card.title}".`,
       card.body.trim(),
       project?.plan ? `It is workstream ${card.label ?? ''} of the project "${project.title}"; plan doc ${project.plan.file}.` : '',
-      ...this.others(card, active, ahead, tags),
+      ...(await this.others(card, active, ahead, tags)),
       siblings.length ? `Of these, workstreams of the same project: ${siblings.join(', ')}.` : '',
       pending.length
         ? `The project's other workstreams that have not landed, neither in progress nor queued ahead:\n${pending
@@ -911,18 +911,20 @@ export class Koordinator {
   }
 
   /** The cards in progress and queued ahead, as a turn of the Koordinator reads them. */
-  private others(card: Item, active: Item[], ahead: Item[], tags: Map<string, string>): string[] {
+  private async others(card: Item, active: Item[], ahead: Item[], tags: Map<string, string>): Promise<string[]> {
     const folder = !!this.o.repoFor(card).folder;
     // in a folder nothing is merged later: every path counts
     const soft = folder ? [] : this.o.repoFor(card).adapter.softPaths;
     const described = folder ? (c: Change) => `${c.file} (${c.regions[0] ?? 'changed'})` : describe;
     const hard = (f: string) => !soft.some((s) => overlaps(normalize(f), s));
+    // git reads the branches side by side, without holding up the server
+    const changes = await Promise.all(active.map((a) => this.o.repoFor(a).workspaces.changes(a.id)));
     return [
       active.length
         ? `Cards in progress:\n${active
-            .map((a) => {
+            .map((a, n) => {
               const tag = tagOf(tags, a.id);
-              const changed = this.o.repoFor(a).workspaces.changes(a.id).filter((c) => hard(c.file));
+              const changed = changes[n]!.filter((c) => hard(c.file));
               return [
                 `- ${tag}: "${a.title}"${a.body ? ` — ${a.body.split('\n')[0]!.slice(0, 200)}` : ''}`,
                 `  expected to change: ${(a.scope ?? []).filter(hard).join(', ') || '(no estimate)'}`,

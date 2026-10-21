@@ -83,7 +83,7 @@ describe('two cards at once', () => {
     const d = (await ws.diff('b', true))!;
     expect(d.files.find((f) => f.file === 'Sortierung.md')).toMatchObject({ added: 1, removed: 0 });
     expect(d.patch).toContain('+drei');
-    expect(ws.changes('a')).toEqual([{ file: 'Steuer/Scan.pdf', regions: ['moved from Scan.pdf'] }]);
+    expect(await ws.changes('a')).toEqual([{ file: 'Steuer/Scan.pdf', regions: ['moved from Scan.pdf'] }]);
   });
 });
 

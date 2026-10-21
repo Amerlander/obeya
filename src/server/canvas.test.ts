@@ -131,7 +131,8 @@ describe('a canvas with several repositories', () => {
     canvas.act(c.id, { action: 'start' });
     await settle();
     scopeCall(['src/index.ts']);
-    await settle();
+    // C's estimate, once git has read what A changed
+    await until(() => estimate().inbox[0]!.includes('task "C"'));
     expect(estimate().inbox[0]).toContain('K1: "A"');
     expect(estimate().inbox[0]).not.toContain('"B"');
     scopeCall(['src/index.ts'], ['K1']);

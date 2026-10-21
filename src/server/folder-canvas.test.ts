@@ -60,7 +60,7 @@ describe('a canvas over a folder without git', () => {
     expect(await listOf(sort.id)).toEqual(['moved Scans/scan-1.pdf → Tax/2025/scan-1.pdf', 'added Tax', 'added Tax/2025']);
     expect(await listOf(letter.id)).toEqual(['added Estate/Reply.md', 'modified Estate/Inventory.md']);
     // the Koordinator sees what each changed
-    expect(canvas.repos[0]!.workspaces.changes(letter.id).map((c) => c.file)).toEqual(['Estate/Reply.md', 'Estate/Inventory.md']);
+    expect((await canvas.repos[0]!.workspaces.changes(letter.id)).map((c) => c.file)).toEqual(['Estate/Reply.md', 'Estate/Inventory.md']);
 
     // a handover without a demo: the change list shows what changed
     expect(await a.call('ready_for_review', { summary: 'Sorted.' })).toContain('Recorded');

@@ -574,7 +574,12 @@ export class FolderWorkspaces implements CardWorkspaces {
   }
 
   /** What the card changed, for the Koordinator: each path with what happened to it. */
-  changes(cardId: string): Change[] {
+  async changes(cardId: string): Promise<Change[]> {
+    return this.changed(cardId);
+  }
+
+  /** What the card changed, as `changes` has it, read at once from what Obeya recorded. */
+  changed(cardId: string): Change[] {
     return (this.rec(cardId)?.changes ?? []).map((t) => ({
       file: t.dir ? `${t.path}/` : t.path,
       regions: t.kind === 'moved' ? [`moved from ${t.from}${t.changed ? ', and changed' : ''}`] : t.kind === 'modified' ? [] : [t.kind],

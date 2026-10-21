@@ -1298,7 +1298,8 @@ go to the Koordinator as on any card without an agent, which passes a note on th
 
 A task's branch (and its plan doc) stands under its title, with the size of its change beside it
 („+120 −30 in 5 Dateien“, `Branch` in `src/ui/diff.tsx`): before landing, the branch in its
-workspace against the default branch, committed or not, new files included; once landed, what the
+workspace against where it left the branch it is built on (`base` in `workspaces.ts`, below),
+committed or not, new files included; once landed, what the
 landing put on the default branch (`Shipped.base..commit`: the default branch before a landing on
 main, a merge commit's first parent; a card whose merge commit GitHub did not name has none; an archived card keeps its size and diff). A click shows the whole diff over the page, file by file, with
 large files folded; while the card has a workspace, „Pfad kopieren“ copies its directory
@@ -2649,7 +2650,12 @@ once that one has started, until it has landed (fairer, at the cost of some para
 judged again sees only the cards queued before it, so no two cards wait for each other.
 
 For each card in progress it sees the estimated files and what the branch has changed so far: each
-file with the changed line ranges and git's function context. Sharing a file does not keep a card
+file with the changed line ranges and git's function context, for the first 200 files a branch
+changes. git reads them for all cards in progress at once, without blocking the server. What a
+branch has changed is measured from where it left the nearest branch that is not a card's (`obeya/…`,
+other than its own): the main branch, or a long-lived branch the card was built on; where the main
+branch was merged into the card's branch since, from the main branch. A card's branch that another
+card was built on keeps its work, since card branches do not count. Sharing a file does not keep a card
 waiting (additions in different places merge cleanly); the same lines or function, or code that one
 card moves, renames or reformats while the other edits it, do. In doubt the card runs: a conflict
 that happens anyway goes back to its worker on landing. Paths the settings mark as soft (`softPaths`, docs) do
@@ -3141,6 +3147,12 @@ of the line.
   it, with its text alone and no field: what the owner thought of meanwhile waited until the agent
   ran. Spoken words still go to the Koordinator there, since „trotzdem starten“ and „aus der
   Warteschlange“ are what is said to a waiting card, and no agent is there yet to pass them on.
+- **A card's change list is its own work, read without blocking** (2026-10-21, GitHub issue #2).
+  Until then each card in progress was diffed in full against the main branch, one after the
+  other on the server's thread, every time a card started. Eight cards built on a feature branch
+  766 commits ahead of `master` each counted that whole branch as theirs (2,566 files, 1.3 million
+  lines of `-U0`, 30–70 s per card on Windows), and every canvas showed „Keine Verbindung zum
+  Server“ for minutes. The judge reads a few dozen files of a branch anyway.
 - **A start that finds no workspace is a wait, not a failure** (2026-10-05): before, such a card
   stood as "Geplant" with "Kein Workspace frei" as its last failure and never started by itself,
   though the owner had started it.

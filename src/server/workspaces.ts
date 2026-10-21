@@ -86,6 +86,15 @@ export function gitOrNull(cwd: string, ...args: string[]): string | null {
   }
 }
 
+/** Whether a workspace may be there, without asking its host: for one on another machine, the git call that follows finds out. */
+function mayExist(path: string): boolean {
+  try {
+    return !!remote(path) || existsSync(path);
+  } catch {
+    return false;
+  }
+}
+
 /** Whether a workspace's directory exists, here or on its host (where an unreachable host counts as no). */
 export function exists(path: string): boolean {
   const there = remoteWorkspace(path);
@@ -114,6 +123,24 @@ const DIFF = ['-c', 'core.quotePath=false', 'diff', '--no-color', '--no-ext-diff
 
 /** How many new files not yet added a branch's diff shows; a worker's stray build output should not flood it. */
 const NEW_FILES_SHOWN = 200;
+
+/** How many of a branch's changed files the Koordinator learns the changed lines of (`changes`). */
+const CHANGES_LISTED = 200;
+
+/**
+ * The first `CHANGES_LISTED` of `files` as git pathspecs, as many as fit on a command line: Windows
+ * takes about 32,000 characters, which 200 long paths exceed.
+ */
+function listed(files: string[]): string[] {
+  const out: string[] = [];
+  let length = 0;
+  for (const f of files.slice(0, CHANGES_LISTED)) {
+    length += f.length + 12;
+    if (length > 24_000) break;
+    out.push(`:(literal)${f}`);
+  }
+  return out;
+}
 
 /** The whole diff from `base` to `to` (a commit; the working tree when left out), as `git diff` has it. */
 export function gitDiff(cwd: string, base: string, to?: string): Promise<string> {
@@ -271,7 +298,7 @@ export interface CardWorkspaces {
   transfer(from: string, to: string, branch: string, rename?: string): { path: string; branch: string };
   followUpTree(cardId: string, branch: string): string;
   removeFollowUpTree(path: string): void;
-  changes(cardId: string): Change[];
+  changes(cardId: string): Promise<Change[]>;
   diff(cardId: string, full: boolean): Promise<CardDiff | null>;
   landedDiff(base: string, commit: string, full: boolean): Promise<CardDiff | null>;
   fileOf(cardId: string, path: string, ref?: string, local?: boolean): Promise<FileAt | null>;
@@ -722,29 +749,35 @@ export class Workspaces implements CardWorkspaces {
   /**
    * What the card's branch changes so far, committed or not: each file relative to the repository
    * root, with the changed line ranges and git's function context, so a judge can tell whether two
-   * cards edit the same place. A new file has no ranges.
+   * cards edit the same place. A new file has no ranges. Without blocking the server, and with
+   * line ranges for the first `CHANGES_LISTED` files only: a branch that changes thousands of
+   * files takes git minutes to diff in full, and the judge reads a few dozen.
    */
-  changes(cardId: string): Change[] {
+  async changes(cardId: string): Promise<Change[]> {
     const ws = this.leasedBy(cardId);
-    if (!ws || !exists(ws)) return [];
+    if (!ws || !mayExist(ws)) return [];
     try {
-      const diff = git(ws, 'diff', '-U0', '--no-color', '--no-ext-diff', git(ws, 'merge-base', 'HEAD', this.upstream(ws)));
-      const untracked = git(ws, 'ls-files', '--others', '--exclude-standard');
-      return [...parseChanges(diff), ...untracked.split('\n').filter(Boolean).map((file) => ({ file, regions: [] }))];
+      const base = await this.base(ws);
+      const [names, untracked] = await Promise.all([gitAsync(ws, 'diff', '--name-only', '-z', base), gitAsync(ws, 'ls-files', '-z', '--others', '--exclude-standard')]);
+      const files = names.split('\0').filter(Boolean);
+      const only = files.length > CHANGES_LISTED ? ['--', ...listed(files)] : [];
+      const diff = files.length ? await gitAsync(ws, 'diff', '-U0', '--no-color', '--no-ext-diff', base, ...only) : '';
+      const added = untracked.split('\0').filter(Boolean).slice(0, Math.max(0, CHANGES_LISTED - files.length));
+      return [...parseChanges(diff), ...added.map((file) => ({ file, regions: [] }))];
     } catch {
       return [];
     }
   }
 
   /**
-   * The card's change in its workspace: its branch against the default branch, committed or not,
-   * with new files not yet added; null without a workspace (or one git cannot read).
+   * The card's change in its workspace: its branch against where it left the branch it is built on,
+   * committed or not, with new files not yet added; null without a workspace (or one git cannot read).
    */
   async diff(cardId: string, full: boolean): Promise<CardDiff | null> {
     const ws = this.leasedBy(cardId);
-    if (!ws || !exists(ws)) return null;
+    if (!ws || !mayExist(ws)) return null;
     try {
-      const base = await gitAsync(ws, 'merge-base', 'HEAD', this.upstream(ws));
+      const base = await this.base(ws);
       const tracked = await gitDiff(ws, base);
       const untracked = (await gitAsync(ws, 'ls-files', '-z', '--others', '--exclude-standard')).split('\0').filter(Boolean);
       const added: string[] = [];
@@ -770,7 +803,7 @@ export class Workspaces implements CardWorkspaces {
 
   /**
    * The files of the card's change as they are now (none deleted), as git names them: its branch
-   * against the default branch, committed or not, with new files; with `landed`, what the landing
+   * against where it left the branch it is built on, committed or not, with new files; with `landed`, what the landing
    * put on the default branch. Separated by NUL, so no name can pass for another, as a name with
    * ` b/` in it can in a diff's header; what `file` serves rests on this list. Empty where git
    * cannot tell.
@@ -784,8 +817,8 @@ export class Workspaces implements CardWorkspaces {
     try {
       if (landed) return await names(this.o.repoPath, ['diff', '--name-only', '-z', '-M', '--diff-filter=d', landed.base, landed.commit]);
       const ws = this.leasedBy(cardId);
-      if (!ws || !exists(ws)) return [];
-      const base = await gitAsync(ws, 'merge-base', 'HEAD', this.upstream(ws));
+      if (!ws || !mayExist(ws)) return [];
+      const base = await this.base(ws);
       return [...(await names(ws, ['diff', '--name-only', '-z', '-M', '--diff-filter=d', base])), ...(await names(ws, ['ls-files', '-z', '--others', '--exclude-standard']))];
     } catch {
       return [];
@@ -814,6 +847,44 @@ export class Workspaces implements CardWorkspaces {
    */
   private main(ws: string): string {
     return branchSetting(this.o.repoPath) || defaultBranch(this.o.mode === 'worktrees' ? this.o.repoPath : ws);
+  }
+
+  /**
+   * The commit the card's own work starts from: where its branch left the nearest branch that is not
+   * a card's, which is the main branch or a long-lived branch the card was built on. Measured
+   * against the main branch alone, a card on a branch hundreds of commits ahead of it counted all
+   * of them as its own. Branches of other cards do not count: a card's branch that another card
+   * was built on still holds the first card's work.
+   */
+  private async base(ws: string): Promise<string> {
+    const [main, at] = await Promise.all([this.upstreamAsync(ws).then((up) => gitAsync(ws, 'merge-base', 'HEAD', up)), gitAsync(ws, 'rev-parse', 'HEAD', '--abbrev-ref', 'HEAD')]);
+    const [head, branch] = at.split('\n');
+    // the card's branch here and in remotes, whatever its name
+    const cards = [`${CARD_BRANCH}*`, ...(branch && branch !== 'HEAD' ? [branch] : [])];
+    const own = (
+      await gitAsync(ws, 'rev-list', '--first-parent', '--parents', 'HEAD', '--not', main, ...cards.map((b) => `--exclude=${b}`), '--branches', ...cards.map((b) => `--exclude=*/${b}`), '--remotes')
+    )
+      .split('\n')
+      .filter(Boolean);
+    if (!own.length) return head!;
+    const fork = own.at(-1)!.split(' ')[1];
+    if (!fork || fork === main) return main;
+    const before = async (a: string, b: string) => (await gitRun(ws, ['merge-base', '--is-ancestor', a, b])).code === 0;
+    // the main branch merged into the card's branch since it left it
+    if (await before(fork, main)) return main;
+    if (await before(main, fork)) return fork;
+    // a card on a long-lived branch with the main branch merged in since: both, as one tree
+    try {
+      return (await gitAsync(ws, 'merge-tree', '--write-tree', fork, main)).split('\n')[0]!;
+    } catch {
+      return fork;
+    }
+  }
+
+  /** `upstream` without blocking: finding a clone's main branch asks git, over SSH for a clone on another machine. */
+  private async upstreamAsync(ws: string): Promise<string> {
+    const main = branchSetting(this.o.repoPath) || (await gitSteps(this.o.mode === 'worktrees' ? this.o.repoPath : ws, detectingBranch()));
+    return this.o.mode === 'worktrees' ? main : `origin/${main}`;
   }
 
   /** The branch the workspace's work goes onto as the workspace has it: the main branch itself in a worktree, `origin`'s copy in a clone. */

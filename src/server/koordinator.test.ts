@@ -36,7 +36,16 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-const settle = () => new Promise((r) => setTimeout(r, 5));
+/**
+ * Lets the Koordinator go on until it waits for an estimate or has decided: before an estimate,
+ * git reads the branches of the cards in progress, which takes a moment.
+ */
+async function settle() {
+  await Bun.sleep(5);
+  const asking = () => runtime.sessions.some((s) => !s.closed && s.spec.tools.some((t) => t.name === 'scope' || t.name === 'schedule'));
+  const judging = () => board.snapshot().items.some((i) => i.queue && 'checking' in i.queue) && !asking();
+  for (const end = Date.now() + 1000; judging() && Date.now() < end; ) await Bun.sleep(2);
+}
 const card = (title: string) => board.create({ title, x: 0, y: 0 });
 const item = (id: string) => board.item(id)!;
 const estimates = () => runtime.sessions.filter((s) => s.spec.tools.some((t) => t.name === 'scope'));
@@ -876,7 +885,7 @@ describe('Koordinator starts all workstreams of a project', () => {
     k = new Koordinator({ board, runtime, home: () => dir, repoFor: () => ({ workers, workspaces, adapter: generic, path: dir }), holdMs: 40 });
     const { p, w2, w3, w4 } = project();
     k.request(p.id);
-    await settle();
+    await Bun.sleep(5);
     expect(schedules()).toHaveLength(0);
     k.dequeue(p.id);
     expect([w2, w3, w4].map((w) => item(w.id).queue)).toEqual([undefined, undefined, undefined]);

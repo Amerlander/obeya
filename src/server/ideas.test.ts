@@ -1180,11 +1180,10 @@ describe('a prototype', () => {
     expect(board().decisions(project.id).at(-1)).toMatchObject({ card_id: w2!.id, answer: `Auf Prototyp „${film!.title}“.` });
     // the Koordinator estimates the scope of the plan doc's card first, then decides on the
     // workstream, which may build on W1 or W3: they have not landed
-    for (let n = 0; n < 2; n++) {
+    await until(() => {
       for (const k of runtime.sessions.filter((x) => x.spec.tools.some((t) => t.name === 'scope'))) k.call('scope', { files: [], conflicts_with: [], reason: '' });
-      await settle();
-    }
-    expect(item(w2!.id).state).toBe('working');
+      return item(w2!.id).state === 'working';
+    });
     const brief = workers().at(-1)!.inbox[0]!;
     expect(brief).toContain('build this workstream on the prototype');
     expect(brief).toContain('Ruhige Seite mit großem Video oben.');

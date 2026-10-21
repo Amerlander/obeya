@@ -3022,7 +3022,7 @@ ${idea.idea.brief}` : '',
 
   /** The end of the briefing in a folder without git: where the card works, and how it hands over without a branch. */
   private folderBriefing(cardId: string, parts: string[], resumed: boolean): string {
-    const changed = this.folder!.changes(cardId).length;
+    const changed = this.folder!.changed(cardId).length;
     parts.push(
       `You work directly in the folder ${this.o.board.row(cardId).workspace}, which is not a git repository: what you change there is there at once, for everyone.${resumed && changed ? ` Your card changed ${changed === 1 ? 'one file' : `${changed} files`} there before; the card lists them.` : ''}`,
     );

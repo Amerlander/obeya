@@ -222,7 +222,7 @@ describe('clones on a host', () => {
     identify(local);
     writeFileSync(join(local, 'new.txt'), 'x\n');
     expect(spaces.hasWork(b)).toBe(true);
-    expect(spaces.changes(b)).toEqual([{ file: 'new.txt', regions: [] }]);
+    expect(await spaces.changes(b)).toEqual([{ file: 'new.txt', regions: [] }]);
     git(local, 'add', '.');
     git(local, 'commit', '--quiet', '-m', 'far work');
     const landed = await spaces.pushToMain(b);
