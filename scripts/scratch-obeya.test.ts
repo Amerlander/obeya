@@ -100,3 +100,33 @@ test("--say and --artifact act as a staged card's agent, through the server", as
   const review = (await api<{ kind: string; text: string }[]>(`/cards/${staged.cards.H}/events`)).at(-1)!;
   expect(review).toMatchObject({ kind: 'review', text: 'The second draft.' });
 }, 20_000);
+
+test('without a port, stagings at the same time each pick a free one, and staging afresh takes the same again', async () => {
+  const stages = ['one', 'two'].map((n) => {
+    const f = join(tmp, `${n}.json`);
+    writeFileSync(f, JSON.stringify({ cards: [{ key: 'A', title: n }] }));
+    return f;
+  });
+  const stageAt = async (f: string) => {
+    const p = Bun.spawn([process.execPath, script, f], { stdout: 'pipe', stderr: 'pipe' });
+    const [out, err] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
+    expect(err).toBe('');
+    return JSON.parse(out) as { url: string; port: number; dir: string; pid: number };
+  };
+  const [one, two] = await Promise.all(stages.map(stageAt));
+  try {
+    expect(one!.port).not.toBe(two!.port);
+    for (const s of [one!, two!]) {
+      expect(s.port).not.toBe(4417);
+      expect(s.dir).toBe(`/tmp/obeya-scratch-${s.port}`);
+      expect((await fetch(s.url, { redirect: 'manual' })).status).toBe(200);
+    }
+    const again = await stageAt(stages[0]!);
+    expect(again.port).toBe(one!.port);
+    expect(again.pid).not.toBe(one!.pid);
+    expect(() => process.kill(one!.pid, 0)).toThrow();
+  } finally {
+    for (const s of [one!, two!]) Bun.spawnSync([process.execPath, script, '--stop', String(s.port)]);
+    for (const s of [one!, two!]) rmSync(s.dir, { recursive: true, force: true });
+  }
+}, 30_000);

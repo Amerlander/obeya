@@ -10,7 +10,14 @@
 //   bun scripts/scratch-obeya.ts --artifact <port> <card key> <file> [<summary>]
 //
 // Prints one JSON line, also kept in <dir>/staged.json:
-//   { "url", "port", "dir", "canvas", "pid", "log", "cards": { "<key>": "<card id>" } }
+//   { "url", "port", "dir", "canvas", "pid", "log", "from", "cards": { "<key>": "<card id>" } }
+// The port is --port, else the stage file's `port`; without either the script picks one: the
+// first from 4480 up that nothing listens on and no other scratch Obeya holds (a running one, or
+// one being staged at the same time), so that workers staging at once never collide. --stop,
+// --login, --say and --artifact take the `port` it printed. Staging afresh from the same stage
+// file with the same --code or --binary (`from`) replaces the scratch Obeya staged from them
+// before and takes its port again while that is free; with another --code, the two run side by
+// side. The dir is --dir, else the stage file's `dir`, else /tmp/obeya-scratch-<port>.
 // `url` signs browsers in (design: Who may talk to it), until the scratch Obeya stops; --login
 // prints it again. The script itself talks to the API with the owner's key of the scratch home.
 //
@@ -40,7 +47,7 @@
 // The stage file (JSON; every field but `cards` optional):
 //   {
 //     "name": "Shop", "canvases": ["Website"], "language": "en", "conversation": "de",
-//     "port": 4480, "dir": "/tmp/obeya-scratch-4480", "clones": 2, "mainBranch": "master",
+//     "clones": 2, "mainBranch": "master",
 //     "poolCheckout": true, "slots": 3,
 //     "hosts": [{ "name": "Workhorse", "ssh": "me@workhorse.local", "clones": 2, "slots": 2 }],
 //     "files": { "src/cli.ts": "…" },
@@ -119,7 +126,7 @@
 
 import { Database } from 'bun:sqlite';
 import { spawn, spawnSync } from 'node:child_process';
-import { copyFileSync, cpSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, linkSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { demoSettingsHere } from '../plugin/skills/demo/lib/settings.ts';
 import { type Language, LANGUAGES } from '../src/core/locale';
@@ -176,6 +183,7 @@ interface Stage {
   conversation?: Language;
   /** Further canvases by name, each over a repository of its own, without cards: to switch between canvases. */
   canvases?: string[];
+  /** Without it (and without --port) the script picks a free one. */
   port?: number;
   dir?: string;
   /** The branch the repositories are on (default `main`). */
@@ -272,7 +280,10 @@ if (artifactPort) {
 const file = args.find((a, i) => !a.startsWith('--') && !args[i - 1]?.match(/^--(port|code|dir|binary)$/));
 if (!file) fail('usage: bun scripts/scratch-obeya.ts <stage.json> [--port <n>] [--code <commit> | --binary <obeya>] [--real-workers] [--restarts] | --stop <port> | --login <port> | --say <port> … | --artifact <port> …');
 const stage = JSON.parse(readFileSync(file!, 'utf8')) as Stage;
-const port = Number(opt('port') ?? stage.port ?? fail('no port: give "port" in the stage file or --port'));
+// what a scratch Obeya was staged from: staging afresh from it replaces that one
+const from = { stage: realpathSync(file!), ...(opt('code') || opt('binary') ? { code: opt('code') ?? opt('binary') } : {}) };
+const given = opt('port') ?? stage.port;
+const port = given !== undefined ? Number(given) : await pickPort(opt('dir') ?? stage.dir);
 const dir = resolve(opt('dir') ?? stage.dir ?? scratchDir(port));
 const base = `http://127.0.0.1:${port}`;
 
@@ -404,7 +415,7 @@ if (!started.up) {
   fail(`the server did not come up ${started.exit !== null ? `(exit ${started.exit}) ${after}` : `${after}, so it was stopped`}; ${log}:\n${readFileSync(log, 'utf8').slice(-2000)}`);
 }
 if (stage.setup) {
-  const staged = { url: (await loginLink(base, home)) ?? `${base}/`, port, dir, repo, pid: server.pid, log, cards: {} };
+  const staged = { url: (await loginLink(base, home)) ?? `${base}/`, port, dir, repo, pid: server.pid, log, from, cards: {} };
   writeFileSync(join(dir, 'staged.json'), JSON.stringify(staged, null, 2));
   console.log(JSON.stringify(staged));
   process.exit(0);
@@ -643,7 +654,7 @@ for (const on of allCanvases) {
 for (const g of stage.groups ?? [])
   await api('POST', '/groups', { name: g.name, cards: g.cards.map((k) => ids[k] ?? fail(`group ${g.name}: card ${k} does not exist`)) });
 
-const staged = { url: (await loginLink(base, home, `/?c=${canvas}`)) ?? `${base}/?c=${canvas}`, port, dir, canvas, pid: server.pid, log, cards: ids };
+const staged = { url: (await loginLink(base, home, `/?c=${canvas}`)) ?? `${base}/?c=${canvas}`, port, dir, canvas, pid: server.pid, log, from, cards: ids };
 writeFileSync(join(dir, 'staged.json'), JSON.stringify(staged, null, 2));
 console.log(JSON.stringify(staged));
 process.exit(0);
@@ -660,6 +671,105 @@ function run(cmd: string, a: string[], cwd: string) {
   if (r.status !== 0) fail(`${cmd} ${a.join(' ')}: ${r.stderr}`);
 }
 
+/**
+ * A port for a scratch Obeya staged without one. Staging afresh from the same stage file and code
+ * stops the scratch Obeya staged from them before (the one in `givenDir`, if given) and takes its
+ * port again; else the first from 4480 up that nothing listens on, whose scratch dir no running
+ * server holds and that no other staging has claimed meanwhile (its server does not listen yet).
+ */
+async function pickPort(givenDir: string | undefined): Promise<number> {
+  const earlier = givenDir ? resolve(givenDir) : scratchDirs().find((d) => JSON.stringify(stagedIn(d)?.from) === JSON.stringify(from));
+  const was = earlier ? stagedIn(earlier)?.port : undefined;
+  if (earlier) stop(earlier);
+  for (const p of [...(was ? [was] : []), ...Array.from({ length: 500 }, (_, i) => 4480 + i)]) {
+    if (p === 4417 || alive(pidIn(scratchDir(p))) || !claim(p)) continue;
+    if (await free(p)) {
+      // one whose port went to another meanwhile leaves no dir behind
+      if (earlier && !givenDir && earlier !== scratchDir(p)) rmSync(earlier, { recursive: true, force: true });
+      return p;
+    }
+    rmSync(claimOf(p), { force: true });
+  }
+  return fail('no free port from 4480 to 4979');
+}
+
+function scratchDirs() {
+  return readdirSync('/tmp')
+    .filter((n) => /^obeya-scratch-\d+$/.test(n))
+    .map((n) => `/tmp/${n}`);
+}
+
+function stagedIn(d: string): { port?: number; from?: unknown } | undefined {
+  try {
+    return JSON.parse(readFileSync(join(d, 'staged.json'), 'utf8'));
+  } catch {
+    return undefined;
+  }
+}
+
+function pidIn(d: string) {
+  return pidOf(join(d, 'server.pid'));
+}
+
+function pidOf(file: string) {
+  try {
+    return Number(readFileSync(file, 'utf8'));
+  } catch {
+    return undefined;
+  }
+}
+
+function alive(pid: number | undefined) {
+  if (!pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function claimOf(p: number) {
+  return `${scratchDir(p)}.claim`;
+}
+
+/** Claims port `p` for this staging until it ends, unless another staging that still runs has. */
+function claim(p: number): boolean {
+  // linked in whole, so that another staging never reads a claim without its pid
+  const mine = `${claimOf(p)}.${process.pid}`;
+  writeFileSync(mine, String(process.pid));
+  try {
+    for (let i = 0; i < 3; i++)
+      try {
+        linkSync(mine, claimOf(p));
+        process.on('exit', () => rmSync(claimOf(p), { force: true }));
+        return true;
+      } catch {
+        const holder = pidOf(claimOf(p));
+        if (alive(holder)) return false;
+        // a staging that was killed left it; one that let go of the port meanwhile left none
+        if (holder) rmSync(claimOf(p), { force: true });
+      }
+    return false;
+  } finally {
+    rmSync(mine, { force: true });
+  }
+}
+
+/** Whether a server could listen on port `p` of the loopback and nothing answers there (one listening on every address, say). */
+async function free(p: number) {
+  try {
+    Bun.serve({ port: p, hostname: '127.0.0.1', fetch: () => new Response() }).stop(true);
+  } catch {
+    return false;
+  }
+  const answers = await Bun.connect({ hostname: '127.0.0.1', port: p, socket: { data() {} } }).then(
+    (s) => (s.end(), true),
+    () => false,
+  );
+  return !answers;
+}
+
 /** Ends the scratch Obeya that `dir` belongs to, and what it started, if it still runs. */
 function stop(d: string) {
   stopServer(d);
@@ -674,9 +784,8 @@ function stop(d: string) {
 }
 
 function stopServer(d: string) {
-  const pidFile = join(d, 'server.pid');
-  if (!existsSync(pidFile)) return;
-  const pid = Number(readFileSync(pidFile, 'utf8'));
+  const pid = pidIn(d);
+  if (!pid) return;
   try {
     process.kill(-pid, 'SIGTERM');
   } catch {

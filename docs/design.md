@@ -3817,7 +3817,9 @@ what to do after a change, where its address is, login, test data, migrations; O
 instance); without Obeya, `bun lib/recipe.ts` in a repository prints it. The worker records once the change is committed and checked, as the recipe
 says how to run the app (Obeya: a scratch instance from the worktree, staged by
 `scripts/scratch-obeya.ts` from a stage file before every take, its workers idle unless the change
-is about agents (`--real-workers`); elsewhere, say, the clone's own app), and hands over the
+is about agents (`--real-workers`), on a port the script picks so that workers staging at once never
+collide (staging afresh from the same stage file and code replaces the one before, on its port);
+elsewhere, say, the clone's own app), and hands over the
 directory and chapter titles with `ready_for_review`. A scratch Obeya speaks the stage's `language`,
 else the language of the demos where the script runs (`DEMO_LANGUAGE`, else the demo settings'), so
 the screen matches the narration; the stage's card titles and conversations are written in it
