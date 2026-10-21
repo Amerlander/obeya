@@ -136,6 +136,8 @@ interface Repo extends RepoRuntime {
   stops: (() => void)[];
   /** Stops watching its plan docs. */
   docs?: () => void;
+  /** Its plan docs as last read from its Lesestand: what the canvas shows while git moves the Lesestand. */
+  planDocs?: ReturnType<typeof readPlanDocs>;
   /** Watches its pull requests, once its work went out as one; it stays for those still open. */
   prs?: PrWatcher;
   /** What the configuration's problems of the repository are read from on its default branch, as last seen (`problemSources`). */
@@ -522,7 +524,11 @@ export class CanvasRuntime {
   /** The plan docs of all its repositories, each from its Lesestand: the home repository's by their bare path, the others' with the repository's id before it. */
   private planDocs() {
     const home = this.repos[0]?.ref.id;
-    const read = this.repos.map((r) => ({ r, ...readPlanDocs(r.read.path, r.adapter) }));
+    const read = this.repos.map((r) => {
+      // while git moves the Lesestand its files are half the one commit and half the other: the docs read before stand
+      if (!r.read.moving || !r.planDocs) r.planDocs = readPlanDocs(r.read.path, r.adapter);
+      return { r, ...r.planDocs };
+    });
     return {
       docs: read.flatMap(({ r, docs }) => docs.map((d) => (r.ref.id === home ? d : { ...d, file: `${r.ref.id}:${d.file}` }))),
       dirs: read.map(({ r, others }) => ({ repo: r.ref.id, dir: r.adapter.planDocs.dir, others })),
@@ -1427,7 +1433,7 @@ export class CanvasRuntime {
     this.writing.delete(cardId);
     const { state, landed, workspace, prototype_of } = this.board.row(cardId);
     if (prototype_of) return this.repoOf(cardId).workers.endPrototype(cardId, 'discarded');
-    if (state === 'working' || state === 'waiting' || (landed && workspace)) this.repoOf(cardId).workers.stop(cardId);
+    if (state === 'working' || state === 'waiting' || (landed && workspace)) void this.repoOf(cardId).workers.stop(cardId);
     if (state === 'idea') this.explorers.close(cardId);
     // work thrown away ended too (finished work counted when it landed)
     else if (!state || !finished(state)) this.workRetro.ended(cardId, workspace);

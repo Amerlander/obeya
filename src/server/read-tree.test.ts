@@ -245,7 +245,7 @@ describe("a repository's settings for everyone", () => {
       }
       git(ws, 'add', '-A');
       git(ws, 'commit', '--quiet', '-m', title);
-      runtime.last.call('ready_for_review', { summary: title, demo: artifact() });
+      await runtime.last.call('ready_for_review', { summary: title, demo: artifact() });
       runtime.last.emit({ type: 'idle' });
       await c.repos[0]!.workers.approve(card.id);
       expect(c.board.item(card.id)!.state).toBe('live');
@@ -291,7 +291,7 @@ describe("a repository's settings for everyone", () => {
       writeFileSync(join(ws, file), text);
       git(ws, 'add', '-A');
       git(ws, 'commit', '--quiet', '-m', title);
-      runtime.last.call('ready_for_review', { summary: title, demo: artifact() });
+      await runtime.last.call('ready_for_review', { summary: title, demo: artifact() });
       runtime.last.emit({ type: 'idle' });
       await workers.approve(card.id, { direct: true });
       expect(c.board.item(card.id)!.state).toBe('live');

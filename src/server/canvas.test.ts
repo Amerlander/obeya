@@ -114,7 +114,7 @@ describe('a canvas with several repositories', () => {
       { repo: 'web', ...here([], []) },
       { repo: 'api', ...here([other.id], [other.id]) },
     ]);
-    canvas.repoOf(other.id).workers.stop(other.id);
+    await canvas.repoOf(other.id).workers.stop(other.id);
     expect(canvas.board.snapshot().workspaces![1]).toEqual({ repo: 'api', ...here([], []) });
   });
 
@@ -130,7 +130,7 @@ describe('a canvas with several repositories', () => {
     writeFileSync(join(clone, 'x.ts'), 'export {}\n');
     git(clone, 'add', '.');
     git(clone, 'commit', '--quiet', '-m', 'X');
-    canvas.repoOf(w.id).workers.stop(w.id);
+    await canvas.repoOf(w.id).workers.stop(w.id);
     canvas.shutdown();
     canvas = start();
     expect(canvas.repoOf(w.id).workspaces.leasedBy(w.id)).toBe(clone);
@@ -368,7 +368,7 @@ describe('where the settings do not say how work lands', () => {
     identify(ws);
     writeFileSync(join(ws, 'README.md'), 'Shop\n');
     git(ws, 'commit', '--quiet', '-am', 'Readme');
-    workers.last.call('ready_for_review', { summary: 'Readme', demo: artifact() });
+    await workers.last.call('ready_for_review', { summary: 'Readme', demo: artifact() });
     workers.last.emit({ type: 'idle' });
     await canvas.repos[0]!.workers.approve(card.id);
     expect(item(card.id).state).toBe('live');
@@ -404,7 +404,7 @@ describe("a repository's settings for this machine", () => {
     identify(shop);
     writeFileSync(join(ws, 'README.md'), 'Shop\n');
     git(ws, 'commit', '--quiet', '-am', 'Readme');
-    workers.last.call('ready_for_review', { summary: 'Readme', demo: artifact() });
+    await workers.last.call('ready_for_review', { summary: 'Readme', demo: artifact() });
     workers.last.emit({ type: 'idle' });
 
     settings = { land: 'main' };
@@ -702,7 +702,7 @@ describe('the configuration changed while the canvas runs', () => {
     identify(held);
     git(held, 'commit', '--quiet', '--allow-empty', '-m', 'work');
     git(held, 'push', '--quiet', 'origin', 'HEAD');
-    canvas.repos[0]!.workers.stop(w.card.id);
+    await canvas.repos[0]!.workers.stop(w.card.id);
     expect(canvas.repos[0]!.workspaces.leasedBy(w.card.id)).toBe(held);
     canvas.board.remove(w.card.id);
     await until(() => !existsSync(held));
@@ -724,7 +724,7 @@ describe('the configuration changed while the canvas runs', () => {
     await until(() => !existsSync(free));
     // the card works on in its clone, and a new card gets a worktree
     expect(spaces.leasedBy(w.card.id)).toBe(held);
-    expect(spaces.hasWork(w.card.id)).toBe(false);
+    expect(await spaces.hasWork(w.card.id)).toBe(false);
     spaces.release(w.card.id);
     expect(spaces.list()).toEqual([]);
     await until(() => !existsSync(held));

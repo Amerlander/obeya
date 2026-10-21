@@ -37,7 +37,7 @@ describe('workers', () => {
     expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', text: `Agent started on ${board.row(c.id).branch}.` });
     runtime.last.call('ask', { question: 'Which columns?', options: ['Date', 'Reading'], multiple: true });
     expect(board.events(c.id).at(-1)!.text).toBe('Which columns? (multiple choice)\n– Date\n– Reading');
-    workers.stop(c.id);
+    await workers.stop(c.id);
     expect(board.events(c.id).at(-1)!.text).toBe('Stopped.');
   });
 
@@ -448,7 +448,7 @@ describe('workers', () => {
   test("after a reply on a card waiting for review, the worker's closing words are logged as such, to fold under the reply; after a handover they are left out", async () => {
     const c = manual();
     await workers.start(c.id);
-    runtime.last.call('ready_for_review', { summary: 'Export gebaut.', demo: artifact() });
+    await runtime.last.call('ready_for_review', { summary: 'Export gebaut.', demo: artifact() });
     // those after a handover repeat it
     runtime.last.emit({ type: 'text', text: 'Übergeben: Export gebaut.' });
     runtime.last.emit({ type: 'idle' });
@@ -486,7 +486,7 @@ describe('workers', () => {
     await workers.start(c.id);
     expect(runtime.last.spec.system).toContain("until they have said anything, the language the card's task is written in, since the owner wrote it themselves: they told you their language with it (only where it tells none, German).");
     expect(runtime.last.inbox[0]).toContain('Add a CONTRIBUTING.md.\n\nThe owner wrote this task themselves: write to them in its language.');
-    workers.stop(c.id);
+    await workers.stop(c.id);
     const w = board.snapshot().items.find((i) => i.label === 'W1')!;
     await workers.start(w.id);
     expect(runtime.last.spec.system).toContain("until they have said anything, German. What you write to the owner is in the owner's language, also where what you work on is in another. The card's task comes from the project's plan doc, not from the owner: its language tells nothing about theirs.");
@@ -591,14 +591,14 @@ describe('workers', () => {
     expect(state(c.id)).toBe('working');
     runtime.last.emit({ type: 'text', text: 'Weiter mit den Tests.' });
     expect(board.item(c.id)!.statusLine).toBe('Exporter steht');
-    workers.stop(c.id);
+    await workers.stop(c.id);
   });
 
   test("a worker the usage limit stopped while it took in the owner's words on its handover stays at them and goes on once it lifts", async () => {
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, limitMargin: 30 }));
     const c = manual();
     await workers.start(c.id);
-    runtime.last.call('ready_for_review', { summary: 'Studie fertig.', demo: artifact() });
+    await runtime.last.call('ready_for_review', { summary: 'Studie fertig.', demo: artifact() });
     runtime.last.emit({ type: 'idle' });
     workers.message(c.id, 'Und wenn wir früher handeln?');
     runtime.last.call('reply', { text: 'Ich rechne das nach.' });
@@ -617,7 +617,7 @@ describe('workers', () => {
     expect(runtime.last.inbox.at(-1)).toContain('usage limit');
     runtime.last.emit({ type: 'text', text: 'Weiter mit der Rechnung.' });
     expect(board.item(c.id)!.statusLine).toBe('Rechne frühes Handeln nach');
-    workers.stop(c.id);
+    await workers.stop(c.id);
   });
 
   test('a worker the usage limit stopped while its background work runs says so, and goes on once it lifts', async () => {
@@ -637,7 +637,7 @@ describe('workers', () => {
     await Bun.sleep(60);
     expect(runtime.last.inbox.length).toBe(sent + 1);
     expect(runtime.last.inbox.at(-1)).toContain('usage limit');
-    workers.stop(c.id);
+    await workers.stop(c.id);
   });
 
   test('a worker the usage limit stopped is no longer busy once its background work stopped counting', async () => {
@@ -652,7 +652,7 @@ describe('workers', () => {
     await Bun.sleep(40);
     expect(workers.busyCards()).toEqual([]);
     expect(board.item(c.id)!.statusLine).toStartWith('Nutzungslimit · weiter um ');
-    workers.stop(c.id);
+    await workers.stop(c.id);
   });
 
   test('a worker the usage limit stopped is not woken once stopped', async () => {
@@ -663,7 +663,7 @@ describe('workers', () => {
     runtime.last.emit({ type: 'idle' });
     const session = runtime.last;
     const sent = session.inbox.length;
-    workers.stop(c.id);
+    await workers.stop(c.id);
     await Bun.sleep(40);
     expect(session.inbox.length).toBe(sent);
     expect(runtime.sessions.length).toBe(1);
@@ -711,7 +711,7 @@ describe('workers', () => {
     expect(workers.busyCards().length).toBeGreaterThan(0);
     // the render ends and wakes the worker, which hands over
     runtime.last.emit({ type: 'text', text: 'Video fertig.' });
-    runtime.last.call('ready_for_review', { summary: 'Fertig.', demo: artifact() });
+    await runtime.last.call('ready_for_review', { summary: 'Fertig.', demo: artifact() });
     runtime.last.emit({ type: 'idle' });
     expect(state(c.id)).toBe('waiting:demo');
   });
@@ -858,7 +858,7 @@ describe('workers', () => {
     writeFileSync(join(clone, 'export.ts'), 'export {}\n');
     git(clone, 'add', '.');
     git(clone, 'commit', '--quiet', '-m', 'Export');
-    runtime.last.call('ready_for_review', { summary: 'Export gebaut.', demo: artifact() });
+    await runtime.last.call('ready_for_review', { summary: 'Export gebaut.', demo: artifact() });
     runtime.last.emit({ type: 'idle' });
     expect(state(c.id)).toBe('waiting:demo');
     expect(board.item(c.id)!.summary).toBe('Export gebaut.');
@@ -872,7 +872,7 @@ describe('workers', () => {
     expect(runtime.last.inbox.at(-1)).toContain('still waits for their approval');
     expect(runtime.last.inbox.at(-1)).toContain('Bitte mit Kopfzeile.');
 
-    runtime.last.call('ready_for_review', { summary: 'Mit Kopfzeile.', demo: artifact() });
+    await runtime.last.call('ready_for_review', { summary: 'Mit Kopfzeile.', demo: artifact() });
     expect(board.item(c.id)!.answering).toBeUndefined();
     runtime.last.emit({ type: 'idle' });
     await workers.approve(c.id);
@@ -896,11 +896,11 @@ describe('workers', () => {
     git(clone, 'add', '.');
     git(clone, 'commit', '--quiet', '-m', 'Export');
     expect(runtime.last.spec.tools.find((x) => x.name === 'ready_for_review')!.description).toContain('on a later one, only what your last handover and your replies since have not said yet');
-    runtime.last.call('ready_for_review', { summary: 'CSV-Export gebaut.', demo: artifact() });
+    await runtime.last.call('ready_for_review', { summary: 'CSV-Export gebaut.', demo: artifact() });
     runtime.last.emit({ type: 'idle' });
     workers.message(c.id, 'Bitte mit Kopfzeile.');
     runtime.last.call('reply', { text: 'Mache ich: die Spaltennamen kommen in die erste Zeile.' });
-    runtime.last.call('ready_for_review', { summary: 'Kopfzeile ergänzt, im Commit.' });
+    await runtime.last.call('ready_for_review', { summary: 'Kopfzeile ergänzt, im Commit.' });
     runtime.last.emit({ type: 'idle' });
     // the conversation shows the change alone
     expect(board.events(c.id).findLast((e) => e.kind === 'review')!.text).toBe('Kopfzeile ergänzt, im Commit.');
@@ -909,9 +909,9 @@ describe('workers', () => {
     expect(board.item(c.id)!.summary).toBe(report);
 
     // started afresh, the worker hands over in full again
-    workers.stop(c.id);
+    await workers.stop(c.id);
     await workers.start(c.id);
-    runtime.last.call('ready_for_review', { summary: 'CSV- und Excel-Export gebaut.', demo: artifact() });
+    await runtime.last.call('ready_for_review', { summary: 'CSV- und Excel-Export gebaut.', demo: artifact() });
     expect(board.summary(c.id)).toBe('CSV- und Excel-Export gebaut.');
   });
 
@@ -942,7 +942,7 @@ describe('workers', () => {
 
     git(clone, 'add', '.');
     git(clone, 'commit', '--quiet', '-m', 'More');
-    runtime.last.call('ready_for_review', { summary: 'Export gebaut.', demo: artifact() });
+    await runtime.last.call('ready_for_review', { summary: 'Export gebaut.', demo: artifact() });
     runtime.last.emit({ type: 'idle' });
     await workers.approve(c.id);
     expect(state(c.id)).toBe('live');
@@ -959,7 +959,7 @@ describe('workers', () => {
     const c = manual();
     await workers.start(c.id);
     writeFileSync(join(board.row(c.id).workspace!, 'loose.ts'), '');
-    runtime.last.call('ready_for_review', { summary: 'Fertig.', demo: artifact() });
+    await runtime.last.call('ready_for_review', { summary: 'Fertig.', demo: artifact() });
     await workers.approve(c.id);
     expect(state(c.id)).toBe('working');
     expect(runtime.last.inbox.at(-1)).toContain('uncommitted changes');
@@ -968,7 +968,7 @@ describe('workers', () => {
   test('stop releases the clone and plans the card again', async () => {
     const c = manual();
     await workers.start(c.id);
-    workers.stop(c.id);
+    await workers.stop(c.id);
     expect(state(c.id)).toBe('planned');
     expect(runtime.last.closed).toBe(true);
     const d = manual();
@@ -982,7 +982,7 @@ describe('workers', () => {
     writeFileSync(join(workspace!, 'work.ts'), 'x');
     git(workspace!, 'add', '.');
     git(workspace!, 'commit', '--quiet', '-m', 'Work');
-    workers.stop(c.id);
+    await workers.stop(c.id);
     expect(board.row(c.id).workspace).toBe(workspace);
     board.patch(c.id, { title: 'Neuer Titel' });
     await workers.start(c.id);
@@ -995,7 +995,7 @@ describe('workers', () => {
     const w = board.snapshot().items.find((i) => i.label === 'W1')!;
     await workers.start(w.id);
     const old = runtime.last;
-    workers.stop(w.id);
+    await workers.stop(w.id);
     expect(state(w.id)).toBe('planned');
     expect(old.call('ask', { question: 'Q?' })).toContain('session has ended');
     expect(old.call('report', { status: 'noch da' })).toContain('session has ended');
@@ -1017,7 +1017,7 @@ describe('workers', () => {
   test('after a restart that cut off a landing, the card waits for the owner to approve again', async () => {
     const c = manual();
     await workers.start(c.id);
-    runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
     board.work(c.id, { approved_at: new Date().toISOString() });
     expect(needsYou(board.item(c.id)!)).toBe(false);
     workers.shutdown();
@@ -1316,7 +1316,7 @@ describe('pausing: the owner halts a worker and lets it go on', () => {
   test('stopping a paused worker plans the card again, and a new start is not paused', async () => {
     const c = await atWork();
     workers.pause(c.id);
-    workers.stop(c.id);
+    await workers.stop(c.id);
     expect(state(c.id)).toBe('planned');
     expect(board.item(c.id)!.paused).toBeUndefined();
     await workers.start(c.id);
@@ -1360,7 +1360,7 @@ describe('pausing: the owner halts a worker and lets it go on', () => {
     writeFileSync(join(clone, 'export.ts'), 'export {}\n');
     git(clone, 'add', '.');
     git(clone, 'commit', '--quiet', '-m', 'Export');
-    runtime.last.call('ready_for_review', { summary: 'Export gebaut.', demo: artifact() });
+    await runtime.last.call('ready_for_review', { summary: 'Export gebaut.', demo: artifact() });
     runtime.last.emit({ type: 'idle' });
     expect(() => workers.pause(c.id)).toThrow(BadRequest);
     workers.message(c.id, 'Bitte mit Kopfzeile.');
@@ -1378,7 +1378,7 @@ describe('pausing: the owner halts a worker and lets it go on', () => {
     expect(runtime.last.inbox[0]).toContain('Bitte mit Kopfzeile.');
     expect(board.item(c.id)).toMatchObject({ state: 'waiting', answering: true, inTurn: true });
     expect(board.item(c.id)!.paused).toBeUndefined();
-    runtime.last.call('ready_for_review', { summary: 'Mit Kopfzeile.', demo: artifact() });
+    await runtime.last.call('ready_for_review', { summary: 'Mit Kopfzeile.', demo: artifact() });
     runtime.last.emit({ type: 'idle' });
     expect(board.item(c.id)).toMatchObject({ state: 'waiting', need: 'demo' });
     expect(board.item(c.id)!.summary).toEndWith('Mit Kopfzeile.');
@@ -1391,7 +1391,7 @@ describe('pausing: the owner halts a worker and lets it go on', () => {
     writeFileSync(join(clone, 'export.ts'), 'export {}\n');
     git(clone, 'add', '.');
     git(clone, 'commit', '--quiet', '-m', 'Export');
-    runtime.last.call('ready_for_review', { summary: 'Export gebaut.', demo: artifact() });
+    await runtime.last.call('ready_for_review', { summary: 'Export gebaut.', demo: artifact() });
     runtime.last.emit({ type: 'idle' });
     workers.message(c.id, 'Bitte mit Kopfzeile.');
     workers.pause(c.id);

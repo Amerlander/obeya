@@ -572,7 +572,7 @@ describe('an idea', () => {
     const demo = join(dir, 'demo');
     mkdirSync(demo);
     writeFileSync(join(demo, 'index.html'), '<p>Plan</p>');
-    worker.call('ready_for_review', { summary: 'Plan geschrieben.', demo: { dir: demo, kind: 'html', page: { title: 'Export', text: 'Ein Plan.' } } });
+    await worker.call('ready_for_review', { summary: 'Plan geschrieben.', demo: { dir: demo, kind: 'html', page: { title: 'Export', text: 'Ein Plan.' } } });
     worker.emit({ type: 'idle' });
     await canvas.act(i.id, { action: 'approve' });
     // nothing is in the branch: approved, the card is done without a pull request
@@ -924,7 +924,7 @@ describe('a prototype', () => {
 
     const ws = board().row(prototype!.id).workspace!;
     const branch = board().row(prototype!.id).branch!;
-    handOver(w, 'Knopf gebaut.');
+    await handOver(w, 'Knopf gebaut.');
     // the demo stays the prototype's, and shows on the idea under its title
     expect(item(i.id).demo).toBeUndefined();
     expect(item(i.id).prototypes).toMatchObject([{ id: prototype!.id, title: prototype!.title, demo: { chapters: [[0, 'Knopf']] } }]);
@@ -964,11 +964,11 @@ describe('a prototype', () => {
     // side by side below the idea, not on top of each other
     expect(new Set(all.map((p) => p.y)).size).toBe(1);
     expect(all[1]!.x - all[0]!.x).toBeGreaterThan(200);
-    handOver(workerOf(all[0]!.id), 'Wortmarke.', 'a');
+    await handOver(workerOf(all[0]!.id), 'Wortmarke.', 'a');
     // the reply to one result, the others still built, leaves the owner waiting for them
     turn(explorer(), 'Die Wortmarke trägt.');
     expect(item(i.id).idea).toMatchObject({ yourTurn: false, thinking: false });
-    handOver(workerOf(all[1]!.id), 'Bildmarke.', 'b');
+    await handOver(workerOf(all[1]!.id), 'Bildmarke.', 'b');
     expect(item(i.id).prototypes!.map((p) => [p.title, !!p.demo])).toEqual([
       ['Prototyp: Logo für Obeya – Wortmarke', true],
       ['Prototyp: Logo für Obeya – Bildmarke', true],
@@ -1046,7 +1046,7 @@ describe('a prototype', () => {
     // the chosen one's worker asked the owner something on its card
     w!.call('ask', { question: 'Knopf oben oder unten?', options: ['oben', 'unten'] });
     canvas.act(chosen!.id, { action: 'answer', text: 'oben' });
-    handOver(w!, 'Knopf oben gebaut; Export als CSV.');
+    await handOver(w!, 'Knopf oben gebaut; Export als CSV.');
     const ws = board().row(chosen!.id).workspace!;
     const otherWs = board().row(other!.id).workspace!;
     const otherBranch = board().row(other!.id).branch!;
@@ -1149,7 +1149,7 @@ describe('a prototype', () => {
     const [film, manifest] = prototypes(i.id);
     const w = workerOf(film!.id);
     commit(film!.id, 'film.html');
-    handOver(w!, 'Ruhige Seite mit großem Video oben.');
+    await handOver(w!, 'Ruhige Seite mit großem Video oben.');
     explorer().emit({ type: 'idle' });
 
     // the plan doc's worker hears what the prototypes showed, so it does not plan them again

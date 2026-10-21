@@ -51,7 +51,13 @@ It refreshes with every round of the PR watcher (2 minutes, and when the owner c
 page) and right after a merge: a fetch of the main branch into `refs/remotes/origin/<branch>` only,
 without `FETCH_HEAD`, so it is safe while a card leases the clone, then, where the commit moved, a
 forced detached checkout and a fresh read of the plan docs. A failed fetch is logged and retried next
-round. So a doc committed only in another clone, or only edited, does not show.
+round. So a doc committed only in another clone, or only edited, does not show. Fetch and checkout
+run without blocking the server (in a repository of thousands of files a checkout takes a while);
+while git writes the files, the canvas keeps the plan docs it read before, since a doc missing for a
+moment would take its project off the canvas and give back its workstreams' workspaces. Moving the
+Lesestand to the worktree when work now lands elsewhere runs the same way, the checkout read until
+the worktree is there. Only making it when the canvas starts waits for git: the checkout, the only
+thing to read meanwhile, may be on a card's branch.
 
 ### Plan docs
 

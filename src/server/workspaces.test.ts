@@ -71,6 +71,48 @@ describe('a leased clone', () => {
   });
 });
 
+describe('free clones', () => {
+  const setup = () => {
+    const repo = gitRepo(join(dir, 'repo'));
+    const store = new Store(':memory:');
+    const board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: repo, branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
+    let changed = 0;
+    const spaces = new Workspaces(store, 'c', { mode: 'clones', repoPath: repo, dir: join(dir, 'ws'), changed: () => changed++ });
+    const clones = spaces.ensureClones(repo, 2);
+    return { board, spaces, clones, changed: () => changed };
+  };
+
+  test('are chosen by their last look, taken in the background; one dirty now gives way to the next', async () => {
+    const { board, spaces, clones, changed } = setup();
+    const [one, two] = clones as [string, string];
+    // not looked at yet: either may be taken; the looks run in the background and change the board once they find them
+    expect(spaces.leasable()).toBe(true);
+    await until(() => changed() === 2);
+    writeFileSync(join(one, 'stray.txt'), 'x');
+    // the first was clean when looked at: a card takes it at once, and git, looking again, finds it dirty
+    const a = board.create({ title: 'A', x: 0, y: 0 }).id;
+    const lease = spaces.lease(a, 'obeya/a');
+    expect(lease.path).toBe(one);
+    expect(await lease.ready!).toBe(two);
+    expect(spaces.leasedBy(a)).toBe(two);
+    expect(git(two, 'branch', '--show-current')).toBe('obeya/a');
+    // the dirty one is free, and known as dirty: no card takes it until it is clean
+    expect(spaces.list().find((w) => w.path === one)!.card_id).toBeNull();
+    expect(spaces.leasable()).toBe(false);
+    const b = board.create({ title: 'B', x: 0, y: 0 }).id;
+    expect(() => spaces.lease(b, 'obeya/b')).toThrow(expect.objectContaining({ code: 'dirtyWorkspaces' }));
+  });
+
+  test('where the one taken is dirty now and no other is left, the lease fails with that shortage', async () => {
+    const { board, spaces, clones } = setup();
+    for (const c of clones) writeFileSync(join(c, 'stray.txt'), 'x');
+    const lease = spaces.lease(board.create({ title: 'A', x: 0, y: 0 }).id, 'obeya/a');
+    await expect(lease.ready!).rejects.toMatchObject({ code: 'dirtyWorkspaces' });
+    expect(spaces.list().every((w) => !w.card_id)).toBe(true);
+    expect(spaces.leasable()).toBe(false);
+  });
+});
+
 describe("a follow-up's temporary worktree", () => {
   test("is at origin's copy of the card's branch where no clone here holds it, else at the default branch, and goes without a trace", async () => {
     const origin = gitRepo(join(dir, 'origin'));

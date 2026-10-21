@@ -90,7 +90,7 @@ describe('Koordinator', () => {
     writeFileSync(join(wa, 'a.ts'), 'a');
     git(wa, 'add', '.');
     git(wa, 'commit', '--quiet', '-m', 'A');
-    workerOf(a.id).call('ready_for_review', { summary: 'S', demo: artifact() });
+    await workerOf(a.id).call('ready_for_review', { summary: 'S', demo: artifact() });
     await workers.approve(a.id);
     await settle();
     expect(item(b.id).state).toBe('working');
@@ -150,13 +150,13 @@ describe('Koordinator', () => {
     k.request(c.id);
     await scope(['src/a.ts']);
     expect(item(c.id).state).toBe('working');
-    workers.stop(a.id);
+    await workers.stop(a.id);
     await settle();
     expect(item(b.id).queue).toMatchObject({ checking: true });
     expect(estimates().at(-1)!.inbox[0]).toContain('"C"');
     await scope(['src/a.ts'], ['K1'], 'Beide ändern dieselbe Funktion.');
     expect(item(b.id).queue).toMatchObject({ behind: [c.id] });
-    workers.stop(c.id);
+    await workers.stop(c.id);
     await settle();
     expect(item(b.id).state).toBe('working');
   });
@@ -194,10 +194,10 @@ describe('Koordinator', () => {
     k.request(d.id);
     await scope(['src/a.ts'], ['K1', 'K2']);
     expect(item(d.id).queue).toMatchObject({ behind: [a.id, c.id] });
-    workers.stop(a.id);
+    await workers.stop(a.id);
     await settle();
     expect(item(d.id).queue).toMatchObject({ behind: [c.id] });
-    workers.stop(c.id);
+    await workers.stop(c.id);
     await settle();
     expect(item(d.id).state).toBe('working');
   });
@@ -217,7 +217,7 @@ describe('Koordinator', () => {
     const since = item(later.id).queue!.since;
     expect(since! > item(first.id).queue!.since!).toBe(true);
 
-    workers.stop(a.id);
+    await workers.stop(a.id);
     await settle();
     expect(item(first.id).state).toBe('working');
     expect(item(later.id).queue).toMatchObject({ checking: true, since });
@@ -225,7 +225,7 @@ describe('Koordinator', () => {
     await scope(['src/a.ts'], ['K1'], 'Beide ändern dieselbe Funktion.');
     expect(item(later.id).queue).toEqual({ behind: [first.id], reason: 'Beide ändern dieselbe Funktion.', since });
 
-    workers.stop(first.id);
+    await workers.stop(first.id);
     await settle();
     expect(item(later.id).state).toBe('working');
   });
@@ -248,11 +248,11 @@ describe('Koordinator', () => {
     expect(board.events(c.id).some((e) => e.text.includes('„B“ (wartet selbst und ist vorher dran)'))).toBe(true);
 
     // B goes first; C waits for it to land, not only to start
-    workers.stop(a.id);
+    await workers.stop(a.id);
     await settle();
     expect(item(b.id).state).toBe('working');
     expect(item(c.id).queue).toMatchObject({ behind: [b.id] });
-    workers.stop(b.id);
+    await workers.stop(b.id);
     await settle();
     expect(item(c.id).state).toBe('working');
   });
@@ -273,7 +273,7 @@ describe('Koordinator', () => {
     await scope(['src/a.ts'], ['K3']);
     expect(item(c.id).queue).toMatchObject({ behind: [b.id] });
 
-    workers.stop(a.id);
+    await workers.stop(a.id);
     await settle();
     expect(item(b.id).queue).toMatchObject({ checking: true });
     const brief = estimates().at(-1)!.inbox[0]!;
@@ -314,7 +314,7 @@ describe('Koordinator', () => {
     await scope(['src/a.ts', 'src/b.ts'], ['K1', 'K2']);
     const since = item(c.id).queue!.since;
     expect(since).toBeString();
-    workers.stop(a.id);
+    await workers.stop(a.id);
     await settle();
     expect(item(c.id).queue).toEqual({ behind: [b.id], reason: 'Grund.', since });
   });
@@ -354,10 +354,10 @@ describe('Koordinator', () => {
     expect(() => k.reorder(e.id, true)).toThrow(expect.objectContaining({ code: 'notQueued' }));
     await scope(['src/e.ts']);
     expect(item(e.id).state).toBe('working');
-    workers.stop(e.id);
+    await workers.stop(e.id);
 
     // C now goes first: B is judged again against it
-    workers.stop(a.id);
+    await workers.stop(a.id);
     await settle();
     expect(item(c.id).state).toBe('working');
     expect(item(b.id).queue).toMatchObject({ checking: true });
@@ -503,7 +503,7 @@ describe('Koordinator waits for a free workspace', () => {
     expect(board.events(b.id).at(-1)).toMatchObject({ kind: 'state', text: expect.stringContaining('sobald einer frei wird') });
     expect(board.events(b.id).some((e) => e.kind === 'error')).toBe(false);
 
-    workers.stop(a.id);
+    await workers.stop(a.id);
     await settle();
     expect(item(b.id).state).toBe('working');
     expect(board.row(b.id).workspace).toBe(clones[0]!);
@@ -516,7 +516,7 @@ describe('Koordinator waits for a free workspace', () => {
     const f = card('F');
     await workers.start(f.id);
     workerOf(f.id).emit({ type: 'session', id: 'sess-f' });
-    workerOf(f.id).call('ready_for_review', { summary: 'S', demo: artifact() });
+    await workerOf(f.id).call('ready_for_review', { summary: 'S', demo: artifact() });
     workerOf(f.id).emit({ type: 'idle' });
     await workers.approve(f.id);
     workerOf(f.id).emit({ type: 'idle' });
@@ -537,7 +537,7 @@ describe('Koordinator waits for a free workspace', () => {
     await settle();
     expect(item(f.id).waitsForClone).toBe(true);
 
-    workers.stop(a.id);
+    await workers.stop(a.id);
     await settle();
     expect(board.row(f.id).workspace).toBe(clones[0]!);
     expect(runtime.last.spec).toMatchObject({ cwd: clones[0]!, resume: 'sess-f' });
@@ -624,7 +624,7 @@ describe('Koordinator waits for a free workspace', () => {
     expect(item(c.id).queue).toMatchObject({ workspace: 'none' });
     expect(item(d.id).queue).toMatchObject({ behind: [b.id] });
 
-    workers.stop(a.id);
+    await workers.stop(a.id);
     await settle();
     expect(item(b.id).state).toBe('working');
     expect(item(c.id).queue).toMatchObject({ workspace: 'none' });
@@ -645,7 +645,7 @@ describe('Koordinator waits for a free workspace', () => {
 
     rmSync(join(free, 'stray.txt'));
     // a dirty clone is not asked again on every change of the board, but once another one frees up
-    workers.stop(a.id);
+    await workers.stop(a.id);
     await settle();
     expect(item(b.id).state).toBe('working');
   });
@@ -660,7 +660,7 @@ describe('Koordinator waits for a free workspace', () => {
     await scope(['src/b.ts']);
     k.dequeue(b.id);
     expect(item(b.id).queue).toBeUndefined();
-    workers.stop(a.id);
+    await workers.stop(a.id);
     await settle();
     expect(item(b.id).state).toBe('planned');
   });
@@ -716,7 +716,7 @@ describe('Koordinator starts all workstreams of a project', () => {
     expect(k.ahead(item(w3.id)).map((i) => i.id)).toEqual([w2.id]);
     expect(board.events(p.id).at(-1)!.text).toContain('1 von 3 Workstreams starten jetzt');
 
-    workers.stop(a.id);
+    await workers.stop(a.id);
     await settle();
     // what runs now is W4: W3 is judged again against it
     expect(item(w3.id).queue).toMatchObject({ checking: true });
@@ -814,7 +814,7 @@ describe('Koordinator starts all workstreams of a project', () => {
     writeFileSync(join(w, `${id}.ts`), id);
     git(w, 'add', '.');
     git(w, 'commit', '--quiet', '-m', id);
-    workerOf(id).call('ready_for_review', { summary: 'S', demo: artifact() });
+    await workerOf(id).call('ready_for_review', { summary: 'S', demo: artifact() });
     await workers.approve(id);
     await settle();
   }
@@ -868,7 +868,7 @@ describe('Koordinator starts all workstreams of a project', () => {
     expect(item(w3.id).queue).toMatchObject({ behind: [w2.id], buildsOn: [w2.id] });
     expect(item(w4.id).queue).toMatchObject({ behind: [w2.id] });
 
-    workers.stop(w2.id);
+    await workers.stop(w2.id);
     await settle();
     // W4 only collided with W2, and nothing runs now: it starts
     expect(item(w4.id).state).toBe('working');
@@ -1093,7 +1093,7 @@ describe('preference memory', () => {
     s.call('ask', { question: 'Q?' });
     w.answer(a.id, 'Ja.');
     w.message(a.id, 'Bitte kleiner schneiden.');
-    s.call('ready_for_review', { summary: 'S', demo: artifact() });
+    await s.call('ready_for_review', { summary: 'S', demo: artifact() });
     w.message(a.id, 'Noch die Einheit.');
     s.call('ask', { question: 'Zeitzone?' });
     w.message(a.id, 'UTC.');

@@ -488,8 +488,8 @@ export class FolderWorkspaces implements CardWorkspaces {
     return [];
   }
 
-  hasWork(cardId: string): boolean {
-    return !!this.rec(cardId)?.changes.length;
+  async hasWork(cardId: string): Promise<boolean> {
+    return this.changed(cardId).length > 0;
   }
 
   /** A card stopped with nothing changed: its record and undo go. */
@@ -510,11 +510,11 @@ export class FolderWorkspaces implements CardWorkspaces {
     return !!this.leasedBy(cardId);
   }
 
-  forkPoint(): null {
+  async forkPoint(): Promise<null> {
     return null;
   }
 
-  addedFiles(): string[] {
+  async addedFiles(): Promise<string[]> {
     return [];
   }
 

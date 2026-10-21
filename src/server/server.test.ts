@@ -1091,7 +1091,7 @@ describe('landing approved work', () => {
       writeFileSync(join(clone, `${title}.ts`), title);
       git(clone, 'add', '.');
       git(clone, 'commit', '--quiet', '-m', title);
-      session.call('ready_for_review', { summary: 'S', demo: artifact() });
+      await session.call('ready_for_review', { summary: 'S', demo: artifact() });
       session.emit({ type: 'idle' });
       return c;
     };
@@ -1167,6 +1167,82 @@ describe('starting a card', () => {
     }
     worktrees.shutdown();
     clones.shutdown();
+  }, 15_000);
+});
+
+describe('the Lesestand and the free clones', () => {
+  test('while git moves the Lesestand or looks at a free clone, slowly, the server answers', async () => {
+    const marks = join(dir, 'marks');
+    mkdirSync(marks);
+    const doc = (title: string) => `# ${title}\n\n## Goal\n\nG.\n\n## Workstreams\n\n- [ ] **W1:** Eins.\n`;
+    const origin = gitRepo(join(dir, 'shop'), { 'docs/plan/export.md': doc('Export'), '.gitattributes': '*.md filter=slow\n' });
+    const checkout = join(dir, 'checkout');
+    git(dir, 'clone', '--quiet', origin, checkout);
+    // work goes out as pull requests: the Lesestand is a worktree of the checkout, apart from the pool's clone
+    const shop = new CanvasRuntime(
+      { name: 'Shop', repos: [{ path: checkout, clones: 1, settings: { land: 'pr', workspaces: 'clones' } }] },
+      { store: new Store(':memory:'), home: join(dir, 'home-shop'), runtime, forge: noForge },
+    );
+    const projects = () => shop.board.snapshot().items.filter((i) => i.kind === 'project').map((p) => p.title).sort();
+    expect(projects()).toEqual(['Export']);
+    // git that takes its time: a checkout writing the plan docs into the Lesestand (a repository of thousands of files),
+    // `git status` in a free clone (a large repository, or one on another machine); each goes on once the test lets it
+    const slow = (mark: string, then: string) => {
+      const script = join(dir, `slow-${mark}`);
+      writeFileSync(script, `#!/bin/sh\ntouch '${join(marks, mark)}'\nwhile [ ! -e '${join(marks, `${mark}.go`)}' ]; do sleep 0.05; done\ntouch '${join(marks, `${mark}.done`)}'\n${then}\n`, { mode: 0o755 });
+      return script;
+    };
+    const go = (mark: string) => writeFileSync(join(marks, `${mark}.go`), '');
+    const hold = (mark: string) => rmSync(join(marks, `${mark}.go`), { force: true });
+    git(checkout, 'config', 'filter.slow.smudge', slow('checkout', 'cat'));
+    const [clone] = shop.repos[0]!.workspaces.list();
+    git(clone!.path, 'config', 'core.fsmonitor', slow('status', 'exit 1'));
+    server.stop(true);
+    server = serve([canvas, shop], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0);
+    const answers = async () => {
+      for (const c of [shop, canvas]) {
+        const before = Date.now();
+        expect((await fetch(new URL(`/api/c/${c.board.canvas.id}/canvas`, server.url))).status).toBe(200);
+        expect(Date.now() - before).toBeLessThan(1000);
+      }
+    };
+
+    // main moves: the Lesestand follows in the background, the plan docs read before standing meanwhile
+    writeFileSync(join(origin, 'docs/plan/import.md'), doc('Import'));
+    git(origin, 'add', '.');
+    git(origin, 'commit', '--quiet', '-m', 'import');
+    let moved = false;
+    const refreshed = shop.repos[0]!.read.refresh().then(() => (moved = true));
+    await until(() => existsSync(join(marks, 'checkout')));
+    await answers();
+    expect([moved, projects()]).toEqual([false, ['Export']]);
+    go('checkout');
+    await refreshed;
+    expect(projects()).toEqual(['Export', 'Import']);
+
+    // whether a card may take the free clone is answered at once, while git looks at it in the background
+    const before = Date.now();
+    expect(shop.repos[0]!.workspaces.leasable()).toBe(true);
+    expect(Date.now() - before).toBeLessThan(1000);
+    await until(() => existsSync(join(marks, 'status')));
+    await answers();
+    go('status');
+    await until(() => existsSync(join(marks, 'status.done')));
+    hold('status');
+    for (const f of ['status', 'status.done']) rmSync(join(marks, f));
+    // a card takes it at once; git looks at it again before its worker starts there
+    const card = shop.board.create({ title: 'Langsamer Blick', x: 0, y: 0 });
+    const starting = Date.now();
+    const started = shop.repos[0]!.workers.start(card.id);
+    expect(Date.now() - starting).toBeLessThan(1000);
+    expect(shop.board.row(card.id).workspace).toBe(clone!.path);
+    await until(() => existsSync(join(marks, 'status')));
+    await answers();
+    expect(runtime.sessions.some((s) => s.spec.cwd === clone!.path)).toBe(false);
+    go('status');
+    await started;
+    expect(runtime.sessions.find((s) => s.spec.cwd === clone!.path)!.inbox[0]).toContain('Langsamer Blick');
+    shop.shutdown();
   }, 15_000);
 });
 

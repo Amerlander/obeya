@@ -443,7 +443,7 @@ describe('a card that starts later', () => {
     expect(last(p.id)).toMatchObject({ kind: 'state', text: expect.stringMatching(/^Zurückgestellt bis .* · Erst in zwei Wochen sichtbar\.$/) });
 
     // its source card's work is done by then, and the one clone free
-    canvas.act(src, { action: 'stop' });
+    await canvas.act(src, { action: 'stop' });
     canvas.shutdown();
     canvas = open();
     canvas.wakeDue(Date.parse(at) - 1000);

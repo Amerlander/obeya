@@ -24,7 +24,7 @@ import { TO_OBEYA, toObeyaTool } from './to-obeya';
 import { type Forward, HOST_DIR, hostName, remote } from './hosts';
 import { runAppCommand } from './app-command';
 import { readingShared } from '../adapters';
-import { branchName, type CardWorkspaces, type FileAt, gitStepsSync, type Landed, type Lease, shortageOf, together, WorkspaceError } from './workspaces';
+import { branchName, type CardWorkspaces, type FileAt, gitSteps, type Landed, type Lease, shortageOf, together, WorkspaceError } from './workspaces';
 import type { FolderWorkspaces, UndoReport } from './folder';
 import type { PrState, Shipped } from './board';
 import type { CardRow } from './db';
@@ -455,6 +455,10 @@ export class Workers {
   private live = new Map<string, Live>();
   /** Cards whose approved work is landing: the server answers meanwhile, but approving again is refused, and a restart waits. */
   private landing = new Set<string>();
+  /** Cards approved while git tells what the approval does (`approve`). */
+  private approving = new Set<string>();
+  /** Merged cards whose branch git reads the added plan docs of: their workspace goes once it has (`finish`). */
+  private reading = new Map<string, Promise<void>>();
   /**
    * Cards whose workspace git is making ready before their worker goes on (`whenReady`), with the
    * machine it is on: the server answers meanwhile, the card holds a slot there, and a restart waits.
@@ -516,7 +520,8 @@ export class Workers {
   /**
    * Starts the card's worker. The card is at work at once, its workspace taken; the worker starts
    * once git has made that ready, which the promise waits for. Refusals (`notPlanned`, no workspace
-   * free) throw at once.
+   * free) throw at once; where the clone it took turns out not to be clean and no other is, the card
+   * is planned again and the promise rejects with that shortage.
    */
   start(cardId: string): Promise<void> {
     const card = this.card(cardId);
@@ -540,6 +545,7 @@ export class Workers {
       () => this.launch(card.id, this.briefing(card, branch, !!row.branch), undefined, this.taskImages(card)),
       // planned again, as before the start
       () => this.o.board.work(card.id, { state: 'planned', workspace: null, branch: row.branch, paused: null, snoozed: null }),
+      true,
     );
   }
 
@@ -548,9 +554,11 @@ export class Workers {
    * (`Lease.ready`; at once when it is), unless the card was stopped, snoozed or started anew
    * meanwhile; until then its status line says that its workspace is being prepared. Where git
    * fails, `undo` puts the card back as it was, whatever came meanwhile, as long as the card still
-   * names the workspace, and its conversation says why.
+   * names the workspace, and its conversation says why. `queues`: where no clean clone was left, the
+   * promise rejects with the shortage instead, for the Koordinator to queue the card as when there is
+   * none at once.
    */
-  private whenReady(cardId: string, ready: Promise<void> | null, go: () => void, undo: () => void): Promise<void> {
+  private whenReady(cardId: string, ready: Promise<string> | null, go: () => void, undo: () => void, queues = false): Promise<void> {
     if (!ready) {
       go();
       return Promise.resolve();
@@ -559,7 +567,7 @@ export class Workers {
     const line = this.o.board.t.worker.preparingWorkspace;
     const path = this.o.board.row(cardId).workspace;
     const settle = (then: () => void, always = false) => {
-      if (this.preparing.get(cardId)?.done === done) this.preparing.delete(cardId);
+      if (this.preparing.get(cardId)?.done === waited) this.preparing.delete(cardId);
       // Obeya stopped meanwhile: a new run takes the card on
       if (this.shut) return;
       // a deleted card keeps its row, to be restored
@@ -576,15 +584,26 @@ export class Workers {
       }
     };
     const done: Promise<void> = ready.then(
-      () => settle(go),
-      (e: unknown) =>
+      (at) => {
+        // the clone it was given had uncommitted changes when git looked again: it holds the one that took its place,
+        // also where it was snoozed or started anew meanwhile
+        if (at !== path && !this.shut && this.o.board.row(cardId).workspace === path) this.o.board.work(cardId, { workspace: at });
+        settle(go);
+      },
+      (e: unknown) => {
+        const short = queues && e instanceof WorkspaceError && !!shortageOf(e.code);
+        let undone = false;
         settle(() => {
           if (this.o.board.row(cardId).workspace !== path) return;
           undo();
-          this.o.board.log(cardId, 'error', 'obeya', this.o.board.t.worker.workspaceFailed(messageOf(e)));
-        }, true),
+          undone = true;
+          if (!short) this.o.board.log(cardId, 'error', 'obeya', this.o.board.t.worker.workspaceFailed(messageOf(e)));
+        }, true);
+        if (short && undone) throw new BadRequest((e as WorkspaceError).code, messageOf(e));
+      },
     );
-    this.preparing.set(cardId, { host: hostName(path), done });
+    const waited = done.catch(() => {});
+    this.preparing.set(cardId, { host: hostName(path), done: waited });
     this.o.board.work(cardId, { status_line: line });
     return done;
   }
@@ -1014,34 +1033,57 @@ export class Workers {
     };
   }
 
+  /** Comments on places in the demo video the owner made before approving: they go with the approval. */
+  private approvalComments(cardId: string): Comments | undefined {
+    const held = this.takeHeld(cardId);
+    return held
+      ? { text: `Before approving, the owner watched your demo video. ${held.text}\n\nThey approved the work as it is all the same: what still matters of these comments, propose as a card of its own (propose_card).`, images: held.images }
+      : undefined;
+  }
+
   /** `direct`: the work goes onto the default branch at once instead of into a pull request, where the repository's settings allow it. */
   async approve(cardId: string, { direct = false }: { direct?: boolean } = {}) {
     const card = this.card(cardId);
-    if (!handedOver(card) || this.landing.has(cardId)) throw new BadRequest('notReady', 'the card is not ready for review');
-    const lands = this.landingOf(cardId);
-    // where work lands on main anyway, approving it directly is approving it
-    if (direct && lands.land === 'pr' && !lands.direct)
-      throw new BadRequest('noDirect', 'this repository lands approved work only through a pull request; its settings do not allow pushing it directly');
+    if (!handedOver(card) || this.landing.has(cardId) || this.approving.has(cardId)) throw new BadRequest('notReady', 'the card is not ready for review');
     if (direct && card.prototypeOf) throw new BadRequest('noDirect', 'a prototype never lands');
-    // comments on places in the demo video the owner made before approving go with the approval
-    const held = this.takeHeld(cardId);
-    const comments = held
-      ? { text: `Before approving, the owner watched your demo video. ${held.text}\n\nThey approved the work as it is all the same: what still matters of these comments, propose as a card of its own (propose_card).`, images: held.images }
-      : undefined;
     // a prototype never lands: approving it is having seen enough
-    if (card.prototypeOf) return this.endPrototype(cardId, 'discarded');
-    // work that changed nothing (a demo, an analysis) has nothing to land and no pull request to open;
-    // in a folder without git, what it changed is in the folder already
-    if (this.folder || !this.o.workspaces.hasWork(cardId)) return this.close(cardId, 'owner', comments);
-    if (lands.land === 'main' || direct) {
-      // the click ends the owner's turn: while the work lands, the card no longer needs them
-      this.o.board.work(cardId, { approved_at: new Date().toISOString() });
-      return this.land(cardId, 'owner', comments);
+    if (card.prototypeOf) {
+      this.takeHeld(cardId);
+      return this.endPrototype(cardId, 'discarded');
     }
+    // in a folder without git, what it changed is in the folder already
+    if (this.folder) return this.close(cardId, 'owner', this.approvalComments(cardId));
+    // git tells where the work lands and whether there is any, without blocking the server; the click ends the owner's turn meanwhile,
+    // and the comments held back wait for the approval
+    clearTimeout(this.holding.get(cardId));
+    this.holding.delete(cardId);
+    const before = this.o.board.row(cardId).approved_at;
+    this.o.board.work(cardId, { approved_at: new Date().toISOString() });
+    this.approving.add(cardId);
+    const generation = this.generation.get(cardId);
+    let lands: { land: 'main' | 'pr'; direct: boolean };
+    let work: boolean;
+    try {
+      [lands, work] = await Promise.all([this.landingOf(cardId), this.o.workspaces.hasWork(cardId)]);
+    } finally {
+      this.approving.delete(cardId);
+    }
+    // stopped meanwhile (and perhaps started and handed over anew: that is not what the owner approved)
+    if (!handedOver(this.card(cardId)) || this.generation.get(cardId) !== generation) throw new BadRequest('notReady', 'the card is not ready for review');
+    // where work lands on main anyway, approving it directly is approving it
+    if (direct && lands.land === 'pr' && !lands.direct) {
+      this.o.board.work(cardId, { approved_at: before });
+      if (this.held(cardId).length) this.releaseLater(cardId, this.o.releaseDelay ?? RELEASE_DELAY);
+      throw new BadRequest('noDirect', 'this repository lands approved work only through a pull request; its settings do not allow pushing it directly');
+    }
+    const comments = this.approvalComments(cardId);
+    // work that changed nothing (a demo, an analysis) has nothing to land and no pull request to open
+    if (!work) return this.close(cardId, 'owner', comments);
+    if (lands.land === 'main' || direct) return this.land(cardId, 'owner', comments);
     // the worker opens the PR the way the repository does it, then Obeya watches it
     const pr: PrState = { url: null, seen: [], reported: [] };
     // the line the worker reported before handing over is about work that is done
-    this.o.board.work(cardId, { state: 'inPr', need: null, detail: null, status_line: null, pr: JSON.stringify(pr) });
+    this.o.board.work(cardId, { state: 'inPr', need: null, detail: null, status_line: null, approved_at: null, pr: JSON.stringify(pr) });
     this.o.board.log(cardId, 'state', 'owner', this.o.board.t.worker.approvedPr);
     // a page that goes out now gets the pull request's link from Obeya once both are there
     this.o.onApproval?.(cardId);
@@ -1091,7 +1133,7 @@ export class Workers {
       'The card still waits for the owner.',
     ];
     this.o.board.work(cardId, {
-      detail: JSON.stringify({ ...detail, noChange: !this.o.workspaces.hasWork(cardId) || undefined }),
+      detail: JSON.stringify({ ...detail, noChange: !this.folder.changed(cardId).length || undefined }),
       unheard: JSON.stringify([...this.unheard(cardId), { said: [], text: told.filter(Boolean).join(' '), images: [] }] satisfies Unheard[]),
     });
     return report;
@@ -1104,11 +1146,11 @@ export class Workers {
    * change with the work, and has answered how work lands in the card that makes it. `own` holds
    * what the branch decides.
    */
-  landingOf(cardId: string): { land: 'main' | 'pr'; direct: boolean; own?: CardLanding } {
+  async landingOf(cardId: string): Promise<{ land: 'main' | 'pr'; direct: boolean; own?: CardLanding }> {
     const repo = { land: this.o.adapter.land, direct: !!this.o.adapter.direct };
-    const fork = this.o.workspaces.forkPoint(cardId);
+    const fork = await this.o.workspaces.forkPoint(cardId);
     if (!fork) return repo;
-    const [now, before] = gitStepsSync(fork.ws, together(readingShared('HEAD'), readingShared(fork.base)));
+    const [now, before] = await gitSteps(fork.ws, together(readingShared('HEAD'), readingShared(fork.base)));
     const machine = this.o.machineSettings?.();
     const own: CardLanding = {};
     for (const field of ['land', 'direct'] as const) {
@@ -1143,9 +1185,9 @@ export class Workers {
   private async landNow(cardId: string, by: 'owner' | 'obeya', comments?: Comments) {
     const row = this.o.board.row(cardId);
     // only a direct approval is held where work goes out as a pull request
-    const direct = this.landingOf(cardId).land === 'pr';
+    const direct = (await this.landingOf(cardId)).land === 'pr';
     // read before landing: the landed branch adds nothing against main
-    const added = this.planDocsAdded(cardId);
+    const added = await this.planDocsAdded(cardId);
     // the demo goes out with the approval, also where it holds for the worker's next handover
     const trailer = this.o.onApproval?.(cardId) ?? undefined;
     const result = await (direct ? this.o.workspaces.pushToMain(cardId, trailer) : this.o.workspaces.landOnMain(cardId, row.branch!, trailer));
@@ -1216,7 +1258,7 @@ export class Workers {
     this.bump(cardId);
     this.o.board.work(cardId, { state: 'done', need: null, detail: null, status_line: null, approved_at: null, pr: null, landed: JSON.stringify({ unchanged: true } satisfies LandedState) });
     const t = this.o.board.t.worker;
-    const folder = !!this.folder && this.o.workspaces.hasWork(cardId);
+    const folder = !!this.folder?.changed(cardId).length;
     // what it changed in the folder stays: nothing of it is undone any more
     this.folder?.done(cardId);
     this.o.board.log(cardId, 'state', by, by === 'owner' ? (folder ? t.approvedFolder : t.approvedUnchanged) : t.doneUnchanged);
@@ -1245,14 +1287,21 @@ export class Workers {
     this.end(cardId);
     this.bump(cardId);
     const row = this.o.board.row(cardId);
-    if (this.inWorktree(cardId)) this.removeTree(row.workspace);
-    else
-      try {
-        this.o.workspaces.removeLanded(cardId, row.branch ?? '');
-      } catch (e) {
-        // the card is done either way; a leftover worktree does no harm
-        console.error('freeing a landed workspace:', e);
-      }
+    const worktree = this.inWorktree(cardId);
+    const free = () => {
+      if (worktree) this.removeTree(row.workspace);
+      else
+        try {
+          this.o.workspaces.removeLanded(cardId, row.branch ?? '');
+        } catch (e) {
+          // the card is done either way; a leftover worktree does no harm
+          console.error('freeing a landed workspace:', e);
+        }
+    };
+    // the plan docs its branch adds are read before its workspace goes
+    const reading = this.reading.get(cardId);
+    if (reading) void reading.finally(free);
+    else free();
     const landed = landedOf(row);
     this.o.board.work(cardId, { landed: null, workspace: null, status_line: null, parked: null, paused: null, snoozed: null, app: null, ...(row.state === 'waiting' ? { state: landed?.unchanged ? 'done' : 'live', need: null, detail: null } : {}) });
     this.o.board.workDone(cardId);
@@ -1261,12 +1310,11 @@ export class Workers {
   }
 
   /** The plan docs the card's branch adds, as plan references of the canvas. */
-  private planDocsAdded(cardId: string): string[] {
+  private async planDocsAdded(cardId: string): Promise<string[]> {
     // a plan folder outside the repository has nothing in the branch: such a card named its doc when it started
     if (!this.o.board.row(cardId).idea || outsidePlanDir(this.o.adapter.planDocs.dir)) return [];
     const home = !this.o.repo || this.o.repo === this.o.board.home;
-    return this.o.workspaces
-      .addedFiles(cardId, this.o.adapter.planDocs.dir)
+    return (await this.o.workspaces.addedFiles(cardId, this.o.adapter.planDocs.dir))
       .filter((f) => f.endsWith('.md') && !this.o.adapter.planDocs.exclude.some((x) => f.endsWith(`/${x}`)))
       .map((f) => (home ? f : `${this.o.repo}:${f}`));
   }
@@ -1384,7 +1432,10 @@ export class Workers {
    */
   merged(cardId: string, commit?: string, note = this.o.board.t.worker.merged) {
     this.bump(cardId);
-    this.o.board.planDocsLanded(cardId, this.planDocsAdded(cardId));
+    // git reads them without blocking the server; the workspace goes only once it has (`finish`)
+    const added = this.planDocsAdded(cardId).then((a) => this.o.board.planDocsLanded(cardId, a));
+    this.reading.set(cardId, added);
+    void added.finally(() => this.reading.get(cardId) === added && this.reading.delete(cardId));
     const pr = this.o.board.row(cardId).pr;
     const { url, number } = pr ? (JSON.parse(pr) as PrState) : { url: null, number: undefined };
     const shipped: Shipped = { ...(commit ? { commit, base: `${commit}^` } : { fetch: true }), ...(url && number ? { pr: { url, number } } : {}) };
@@ -1417,23 +1468,32 @@ export class Workers {
     });
   }
 
-  stop(cardId: string) {
+  /**
+   * The owner stops the card's worker: the card is planned again at once. Its workspace stays with
+   * it where it holds work, so that starting again goes on from there, and is given back otherwise
+   * once git has told (`hasWork`, without blocking the server), unless the card started again meanwhile.
+   */
+  stop(cardId: string): Promise<void> {
     const card = this.card(cardId);
     if (card.finishing) {
       this.o.board.log(cardId, 'state', 'owner', this.o.board.t.worker.stopped);
       this.finish(cardId);
-      return;
+      return Promise.resolve();
     }
     if (card.state !== 'working' && card.state !== 'waiting') throw new BadRequest('noAgent', 'no agent works on this card');
     // comments held back for the worker stay in the conversation
     this.takeHeld(cardId);
     this.end(cardId);
     this.bump(cardId);
-    // work on the branch keeps its workspace, so starting again goes on from there
-    const keep = this.o.workspaces.hasWork(cardId);
-    if (!keep) this.o.workspaces.release(cardId);
-    this.o.board.work(cardId, { state: 'planned', need: null, detail: null, pr: null, approved_at: null, paused: null, snoozed: null, app: null, ...(keep ? {} : { workspace: null }) });
+    const generation = this.generation.get(cardId);
+    const path = this.o.board.row(cardId).workspace;
+    this.o.board.work(cardId, { state: 'planned', need: null, detail: null, pr: null, approved_at: null, paused: null, snoozed: null, app: null });
     this.o.board.log(cardId, 'state', 'owner', card.pr ? this.o.board.t.worker.stoppedPrOpen(card.pr.number) : this.o.board.t.worker.stopped);
+    return this.o.workspaces.hasWork(cardId).then((keep) => {
+      if (keep || this.generation.get(cardId) !== generation || this.o.board.row(cardId).workspace !== path) return;
+      this.o.workspaces.release(cardId);
+      this.o.board.work(cardId, { workspace: null });
+    });
   }
 
   /**
@@ -1746,7 +1806,10 @@ export class Workers {
   busyOn(host: string | null): number {
     const on = (id: string) => {
       const live = this.live.get(id);
-      return live ? live.host : this.preparing.get(id)!.host;
+      if (live) return live.host;
+      // a clone that turned out dirty gave way to one on another machine, perhaps
+      const at = this.o.workspaces.leasedBy(id);
+      return at ? hostName(at) : this.preparing.get(id)!.host;
     };
     return this.inTurn().filter((id) => on(id) === host).length;
   }
@@ -2740,7 +2803,10 @@ export class Workers {
         run: ({ summary, demo, files }) => {
           type Demo = { kind?: DemoKind; dir: string; chapters?: string[]; question?: string; page?: DemoPage; follows?: 'replaces' | 'supplements' };
           const given = demo as Demo | undefined;
-          const handOverWork = (d: Demo | undefined, named: CardFile[] | undefined, shows: boolean): string => {
+          // whether the branch holds work and decides where it lands, which git tells without blocking the server
+          const handOverWork = (d: Demo | undefined, named: CardFile[] | undefined, shows: boolean): Promise<string> =>
+            Promise.all([this.o.workspaces.hasWork(cardId), this.landingOf(cardId)]).then(([work, { own }]) => handOverNow(d, named, shows, work, own));
+          const handOverNow = (d: Demo | undefined, named: CardFile[] | undefined, shows: boolean, work: boolean, own: CardLanding | undefined): string => {
             // reading what the change shows takes a while, in which the owner may stop or replace the session
             if (this.live.get(cardId) !== live && !live.standIn) return 'This session has ended. Stop working and end your turn.';
             const s = clip(String(summary), 6000);
@@ -2778,8 +2844,6 @@ export class Workers {
             }
             handOver();
             const report = this.report(cardId, s);
-            // the owner sees before approving where work lands that its own branch decides
-            const own = this.landingOf(cardId).own;
             const e = this.o.board.log(cardId, 'review', 'worker', s);
             // the demo report's question goes with the handover it came with, also once a later one keeps the demo
             if (demoJson) demoJson = JSON.stringify({ ...(JSON.parse(demoJson) as object), handover: e.id, at: e.at });
@@ -2789,8 +2853,9 @@ export class Workers {
             this.o.board.work(cardId, {
               // the worker's last status line is about the work it hands over: it would show again once the card is at work
               ...(approved ? { status_line: this.o.board.t.worker.landing } : { state: 'waiting', need: d || kept ? 'demo' : 'review', status_line: null }),
-              // approving work that changes nothing makes the card done, which the owner sees before approving
-              detail: JSON.stringify({ summary: report, ...(this.o.workspaces.hasWork(cardId) ? (own ? { lands: own } : {}) : { noChange: true }), ...(answered && !approved ? { answered: true } : {}) }),
+              // approving work that changes nothing makes the card done, which the owner sees before approving; where work
+              // lands that its own branch decides, likewise
+              detail: JSON.stringify({ summary: report, ...(work ? (own ? { lands: own } : {}) : { noChange: true }), ...(answered && !approved ? { answered: true } : {}) }),
               ...(demoJson ? { demo: demoJson } : {}),
               ...(demos ? { demos } : {}),
               // the files named stand until a later handover names others (an empty list named clears them); a folder's card handed
@@ -2832,12 +2897,13 @@ export class Workers {
         name: 'close_unchanged',
         description: `After the owner approved: your work changed nothing in the repository (no commits, nothing uncommitted), because the task needed no change to the code (a demo, an analysis, an answer). Then nothing lands and there is no pull request to open: this closes the card as done instead. Then end your turn.`,
         schema: {},
-        run: () => {
+        run: async () => {
+          const work = await this.o.workspaces.hasWork(cardId);
           const row = this.o.board.row(cardId);
           if (row.landed) return 'Not recorded: the card is finished already.';
           const pr = row.pr ? (JSON.parse(row.pr) as PrState) : null;
           if (!row.approved_at && !(pr && !pr.url)) return 'Not recorded: only work the owner approved can be closed, and only before its pull request is open. Hand it over with ready_for_review first.';
-          if (this.o.workspaces.hasWork(cardId))
+          if (work)
             return 'Not recorded: your branch holds commits or uncommitted changes. Work that changes the repository lands (or goes out as a pull request); throw away what is not meant to land first, if nothing is.';
           this.close(cardId, 'worker');
           return `Recorded: the card is done. ${AFTER_LANDING}`;

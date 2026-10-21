@@ -667,14 +667,18 @@ export class Koordinator {
   private launch(cardId: string, since?: string) {
     const card = this.o.board.item(cardId);
     if (!card) return;
-    try {
-      // git makes its workspace ready in the background; what goes wrong there its card says itself
-      this.o.repoFor(card).workers.start(cardId).catch((e: unknown) => this.o.board.log(cardId, 'error', 'obeya', messageOf(e)));
-    } catch (e) {
+    const refused = (e: unknown) => {
       const shortage = e instanceof BadRequest ? shortageOf(e.code) : undefined;
       if (!shortage) return this.o.board.log(cardId, 'error', 'obeya', messageOf(e), { code: e instanceof BadRequest ? e.code : undefined });
       this.setQueue(cardId, { workspace: shortage }, since);
       this.o.board.log(cardId, 'state', 'obeya', { none: this.o.board.t.koordinator.noWorkspace, dirty: this.o.board.t.koordinator.dirtyWorkspaces, slots: this.o.board.t.koordinator.noSlot }[shortage]);
+    };
+    try {
+      // git makes its workspace ready in the background; what goes wrong there its card says itself, but that the clone
+      // it took was not clean and no other is, which queues it as when there is none at once
+      this.o.repoFor(card).workers.start(cardId).catch(refused);
+    } catch (e) {
+      refused(e);
     }
   }
 

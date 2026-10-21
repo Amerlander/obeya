@@ -82,7 +82,7 @@ async function inPr() {
   const c = board.create({ title: 'Export', x: 0, y: 0 });
   await workers.start(c.id);
   commit(c.id);
-  runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
+  await runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
   await workers.approve(c.id);
   return c.id;
 }
@@ -111,7 +111,7 @@ describe('the PR phase', () => {
     const c = board.create({ title: 'Export', x: 0, y: 0 });
     await workers.start(c.id);
     commit(c.id);
-    runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
     board.work(c.id, { share: JSON.stringify({ slug: 'export', url: 'https://demos.example/export/', dir: '/d' }) });
     await workers.approve(c.id);
     expect(runtime.last.inbox.at(-1)).toContain('shared with the team on a page of its own: https://demos.example/export/. Link it');
@@ -335,7 +335,7 @@ describe('watching', () => {
     const id = await inPr();
     runtime.last.call('pr_opened', { url: URL_ });
     runtime.last.call('ask', { question: 'Q?' });
-    workers.stop(id);
+    await workers.stop(id);
     expect(board.item(id)!.pr).toBeUndefined();
     expect(board.events(id).at(-1)!.text).toContain('#42 bleibt offen');
     await workers.start(id);
@@ -401,6 +401,8 @@ describe('watching', () => {
     runtime.last.emit({ type: 'idle' });
     expect(runtime.last.closed).toBe(true);
     expect(board.row(id).workspace).toBeNull();
+    // the clone goes once git has read which plan docs the branch adds
+    await new Promise((r) => setTimeout(r, 0));
 
     status.state = 'OPEN';
     const other = await inPr();

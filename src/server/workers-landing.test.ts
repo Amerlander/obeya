@@ -25,7 +25,7 @@ describe('landing through a pull request', () => {
     git(clone, 'add', '.');
     git(clone, 'commit', '--quiet', '-m', 'X');
     runtime.last.call('report', { status: 'Demo fertig, übergebe' });
-    runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
     expect(board.item(c.id)!.noChange).toBeUndefined();
     // the line was about the work handed over: it would show again once the card is at work
     expect(board.item(c.id)!.statusLine).toBeUndefined();
@@ -39,7 +39,7 @@ describe('landing through a pull request', () => {
     const c = manual();
     await workers.start(c.id);
     const s = runtime.last;
-    s.call('ready_for_review', { summary: 'Demo aufgenommen, keine Code-Änderung.', demo: artifact() });
+    await s.call('ready_for_review', { summary: 'Demo aufgenommen, keine Code-Änderung.', demo: artifact() });
     // the owner sees before approving that approval ends the card
     expect(board.item(c.id)!.noChange).toBe(true);
     s.emit({ type: 'idle' });
@@ -70,19 +70,19 @@ describe('landing through a pull request', () => {
     const c = manual();
     await workers.start(c.id);
     const s = runtime.last;
-    expect(s.call('close_unchanged', {})).toContain('only work the owner approved');
+    expect(await s.call('close_unchanged', {})).toContain('only work the owner approved');
     const clone = board.row(c.id).workspace!;
     writeFileSync(join(clone, 'x.ts'), '');
     git(clone, 'add', '.');
     git(clone, 'commit', '--quiet', '-m', 'X');
-    s.call('ready_for_review', { summary: 'S', demo: artifact() });
+    await s.call('ready_for_review', { summary: 'S', demo: artifact() });
     s.emit({ type: 'idle' });
     await workers.approve(c.id);
     expect(state(c.id)).toBe('inPr');
     // with work on the branch, it goes out as a pull request
-    expect(s.call('close_unchanged', {})).toContain('holds commits');
+    expect(await s.call('close_unchanged', {})).toContain('holds commits');
     git(clone, 'reset', '--quiet', '--hard', 'HEAD~1');
-    expect(s.call('close_unchanged', {})).toContain('the card is done');
+    expect(await s.call('close_unchanged', {})).toContain('the card is done');
     expect(state(c.id)).toBe('done');
     expect(board.item(c.id)!.pr).toBeUndefined();
     expect(board.events(c.id).at(-1)).toMatchObject({ author: 'worker', text: 'Ohne Änderung am Code abgeschlossen: erledigt.' });
@@ -101,7 +101,7 @@ describe('a card whose own branch changes how work lands', () => {
     writeFileSync(join(clone, '.obeya/settings.json'), JSON.stringify(settings));
     git(clone, 'add', '.');
     git(clone, 'commit', '--quiet', '-m', 'Obeya settings');
-    runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
     runtime.last.emit({ type: 'idle' });
     return c;
   };
@@ -165,7 +165,7 @@ describe('approving directly onto main where work goes out as a pull request', (
   test('Obeya pushes the work onto origin/main itself: no pull request, the card is live, the Obeya checkout stays', async () => {
     const { c, session, clone } = await handedOver();
     commitIn(clone, 'x.ts', 'X');
-    session.call('ready_for_review', { summary: 'S', demo: artifact() });
+    await session.call('ready_for_review', { summary: 'S', demo: artifact() });
     session.emit({ type: 'idle' });
     const approved = workers.approve(c.id, { direct: true });
     // the click ends the owner's turn: the card no longer needs them while the push runs
@@ -189,7 +189,7 @@ describe('approving directly onto main where work goes out as a pull request', (
   test('main moved on: the work is rebased onto it, also when it moves again between fetch and push', async () => {
     const { c, session, clone } = await handedOver();
     commitIn(clone, 'x.ts', 'X');
-    session.call('ready_for_review', { summary: 'S', demo: artifact() });
+    await session.call('ready_for_review', { summary: 'S', demo: artifact() });
     pushElsewhere('y.ts', 'Y');
     // the first push finds main moved once more, as when someone pushes while Obeya rebases
     const hook = join(clone, '.git/hooks/pre-push');
@@ -208,7 +208,7 @@ describe('approving directly onto main where work goes out as a pull request', (
   test('a conflict goes back to the worker with the approval kept: its next handover is pushed directly too', async () => {
     const { c, session, clone } = await handedOver();
     commitIn(clone, 'same.ts', 'A');
-    session.call('ready_for_review', { summary: 'S', demo: artifact() });
+    await session.call('ready_for_review', { summary: 'S', demo: artifact() });
     pushElsewhere('same.ts', 'B');
     await workers.approve(c.id, { direct: true });
     expect(state(c.id)).toBe('working');
@@ -218,7 +218,7 @@ describe('approving directly onto main where work goes out as a pull request', (
     // the worker brings its branch up to date and hands over again
     git(clone, 'reset', '--quiet', '--hard', 'origin/main');
     commitIn(clone, 'same.ts', 'A nach B');
-    session.call('ready_for_review', { summary: 'S', demo: artifact() });
+    await session.call('ready_for_review', { summary: 'S', demo: artifact() });
     expect(board.item(c.id)!.statusLine).toBe('Landet auf main');
     session.emit({ type: 'idle' });
     await until(() => state(c.id) === 'live');
@@ -230,7 +230,7 @@ describe('approving directly onto main where work goes out as a pull request', (
   test('a push the remote turns away (a protected branch) stays with the owner, who approves again', async () => {
     const { c, session, clone } = await handedOver();
     commitIn(clone, 'x.ts', 'X');
-    session.call('ready_for_review', { summary: 'S', demo: artifact() });
+    await session.call('ready_for_review', { summary: 'S', demo: artifact() });
     writeFileSync(join(origin, 'hooks/pre-receive'), '#!/bin/sh\necho "protected branch" >&2\nexit 1\n', { mode: 0o755 });
     const approved = workers.approve(c.id, { direct: true }).catch((e) => e);
     expect(needsYou(board.item(c.id)!)).toBe(false);
@@ -250,7 +250,7 @@ describe('approving directly onto main where work goes out as a pull request', (
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'pr', workspaces: 'clones' } }));
     const { c, session, clone } = await handedOver();
     commitIn(clone, 'x.ts', 'X');
-    session.call('ready_for_review', { summary: 'S', demo: artifact() });
+    await session.call('ready_for_review', { summary: 'S', demo: artifact() });
     const err = await workers.approve(c.id, { direct: true }).catch((e) => e);
     expect(err).toMatchObject({ code: 'noDirect' });
     expect(state(c.id)).toBe('waiting:demo');
@@ -260,7 +260,7 @@ describe('approving directly onto main where work goes out as a pull request', (
     setup({ ...generic, land: 'main', workspaces: 'clones' });
     const d = await handedOver('Logo');
     commitIn(d.clone, 'logo.svg', 'Logo');
-    d.session.call('ready_for_review', { summary: 'S', demo: artifact() });
+    await d.session.call('ready_for_review', { summary: 'S', demo: artifact() });
     await workers.approve(d.c.id, { direct: true });
     expect(state(d.c.id)).toBe('live');
     expect(git(main, 'log', '--format=%s', '-1')).toBe('Logo');
@@ -268,7 +268,7 @@ describe('approving directly onto main where work goes out as a pull request', (
 
   test('work that changed nothing closes as done, approved directly or not', async () => {
     const { c, session } = await handedOver();
-    session.call('ready_for_review', { summary: 'Nur eine Analyse.', demo: artifact() });
+    await session.call('ready_for_review', { summary: 'Nur eine Analyse.', demo: artifact() });
     await workers.approve(c.id, { direct: true });
     expect(state(c.id)).toBe('done');
     expect(git(origin, 'log', '--format=%s', 'main')).toBe('init');
@@ -299,7 +299,7 @@ describe('the landed commit names the demo’s page', () => {
       git(clone, 'add', '.');
       git(clone, 'commit', '--quiet', '-m', 'Zählerstände als CSV\n\nDer Export liest alle Zähler.\n\nCo-Authored-By: Claude <noreply@anthropic.com>');
     }
-    runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
     return c;
   }
 
@@ -382,7 +382,7 @@ describe('a workstream whose plan doc keeps it open after its work landed', () =
     writeFileSync(join(clone, 'config.ts'), 'export {}\n');
     git(clone, 'add', '.');
     git(clone, 'commit', '--quiet', '-m', 'Config');
-    runtime.last.call('ready_for_review', { summary: 'Konfiguration vorbereitet.', demo: artifact() });
+    await runtime.last.call('ready_for_review', { summary: 'Konfiguration vorbereitet.', demo: artifact() });
     runtime.last.emit({ type: 'idle' });
     return w;
   };
@@ -516,7 +516,7 @@ describe('a workstream merged as a pull request, its box still empty', () => {
     writeFileSync(join(clone, 'config.ts'), 'export {}\n');
     git(clone, 'add', '.');
     git(clone, 'commit', '--quiet', '-m', 'Config');
-    runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
     runtime.last.emit({ type: 'idle' });
     await workers.approve(w.id);
     board.work(w.id, { pr: JSON.stringify({ url: 'https://github.com/acme/app/pull/821', number: 821, seen: [], reported: [] }) });
@@ -568,7 +568,7 @@ describe('a workspace its card will not work in again goes back to the pool', ()
     writeFileSync(join(clone, 'config.ts'), 'export {}\n');
     git(clone, 'add', '.');
     git(clone, 'commit', '--quiet', '-m', 'Config');
-    workers.stop(id);
+    await workers.stop(id);
     expect(spaces.leasedBy(id)).toBe(clone);
     return clone;
   };
@@ -699,7 +699,7 @@ describe('a workspace its card will not work in again goes back to the pool', ()
     const c = manual();
     await workers.start(c.id);
     const clone = board.row(c.id).workspace!;
-    runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
     runtime.last.emit({ type: 'idle' });
     await workers.approve(c.id);
     expect(state(c.id)).toBe('done');
@@ -718,7 +718,7 @@ describe('a workspace its card will not work in again goes back to the pool', ()
     writeFileSync(join(clone, 'config.ts'), 'export {}\n');
     git(clone, 'add', '.');
     git(clone, 'commit', '--quiet', '-m', 'Config');
-    runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
     runtime.last.emit({ type: 'idle' });
     await workers.approve(w.id);
     board.work(w.id, { pr: JSON.stringify({ url: 'https://github.com/acme/app/pull/821', number: 821, seen: [], reported: [] }) });

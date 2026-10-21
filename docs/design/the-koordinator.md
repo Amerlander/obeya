@@ -50,7 +50,7 @@ progress or queued, it skips this judgement only when no workstream of its proje
 A card let start while no workspace is free (all clones leased, or every free one dirty) waits in
 its place in the queue („Wartet auf Workspace“), counting as ahead of the cards after it, and starts
 by itself once one is free (looked for at every change of the board, and for dirty clones at least
-once a minute, since they can turn clean without one). Its reason ends in a link („Anzahl der Klone
+once a minute, since they can turn clean without one; see Workspaces for how free clones are looked at). Its reason ends in a link („Anzahl der Klone
 ändern“, or „… der Slots ändern“) that opens the configuration at that setting, since the owner may
 not know the pool is the limit nor where it is set. A start that fails for another reason drops the
 card back to planned, showing the error as the reason. Waiting cards are picked up again when Obeya

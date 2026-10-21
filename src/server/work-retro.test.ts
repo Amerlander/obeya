@@ -230,12 +230,12 @@ describe('Arbeitsrückschau', () => {
     const c = board.create({ title: 'Neu gestartet', x: 0, y: 0 });
     await workers.start(c.id);
     runtime.last.emit({ type: 'session', id: 's1' });
-    workers.stop(c.id);
+    await workers.stop(c.id);
     await workers.start(c.id);
     expect(board.events(c.id).some((e) => e.text.includes('(Sitzung s1) bleibt für die Arbeitsrückschau erhalten'))).toBe(true);
     const worker = runtime.last;
     worker.emit({ type: 'session', id: 's2' });
-    worker.call('ready_for_review', { summary: 'Fertig.', demo: artifact() });
+    await worker.call('ready_for_review', { summary: 'Fertig.', demo: artifact() });
     worker.emit({ type: 'idle' });
     // approved without a change: nothing lands, and the card is done once its worker's turn ends
     await workers.approve(c.id);

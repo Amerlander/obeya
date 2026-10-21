@@ -59,6 +59,22 @@ where it was (planned, its snooze gone, the words kept for its next start) and i
 says why; a clone git failed on is passed over for a while, like a dirty one, so a fetch that keeps
 failing does not take it again and again.
 
+Choosing a clone does not block the server either: `git status` in each free clone takes a while in
+a large repository, and over SSH on a host. Obeya chooses by its last look at each free clone (clean,
+uncommitted changes, or not there, its host unreachable), which git takes in the background: when a
+clone is given back, and again when a look is older than a minute as Obeya looks for a free clone
+(at every change of the board while cards wait for one). A clean clone goes first, then one not
+looked at yet; a look that changes the answer changes the board, so a waiting card takes a clone
+turned clean. The clone a card takes is looked at again before it works there: one no longer clean
+is given back and the next one taken, and where none is left the card goes back to planned and waits
+in the queue as when none is free at once. What else Obeya asks git about a card's workspace runs in
+the background as well: whether it holds work (uncommitted changes, commits beyond the main branch),
+where its branch left the main branch, and the plan docs its branch adds. A stopped card is planned
+at once and gives its workspace back once git has said that it holds nothing (not if it started
+again meanwhile); an approval ends the owner's turn at once, the card landing (`approved_at`), and
+lands the work, opens the pull request or closes the card once git has told which; a handover is
+recorded once git has told whether it changes anything.
+
 The pool is what the configuration names. A clone no longer named leaves it: a free one at once, a
 leased one when its card gives it back (no card moves mid-work). A clone Obeya made is then deleted
 from disk, after `app.stop` ran in it, if nothing would be lost: no uncommitted or untracked files
@@ -193,9 +209,9 @@ unseen by its callers: `ssh <target> exec sh -c '…'` with the installers' dire
 `exec`, so a shell that forks for a command (dash) does not stay as the session's parent under
 another pid. One shared connection where `ControlMaster` exists (not Windows), its sockets in
 `/tmp/obeya-ssh-<uid>` for the owner alone, since whoever reaches a socket uses its connection;
-`BatchMode`; keep-alives that notice a dropped link within 45 s. Calls the server blocks on (looking
-for a free clone, reading changes) fail at once after a host's connection failed, and the host is
-asked again in the background 30 s on; when it answers, waiting cards look again.
+`BatchMode`; keep-alives that notice a dropped link within 45 s. Calls the server still blocks on fail
+at once after a host's connection failed, and the host is asked again in the background 30 s on;
+when it answers, waiting cards look again.
 
 #### Logins and files
 
@@ -266,3 +282,7 @@ a container say, reuses pids). A host needs git, Claude Code and what the reposi
   freeing only on a card's normal path, which left stopped, ticked-off workstreams holding clones.
 - **An unreachable host fails fast** (2026-10-12): asking it on every look for a free clone (almost a
   minute with five clones there) left Obeya unresponsive while a card waited.
+- **Free clones are chosen by their last look, the one taken looked at again** (2026-10-21): in a
+  large repository (GitHub issue #2: 9,188 files, on Windows) or over SSH, `git status` in every free
+  clone at each look held the server, on every canvas. Rejected: asking git while choosing; a start
+  that waits for the look before taking a clone (slots and the queue would not see it taken meanwhile).

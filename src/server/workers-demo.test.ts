@@ -29,7 +29,7 @@ describe('parking: the app of a card that waits for the owner', () => {
   const handOver = async () => {
     const c = manual();
     await workers.start(c.id);
-    runtime.last.call('ready_for_review', { summary: 'Fertig.', demo: artifact() });
+    await runtime.last.call('ready_for_review', { summary: 'Fertig.', demo: artifact() });
     runtime.last.emit({ type: 'idle' });
     return c;
   };
@@ -91,7 +91,7 @@ describe('parking: the app of a card that waits for the owner', () => {
     parking();
     const c = manual();
     await workers.start(c.id);
-    runtime.last.call('ready_for_review', { summary: 'Fertig.', demo: artifact() });
+    await runtime.last.call('ready_for_review', { summary: 'Fertig.', demo: artifact() });
     runtime.last.emit({ type: 'idle', background: 1 });
     await Bun.sleep(60);
     expect(stopped(c.id)).toBe(false);
@@ -171,7 +171,7 @@ describe('parking: the app of a card that waits for the owner', () => {
     runtime.last.call('app_running', { url: '' });
     expect(board.item(c.id)!.app).toBeUndefined();
     runtime.last.call('app_running', { url: 'http://localhost:5174/' });
-    runtime.last.call('ready_for_review', { summary: 'Fertig.', demo: artifact() });
+    await runtime.last.call('ready_for_review', { summary: 'Fertig.', demo: artifact() });
     runtime.last.emit({ type: 'idle' });
     await until(() => board.row(c.id).parked);
     expect(board.item(c.id)!.app).toBeUndefined();
@@ -183,7 +183,7 @@ describe('parking: the app of a card that waits for the owner', () => {
     const c = manual();
     await workers.start(c.id);
     runtime.last.call('app_running', { url: 'http://localhost:5173/' });
-    runtime.last.call('ready_for_review', { summary: 'Fertig.', demo: artifact() });
+    await runtime.last.call('ready_for_review', { summary: 'Fertig.', demo: artifact() });
     runtime.last.emit({ type: 'idle' });
     expect(await workers.openApp(c.id)).toBe('http://localhost:5173/');
     await Bun.sleep(80);
@@ -261,7 +261,7 @@ describe('handing over with a demo', () => {
     const c = manual();
     await workers.start(c.id);
     const d = demoDir();
-    expect(runtime.last.call('ready_for_review', { summary: 'S', demo: demo(d) })).toContain('End your turn');
+    expect(await runtime.last.call('ready_for_review', { summary: 'S', demo: demo(d) })).toContain('End your turn');
     expect(state(c.id)).toBe('waiting:demo');
     const { id: handover, at } = board.events(c.id).findLast((e) => e.kind === 'review')!;
     expect(board.item(c.id)!.demo).toEqual({ kind: 'video', chapters: [[0, 'Vorher'], [6, 'Nachher']], question: 'Semikolon oder Komma?', handover, at });
@@ -280,7 +280,7 @@ describe('handing over with a demo', () => {
   test('the question in the demo report is answered on the card; the demo still waits for approval', async () => {
     const c = manual();
     await workers.start(c.id);
-    runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir()) });
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir()) });
     runtime.last.emit({ type: 'idle' });
     expect(board.item(c.id)!.question).toEqual({ text: 'Semikolon oder Komma?', options: [] });
     const n = runtime.last.inbox.length;
@@ -307,11 +307,11 @@ describe('handing over with a demo', () => {
   test('a handover that keeps the demo leaves its answered question with the handover it came with', async () => {
     const c = manual();
     await workers.start(c.id);
-    runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir()) });
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir()) });
     runtime.last.emit({ type: 'idle' });
     const first = board.events(c.id).findLast((e) => e.kind === 'review')!.id;
     workers.answer(c.id, 'Semikolon.');
-    runtime.last.call('ready_for_review', { summary: 'Entscheidung festgehalten.' });
+    await runtime.last.call('ready_for_review', { summary: 'Entscheidung festgehalten.' });
     runtime.last.emit({ type: 'idle' });
     expect(state(c.id)).toBe('waiting:demo');
     expect(board.item(c.id)!.question).toBeUndefined();
@@ -321,7 +321,7 @@ describe('handing over with a demo', () => {
   test('a worker that reworks its demo after the answer hands over anew; until then the card is at work', async () => {
     const c = manual();
     await workers.start(c.id);
-    runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir()) });
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir()) });
     runtime.last.emit({ type: 'idle' });
     workers.answer(c.id, 'Komma, bitte.');
     // a turn the session ends before it took in the answer leaves the card with the worker
@@ -329,7 +329,7 @@ describe('handing over with a demo', () => {
     expect(needsYou(board.item(c.id)!)).toBe(false);
     runtime.last.emit({ type: 'tool', name: 'Edit', input: {} });
     expect(needsYou(board.item(c.id)!)).toBe(false);
-    runtime.last.call('ready_for_review', { summary: 'Jetzt mit Komma.', demo: { dir: demoDir(), chapters: ['Vorher', 'Nachher'] } });
+    await runtime.last.call('ready_for_review', { summary: 'Jetzt mit Komma.', demo: { dir: demoDir(), chapters: ['Vorher', 'Nachher'] } });
     runtime.last.emit({ type: 'idle' });
     expect(state(c.id)).toBe('waiting:demo');
     expect(board.item(c.id)!.summary).toEndWith('Jetzt mit Komma.');
@@ -340,7 +340,7 @@ describe('handing over with a demo', () => {
   test('an answer to the owner\'s words without a new demo marks the card answered; a new demo is a demo again', async () => {
     const c = manual();
     await workers.start(c.id);
-    runtime.last.call('ready_for_review', { summary: 'S', demo: { dir: demoDir(), chapters: ['Vorher', 'Nachher'] } });
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: { dir: demoDir(), chapters: ['Vorher', 'Nachher'] } });
     runtime.last.emit({ type: 'idle' });
     expect(board.item(c.id)!.answered).toBeUndefined();
     // a reply alone
@@ -357,13 +357,13 @@ describe('handing over with a demo', () => {
     expect(board.item(c.id)!.answering).toBe(true);
     expect(board.item(c.id)!.answered).toBeUndefined();
     // a handover that keeps the demo answers them too
-    runtime.last.call('ready_for_review', { summary: 'Kopfzeile ergänzt.' });
+    await runtime.last.call('ready_for_review', { summary: 'Kopfzeile ergänzt.' });
     runtime.last.emit({ type: 'idle' });
     expect(state(c.id)).toBe('waiting:demo');
     expect(board.item(c.id)!.answered).toBe(true);
     // a new demo is what the owner looks at next
     workers.message(c.id, 'Zeig mal.');
-    runtime.last.call('ready_for_review', { summary: 'Mit Video.', demo: { dir: demoDir(), chapters: ['Vorher', 'Nachher'] } });
+    await runtime.last.call('ready_for_review', { summary: 'Mit Video.', demo: { dir: demoDir(), chapters: ['Vorher', 'Nachher'] } });
     runtime.last.emit({ type: 'idle' });
     expect(state(c.id)).toBe('waiting:demo');
     expect(board.item(c.id)!.answered).toBeUndefined();
@@ -372,7 +372,7 @@ describe('handing over with a demo', () => {
   test('words its worker never answers do not read as answered, though it answered the ones before', async () => {
     const c = manual();
     await workers.start(c.id);
-    runtime.last.call('ready_for_review', { summary: 'S', demo: { dir: demoDir(), chapters: ['Vorher', 'Nachher'] } });
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: { dir: demoDir(), chapters: ['Vorher', 'Nachher'] } });
     runtime.last.emit({ type: 'idle' });
     workers.message(c.id, 'Warum zwei Spalten?');
     runtime.last.emit({ type: 'tool', name: 'Read', input: {} });
@@ -413,7 +413,7 @@ describe('handing over with a demo', () => {
   test('a worker that a background command wakes after it answered is at work again until its turn ends', async () => {
     const c = manual();
     await workers.start(c.id);
-    runtime.last.call('ready_for_review', { summary: 'S', demo: { dir: demoDir(), chapters: ['Vorher', 'Nachher'] } });
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: { dir: demoDir(), chapters: ['Vorher', 'Nachher'] } });
     runtime.last.emit({ type: 'idle' });
     workers.message(c.id, 'Auf dem Telefon geht es nicht.');
     runtime.last.emit({ type: 'tool', name: 'Bash', input: { command: 'bun test', run_in_background: true } });
@@ -430,7 +430,7 @@ describe('handing over with a demo', () => {
     runtime.last.emit({ type: 'text', text: 'Läuft.' });
     expect(board.item(c.id)!.answering).toBe(true);
     // the new handover keeps the demo: the card is the owner's again
-    runtime.last.call('ready_for_review', { summary: 'Behoben.' });
+    await runtime.last.call('ready_for_review', { summary: 'Behoben.' });
     runtime.last.emit({ type: 'idle' });
     expect(board.item(c.id)!.answered).toBe(true);
     expect(needsYou(board.item(c.id)!)).toBe(true);
@@ -440,7 +440,7 @@ describe('handing over with a demo', () => {
     const c = manual();
     await workers.start(c.id);
     runtime.last.emit({ type: 'session', id: 'sess-1' });
-    runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir()) });
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir()) });
     runtime.last.emit({ type: 'idle' });
     workers.answer(c.id, 'Semikolon.');
     workers.shutdown();
@@ -457,7 +457,7 @@ describe('handing over with a demo', () => {
     const c = manual();
     await workers.start(c.id);
     runtime.last.emit({ type: 'session', id: 'sess-1' });
-    runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir()) });
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir()) });
     runtime.last.emit({ type: 'idle' });
     workers.answer(c.id, 'Nimm die andere Stimme.');
     const busy = runtime.last;
@@ -480,9 +480,9 @@ describe('handing over with a demo', () => {
     setup({ ...generic, land: 'main', workspaces: 'clones', app: { run: 'bun start' } });
     const c = manual();
     await workers.start(c.id);
-    runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir()) });
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir()) });
     workers.message(c.id, 'Nur den Text ändern.');
-    expect(runtime.last.call('ready_for_review', { summary: 'Text geändert.' })).toContain('End your turn');
+    expect(await runtime.last.call('ready_for_review', { summary: 'Text geändert.' })).toContain('End your turn');
     expect(state(c.id)).toBe('waiting:demo');
     expect(board.item(c.id)!.summary).toEndWith('Text geändert.');
     expect(board.item(c.id)!.demo!.chapters).toHaveLength(2);
@@ -492,20 +492,20 @@ describe('handing over with a demo', () => {
     const c = manual();
     await workers.start(c.id);
     const first = artifact();
-    runtime.last.call('ready_for_review', { summary: 'S', demo: first });
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: first });
     const handover = board.events(c.id).findLast((e) => e.kind === 'review')!;
     workers.message(c.id, 'Den Button ausrichten.');
     const second = demoDir();
-    runtime.last.call('ready_for_review', { summary: 'Ausgerichtet.', demo: demo(second, ['Nachher', 'Danach']) });
+    await runtime.last.call('ready_for_review', { summary: 'Ausgerichtet.', demo: demo(second, ['Nachher', 'Danach']) });
     expect(board.item(c.id)!.demo!.chapters).toEqual([[0, 'Nachher'], [6, 'Danach']]);
     expect(board.item(c.id)!.demos).toEqual([{ kind: 'html', chapters: [], single: true, handover: handover.id, at: handover.at, n: 0 }]);
     expect(board.demoFiles(c.id, 0)).toEqual({ dir: first.dir, kind: 'html' });
     expect(board.demoFiles(c.id)).toEqual({ dir: second, kind: 'video' });
     // a handover without a new demo keeps both as they are
-    runtime.last.call('ready_for_review', { summary: 'Text geändert.' });
+    await runtime.last.call('ready_for_review', { summary: 'Text geändert.' });
     expect(board.item(c.id)!.demos).toHaveLength(1);
     // a demo rendered again into the same directory replaced the files of the one before: nothing to go back to
-    runtime.last.call('ready_for_review', { summary: 'Neu aufgenommen.', demo: demo(second) });
+    await runtime.last.call('ready_for_review', { summary: 'Neu aufgenommen.', demo: demo(second) });
     expect(board.item(c.id)!.demos!.map((d) => d.n)).toEqual([0]);
     // demos are deleted to free space: one whose files are gone is no longer offered, from the canvas's next change on
     rmSync(first.dir, { recursive: true, force: true });
@@ -520,10 +520,10 @@ describe('handing over with a demo', () => {
     await workers.start(c.id);
     expect(runtime.last.inbox[0]).toContain('share the demo, a video or an HTML artifact, with colleagues');
     const d = demoDir();
-    expect(runtime.last.call('ready_for_review', { summary: 'S', demo: demo(d) })).toContain('needs its page');
+    expect(await runtime.last.call('ready_for_review', { summary: 'S', demo: demo(d) })).toContain('needs its page');
     expect(state(c.id)).toBe('working');
     const page = { title: 'Zählerstände als CSV', text: 'Vermieter laden die Zählerstände jetzt als CSV herunter.' };
-    expect(runtime.last.call('ready_for_review', { summary: 'S', demo: { ...demo(d), page } })).toContain('End your turn');
+    expect(await runtime.last.call('ready_for_review', { summary: 'S', demo: { ...demo(d), page } })).toContain('End your turn');
     expect(board.item(c.id)!.demo!.page).toEqual(page);
 
     const a = join(dir, 'auswertung');
@@ -531,8 +531,8 @@ describe('handing over with a demo', () => {
     writeFileSync(join(a, 'index.html'), '<h2>Graph</h2>');
     const html = { kind: 'html', dir: a };
     workers.message(c.id, 'Bitte als Auswertung.');
-    expect(runtime.last.call('ready_for_review', { summary: 'S', demo: html })).toContain('needs its page');
-    expect(runtime.last.call('ready_for_review', { summary: 'S', demo: { ...html, page } })).toContain('End your turn');
+    expect(await runtime.last.call('ready_for_review', { summary: 'S', demo: html })).toContain('needs its page');
+    expect(await runtime.last.call('ready_for_review', { summary: 'S', demo: { ...html, page } })).toContain('End your turn');
     // its index.html alone: it also goes out as one HTML file
     expect(board.item(c.id)!.demo).toMatchObject({ kind: 'html', page, single: true });
   });
@@ -540,14 +540,14 @@ describe('handing over with a demo', () => {
   test('a broken demo or a missing one is refused, and the worker keeps the card', async () => {
     const c = manual();
     await workers.start(c.id);
-    expect(runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir(), ['Nur eins']) })).toContain('Not handed over');
+    expect(await runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir(), ['Nur eins']) })).toContain('Not handed over');
     expect(state(c.id)).toBe('working');
     rmSync(dir, { recursive: true, force: true });
     setup({ ...generic, land: 'main', workspaces: 'clones', app: { run: 'bun start' } });
     const d = manual();
     await workers.start(d.id);
     expect(runtime.last.inbox[0]).toContain('How to run the app: bun start');
-    expect(runtime.last.call('ready_for_review', { summary: 'S' })).toContain(`every handover brings a demo. Record it with the demo skill (\`${demoSkillName()}\`; if your session does not know it, read its file ${DEMO_SKILL_FILE} and follow that)`);
+    expect(await runtime.last.call('ready_for_review', { summary: 'S' })).toContain(`every handover brings a demo. Record it with the demo skill (\`${demoSkillName()}\`; if your session does not know it, read its file ${DEMO_SKILL_FILE} and follow that)`);
     expect(state(d.id)).toBe('working');
   });
 
@@ -557,11 +557,11 @@ describe('handing over with a demo', () => {
     const d = join(dir, 'logos');
     Bun.spawnSync(['mkdir', '-p', join(d, 'img')]);
     const html = { kind: 'html', dir: d };
-    expect(runtime.last.call('ready_for_review', { summary: 'S', demo: html })).toContain('index.html is missing');
+    expect(await runtime.last.call('ready_for_review', { summary: 'S', demo: html })).toContain('index.html is missing');
     expect(state(c.id)).toBe('working');
     writeFileSync(join(d, 'index.html'), '<img src="img/a.svg">');
     writeFileSync(join(d, 'img', 'a.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
-    expect(runtime.last.call('ready_for_review', { summary: 'S', demo: html })).toContain('End your turn');
+    expect(await runtime.last.call('ready_for_review', { summary: 'S', demo: html })).toContain('End your turn');
     expect(state(c.id)).toBe('waiting:demo');
     expect(board.item(c.id)!.demo).toMatchObject({ kind: 'html', chapters: [] });
     expect(board.demoFiles(c.id)).toEqual({ dir: d, kind: 'html' });
@@ -577,13 +577,13 @@ describe('handing over with a demo', () => {
     expect(runtime.last.inbox[0]).not.toContain('How to run the app:');
     expect(runtime.last.inbox[0]).toContain('Where either would do, record the video');
     expect(runtime.last.inbox[0]).not.toContain('no_demo');
-    expect(runtime.last.call('ready_for_review', { summary: 'Gibt es schon.' })).toContain('Not handed over: every handover brings a demo.');
+    expect(await runtime.last.call('ready_for_review', { summary: 'Gibt es schon.' })).toContain('Not handed over: every handover brings a demo.');
     expect(state(c.id)).toBe('working');
-    expect(runtime.last.call('ready_for_review', { summary: 'Gibt es schon.', demo: artifact() })).toContain('End your turn');
+    expect(await runtime.last.call('ready_for_review', { summary: 'Gibt es schon.', demo: artifact() })).toContain('End your turn');
     expect(state(c.id)).toBe('waiting:demo');
     // after feedback, a handover without a new demo keeps the one on the card
     workers.message(c.id, 'Wo genau?');
-    expect(runtime.last.call('ready_for_review', { summary: 'In der Kopfzeile.' })).toContain('End your turn');
+    expect(await runtime.last.call('ready_for_review', { summary: 'In der Kopfzeile.' })).toContain('End your turn');
     expect(state(c.id)).toBe('waiting:demo');
   });
 });
@@ -600,7 +600,7 @@ describe('comments on places in the demo video', () => {
     writeFileSync(join(d, 'captions.vtt'), 'WEBVTT\n\n00:00:00.350 --> 00:00:05.000\nDie Liste.\n\n00:00:06.350 --> 00:00:16.350\nJetzt der Export. Die Datei hat eine Kopfzeile.\n');
     const c = manual();
     await workers.start(c.id);
-    runtime.last.call('ready_for_review', { summary: 'S', demo: { dir: d, chapters: ['Liste', 'Export'], ...(question ? { question } : {}) } });
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: { dir: d, chapters: ['Liste', 'Export'], ...(question ? { question } : {}) } });
     runtime.last.emit({ type: 'idle' });
     return c;
   };
@@ -733,7 +733,7 @@ describe('comments on places in the demo video', () => {
     mkdirSync(d, { recursive: true });
     writeFileSync(join(d, 'demo.mp4'), 'x');
     writeFileSync(join(d, 'captions.vtt'), 'WEBVTT\n\n00:00:00.350 --> 00:00:04.000\nNur die Zeile.\n');
-    runtime.last.call('ready_for_review', { summary: 'Nur die Zeile.', demo: { dir: d, chapters: ['Zeile'] } });
+    await runtime.last.call('ready_for_review', { summary: 'Nur die Zeile.', demo: { dir: d, chapters: ['Zeile'] } });
     const second = board.events(c.id).findLast((e) => e.kind === 'review')!.id;
     board.work(c.id, { state: 'working', need: null });
     workers.message(c.id, 'Hier war es noch falsch.', [], false, undefined, { at: 7, demo: first });

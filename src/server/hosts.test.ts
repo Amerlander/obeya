@@ -11,12 +11,12 @@ import type { SpawnOptions } from '@anthropic-ai/claude-agent-sdk';
 import { generic } from '../adapters/generic';
 import { Board } from './board';
 import { Store } from './db';
-import { HostError, hostName, onHost, RECHECK_DOWN_MS, registerHost, remote, sessionFiles, type SshHost } from './hosts';
+import { HostError, hostName, onHost, registerHost, remote, sessionFiles, type SshHost } from './hosts';
 import { runAppCommand } from './app-command';
 import { type AgentEvent, sdkRuntime } from './runtime';
 import { FakeRuntime, fakeSsh, gitRepo, identify, until } from './testing';
 import { Workers } from './workers';
-import { git, gitAsync, HERE, Workspaces } from './workspaces';
+import { git, gitAsync, HERE, RECHECK_MS, Workspaces } from './workspaces';
 
 let dir: string;
 let ssh: string;
@@ -219,11 +219,11 @@ describe('clones on a host', () => {
     const far = spaces.lease(b, 'obeya/b');
     expect(far.path).toBe(onHost(name, join(dir, 'far', '1')));
     await Promise.all([here.ready, far.ready]);
-    expect(spaces.hasWork(b)).toBe(false);
+    expect(await spaces.hasWork(b)).toBe(false);
     const local = join(dir, 'far', '1');
     identify(local);
     writeFileSync(join(local, 'new.txt'), 'x\n');
-    expect(spaces.hasWork(b)).toBe(true);
+    expect(await spaces.hasWork(b)).toBe(true);
     expect(await spaces.changes(b)).toEqual([{ file: 'new.txt', regions: [] }]);
     git(local, 'add', '.');
     git(local, 'commit', '--quiet', '-m', 'far work');
@@ -274,31 +274,35 @@ describe('clones on a host', () => {
     workers.shutdown();
   }, 30_000);
 
-  test('of a host that stops answering hold the server once, not at each look for a free clone', async () => {
+  test('of a host that stops answering are looked at in the background, and again only a while later', async () => {
     expect(await spaces.ensureHostClones(host, join(dir, 'far'), origin, 2, () => undefined)).toBeNull();
     let back = 0;
     const stop = host.onBack(() => back++);
     const tries = () => (existsSync(join(dir, 'net', 'tries')) ? readFileSync(join(dir, 'net', 'tries'), 'utf8').split('\n').length - 1 : 0);
     writeFileSync(join(dir, 'net', 'down'), '');
     const before = tries();
-    // the first look finds the host gone; ssh took seconds for that (a name it cannot resolve)
-    expect(spaces.leasable()).toBe(false);
-    expect(tries()).toBe(before + 1);
+    // not looked at yet: a card may take one, which is looked at again before it works there; the server does not wait for the host
+    expect(spaces.leasable()).toBe(true);
+    expect(tries()).toBe(before);
+    // the looks find the host gone
+    await until(() => !spaces.leasable());
     expect(host.unreachable).toBe(true);
+    const looked = tries();
+    expect(looked).toBeGreaterThan(before);
     // the next looks, at every change of the board, do not ask it again
     for (let i = 0; i < 5; i++) expect(spaces.leasable()).toBe(false);
-    expect(tries()).toBe(before + 1);
+    expect(tries()).toBe(looked);
     // a while later a look has it asked again, in the background
     rmSync(join(dir, 'net', 'down'));
-    setSystemTime(new Date(Date.now() + RECHECK_DOWN_MS));
+    setSystemTime(new Date(Date.now() + RECHECK_MS));
     try {
       expect(spaces.leasable()).toBe(false);
     } finally {
       setSystemTime();
     }
-    await until(() => !host.unreachable);
+    await until(() => spaces.leasable());
+    expect(host.unreachable).toBe(false);
     expect(back).toBe(1);
-    expect(spaces.leasable()).toBe(true);
     stop();
   });
 
@@ -479,7 +483,7 @@ describe('the app of a card on a host', () => {
     runtime.last.call('app_running', { url: app('dritte') });
     const third = (await workers.openApp(card.id))!;
     expect(await answers(third)).toBe('dritte');
-    workers.stop(card.id);
+    await workers.stop(card.id);
     await closed(third);
     expect(forwards()).toHaveLength(3);
   }, 20_000);
