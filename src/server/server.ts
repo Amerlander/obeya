@@ -202,6 +202,8 @@ export function serve(
           })),
         );
         send({ type: 'snapshot', snapshot: c.board.snapshot() });
+        // what the switchers show of it (its repositories, whether they run as configured) may have changed
+        relist();
         const n = counted(c);
         if (n === waiting[c.id]) return;
         waiting[c.id] = n;
@@ -530,6 +532,8 @@ export function serve(
       // a repository's commands, new or changed on its default branch, confirmed by the owner: they count from now on
       '/api/config/trust': { POST: needs(config, async (c, req) => (c.trust(await req.json()), {})) },
       // what the configuration amounts to and what is wrong with it: as saved, or a draft as the owner edits it
+      // „Erneut versuchen“: what did not start as the configuration has it tries again
+      '/api/config/retry': { POST: needs(config, (c) => c.retry()) },
       '/api/config/check': {
         GET: needs(config, (c) => c.checkSaved()),
         POST: needs(config, async (c, req) => c.check(await req.json())),

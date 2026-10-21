@@ -43,6 +43,13 @@ afterEach(() => {
 });
 
 const settle = () => new Promise((r) => setTimeout(r, 5));
+/** Collects what goes to `console.error` until `restore`. */
+function quiet() {
+  const lines: string[] = [];
+  const error = console.error;
+  console.error = (line: string) => lines.push(line);
+  return { lines, restore: () => (console.error = error) };
+}
 const item = (id: string) => canvas.board.item(id)!;
 
 describe('a canvas with several repositories', () => {
@@ -766,9 +773,121 @@ describe('the configuration changed while the canvas runs', () => {
     expect(w.session.inbox.join()).not.toContain("restart this repository's agents");
     expect(canvas.pendingRestart()?.repos).toEqual(['web']);
   });
+
+  /** A clone of the repository at `of`, which a configuration may list as a workspace of it. */
+  const cloneOf = (of: string, name: string) => {
+    const path = join(dir, name);
+    git(dir, 'clone', '--quiet', of, path);
+    return path;
+  };
+
+  test('a repository whose agents do not start as the configuration has them now works on as it was set up before, until they do', async () => {
+    open([{ path: web, settings: { land: 'pr' }, clones: 1 }]);
+    const w = atWork('web', 'W');
+    const before = canvas.repos[0]!;
+    const rev = canvas.board.canvas.configRev ?? 0;
+    // a clone of another repository listed for it: its workspaces refuse it as it starts
+    const wrong = cloneOf(api, 'x-api');
+    const errors = quiet();
+    canvas.apply({ name: 'Produkt', repos: [{ path: web, settings: { land: 'pr' }, clones: 1, workspaces: [wrong] }] });
+    w.session.emit({ type: 'idle' });
+    await until(() => canvas.repos[0] !== before);
+    errors.restore();
+    expect(errors.lines.join('\n')).toContain(`the agents of ${web} do not start as the configuration has it now`);
+    expect(canvas.board.canvas.repos.map((r) => r.id)).toEqual(['web']);
+    expect(canvas.repos[0]!.workspaces.list().map((x) => x.path)).toEqual(before.workspaces.list().map((x) => x.path));
+    expect(canvas.failures()).toEqual([{ canvas: 'produkt', repo: 'web', before: true, detail: expect.stringContaining(`${wrong} is not a clone of`) }]);
+    expect(canvas.board.canvas.configRev).toBe(rev + 1);
+    // its worker resumed where it paused
+    expect(workers.last.spec.resume).toBe('sess-W');
+    // a configuration it starts with: the failure goes
+    const now = canvas.repos[0]!;
+    canvas.apply({ name: 'Produkt', repos: [{ path: web, settings: { land: 'pr' }, clones: 2 }] });
+    workers.last.emit({ type: 'idle' });
+    await until(() => canvas.repos[0] !== now);
+    expect(canvas.repos[0]!.workspaces.list()).toHaveLength(2);
+    expect(canvas.failures()).toEqual([]);
+    expect(canvas.board.canvas.configRev).toBe(rev + 2);
+  });
+
+  test('a repository that starts neither as configured now nor as before leaves the canvas, its cards kept; it starts again once it can', async () => {
+    const own = cloneOf(api, 'x-own');
+    open([
+      { path: web, settings: { land: 'pr' } },
+      { path: api, settings: { land: 'pr' }, workspaces: [own] },
+    ]);
+    const a = atWork('api', 'A');
+    // the listed clone now belongs to another repository: the set-up before fails as well
+    git(own, 'remote', 'set-url', 'origin', web);
+    const errors = quiet();
+    canvas.apply({ name: 'Produkt', repos: [{ path: web, settings: { land: 'pr' } }, { path: api, settings: { land: 'pr' }, workspaces: [own], clones: 1 }] });
+    a.session.emit({ type: 'idle' });
+    await until(() => canvas.repos.length === 1);
+    errors.restore();
+    expect(errors.lines.join('\n')).toContain('nor as they were set up before');
+    expect(canvas.board.canvas.repos.map((r) => r.id)).toEqual(['web']);
+    expect(canvas.board.item(a.card.id)).toBeDefined();
+    expect(canvas.failures()).toEqual([{ canvas: 'produkt', repo: 'api', detail: expect.stringContaining(`${own} is not a clone of`) }]);
+    // the cause fixed, the configuration taken over again (a save, „Erneut versuchen“) starts it at once
+    git(own, 'remote', 'set-url', 'origin', api);
+    canvas.apply({ name: 'Produkt', repos: [{ path: web, settings: { land: 'pr' } }, { path: api, settings: { land: 'pr' }, workspaces: [own], clones: 1 }] });
+    expect(canvas.board.canvas.repos.map((r) => r.id)).toEqual(['web', 'api']);
+    expect(canvas.repos[1]!.workspaces.list()).toHaveLength(2);
+    expect(canvas.failures()).toEqual([]);
+  });
 });
 
 describe('the canvases Obeya serves', () => {
+  test("a canvas whose home repository does not start is left out, another repository that does not start leaves its canvas running; both are listed and start once they can", async () => {
+    fresh();
+    const web = repo('web', 'Web');
+    const api = repo('api', 'API');
+    const shop = repo('shop', 'Shop');
+    canvas.shutdown();
+    // a clone listed for web and one listed for shop that belong to api: their workspaces refuse them
+    const forWeb = join(dir, 'x-web');
+    const forShop = join(dir, 'x-shop');
+    git(dir, 'clone', '--quiet', api, forWeb);
+    git(dir, 'clone', '--quiet', api, forShop);
+    const configs = [
+      { name: 'Web', repos: [{ path: web, settings: { land: 'pr' as const }, workspaces: [forWeb] }] },
+      { name: 'API', repos: [{ path: api, settings: { land: 'pr' as const } }, { path: shop, settings: { land: 'pr' as const }, workspaces: [forShop] }] },
+    ];
+    const store = new Store(':memory:');
+    const errors = quiet();
+    const set = new Canvases(configs, { store, home: dir, runtime: new FakeRuntime(), forge: noForge, restartIntervalMs: 5 });
+    errors.restore();
+    expect(set.all().map((c) => c.id)).toEqual(['api']);
+    expect(set.get('api')!.board.canvas.repos.map((r) => r.id)).toEqual(['api']);
+    expect(set.failures()).toEqual([
+      { canvas: 'web', detail: expect.stringContaining(`${forWeb} is not a clone of`) },
+      { canvas: 'api', repo: 'shop', detail: expect.stringContaining(`${forShop} is not a clone of`) },
+    ]);
+    // the causes fixed, the configuration taken over again (a save, „Erneut versuchen“): both start
+    git(forWeb, 'remote', 'set-url', 'origin', web);
+    git(forShop, 'remote', 'set-url', 'origin', shop);
+    set.apply(configs, ['web', 'api']);
+    expect(set.all().map((c) => c.id)).toEqual(['api', 'web']);
+    expect(set.get('api')!.board.canvas.repos.map((r) => r.id)).toEqual(['api', 'shop']);
+    expect(set.failures()).toEqual([]);
+    // the home repository starts neither as configured now nor as before: the canvas stops, its cards kept
+    const keep = set.get('web')!.board.create({ title: 'Bleibt', x: 0, y: 0 });
+    let changes = 0;
+    set.onChange(() => changes++);
+    git(forWeb, 'remote', 'set-url', 'origin', api);
+    const again = quiet();
+    set.apply([{ ...configs[0]!, repos: [{ ...configs[0]!.repos[0]!, clones: 1 }] }, configs[1]!], ['web', 'api']);
+    await until(() => set.all().length === 1);
+    again.restore();
+    expect(set.all().map((c) => c.id)).toEqual(['api']);
+    expect(changes).toBeGreaterThan(0);
+    expect(set.failures()).toEqual([{ canvas: 'web', detail: expect.stringContaining(`${forWeb} is not a clone of`) }]);
+    expect(again.lines.join('\n')).toContain('the home repository of the canvas web does not start; the canvas stopped');
+    expect(store.cards('web').map((c) => c.id)).toContain(keep.id);
+    set.shutdown();
+    canvas = new CanvasRuntime({ repos: [{ path: api, settings: { land: 'pr' } }] }, { store: new Store(':memory:'), home: dir, runtime: new FakeRuntime(), forge: noForge });
+  });
+
   test('a canvas new in the configuration starts at once, one no longer in it stops, its cards kept', async () => {
     fresh();
     const web = repo('web', 'Web');

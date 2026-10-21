@@ -793,6 +793,8 @@ export interface CanvasInfo {
   name: string;
   /** The repositories on the canvas; the first is its home. */
   repos: RepoRef[];
+  /** How many times which of its repositories do not run as the configuration has them changed: the page reads the configuration's problems again when it changes. */
+  configRev?: number;
 }
 
 export interface RepoRef {
@@ -1688,7 +1690,10 @@ export interface ConfigProblem {
 }
 
 /** Whether a problem keeps the configuration from being saved: not one in the repository, which is fixed there. */
-export const blocksSaving = (p: ConfigProblem) => p.code !== 'demoSite' && p.code !== 'adapterGone' && p.code !== 'repoSettings' && p.code !== 'untrusted';
+/** Problems of the running canvases, not of the configuration: a canvas or repository that did not start as it has them (`StartFailure`). Saving the configuration, or „Erneut versuchen“, has them try again. */
+export const START_FAILED: ConfigProblemCode[] = ['canvasDown', 'repoDown', 'repoBefore'];
+
+export const blocksSaving = (p: ConfigProblem) => !['demoSite', 'adapterGone', 'repoSettings', 'untrusted', ...START_FAILED].includes(p.code);
 
 export type ConfigProblemCode =
   /** No canvas at all. */
@@ -1724,6 +1729,12 @@ export type ConfigProblemCode =
   | 'repoSettings'
   /** Commands of the repository, new or changed on its default branch, that wait for the owner to confirm them (`RepoTrust`). */
   | 'untrusted'
+  /** The canvas does not run: its home repository did not start (a git error, say). */
+  | 'canvasDown'
+  /** The repository did not start: it is left out of its canvas, its cards kept. */
+  | 'repoDown'
+  /** The repository's agents did not start as the configuration has them now: they work on as they were set up before. */
+  | 'repoBefore'
   /** Malformed: a bug in whoever wrote it. */
   | 'invalid';
 

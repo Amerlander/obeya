@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { type Bounds, boundsOf, CARD_SIZE, centre, onCanvas, type Place, PROJECT_HEAD, PROJECT_PAD, unionBounds } from '../core/layout';
-import { type CanvasInfo, type CanvasSnapshot, type CardPatch, finished, type Group, type Item, nameless, needsYou, openPerGroup, type PendingRestart, type PlanDir, START_ALL_HOLD_MS, titleFrom, type AppUpdate, type SourceUpdate, unreadAnswers } from '../core/types';
+import { type CanvasInfo, type CanvasSnapshot, type CardPatch, type ConfigProblem, finished, type Group, type Item, nameless, needsYou, openPerGroup, type PendingRestart, type PlanDir, START_ALL_HOLD_MS, titleFrom, type AppUpdate, type SourceUpdate, unreadAnswers } from '../core/types';
 import { api, ApiError, beforeReload, onNotice, quietAtStart, reportFocus, setCanvas, useCanvas } from './api';
 import { GroupNames, growFrom, inside, Lasso, MarkHint, Marked, Ring, TerritoryLayer, useTerritories } from './groups';
 import { besideSheet, BOTTOM, type Cam, camFor, centreOn, chase, dragLimit, edgeScroll, FAR, flying, flyTo, keepInView, MAX_ZOOM, MIN_ZOOM, overviewCam, placeIn, shows, stopFlight, TOP, toWorld } from './camera';
@@ -14,7 +14,7 @@ import type { Heard, Where } from './api';
 import { replyOn, setReply } from './reply';
 import { ArchivePill } from './archive';
 import { useBarFit } from './barFit';
-import { ConfigDialog, showCanvasesSection, showDevicesSection, showRepoClones } from './config';
+import { ConfigDialog, Problem, showCanvasesSection, showDevicesSection, showRepoClones } from './config';
 import { PhoneDialog } from './access';
 import { Setup } from './setup';
 import { Phone, phoneView } from './phone';
@@ -63,14 +63,40 @@ export function App() {
   // the canvas in the address, else the first
   const wanted = new URLSearchParams(location.search).get('c');
   const current = canvases.find((c) => c.id === wanted) ?? canvases[0];
-  // the first start: no canvas yet, so the setup assistant fills the page and creates one
-  if (!current) return <Setup first />;
+  if (!current) return <NoCanvas />;
   // a phone gets every canvas's waits and work, and the cards full screen, instead of the canvas
   if (phone) return <Phone canvases={canvases} />;
   setCanvas(current.id);
   keepDrafts(sessionStorage, current.id);
   keepWish(sessionStorage, current.id);
   return <Live canvases={canvases} />;
+}
+
+/**
+ * No canvas runs: on the first start, with none configured yet, the setup assistant fills the page
+ * and creates one; where the configured ones did not start, the page says why, and „Erneut
+ * versuchen“ opens the canvases once one runs.
+ */
+function NoCanvas() {
+  const [down, setDown] = useState<ConfigProblem[] | null>(null);
+  const read = () => api.configCheck().then((c) => setDown(c.problems.filter((p) => p.code === 'canvasDown')), () => setDown([]));
+  useEffect(() => void read(), []);
+  if (!down) return <Splash offline={false} />;
+  if (!down.length) return <Setup first />;
+  const retried = () =>
+    void api.canvases().then((list) => {
+      if (list.length) location.reload();
+      else void read();
+    }, console.error);
+  return (
+    <div id="splash" className="none-runs">
+      <Sign size={56} />
+      <h2>{t.noneRuns}</h2>
+      {down.map((p, k) => (
+        <Problem key={k} problem={p} where="" retried={retried} />
+      ))}
+    </div>
+  );
 }
 
 /** While the page loads, and after a restart until the canvas is back: the sign in the middle, above "offline" when the server cannot be reached. */
@@ -327,10 +353,11 @@ function Canvas({
   const [newHintOn, setNewHintOn] = useState(false);
   const [setupOn, setSetupOn] = useState(false);
   // what is wrong in the configuration as saved, marked on its button; read when the page loads,
-  // after a save in the dialog, and when a repository's settings change on its default branch,
-  // which the canvas counts in its repositories (`configRev`)
+  // after a save in the dialog, when a repository's settings change on its default branch, which
+  // the canvas counts in its repositories (`configRev`), and when a canvas or repository does not
+  // start, which the canvases count (theirs, and which of them run)
   const [configProblems, setConfigProblems] = useState(0);
-  const configRevs = snapshot.canvas.repos.map((r) => `${r.id}:${r.configRev ?? 0}`).join(' ');
+  const configRevs = [...snapshot.canvas.repos.map((r) => `${r.id}:${r.configRev ?? 0}`), ...canvases.map((c) => `${c.id}:${c.configRev ?? 0}`), `${snapshot.canvas.configRev ?? 0}`].join(' ');
   useEffect(() => void api.configCheck().then((c) => setConfigProblems(c.problems.length), console.error), [configRevs]);
   // the archive, read while its list is open; archived cards unfold from their row there
   const [archived, setArchived] = useState<Item[]>([]);
@@ -1563,6 +1590,7 @@ function Canvas({
           onSetup={() => setSetupOn(true)}
           onTalk={talkFromConfig}
           onProblems={setConfigProblems}
+          revs={configRevs}
           onConnect={() => (setCOn(false), setPhoneOn(true))}
           onAsk={(text, canvas) => void told.tell(t.voice.reading(t.voice.koordinator), undefined, () => (canvas ? api.commandOn(canvas, text) : api.command(text, null, { place: placeNow() })))}
         />

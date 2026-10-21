@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { blocksSaving, type CanvasConfig, type ConfigView, type DemoSettingsView, type LanguageView } from '../core/types';
 import { Board } from './board';
-import { CanvasRuntime } from './canvas';
+import { CanvasRuntime, type StartFailure } from './canvas';
 import { clipProblems, Config, demoSettingsProblems, readConfigFile } from './config';
 import { Store } from './db';
 import { serve } from './server';
@@ -283,6 +283,28 @@ describe("Obeya's configuration", async () => {
     expect(taken).toEqual([['web'], ['web'], ['web'], ['web'], ['web', 'api']]);
     expect(restarts).toBe(0);
     expect(c.view().restarting).toBe(false);
+  });
+
+  test("what does not run as configured is a problem at its canvas or repository that blocks nothing; „Erneut versuchen“ has the canvases take the configuration over again", async () => {
+    mkdirSync(join(dir, 'home'));
+    const saved = [{ name: 'Web', repos: [{ path: web }] }, { name: 'API', repos: [{ path: api }, { path: web }] }];
+    writeFileSync(file, JSON.stringify(saved));
+    const failures: StartFailure[] = [
+      { canvas: 'web', detail: 'git broke' },
+      { canvas: 'api', repo: 'web', detail: 'no clone', before: true },
+      { canvas: 'gone', detail: 'no longer configured' },
+    ];
+    const c = new Config({ file, source: 'file', started: saved, store, running: () => ['api'], server: { port: 4417, home: dir, permissionMode: 'auto' }, apply: (_, ids) => void taken.push(ids), failures: () => failures });
+    const { problems } = await c.checkSaved();
+    expect(problems).toEqual([
+      { code: 'canvasDown', canvas: 0, detail: 'git broke' },
+      { code: 'repoBefore', canvas: 1, repo: 1, detail: 'no clone' },
+    ]);
+    expect(problems.filter(blocksSaving)).toEqual([]);
+    failures[1] = { canvas: 'api', repo: 'web', detail: 'no clone' };
+    expect((await c.checkSaved()).problems[1]).toMatchObject({ code: 'repoDown', canvas: 1, repo: 1 });
+    expect(await c.retry()).toEqual({});
+    expect(taken).toEqual([['web', 'api']]);
   });
 
   test("shows each repository's settings without this machine's, with where each comes from", async () => {

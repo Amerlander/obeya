@@ -422,6 +422,9 @@ button.pill.help:hover, button.pill.help.on { color: var(--ink); }
 .empty .where { font-size: 13px; margin-top: 2px; margin-bottom: 10px; }
 .empty.above-note { transform: translate(-50%, -100%); }
 #splash { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: var(--muted); animation: fade .3s ease-out; }
+#splash.none-runs { color: var(--ink); padding: 24px; }
+#splash.none-runs h2 { margin: 0; }
+#splash.none-runs .c-problem { max-width: 640px; }
 
 #edges { position: fixed; inset: 0; pointer-events: none; z-index: 15; }
 .edge { position: absolute; pointer-events: auto; cursor: pointer; display: flex; align-items: center; gap: 6px;

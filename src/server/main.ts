@@ -226,6 +226,7 @@ const config = new Config({
     for (const c of live()) c.settingsChanged();
   },
   apply: (configs, ids) => canvases?.apply(configs, ids),
+  failures: () => canvases?.failures() ?? [],
   ...(process.env.OBEYA_SUPERVISED
     ? {
         restart: () => {

@@ -126,6 +126,7 @@ export const api = {
   /** What the configuration as saved amounts to, and what is wrong with it: it reads every repository, so it comes after `config`. */
   configCheck: () => call<ConfigChecked>('GET', '/api/config/check'),
   checkConfig: (canvases: CanvasConfig[]) => call<ConfigChecked>('POST', '/api/config/check', canvases),
+  retryStart: () => call<{}>('POST', '/api/config/retry'),
   /** Saves it; Obeya then starts again with it where something restarts it. */
   saveConfig: (canvases: CanvasConfig[]) => call<ConfigSaved>('PUT', '/api/config', canvases),
   /** „Für alle ins Repository übernehmen“: the repository's settings for this machine into its `.obeya/settings.json`. */

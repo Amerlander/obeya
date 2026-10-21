@@ -28,7 +28,7 @@ import {
 import { checkSetup, type SetupCheck } from '../../plugin/skills/demo/lib/setup.ts';
 import { installState, installVoice, KEY_ENV, sample } from '../../plugin/skills/demo/lib/voices.ts';
 import { BadRequest } from './board';
-import { ConfigError, readingRepo, resolveCanvas } from './canvas';
+import { ConfigError, readingRepo, resolveCanvas, type StartFailure } from './canvas';
 import type { Store } from './db';
 import { freshPath } from './path';
 import { sameRemote } from './repo';
@@ -222,6 +222,8 @@ export interface ConfigOptions {
    * `ids` are its canvases' ids, null where one does not resolve.
    */
   apply?: (canvases: CanvasConfig[], ids: (string | null)[]) => void;
+  /** The canvases, and repositories of those that run, that do not run as the configuration has them (`Canvases.failures`). */
+  failures?: () => StartFailure[];
   /** Repositories' settings for everyone were committed: the running canvases read them again. */
   onSettings?: () => void;
   /** Where „Für alle ins Repository übernehmen“ opens its pull request. */
@@ -621,9 +623,19 @@ export class Config {
         return null;
       }
     });
+    const failures = this.o.failures?.() ?? [];
     resolved.forEach((r, canvas) => {
       const first = resolved.findIndex((x) => x?.id === r?.id);
       if (r && first !== canvas) problems.push({ code: 'sameId', canvas, detail: `canvas ${canvas + 1} has the id "${r.id}" of canvas ${first + 1}; give it another name` });
+      // what does not run as it is configured, by the canvases and repositories it resolves to
+      for (const f of failures.filter((f) => f.canvas === r?.id)) {
+        if (f.repo === undefined) {
+          problems.push({ code: 'canvasDown', canvas, detail: f.detail });
+          continue;
+        }
+        const repo = r!.repos.findIndex((x) => x.id === f.repo);
+        if (repo >= 0) problems.push({ code: f.before ? 'repoBefore' : 'repoDown', canvas, repo, detail: f.detail });
+      }
     });
     return { canvases, resolved, problems };
   }
@@ -726,6 +738,17 @@ export class Config {
    * configuration). Where they came from the command line, Obeya starts again with it where
    * something restarts it.
    */
+  /**
+   * „Erneut versuchen“: the running canvases take the saved configuration over again, as after a
+   * save, so what did not start as it has them tries again.
+   */
+  async retry(): Promise<{}> {
+    if (!this.o.apply) throw new BadRequest('config', 'this Obeya does not apply its configuration while it runs');
+    const { canvases, resolved } = await this.check(this.current());
+    this.o.apply(expandConfig(canvases), resolved.map((r) => r?.id ?? null));
+    return {};
+  }
+
   async save(input: unknown): Promise<ConfigSaved> {
     const { canvases, resolved, problems: all } = await this.check(input);
     const problems = all.filter(blocksSaving);

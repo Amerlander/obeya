@@ -218,6 +218,7 @@ const de = {
   deleted: (title: string) => `„${title}“ gelöscht.`,
   undo: 'Rückgängig',
   offline: 'Keine Verbindung zum Server',
+  noneRuns: 'Keine Leinwand läuft',
   repos: (n: number) => `${n} Repositories`,
   switchCanvas: 'Leinwand wechseln',
   waitingThere: (n: number) => (n === 1 ? '1 Aufgabe braucht dich dort' : `${n} Aufgaben brauchen dich dort`),
@@ -1015,6 +1016,7 @@ const de = {
     info: 'Mehr dazu',
     problemCount: (n: number) => (n === 1 ? 'Ein Problem in der Konfiguration' : `${n} Probleme in der Konfiguration`),
     askFix: 'Aufgabe zum Beheben anlegen',
+    retry: 'Erneut versuchen',
     repoAt: (path: string) => `Repository ${path}`,
     fixRequest: (where: string, problem: string, detail: string) =>
       `Die Konfiguration meldet ein Problem${where ? ` (${where})` : ''}: ${problem} Technisch: ${detail}. Lege eine Aufgabe an, die es behebt.`,
@@ -1185,6 +1187,9 @@ const de = {
       untrusted: 'Das Repository bringt Befehle mit, die neu sind oder sich geändert haben. Obeya führt sie erst aus, wenn du ihnen vertraust:',
       demoSite: 'Die Demo-Site in den Einstellungen des Repositorys ist so nicht nutzbar; bis sie es ist, exportiert „Teilen“ Demos als Datei:',
       adapterGone: 'Das Repository hat auf dem Hauptbranch noch ein .obeya/adapter/, das Obeya nicht mehr liest. Was darin steht, gehört in seine Einstellungen (.obeya/settings.json); „Von einem Agenten ausfüllen lassen“ übernimmt es:',
+      canvasDown: 'Diese Leinwand läuft nicht: Ihr Heimat-Repository ließ sich nicht starten. Ihre Karten bleiben gespeichert.',
+      repoDown: 'Dieses Repository ließ sich nicht starten und fehlt auf seiner Leinwand: Seine Agenten arbeiten nicht, seine Karten bleiben gespeichert.',
+      repoBefore: 'Die Agenten dieses Repositorys ließen sich mit dieser Konfiguration nicht starten: Sie arbeiten weiter wie vor der Änderung.',
       invalid: 'Die Konfiguration ist fehlerhaft.',
     } satisfies Record<ConfigProblemCode, string>,
     voice: {
@@ -1877,6 +1882,7 @@ const en: Strings = {
   deleted: (title: string) => `“${title}” deleted.`,
   undo: 'Undo',
   offline: 'No connection to the server',
+  noneRuns: 'No canvas is running',
   repos: (n: number) => `${n} repositories`,
   switchCanvas: 'Switch canvas',
   waitingThere: (n: number) => (n === 1 ? '1 task needs you there' : `${n} tasks need you there`),
@@ -2618,6 +2624,7 @@ const en: Strings = {
     info: 'More about this',
     problemCount: (n: number) => (n === 1 ? 'One problem in the configuration' : `${n} problems in the configuration`),
     askFix: 'Create a task to fix this',
+    retry: 'Try again',
     repoAt: (path: string) => `repository ${path}`,
     fixRequest: (where: string, problem: string, detail: string) =>
       `The configuration reports a problem${where ? ` (${where})` : ''}: ${problem} Technically: ${detail}. Create a task that fixes it.`,
@@ -2789,6 +2796,9 @@ const en: Strings = {
       untrusted: 'The repository brings commands that are new or changed. Obeya runs them only once you trust them:',
       demoSite: 'The demo site in the repository’s settings cannot be used like this; until it can, “Share” exports demos as a file:',
       adapterGone: 'The repository still has a .obeya/adapter/ on its main branch, which Obeya no longer reads. What it says belongs in its settings (.obeya/settings.json); “Have an agent fill them in” moves it there:',
+      canvasDown: 'This canvas is not running: its home repository did not start. Its cards are kept.',
+      repoDown: 'This repository did not start and is missing from its canvas: its agents are not working, its cards are kept.',
+      repoBefore: 'This repository’s agents did not start with this configuration: they work on as before the change.',
       invalid: 'The configuration is invalid.',
     },
     voice: {

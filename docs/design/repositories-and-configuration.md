@@ -539,6 +539,21 @@ hear of canvases that start, stop or change their name or repositories (`canvase
 WebSocket), so the switcher follows; a page of a canvas that stopped is closed and goes to the first
 canvas.
 
+A repository that does not start (a clone its workspaces refuse, a clone that cannot be made, a git
+error) never leaves a canvas half stopped. Restarted, it starts again as it was set up before
+(`Repo.from`), and the Konfiguration shows the problem `repoBefore` at it; where that fails too, it
+leaves the canvas like one the configuration no longer has, its cards kept (`repoDown`). A
+repository new on the canvas, or one that does not start with Obeya, is left out the same way while
+the canvas runs with the others. Without its home repository a canvas does not run: it is left out
+at startup, and stops when a restart cannot bring that repository back (`canvasDown`; `Canvases`
+keeps why). These are problems of the running canvases, not of the configuration
+(`StartFailure`, from `Canvases.failures` into `Config.check`): they block no save, show in the
+problem count on the Konfiguration button of every canvas (`CanvasInfo.configRev` tells the pages
+to read the problems again), and „Erneut versuchen“ at the problem (`POST /api/config/retry`) has
+the canvases take the saved configuration over again, as a save does, so that what failed tries
+again. Where no canvas runs because none started, the page says so with the problems and that
+button, instead of the setup assistant's first start.
+
 ### Language
 
 Obeya keeps three languages apart, each German or English: the interface's, the conversation's and

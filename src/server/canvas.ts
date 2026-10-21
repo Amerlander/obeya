@@ -88,6 +88,30 @@ export interface CanvasDeps {
    * used (`Config.repoSettings`); those the canvas started with when left out.
    */
   settings?: (repoPath: string) => RepoSettings | undefined;
+  /** The canvas stopped while it ran: its home repository no longer starts (`Canvases` leaves it out). */
+  stopped?: (c: CanvasRuntime, why: string) => void;
+}
+
+/**
+ * A canvas or one of its repositories that does not run as the configuration has it, by their ids,
+ * with why: a repository left out of its canvas (`repo`), or one that runs on as it was set up
+ * before (`before`); without `repo`, the canvas is left out (its home repository did not start).
+ */
+export interface StartFailure {
+  canvas: string;
+  repo?: string;
+  detail: string;
+  before?: true;
+}
+
+/** The home repository of a canvas did not start: the canvas does not run. */
+class HomeDown extends Error {
+  constructor(
+    readonly canvas: string,
+    cause: unknown,
+  ) {
+    super(messageOf(cause));
+  }
 }
 
 export interface RepoRuntime {
@@ -115,6 +139,8 @@ interface Repo extends RepoRuntime {
   prs?: PrWatcher;
   /** What the configuration's problems of the repository are read from on its default branch, as last seen (`problemSources`). */
   problemSources?: string;
+  /** The resolved configuration it was set up by, and its place there: what it starts again with where a new one fails. */
+  from: { resolved: Resolved; index: number };
 }
 
 /**
@@ -165,6 +191,10 @@ export class CanvasRuntime {
   private adapterModules = new Map<string, boolean>();
   /** The restart of some repositories' agents that waits, if one does. */
   private pending: RepoRestart | null = null;
+  /** Set once the canvas stopped because its home repository did not start again. */
+  private stopped = false;
+  /** By repository's id: why it does not run as the configuration has it (`StartFailure`). */
+  private failed = new Map<string, { detail: string; before?: true }>();
   /** The restart of all of Obeya that waits, if one does: it covers the repositories' too. */
   private obeyaDue: DueRestart | null = null;
   private pendingListeners = new Set<() => void>();
@@ -216,7 +246,16 @@ export class CanvasRuntime {
     });
     board.showSettings(this.settingsNow);
     // the Koordinator needs the workers, and the workers ask it: it is set right after them
-    repos.forEach((_, i) => this.addRepo(this.startRepo(resolved, i)));
+    repos.forEach((x, i) => {
+      try {
+        this.addRepo(this.startRepo(resolved, i));
+      } catch (e) {
+        // without its home repository the canvas does not start; another one is left out, its cards kept
+        if (i === 0) throw new HomeDown(id, e);
+        console.error(`Obeya: ${x.read.info.path} does not start, left out of the canvas ${id}: ${messageOf(e)}`);
+        this.fail(x.ref.id, e);
+      }
+    });
     board.showPools(() =>
       this.repos.filter((r) => r.workspaces.pooled).map((r) => ({ repo: r.ref.id, hosts: r.workspaces.pool(r.workers.inTurn()) })),
     );
@@ -509,7 +548,7 @@ export class CanvasRuntime {
     Object.assign(ref, shareRef(site, deps.home));
     const stops: (() => void)[] = [];
     // filled in below; what is set up here reaches it once it is
-    const repo = { config: rc, stops } as Repo;
+    const repo = { config: rc, stops, from: { resolved, index } } as Repo;
     repo.problemSources = this.problemSources(info.path, this.adapterModules.get(info.path));
     // where work lands on the local main, the checkout is the Lesestand; otherwise it is a pool clone on a card's branch
     const folder = !!info.folder;
@@ -696,11 +735,22 @@ export class CanvasRuntime {
       return false;
     });
     if (changed.length) this.due(changed.map((r) => r.info.path), 'config');
+    // the restart went at once, and its home repository did not start: the canvas stopped
+    if (this.stopped) return;
+    // a repository that did not start and left the configuration is no longer wrong
+    for (const repo of this.failed.keys()) if (!resolved.repos.some((x) => x.ref.id === repo)) this.ran(repo);
     // a repository new on the canvas starts at once; one whose restart waits starts with it
     resolved.repos.forEach(({ read: { info } }, i) => {
       if (this.repos.some((r) => r.info.path === info.path) || this.pending?.paths.has(info.path)) return;
-      const r = this.startRepo(resolved, i);
+      let r: Repo;
+      try {
+        r = this.startRepo(resolved, i);
+      } catch (e) {
+        console.error(`Obeya: ${info.path} does not start, left out of the canvas ${this.id}: ${messageOf(e)}`);
+        return this.fail(resolved.repos[i]!.ref.id, e);
+      }
       this.addRepo(r);
+      this.ran(r.ref.id);
       console.log(`Obeya: ${info.path} is on the canvas ${this.id} now`);
       if (this.obeyaDue) r.workers.restartDue(this.obeyaDue);
       r.workers.resumeAll(true);
@@ -799,22 +849,57 @@ export class CanvasRuntime {
       return;
     }
     const started: Repo[] = [];
+    let homeDown: unknown = null;
     for (const path of p.paths) {
       const at = this.repos.findIndex((r) => r.info.path === path);
-      if (at >= 0) this.stopRepo(this.repos[at]!);
+      const was = at >= 0 ? this.repos[at]! : undefined;
+      if (was) this.stopRepo(was);
       const i = resolved.repos.findIndex((x) => x.read.info.path === path);
       if (i < 0) {
         if (at >= 0) this.repos.splice(at, 1);
+        if (was) this.ran(was.ref.id);
         this.branchSettings.get(path)?.();
         this.branchSettings.delete(path);
         console.log(`Obeya: ${path} left the canvas ${this.id}; its cards are kept`);
         continue;
       }
-      const r = this.startRepo(resolved, i);
+      const repo = resolved.repos[i]!.ref.id;
+      let r: Repo | null = null;
+      try {
+        r = this.startRepo(resolved, i);
+        this.ran(repo);
+        console.log(`Obeya: restarted the agents of ${path}`);
+      } catch (e) {
+        // it starts again as it was set up before; where that fails too, it leaves the canvas, its cards kept
+        console.error(`Obeya: the agents of ${path} do not start as the configuration has it now: ${messageOf(e)}`);
+        try {
+          if (was) {
+            r = this.startRepo(was.from.resolved, was.from.index);
+            console.log(`Obeya: the agents of ${path} work on as they were set up before`);
+          }
+        } catch (again) {
+          console.error(`Obeya: nor as they were set up before: ${messageOf(again)}`);
+        }
+        this.fail(repo, e, !!r);
+        if (!r && i === 0) homeDown = e;
+      }
+      if (!r) {
+        if (at >= 0) this.repos.splice(at, 1);
+        if (!homeDown) console.log(`Obeya: ${path} is left out of the canvas ${this.id}; its cards are kept`);
+        continue;
+      }
       if (at >= 0) this.repos.splice(at, 1, r);
       else this.repos.push(r);
       started.push(r);
-      console.log(`Obeya: restarted the agents of ${path}`);
+    }
+    if (homeDown) {
+      // without its home repository the canvas does not run: it stops, its cards kept
+      this.stopped = true;
+      this.shutdown();
+      console.error(`Obeya: the home repository of the canvas ${this.id} does not start; the canvas stopped, its cards are kept`);
+      this.emitPending();
+      this.deps.stopped?.(this, messageOf(homeDown));
+      return;
     }
     this.board.canvas.repos.splice(0, this.board.canvas.repos.length, ...this.repos.map((r) => r.ref));
     for (const r of started) {
@@ -824,6 +909,27 @@ export class CanvasRuntime {
     }
     this.board.docsChanged();
     this.emitPending();
+  }
+
+  /** The repositories of the canvas that do not run as the configuration has it. */
+  failures(): StartFailure[] {
+    return [...this.failed].map(([repo, f]) => ({ canvas: this.id, repo, ...f }));
+  }
+
+  /** The repository did not start as the configuration has it (`before`: it runs on as it was set up before): the page reads the configuration's problems again. */
+  private fail(repo: string, e: unknown, before = false) {
+    this.failed.set(repo, { detail: messageOf(e), ...(before ? { before: true as const } : {}) });
+    this.failuresChanged();
+  }
+
+  /** The repository runs as the configuration has it, or left it. */
+  private ran(repo: string) {
+    if (this.failed.delete(repo)) this.failuresChanged();
+  }
+
+  private failuresChanged() {
+    this.board.canvas.configRev = (this.board.canvas.configRev ?? 0) + 1;
+    this.board.changed();
   }
 
   /** Restarts the repositories' agents the restart waits for at once, cutting off those still in a turn; false when none waits. */
@@ -1864,16 +1970,18 @@ export function approachOf(what: string, max = 40): string {
 }
 
 /**
- * Starts the canvases; one that does not start is left out, with why in Obeya's log (and in
- * "Konfiguration", which checks the configuration again), and the others run.
+ * Starts the canvases; one that does not start is left out, with why in Obeya's log and in
+ * "Konfiguration" (which checks the configuration again, and shows `failed` of one whose home
+ * repository did not start), and the others run.
  */
-export function startCanvases(configs: CanvasConfig[], deps: CanvasDeps): CanvasRuntime[] {
+export function startCanvases(configs: CanvasConfig[], deps: CanvasDeps, failed: (f: StartFailure) => void = () => {}): CanvasRuntime[] {
   return configs.flatMap((c) => {
     try {
       return new CanvasRuntime(c, deps);
     } catch (e) {
-      const why = e instanceof ConfigError ? e.message : e instanceof Error ? (e.stack ?? e.message) : String(e);
+      const why = e instanceof ConfigError || e instanceof HomeDown ? e.message : e instanceof Error ? (e.stack ?? e.message) : String(e);
       console.error(`Obeya: the canvas ${c.name ?? c.id ?? c.repos[0]?.path} does not start, left out: ${why}`);
+      if (e instanceof HomeDown) failed({ canvas: e.canvas, detail: e.message });
       return [];
     }
   });
@@ -1887,6 +1995,8 @@ export function startCanvases(configs: CanvasConfig[], deps: CanvasDeps): Canvas
 export class Canvases {
   private list: CanvasRuntime[];
   private listeners = new Set<() => void>();
+  /** By canvas's id: why one in the configuration does not run (its home repository did not start). */
+  private down = new Map<string, string>();
 
   constructor(
     configs: CanvasConfig[],
@@ -1894,7 +2004,27 @@ export class Canvases {
     /** A canvas started while Obeya runs. */
     private started: (c: CanvasRuntime) => void = () => {},
   ) {
-    this.list = startCanvases(configs, deps);
+    this.deps = {
+      ...deps,
+      stopped: (c, why) => {
+        this.list = this.list.filter((x) => x !== c);
+        this.down.set(c.id, why);
+        this.emit();
+      },
+    };
+    this.list = this.start(configs);
+  }
+
+  /** Starts canvases, keeping why one did not. */
+  private start(configs: CanvasConfig[]): CanvasRuntime[] {
+    const list = startCanvases(configs, this.deps, (f) => this.down.set(f.canvas, f.detail));
+    for (const c of list) this.down.delete(c.id);
+    return list;
+  }
+
+  /** The canvases, and repositories of those that run, that do not run as the configuration has them. */
+  failures(): StartFailure[] {
+    return [...[...this.down].map(([canvas, detail]) => ({ canvas, detail })), ...this.list.flatMap((c) => c.failures())];
   }
 
   all(): CanvasRuntime[] {
@@ -1921,19 +2051,22 @@ export class Canvases {
       if (!id) return;
       const running = this.get(id);
       if (running) return running.apply(config);
-      const [c] = startCanvases([config], this.deps);
+      const [c] = this.start([config]);
       if (!c) return;
       this.list.push(c);
       console.log(`Obeya: the canvas ${c.board.canvas.name} (?c=${c.id}) runs now`);
       this.started(c);
     });
-    if (!ids.includes(null))
+    if (!ids.includes(null)) {
+      // a canvas that did not start and left the configuration is no longer wrong
+      for (const id of [...this.down.keys()]) if (!ids.includes(id)) this.down.delete(id);
       for (const c of [...this.list])
         if (!ids.includes(c.id))
           c.retire(() => {
             this.list = this.list.filter((x) => x !== c);
             this.emit();
           });
+    }
     this.emit();
   }
 

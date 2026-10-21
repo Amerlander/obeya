@@ -4,7 +4,7 @@
 // own settings come from its command line and show read-only.
 
 import { type CSSProperties, Fragment, type ReactNode, useEffect, useId, useRef, useState } from 'react';
-import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigChecked, type ConfigProblem, type ConfigView, commandLines, type DemoSettings, type DemoSettingsView, type DemoSite, type DemoVoiceCheck, type FilledClones, type Language, type HostConfig, type LanguageView, type NarrationLanguage, restartsAgents, type RepoConfig, type RepoSettings, type RepoTrust, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type SetupCheck, type Theme, THEMES, type ThemeView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
+import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigChecked, type ConfigProblem, type ConfigView, commandLines, type DemoSettings, type DemoSettingsView, type DemoSite, type DemoVoiceCheck, type FilledClones, type Language, type HostConfig, type LanguageView, type NarrationLanguage, restartsAgents, type RepoConfig, type RepoSettings, type RepoTrust, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type SetupCheck, START_FAILED, type Theme, THEMES, type ThemeView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
 import { lineDiff } from '../core/diff';
 import { LANGUAGES } from '../core/locale';
 import { pushKeyFromEvent, type PushKeyView } from '../core/push-key';
@@ -88,7 +88,7 @@ function pinned(kept: KeptCanvases, loaded: CanvasConfig[], resolved: Checked['r
   return { draft: out.map((x) => x.c), origin: out.map((x) => x.id) };
 }
 
-export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems, onConnect }: { on: boolean; onClose: () => void; onSetup: () => void; onAsk: Ask; onTalk: () => void; onProblems: (n: number) => void; onConnect: () => void }) {
+export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems, onConnect, revs }: { on: boolean; onClose: () => void; onSetup: () => void; onAsk: Ask; onTalk: () => void; onProblems: (n: number) => void; onConnect: () => void; revs: string }) {
   const [view, setView] = useState<ConfigView | null>(null);
   const [draft, setDraft] = useState<CanvasConfig[]>([]);
   const [checked, setChecked] = useState<Checked | null>(null);
@@ -163,6 +163,14 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems, 
       checkSaved();
     }, console.error);
   }, [on]);
+
+  // what the problems are read from changed while the dialog is open (a repository did not start, say): the saved configuration is checked again
+  const revsSeen = useRef(revs);
+  useEffect(() => {
+    if (revsSeen.current === revs) return;
+    revsSeen.current = revs;
+    if (on && view) checkSaved();
+  }, [revs]);
 
   const take = (c: Checked, checkedDraft: CanvasConfig[]) => {
     setChecked(c);
@@ -1167,7 +1175,7 @@ function CanvasBlock({ n, canvas, resolved, running, pin, saved, problems, focus
       {problems
         .filter((p) => p.repo === undefined)
         .map((p, k) => (
-          <Problem key={k} problem={p} where={here} ask={askHere} />
+          <Problem key={k} problem={p} where={here} ask={askHere} retried={askHere && onRecheck} />
         ))}
       <button className="btn small" onClick={() => onChange({ ...canvas, repos: [...canvas.repos, { path: '' }] })}>
         {t.config.addRepo}
@@ -1346,7 +1354,7 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
       )}
       {problems.map((p, k) => (
         <div key={k} className="cfg-span">
-          <Problem problem={p} where={where} ask={ask} />
+          <Problem problem={p} where={where} ask={ask} retried={ask && onRecheck} />
           {p.code === 'notRepo' && noGit && <GitSetup key={noGit} path={noGit} confirm={t.setup.git.confirm} onDone={onRecheck} onFolder={() => onChange({ path: repo.path, git: false, ...(repo.settings ? { settings: repo.settings } : {}) })} />}
           {p.code === 'untrusted' && resolved?.trust && <TrustCommands path={repo.path} trust={resolved.trust} onDone={onRecheck} />}
         </div>
@@ -1787,16 +1795,31 @@ function Hosts({ hosts, onChange }: { hosts: HostConfig[]; onChange: (hosts: Hos
   );
 }
 
-// problems whose detail says what to fix, in the repository's settings rather than here
-const DETAILED: ConfigProblem['code'][] = ['demoSite', 'adapterGone', 'repoSettings', 'hostName'];
+// problems whose detail says what to fix, in the repository's settings rather than here, or why something did not start
+const DETAILED: ConfigProblem['code'][] = ['demoSite', 'adapterGone', 'repoSettings', 'hostName', ...START_FAILED];
 
 /**
  * A problem of the configuration: what is wrong, the technical detail folded away where it says
  * what to fix, and a button that has the Koordinator create a task that fixes it (with the detail, which it reads).
+ * What did not start as saved tries again with „Erneut versuchen“, where `retried` is given (called after it).
  */
-function Problem({ problem, where, ask }: { problem: ConfigProblem; where: string; ask?: (text: string) => void }) {
+export function Problem({ problem, where, ask, retried }: { problem: ConfigProblem; where: string; ask?: (text: string) => void; retried?: () => void }) {
   const [asked, setAsked] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [error, setError] = useState('');
   const text = t.config.problem[problem.code];
+  const retry = async () => {
+    setRetrying(true);
+    setError('');
+    try {
+      await api.retryStart();
+      retried?.();
+    } catch (e) {
+      setError(failText(e));
+    } finally {
+      setRetrying(false);
+    }
+  };
   return (
     <div className="p-error c-problem">
       {text}
@@ -1806,6 +1829,12 @@ function Problem({ problem, where, ask }: { problem: ConfigProblem; where: strin
           <code>{problem.detail}</code>
         </details>
       )}
+      {retried && START_FAILED.includes(problem.code) && (
+        <button className="btn small" disabled={retrying} onClick={() => void retry()}>
+          {t.config.retry}
+        </button>
+      )}
+      {error && <p>{error}</p>}
       {/* commands to trust are the owner's to look at, not a task's to fix */}
       {ask && problem.code !== 'untrusted' && (
         <button
