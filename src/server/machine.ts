@@ -15,6 +15,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 // by its path: the package exports no package.json, which Bun imports all the same but TypeScript does not
 import sdk from '../../node_modules/@anthropic-ai/claude-agent-sdk/package.json';
+import { DOCUMENT } from '../core/files';
 import { blocksSaving, CLONES, type FirstCanvas, type MachineItem, type MachineJob, type MachineSection, type MachineSectionId, type MachineView, type SetupFolder, type GitSetupPreview } from '../core/types';
 import { expandHome, readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
 import { checkSetup, type LinuxFamily, linuxFamily, output } from '../../plugin/skills/demo/lib/setup.ts';
@@ -108,18 +109,13 @@ function detached(cmd: string, args: string[], o: { env?: Env; windowsVerbatimAr
 }
 
 /**
- * Files that open in an app to look at them. Anything else an agent wrote (a `.command`, `.app`,
- * `.bat`, `.desktop`, a script) would run when opened, so it is shown in its folder instead.
- */
-const DOCUMENT = /\.(pdf|png|jpe?g|gif|webp|svg|html?|md|txt|csv|tsv|json|ya?ml|xml|log|xlsx?|docx?|pptx?|od[tsp]|rtf|mp4|mov|webm|mp3|wav|m4a|ogg)$/i;
-
-/**
  * Opens a file (or a directory) with the system's app for it, on the machine Obeya runs on, which
- * the owner sits at: Finder or Explorer for a directory. A file that is no document (`DOCUMENT`)
- * is shown in its folder, selected, where the platform can (Linux opens the folder).
+ * the owner sits at: Finder or Explorer for a directory. A file that is no document (`DOCUMENT`),
+ * or any file with `show` („Im Ordner zeigen“), is shown in its folder, selected, where the
+ * platform can (Linux opens the folder).
  */
-export function openWithSystem(path: string, file = false): Promise<boolean> {
-  const reveal = file && !DOCUMENT.test(path);
+export function openWithSystem(path: string, file = false, show = false): Promise<boolean> {
+  const reveal = file && (show || !DOCUMENT.test(path));
   const [cmd, ...args] =
     process.platform === 'darwin'
       ? ['open', ...(reveal ? ['-R'] : []), path]

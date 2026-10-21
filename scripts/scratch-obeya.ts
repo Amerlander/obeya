@@ -86,7 +86,7 @@
 // with events of kind `review`, the demos in `row.demos` and then `demo` go with those handovers in order, and a `spot` (a comment's
 // place in a demo video, `{ at, chapter?, demo? }`) names its demo by its place in that order; earlier demos need code that has them),
 // workspace (true: the card holds the next free clone, for a repository whose settings say clones; with
-// `branch` checked out there, holding a commit; for one that works in worktrees, `branch` is
+// `branch` checked out there, holding a commit, of `branchFiles` too (by path, a text or `{ from }` a file to copy); for one that works in worktrees, `branch` is
 // required and the card gets a worktree of its own on it), prototypeOf (the key of the idea it is a prototype of),
 // and `row` for any other column of `cards` (objects are stored as JSON). Times: "90s", "15m", "2h",
 // "3d" ago. `mainBranch` is the branch the repositories are on (default `main`). `"setup": true` serves no canvas (no configuration, no repository given): the first start,
@@ -154,6 +154,8 @@ interface StageCard {
   scope?: string[];
   changes?: { kind: 'added' | 'modified' | 'deleted' | 'moved'; path: string; from?: string }[];
   branch?: string;
+  /** Files the card's branch commits beside `scratch.txt`: by path, its text, or `{ from }` a file to copy (a PDF, say). */
+  branchFiles?: Record<string, string | { from: string }>;
   workspace?: boolean;
   /** A prototype of the idea with this key. */
   prototypeOf?: string;
@@ -508,6 +510,11 @@ for (const [i, c] of stage.cards.entries()) {
     row.workspace = path;
     if (c.branch) {
       writeFileSync(join(path, 'scratch.txt'), `${c.title ?? c.branch}\n`);
+      for (const [file, what] of Object.entries(c.branchFiles ?? {})) {
+        mkdirSync(dirname(join(path, file)), { recursive: true });
+        if (typeof what === 'string') writeFileSync(join(path, file), what);
+        else copyFileSync(what.from, join(path, file));
+      }
       run('git', ['add', '-A'], path);
       run('git', ['-c', 'user.name=Scratch', '-c', 'user.email=scratch@example.com', 'commit', '-qm', c.title ?? c.branch], path);
     }

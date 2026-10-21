@@ -712,6 +712,36 @@ textarea.p-body:focus { border-color: var(--muted); }
 .answer-files figcaption a { color: inherit; }
 .answer-page iframe { width: 100%; min-height: 80px; border: 1px solid var(--line); border-radius: 2px; background: #fff; display: block; }
 .answer-image img { display: block; max-width: 100%; max-height: 480px; border: 1px solid var(--line); border-radius: 2px; background: #fff; }
+
+/* a card's result files beside its conversation: a tab each above the view, the demo first */
+.results .r-tabs { display: flex; flex-wrap: wrap; gap: 2px 4px; align-items: flex-end; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+.r-tab { border: 0; border-bottom: 2px solid transparent; background: none; padding: 5px 8px 6px; margin-bottom: -1px; font: inherit; font-size: 13px;
+  color: var(--muted); cursor: pointer; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.r-tab:hover { color: var(--ink); }
+.r-tab.on { color: var(--ink); font-weight: 600; border-bottom-color: var(--waiting); }
+.r-tab.named::after { content: " ★"; color: var(--waiting); font-size: 10px; }
+.r-more { position: relative; }
+.r-menu { position: absolute; z-index: 5; top: 100%; left: 0; min-width: 260px; max-width: 520px; max-height: 60vh; overflow: auto; padding: 4px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 3px; box-shadow: var(--lift); display: flex; flex-direction: column; }
+.r-menu button { border: 0; background: none; text-align: left; padding: 5px 8px; font: 12.5px var(--mono); color: var(--ink); cursor: pointer; border-radius: 2px; overflow-wrap: anywhere; }
+.r-menu button:hover { background: var(--chip); }
+.r-head { font-size: 13px; margin-bottom: 4px; overflow-wrap: anywhere; }
+.r-path { font: 12.5px var(--mono); }
+.r-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-bottom: 12px; font-size: 13px; }
+.r-mode { display: inline-flex; background: var(--chip); border-radius: 3px; padding: 2px; gap: 2px; }
+.r-mode button { border: 0; background: transparent; border-radius: 2px; padding: 3px 10px; font: inherit; font-size: 12.5px; cursor: pointer; color: var(--muted); }
+.r-mode button.on { background: var(--card); color: var(--ink); box-shadow: var(--shadow); }
+.r-ways a.link { color: var(--working); text-decoration: none; }
+.r-doc { max-width: 760px; }
+.doc-img { max-width: 100%; border-radius: 2px; vertical-align: middle; }
+.r-text { margin: 0; padding: 10px 12px; background: var(--chip); border-radius: 2px; font: 12.5px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.r-image { display: block; max-width: 100%; border: 1px solid var(--line); border-radius: 2px; background: #fff; }
+.r-page { width: 100%; min-height: 120px; height: min(560px, 62vh); border: 1px solid var(--line); border-radius: 3px; background: #fff; display: block; }
+.r-pdf { width: 100%; height: max(480px, calc(100vh - 320px)); border: 1px solid var(--line); border-radius: 3px; background: #fff; display: block; }
+.r-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 18px 20px; border: 1px solid var(--line); border-radius: 6px; max-width: 420px; }
+.r-tile-name { font: 600 15px var(--cond); overflow-wrap: anywhere; }
+.r-diff .d-file { margin-top: 0; }
+.r-diff .d-file h3 { top: 0; }
 .file-chips { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
 .file-chip { display: inline-flex; align-items: stretch; border: 1px solid var(--line); border-radius: 11px; overflow: hidden; font: 12px var(--cond); }
 .file-chip .file-open { border: 0; background: none; padding: 2px 6px 2px 8px; color: var(--ink); cursor: pointer; font: inherit; }

@@ -7,7 +7,9 @@ import type { RepoAdapter } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
 import { LANGUAGE_NAMES, LANGUAGES, ownersLanguage, repositoryLanguage } from '../core/locale';
 import { MESSAGES, type Messages, type Pause } from '../core/messages';
-import { basename } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { basename, isAbsolute } from 'node:path';
+import { type CardFile, docImages, fileKind, isImage, normalPath } from '../core/files';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
 import { answering, askable, type Awaited, AWAITED_STATES, awaited, type BackgroundTask, pausable, type CardLanding, type DemoKind, type DemoPage, finished, formatQuestion, handedOver, type Item, type TaskAuthor, taskAuthor, type Mock, ownWords, pickedAnswer, type Question, type RepoSettings, type RestartReason, type Snooze, type Spot, type Superseded, type SpotInput, started } from '../core/types';
 import { BadRequest, type Board, replyNote, type Retracted, type StoredDemo, titleKey } from './board';
@@ -22,7 +24,7 @@ import { TO_OBEYA, toObeyaTool } from './to-obeya';
 import { type Forward, HOST_DIR, hostName, remote } from './hosts';
 import { runAppCommand } from './app-command';
 import { readingShared } from '../adapters';
-import { branchName, type CardWorkspaces, gitStepsSync, type Landed, shortageOf, together, WorkspaceError } from './workspaces';
+import { branchName, type CardWorkspaces, type FileAt, gitStepsSync, type Landed, shortageOf, together, WorkspaceError } from './workspaces';
 import type { FolderWorkspaces, UndoReport } from './folder';
 import type { PrState, Shipped } from './board';
 import type { CardRow } from './db';
@@ -134,6 +136,15 @@ const settled = ({ restarts: _, waits: __, ...l }: LandedState): LandedState => 
 const landedOf = (row: { landed: string | null }): LandedState | null => (row.landed ? (JSON.parse(row.landed) as LandedState) : null);
 
 /** What `f` returns; a workspace it cannot have is the request's error. */
+/** A path with its links resolved, or as it is where it cannot be (gone). */
+const realpathOr = (path: string) => {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+};
+
 function asBadRequest<T>(f: () => T): T {
   try {
     return f();
@@ -296,6 +307,9 @@ export function answerNote(picks: string[], text: string): string {
   const words = ownWords({ text, picks });
   return `They picked ${picks.map((o) => `„${o}“`).join(', ')}.${words ? `\n\nThey added in their own words:\n\n${words}` : ''}`;
 }
+
+/** How many files a worker may name as its result at a handover. */
+const MAX_RESULT_FILES = 12;
 
 const END_TURN = 'Recorded. End your turn now without further work; the reply arrives as your next message.';
 
@@ -1222,6 +1236,63 @@ export class Workers {
     // landed work's workspace, while its worker finishes, has nothing left against the default branch
     if (row.state === 'live' && shipped?.commit && shipped.base) return this.o.workspaces.landedDiff(shipped.base, shipped.commit, full);
     return this.o.workspaces.diff(cardId, full);
+  }
+
+  /** The files of the card's change as they are now, as `diff` reads it, by a list no file name can pass for another in (`CardWorkspaces.changedFiles`). */
+  changedFiles(cardId: string): Promise<string[]> {
+    const row = this.o.board.row(cardId);
+    const shipped = row.shipped ? (JSON.parse(row.shipped) as Shipped) : null;
+    if (row.state === 'live' && shipped?.commit && shipped.base) return this.o.workspaces.changedFiles(cardId, { base: shipped.base, commit: shipped.commit });
+    return this.o.workspaces.changedFiles(cardId);
+  }
+
+  /**
+   * A file of the card's work, as its left column shows it: only one its change made or changed
+   * (`changedFiles`), or an image a Markdown file of it shows from beside it, never any other file
+   * of the workspace or the folder, nor a link standing for one. From its workspace (or the folder)
+   * while it has one here, else from the commit it landed with or its branch. `local`: a file on
+   * disk to open, for a landed card the checkout's copy. Null where it is none of those, or nothing
+   * holds it.
+   */
+  async file(cardId: string, asked: string, local = false): Promise<FileAt | null> {
+    const path = normalPath(asked);
+    if (!path) return null;
+    const row = this.o.board.row(cardId);
+    const shipped = row.shipped ? (JSON.parse(row.shipped) as Shipped) : null;
+    const landed = row.state === 'live' && shipped?.commit ? shipped.commit : undefined;
+    // to open: the checkout's copy only of what landed there, never for a branch elsewhere
+    const ref = landed ?? (local ? undefined : (row.branch ?? undefined));
+    const changed = await this.changedFiles(cardId);
+    const at = (p: string, onDisk = local) => this.o.workspaces.fileOf(cardId, p, ref, onDisk);
+    if (changed.includes(path)) return at(path);
+    if (!isImage(path)) return null;
+    for (const doc of changed.filter((p) => fileKind(p) === 'markdown')) {
+      const md = await at(doc, false);
+      const text = md && ('path' in md ? await Bun.file(md.path).text() : new TextDecoder().decode(md.data));
+      if (text && docImages(doc, text).includes(path)) return at(path);
+    }
+    return null;
+  }
+
+  /**
+   * The files a worker names as its result at its handover, as paths of its change relative to the
+   * workspace (or folder); what is wrong instead, for the worker to fix.
+   */
+  private async namedFiles(cardId: string, files: { path: string; caption: string }[]): Promise<CardFile[] | string> {
+    const ws = (this.o.board.row(cardId).workspace ?? '').replace(/^ssh:\/\/[^/]+/, '');
+    const roots = [ws, ...(ws && !hostName(this.o.board.row(cardId).workspace) ? [realpathOr(ws)] : [])].filter(Boolean);
+    const changed = await this.changedFiles(cardId);
+    const out: CardFile[] = [];
+    for (const f of files) {
+      let given = String(f.path).trim();
+      const root = roots.find((r) => given.startsWith(`${r}/`));
+      if (root) given = given.slice(root.length + 1);
+      const path = isAbsolute(given) ? null : normalPath(given);
+      if (!path || !changed.includes(path))
+        return `${f.path} is not among the files your card made or changed${changed.length ? ` (${changed.slice(0, 30).join(', ')}${changed.length > 30 ? ', …' : ''})` : ' (none so far)'}`;
+      if (!out.some((o) => o.path === path)) out.push({ path, caption: clip(String(f.caption ?? '').replace(/\s+/g, ' ').trim(), 200) });
+    }
+    return out;
   }
 
   /**
@@ -2530,11 +2601,18 @@ export class Workers {
                 : {}),
             })
             .optional(),
+          files: z
+            .array(z.object({ path: z.string(), caption: z.string() }))
+            .max(MAX_RESULT_FILES)
+            .optional()
+            .describe(
+              `the files ${this.folder ? 'in the folder' : 'of your branch'} that are the result for the owner (a document, a report, a spreadsheet, a page; not the code or configuration behind it), each with its path and a one-line caption in ${language}. The card shows them beside the demo: Markdown formatted, a PDF in the browser's viewer, any other file to open on the owner's computer. Without them, the ones named at your last handover stand.`,
+            ),
         },
-        run: ({ summary, demo }) => {
+        run: ({ summary, demo, files }) => {
           type Demo = { kind?: DemoKind; dir: string; chapters?: string[]; question?: string; page?: DemoPage; follows?: 'replaces' | 'supplements' };
           const given = demo as Demo | undefined;
-          const handOverWork = (d: Demo | undefined): string => {
+          const handOverWork = (d: Demo | undefined, named?: CardFile[]): string => {
             const s = clip(String(summary), 6000);
             const row = this.o.board.row(cardId);
             if (row.landed) return 'Not handed over: your work is on main already.';
@@ -2585,6 +2663,15 @@ export class Workers {
               detail: JSON.stringify({ summary: report, ...(this.o.workspaces.hasWork(cardId) ? (own ? { lands: own } : {}) : { noChange: true }), ...(answered && !approved ? { answered: true } : {}) }),
               ...(demoJson ? { demo: demoJson } : {}),
               ...(demos ? { demos } : {}),
+              // the files named stand until a later handover names others; a folder's card handed over without a demo shows what it changed
+              // (an empty list named clears them)
+              ...(named?.length
+                ? { files: JSON.stringify(named) }
+                : (named || !row.files) && this.folder && !d && !kept && this.o.workspaces.hasWork(cardId)
+                  ? { files: '[]' }
+                  : named
+                    ? { files: null }
+                    : {}),
             });
             const card = this.o.board.item(cardId);
             if (card?.prototypeOf) this.o.onPrototype?.(card, report, demoJson);
@@ -2592,13 +2679,21 @@ export class Workers {
             return END_TURN;
           };
           // a demo made on another machine is served and shared from its copy here
-          if (given && hostName(this.o.board.row(cardId).workspace))
-            return this.demoHere(cardId, given.dir).then((here) =>
-              'wrong' in here
-                ? `Not handed over: the demo could not be copied to the owner's machine (${here.wrong}). Check the directory, then call ready_for_review again.`
-                : handOverWork({ ...given, dir: here.dir }),
+          const handOverWith = (named?: CardFile[]): string | Promise<string> => {
+            if (given && hostName(this.o.board.row(cardId).workspace))
+              return this.demoHere(cardId, given.dir).then((here) =>
+                'wrong' in here
+                  ? `Not handed over: the demo could not be copied to the owner's machine (${here.wrong}). Check the directory, then call ready_for_review again.`
+                  : handOverWork({ ...given, dir: here.dir }, named),
+              );
+            return handOverWork(given, named);
+          };
+          // the files named as the result, checked against what the card changed before anything is handed over
+          if (files !== undefined)
+            return this.namedFiles(cardId, files as { path: string; caption: string }[]).then((named) =>
+              typeof named === 'string' ? `Not handed over: ${named}. Name only files your card made or changed, then call ready_for_review again.` : handOverWith(named),
             );
-          return handOverWork(given);
+          return handOverWith();
         },
       },
       {
@@ -2919,6 +3014,7 @@ ${idea.idea.brief}` : '',
         `Usually that is a video of the change, recorded with ${this.demoSkill(card.id)} as its instructions say (directory, chapter titles). Its length follows the size of the change, never padded: 30–60 s for a small one (a fix: the broken behaviour, then the fixed one), 1½–3 min for a larger one. Skip the skill's last steps (opening the page, the notification, the chat reply): Obeya shows the demo on the card.${this.shares ? ' The owner may share the demo, a video or an HTML artifact, with colleagues of the team on a page of its own: hand it over with that page (title, text), written for them.' : ''} ${run?.trim() ? 'Run the app for it as the recipe above says.' : "The repository's settings say nothing yet about how to run the app: find it out from the repository (README, scripts, configuration) and say in your summary how you ran it."}`,
         "When the result is something to look at rather than something that happens (drafts of a logo or a layout side by side, a comparison of variants, an analysis, an answer), make an HTML artifact instead: an index.html in a new directory under ~/demos/ (never in git), self-contained or with the files it loads beside it, made for the owner to decide on, and hand it over with kind 'html'. It shows in a sandboxed frame on the card, about 800 px wide, without Obeya's API.",
         'Where either would do, record the video: watching the work happen is what the owner enjoys most.',
+        "Where the work itself is a file for the owner (a document, a report, a spreadsheet in the repository), name it in ready_for_review's files: the card shows it beside the demo.",
       ].join(' '),
     );
     return parts.join('\n\n');
@@ -2936,7 +3032,7 @@ ${idea.idea.brief}` : '',
     if (this.o.adapter.checks?.length) parts.push(`Before ready_for_review, run: ${this.o.adapter.checks.map((c) => `\`${c}\``).join(', ')}.`);
     parts.push(
       [
-        'Then hand it over with ready_for_review: your summary says what you did and what the owner needs to know. The card shows the owner what you changed in the folder, file by file (added, changed, moved, deleted, with the changed lines of text files), and they may discard those changes before approving.',
+        'Then hand it over with ready_for_review: your summary says what you did and what the owner needs to know, and its files name the files that are the result for the owner (a document, a report, a spreadsheet), which the card shows first. The card shows the owner what you changed in the folder, file by file (added, changed, moved, deleted, with the changed lines of text files), and they may discard those changes before approving.',
         `A demo is needed only where something can be seen: a draft or an overview to look at as an HTML artifact (an index.html in a new directory under ~/demos/, outside the folder, self-contained or with the files it loads beside it, made for the owner to decide on), handed over with kind 'html'; something that happens on screen as a video, recorded with ${this.demoSkill(cardId)}.`,
       ].join(' '),
     );

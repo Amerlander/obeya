@@ -72,7 +72,7 @@ type Routes<D, R extends string> = Bun.Serve.RoutesWithUpgrade<D, R>;
 type Handler = (req: Request, server: Bun.Server<unknown>) => unknown;
 
 /** The routes that serve the workers' files: an HTML artifact's, a looked-up answer's. */
-const FILES = ['/cards/:id/demo/*', '/cards/:id/demos/:n/*', '/threads/:thread/files/*'];
+const FILES = ['/cards/:id/demo/*', '/cards/:id/demos/:n/*', '/cards/:id/files/*', '/threads/:thread/files/*'];
 
 /** Keys the addresses of the workers' files with; new at every start, so an address with an old key is sent on to the new one. */
 const FILES_SECRET = crypto.getRandomValues(new Uint8Array(32));
@@ -89,7 +89,7 @@ export function filesKey(base: string): string {
  * key, which only a request with the owner's key or a paired device's gets to see, lets it in.
  */
 function keyedFiles(req: Request): boolean {
-  const m = new URL(req.url).pathname.match(/^(\/api\/c\/[^/]+\/(?:cards\/[^/]+\/(?:demo|demos\/\d+)|threads\/[^/]+\/files)\/)~([0-9a-f]{32})\//);
+  const m = new URL(req.url).pathname.match(/^(\/api\/c\/[^/]+\/(?:cards\/[^/]+\/(?:demo|demos\/\d+|files)|threads\/[^/]+\/files)\/)~([0-9a-f]{32})\//);
   return !!m && timingSafeEqual(Buffer.from(m[2]!), Buffer.from(filesKey(m[1]!)));
 }
 

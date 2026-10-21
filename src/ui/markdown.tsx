@@ -1,11 +1,19 @@
 // Inline markdown as plan docs use it: `code`, **bold**, *emphasis* and _emphasis_, ~~strike~~, [links](url),
-// and bare web addresses, as agents write them in their messages.
+// and bare web addresses, as agents write them in their messages; ![images](bild.png) where the
+// document says where its images are served (`DocImages`), else their text.
 // An asterisk opens emphasis only before a non-space and closes it only after one, so `5 * 3` and
 // a list's `* ` stay as they are; neither may touch a word outside, so `a*b*c` stays too.
 
-import type { ReactNode } from 'react';
+import { createContext, type ReactNode, useContext } from 'react';
 
-const TOKEN = /`([^`]+)`|\*\*(.+?)\*\*(?!\*)|~~(.+?)~~|(?<![\w])_(.+?)_(?![\w])|(?<![\w*])\*(?![\s*])(.+?)(?<![\s*])\*(?![\w*])|\[([^\]]+)\]\(([^)\s]+)\)|(?<![\w/])(https?:\/\/[^\s<>`"]+)/g;
+const TOKEN = /`([^`]+)`|\*\*(.+?)\*\*(?!\*)|~~(.+?)~~|(?<![\w])_(.+?)_(?![\w])|(?<![\w*])\*(?![\s*])(.+?)(?<![\s*])\*(?![\w*])|\[([^\]]+)\]\(([^)\s]+)\)|(?<![\w/])(https?:\/\/[^\s<>`"]+)|!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g;
+
+/**
+ * Where a document's images are served, by the address its markdown gives (`![…](bild.png)`); null
+ * for one it does not serve. Without it an image shows as its text: a message or a plan doc loads
+ * nothing from the web or the disk.
+ */
+export const DocImages = createContext<((src: string) => string | null) | null>(null);
 
 /**
  * A bare address without what the sentence put after it: closing punctuation, and a parenthesis
@@ -22,29 +30,32 @@ function bareUrl(s: string): string {
 }
 
 export function Inline({ md }: { md: string }) {
-  return <>{render(md)}</>;
+  return <>{render(md, false, useContext(DocImages))}</>;
 }
 
-/** `inLink`: the text of a link, where an address is only words, since a link holds no other. */
-function render(md: string, inLink = false): ReactNode[] {
+/** `inLink`: the text of a link, where an address is only words, since a link holds no other; `image`: where images are served. */
+function render(md: string, inLink = false, image: ((src: string) => string | null) | null = null): ReactNode[] {
   const out: ReactNode[] = [];
   let last = 0;
   let k = 0;
   for (const m of md.matchAll(TOKEN)) {
     if (m.index > last) out.push(md.slice(last, m.index));
-    const [, code, bold, strike, em, star, text, href, bare] = m;
+    const [, code, bold, strike, em, star, text, href, bare, alt, src] = m;
     let end = m.index + m[0].length;
     if (code !== undefined) out.push(<code key={k++}>{code}</code>);
-    else if (bold !== undefined) out.push(<b key={k++}>{render(bold, inLink)}</b>);
-    else if (strike !== undefined) out.push(<s key={k++}>{render(strike, inLink)}</s>);
-    else if (em !== undefined || star !== undefined) out.push(<em key={k++}>{render(em ?? star!, inLink)}</em>);
-    else if (bare !== undefined) {
+    else if (bold !== undefined) out.push(<b key={k++}>{render(bold, inLink, image)}</b>);
+    else if (strike !== undefined) out.push(<s key={k++}>{render(strike, inLink, image)}</s>);
+    else if (em !== undefined || star !== undefined) out.push(<em key={k++}>{render(em ?? star!, inLink, image)}</em>);
+    else if (src !== undefined) {
+      const url = image?.(src);
+      out.push(url ? <img key={k++} className="doc-img" src={url} alt={alt} title={alt || undefined} /> : <span key={k++}>{alt}</span>);
+    } else if (bare !== undefined) {
       const url = bareUrl(bare);
       end = m.index + url.length;
       // shown without its scheme, which says nothing in a sentence
       out.push(inLink ? url : <a key={k++} className="link" href={url} target="_blank" rel="noreferrer">{url.replace(/^https?:\/\/(www\.)?/, '')}</a>);
-    } else if (/^https?:/.test(href!) && !inLink) out.push(<a key={k++} className="link" href={href} target="_blank" rel="noreferrer">{render(text!, true)}</a>);
-    else out.push(<span key={k++}>{render(text!, inLink)}</span>);
+    } else if (/^https?:/.test(href!) && !inLink) out.push(<a key={k++} className="link" href={href} target="_blank" rel="noreferrer">{render(text!, true, image)}</a>);
+    else out.push(<span key={k++}>{render(text!, inLink, image)}</span>);
     last = end;
   }
   if (last < md.length) out.push(md.slice(last));
@@ -53,7 +64,7 @@ function render(md: string, inLink = false): ReactNode[] {
 
 /** Plain text for places that clamp or truncate. */
 export function plain(md: string): string {
-  return md.replace(TOKEN, (_, code, bold, strike, em, star, text, _href, bare) => code ?? bare ?? plain(bold ?? strike ?? em ?? star ?? text ?? ''));
+  return md.replace(TOKEN, (_, code, bold, strike, em, star, text, _href, bare, alt) => code ?? bare ?? plain(bold ?? strike ?? em ?? star ?? text ?? alt ?? ''));
 }
 
 // ------------------------------------------------------------------ whole documents

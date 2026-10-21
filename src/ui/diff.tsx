@@ -215,7 +215,7 @@ export function Lines({ n }: { n: { added: number; removed: number } }) {
   );
 }
 
-function FileDiff({ part }: { part: DiffPart }) {
+export function FileDiff({ part }: { part: DiffPart }) {
   const lines = numbered(part.lines);
   const [folded, setFolded] = useState(lines.length > FOLD_LINES);
   return (

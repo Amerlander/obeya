@@ -8,6 +8,7 @@ import { pagePolicy, withHeightReport } from '../core/frame';
 import { chapterAt, type DemoKind } from '../core/types';
 import { filesKey, ownOrigin } from './access';
 import { demoFile, esc } from './demo-page';
+import type { FileAt } from './workspaces';
 import { resource } from './resources';
 
 /**
@@ -215,13 +216,54 @@ function serveSandboxed(dir: string, asked: string, req: Request, route: string,
   if (name instanceof Response) return name;
   const path = demoFile(dir, name);
   if (!path) return notFound();
-  const file = Bun.file(path);
-  if (!download && req.headers.get('sec-fetch-dest') === 'document' && /html|svg|xml/.test(file.type)) return framed(basename(path));
+  return sandboxed({ path }, basename(path), req, page(path), download);
+}
+
+/** A worker's file (on disk, or what a commit holds) as `serveSandboxed` sends it; `page`: it tells its frame its height. */
+function sandboxed(file: FileAt, name: string, req: Request, page: boolean, download: boolean): Response {
+  // the type by the name, for what a commit holds too
+  const type = Bun.file(name).type;
+  if (!download && req.headers.get('sec-fetch-dest') === 'document' && /html|svg|xml/.test(type)) return framed(name);
+  const body = 'path' in file ? Bun.file(file.path) : file.data;
   // without an address to name, the page gets no files beside it rather than a policy that names something else
-  const headers = { 'content-type': file.type, ...sealedHeaders(servedFrom(req)), 'cache-control': 'no-cache', 'access-control-allow-origin': 'null' };
-  if (download) return new Response(file, { headers: { ...headers, 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(basename(path))}` } });
-  if (page(path)) return new Response(withHeightReport(readFileSync(path, 'utf8')), { headers });
-  return new Response(file, { headers });
+  const headers = { 'content-type': type, ...sealedHeaders(servedFrom(req)), 'cache-control': 'no-cache', 'access-control-allow-origin': 'null' };
+  if (download) return new Response(body, { headers: { ...headers, 'content-disposition': attachment(name) } });
+  if (page) return new Response(withHeightReport('path' in file ? readFileSync(file.path, 'utf8') : new TextDecoder().decode(file.data)), { headers });
+  return new Response(body, { headers });
+}
+
+const attachment = (name: string) => `attachment; filename*=UTF-8''${encodeURIComponent(name)}`;
+
+/**
+ * A file a card's work made or changed (`Workers.file`), as its left column loads it: sandboxed as an
+ * HTML artifact's files are, a page telling its frame its height. A PDF comes as a PDF for the
+ * browser's viewer, which shows none in a sandboxed frame or under a CSP sandbox: without the
+ * sandbox, with a policy that allows it nothing beyond, and `nosniff`, which keeps a file named
+ * `.pdf` from being read as anything else.
+ * `get`: the file by its path, once the key in the address is checked.
+ */
+export async function serveCardFile(asked: string, download: boolean, req: Request, get: (path: string) => Promise<FileAt | null>): Promise<Response> {
+  const path = keyed(req, '/files/', asked);
+  if (path instanceof Response) return path;
+  const file = await get(path);
+  if (!file) return notFound();
+  const name = basename(path);
+  if (/\.pdf$/i.test(name)) {
+    const body = 'path' in file ? Bun.file(file.path) : file.data;
+    // the viewer runs a PDF's scripts, and sent nothing on its own when tried (form submission, links, getURL, launchURL);
+    // in case a later one does, the policies of a worker's page say no further, which leave the viewer as it is
+    const headers: Record<string, string> = {
+      'content-type': 'application/pdf',
+      'x-content-type-options': 'nosniff',
+      'content-security-policy': "default-src 'none'; form-action 'none'; frame-ancestors 'self'",
+      'connection-allowlist': OWN_CONNECTIONS,
+      'x-dns-prefetch-control': 'off',
+      'cache-control': 'no-cache',
+      ...(download ? { 'content-disposition': attachment(name) } : {}),
+    };
+    return new Response(body, { headers });
+  }
+  return sandboxed(file, name, req, /\.html?$/i.test(name), download);
 }
 
 /** Points the frame at the page's own address, the part after `#` included, which never reaches the server. */

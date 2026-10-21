@@ -9,6 +9,7 @@
 import { existsSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { type Bounds, boundsOf, CARD_SIZE, freeSpotNear, GAP, type Place, PROJECT_HEAD, placeProjects, planDirNoteBox, placeWorkstreams, projectSize, sizeOf, unionBounds } from '../core/layout';
+import type { CardFile } from '../core/files';
 import type { Language } from '../core/locale';
 import { MESSAGES, type Messages, snoozeTerm } from '../core/messages';
 import { type KnownChange, missedChanges, PAGE_CHANGES, pagesVersion } from '../core/page-changes';
@@ -2056,6 +2057,7 @@ function work(r: CardRow): Partial<Item> {
     ...(r.approved_at && r.state === 'waiting' ? { landing: true } : {}),
     ...(demo ? { demo } : {}),
     ...(earlier.length ? { demos: earlier } : {}),
+    ...(r.files ? { files: JSON.parse(r.files) as CardFile[] } : {}),
     ...(share ? { share } : {}),
     ...(notOnApproval ? { notOnApproval } : {}),
     ...(r.from_id ? { from: r.from_id } : {}),

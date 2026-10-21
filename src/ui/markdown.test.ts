@@ -1,11 +1,20 @@
 import { describe, expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { blocks, Inline, plain } from './markdown';
+import { blocks, DocImages, Inline, plain } from './markdown';
 
 const html = (md: string) => renderToStaticMarkup(createElement(Inline, { md }));
 
 describe('inline markdown', () => {
+  test('an image shows where the document serves it, else as its text: a message loads nothing', () => {
+    const md = 'See ![the chart](chart.png) and ![web](https://x.org/a.png).';
+    expect(html(md)).toBe('See <span>the chart</span> and <span>web</span>.');
+    const served = renderToStaticMarkup(createElement(DocImages.Provider, { value: (src) => (src.startsWith('http') ? null : `/files/${src}`) }, createElement(Inline, { md })));
+    // React's server rendering preloads the image ahead of it
+    expect(served.replace(/^<link [^>]*>/, '')).toBe('See <img class="doc-img" src="/files/chart.png" alt="the chart" title="the chart"/> and <span>web</span>.');
+    expect(plain(md)).toBe('See the chart and web.');
+  });
+
   test('emphasis with single asterisks, beside bold and underscores', () => {
     expect(html('Das ist *wichtig*.')).toBe('Das ist <em>wichtig</em>.');
     expect(html('*a* and **b** and _c_')).toBe('<em>a</em> and <b>b</b> and <em>c</em>');

@@ -16,7 +16,7 @@ import type { PoolHost } from '../core/types';
 import { messageOf } from '../core/text';
 import type { Store } from './db';
 import { spawnOutput } from './spawn';
-import { type CardWorkspaces, type Change, GIT, type LandProblem, type Landed, WorkspaceError } from './workspaces';
+import { type CardWorkspaces, type Change, type FileAt, GIT, ownFile, type LandProblem, type Landed, WorkspaceError } from './workspaces';
 
 /** A file or directory as the manifest has it. */
 export interface Entry {
@@ -561,6 +561,16 @@ export class FolderWorkspaces implements CardWorkspaces {
 
   async landedDiff(): Promise<CardDiff | null> {
     return null;
+  }
+
+  /** The files the card changed in the folder as they are now: neither deleted nor a directory. */
+  async changedFiles(cardId: string): Promise<string[]> {
+    return (this.rec(cardId)?.changes ?? []).filter((t) => t.kind !== 'deleted' && !t.dir).map((t) => t.path);
+  }
+
+  /** A file in the folder, for a card that changed something there; a link is none. */
+  async fileOf(cardId: string, path: string): Promise<FileAt | null> {
+    return this.rec(cardId) ? ownFile(this.root, path) : null;
   }
 
   /** What the card changed, for the Koordinator: each path with what happened to it. */

@@ -86,6 +86,10 @@ const whereAt = (where: Where, path: string) => {
 export const answerFile = (thread: number, name: string, download = false) =>
   at(`/threads/${thread}/files/${name.split('/').map(encodeURIComponent).join('/')}${download ? '?download' : ''}`);
 
+/** Where a file of a card's work is served (its left column's tabs); `download` to save it. */
+export const cardFile = (id: string, path: string, download = false) =>
+  cardAt(id, `/files/${path.split('/').map(encodeURIComponent).join('/')}${download ? '?download' : ''}`);
+
 /** What a command is said about: the open card, the open project, or neither. */
 export type Where = { card: string } | { project: string } | null;
 /** The field on a card words were typed into, which tells the Koordinator what they were meant as. */
@@ -214,6 +218,7 @@ export const api = {
   threadCard: (thread: number) => call<Item>('POST', at(`/threads/${thread}/card`)),
   /** Opens an answer's file with the system's app, or without `file` the thread's directory. */
   openAnswer: (thread: number, file?: string) => call<void>('POST', at(`/threads/${thread}/open`), file === undefined ? {} : { file }),
+  openCardFile: (id: string, file: string, show = false) => call<void>('POST', cardAt(id, '/open'), { file, ...(show ? { show } : {}) }),
   /** A new group with the cards in it; a name a group has already puts them into that one. */
   createGroup: (name: string, cards: string[], hue?: number) => call<Group>('POST', at('/groups'), { name, cards, hue }),
   /** Ends the group: its cards belong to none. Returns what brings it back. */

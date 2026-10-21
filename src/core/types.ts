@@ -2,6 +2,7 @@
 
 import type { DemoSettings, NarrationLanguage, VoiceKind } from '../../plugin/skills/demo/lib/settings.ts';
 import type { SetupId, SetupItem } from '../../plugin/skills/demo/lib/setup.ts';
+import type { CardFile } from './files';
 import type { Language } from './locale';
 import { MESSAGES } from './messages';
 import type { PageChangeId } from './page-changes';
@@ -279,6 +280,12 @@ export interface Item {
    * are still on disk; each one's files are served under `/api/cards/:id/demos/:n/`.
    */
   demos?: EarlierDemo[];
+  /**
+   * The files its worker named as the result at its latest handover that named any, the left column's
+   * first tabs after the demo; served with the others it changed under `/api/cards/:id/files/`.
+   * An empty list: none named, but there are files of its change to show (a folder's card handed over without a demo).
+   */
+  files?: CardFile[];
   /** The demo's page for colleagues, once the owner shared it (or is about to). */
   share?: Share;
   /** Where the repository's site publishes on approval: the owner unticked „Mit der Freigabe teilen“, so approving shares nothing. */

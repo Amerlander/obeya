@@ -99,6 +99,8 @@ export interface CardRow {
   waiting_since: string | null;
   /** JSON, while the card is snoozed until a point in time (`Snooze`): Obeya wakes it then. */
   snoozed: string | null;
+  /** JSON: the files its worker named as the result at its latest handover that named any (`CardFile[]`). */
+  files: string | null;
 }
 
 /** Words the usage limit keeps the Koordinator from reading (`talk.held`): until when, and how it reads them then (`Commander`'s). */
@@ -389,6 +391,8 @@ export const MIGRATIONS = [
     folder TEXT NOT NULL,
     state TEXT NOT NULL
   );`,
+  // the files a card's worker named as its result at its handover (JSON `CardFile[]`)
+  'ALTER TABLE cards ADD COLUMN files TEXT;',
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter, wish';

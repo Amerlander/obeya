@@ -113,6 +113,34 @@ describe('a canvas over a folder without git', () => {
     expect(item(rename.id).state).toBe('working');
   });
 
+  test('a card shows the files it changed as its result: those its worker names first, served from the folder, no other file of it', async () => {
+    const plan = canvas.board.create({ title: 'Pension plan', x: 0, y: 0 });
+    const workers = canvas.repoOf(plan.id).workers;
+    workers.start(plan.id);
+    const a = runtime.last;
+    await a.use('Write', { file_path: join(docs, 'Estate', 'Plan.md') }, () => writeFileSync(join(docs, 'Estate', 'Plan.md'), '# Plan\n\n![Scan](../Scans/scan-1.pdf)\n'));
+    await a.use('Bash', { command: 'python3 model.py' }, () => {
+      writeFileSync(join(docs, 'Estate', 'model.py'), 'print(1)\n');
+      mkdirSync(join(docs, 'Estate', '__pycache__'));
+      writeFileSync(join(docs, 'Estate', '__pycache__', 'model.pyc'), bytes(100, 3));
+    });
+    expect(await a.call('ready_for_review', { summary: 'Done.', files: [{ path: 'Estate/Inventory.md', caption: 'x' }] })).toContain('Estate/Inventory.md is not among the files your card made or changed');
+    // without files named, the card still shows what it changed, beside its conversation
+    expect(await a.call('ready_for_review', { summary: 'Done.' })).toContain('Recorded');
+    expect(item(plan.id).files).toEqual([]);
+    workers.message(plan.id, 'Name the plan.');
+    expect(await a.call('ready_for_review', { summary: 'Done.', files: [{ path: join(docs, 'Estate', 'Plan.md'), caption: 'The plan' }] })).toContain('Recorded');
+    expect(item(plan.id).files).toEqual([{ path: 'Estate/Plan.md', caption: 'The plan' }]);
+
+    const file = (path: string) => canvas.cardFile(plan.id, path);
+    expect(await file('Estate/Plan.md')).toMatchObject({ path: expect.stringMatching(/Estate\/Plan\.md$/) });
+    expect(await file('Estate/__pycache__/model.pyc')).not.toBeNull();
+    // in the folder, but not the card's: neither a file it did not change nor one its Markdown links to that is no image
+    expect(await file('Estate/Inventory.md')).toBeNull();
+    expect(await file('Scans/scan-1.pdf')).toBeNull();
+    expect(await file('../Documents/Estate/Inventory.md')).toBeNull();
+  });
+
   test('has no prototypes', () => {
     const idea = canvas.board.create({ idea: true, title: 'Ordnung', x: 0, y: 0 });
     expect(() => canvas.act(idea.id, { action: 'prototype', text: 'so' })).toThrow('no prototypes');

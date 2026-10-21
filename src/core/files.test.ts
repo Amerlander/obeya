@@ -1,0 +1,98 @@
+import { describe, expect, test } from 'bun:test';
+import type { CardDiff } from './diff';
+import { docImages, fileKind, imageAt, normalPath, shownFiles } from './files';
+
+const folder: CardDiff = {
+  source: 'folder',
+  files: [],
+  folder: {
+    undo: 'full',
+    changes: [
+      { kind: 'added', path: 'Finanzen/Modell.py', added: 69, removed: 0 },
+      { kind: 'added', path: 'Finanzen/Regelungen.md', added: 121, removed: 0 },
+      { kind: 'added', path: 'Finanzen/__pycache__/Modell.cpython-314.pyc' },
+      { kind: 'modified', path: 'CLAUDE.md', added: 1, removed: 1 },
+      { kind: 'modified', path: 'Steuer.xlsx' },
+      { kind: 'deleted', path: 'Alt.md' },
+      { kind: 'added', path: 'Scans', dir: true },
+      { kind: 'moved', from: 'a.pdf', path: 'Scans/a.pdf' },
+    ],
+  },
+};
+
+const branch: CardDiff = {
+  source: 'branch',
+  files: [
+    { file: 'src/app.ts', status: 'modified', added: 4, removed: 2 },
+    { file: 'docs/report.pdf', status: 'added', added: 0, removed: 0, binary: true },
+    { file: 'docs/old.md', status: 'deleted', added: 0, removed: 5 },
+    { file: 'docs/new-name.md', from: 'docs/name.md', status: 'renamed', added: 0, removed: 0 },
+    { file: 'bin/tool.o', status: 'added', added: 0, removed: 0, binary: true },
+  ],
+};
+
+describe('the files a card shows as its result', () => {
+  test('in a folder: documents first, then text and code; nothing deleted, no directory, nothing that is neither document nor text', () => {
+    expect(shownFiles(folder).map((f) => `${f.path} ${f.kind}${f.added ? ' new' : ''}${f.diff ? ' diff' : ''}`)).toEqual([
+      'Finanzen/Regelungen.md markdown new',
+      'CLAUDE.md markdown diff',
+      'Steuer.xlsx other',
+      'Scans/a.pdf pdf new',
+      'Finanzen/Modell.py text new',
+    ]);
+  });
+
+  test('the files its worker named come first, with their captions, in its order', () => {
+    const named = [
+      { path: 'Steuer.xlsx', caption: 'Die Tabelle' },
+      { path: 'Finanzen/Modell.py', caption: 'Das Modell' },
+    ];
+    expect(shownFiles(folder, named).map((f) => [f.path, f.caption])).toEqual([
+      ['Steuer.xlsx', 'Die Tabelle'],
+      ['Finanzen/Modell.py', 'Das Modell'],
+      ['Finanzen/Regelungen.md', undefined],
+      ['CLAUDE.md', undefined],
+      ['Scans/a.pdf', undefined],
+    ]);
+  });
+
+  test('on a branch: a renamed file without changes is shown as it is, a changed one with its changes', () => {
+    expect(shownFiles(branch).map((f) => `${f.path} ${f.kind}${f.added ? ' new' : ''}${f.diff ? ' diff' : ''}`)).toEqual([
+      'docs/report.pdf pdf new',
+      'docs/new-name.md markdown new',
+      'src/app.ts text diff',
+    ]);
+    expect(shownFiles(null)).toEqual([]);
+  });
+
+  test('how a file is shown, by its name', () => {
+    expect(['a.md', 'a.PDF', 'a.svg', 'a.html', 'a.py', 'a.docx', 'a.bin'].map((f) => fileKind(f))).toEqual(['markdown', 'pdf', 'image', 'page', 'text', 'other', 'other']);
+    // read as text or not, a spreadsheet is no text to show
+    expect(fileKind('a.xlsx', true)).toBe('other');
+    expect(fileKind('Makefile', true)).toBe('text');
+  });
+});
+
+describe('paths and the images of a Markdown file', () => {
+  test('a path keeps inside its root', () => {
+    expect(normalPath('./a/b/../c.md')).toBe('a/c.md');
+    expect(normalPath('a\\b.md')).toBe('a/b.md');
+    expect(normalPath('../x')).toBeNull();
+    expect(normalPath('a/../../x')).toBeNull();
+    expect(normalPath('')).toBeNull();
+  });
+
+  test('an image beside the document, relative to it; none from the web, an absolute path or outside', () => {
+    expect(imageAt('docs/report.md', 'chart.png')).toBe('docs/chart.png');
+    expect(imageAt('docs/report.md', '../img/My%20chart.png?raw=1')).toBe('img/My chart.png');
+    expect(imageAt('report.md', 'https://example.com/a.png')).toBeNull();
+    expect(imageAt('report.md', 'data:image/png;base64,AAA')).toBeNull();
+    expect(imageAt('report.md', '/etc/a.png')).toBeNull();
+    expect(imageAt('docs/report.md', '../../a.png')).toBeNull();
+  });
+
+  test('the images a document shows', () => {
+    const md = '# R\n\n![Chart](chart.png) and ![](<sub/two.jpg> "Title")\n\n[a link](other.md) ![web](https://x.org/a.png) ![x](notes.txt)';
+    expect(docImages('docs/r.md', md)).toEqual(['docs/chart.png', 'docs/sub/two.jpg']);
+  });
+});

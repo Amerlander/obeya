@@ -1282,7 +1282,7 @@ idea's.
 
 Every card with a conversation is laid out the same way (`Split` and `Talk` in `src/ui/detail.tsx`):
 idea, proposal, and a task an agent worked on. What the card is about stands on the left (an idea's
-brief, a proposal's text, a task's demo with its chapters and sharing, its pull request, what
+brief, a proposal's text, a task's demo with its chapters and sharing, the files its work made or changed, its pull request, what
 landed, a decided idea's brief), the conversation on the right with the questions it waits on at its
 end and the owner's one field with one Send under it, and the decisions (build, accept, approve,
 stop, archive) in a row below both. A task that has nothing for the left yet (the agent at work, a
@@ -1303,6 +1303,59 @@ large files folded; while the card has a workspace, „Pfad kopieren“ copies i
 (`host:/dir` on another machine). The owner rarely reads the code, so it stays a quiet line, read
 when the card opens and again as the work moves on (`GET …/cards/:id/diff`, `?full` for the diff
 itself, cut off past 2 MB).
+
+#### The files beside the demo
+
+What a card's work made or changed is its result, and the left column shows it so (`ResultFiles` in
+`src/ui/files.tsx`, for folder and git cards alike): a row of tabs above the view, the demo the
+first, then the files its worker named as the result at its handover (`ready_for_review`'s `files`,
+each with its path and a one-line caption, marked ★, the caption on hover), then the other files it
+made or changed that can be shown, documents before text and code (`shownFiles` in
+`src/core/files.ts`). Six get a tab beside the named ones; the rest are under „N weitere ▾“. A
+deleted file, a directory and a file that is neither a document nor text (a `__pycache__/*.pyc`)
+get none and stay in the change list. Each file shows by its kind:
+
+- Markdown formatted (`Doc`), with the images it shows from beside it (`![…](bild.png)`)
+- a PDF in the browser's own viewer
+- an image as it is
+- an HTML page in the sandboxed frame of an HTML artifact, as high as it reports
+- text and code as text (its first 400 KB)
+- anything else (a spreadsheet, a Word file) as a tile with „Auf dem Rechner öffnen“
+
+A new file shows as it is; a changed one with lines to compare first shows its changes, with
+„Formatiert“ (or „Ganze Datei“) beside „Änderungen“ to see it whole. Above each view stand „Auf dem
+Rechner öffnen“, „Im Ordner zeigen“ and ↓: the first two open the file with the system's app, or
+show it selected in its folder, on the machine Obeya runs on (`openWithSystem`, as for an answer's
+files; a file that is no document is shown in its folder instead, as opening it would run it). Only
+a request from that machine may do so (`POST …/cards/:id/open`); from another device, a phone over
+Tailscale say, it would open the file on the Mac, so there the browser downloads it instead, and
+„Im Ordner zeigen“ says it works only at that machine. The column keeps the height of its tallest
+tab so far, so the card does not shrink and move under the tabs; a PDF's viewer is as high as the
+column shows, so that scrolled to it, its own scrollbar is the only one. A video demo left under
+another tab stops playing.
+
+A card whose worker named files, or a folder's card handed over without a demo that changed
+something there, has a result for the left column even without a demo (`Item.files`, an empty list
+for the latter), so it is laid out as a split.
+
+Obeya serves a file of the card's work (`GET …/cards/:id/files/<path>`, `Workers.file`) only when
+it is one the card made or changed (`changedFiles`: its change list in a folder; on a branch git's
+list of names separated by NUL, not the diff's headers, where a file named `x b/notes.md` reads as
+`notes.md`), or an image a Markdown file of those shows from beside it: nothing else of the folder,
+the workspace or the disk comes out this way, nor through a link the card made, which counts as no
+file. It reads the file from the card's workspace (or the
+folder) while it has one, else from the commit it landed with or its branch in the repository; to
+open a landed card's file, the checkout's copy. Files are served as an HTML artifact's are (the
+same CSP, sandbox, key in the address, height report for a page; see The demo on the card), but for
+a PDF: the browser shows none in a sandboxed frame or under a CSP sandbox, so it comes as
+`application/pdf` with `nosniff`, into a frame without `sandbox`, with a policy that allows it
+nothing beyond (`default-src 'none'`, `form-action 'none'`, `Connection-Allowlist`), which leaves
+Chrome's viewer working. The viewer runs a PDF's scripts; tried in Chrome on 2026-10-21, a PDF that
+submits a form, opens a link or calls `getURL` or `launchURL` as it opens sent nothing, even to
+Obeya itself. A worker names files only of its change: another path is refused and it is asked
+again, as are more than twelve. Without `files` at a later handover, those named before stand; an
+empty list takes them back. A view open while a new handover arrives, or while the work changes
+the file, reads it afresh.
 
 #### Trying the app by hand
 
@@ -1534,6 +1587,17 @@ card's state came later, see below). German
   forwarding more ports would need the worker to name them, and would only help a page that names
   them if each kept its number here, where the stacks of clones here need them. Until 2026-10-16
   those workspaces had no `app_running` and no link.
+- **A card's files are its result, in tabs beside the demo** (2026-10-21, owner): until then a
+  folder's card showed only the list „Im Ordner geändert“, its diffs as raw text, and its left
+  column stayed empty without a demo; a Markdown file could only be read as a diff, and a git card
+  had its branch and diff alone. Now the files show formatted on the left, with tabs, and open on
+  the computer with a click. Rejected: only „Auf dem Rechner öffnen“ at each entry of the change
+  list (no place for the result, Markdown still unread in the browser), and Markdown formatted only
+  in the diff overlay (the result stays behind „Ansehen“). The files the worker names come first,
+  the others it changed behind them (owner). Only the card's own files are served, so this way
+  reads no other file of the folder or the disk. A PDF is served unsandboxed, as Chrome shows no
+  PDF in a sandboxed frame; a bundled pdf.js was the alternative. Opening a file from another device
+  downloads it instead of opening it on the Mac, and since then an answer's files do the same.
 
 ## The canvas
 
@@ -2003,7 +2067,9 @@ Rückgängig: vollständig“) and below it beside the handover (↪ moved, ＋ 
 the lines added and removed in columns of their own, never broken off the path), and „Ansehen“ shows
 it over the page with the diffs of text files whose earlier version Obeya kept (`git diff --no-index`;
 a file counts as text up to 1 MB without a NUL byte in its first 8,000). A click on such a file in the
-list opens its diff alone, with „Ganzes Diff ansehen“ beside it for the rest.
+list opens its diff alone, with „Ganzes Diff ansehen“ beside it for the rest. Beside the conversation, the files it changed show as
+its result, Markdown formatted, a PDF as a PDF (see The files beside the demo); its worker names
+those that are the result for the owner when it hands over.
 
 **Undo.** „Änderungen verwerfen“ on a card waiting for approval puts back what it changed, after
 eight seconds in which the button counts down in itself („Änderungen verwerfen 7 s ×“, the × in red,
@@ -2827,7 +2893,7 @@ the directory, or no file, is refused and the agent asked again. Under its text 
 them, in the sheet, a card's log and a Question card alike (`AnswerFiles` in `src/ui/message.tsx`):
 a page in the sandboxed frame of an HTML artifact (same CSP, key, height report), an image inline, any
 other file as a chip that opens it with the system's app (`open`, `explorer.exe`, `xdg-open` on the
-machine Obeya runs on; where that fails the browser downloads it; a file that is no document, a
+machine Obeya runs on, and only from a page there; where that fails, or from another device, the browser downloads it; a file that is no document, a
 `.command` or `.bat` the agent wrote, say, is shown selected in its folder instead, as opening it
 would run it), with ↓ to download, and „Im
 Ordner zeigen“ for the directory. A follow-up writes into the same directory, so it builds on the

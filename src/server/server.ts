@@ -15,7 +15,7 @@ import { parsePlace } from '../core/layout';
 import { type Focus, type Heard, type Input, isField } from './commands';
 import { inQueue } from '../core/queue';
 import type { Config } from './config';
-import { serveAnswerFile, serveDemoFile, serveMockFrame } from './demo';
+import { serveAnswerFile, serveCardFile, serveDemoFile, serveMockFrame } from './demo';
 import { type NarrationHost, parseClipRequest } from './narration';
 import type { Restarter } from './self-update';
 import { looping, silence, type Transcriber } from './voice';
@@ -638,6 +638,30 @@ export function serve(
           }
         },
       },
+      // a file the card's work made or changed, for its left column; `?download` to save it
+      '/api/c/:canvas/cards/:id/files/*': {
+        GET: (req) => {
+          try {
+            const c = byId.get(req.params.canvas);
+            const url = new URL(req.url);
+            const file = decodeURIComponent(url.pathname.split('/files/').slice(1).join('/files/'));
+            return c ? serveCardFile(file, url.searchParams.has('download'), req, (path) => c.cardFile(req.params.id, path)).catch(() => notFound()) : notFound();
+          } catch {
+            return notFound();
+          }
+        },
+      },
+      // opens a file of the card's work with the system's app (`show`: in its folder), on this machine only: from another device the browser downloads it
+      '/api/c/:canvas/cards/:id/open': {
+        POST: (req, srv) =>
+          access.isLocal(req, srv)
+            ? on(async (c, req) => {
+                const { file, show } = (await req.json().catch(() => ({}))) as { file?: string; show?: boolean };
+                if (typeof file !== 'string') throw new BadRequest('invalid', 'file must be a path');
+                await c.openCardFile(req.params.id!, file, show === true);
+              })(req)
+            : onlyHere(),
+      },
       // "Make it a card": a looked-up thread moves onto a Question card
       '/api/c/:canvas/threads/:thread/card': { POST: on((c, req) => c.answers.toCard(Number(req.params.thread))) },
       // a file a looked-up answer comes with; `?download` to save it
@@ -655,10 +679,13 @@ export function serve(
       },
       // opens an answer's file (`file`), or its thread's directory, with the system's app
       '/api/c/:canvas/threads/:thread/open': {
-        POST: on(async (c, req) => {
-          const { file } = (await req.json().catch(() => ({}))) as { file?: string };
-          await c.openAnswerFile(Number(req.params.thread), file);
-        }),
+        POST: (req, srv) =>
+          access.isLocal(req, srv)
+            ? on(async (c, req) => {
+                const { file } = (await req.json().catch(() => ({}))) as { file?: string };
+                await c.openAnswerFile(Number(req.params.thread), file);
+              })(req)
+            : onlyHere(),
       },
       // the push-to-talk key anywhere on the machine, chosen in the settings, and the shell that hears it
       '/api/push-to-talk': {

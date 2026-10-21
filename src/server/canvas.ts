@@ -35,7 +35,7 @@ import { changesCode, RESTART_PATIENCE_MS, whenIdle } from './self-update';
 import { Sharing, siteIncomplete } from './share';
 import { siteMissing, siteName } from './site';
 import { type DueRestart, Workers } from './workers';
-import { branchSetting, type CardWorkspaces, defaultBranch, detectingBranch, gitCalls, gitOrNull, type GitSteps, gitStepsSync, type Landed, markFolder, readingBranches, together, useBranchSetting, Workspaces } from './workspaces';
+import { branchSetting, type CardWorkspaces, defaultBranch, type FileAt, detectingBranch, gitCalls, gitOrNull, type GitSteps, gitStepsSync, type Landed, markFolder, readingBranches, together, useBranchSetting, Workspaces } from './workspaces';
 import { FolderWorkspaces } from './folder';
 import { claudeToken, githubToken, hostName, registerHost } from './hosts';
 import { clip, messageOf, oneLine } from '../core/text';
@@ -1253,6 +1253,18 @@ export class CanvasRuntime {
     const path = file === undefined ? dir : demoFile(dir, String(file));
     if (!path) throw new BadRequest('noFile', 'no such file in the answer’s directory');
     if (!(await openWithSystem(path, path !== dir))) throw new BadRequest('invalid', 'the system has no app to open it with');
+  }
+
+  /** A file of the card's work as its left column shows it (`Workers.file`); `local`: on disk, to open it. */
+  cardFile(cardId: string, path: string, local = false): Promise<FileAt | null> {
+    return this.repoOf(this.board.card(cardId) ?? cardId).workers.file(cardId, path, local);
+  }
+
+  /** „Auf dem Rechner öffnen“ on a file of the card's work, or with `show` „Im Ordner zeigen“: with the system's app on this machine. */
+  async openCardFile(cardId: string, path: string, show: boolean) {
+    const file = await this.cardFile(cardId, path, true);
+    if (!file || !('path' in file)) throw new BadRequest('noFile', 'the file is not on this machine');
+    if (!(await openWithSystem(file.path, true, show))) throw new BadRequest('invalid', 'the system has no app to open it with');
   }
 
   /**

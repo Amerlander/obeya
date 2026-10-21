@@ -11,6 +11,7 @@ import { useCopy } from './copy';
 import { firstOpening } from './demoSeen';
 import { know, known } from './known';
 import { Branch } from './diff';
+import { ResultFiles } from './files';
 import { DiscardChanges, FolderBox, FolderLine, useFolderDiff } from './folder';
 import { landedRef, shownTitle } from './parts';
 import { inQueue } from '../core/queue';
@@ -494,24 +495,30 @@ export function Detail(p: Props) {
                     )}
                   </p>
                 )}
-                {/* the last handover's demo stays while the agent works on the card again; a new handover replaces it */}
-                {item.demo && (
-                  <DemoView
-                    item={item}
-                    demo={item.demo}
-                    autoplay={demoWaits}
-                    comments={agentListens(item)}
-                    top={
-                      (!demoWaits || sharing) &&
-                      ((shown, latest) => (
-                        <>
-                          {!demoWaits && latest && <p className="hint">{item.state === 'working' || item.state === 'waiting' ? t.demo.again : t.demo.kept}</p>}
-                          {sharing && shareBox(shown)}
-                        </>
-                      ))
-                    }
-                  />
-                )}
+                {/* the last handover's demo stays while the agent works on the card again; a new handover replaces it. Beside it, the files the work made or changed */}
+                <ResultFiles
+                  item={item}
+                  {...(inFolder ? { diff: changes.diff } : {})}
+                  demo={
+                    item.demo && (
+                      <DemoView
+                        item={item}
+                        demo={item.demo}
+                        autoplay={demoWaits}
+                        comments={agentListens(item)}
+                        top={
+                          (!demoWaits || sharing) &&
+                          ((shown, latest) => (
+                            <>
+                              {!demoWaits && latest && <p className="hint">{item.state === 'working' || item.state === 'waiting' ? t.demo.again : t.demo.kept}</p>}
+                              {sharing && shareBox(shown)}
+                            </>
+                          ))
+                        }
+                      />
+                    )
+                  }
+                />
                 {item.pr && (item.state === 'inPr' || item.state === 'waiting') && <PrBox pr={item.pr} />}
                 {item.state === 'inPr' && !item.pr && <p className="hint">{t.pr.opening}</p>}
                 {item.finishing && finished(item.state) && <p className="hint">{item.followUp ? t.followingUpLong : item.state === 'done' ? t.finishingDoneLong : t.finishingLong}</p>}

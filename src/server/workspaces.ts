@@ -6,7 +6,7 @@
 // created on start, as many in parallel as there are cards unless the repository has slots; kept
 // across stop and restart until the card's work has landed.
 
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, realpathSync, rmSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { type CardDiff, cardDiff } from '../core/diff';
@@ -15,6 +15,7 @@ import type { Store } from './db';
 import { HostError, hostName, onHost, remote, sh as shWord, type SshHost, TOKEN_HELPER, TOKEN_HELPER_ARGS } from './hosts';
 import { messageOf } from '../core/text';
 import { oneAtATime } from '../core/one-at-a-time';
+import { demoFile } from './demo-page';
 import { spawnOutput } from './spawn';
 
 export class WorkspaceError extends Error {
@@ -272,6 +273,24 @@ export interface CardWorkspaces {
   changes(cardId: string): Change[];
   diff(cardId: string, full: boolean): Promise<CardDiff | null>;
   landedDiff(base: string, commit: string, full: boolean): Promise<CardDiff | null>;
+  fileOf(cardId: string, path: string, ref?: string, local?: boolean): Promise<FileAt | null>;
+  changedFiles(cardId: string, landed?: { base: string; commit: string }): Promise<string[]>;
+}
+
+/** A file of a card's work: where it lies on this machine, or what it holds (read from a commit). */
+export type FileAt = { path: string } | { data: Uint8Array<ArrayBuffer> };
+
+/**
+ * The file at `path` in `root` itself, null where it is a link (or lies in a linked directory): a
+ * link the card made could otherwise stand for any file of the root it did not change.
+ */
+export function ownFile(root: string, path: string): FileAt | null {
+  const at = demoFile(root, path);
+  try {
+    return at && at === join(realpathSync(root), path) ? { path: at } : null;
+  } catch {
+    return null;
+  }
 }
 
 export class Workspaces implements CardWorkspaces {
@@ -723,6 +742,46 @@ export class Workspaces implements CardWorkspaces {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * The files of the card's change as they are now (none deleted), as git names them: its branch
+   * against the default branch, committed or not, with new files; with `landed`, what the landing
+   * put on the default branch. Separated by NUL, so no name can pass for another, as a name with
+   * ` b/` in it can in a diff's header; what `file` serves rests on this list. Empty where git
+   * cannot tell.
+   */
+  async changedFiles(cardId: string, landed?: { base: string; commit: string }): Promise<string[]> {
+    const names = async (cwd: string, args: string[]) => {
+      const r = await gitRun(cwd, ['-c', 'core.quotePath=false', ...args]);
+      if (r.code !== 0) throw new WorkspaceError(r.stderr);
+      return r.stdout.split('\0').filter(Boolean);
+    };
+    try {
+      if (landed) return await names(this.o.repoPath, ['diff', '--name-only', '-z', '-M', '--diff-filter=d', landed.base, landed.commit]);
+      const ws = this.leasedBy(cardId);
+      if (!ws || !exists(ws)) return [];
+      const base = await gitAsync(ws, 'merge-base', 'HEAD', this.upstream(ws));
+      return [...(await names(ws, ['diff', '--name-only', '-z', '-M', '--diff-filter=d', base])), ...(await names(ws, ['ls-files', '-z', '--others', '--exclude-standard']))];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * A file of the card's work as it is now, by its path relative to the repository: in its workspace
+   * while it has one here, else as `ref` (the commit it landed with, its branch) holds it in the
+   * repository. `local`: only a file on disk, to open it; for `ref` the checkout's copy. Null where
+   * none holds it; a link out of the workspace holds none.
+   */
+  async fileOf(cardId: string, path: string, ref?: string, local = false): Promise<FileAt | null> {
+    const ws = this.leasedBy(cardId);
+    if (ws && !remoteWorkspace(ws) && existsSync(ws)) return ownFile(ws, path);
+    if (!ref) return null;
+    if (local) return ownFile(this.o.repoPath, path);
+    const p = Bun.spawn([GIT, 'show', `${ref}:${path}`], { cwd: this.o.repoPath, stdout: 'pipe', stderr: 'ignore' });
+    const data = new Uint8Array(await new Response(p.stdout).arrayBuffer());
+    return (await p.exited) === 0 ? { data } : null;
   }
 
   /**
