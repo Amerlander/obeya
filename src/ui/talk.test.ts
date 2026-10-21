@@ -57,6 +57,17 @@ test("a task's conversation: the owner's words, the worker's replies and handove
   expect(pending).toEqual([]);
 });
 
+test("Obeya's lines that the plan doc ticked a workstream off stand as lines: they say why the card is done", () => {
+  const stopped = ev('state', 'owner', 'Gestoppt.');
+  const freed = ev('state', 'obeya', MESSAGES.de.worker.tickedFreed);
+  const merged = ev('state', 'obeya', MESSAGES.en.worker.mergedTicked);
+  expect(talkTurns([stopped, freed, merged]).shown).toEqual([
+    { e: stopped, steps: [], line: true },
+    { e: freed, steps: [], line: true },
+    { e: merged, steps: [], line: true },
+  ]);
+});
+
 test('a note the worker did not reply to is answered by the first words it says after it', () => {
   const read = ev('activity', 'worker', 'Liest server/export.ts');
   const note = ev('hint', 'owner', 'Bitte auch Excel.');

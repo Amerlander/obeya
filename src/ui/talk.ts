@@ -50,7 +50,7 @@ export interface Talk {
 
 /** Obeya's lines that mark where the work stands, or why an idea clicked to build was not; its other notes (restarts, sessions, what happens on the pull request) fold away. */
 const MILESTONE =
-  /^(Agent gestartet|Agent started|Pull Request gemergt|Pull request merged|Nach der Freigabe auf main gelandet|Landed on main after the approval|Pull Request ohne Merge geschlossen|Pull request closed without a merge|Das Projekt steht jetzt|The project now stands|Nicht gebaut|Not built|Teil gelandet|Part landed)/;
+  /^(Agent gestartet|Agent started|Pull Request gemergt|Pull request merged|Nach der Freigabe auf main gelandet|Landed on main after the approval|Pull Request ohne Merge geschlossen|Pull request closed without a merge|Das Projekt steht jetzt|The project now stands|Nicht gebaut|Not built|Teil gelandet|Part landed|Im Plan-Doc|Ticked off in the plan doc)/;
 
 /** The agent that works on the card or thinks the idea through. */
 const agentAuthor = (e: CardEvent) => e.author === 'worker' || e.author === 'explorer';
