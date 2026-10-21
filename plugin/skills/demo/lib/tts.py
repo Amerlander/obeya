@@ -22,7 +22,13 @@ Whatever comes back is made a mono 16-bit WAV with ffmpeg:
     uv run --no-project python tts.py [--lock <file>] <spec.json> <language> <jobs.json> <out_dir>
 
 `jobs.json` is `[{"id": ..., "text": ...}]`. Each text becomes `<out_dir>/<hash>.wav`, cached by
-voice + text, so re-rendering a demo after a visual fix costs no synthesis. Results land in
+voice + the text as spoken, so re-rendering a demo after a visual fix costs no synthesis.
+
+A voice whose spec has `respell` (Piper, `say`) reads every word by the rules of the narration
+language, so English terms in German narration get respelt first: from the language's lexicon
+beside this file (`lexicon.<language>.json`, term to spoken form), and from marks in the script,
+`{Canvas|Kännwes}`, which win over the lexicon. Other voices get the written form ("Canvas").
+The cache key is the spoken text, so a change to the lexicon re-synthesises only the clips it touches. Results land in
 `<out_dir>/tts.json`: `{"clips": [{"id", "file", "seconds"}]}`.
 
 `--lock <file>` takes that file's lock before this process loads a large model and holds it to
@@ -105,6 +111,50 @@ TAG_MODELS = ("eleven_v3", "eleven_v4")
 #: A pause tag and the silence a voice that does not read tags puts in its place, in seconds.
 PAUSE_TAG = re.compile(r"\[(short pause|long pause|pause)\]")
 PAUSES = {"short pause": 0.5, "pause": 0.8, "long pause": 1.5}
+
+
+#: A term the script spells out for the voice: `{Canvas|Kännwes}`, written "Canvas", spoken "Kännwes".
+MARK = re.compile(r"\{([^{}|]*)\|([^{}]*)\}")
+
+
+def written(text: str) -> str:
+    """The script as it reads, its marks as their written form."""
+    return MARK.sub(lambda m: m[1], text)
+
+
+def key(term: str) -> str:
+    """A term as the lexicon looks it up: lower case, its words apart by one space."""
+    return " ".join(re.split(r"[\s-]+", term.lower().strip()))
+
+
+def lexicon(language: str) -> dict[str, str]:
+    """The narration language's lexicon, keyed by the term in lower case; empty without one."""
+    file = Path(__file__).with_name(f"lexicon.{language}.json")
+    if not file.exists():
+        return {}
+    return {key(term): spoken for term, spoken in json.loads(file.read_text(encoding="utf-8")).items()}
+
+
+def respelt(text: str, words: dict[str, str]) -> str:
+    """The script as a voice that reads by the narration language's rules should get it: each mark
+    as its spoken form, and each term of the lexicon, as a whole word in any case, as its spoken
+    form; the longest term first, so "Pull Request" goes before "Request"."""
+    if not words:
+        return MARK.sub(lambda m: m[2], text)
+    terms = sorted(words, key=len, reverse=True)
+    # the words of a term may be apart by any space or a hyphen ("Pull-Request")
+    pattern = re.compile(r"(?<!\w)(?:" + "|".join(r"[\s-]+".join(map(re.escape, t.split())) for t in terms) + r")(?!\w)", re.IGNORECASE)
+    say = lambda part: pattern.sub(lambda m: words[key(m[0])], part)
+    out, at = [], 0
+    for mark in MARK.finditer(text):
+        out += [say(text[at:mark.start()]), mark[2]]
+        at = mark.end()
+    return "".join(out + [say(text[at:])])
+
+
+def spoken(spec: dict, language: str, text: str) -> str:
+    """What the voice of `spec` is given to say for `text`."""
+    return respelt(text, lexicon(language)) if spec.get("respell") else written(text)
 
 
 def untagged(text: str) -> str:
@@ -527,12 +577,13 @@ def main() -> None:
     _lock_file = take_option(args, "--lock")
     if args[0] == "--sample":
         spec_file, language, text, target = args[1:5]
-        voice = make_voice(json.loads(Path(spec_file).read_text(encoding="utf-8")), language)
+        spec = json.loads(Path(spec_file).read_text(encoding="utf-8"))
+        voice = make_voice(spec, language)
         # a command voice may load a model with every clip; a served one takes the lock as it starts
         if isinstance(voice, CommandVoice):
             hold_lock()
         try:
-            voice.synthesize(text, Path(target))
+            voice.synthesize(spoken(spec, language, text), Path(target))
         finally:
             close(voice)
         return
@@ -543,6 +594,7 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     if language not in LANGUAGE_NAMES:
         sys.exit(f"unknown narration language {language!r}; known: {', '.join(LANGUAGE_NAMES)}")
+    jobs = [{**job, "text": spoken(spec, language, job["text"])} for job in jobs]
     voice = make_voice(spec, language)
     if isinstance(voice, CommandVoice):
         hold_lock()

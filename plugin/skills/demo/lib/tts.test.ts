@@ -10,6 +10,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { NarrationHost } from '../../../../src/server/narration';
 import { serveNarration } from '../../../../src/server/server';
+import { untagged } from './timeline';
+import { voiceSpec } from './voices';
 
 const LIB = import.meta.dirname;
 const python = (args: string[], env: Record<string, string> = {}, input?: string) =>
@@ -123,6 +125,66 @@ describe('a voice that stays loaded', () => {
     expect(performance.now() - started).toBeLessThan(30_000);
     expect(log()).toEqual(['start', 'de:Eins.']);
   });
+});
+
+describe('English terms in German narration', () => {
+  const lexicon = JSON.parse(readFileSync(join(LIB, 'lexicon.de.json'), 'utf8')) as Record<string, string>;
+  const spec = (respell: boolean) => {
+    const s = JSON.parse(readFileSync(join(dir, 'spec.json'), 'utf8'));
+    writeFileSync(join(dir, 'spec.json'), JSON.stringify({ ...s, respell }));
+  };
+  const jobs = (...texts: string[]) => writeFileSync(join(dir, 'jobs.json'), JSON.stringify(texts.map((text, i) => ({ id: `s${i}`, text }))));
+  const said = () => log().filter((l) => l.startsWith('de:')).map((l) => l.slice(3));
+
+  test('Piper and say respell them, the others do not', () => {
+    for (const voice of ['piper', 'say'] as const) expect(voiceSpec({ language: 'de', voice })).toMatchObject({ respell: true });
+    for (const voice of ['qwen3', 'command', 'elevenlabs', 'gemini', 'openai', 'azure', 'http'] as const)
+      expect(voiceSpec({ language: 'de', voice })).not.toHaveProperty('respell');
+  });
+
+  test('a voice that respells gets the lexicon\'s spoken forms, as whole words in any case, longest first, and a mark before the lexicon', () => {
+    spec(true);
+    jobs(
+      'Der Pull Request liegt auf dem branch. Pull-Request und Branchen.',
+      'Ein {Branch|Brantsch} auf dem {Canvas|Leinwand}. [short pause] Fertig.',
+    );
+    expect(narrate().status).toBe(0);
+    expect(said()).toEqual([
+      `Der ${lexicon['Pull Request']} liegt auf dem ${lexicon.Branch}. ${lexicon['Pull Request']} und Branchen.`,
+      'Ein Brantsch auf dem Leinwand.',
+      'Fertig.',
+    ]);
+  }, 30_000);
+
+  test('a voice that reads English terms (Qwen3, the hosted ones) gets them as written, without marks', () => {
+    spec(false);
+    jobs('Der Pull Request liegt auf dem {Canvas|Kännwes}.');
+    expect(narrate().status).toBe(0);
+    expect(said()).toEqual(['Der Pull Request liegt auf dem Canvas.']);
+  }, 30_000);
+
+  test('a clip is cached by what the voice says, so only a changed spoken form synthesises again', () => {
+    spec(true);
+    jobs('Der Branch.', 'Das Canvas.');
+    expect(narrate().status).toBe(0);
+    rmSync(join(dir, 'log'));
+    // the same spoken forms, from a mark instead of the lexicon: nothing to synthesise
+    jobs(`Der {Branch|${lexicon.Branch}}.`, `Das {Canvas|${lexicon.Canvas}}.`);
+    expect(narrate().status).toBe(0);
+    expect(existsSync(join(dir, 'log'))).toBe(false);
+    // another spoken form for one of them: that clip alone
+    jobs('Der {Branch|Brantsch}.', 'Das Canvas.');
+    expect(narrate().status).toBe(0);
+    expect(said()).toEqual(['Der Brantsch.']);
+  }, 60_000);
+
+  test('a sample is respelt too, and captions show the term as written', () => {
+    spec(true);
+    const r = python([join(LIB, 'tts.py'), '--sample', join(dir, 'spec.json'), 'de', 'Ein Feature auf dem {Canvas|Kännwes}.', join(dir, 'sample.wav')], { FAKE_LOG: join(dir, 'log') });
+    expect(r.status).toBe(0);
+    expect(said()).toEqual([`Ein ${lexicon.Feature} auf dem Kännwes.`]);
+    expect(untagged('Ein Feature auf dem {Canvas|Kännwes}. [short pause] Fertig.')).toBe('Ein Feature auf dem Canvas. Fertig.');
+  }, 30_000);
 });
 
 describe('a voice Obeya holds', () => {

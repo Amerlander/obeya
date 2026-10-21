@@ -3555,6 +3555,29 @@ from its environment variable or a key file. Whatever comes back becomes a mono 
 through ffmpeg (a voice command gets its text as UTF-8, with `PYTHONUTF8`: on Windows Piper read
 it in the code page otherwise).
 
+English terms in German narration ("Pull Request", "Branch", "Feature", "Canvas") are respelt for
+the voices that read every word by the narration language's rules, Piper (through espeak-ng, which
+made "Feature" *fe-a-tu-re* and "Branch" *branç*) and `say`; their spec says so (`respell`). The
+spoken form comes from a lexicon per narration language that ships with the skill
+(`lib/lexicon.de.json`: common terms of software work and their inflected forms, "Bräntsch",
+"Fietscher", "Kännwes") and from a mark in the script, `{Canvas|Kännwes}`, for a term the lexicon lacks, which wins over the lexicon.
+`tts.py` replaces whole words only, in any case, the longest term first, before it keys the clip
+cache on the spoken text, so a change to the lexicon re-synthesises only the clips it touches; the
+captions (`untagged`, in a render and in a re-voicing) show the written form. Every other voice gets
+the written form: Qwen3 said most terms well as written and sounded too German with the respelling,
+and the hosted voices read English. Rejected (2026-10-21): English phonemes for Piper (`[[ … ]]`;
+Thorsten hardly has *w* and *ɹ*, and Whisper heard "Pull Equest" and "Benz"), and recognising
+English words by themselves ("Demo", "Team", "Agent" belong to both languages). There is no English
+lexicon yet; the mechanism is per language.
+
+The lexicon holds a term only where Piper got it wrong and the respelling got it right: each
+candidate was synthesised in German sentences and heard back through Whisper (large-v3-turbo,
+2026-10-21). espeak-ng's German exception list already says Commit, Update, Push, Release,
+Screenshot and Prompt in English, and Repository came through as written, so they have no entry.
+"Build" is "Bild", the same sound, which Whisper writes as the German word. For "Branches" and
+"mergen" no respelling was heard back as the term ("Brennschiffs", "matchen"), so they have none
+yet; a script marks them where they matter.
+
 Voices are not labelled as generated, a clone included: the whole demo is generated, and that is
 clear from where it is shown. The person follows from "Das ist meine eigene Stimme" in the settings:
 the first person only in the owner's own voice, otherwise the narration presents the work without

@@ -51,6 +51,12 @@ The voice is chosen in Obeya's settings ("Demos"); "Anhören" plays a sentence i
   (POST `{"text", "language"}` as JSON, audio back). Tick "Das ist meine eigene Stimme" when it
   speaks in your voice; the narration is then in the first person.
 
+Piper and `say` read every word by the rules of the narration language, so in German narration
+English terms are respelt for them: from `plugin/skills/demo/lib/lexicon.de.json` (term → spoken
+form, e.g. `"Branch": "Bräntsch"`), and from a mark in a demo's script, `{Canvas|Kännwes}`. The
+captions show the written form; the other voices get it too. To add a term, write its spoken form
+into the lexicon and listen to a clip of it in Piper first.
+
 ## Without Obeya
 
 The skill also runs in a plain Claude Code session: link it as a user skill

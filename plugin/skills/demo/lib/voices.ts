@@ -52,6 +52,11 @@ export type VoiceSpec =
       /** Loads a large model: one such synthesis at a time on the machine. */
       heavy: boolean;
       /**
+       * Reads every word by the rules of the narration language (Piper through espeak-ng, `say`):
+       * `tts.py` gives it English terms respelt, from the language's lexicon and the script's marks.
+       */
+      respell?: boolean;
+      /**
        * The voice can stay loaded: this command starts once per render and answers clip by clip
        * over its stdin and stdout (the protocol is in `qwen3.py`). Without it, `argv` or `shell`
        * runs once per clip.
@@ -233,7 +238,7 @@ export function voiceSpec(s: DemoSettings, home = obeyaHome()): VoiceSpec {
   switch (s.voice) {
     case 'piper': {
       const { python, onnx } = piperFiles(s, home);
-      return { kind: 'command', argv: [python, '-m', 'piper', '-m', onnx, '-f', '{out}'], tag: `piper|${piperVoice(s).name}`, heavy: false };
+      return { kind: 'command', argv: [python, '-m', 'piper', '-m', onnx, '-f', '{out}'], tag: `piper|${piperVoice(s).name}`, heavy: false, respell: true };
     }
     case 'qwen3': {
       const clip = referenceOf(s);
@@ -251,7 +256,7 @@ export function voiceSpec(s: DemoSettings, home = obeyaHome()): VoiceSpec {
     }
     case 'say': {
       const voice = s.voiceName || SAY_VOICES[s.language];
-      return { kind: 'command', argv: ['say', '-v', voice, '-o', '{out}', '--file-format=WAVE', '--data-format=LEI16@24000', '-f', '-'], tag: `say|${voice}`, heavy: false };
+      return { kind: 'command', argv: ['say', '-v', voice, '-o', '{out}', '--file-format=WAVE', '--data-format=LEI16@24000', '-f', '-'], tag: `say|${voice}`, heavy: false, respell: true };
     }
     case 'command':
       // The owner's command may load a large model (a clone does), so it takes the machine's turn.

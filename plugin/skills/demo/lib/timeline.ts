@@ -23,9 +23,17 @@ export interface Frame {
   height: number;
 }
 
-/** A narration as it is shown (captions) and checked: without audio tags ("[short pause]"), which only some voices read. */
+/**
+ * A narration as it is shown (captions) and checked: without audio tags ("[short pause]"), which
+ * only some voices read, and a term respelt for the voice as it is written (`{Canvas|Kännwes}`
+ * reads "Canvas", `MARK` in `tts.py`).
+ */
 export function untagged(say: string) {
-  return say.replace(/\[[^\]]*\]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+  return say
+    .replace(/\{([^{}|]*)\|[^{}]*\}/g, '$1')
+    .replace(/\[[^\]]*\]/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 }
 
 /** The clock strip `overlay.js` paints: its cells, their size and where it sits. */
