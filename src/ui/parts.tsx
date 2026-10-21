@@ -714,27 +714,25 @@ export const ProjectView = memo(
 
 /**
  * A curve between the facing sides of two cards: left and right when they stand more beside each
- * other than above each other, else bottom and top.
+ * other than above each other, else bottom and top. It leaves and enters the cards square to their
+ * sides. With a `head`, it stops that far short of `b`, where the base of an arrow head drawn along
+ * its last direction goes, so the head ends on `b`'s side however sharply the curve bends.
  */
-export function linkPath(a: Bounds, b: Bounds): string {
+export function linkPath(a: Bounds, b: Bounds, head = 0): string {
   const gapX = Math.max(b.x - (a.x + a.w), a.x - (b.x + b.w));
   const gapY = Math.max(b.y - (a.y + a.h), a.y - (b.y + b.h));
-  if (gapX > gapY) {
-    const right = b.x + b.w / 2 > a.x + a.w / 2;
-    const x1 = right ? a.x + a.w : a.x;
-    const x2 = right ? b.x : b.x + b.w;
-    const y1 = a.y + a.h / 2;
-    const y2 = b.y + b.h / 2;
-    const mx = (x1 + x2) / 2;
-    return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
-  }
-  const down = b.y + b.h / 2 > a.y + a.h / 2;
-  const x1 = a.x + a.w / 2;
-  const x2 = b.x + b.w / 2;
-  const y1 = down ? a.y + a.h : a.y;
-  const y2 = down ? b.y : b.y + b.h;
-  const my = (y1 + y2) / 2;
-  return `M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}`;
+  const across = gapX > gapY;
+  // The direction of travel along the axis the cards face each other on, and the ends on it.
+  const dir = across ? Math.sign(b.x + b.w / 2 - (a.x + a.w / 2)) || 1 : Math.sign(b.y + b.h / 2 - (a.y + a.h / 2)) || 1;
+  const [x1, y1] = across ? [dir > 0 ? a.x + a.w : a.x, a.y + a.h / 2] : [a.x + a.w / 2, dir > 0 ? a.y + a.h : a.y];
+  const [x2, y2] = across ? [(dir > 0 ? b.x : b.x + b.w) - dir * head, b.y + b.h / 2] : [b.x + b.w / 2, (dir > 0 ? b.y : b.y + b.h) - dir * head];
+  // How far the control points reach out from the cards: half the way, but with a head at least its
+  // length (less where the curve hardly goes sideways), so that a short link still runs square into
+  // the head instead of meeting it from the side.
+  const along = across ? x2 - x1 : y2 - y1;
+  const aside = across ? y2 - y1 : x2 - x1;
+  const reach = dir * Math.max(dir * along / 2, Math.min(Math.abs(aside) / 2, head));
+  return across ? `M${x1},${y1} C${x1 + reach},${y1} ${x2 - reach},${y2} ${x2},${y2}` : `M${x1},${y1} C${x1},${y1 + reach} ${x2},${y2 - reach} ${x2},${y2}`;
 }
 
 /**
@@ -757,20 +755,24 @@ export function Links({ placed }: { placed: { item: Item; b: Bounds }[] }) {
   );
 }
 
+/** The length of the arrow head at the end of a wait's line, in canvas pixels. */
+const DEP_HEAD = 15;
+
 /** While the pointer is on a card with waits: a line for each wait, from the card waited for to the card waiting. */
 export function DepLinks({ placed, edges }: { placed: { item: Item; b: Bounds }[]; edges: [string, string][] }) {
   const byId = new Map(placed.map((p) => [p.item.id, p.b]));
   return (
     <svg id="deps" width="1" height="1">
       <defs>
-        <marker id="dep-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-          <path d="M0,1 L9,5 L0,9 z" />
+        {/* The line stops at the head's base (refX 0, a hair inside so no seam shows) and the head points on to the card. */}
+        <marker id="dep-arrow" viewBox="0 0 9 8" refX="0.3" refY="4" markerUnits="userSpaceOnUse" markerWidth={DEP_HEAD} markerHeight={(DEP_HEAD * 8) / 9} orient="auto">
+          <path d="M0,0 L9,4 L0,8 z" />
         </marker>
       </defs>
       {edges.flatMap(([from, to]) => {
         const a = byId.get(from);
         const b = byId.get(to);
-        return a && b ? [<path key={`${from} ${to}`} d={linkPath(a, b)} markerEnd="url(#dep-arrow)" />] : [];
+        return a && b ? [<path key={`${from} ${to}`} d={linkPath(a, b, DEP_HEAD)} markerEnd="url(#dep-arrow)" />] : [];
       })}
     </svg>
   );
