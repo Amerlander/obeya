@@ -1,13 +1,16 @@
 # CLAUDE.md
 
-Obeya: a spatial canvas for directing AI coding agents. Goal, behaviour, architecture and the
-decisions behind them are in `docs/design.md`, an index, and its chapters under `docs/design/`:
-read the index, then the chapters the change touches, and keep those current in the same change.
-The permanent docs (`docs/*.md` and the chapters under `docs/design/`) hold only what an
-experienced engineer would need to rebuild the software with the same features, however different
-the reimplementation would look. Work in progress is planned in plan docs under `docs/plan/` (Obeya
-shows them as projects); when one is done, what lasts moves into the chapters under `docs/design/`
-(or the index) and the doc goes.
+Obeya: a spatial canvas for directing AI coding agents. Goal, behaviour and the decisions behind
+them are in `docs/design.md`, an index, and its chapters under `docs/design/`: read the index, then
+the chapters the change touches, and keep those current in the same change by the rebuild test the
+index's header states. The permanent docs (`docs/*.md` and the chapters under `docs/design/`) hold
+only what an experienced engineer would need to rebuild the software with the same features,
+however different the reimplementation would look: behaviour seen from outside, formats a rebuild
+must stay compatible with, non-obvious constraints, and decisions (chosen, why, rejected, date).
+Not what the code shows (names, modules, pixel values), and not history: a change rewrites the
+description instead of adding the old behaviour to it. Work in progress is planned in plan docs
+under `docs/plan/` (Obeya shows them as projects); when one is done, what passes the same test moves
+into the chapters under `docs/design/` (or the index) and the doc goes.
 
 - Bun + TypeScript throughout; tests with `bun test --parallel` (a file per process, from Bun 1.4 on;
   older Bun ignores the flag and runs them one after the other), types with `bun run typecheck`.

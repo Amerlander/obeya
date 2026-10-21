@@ -6,10 +6,11 @@ same steps work for you, with or without Obeya running.
 
 ## Design doc first
 
-[`docs/design.md`](docs/design.md) describes what Obeya does, how it is built and why: goal,
-principles, architecture and the decisions behind them. It is an index of chapters under
-[`docs/design/`](docs/design/): read it, then the chapters your change touches, and keep those
-current in the same change.
+[`docs/design.md`](docs/design.md) describes what Obeya does and why: goal, principles, behaviour
+and the decisions behind them, as much as an experienced engineer would need to rebuild it with the
+same features (its header says what belongs in it and what the code says instead). It is an index
+of chapters under [`docs/design/`](docs/design/): read it, then the chapters your change touches,
+and keep those current in the same change.
 
 ## Plan docs
 
@@ -17,7 +18,7 @@ Work larger than one change is planned in a plan doc under [`docs/plan/`](docs/p
 where things stand, the design, and the workstreams as a checklist (`- [ ] **W1:** …`). Obeya
 shows each plan doc as a project with a card per workstream; the change that finishes a workstream
 ticks it off in the doc, and once all are ticked the project goes into the archive. When the
-project is done, what lasts moves into the design doc and the plan doc goes.
+project is done, what passes the design doc's test moves into it and the plan doc goes.
 
 ## Cards
 
