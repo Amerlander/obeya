@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { CanvasSnapshot } from '../src/core/types';
 import { ownerHeaders } from '../src/server/owner';
+import { worked } from '../src/ui/talk';
 
 const script = join(import.meta.dir, 'scratch-obeya.ts');
 const tmp = mkdtempSync(join(tmpdir(), 'obeya-stage-'));
@@ -60,6 +61,12 @@ test('stages a scratch Obeya with its cards in the states the stage file gives',
   expect(card('A')).toMatchObject({ title: 'Einlesen', state: 'working', statusLine: 'Tests laufen' });
   expect(card('B').queue).toMatchObject({ behind: [staged.cards.A], reason: 'Beide ändern src/config.ts.' });
   expect(card('C')).toMatchObject({ state: 'waiting', need: 'question', question: { text: 'Lang oder kurz?', options: ['Lang', 'Kurz'] } });
+  // cards at work or waiting have the branch their start gave them: only then does the card show the
+  // conversation with the question and the field to answer it, on the canvas and on the phone
+  expect(card('C').branch).toBe(`obeya/frage-${staged.cards.C!.slice(0, 6)}`);
+  expect(card('W1').branch).toStartWith('obeya/konfiguration-');
+  for (const key of ['A', 'C', 'H', 'W1']) expect(worked(card(key))).toBe(true);
+  expect(card('B').branch).toBeUndefined();
   expect(card('D').from).toBe(staged.cards.C!);
   const created = Bun.spawnSync(['sqlite3', join(dir, 'home/obeya.db'), `SELECT created_at FROM cards WHERE id = '${staged.cards.A}'`]).stdout.toString();
   expect(Date.now() - Date.parse(created.trim())).toBeGreaterThan(7000_000);

@@ -89,11 +89,12 @@
 // several plan docs "docs/plan/x.md#W1"), which exist already. Then its fields are written straight
 // into the database:
 // state, need, statusLine, summary, question, demo (`kind` defaults to video), queue (`behind` by key; `since` defaults to
-// now), scope (files), branch, createdAgo, archivedAgo, events ([{ kind, author, text, ago?, mocks?, spot? }]; an idea's reply with `mocks` needs code that has them;
+// now), scope (files), branch (a working or waiting card without one gets the branch a start would
+// have given it, which every started card has), createdAgo, archivedAgo, events ([{ kind, author, text, ago?, mocks?, spot? }]; an idea's reply with `mocks` needs code that has them;
 // with events of kind `review`, the demos in `row.demos` and then `demo` go with those handovers in order, and a `spot` (a comment's
 // place in a demo video, `{ at, chapter?, demo? }`) names its demo by its place in that order; earlier demos need code that has them),
 // workspace (true: the card holds the next free clone, for a repository whose settings say clones; with
-// `branch` checked out there, holding a commit, of `branchFiles` too (by path, a text or `{ from }` a file to copy); for one that works in worktrees, `branch` is
+// its branch checked out there, holding a commit where `branch` names it, of `branchFiles` too (by path, a text or `{ from }` a file to copy); for one that works in worktrees, a branch is
 // required and the card gets a worktree of its own on it), prototypeOf (the key of the idea it is a prototype of),
 // and `row` for any other column of `cards` (objects are stored as JSON). Times: "90s", "15m", "2h",
 // "3d" ago. `mainBranch` is the branch the repositories are on (default `main`). `"setup": true` serves no canvas (no configuration, no repository given): the first start,
@@ -133,6 +134,7 @@ import { type Language, LANGUAGES } from '../src/core/locale';
 import type { CanvasSnapshot, Item } from '../src/core/types';
 import { loginLink, ownerHeaders } from '../src/server/owner';
 import { findTailscale, type ServeEntry, Tailscale } from '../src/server/tailscale';
+import { branchName } from '../src/server/workspaces';
 import { opt } from './common';
 import { waitUp } from './wait-up';
 
@@ -494,11 +496,14 @@ for (const [i, c] of stage.cards.entries()) {
       since: c.queue.since ?? new Date().toISOString(),
     };
   if (c.scope !== undefined) row.scope = { files: c.scope, reason: '' };
-  if (c.branch !== undefined) row.branch = c.branch;
+  // a card at work or waiting for the owner has the branch its start gave it, as every started card
+  // has: without one the card shows neither its conversation's field nor the question it waits on
+  const branch = c.branch ?? (c.state === 'working' || c.state === 'waiting' ? branchName(c.title ?? snapshot.items.find((x) => x.id === id)?.title ?? '', id) : undefined);
+  if (branch !== undefined) row.branch = branch;
   if (c.workspace && folder) {
     // every card works in the folder itself, with a record of what it changed there (folder.ts)
     row.workspace = repo;
-    row.branch = c.branch ?? `obeya/${id.slice(0, 6)}`;
+    row.branch = branch ?? `obeya/${id.slice(0, 6)}`;
     db.query('INSERT INTO folder_cards (card_id, folder, state) VALUES ($id, $f, $s) ON CONFLICT(card_id) DO NOTHING').run({
       id,
       f: realpathSync(repo),
@@ -507,16 +512,16 @@ for (const [i, c] of stage.cards.entries()) {
   } else if (c.workspace) {
     const free = db.query('SELECT path FROM workspaces WHERE card_id IS NULL ORDER BY path').get() as { path: string } | null;
     // no clones: the repository works in worktrees, one per card under Obeya's home
-    const tree = !free && !!c.branch && !stage.clones;
+    const tree = !free && !!branch && !stage.clones;
     if (!free && !tree) fail(`card ${c.key ?? i}: no free clone for it ("clones" in the stage, settings that say clones), nor a branch for a worktree`);
     const path = tree ? join(home, 'workspaces', canvas, id.slice(0, 8)) : free!.path;
     if (tree) {
       mkdirSync(dirname(path), { recursive: true });
-      run('git', ['worktree', 'add', '-q', '-b', c.branch!, path, mainBranch], repo);
+      run('git', ['worktree', 'add', '-q', '-b', branch!, path, mainBranch], repo);
       db.query('INSERT INTO workspaces (path, canvas_id, card_id) VALUES ($path, $c, $id)').run({ path, c: canvas, id });
     } else {
       db.query('UPDATE workspaces SET card_id = $id WHERE path = $path').run({ id, path });
-      if (c.branch) run('git', ['checkout', '-q', '-b', c.branch], path);
+      if (branch) run('git', ['checkout', '-q', '-b', branch], path);
     }
     row.workspace = path;
     if (c.branch) {
