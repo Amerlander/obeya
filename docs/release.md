@@ -1,7 +1,7 @@
 # Releasing Obeya
 
 How a version of the app goes out, and the owner's steps it depends on. The builds are described
-in `docs/design.md` (Builds, App updates).
+in [`docs/design/distribution.md`](design/distribution.md) (Builds, App updates).
 
 The Mac apps are signed with a Developer ID and notarised; the Windows installer and the Linux
 packages are not signed (Windows: the SignPath Foundation, applied for), and the release lists the

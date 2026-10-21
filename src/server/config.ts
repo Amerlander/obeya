@@ -1,7 +1,8 @@
 // Obeya's configuration: the canvases it serves, saved in `canvases.json` under its home. The owner
 // reads and edits it in its sheet, the Koordinator on their word. A saved change applies while
-// Obeya runs (`Canvases.apply`, see Live configuration in docs/design.md): what a repository's
-// agents are set up by restarts that repository's agents alone, once they paused. The
+// Obeya runs (`Canvases.apply`, see Live configuration in
+// docs/design/repositories-and-configuration.md): what a repository's agents are set up by
+// restarts that repository's agents alone, once they paused. The
 // repositories' settings (`RepoSettings`) are read where they are used, apply at once, and saving
 // them alone restarts nothing but where they change where the workers work.
 

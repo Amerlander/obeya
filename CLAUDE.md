@@ -1,9 +1,10 @@
 # CLAUDE.md
 
 Obeya: a spatial canvas for directing AI coding agents. Goal, behaviour, architecture and the
-decisions behind them are in `docs/design.md` — read it before changing anything, and keep it
-current in the same change. Work in progress is planned in plan docs under `docs/plan/` (Obeya
-shows them as projects); when one is done, what lasts moves into `docs/design.md` and the doc goes.
+decisions behind them are in `docs/design.md`, an index, and its chapters under `docs/design/`:
+read the index, then the chapters the change touches, and keep those current in the same change.
+Work in progress is planned in plan docs under `docs/plan/` (Obeya shows them as projects); when one
+is done, what lasts moves into the chapters under `docs/design/` (or the index) and the doc goes.
 
 - Bun + TypeScript throughout; tests with `bun test --parallel` (a file per process, from Bun 1.4 on;
   older Bun ignores the flag and runs them one after the other), types with `bun run typecheck`.

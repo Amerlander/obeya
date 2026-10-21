@@ -7,8 +7,9 @@ same steps work for you, with or without Obeya running.
 ## Design doc first
 
 [`docs/design.md`](docs/design.md) describes what Obeya does, how it is built and why: goal,
-principles, architecture and the decisions behind them. Read it before changing anything, and
-keep it current in the same change.
+principles, architecture and the decisions behind them. It is an index of chapters under
+[`docs/design/`](docs/design/): read it, then the chapters your change touches, and keep those
+current in the same change.
 
 ## Plan docs
 

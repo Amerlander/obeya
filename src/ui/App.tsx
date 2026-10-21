@@ -145,7 +145,7 @@ function Canvas({
   source: SourceUpdate | null;
   canvases: CanvasInfo[];
   waiting: Record<string, number>;
-  /** The Bun the server runs on, when it is too old for it (design.md, Builds). */
+  /** The Bun the server runs on, when it is too old for it (docs/design/distribution.md, Builds). */
   oldBun: string | null;
 }) {
   // ---------------------------------------------------------------- items

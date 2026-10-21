@@ -205,7 +205,8 @@ const watchKeepsPath = process.platform === 'darwin';
 /**
  * Bun before 1.3.14 on Linux, whose watches misbehave: closing one while Bun still lists its
  * directory can deadlock a thread of Bun's work pool, after which no page bundles any more
- * (design.md, Builds), so Obeya warns of it in the log and on the canvas; and see below.
+ * (docs/design/distribution.md, Builds), so Obeya warns of it in the log and on the canvas; and
+ * see below.
  */
 export function oldLinuxBun(platform: string = process.platform, version: string = Bun.version): boolean {
   return platform === 'linux' && Bun.semver.order(version, '1.3.14') < 0;

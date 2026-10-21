@@ -176,7 +176,8 @@ once). Obeya clones the repository there itself, and a new card goes there once 
 free slot. The other machine needs git, Claude Code and what the repository's own work needs; the
 logins go along with each start (Claude's from `claude setup-token`, saved as `claude-token` in
 Obeya's home) and are not left there. Demos recorded there come back to this machine and are
-narrated by its voice. How it works is under "Hosts" in [`docs/design.md`](docs/design.md).
+narrated by its voice. How it works is under "Hosts" in
+[`docs/design/agents-and-workspaces.md`](docs/design/agents-and-workspaces.md).
 
 ### Setting up a repository
 

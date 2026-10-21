@@ -3,7 +3,7 @@
 > Plan doc for bringing Obeya to Claude Code users worldwide and to tech leads and teams in
 > Germany: demo sites that point back to Obeya and carry a feed, a weekly post drafted from the
 > week's demos, and a launch kit. Deleted when it ships; durable content moves into
-> [`docs/design.md`](../design.md).
+> [`docs/design.md`](../design.md) and its chapters under `docs/design/`.
 
 ## Goal
 
@@ -28,7 +28,7 @@ Checked 2026-10-19.
   the pages nor the overview say what made them, and there is no feed. A page keeps the template it
   was published with; a change to the templates that viewers see gets an entry in
   `src/core/page-changes.ts`, and the Koordinator's sheet then offers to share the outdated pages
-  again (see Outdated pages in `docs/design.md`).
+  again (see Outdated pages in `docs/design/sharing-demos.md`).
 - *Elsewhere*: Obeya is not on Hacker News, Reddit, Product Hunt or any awesome list.
   awesome-claude-code (56k stars) takes recommendations only through its web issue form, from
   projects at least 14 days old with ongoing commits or with 100 stars, and says plainly that it is
