@@ -613,13 +613,19 @@ describe('a workspace its card will not work in again goes back to the pool', ()
   test('a deleted card frees its clone; restored, it takes the clone back while that is free', async () => {
     const c = manual();
     const clone = stoppedWithWork(c.id);
+    board.showPools(() => [{ repo: 'home', hosts: spaces.pool([]) }]);
+    const taken = () => board.snapshot().workspaces![0]!.hosts[0]!.cards;
+    expect(taken()).toEqual([c.id]);
     board.remove(c.id);
     await flush();
     expect(spaces.leasedBy(c.id)).toBeNull();
     expect(spaces.leasable()).toBe(true);
+    // the pool the canvas shows has it free
+    expect(taken()).toEqual([]);
     board.restore(c.id);
     workers.restored(c.id);
     expect(spaces.leasedBy(c.id)).toBe(clone);
+    expect(taken()).toEqual([c.id]);
     workers.start(c.id);
     expect(git(clone, 'log', '--format=%s', '-1')).toBe('Config');
   });

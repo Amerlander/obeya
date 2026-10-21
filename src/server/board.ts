@@ -1184,7 +1184,8 @@ export class Board {
 
   /** A card's workspace was freed (`leaseEnded`); a deleted card keeps it named, to take it back when it is restored. */
   freed(cardId: string) {
-    if (this.store.card(cardId)?.deleted_at) return;
+    // the pool the canvas shows has a clone more
+    if (this.store.card(cardId)?.deleted_at) return this.changed();
     this.work(cardId, { workspace: null, app: null, parked: null });
   }
 

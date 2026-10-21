@@ -1524,7 +1524,9 @@ export class Workers {
   restored(cardId: string) {
     const row = this.o.board.row(cardId);
     this.kept.delete(cardId);
-    if (row.workspace && !this.o.workspaces.retake(cardId, row.workspace)) this.o.board.work(cardId, { workspace: null, app: null, parked: null });
+    if (!row.workspace) return;
+    if (this.o.workspaces.retake(cardId, row.workspace)) this.o.board.changed();
+    else this.o.board.work(cardId, { workspace: null, app: null, parked: null });
   }
 
   /** After a restart, a paused worker stays paused: a restart it waited for has happened, which it hears once it goes on. */
