@@ -740,14 +740,17 @@ function TalkButton({ label, shown, n, count, working, onClick }: { label: strin
   );
 }
 
-/** The button for an open card's conversation: what waits there is the messages not seen yet and the questions open. */
+/**
+ * The button for an open card's conversation: what waits there is the messages not seen yet and the
+ * questions open, which count as one, the block they stand in together.
+ */
 function CardTalkButton({ item, open, shown, onClick }: { item: Item; open: boolean; shown: boolean; onClick: () => void }) {
   const events = useEvents(item.id);
   // the conversation marks what it holds seen while it is open
   const messages = events && !open ? unseen(cardTalk(item, events), events, seenOf(item.id)) : 0;
   const questions = openQuestions(item).length;
   const working = agentWorks(item) || (!!events && koordinatorReads(events));
-  return <TalkButton label={t.phone.cardTalk} shown={shown} n={messages + questions} count={t.phone.cardWaiting(messages, questions)} working={working} onClick={onClick} />;
+  return <TalkButton label={t.phone.cardTalk} shown={shown} n={messages + (questions ? 1 : 0)} count={t.phone.cardWaiting(messages, questions)} working={working} onClick={onClick} />;
 }
 
 /**
