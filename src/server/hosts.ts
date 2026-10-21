@@ -212,11 +212,6 @@ export class SshHost {
     return { code, stdout: r.stdout, stderr: r.stderr };
   }
 
-  /** Whether `path` exists there. */
-  exists(path: string): boolean {
-    return this.runSync(['test', '-e', path]).code === 0;
-  }
-
   /** Whether the host answers now. */
   async reachable(): Promise<boolean> {
     return (await this.run(['true'], { timeout: 20_000 })).code === 0;

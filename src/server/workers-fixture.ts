@@ -88,7 +88,11 @@ export function eachTest() {
       app: { run: 'Start it with `bun run stack`; after an API change, `bun run api:restart`. The URL is in `.stack.env` under WEB_URL.' },
     }),
   );
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+  afterEach(async () => {
+    // git freeing a workspace in the background is done before its repository goes
+    await workers?.freed();
+    rmSync(dir, { recursive: true, force: true });
+  });
 }
 
 export const manual = () => board.create({ title: 'Zählerstände exportieren', x: 0, y: 0 });

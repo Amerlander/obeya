@@ -26,7 +26,9 @@ beforeEach(() => {
   runtime = new FakeRuntime();
   canvas = open();
 });
-afterEach(() => {
+afterEach(async () => {
+  // git freeing a workspace in the background is done before its repository goes
+  await Promise.all(canvas.repos.map((r) => r.workers.freed()));
   canvas.shutdown();
   rmSync(dir, { recursive: true, force: true });
 });
@@ -35,6 +37,7 @@ afterEach(() => {
 const settle = async (ms = 5) => {
   await new Promise((r) => setTimeout(r, ms));
   await Promise.all(canvas.repos.map((r) => r.workers.prepared()));
+  await Promise.all(canvas.repos.map((r) => r.workers.freed()));
 };
 /** A plan doc lands on main, and Obeya reads it from there. */
 const landDoc = async (file: string, text: string) => {
@@ -937,6 +940,7 @@ describe('a prototype', () => {
     // approving a prototype is having seen enough: it is discarded
     canvas.act(prototype!.id, { action: 'approve' });
     expect(board().item(prototype!.id)).toBeUndefined();
+    await settle();
     expect(git(main, 'branch', '--list', branch)).toBe('');
     expect(git(ws, 'branch', '--list', branch)).toBe('');
     expect(canvas.repos[0]!.workspaces.leasedBy(prototype!.id)).toBeNull();
@@ -1054,7 +1058,7 @@ describe('a prototype', () => {
     explorer().emit({ type: 'idle' });
     explorer().emit({ type: 'idle' });
 
-    canvas.act(chosen!.id, { action: 'buildPrototype' });
+    await canvas.act(chosen!.id, { action: 'buildPrototype' });
     // the idea is the feature now, in the prototype's workspace, on its branch under the idea's name
     const built = item(i.id);
     expect(built).toMatchObject({ state: 'planned', body: '**Ziel:** CSV-Export.', builtOn: chosen!.id });
@@ -1072,6 +1076,7 @@ describe('a prototype', () => {
     // the other one is discarded with its code
     expect(wOther!.closed).toBe(true);
     expect(archived(other!.id)).toMatchObject({ prototypeEnd: 'discarded' });
+    await settle();
     expect(git(otherWs, 'branch', '--list', otherBranch)).toBe('');
     expect(prototypes(i.id)).toEqual([]);
     expect(board().decisions(null).at(-1)).toMatchObject({ card_id: i.id, answer: `So bauen, auf Prototyp „${chosen!.title}“.` });
@@ -1103,7 +1108,7 @@ describe('a prototype', () => {
     expect(item(prototype!.id).buildProposal).toBe('Der Owner hat den Knopf gewählt.');
     expect(board().snapshot().items.filter((x) => x.state === 'proposal')).toEqual([]);
     // accepting it is "Diesen Prototyp bauen"
-    canvas.act(prototype!.id, { action: 'buildPrototype' });
+    await canvas.act(prototype!.id, { action: 'buildPrototype' });
     expect(item(i.id)).toMatchObject({ state: 'planned', builtOn: prototype!.id });
     expect(archived(prototype!.id)!.buildProposal).toBeUndefined();
   });
@@ -1187,7 +1192,7 @@ describe('a prototype', () => {
     const ws = board().row(film!.id).workspace!;
     // once the other one is under way, the plan doc names the workstream to build on the prototype
     board().work(w3!.id, { branch: 'obeya/aufraeumen' });
-    canvas.act(film!.id, { action: 'buildPrototype' });
+    await canvas.act(film!.id, { action: 'buildPrototype' });
     // the workstream takes over the prototype's workspace and branch, and starts
     expect(item(w2!.id).builtOn).toBe(film!.id);
     expect(item(w2!.id).prototypes!.map((p) => p.id)).toEqual([film!.id]);
@@ -1216,6 +1221,7 @@ describe('a prototype', () => {
     const [prototype] = prototypes(i.id);
     canvas.remove(prototype!.id);
     expect(archived(prototype!.id)).toMatchObject({ prototypeEnd: 'discarded' });
+    await settle();
     expect(canvas.repos[0]!.workspaces.leasedBy(prototype!.id)).toBeNull();
     expect(() => canvas.act(i.id, { action: 'buildPrototype' })).toThrow('not a prototype');
   });
@@ -1401,7 +1407,7 @@ describe('by voice', () => {
     const tag = reader().inbox[0]!.match(/(K\d+) \[working\] "Prototyp/)![1];
     reader().call('act', { actions: [{ do: 'build', card: tag }], confirm: 'Die Idee wird auf diesem Prototyp gebaut.' });
     canvas.commander.arm((await heard).token!);
-    await settle(30);
+    await until(() => item(i.id).builtOn);
     expect(item(i.id)).toMatchObject({ builtOn: prototype.id });
   });
 
@@ -1427,7 +1433,8 @@ describe('by voice', () => {
     expect(list).toContain('build starts its workstream K');
     reader().call('act', { actions: [{ do: 'build', card: tag }], confirm: 'W1 wird auf diesem Prototyp gebaut.' });
     canvas.commander.arm((await heard).token!);
-    await settle(30);
+    await until(() => item(w1.id).builtOn);
+    await settle();
     expect(item(w1.id)).toMatchObject({ builtOn: prototype.id });
   });
 

@@ -502,7 +502,7 @@ export class FolderWorkspaces implements CardWorkspaces {
   }
 
   /** The folder is no pool: nothing to give back. */
-  abandon(): boolean {
+  async abandon(): Promise<boolean> {
     return false;
   }
 
@@ -535,7 +535,7 @@ export class FolderWorkspaces implements CardWorkspaces {
   }
 
   /** The card's work is over: its undo goes; what it changed stays its record. */
-  removeLanded(cardId: string) {
+  async removeLanded(cardId: string) {
     const rec = this.rec(cardId);
     if (!rec) return;
     this.save(cardId, { ...rec, held: undefined, done: true, undo: null });
@@ -543,13 +543,13 @@ export class FolderWorkspaces implements CardWorkspaces {
   }
 
   /** The card goes: its record and undo with it. */
-  discard(cardId: string) {
+  async discard(cardId: string) {
     if (!this.rec(cardId)) return;
     this.save(cardId, null);
     this.dropUndo(cardId);
   }
 
-  transfer(): { path: string; branch: string } {
+  async transfer(): Promise<{ path: string; branch: string }> {
     throw new WorkspaceError('a folder without git has no branch to build on');
   }
 

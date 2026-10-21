@@ -94,6 +94,17 @@ card names another workspace). A clone keeps the card's branch and the rest and 
 once clean; a worktree goes once nothing in it is uncommitted, its branch kept. A deleted card
 brought back with the undo takes its clone back if still free, else another at its next start.
 
+Giving a workspace back does not block the server either: in a large repository (a checkout of
+thousands of files) or over SSH, git takes a while to look into a worktree and remove it, to remove
+a landed card's worktree and branch, to put a discarded prototype's clone back on the main branch
+(its changes and branch thrown away), or to rename the branch of a prototype an idea is built on.
+Git does all of it in the background, one step after the other on the same workspace, and the
+workspace stays taken until git is done with it: no other card takes a clone half cleaned, and a
+card's worktree made again meanwhile is added once the old one is gone. The card itself moves at
+once (a discarded prototype into the archive, a deleted card off the canvas), and the pool shows the
+workspace free once git is through; a restart waits for git as for a landing. Landing finds the
+main branch the same way, without blocking.
+
 #### Slots
 
 Workers in clones are capped by slots, not clones: a slot is room for one busy worker (in a turn or
@@ -282,6 +293,10 @@ a container say, reuses pids). A host needs git, Claude Code and what the reposi
   freeing only on a card's normal path, which left stopped, ticked-off workstreams holding clones.
 - **An unreachable host fails fast** (2026-10-12): asking it on every look for a free clone (almost a
   minute with five clones there) left Obeya unresponsive while a card waited.
+- **Git frees workspaces in the background, the workspace taken until it is done** (2026-10-21):
+  removing a worktree, or a checkout back to the main branch in a discarded prototype's clone, held
+  the server on every canvas in a large repository or over SSH. Rejected: freeing the workspace first
+  and cleaning it afterwards (another card could take it half cleaned).
 - **Free clones are chosen by their last look, the one taken looked at again** (2026-10-21): in a
   large repository (GitHub issue #2: 9,188 files, on Windows) or over SSH, `git status` in every free
   clone at each look held the server, on every canvas. Rejected: asking git while choosing; a start

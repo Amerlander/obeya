@@ -229,7 +229,7 @@ describe('clones on a host', () => {
     git(local, 'commit', '--quiet', '-m', 'far work');
     const landed = await spaces.pushToMain(b);
     expect('to' in landed && git(origin, 'log', '-1', '--format=%s', 'main')).toBe('far work');
-    spaces.discard(b, 'obeya/b');
+    await spaces.discard(b, 'obeya/b');
     expect(git(local, 'branch', '--list', 'obeya/b')).toBe('');
     // many git calls, each through the stand-in for ssh
   }, 30_000);

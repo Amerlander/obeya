@@ -156,6 +156,16 @@ function asBadRequest<T>(f: () => T): T {
   }
 }
 
+/** `asBadRequest` for what settles later. */
+async function asBadRequestAsync<T>(p: Promise<T>): Promise<T> {
+  try {
+    return await p;
+  } catch (e) {
+    if (e instanceof WorkspaceError) throw new BadRequest(e.code, e.message);
+    throw e;
+  }
+}
+
 /** The questions of a proposal (`propose_card`, `revise_proposal`) as the agent gives them. */
 export const PROPOSAL_QUESTIONS = z.array(z.object({ question: z.string(), options: z.array(z.string()).max(4).optional(), multiple: z.boolean().optional() })).max(5);
 
@@ -486,6 +496,11 @@ export class Workers {
   private settling = false;
   /** Worktrees their cards are done with that still hold uncommitted changes: they stay (`settleLeases`). */
   private kept = new Set<string>();
+  /**
+   * Workspaces git is freeing now (a landed card's, a discarded prototype's, one its card is done
+   * with), by path, with the card that held them: the server answers meanwhile, and a restart waits.
+   */
+  private freeing = new Map<string, { card: string; done: Promise<void> }>();
   /** Cards with comments on places in the demo video held back: when they go to the worker without the owner's sign. */
   private holding = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -1288,20 +1303,16 @@ export class Workers {
     this.bump(cardId);
     const row = this.o.board.row(cardId);
     const worktree = this.inWorktree(cardId);
-    const free = () => {
-      if (worktree) this.removeTree(row.workspace);
-      else
-        try {
-          this.o.workspaces.removeLanded(cardId, row.branch ?? '');
-        } catch (e) {
-          // the card is done either way; a leftover worktree does no harm
-          console.error('freeing a landed workspace:', e);
-        }
-    };
     // the plan docs its branch adds are read before its workspace goes
     const reading = this.reading.get(cardId);
-    if (reading) void reading.finally(free);
-    else free();
+    if (worktree) {
+      if (reading) void reading.finally(() => this.removeTree(row.workspace));
+      else this.removeTree(row.workspace);
+    } else if (row.workspace) {
+      const removeLanded = () => this.o.workspaces.removeLanded(cardId, row.branch ?? '');
+      // the card is done either way; a leftover worktree does no harm
+      this.whileFreeing(cardId, row.workspace, reading ? reading.catch(() => {}).then(removeLanded) : removeLanded(), 'freeing a landed workspace');
+    }
     const landed = landedOf(row);
     this.o.board.work(cardId, { landed: null, workspace: null, status_line: null, parked: null, paused: null, snoozed: null, app: null, ...(row.state === 'waiting' ? { state: landed?.unchanged ? 'done' : 'live', need: null, detail: null } : {}) });
     this.o.board.workDone(cardId);
@@ -1322,7 +1333,8 @@ export class Workers {
   /**
    * A prototype has served its purpose, whatever its state: its worker stops and the card goes into
    * the archive with its log, demo and summary. Discarded, its workspace and branch are thrown away;
-   * built, they went to its idea, or the workstream `into`, before (`buildOn`).
+   * built, they went to its idea, or the workstream `into`, before (`buildOn`). Git cleans the
+   * workspace in the background; it is free once git is done.
    */
   endPrototype(cardId: string, end: 'discarded' | 'built', by: 'owner' | 'obeya' = 'owner', into?: string) {
     const card = this.card(cardId);
@@ -1331,12 +1343,10 @@ export class Workers {
     this.end(cardId);
     this.bump(cardId);
     this.o.board.work(cardId, { paused: null, snoozed: null });
-    try {
-      this.o.workspaces.discard(cardId, this.o.board.row(cardId).branch ?? '');
-    } catch (e) {
-      // the card goes anyway; a leftover worktree does no harm
-      console.error('discarding a prototype:', e);
-    }
+    const workspace = this.o.workspaces.leasedBy(cardId);
+    const { branch } = this.o.board.row(cardId);
+    // the card goes anyway, its workspace once git has cleaned it; a leftover worktree does no harm
+    if (workspace) this.whileFreeing(cardId, workspace, this.o.workspaces.discard(cardId, branch ?? ''), 'discarding a prototype');
     const idea = this.o.board.card(card.prototypeOf);
     const t = this.o.board.t.worker;
     this.o.board.log(cardId, 'state', by, end === 'discarded' ? t.prototypeDiscarded : into ? t.prototypeBuiltInto(into) : t.prototypeBuilt(idea?.title ?? ''));
@@ -1346,15 +1356,18 @@ export class Workers {
 
   /**
    * The idea, or the workstream `into` names of the project it became, is built on this prototype:
-   * its workspace and branch (renamed for that card) go to the card, and the prototype ends as
-   * built. Returns the workspace and branch the card has now.
+   * its workspace and branch (renamed for that card) go to the card, which names them before the
+   * prototype ends as built (a lease its card does not name is freed). Settles with the workspace
+   * and branch the card has now, once git has renamed the branch.
    */
-  buildOn(prototypeId: string, idea: Item, into?: string): { path: string; branch: string } {
+  buildOn(prototypeId: string, idea: Item, into?: string): Promise<{ path: string; branch: string }> {
     const { workspace, branch } = this.o.board.row(prototypeId);
     if (!workspace || !branch) throw new BadRequest('noWorkspace', 'the prototype has no workspace to build on');
-    const moved = asBadRequest(() => this.o.workspaces.transfer(prototypeId, idea.id, branch, branchName(idea.title, idea.id)));
-    this.endPrototype(prototypeId, 'built', 'owner', into);
-    return moved;
+    return asBadRequestAsync(this.o.workspaces.transfer(prototypeId, idea.id, branch, branchName(idea.title, idea.id))).then((moved) => {
+      this.o.board.work(idea.id, { workspace: moved.path, branch: moved.branch, built_on: prototypeId });
+      this.endPrototype(prototypeId, 'built', 'owner', into);
+      return moved;
+    });
   }
 
   /**
@@ -1735,29 +1748,50 @@ export class Workers {
   private settleLeases() {
     if (this.folder) return;
     for (const { path, card_id: id } of this.o.workspaces.list()) {
-      // a workspace being made ready is freed once git is done
-      if (!id || this.kept.has(path) || this.preparing.has(id)) continue;
+      // a workspace being made ready is freed once git is done, and so is one git is freeing
+      if (!id || this.kept.has(path) || this.preparing.has(id) || this.freeing.has(path)) continue;
       const ended = this.o.board.leaseEnded(id, path);
       if (!ended) continue;
       if (ended === 'merged') {
         this.merged(id, undefined, this.o.board.t.worker.mergedTicked);
         continue;
       }
-      let freed = false;
-      try {
-        freed = this.o.workspaces.abandon(path);
-      } catch (e) {
-        console.error('freeing the workspace of a card done with it:', e);
-      }
-      // a worktree with uncommitted changes stays, and is not looked at again until Obeya starts anew
-      if (!freed) {
-        this.kept.add(path);
-        continue;
-      }
-      this.o.board.freed(id, path);
-      if (ended === 'ticked') this.o.board.log(id, 'state', 'obeya', this.o.board.t.worker.tickedFreed);
-      if (ended === 'gone') this.o.board.log(id, 'state', 'obeya', this.o.board.t.worker.goneFreed);
+      const abandoned = this.o.workspaces.abandon(path).then(
+        (freed) => {
+          // a worktree with uncommitted changes stays, and is not looked at again until Obeya starts anew
+          if (!freed) return void this.kept.add(path);
+          this.o.board.freed(id, path);
+          if (ended === 'ticked') this.o.board.log(id, 'state', 'obeya', this.o.board.t.worker.tickedFreed);
+          if (ended === 'gone') this.o.board.log(id, 'state', 'obeya', this.o.board.t.worker.goneFreed);
+        },
+        (e: unknown) => {
+          console.error('freeing the workspace of a card done with it:', e);
+          this.kept.add(path);
+        },
+      );
+      this.whileFreeing(id, path, abandoned, 'freeing the workspace of a card done with it');
     }
+  }
+
+  /**
+   * Git frees the card's workspace at `path` in the background (`freeing`): the board changes once
+   * it is done, the pool having a workspace more. What goes wrong is logged under `what`.
+   */
+  private whileFreeing(cardId: string, path: string, done: Promise<unknown>, what: string) {
+    const freeing: { card: string; done: Promise<void> } = { card: cardId, done: Promise.resolve() };
+    freeing.done = done
+      .then(() => {})
+      .catch((e: unknown) => console.error(`${what}:`, e))
+      .finally(() => {
+        if (this.freeing.get(path) === freeing) this.freeing.delete(path);
+        this.o.board.changed();
+      });
+    this.freeing.set(path, freeing);
+  }
+
+  /** Settles once the workspaces git is freeing now are free: for tests, as `prepared`. */
+  async freed(): Promise<void> {
+    while (this.freeing.size) await Promise.all([...this.freeing.values()].map((f) => f.done));
   }
 
   /** A deleted card is restored: it takes back the workspace it had, where it can; else its next start takes another. */
@@ -1816,10 +1850,10 @@ export class Workers {
 
   /**
    * The cards whose worker is in the middle of a turn (or whose ended turn waits for its background
-   * work), and those whose workspace is being made ready or whose work is landing: a restart would cut off git midway.
+   * work), and those whose workspace is being made ready or freed or whose work is landing: a restart would cut off git midway.
    */
   busyCards(): string[] {
-    return [...new Set([...this.inTurn(), ...this.landing])];
+    return [...new Set([...this.inTurn(), ...this.landing, ...[...this.freeing.values()].map((f) => f.card)])];
   }
 
   /**

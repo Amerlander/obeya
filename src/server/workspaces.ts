@@ -97,13 +97,10 @@ function mayExist(path: string): boolean {
   }
 }
 
-/** Whether a workspace's directory exists, here or on its host (where an unreachable host counts as no). */
-export function exists(path: string): boolean {
-  const there = remoteWorkspace(path);
-  return there ? there.host.exists(there.path) : existsSync(path);
-}
-
-/** `exists` without blocking: for a workspace on another machine, asking its host is a round trip over SSH. */
+/**
+ * Whether a workspace's directory exists, here or on its host (where an unreachable host counts as
+ * no); without blocking the server, since for a workspace on another machine it asks over SSH.
+ */
 async function existsAsync(path: string): Promise<boolean> {
   const there = remoteWorkspace(path);
   return there ? (await there.host.run(['test', '-e', there.path])).code === 0 : existsSync(path);
@@ -335,15 +332,15 @@ export interface CardWorkspaces {
   pool(busy: string[]): PoolHost[];
   hasWork(cardId: string): Promise<boolean>;
   release(cardId: string): void;
-  abandon(path: string): boolean;
+  abandon(path: string): Promise<boolean>;
   retake(cardId: string, path: string): boolean;
   forkPoint(cardId: string): Promise<{ ws: string; base: string } | null>;
   addedFiles(cardId: string, dir: string): Promise<string[]>;
   landOnMain(cardId: string, branch: string, trailer?: string): Promise<LandProblem | Landed>;
   pushToMain(cardId: string, trailer?: string): Promise<LandProblem | Landed>;
-  removeLanded(cardId: string, branch: string): void;
-  discard(cardId: string, branch: string): void;
-  transfer(from: string, to: string, branch: string, rename?: string): { path: string; branch: string };
+  removeLanded(cardId: string, branch: string): Promise<void>;
+  discard(cardId: string, branch: string): Promise<void>;
+  transfer(from: string, to: string, branch: string, rename?: string): Promise<{ path: string; branch: string }>;
   followUpTree(cardId: string, branch: string): Lease;
   removeFollowUpTree(path: string): Promise<void>;
   changes(cardId: string): Promise<Change[]>;
@@ -402,6 +399,11 @@ export class Workspaces implements CardWorkspaces {
   private failed = new Map<string, number>();
   /** Follow-ups' temporary worktrees git is adding, by path: removing one waits for it. */
   private trees = new Map<string, Promise<void>>();
+  /**
+   * What git does now to a card's workspace as it is freed, discarded or handed over, by path
+   * (`clearing`): in the background, one after the other on the same workspace.
+   */
+  private clears = new Map<string, Promise<unknown>>();
 
   constructor(
     private store: Store,
@@ -843,21 +845,36 @@ export class Workspaces implements CardWorkspaces {
    * its workstream done without it), losing nothing: a clone keeps the card's branch and whatever
    * else it holds, and is free for other cards (one with uncommitted changes takes none until it is
    * clean); a clean worktree goes and its branch stays, a worktree with uncommitted changes stays as
-   * it is (it takes no slot). Returns whether it freed it.
+   * it is (it takes no slot). Settles with whether it freed it: once git is done with the worktree,
+   * and with what else git does to the workspace now (a discarded prototype's clone cleaned), so
+   * that no other card takes it half cleaned. One freed meanwhile counts as freed.
    */
-  abandon(path: string): boolean {
-    // one git is still making ready is freed once git is done
-    if (this.list().some((w) => w.path === path && w.card_id && this.preparing.has(w.card_id))) return false;
-    if (this.cloned(path)) {
-      this.free(path);
+  abandon(path: string): Promise<boolean> {
+    return this.clearing(path, async () => {
+      const by = this.list().find((w) => w.path === path)?.card_id;
+      if (!by) return true;
+      // one git is still making ready is freed once git is done
+      if (this.preparing.has(by)) return false;
+      if (this.cloned(path)) {
+        this.free(path);
+        return true;
+      }
+      if (existsSync(path)) {
+        if ((await gitAsync(path, 'status', '--porcelain').catch(() => null)) !== '') return false;
+        if ((await gitAsync(this.o.repoPath, 'worktree', 'remove', path).catch(() => null)) === null) return false;
+      }
+      this.store.removeWorkspace(path);
       return true;
-    }
-    if (existsSync(path)) {
-      if (gitOrNull(path, 'status', '--porcelain') !== '') return false;
-      if (gitOrNull(this.o.repoPath, 'worktree', 'remove', path) === null) return false;
-    }
-    this.store.removeWorkspace(path);
-    return true;
+    });
+  }
+
+  /**
+   * Runs `fn`, git's work on the workspace at `path` that frees, discards or hands it over, once
+   * what git does there already is through: without blocking the server, which in a large
+   * repository (a checkout of thousands of files) or over SSH would answer nothing meanwhile.
+   */
+  private clearing<T>(path: string, fn: () => Promise<T>): Promise<T> {
+    return oneAtATime(this.clears, path, fn);
   }
 
   /** A deleted card restored takes back the clone it had, while that one is still free; a worktree is made again on its branch. */
@@ -908,8 +925,8 @@ export class Workspaces implements CardWorkspaces {
     const ws = this.leasedBy(cardId);
     if (!ws) return { code: 'land', worker: false, detail: 'the card has no workspace' };
     try {
-      const base = this.main(ws);
-      const problem = await rebased(ws, base, this.upstream(ws, base));
+      const base = await this.mainAsync(ws);
+      const problem = await rebased(ws, base, this.cloned(ws) ? `origin/${base}` : base);
       if (problem) return problem;
       await withTrailer(ws, trailer);
       if ((await gitAsync(this.o.repoPath, 'branch', '--show-current')) !== base) return { code: 'landCheckout', worker: false, detail: `the Obeya checkout is not on ${base}` };
@@ -948,7 +965,7 @@ export class Workspaces implements CardWorkspaces {
       let base: string;
       let from: string;
       try {
-        base = this.main(ws);
+        base = await this.mainAsync(ws);
         const upstream = `origin/${base}`;
         const problem = await rebased(ws, base, upstream);
         if (problem) return problem;
@@ -972,61 +989,75 @@ export class Workspaces implements CardWorkspaces {
   /**
    * Frees the workspace of work that has landed, once its worker is done: a worktree and its
    * branch are removed (a branch with commits that never landed stays), a clone is free again.
+   * Settles once git is done; the card's worktree made again meanwhile waits for it.
    */
-  removeLanded(cardId: string, branch: string) {
+  async removeLanded(cardId: string, branch: string): Promise<void> {
     const ws = this.leasedBy(cardId);
     if (!ws) return;
     if (this.cloned(ws)) return this.release(cardId);
     this.store.removeWorkspace(ws);
-    if (existsSync(ws)) git(this.o.repoPath, 'worktree', 'remove', '--force', ws);
-    try {
-      if (git(this.o.repoPath, 'branch', '--list', branch)) git(this.o.repoPath, 'branch', '--quiet', '-d', branch);
-    } catch (e) {
-      console.error(`keeping branch ${branch}:`, e instanceof Error ? e.message : e);
-    }
+    await this.clearing(ws, async () => {
+      if (existsSync(ws)) await gitAsync(this.o.repoPath, 'worktree', 'remove', '--force', ws);
+      try {
+        if (await gitAsync(this.o.repoPath, 'branch', '--list', branch)) await gitAsync(this.o.repoPath, 'branch', '--quiet', '-d', branch);
+      } catch (e) {
+        console.error(`keeping branch ${branch}:`, messageOf(e));
+      }
+    });
   }
 
   /**
    * Throws the card's work away: a prototype never lands. A worktree and its branch are
-   * removed; a clone goes back to its default branch, without the card's branch, and is free again.
+   * removed; a clone goes back to its default branch, without the card's branch, and is free again
+   * once git is done there (where git fails, it stays the card's). Settles once git is done.
    */
-  discard(cardId: string, branch: string) {
+  async discard(cardId: string, branch: string): Promise<void> {
     const ws = this.leasedBy(cardId);
     if (!ws) return;
     if (!this.cloned(ws)) {
       this.store.removeWorkspace(ws);
-      if (existsSync(ws)) git(this.o.repoPath, 'worktree', 'remove', '--force', ws);
-      if (git(this.o.repoPath, 'branch', '--list', branch)) git(this.o.repoPath, 'branch', '--quiet', '-D', branch);
-      return;
+      return this.clearing(ws, async () => {
+        if (existsSync(ws)) await gitAsync(this.o.repoPath, 'worktree', 'remove', '--force', ws);
+        if (await gitAsync(this.o.repoPath, 'branch', '--list', branch)) await gitAsync(this.o.repoPath, 'branch', '--quiet', '-D', branch);
+      });
     }
-    if (exists(ws)) {
-      git(ws, 'reset', '--quiet', '--hard');
-      git(ws, 'clean', '--quiet', '-fd');
-      git(ws, 'checkout', '--quiet', '--detach', `origin/${this.main(ws)}`);
-      if (git(ws, 'branch', '--list', branch)) git(ws, 'branch', '--quiet', '-D', branch);
-    }
-    this.release(cardId);
+    await this.clearing(ws, async () => {
+      // handed over or given back while git was busy with it before
+      if (this.leasedBy(cardId) !== ws) return;
+      if (await existsAsync(ws)) {
+        await gitAsync(ws, 'reset', '--quiet', '--hard');
+        await gitAsync(ws, 'clean', '--quiet', '-fd');
+        await gitAsync(ws, 'checkout', '--quiet', '--detach', `origin/${await this.mainAsync(ws)}`);
+        if (await gitAsync(ws, 'branch', '--list', branch)) await gitAsync(ws, 'branch', '--quiet', '-D', branch);
+      }
+      this.release(cardId);
+    });
   }
 
   /**
    * Hands card `from`'s workspace and branch to card `to`, which goes on with the work there (an
    * idea built on its prototype). The branch is renamed to `rename` when that name is free; the
-   * worktree keeps its directory. Returns the workspace and the branch as they are now.
+   * worktree keeps its directory. Settles with the workspace and the branch as they are now, once
+   * git has renamed it; the workspace stays `from`'s until then.
    */
-  transfer(from: string, to: string, branch: string, rename?: string): { path: string; branch: string } {
+  async transfer(from: string, to: string, branch: string, rename?: string): Promise<{ path: string; branch: string }> {
     const path = this.leasedBy(from);
     if (!path) throw new WorkspaceError('the card has no workspace', 'noWorkspace');
-    if (this.preparing.has(from)) throw new WorkspaceError('git is still preparing the workspace of the card it comes from');
-    if (this.leasedBy(to)) throw new WorkspaceError('the card it goes to has a workspace of its own');
-    // in a worktree the branch lives in the Obeya checkout, in a clone in the clone
-    const repo = this.cloned(path) ? path : this.o.repoPath;
-    let now = branch;
-    if (rename && rename !== branch && !git(repo, 'branch', '--list', rename)) {
-      git(repo, 'branch', '-m', branch, rename);
-      now = rename;
-    }
-    this.store.setLease(path, to);
-    return { path, branch: now };
+    return this.clearing(path, async () => {
+      // handed over or given back while git was busy with it before
+      if (this.leasedBy(from) !== path) throw new WorkspaceError('the card has no workspace', 'noWorkspace');
+      if (this.preparing.has(from)) throw new WorkspaceError('git is still preparing the workspace of the card it comes from');
+      if (this.leasedBy(to)) throw new WorkspaceError('the card it goes to has a workspace of its own');
+      // in a worktree the branch lives in the Obeya checkout, in a clone in the clone
+      const repo = this.cloned(path) ? path : this.o.repoPath;
+      let now = branch;
+      if (rename && rename !== branch && !(await gitAsync(repo, 'branch', '--list', rename))) {
+        await gitAsync(repo, 'branch', '-m', branch, rename);
+        now = rename;
+      }
+      this.store.setLease(path, to);
+      return { path, branch: now };
+    });
   }
 
   /**
@@ -1125,14 +1156,6 @@ export class Workspaces implements CardWorkspaces {
   }
 
   /**
-   * The main branch as a workspace sees it: the repository's for a worktree; for a clone the one the
-   * owner set for the repository, else the one its `origin` has.
-   */
-  private main(ws: string): string {
-    return branchSetting(this.o.repoPath) || defaultBranch(this.cloned(ws) ? ws : this.o.repoPath);
-  }
-
-  /**
    * The commit the card's own work starts from: where its branch left the nearest branch that is not
    * a card's, which is the main branch or a long-lived branch the card was built on. Measured
    * against the main branch alone, a card on a branch hundreds of commits ahead of it counted all
@@ -1164,19 +1187,18 @@ export class Workspaces implements CardWorkspaces {
     }
   }
 
-  /** `main` without blocking: finding a clone's main branch asks git, over SSH for a clone on another machine. */
+  /**
+   * The main branch as a workspace sees it: the repository's for a worktree; for a clone the one the
+   * owner set for the repository, else the one its `origin` has. Without blocking: finding a clone's
+   * main branch asks git, over SSH for a clone on another machine.
+   */
   private async mainAsync(ws: string): Promise<string> {
     return branchSetting(this.o.repoPath) || (await gitSteps(this.cloned(ws) ? ws : this.o.repoPath, detectingBranch()));
   }
 
-  /** `upstream` without blocking. */
+  /** The branch the workspace's work goes onto as the workspace has it: the main branch itself in a worktree, `origin`'s copy in a clone. */
   private async upstreamAsync(ws: string): Promise<string> {
     const main = await this.mainAsync(ws);
-    return this.cloned(ws) ? `origin/${main}` : main;
-  }
-
-  /** The branch the workspace's work goes onto as the workspace has it: the main branch itself in a worktree, `origin`'s copy in a clone. */
-  private upstream(ws: string, main = this.main(ws)): string {
     return this.cloned(ws) ? `origin/${main}` : main;
   }
 
@@ -1267,16 +1289,23 @@ export class Workspaces implements CardWorkspaces {
     await removeTree(path);
   }
 
-  /** The card's worktree, leased at once; added in the background, where it does not exist yet (in a large repository that takes a minute). */
+  /**
+   * The card's worktree, leased at once; added in the background, where it does not exist yet (in a
+   * large repository that takes a minute), or once git has removed the one it had before.
+   */
   private leaseWorktree(cardId: string, branch: string): Lease {
     const path = join(this.o.dir, cardId.slice(0, 8));
     this.store.addWorkspace(this.canvasId, path, this.o.repo ?? null);
     this.store.setLease(path, cardId);
-    if (existsSync(path)) return { path, ready: null };
+    const removing = this.clears.get(path);
+    if (!removing && existsSync(path)) return { path, ready: null };
     return this.prepare(
       cardId,
       path,
       async () => {
+        await removing;
+        // one git failed to remove is the card's again
+        if (existsSync(path)) return path;
         mkdirSync(this.o.dir, { recursive: true });
         if ((await gitAsync(this.o.repoPath, 'branch', '--list', branch)) !== '') await gitAsync(this.o.repoPath, 'worktree', 'add', '--quiet', path, branch);
         else await gitAsync(this.o.repoPath, 'worktree', 'add', '--quiet', '-b', branch, path, await this.mainAsync(this.o.repoPath));

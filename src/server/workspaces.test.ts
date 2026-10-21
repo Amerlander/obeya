@@ -113,6 +113,49 @@ describe('free clones', () => {
   });
 });
 
+describe('a workspace git frees', () => {
+  const setup = (mode: 'clones' | 'worktrees') => {
+    const repo = gitRepo(join(dir, 'repo'));
+    const store = new Store(':memory:');
+    const board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: repo, branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
+    const spaces = new Workspaces(store, 'c', { mode, repoPath: repo, dir: join(dir, 'ws') });
+    if (mode === 'clones') spaces.ensureClones(repo, 1);
+    return { repo, spaces, card: (title: string) => board.create({ title, x: 0, y: 0 }).id };
+  };
+
+  test('a discarded clone is no other card’s until git has cleaned it; freeing it meanwhile waits for git', async () => {
+    const { spaces, card } = setup('clones');
+    const a = card('A');
+    const { path, ready } = spaces.lease(a, 'obeya/a');
+    await ready;
+    writeFileSync(join(path, 'draft.txt'), 'x');
+    const discarded = spaces.discard(a, 'obeya/a');
+    const abandoned = spaces.abandon(path);
+    expect(spaces.leasedBy(a)).toBe(path);
+    expect(() => spaces.lease(card('B'), 'obeya/b')).toThrow(expect.objectContaining({ code: 'noWorkspace' }));
+    await discarded;
+    expect(await abandoned).toBe(true);
+    expect(spaces.list()).toEqual([{ path, card_id: null }]);
+    expect(existsSync(join(path, 'draft.txt'))).toBe(false);
+    expect(git(path, 'branch', '--list', 'obeya/a')).toBe('');
+  });
+
+  test("a card's worktree made again while git removes the one it had is added once git is done", async () => {
+    const { repo, spaces, card } = setup('worktrees');
+    const a = card('A');
+    const first = spaces.lease(a, 'obeya/a');
+    await first.ready;
+    const removed = spaces.removeLanded(a, 'obeya/a');
+    const again = spaces.lease(a, 'obeya/a');
+    expect(again.path).toBe(first.path);
+    expect(again.ready).not.toBeNull();
+    await removed;
+    expect(await again.ready!).toBe(first.path);
+    expect(git(again.path, 'branch', '--show-current')).toBe('obeya/a');
+    expect(git(repo, 'worktree', 'list').split('\n')).toHaveLength(2);
+  });
+});
+
 describe("a follow-up's temporary worktree", () => {
   test("is at origin's copy of the card's branch where no clone here holds it, else at the default branch, and goes without a trace", async () => {
     const origin = gitRepo(join(dir, 'origin'));

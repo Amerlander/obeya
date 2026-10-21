@@ -358,7 +358,7 @@ describe('a prototype built on in a clone', () => {
     writeFileSync(join(path, 'logo.svg'), '<svg/>');
     git(path, 'add', '.');
     git(path, 'commit', '--quiet', '-m', 'Prototyp');
-    const moved = workers.buildOn(prototype.id, board.item(idea.id)!);
+    const moved = await workers.buildOn(prototype.id, board.item(idea.id)!);
     expect(moved.path).toBe(path);
     expect(git(path, 'branch', '--show-current')).toBe(moved.branch);
     expect(git(path, 'branch', '--list', old)).toBe('');
@@ -681,6 +681,7 @@ describe('a workspace its card will not work in again goes back to the pool', ()
     store.update(c.id, { state: 'done', landed: null });
     expect(spaces.leasable()).toBe(false);
     const fresh = restart();
+    await flush();
     expect(spaces.leasedBy(c.id)).toBeNull();
     expect(fresh.row(c.id).workspace).toBeNull();
     expect(spaces.leasable()).toBe(true);

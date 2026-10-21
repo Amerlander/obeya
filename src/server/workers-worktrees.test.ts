@@ -11,7 +11,8 @@ import { GIT, git, gitOrNull } from './workspaces';
 eachTest();
 
 describe('a worktree per card', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await workers?.freed();
     rmSync(dir, { recursive: true, force: true });
     setup({ ...generic, land: 'main', workspaces: 'worktrees' });
   });
@@ -115,6 +116,7 @@ describe('a worktree per card', () => {
       session.emit({ type: 'idle' });
     }
     // B was rebased onto A before the fast-forward
+    await workers.freed();
     expect(git(main, 'log', '--format=%s', '-3').split('\n')).toEqual(['B', 'A', 'init']);
     expect(git(main, 'worktree', 'list').split('\n')).toHaveLength(1);
     expect(git(main, 'branch', '--list', 'obeya/*')).toBe('');
@@ -201,7 +203,7 @@ describe('a worktree per card', () => {
     const path = board.row(prototype.id).workspace!;
     const old = board.row(prototype.id).branch!;
     commitIn(path, 'logo.svg', 'Prototyp Wortmarke');
-    const moved = workers.buildOn(prototype.id, board.item(idea.id)!);
+    const moved = await workers.buildOn(prototype.id, board.item(idea.id)!);
     // the worktree stays where it is; its branch now has the idea's name
     expect(moved.path).toBe(path);
     expect(moved.branch).toMatch(/^obeya\/logo-/);
@@ -224,6 +226,7 @@ describe('a worktree per card', () => {
     expect(state(idea.id)).toBe('live');
     session.emit({ type: 'idle' });
     // the prototype's commits are part of what landed; worktree and branch are gone
+    await workers.freed();
     expect(git(main, 'log', '--format=%s', '-3').split('\n')).toEqual(['Logo mit Tests', 'Prototyp Wortmarke', 'init']);
     expect(git(main, 'worktree', 'list').split('\n')).toHaveLength(1);
     expect(git(main, 'branch', '--list', 'obeya/*')).toBe('');
@@ -403,6 +406,7 @@ describe('a worktree per card', () => {
     s.emit({ type: 'idle' });
     expect(s.closed).toBe(true);
     expect(board.item(c.id)!.finishing).toBeUndefined();
+    await workers.freed();
     expect(board.row(c.id).workspace).toBeNull();
     expect(git(main, 'worktree', 'list').split('\n')).toHaveLength(1);
     expect(git(main, 'branch', '--list', branch)).toBe('');
@@ -609,6 +613,7 @@ describe('a worktree per card', () => {
     expect(resumed.closed).toBe(true);
     expect(board.row(c.id).workspace).toBeNull();
     expect(board.row(c.id).landed).toBeNull();
+    await after.freed();
   });
 
   test('approving work without commits lands nothing: the card is done, main untouched, worktree and branch go', async () => {
@@ -622,6 +627,7 @@ describe('a worktree per card', () => {
     expect(state(c.id)).toBe('done');
     expect(git(main, 'log', '--format=%s', '-1')).toBe('init');
     s.emit({ type: 'idle' });
+    await workers.freed();
     expect(s.closed).toBe(true);
     expect(git(main, 'worktree', 'list').split('\n')).toHaveLength(1);
     expect(git(main, 'branch', '--list', branch)).toBe('');
@@ -662,6 +668,7 @@ describe('a worktree per card', () => {
     await workers.stop(c.id);
     expect(state(c.id)).toBe('live');
     expect(runtime.last.closed).toBe(true);
+    await workers.freed();
     expect(board.row(c.id).workspace).toBeNull();
     expect(git(main, 'worktree', 'list').split('\n')).toHaveLength(1);
   });
@@ -745,6 +752,7 @@ describe('a worktree per card', () => {
     resumed.emit({ type: 'idle' });
     expect(resumed.closed).toBe(true);
     expect(board.row(c.id).workspace).toBeNull();
+    await after.freed();
   });
 
   test('after the landing, a worker waiting for a deploy in the background keeps its workspace until the watcher wakes it', async () => {
@@ -875,6 +883,7 @@ describe('a worktree per card', () => {
     await workers.stop(a.id);
     board.remove(a.id);
     await flush();
+    await workers.freed();
     expect(existsSync(wa)).toBe(false);
     expect(spaces.leasedBy(a.id)).toBeNull();
     expect(git(main, 'branch', '--list', branch)).toContain(branch);

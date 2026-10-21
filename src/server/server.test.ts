@@ -1246,6 +1246,103 @@ describe('the Lesestand and the free clones', () => {
   }, 15_000);
 });
 
+describe('freeing and discarding workspaces', () => {
+  test('while git frees a worktree or cleans a discarded prototype’s clone, slowly, the server answers; the workspace is free once git is done', async () => {
+    const marks = join(dir, 'marks');
+    mkdirSync(marks);
+    // git that takes its time (a large repository, a clone on another machine): it goes on once the test lets it
+    const slow = (mark: string, then: string) => {
+      const script = join(dir, `slow-${mark}`);
+      writeFileSync(script, `#!/bin/sh\ntouch '${join(marks, mark)}'\nwhile [ ! -e '${join(marks, `${mark}.go`)}' ]; do sleep 0.05; done\n${then}\n`, { mode: 0o755 });
+      return script;
+    };
+    const go = (mark: string) => writeFileSync(join(marks, `${mark}.go`), '');
+    const hold = (mark: string) => {
+      rmSync(join(marks, `${mark}.go`), { force: true });
+      rmSync(join(marks, mark), { force: true });
+    };
+    go('checkout');
+    go('status');
+    // a prototype in the pool's only clone, and a card in a worktree of its own
+    const origin = gitRepo(join(dir, 'shop'), { 'guide.md': 'Guide\n', '.gitattributes': '*.md filter=slow\n' });
+    const shop = new CanvasRuntime(
+      { name: 'Shop', repos: [{ path: origin, clones: 1, settings: { land: 'pr', workspaces: 'clones' } }] },
+      { store: new Store(':memory:'), home: join(dir, 'home-shop'), runtime, forge: noForge },
+    );
+    const tools = new CanvasRuntime(
+      { name: 'Tools', repos: [{ path: gitRepo(join(dir, 'tools')), settings: { land: 'main', workspaces: 'worktrees' } }] },
+      { store: new Store(':memory:'), home: join(dir, 'home-tools'), runtime, forge: noForge },
+    );
+    const [clone] = shop.repos[0]!.workspaces.list();
+    // writing a file of the default branch back into the clone, and `git status` in the worktree, wait for the test
+    git(clone!.path, 'config', 'filter.slow.smudge', slow('checkout', 'cat'));
+    git(clone!.path, 'config', 'filter.slow.clean', 'cat');
+    git(tools.repos[0]!.ref.path, 'config', 'core.fsmonitor', slow('status', 'exit 1'));
+    server.stop(true);
+    server = serve([canvas, shop, tools], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0);
+    const answers = async () => {
+      for (const c of [shop, tools, canvas]) {
+        const before = Date.now();
+        expect((await fetch(new URL(`/api/c/${c.board.canvas.id}/canvas`, server.url))).status).toBe(200);
+        expect(Date.now() - before).toBeLessThan(1000);
+      }
+    };
+
+    // the prototype changed the guide on its branch; discarded, its clone goes back to the default branch
+    const idea = shop.board.create({ idea: true, title: 'Export', x: 0, y: 0 });
+    const prototype = shop.board.addPrototype(idea.id, 'Prototype: Export – button', 'Button');
+    await shop.repos[0]!.workers.start(prototype.id);
+    await shop.repos[0]!.workers.prepared();
+    writeFileSync(join(clone!.path, 'guide.md'), 'Guide with a button\n');
+    identify(clone!.path);
+    git(clone!.path, 'commit', '--quiet', '-am', 'Button');
+    hold('checkout');
+    const discarding = Date.now();
+    const discarded = await fetch(new URL(`/api/c/${shop.board.canvas.id}/cards/${prototype.id}/act`, server.url), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'discard' }),
+    });
+    expect(discarded.ok).toBe(true);
+    expect(Date.now() - discarding).toBeLessThan(1000);
+    expect(shop.board.archived().find((i) => i.id === prototype.id)).toMatchObject({ prototypeEnd: 'discarded' });
+    await until(() => existsSync(join(marks, 'checkout')));
+    await answers();
+    // half cleaned, the clone is no other card's yet
+    expect(shop.repos[0]!.workspaces.list()).toEqual([{ path: clone!.path, card_id: prototype.id }]);
+    expect(shop.repos[0]!.workspaces.leasable()).toBe(false);
+    go('checkout');
+    await shop.repos[0]!.workers.freed();
+    expect(shop.repos[0]!.workspaces.list()).toEqual([{ path: clone!.path, card_id: null }]);
+    expect(git(clone!.path, 'branch', '--list', 'obeya/*')).toBe('');
+    expect(git(clone!.path, 'status', '--porcelain')).toBe('');
+
+    // a card deleted after it stopped with work committed: git looks whether its worktree holds anything uncommitted before it goes
+    const card = tools.board.create({ title: 'Lint', x: 0, y: 0 });
+    await tools.repos[0]!.workers.start(card.id);
+    await tools.repos[0]!.workers.prepared();
+    const tree = tools.board.row(card.id).workspace!;
+    writeFileSync(join(tree, 'lint.ts'), 'lint\n');
+    git(tree, 'add', '.');
+    git(tree, 'commit', '--quiet', '-m', 'Lint');
+    await tools.repos[0]!.workers.stop(card.id);
+    hold('status');
+    const deleting = Date.now();
+    tools.board.remove(card.id);
+    expect(Date.now() - deleting).toBeLessThan(1000);
+    await until(() => existsSync(join(marks, 'status')));
+    await answers();
+    expect(existsSync(tree)).toBe(true);
+    expect(tools.repos[0]!.workspaces.leasedBy(card.id)).toBe(tree);
+    go('status');
+    await until(() => !existsSync(tree));
+    await tools.repos[0]!.workers.freed();
+    expect(tools.repos[0]!.workspaces.list()).toEqual([]);
+    shop.shutdown();
+    tools.shutdown();
+  }, 20_000);
+});
+
 describe("the app's push-to-talk key in another app", () => {
   test('a command goes where the page the owner looked at last has its focus', async () => {
     const c = card();

@@ -1627,6 +1627,7 @@ export class CanvasRuntime {
    * The idea is built on this prototype: the prototype's workspace and branch become the idea's,
    * whose worker goes on from there with the brief, the prototype's handover and the owner's answers
    * on it. The prototype goes into the archive as built, the idea's other prototypes as discarded.
+   * What stands in the way is thrown at once; git renames the branch in the background.
    */
   private buildOnPrototype(prototypeId: string, workstreamId?: string) {
     const prototype = this.prototypeCard(prototypeId);
@@ -1637,16 +1638,16 @@ export class CanvasRuntime {
     if (!planning) throw new BadRequest('ideaGone', 'the prototype’s idea is no longer on the canvas, and no project of it is');
     const idea = this.settledIdea(prototype.prototypeOf!);
     const { workers } = this.repoOf(prototype);
-    const { path, branch } = workers.buildOn(prototype.id, idea);
-    this.board.work(idea.id, { workspace: path, branch, built_on: prototype.id });
-    this.decided(idea, { answer: this.board.t.idea.buildOnAnswer(prototype.title), log: this.board.t.idea.buildOnLog(prototype.title) });
-    this.koordinator.request(idea.id);
+    return workers.buildOn(prototype.id, idea).then(() => {
+      this.decided(idea, { answer: this.board.t.idea.buildOnAnswer(prototype.title), log: this.board.t.idea.buildOnLog(prototype.title) });
+      this.koordinator.request(idea.id);
+    });
   }
 
   /**
    * The idea has become a project: the workstream the owner chose, or else the one its plan doc
    * builds on the prototypes with, is built on the prototype's branch and starts at once; the
-   * idea's other prototypes are discarded.
+   * idea's other prototypes are discarded. As `buildOnPrototype`, what stands in the way is thrown at once.
    */
   private buildWorkstreamOn(prototype: Item, project: Item, workstreamId?: string) {
     const ws = workstreamId ? this.board.item(workstreamId) : prototypeWorkstream(this.board.snapshot().items, project.id);
@@ -1654,13 +1655,15 @@ export class CanvasRuntime {
     if (!ws || ws.parent !== project.id) throw new BadRequest('invalid', 'not a workstream of the project the idea became');
     if (!buildableOn(ws)) throw new BadRequest('workstreamStarted', 'only a workstream nobody has started can be built on a prototype');
     const named = `${ws.label ? `${ws.label} ` : ''}${this.board.t.quote(ws.title)}`;
-    const { path, branch } = this.repoOf(prototype).workers.buildOn(prototype.id, ws, named);
-    this.board.work(ws.id, { workspace: path, branch, built_on: prototype.id });
-    this.discardPrototypes(prototype.prototypeOf!);
-    const t = this.board.t.idea;
-    this.board.decide({ project_id: project.id, card_id: ws.id, question: t.whichPrototype(named), answer: t.onPrototype(prototype.title), by: 'owner' });
-    this.board.log(ws.id, 'state', 'owner', t.workstreamOnLog(prototype.title));
-    this.koordinator.request(ws.id);
+    return this.repoOf(prototype)
+      .workers.buildOn(prototype.id, ws, named)
+      .then(() => {
+        this.discardPrototypes(prototype.prototypeOf!);
+        const t = this.board.t.idea;
+        this.board.decide({ project_id: project.id, card_id: ws.id, question: t.whichPrototype(named), answer: t.onPrototype(prototype.title), by: 'owner' });
+        this.board.log(ws.id, 'state', 'owner', t.workstreamOnLog(prototype.title));
+        this.koordinator.request(ws.id);
+      });
   }
 
   /** The idea's prototypes still on the canvas go into the archive as discarded. */
