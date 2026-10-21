@@ -250,12 +250,13 @@ function closed(steps: CardEvent[]): Turn | undefined {
 
 /**
  * Where the open questions were asked, the last time each was, unless something answered it there
- * (on the owner's behalf, say, whatever the card says) or a note took it back: those stand at the
- * end, to be answered.
+ * (on the owner's behalf, say, or options the owner picked that the agent has not taken in, as when a
+ * proposal's rework failed: whatever the card says, the answer stays in view) or a note took it
+ * back: those stand at the end, to be answered.
  */
 function askedLast(shown: Turn[], open: Question[]): Turn[] {
   const asked = new Set(open.map((q) => shown.findLast((x) => x.e.kind === 'question' && parseQuestion(x.e.text).text === q.text)));
-  return shown.filter((x) => asked.has(x) && x.answer === undefined && !x.settled);
+  return shown.filter((x) => asked.has(x) && x.answer === undefined && !x.picks && !x.settled);
 }
 
 /**

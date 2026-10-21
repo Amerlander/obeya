@@ -453,6 +453,11 @@ test("a proposal's open questions leave where they were asked; settled ones stay
   const open = cardTalk({ ...proposal, proposal: { questions: [pdf] } }, events);
   expect(open.shown.map((x) => x.e)).toEqual([q1, owner, reply]);
   expect(open.asked.map((x) => x.e)).toEqual([q2]);
+  // a rework that failed keeps the question the owner picked an option for: the pick stays marked where it was asked
+  const picked = ev('say', 'owner', answerText([pdf], [['Ja']], ''));
+  const failed = cardTalk({ ...proposal, proposal: { questions: [pdf] } }, [q1, q2, picked]);
+  expect(failed.shown).toEqual([{ e: q1, steps: [] }, { e: q2, steps: [], picks: ['Ja'] }]);
+  expect(failed.asked).toEqual([]);
   // while it is reworked, nothing is answered at the end
   expect(cardTalk({ ...proposal, proposal: { questions: [pdf], revising: {} } } as unknown as Item, events).shown.map((x) => x.e)).toEqual(events);
 });
