@@ -63,7 +63,7 @@ import {
   type Notice,
   type BackgroundTask,
 } from '../core/types';
-import type { CardRow, DecisionRow, Friction, FrictionNote, GroupRow, HeldTalk, NewRow, RowUpdate, Store, TalkWaitRow } from './db';
+import type { CardRow, DecisionRow, Friction, FrictionNote, GroupRow, HeldTalk, Mark, NewRow, RowUpdate, Store, TalkWaitRow } from './db';
 import type { Images } from './images';
 import { clip, oneLine } from '../core/text';
 import type { Wish } from '../core/wish';
@@ -986,9 +986,14 @@ export class Board {
     return this.store.lookingUp(this.canvas.id);
   }
 
-  /** The cards' history after `since` (ISO time), oldest first, at most the latest `limit` steps. */
-  timeline(since: string, limit: number) {
+  /** The cards' history after `since` (ISO time, or a `mark`), oldest first, at most the latest `limit` steps. */
+  timeline(since: string | Mark, limit: number) {
     return this.store.timeline(this.canvas.id, since, limit);
+  }
+
+  /** Where the cards' history stands now. */
+  mark() {
+    return this.store.mark();
   }
 
   /** What the owner said after `since` (ISO time), oldest first, at most the latest `limit`. */

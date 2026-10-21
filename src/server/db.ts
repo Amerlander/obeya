@@ -127,6 +127,16 @@ export interface GroupRow {
 }
 
 
+/**
+ * Where the cards' history stood when it was read: the time, and the latest event and card then.
+ * What is written later has a larger id, even within the same millisecond or once the clock went back.
+ */
+export interface Mark {
+  at: string;
+  event: number;
+  card: number;
+}
+
 /** A step in a card's history, as the Koordinator reads it; `created` marks a card of the owner's or a proposal. */
 export interface Moment {
   at: string;
@@ -1030,23 +1040,34 @@ export class Store {
   /**
    * How the cards got where they are, after `since` (ISO time), oldest first: their milestones
    * (state changes, questions, answers, hand-overs, the owner's notes, errors) and the creation of
-   * cards that come from no plan doc. Deleted cards are left out.
+   * cards that come from no plan doc. Deleted cards are left out. After a mark, also what was written
+   * since it, whatever its time; its time still counts, for an event that takes up the id of one the
+   * owner deleted.
    */
-  timeline(canvasId: string, since: string, limit: number): Moment[] {
+  timeline(canvasId: string, since: string | Mark, limit: number): Moment[] {
+    const m = typeof since === 'string' ? { at: since, event: Number.MAX_SAFE_INTEGER, card: Number.MAX_SAFE_INTEGER } : since;
     return (
       this.db
         .query(
           // within one millisecond, cards are created before anything happens to them, each in the order it was written
           `SELECT at, cardId, kind, author, text FROM (
              SELECT e.at, e.card_id AS cardId, e.kind, e.author, e.text, 1 AS phase, e.id AS seq FROM events e JOIN cards c ON c.id = e.card_id
-             WHERE c.canvas_id = $c AND c.deleted_at IS NULL AND e.at > $since AND e.kind IN ('state', 'question', 'answer', 'review', 'hint', 'error')
+             WHERE c.canvas_id = $c AND c.deleted_at IS NULL AND (e.at > $since OR e.id > $event) AND e.kind IN ('state', 'question', 'answer', 'review', 'hint', 'error')
              UNION ALL
              SELECT created_at, id, 'created', CASE WHEN from_id IS NULL THEN 'owner' ELSE 'worker' END, '', 0, rowid FROM cards
-             WHERE canvas_id = $c AND deleted_at IS NULL AND plan_ref IS NULL AND created_at > $since
+             WHERE canvas_id = $c AND deleted_at IS NULL AND plan_ref IS NULL AND (created_at > $since OR rowid > $card)
            ) ORDER BY at DESC, phase DESC, seq DESC LIMIT $limit`,
         )
-        .all({ c: canvasId, since, limit }) as Moment[]
+        .all({ c: canvasId, since: m.at, event: m.event, card: m.card, limit }) as Moment[]
     ).reverse();
+  }
+
+  /** Where the cards' history stands now, for `timeline` to go on from. */
+  mark(): Mark {
+    const { event, card } = this.db
+      .query('SELECT (SELECT COALESCE(MAX(id), 0) FROM events) AS event, (SELECT COALESCE(MAX(rowid), 0) FROM cards) AS card')
+      .get() as { event: number; card: number };
+    return { at: now(), event, card };
   }
 
   /**

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, setSystemTime, test } from 'bun:test';
 import { type AgentSetting, type CanvasConfig, type ConfigProblem, type ConfigView, type Notice, waitingOn } from '../core/types';
 import { Board } from './board';
 import { type Command, Commander } from './commands';
@@ -103,6 +103,28 @@ describe('the Koordinator remembers', () => {
     expect(second.brief).toContain('K1 "Export": the agent asked: CSV oder Excel?');
     expect(second.brief).toContain('K2 "Login": new card');
     expect(second.brief).not.toContain('You have not talked');
+  });
+
+  test('what happens in the millisecond of a command, or after the clock went back, comes with the next one', async () => {
+    const at = new Date('2026-10-21T12:40:07.650Z');
+    setSystemTime(at);
+    try {
+      const a = board.create({ title: 'Export', x: 0, y: 0 });
+      const k = commander();
+      await say(k, 'starte Export', 'reply', { confirm: 'Gleich.' });
+      // in the same millisecond as the brief
+      board.log(a.id, 'question', 'worker', 'CSV oder Excel?');
+      const second = await say(k, 'und?', 'reply', { confirm: 'Es fragt.' });
+      expect(second.brief).toContain('K1 "Export": the agent asked: CSV oder Excel?');
+      // the clock steps back, as a machine's may when it is set
+      setSystemTime(new Date(at.getTime() - 50));
+      board.create({ title: 'Login', x: 0, y: 0 });
+      const third = await say(k, 'und jetzt?', 'reply', { confirm: 'Neue Karte.' });
+      expect(third.brief).toContain('K2 "Login": new card');
+      expect(third.brief).not.toContain('CSV oder Excel?');
+    } finally {
+      setSystemTime();
+    }
   });
 
   test('a command the owner takes back is told with the next one, and marked in the conversation', async () => {

@@ -9,7 +9,7 @@ import { answerTag, fromAnswerTag } from './answers';
 import { BadRequest, type Board, excerpt, replyNote } from './board';
 import type { Place } from '../core/layout';
 import type { Config } from './config';
-import type { Moment, TalkWaitRow } from './db';
+import type { Mark, Moment, TalkWaitRow } from './db';
 import { type AgentRuntime, type AgentSession, failureReason, limitLifts } from './runtime';
 import { type Language, LANGUAGES, ownersLanguage } from '../core/locale';
 import { MESSAGES } from '../core/messages';
@@ -193,8 +193,8 @@ interface Session {
   tagOf: Map<string, string>;
   /** Commands it has read so far; the first one brings the memory. */
   read: number;
-  /** Up to when it knows the canvas's history (ISO time). */
-  since: string;
+  /** Up to where it knows the canvas's history; none before the first command. */
+  since?: Mark;
   /** The rules as numbered in the latest message (their ids), for `remember` to name the one it changes. */
   rules: number[];
   /** The command being read; `from`: the card whose agent passed it on. */
@@ -682,7 +682,7 @@ export class Commander {
     const ui = this.o.board.language();
     const t = MESSAGES[ui];
     const say = CONFIRM[language];
-    const s: Session = { agent: null as unknown as AgentSession, ended: false, languages: this.languages(), choice: this.choice(), tags: new Map(), tagOf: new Map(), read: 0, since: '', rules: [] };
+    const s: Session = { agent: null as unknown as AgentSession, ended: false, languages: this.languages(), choice: this.choice(), tags: new Map(), tagOf: new Map(), read: 0, rules: [] };
     const finish = (commands: Command[], confirm: string, lookUp?: LookUp, more?: More) => (s.reading ? s.reading.finish(commands, confirm, lookUp, more) : 'No command to read.');
     const repos = this.o.board.canvas.repos;
     const config = this.o.config;
@@ -1192,6 +1192,8 @@ export class Commander {
       return [`- ${when(m.at)} ${tag(m.cardId)} "${card.title}": ${what}`];
     };
     const now = new Date().toISOString();
+    // what is written from here on comes with the next command
+    const mark = this.o.board.mark();
     const first = s.read === 0;
     let history: string[];
     if (first) {
@@ -1218,12 +1220,12 @@ export class Commander {
         `What happened on the canvas in the last ${HISTORY_DAYS} days (oldest first):\n${steps.flatMap(step).join('\n') || '(nothing)'}`,
       ];
     } else {
-      const steps = this.o.board.timeline(s.since, NEWS_STEPS + 1);
+      const steps = this.o.board.timeline(s.since!, NEWS_STEPS + 1);
       const more = steps.length > NEWS_STEPS ? steps.splice(0, steps.length - NEWS_STEPS).length : 0;
       history = steps.length ? [`What happened on the canvas since the owner's last command:\n${more ? `- (${more} earlier steps left out)\n` : ''}${steps.flatMap(step).join('\n')}`] : [];
     }
     s.read++;
-    s.since = now;
+    s.since = mark;
     const news = this.news.splice(0);
     const rules = this.o.board.preferences('active');
     s.rules = rules.map((r) => r.id);
