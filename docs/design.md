@@ -5359,7 +5359,10 @@ and are kept, and when the network fails or takes more than 3 s, from what was k
 from the home screen while the machine sleeps shows the phone view saying that Obeya does not answer,
 within about 7 s, instead of the browser's error or a blank page that waits: the page waits 3 s for
 its language and the canvases, then goes on with the browser's language and the canvases it last
-had (their cards come once Obeya answers). The canvas page at the machine registers no worker.
+had (their cards come once Obeya answers). The worker asks for the page anew, as a request of its
+own: passed on, the request of the app opened from the home screen (a launch Android's Chrome marks
+`Sec-Fetch-Site: cross-site`, as a link from elsewhere) keeps that mark but loses `Sec-Fetch-Mode:
+navigate`, and *Its own site* would refuse it. The canvas page at the machine registers no worker.
 
 ### Setup assistant
 

@@ -64,7 +64,10 @@ export function worker() {
     if (kept && quiet && !page) return kept;
     let answered = false;
     let keptShown = false;
-    const network = fetch(req).then((r) => {
+    // the page asked for anew, as the worker's own: passed on, the request of an app opened from
+    // the home screen (or a link elsewhere) keeps `Sec-Fetch-Site: cross-site`, but no longer
+    // `Sec-Fetch-Mode: navigate`, and Obeya would refuse it as another site's request
+    const network = fetch(page ? new Request(req.url, { redirect: 'manual' }) : req).then((r) => {
       answered = true;
       if (page) quiet = false;
       if (r.ok && r.type === 'basic') {
