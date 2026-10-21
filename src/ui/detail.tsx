@@ -282,7 +282,7 @@ export function Detail(p: Props) {
   // a workstream names its plan doc at the top in every state, an agent's work its branch beside it
   const where = (worked || parent?.plan) && (
     <p className="p-src">
-      {worked && (inFolder ? <FolderLine item={item} diff={changes.diff} /> : item.branch && <Branch item={item} />)}
+      {worked && (inFolder ? <FolderLine item={item} diff={changes.diff} sizeBelow={!talkAlone(item)} /> : item.branch && <Branch item={item} sizeBelow={!talkAlone(item)} />)}
       {parent?.plan && (
         <>
           {worked && item.branch && ' · '}

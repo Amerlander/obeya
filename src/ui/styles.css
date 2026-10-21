@@ -770,7 +770,7 @@ span.cl-name { color: inherit; cursor: default; }
 .cl-row.on { border-left-color: var(--waiting); background: color-mix(in srgb, var(--waiting) 12%, transparent); }
 .cl-row.on .cl-name { color: var(--ink); font-weight: 600; }
 .cl-row.off { color: var(--muted); }
-.cl-more { margin: 4px 0 0 6px; font-size: 12.5px; }
+.cl-foot { margin: 4px 0 0 6px; font-size: 12.5px; }
 .r-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-bottom: 12px; font-size: 13px; }
 .r-mode { display: inline-flex; background: var(--chip); border-radius: 3px; padding: 2px; gap: 2px; }
 .r-mode button { border: 0; background: transparent; border-radius: 2px; padding: 3px 10px; font: inherit; font-size: 12.5px; cursor: pointer; color: var(--muted); }
@@ -1810,7 +1810,8 @@ button.link:hover { text-decoration: underline; }
 /* the change list's lines a finger's size */
 .ph-view .cl-list { font-size: 14.5px; }
 .ph-view .cl-list td, .ph-view .cl-list .f-mark { padding-top: 10px; padding-bottom: 10px; }
-.ph-view .cl-more { padding: 8px 0; font-size: 14.5px; }
+.ph-view .cl-foot { font-size: 14.5px; }
+.ph-view .cl-foot .link { padding: 8px 0; }
 /* the video plays full width, and full screen from Obeya's button over it (fullscreen.ts); zooming within the page adds nothing on a phone */
 .ph-view .demo-view .zoom, .ph-view .seek-hint { display: none; }
 .ph-view .demo-view .fullscreen { position: absolute; top: 10px; right: 10px; z-index: 1; width: 42px; height: 42px; border: 0; border-radius: 50%;

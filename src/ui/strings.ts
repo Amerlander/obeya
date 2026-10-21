@@ -746,6 +746,7 @@ const de = {
   files: {
     demo: 'Demo',
     more: (n: number) => `und ${n} weitere`,
+    changed: (n: number) => (n === 1 ? '1 geänderte Datei' : `${n} geänderte Dateien`),
     less: 'weniger',
     showChanges: 'Zeigt, was sich in der Datei geändert hat',
     formatted: 'Formatiert',
@@ -2374,6 +2375,7 @@ const en: Strings = {
   files: {
     demo: 'Demo',
     more: (n: number) => `and ${n} more`,
+    changed: (n: number) => (n === 1 ? '1 changed file' : `${n} changed files`),
     less: 'fewer',
     showChanges: 'Shows what changed in the file',
     formatted: 'Formatted',

@@ -106,7 +106,7 @@ message (the owner, 2026-10-17). Send is an arrow in a dark circle, as in chat a
 starts something rather than sends keeps its words („Prototyp starten“).
 
 Under a task's title stand its branch (and plan doc) and the size of its change („+120 −30 in 5
-Dateien“): before landing the workspace against where its base branch was, uncommitted and new files
+Dateien“; where the card shows its change list, the size stands below the list instead): before landing the workspace against where its base branch was, uncommitted and new files
 included; after, what the landing put on the default branch (an archived card keeps it). A click
 shows the whole diff over the page; „Pfad kopieren“ copies the workspace's directory (`host:/dir` on
 another machine). The owner rarely reads code, so it stays a quiet line.
@@ -121,8 +121,13 @@ leave. „▶ Demo“ comes first, then the files the worker named at its handov
 `files`, the caption under the path), then other changed files that can be shown, documents first;
 last, greyed and not to be picked, deleted files, directories and files that are neither documents
 nor text (their line counts still open their diff). The line picked is marked like a tab; a click on
-a line shows its file below, a click on its line counts its changes there. Past eight lines „und N
-weitere ▾“ unfolds the rest; the file picked stays in view when folded. On a git card the lines are
+a line shows its file below, a click on its line counts its changes there. Beside a demo, and while
+the agent is at work (working, stopped, or asking), the list shows the demo and the named files
+only, the other changed files folded under „N geänderte Dateien ▾“ (or „und N weitere ▾“ below named
+files), and no file is picked until the owner picks one; handed over without a demo, the list is
+open and its first file shows, so there is always a result to see. Unfolded, past eight lines „und
+N weitere ▾“ unfolds the rest. The file picked stays in view when folded. Beside the toggle stands
+the size of the whole change („+120 −30“), which shows the whole diff over the page. On a git card the lines are
 the branch's files, on a folder card its change list. The phone shows the same list with lines tall
 enough to tap. Markdown shows formatted (with its images), a PDF in the browser's
 viewer, an image as is, an HTML page as an HTML artifact, text and code as text; anything else as a
@@ -249,3 +254,9 @@ image.
   across the card and as tabs below it. Rejected: tabs alone with the list folded away (what stays
   before „Änderungen verwerfen“ would no longer show at a glance, files without a view would be
   hidden) and tabs down the side of the file (they take the document's width).
+- **Beside a demo and during the work, the changed files start folded** (owner, 2026-10-21): the
+  owner works on requirements and judges the result by its demo and the files named as the result,
+  not by reading the code; a dozen changed files above the video put the code in front, on the
+  phone above all. The named files stay in view, being results themselves; a handover without demo
+  or named files shows its files open, since some result must show. The size of the change moved
+  from the branch line to the folded list, so count, size and files stand together.

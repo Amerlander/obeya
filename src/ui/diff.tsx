@@ -14,8 +14,11 @@ import { t } from './strings';
 /** A file with more lines than this starts folded, so a generated file does not bury the rest. */
 const FOLD_LINES = 1500;
 
-/** The branch line of a card: its name, the size of its change, its directory to copy, and its running app to open. */
-export function Branch({ item }: { item: Item }) {
+/**
+ * The branch line of a card: its name, the size of its change, its directory to copy, and its
+ * running app to open. `sizeBelow`: the card's change list shows the size instead.
+ */
+export function Branch({ item, sizeBelow }: { item: Item; sizeBelow?: boolean }) {
   const [diff, setDiff] = useState<CardDiff | null>(null);
   const [open, setOpen] = useState(false);
   // read again when the work moves on; the line keeps the last size meanwhile
@@ -30,7 +33,7 @@ export function Branch({ item }: { item: Item }) {
   return (
     <>
       {t.branch} <code>{item.branch}</code>
-      {diff && size && (
+      {diff && size && !(sizeBelow && diff.files.length) && (
         <>
           {' · '}
           {diff.files.length ? (

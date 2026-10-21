@@ -10,7 +10,7 @@ import { api } from './api';
 import { useCopy } from './copy';
 import type { ActDone } from './detail';
 import { DiffView, Lines } from './diff';
-import { ChangeList } from './files';
+import { atWork, ChangeList } from './files';
 import { t } from './strings';
 
 /** How often an open card at work reads its change list again: its agent changes the folder as it goes. */
@@ -45,19 +45,23 @@ function UndoKind({ undo }: { undo: 'full' | 'partial' }) {
   );
 }
 
-/** The card's line in place of a branch: how much it changed in the folder, its undo, the folder's path to copy. */
-export function FolderLine({ item, diff }: { item: Item; diff: CardDiff | null }) {
+/**
+ * The card's line in place of a branch: how much it changed in the folder, its undo, the folder's
+ * path to copy. `sizeBelow`: the card's change list shows how much instead.
+ */
+export function FolderLine({ item, diff, sizeBelow }: { item: Item; diff: CardDiff | null; sizeBelow?: boolean }) {
   const [open, setOpen] = useState(false);
   const [copied, copy] = useCopy(3000);
   const changes = diff?.folder?.changes ?? [];
   const size = diff && diffSize(diff.files);
+  const below = sizeBelow && !!changes.length;
   return (
     <>
       {t.folder.changed}
       {diff && (
         <>
-          {': '}
-          {changes.length ? (
+          {below ? null : ': '}
+          {below ? null : changes.length ? (
             <button className="link diff-size" title={t.diff.show} onClick={() => setOpen(true)}>
               {t.folder.files(shownChanges(changes).length)}
               {size && (size.added || size.removed) ? (
@@ -101,7 +105,7 @@ export function FolderBox({ item, diff }: { item: Item; diff: CardDiff | null })
   return (
     <div className="f-box">
       <b>{t.folder.changed}</b>
-      <ChangeList item={item} rows={rows} />
+      <ChangeList item={item} rows={rows} fold={atWork(item)} />
     </div>
   );
 }
