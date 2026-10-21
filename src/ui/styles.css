@@ -847,6 +847,8 @@ button.q-end:hover { color: var(--ink); text-decoration: underline; }
 .queue-menu li .why { display: block; margin-top: 2px; }
 .queue-menu li .btn.qmove { padding: 2px 8px; background: var(--card); border: 1px solid var(--line); }
 .queue-menu li .btn.qmove.stuck { border-style: dashed; }
+.queue-menu li .x { flex: none; padding: 0 4px; font-size: 17px; line-height: 22px; color: var(--muted); background: none; border: 0; cursor: pointer; }
+.queue-menu li .x:hover { color: var(--ink); }
 .p-files { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; }
 .card.queued .state { font-style: italic; }
 .card.queued::before { background: repeating-linear-gradient(90deg, var(--c) 0 8px, transparent 8px 13px); }

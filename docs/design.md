@@ -1547,8 +1547,9 @@ the link „Wunsch oder Fehler melden“ (see Wishes for Obeya's makers).
 
 Left in the bar, after the canvas switcher: the archive's button, the queue's and "Neue Aufgabe".
 The queue's button counts the waiting cards (grey); a click lists them under it in turn, each with
-what it waits for and the buttons that move it, and a row opens its card; a click beside the list or
-Esc closes it. The archive's button lists the archive under it the same way (`src/ui/archive.tsx`).
+what it waits for, the buttons that move it and a × that takes it out of the queue at once, like
+"Aus der Warteschlange nehmen" on the card (back to planned; starting it again is the way back, so
+there is no undo), and a row opens its card; a click beside the list or Esc closes it. The archive's button lists the archive under it the same way (`src/ui/archive.tsx`).
 The bar's buttons are all one height.
 
 The bar's buttons always fit into it (`src/ui/barFit.ts`): narrower than its contents, beside a wide

@@ -1,5 +1,5 @@
 // The queue: the bar's button with its count and the list under it, and moving a waiting card earlier
-// or later, with the same two buttons on the card and in that list. A button whose way is blocked by a
+// or later, with the same two buttons on the card and in that list; a row's × takes its card out. A button whose way is blocked by a
 // wait says why when clicked (and on hover); at the head or the end of the queue it is greyed out.
 
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from 'react';
@@ -74,9 +74,10 @@ export function waitedOn(ids: string[], items: Item[], name: (id: string) => str
   });
 }
 
-/** A card in the queue, with what it waits for and the buttons that move it. */
+/** A card in the queue, with what it waits for, the buttons that move it and the × that takes it out of the queue. */
 function QueueRow({ item, items, onOpen }: { item: Item; items: Item[]; onOpen: (i: Item) => void }) {
   const m = useQueueMove(item, items);
+  const [failed, setFailed] = useState('');
   return (
     <li className="s-planned" onClick={() => onOpen(item)}>
       <span className="dot" />
@@ -84,9 +85,21 @@ function QueueRow({ item, items, onOpen }: { item: Item; items: Item[]; onOpen: 
         {plain(item.title)}
         <br />
         <span className="hint">{item.queue && 'behind' in item.queue ? t.queue.behind(waitedOn(item.queue.behind, items)) : stateLabel(item)}</span>
-        {m?.why && <span className="hint why">{m.why}</span>}
+        {(failed || m?.why) && <span className="hint why">{failed || m?.why}</span>}
       </span>
       {m?.buttons}
+      <button
+        className="x"
+        title={t.queue.dequeue}
+        aria-label={t.queue.dequeue}
+        onClick={(e) => {
+          e.stopPropagation();
+          setFailed('');
+          api.act(item.id, { action: 'dequeue' }).catch((err) => setFailed(failText(err)));
+        }}
+      >
+        ×
+      </button>
     </li>
   );
 }
