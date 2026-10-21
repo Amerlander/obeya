@@ -840,7 +840,7 @@ export interface CanvasSnapshot {
 }
 
 /**
- * A repository's plan directory, shown as a note beside the projects: the docs in it that are not
+ * A repository's plan directory, shown as a note beside the projects (or where the owner put it): the docs in it that are not
  * projects, with the reason and the card preparing each as one (`preparing`), or, while the
  * repository has no plan doc and never had a project (`empty`), where the first one goes.
  */
@@ -850,6 +850,8 @@ export interface PlanDir {
   dir: string;
   empty: boolean;
   others: { file: string; reason: NotAProject; preparing?: string }[];
+  /** Where the owner put the note, its top left on the canvas; without it, it stands above the projects. */
+  at?: { x: number; y: number };
 }
 
 /**

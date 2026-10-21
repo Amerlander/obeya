@@ -28,7 +28,7 @@ import { branchCommit, defaultBranchCommit, ReadTree } from './read-tree';
 import { Revisions } from './revisions';
 import { ProjectAgents } from './project-agents';
 import { outsidePlanDir, readPlanDocs, watchPlanDocs } from './repo';
-import { boundsOf, GAP, type Place, unionBounds } from '../core/layout';
+import { boundsOf, GAP, type Place, planDirNoteBox, unionBounds } from '../core/layout';
 import { type AgentRuntime, idleRuntime, withAgentSetting, withLimitWait, withRepoTrust } from './runtime';
 import { commandsOf, heldGroups, withoutHeld } from './trust';
 import { changesCode, RESTART_PATIENCE_MS, whenIdle } from './self-update';
@@ -1308,7 +1308,8 @@ export class CanvasRuntime {
   /**
    * A doc in the plan directory that is not a project: a card whose worker adds the workstream
    * checklist, started at once; once its change lands, the doc is a project. It goes right of
-   * everything on the canvas, at the top, clear of the note on the plan directory at the left.
+   * everything on the canvas, at the top, clear of the note on the plan directory at the left (and
+   * of a note the owner put elsewhere).
    */
   preparePlanDoc(repo: string, file: string): Item {
     const dir = this.board.snapshot().planDirs?.find((d) => d.repo === repo);
@@ -1316,8 +1317,8 @@ export class CanvasRuntime {
     if (!doc) throw new BadRequest('invalid', 'not a doc in the plan directory that is not a project');
     if (doc.preparing) return this.board.card(doc.preparing)!;
     const { title, body } = this.board.t.preparePlanDoc;
-    const items = this.board.snapshot().items;
-    const box = unionBounds(items.filter((i) => !i.parent).map((i) => boundsOf(i, items)));
+    const { items, planDirs = [] } = this.board.snapshot();
+    const box = unionBounds([...items.filter((i) => !i.parent).map((i) => boundsOf(i, items)), ...planDirs.flatMap((d) => planDirNoteBox(d) ?? [])]);
     const card = this.board.create({ title: title(file), body: body(file), repo, ...(box ? { x: box.x + box.w + 2 * GAP, y: box.y } : { x: 0, y: 0 }) });
     this.koordinator.request(card.id);
     return this.board.card(card.id)!;

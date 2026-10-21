@@ -8,7 +8,7 @@
 
 import { existsSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { type Bounds, boundsOf, CARD_SIZE, freeSpotNear, GAP, type Place, PROJECT_HEAD, placeProjects, placeWorkstreams, projectSize, sizeOf, unionBounds } from '../core/layout';
+import { type Bounds, boundsOf, CARD_SIZE, freeSpotNear, GAP, type Place, PROJECT_HEAD, placeProjects, planDirNoteBox, placeWorkstreams, projectSize, sizeOf, unionBounds } from '../core/layout';
 import type { Language } from '../core/locale';
 import { MESSAGES, type Messages, snoozeTerm } from '../core/messages';
 import { type KnownChange, missedChanges, PAGE_CHANGES, pagesVersion } from '../core/page-changes';
@@ -1364,9 +1364,24 @@ export class Board {
             const card = preparing.find((r) => (r.repo ?? this.home) === repo && titles.includes(r.title!));
             return { ...o, ...(card ? { preparing: card.id } : {}) };
           }),
+          ...this.planDirNoteAt(repo),
         },
       ];
     });
+  }
+
+  private planDirNoteAt(repo: string): { at?: { x: number; y: number } } {
+    const at = this.store.setting(this.canvas.id, `plan_dir_note:${repo}`);
+    return at ? { at: JSON.parse(at) as { x: number; y: number } } : {};
+  }
+
+  /** The owner moved the note on a repository's plan directory: it stays there, wherever the projects go. */
+  movePlanDirNote(repo: string, at: unknown) {
+    const { x, y } = (at ?? {}) as { x?: unknown; y?: unknown };
+    if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) throw new BadRequest('invalid', 'a place needs x and y');
+    if (!this.dirs.some((d) => d.repo === repo)) throw new BadRequest('invalid', 'no plan directory of that repository on the canvas');
+    this.store.setSetting(this.canvas.id, `plan_dir_note:${repo}`, JSON.stringify({ x: Math.round(x), y: Math.round(y) }));
+    this.changed();
   }
 
   /**
@@ -1822,7 +1837,9 @@ export class Board {
       return { doc: d, pos, size: projectSize(kids) };
     });
     const top = items.filter((i) => !i.parent);
-    const at = placeProjects(unionBounds(top.map((i) => boundsOf(i, items))), layouts.map((l) => l.size));
+    // below a note the owner put there too
+    const notes = this.planDirs(all).flatMap((d) => planDirNoteBox(d) ?? []);
+    const at = placeProjects(unionBounds([...top.map((i) => boundsOf(i, items)), ...notes]), layouts.map((l) => l.size));
     layouts.forEach(({ doc, pos }, n) => {
       const [project] = this.store.insert([{ canvas_id: c, kind: 'project', plan_ref: doc.file, ...at[n]! }]);
       this.store.insert(

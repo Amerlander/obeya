@@ -158,6 +158,7 @@ const de = {
   planDir: {
     notProjects: (dir: string, n: number) => `${dir} · ${n === 1 ? '1 Doc ist kein Projekt' : `${n} Docs sind keine Projekte`}`,
     reason: { noWorkstreams: 'Kein Abschnitt „##\u00a0Workstreams“', noChecklist: 'Keine Checkliste unter „##\u00a0Workstreams“' } satisfies Record<NotAProject, string>,
+    move: 'Ziehen, um die Notiz zu verschieben',
     prepare: 'Als Projekt aufbereiten',
     prepareHint: 'Ein Agent ergänzt die Workstream-Checkliste im Stil des Docs. Ist seine Änderung gelandet, steht das Doc hier als Projekt.',
     preparing: 'Wird aufbereitet',
@@ -1735,6 +1736,7 @@ const en: Strings = {
   planDir: {
     notProjects: (dir: string, n: number) => `${dir} · ${n === 1 ? '1 doc is not a project' : `${n} docs are not projects`}`,
     reason: { noWorkstreams: 'No “##\u00a0Workstreams” section', noChecklist: 'No checklist under “##\u00a0Workstreams”' },
+    move: 'Drag to move the note',
     prepare: 'Prepare as a project',
     prepareHint: 'An agent adds the workstream checklist in the doc’s own style. Once its change has landed, the doc stands here as a project.',
     preparing: 'Being prepared',

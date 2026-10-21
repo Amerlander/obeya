@@ -3,31 +3,26 @@
 // repository has no plan doc yet, where the first one goes (which the owner can hide).
 
 import { useCallback } from 'react';
-import { type Bounds, unionBounds } from '../core/layout';
+import { type Bounds, PLAN_DIR_NOTE_W, planDirNoteBox, planDirNoteHeight, unionBounds } from '../core/layout';
 import type { Item, PlanDir } from '../core/types';
 import { t } from './strings';
 import { useStoredState } from './stored';
 
-const NOTE_W = 380;
 /** Between the note and the projects below it. */
 const NOTE_GAP = 40;
 
-/** How tall the note is, about: the camera keeps it in sight as it does the cards. It stands on the bottom of its box. */
-function noteHeight(d: PlanDir): number {
-  const mixed = new Set(d.others.map((o) => o.reason)).size > 1;
-  return d.empty ? 92 : 64 + d.others.length * (mixed ? 48 : 34);
-}
-
 /**
- * Where each note stands: side by side above the top left of the projects (of all cards, while
- * there are none), so that a card started from a note, which goes right of everything, leaves it where it was.
+ * Where each note stands: where the owner put it, else side by side above the top left of the
+ * projects (of all cards, while there are none), so that a card started from a note, which goes
+ * right of everything, leaves it where it was. One that stands above the projects stands on the
+ * bottom of its box, which is as tall as the camera takes it for to keep it in sight.
  */
 export function planDirBoxes(dirs: PlanDir[], placed: { item: Item; b: Bounds }[]): Bounds[] {
   const top = placed.filter(({ item }) => !item.parent);
   const projects = top.filter(({ item }) => item.kind === 'project');
   const at = unionBounds((projects.length ? projects : top).map((p) => p.b)) ?? { x: 0, y: 0, w: 0, h: 0 };
-  const h = Math.max(...dirs.map(noteHeight));
-  return dirs.map((_, n) => ({ x: at.x + n * (NOTE_W + NOTE_GAP), y: at.y - NOTE_GAP - h, w: NOTE_W, h }));
+  const h = Math.max(...dirs.map(planDirNoteHeight));
+  return dirs.map((d, n) => planDirNoteBox(d) ?? { x: at.x + n * (PLAN_DIR_NOTE_W + NOTE_GAP), y: at.y - NOTE_GAP - h, w: PLAN_DIR_NOTE_W, h });
 }
 
 /**
@@ -46,6 +41,7 @@ const noteId = (d: PlanDir) => `${d.repo}:${d.dir}`;
 export function PlanDirNote({
   dir,
   b,
+  dragging,
   repo,
   onPrepare,
   onOpen,
@@ -54,6 +50,7 @@ export function PlanDirNote({
 }: {
   dir: PlanDir;
   b: Bounds;
+  dragging: boolean;
   /** The repository's name, when the canvas has several. */
   repo?: string;
   onPrepare: (dir: PlanDir, file: string) => void;
@@ -65,8 +62,14 @@ export function PlanDirNote({
   const reasons = new Set(dir.others.map((o) => o.reason));
   const one = reasons.size === 1 ? t.planDir.reason[dir.others[0]!.reason] : null;
   return (
-    // the canvas would take a press here as the start of a pan
-    <div className={dir.empty ? 'plan-dir empty-dir' : 'plan-dir'} style={{ left: b.x, top: b.y + b.h, width: b.w }} onPointerDown={(e) => e.stopPropagation()}>
+    // a press on the note moves it, like a card; one on a button there is no move
+    <div
+      className={['plan-dir', dir.empty && 'empty-dir', dir.at && 'put', dragging && 'dragging'].filter(Boolean).join(' ')}
+      data-repo={dir.repo}
+      title={t.planDir.move}
+      style={{ left: b.x, top: dir.at ? b.y : b.y + b.h, width: b.w }}
+      onPointerDown={(e) => (e.target as Element).closest('button') && e.stopPropagation()}
+    >
       {dir.empty ? (
         <p>
           <button className="x" title={t.planDir.hide} aria-label={t.planDir.hide} onClick={onHide}>

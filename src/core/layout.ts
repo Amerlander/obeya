@@ -1,6 +1,6 @@
 // Card sizes and default placement. Cards keep a fixed, readable size; a project wraps its children.
 
-import { finished, finishingUp, type Item } from './types';
+import { finished, finishingUp, type Item, type PlanDir } from './types';
 
 export type Shape = 'task' | 'chip' | 'project';
 
@@ -144,6 +144,18 @@ export function parsePlace(s: string | null | undefined): Place | undefined {
   const [x, y, vx, vy, vw, vh] = n as [number, number, number?, number?, number?, number?];
   return { x, y, ...(vw !== undefined && vw > 0 && vh! > 0 ? { view: { x: vx!, y: vy!, w: vw, h: vh! } } : {}) };
 }
+
+/** How wide the note on a plan directory is (`PlanDir`). */
+export const PLAN_DIR_NOTE_W = 380;
+
+/** How tall the note on a plan directory is, about: it has a row for each doc it lists. */
+export function planDirNoteHeight(d: PlanDir): number {
+  const mixed = new Set(d.others.map((o) => o.reason)).size > 1;
+  return d.empty ? 92 : 64 + d.others.length * (mixed ? 48 : 34);
+}
+
+/** Where the owner put the note on a plan directory, about; none while it stands beside the projects. */
+export const planDirNoteBox = (d: PlanDir): Bounds | undefined => d.at && { ...d.at, w: PLAN_DIR_NOTE_W, h: planDirNoteHeight(d) };
 
 /** Places new projects in a roughly square grid of columns below everything already on the canvas. */
 export function placeProjects(existing: Bounds | null, sizes: [number, number][]): { x: number; y: number }[] {

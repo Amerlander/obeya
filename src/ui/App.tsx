@@ -186,11 +186,20 @@ function Canvas({
   // ideas with a prototype on the canvas, which stay out of the archive until it ends
   const prototyped = useMemo(() => new Set(items.flatMap((i) => (i.prototypeOf ? [i.prototypeOf] : []))), [items]);
   const [noteHidden, hideNote] = useHiddenEmptyNotes(snapshot.canvas.id);
+  // where notes on plan directories were moved here, by repository, until the server echoes it back
+  const [notesMoved, setNotesMoved] = useState<Record<string, Pos>>({});
+  useEffect(() => {
+    const at = new Map(snapshot.planDirs?.map((d) => [d.repo, d.at]));
+    setNotesMoved((m) => {
+      const keep = Object.entries(m).filter(([repo, p]) => dragRef.current?.note === repo || at.get(repo)?.x !== p.x || at.get(repo)?.y !== p.y);
+      return keep.length === Object.keys(m).length ? m : Object.fromEntries(keep);
+    });
+  }, [snapshot]);
   // a fresh array only when what is shown changes: the camera keeps the notes in sight
   const planDirs = useMemo(() => {
-    const shown = snapshot.planDirs?.filter((d) => !noteHidden(d));
+    const shown = snapshot.planDirs?.filter((d) => !noteHidden(d)).map((d) => (notesMoved[d.repo] ? { ...d, at: notesMoved[d.repo] } : d));
     return shown?.length ? shown : undefined;
-  }, [snapshot.planDirs, noteHidden]);
+  }, [snapshot.planDirs, noteHidden, notesMoved]);
   const notes = useMemo(() => (planDirs ? planDirBoxes(planDirs, placed) : []), [planDirs, placed]);
   const all: Bounds = useMemo(() => unionBounds([...placed.map((p) => p.b), ...notes]) ?? { x: 0, y: 0, w: 1000, h: 600 }, [placed, notes]);
   // what the view keeps in sight: the cards, a project only while it holds none, and the notes on plan directories
@@ -796,7 +805,8 @@ function Canvas({
   const viewportRef = useRef<HTMLDivElement>(null);
   const panRef = useRef<{ x: number; y: number } | null>(null);
   // a dragged card follows the world point it was picked up at, also while the view scrolls under it
-  type Drag = { id: string; x: number; y: number; px: number; py: number; grab: Pos; start: Pos; limit: Bounds; moved: boolean; frame: number; last: number };
+  // (or the note on a plan directory, by its repository, with where it is now)
+  type Drag = { id: string; note?: string; to?: Pos; x: number; y: number; px: number; py: number; grab: Pos; start: Pos; limit: Bounds; moved: boolean; frame: number; last: number };
   const dragRef = useRef<Drag | null>(null);
   const [panning, setPanning] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -899,8 +909,17 @@ function Canvas({
     if (focusRef.current?.type === 'card' || e.button !== 0) return;
     stopFlight();
     const el = (e.target as Element).closest<HTMLElement>('.item');
-    // a project moves by its header; its body is canvas, so dragging there pans
-    if (el && (!el.classList.contains('project') || (e.target as Element).closest('.head'))) {
+    const note = (e.target as Element).closest<HTMLElement>('.plan-dir');
+    if (note) {
+      // it moves by its top left as it stands now: one above the projects stands on its bottom
+      const repo = note.dataset.repo!;
+      const r = note.getBoundingClientRect();
+      const start = toWorld(camRef.current, r.left, r.top);
+      const b = notes[planDirs!.findIndex((d) => d.repo === repo)]!;
+      const content = unionBounds(placed.map((p) => p.b)) ?? b;
+      const grab = toWorld(camRef.current, e.clientX, e.clientY);
+      dragRef.current = { id: `note:${repo}`, note: repo, x: e.clientX, y: e.clientY, px: e.clientX, py: e.clientY, grab, start, limit: dragLimit(content, b), moved: false, frame: 0, last: 0 };
+    } else if (el && (!el.classList.contains('project') || (e.target as Element).closest('.head'))) {
       const i = byId(el.dataset.id!);
       if (!i) return;
       // the view scrolls as far as the rest of the canvas reaches, plus room to drop the card beside it
@@ -925,6 +944,10 @@ function Canvas({
   function place(d: Drag) {
     const w = toWorld(camRef.current, d.px, d.py);
     let p = { x: Math.round(d.start.x + w.x - d.grab.x), y: Math.round(d.start.y + w.y - d.grab.y) };
+    if (d.note) {
+      d.to = p;
+      return setNotesMoved((m) => ({ ...m, [d.note!]: p }));
+    }
     // workstreams stay inside their project
     if (byId(d.id)?.parent) p = { x: Math.max(PROJECT_PAD, p.x), y: Math.max(PROJECT_HEAD, p.y) };
     setMoved((m) => ({ ...m, [d.id]: p }));
@@ -992,6 +1015,15 @@ function Canvas({
       cancelAnimationFrame(d.frame);
       dragRef.current = null;
       setDragId(null);
+      const repo = d.note;
+      if (repo) {
+        if (d.moved && d.to)
+          api.movePlanDirNote(repo, d.to).catch((err) => {
+            console.error(err);
+            setNotesMoved(({ [repo]: _, ...rest }) => rest);
+          });
+        return;
+      }
       const i = byId(d.id);
       if (!i) return;
       if (d.moved)
@@ -1008,7 +1040,7 @@ function Canvas({
 
   function onDoubleClick(e: React.MouseEvent) {
     // the pointer capture retargets the event to the viewport, so look at what is under the pointer
-    if (focusRef.current || document.elementFromPoint(e.clientX, e.clientY)?.closest('.item')) return;
+    if (focusRef.current || document.elementFromPoint(e.clientX, e.clientY)?.closest('.item, .plan-dir')) return;
     createAt(toWorld(camRef.current, e.clientX, e.clientY));
     if (!dblKnown) {
       know(DOUBLE_CLICK_KNOWN);
@@ -1240,6 +1272,7 @@ function Canvas({
                 key={d.repo}
                 dir={d}
                 b={notes[n]!}
+                dragging={dragId === `note:${d.repo}`}
                 {...(snapshot.canvas.repos.length > 1 ? { repo: snapshot.canvas.repos.find((r) => r.id === d.repo)?.name ?? d.repo } : {})}
                 onPrepare={preparePlanDoc}
                 onOpen={(id) => {

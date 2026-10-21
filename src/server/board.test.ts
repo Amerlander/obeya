@@ -196,6 +196,24 @@ describe('the note on the plan directory', () => {
     expect(board.snapshot().planDirs![0]!.others[0]!.preparing).toBeUndefined();
   });
 
+  test('stays where the owner put it, wherever the projects go, and new projects go below it', () => {
+    dirs = [{ repo: 'home', dir: 'docs/plan', others: [{ file: 'docs/plan/rollout.md', reason: 'noWorkstreams' }] }];
+    board.docsChanged();
+    expect(board.snapshot().planDirs![0]!.at).toBeUndefined();
+    expect(() => board.movePlanDirNote('home', { x: 1 })).toThrow(BadRequest);
+    expect(() => board.movePlanDirNote('elsewhere', { x: 1, y: 2 })).toThrow(BadRequest);
+    board.movePlanDirNote('home', { x: 40.4, y: 3000 });
+    expect(board.snapshot().planDirs![0]!.at).toEqual({ x: 40, y: 3000 });
+    // a project moved away leaves it there
+    const a = board.snapshot().items.find((i) => i.kind === 'project')!;
+    board.patch(a.id, { x: a.x + 900, y: a.y - 400 });
+    expect(board.snapshot().planDirs![0]!.at).toEqual({ x: 40, y: 3000 });
+    docs = [docA, docB];
+    board.docsChanged();
+    const b = board.snapshot().items.find((i) => i.kind === 'project' && i.plan?.file === docB.file)!;
+    expect(b.y).toBeGreaterThan(3000);
+  });
+
   test('says where plan docs go until the repository has its first project, and not when every doc is one', () => {
     docs = [];
     dirs = [{ repo: 'home', dir: 'docs/plan', others: [] }];

@@ -545,6 +545,10 @@ export function serve(
           return c.preparePlanDoc(String(repo), String(file));
         }),
       },
+      // the owner moved the note on a repository's plan directory
+      '/api/c/:canvas/plan-dirs/:repo': {
+        PATCH: on(async (c, req) => c.board.movePlanDirNote(req.params.repo!, await req.json())),
+      },
       '/api/c/:canvas/cards/:id': {
         PATCH: on(async (c, req) => c.patch(req.params.id!, (await req.json()) as CardPatch)),
         DELETE: on((c, req) => click(c, c.remove(req.params.id!))),

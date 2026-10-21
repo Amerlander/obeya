@@ -76,7 +76,11 @@ h1, h2, .cfg-head h3, .p-title, .project > .head .ttl, .timeline .a-ttl { font-f
 .item { position: absolute; }
 /* the note on a plan directory, above the projects: quiet beside the cards */
 .plan-dir { position: absolute; transform: translateY(-100%); box-sizing: border-box; padding: 12px 14px; border-radius: 4px; font-size: 13px; line-height: 1.4;
-  background: var(--container); border: 1.5px solid var(--container-line); color: var(--ink); cursor: default; }
+  background: var(--container); border: 1.5px solid var(--container-line); color: var(--ink); cursor: grab; user-select: none; }
+/* one the owner put somewhere stands on its top, and grows downwards as docs join it */
+.plan-dir.put { transform: none; }
+.plan-dir.dragging { cursor: grabbing; box-shadow: 0 8px 24px rgba(0, 0, 0, .18); }
+.plan-dir button { cursor: pointer; }
 .plan-dir.empty-dir { border-style: dashed; color: var(--muted); }
 .plan-dir p { margin: 0; }
 .plan-dir.empty-dir p { padding-right: 14px; }

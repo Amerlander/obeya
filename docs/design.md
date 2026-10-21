@@ -4501,6 +4501,11 @@ a normal state, and the note has said what it has to say once read. Another dire
 settings brings it back; the note on docs that are no projects has no ×, since each of its rows is
 something to do.
 
+The owner drags either note like a card (a grab cursor shows it moves): from then on it stays where
+they put it, by its top left, whatever the projects do (the canvas's setting `plan_dir_note:<repo>`),
+and new projects and the cards it starts go clear of it. Until then it follows the top left of the
+projects, so a project placed below everything, or one the owner moves, takes it along.
+
 #### A workstream's state
 
 Work in progress (`working`, `waiting`, `inPr`, `approved`) wins over the doc, so a workstream
@@ -5006,6 +5011,11 @@ Prompts only agents read stay English with German examples of what the owner may
   (`planDocs.read`, several directories), until a repository needs its docs to stay in a format of
   their own. Rejected: an agent mapping any doc into workstreams kept in Obeya's database, against
   "plan docs are read, never written", with no box for workers to tick.
+- **The note on a plan directory moves freely** (2026-10-21, a colleague's feedback). Before, it
+  always stood above the top left of the projects, so it jumped to each new project placed below
+  everything and went along with a project the owner moved. Its place is the canvas's, kept on the
+  server like a card's, so it is the same in every browser. Rejected: keeping it in localStorage like
+  the hidden empty note (a hidden note is a reading state, a place is part of the layout).
 - **A stored `live` holds only until the Lesestand has what landed** (2026-10-06). Until then a
   stored `live` or `done` beat an empty box: that came from the time plan docs were read from a pool
   clone's working tree, where the doc was often behind; it hid a workstream the doc kept open on
