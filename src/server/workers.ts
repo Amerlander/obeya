@@ -1398,10 +1398,17 @@ export class Workers {
    */
   startsNow(cardId: string, timeUp: boolean) {
     const s = this.o.board.unsnooze(cardId, timeUp ? 'time' : 'owner');
-    if (!s?.until) return;
-    const at = MESSAGES.en.at(Date.parse(s.until));
-    const who = s.by === 'agent' ? 'The agent that proposed this card set it to start' : 'The owner set this card aside to start';
-    const text = timeUp ? `${who} at ${at}, and it is that time now: what the task leaves for later is due now.` : `${who} at ${at}; the owner started it earlier, now.`;
+    if (s?.until) this.startsAt(cardId, s.until, s.by, timeUp);
+  }
+
+  /**
+   * What the card's worker hears with its task: when the card was set to start (`by` its proposing
+   * agent or the owner), and that the time has come (`due`) or the owner started it earlier.
+   */
+  startsAt(cardId: string, until: string, by: Snooze['by'], due: boolean) {
+    const at = MESSAGES.en.at(Date.parse(until));
+    const who = by === 'agent' ? 'The agent that proposed this card set it to start' : 'The owner set this card aside to start';
+    const text = due ? `${who} at ${at}, and that time has come: what the task leaves for later is due now.` : `${who} at ${at}; the owner started it earlier, now.`;
     this.o.board.work(cardId, { unheard: JSON.stringify([...this.unheard(cardId), { said: [], text, images: [] }] satisfies Unheard[]) });
   }
 

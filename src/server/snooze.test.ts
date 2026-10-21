@@ -452,7 +452,7 @@ describe('a card that starts later', () => {
     expect(item(p.id).state).toBe('working');
     // its worker reads the task as due now, not as two weeks off
     expect(worker().inbox[0]).toContain('The agent that proposed this card set it to start at');
-    expect(worker().inbox[0]).toContain('it is that time now');
+    expect(worker().inbox[0]).toContain('that time has come');
   });
 
   test('the owner changes the start time or takes it away; a time that has passed when accepting starts it at once', () => {
@@ -472,6 +472,8 @@ describe('a card that starts later', () => {
     canvas.act(q.id, { action: 'accept' });
     expect(item(q.id).snoozed).toBeUndefined();
     expect(item(q.id).queue).toMatchObject({ checking: true });
+    // its worker hears all the same that the time has come
+    expect(board().row(q.id).unheard).toContain('that time has come');
 
     // kept as planned only, or taken on as an idea, it waits for no time
     const r = board().propose(b.id, { title: 'Nur geplant', task: 'T', reason: 'R', startAt: later(DAY) });
@@ -516,10 +518,21 @@ describe('a card that starts later', () => {
     expect(item(d.id).queue).toMatchObject({ checking: true });
   });
 
-  test('a snoozed planned card that is no longer planned to start is snoozed no longer', () => {
+  test('a snoozed planned card that is no longer planned to start is snoozed no longer, nor one archived and brought back', () => {
     const c = board().create({ title: 'Erst Montag', x: 0, y: 0 });
     canvas.act(c.id, { action: 'snooze', until: later(DAY) });
     board().work(c.id, { state: 'idea' });
     expect(item(c.id).snoozed).toBeUndefined();
+
+    // a stopped card, snoozed, archived, and back after its time: nothing starts it
+    const d = board().create({ title: 'Gestoppt', x: 0, y: 0 });
+    board().work(d.id, { branch: 'obeya/gestoppt' });
+    const until = later(HOUR);
+    canvas.act(d.id, { action: 'snooze', until });
+    board().archive([d.id]);
+    board().unarchive(d.id);
+    canvas.wakeDue(Date.parse(until) + 1);
+    expect(item(d.id).snoozed).toBeUndefined();
+    expect(item(d.id).queue).toBeUndefined();
   });
 });

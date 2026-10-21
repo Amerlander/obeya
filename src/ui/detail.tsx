@@ -817,7 +817,9 @@ function ProposalView({
   const accept = (start: boolean, asIdea = false) =>
     act(
       { action: 'accept', ...(start ? {} : { start: false }), ...(asIdea ? { idea: true } : {}), ...(answer.picked ? { picks: answer.picks } : {}) },
-      (start || asIdea) && !revising ? { close: true, ack: idea || asIdea ? t.acceptedIdea : t.accepted } : { close: false },
+      (start || asIdea) && !revising
+        ? { close: true, ack: idea || asIdea ? t.acceptedIdea : later && Date.parse(item.proposal!.startAt!) > Date.now() ? t.acceptedLater(snoozeWhen(item.proposal!.startAt!)) : t.accepted }
+        : { close: false },
     );
   return (
     <>
@@ -890,7 +892,6 @@ function StartAt({ item, act }: { item: Item; act: (a: CardAction, done: ActDone
         label={t.snooze.change}
         className="link"
         mark={false}
-        inline
         heading={t.startAt.heading}
         hint={t.startAt.accept}
         set={t.startAt.set}

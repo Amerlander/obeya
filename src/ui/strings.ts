@@ -383,6 +383,7 @@ const de = {
   cardError: (title: string, why: string) => `„${title}“: ${why}`,
   approvedNoChange: 'Beendet.',
   accepted: 'Vorschlag übernommen und gestartet.',
+  acceptedLater: (when: string) => `Vorschlag übernommen; er startet ${when}.`,
   acceptedIdea: 'Vorschlag als Idee übernommen; der Agent eröffnet die Diskussion.',
   dismissed: 'Vorschlag verworfen.',
   /** An accepted proposal its agent withdrew or replaced since. */
@@ -1941,6 +1942,7 @@ const en: Strings = {
   cardError: (title: string, why: string) => `“${title}”: ${why}`,
   approvedNoChange: 'Closed.',
   accepted: 'Proposal accepted and started.',
+  acceptedLater: (when: string) => `Proposal accepted; it starts ${when}.`,
   acceptedIdea: 'Proposal accepted as an idea; the agent opens the discussion.',
   dismissed: 'Proposal dismissed.',
   superseded: {

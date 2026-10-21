@@ -1335,7 +1335,10 @@ export class CanvasRuntime {
     // one its agent proposed to start later waits until then, unless that time has passed
     else if (start && proposal.startAt && Date.parse(proposal.startAt) > Date.now())
       this.board.snooze(cardId, { until: proposal.startAt, by: 'agent', start: true, ...(proposal.reason ? { why: clip(oneLine(proposal.reason), 200) } : {}) });
-    else if (start) this.koordinator.request(cardId);
+    else if (start) {
+      if (proposal.startAt) this.repoOf(cardId).workers.startsAt(cardId, proposal.startAt, 'agent', true);
+      this.koordinator.request(cardId);
+    }
   }
 
   /** Accepting after the revision is taken back: the proposal stays one. */

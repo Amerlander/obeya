@@ -1082,7 +1082,8 @@ export class Board {
       if (row.landed && row.workspace) throw new BadRequest('notDone', 'its agent still finishes what remains after the landing');
     }
     const at = new Date().toISOString();
-    this.store.db.transaction(() => ids.forEach((id) => this.store.update(id, { archived_at: at })))();
+    // a stopped card snoozed to start later starts no more: brought back, it is the owner's to start
+    this.store.db.transaction(() => ids.forEach((id) => this.store.update(id, { archived_at: at, ...(this.snoozedOf(id)?.start ? { snoozed: null } : {}) })))();
     this.changed();
   }
 
