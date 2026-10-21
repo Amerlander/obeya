@@ -471,7 +471,7 @@ export class Workers {
   private granted = new Map<string, Set<string>>();
   /** Whether settling the leases is due once the change at hand is through (`settleLater`). */
   private settling = false;
-  /** Cards done with their worktree that still holds uncommitted changes: it stays theirs (`settleLeases`). */
+  /** Worktrees their cards are done with that still hold uncommitted changes: they stay (`settleLeases`). */
   private kept = new Set<string>();
   /** Cards with comments on places in the demo video held back: when they go to the worker without the owner's sign. */
   private holding = new Map<string, ReturnType<typeof setTimeout>>();
@@ -1560,16 +1560,17 @@ export class Workers {
 
   /**
    * Frees the workspaces of cards that will not work in them again, which would otherwise stay
-   * taken for good, a restart notwithstanding: a deleted card's, and a workstream's that no worker
-   * is on (stopped, say, and its work merged by hand) once the plan doc on the default branch ticks
-   * it off. A workstream still in its pull request then counts as merged, which its worker hears
-   * as from the pull request's watcher: the doc says so, though the watcher may not see it.
+   * taken for good, a restart notwithstanding (`leaseEnded`): one its card no longer names or is done
+   * with, a deleted card's, and a workstream's that no worker is on (stopped, say, and its work
+   * merged by hand) once the plan doc on the default branch ticks it off or no longer has it. A
+   * workstream still in its pull request then counts as merged, which its worker hears as from the
+   * pull request's watcher: the doc says so, though the watcher may not see it.
    */
   private settleLeases() {
     if (this.folder) return;
-    for (const { card_id: id } of this.o.workspaces.list()) {
-      if (!id || this.kept.has(id)) continue;
-      const ended = this.o.board.leaseEnded(id);
+    for (const { path, card_id: id } of this.o.workspaces.list()) {
+      if (!id || this.kept.has(path)) continue;
+      const ended = this.o.board.leaseEnded(id, path);
       if (!ended) continue;
       if (ended === 'merged') {
         this.merged(id, undefined, this.o.board.t.worker.mergedTicked);
@@ -1577,25 +1578,26 @@ export class Workers {
       }
       let freed = false;
       try {
-        freed = this.o.workspaces.abandon(id);
+        freed = this.o.workspaces.abandon(path);
       } catch (e) {
         console.error('freeing the workspace of a card done with it:', e);
       }
       // a worktree with uncommitted changes stays, and is not looked at again until Obeya starts anew
       if (!freed) {
-        this.kept.add(id);
+        this.kept.add(path);
         continue;
       }
-      this.o.board.freed(id);
+      this.o.board.freed(id, path);
       if (ended === 'ticked') this.o.board.log(id, 'state', 'obeya', this.o.board.t.worker.tickedFreed);
+      if (ended === 'gone') this.o.board.log(id, 'state', 'obeya', this.o.board.t.worker.goneFreed);
     }
   }
 
   /** A deleted card is restored: it takes back the workspace it had, where it can; else its next start takes another. */
   restored(cardId: string) {
     const row = this.o.board.row(cardId);
-    this.kept.delete(cardId);
     if (!row.workspace) return;
+    this.kept.delete(row.workspace);
     if (this.o.workspaces.retake(cardId, row.workspace)) this.o.board.changed();
     else this.o.board.work(cardId, { workspace: null, app: null, parked: null });
   }

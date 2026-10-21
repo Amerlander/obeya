@@ -90,6 +90,8 @@ const de = {
     mergedTicked: 'Im Plan-Doc auf dem Hauptbranch abgehakt: Pull Request gilt als gemergt. Live.',
     /** A workstream no worker was on (stopped) is ticked off in its plan doc: its workspace goes back to the pool. */
     tickedFreed: 'Im Plan-Doc abgehakt: Workspace freigegeben.',
+    /** A workstream no worker was on (stopped) is no longer in the plan doc on the default branch: its workspace goes back to the pool. */
+    goneFreed: 'Nicht mehr im Plan-Doc auf dem Hauptbranch: Workspace freigegeben.',
     prClosed: 'Pull Request ohne Merge geschlossen.',
     prClosedQuestion: 'Der Pull Request wurde geschlossen, ohne gemergt zu werden. Wie geht es weiter?',
     reopen: 'Neu eröffnen',
@@ -471,6 +473,7 @@ const en: Messages = {
     merged: 'Pull request merged. Live.',
     mergedTicked: 'Ticked off in the plan doc on the default branch: the pull request counts as merged. Live.',
     tickedFreed: 'Ticked off in the plan doc: workspace freed.',
+    goneFreed: 'No longer in the plan doc on the default branch: workspace freed.',
     prClosed: 'Pull request closed without a merge.',
     prClosedQuestion: 'The pull request was closed without being merged. How should it go on?',
     reopen: 'Reopen it',

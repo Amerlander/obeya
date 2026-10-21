@@ -287,7 +287,7 @@ export interface CardWorkspaces {
   pool(busy: string[]): PoolHost[];
   hasWork(cardId: string): boolean;
   release(cardId: string): void;
-  abandon(cardId: string): boolean;
+  abandon(path: string): boolean;
   retake(cardId: string, path: string): boolean;
   forkPoint(cardId: string): { ws: string; base: string } | null;
   addedFiles(cardId: string, dir: string): string[];
@@ -551,30 +551,31 @@ export class Workspaces implements CardWorkspaces {
   /** Frees the workspace for other cards; a worktree stays until the card's work has landed. A clone the configuration no longer names leaves the pool. */
   release(cardId: string) {
     const path = this.leasedBy(cardId);
-    if (!path) return;
+    if (path) this.free(path);
+  }
+
+  private free(path: string) {
     if (this.leaving.delete(path)) this.store.removeWorkspace(path);
     else this.store.setLease(path, null);
   }
 
   /**
-   * Frees the workspace of a card that will not work in it again (deleted, or its workstream done
-   * without it), losing nothing: a clone keeps the card's branch and whatever else it holds, and is
-   * free for other cards (one with uncommitted changes takes none until it is clean); a clean
-   * worktree goes and its branch stays, a worktree with uncommitted changes stays as it is (it
-   * takes no slot). Returns whether it freed it.
+   * Frees the workspace at `path`, whose card will not work in it again (deleted, done with it, or
+   * its workstream done without it), losing nothing: a clone keeps the card's branch and whatever
+   * else it holds, and is free for other cards (one with uncommitted changes takes none until it is
+   * clean); a clean worktree goes and its branch stays, a worktree with uncommitted changes stays as
+   * it is (it takes no slot). Returns whether it freed it.
    */
-  abandon(cardId: string): boolean {
-    const ws = this.leasedBy(cardId);
-    if (!ws) return false;
+  abandon(path: string): boolean {
     if (this.o.mode === 'clones') {
-      this.release(cardId);
+      this.free(path);
       return true;
     }
-    if (existsSync(ws)) {
-      if (gitOrNull(ws, 'status', '--porcelain') !== '') return false;
-      if (gitOrNull(this.o.repoPath, 'worktree', 'remove', ws) === null) return false;
+    if (existsSync(path)) {
+      if (gitOrNull(path, 'status', '--porcelain') !== '') return false;
+      if (gitOrNull(this.o.repoPath, 'worktree', 'remove', path) === null) return false;
     }
-    this.store.removeWorkspace(ws);
+    this.store.removeWorkspace(path);
     return true;
   }
 

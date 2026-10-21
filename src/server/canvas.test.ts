@@ -107,6 +107,25 @@ describe('a canvas with several repositories', () => {
     expect(canvas.board.snapshot().workspaces![1]).toEqual({ repo: 'api', ...here([], []) });
   });
 
+  test("a stopped workstream of a repository after the first keeps its clone when Obeya starts again", () => {
+    canvas.shutdown();
+    const config = { name: 'Produkt', repos: [{ path: join(dir, 'web'), clones: 1, settings: { land: 'main' as const } }, { path: join(dir, 'api'), clones: 1, settings: { land: 'main' as const } }] };
+    // watching the first repository reads the docs before the second one is on the canvas
+    const start = () => new CanvasRuntime(config, { store, home: dir, runtime, forge: noForge, watch: true });
+    canvas = start();
+    const w = canvas.board.snapshot().items.find((i) => i.label === 'W1' && i.repo === 'api')!;
+    canvas.repoOf(w.id).workers.start(w.id);
+    const clone = canvas.board.row(w.id).workspace!;
+    writeFileSync(join(clone, 'x.ts'), 'export {}\n');
+    git(clone, 'add', '.');
+    git(clone, 'commit', '--quiet', '-m', 'X');
+    canvas.repoOf(w.id).workers.stop(w.id);
+    canvas.shutdown();
+    canvas = start();
+    expect(canvas.repoOf(w.id).workspaces.leasedBy(w.id)).toBe(clone);
+    expect(canvas.board.row(w.id).workspace).toBe(clone);
+  });
+
   test('cards of different repositories never wait for each other', async () => {
     const a = canvas.board.create({ title: 'A', x: 0, y: 0 });
     canvas.act(a.id, { action: 'start' });

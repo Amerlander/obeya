@@ -2046,15 +2046,20 @@ the pool for good: lowering the number to make, or emptying it, changed nothing.
 
 A card that will not work in its workspace again gives it back, which nothing else would do, a
 restart included (`settleLeases` in `workers.ts`, on every change of the board and when Obeya
-starts): a deleted card, and a workstream no worker is on (stopped with work on its branch, say,
-and that work merged by hand) once the plan doc on the default branch ticks it off. Nothing is
+starts; `leaseEnded` in `board.ts` says why): a deleted card; a workstream no worker is on (stopped
+with work on its branch, say, and that work merged by hand) once the plan doc on the default branch
+ticks it off or no longer has it (the doc gone, the workstream taken out); and a lease that outlived
+its card's work, held by a finished card whose worker is done or by a card that names another
+workspace or none, however it came about. Nothing is
 lost: a clone keeps the card's branch and whatever else it holds and is free for other cards (one
 with uncommitted changes takes none until it is clean, as any dirty clone); a worktree goes once it
 holds nothing uncommitted, its branch kept, and stays as it is otherwise (it takes no slot). A
 deleted card brought back with the undo takes its clone back while that is still free, else its
 next start takes another (a worktree is made again on its branch). Until 2026-10-21 such cards held
 their clone for good, with no button to free it: a stopped workstream ticked off showed as done
-while the pool counted its clone taken.
+while the pool counted its clone taken; until a later change that day, a stopped workstream whose
+doc went from the default branch (as plan docs go once done) held it for good too, and so did any
+lease its card no longer named.
 
 #### Slots
 

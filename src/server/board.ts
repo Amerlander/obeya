@@ -312,6 +312,8 @@ export interface PlanRead {
 export class Board {
   private listeners = new Set<() => void>();
   private docs: PlanDoc[] | null = null;
+  /** The repositories on the canvas when `docs` were read. */
+  private docsOf = '';
   private dirs: PlanRead['dirs'] = [];
   /** The docs whose projects were on the canvas at the last snapshot, to see one end or come back. */
   private open: string | null = null;
@@ -1191,28 +1193,41 @@ export class Board {
   }
 
   /**
-   * Why a card holding a workspace will not work in it again, where it will not: it was deleted, or
-   * it is a workstream no worker is on whose box the plan doc on the default branch ticks off
-   * (`ticked`; `merged` while it is in its pull request, which the doc says has been merged).
+   * Why the card holding the workspace at `path` will not work in it again, where it will not: the
+   * card does not name it as its workspace, or its work is over and its worker done (`stale`: the
+   * lease outlived what it was for); it was deleted; or it is a workstream no worker is on whose box
+   * the plan doc on the default branch ticks off (`ticked`; `merged` while it is in its pull request,
+   * which the doc says has been merged), or that the doc there no longer has (`gone`).
    */
-  leaseEnded(cardId: string): 'deleted' | 'ticked' | 'merged' | null {
+  leaseEnded(cardId: string, path: string): 'stale' | 'deleted' | 'ticked' | 'merged' | 'gone' | null {
     const row = this.store.card(cardId);
-    if (!row || row.canvas_id !== this.canvas.id || row.landed) return null;
+    if (!row) return 'stale';
+    if (row.canvas_id !== this.canvas.id) return null;
+    // a deleted card keeps its workspace named, to take it back when it is restored
+    if (row.workspace !== path) return 'stale';
+    if (row.landed) return null;
     if (row.deleted_at) return 'deleted';
+    // what remained after the landing is done: the worker that did it gave the workspace up
+    if (row.state && finished(row.state)) return 'stale';
     const hash = row.plan_ref?.indexOf('#') ?? -1;
     if (hash < 0 || row.state === 'working' || row.state === 'waiting' || row.state === 'approved') return null;
     if (row.state === 'inPr' && !row.pr) return null;
     // the docs are read the way the canvas reads them, which plans again a workstream only a part of which landed
     this.snapshot();
     const doc = this.docs?.find((d) => d.file === row.plan_ref!.slice(0, hash));
-    if (!doc?.workstreams.find((w) => w.key === row.plan_ref!.slice(hash + 1))?.done) return null;
+    const w = doc?.workstreams.find((x) => x.key === row.plan_ref!.slice(hash + 1));
+    // an open pull request goes on without the doc: its watcher sees it merged or closed; a repository
+    // not (yet) on the canvas has no docs read
+    if (!w) return row.state === 'inPr' || !this.canvas.repos.some((r) => r.id === repoOfRef(row.plan_ref!, this.home)) ? null : 'gone';
+    if (!w.done) return null;
     return row.state === 'inPr' ? 'merged' : 'ticked';
   }
 
-  /** A card's workspace was freed (`leaseEnded`); a deleted card keeps it named, to take it back when it is restored. */
-  freed(cardId: string) {
+  /** The workspace at `path` was freed (`leaseEnded`); a deleted card keeps it named, to take it back when it is restored. */
+  freed(cardId: string, path: string) {
+    const row = this.store.card(cardId);
     // the pool the canvas shows has a clone more
-    if (this.store.card(cardId)?.deleted_at) return this.changed();
+    if (!row || row.deleted_at || row.workspace !== path) return this.changed();
     this.work(cardId, { workspace: null, app: null, parked: null });
   }
 
@@ -1225,9 +1240,18 @@ export class Board {
 
   /** The canvas as the UI sees it; built once per change (every write here ends in `changed`). */
   snapshot(): CanvasSnapshot {
+    // docs read before a repository joined the canvas lack its docs, which would count its workstreams gone
+    const repos = this.canvas.repos.map((r) => r.id).join('\n');
+    if (this.docs && this.docsOf !== repos) {
+      this.docs = null;
+      this.cache = null;
+    }
     if (this.cache) return this.cache;
     const read = !this.docs;
-    if (!this.docs) this.docs = this.read();
+    if (!this.docs) {
+      this.docs = this.read();
+      this.docsOf = repos;
+    }
     const all = this.docs;
     const docs = this.openDocs(all);
     const open = docs.map((d) => d.file).join('\n');

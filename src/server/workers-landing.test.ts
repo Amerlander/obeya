@@ -643,6 +643,72 @@ describe('a workspace its card will not work in again goes back to the pool', ()
     expect(board.row(c.id).workspace).toBeNull();
   });
 
+  test('a stopped workstream its plan doc no longer has frees its clone; its branch stays there', async () => {
+    const w = w1();
+    const clone = stoppedWithWork(w.id);
+    const branch = board.row(w.id).branch!;
+    setDocs([{ ...doc, workstreams: [ws('W2')] }]);
+    board.docsChanged();
+    await flush();
+    expect(spaces.leasedBy(w.id)).toBeNull();
+    expect(board.row(w.id).workspace).toBeNull();
+    expect(board.events(w.id).at(-1)!.text).toBe('Nicht mehr im Plan-Doc auf dem Hauptbranch: Workspace freigegeben.');
+    expect(git(clone, 'branch', '--list', branch)).toContain(branch);
+    expect(spaces.leasable()).toBe(true);
+  });
+
+  test('so does one whose plan doc went from the default branch', async () => {
+    const w = w1();
+    stoppedWithWork(w.id);
+    setDocs([]);
+    board.docsChanged();
+    await flush();
+    expect(spaces.leasedBy(w.id)).toBeNull();
+    expect(spaces.leasable()).toBe(true);
+  });
+
+  /** An Obeya started anew on the same database, which settles the leases as it starts. */
+  const restart = () => {
+    const fresh = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: main, branch: 'main' }] }, () => ({ docs: [doc], dirs: [] }));
+    new Workers({ board: fresh, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' } }).resumeAll();
+    return fresh;
+  };
+
+  test('a finished card whose worker is done gives back the clone the pool still counts taken, at the latest when Obeya starts', () => {
+    const c = manual();
+    workers.start(c.id);
+    // closed as done, its worker through, and only the lease left behind (by an Obeya before this one)
+    store.update(c.id, { state: 'done', landed: null });
+    expect(spaces.leasable()).toBe(false);
+    const fresh = restart();
+    expect(spaces.leasedBy(c.id)).toBeNull();
+    expect(fresh.row(c.id).workspace).toBeNull();
+    expect(spaces.leasable()).toBe(true);
+  });
+
+  test('a lease its card knows nothing of goes back to the pool; the card keeps what it names', () => {
+    const c = manual();
+    workers.start(c.id);
+    store.update(c.id, { state: 'planned', workspace: null });
+    restart();
+    expect(spaces.leasedBy(c.id)).toBeNull();
+    expect(spaces.leasable()).toBe(true);
+  });
+
+  test('a card whose worker still finishes after the landing keeps its clone', async () => {
+    const c = manual();
+    workers.start(c.id);
+    const clone = board.row(c.id).workspace!;
+    runtime.last.call('ready_for_review', { summary: 'S', demo: artifact() });
+    runtime.last.emit({ type: 'idle' });
+    await workers.approve(c.id);
+    expect(state(c.id)).toBe('done');
+    await flush();
+    expect(spaces.leasedBy(c.id)).toBe(clone);
+    runtime.last.emit({ type: 'idle' });
+    expect(spaces.leasedBy(c.id)).toBeNull();
+  });
+
   test('a workstream in its pull request that the doc on the default branch ticks off counts as merged', async () => {
     rmSync(dir, { recursive: true, force: true });
     setup({ ...generic, land: 'pr', workspaces: 'clones' });
