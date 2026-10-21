@@ -5,7 +5,7 @@ import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import type { RepoAdapter } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
-import { LANGUAGE_NAMES, LANGUAGES, ownersLanguage, repositoryLanguage } from '../core/locale';
+import { type Language, LANGUAGE_NAMES, LANGUAGES, ownersLanguage, repositoryLanguage } from '../core/locale';
 import { MESSAGES, type Messages, type Pause } from '../core/messages';
 import { realpathSync } from 'node:fs';
 import { basename, isAbsolute } from 'node:path';
@@ -92,6 +92,8 @@ export interface WorkerOptions {
   restartsFor?: (landed: Landed, pushedFrom?: string) => 'obeya' | 'repo' | false;
   /** Added to every worker's environment: where Obeya is (`OBEYA_URL`), for a demo's narration. */
   env?: Record<string, string>;
+  /** The narration language of the demo settings, for a repository that names none for its demos; the conversation language when left out. */
+  demoLanguage?: () => Language;
   /** A card's work ended (landed, closed without a change, a prototype discarded or built): its runs can be read now. */
   onWorkEnded?: (cardId: string, workspace: string | null) => void;
   /** Passes on to the Koordinator what the owner's words to a card's worker ask of Obeya (`to_obeya`); without it the worker has no such tool. */
@@ -2549,7 +2551,7 @@ export class Workers {
     // the system prompt says which language that is (`ownersLanguage`)
     const language = "the owner's language";
     // the page goes to colleagues: in the language of the repository's demos where it names one
-    const pageLanguage = LANGUAGE_NAMES[this.o.adapter.demo?.language ?? this.o.board.conversation()];
+    const pageLanguage = LANGUAGE_NAMES[this.demoLanguage()];
     const handOver = () => {
       live.handedOver = true;
       live.nudged = false;
@@ -3024,6 +3026,11 @@ export class Workers {
 
   // ---------------------------------------------------------------- prompts
 
+  /** The language of the card's demos (design: Language): the repository's, else the demo settings' narration language. */
+  private demoLanguage(): Language {
+    return this.o.adapter.demo?.language ?? this.o.demoLanguage?.() ?? this.o.board.conversation();
+  }
+
   private system(preferences: string, prototype = false, card?: Item): string {
     // a task the owner wrote is their first words to the worker; one an agent or a plan doc wrote is not
     const by = card?.body.trim() ? taskAuthor(card) : undefined;
@@ -3052,8 +3059,8 @@ ${this.o.toObeya ? `\n${TO_OBEYA}\n` : ''}
 Rules:
 ${folder ? '- Others work in the same folder at the same time: leave what your card is not about as it is.' : '- Commit your work on your branch in this workspace. Do not push, do not open pull requests, do not switch branches.'}
 - Follow the repository's own instructions (CLAUDE.md and docs).
-- Owner-facing text (report, reply, ask, ${prototype ? 'propose_build' : 'propose_card'}, ready_for_review) is in the owner's language, short and concrete. What you write between tool calls also shows on the card for the owner, folded under your next message: keep it brief and in the owner's language too. ${language} The docs you read do not count as the owner's words.
-- ${repositoryLanguage(this.o.adapter.language, folder)} A demo (its narration, report, or an HTML artifact's words) is in the language the demo skill's settings name, whatever language the owner talks in.
+- Owner-facing text (report, reply, ask, ${prototype ? 'propose_build' : 'propose_card'}, ready_for_review) is in the owner's language, short and concrete. What you write between tool calls also shows on the card for the owner, folded under your next message: keep it brief and in the owner's language too. ${language} The docs you read and the owner's standing preferences do not count as the owner's words.
+- ${repositoryLanguage(this.o.adapter.language, folder)} A demo (its narration, report, or an HTML artifact's words) is in ${LANGUAGE_NAMES[this.demoLanguage()]}${this.o.adapter.demo?.language ? ", the language this repository's settings name for its demos" : ''}, whatever language the owner talks in.
 - Wait for anything external (a deploy, a CI run, a process to finish) in the background: run_in_background or Monitor, then end your turn; Obeya wakes you when it finishes or fires. A point in time further off than a background command can wait (two hours), or another card getting somewhere (its fix on main), you snooze until (snooze). Never wait with sleep or a polling loop in the foreground: a note from the owner reaches you only once the running command is done.
 - When a note or feedback from the owner arrives, answer it with reply. If it is unclear what they want, ask.
 `.trim() + (preferences ? `\n\n${preferences}` : '');

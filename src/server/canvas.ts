@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, realpathSync, statSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { defaultsFor, hasAdapterModule, readingAdapterModule, readingShared, readShared, repoValues, type SharedRead, withSettings } from '../adapters';
 import { Answers, answersDir, answerTag } from './answers';
+import { readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
 import { demoFile } from './demo-page';
 import { openWithSystem } from './machine';
 import { repoName } from '../adapters/generic';
@@ -661,6 +662,7 @@ export class CanvasRuntime {
       toObeya: this.toObeya,
       ...(deps.permissionMode ? { permissionMode: deps.permissionMode } : {}),
       ...(deps.workerEnv ? { env: deps.workerEnv } : {}),
+      demoLanguage: () => readDemoSettings(deps.home).language,
       ...(deps.parkGrace !== undefined ? { parkGrace: deps.parkGrace } : {}),
     });
     return Object.assign(repo, { ref, info, adapter, site, read, workspaces, workers, projectAgents });

@@ -240,6 +240,21 @@ describe('handing over with a demo', () => {
     setup({ ...generic, land: 'main', workspaces: 'clones', demo: { language: 'en' } });
     await workers.start(manual().id);
     expect(runtime.last.spec.env).toEqual({ OBEYA_URL: 'http://127.0.0.1:4417', DEMO_LANGUAGE: 'en' });
+    // named in its instructions too: an HTML artifact is written without the skill, which reads it
+    expect(runtime.last.spec.system).toContain("A demo (its narration, report, or an HTML artifact's words) is in English, the language this repository's settings name for its demos, whatever language the owner talks in.");
+    expect(runtime.last.spec.system).toContain('until they have said anything, German.');
+  });
+
+  test("a repository that names no language for its demos has its worker demo in the demo settings' narration language, else the conversation's", async () => {
+    rmSync(dir, { recursive: true, force: true });
+    setup({ ...generic, land: 'main', workspaces: 'clones' });
+    await workers.start(manual().id);
+    expect(runtime.last.spec.system).toContain("A demo (its narration, report, or an HTML artifact's words) is in German, whatever language the owner talks in.");
+    rmSync(dir, { recursive: true, force: true });
+    setup({ ...generic, land: 'main', workspaces: 'clones' });
+    setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, demoLanguage: () => 'en' }));
+    await workers.start(manual().id);
+    expect(runtime.last.spec.system).toContain("A demo (its narration, report, or an HTML artifact's words) is in English, whatever language the owner talks in.");
   });
 
   test('the card waits with the demo; its files are found; words under it answer its question and leave the demo', async () => {

@@ -366,7 +366,8 @@ recent words to it, typed or spoken, even where its work is in English; words th
 the interface language until chosen. It is an instruction in the prompts, not detection code. A task
 the owner wrote (or the Koordinator put in from their words) counts as their first words; one from a
 plan doc, a proposal, an idea's brief or the Arbeitsrückschau does not, nor do the docs a worker reads
-(the owner, 2026-10-20: an English task answered in German looked wrong). Agents without the owner's words (conflict reasons, proposed rules) use the
+or the owner's standing preferences (the owner, 2026-10-20: an English task answered in German looked
+wrong; 2026-10-21: a worker took German from German preferences). Agents without the owner's words (conflict reasons, proposed rules) use the
 conversation language; the card namer uses the task's. The Koordinator knows the owner's words for
 its cards in both languages, takes examples in the conversation language, names Obeya's own cards
 („CLAUDE.md ergänzen“) in the interface language, and starts its session afresh when either language changes. An analysis
@@ -379,7 +380,9 @@ languages explicitly, so a German conversation does not make German docs.
 
 **Demos** have their own language per repository (`demo.language`), else the demo settings' narration
 language, else the conversation language; their shared pages follow it (see The demo settings and
-voices). Obeya's own repository says English, since its demos go public.
+voices). Obeya's own repository says English, since its demos go public. A worker's instructions name
+that language outright, not where to look it up (2026-10-21: a worker writing an HTML artifact, which
+needs no skill, read the demo settings' German and missed the repository's English).
 
 Prompts only agents read stay English, with German examples of what the owner may say.
 
