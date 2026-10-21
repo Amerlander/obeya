@@ -16,7 +16,7 @@ import { landedRef, shownTitle } from './parts';
 import { inQueue } from '../core/queue';
 import { useQueueMove } from './queue';
 import { Inline, plain } from './markdown';
-import { Body, Msg, Quote, Reading, useAnswer, useReportedHeight } from './message';
+import { Body, goToMessage, Msg, Quote, Reading, useAnswer, useReportedHeight } from './message';
 import { cardDraft, giveBack, questionsKey, updateDraft, useDraft } from './draft';
 import { eventQuote, type Reply, setReply, useReplyKnown } from './reply';
 import { Composer } from './composer';
@@ -1280,7 +1280,7 @@ function Message({
   return (
     <Msg
       by={ownerSide(e) ? 'owner' : e.author}
-      className={[q && 'q', turn.settled && 'settled', fresh && 'fresh', unread ? 'unread' : onDelete && 'held'].filter(Boolean).join(' ')}
+      className={[q && 'q', turn.end && `ended ${turn.end}`, fresh && 'fresh', unread ? 'unread' : onDelete && 'held'].filter(Boolean).join(' ')}
       who={`${t.author[e.author]}${e.kind === 'question' ? ` · ${t.talk.question}` : e.kind === 'review' ? ` · ${t.talk.handover}` : ''}`}
       at={e.at}
       ev={e.id}
@@ -1294,7 +1294,7 @@ function Message({
       {e.spot && <SpotLink cardId={e.cardId} spot={e.spot} />}
       {!turn.quiet && <Body md={q ? q.text : (turn.words ?? e.text)} />}
       {e.wish && <WishReplyLink wish={e.wish} />}
-      {q && !turn.settled && q.options.length > 0 && (
+      {q && turn.end !== 'settled' && q.options.length > 0 && (
         <ul className="q-opts">
           {q.options.map((o) => (
             <li key={o} className={(turn.picks ? turn.picks.includes(o) : turn.answer?.includes(o)) ? 'on' : ''}>
@@ -1303,7 +1303,13 @@ function Message({
           ))}
         </ul>
       )}
-      {turn.settled && <div className="hint">{t.talk.settled}</div>}
+      {turn.end === 'again' ? (
+        <button className="hint q-end" title={t.talk.toQuoted} onMouseDown={(m) => m.preventDefault()} onClick={() => goToMessage(turn.next!)}>
+          {t.talk.again} ↓
+        </button>
+      ) : (
+        turn.end && <div className="hint q-end">{t.talk[turn.end]}</div>
+      )}
       {turn.then && (
         <div className="then" data-ev={turn.then.e.id}>
           <span className="then-who">

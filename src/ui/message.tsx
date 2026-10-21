@@ -69,24 +69,25 @@ export function Msg({
 /** Under the owner's words while the Koordinator reads them, in the sheet and on a card alike. */
 export const Reading = () => <Msg by="koordinator" className="thinking" who={`${t.author.koordinator} ${t.talk.reading}`} />;
 
+/** Scrolls the conversation to a message (`ev` in `Msg`), which lights up once, so the eye finds it. */
+export function goToMessage(ev: number | string) {
+  const el = document.querySelector<HTMLElement>(`.talk [data-ev="${ev}"]`);
+  if (!el) return;
+  el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  el.classList.remove('flash');
+  void el.offsetWidth;
+  el.classList.add('flash');
+}
+
 /**
  * The message a reply answers, quoted above it or above the field the reply is written in: who said
  * it and its start, a few lines at most. A click on it goes to the message in the conversation
  * (`ev` in `Msg`); `onClear` takes it out of the field.
  */
 export function Quote({ q, onClear }: { q: Quoted; onClear?: () => void }) {
-  const go = () => {
-    const el = document.querySelector<HTMLElement>(`.talk [data-ev="${q.ev}"]`);
-    if (!el) return;
-    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    // the message lights up once, so the eye finds it
-    el.classList.remove('flash');
-    void el.offsetWidth;
-    el.classList.add('flash');
-  };
   return (
     <div className={`quote q-by-${q.by}`}>
-      <button className="quote-go" title={t.talk.toQuoted} onMouseDown={(m) => m.preventDefault()} onClick={go}>
+      <button className="quote-go" title={t.talk.toQuoted} onMouseDown={(m) => m.preventDefault()} onClick={() => goToMessage(q.ev)}>
         <span className="quote-who">
           {t.author[q.by]}
           {q.what === 'question' ? ` · ${t.talk.question}` : q.what === 'handover' ? ` · ${t.talk.handover}` : ''}

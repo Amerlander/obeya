@@ -765,7 +765,13 @@ textarea.p-body:focus { border-color: var(--muted); }
 /* a question in the conversation is answered, taken back or asked anew (the one the card waits on
    stands at the end): no edge, its label stays orange, a turn where the owner had something to do */
 .talk .msg.q .who { color: var(--waiting); }
-.talk .msg.q.settled .who, .talk .msg.q.settled .p-lead { color: var(--muted); }
+/* a question nobody waits on that the owner picked nothing for: greyed, with how it ended; asked again
+   or left open, its options stay, greyed too */
+.talk .msg.q.ended .who, .talk .msg.q.ended .p-lead { color: var(--muted); }
+.talk .msg.q.ended .q-opts li { opacity: .6; }
+.talk .msg .q-end { display: block; margin-top: 4px; font-style: italic; }
+button.q-end { padding: 0; border: 0; background: none; cursor: pointer; text-align: left; font-family: inherit; }
+button.q-end:hover { color: var(--ink); text-decoration: underline; }
 .talk .msg .q-opts { list-style: none; margin: 6px 0 2px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 /* rounded by half a line: a short option is a pill, a long one that wraps a rounded box around all its lines */
 .talk .msg .q-opts li { font-size: 12.5px; padding: 2px 9px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); }

@@ -212,7 +212,8 @@ several fit together; the owner picks, may add their own words, and both go out 
 names each question. The questions stand in the conversation as the agent's messages, like a worker's;
 while they wait for the owner they stand at its end, where they are answered, and once answered (or
 while the agent works on a reply, which may settle them) they stay where they were asked, the options picked ticked on them, the alternatives beside, and the owner's
-message under them holds only their own words (until 2026-10-20 an answered question stood only as a
+message under them holds only their own words; one the owner's words passed over shows how it ended,
+settled or asked again (see The conversation) (until 2026-10-20 an answered question stood only as a
 bold line of the owner's message, without the alternatives). The owner types in the panel or holds Space with the idea open; both go
 straight to the agent, as on every card an agent listens on (see Voice in), spoken words as soon as
 the speech recognition has written them down (picked options too, with the words beside them). The
@@ -462,7 +463,8 @@ reviser answers and leaves the proposal as it was there.
 
 As with an idea, the conversation about it stands beside the proposal, its open questions at the end
 of it and the field under it; a question stands where it was asked once it is settled (or while the
-proposal is reworked), so the owner still sees what they answered; the proposal's text and reason
+proposal is reworked), so the owner still sees what they answered, and how it ended when they picked
+nothing for it (see The conversation); the proposal's text and reason
 are on the left, its buttons below both. The text box is as tall as the text and the panel grows
 with it up to the screen's height; only beyond that does the box scroll. Options picked there and
 sent („Antworten“, with words or without) go to the reviser at once, without the Koordinator or an
@@ -1103,12 +1105,27 @@ handover, the conversation ends with it at work and its latest step, cut to its 
 characters, whole while the mouse is over it; the question the card waits on (its own, or the one in
 its demo report) stands at the end with its options, and the card's one field under it. A worker
 that asks while its background work runs (a test suite, a review it started) is still in its turn:
-its question stands with its options, and the bubble at work below it; a question a
-note took back stays, without options, „Durch deinen Hinweis erledigt“. A question answered or asked
+its question stands with its options, and the bubble at work below it. A question answered or asked
 anew has no orange edge either: only its label „Agent · Frage“ stays orange, a turn where the owner
 had something to do. Until 2026-10-17 an answered question kept its
 orange edge, which also marks the messages new to the owner, so it looked as if it still waited. A card that was an idea
 continues the idea's conversation in the same list.
+
+How a question ended is one rule for every kind of card too, whoever asked it (a worker, an idea's
+agent, a proposal's reviser), read from what came after it (`ended` in `src/ui/talk.ts`). Options
+the owner picked for it stand ticked on it (a worker's question answered in the owner's own words
+ticks the options they name). Asked again later in the same words, it reads „Weiter unten erneut
+gefragt. ↓“, a link to the later asking, its options greyed but there. With the owner's words after
+it that picked nothing for it (a note, words on an idea or a proposal, an answer in their own words)
+and the agent's reply there without asking it again, it reads „Durch deine Nachricht erledigt.“
+without its options; while the agent still works on that reply it shows nothing yet, since it may
+still ask again. Without a word to it before the card went on (an idea built, a proposal taken on,
+a card parked or archived), it reads „Offen geblieben.“, its options greyed. An answer that picks for
+one of two questions thus ticks the one and marks the other by the same rule. A question the agent
+rephrases counts as settled. Until 2026-10-21 only a worker's question a note took back showed how
+it ended („Durch deinen Hinweis erledigt“): an idea's or a proposal's question the owner's words
+passed over stood with all its options, like one never answered, and one asked again stood twice,
+the earlier asking unmarked.
 
 Which questions are open is one rule for every kind of card (`openQuestions` in `src/core/types.ts`):
 an open idea's while its agent is not at work on a reply, a proposal's while it is not reworked, a

@@ -219,7 +219,7 @@ test('questions carry their answer; a note instead of an answer settles one; the
   const q3 = ev('question', 'worker', formatQuestion({ text: 'Auch PDF?', options: ['Ja', 'Nein'] }, 'de'));
   const events = [q1, a1, q2, note, work, q3];
   const { shown, asked } = talkTurns(events, { open: [{ text: 'Auch PDF?', options: ['Ja', 'Nein'] }] });
-  expect(shown).toEqual([{ e: q1, steps: [], answer: 'CSV' }, { e: a1, steps: [] }, { e: q2, steps: [], settled: true }, { e: note, steps: [] }]);
+  expect(shown).toEqual([{ e: q1, steps: [], answer: 'CSV' }, { e: a1, steps: [] }, { e: q2, steps: [], end: 'settled' }, { e: note, steps: [] }]);
   expect(asked).toEqual([{ e: q3, steps: [work] }]);
   // a question answered on the owner's behalf is no longer open, whatever the card says
   expect(talkTurns([...events, ev('answer', 'project', 'Nein')], { open: [{ text: 'Auch PDF?', options: [] }] }).asked).toEqual([]);
@@ -405,14 +405,14 @@ test('the options an idea’s or a proposal’s answer names stand on their ques
   const picksOnly = ev('talk', 'owner', answerText([format], [['CSV']], ''));
   expect(talkTurns([q1, picksOnly]).shown).toEqual([{ e: q1, steps: [], picks: ['CSV'] }]);
   const words = ev('talk', 'owner', 'Erklär mir das.');
-  expect(talkTurns([q1, words]).shown).toEqual([{ e: q1, steps: [] }, { e: words, steps: [] }]);
-  // a proposal's question asked again is answered where it was asked last; a note after it does not take it back
+  expect(talkTurns([q1, words]).shown).toEqual([{ e: q1, steps: [], end: 'settled' }, { e: words, steps: [] }]);
+  // a proposal's question asked again is answered where it was asked last, the first asking points there; a note after it does not take it back
   const p1 = ev('question', 'worker', formatQuestion(format, 'de'));
   const p2 = ev('question', 'worker', formatQuestion(format, 'de'));
   const said = ev('say', 'owner', answerText([format], [['CSV']], ''));
   const note = ev('hint', 'owner', 'Danke.');
   expect(talkTurns([p1, p2, said, note]).shown).toEqual([
-    { e: p1, steps: [] },
+    { e: p1, steps: [], end: 'again', next: p2.id },
     { e: p2, steps: [], picks: ['CSV'] },
     { e: note, steps: [] },
   ]);
@@ -456,7 +456,7 @@ test("a proposal's open questions leave where they were asked; settled ones stay
   // a rework that failed keeps the question the owner picked an option for: the pick stays marked where it was asked
   const picked = ev('say', 'owner', answerText([pdf], [['Ja']], ''));
   const failed = cardTalk({ ...proposal, proposal: { questions: [pdf] } }, [q1, q2, picked]);
-  expect(failed.shown).toEqual([{ e: q1, steps: [] }, { e: q2, steps: [], picks: ['Ja'] }]);
+  expect(failed.shown).toEqual([{ e: q1, steps: [], end: 'settled' }, { e: q2, steps: [], picks: ['Ja'] }]);
   expect(failed.asked).toEqual([]);
   // while it is reworked, nothing is answered at the end
   expect(cardTalk({ ...proposal, proposal: { questions: [pdf], revising: {} } } as unknown as Item, events).shown.map((x) => x.e)).toEqual(events);
@@ -603,4 +603,67 @@ test('the line that the agent stopped without answering stands, not as a step of
   expect(t.shown.map((x) => x.e)).toEqual([asked, failed, unanswered]);
   expect(t.shown[2]).toMatchObject({ line: true });
   expect(t.pending).toEqual([]);
+});
+
+test('a question nobody waits on shows how it ended, the same on every kind of card', () => {
+  const format = { text: 'Welches Format?', options: ['CSV', 'Excel'] };
+  const whom = { text: 'Für wen?', options: ['Vermieter', 'Verwalter'] };
+  const idea = { state: 'idea', idea: { status: 'open', questions: [], yourTurn: true } } as unknown as Item;
+  // an idea's answer that picks for one of two questions: the other is settled by the owner's words once the agent replied without asking it again
+  const reply = ev('talk', 'explorer', 'Zwei Fragen.');
+  const q1 = ev('question', 'explorer', formatQuestion(format, 'de'));
+  const q2 = ev('question', 'explorer', formatQuestion(whom, 'de'));
+  const partial = ev('talk', 'owner', answerText([format, whom], [['Excel'], []], 'Den Rest entscheide du.'));
+  const next = ev('talk', 'explorer', 'Excel, für beide.');
+  expect(cardTalk(idea, [reply, q1, q2, partial, next]).shown).toEqual([
+    { e: reply, steps: [] },
+    { e: q1, steps: [], picks: ['Excel'] },
+    { e: q2, steps: [], end: 'settled' },
+    { e: partial, steps: [], words: 'Den Rest entscheide du.' },
+    { e: next, steps: [] },
+  ]);
+  // while its agent works on the reply it may still ask again: no mark yet
+  const thinking = { ...idea, idea: { ...idea.idea!, thinking: true } } as Item;
+  expect(cardTalk(thinking, [reply, q1, q2, partial]).shown[2]).toEqual({ e: q2, steps: [] });
+  // asked again, the earlier asking points to the later one, which waits at the end
+  const again = ev('question', 'explorer', formatQuestion(whom, 'de'));
+  const asking = cardTalk({ ...idea, idea: { ...idea.idea!, questions: [whom] } } as Item, [reply, q1, q2, partial, next, again]);
+  expect(asking.shown[2]).toEqual({ e: q2, steps: [], end: 'again', next: again.id });
+  expect(asking.asked).toEqual([{ e: again, steps: [] }]);
+  // built without a word to it, it was left open, also while the worker on it works
+  const built = { state: 'working', inTurn: true, branch: 'obeya/export' } as unknown as Item;
+  const start = ev('state', 'obeya', MESSAGES.de.worker.started('obeya/export'));
+  expect(cardTalk(built, [reply, q1, start]).shown[1]).toEqual({ e: q1, steps: [], end: 'left' });
+
+  // a task: a question a note took back is settled once the worker replied; asked anew, it points further down
+  const asked = ev('question', 'worker', formatQuestion(format, 'de'));
+  const note = ev('hint', 'owner', 'Nimm, was Excel öffnet.');
+  const answer = ev('talk', 'worker', 'Dann Excel.');
+  const task = { state: 'working', inTurn: true, branch: 'obeya/export' } as unknown as Item;
+  expect(cardTalk(task, [asked, note]).shown[0]).toEqual({ e: asked, steps: [] });
+  expect(cardTalk(task, [asked, note, answer]).shown[0]).toEqual({ e: asked, steps: [], end: 'settled' });
+  const anew = ev('question', 'worker', formatQuestion(format, 'de'));
+  const waits = { state: 'waiting', need: 'question', question: format, branch: 'obeya/export' } as unknown as Item;
+  const t = cardTalk(waits, [asked, note, answer, anew]);
+  expect(t.shown[0]).toEqual({ e: asked, steps: [], end: 'again', next: anew.id });
+  expect(t.asked).toEqual([{ e: anew, steps: [] }]);
+
+  // a proposal: its words pass over one question, the rework drops it; taken on with the other open, that one was left open
+  const p1 = ev('question', 'worker', formatQuestion(format, 'de'));
+  const p2 = ev('question', 'worker', formatQuestion(whom, 'de'));
+  const said = ev('say', 'owner', 'CSV reicht.');
+  const revised = ev('talk', 'worker', 'Format auf CSV gesetzt.');
+  const proposal = { state: 'proposal', proposal: { questions: [whom] } } as unknown as Item;
+  const open = cardTalk(proposal, [p1, p2, said, revised]);
+  expect(open.shown[0]).toEqual({ e: p1, steps: [], end: 'settled' });
+  expect(open.asked).toEqual([{ e: p2, steps: [] }]);
+  const reworked = cardTalk({ ...proposal, proposal: { questions: [whom], revising: {} } } as unknown as Item, [p1, p2, said]);
+  expect(reworked.shown.slice(0, 2)).toEqual([{ e: p1, steps: [] }, { e: p2, steps: [] }]);
+  const accepted = { state: 'planned' } as unknown as Item;
+  expect(cardTalk(accepted, [p1, p2]).shown).toEqual([
+    { e: p1, steps: [], end: 'left' },
+    { e: p2, steps: [], end: 'left' },
+  ]);
+  // an archived card's question nobody answered was left open too
+  expect(cardTalk(idea, [reply, q1], true).shown[1]).toEqual({ e: q1, steps: [], end: 'left' });
 });

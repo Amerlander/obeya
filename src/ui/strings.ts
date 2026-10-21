@@ -297,7 +297,10 @@ const de = {
     backgroundFor: (s: number) => `seit ${s < 60 ? `${s} s` : s < 3600 ? `${Math.floor(s / 60)} min` : `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`}`,
     question: 'Frage',
     handover: 'Übergabe',
-    settled: 'Durch deinen Hinweis erledigt.',
+    // how a question in the conversation ended that the owner picked nothing for: settled by their words, asked again further down (a link there), or left open when the card went on
+    settled: 'Durch deine Nachricht erledigt.',
+    again: 'Weiter unten erneut gefragt.',
+    left: 'Offen geblieben.',
     // under the owner's words the agent has not read yet: when it will (a worker at its next tool step, or once it starts on a card waiting to; other agents after their reply)
     unread: (when: 'step' | 'start' | 'reply') => `Noch nicht gelesen · ${{ step: 'beim nächsten Schritt', start: 'sobald der Agent startet', reply: 'nach der laufenden Antwort' }[when]}`,
     withdraw: 'Zurücknehmen: Der Agent bekommt es nicht; ist dein Feld leer, steht der Text wieder darin',
@@ -1847,7 +1850,9 @@ const en: Strings = {
     backgroundFor: (s: number) => `for ${s < 60 ? `${s} s` : s < 3600 ? `${Math.floor(s / 60)} min` : `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`}`,
     question: 'Question',
     handover: 'Handover',
-    settled: 'Settled by your note.',
+    settled: 'Settled by your message.',
+    again: 'Asked again below.',
+    left: 'Left open.',
     unread: (when: 'step' | 'start' | 'reply') => `Not read yet · ${{ step: 'at its next step', start: 'once the agent starts', reply: 'after its current reply' }[when]}`,
     withdraw: 'Take back: the agent does not get it; if your field is empty, the text goes back into it',
     demoQuestion: 'Question in the demo report:',

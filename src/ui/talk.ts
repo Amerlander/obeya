@@ -16,12 +16,19 @@ export interface Turn {
   line?: true;
   /** A worker's question: the answer it got. */
   answer?: string;
-  /** A worker's question: the options the owner picked in the answer, marked on it. */
+  /** A question: the options the owner picked for it, marked on it. */
   picks?: string[];
   /** The owner's answer whose picks its question marks: what the message says beside them, their own words. */
   words?: string;
-  /** A worker's question the owner's note took back instead of an answer. */
-  settled?: true;
+  /**
+   * A question nobody waits on any more that the owner picked nothing for: how it ended (`ended`).
+   * `again`: the agent asked it again further down (`next`, that event's id); `settled`: the owner's
+   * words after it, which the agent replied to without asking it again; `left`: the owner said
+   * nothing to it before the card went on.
+   */
+  end?: 'again' | 'settled' | 'left';
+  /** A question asked again further down: where. */
+  next?: number;
   /** Only the agent's steps, without words: a turn it ended silently, in a conversation nobody works on any more. */
   quiet?: true;
   /**
@@ -89,10 +96,11 @@ export function demoHandover(demo: Demo, shown: Turn[]): Turn | undefined {
  * state changes between them. The agent's steps before it read the owner's words close above them
  * (`closed`). What the owner says to a worker that does not `reply` is answered by the first words
  * it says after it; words before its reply are steps on the way to it. What the agent has not read yet stands apart (`unread`).
- * `open`: the questions the card waits on, which leave where they were last asked. `over`: no agent works on the card, so no message will
+ * `open`: the questions the card waits on, which leave where they were last asked; the others show how they ended (`ended`). `over`: no agent works on the card, so no message will
  * come for the steps without one (`settle`). `paused`: the agent is paused now, at the last line that says so.
+ * `working`: the agent is at work, so the owner's last words may still get a question asked again.
  */
-export function talkTurns(all: CardEvent[], opts: { open?: Question[]; over?: boolean; paused?: boolean } = {}): Talk {
+export function talkTurns(all: CardEvent[], opts: { open?: Question[]; over?: boolean; paused?: boolean; working?: boolean } = {}): Talk {
   const shown: Turn[] = [];
   let steps: CardEvent[] = [];
   // the owner said something to the agent, and the worker has not answered yet
@@ -154,11 +162,13 @@ export function talkTurns(all: CardEvent[], opts: { open?: Question[]; over?: bo
       if (toAgent(e)) open = true;
     }
   });
+  // an idea's and a proposal's questions are answered in the owner's words; a worker's on their own
   named(shown);
-  // a worker's question is answered on its own; an idea's and a proposal's in the owner's words
-  for (const turn of shown) if (turn.e.kind === 'question' && turn.e.author === 'worker' && !turn.picks) Object.assign(turn, outcome(events, turn.e));
+  for (const turn of shown) if (turn.e.kind === 'question' && !turn.picks) Object.assign(turn, answered(events, turn.e));
   marked(shown);
   const asked = askedLast(shown, opts.open ?? []);
+  const at = new Map(events.map((e, i) => [e, i]));
+  for (const turn of shown) if (turn.e.kind === 'question' && !asked.includes(turn)) Object.assign(turn, ended(turn, events, at, shown, !!opts.working));
   for (const x of asked) shown.splice(shown.indexOf(x), 1);
   if (opts.over && !asked.length) {
     settle(shown, steps, events);
@@ -174,7 +184,7 @@ export function talkTurns(all: CardEvent[], opts: { open?: Question[]; over?: bo
  */
 export function cardTalk(item: Item, events: CardEvent[], past = false): Talk {
   const { working, paused, open } = talkState(item, past);
-  return talkTurns(events, { open, over: !working && !paused, paused });
+  return talkTurns(events, { open, over: !working && !paused, paused, working });
 }
 
 /**
@@ -251,12 +261,12 @@ function closed(steps: CardEvent[]): Turn | undefined {
 /**
  * Where the open questions were asked, the last time each was, unless something answered it there
  * (on the owner's behalf, say, or options the owner picked that the agent has not taken in, as when a
- * proposal's rework failed: whatever the card says, the answer stays in view) or a note took it
- * back: those stand at the end, to be answered.
+ * proposal's rework failed: whatever the card says, the answer stays in view): those stand at the
+ * end, to be answered.
  */
 function askedLast(shown: Turn[], open: Question[]): Turn[] {
   const asked = new Set(open.map((q) => shown.findLast((x) => x.e.kind === 'question' && parseQuestion(x.e.text).text === q.text)));
-  return shown.filter((x) => asked.has(x) && x.answer === undefined && !x.picks && !x.settled);
+  return shown.filter((x) => asked.has(x) && x.answer === undefined && !x.picks);
 }
 
 /**
@@ -286,14 +296,40 @@ function duplicate(events: CardEvent[], i: number): boolean {
   return !!next && next.kind !== 'say' && next.text.trim() === said;
 }
 
-/** How a question ended: answered, or taken back by a note of the owner's before anything else was asked. */
-function outcome(events: CardEvent[], q: CardEvent): Pick<Turn, 'answer' | 'picks' | 'settled'> {
+/** The answer a question got before anything else was asked (only a worker's question is answered on its own). */
+function answered(events: CardEvent[], q: CardEvent): Pick<Turn, 'answer' | 'picks'> {
   const after = events.slice(events.indexOf(q) + 1);
   const until = after.findIndex((e) => e.kind === 'question');
-  const before = until < 0 ? after : after.slice(0, until);
-  const answer = before.find((e) => e.kind === 'answer');
-  if (answer) return { answer: answer.text, ...(answer.picks ? { picks: answer.picks } : {}) };
-  return before.some((e) => e.kind === 'hint' && e.author === 'owner') ? { settled: true } : {};
+  const answer = (until < 0 ? after : after.slice(0, until)).find((e) => e.kind === 'answer');
+  return answer ? { answer: answer.text, ...(answer.picks ? { picks: answer.picks } : {}) } : {};
+}
+
+/** What the owner says on a card, to its agent or about a proposal (`revise` logs it as their spoken words). */
+const ownerSays = (e: CardEvent) => toAgent(e) || (e.kind === 'say' && e.author === 'owner');
+
+/**
+ * How a question that nobody waits on any more ended, the same on every kind of card, by what came
+ * after it: options picked for it stand ticked (an answer in the owner's own words ticks the options
+ * it names); asked again later, it points there; with the owner's words after it, they settled it
+ * once the agent replied without asking it again (while the agent still works on that reply, it may
+ * yet, so nothing shows); without, it was left open when the card went on (built, taken on, parked,
+ * archived). Until 2026-10-21 only a
+ * worker's question taken back by a note showed how it ended: an idea's or a proposal's the owner's
+ * words passed over stood with its options as if it waited, and one asked again stood twice alike.
+ */
+function ended(turn: Turn, events: CardEvent[], at: Map<CardEvent, number>, shown: Turn[], working: boolean): Pick<Turn, 'end' | 'next'> {
+  const q = parseQuestion(turn.e.text);
+  if (turn.picks || (turn.answer !== undefined && q.options.some((o) => turn.answer!.includes(o)))) return {};
+  const after = events.slice(at.get(turn.e)! + 1);
+  const again = after.find((e) => e.kind === 'question' && parseQuestion(e.text).text === q.text);
+  if (again) return { end: 'again', next: again.id };
+  // the agent at work is still the one that asked, not a worker started on the idea built or the proposal taken on
+  const still = working && !after.some(started);
+  const words = after.find(ownerSays);
+  if (!words) return still ? {} : { end: 'left' };
+  const said = at.get(words)!;
+  const replied = shown.some((x) => !x.line && agentAuthor(x.e) && (at.get(x.e) ?? -1) > said);
+  return still && !replied ? {} : { end: 'settled' };
 }
 
 /**
