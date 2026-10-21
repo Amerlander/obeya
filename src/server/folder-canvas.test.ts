@@ -162,6 +162,19 @@ describe('a canvas over a folder without git', () => {
     expect(item(tidy.id).files).toBeUndefined();
   });
 
+  test('a handover the owner stopped the session under, while its change was read, changes nothing', async () => {
+    const card = canvas.board.create({ title: 'Write it', x: 0, y: 0 });
+    const workers = canvas.repoOf(card.id).workers;
+    workers.start(card.id);
+    const a = runtime.last;
+    await a.use('Write', { file_path: join(docs, 'Note.md') }, () => writeFileSync(join(docs, 'Note.md'), '# Note\n'));
+    const handover = a.call('ready_for_review', { summary: 'Written.' });
+    workers.stop(card.id);
+    expect(await handover).toContain('This session has ended');
+    expect(item(card.id).state).toBe('planned');
+    expect(canvas.board.events(card.id).some((e) => e.kind === 'review')).toBe(false);
+  });
+
   test('cards handed over without a demo before Obeya kept their list get it at the start, archived ones too, while their files are there', async () => {
     const handed = async (title: string, file: string) => {
       const card = canvas.board.create({ title, x: 0, y: 0 });

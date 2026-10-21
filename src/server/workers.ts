@@ -2638,6 +2638,8 @@ export class Workers {
           type Demo = { kind?: DemoKind; dir: string; chapters?: string[]; question?: string; page?: DemoPage; follows?: 'replaces' | 'supplements' };
           const given = demo as Demo | undefined;
           const handOverWork = (d: Demo | undefined, named: CardFile[] | undefined, shows: boolean): string => {
+            // reading what the change shows takes a while, in which the owner may stop or replace the session
+            if (this.live.get(cardId) !== live && !live.standIn) return 'This session has ended. Stop working and end your turn.';
             const s = clip(String(summary), 6000);
             const row = this.o.board.row(cardId);
             if (row.landed) return 'Not handed over: your work is on main already.';

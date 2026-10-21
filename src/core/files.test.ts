@@ -56,6 +56,12 @@ describe('the files a card shows as its result', () => {
     ]);
   });
 
+  test('a file gone from the folder since gets no tab, named or not', () => {
+    const changes = folder.folder!.changes.map((c) => (c.path === 'Steuer.xlsx' || c.path === 'CLAUDE.md' ? { ...c, gone: true as const } : c));
+    const named = [{ path: 'Steuer.xlsx', caption: 'Die Tabelle' }];
+    expect(shownFiles({ ...folder, folder: { undo: 'full', changes } }, named).map((f) => f.path)).toEqual(['Finanzen/Regelungen.md', 'Scans/a.pdf', 'Finanzen/Modell.py']);
+  });
+
   test('on a branch: a renamed file without changes is shown as it is, a changed one with its changes', () => {
     expect(shownFiles(branch).map((f) => `${f.path} ${f.kind}${f.added ? ' new' : ''}${f.diff ? ' diff' : ''}`)).toEqual([
       'docs/report.pdf pdf new',
