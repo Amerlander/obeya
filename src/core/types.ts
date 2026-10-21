@@ -618,11 +618,13 @@ export const START_ALL_HOLD_MS = 8000;
  * longest goes first. `together`: the project whose workstreams the Koordinator judges all at once.
  * `workspace`: the Koordinator let the card start, but no workspace was free for it (`none`: all
  * leased or none set up; `dirty`: every free one has uncommitted changes); it starts once one is.
+ * `behind`: the cards it waits for; `buildsOn`: those of them it builds on (workstreams of its
+ * project), which hold it until they have landed, also while not started or stopped.
  */
 export type Queue = Wait & { since: string };
 
 /** What a card in the queue waits for (`Queue`). */
-export type Wait = { checking: true; together?: string } | { behind: string[]; reason: string } | { workspace: WorkspaceShortage };
+export type Wait = { checking: true; together?: string } | { behind: string[]; reason: string; buildsOn?: string[] } | { workspace: WorkspaceShortage };
 
 /** Why a card waits to start: no clone free (`none`), the free ones dirty, or every machine with a clean free one busy to its slots (`slots`). */
 export type WorkspaceShortage = 'none' | 'dirty' | 'slots';

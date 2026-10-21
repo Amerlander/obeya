@@ -2479,6 +2479,18 @@ A card likely to conflict waits, with the reason (one that starts says which fil
 that is fine); once what it waits for has landed or stopped it starts, or, while other work runs
 that may have started meanwhile, it is judged again — the owner can start it anyway.
 
+A workstream started on its own also waits for the workstreams of its project it builds on (code,
+an API, data or a decision one of them introduces, or the plan says it comes after it), judged from
+the plan doc: those in progress, queued, and those the owner has not started (stopped ones too),
+since the owner may start workstreams one by one to keep work from going on by itself. Such a wait
+(`buildsOn` among `behind`) holds until the workstream it builds on has landed: taking that one out
+of the queue or stopping it does not free the card, as it frees one waiting for a conflict. The card
+says so ("Wartet auf W2 „…“ (noch nicht gestartet)", in its log, the queue's list and the project's
+sheet), so the owner sees which workstream to start first; "Trotzdem starten" starts it anyway.
+With nothing in progress and nothing queued it still starts at once only when no workstream of its
+project is left unlanded. A card that waits for another, directly or through others, is not among
+the cards that one sees as queued ahead or to build on, so no two cards wait for each other.
+
 #### Waiting for a workspace
 
 A card the Koordinator lets start while no workspace is free (all clones leased, or every free one
@@ -2519,11 +2531,11 @@ A project starts all its planned workstreams at once ("Alle N starten" in the pr
 plan's order, wait 8 seconds in which "Rückgängig" takes the start back (the button is easily hit),
 and then one Koordinator turn sees them together with the plan doc, the cards in progress and those
 queued ahead. It puts them in an order and says for each what it waits for: a workstream it builds
-on (until that one has landed) or one it would likely conflict with; the rest start at once. A
+on (until that one has landed, as above) or one it would likely conflict with; the rest start at once. A
 workstream may wait only for what comes before it in that order, so none wait for each other, and
 the order is the queue's from then on. The project's sheet names what each waiting workstream waits
-for. When the turn fails, each is judged on its own as if started alone; after a restart the joint
-turn runs again.
+for. When the turn fails, each is judged on its own as if started alone, seeing the others queued
+after it to build on; after a restart the joint turn runs again.
 
 ### Learning the owner's rules
 

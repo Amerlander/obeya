@@ -14,7 +14,7 @@ import { Branch } from './diff';
 import { DiscardChanges, FolderBox, FolderLine, useFolderDiff } from './folder';
 import { landedRef, shownTitle } from './parts';
 import { inQueue } from '../core/queue';
-import { useQueueMove } from './queue';
+import { useQueueMove, waitedOn } from './queue';
 import { Inline, plain } from './markdown';
 import { Body, goToMessage, Msg, Quote, Reading, useAnswer, useReportedHeight } from './message';
 import { cardDraft, giveBack, questionsKey, updateDraft, useDraft } from './draft';
@@ -315,7 +315,7 @@ export function Detail(p: Props) {
       ) : (
         <>
           <div className="q-text">
-            {t.queue.behind(item.queue.behind.map((id) => plain(all.find((x) => x.id === id)?.title ?? id)))} {item.queue.reason}
+            {t.queue.behind(waitedOn(item.queue.behind, all))} {item.queue.reason}
           </div>
           <QueuePlace item={item} items={all} />
           <div className="actions">

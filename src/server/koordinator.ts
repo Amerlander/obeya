@@ -4,8 +4,8 @@
 
 import { z } from 'zod';
 import type { RepoAdapter } from '../adapters/types';
-import { inQueue, move, movable, queueOrder } from '../core/queue';
-import { type AgentRole, type CardEvent, type Item, nameless, type Preference, START_ALL_HOLD_MS, titleFrom, type Wait } from '../core/types';
+import { inQueue, move, movable, notStarted, queueOrder, waitsOn } from '../core/queue';
+import { type AgentRole, type CardEvent, finished, type Item, nameless, type Preference, START_ALL_HOLD_MS, titleFrom, type Wait } from '../core/types';
 import { ACTIVE, BadRequest, type Board } from './board';
 import type { Utterance } from './db';
 import { type AgentRuntime, type AgentTool, waitQuietly } from './runtime';
@@ -19,6 +19,8 @@ interface Planned {
   card: string;
   files: string[];
   waitsFor: string[];
+  /** Those of `waitsFor` it builds on. */
+  buildsOn: string[];
   reason: string;
 }
 
@@ -43,6 +45,8 @@ export interface Scope {
   files: string[];
   /** Cards in progress or queued ahead whose changes the Koordinator expects to conflict with this card's on merge. */
   conflictsWith: string[];
+  /** Workstreams of its project it builds on: they hold it until they have landed, also while not started. */
+  buildsOn: string[];
   reason: string;
 }
 
@@ -408,15 +412,37 @@ export class Koordinator {
 
   /**
    * Cards of the card's repository queued before it and still waiting: they go first, so a card
-   * likely to conflict with one of them queues behind it instead of overtaking it.
+   * likely to conflict with one of them queues behind it instead of overtaking it. One that waits
+   * for the card itself (it builds on it) does not go first, so the two never wait for each other.
    */
   ahead(card: Item): Item[] {
     const since = card.queue?.since;
     if (!since) return [];
-    return this.o.board
-      .snapshot()
-      .items.filter((i) => i.id !== card.id && i.repo === card.repo && inQueue(i) && (i.queue!.since ?? '') < since)
+    const items = this.o.board.snapshot().items;
+    return items
+      .filter((i) => i.id !== card.id && i.repo === card.repo && inQueue(i) && (i.queue!.since ?? '') < since && !waitsOn(i, card.id, items))
       .sort((a, b) => a.queue!.since.localeCompare(b.queue!.since));
+  }
+
+  /**
+   * The other workstreams of a workstream's project that have not landed and are neither in progress
+   * nor queued ahead: not started (stopped ones too), or queued after it. It may build on one of
+   * them; one waiting for it is left out, so the two never wait for each other.
+   */
+  private pending(card: Item, active: Item[], ahead: Item[]): Item[] {
+    if (!card.parent) return [];
+    const items = this.o.board.snapshot().items;
+    const seen = new Set([card.id, ...active.map((i) => i.id), ...ahead.map((i) => i.id)]);
+    return items.filter(
+      (i) => i.parent === card.parent && i.kind !== 'project' && !seen.has(i.id) && !finished(i.state) && !i.archivedAt && !waitsOn(i, card.id, items),
+    );
+  }
+
+  /** How the log names a card waited for: a workstream by its label, and one not started as such. */
+  private nameOf(i: Item): string {
+    const t = this.o.board.t;
+    const name = i.parent && i.label ? `${i.label} ${t.quote(i.title)}` : t.quote(i.title);
+    return notStarted(i) ? t.koordinator.notStarted(name) : name;
   }
 
   private async decide(cardId: string) {
@@ -427,37 +453,40 @@ export class Koordinator {
     if (!card || card.state !== 'planned' || !card.queue || !('checking' in card.queue)) return;
     const active = this.inProgress(card.repo);
     const ahead = this.ahead(card);
-    if (!active.length && !ahead.length) {
-      // nothing it could collide with: start at once, and estimate the scope for the cards after it
+    const pending = this.pending(card, active, ahead);
+    if (!active.length && !ahead.length && !pending.length) {
+      // nothing it could collide with or build on: start at once, and estimate the scope for the cards after it
       this.startNow(cardId, this.o.board.t.koordinator.nothingRuns);
       if (this.o.board.item(cardId)?.state !== 'working') return;
       try {
-        const scope = await this.estimate(card, [], [], waitQuietly);
+        const scope = await this.estimate(card, [], [], [], waitQuietly);
         this.o.board.work(cardId, { scope: JSON.stringify({ files: scope.files, reason: scope.reason }) });
       } catch {}
       return;
     }
     let scope: Scope;
     try {
-      scope = await this.estimate(card, active, ahead, (until) => this.o.board.waitsForLimit({ card: cardId }, until));
+      scope = await this.estimate(card, active, ahead, pending, (until) => this.o.board.waitsForLimit({ card: cardId }, until));
     } catch (e) {
       this.o.board.log(cardId, 'error', 'obeya', this.o.board.t.koordinator.estimateFailed(messageOf(e)));
-      scope = { files: [], conflictsWith: [], reason: '' };
+      scope = { files: [], conflictsWith: [], buildsOn: [], reason: '' };
     }
     if (!this.o.board.item(cardId)?.queue) return;
     this.o.board.work(cardId, { scope: JSON.stringify({ files: scope.files, reason: scope.reason }) });
-    // the cards in progress or queued ahead whose changes it expects to conflict with the card's
-    const behind = [...active, ...ahead].filter((a) => scope.conflictsWith.includes(a.id)).map((a) => a.id);
+    // the workstreams it builds on, and the cards in progress or queued ahead whose changes it
+    // expects to conflict with the card's
+    const behind = [...active, ...ahead, ...pending].filter((a) => scope.buildsOn.includes(a.id) || scope.conflictsWith.includes(a.id)).map((a) => a.id);
     const t = this.o.board.t.koordinator;
     if (!behind.length) return this.startNow(cardId, `${t.noConflict}${scope.reason ? ` ${scope.reason}` : ''}`);
     const names = behind
       .map((id) => {
         const a = ahead.find((x) => x.id === id);
-        return a ? t.waitsAhead(a.title) : this.o.board.t.quote(active.find((x) => x.id === id)?.title ?? id);
+        return a ? t.waitsAhead(a.title) : this.nameOf([...active, ...pending].find((x) => x.id === id)!);
       })
       .join(', ');
-    const reason = scope.reason || t.likelyConflict;
-    this.setQueue(cardId, { behind, reason });
+    const buildsOn = behind.filter((id) => scope.buildsOn.includes(id));
+    const reason = scope.reason || (buildsOn.length ? t.buildsOn : t.likelyConflict);
+    this.setQueue(cardId, { behind, reason, ...(buildsOn.length && { buildsOn }) });
     this.o.board.log(cardId, 'state', 'obeya', t.waitsFor(names, reason));
   }
 
@@ -474,15 +503,15 @@ export class Koordinator {
     const ids = new Set(batch.map((w) => w.id));
     const repo = batch[0]!.repo;
     const active = this.inProgress(repo);
-    // what waits already came first, as for a single card
+    // what waits already came first, as for a single card, unless it waits for one of them
     const ahead = items
-      .filter((i) => i.repo === repo && !ids.has(i.id) && inQueue(i))
+      .filter((i) => i.repo === repo && !ids.has(i.id) && inQueue(i) && !batch.some((w) => waitsOn(i, w.id, items)))
       .sort((a, b) => a.queue!.since.localeCompare(b.queue!.since));
     let plan: Planned[];
     try {
       plan = await this.schedule(this.o.board.item(projectId)!, batch, active, ahead);
     } catch (e) {
-      // judged one by one instead: without the dependencies, but nothing is lost
+      // judged one by one instead, each seeing the others it may build on
       this.o.board.log(projectId, 'error', 'obeya', this.o.board.t.koordinator.togetherFailed(messageOf(e)));
       for (const w of batch) {
         this.setQueue(w.id, { checking: true });
@@ -511,8 +540,9 @@ export class Koordinator {
         started++;
         return this.startNow(id, `${this.o.board.t.koordinator.togetherStarts}${p.reason ? ` ${p.reason}` : ''}`);
       }
-      const reason = p.reason || this.o.board.t.koordinator.likelyConflict;
-      this.setQueue(id, { behind, reason });
+      const buildsOn = behind.filter((b) => p.buildsOn.includes(b));
+      const reason = p.reason || (buildsOn.length ? this.o.board.t.koordinator.buildsOn : this.o.board.t.koordinator.likelyConflict);
+      this.setQueue(id, { behind, reason, ...(buildsOn.length && { buildsOn }) });
       this.o.board.log(id, 'state', 'obeya', this.o.board.t.koordinator.waitsFor(behind.map((b) => names.get(b) ?? b).join(', '), reason));
     });
     this.o.board.log(projectId, 'state', 'koordinator', this.o.board.t.koordinator.planned(started, plan.length));
@@ -582,11 +612,13 @@ export class Koordinator {
         if (this.o.board.item(w.id)?.queue) full.add(w.repo);
         continue;
       }
-      const q = w.queue as { behind: string[]; reason: string };
-      const still = q.behind.filter((id) => active.has(id));
+      const q = w.queue as { behind: string[]; reason: string; buildsOn?: string[] };
+      // what it builds on holds it until it has landed, also while not started or stopped
+      const still = q.behind.filter((id) => active.has(id) || (q.buildsOn?.includes(id) && unlanded(items.find((i) => i.id === id))));
       if (still.length === q.behind.length) continue;
       if (still.length) {
-        this.setQueue(w.id, { behind: still, reason: q.reason });
+        const buildsOn = q.buildsOn?.filter((id) => still.includes(id));
+        this.setQueue(w.id, { behind: still, reason: q.reason, ...(buildsOn?.length && { buildsOn }) });
         continue;
       }
       // what it waited for is done; with nothing else running it starts, else it is judged again
@@ -660,9 +692,14 @@ export class Koordinator {
   // ---------------------------------------------------------------- the estimate
 
   /** `onLimit`: where the estimate shows that it waits for the usage limit. */
-  private async estimate(card: Item, active: Item[], ahead: Item[], onLimit: (until: number | undefined) => void): Promise<Scope> {
+  private async estimate(card: Item, active: Item[], ahead: Item[], pending: Item[], onLimit: (until: number | undefined) => void): Promise<Scope> {
     let scope: Scope | undefined;
-    const tags = new Map([...active, ...ahead].map((a, n) => [`K${n + 1}`, a.id]));
+    const tags = new Map([...active, ...ahead, ...pending].map((a, n) => [`K${n + 1}`, a.id]));
+    // a conflict only with what runs or goes first; building on only a workstream of its project
+    const running = new Set([...active, ...ahead].map((a) => a.id));
+    const siblings = new Set([...active, ...ahead, ...pending].filter((a) => card.parent && a.parent === card.parent).map((a) => a.id));
+    const ids = (list: unknown, among: Set<string>) =>
+      (Array.isArray(list) ? list : []).map((t) => tags.get(String(t))).filter((x): x is string => !!x && among.has(x));
     const error = await readSession(this.o.runtime, {
       cwd: this.o.repoFor(card).path,
       role: 'koordinator',
@@ -671,20 +708,21 @@ export class Koordinator {
       tools: (finish) => [
         {
           name: 'scope',
-          description: `Report the files the card will change, the cards in progress or queued ahead whose changes are likely to conflict with it on merge (their tags), and a one-sentence reason in ${this.language}.`,
-          schema: { files: z.array(z.string()), conflicts_with: z.array(z.string()), reason: z.string() },
+          description: `Report the files the card will change, the cards in progress or queued ahead whose changes are likely to conflict with it on merge (their tags), the workstreams of its project it builds on (their tags), and a one-sentence reason in ${this.language}.`,
+          schema: { files: z.array(z.string()), conflicts_with: z.array(z.string()), builds_on: z.array(z.string()).optional(), reason: z.string() },
           run: (a) => {
             if (scope) return 'Already reported.';
             scope = {
               files: (a.files as string[]).slice(0, 200),
-              conflictsWith: (a.conflicts_with as string[]).map((t) => tags.get(t)).filter((x): x is string => !!x),
+              conflictsWith: ids(a.conflicts_with, running),
+              buildsOn: ids(a.builds_on, siblings),
               reason: String(a.reason).slice(0, 500),
             };
             return finish('Recorded. End your turn now.');
           },
         },
       ],
-      brief: this.brief(card, active, ahead, tags),
+      brief: this.brief(card, active, ahead, pending, tags),
     });
     if (!scope) throw new Error(error ?? 'no estimate');
     return scope;
@@ -705,23 +743,28 @@ export class Koordinator {
       tools: (finish) => [
         {
           name: 'schedule',
-          description: `Report every workstream once, in the order they should go: its tag, the files it will change, the tags of the cards it waits for (in progress, queued ahead, or workstreams earlier in your order; empty to start now), and a one-sentence reason in ${this.language}.`,
+          description: `Report every workstream once, in the order they should go: its tag, the files it will change, the tags of the workstreams it builds on and of the cards it would likely conflict with (both empty to start now), and a one-sentence reason in ${this.language}.`,
           schema: {
-            workstreams: z.array(z.object({ card: z.string(), files: z.array(z.string()), waits_for: z.array(z.string()), reason: z.string() })),
+            workstreams: z.array(
+              z.object({ card: z.string(), files: z.array(z.string()), builds_on: z.array(z.string()), conflicts_with: z.array(z.string()), reason: z.string() }),
+            ),
           },
           run: (a) => {
             if (plan) return 'Already reported.';
             const mine = new Set(batch.map((w) => w.id));
             const seen = new Set<string>();
             const order: Planned[] = [];
-            for (const w of a.workstreams as { card: string; files: string[]; waits_for: string[]; reason: string }[]) {
+            for (const w of a.workstreams as { card: string; files: string[]; builds_on: string[]; conflicts_with: string[]; reason: string }[]) {
               const id = tags.get(w.card);
               if (!id || !mine.has(id) || seen.has(id)) continue;
               seen.add(id);
+              const ids = (list: string[]) => list.map((t) => tags.get(t)).filter((x): x is string => !!x && x !== id);
+              const buildsOn = ids(w.builds_on);
               order.push({
                 card: id,
                 files: w.files.slice(0, 200),
-                waitsFor: w.waits_for.map((t) => tags.get(t)).filter((x): x is string => !!x && x !== id),
+                waitsFor: [...new Set([...buildsOn, ...ids(w.conflicts_with)])],
+                buildsOn,
                 reason: String(w.reason).slice(0, 500),
               });
             }
@@ -747,13 +790,23 @@ export class Koordinator {
     return plan;
   }
 
-  private brief(card: Item, active: Item[], ahead: Item[], tags: Map<string, string>): string {
+  private brief(card: Item, active: Item[], ahead: Item[], pending: Item[], tags: Map<string, string>): string {
     const project = card.parent ? this.o.board.item(card.parent) : undefined;
+    const siblings = [...active, ...ahead].filter((a) => a.parent === card.parent).map((a) => tagOf(tags, a.id));
     const lines = [
       `The card to start: ${card.kind} "${card.title}".`,
       card.body.trim(),
       project?.plan ? `It is workstream ${card.label ?? ''} of the project "${project.title}"; plan doc ${project.plan.file}.` : '',
       ...this.others(card, active, ahead, tags),
+      siblings.length ? `Of these, workstreams of the same project: ${siblings.join(', ')}.` : '',
+      pending.length
+        ? `The project's other workstreams that have not landed, neither in progress nor queued ahead:\n${pending
+            .map((w) => {
+              const state = notStarted(w) ? (w.branch ? 'stopped by the owner, not running' : 'not started') : 'queued after this card';
+              return `- ${tagOf(tags, w.id)}: ${w.label ? `${w.label} ` : ''}"${w.title}" (${state})${w.body ? ` — ${w.body.replace(/\s+/g, ' ').slice(0, 300)}` : ''}`;
+            })
+            .join('\n')}`
+        : '',
     ];
     return lines.filter(Boolean).join('\n\n');
   }
@@ -819,26 +872,32 @@ export class Koordinator {
 const NAME_SYSTEM = (language: string) => `You name a card on Obeya, a canvas on which the owner directs coding agents. The owner wrote the card's task (below) without a title. Give it one with the tool title: in the language the task is written in (${language} where it tells none), short and precise like a ticket title (at most about 70 characters), saying what the task changes or achieves; no quotes, no full stop at the end. Then end your turn.`;
 
 const SYSTEM = (language: string) => `
-You are the Koordinator of Obeya, a canvas on which the owner directs coding agents; the owner knows you simply as Obeya. Several workers work at the same time, each in its own workspace, and their branches are rebased onto the main branch one after the other. Your job here: before a card starts, estimate which files it will change, and judge whether running it next to the cards in progress is likely to end in merge conflicts. Only those keep it waiting; everything else should run in parallel. Cards queued ahead of it count too: they came first and start before it, so a card likely to conflict with one of them waits behind it rather than overtaking it.
+You are the Koordinator of Obeya, a canvas on which the owner directs coding agents; the owner knows you simply as Obeya. Several workers work at the same time, each in its own workspace, and their branches are rebased onto the main branch one after the other. Your job here: before a card starts, estimate which files it will change, and judge whether running it next to the cards in progress is likely to end in merge conflicts. Only those keep it waiting, and for a workstream of a project what it builds on; everything else should run in parallel. Cards queued ahead of it count too: they came first and start before it, so a card likely to conflict with one of them waits behind it rather than overtaking it.
+
+A workstream of a project builds on another workstream of it when it needs code, an API, data or a decision that the other one introduces, or the plan says it comes after it. It then waits until that one has landed, also when the owner has not started that one yet: the owner may start workstreams one by one, and starting this one now would build on what is not there. Read the plan doc for that.
 
 Sharing a file is not a conflict. Git merges changes to different places of the same file cleanly: new strings, types, routes, tests or functions added next to others; edits in different functions. A conflict is likely when both cards change the same lines or the same function or block, when one rewrites, moves, renames or reformats code the other one edits, or when both change the same small, tightly packed section (one config entry, one signature that both extend). For a card in progress you see what it is expected to change and the places it has changed so far (line ranges in its branch, with the enclosing function); read the code there when you need to.
 
 Read what you need in the repository (you cannot change files), then call scope exactly once:
 - files: repository-relative paths the card will most likely change; a path ending in "/" stands for a directory. Be concrete; list new files where you expect them.
 - conflicts_with: the tags of cards in progress or queued ahead whose changes will likely conflict with this card's on merge; empty when none. When in doubt, leave a card out: a conflict that happens anyway goes back to its worker to resolve.
-- reason: one sentence in ${language} for the owner: with a conflict, where the two cards change the same code; without one, which files they share, if any, and why that is fine. The owner does not know the tags: name cards by their title.
+- builds_on: for a workstream, the tags of the workstreams of its project it builds on, whether in progress, queued or not started; empty when none, and for any other card.
+- reason: one sentence in ${language} for the owner: with a dependency, what it builds on; with a conflict, where the two cards change the same code; without either, which files they share, if any, and why that is fine. The owner does not know the tags: name cards by their title.
 Keep it quick: this runs every time a card starts.
 `.trim();
 
 const FOLDER_SYSTEM = (language: string) => `
-You are the Koordinator of Obeya, a canvas on which the owner directs agents; the owner knows you simply as Obeya. Several workers work at the same time, all directly in one folder that is not a git repository: what one changes is there at once for the others, and nothing is merged afterwards. Your job here: before a card starts, estimate which files and directories it will touch, and judge whether running it next to the cards in progress is likely to get in their way. Only those keep it waiting; everything else should run in parallel. Cards queued ahead of it count too: they came first and start before it, so a card likely to collide with one of them waits behind it rather than overtaking it.
+You are the Koordinator of Obeya, a canvas on which the owner directs agents; the owner knows you simply as Obeya. Several workers work at the same time, all directly in one folder that is not a git repository: what one changes is there at once for the others, and nothing is merged afterwards. Your job here: before a card starts, estimate which files and directories it will touch, and judge whether running it next to the cards in progress is likely to get in their way. Only those keep it waiting, and for a workstream of a project what it builds on; everything else should run in parallel. Cards queued ahead of it count too: they came first and start before it, so a card likely to collide with one of them waits behind it rather than overtaking it.
+
+A workstream of a project builds on another workstream of it when it needs files, an overview, data or a decision that the other one makes, or the plan says it comes after it. It then waits until that one is done, also when the owner has not started that one yet: the owner may start workstreams one by one, and starting this one now would build on what is not there. Read the plan doc for that.
 
 Working in the same directory is not a collision: cards that add or edit different files there run side by side. A collision is likely when both change, move, rename or delete the same files; when one moves, renames or reorganises a directory the other works in; or when one sorts or rewrites files the other creates or reads. For a card in progress you see what it is expected to touch and what it has changed so far (each path, and whether it was added, changed, moved or deleted); look in the folder when you need to.
 
 Read what you need in the folder (you cannot change files), then call scope exactly once:
 - files: paths relative to the folder that the card will most likely touch; a path ending in "/" stands for a directory. Be concrete; list new files where you expect them.
 - conflicts_with: the tags of cards in progress or queued ahead it would likely collide with; empty when none. Leave out a card that only works beside it.
-- reason: one sentence in ${language} for the owner: with a collision, which files or directories both touch; without one, what they share, if anything, and why that is fine. The owner does not know the tags: name cards by their title.
+- builds_on: for a workstream, the tags of the workstreams of its project it builds on, whether in progress, queued or not started; empty when none, and for any other card.
+- reason: one sentence in ${language} for the owner: with a dependency, what it builds on; with a collision, which files or directories both touch; without either, what they share, if anything, and why that is fine. The owner does not know the tags: name cards by their title.
 Keep it quick: this runs every time a card starts.
 `.trim();
 
@@ -853,7 +912,9 @@ Everything else starts now and runs in parallel; parallel work is the point. Car
 Call schedule exactly once, with every workstream once, in the order they should go (what starts now first, then each one after what it waits for):
 - card: its tag.
 - files: paths relative to the folder it will most likely touch; a path ending in "/" stands for a directory.
-- waits_for: the tags of cards it waits for: cards in progress, queued ahead, or workstreams earlier in your order. Empty: it starts now. A workstream that waits starts by itself once what it waits for is done.
+- builds_on: the tags of the workstreams it depends on (in progress, queued ahead, or earlier in your order).
+- conflicts_with: the tags of cards it would likely collide with: cards in progress, queued ahead, or workstreams earlier in your order.
+Both empty: it starts now. A workstream that waits starts by itself once what it waits for is done.
 - reason: one sentence in ${language} for the owner: why it waits (the dependency, or where the changes collide), or, starting now, why it can run beside the others. The owner does not know the tags: name cards by their label or title.
 `.trim();
 
@@ -868,7 +929,9 @@ Everything else starts now and runs in parallel; parallel work is the point. Whe
 Call schedule exactly once, with every workstream once, in the order they should go (what starts now first, then each one after what it waits for):
 - card: its tag.
 - files: repository-relative paths it will most likely change; a path ending in "/" stands for a directory.
-- waits_for: the tags of cards it waits for: cards in progress, queued ahead, or workstreams earlier in your order. Empty: it starts now. A workstream that waits starts by itself once what it waits for has landed.
+- builds_on: the tags of the workstreams it depends on (in progress, queued ahead, or earlier in your order).
+- conflicts_with: the tags of cards it would likely conflict with: cards in progress, queued ahead, or workstreams earlier in your order.
+Both empty: it starts now. A workstream that waits starts by itself once what it waits for has landed.
 - reason: one sentence in ${language} for the owner: why it waits (the dependency, or where the changes collide), or, starting now, why it can run beside the others. The owner does not know the tags: name cards by their label or title.
 `.trim();
 
@@ -1026,6 +1089,9 @@ const describe = (c: Change) =>
   `${c.file} (${c.regions.length ? (c.regions[0] === 'deleted' ? 'deleted' : `lines ${c.regions.slice(0, 8).join('; ')}${c.regions.length > 8 ? '; …' : ''}`) : 'new'})`;
 
 /** The tag a turn of the Koordinator knows a card by. */
+/** A card waited on that still holds back what builds on it: there, and its work not on the main branch yet. */
+const unlanded = (i?: Item) => !!i && !finished(i.state) && !i.archivedAt;
+
 const tagOf = (tags: Map<string, string>, id: string) => [...tags].find(([, x]) => x === id)![0];
 
 const normalize = (p: string) => p.trim().replace(/^\.\//, '').replace(/^\/+/, '');

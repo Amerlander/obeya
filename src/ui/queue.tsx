@@ -3,7 +3,7 @@
 // wait says why when clicked (and on hover); at the head or the end of the queue it is greyed out.
 
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from 'react';
-import { move, movable, queueOrder } from '../core/queue';
+import { move, movable, notStarted, queueOrder } from '../core/queue';
 import type { Item } from '../core/types';
 import { api } from './api';
 import { plain } from './markdown';
@@ -66,17 +66,24 @@ export function QueuePill({ items, onOpen }: { items: Item[]; onOpen: (i: Item) 
   );
 }
 
+/** What a waiting card's line says it waits for: each card by `name`, and whether it has not been started. */
+export function waitedOn(ids: string[], items: Item[], name: (id: string) => string = (id) => plain(items.find((i) => i.id === id)?.title ?? id)) {
+  return ids.map((id) => {
+    const i = items.find((x) => x.id === id);
+    return { title: name(id), notStarted: !!i && notStarted(i) };
+  });
+}
+
 /** A card in the queue, with what it waits for and the buttons that move it. */
 function QueueRow({ item, items, onOpen }: { item: Item; items: Item[]; onOpen: (i: Item) => void }) {
   const m = useQueueMove(item, items);
-  const title = (id: string) => plain(items.find((i) => i.id === id)?.title ?? '');
   return (
     <li className="s-planned" onClick={() => onOpen(item)}>
       <span className="dot" />
       <span className="q-what">
         {plain(item.title)}
         <br />
-        <span className="hint">{item.queue && 'behind' in item.queue ? t.queue.behind(item.queue.behind.map(title)) : stateLabel(item)}</span>
+        <span className="hint">{item.queue && 'behind' in item.queue ? t.queue.behind(waitedOn(item.queue.behind, items)) : stateLabel(item)}</span>
         {m?.why && <span className="hint why">{m.why}</span>}
       </span>
       {m?.buttons}

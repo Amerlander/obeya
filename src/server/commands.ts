@@ -4,7 +4,7 @@
 import { z } from 'zod';
 import { settingsShape } from '../adapters/schema';
 import { type AgentSetting, agentListens, answering, askable, type Awaited, awaited, type AwaitedState, blocksSaving, type CanvasConfig, finished, handedOver, type Item, type NextStep, type Notice, openQuestions, pausable, plannableAsProject, prototypeWorkstream, snoozable, type Queue, type SpotInput, type Talk, type TalkAfter, type TalkQuote, type TalkRef } from '../core/types';
-import { inQueue } from '../core/queue';
+import { inQueue, notStarted } from '../core/queue';
 import { answerTag, fromAnswerTag } from './answers';
 import { BadRequest, type Board, excerpt, replyNote } from './board';
 import type { Place } from '../core/layout';
@@ -1312,7 +1312,12 @@ function queued(q: Queue, items: Item[]): string {
   if ('checking' in q) return 'queued: Obeya checks it for merge conflicts';
   if ('workspace' in q && q.workspace === 'slots') return 'waits for a free slot (every machine with a free workspace has as many workers busy as it has slots); starts by itself once one is done';
   if ('workspace' in q) return `waits for a free workspace (${q.workspace === 'dirty' ? 'every free one has uncommitted changes' : 'all are leased'}); starts by itself once one is free`;
-  const titles = q.behind.map((id) => `"${items.find((i) => i.id === id)?.title ?? id}"`).join(', ');
+  const titles = q.behind
+    .map((id) => {
+      const i = items.find((x) => x.id === id);
+      return `"${i?.title ?? id}"${i && notStarted(i) ? ' (not started yet)' : ''}${q.buildsOn?.includes(id) ? ' (builds on it)' : ''}`;
+    })
+    .join(', ');
   return `queued behind ${titles}`;
 }
 

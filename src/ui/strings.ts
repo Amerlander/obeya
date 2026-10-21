@@ -406,7 +406,7 @@ const de = {
     checking: 'Obeya prüft',
     waiting: 'In der Warteschlange',
     checkingLong: 'Obeya prüft, ob die Aufgabe mit laufender Arbeit wahrscheinlich in Merge-Konflikte gerät.',
-    behind: (titles: string[]) => `Wartet auf ${titles.map((x) => `„${x}“`).join(', ')}.`,
+    behind: (cards: { title: string; notStarted: boolean }[]) => `Wartet auf ${cards.map((c) => `„${c.title}“${c.notStarted ? ' (noch nicht gestartet)' : ''}`).join(', ')}.`,
     workspace: 'Wartet auf Workspace',
     slot: 'Wartet auf freien Slot',
     /** On the card: why it waits for a workspace. */
@@ -1965,7 +1965,7 @@ const en: Strings = {
     checking: 'Obeya checking',
     waiting: 'In the queue',
     checkingLong: 'Obeya checks whether the task is likely to run into merge conflicts with work in progress.',
-    behind: (titles: string[]) => `Waits for ${titles.map((x) => `“${x}”`).join(', ')}.`,
+    behind: (cards: { title: string; notStarted: boolean }[]) => `Waits for ${cards.map((c) => `“${c.title}”${c.notStarted ? ' (not started yet)' : ''}`).join(', ')}.`,
     workspace: 'Waiting for a workspace',
     slot: 'Waiting for a free slot',
     workspaceWhy: { none: 'All workspaces are taken.', dirty: 'The free workspaces have uncommitted changes.', slots: 'All slots are taken.' },

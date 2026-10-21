@@ -17,6 +17,26 @@ export function queueOrder(items: Item[]): Item[] {
 
 const behind = (i: Item) => (i.queue && 'behind' in i.queue ? i.queue.behind : []);
 
+/** A card that has not been started: planned and not in the queue (a stopped one too). */
+export const notStarted = (i: Pick<Item, 'state' | 'queue'>) => i.state === 'planned' && !i.queue;
+
+/** Whether `card` waits for `id`, directly or through cards it waits for. */
+export function waitsOn(card: Item, id: string, items: Item[]): boolean {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const seen = new Set<string>();
+  const todo = [card];
+  while (todo.length) {
+    for (const b of behind(todo.pop()!)) {
+      if (b === id) return true;
+      if (seen.has(b)) continue;
+      seen.add(b);
+      const next = byId.get(b);
+      if (next) todo.push(next);
+    }
+  }
+  return false;
+}
+
 /**
  * Moving the card one place earlier or later: the card it passes, and why it cannot pass it, if so.
  * No `past`: it is first or last already. A card that waits for the next one up stays behind it,
