@@ -12,7 +12,11 @@ one JSON object per line each way (what `tts.py` speaks with a voice whose spec 
 
     → {"ready": true}                                      once the model is loaded
     ← {"text": "...", "out": "/x/clip.wav", "language": "de", "id": 7}   language, id optional
+    → {"sentence": 1, "of": 3, "id": 7}                    once per sentence done
     → {"ok": true, "seconds": 4.2, "id": 7}  or  {"error": "...", "id": 7}
+
+The sentence lines tell whoever asked that the voice is still at work: a voice that says nothing
+for minutes is stuck, and gets ended.
 
 stdout carries nothing but these lines: the libraries print there too, so their output is moved
 to stderr before they load.
@@ -101,13 +105,15 @@ def load(args):
     return speak, lambda: rate
 
 
-def clip(speak, rate, text: str, language: str, out: str) -> None:
+def clip(speak, rate, text: str, language: str, out: str, done=lambda n, of: None) -> None:
     import numpy as np
 
     chunks = []
-    for sentence in sentences(text):
+    parts = sentences(text)
+    for n, sentence in enumerate(parts, 1):
         samples = speak(sentence, language)
         chunks += [samples, np.zeros(int(SENTENCE_GAP_SECONDS * rate()), dtype=np.float32)]
+        done(n, len(parts))
     if not chunks:
         raise ValueError("nothing to say")
     write_wav(out, np.concatenate(chunks[:-1]), rate())
@@ -136,7 +142,7 @@ def serve(args) -> None:
             if language not in LANGUAGES:
                 raise ValueError(f"unknown language {language!r}; known: {', '.join(LANGUAGES)}")
             started = time.monotonic()
-            clip(speak, rate, request["text"], language, request["out"])
+            clip(speak, rate, request["text"], language, request["out"], lambda n, of: answer({"sentence": n, "of": of, **reply}))
             reply |= {"ok": True, "seconds": round(time.monotonic() - started, 2)}
         except Exception as failed:  # a bad request or a failed generation; the model stays loaded
             reply |= {"error": f"{type(failed).__name__}: {failed}"[:600]}

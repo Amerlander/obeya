@@ -22,7 +22,8 @@ const python = (args: string[], env: Record<string, string> = {}, input?: string
 
 /**
  * A voice that serves until its stdin ends, writing a short silent WAV per request. Given a second
- * argument, it is loaded only once that file exists.
+ * argument, it is loaded only once that file exists. `FAKE_HANG_AT` gives no answer to that
+ * request, as a stuck Qwen3 voice did; it reports a sentence done first.
  */
 const FAKE_VOICE = String.raw`
 import json, os, sys, time, wave
@@ -42,6 +43,10 @@ while line := sys.stdin.readline():
     if os.environ.get("FAKE_DIE_AT") == str(asked):
         print("out of memory", file=sys.stderr, flush=True)
         os._exit(3)
+    if os.environ.get("FAKE_HANG_AT") == str(asked):
+        answer({"sentence": 1, "of": 2})
+        print("generating " + request["text"], file=sys.stderr, flush=True)
+        time.sleep(3600)
     with wave.open(request["out"], "wb") as fh:
         fh.setnchannels(1); fh.setsampwidth(2); fh.setframerate(24000); fh.writeframes(b"\0\0" * 2400)
     open(log, "a").write(request["language"] + ":" + request["text"] + "\n")
@@ -61,6 +66,12 @@ afterEach(() => rmSync(dir, { recursive: true, force: true }));
 const narrate = (env: Record<string, string> = {}) =>
   python([join(LIB, 'tts.py'), join(dir, 'spec.json'), 'de', join(dir, 'jobs.json'), join(dir, 'out')], { FAKE_LOG: join(dir, 'log'), ...env });
 const log = () => readFileSync(join(dir, 'log'), 'utf8').trim().split('\n');
+/** tts.py's render with its time limits for a voice's answers cut to a fraction of a second. */
+const impatient = (env: Record<string, string>) =>
+  python(
+    ['-c', `import sys; sys.path.insert(0, ${JSON.stringify(LIB)}); import tts; tts.ANSWER_LIMITS = {"load": 5, "sentence": 0.5}; sys.argv[1:] = ${JSON.stringify([join(dir, 'spec.json'), 'de', join(dir, 'jobs.json'), join(dir, 'out')])}; tts.main()`],
+    { FAKE_LOG: join(dir, 'log'), ...env },
+  );
 
 describe('a voice that stays loaded', () => {
   test('starts once for all clips of a render, and not at all when every clip is cached', () => {
@@ -102,6 +113,15 @@ describe('a voice that stays loaded', () => {
     const loading = narrate({ FAKE_DIE_AT: '0' });
     expect(loading.status).not.toBe(0);
     expect(loading.stderr).toContain('cannot load the model');
+  });
+
+  test('a voice that stops answering stops the render after a while, with its stderr, instead of waiting for good', () => {
+    const started = performance.now();
+    const r = impatient({ FAKE_HANG_AT: '2' });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain('the voice said nothing for 0.5 s while making a clip and was ended: generating Zwei.');
+    expect(performance.now() - started).toBeLessThan(30_000);
+    expect(log()).toEqual(['start', 'de:Eins.']);
   });
 });
 
@@ -218,8 +238,11 @@ def load_model(repo):
     const replies = r.stdout.trim().split('\n').map((line) => JSON.parse(line));
     expect(replies).toEqual([
       { ready: true },
+      { id: 1, sentence: 1, of: 2 },
+      { id: 1, sentence: 2, of: 2 },
       { id: 1, ok: true, seconds: expect.any(Number) },
       { id: 2, error: 'ValueError: nothing to say' },
+      { sentence: 1, of: 1 },
       { ok: true, seconds: expect.any(Number) },
     ]);
     expect(r.stderr).toContain('raw bytes on fd 1');

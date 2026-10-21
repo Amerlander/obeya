@@ -9,7 +9,7 @@ The voice comes as a spec from `voices.ts`, one of two kinds:
   loaded (the Qwen3-TTS helper `qwen3.py`) has `serve` as well: that command starts once, on the
   first clip to synthesise, and answers clip by clip over its stdin and stdout,
   one JSON line each way (the protocol is in `qwen3.py`). If it dies, the render stops with its
-  stderr. Such a voice with `host` as well is held by Obeya across renders when `OBEYA_URL` says
+  stderr; one that says nothing for minutes (`ANSWER_LIMITS`) is stuck, and is ended the same way. Such a voice with `host` as well is held by Obeya across renders when `OBEYA_URL` says
   where Obeya runs: each clip goes to `POST $OBEYA_URL/api/narration/clip` and waits its turn
   behind other renders' clips (`src/server/narration.ts`). An Obeya that cannot be reached, or
   does not hold voices, leaves the voice to this process, as without Obeya.
@@ -41,6 +41,7 @@ import hashlib
 import base64
 import json
 import os
+import queue
 import re
 import subprocess
 import sys
@@ -147,6 +148,12 @@ class CommandVoice:
         raw.unlink(missing_ok=True)
 
 
+#: How long a voice that stays loaded may say nothing, in seconds: while it loads its model (a cold
+#: load took 17 s), and per sentence of a clip (a few seconds on a GPU, a minute or two on a slow
+#: CPU). Beyond that it is stuck, as `src/server/narration.ts` has it for the voice Obeya holds.
+ANSWER_LIMITS = {"load": 600.0, "sentence": 300.0}
+
+
 class ServedVoice:
     """A voice that stays loaded for the whole render: started on the first clip, asked per clip."""
 
@@ -157,6 +164,8 @@ class ServedVoice:
         self._process: subprocess.Popen | None = None
         self._stderr: deque[str] = deque(maxlen=40)
         self._drain: threading.Thread | None = None
+        # its stdout, line by line, read by a thread of its own so a wait for it can end
+        self._lines: queue.Queue[str] = queue.Queue()
 
     def _start(self) -> None:
         hold_lock()
@@ -171,7 +180,8 @@ class ServedVoice:
         # why when the voice dies.
         self._drain = threading.Thread(target=lambda: self._stderr.extend(self._process.stderr), daemon=True)
         self._drain.start()
-        self._reply()
+        threading.Thread(target=self._read, daemon=True).start()
+        self._reply("load")
         print(f"narration: voice loaded in {time.monotonic() - started:.1f} s", file=sys.stderr, flush=True)
 
     def _died(self) -> None:
@@ -179,9 +189,22 @@ class ServedVoice:
         self._drain.join(timeout=5)
         sys.exit(f"the voice stopped ({code}): {''.join(self._stderr).strip()[-1500:]}")
 
-    def _reply(self) -> dict:
+    def _read(self) -> None:
+        for line in self._process.stdout:
+            self._lines.put(line)
+        self._lines.put("")
+
+    def _reply(self, doing: str) -> dict:
+        """The voice's next protocol line; a sentence done (`{"sentence": n}`) starts its time anew."""
         while True:
-            line = self._process.stdout.readline()
+            try:
+                line = self._lines.get(timeout=ANSWER_LIMITS[doing])
+            except queue.Empty:
+                self._process.kill()
+                self._process.wait()
+                self._drain.join(timeout=5)
+                why = "".join(self._stderr).strip()[-1500:]
+                sys.exit(f"the voice said nothing for {ANSWER_LIMITS[doing]:g} s while {'loading' if doing == 'load' else 'making a clip'} and was ended" + (f": {why}" if why else ""))
             if not line:
                 self._died()
             try:
@@ -189,6 +212,8 @@ class ServedVoice:
             except ValueError:
                 reply = None
             if isinstance(reply, dict):
+                if "sentence" in reply:
+                    continue
                 return reply
             # Not the protocol: something printed where it should not have. Shown, not fatal.
             print(f"voice: {line.rstrip()}", file=sys.stderr)
@@ -203,7 +228,7 @@ class ServedVoice:
             self._process.stdin.flush()
         except (BrokenPipeError, OSError):
             self._died()
-        reply = self._reply()
+        reply = self._reply("sentence")
         if "error" in reply or not raw.exists():
             sys.exit(f"the voice failed: {reply.get('error') or f'it wrote no WAV at {raw}'}")
         print(f"narration: synthesised in {reply.get('seconds', '?')} s", file=sys.stderr, flush=True)

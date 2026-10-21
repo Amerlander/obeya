@@ -3548,14 +3548,18 @@ file, no transcript beside it); its narration language says that a repository ca
 A voice that can stay loaded says so in its spec (`serve`, so far only Qwen3-TTS: `qwen3.py
 --serve`): `tts.py` starts it once per render (and once per "Anhören"), on the first clip that is
 not cached, and asks it clip by clip over its stdin and stdout, one JSON line each way (text, WAV,
-language; a ready line once the model is loaded, then `ok` or `error` per clip). Model, reference
+language; a ready line once the model is loaded, a line per sentence done, then `ok` or `error`
+per clip). Model, reference
 and transcript load once instead of per clip: three clips with a clone, no cache, went from 25.8 s
 to 15.8 s on an Apple Silicon Mac (a warm start with the model costs about 2 s, a cold one 17 s;
 synthesis about 2–4 s per clip either way; measured 2026-10-05, when renders still listened back
 with Whisper). The libraries print on stdout too, so the server
 moves fd 1 to stderr and keeps a duplicate of it for the protocol alone; a line that is not the
 protocol is shown and skipped. A voice that dies stops the render with the tail of its stderr
-instead of hanging. Piper, `say` and the owner's command still run once per clip.
+instead of hanging. One that says nothing for 10 minutes while it loads, or for 5 minutes while it
+makes a sentence (a few seconds on a GPU, a minute or two on a slow CPU), is stuck: it is ended and
+its clip fails the same way. The sentence lines are there for that: a long clip is never taken for a
+stuck one. Piper, `say` and the owner's command still run once per clip.
 
 Under Obeya the Qwen3 voice lives longer than a render: Obeya holds it as a child process of its
 server (`src/server/narration.ts`), since the server runs all along and on every platform. The spec
@@ -3572,7 +3576,12 @@ each render asks for its next clip only once the last is done, so parallel rende
 by clip (throughput stays that of one GPU). The voice starts with the first clip and runs on for 5
 minutes after the queue empties (`NARRATION_IDLE_MS`), then its stdin ends; a clip for another voice
 (reference, speaker or language) ends it at once, and Obeya's shutdown kills it. Between server and
-voice runs the line protocol above, unchanged. What it saves is a model load per render or "Anhören"
+voice runs the line protocol above, unchanged, with the same limits (`NARRATION_LOAD_MS`,
+`NARRATION_SENTENCE_MS`): a voice that stops answering fails its clip with a message, the render
+stops with it, and the next clip starts a new voice. On 2026-10-21, before these limits, the held
+English voice gave no answer to a clip and sat at 0 % CPU for 40 minutes; every render and the
+configuration dialog's German sample waited behind it in the queue until it was killed by hand. The
+switch to the sample's voice was not the cause: the queue never got to it. What it saves is a model load per render or "Anhören"
 within those 5 minutes: about 2 s warm, 17 s cold, at the cost of 3–4 GB held meanwhile. Without
 `OBEYA_URL`, or when Obeya does not answer (not running, restarting, an older Obeya without the
 endpoint), `tts.py` loads the voice itself as before.

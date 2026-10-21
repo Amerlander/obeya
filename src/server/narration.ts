@@ -6,7 +6,10 @@
 // for one clip at a time, so parallel renders take turns clip by clip. Once the queue is empty
 // the voice stays loaded for a while (`idleMs`), then ends; a request for another voice (another
 // reference, speaker or language) ends it at once. Between this server and the voice runs the
-// line protocol of `qwen3.py`, unchanged.
+// line protocol of `qwen3.py`, unchanged. A voice that stops answering (on 2026-10-21 one sat at
+// 0 % CPU with a clip in hand for 40 minutes, and every render and sample waited behind it) fails
+// its clip once it has said nothing for a while (`NARRATION_LOAD_MS`, `NARRATION_SENTENCE_MS`):
+// it is ended, and the next clip starts a new one.
 
 import type { Subprocess } from 'bun';
 import { tmpdir } from 'node:os';
@@ -33,6 +36,15 @@ export type ClipReply = { ok: true; seconds: number; wav?: string } | { error: s
 /** How long the voice stays loaded after the last clip: the next render within it skips loading the model. */
 export const NARRATION_IDLE_MS = 5 * 60_000;
 
+/** How long the voice may take to load its model before it counts as stuck: a cold load took 17 s. */
+export const NARRATION_LOAD_MS = 10 * 60_000;
+
+/**
+ * How long the voice may take for one sentence of a clip (it reports each, `qwen3.py`) before it
+ * counts as stuck: a few seconds on a GPU, a minute or two on a slow CPU.
+ */
+export const NARRATION_SENTENCE_MS = 5 * 60_000;
+
 interface Job {
   argv: string[];
   request: ClipRequest;
@@ -58,6 +70,8 @@ export class NarrationHost {
       /** The command that serves this voice (`voices.ts`: `qwen3Serve`). */
       argv: (voice: HeldVoice, language: ClipRequest['language']) => string[];
       idleMs?: number;
+      loadMs?: number;
+      sentenceMs?: number;
       log?: (line: string) => void;
     },
   ) {}
@@ -86,7 +100,10 @@ export class NarrationHost {
     if (this.serving) return;
     this.serving = true;
     clearTimeout(this.idle);
-    for (let job = this.queue.shift(); job; job = this.queue.shift()) job.resolve(await this.synthesize(job));
+    for (let job = this.queue.shift(); job; job = this.queue.shift()) {
+      // a clip that throws must not hold up the queue: the clips behind it would wait for good
+      job.resolve(await this.synthesize(job).catch((e: unknown) => ({ error: `the clip failed: ${messageOf(e)}` })));
+    }
     this.serving = false;
     if (this.voice) this.idle = setTimeout(() => this.end('nothing more to say'), this.o.idleMs ?? NARRATION_IDLE_MS);
   }
@@ -105,7 +122,8 @@ export class NarrationHost {
     } catch {
       return this.died(voice);
     }
-    const reply = await this.reply(voice);
+    const reply = await this.reply(voice, this.o.sentenceMs ?? NARRATION_SENTENCE_MS);
+    if (reply === 'stuck') return this.stuck(voice, 'making a clip', this.o.sentenceMs ?? NARRATION_SENTENCE_MS);
     if (!reply) return this.died(voice);
     if (typeof reply.error === 'string') return { error: reply.error };
     return { ok: true, seconds: typeof reply.seconds === 'number' ? reply.seconds : 0 };
@@ -129,23 +147,54 @@ export class NarrationHost {
     })();
     this.voice = voice;
     this.o.log?.(`Obeya: starting the narration voice (${argv.slice(-6).join(' ')})`);
-    const ready = await this.reply(voice);
+    const ready = await this.reply(voice, this.o.loadMs ?? NARRATION_LOAD_MS);
+    if (ready === 'stuck') return this.stuck(voice, 'loading', this.o.loadMs ?? NARRATION_LOAD_MS);
     if (!ready) return this.died(voice);
     this.o.log?.(`Obeya: narration voice loaded in ${((performance.now() - started) / 1000).toFixed(1)} s`);
     return { ok: true };
   }
 
-  /** The voice's next protocol line; null once it ended. A line that is not the protocol is skipped. */
-  private async reply(voice: Running): Promise<Record<string, unknown> | null> {
+  /**
+   * The voice's next protocol line; null once it ended, 'stuck' when it said nothing for `ms`. A
+   * line that is not the protocol is skipped, a sentence done (`{"sentence": n}`) starts the time anew.
+   */
+  private async reply(voice: Running, ms: number): Promise<Record<string, unknown> | null | 'stuck'> {
     while (true) {
-      const next = await voice.lines.next();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const silent = new Promise<'stuck'>((resolve) => (timer = setTimeout(() => resolve('stuck'), ms)));
+      const next = await Promise.race([voice.lines.next(), silent]).finally(() => clearTimeout(timer));
+      if (next === 'stuck') return next;
       if (next.done) return null;
+      let reply: unknown;
       try {
-        const reply = JSON.parse(next.value) as unknown;
-        if (reply && typeof reply === 'object' && !Array.isArray(reply)) return reply as Record<string, unknown>;
+        reply = JSON.parse(next.value);
       } catch {}
+      if (reply && typeof reply === 'object' && !Array.isArray(reply)) {
+        if ('sentence' in reply) continue;
+        return reply as Record<string, unknown>;
+      }
       this.o.log?.(`narration voice: ${next.value}`);
     }
+  }
+
+  /**
+   * Ends a voice that stopped answering, so the clips behind it get their turn; the next voice
+   * starts once this one has given back its memory.
+   */
+  private async stuck(voice: Running, doing: string, ms: number): Promise<{ error: string }> {
+    if (this.voice === voice) this.voice = undefined;
+    const gone = (wait: number) => Promise.race([voice.child.exited.then(() => true), Bun.sleep(wait).then(() => false)]);
+    voice.child.kill();
+    // one too stuck for SIGTERM
+    if (!(await gone(5000))) {
+      voice.child.kill('SIGKILL');
+      await gone(5000);
+    }
+    const silence = ms >= 60_000 ? `${Math.round(ms / 60_000)} min` : `${ms / 1000} s`;
+    const why = voice.stderr.join('\n').trim().slice(-1500);
+    const error = `the voice said nothing for ${silence} while ${doing} and was ended${why ? `: ${why}` : ''}`;
+    this.o.log?.(`Obeya: ${error}`);
+    return { error };
   }
 
   private async died(voice: Running): Promise<{ error: string }> {

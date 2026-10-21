@@ -9,19 +9,27 @@ import { type ClipRequest, NarrationHost, parseClipRequest } from './narration';
 import { serve } from './server';
 import { asOwner } from './testing';
 
-/** Logs its start, each clip and its end; `dies` as the speaker makes it die at the second clip. */
+/**
+ * Logs its start, each clip and its end; `dies` as the speaker makes it die at the second clip,
+ * `stumm` at loading, `lahm` never gets loaded. A clip whose text says „hängt“ gets no answer, as
+ * the Qwen3 voice gave none on 2026-10-21; a clip of several sentences reports each after a while.
+ */
 const FAKE_VOICE = `
 import { appendFileSync, writeFileSync } from 'node:fs';
 const [log, who] = process.argv.slice(2);
 appendFileSync(log, 'start ' + who + '\\n');
 console.log('loading weights ...');
 if (who === 'stumm') { console.error('cannot load the model'); process.exit(2); }
+if (who === 'lahm') { console.error('waiting for the GPU'); await new Promise(() => {}); }
 console.log(JSON.stringify({ ready: true }));
 let asked = 0;
 for await (const line of console) {
   if (!line.trim()) continue;
   const request = JSON.parse(line);
   if (who === 'dies' && ++asked === 2) { console.error('out of memory'); process.exit(3); }
+  if (request.text.includes('hängt')) { console.error('generating ' + request.text); await new Promise(() => {}); }
+  const sentences = request.text.split('. ');
+  if (sentences.length > 1) for (const n of sentences.keys()) { await Bun.sleep(150); console.log(JSON.stringify({ sentence: n + 1, of: sentences.length })); }
   writeFileSync(request.out, 'RIFF');
   appendFileSync(log, request.language + ':' + request.text + '\\n');
   console.log(JSON.stringify({ ok: true, seconds: 0.01 }));
@@ -40,10 +48,10 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-const hold = (idleMs = 60_000) =>
-  (host = new NarrationHost({ argv: (voice) => ['bun', join(dir, 'voice.ts'), join(dir, 'log'), voice.speaker ?? voice.reference ?? ''], idleMs }));
+const hold = (idleMs = 60_000, limits: { loadMs?: number; sentenceMs?: number } = {}) =>
+  (host = new NarrationHost({ argv: (voice, language) => ['bun', join(dir, 'voice.ts'), join(dir, 'log'), voice.speaker ?? voice.reference ?? '', language], idleMs, ...limits }));
 const log = () => (existsSync(join(dir, 'log')) ? readFileSync(join(dir, 'log'), 'utf8').trim().split('\n') : []);
-const clip = (text: string, speaker = 'ryan'): ClipRequest => ({ voice: { speaker }, text, out: join(dir, `${text}.wav`), language: 'de' });
+const clip = (text: string, speaker = 'ryan', language: ClipRequest['language'] = 'de'): ClipRequest => ({ voice: { speaker }, text, out: join(dir, `${text}.wav`), language });
 const until = async (done: () => boolean) => {
   for (let i = 0; i < 100 && !done(); i++) await Bun.sleep(50);
 };
@@ -92,6 +100,45 @@ describe('the voice Obeya holds', () => {
     expect(await host.clip(clip('drei', 'dies'))).toEqual({ ok: true, seconds: 0.01 });
     expect(await host.clip(clip('vier', 'stumm'))).toEqual({ error: expect.stringContaining('the voice stopped (2): cannot load the model') });
     expect(log().filter((l) => l.startsWith('start'))).toEqual(['start dies', 'start dies', 'start stumm']);
+  });
+});
+
+describe('a voice that stops answering', () => {
+  test('fails its clip after a while, and the sample in another language and the renders behind it get their turn', async () => {
+    // 2026-10-21: the English voice gave no answer to a clip; the configuration sheet's German
+    // sample and every render waited behind it without end
+    hold(60_000, { sentenceMs: 400 });
+    const replies: string[] = [];
+    const render = async (name: string, texts: string[]) => {
+      for (const text of texts) {
+        const reply = await host.clip(clip(text, 'ryan', 'en'));
+        replies.push(`${name}:${text} ${'ok' in reply ? 'ok' : reply.error}`);
+      }
+    };
+    const a = render('a', ['a1 hängt', 'a2']);
+    const b = render('b', ['b1', 'b2']);
+    await until(() => log().includes('start ryan'));
+    const sample = host.clip(clip('Probe', 'ryan', 'de'));
+    await Promise.all([a, b, sample]);
+    expect(await sample).toEqual({ ok: true, seconds: 0.01 });
+    expect(replies[0]).toMatch(/^a:a1 hängt the voice said nothing for 0.4 s while making a clip and was ended: .*generating a1 hängt/s);
+    expect(replies.slice(1)).toEqual(['b:b1 ok', 'a:a2 ok', 'b:b2 ok']);
+    // the stuck voice is gone: a new one took the next clip, another the sample (German), a third the renders again
+    expect(log().filter((l) => !l.startsWith('end'))).toEqual(['start ryan', 'start ryan', 'en:b1', 'start ryan', 'de:Probe', 'start ryan', 'en:a2', 'en:b2']);
+  });
+
+  test('loading for too long fails the clip, and the next clip starts the voice anew', async () => {
+    hold(60_000, { loadMs: 300 });
+    expect(await host.clip(clip('eins', 'lahm'))).toEqual({ error: expect.stringContaining('while loading and was ended: waiting for the GPU') });
+    expect(host.loaded).toBe(false);
+    expect(await host.clip(clip('zwei'))).toEqual({ ok: true, seconds: 0.01 });
+  });
+
+  test('is not taken for stuck while it reports each sentence of a long clip', async () => {
+    hold(60_000, { sentenceMs: 300 });
+    // four sentences at 150 ms each: longer than the limit, but never silent for it
+    expect(await host.clip(clip('Eins. Zwei. Drei. Vier.'))).toEqual({ ok: true, seconds: 0.01 });
+    expect(log()).toEqual(['start ryan', 'de:Eins. Zwei. Drei. Vier.']);
   });
 });
 
