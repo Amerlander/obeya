@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { boundsOf, CARD_SIZE } from '../core/layout';
-import type { RepoConfig, RepoSettings } from '../core/types';
+import type { CardAction, RepoConfig, RepoSettings } from '../core/types';
+import type { BadRequest } from './board';
 import { Canvases, CanvasRuntime, startCanvases } from './canvas';
 import { Store } from './db';
 import { readShared } from '../adapters';
@@ -55,6 +56,14 @@ function quiet() {
   return { lines, restore: () => (console.error = error) };
 }
 const item = (id: string) => canvas.board.item(id)!;
+/** Why the canvas refuses the owner's action on the card, if it does. */
+function refused(cardId: string, a: CardAction): string | undefined {
+  try {
+    canvas.act(cardId, a);
+  } catch (e) {
+    return (e as BadRequest).code;
+  }
+}
 
 describe('a canvas with several repositories', () => {
   test('names itself, lists its repositories, and shows the plan docs of all of them', () => {
@@ -768,6 +777,39 @@ describe('the configuration changed while the canvas runs', () => {
     expect(canvas.board.item(a.card.id)).toBeDefined();
   });
 
+  test("a card of a repository that left the canvas goes to no other repository's agents; it starts in its own once that is back", async () => {
+    const both: RepoConfig[] = [
+      { path: web, settings: { land: 'pr' } },
+      { path: api, settings: { land: 'pr' } },
+    ];
+    open(both);
+    const card = canvas.board.create({ title: 'A', x: 0, y: 0, repo: 'api' });
+    const later = canvas.board.create({ title: 'Später', x: 0, y: 0, repo: 'api' });
+    canvas.act(later.id, { action: 'snooze', until: new Date(Date.now() + 60_000).toISOString() });
+    canvas.apply({ name: 'Produkt', repos: [both[0]!] });
+    await until(() => canvas.repos.length === 1);
+    expect(item(card.id).repoDown).toBe(true);
+    expect(item(card.id).repo).toBe('api');
+    expect(() => canvas.repoOf(card.id)).toThrow();
+    for (const a of [{ action: 'start' }, { action: 'message', text: 'Hallo' }, { action: 'approve' }] as CardAction[]) expect(refused(card.id, a)).toBe('repoDown');
+    // nor does it become an idea, whose agent would read in another repository
+    expect(() => canvas.patch(card.id, { state: 'idea' })).toThrow();
+    expect(item(card.id).state).toBe('planned');
+    // its time come, the card set to start later waits on
+    canvas.wakeDue(Date.now() + 120_000);
+    expect(item(later.id).snoozed).toBeDefined();
+    await settle();
+    expect(workers.sessions).toHaveLength(0);
+    canvas.apply({ name: 'Produkt', repos: both });
+    expect(item(card.id).repoDown).toBeUndefined();
+    canvas.act(card.id, { action: 'start' });
+    await until(() => workers.sessions.length === 1);
+    const api_ = canvas.repos.find((r) => r.ref.id === 'api')!;
+    expect(workers.last.spec.cwd).toBe(api_.workspaces.leasedBy(card.id)!);
+    canvas.wakeDue(Date.now() + 120_000);
+    expect(item(later.id).snoozed).toBeUndefined();
+  });
+
   test("a restart of all of Obeya that comes meanwhile is what the workers hear of; the repository's restart still goes", async () => {
     open([{ path: web, settings: { land: 'pr' }, clones: 1 }]);
     const w = await atWork('web', 'W');
@@ -832,12 +874,23 @@ describe('the configuration changed while the canvas runs', () => {
     expect(canvas.board.canvas.repos.map((r) => r.id)).toEqual(['web']);
     expect(canvas.board.item(a.card.id)).toBeDefined();
     expect(canvas.failures()).toEqual([{ canvas: 'produkt', repo: 'api', detail: expect.stringContaining(`${own} is not a clone of`) }]);
+    // its card shows that its repository does not run, and goes to no other's workers
+    expect(item(a.card.id).repoDown).toBe(true);
+    const sessions = workers.sessions.length;
+    expect(refused(a.card.id, { action: 'message', text: 'Weiter' })).toBe('repoDown');
+    expect(workers.sessions).toHaveLength(sessions);
     // the cause fixed, the configuration taken over again (a save, „Erneut versuchen“) starts it at once
     git(own, 'remote', 'set-url', 'origin', api);
     canvas.apply({ name: 'Produkt', repos: [{ path: web, settings: { land: 'pr' } }, { path: api, settings: { land: 'pr' }, workspaces: [own], clones: 1 }] });
     expect(canvas.board.canvas.repos.map((r) => r.id)).toEqual(['web', 'api']);
     expect(canvas.repos[1]!.workspaces.list()).toHaveLength(2);
     expect(canvas.failures()).toEqual([]);
+    // the card works again, in its own repository
+    expect(item(a.card.id).repoDown).toBeUndefined();
+    canvas.act(a.card.id, { action: 'message', text: 'Weiter' });
+    await until(() => workers.sessions.length > sessions);
+    expect(workers.last.spec.resume).toBe('sess-A');
+    expect(workers.last.spec.cwd).toBe(canvas.repos[1]!.workspaces.leasedBy(a.card.id)!);
   });
 });
 

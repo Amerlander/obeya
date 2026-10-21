@@ -1281,6 +1281,9 @@ export class Board {
     });
     items = this.withoutStaleSnoozes(items, rows);
     items = this.withWaitingSince(items);
+    // a card whose repository does not run on the canvas waits for it
+    const running = new Set(this.canvas.repos.map((r) => r.id));
+    if (items.some((i) => !running.has(i.repo))) items = items.map((i) => (running.has(i.repo) || i.kind === 'question' ? i : { ...i, repoDown: true }));
     const limited = (key: string) => {
       const until = this.limits.get(key);
       return until ? { limitedUntil: until } : {};

@@ -129,6 +129,7 @@ export function CardFace({ item, where, underway, since, chip }: { item: Item; w
         ? t.pr.short(item.pr.number, item.pr.checks.filter((c) => c.state === 'failure').length, item.pr.conflict, item.pr.ready, item.pr.held?.score)
         : undefined;
   const meta =
+    (item.repoDown ? t.repoDown.short : undefined) ??
     (item.snoozed ? snoozeWho(item.snoozed) : undefined) ??
     (item.superseded ? (item.superseded.by ? t.superseded.byShort(plain(item.superseded.title ?? '')) : t.superseded.withdrawnShort) : undefined) ??
     (item.limitedUntil ? t.limitedUntil(clock(item.limitedUntil)) : undefined) ??

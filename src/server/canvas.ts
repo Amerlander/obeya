@@ -164,6 +164,12 @@ interface RepoRestart {
 const HOST_RETRY_MS = 2 * 60_000;
 /** How often Obeya looks for snoozed cards whose time has come. */
 const WAKE_EVERY_MS = 15_000;
+
+/** The owner's actions on a card that change only the board: they go also while its repository does not run on the canvas. */
+const BOARD_ONLY: CardAction['action'][] = ['name', 'dequeue', 'reorder', 'startAt', 'dismiss', 'keep', 'park', 'drop'];
+
+/** The card's repository does not run on the canvas: nothing goes to its agents (`Item.repoDown`). */
+const repoDown = (card: Item) => new BadRequest('repoDown', `the repository ${card.repo} of the card does not run on this canvas`);
 /** No card is snoozed longer than this. */
 const SNOOZE_LIMIT = 366 * 24 * 60 * 60_000;
 
@@ -293,8 +299,9 @@ export class CanvasRuntime {
       board,
       runtime: deps.runtime,
       preferences: this.preferences,
-      pathFor: (card) => (card ? this.repoOf(card) : this.repos[0]!).read.path,
-      startBrief: (card) => this.repoOf(card).workers.startBrief(card),
+      // a question about a card whose repository does not run is looked up in the home repository
+      pathFor: (card) => (card && this.runs(card) ? this.repoOf(card) : this.repos[0]!).read.path,
+      startBrief: (card) => (this.runs(card) ? this.repoOf(card).workers.startBrief(card) : undefined),
       projectAgent: (project) => this.repoOf(project).projectAgents,
       ...(deps.permissionMode ? { permissionMode: deps.permissionMode } : {}),
       dirOf: (thread) => answersDir(deps.home, id, thread),
@@ -341,11 +348,12 @@ export class CanvasRuntime {
       runtime: deps.runtime,
       home: deps.home,
       forge: deps.forge,
+      // the site of a repository not running is not known meanwhile
       sourceFor: (card) => {
-        const r = this.repoOf(card);
-        return r.site ? { site: r.site, repo: r.info.path } : null;
+        const r = this.runs(card) ? this.repoOf(card) : undefined;
+        return r?.site ? { site: r.site, repo: r.info.path } : null;
       },
-      languageFor: (card) => this.repoOf(card).adapter.demo?.language,
+      languageFor: (card) => (this.runs(card) ? this.repoOf(card).adapter.demo?.language : undefined),
     });
     this.sharing.resume();
     // snoozed cards wake at their time: one that passed while Obeya was not running, or the machine slept, at once
@@ -374,7 +382,8 @@ export class CanvasRuntime {
     // and the Koordinator takes up the steps it waited on cards for
     this.commander.due(items);
     for (const i of items) {
-      if (!i.snoozed) continue;
+      // one whose repository does not run wakes once it is back
+      if (!i.snoozed || i.repoDown) continue;
       const on = i.snoozed.on;
       const met = on ? awaited(items.find((x) => x.id === on.card), on.state) : null;
       if (!met && !(i.snoozed.until && Date.parse(i.snoozed.until) <= now)) continue;
@@ -1066,11 +1075,23 @@ export class CanvasRuntime {
     this.board.docsChanged();
   }
 
-  /** The repository a card belongs to. */
+  /**
+   * The repository a card belongs to. One that does not run on the canvas (it left the
+   * configuration, or did not start) has no agents to take the card: it waits for it, rather than
+   * going to another repository's.
+   */
   repoOf(card: Item | string): RepoRuntime {
     const item = typeof card === 'string' ? this.board.item(card) : card;
     if (!item) throw new BadRequest('unknownCard', 'unknown card');
-    return this.repos.find((r) => r.ref.id === item.repo) ?? this.repos[0]!;
+    const r = this.repos.find((x) => x.ref.id === item.repo);
+    if (!r) throw repoDown(item);
+    return r;
+  }
+
+  /** Whether the card's repository runs on the canvas. */
+  private runs(card: Item | string): boolean {
+    const item = typeof card === 'string' ? this.board.card(card) : card;
+    return !!item && this.repos.some((r) => r.ref.id === item.repo);
   }
 
   /** What the card's work changes (`Workers.diff`), for an archived card too. */
@@ -1091,6 +1112,8 @@ export class CanvasRuntime {
   /** The owner edits a card; what they write in it is offered for learning once they have written it. */
   patch(cardId: string, p: CardPatch) {
     const { body: before, state } = this.board.row(cardId);
+    // an idea's agent reads in its repository
+    if (p.state === 'idea' && state !== 'idea' && !this.runs(cardId)) throw repoDown(this.board.item(cardId)!);
     this.board.patch(cardId, p);
     if (p.body !== undefined) {
       const w = this.writing.get(cardId);
@@ -1267,6 +1290,9 @@ export class CanvasRuntime {
    */
   act(cardId: string, a: CardAction, log = false) {
     this.written(cardId);
+    // the card's agents work in its repository: while that does not run, only the board changes
+    const card = this.board.item(cardId);
+    if (card?.repoDown && !BOARD_ONLY.includes(a.action)) throw repoDown(card);
     const text = 'text' in a ? (a.text ?? '') : '';
     const images = this.images.resolve('images' in a ? a.images : undefined);
     // a reply to anything but a message of this card's conversation is the words alone
@@ -1421,6 +1447,7 @@ export class CanvasRuntime {
     const card = this.board.item(cardId);
     if (card?.kind !== 'question') throw new BadRequest('notQuestion', 'the card is no Question card');
     if (card.thread?.thinking) throw new BadRequest('ideaThinking', 'its agent is still reading; discuss it as an idea once the answer is there');
+    if (!this.runs(card)) throw repoDown(card);
     // a paused agent's question goes into the discussion with the rest of the thread
     this.board.work(cardId, { kind: 'task', state: 'idea', idea: JSON.stringify({ status: 'open', brief: '' }), session_id: null, paused: null });
     this.board.log(cardId, 'state', 'owner', this.board.t.answer.asIdea);
@@ -1433,17 +1460,17 @@ export class CanvasRuntime {
     this.writing.delete(cardId);
     const { state, landed, workspace, prototype_of } = this.board.row(cardId);
     if (prototype_of) return this.repoOf(cardId).workers.endPrototype(cardId, 'discarded');
-    if (state === 'working' || state === 'waiting' || (landed && workspace)) void this.repoOf(cardId).workers.stop(cardId);
+    if ((state === 'working' || state === 'waiting' || (landed && workspace)) && this.runs(cardId)) void this.repoOf(cardId).workers.stop(cardId);
     if (state === 'idea') this.explorers.close(cardId);
-    // work thrown away ended too (finished work counted when it landed)
-    else if (!state || !finished(state)) this.workRetro.ended(cardId, workspace);
+    // work thrown away ended too (finished work counted when it landed); the retrospective reads in its repository
+    else if ((!state || !finished(state)) && this.runs(cardId)) this.workRetro.ended(cardId, workspace);
     this.board.remove(cardId);
   }
 
   /** Brings a deleted card back (the owner's undo), with the workspace it had where that is still free. */
   restore(cardId: string) {
     this.board.restore(cardId);
-    this.repoOf(cardId).workers.restored(cardId);
+    if (this.runs(cardId)) this.repoOf(cardId).workers.restored(cardId);
   }
 
   /**

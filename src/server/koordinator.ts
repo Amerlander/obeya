@@ -121,6 +121,7 @@ export class Koordinator {
   /** The owner wants the card worked on; a project, all its planned workstreams. */
   request(cardId: string): void {
     const card = this.card(cardId);
+    if (card.repoDown) throw new BadRequest('repoDown', `the repository ${card.repo} of the card does not run on this canvas`);
     if (card.kind === 'project') return this.requestAll(card);
     if (card.state !== 'planned') throw new BadRequest('notPlanned', 'only a planned card can be started');
     if (card.queue) throw new BadRequest('queued', 'the card is already with Obeya');
@@ -460,7 +461,7 @@ export class Koordinator {
     const { question, reply, before } = context;
     let proposed = false;
     await readSession(this.o.runtime, {
-      cwd: card ? this.o.repoFor(card).path : this.o.home(),
+      cwd: card && !card.repoDown ? this.o.repoFor(card).path : this.o.home(),
       role: 'koordinator',
       onLimit: waitQuietly,
       system: LEARN_SYSTEM(this.language),
@@ -550,6 +551,7 @@ export class Koordinator {
     const card = this.o.board.item(cardId);
     // taken out of the queue or deleted while waiting for its turn
     if (!card || card.state !== 'planned' || !card.queue || !('checking' in card.queue)) return;
+    if (card.repoDown) return this.repoGone(card);
     const active = this.inProgress(card.repo);
     const ahead = this.ahead(card);
     const pending = this.pending(card, active, ahead);
@@ -570,7 +572,10 @@ export class Koordinator {
       this.o.board.log(cardId, 'error', 'obeya', this.o.board.t.koordinator.estimateFailed(messageOf(e)));
       scope = { files: [], conflictsWith: [], buildsOn: [], reason: '' };
     }
-    if (!this.o.board.item(cardId)?.queue) return;
+    const now = this.o.board.item(cardId);
+    if (!now?.queue) return;
+    // its repository stopped running while the Koordinator read
+    if (now.repoDown) return this.repoGone(now);
     this.o.board.work(cardId, { scope: JSON.stringify({ files: scope.files, reason: scope.reason }) });
     // the workstreams it builds on, and the cards in progress or queued ahead whose changes it
     // expects to conflict with the card's
@@ -594,6 +599,7 @@ export class Koordinator {
     const items = this.o.board.snapshot().items;
     const batch = this.unplanned(projectId);
     if (!batch.length) return;
+    if (batch[0]!.repoDown) return batch.forEach((w) => this.repoGone(w));
     if (batch.length === 1) {
       // one is judged as any card
       this.setQueue(batch[0]!.id, { checking: true });
@@ -618,6 +624,7 @@ export class Koordinator {
       }
       return;
     }
+    if (this.o.board.item(projectId)?.repoDown) return this.unplanned(projectId).forEach((w) => this.repoGone(w));
     // taken out of the queue or started anyway meanwhile
     const still = (id: string) => {
       const q = this.o.board.item(id)?.queue;
@@ -702,11 +709,13 @@ export class Koordinator {
     // a repository whose workspaces are taken by a card waiting longer is not asked again
     const full = new Set<string | undefined>();
     // the owner's question to a finished card whose agent needs a full clone goes before queued cards
-    for (const f of items.filter((i) => i.waitsForClone)) {
+    for (const f of items.filter((i) => i.waitsForClone && !i.repoDown)) {
       const hands = this.o.repoFor(f);
       if (full.has(f.repo) || !hands.workspaces.leasable(true) || !hands.workers.takeClone(f.id)) full.add(f.repo);
     }
     for (const w of waiting) {
+      // one whose repository does not run waits on until it is back
+      if (w.repoDown) continue;
       if ('workspace' in w.queue!) {
         if (full.has(w.repo) || !this.o.repoFor(w).workspaces.leasable()) {
           full.add(w.repo);
@@ -771,7 +780,8 @@ export class Koordinator {
   private async writeTitle(card: Item): Promise<string> {
     let title: string | null = null;
     await readSession(this.o.runtime, {
-      cwd: this.o.repoFor(card).path,
+      // a title reads as well from the home repository while the card's does not run
+      cwd: card.repoDown ? this.o.home() : this.o.repoFor(card).path,
       role: 'chores',
       onLimit: (until) => this.o.board.waitsForLimit({ card: card.id }, until),
       system: NAME_SYSTEM(this.language),
@@ -960,6 +970,12 @@ export class Koordinator {
 
   private serial(fn: () => unknown) {
     this.chain = this.chain.then(fn).catch((e) => console.error('Koordinator:', e));
+  }
+
+  /** The repository of a card it was deciding on stopped running on the canvas: the card is planned again, for the owner to start once it is back. */
+  private repoGone(card: Item) {
+    this.setQueue(card.id, null);
+    this.o.board.log(card.id, 'state', 'obeya', this.o.board.t.koordinator.repoDown(card.repo));
   }
 
   /** A card keeps the time it came to the Koordinator for as long as it stays queued. */

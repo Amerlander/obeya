@@ -475,6 +475,12 @@ const de = {
     before: 'kommt zuerst',
     after: 'wartet darauf',
   },
+  /** A card whose repository does not run on the canvas (`Item.repoDown`): on the card, and in its panel. */
+  repoDown: {
+    short: 'Repository läuft nicht',
+    long: (repo: string) =>
+      `Das Repository ${repo} läuft gerade nicht auf dieser Leinwand: Es ließ sich nicht starten oder steht nicht mehr in der Konfiguration. Bis es zurück ist, arbeitet kein Agent an dieser Karte; dann geht es hier weiter.`,
+  },
   /** Why the server refused an action; `invalid` is also the text for anything unknown. */
   error: {
     unknownCard: 'Das gibt es nicht mehr.',
@@ -496,6 +502,7 @@ const de = {
     noDirect: 'In diesem Repository geht freigegebene Arbeit nur per Pull Request auf main.',
     notFolder: 'Das geht nur in einem Ordner ohne git.',
     inFolder: 'Das gibt es in einem Ordner ohne git nicht.',
+    repoDown: 'Das Repository dieser Karte läuft gerade nicht auf dieser Leinwand.',
     notProposal: 'Das ist kein Vorschlag mehr.',
     notSuperseded: 'Der Agent hat diese Karte nicht zurückgezogen oder ersetzt.',
     revising: 'Der Vorschlag wird gerade überarbeitet. Gleich ist er da.',
@@ -2114,6 +2121,11 @@ const en: Strings = {
     before: 'comes first',
     after: 'waits for it',
   },
+  repoDown: {
+    short: 'Repository not running',
+    long: (repo: string) =>
+      `The repository ${repo} does not run on this canvas right now: it did not start, or it is no longer in the configuration. Until it is back, no agent works on this card; then it goes on here.`,
+  },
   error: {
     unknownCard: 'That no longer exists.',
     unknownGroup: 'This group no longer exists.',
@@ -2134,6 +2146,7 @@ const en: Strings = {
     noDirect: 'In this repository, approved work reaches main only through a pull request.',
     notFolder: 'That is only possible in a folder without git.',
     inFolder: 'A folder without git has no such thing.',
+    repoDown: 'This card’s repository does not run on this canvas right now.',
     notProposal: 'This is no longer a proposal.',
     notSuperseded: 'Its agent has not withdrawn or replaced this card.',
     revising: 'The proposal is being reworked. It will be there in a moment.',

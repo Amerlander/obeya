@@ -177,7 +177,8 @@ export class Explorers {
   resumeAll() {
     for (const i of this.o.board.snapshot().items) {
       if (i.state !== 'idea' || !i.idea?.thinking) continue;
-      if (this.o.board.row(i.id).session_id) this.send(i, 'Obeya was restarted while you worked on your reply. Answer the owner’s last message now.');
+      // with its repository not on the canvas, what it has not answered waits for the owner's next words
+      if (this.o.board.row(i.id).session_id && !i.repoDown) this.send(i, 'Obeya was restarted while you worked on your reply. Answer the owner’s last message now.');
       else {
         this.o.board.setIdea(i.id, { thinking: false });
         this.o.onReplied?.(i.id, false);
@@ -235,6 +236,8 @@ export class Explorers {
   }
 
   private launch(card: Item, current: Message[], message: string, resume: string | undefined, images: string[], quiet = false) {
+    // where it reads, first: without its repository on the canvas, nothing starts
+    const cwd = this.o.pathFor(card);
     const preferences = this.o.preferences?.() ?? '';
     const live: Live = { session: undefined!, current, queue: [], replied: false, lastText: '', quiet, preferences, work: undefined! };
     // without a sign of the agent for a long while (the work ended, and nothing woke it), its turn is over
@@ -247,7 +250,7 @@ export class Explorers {
     this.live.set(card.id, live);
     live.session = this.o.runtime.start(
       {
-        cwd: this.o.pathFor(card),
+        cwd,
         role: 'explorer',
         ...(this.o.permissionMode ? { permissionMode: this.o.permissionMode } : {}),
         system: system(this.o.board.conversation(), this.o.board.language(), this.o.repoLanguage?.(card) ?? 'en', !!this.o.toObeya) + (preferences ? `\n\n${preferences}` : ''),

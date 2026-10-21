@@ -306,6 +306,12 @@ export interface Item {
   superseded?: Superseded;
   /** The repository the card belongs to (an id from the canvas's `repos`). */
   repo: string;
+  /**
+   * Its repository does not run on the canvas (it left the configuration, or did not start): its
+   * agents take nothing until it is back, and no other repository's agents take it meanwhile.
+   * Never on a Question card, whose agent reads only.
+   */
+  repoDown?: true;
   branch?: string;
   /** Where the branch is checked out, while the card has a workspace: a directory, `host:/dir` on another machine. */
   workspace?: string;
@@ -1203,6 +1209,8 @@ export type ErrorCode =
   /** A group that no card belongs to any more, so it is gone. */
   | 'unknownGroup'
   | 'project'
+  /** An action that needs the card's agents while its repository does not run on the canvas (`Item.repoDown`). */
+  | 'repoDown'
   | 'notPlanned'
   | 'queued'
   | 'notQueued'

@@ -147,6 +147,7 @@ export function Detail(p: Props) {
         {kind && <div className="p-kind">{kind}</div>}
         {item.archivedAt ? <div className="p-title">{shownTitle(item)}</div> : <ManualTitle item={item} onEdit={p.onEdit} />}
         <SupersededBox item={item} all={all} act={act} onDelete={p.onDelete} />
+        <RepoDownBox item={item} />
         <IdeaView item={item} act={act} run={run} listener={listener} onDelete={p.onDelete} onTell={p.onTell} prototypes={!inFolder} />
         {error && <p className="p-error">{error}</p>}
       </>
@@ -372,6 +373,7 @@ export function Detail(p: Props) {
       {where}
 
       <SupersededBox item={item} all={all} act={act} onDelete={p.onDelete} />
+      <RepoDownBox item={item} />
 
       {item.state === 'proposal' && (
         <ProposalView item={item} from={p.from} act={act} listener={listener} onRevise={tell('revise')}>
@@ -654,6 +656,16 @@ function SupersededBox({ item, all, act, onDelete }: { item: Item; all: Item[]; 
           {t.superseded.keep}
         </button>
       </div>
+    </div>
+  );
+}
+
+/** On a card whose repository does not run on the canvas: no agent works on it until that is back. */
+function RepoDownBox({ item }: { item: Item }) {
+  if (!item.repoDown) return null;
+  return (
+    <div className="question repo-down">
+      <div className="q-text">{t.repoDown.long(item.repo)}</div>
     </div>
   );
 }
