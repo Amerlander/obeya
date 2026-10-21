@@ -238,8 +238,17 @@ test.skipIf(process.platform === 'win32')("Claude Code here runs out of the term
   const exited = new Promise<string | null>((r) => p.once('exit', (_code: number | null, signal: NodeJS.Signals | null) => r(signal)));
   endAgentsHere();
   expect(await exited).toBe('SIGTERM');
-  // the command it ran went with it
-  expect(() => process.kill(-Number(group), 0)).toThrow();
+  // the command it ran went with it: it got the signal too, and is gone once it was reaped, which
+  // may come a moment after the agent's own exit
+  const alive = () => {
+    try {
+      return process.kill(-Number(group), 0);
+    } catch {
+      return false;
+    }
+  };
+  for (const end = Date.now() + 2000; alive() && Date.now() < end; ) await Bun.sleep(20);
+  expect(alive()).toBe(false);
   expect(withStderr('Claude Code process exited with code 1', stderr)).toBe('Claude Code process exited with code 1. stderr: not logged in');
   expect(withStderr('x. stderr: not logged in', stderr)).toBe('x. stderr: not logged in');
 });
