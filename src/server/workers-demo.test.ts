@@ -241,7 +241,7 @@ describe('handing over with a demo', () => {
     await workers.start(manual().id);
     expect(runtime.last.spec.env).toEqual({ OBEYA_URL: 'http://127.0.0.1:4417', DEMO_LANGUAGE: 'en' });
     // named in its instructions too: an HTML artifact is written without the skill, which reads it
-    expect(runtime.last.spec.system).toContain("A demo (its narration, report, or an HTML artifact's words) is in English, the language this repository's settings name for its demos, whatever language the owner talks in.");
+    expect(runtime.last.spec.system).toContain("A demo (its narration, report, or an HTML artifact's words) is in English, whatever language the owner talks in. This repository's settings name English for its demos, which holds over the narration language of the demo settings.");
     expect(runtime.last.spec.system).toContain('until they have said anything, German.');
   });
 
