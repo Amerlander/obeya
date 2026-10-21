@@ -2,7 +2,7 @@
 // of their own, on a card's action row and as „Ändern“ on the snooze line of its conversation, and
 // that line with „Jetzt zurückholen“. One component for every kind of card.
 
-import { useEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import type { CardEvent, Item, Snooze } from '../core/types';
 import { api } from './api';
 import { useMenuClose } from './queue';
@@ -38,10 +38,25 @@ const fieldValue = (d: Date) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 };
 
+/** Room kept between the menu and the edges of the screen. */
+const EDGE = 8;
+
+/** Puts the menu (fixed) below the button where it fits on the screen, else above it, else as low as fits, centred on the button. */
+function placeOnScreen(menu: HTMLElement, button: DOMRect) {
+  const { width, height } = menu.getBoundingClientRect();
+  const below = button.bottom + 6;
+  const above = button.top - 6 - height;
+  const top = below + height <= innerHeight - EDGE ? below : above >= EDGE ? above : Math.max(EDGE, innerHeight - EDGE - height);
+  const left = Math.min(Math.max(EDGE, button.left + button.width / 2 - width / 2), innerWidth - EDGE - width);
+  menu.style.top = `${top}px`;
+  menu.style.left = `${Math.max(EDGE, left)}px`;
+}
+
 /**
  * The button that snoozes the card („Später …“, „Ändern“) and its menu: the presets, and a date and
- * time to pick. `inline`: the menu opens below the button, scrolled into view (in the conversation,
- * where the line may stand at its top), else above it. A proposal's start time is set with the same
+ * time to pick. `inline`: the menu opens below the button where the screen has room, else above it,
+ * over the conversation rather than in it (on the phone the conversation is often lower than the
+ * menu, which it cut off); else above the button. A proposal's start time is set with the same
  * menu (`heading`, `hint`), which can also take the time away (`clear`).
  */
 export function SnoozeMenu({
@@ -75,8 +90,17 @@ export function SnoozeMenu({
   const [value, setValue] = useState('');
   const box = useRef<HTMLDivElement>(null);
   const menu = useRef<HTMLDivElement>(null);
-  // in the conversation the menu may reach past its end, the more once the date and time to pick open in it
-  useEffect(() => void (inline && menu.current?.scrollIntoView({ block: 'nearest' })), [open, picking]);
+  useLayoutEffect(() => {
+    if (!inline || !open) return;
+    const place = () => menu.current && box.current && placeOnScreen(menu.current, box.current.firstElementChild!.getBoundingClientRect());
+    place();
+    addEventListener('scroll', place, true);
+    addEventListener('resize', place);
+    return () => {
+      removeEventListener('scroll', place, true);
+      removeEventListener('resize', place);
+    };
+  }, [open, picking]);
   const close = () => {
     setOpen(false);
     setPicking(false);

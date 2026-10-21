@@ -823,18 +823,18 @@ span.cl-name { color: inherit; cursor: default; }
 .talk .wait-line .clock-mark { vertical-align: -1px; }
 .snooze-acts { display: flex; gap: 8px; align-items: flex-start; justify-content: center; flex-wrap: wrap; }
 .snooze-acts .btn.small { margin-top: 4px; background: var(--card); border: 1px solid var(--line); color: var(--ink); }
-/* „Später …“ and its menu of times, above the button in a card's action row, below it in the flow on the snooze line */
+/* „Später …“ and its menu of times, above the button in a card's action row; on the snooze line over the conversation, placed by script */
 .snooze-box { position: relative; display: inline-flex; flex-direction: column; align-items: center; }
 .snooze-box > .btn .clock-mark { margin-right: 4px; vertical-align: -1px; }
 .snooze-menu { position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 30; min-width: 220px; display: flex; flex-direction: column;
   background: var(--card); border: 1px solid var(--line); border-radius: 4px; box-shadow: var(--lift); padding: 4px 0; text-align: left; font-style: normal; }
-.snooze-box.inline .snooze-menu { bottom: auto; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); }
+.snooze-box.inline .snooze-menu { position: fixed; bottom: auto; max-width: calc(100vw - 16px); }
 .snooze-h { padding: 6px 12px 4px; font-size: 11.5px; color: var(--muted); }
 .snooze-opt { border: 0; background: none; text-align: left; padding: 7px 12px; font: inherit; font-size: 13.5px; color: var(--ink); cursor: pointer; }
 .snooze-opt:hover { background: var(--chip); }
 .snooze-opt.more { border-top: 1px solid var(--line); margin-top: 2px; }
 .snooze-pick { display: flex; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); margin-top: 2px; align-items: center; }
-.snooze-pick input { font: inherit; font-size: 13px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg); color: var(--ink); }
+.snooze-pick input { min-width: 0; font: inherit; font-size: 13px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg); color: var(--ink); }
 .snooze-pick .btn { padding: 6px 12px; }
 /* a proposal its agent wants started later: when, with „Ändern“ */
 .start-at { display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; margin: 10px 0 2px; font-size: 13px; color: var(--ink); }

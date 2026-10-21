@@ -491,7 +491,8 @@ class Phone {
     await this.shell(`input tap ${at.x} ${at.y}`);
     // a text field the tap focused opens the keyboard, which takes a moment: return once it is open
     // and the page has settled around it, so that what is measured next is the page with the keyboard
-    const editable = `(() => { const a = document.activeElement; return !!a && (a.isContentEditable || /^(INPUT|TEXTAREA)$/.test(a.tagName)); })()`;
+    // (a date or time field opens a picker instead)
+    const editable = `(() => { const a = document.activeElement; return !!a && (a.isContentEditable || a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && ['text', 'search', 'email', 'url', 'tel', 'password', 'number'].includes(a.type))); })()`;
     const focused = await until('a text field to take the focus', 600, async () =>
       (await evaluate(target, editable, 2000)).result.value === true ? true : undefined,
     ).catch(() => false);
