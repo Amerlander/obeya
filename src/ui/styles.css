@@ -110,6 +110,16 @@ h1, h2, .cfg-head h3, .p-title, .project > .head .ttl, .timeline .a-ttl { font-f
 .project > .head .arrange:disabled { cursor: default; animation: arranging 1.4s ease-in-out infinite; }
 @keyframes arranging { 50% { opacity: .45; } }
 .z-far .project .head-btn { display: none; }
+.project > .head { padding-left: 12px; }
+/* folds the project to its head and back; always in sight, so it is found */
+.project > .head .fold { flex: none; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; margin-right: -4px;
+  border: 0; border-radius: 3px; background: none; color: var(--muted); cursor: pointer; }
+.project > .head .fold:hover { background: var(--card); color: var(--ink); }
+.project > .head .fold path { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.project.collapsed > .head { height: 54px; }
+.project > .marks { position: absolute; left: 22px; right: 22px; top: 54px; display: flex; flex-wrap: wrap; gap: 4px; overflow: hidden; height: 14px; }
+.project > .marks .mark { flex: none; width: 18px; height: 10px; margin-top: 2px; padding: 0; border: 0; border-radius: 2px; cursor: pointer; opacity: .55; }
+.project > .marks .mark.yours, .project > .marks .mark:hover { opacity: 1; }
 
 /* an index card pinned to the wall: card stock with nearly square corners, a short hard shadow, the state as a
    rule across the top; title in a serif, the small print in a condensed sans */

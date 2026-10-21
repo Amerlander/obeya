@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { type Bounds, boundsOf, CARD_SIZE, centre, type Place, PROJECT_HEAD, PROJECT_PAD, unionBounds } from '../core/layout';
+import { type Bounds, boundsOf, CARD_SIZE, centre, onCanvas, type Place, PROJECT_HEAD, PROJECT_PAD, unionBounds } from '../core/layout';
 import { type CanvasInfo, type CanvasSnapshot, type CardPatch, finished, type Group, type Item, nameless, needsYou, openPerGroup, type PendingRestart, type PlanDir, START_ALL_HOLD_MS, titleFrom, type AppUpdate, type SourceUpdate, unreadAnswers } from '../core/types';
 import { api, ApiError, beforeReload, onNotice, quietAtStart, reportFocus, setCanvas, useCanvas } from './api';
 import { GroupNames, growFrom, inside, Lasso, MarkHint, Marked, Ring, TerritoryLayer, useTerritories } from './groups';
@@ -150,6 +150,8 @@ function Canvas({
   // ---------------------------------------------------------------- items
   // Local positions win over the snapshot until the server echoes them back.
   const [moved, setMoved] = useState<Record<string, Pos>>({});
+  // Projects collapsed or expanded here, until the server echoes it back.
+  const [folded, setFolded] = useState<Record<string, boolean>>({});
   // Cards created here, until the snapshot carries them.
   const [pending, setPending] = useState<Item[]>([]);
   // Approved cards the server is still landing, with what the card says meanwhile, until it moves on.
@@ -166,6 +168,10 @@ function Canvas({
       });
       return keep.length === Object.keys(m).length ? m : Object.fromEntries(keep);
     });
+    setFolded((f) => {
+      const keep = Object.entries(f).filter(([id, c]) => byId.has(id) && !!byId.get(id)!.collapsed !== c);
+      return keep.length === Object.keys(f).length ? f : Object.fromEntries(keep);
+    });
     setPending((p) => (p.some((i) => byId.has(i.id)) ? p.filter((i) => !byId.has(i.id)) : p));
     setUnderway((u) => {
       const keep = Object.entries(u).filter(([id]) => byId.get(id)?.state === 'waiting');
@@ -173,15 +179,22 @@ function Canvas({
     });
   }, [snapshot]);
 
-  const items = useMemo(() => {
+  const items = useMemo((): Item[] => {
     // the snapshot may carry a new card before its creation answers: then it is there once
     const ids = new Set(snapshot.items.map((i) => i.id));
     const all = [...snapshot.items, ...pending.filter((i) => !ids.has(i.id))];
-    return all.map((i) => (moved[i.id] ? { ...i, ...moved[i.id] } : i));
-  }, [snapshot, pending, moved]);
+    return all.map((i) => {
+      const at = moved[i.id] ? { ...i, ...moved[i.id] } : i;
+      const c = folded[i.id];
+      if (c === undefined) return at;
+      const { collapsed: _, ...open } = at;
+      return c ? { ...open, collapsed: true as const } : open;
+    });
+  }, [snapshot, pending, moved, folded]);
   const itemsRef = useRef(items);
   itemsRef.current = items;
-  const placed = useMemo(() => items.map((item) => ({ item, b: boundsOf(item, items) })), [items]);
+  // the workstreams of a collapsed project are not on the canvas: its marks stand for them
+  const placed = useMemo(() => onCanvas(items).map((item) => ({ item, b: boundsOf(item, items) })), [items]);
   const territories = useTerritories(placed, snapshot.groups);
   const kidsOf = useMemo(() => {
     const m = new Map<string, Item[]>();
@@ -207,12 +220,18 @@ function Canvas({
   }, [snapshot.planDirs, noteHidden, notesMoved]);
   const notes = useMemo(() => (planDirs ? planDirBoxes(planDirs, placed) : []), [planDirs, placed]);
   const all: Bounds = useMemo(() => unionBounds([...placed.map((p) => p.b), ...notes]) ?? { x: 0, y: 0, w: 1000, h: 600 }, [placed, notes]);
-  // what the view keeps in sight: the cards, a project only while it holds none, and the notes on plan directories
-  const content = useMemo(() => [...placed.filter(({ item }) => !kidsOf.has(item.id)).map((p) => p.b), ...notes], [placed, kidsOf, notes]);
+  // what the view keeps in sight: the cards, a project only while it shows none, and the notes on plan directories
+  const content = useMemo(() => [...placed.filter(({ item }) => item.collapsed || !kidsOf.has(item.id)).map((p) => p.b), ...notes], [placed, kidsOf, notes]);
   const contentRef = useRef(content);
   contentRef.current = content;
   const byId = (id: string) => itemsRef.current.find((i) => i.id === id);
-  const bounds = (i: Item) => boundsOf(i, itemsRef.current);
+  /** Where a card stands on the canvas; a workstream of a collapsed project, where its project does. */
+  const bounds = (i: Item) => boundsOf(standsFor(i), itemsRef.current);
+  /** The card on the canvas that shows `i`: a workstream of a collapsed project shows as a mark on its project. */
+  const standsFor = (i: Item) => {
+    const p = i.parent ? byId(i.parent) : undefined;
+    return p?.collapsed ? p : i;
+  };
 
   // ---------------------------------------------------------------- camera
   const [cam, setCam, camRef] = useLive<Cam>(() => {
@@ -683,6 +702,21 @@ function Canvas({
     }
   }, []);
 
+  /** The fold in a project's head: collapsed, only its head and a mark for each workstream stay on the canvas. */
+  const collapse = useCallback(async (p: Item, collapsed: boolean) => {
+    setFolded((f) => ({ ...f, [p.id]: collapsed }));
+    try {
+      await api.patch(p.id, { collapsed });
+    } catch (e) {
+      setFolded(({ [p.id]: _, ...rest }) => rest);
+      fail(e);
+    }
+  }, []);
+  // a stable handle on `open` for the memoised project views
+  const openRef = useRef(open);
+  openRef.current = open;
+  const openCard = useCallback((i: Item) => void openRef.current(i).catch(console.error), []);
+
   /** "Als Projekt aufbereiten" on the note on a plan directory: a card whose agent prepares the doc, started at once. */
   const preparePlanDoc = useCallback(async (dir: PlanDir, file: string) => {
     try {
@@ -984,7 +1018,7 @@ function Canvas({
       });
       const moving = new Set([i.id, ...along.map((a) => a.id)]);
       // the view scrolls as far as the rest of the canvas reaches, plus room to drop the cards beside it
-      const rest = itemsRef.current.filter((x) => !moving.has(x.id));
+      const rest = onCanvas(itemsRef.current).filter((x) => !moving.has(x.id));
       const b = unionBounds([...moving].map((id) => bounds(byId(id)!)))!;
       const content = unionBounds(rest.map((x) => boundsOf(x, rest))) ?? b;
       const grab = toWorld(camRef.current, e.clientX, e.clientY);
@@ -1278,7 +1312,12 @@ function Canvas({
   const sheetKids = !sheetProject ? [] : sheetProject.archivedAt ? archived.filter((i) => i.parent === sheetProject.id) : (kidsOf.get(sheetProject.id) ?? []);
   const deps = useMemo(() => (hoverId && !panning && !dragId ? depsOf(hoverId, items) : undefined), [hoverId, panning, dragId, items]);
   const depOf = (id: string) => (!deps ? undefined : id === hoverId ? 'self' : deps.before.has(id) ? 'before' : deps.after.has(id) ? 'after' : undefined);
-  const edgeTargets = placed.filter(({ item }) => yours(item) && (focus?.type !== 'project' || item.parent === focus.id));
+  // a workstream of a collapsed project points to where its project stands
+  const at = new Map(placed.map((p) => [p.item.id, p.b]));
+  const edgeTargets = items.flatMap((item) => {
+    const b = at.get(standsFor(item).id);
+    return b && yours(item) && (focus?.type !== 'project' || item.parent === focus.id) ? [{ item, b }] : [];
+  });
 
   // the button for the conversation with Obeya: the rightmost in the bar; while its sidebar is open it
   // belongs to the sidebar, at its top corner, and closes it. It is one element that never moves to
@@ -1330,7 +1369,7 @@ function Canvas({
             {deps && <DepLinks placed={placed} edges={deps.edges} />}
             {placed.map(({ item, b }) =>
               item.kind === 'project' ? (
-                <ProjectView key={item.id} item={item} b={b} kids={kidsOf.get(item.id) ?? []} onStartAll={startAll} onArrange={arrange} />
+                <ProjectView key={item.id} item={item} b={b} kids={kidsOf.get(item.id) ?? []} els={els} onStartAll={startAll} onArrange={arrange} onCollapse={collapse} onOpen={openCard} />
               ) : (
                 <CardView
                   key={item.id}

@@ -170,6 +170,8 @@ const de = {
     arranged: 'Workstreams nach Abhängigkeiten angeordnet.',
     arrangeUndone: 'Die Karten stehen wieder, wo sie standen.',
     buildsOn: (names: string[]) => `baut auf ${names.join(', ')} auf`,
+    collapse: 'Zuklappen: nur der Kopf des Projekts bleibt auf der Leinwand',
+    expand: 'Aufklappen: die Workstreams wieder zeigen',
   },
   /** The note on a plan directory beside the projects. */
   planDir: {
@@ -1790,6 +1792,8 @@ const en: Strings = {
     arranged: 'Workstreams arranged by their dependencies.',
     arrangeUndone: 'The cards are back where they were.',
     buildsOn: (names: string[]) => `builds on ${names.join(', ')}`,
+    collapse: 'Collapse: only the project’s head stays on the canvas',
+    expand: 'Expand: show the workstreams again',
   },
   planDir: {
     notProjects: (dir: string, n: number) => `${dir} · ${n === 1 ? '1 doc is not a project' : `${n} docs are not projects`}`,

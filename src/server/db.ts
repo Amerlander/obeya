@@ -103,6 +103,8 @@ export interface CardRow {
   files: string | null;
   /** JSON, projects only: which workstream builds on which, as the Koordinator read it from the plan doc (`StoredDeps` in board.ts). */
   deps: string | null;
+  /** 1 while the owner has a project folded to its head: its workstreams are not shown on the canvas. */
+  collapsed: number;
 }
 
 /** Words the usage limit keeps the Koordinator from reading (`talk.held`): until when, and how it reads them then (`Commander`'s). */
@@ -397,6 +399,8 @@ export const MIGRATIONS = [
   'ALTER TABLE cards ADD COLUMN files TEXT;',
   // which workstream of a project builds on which, read from its plan doc to arrange them (JSON `StoredDeps`)
   'ALTER TABLE cards ADD COLUMN deps TEXT;',
+  // a project the owner folded to its head
+  'ALTER TABLE cards ADD COLUMN collapsed INTEGER NOT NULL DEFAULT 0;',
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter, wish';

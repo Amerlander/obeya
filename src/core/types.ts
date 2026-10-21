@@ -391,6 +391,8 @@ export interface Item {
   mocks?: Mock[];
   /** An idea or a task of the owner's, decided as a project: its worker writes the plan doc, and the project takes its place. */
   becomesProject?: boolean;
+  /** A project the owner folded to its head: its workstreams are not shown on the canvas, only counted in it. */
+  collapsed?: true;
   /** The group the card belongs to (a `Group` id); a workstream's is its project's. */
   group?: string;
 }
@@ -1049,6 +1051,8 @@ export interface CardPatch {
   need?: Need | null;
   /** Another repository of the canvas, before work on the card has begun. */
   repo?: string;
+  /** A project: folded to its head, its workstreams not shown on the canvas, or unfolded again. */
+  collapsed?: boolean;
   /** The task's screenshots, all of them (ids from `POST /api/c/<canvas>/images`). */
   images?: string[];
 }

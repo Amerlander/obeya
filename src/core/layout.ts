@@ -13,6 +13,8 @@ export const CARD_SIZE: Record<Exclude<Shape, 'project'>, readonly [number, numb
 export const PROJECT_PAD = 30;
 export const PROJECT_HEAD = 78;
 const PROJECT_MIN: readonly [number, number] = [420, 150];
+/** A project the owner collapsed: its head, and a row of marks for its workstreams. */
+export const PROJECT_COLLAPSED: readonly [number, number] = [440, 84];
 const CHIPS_PER_ROW = 4;
 const TASKS_PER_ROW = 3;
 export const GAP = 20;
@@ -42,9 +44,15 @@ export function projectSize(children: Pick<Item, 'kind' | 'state' | 'parent' | '
 
 export function sizeOf(i: Item, all: Item[]): [number, number] {
   const shape = shapeOf(i);
-  if (shape === 'project') return projectSize(all.filter((c) => c.parent === i.id));
+  if (shape === 'project') return i.collapsed ? [...PROJECT_COLLAPSED] : projectSize(all.filter((c) => c.parent === i.id));
   const [w, h] = CARD_SIZE[shape];
   return [w, h];
+}
+
+/** The items the canvas shows: all but the workstreams of a collapsed project. */
+export function onCanvas(items: Item[]): Item[] {
+  const collapsed = new Set(items.flatMap((i) => (i.collapsed ? [i.id] : [])));
+  return collapsed.size ? items.filter((i) => !i.parent || !collapsed.has(i.parent)) : items;
 }
 
 export interface Bounds {

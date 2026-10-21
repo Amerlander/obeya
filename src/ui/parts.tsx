@@ -597,25 +597,50 @@ export const ProjectView = memo(
     item,
     b,
     kids,
+    els,
     onStartAll,
     onArrange,
+    onCollapse,
+    onOpen,
   }: {
     item: Item;
     b: Bounds;
     kids: Item[];
+    els: Map<string, HTMLElement>;
     onStartAll: (project: Item, count: number) => void;
     onArrange: (project: Item) => void;
+    onCollapse: (project: Item, collapsed: boolean) => void;
+    onOpen: (i: Item) => void;
   }) {
     const live = kids.filter((k) => finished(k.state)).length;
     const waiting = kids.filter(needsYou).length;
     const startable = startableIn(kids);
+    const collapsed = !!item.collapsed;
+    // the canvas would take the press as the start of a drag or a click that opens the project
+    const own = (e: React.PointerEvent) => e.stopPropagation();
     return (
-      <div className={`item project s-${item.state}`} data-id={item.id} style={{ left: b.x, top: b.y, width: b.w, height: b.h, zIndex: 0 }}>
+      <div className={`item project s-${item.state}${collapsed ? ' collapsed' : ''}`} data-id={item.id} style={{ left: b.x, top: b.y, width: b.w, height: b.h, zIndex: 0 }}>
         <div className="head">
+          <button
+            className="fold"
+            title={collapsed ? t.plan.expand : t.plan.collapse}
+            aria-label={collapsed ? t.plan.expand : t.plan.collapse}
+            aria-expanded={!collapsed}
+            onPointerDown={own}
+            onClick={(e) => {
+              e.stopPropagation();
+              onCollapse(item, !collapsed);
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+              <path d={collapsed ? 'M4 2l4 4-4 4' : 'M2 4l4 4 4-4'} />
+            </svg>
+          </button>
           <span className="ttl">{plain(item.title)}</span>
           <span className="kind">{t.kind.project}</span>
           <span className="progress">{t.progress(live, kids.length)}</span>
-          {(item.arranging || arrangeable(kids)) && (
+          {/* collapsed, its workstreams are not on the canvas to arrange; its sheet still has the button */}
+          {!collapsed && (item.arranging || arrangeable(kids)) && (
             <button
               className="head-btn arrange"
               disabled={item.arranging}
@@ -634,8 +659,7 @@ export const ProjectView = memo(
             <button
               className="head-btn start-all"
               title={`${t.plan.startAll(startable)}. ${t.plan.startAllHint}`}
-              // the canvas would take the press as the start of a drag or a click that opens the project
-              onPointerDown={(e) => e.stopPropagation()}
+              onPointerDown={own}
               onClick={(e) => {
                 e.stopPropagation();
                 onStartAll(item, startable);
@@ -646,11 +670,39 @@ export const ProjectView = memo(
             </button>
           )}
         </div>
+        {/* a collapsed project's workstreams, a mark each in its state's colour: a click opens one, unfolding from its mark */}
+        {collapsed && (
+          <div className="marks">
+            {kids.map((k) => (
+              <button
+                key={k.id}
+                ref={(el) => void (el ? els.set(k.id, el) : els.delete(k.id))}
+                className={needsYou(k) ? 'mark yours' : 'mark'}
+                title={plain(k.title)}
+                aria-label={plain(k.title)}
+                style={{ background: `var(--${shownState(k)})` }}
+                onPointerDown={own}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpen(k);
+                }}
+              />
+            ))}
+          </div>
+        )}
         {waiting > 0 && <div className="badge">{waiting}</div>}
       </div>
     );
   },
-  (a, b) => a.item === b.item && a.onStartAll === b.onStartAll && a.onArrange === b.onArrange && sameBounds(a.b, b.b) && a.kids.length === b.kids.length && a.kids.every((k, i) => k === b.kids[i]),
+  (a, b) =>
+    a.item === b.item &&
+    a.onStartAll === b.onStartAll &&
+    a.onArrange === b.onArrange &&
+    a.onCollapse === b.onCollapse &&
+    a.onOpen === b.onOpen &&
+    sameBounds(a.b, b.b) &&
+    a.kids.length === b.kids.length &&
+    a.kids.every((k, i) => k === b.kids[i]),
 );
 
 /**

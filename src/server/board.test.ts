@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { boundsOf, sizeOf } from '../core/layout';
+import { boundsOf, onCanvas, PROJECT_COLLAPSED, sizeOf } from '../core/layout';
 import type { PlanDoc } from '../core/plan-doc';
 import { BadRequest, Board, pathOfRef, type PlanRead, repoOfRef } from './board';
 import { Store } from './db';
@@ -72,6 +72,23 @@ describe('plan docs', () => {
     const b = boundsOf(items.find((i) => i.title === 'B')!, items);
     expect(b.y).toBeGreaterThanOrEqual(a.y + a.h);
     expect(first.length + 2).toBe(items.length);
+  });
+
+  test('a collapsed project stays collapsed, takes the room of its head, and expands again', () => {
+    const p = board.snapshot().items[0]!;
+    board.patch(p.id, { collapsed: true });
+    let items = board.snapshot().items;
+    expect(items[0]).toMatchObject({ id: p.id, collapsed: true });
+    expect(boundsOf(items[0]!, items)).toMatchObject({ w: PROJECT_COLLAPSED[0], h: PROJECT_COLLAPSED[1] });
+    // its workstreams are still there, for its sheet and its marks
+    expect(onCanvas(items).map((i) => i.id)).toEqual([p.id]);
+    expect(items.filter((i) => i.parent === p.id)).toHaveLength(3);
+    expect(() => board.patch(p.id, { collapsed: 'yes' as never })).toThrow(BadRequest);
+    expect(() => board.patch(items[1]!.id, { collapsed: true })).toThrow(BadRequest);
+    board.patch(p.id, { collapsed: false });
+    items = board.snapshot().items;
+    expect(items[0]!.collapsed).toBeUndefined();
+    expect(onCanvas(items)).toHaveLength(4);
   });
 
   test('a removed doc takes its project into the archive; its return brings it back to its place', () => {

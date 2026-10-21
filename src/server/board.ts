@@ -1754,17 +1754,18 @@ export class Board {
 
   patch(id: string, p: CardPatch) {
     const row = this.own(id);
-    const allowed = row.plan_ref ? (row.kind === 'project' ? ['x', 'y'] : ['x', 'y', 'state', 'need']) : ['x', 'y', 'title', 'body', 'state', 'need', 'repo', 'images'];
+    const allowed = row.plan_ref ? (row.kind === 'project' ? ['x', 'y', 'collapsed'] : ['x', 'y', 'state', 'need']) : ['x', 'y', 'title', 'body', 'state', 'need', 'repo', 'images'];
     const bad = Object.keys(p).filter((k) => !allowed.includes(k));
     if (bad.length) throw new BadRequest('invalid', `cannot change ${bad.join(', ')} on this card`);
     if (p.x !== undefined) checkNumber(p.x, 'x');
     if (p.y !== undefined) checkNumber(p.y, 'y');
+    if (p.collapsed !== undefined && typeof p.collapsed !== 'boolean') throw new BadRequest('invalid', 'collapsed must be true or false');
     if (p.title !== undefined) checkText(p.title, 'title', 200);
     if (p.body !== undefined) checkText(p.body, 'body', 20000);
     if (p.images !== undefined) this.checkImages(p.images);
     if (p.state !== undefined && !STATES.includes(p.state)) throw new BadRequest('invalid', `state must be one of ${STATES.join(', ')}`);
     if (p.need !== undefined && p.need !== null && p.need !== 'demo' && p.need !== 'question') throw new BadRequest('invalid', 'need must be demo, question or null');
-    const { repo, images, ...fields } = p;
+    const { repo, images, collapsed, ...fields } = p;
     // a planned card of the owner's may become an idea again, to be discussed first
     if (p.state === 'idea' && row.state !== 'idea' && (row.plan_ref || (row.state ?? 'planned') !== 'planned' || row.workspace))
       throw new BadRequest('invalid', 'only a planned card of your own that has not been worked on can become an idea');
@@ -1777,6 +1778,7 @@ export class Board {
       ...fields,
       ...(repo !== undefined ? { repo: this.repoColumn(repo) } : {}),
       ...(images !== undefined ? { images: images.length ? JSON.stringify(images) : null } : {}),
+      ...(collapsed !== undefined ? { collapsed: collapsed ? 1 : 0 } : {}),
     });
     this.changed();
   }
@@ -2061,6 +2063,7 @@ export function toItems(rows: CardRow[], docs: PlanDoc[], home: string): Item[] 
         repo: repoOfRef(doc.file, home),
         plan: { file: doc.file, goal: doc.goal },
         ...(depsOf.get(r.id)?.reading ? { arranging: true as const } : {}),
+        ...(r.collapsed ? { collapsed: true } : {}),
         ...(r.from_id ? { origin: r.from_id } : {}),
         ...(r.group_id ? { group: r.group_id } : {}),
       });

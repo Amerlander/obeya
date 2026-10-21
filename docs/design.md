@@ -1662,6 +1662,19 @@ joins the sides that face each other (left and right when the two stand more bes
 other) and runs above projects but below cards, so a line from a workstream stays visible over its
 project.
 
+A project collapses to its head with the arrow before its title („Zuklappen“, „Aufklappen“), for
+projects the owner does not work on, as on a canvas of a repository a team shares, where every
+colleague's plan docs are projects. Collapsed, it is 440 × 84 px: its head (title, progress, the
+start button, the badge of workstreams that need the owner) and below it a mark for each workstream
+in its state's colour, brighter for one that needs the owner, whose title shows on the pointer and
+which opens that workstream, unfolding from its mark. The workstreams stay on the project's sheet
+and in the queue; an edge indicator for one that needs the owner points to its project. What stands
+around the project keeps its place, and so does the project's own: the room it gave up is free for
+other cards, and one put there may lie under the project once it is expanded again. Whether a
+project is collapsed is kept on its row (`collapsed`), for this Obeya alone, never in the plan doc,
+so it holds across reloads and on every device; a project that comes back from the archive comes back
+as it was.
+
 On the canvas, a planned card and one waiting in the queue show a play button while the pointer is
 on them; it starts the card (the queued one anyway) without unfolding it. While the pointer is on a
 card, the waits around it show (see Scheduling).
@@ -1898,6 +1911,11 @@ generic one for anything else.
 - **A group ends with its last card**: it is made by putting cards into it, so there is never an
   empty group to clean up. Deleting one ends it at once by taking its cards out, for a group whose
   last cards sit in the archive, out of reach of the ring (2026-10-06).
+- **A project the owner does not work on collapses rather than going away** (2026-10-21). A
+  colleague on a shared repository wanted to see only their own projects and to dismiss plan docs
+  for themselves alone. Considered: hiding a project into a list of its own beside the archive, with
+  an optional filter on the doc's git author („Nur meine Projekte“). The owner chose collapsing: the
+  project stays in sight, small, and needs no second list to bring it back.
 - **Placement and lines** (2026-10-05): a proposal or follow-up finds the nearest free spot when its
   own place is taken; the dashed line to its card joins the sides that face each other and runs
   above projects but below cards.
@@ -6273,7 +6291,7 @@ Persistent (SQLite):
   and its worker's proposal to build on it, the prototype an idea is built on, landed work whose
   worker still finishes; an approval held until the work can land; what landed work shipped with; a
   waiting card's stopped app; until when a card is snoozed, by whom and why; a worker's proposal waiting for the owner (why, its open
-  questions); a project's plan doc as last read and the idea or task it came from; that a card
+  questions); a project's plan doc as last read, the idea or task it came from, and whether the owner collapsed it; that a card
   becomes a project, and the plan docs its landed work added;
 - the shared demo page: slug, link, the demo directory it shows, what the page shows (title, text,
   chapters, kind) and the pull request it links, the newest page change it was published after, and
