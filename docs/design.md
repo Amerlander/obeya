@@ -2022,7 +2022,9 @@ clone), or a worktree per card (Obeya itself: any number in parallel unless the 
 what remains after it. Clones come from the
 repository's `clones` or `workspaces` in the configuration, or on the command line from `--workspace
 <path>` or `--clones <n>`; a repository whose configuration names clones (these, or `hosts`) works
-in clones whatever its settings say.
+in clones whatever its settings say. The two add up: `clones` is how many Obeya makes in its own
+directory (`workspaces/<canvas>/<repo>/1..n`, `ensureClones`), on top of the existing ones
+`workspaces` lists; the Konfiguration dialog shows the sum (see The Konfiguration dialog).
 
 The pool is what the configuration names (`keepOnly` in `workspaces.ts`, when a repository's agents
 start, and for a host once its clones are in place): a clone it no longer names (fewer to make, an
@@ -5006,7 +5008,11 @@ beside their 2 existing ones and got 4. Switching sets this machine's `workspace
 switching to worktrees takes the clones the entry names out of it (they would keep it in clones)
 and a switch back while the dialog is open brings them back. A repository added in the dialog that
 is in clones gets as many as the first canvas's, two, filled in once its path is checked and
-changeable before saving. The command that shares its demos
+changeable before saving (`withClones` in `core/types.ts`). The two fields add up, so that number
+goes again as soon as an existing clone is listed (a line that is not blank), and comes back when
+the list is emptied, as long as the owner has not touched it; a number the owner typed, changed or
+emptied stays as it is. Until 2026-10-21 the two stayed: a colleague who then listed their 2
+existing clones got 4. The command that shares its demos
 is a row of its settings, for this machine only, since it often needs credentials, so „Für alle“
 does not take it over (empty: the demo site of its settings, shown as „Site: <url>“, or an export;
 see Where a demo goes). Each repository folds its settings under „Einstellungen“ below its row (see

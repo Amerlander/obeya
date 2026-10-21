@@ -1563,22 +1563,43 @@ export function restartsAgents(before: CanvasConfig[], after: CanvasConfig[]): b
 export const CLONES = 2;
 
 /**
- * The draft with `CLONES` filled in for each repository the saved configuration does not have whose
- * settings say clones (`resolved`, by index) and that names none, once per path: `filled` keeps the
- * paths, so a count emptied again stays empty. Null when nothing is filled in.
+ * Where the count of a repository added in the dialog stands (`withClones`): `filled`, the dialog's
+ * `CLONES` is in; `withdrawn`, the dialog took it out again for the existing clones listed; `owner`,
+ * the count is the owner's (typed, changed, emptied, or there before the dialog had a say). A path
+ * not in it has had nothing filled in yet.
  */
-export function withClones(draft: CanvasConfig[], saved: CanvasConfig[], resolved: (ResolvedCanvas | null)[], filled: Set<string>): CanvasConfig[] | null {
+export type FilledClones = Map<string, 'filled' | 'withdrawn' | 'owner'>;
+
+/**
+ * The draft with `CLONES` filled in for each repository the saved configuration does not have whose
+ * settings say clones (`resolved`, by index) and that names none, once per path, or null when it
+ * changes nothing. The dialog's number goes again once existing clones are listed beside it (they
+ * add up, so 2 beside 2 existing would make 4) and comes back when the list is emptied, as long as
+ * the owner has not touched it; `filled` keeps where each path stands, so a count of the owner's,
+ * emptied included, stays as it is.
+ */
+export function withClones(draft: CanvasConfig[], saved: CanvasConfig[], resolved: (ResolvedCanvas | null)[], filled: FilledClones): CanvasConfig[] | null {
   const known = new Set(saved.flatMap((c) => c.repos.map((r) => r.path.trim())));
   let changed = false;
   const next = draft.map((c, i) => ({
     ...c,
     repos: c.repos.map((r, j) => {
       const path = r.path.trim();
-      if (!path || known.has(path) || filled.has(path) || resolved[i]?.repos[j]?.workspaces !== 'clones') return r;
-      filled.add(path);
-      if (r.clones !== undefined || r.workspaces?.length) return r;
+      if (!path || known.has(path) || resolved[i]?.repos[j]?.workspaces !== 'clones') return r;
+      const existing = !!r.workspaces?.some((w) => w.trim());
+      const state = filled.get(path);
+      if (state === 'owner') return r;
+      // the count is no longer the one the dialog left: the owner's from now on
+      if (r.clones !== (state === 'filled' ? CLONES : undefined)) {
+        filled.set(path, 'owner');
+        return r;
+      }
+      if ((state === 'filled') === !existing) return r;
       changed = true;
-      return { ...r, clones: CLONES };
+      filled.set(path, existing ? 'withdrawn' : 'filled');
+      if (!existing) return { ...r, clones: CLONES };
+      const { clones: _, ...rest } = r;
+      return rest;
     }),
   }));
   return changed ? next : null;
