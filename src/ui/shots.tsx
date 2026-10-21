@@ -9,7 +9,8 @@ import { api, at } from './api';
 import { draftOf, dropDraft, markupOf, setMarkup, updateDraft, useDraft } from './draft';
 import { know, known } from './known';
 import { badgeOf, CLICK_PX, drawMarks, EDGE, type Mark, markOf, markSize, type Point, RED, roundedRect } from './marks';
-import { failText, t } from './strings';
+import { confirmPasteHint, pastedShots, pickedShots, usePasteHint } from './pasteHint';
+import { failText, pasteKeys, t } from './strings';
 import { behindThumb, type Box, onto, ZOOM_EASE, ZOOM_MS } from './zoomBox';
 
 /** The longest side the model looks at in detail; larger screenshots only cost upload and context. */
@@ -49,14 +50,16 @@ async function markedImage(src: string, marks: Mark[]): Promise<Blob> {
   return prepareImage(await canvas.convertToBlob({ type: 'image/png' }));
 }
 
-/** Screenshots for a draft, uploaded one after the other; `added` hears each one that arrived. */
+/** Screenshots for a draft, uploaded one after the other; `added` hears each one that arrived. How many did. */
 export async function attachTo(key: string, files: File[], added?: () => void) {
-  if (!files.length) return;
+  let arrived = 0;
+  if (!files.length) return arrived;
   updateDraft(key, (d) => ({ error: '', uploading: d.uploading + files.length }));
   for (const f of files) {
     try {
       const id = await api.uploadImage(await prepareImage(f));
       updateDraft(key, (d) => ({ images: [...d.images, id] }));
+      arrived++;
       added?.();
     } catch (e) {
       updateDraft(key, { error: failText(e) });
@@ -64,6 +67,7 @@ export async function attachTo(key: string, files: File[], added?: () => void) {
       updateDraft(key, (d) => ({ uploading: d.uploading - 1 }));
     }
   }
+  return arrived;
 }
 
 /**
@@ -86,10 +90,13 @@ export function useShotInput({ draft, initial = [], onChange, off = false }: { d
     updateDraft(key, (d) => ({ images: fn(d.images) }));
     change.current?.(draftOf(key).images);
   };
-  const attach = (files: File[]) => (off ? Promise.resolve() : attachTo(key, files, () => change.current?.(draftOf(key).images)));
+  const pasteHint = usePasteHint(key, !off);
+  const attach = (files: File[]) => (off ? Promise.resolve(0) : attachTo(key, files, () => change.current?.(draftOf(key).images)));
   const failed = (e: unknown) => updateDraft(key, { error: failText(e) });
   return {
+    key,
     off,
+    pasteHint,
     images,
     uploading,
     marking,
@@ -148,16 +155,20 @@ export function useShotInput({ draft, initial = [], onChange, off = false }: { d
       const files = imageFiles(e.clipboardData.files);
       if (off || !files.length) return;
       e.preventDefault();
+      pastedShots();
       attach(files);
     },
   };
 }
 export type ShotInput = ReturnType<typeof useShotInput>;
 
-/** The screenshots in a text field, each to enlarge and mark or to remove, and those still uploading. */
+/**
+ * The screenshots in a text field, each to enlarge and mark or to remove, and those still uploading;
+ * after the first one picked from disk, the hint that pasting works too, until it is confirmed.
+ */
 export function ShotStrip({ shots }: { shots: ShotInput }) {
   const enlarge = useEnlarge(shots);
-  if (!shots.images.length && !shots.uploading) return null;
+  if (!shots.images.length && !shots.uploading && !shots.pasteHint) return null;
   return (
     <div className="c-shots">
       {shots.images.map((id) => (
@@ -175,6 +186,14 @@ export function ShotStrip({ shots }: { shots: ShotInput }) {
           {t.shots.uploading}
         </span>
       ))}
+      {shots.pasteHint && (
+        <div className="c-paste-hint" role="note">
+          <p>{t.shots.pasteHint(pasteKeys())}</p>
+          <button className="btn small primary" onClick={confirmPasteHint}>
+            {t.newCardHint.ok}
+          </button>
+        </div>
+      )}
       {enlarge.view}
     </div>
   );
@@ -232,7 +251,8 @@ export function AttachButton({ shots, title = t.shots.attach }: { shots: ShotInp
         multiple
         hidden
         onChange={(e) => {
-          shots.attach(imageFiles(e.target.files));
+          // once they have arrived, the hint that pasting is quicker
+          void shots.attach(imageFiles(e.target.files)).then((n) => n && pickedShots(shots.key));
           e.target.value = '';
           back();
         }}

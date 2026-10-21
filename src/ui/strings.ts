@@ -1648,6 +1648,10 @@ const de = {
     done: 'Fertig',
     alt: 'Screenshot',
     uploading: 'lädt …',
+    ctrlV: 'Strg+V',
+    winShiftS: 'Win+Umschalt+S',
+    pasteHint: (k: { paste: string; grab?: string }) =>
+      `Screenshots fügst du auch mit ${k.paste} aus der Zwischenablage ein, ohne sie erst als Datei zu speichern.${k.grab ? ` ${k.grab} legt einen Screenshot direkt dort ab.` : ''}`,
   },
   /** On an empty canvas: speaking first (and where its card lands), the double-click second. */
   empty: { none: 'Noch keine Aufgaben.', speak: 'Halte die Leertaste und sag, was Obeya bauen soll.', where: 'Die Karte erscheint dort, wo der Mauszeiger beim Loslassen steht.', click: 'Oder doppelklicke auf die Fläche, um selbst eine anzulegen.' },
@@ -3211,6 +3215,10 @@ const en: Strings = {
     done: 'Done',
     alt: 'Screenshot',
     uploading: 'uploading …',
+    ctrlV: 'Ctrl+V',
+    winShiftS: 'Win+Shift+S',
+    pasteHint: (k: { paste: string; grab?: string }) =>
+      `You can also paste screenshots from the clipboard with ${k.paste}, without saving them as a file first.${k.grab ? ` ${k.grab} puts a screenshot straight there.` : ''}`,
   },
   empty: { none: 'No tasks yet.', speak: 'Hold Space and say what Obeya should build.', where: 'The card appears where the pointer is when you let go.', click: 'Or double-click on the canvas to create one yourself.' },
 };
@@ -3254,6 +3262,13 @@ export function pushKeyLabel(key: string, mac = typeof navigator !== 'undefined'
       return side ? t.config.pushKey.side[side](shown) : shown;
     })
     .join('+');
+}
+
+/** The keys that paste, and that take a screenshot onto the clipboard where the system has one for it. */
+export function pasteKeys(platform = typeof navigator !== 'undefined' ? navigator.platform : '') {
+  if (/Mac/.test(platform)) return { paste: '⌘V', grab: '⌃⇧⌘4' };
+  if (/Win/.test(platform)) return { paste: t.shots.ctrlV, grab: t.shots.winShiftS };
+  return { paste: t.shots.ctrlV };
 }
 
 /** A file's size: bytes, KB or MB (as 1000s, like the systems' file managers mostly show them). */

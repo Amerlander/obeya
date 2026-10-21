@@ -28,6 +28,7 @@ import { know, known } from './known';
 import { addAll, MARK_KNOWN, markable, MOVE_MARKED_KNOWN, movesWith, shifted, toggle } from './selection';
 import { closeWish, keepWish, openWish, useWish, WishDialog } from './wish';
 import { PlanDirNote, planDirBoxes, useHiddenEmptyNotes } from './planDirs';
+import { pastedShots } from './pasteHint';
 import { attachTo, imageFiles } from './shots';
 import { cardDraft, fieldOn, focusedDraft, keepDrafts, MIC_DRAFT, OBEYA_DRAFT, takesImages } from './draft';
 import { HoldToTalk, PushToTalk, SPACE_SHOWS_MS, TAP_MS, ToldList, usePushToTalk, useTold } from './voice';
@@ -847,6 +848,7 @@ function Canvas({
       const key = fieldFor(where());
       if (!files.length || !takesImages(key)) return;
       e.preventDefault();
+      pastedShots();
       void attachTo(key, files);
     };
     addEventListener('keyup', up, true);

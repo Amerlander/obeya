@@ -1396,6 +1396,15 @@ thumbnail grows the screenshot out of it to as large as the window allows, over 
 like the demo video's zoom (`Lightbox` in `src/ui/shots.tsx`); Esc or a click puts it back into its
 thumbnail, and the card stays open.
 
+Picking a file is the way a newcomer finds first (the field's image button), pasting the quicker
+one. So once the first screenshot picked with the file dialog has arrived, the field says under its
+thumbnails that screenshots paste from the clipboard too (⌘V on a Mac, Ctrl+V elsewhere), with the
+system's keys that take one onto the clipboard where it has them (⌃⇧⌘4 on a Mac, Win+Shift+S on
+Windows), and „Verstanden“ (`src/ui/pasteHint.ts`). It stays, also after sending, closing the card
+or a reload, until the owner confirms it; while its field is gone, the field that appeared last
+shows it. It never shows again after that, nor once the owner has pasted a screenshot anywhere, and
+never on a device without a mouse or trackpad (a phone), which has no keys to paste with.
+
 A card's task takes screenshots the same way: in its description field, while the card is planned.
 They show under the task, and its worker gets them with the task when it starts (an idea's
 exploration agent, when a planned card becomes an idea; building an idea adds the screenshots the

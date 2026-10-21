@@ -974,6 +974,13 @@ button.q-end:hover { color: var(--ink); text-decoration: underline; }
 .c-shot .remove { position: absolute; top: -7px; right: -7px; width: 20px; height: 20px; border-radius: 3px; border: 1px solid var(--line);
   background: var(--card); color: var(--ink); font-size: 13px; line-height: 1; cursor: pointer; padding: 0; }
 .c-shot.loading { padding: 0 10px; }
+/* after the first screenshot picked from disk: pasting works too, until confirmed */
+.c-paste-hint { flex-basis: 100%; display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-left: 3px solid var(--working);
+  border-radius: 2px; background: color-mix(in srgb, var(--working) 8%, var(--card)); font-size: 13px; line-height: 1.4; }
+.c-paste-hint p { margin: 0; flex: 1; }
+.c-paste-hint .btn { flex: none; }
+.ptt-shots .c-shots { flex-wrap: nowrap; align-items: center; }
+.ptt-shots .c-paste-hint { flex: 0 0 auto; width: 320px; }
 /* the marked version is being drawn and uploaded, to take its place */
 .c-shot.marking img { opacity: .5; }
 .c-error { flex-basis: 100%; margin: 0; }
