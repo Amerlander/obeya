@@ -1637,7 +1637,7 @@ function panelRect(i: Item, inner: HTMLElement, side: number) {
   // beside a sheet dragged wide a card keeps at least the width of a conversation and reaches over the sheet
   const W = Math.min(want, Math.max(innerWidth - side - 80, Math.min(TALK_W, innerWidth - 80)));
   inner.style.width = `${W}px`;
-  inner.style.paddingBottom = '';
+  inner.style.removeProperty('--pb');
   inner.style.overflowY = '';
   const pad = getComputedStyle(inner);
   const base = parseFloat(pad.paddingBottom);
@@ -1672,7 +1672,8 @@ function panelRect(i: Item, inner: HTMLElement, side: number) {
   let H = Math.min(Math.ceil(need), max);
   H = Math.min(Math.ceil(need + under(H)), max);
   const extra = under(H);
-  if (extra) inner.style.paddingBottom = `${base + extra}px`;
+  // through --pb, which the card's sticky row of decisions reaches down over too (styles.css)
+  if (extra) inner.style.setProperty('--pb', `${base + extra}px`);
   return { left: `${Math.max(40, (innerWidth - side - W) / 2)}px`, top: `${top(H)}px`, width: `${W}px`, height: `${H}px` };
 }
 

@@ -416,44 +416,6 @@ export function Detail(p: Props) {
             </>
           )}
           {planSource}
-          {!item.queue && (
-            <div className="actions">
-              {/* one snoozed to start later starts now with „Jetzt zurückholen“ on its line in the conversation */}
-              {!item.snoozed && (
-                <button className="btn primary" title={inFolder ? t.folder.startHint : t.startHint} onClick={() => act({ action: 'start' }, { close: false })}>
-                  {t.start}
-                </button>
-              )}
-              <Later item={item} act={act} />
-              {prototypeActions}
-              {item.source === 'manual' && !item.prototypeOf && (
-                <>
-                  {/* a task with a branch has work already, one decided as a project goes its way: neither is discussed or planned anew */}
-                  {plannableAsProject(item) && (
-                    <>
-                      <button
-                        className="btn"
-                        title={t.idea.makeIdeaHint}
-                        onClick={async () => {
-                          await p.flush();
-                          p.onEdit({ state: 'idea' });
-                          await p.flush();
-                        }}
-                      >
-                        {t.idea.makeIdea}
-                      </button>
-                      <button className="btn" title={t.idea.planDocHint} onClick={() => act({ action: 'planDoc' }, { close: true, ack: t.idea.planned })}>
-                        {t.idea.planDoc}
-                      </button>
-                    </>
-                  )}
-                  <button className="btn danger" onClick={p.onDelete}>
-                    {t.delete}
-                  </button>
-                </>
-              )}
-            </div>
-          )}
         </>
       )}
 
@@ -548,6 +510,48 @@ export function Detail(p: Props) {
         </>
       )}
 
+      {error && <p className="p-error">{error}</p>}
+
+      {/* the decisions of a card nobody worked on yet, below what it shows, as on every card */}
+      {item.state === 'planned' && !worked && !waits && !item.queue && (
+        <div className="actions">
+          {/* one snoozed to start later starts now with „Jetzt zurückholen“ on its line in the conversation */}
+          {!item.snoozed && (
+            <button className="btn primary" title={inFolder ? t.folder.startHint : t.startHint} onClick={() => act({ action: 'start' }, { close: false })}>
+              {t.start}
+            </button>
+          )}
+          <Later item={item} act={act} />
+          {prototypeActions}
+          {item.source === 'manual' && !item.prototypeOf && (
+            <>
+              {/* a task with a branch has work already, one decided as a project goes its way: neither is discussed or planned anew */}
+              {plannableAsProject(item) && (
+                <>
+                  <button
+                    className="btn"
+                    title={t.idea.makeIdeaHint}
+                    onClick={async () => {
+                      await p.flush();
+                      p.onEdit({ state: 'idea' });
+                      await p.flush();
+                    }}
+                  >
+                    {t.idea.makeIdea}
+                  </button>
+                  <button className="btn" title={t.idea.planDocHint} onClick={() => act({ action: 'planDoc' }, { close: true, ack: t.idea.planned })}>
+                    {t.idea.planDoc}
+                  </button>
+                </>
+              )}
+              <button className="btn danger" onClick={p.onDelete}>
+                {t.delete}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* the decisions go below both columns, as on an idea or a proposal */}
       {worked && (running || archivable || halted || rest || snoozable(item)) && (
         <div className="actions">
@@ -578,8 +582,6 @@ export function Detail(p: Props) {
       )}
       {review && item.noChange && !item.prototypeOf && <p className="hint">{inFolder ? t.folder.noChangeHint : t.noChangeHint}</p>}
       {review && direct && !item.prototypeOf && <p className="hint">{t.directHint}</p>}
-
-      {error && <p className="p-error">{error}</p>}
     </>
   );
 }

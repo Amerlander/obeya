@@ -441,11 +441,24 @@ button.pill.help:hover, button.pill.help.on { color: var(--ink); }
 #panel.anim { --ease: cubic-bezier(.3,.9,.3,1); transition: left var(--unfold) var(--ease), top var(--unfold) var(--ease),
   width var(--unfold) var(--ease), height var(--unfold) var(--ease); }
 /* the inner box keeps the final width while the panel unfolds, so the content can be measured before it shows */
-#panel .inner { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; overflow: auto; scrollbar-gutter: stable;
-  padding: 26px 30px; opacity: 0; transition: opacity .12s; }
+/* --pb: the room below the content, more where the microphone covers the panel's foot (App.tsx) */
+#panel .inner { --pb: 26px; position: absolute; left: 0; top: 0; bottom: 0; width: 100%; overflow: auto; scrollbar-gutter: stable;
+  padding: 26px 30px var(--pb); opacity: 0; transition: opacity .12s; }
 /* as much room below the last line as above the title */
 #panel .content { display: flow-root; }
 #panel .content > :last-child { margin-bottom: 0; }
+/* the card's decisions at its end stay in view while a long text scrolls under them, filling the
+   room below the content (and above the microphone) as the panel's foot; a line above them while
+   there is more to scroll to */
+#panel .content > .actions:last-child { position: sticky; bottom: calc(-1 * var(--pb)); z-index: 1; margin-bottom: calc(-1 * var(--pb));
+  margin-top: 6px; padding: 12px 0 var(--pb); background: var(--panel); }
+@supports (animation-timeline: scroll()) {
+  #panel .content > .actions:last-child { animation: foot-line linear both; animation-timeline: scroll(nearest block); }
+}
+@keyframes foot-line {
+  0%, 99.5% { box-shadow: 0 -1px 0 var(--line); }
+  100% { box-shadow: none; }
+}
 #panel.ready .inner { opacity: 1; }
 #panel .close { position: absolute; right: 14px; top: 12px; border: 0; background: var(--chip); width: 32px; height: 32px; border-radius: 3px; cursor: pointer; z-index: 2; }
 /* the card's rule across the top, as on the card it unfolded from */

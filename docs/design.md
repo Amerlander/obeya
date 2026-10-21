@@ -1727,8 +1727,11 @@ closing runs the same in reverse. Fast enough not to wait on, long enough to kee
 An unfolded card is as tall as its content, up to a limit per state beyond which it scrolls, and
 follows its content while open. Where its bottom lies under the microphone, the content gets that
 much room below it, so the last row (an idea's „Parken“, „Verwerfen“) scrolls up past the microphone
-instead of staying under it. A task whose conversation stands alone is 640 px wide, the
-conversation's widest, and otherwise sized like a split.
+instead of staying under it. A card's row of decisions at its end stays in view at the panel's foot
+(above the microphone) while a long text scrolls under it, with a line above it while there is more
+to scroll to: a planned workstream whose plan-doc text runs past the panel shows „Agent starten“
+without scrolling, as its card on the canvas shows its play button. A task whose conversation
+stands alone is 640 px wide, the conversation's widest, and otherwise sized like a split.
 
 A card with a conversation beside what it is about (an idea, a proposal, a task an agent worked on
 with a result) is up to 1600 px wide instead, the conversation a third of the width (400–560 px), and as
