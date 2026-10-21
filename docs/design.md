@@ -4560,6 +4560,11 @@ it.
 
 #### Reading a plan doc
 
+The project's sheet lists each workstream with its label, its title and, under it in smaller type,
+the rest of its item in the doc (its text and sub-items), then its state: a title alone is often too
+short to tell what a workstream is, and the owner should not have to search the doc for it
+(2026-10-21). Details a doc keeps elsewhere than in the item (a section of its own) stay in the doc.
+
 The owner reads a plan doc where the project is: "Plandokument lesen" in the project's sheet widens
 it and shows the doc as written, rendered, kept current with the file; a workstream's card opens it
 at the workstream's item. Esc goes back to the workstreams. The server hands out only docs it shows

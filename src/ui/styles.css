@@ -1033,6 +1033,14 @@ button.q-end:hover { color: var(--ink); text-decoration: underline; }
 .sheet > ol > li:hover { background: var(--chip); }
 .sheet > ol > li .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); margin-top: 5px; flex: none; }
 .sheet > ol > li .w { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 30px; }
+/* a workstream's text from the plan doc under its title, so the list says what each one is */
+.sheet > ol > li .ws { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.sheet > ol > li .ws > .ws-title { font-weight: 600; }
+.sheet .ws-text { color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+.sheet .ws-text .p-lead { font-size: inherit; margin: 0; max-width: none; }
+.sheet .ws-text .p-lead + .p-lead, .sheet .ws-text .p-list { margin-top: 3px; }
+.sheet .ws-text .p-list { font-size: inherit; max-width: none; }
+.sheet .ws-text .p-list li { margin: 1px 0; }
 /* the archive: per day a timeline, the time on the left, each archived card as a small card */
 .archive-menu { width: min(460px, calc(100vw - 28px)); padding: 8px 10px 4px; }
 .archive-menu > .btn { margin: 2px 0 6px; padding: 6px 12px; font-size: 13px; }

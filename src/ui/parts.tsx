@@ -8,6 +8,7 @@ import { api } from './api';
 import type { Cam } from './camera';
 import type { Shape } from './groups';
 import { Doc, Inline, plain } from './markdown';
+import { Body } from './message';
 import { waitedOn } from './queue';
 import { ClockMark, snoozeWho } from './snooze';
 import { becomesLabel, clock, shortDay, snoozeWhen, stateLabel, t } from './strings';
@@ -808,9 +809,15 @@ export function Sheet({
               <li key={k.id} ref={ref(k.id)} className={`s-${k.state}`} onClick={() => onOpen(k)}>
                 <span className="dot" />
                 <span className="w">{k.label}</span>
-                <span>
-                  <Inline md={k.title} />
-                  <br />
+                <span className="ws">
+                  <span className="ws-title">
+                    <Inline md={k.title} />
+                  </span>
+                  {k.body.trim() && (
+                    <div className="ws-text">
+                      <Body md={k.body} />
+                    </div>
+                  )}
                   <span className="hint">
                     {k.queue && 'behind' in k.queue ? t.queue.behind(waitedOn(k.queue.behind, all, (id) => sibling(id, kids, all))) : stateLabel(k)}
                   </span>
