@@ -476,11 +476,14 @@ export class Workers {
   /** Cards with comments on places in the demo video held back: when they go to the worker without the owner's sign. */
   private holding = new Map<string, ReturnType<typeof setTimeout>>();
 
+  /** Ends the subscription to the board's changes. */
+  private unwatch: () => void;
+
   constructor(private o: WorkerOptions) {
     // what a worker does shows on its card while it is in a turn, and only then can it be paused
     o.board.showTurns(() => this.turnsShown());
     // a forward to a card's app ends once the card no longer offers it: cleared, parked, its workspace gone
-    o.board.onChange(() => {
+    this.unwatch = o.board.onChange(() => {
       for (const [id, f] of this.forwards) {
         const card = this.o.board.item(id);
         if (card?.app !== f.app || this.o.board.row(id).workspace !== f.workspace) this.unforward(id);
@@ -1686,6 +1689,8 @@ export class Workers {
   }
 
   shutdown() {
+    // workers of a repository started afresh are its new ones: these settle no lease any more
+    this.unwatch();
     for (const id of [...this.live.keys()]) this.end(id);
     for (const timer of this.reconnecting.values()) clearTimeout(timer);
     this.reconnecting.clear();

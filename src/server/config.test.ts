@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { blocksSaving, type CanvasConfig, type ConfigView, type DemoSettingsView, type LanguageView } from '../core/types';
+import { Board } from './board';
 import { CanvasRuntime } from './canvas';
 import { clipProblems, Config, demoSettingsProblems, readConfigFile } from './config';
 import { Store } from './db';
@@ -78,6 +79,29 @@ describe("Obeya's configuration", async () => {
     expect(await mode({ clones: 2 })).toBe('clones');
     expect(await mode({ workspaces: [api] })).toBe('clones');
     expect(await mode({ settings: { workspaces: 'worktrees' }, clones: 1 })).toBe('clones');
+  });
+
+  test("says which clones of a running canvas's pool a configuration no longer names, and which card holds one", async () => {
+    const c = config('file', [], ['web']);
+    const board = new Board(store, { id: 'web', name: 'web', repos: [{ id: 'web', name: 'web', path: web, branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
+    const made = [1, 2, 3].map((i) => gitRepo(join(dir, 'workspaces', 'web', String(i))));
+    const own = gitRepo(join(dir, 'own'));
+    // a card's worktree is no clone
+    const tree = join(dir, 'workspaces', 'web', '12345678');
+    mkdirSync(tree, { recursive: true });
+    writeFileSync(join(tree, '.git'), 'gitdir: elsewhere\n');
+    for (const p of [...made, own, tree, 'ssh://gpu/far/1', 'ssh://gpu/far/2']) store.addWorkspace('web', p);
+    store.setLease(made[2]!, board.create({ title: 'Login', x: 0, y: 0 }).id);
+    const leaving = async (r: object) => (await c.check([{ repos: [{ path: web, ...r }] }])).resolved[0]!.repos[0]!.leaving;
+    expect(await leaving({ clones: 3, workspaces: [own], hosts: [{ name: 'gpu', ssh: 'gpu', root: '/far', clones: 2 }] })).toBeUndefined();
+    expect(await leaving({ clones: 1, hosts: [{ name: 'gpu', ssh: 'gpu', root: '/far', clones: 1 }] })).toEqual([
+      { path: own },
+      { path: made[1]!, made: 2 },
+      { path: made[2]!, made: 3, card: 'Login' },
+      { path: '/far/2', host: 'gpu', made: 2 },
+    ]);
+    // in worktrees, every clone leaves
+    expect((await leaving({ settings: { workspaces: 'worktrees' } }))?.map((x) => x.path)).toEqual([own, ...made, '/far/1', '/far/2']);
   });
 
   test('a folder without git is checked as a folder, and keeps neither clones nor hosts', async () => {

@@ -539,19 +539,27 @@ export class CanvasRuntime {
         repo: isHome ? null : ref.id,
         machines: [{ host: null, ...(rc.slots !== undefined ? { slots: rc.slots } : {}) }, ...remoteHosts.map((h) => ({ host: h.name, ...(h.slots !== undefined ? { slots: h.slots } : {}) }))],
         busy: (host) => workers.busyOn(host),
+        ...(adapter.app?.stop ? { stop: adapter.app.stop } : {}),
+        origins: [info.remote, info.path].filter((x): x is string => !!x),
+        changed: () => board.changed(),
       });
-      // a clone registered for this repository must be one of it
-      const named = (rc.workspaces ?? []).map((w) => resolve(w));
-      for (const w of named) git.register(w, [info.remote, info.path].filter((x): x is string => !!x));
-      // landing on main needs clones that see the local main; otherwise they track the remote
-      if (rc.clones) named.push(...git.ensureClones(adapter.land === 'main' || !info.remote ? info.path : info.remote, rc.clones));
-      // the pool is what the configuration names now: clones here it no longer names leave it, and those on hosts
-      // no longer in use (on a host still in use, once its clones are in place); worktrees are the cards' own
+      const named: string[] = [];
       if (adapter.workspaces === 'clones') {
-        git.keepOnly(null, named);
-        const hosts = new Set(remoteHosts.map((h) => h.name));
-        for (const host of new Set(git.list().map((w) => hostName(w.path)))) if (host !== null && !hosts.has(host)) git.keepOnly(host, []);
+        // a clone registered for this repository must be one of it
+        for (const w of rc.workspaces ?? []) {
+          git.register(resolve(w), [info.remote, info.path].filter((x): x is string => !!x));
+          named.push(resolve(w));
+        }
+        // landing on main needs clones that see the local main; otherwise they track the remote
+        if (rc.clones) named.push(...git.ensureClones(adapter.land === 'main' || !info.remote ? info.path : info.remote, rc.clones));
       }
+      // the pool is what the configuration names now (in worktrees, no clone): clones here it no longer names leave it,
+      // and those on hosts no longer in use (on a host still in use, once its clones are in place); worktrees are the cards' own
+      git.keepOnly(null, named);
+      const hosts = new Set(remoteHosts.map((h) => h.name));
+      for (const host of new Set(git.list().map((w) => hostName(w.path)))) if (host !== null && !hosts.has(host)) git.keepOnly(host, []);
+      // the folders of Obeya's clones that left the pool earlier go once nothing in them would be lost
+      git.sweep();
       workspaces = git;
     }
     // clones on other machines, made in the background: a host that is off now gets them once it answers

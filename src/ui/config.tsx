@@ -12,6 +12,7 @@ import { AccessSection } from './access';
 import { api, reload } from './api';
 import { keepConfigDraft, keptConfigDraft } from './configDraft';
 import { keep } from './keep';
+import { plain } from './markdown';
 import { demoState, GitSetup, platformName, RecognitionDetail, SetupList, useFolderWithoutGit, voiceState } from './setup';
 import { useFitHeight } from './fitHeight';
 import { failText, fileSize, pushKeyLabel, t } from './strings';
@@ -1250,6 +1251,9 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
     onChange(next);
   };
   const source = named ? t.config.settings.source.clones : own !== undefined ? t.config.settings.source.machine : base ? t.config.settings.source[base.source] : undefined;
+  const listed = (repo.workspaces ?? []).filter((w) => w.trim()).length;
+  // what saving does to the clones registered now: those it no longer names leave the pool, a card's once it is done
+  const leaving = resolved?.leaving?.length ? <span className="hint cfg-clone-leaving">{t.config.cloneLeaving(resolved.leaving.map((c) => (c.card ? { ...c, card: plain(c.card) } : c)))}</span> : null;
   // one row of the canvas's table of repositories; what only some have (clones, problems) spans the row below it
   return (
     <>
@@ -1307,16 +1311,24 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
                 </span>
                 <input type="number" min={0} max={20} aria-label={t.config.slots} placeholder={t.config.slotsAll} value={repo.slots ?? ''} onChange={(e) => onChange(without('slots', slotsOf(e.target.value)))} />
               </label>
-              <span className="hint cfg-clone-total">{t.config.cloneTotal((repo.workspaces ?? []).filter((w) => w.trim()).length, repo.clones ?? 0)}</span>
+              {listed + (repo.clones ?? 0) + (repo.hosts ?? []).reduce((n, h) => n + h.clones, 0) === 0 ? (
+                <span className="hint warn cfg-clone-total">{t.config.noClones}</span>
+              ) : (
+                <span className="hint cfg-clone-total">{t.config.cloneTotal(listed, repo.clones ?? 0)}</span>
+              )}
+              {leaving}
               <Hosts hosts={repo.hosts ?? []} onChange={(hosts) => onChange(without('hosts', hosts.length ? hosts : undefined))} />
             </>
           ) : (
-            <label className="cfg-slots cfg-has-info">
-              <span className="hint">
-                {t.config.slots} <Info text={t.config.slotsWorktreesHint} />
-              </span>
-              <input type="number" min={0} max={20} aria-label={t.config.slots} placeholder={t.config.slotsAny} value={repo.slots ?? ''} onChange={(e) => onChange(without('slots', slotsOf(e.target.value)))} />
-            </label>
+            <>
+              <label className="cfg-slots cfg-has-info">
+                <span className="hint">
+                  {t.config.slots} <Info text={t.config.slotsWorktreesHint} />
+                </span>
+                <input type="number" min={0} max={20} aria-label={t.config.slots} placeholder={t.config.slotsAny} value={repo.slots ?? ''} onChange={(e) => onChange(without('slots', slotsOf(e.target.value)))} />
+              </label>
+              {leaving}
+            </>
           )}
         </div>
       )}

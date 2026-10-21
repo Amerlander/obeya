@@ -2044,16 +2044,39 @@ directory (`workspaces/<canvas>/<repo>/1..n`, `ensureClones`), on top of the exi
 `workspaces` lists; the Konfiguration dialog shows the sum (see The Konfiguration dialog).
 
 The pool is what the configuration names (`keepOnly` in `workspaces.ts`, when a repository's agents
-start, and for a host once its clones are in place): a clone it no longer names (fewer to make, an
-existing one taken out of the list, a host removed or given fewer) leaves the pool, a free one at
-once, one a card holds once the card gives it back. Nothing goes from disk: a clone keeps its
-branches, and naming it again brings it back. Until 2026-10-21 a clone, once registered, stayed in
-the pool for good: lowering the number to make, or emptying it, changed nothing.
+start, and for a host once its clones are in place): a clone it no longer names (fewer to make, the
+number emptied or 0, an existing one taken out of the list, a host removed or given fewer, the
+repository gone over to worktrees) leaves the pool, a free one at once, one a card holds once the
+card gives it back (landed, deleted, its workstream ticked off); no card moves in the middle of its
+work, and a deleted card brought back with the undo does not take it back. Until 2026-10-21 a clone,
+once registered, stayed in the pool for good: lowering the number to make, or emptying it, changed
+nothing, and a colleague who lowered it kept 4 clones.
+
+A clone Obeya made (`workspaces/…/<n>`, on a host `<root>/<n>`, a clone of the repository by its
+`origin`) goes from disk as it leaves (`retire`), where nothing in it would be lost (`unlanded`): no
+changes not committed, no files git does not track (those it ignores aside), no stash, no
+submodules (their work is not looked into), no worktree made from it in use (a follow-up's), and no
+branch, tag or detached HEAD with commits that are on no branch of `origin` (fetched with pruning)
+unless each file it changes is on `origin`'s main branch as it has it, which is how a branch
+squashed or rebased onto it in its pull request, then deleted, counts as landed. Where work lands on the local
+main, `origin` is the Obeya checkout. The repository's `app.stop` runs in it first, so no app stack
+is left without its folder, and what it leaves behind is looked at again. The folder is moved aside
+before it goes, so a clone named again meanwhile (here, or as another canvas's) is never removed
+under a card; on a host, making a clone and removing it wait for each other. Otherwise the folder stays: the log says once which folder
+and what lies in it, and the pool's tooltip shows it („bleibt: nicht gelandete Arbeit in <Pfad>“)
+until a later start finds it can go (`sweep` here, on a host when its clones are made sure of); a
+host that does not answer is asked at the next start. Raising the number again takes a folder that
+stayed back into the pool as it is. A clone the owner listed is never touched on disk, nor are the
+folders on a host no longer configured, which Obeya cannot reach. Deleting was chosen over leaving
+the folder (disk space and app stacks would stay, and who lowers the number mostly wants the space
+back) and over asking when saving (a step more, and a clone a card holds is freed only later).
 
 A card that will not work in its workspace again gives it back, which nothing else would do, a
 restart included (`settleLeases` in `workers.ts`, on every change of the board and when Obeya
-starts; `leaseEnded` in `board.ts` says why): a deleted card; a workstream no worker is on (stopped
-with work on its branch, say, and that work merged by hand) once the plan doc on the default branch
+starts; `leaseEnded` in `board.ts` says why; only the workers a repository runs now, not those it
+ran before its agents restarted, which until 2026-10-21 went on settling with the pool as it was and
+gave a clone that had left it back): a deleted card; a workstream no worker is on (stopped with
+work on its branch, say, and that work merged by hand) once the plan doc on the default branch
 ticks it off or no longer has it (the doc gone, the workstream taken out); and a lease that outlived
 its card's work, held by a finished card whose worker is done or by a card that names another
 workspace or none, however it came about. Nothing is
@@ -5050,7 +5073,12 @@ found without opening its settings: Klonen shows the existing clones („Vorhand
 Zeile“), below them the clones Obeya makes in addition („Dazu neue Klone anlegen“, its info icon
 saying they come on top of the existing ones, in Obeya's directory), the slots, a line with how many
 clones that makes on this machine („Zusammen 4 Klone auf diesem Rechner (2 vorhandene, 2 neue)“),
-and the other machines; Worktrees only the slots. Until 2026-10-21 the number came first, labelled
+and the other machines; Worktrees only the slots. With none of them, the line warns instead that no
+card would start there any more („Kein einziger Klon: …“). Under it, for a canvas that runs, stands
+what saving does to the clones registered now (`leaving` of the dialog's check, `leavingClones`):
+„Klon 3 und 4 fallen weg; Klon 4 erst, wenn ‚Login‘ fertig ist. Ihre Ordner werden gelöscht, wenn
+darin nichts Ungelandetes liegt.“ (an existing clone by its path, whose folder stays as it is), also
+when switching to worktrees. Until 2026-10-21 the number came first, labelled
 „Klone anlegen“, with no sum: a colleague took it for the number of clones to work in, typed 2
 beside their 2 existing ones and got 4. An existing clone is one of the repository when it is the
 repository itself or its `origin` is the repository's (or the repository's path): the same

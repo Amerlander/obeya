@@ -734,6 +734,11 @@ export class Store {
       .all({ c: canvasId, repo }) as { path: string; card_id: string | null }[];
   }
 
+  /** Whether a workspace is registered, on any canvas. */
+  hasWorkspace(path: string): boolean {
+    return !!this.db.query('SELECT 1 FROM workspaces WHERE path = $path').get({ path });
+  }
+
   removeWorkspace(path: string) {
     this.db.query('DELETE FROM workspaces WHERE path = $path').run({ path });
   }

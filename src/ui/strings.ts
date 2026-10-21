@@ -7,7 +7,21 @@ import type { DiffFile } from '../core/diff';
 import { type Language, languageOf } from '../core/locale';
 import type { PageChangeId } from '../core/page-changes';
 import type { NotAProject } from '../core/plan-doc';
-import { type AgentEffort, type AgentModel, type AgentRole, type CardState, type ConfigProblemCode, type DemoKind, type ClipProblem, type DemoSettingsProblem, type ErrorCode, EXPORT_HTML_MAX, type NarrationLanguage, type Theme, type VoiceKind, type Idea, type Need, type NextStep, type Queue, type OwnerHold, type RestartReason, type SetupId, type VoiceSetupId, type CloudPreset, type MachineSectionId, type NeededId, type PrId, type Snooze, type Awaited, type AwaitedState, stopped } from '../core/types';
+import { type AgentEffort, type AgentModel, type AgentRole, type CardState, type ConfigProblemCode, type DemoKind, type ClipProblem, type DemoSettingsProblem, type ErrorCode, EXPORT_HTML_MAX, type NarrationLanguage, type Theme, type VoiceKind, type Idea, type Need, type NextStep, type Queue, type OwnerHold, type RestartReason, type SetupId, type VoiceSetupId, type CloudPreset, type MachineSectionId, type NeededId, type PrId, type Snooze, type Awaited, type AwaitedState, type LeavingClone, stopped } from '../core/types';
+
+/** A list in a sentence: „a, b und c“. */
+const listOf = (items: string[], and: string) => (items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} ${and} ${items.at(-1)}`);
+
+/** The clones a configuration drops, for a sentence: those Obeya made by machine (their numbers), then each one the owner listed (its path). */
+function cloneGroups(leaving: LeavingClone[]): { host?: string; numbers?: number[]; path?: string }[] {
+  const groups: { host?: string; numbers?: number[]; path?: string }[] = [];
+  for (const c of leaving) {
+    const same = c.made !== undefined && groups.find((g) => g.numbers && g.host === c.host);
+    if (same) same.numbers!.push(c.made!);
+    else groups.push(c.made === undefined ? { path: c.path } : { ...(c.host ? { host: c.host } : {}), numbers: [c.made] });
+  }
+  return groups;
+}
 
 const de = {
   kind: { task: 'Aufgabe', question: 'Frage', project: 'Projekt', workstream: 'Workstream', idea: 'Idee', prototype: 'Prototyp', becomesProject: 'Idee → Projekt', taskBecomesProject: 'Aufgabe → Projekt' },
@@ -1007,7 +1021,25 @@ const de = {
     folderMode: 'Ordner ohne git: Agenten arbeiten direkt darin',
     clones: 'Dazu neue Klone anlegen',
     clonesHint:
-      'Wie viele Klone Obeya zusätzlich zu den vorhandenen selbst anlegt, in seinem eigenen Verzeichnis. Leer, wenn die Agenten nur in den vorhandenen arbeiten sollen. Mit weniger verlassen die übrigen Klone den Pool, sobald keine Aufgabe mehr darin arbeitet; ihr Ordner bleibt liegen.',
+      'Wie viele Klone Obeya zusätzlich zu den vorhandenen selbst anlegt, in seinem eigenen Verzeichnis. Leer, wenn die Agenten nur in den vorhandenen arbeiten sollen. Mit weniger verlassen die übrigen Klone den Pool, sobald keine Aufgabe mehr darin arbeitet; ihr Ordner wird gelöscht, wenn darin nichts Ungelandetes liegt.',
+    cloneLeaving: (leaving: LeavingClone[]) => {
+      const one = (c: LeavingClone) => (c.made === undefined ? c.path : `Klon ${c.made}${c.host ? ` auf ${c.host}` : ''}`);
+      const names = cloneGroups(leaving).map((g) => (g.numbers ? `Klon ${listOf(g.numbers.map(String), 'und')}${g.host ? ` auf ${g.host}` : ''}` : g.path!));
+      const waits = leaving.filter((c) => c.card !== undefined).map((c) => `; ${one(c)} erst, wenn ‚${c.card || 'die Karte darin'}‘ fertig ist`);
+      const made = leaving.filter((c) => c.made !== undefined).length;
+      const listed = leaving.length - made;
+      const folders = !listed
+        ? made === 1
+          ? 'Sein Ordner wird gelöscht, wenn darin nichts Ungelandetes liegt.'
+          : 'Ihre Ordner werden gelöscht, wenn darin nichts Ungelandetes liegt.'
+        : !made
+          ? listed === 1
+            ? 'Sein Ordner bleibt, wie er ist.'
+            : 'Ihre Ordner bleiben, wie sie sind.'
+          : 'Die Ordner der Klone, die Obeya angelegt hat, werden gelöscht, wenn darin nichts Ungelandetes liegt; die vorhandenen bleiben, wie sie sind.';
+      return `${listOf(names, 'und')} ${leaving.length === 1 ? 'fällt' : 'fallen'} weg${waits.join('')}. ${folders}`;
+    },
+    noClones: 'Kein einziger Klon: In diesem Repository startet dann keine Karte mehr. Trag vorhandene Klone ein, lass Obeya welche anlegen oder stell auf Worktrees.',
     cloneTotal: (existing: number, made: number) =>
       existing + made === 0
         ? 'Noch kein Klon auf diesem Rechner: trag vorhandene ein oder lass Obeya welche anlegen.'
@@ -1500,6 +1532,7 @@ const de = {
       `${name}: ${busy} von ${slots} ${slots === 1 ? 'Slot' : 'Slots'} in Arbeit, ${taken} von ${total} ${total === 1 ? 'Klon' : 'Klonen'} belegt${taken ? ':' : '.'}`,
     worktreeSlots: (name: string, busy: number, slots: number) => `${name}: ${busy} von ${slots} ${slots === 1 ? 'Slot' : 'Slots'} in Arbeit${busy ? ':' : '.'}`,
     offCanvas: 'eine Karte, die nicht auf der Leinwand liegt',
+    kept: (path: string) => `bleibt: nicht gelandete Arbeit in ${path}`,
     atWork: 'arbeitet',
     waiting: (n: number) => (n === 1 ? '1 Karte wartet auf einen freien Workspace.' : `${n} Karten warten auf einen freien Workspace.`),
     waitingSlot: (n: number) => (n === 1 ? '1 Karte wartet auf einen freien Slot.' : `${n} Karten warten auf einen freien Slot.`),
@@ -2591,7 +2624,26 @@ const en: Strings = {
     folderMode: 'Folder without git: agents work directly in it',
     clones: 'Also create new clones',
     clonesHint:
-      'How many clones Obeya creates itself, in its own directory, in addition to the existing ones. Leave it empty when the agents are to work only in the existing ones. With fewer, the other clones leave the pool once no task works in them any more; their folders stay.',
+      'How many clones Obeya creates itself, in its own directory, in addition to the existing ones. Leave it empty when the agents are to work only in the existing ones. With fewer, the other clones leave the pool once no task works in them any more; their folders are deleted unless they hold work that has not landed.',
+    cloneLeaving: (leaving: LeavingClone[]) => {
+      const one = (c: LeavingClone) => (c.made === undefined ? c.path : `clone ${c.made}${c.host ? ` on ${c.host}` : ''}`);
+      const names = cloneGroups(leaving).map((g) => (g.numbers ? `${g.numbers.length === 1 ? 'Clone' : 'Clones'} ${listOf(g.numbers.map(String), 'and')}${g.host ? ` on ${g.host}` : ''}` : g.path!));
+      const waits = leaving.filter((c) => c.card !== undefined).map((c) => `; ${one(c)} only once ‘${c.card || 'the card in it'}’ is done`);
+      const made = leaving.filter((c) => c.made !== undefined).length;
+      const listed = leaving.length - made;
+      const folders = !listed
+        ? made === 1
+          ? 'Its folder is deleted unless it holds work that has not landed.'
+          : 'Their folders are deleted unless they hold work that has not landed.'
+        : !made
+          ? listed === 1
+            ? 'Its folder stays as it is.'
+            : 'Their folders stay as they are.'
+          : 'The folders of the clones Obeya created are deleted unless they hold work that has not landed; the existing ones stay as they are.';
+      const all = listOf(names, 'and');
+      return `${all} ${leaving.length === 1 ? 'goes' : 'go'}${waits.join('')}. ${folders}`;
+    },
+    noClones: 'Not a single clone: no card would start in this repository any more. List existing clones, let Obeya create some, or switch to worktrees.',
     cloneTotal: (existing: number, made: number) =>
       existing + made === 0
         ? 'No clone on this machine yet: list existing ones or let Obeya create some.'
@@ -3082,6 +3134,7 @@ const en: Strings = {
       `${name}: ${busy} of ${slots} ${slots === 1 ? 'slot' : 'slots'} at work, ${taken} of ${total} ${total === 1 ? 'clone' : 'clones'} taken${taken ? ':' : '.'}`,
     worktreeSlots: (name: string, busy: number, slots: number) => `${name}: ${busy} of ${slots} ${slots === 1 ? 'slot' : 'slots'} at work${busy ? ':' : '.'}`,
     offCanvas: 'a card that is not on the canvas',
+    kept: (path: string) => `stays: work not landed in ${path}`,
     atWork: 'at work',
     waiting: (n: number) => (n === 1 ? '1 card is waiting for a free workspace.' : `${n} cards are waiting for a free workspace.`),
     waitingSlot: (n: number) => (n === 1 ? '1 card is waiting for a free slot.' : `${n} cards are waiting for a free slot.`),

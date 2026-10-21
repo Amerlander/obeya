@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Board } from './board';
 import { Store } from './db';
-import { gitRepo } from './testing';
+import { gitRepo, identify, until } from './testing';
 import { addTrailer, defaultBranch, git, Workspaces } from './workspaces';
 
 let dir: string;
@@ -70,6 +71,184 @@ describe("a follow-up's temporary worktree", () => {
     expect(git(checkout, 'worktree', 'list').split('\n')).toHaveLength(1);
     const fresh = spaces.followUpTree('card-1234567', 'obeya/gone-def456');
     expect(git(fresh, 'rev-parse', 'HEAD')).toBe(git(checkout, 'rev-parse', 'origin/main'));
+  });
+});
+
+describe('clones the configuration no longer names', () => {
+  let origin: string;
+  let store: Store;
+  let board: Board;
+  let ws: string;
+  const make = (n: number) => {
+    const spaces = new Workspaces(store, 'c', { mode: 'clones', repoPath: join(dir, 'main'), dir: ws, stop: 'echo "$PWD" >> ../stopped' });
+    const paths = spaces.ensureClones(origin, n);
+    for (const p of paths) identify(p);
+    return { spaces, paths };
+  };
+  // what the stop command ran in, as the path names it (macOS's temporary directory is behind a link)
+  const stopped = () => (existsSync(join(ws, 'stopped')) ? readFileSync(join(ws, 'stopped'), 'utf8').trim().split('\n').map((p) => p.replace(/^\/private\//, '/')) : []);
+
+  beforeEach(() => {
+    gitRepo(join(dir, 'main'));
+    origin = join(dir, 'origin.git');
+    git(dir, 'clone', '--quiet', '--bare', join(dir, 'main'), origin);
+    store = new Store(':memory:');
+    board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: join(dir, 'main'), branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
+    ws = join(dir, 'ws');
+  });
+
+  test('a free clone Obeya made leaves the pool at once, and its folder goes once its app is stopped', async () => {
+    const { spaces, paths } = make(3);
+    spaces.keepOnly(null, paths.slice(0, 2));
+    expect(spaces.list().map((w) => w.path)).toEqual(paths.slice(0, 2));
+    await until(() => !existsSync(paths[2]!));
+    expect(stopped()).toEqual([paths[2]!]);
+    await until(() => !spaces.pool([])[0]!.kept);
+  });
+
+  test('its folder stays while something in it would be lost, and goes once nothing would', async () => {
+    const { paths } = make(4);
+    const [changed, untracked, stashed, unpushed] = paths as [string, string, string, string];
+    writeFileSync(join(changed, 'README.md'), 'changed\n');
+    writeFileSync(join(untracked, 'notes.txt'), 'mine\n');
+    writeFileSync(join(stashed, 'README.md'), 'stashed\n');
+    git(stashed, 'stash', '--quiet');
+    git(unpushed, 'checkout', '--quiet', '-b', 'obeya/card-abc123');
+    writeFileSync(join(unpushed, 'work.txt'), 'work\n');
+    git(unpushed, 'add', '.');
+    git(unpushed, 'commit', '--quiet', '-m', 'not pushed');
+    let changes = 0;
+    const watched = new Workspaces(store, 'c', { mode: 'clones', repoPath: join(dir, 'main'), dir: ws, stop: 'echo "$PWD" >> ../stopped', changed: () => changes++ });
+    watched.keepOnly(null, []);
+    expect(watched.list()).toEqual([]);
+    await until(() => watched.pool([])[0]!.kept?.length === 4);
+    expect(watched.pool([])[0]!.kept!.toSorted()).toEqual(paths);
+    expect(changes).toBe(4);
+    for (const p of paths) expect(existsSync(join(p, '.git'))).toBe(true);
+    // nothing was stopped: the folder stays as it is
+    expect(stopped()).toEqual([]);
+    // the work landed or was thrown away: the next start finds nothing left, and the folders go
+    git(changed, 'checkout', '--quiet', '.');
+    rmSync(join(untracked, 'notes.txt'));
+    git(stashed, 'stash', 'drop', '--quiet');
+    git(unpushed, 'push', '--quiet', 'origin', 'obeya/card-abc123');
+    const next = new Workspaces(store, 'c', { mode: 'clones', repoPath: join(dir, 'main'), dir: ws, stop: 'echo "$PWD" >> ../stopped' });
+    next.sweep();
+    await until(() => paths.every((p) => !existsSync(p)) && !next.pool([])[0]!.kept);
+    expect(stopped().toSorted()).toEqual(paths);
+  });
+
+  test('commits a tag holds, a branch deleted on origin, or files with odd names stay; a branch squashed onto main counts as landed', async () => {
+    const { spaces, paths } = make(4);
+    const [tagged, deleted, squashed, odd] = paths as [string, string, string, string];
+    const commit = (clone: string, file: string) => {
+      writeFileSync(join(clone, file), `${file}\n`);
+      git(clone, 'add', '.');
+      git(clone, 'commit', '--quiet', '-m', file);
+    };
+    git(tagged, 'checkout', '--quiet', '-b', 'try');
+    commit(tagged, 'try.txt');
+    git(tagged, 'tag', 'tried');
+    git(tagged, 'checkout', '--quiet', 'main');
+    git(tagged, 'branch', '--quiet', '-D', 'try');
+    git(deleted, 'checkout', '--quiet', '-b', 'obeya/gone');
+    commit(deleted, 'gone.txt');
+    git(deleted, 'push', '--quiet', 'origin', 'obeya/gone');
+    git(origin, 'branch', '--quiet', '-D', 'obeya/gone');
+    // a name with a tab or a leading space is its own file, not one main has
+    git(odd, 'checkout', '--quiet', '-b', 'odd');
+    commit(odd, 'notes\tsecret.txt');
+    commit(odd, ' leading.txt');
+    git(squashed, 'checkout', '--quiet', '-b', 'obeya/squashed');
+    commit(squashed, 'a.txt');
+    commit(squashed, 'b.txt');
+    // the pull request was squashed onto main, and its branch deleted
+    const other = join(dir, 'other');
+    git(dir, 'clone', '--quiet', origin, other);
+    identify(other);
+    for (const f of ['a.txt', 'b.txt']) writeFileSync(join(other, f), `${f}\n`);
+    git(other, 'add', '.');
+    git(other, 'commit', '--quiet', '-m', 'Squashed');
+    git(other, 'push', '--quiet', 'origin', 'main');
+    spaces.keepOnly(null, []);
+    await until(() => !existsSync(squashed) && spaces.pool([])[0]!.kept?.length === 3);
+    expect(spaces.pool([])[0]!.kept!.toSorted()).toEqual([tagged, deleted, odd]);
+  });
+
+  test('a clone named again while its folder is looked at stays, with what a card does in it', async () => {
+    const spaces = new Workspaces(store, 'c', { mode: 'clones', repoPath: join(dir, 'main'), dir: ws, stop: 'sleep 0.3' });
+    const [path] = spaces.ensureClones(origin, 1) as [string];
+    spaces.keepOnly(null, []);
+    await Bun.sleep(150);
+    expect(spaces.ensureClones(origin, 1)).toEqual([path]);
+    const a = board.create({ title: 'A', x: 0, y: 0 }).id;
+    expect(spaces.lease(a, 'obeya/a')).toBe(path);
+    writeFileSync(join(path, 'new.txt'), 'work\n');
+    await Bun.sleep(600);
+    expect(readFileSync(join(path, 'new.txt'), 'utf8')).toBe('work\n');
+    expect(spaces.leasedBy(a)).toBe(path);
+  });
+
+  test('what the stop command leaves behind keeps the folder', async () => {
+    const spaces = new Workspaces(store, 'c', { mode: 'clones', repoPath: join(dir, 'main'), dir: ws, stop: 'echo snapshot > saved.txt' });
+    const [path] = spaces.ensureClones(origin, 1) as [string];
+    spaces.keepOnly(null, []);
+    await until(() => spaces.pool([])[0]!.kept?.length === 1);
+    expect(readFileSync(join(path, 'saved.txt'), 'utf8')).toBe('snapshot\n');
+  });
+
+  test('a clone of another repository in its directory is not its to remove', async () => {
+    const spaces = new Workspaces(store, 'c', { mode: 'clones', repoPath: join(dir, 'main'), dir: ws, origins: [origin] });
+    const stranger = gitRepo(join(dir, 'stranger'));
+    git(dir, 'clone', '--quiet', stranger, join(ws, '7'));
+    const [mine] = spaces.ensureClones(origin, 1) as [string];
+    spaces.keepOnly(null, []);
+    spaces.sweep();
+    await until(() => !existsSync(mine));
+    await Bun.sleep(100);
+    expect(existsSync(join(ws, '7', '.git'))).toBe(true);
+  });
+
+  test('a folder that stayed is back in the pool once the number is raised again', async () => {
+    const { spaces, paths } = make(2);
+    writeFileSync(join(paths[1]!, 'notes.txt'), 'mine\n');
+    spaces.keepOnly(null, paths.slice(0, 1));
+    await until(() => spaces.pool([])[0]!.kept?.length === 1);
+    expect(spaces.ensureClones(origin, 2)).toEqual(paths);
+    expect(spaces.list().map((w) => w.path)).toEqual(paths);
+    expect(spaces.pool([])[0]!.kept).toBeUndefined();
+    expect(readFileSync(join(paths[1]!, 'notes.txt'), 'utf8')).toBe('mine\n');
+  });
+
+  test('a clone a card holds stays with it until the card gives it back, then goes', async () => {
+    const { spaces, paths } = make(2);
+    const a = board.create({ title: 'A', x: 0, y: 0 }).id;
+    expect(spaces.lease(a, 'obeya/a')).toBe(paths[0]!);
+    spaces.keepOnly(null, []);
+    expect(spaces.list().map((w) => w.path)).toEqual([paths[0]!]);
+    expect(spaces.leasedBy(a)).toBe(paths[0]!);
+    await until(() => !existsSync(paths[1]!));
+    expect(existsSync(paths[0]!)).toBe(true);
+    spaces.release(a);
+    expect(spaces.list()).toEqual([]);
+    // the card's branch holds nothing that is not on origin
+    await until(() => !existsSync(paths[0]!));
+    // a deleted card brought back does not take it back
+    expect(spaces.retake(a, paths[0]!)).toBe(false);
+  });
+
+  test('a clone the owner listed only leaves the pool: Obeya never touches its folder', async () => {
+    const own = join(dir, 'own');
+    git(dir, 'clone', '--quiet', origin, own);
+    const { spaces, paths } = make(1);
+    spaces.register(own, [origin]);
+    spaces.keepOnly(null, []);
+    expect(spaces.list()).toEqual([]);
+    await until(() => !existsSync(paths[0]!));
+    spaces.sweep();
+    await Bun.sleep(50);
+    expect(existsSync(join(own, '.git'))).toBe(true);
+    expect(stopped()).toEqual([paths[0]!]);
   });
 });
 

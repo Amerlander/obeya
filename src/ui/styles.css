@@ -1261,11 +1261,11 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 .cfg-clones label > .hint { display: block; font-size: 11.5px; margin-bottom: 3px; }
 .cfg-clones input { width: 80px; }
 .cfg-clones > .cfg-work-in { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; }
-.cfg-clones > .cfg-existing, .cfg-clones > .cfg-clone-total { grid-column: 1 / -1; }
+.cfg-clones > .cfg-existing, .cfg-clones > .cfg-clone-total, .cfg-clones > .cfg-clone-leaving { grid-column: 1 / -1; }
 /* as tall as its clones (two lines at least): it grows with them instead of scrolling */
 #config .cfg-existing textarea { resize: none; overflow-y: hidden; }
 .cfg-clones > .cfg-clone-count { grid-column: 1; }
-.cfg-clone-total { font-size: 11.5px; }
+.cfg-clone-total, .cfg-clone-leaving { font-size: 11.5px; }
 .cfg-work-in > .hint { display: inline-flex; align-items: baseline; gap: 8px; font-size: 11.5px; }
 .cfg-work-in > .seg { margin-top: 0; }
 /* opened from a card waiting for a free clone: the clone settings it means light up */

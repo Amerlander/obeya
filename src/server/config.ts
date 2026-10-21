@@ -33,7 +33,7 @@ import { freshPath } from './path';
 import { sameRemote } from './repo';
 import type { Forge } from './forge';
 import { commitShared, proposeShared, pushShared } from './shared-settings';
-import { gitCalls, gitSteps } from './workspaces';
+import { gitCalls, gitSteps, leavingClones } from './workspaces';
 import { VERSION } from './resources';
 import { siteProblem } from './share';
 import { canonical, commandsOf, heldGroups, trustHeld, trustTakenOver } from './trust';
@@ -600,6 +600,7 @@ export class Config {
           name,
           repos: given.map(({ config: r, ref, adapter, read: got, values }) => {
             const trust = trustOf(got.info.path, got.shared, r.settings, this.o.store);
+            const leaving = got.info.folder ? [] : this.leaving(id, ref.id === repos[0]!.ref.id ? null : ref.id, r, adapter.workspaces);
             return {
             id: ref.id,
             workspaces: adapter.workspaces,
@@ -609,6 +610,7 @@ export class Config {
             ...(trust ? { trust } : {}),
             shareTo: adapter.land === 'main' ? 'main' : 'pr',
             ...(adapter.land === 'pr' && adapter.direct ? { shareDirect: true } : {}),
+            ...(leaving.length ? { leaving } : {}),
             };
           }),
         };
@@ -623,6 +625,19 @@ export class Config {
       if (r && first !== canvas) problems.push({ code: 'sameId', canvas, detail: `canvas ${canvas + 1} has the id "${r.id}" of canvas ${first + 1}; give it another name` });
     });
     return { canvases, resolved, problems };
+  }
+
+  /** The clones of a repository's pool (`repo` null: the canvas's home repository) that the configuration `r` no longer names. */
+  private leaving(canvas: string, repo: string | null, r: CanvasConfig['repos'][number], mode: 'clones' | 'worktrees') {
+    const rows = this.o.store.workspaces(canvas, repo);
+    if (!rows.length) return [];
+    const dir = join(this.o.server.home, 'workspaces', canvas, ...(repo ? [repo] : []));
+    const hosts = (r.hosts ?? []).map((h) => ({ name: h.name, clones: h.clones }));
+    return leavingClones(rows, { dir, mode, listed: (r.workspaces ?? []).map((w) => resolve(w)), clones: r.clones ?? 0, hosts }).map((c) => {
+      const title = c.card ? (this.o.store.card(c.card)?.title ?? undefined) : undefined;
+      const { card: _, ...rest } = c;
+      return { ...rest, ...(title !== undefined ? { card: title } : {}) };
+    });
   }
 
   /** The demo settings in Obeya's home; a demo reads them when it renders, so no restart is needed. */

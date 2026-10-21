@@ -534,8 +534,8 @@ export function WorkspacesPill({ pools, canvas, items }: { pools: ClonePool[]; c
   const free = (p: ClonePool) => p.hosts.reduce((n, h) => n + room(h), 0);
   const total = (p: ClonePool) => p.hosts.reduce((n, h) => n + h.total, 0);
   const full = pools.every((p) => free(p) === 0);
-  // the machines a pool names: those with clones, and every other machine than this one
-  const named = (p: ClonePool) => p.hosts.filter((h) => h.total > 0 || !h.here);
+  // the machines a pool names: those with clones or a clone's folder kept, and every other machine than this one
+  const named = (p: ClonePool) => p.hosts.filter((h) => h.total > 0 || !h.here || h.kept?.length);
   return (
     <div className={full ? 'pill workspaces full' : 'pill workspaces'} id="workspaces">
       <span className="lbl">{t.workspaces.label}</span>
@@ -582,6 +582,11 @@ export function WorkspacesPill({ pools, canvas, items }: { pools: ClonePool[]; c
                     })}
                   </ul>
                 )}
+                {h.kept?.map((path) => (
+                  <p key={path} className="hint">
+                    {t.workspaces.kept(path)}
+                  </p>
+                ))}
               </div>
             ))}
           </div>

@@ -668,10 +668,66 @@ describe('the configuration changed while the canvas runs', () => {
     await until(() => canvas.repos[0] !== before);
     const spaces = canvas.repos[0]!.workspaces;
     expect(spaces.list().map((x) => x.path)).toEqual([held, own]);
+    // the free clone Obeya made goes from disk at once, the one the card holds once it gives it back; the owner's stays
+    await until(() => !existsSync(made2!));
+    expect(existsSync(held)).toBe(true);
     spaces.release(w.card.id);
     expect(spaces.list().map((x) => x.path)).toEqual([own]);
-    // the clones Obeya made stay on disk with their branches; naming them again brings them back
-    expect(existsSync(join(made2!, '.git'))).toBe(true);
+    await until(() => !existsSync(held));
+    expect(existsSync(join(own, '.git'))).toBe(true);
+  });
+
+  test('a card deleted after the restart gives its clone back to the pool as the configuration has it now, not to the one before', async () => {
+    open([{ path: web, settings: { land: 'pr' }, clones: 2 }]);
+    const v = atWork('web', 'V');
+    const w = atWork('web', 'W');
+    const held = canvas.repos[0]!.workspaces.leasedBy(w.card.id)!;
+    const before = canvas.repos[0]!;
+    canvas.apply({ name: 'Produkt', repos: [{ path: web, settings: { land: 'pr' }, clones: 1 }] });
+    v.session.emit({ type: 'idle' });
+    w.session.emit({ type: 'idle' });
+    await until(() => canvas.repos[0] !== before);
+    // work on its branch, pushed: the card keeps its clone when stopped, and nothing is lost with its folder
+    identify(held);
+    git(held, 'commit', '--quiet', '--allow-empty', '-m', 'work');
+    git(held, 'push', '--quiet', 'origin', 'HEAD');
+    canvas.repos[0]!.workers.stop(w.card.id);
+    expect(canvas.repos[0]!.workspaces.leasedBy(w.card.id)).toBe(held);
+    canvas.board.remove(w.card.id);
+    await until(() => !existsSync(held));
+    expect(canvas.repos[0]!.workspaces.list().map((x) => x.card_id)).toEqual([v.card.id]);
+  });
+
+  test('with no clones to create and none listed the pool is empty; gone over to worktrees, a card keeps its clone until it gives it back', async () => {
+    open([{ path: web, settings: { land: 'pr' }, clones: 2 }]);
+    const w = atWork('web', 'W');
+    const [held, free] = canvas.repos[0]!.workspaces.list().map((x) => x.path) as [string, string];
+    const before = canvas.repos[0]!;
+    // the number emptied: the repository's settings say nothing, so it goes over to worktrees
+    canvas.apply({ name: 'Produkt', repos: [{ path: web, settings: { land: 'pr' } }] });
+    w.session.emit({ type: 'idle' });
+    await until(() => canvas.repos[0] !== before);
+    const spaces = canvas.repos[0]!.workspaces;
+    expect(spaces.mode).toBe('worktrees');
+    expect(spaces.list().map((x) => x.path)).toEqual([held]);
+    await until(() => !existsSync(free));
+    // the card works on in its clone, and a new card gets a worktree
+    expect(spaces.leasedBy(w.card.id)).toBe(held);
+    expect(spaces.hasWork(w.card.id)).toBe(false);
+    spaces.release(w.card.id);
+    expect(spaces.list()).toEqual([]);
+    await until(() => !existsSync(held));
+  });
+
+  test('clones set to 0 in a repository whose settings say clones: no clone is left', async () => {
+    open([{ path: web, settings: { land: 'pr', workspaces: 'clones' }, clones: 1 }]);
+    const [made] = canvas.repos[0]!.workspaces.list().map((x) => x.path) as [string];
+    const before = canvas.repos[0]!;
+    canvas.apply({ name: 'Produkt', repos: [{ path: web, settings: { land: 'pr', workspaces: 'clones' }, clones: 0 }] });
+    await until(() => canvas.repos[0] !== before);
+    expect(canvas.repos[0]!.workspaces.mode).toBe('clones');
+    expect(canvas.repos[0]!.workspaces.list()).toEqual([]);
+    await until(() => !existsSync(made));
   });
 
   test('"Jetzt übernehmen" restarts them at once, cutting off the worker in its turn', () => {

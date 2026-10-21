@@ -6,13 +6,15 @@
 // created on start, as many in parallel as there are cards unless the repository has slots; kept
 // across stop and restart until the card's work has landed.
 
-import { existsSync, mkdirSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, realpathSync, renameSync, rmSync, statSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import { hostname } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { type CardDiff, cardDiff } from '../core/diff';
 import type { PoolHost, WorkspaceShortage } from '../core/types';
 import type { Store } from './db';
-import { HostError, hostName, onHost, remote, sh as shWord, type SshHost, TOKEN_HELPER, TOKEN_HELPER_ARGS } from './hosts';
+import { HostError, hostName, LOST, onHost, remote, sh as shWord, type SshHost, TOKEN_HELPER, TOKEN_HELPER_ARGS } from './hosts';
+import { runAppCommand } from './app-command';
 import { messageOf } from '../core/text';
 import { oneAtATime } from '../core/one-at-a-time';
 import { demoFile } from './demo-page';
@@ -260,7 +262,47 @@ export interface WorkspaceOptions {
   machines?: { host: string | null; slots?: number }[];
   /** How many of the repository's workers are in a turn on a machine now (null: this one). */
   busy?: (host: string | null) => number;
+  /** The repository's command that stops its app (`app.stop`), run in a clone of Obeya's own before its folder goes. */
+  stop?: string;
+  /** What its clones are clones of (its remote, its checkout): a folder whose `origin` is none of them is not one of its clones, and stays. */
+  origins?: string[];
+  /** Called when what the pool shows changes outside a card's lease: a clone's folder kept or gone. */
+  changed?: () => void;
 }
+
+/**
+ * The folders of Obeya's own clones that left the pool and stay on disk since something in them
+ * would be lost, by path (`ssh://<host>/…` on a host): what lies in them. Kept across a
+ * repository's restarts, which make its `Workspaces` afresh; looked at again at each start.
+ */
+const kept = new Map<string, string>();
+/** The clones whose folders are being looked at or removed now, settling once that is through. */
+const retiring = new Map<string, Promise<void>>();
+/** Clones registered again while their folders were looked at: those stay. */
+const claimed = new Set<string>();
+/** What runs on a clone's folder now, by path: `ensureHostClones` making it, `clearAway` removing it; each waits for the other. */
+const busyPaths = new Map<string, Promise<unknown>>();
+
+/** Runs `fn` once what runs on `path` (`busyPaths`) is through, and keeps others off it meanwhile. */
+function onPath<T>(path: string, fn: () => Promise<T>): Promise<T> {
+  const before = busyPaths.get(path) ?? Promise.resolve();
+  const run = before.catch(() => {}).then(fn);
+  const settled = run.catch(() => {});
+  busyPaths.set(path, settled);
+  void settled.then(() => busyPaths.get(path) === settled && busyPaths.delete(path));
+  return run;
+}
+
+/** The name of a clone Obeya makes, its number (`ensureClones`); a card's worktree is named by the card's id, 8 characters. */
+const CLONE_NAME = /^\d{1,4}$/;
+/** The name of a clone's folder moved aside to be removed (`clearAway`). */
+const TRASH_NAME = /^\d{1,4}\.removing-\d+$/;
+
+/** The path of a workspace on its machine, without `ssh://<host>`. */
+const pathThere = (path: string) => {
+  const host = hostName(path);
+  return host === null ? path : path.slice(`ssh://${host}`.length) || '/';
+};
 
 /** The name of the machine Obeya runs on, as the Workspaces pill shows it. */
 export const HERE = hostname().split('.')[0] || 'localhost';
@@ -326,6 +368,8 @@ export class Workspaces implements CardWorkspaces {
   private dirty = new Map<boolean, { key: string; at: number }>();
   /** Clones the configuration no longer names that a card still holds: they leave the pool once it gives them back (`keepOnly`). */
   private leaving = new Set<string>();
+  /** The directory Obeya makes its clones in on each host, once it has made sure they are there (`ensureHostClones`). */
+  private hostDirs = new Map<string, string>();
 
   constructor(
     private store: Store,
@@ -353,6 +397,9 @@ export class Workspaces implements CardWorkspaces {
       if (!origins.some((o) => sameRemote(o, origin))) throw new WorkspaceError(`${path} is not a clone of ${origins.join(' or ')} (its origin is ${origin || 'unset'})`);
     }
     this.store.addWorkspace(this.canvasId, path, this.o.repo ?? null);
+    if (retiring.has(path)) claimed.add(path);
+    // a folder that stayed is back in the pool
+    if (kept.delete(path)) this.o.changed?.();
   }
 
   /** Makes sure `n` clones of `source` exist and are registered; returns their paths. */
@@ -370,17 +417,126 @@ export class Workspaces implements CardWorkspaces {
 
   /**
    * Takes the clones on `host` (null: this machine) that are not among `named` out of the pool: the
-   * configuration no longer names them (fewer clones to create, an existing one or a host taken out).
-   * A free one leaves at once; one a card holds stays with it and leaves once the card gives it
-   * back. Nothing on disk goes: a clone keeps its branches, and naming it again brings it back.
+   * configuration no longer names them (fewer clones to create, an existing one or a host taken out,
+   * the repository gone over to worktrees). A free one leaves at once; one a card holds stays with
+   * it and leaves once the card gives it back. A clone Obeya made goes from disk as it leaves where
+   * nothing would be lost (`retire`); one the owner listed stays as it is.
    */
   keepOnly(host: string | null, named: string[]) {
     for (const w of this.list()) {
-      if (hostName(w.path) !== host || named.includes(w.path)) continue;
+      if (hostName(w.path) !== host || named.includes(w.path) || !this.isClone(w.path)) continue;
       if (w.card_id) this.leaving.add(w.path);
-      else this.store.removeWorkspace(w.path);
+      else {
+        this.store.removeWorkspace(w.path);
+        this.retire(w.path);
+      }
     }
     for (const path of this.leaving) if (named.includes(path)) this.leaving.delete(path);
+  }
+
+  /**
+   * Looks again at the folders of Obeya's own clones on this machine that are not in the pool (left
+   * it earlier, their folders kept since something in them would have been lost): those that lose
+   * nothing now go.
+   */
+  sweep() {
+    let names: string[] = [];
+    try {
+      names = readdirSync(this.o.dir);
+    } catch {}
+    const pool = new Set(this.list().map((w) => w.path));
+    for (const name of names) {
+      if (CLONE_NAME.test(name) && !pool.has(join(this.o.dir, name))) this.retire(join(this.o.dir, name));
+      // one whose removal a stop of Obeya cut off
+      if (TRASH_NAME.test(name) && !this.store.hasWorkspace(join(this.o.dir, name))) void rm(join(this.o.dir, name), { recursive: true, force: true }).catch(() => {});
+    }
+  }
+
+  /** Whether a workspace is a clone rather than a card's worktree: on a host, or with a repository of its own. */
+  private isClone(path: string): boolean {
+    if (hostName(path) !== null) return true;
+    try {
+      return statSync(join(path, '.git')).isDirectory();
+    } catch {
+      return this.made(path);
+    }
+  }
+
+  /** Whether a clone is one Obeya made in its own directory (on a host, in the one it makes them in there), not one the owner listed. */
+  private made(path: string): boolean {
+    const host = hostName(path);
+    const dir = host === null ? this.o.dir : this.hostDirs.get(host);
+    const there = pathThere(path);
+    return !!dir && dirname(there) === dir && CLONE_NAME.test(basename(there));
+  }
+
+  /** Whether a workspace is a clone: this repository's mode, or a clone a card still holds after the repository went over to worktrees. */
+  private cloned(ws: string): boolean {
+    return this.o.mode === 'clones' || this.leaving.has(ws);
+  }
+
+  /**
+   * A clone that left the pool: one Obeya made goes from disk, its app stopped first, unless
+   * something in it would be lost (`unlanded`); then it stays, the log says once what lies in it,
+   * and the pool shows it (`kept`) until a later start finds it can go. A host that does not
+   * answer is asked again at the next start. One the owner listed is never touched.
+   */
+  private retire(path: string) {
+    if (!this.made(path) || retiring.has(path) || this.store.hasWorkspace(path)) return;
+    claimed.delete(path);
+    retiring.set(
+      path,
+      onPath(path, () => this.clearAway(path))
+        .catch((e) => console.error(`clone ${path}: ${messageOf(e)}`))
+        .finally(() => {
+          retiring.delete(path);
+          claimed.delete(path);
+        }),
+    );
+  }
+
+  private async clearAway(path: string) {
+    // registered again, on any canvas, while it was looked at: it is a workspace again
+    const taken = () => claimed.has(path) || this.store.hasWorkspace(path);
+    const o = { origins: this.o.origins ?? [], main: branchSetting(this.o.repoPath) || undefined };
+    // what the stop command leaves behind (a snapshot it writes, say) counts too: looked at again after it
+    for (const after of [false, true]) {
+      const lost = await unlanded(path, o);
+      // the host does not answer, origin cannot be asked, or it is not a clone of the repository: next time
+      if (lost === null || taken()) return;
+      if (lost === 'gone') {
+        if (kept.delete(path)) this.o.changed?.();
+        return;
+      }
+      if (lost.length) {
+        const what = lost.join('; ');
+        if (kept.get(path) !== what) {
+          console.log(`clone ${path} left the pool and stays on disk: ${what}`);
+          kept.set(path, what);
+          this.o.changed?.();
+        }
+        return;
+      }
+      if (after || !this.o.stop) break;
+      const stopped = await runAppCommand(path, this.o.stop);
+      if (!stopped.ok) console.error(`clone ${path}: ${this.o.stop} failed: ${stopped.output}`);
+      if (taken()) return;
+    }
+    // moved aside before it goes: once moved, nothing registers or leases the folder (here at once, on a host
+    // `ensureHostClones` waits for it), and making the clone again makes a fresh one
+    const trash = `${pathThere(path)}.removing-${Date.now()}`;
+    const there = remote(path);
+    if (there) {
+      const r = await there.host.run(`mv ${shWord(there.path)} ${shWord(trash)} && rm -rf ${shWord(trash)}`);
+      if (r.code !== 0) return console.error(`clone ${path}: ${(r.stderr || r.stdout).trim() || `exit code ${r.code}`}`);
+    } else {
+      if (taken()) return;
+      renameSync(path, trash);
+      await rm(trash, { recursive: true, force: true });
+    }
+    console.log(`clone ${path} left the pool; its folder is removed`);
+    kept.delete(path);
+    this.o.changed?.();
   }
 
   /**
@@ -392,22 +548,35 @@ export class Workspaces implements CardWorkspaces {
   async ensureHostClones(host: SshHost, root: string, source: string, n: number, token: () => string | undefined): Promise<string | null> {
     try {
       const dir = await host.resolveDir(root);
+      this.hostDirs.set(host.name, dir);
       host.tokenFor(dir, token);
       for (let i = 1; i <= n; i++) {
         const path = `${dir}/${i}`;
-        if ((await host.run(['test', '-d', `${path}/.git`])).code !== 0) {
-          const r = await host.run(['git', ...TOKEN_HELPER_ARGS, 'clone', '--quiet', source, path], { cwd: dir });
-          if (r.code !== 0) throw new HostError(`cloning ${source} on ${host.name}: ${(r.stderr || r.stdout).trim()}`);
-        }
-        // the worker's own push and gh go through the same login
-        const helper = `git config --unset-all credential.helper; ${TOKEN_HELPER.map((h) => `git config --add credential.helper ${shWord(h)}`).join(' && ')}`;
-        const c = await host.run(helper, { cwd: path });
-        if (c.code !== 0) throw new HostError(`${host.name}: ${c.stderr.trim()}`);
-        await host.trust(path);
-        this.store.addWorkspace(this.canvasId, onHost(host.name, path), this.o.repo ?? null);
+        // a folder being removed is made afresh once it is gone; one being made is not removed meanwhile
+        await onPath(onHost(host.name, path), async () => {
+          if ((await host.run(['test', '-d', `${path}/.git`])).code !== 0) {
+            const r = await host.run(['git', ...TOKEN_HELPER_ARGS, 'clone', '--quiet', source, path], { cwd: dir });
+            if (r.code !== 0) throw new HostError(`cloning ${source} on ${host.name}: ${(r.stderr || r.stdout).trim()}`);
+          }
+          // the worker's own push and gh go through the same login
+          const helper = `git config --unset-all credential.helper; ${TOKEN_HELPER.map((h) => `git config --add credential.helper ${shWord(h)}`).join(' && ')}`;
+          const c = await host.run(helper, { cwd: path });
+          if (c.code !== 0) throw new HostError(`${host.name}: ${c.stderr.trim()}`);
+          await host.trust(path);
+          this.store.addWorkspace(this.canvasId, onHost(host.name, path), this.o.repo ?? null);
+          kept.delete(onHost(host.name, path));
+        });
       }
       // those of fewer clones there, or under another directory, leave the pool
-      this.keepOnly(host.name, Array.from({ length: n }, (_, i) => onHost(host.name, `${dir}/${i + 1}`)));
+      const named = Array.from({ length: n }, (_, i) => onHost(host.name, `${dir}/${i + 1}`));
+      this.keepOnly(host.name, named);
+      // and the folders of those that left it earlier go once nothing in them would be lost
+      const ls = await host.run(['ls', '-1', dir]);
+      if (ls.code === 0)
+        for (const name of ls.stdout.split('\n')) {
+          const path = onHost(host.name, `${dir}/${name}`);
+          if (CLONE_NAME.test(name) && !named.includes(path) && !this.list().some((w) => w.path === path)) this.retire(path);
+        }
       return null;
     } catch (e) {
       return messageOf(e);
@@ -513,13 +682,18 @@ export class Workspaces implements CardWorkspaces {
   /**
    * The pool by machine for the Workspaces pill, `busy` the cards whose worker is in a turn. Worktrees
    * are never short, so their pool is this machine's slots, each taken while a worker is at work.
+   * `kept`: the folders of clones Obeya made that left the pool and stay since something in them would be lost.
    */
   pool(busy: string[]): PoolHost[] {
     const all = this.list();
+    const keptOn = (host: string | null) => {
+      const paths = [...kept.keys()].filter((p) => hostName(p) === host && this.made(p)).map(pathThere);
+      return paths.length ? { kept: paths } : {};
+    };
     if (this.o.mode === 'worktrees') {
       const slots = this.slots(null);
       const cards = all.flatMap((w) => (w.card_id && busy.includes(w.card_id) ? [w.card_id] : []));
-      return [{ name: HERE, here: true, worktrees: true, slots, total: slots, cards, busy: cards }];
+      return [{ name: HERE, here: true, worktrees: true, slots, total: slots, cards, busy: cards, ...keptOn(null) }];
     }
     return this.machines().map((host) => {
       const ws = all.filter((w) => hostName(w.path) === host);
@@ -532,6 +706,7 @@ export class Workspaces implements CardWorkspaces {
         total: ws.length,
         cards,
         busy: cards.filter((c) => busy.includes(c)),
+        ...keptOn(host),
       };
     });
   }
@@ -554,9 +729,11 @@ export class Workspaces implements CardWorkspaces {
     if (path) this.free(path);
   }
 
+  /** Frees a clone or worktree for other cards; a clone the configuration no longer names leaves the pool, and its folder goes where nothing would be lost. */
   private free(path: string) {
-    if (this.leaving.delete(path)) this.store.removeWorkspace(path);
-    else this.store.setLease(path, null);
+    if (!this.leaving.delete(path)) return this.store.setLease(path, null);
+    this.store.removeWorkspace(path);
+    this.retire(path);
   }
 
   /**
@@ -567,7 +744,7 @@ export class Workspaces implements CardWorkspaces {
    * it is (it takes no slot). Returns whether it freed it.
    */
   abandon(path: string): boolean {
-    if (this.o.mode === 'clones') {
+    if (this.cloned(path)) {
       this.free(path);
       return true;
     }
@@ -637,7 +814,7 @@ export class Workspaces implements CardWorkspaces {
     }
     try {
       const from = await gitAsync(this.o.repoPath, 'rev-parse', 'HEAD');
-      if (this.o.mode === 'worktrees') await gitAsync(this.o.repoPath, 'merge', '--ff-only', '--quiet', branch);
+      if (!this.cloned(ws)) await gitAsync(this.o.repoPath, 'merge', '--ff-only', '--quiet', branch);
       else {
         await gitAsync(this.o.repoPath, 'fetch', '--quiet', ws, branch);
         await gitAsync(this.o.repoPath, 'merge', '--ff-only', '--quiet', 'FETCH_HEAD');
@@ -695,7 +872,7 @@ export class Workspaces implements CardWorkspaces {
   removeLanded(cardId: string, branch: string) {
     const ws = this.leasedBy(cardId);
     if (!ws) return;
-    if (this.o.mode === 'clones') return this.release(cardId);
+    if (this.cloned(ws)) return this.release(cardId);
     this.store.removeWorkspace(ws);
     if (existsSync(ws)) git(this.o.repoPath, 'worktree', 'remove', '--force', ws);
     try {
@@ -712,7 +889,7 @@ export class Workspaces implements CardWorkspaces {
   discard(cardId: string, branch: string) {
     const ws = this.leasedBy(cardId);
     if (!ws) return;
-    if (this.o.mode === 'worktrees') {
+    if (!this.cloned(ws)) {
       this.store.removeWorkspace(ws);
       if (existsSync(ws)) git(this.o.repoPath, 'worktree', 'remove', '--force', ws);
       if (git(this.o.repoPath, 'branch', '--list', branch)) git(this.o.repoPath, 'branch', '--quiet', '-D', branch);
@@ -737,7 +914,7 @@ export class Workspaces implements CardWorkspaces {
     if (!path) throw new WorkspaceError('the card has no workspace', 'noWorkspace');
     if (this.leasedBy(to)) throw new WorkspaceError('the card it goes to has a workspace of its own');
     // in a worktree the branch lives in the Obeya checkout, in a clone in the clone
-    const repo = this.o.mode === 'worktrees' ? this.o.repoPath : path;
+    const repo = this.cloned(path) ? path : this.o.repoPath;
     let now = branch;
     if (rename && rename !== branch && !git(repo, 'branch', '--list', rename)) {
       git(repo, 'branch', '-m', branch, rename);
@@ -847,7 +1024,7 @@ export class Workspaces implements CardWorkspaces {
    * owner set for the repository, else the one its `origin` has.
    */
   private main(ws: string): string {
-    return branchSetting(this.o.repoPath) || defaultBranch(this.o.mode === 'worktrees' ? this.o.repoPath : ws);
+    return branchSetting(this.o.repoPath) || defaultBranch(this.cloned(ws) ? ws : this.o.repoPath);
   }
 
   /**
@@ -884,13 +1061,13 @@ export class Workspaces implements CardWorkspaces {
 
   /** `upstream` without blocking: finding a clone's main branch asks git, over SSH for a clone on another machine. */
   private async upstreamAsync(ws: string): Promise<string> {
-    const main = branchSetting(this.o.repoPath) || (await gitSteps(this.o.mode === 'worktrees' ? this.o.repoPath : ws, detectingBranch()));
-    return this.o.mode === 'worktrees' ? main : `origin/${main}`;
+    const main = branchSetting(this.o.repoPath) || (await gitSteps(this.cloned(ws) ? ws : this.o.repoPath, detectingBranch()));
+    return this.cloned(ws) ? `origin/${main}` : main;
   }
 
   /** The branch the workspace's work goes onto as the workspace has it: the main branch itself in a worktree, `origin`'s copy in a clone. */
   private upstream(ws: string, main = this.main(ws)): string {
-    return this.o.mode === 'worktrees' ? main : `origin/${main}`;
+    return this.cloned(ws) ? `origin/${main}` : main;
   }
 
   private leaseClone(cardId: string, branch: string, overSlots: boolean): string {
@@ -956,6 +1133,113 @@ export class Workspaces implements CardWorkspaces {
 export function addDetachedTree(repo: string, path: string, commit: string) {
   mkdirSync(dirname(path), { recursive: true });
   git(repo, '-c', 'core.hooksPath=/dev/null', 'worktree', 'add', '--quiet', '--detach', '--force', path, commit);
+}
+
+/**
+ * The clones of a repository's pool (`rows`, as registered) that a configuration no longer names,
+ * which leave the pool once it runs (`keepOnly`): with the repository in worktrees all of them;
+ * else those here that are neither `listed` (resolved) nor among the first `clones` Obeya makes in
+ * `dir`, and on a host those beyond its number, or all where it is no longer configured. Each with
+ * its number where Obeya made it, and the card that holds it.
+ */
+export function leavingClones(
+  rows: { path: string; card_id: string | null }[],
+  o: { dir: string; mode: 'clones' | 'worktrees'; listed: string[]; clones: number; hosts: { name: string; clones: number }[] },
+): { path: string; host?: string; made?: number; card?: string }[] {
+  return rows.flatMap((w) => {
+    const host = hostName(w.path);
+    const there = pathThere(w.path);
+    const n = CLONE_NAME.test(basename(there)) ? Number(basename(there)) : undefined;
+    const made = host !== null ? n : dirname(w.path) === o.dir ? n : undefined;
+    if (host === null) {
+      // a card's worktree is no clone
+      let clone = true;
+      try {
+        clone = statSync(join(w.path, '.git')).isDirectory();
+      } catch {}
+      if (!clone) return [];
+    }
+    if (o.mode === 'clones') {
+      if (host === null && (o.listed.includes(w.path) || (made !== undefined && made <= o.clones))) return [];
+      const h = o.hosts.find((x) => x.name === host);
+      if (h && made !== undefined && made <= h.clones) return [];
+    }
+    return [{ path: there, ...(host !== null ? { host } : {}), ...(made !== undefined ? { made } : {}), ...(w.card_id ? { card: w.card_id } : {}) }];
+  });
+}
+
+/**
+ * What would be lost with a clone's folder: changes not committed, files git does not track (those
+ * it ignores aside), a stash, submodules (not looked into), worktrees made from it that are in use
+ * (a follow-up's), and commits of a branch, a tag or a detached HEAD that are on no branch of
+ * `origin` (fetched with pruning: a branch deleted there counts as gone), unless the files it
+ * changes are on `origin`'s main branch as it has them (so a branch squashed or rebased onto it
+ * counts as landed). `origin` is where its work lands: the remote, or the Obeya checkout where work lands on
+ * the local main. Empty where nothing would be lost; `gone` where the folder is gone already; null
+ * where it cannot tell now (the host does not answer, `origin` cannot be fetched), or the folder is
+ * no clone of `origins` (a worktree's `.git` is a file, a clone of another repository).
+ */
+export async function unlanded(path: string, o: { origins?: string[]; main?: string } = {}): Promise<string[] | 'gone' | null> {
+  const run = async (...args: string[]) => {
+    const r = await gitRun(path, args);
+    return r.code === 0 ? r.stdout.trim() : null;
+  };
+  let there: ReturnType<typeof remote>;
+  try {
+    there = remote(path);
+  } catch {
+    return null;
+  }
+  const has = async (sub: string) => {
+    if (!there) return existsSync(join(path, sub)) ? 1 : 0;
+    const r = await there.host.run(['test', '-e', `${there.path}/${sub}`]);
+    return r.code === LOST ? null : r.code === 0 ? 1 : 0;
+  };
+  const dotGit = await has('.git');
+  if (dotGit === null) return null;
+  if (!dotGit) return (await has('')) === 0 ? 'gone' : null;
+  if ((await run('rev-parse', '--git-dir')) !== '.git') return null;
+  if (o.origins?.length) {
+    const origin = (await run('remote', 'get-url', 'origin')) ?? '';
+    if (!o.origins.some((x) => sameRemote(x, origin))) return null;
+  }
+  const lost: string[] = [];
+  const modules = await has('.git/modules');
+  if (modules === null) return null;
+  const gitlinks = await run('ls-files', '--stage');
+  if (gitlinks === null) return null;
+  if (modules || gitlinks.split('\n').some((l) => l.startsWith('160000 '))) lost.push('submodules, whose work is not looked into');
+  await run('worktree', 'prune');
+  const trees = (await run('worktree', 'list', '--porcelain'))?.split('\n').filter((l) => l.startsWith('worktree ')).length ?? 1;
+  if (trees > 1) lost.push(`${trees - 1} worktree(s) made from it`);
+  const status = await run('status', '--porcelain');
+  if (status === null) return null;
+  if (status) lost.push(`changes not committed or files not in git: ${status.split('\n').length}`);
+  if ((await run('rev-parse', '--verify', '--quiet', 'refs/stash')) !== null) lost.push('a stash');
+  if ((await run('fetch', '--quiet', '--prune', 'origin')) === null) return null;
+  const main = `refs/remotes/origin/${o.main || ((await run('symbolic-ref', '--short', 'refs/remotes/origin/HEAD')) ?? 'origin/main').replace(/^origin\//, '')}`;
+  const onMain = (await run('rev-parse', '--verify', '--quiet', main)) !== null;
+  const refs = ((await run('for-each-ref', '--format=%(refname)')) ?? '').split('\n').filter((r) => r && !r.startsWith('refs/remotes/') && r !== 'refs/stash');
+  if ((await run('symbolic-ref', '-q', 'HEAD')) === null) refs.push('HEAD');
+  const landedOn = async (main: string, ref: string) => {
+    const base = await run('merge-base', main, ref);
+    if (base === null) return false;
+    // the names as they are, NUL-separated: a name with a tab or a space at its end is no other file's
+    const listed = await gitRun(path, ['diff', '-z', '--no-ext-diff', '--no-textconv', '--name-only', '--no-renames', base, ref]);
+    const files = listed.stdout.split('\0').filter(Boolean);
+    if (listed.code !== 0 || files.length > 1000) return false;
+    return !files.length || (await run('diff', '--quiet', '--no-ext-diff', '--no-textconv', main, ref, '--', ...files.map((f) => `:(literal)${f}`))) !== null;
+  };
+  for (const ref of refs) {
+    const n = await run('rev-list', '--count', ref, '--not', '--remotes=origin');
+    if (n === null) return null;
+    if (n === '0') continue;
+    // its changes are on the main branch already (squashed, rebased): each file it changed is there as it has it
+    if (onMain && (await landedOn(main, ref))) continue;
+    const name = ref === 'HEAD' ? 'a detached HEAD' : ref.startsWith('refs/heads/') ? `branch ${ref.slice(11)}` : ref.replace(/^refs\//, '');
+    lost.push(`${name} with ${n} commit(s) not on origin`);
+  }
+  return lost;
 }
 
 export interface Change {

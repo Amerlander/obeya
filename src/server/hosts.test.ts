@@ -298,17 +298,27 @@ describe('clones on a host', () => {
     stop();
   });
 
-  test('fewer of them in the configuration: the others leave the pool once a card no longer holds them', async () => {
-    expect(await spaces.ensureHostClones(host, join(dir, 'far'), origin, 2, () => undefined)).toBeNull();
+  test('fewer of them in the configuration: the others leave the pool once a card no longer holds them, and their folders go', async () => {
+    expect(await spaces.ensureHostClones(host, join(dir, 'far'), origin, 3, () => undefined)).toBeNull();
     const a = board.create({ title: 'A', x: 0, y: 0 }).id;
     spaces.lease(a, 'obeya/a');
+    writeFileSync(join(dir, 'far', '3', 'notes.txt'), 'mine\n');
     expect(await spaces.ensureHostClones(host, join(dir, 'far'), origin, 0, () => undefined)).toBeNull();
     expect(spaces.list().map((w) => w.path)).toEqual([onHost(name, join(dir, 'far', '1'))]);
+    // a free clean one goes from the host's disk; one with work not landed stays, and the pool says so
+    await until(() => !existsSync(join(dir, 'far', '2')) && spaces.pool([]).some((h) => h.kept?.length));
+    expect(spaces.pool([]).find((h) => h.name === name)?.kept).toEqual([join(dir, 'far', '3')]);
+    // while the host does not answer, the clone a card gives back stays; the next start looks again
+    writeFileSync(join(dir, 'net', 'down'), '');
     spaces.release(a);
     expect(spaces.list()).toEqual([]);
-    // nothing goes from the host's disk
-    expect(existsSync(join(dir, 'far', '2', '.git'))).toBe(true);
-  });
+    await Bun.sleep(100);
+    expect(existsSync(join(dir, 'far', '1', '.git'))).toBe(true);
+    rmSync(join(dir, 'net', 'down'));
+    rmSync(join(dir, 'far', '3', 'notes.txt'));
+    expect(await spaces.ensureHostClones(host, join(dir, 'far'), origin, 0, () => undefined)).toBeNull();
+    await until(() => !existsSync(join(dir, 'far', '1')) && !existsSync(join(dir, 'far', '3')) && !spaces.pool([]).some((h) => h.kept));
+  }, 20_000);
 
   test('wait for a host that cannot be reached, and say why', async () => {
     writeFileSync(join(dir, 'net', 'down'), '');

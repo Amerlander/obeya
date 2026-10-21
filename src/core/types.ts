@@ -841,6 +841,8 @@ export interface PoolHost {
   cards: string[];
   /** The cards whose worker is in a turn there now. */
   busy: string[];
+  /** The folders (paths there) of clones Obeya made that left the pool and stay, since something in them would be lost. */
+  kept?: string[];
 }
 
 export interface CanvasSnapshot {
@@ -1658,7 +1660,22 @@ export interface ResolvedCanvas {
     shareTo: 'main' | 'pr';
     /** Where it goes out as a pull request, it may also be pushed straight onto `origin`'s main branch (`direct`). */
     shareDirect?: boolean;
+    /**
+     * On a canvas that runs: the clones its pool loses with this configuration (path on its machine,
+     * the host where not here, the number where Obeya made it, the title of the card that holds it).
+     */
+    leaving?: LeavingClone[];
   }[];
+}
+
+/** A clone a repository's pool loses with a configuration (`ResolvedCanvas`). */
+export interface LeavingClone {
+  path: string;
+  host?: string;
+  /** Its number where Obeya made it; its folder goes once nothing in it would be lost. One the owner listed has none, and stays on disk. */
+  made?: number;
+  /** The title of the card that holds it: it leaves once that card gives it back. */
+  card?: string;
 }
 
 /** Something in a configuration that keeps Obeya from starting with it; `canvas` and `repo` count from 0. */
