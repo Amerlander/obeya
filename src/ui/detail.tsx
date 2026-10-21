@@ -492,6 +492,8 @@ export function Detail(p: Props) {
                     ) : (
                       <code>{landedRef(item.landedPart)}</code>
                     )}
+                  </p>
+                )}
                 {/* the last handover's demo stays while the agent works on the card again; a new handover replaces it */}
                 {item.demo && (
                   <DemoView
@@ -512,8 +514,6 @@ export function Detail(p: Props) {
                 )}
                 {item.pr && (item.state === 'inPr' || item.state === 'waiting') && <PrBox pr={item.pr} />}
                 {item.state === 'inPr' && !item.pr && <p className="hint">{t.pr.opening}</p>}
-                  </p>
-                )}
                 {item.finishing && finished(item.state) && <p className="hint">{item.followUp ? t.followingUpLong : item.state === 'done' ? t.finishingDoneLong : t.finishingLong}</p>}
                 {brief}
               </>
