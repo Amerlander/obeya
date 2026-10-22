@@ -665,6 +665,15 @@ textarea.p-body:focus { border-color: var(--muted); }
 /* until the owner has replied once, the latest message they did not write shows its button (reply.ts) */
 .talk.reply-new > :nth-last-child(1 of .msg.replies:not(.by-owner)) > .msg-reply { opacity: 1; color: var(--ink); }
 .msg-reply:hover { color: var(--ink); background: var(--line); }
+/* the button at text marked in a conversation, which quotes it in the field (cite.tsx): above the
+   end of the marking, or below its last line (on a touch screen clear of the selection handles) */
+.cite { position: fixed; z-index: 50; transform: translate(-50%, calc(-100% - 6px)); display: flex; align-items: center; gap: 5px;
+  height: 28px; min-width: 28px; padding: 0 6px; justify-content: center; border: 0; border-radius: 3px; background: var(--ink); color: var(--bg);
+  box-shadow: var(--shadow); font: inherit; font-size: 12.5px; cursor: pointer; -webkit-user-select: none; user-select: none; }
+.cite.named { padding: 0 9px 0 7px; }
+.cite.below { transform: translate(-50%, 6px); }
+@media (pointer: coarse) { .cite { height: 36px; min-width: 36px; } .cite.below { transform: translate(-50%, 30px); } }
+.cite:hover { background: color-mix(in srgb, var(--ink) 85%, var(--bg)); }
 .msg-delete { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; display: grid; place-items: center; padding: 0;
   border: 0; border-radius: 3px; background: transparent; color: var(--muted); cursor: pointer; }
 .msg-delete:hover { color: var(--error); background: var(--line); }

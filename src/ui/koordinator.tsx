@@ -10,6 +10,7 @@ import { Inline, plain } from './markdown';
 import { AnswerFiles, Body, Continues, Msg, Quote, Reading, ThreadCard } from './message';
 import { type Reply, setReply, talkEv, talkQuote, useReplyKnown } from './reply';
 import { clock, failText, t } from './strings';
+import { CiteButton } from './cite';
 import { Composer } from './composer';
 import { cardDraft, OBEYA_DRAFT } from './draft';
 import { Shots } from './shots';
@@ -324,6 +325,7 @@ function Conversation({ talk, fresh, items, onOpen, draft, sheetOf }: { talk: Ta
           </Fragment>
         );
       })}
+      <CiteButton box={box} draft={draft} />
     </div>
   );
 }

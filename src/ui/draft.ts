@@ -62,6 +62,8 @@ const fields = new Map<string, HTMLTextAreaElement>();
 const noImages = new Set<string>();
 /** Where the cursor stood when a dictation started, for when the field has lost it by the time the words come. */
 const carets = new Map<string, [number, number]>();
+/** Where the cursor stood when the field on the page last lost it, for a quote put in from the conversation (`cite`). */
+const left = new Map<string, number>();
 const listeners = new Set<() => void>();
 const changed = () => {
   for (const fn of listeners) fn();
@@ -185,8 +187,13 @@ export function useDraftField(key: string, el: () => HTMLTextAreaElement | null,
     fields.set(key, f);
     if (!images) noImages.add(key);
     changed();
+    const blur = () => left.set(key, f.selectionEnd);
+    f.addEventListener('blur', blur);
     return () => {
+      f.removeEventListener('blur', blur);
       if (fields.get(key) !== f) return;
+      // a field shown afresh has no cursor yet: a quote goes at its end
+      left.delete(key);
       fields.delete(key);
       noImages.delete(key);
       changed();
@@ -242,6 +249,33 @@ export function dictate(key: string, words: string) {
   const piece = `${before && !/\s$/.test(before) ? ' ' : ''}${words}${after && !/^\s/.test(after) ? ' ' : ''}`;
   if (focused) typeInto(el, piece);
   else updateDraft(key, { text: before + piece + after });
+}
+
+/**
+ * Where a quote goes into `text` with the cursor at `caret`, and what goes in: at the end, on a line
+ * of its own (after a line break unless the cursor stands at a line's start); from the middle of the
+ * text, as the line after the cursor's.
+ */
+export function citeAt(text: string, caret: number, quote: string): { at: number; piece: string } {
+  if (caret >= text.length) return { at: text.length, piece: `${text && !text.endsWith('\n') ? '\n' : ''}${quote}` };
+  const end = text.indexOf('\n', caret);
+  return { at: end < 0 ? text.length : end, piece: `\n${quote}` };
+}
+
+/**
+ * Puts a quote into the draft (`citeAt`, from where the cursor stood when it left the field, or at the
+ * end if it never was there) and the cursor behind it, in the field, to type on at once. Typed in as
+ * by hand, so ⌘Z takes it back.
+ */
+export function cite(key: string, quote: string) {
+  const el = fields.get(key);
+  const text = el?.value ?? draftOf(key).text;
+  const caret = el && el === document.activeElement ? el.selectionEnd : (left.get(key) ?? text.length);
+  const { at, piece } = citeAt(text, caret, quote);
+  if (!el) return updateDraft(key, { text: text.slice(0, at) + piece + text.slice(at) });
+  el.focus();
+  el.setSelectionRange(at, at);
+  typeInto(el, piece);
 }
 
 /** Types `s` into the focused field at its cursor, as a keystroke would: React hears it, ⌘Z takes it back. */

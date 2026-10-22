@@ -20,6 +20,7 @@ import { Inline, plain } from './markdown';
 import { Body, goToMessage, Msg, Quote, Reading, useAnswer, useReportedHeight } from './message';
 import { cardDraft, giveBack, questionsKey, updateDraft, useDraft } from './draft';
 import { eventQuote, type Reply, setReply, useReplyKnown } from './reply';
+import { CiteButton } from './cite';
 import { Composer } from './composer';
 import { useFitHeight } from './fitHeight';
 import { useFullscreen } from './fullscreen';
@@ -1087,12 +1088,15 @@ function Conversation({
   past = false,
   hideEmpty = false,
   onReply,
+  draft,
 }: {
   item: Item;
   questions?: ReactNode;
   past?: boolean;
   hideEmpty?: boolean;
   onReply?: (e: CardEvent) => void;
+  /** The field under the conversation, which text marked in it can be quoted into. */
+  draft?: string;
 }) {
   const events = useEvents(item.id);
   const box = useRef<HTMLDivElement>(null);
@@ -1255,6 +1259,7 @@ function Conversation({
         {!working && !past && koordinatorReads(events) && <Reading />}
         {!working && questions}
       </div>
+      {draft && <CiteButton box={box} draft={draft} />}
     </>
   );
 }
@@ -2413,6 +2418,7 @@ function Talk({ item, past, field }: { item: Item; past?: boolean; field?: TalkF
         item={item}
         past={past}
         onReply={field ? (e) => setReply(draft, { to: e.id, quote: eventQuote(e) }) : undefined}
+        draft={field ? draft : undefined}
         questions={<Questions {...picks} />}
       />
       {field && (

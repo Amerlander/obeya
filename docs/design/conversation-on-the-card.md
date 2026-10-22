@@ -81,6 +81,21 @@ The agent reads `[In reply to your message: „…“]` above the words: about 1
 already has in its session, else the whole message (Obeya's words, which the worker never got). The
 Koordinator always gets the quote whole; in the sheet a looked-up answer by its tag (`A12`).
 
+### Quoting marked text
+
+To answer a part of a message, the owner marks it in the conversation, in anyone's message, their
+own included; on a card with a field and in Obeya's sheet a small button with a quotation-mark icon
+appears beside the marking (named „Zitieren“ beside the icon until used once). At the desk it
+stands at the end where the pointer let go, outside the marking; on a touch screen below the middle
+of the marking's last line, clear of the selection handles and of the system's menu above. A press
+puts the marked text, on one line, in quotation marks of the UI language into the field, followed by
+„ - “, with the cursor behind it and the focus in the field (on the phone the keyboard opens at the
+first tap). Where it goes depends on where the cursor stood when it left the field: at the end of
+the text (or never in this field since it was shown), at the end, after a line break unless that is
+the start of a line; anywhere else, as the line after the cursor's line. It is typed in as by hand,
+so ⌘Z takes it back. Unlike replying to a message, the quote is plain text of the draft: the agent
+reads it as the owner's words.
+
 ### The task as first message
 
 Once the agent starts, a task's text and screenshots stand as the conversation's first message,
@@ -228,6 +243,10 @@ image.
   to the newest handover, orange as if open.
 - **Agent words kept long** (2026-10-09). Rejected: a 600-character cut.
 - **Replies to one message** (2026-10-09; sheet 2026-10-15), the quote part of the draft.
+- **Quoting marked text into the field** (owner, 2026-10-22): the owner often answers single
+  sentences or parts of them and did so by copy, paste, quotation marks and „ - “ by hand. The quote
+  is text in the field rather than a reply chip, so several can stand in one message, each followed
+  by its comment.
 - **Order as the agent saw it** (2026-10-14): Obeya holds the words and passes them at the next
   step, so it knows where they were read and can take them back. Rejected: passing a note straight
   into the session; Obeya learned only at turn end what it took, and the SDK takes one back only by
