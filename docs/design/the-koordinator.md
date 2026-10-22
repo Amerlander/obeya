@@ -68,7 +68,8 @@ count as ahead when one is judged again.
 While the pointer is on a card, its waits show both ways over every step: the cards it waits for
 („kommt zuerst“) and those waiting for it („wartet darauf“), each with a ring and an arrow from the
 card waited for to the card waiting. A workstream not delivered yet also shows the open workstreams
-it builds on as read for its project's arrangement (see A project arranged by its dependencies).
+it builds on as read for its project's arrangement (see A project arranged by its dependencies), and
+a card snoozed until another card gets somewhere waits for that card (see Snoozing a card).
 
 #### Starting a whole project
 

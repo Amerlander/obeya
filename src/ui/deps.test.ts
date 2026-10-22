@@ -52,3 +52,13 @@ test('a workstream waits for the open ones it builds on, started or not; a deliv
   expect(d.edges).toEqual([['W2', 'W3']]);
   expect(depsOf('W1', all)).toBeUndefined();
 });
+
+test('a card snoozed until another card gets somewhere waits for that card', () => {
+  const snoozed = { ...card('R'), snoozed: { on: { card: 'F', title: 'F', state: 'done' }, by: 'agent' } } as Item;
+  const all = [card('F'), snoozed, card('S', 'R')];
+  const d = depsOf('R', all)!;
+  expect([...d.before]).toEqual(['F']);
+  expect([...d.after]).toEqual(['S']);
+  expect(depsOf('F', all)!.edges.sort()).toEqual([['F', 'R'], ['R', 'S']]);
+  expect(depsOf('R', [snoozed])).toBeUndefined();
+});
