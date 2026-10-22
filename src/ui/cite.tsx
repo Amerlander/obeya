@@ -20,6 +20,8 @@ interface Marked {
   x: number;
   y: number;
   below: boolean;
+  /** Whether it ends at that point rather than being centred on it. */
+  left: boolean;
 }
 
 /**
@@ -58,7 +60,9 @@ export function CiteButton({ box, draft }: { box: RefObject<HTMLElement | null>;
       // when marked backwards; on the other side where the conversation has no room for it
       const below = touch || !backwards ? view.bottom - last.bottom > 40 || first.top - view.top < 36 : first.top - view.top < 36;
       const x = touch ? (last.left + last.right) / 2 : backwards ? first.left : last.right;
-      setMarked({ text, x: Math.min(Math.max(x, view.left + 24), view.right - 24), y: below ? last.bottom : first.top, below });
+      // below where the mouse let go it ends there, left of the pointer, which would cover it
+      const left = below && !touch && !backwards;
+      setMarked({ text, x: Math.min(Math.max(x, view.left + (left ? 80 : 24)), view.right - 24), y: below ? last.bottom : first.top, below, left });
     };
     const down = (e: PointerEvent) => {
       if (e.pointerType === 'mouse' && !(e.target as Element).closest?.('.cite')) {
@@ -88,7 +92,7 @@ export function CiteButton({ box, draft }: { box: RefObject<HTMLElement | null>;
   if (!marked) return null;
   return createPortal(
     <button
-      className={['cite', marked.below && 'below', named && 'named'].filter(Boolean).join(' ')}
+      className={['cite', marked.below && 'below', marked.left && 'left', named && 'named'].filter(Boolean).join(' ')}
       style={{ left: marked.x, top: marked.y }}
       title={t.talk.citeHint}
       aria-label={t.talk.citeHint}

@@ -672,6 +672,7 @@ textarea.p-body:focus { border-color: var(--muted); }
   box-shadow: var(--shadow); font: inherit; font-size: 12.5px; cursor: pointer; -webkit-user-select: none; user-select: none; }
 .cite.named { padding: 0 9px 0 7px; }
 .cite.below { transform: translate(-50%, 6px); }
+.cite.below.left { transform: translate(calc(-100% + 2px), 6px); }
 @media (pointer: coarse) { .cite { height: 36px; min-width: 36px; } .cite.below { transform: translate(-50%, 30px); } }
 .cite:hover { background: color-mix(in srgb, var(--ink) 85%, var(--bg)); }
 .msg-delete { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; display: grid; place-items: center; padding: 0;
