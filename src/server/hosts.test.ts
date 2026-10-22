@@ -281,9 +281,10 @@ describe('clones on a host', () => {
     const tries = () => (existsSync(join(dir, 'net', 'tries')) ? readFileSync(join(dir, 'net', 'tries'), 'utf8').split('\n').length - 1 : 0);
     writeFileSync(join(dir, 'net', 'down'), '');
     const before = tries();
-    // not looked at yet: a card may take one, which is looked at again before it works there; the server does not wait for the host
+    // not looked at yet: a card may take one, which is looked at again before it works there; the server does not wait for the host,
+    // whose looks have started but answer only later
     expect(spaces.leasable()).toBe(true);
-    expect(tries()).toBe(before);
+    expect(host.unreachable).toBe(false);
     // the looks find the host gone
     await until(() => !spaces.leasable());
     expect(host.unreachable).toBe(true);
