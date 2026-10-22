@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { blocks, DocImages, Inline, plain } from './markdown';
+import { blocks, DocImages, excerpt, Inline, plain } from './markdown';
 
 const html = (md: string) => renderToStaticMarkup(createElement(Inline, { md }));
 
@@ -49,6 +49,21 @@ describe('inline markdown', () => {
   test('plain text drops the markers, nested ones too', () => {
     expect(plain('*wichtig* and **bold *em***, `*code*`')).toBe('wichtig and bold em, *code*');
     expect(plain('see https://x.io/a_b_ and [it](https://x.io)')).toBe('see https://x.io/a_b_ and it');
+  });
+
+  test('plain text drops the marks of blocks and keeps what a code block holds', () => {
+    expect(plain('Here is a draft. Shall I keep it this short?\n\n```text\nTmux gives you the *terminals*;\n```\nOr longer?')).toBe(
+      'Here is a draft. Shall I keep it this short?\n\nTmux gives you the *terminals*;\nOr longer?',
+    );
+    expect(plain('~~~\nraw\n~~~')).toBe('raw');
+    expect(plain('## The **plan** ##\n> quoted\n> > twice\n- one\n* two\n3. three\n- [x] done\n---\nend')).toBe('The plan\nquoted\ntwice\none\ntwo\nthree\ndone\nend');
+    expect(plain('| a | b |\n|---|:-:|\n| `1` | 2 |')).toBe('a · b\n1 · 2');
+    expect(plain('5 * 3 = 15, #hashtag')).toBe('5 * 3 = 15, #hashtag');
+  });
+
+  test("a card's excerpt is one line, with a dot between blocks that end in no punctuation", () => {
+    expect(excerpt('Here is a draft. Shall I keep it?\n\n```\nTmux gives you the terminals.\n```')).toBe('Here is a draft. Shall I keep it? Tmux gives you the terminals.');
+    expect(excerpt('## Two ways\n\n- **Keep** the cache\n- Drop it\n\nWhich one?')).toBe('Two ways · Keep the cache · Drop it · Which one?');
   });
 });
 

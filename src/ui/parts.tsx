@@ -8,7 +8,7 @@ import { ProjectTalk } from './koordinator';
 import { api } from './api';
 import type { Cam } from './camera';
 import type { Shape } from './groups';
-import { Doc, Inline, plain } from './markdown';
+import { Doc, excerpt, Inline, plain } from './markdown';
 import { Body } from './message';
 import { waitedOn } from './queue';
 import { ClockMark, snoozeWho } from './snooze';
@@ -18,7 +18,7 @@ import { becomesLabel, clock, shortDay, snoozeWhen, stateLabel, t } from './stri
 const firstLine = (md: string) =>
   plain(md)
     .split('\n')
-    .map((l) => l.replace(/^\s*[-*]\s+/, '').replace(/^(Ziel|Goal)\s*:?\s*/i, '').trim())
+    .map((l) => l.replace(/^(Ziel|Goal)\s*:?\s*/i, '').trim())
     .find(Boolean) ?? '';
 
 /** What of a workstream planned again has landed: its pull request, else its commit. */
@@ -124,18 +124,19 @@ export function CardFace({ item, where, underway, since, chip }: { item: Item; w
   // a card whose agent finishes after the landing, opens its PR or takes in the owner's words on its handover shows its line like one at work: the usage limit it waits on, its reports
   const status =
     item.state === 'working' || item.finishing || answering(item) || (item.state === 'inPr' && !item.pr)
-      ? item.statusLine
+      ? item.statusLine && excerpt(item.statusLine)
       : item.state === 'inPr' && item.pr
         ? t.pr.short(item.pr.number, item.pr.checks.filter((c) => c.state === 'failure').length, item.pr.conflict, item.pr.ready, item.pr.held?.score)
         : undefined;
+  const asked = openQuestions(item)[0]?.text;
   const meta =
     (item.repoDown ? t.repoDown.short : undefined) ??
     (item.snoozed ? snoozeWho(item.snoozed) : undefined) ??
     (item.superseded ? (item.superseded.by ? t.superseded.byShort(plain(item.superseded.title ?? '')) : t.superseded.withdrawnShort) : undefined) ??
     (item.limitedUntil ? t.limitedUntil(clock(item.limitedUntil)) : undefined) ??
     (item.kind === 'question' && item.thread ? t.question.count(item.thread.answers, item.thread.files) : undefined) ??
-    openQuestions(item)[0]?.text ??
-    (item.queue && 'behind' in item.queue ? item.queue.reason : undefined) ??
+    (asked === undefined ? undefined : excerpt(asked)) ??
+    (item.queue && 'behind' in item.queue ? excerpt(item.queue.reason) : undefined) ??
     (item.queue && 'workspace' in item.queue ? t.queue.workspaceWhy[item.queue.workspace] : undefined) ??
     status ??
     (item.idea ? firstLine(item.idea.brief) || firstLine(item.body) : firstLine(item.body));
