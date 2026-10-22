@@ -42,6 +42,10 @@ into the chapters under `docs/design/` (or the index) and the doc goes.
   (`.obeya/settings.json` in that repository), not into this repo. Those settings stay few and
   generic: each describes something that holds for any kind of app, not one kind of web stack, and
   no two cover the same need; where two overlap, merge them.
+- The owner works in Obeya at the level of requirements, feature and bug descriptions and specs,
+  and checks results in demos and result artifacts. Source code and diffs stay in the background:
+  on a card with a demo or artifact, its changed files are optional and stay collapsed until
+  opened, never shown up front.
 - UI strings live in one place, `src/ui/strings.ts`, in German and English (two tables of one shape).
   German UI texts and docs call a button "Button" or "Schaltfläche", never "Knopf".
 - An interaction that several kinds of card share (answering questions with comments and one Send
