@@ -428,10 +428,15 @@ export const opensWithTalk = (i: Item) => (i.state === 'working' && !i.archivedA
 /**
  * The messages of a card's conversation the owner has not seen: those it shows (`talk`, not the words
  * folded into a message's steps) after the last event they saw (`seen`, an event id), and never those
- * before their own last words, which they wrote having read them. Until 2026-10-17 every word an agent
- * said counted, also those between its tool calls, and a card with two handovers counted 81.
+ * before their own last words, which they wrote having read them. A reply and the handover that follows
+ * it in the same message (`then`) count once, as the one message the owner sees. Until 2026-10-17 every
+ * word an agent said counted, also those between its tool calls, and a card with two handovers counted
+ * 81; until 2026-10-22 such a reply and its handover counted two.
  */
-export const unseen = (talk: Talk, events: CardEvent[], seen = -1): number => unseenTurns(talk, events, seen).length;
+export const unseen = (talk: Talk, events: CardEvent[], seen = -1): number => {
+  const turns = new Set(unseenTurns(talk, events, seen));
+  return talk.shown.filter((x) => turns.has(x) || (x.then && turns.has(x.then))).length;
+};
 
 /** Those messages themselves, a handover that follows its reply in the same message (`then`) on its own. */
 export function unseenTurns(talk: Talk, events: CardEvent[], seen = -1): Turn[] {

@@ -173,8 +173,8 @@ button, the browser's, Esc) returns to the list where it was scrolled. It is the
 with the same answer options, demo, approve buttons and undo, its page the only thing that scrolls;
 plan docs and the configuration are not opened from there. Its conversation is in the same panel as
 Obeya's, at `?card=<id>&talk`, opened by the button left of the microphone, whose number counts the
-messages the conversation shows (not the agent's folded words between steps) since the owner last had
-it open or wrote there, plus one for the open questions, however many stand in their block (until
+messages the conversation shows (not the agent's folded words between steps; a reply and the handover
+under it in the same message count once) since the owner last had it open or wrote there, plus one for the open questions, however many stand in their block (until
 2026-10-22 each question counted). Every card kind gets there the same way, through the
 shared detail view. A working card and one waiting for answers open with the panel up, a working one
 as a half sheet so title, state line and buttons stay in view; others open on their page. While an

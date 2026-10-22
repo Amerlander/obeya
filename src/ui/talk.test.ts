@@ -600,6 +600,14 @@ test("a card's messages count as unseen after the last one seen, its words betwe
   // the conversation marks the same messages it counts
   expect(unseenTurns(talkTurns(all, { over: true }), all, began.id).map((x) => x.e.id)).toEqual([reply.id]);
   expect(unseenTurns(talkTurns(work, { over: true }), work).map((x) => x.e.id)).toEqual([handover.id]);
+  // a reply and the handover under it are one message: they count once, and each is marked
+  const feedback = ev('hint', 'owner', 'Bitte nur beim Hovern.');
+  const answer = ev('talk', 'worker', 'Mache ich.');
+  const again = ev('review', 'worker', 'Zeigt sich jetzt nur beim Hovern.');
+  const reworked = [...work, feedback, answer, again];
+  expect(count(reworked)).toBe(1);
+  expect(count(reworked, answer.id)).toBe(1);
+  expect(unseenTurns(talkTurns(reworked, { over: true }), reworked).map((x) => x.e.id)).toEqual([answer.id, again.id]);
 });
 
 test('the snooze is a line, with what the agent did before it closed above it, and waking is a line too', () => {
