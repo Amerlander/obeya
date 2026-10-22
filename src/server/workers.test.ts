@@ -1120,6 +1120,25 @@ describe('workers', () => {
     expect(board.item(p.id)!.body).toBe('Der Knopf „Export“ heißt in src/ui/strings.ts noch „Exportieren“.\n\nOffene Fragen:\n- Welches Wort? (Export / Exportieren)');
   });
 
+  test('on a canvas with several repositories, a proposal goes to the one its agent names, else to its card’s', async () => {
+    const c = manual();
+    await workers.start(c.id);
+    // with one repository there is nothing to choose
+    expect(runtime.last.spec.tools.find((t) => t.name === 'propose_card')!.description).not.toContain('repo:');
+    await workers.stop(c.id);
+    board.canvas.repos.push({ id: 'site', name: 'Site', path: '/r/site', branch: 'main' });
+    await workers.start(c.id);
+    expect(runtime.last.spec.tools.find((t) => t.name === 'propose_card')!.description).toContain(`by its id: home (${main}, yours), site (/r/site); yours when left out.`);
+    runtime.last.call('propose_card', { title: 'Hier', task: 'T', reason: 'R' });
+    expect(runtime.last.call('propose_card', { title: 'Dort', task: 'T', reason: 'R', repo: 'site' })).toContain('Proposed');
+    // the repository's name does as well as its id
+    runtime.last.call('propose_card', { title: 'Auch dort', task: 'T', reason: 'R', repo: 'SITE' });
+    const repoOf = (title: string) => board.snapshot().items.find((i) => i.title === title)!.repo;
+    expect([repoOf('Hier'), repoOf('Dort'), repoOf('Auch dort')]).toEqual(['home', 'site', 'site']);
+    expect(runtime.last.call('propose_card', { title: 'Nirgends', task: 'T', reason: 'R', repo: 'shop' })).toBe('Not proposed: there is no repository shop on this canvas; give one of home, site.');
+    expect(board.snapshot().items.some((i) => i.title === 'Nirgends')).toBe(false);
+  });
+
   test('a worker withdraws its open proposal: it goes at once, and not as a dismissal of the owner’s', async () => {
     const c = manual();
     await workers.start(c.id);

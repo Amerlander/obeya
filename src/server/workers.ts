@@ -2660,6 +2660,9 @@ export class Workers {
     const language = "the owner's language";
     // the page goes to colleagues: in the language of the repository's demos where it names one
     const pageLanguage = LANGUAGE_NAMES[this.demoLanguage()];
+    // on a canvas with several repositories a proposal may go to another one than the card's
+    const repos = this.o.board.canvas.repos;
+    const ownRepo = this.o.repo ?? this.o.board.home;
     const handOver = () => {
       live.handedOver = true;
       live.nudged = false;
@@ -2752,6 +2755,9 @@ export class Workers {
               `questions: what the owner has to decide first (product behaviour, a trade-off), each with up to four short options; keep them out of task. The owner may answer them on the proposal; what they decided and what stays open go to the agent with the task.`,
               `replaces: the title of an earlier proposal of yours this one takes the place of; Obeya takes that one off the canvas, or, if the owner has taken it on already, marks it as replaced and offers to remove it.`,
               `start_at: when the card is to start, ISO 8601 with your timezone's offset (2026-11-04T08:00:00+01:00), for a task that can only be done later (whether a bank has registered a form two weeks on, say): accepted, it waits until then and starts by itself. Its agent then checks what it can and asks the owner for what only they can see.`,
+              ...(repos.length > 1
+                ? [`repo: the repository the change is to be made in, by its id: ${repos.map((r) => `${r.id} (${r.path}${r.id === ownRepo ? ', yours' : ''})`).join(', ')}; yours when left out.`]
+                : []),
               `Everything in ${language}.`,
             ].join(' '),
             schema: {
@@ -2762,8 +2768,12 @@ export class Workers {
               questions: PROPOSAL_QUESTIONS.optional(),
               replaces: z.string().optional(),
               start_at: z.string().optional(),
+              ...(repos.length > 1 ? { repo: z.string().optional() } : {}),
             },
-            run: ({ title, task, reason, idea, questions, replaces, start_at }) => {
+            run: ({ title, task, reason, idea, questions, replaces, start_at, repo }) => {
+              const wanted = typeof repo === 'string' && repo.trim() ? repo.trim() : undefined;
+              const into = wanted ? this.o.board.canvas.repos.find((r) => r.id === wanted || r.name.toLowerCase() === wanted.toLowerCase()) : undefined;
+              if (wanted && !into) return `Not proposed: there is no repository ${wanted} on this canvas; give one of ${this.o.board.canvas.repos.map((r) => r.id).join(', ')}.`;
               const named = typeof start_at === 'string' && start_at.trim() ? start_at.trim() : undefined;
               const at = named ? Date.parse(named) : NaN;
               if (named && Number.isNaN(at)) return 'Not proposed: give start_at as ISO 8601 with your timezone offset (2026-11-04T08:00:00+01:00).';
@@ -2776,6 +2786,7 @@ export class Workers {
                 idea: !!idea,
                 questions: proposalQuestions(questions as z.infer<typeof PROPOSAL_QUESTIONS> | undefined),
                 ...(named ? { startAt: new Date(at).toISOString() } : {}),
+                ...(into ? { repo: into.id } : {}),
               });
               this.o.board.log(cardId, 'activity', 'worker', idea ? this.o.board.t.worker.proposedIdea(p.title) : this.o.board.t.worker.proposedCard(p.title));
               const old = typeof replaces === 'string' && replaces.trim() ? replaces.trim() : undefined;

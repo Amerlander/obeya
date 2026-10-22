@@ -617,7 +617,9 @@ export class Board {
    * A card an agent proposes, placed below the card it came from, or at the nearest free spot: its
    * text for the agent that takes it on, and apart from it why and what the owner has to decide.
    */
-  propose(fromId: string, p: { title: string; task: string; reason?: string; idea?: boolean; questions?: Question[]; startAt?: string }): Item {
+  /** An agent's proposal from card `fromId`: in the repository it names (`p.repo`), else in that card's. */
+  propose(fromId: string, p: { title: string; task: string; reason?: string; idea?: boolean; questions?: Question[]; startAt?: string; repo?: string }): Item {
+    if (p.repo !== undefined) this.checkRepo(p.repo);
     const items = this.snapshot().items;
     const from = items.find((i) => i.id === fromId);
     const at = from ? this.nearFree(items, below(boundsOf(from, items))) : this.freeSpot();
@@ -631,7 +633,7 @@ export class Board {
         body: p.task.slice(0, 20000),
         ...at,
         from_id: fromId,
-        repo: this.repoColumn(from?.repo),
+        repo: this.repoColumn(p.repo ?? from?.repo),
         proposal: JSON.stringify(proposal),
         group_id: from?.group ?? null,
       },

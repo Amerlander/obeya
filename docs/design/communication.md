@@ -18,9 +18,10 @@ visible on a card.
   nehmen“ on the card. Picks travel apart from the owner's words: the worker reads `They picked „…“.`
   and below it what they `added in their own words`; the log keeps both as one text, picks first.
   An answer stands in the conversation at once and leaves the card open.
-- `propose_card(title, task, reason, idea?, questions?, replaces?, start_at?)` and
+- `propose_card(title, task, reason, idea?, questions?, replaces?, start_at?, repo?)` and
   `withdraw_proposal(title, why, replaced_by?)` (see Proposals): something it noticed outside its
-  task, instead of doing it, or a follow-up due later (`start_at`).
+  task, instead of doing it, or a follow-up due later (`start_at`). `repo` exists only on a canvas
+  with several repositories, whose ids and paths its description lists.
 - `ready_for_review(summary, demo)`, whose summary is the report the owner reads.
 - `app_running(url)`: where the app in its workspace opens, for the owner to try by hand (see Trying
   the app by hand); for a workspace on another machine Obeya forwards the port.

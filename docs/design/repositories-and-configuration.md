@@ -7,8 +7,12 @@ A chapter of the [design doc](../design.md), whose header says how it is written
 Each repository on a canvas has its own settings, workspaces, workers, project agents and PR watcher;
 the canvas has one board and one Koordinator, whose collision checks stay within a repository. The
 first repository is the canvas's home; the others' plan docs are referenced as `<repo>:<path>`. The
-owner's cards carry their repository, chosen in the panel before work begins (home by default), and a
-proposal inherits it; on a canvas with several repositories every card names its own.
+owner's cards carry their repository, chosen in the panel before work begins (home by default); on a
+canvas with several repositories every card names its own. A proposal goes to the repository its agent
+names, the one where the change is to be made, and otherwise inherits its card's: a worker in one
+repository often notices what needs changing in another (one drafting posts about the app sees what
+the app lacks), and a proposal filed under the wrong repository would start its worker in the wrong
+place unless the owner noticed and switched it.
 
 The UI opens `?c=<canvas>`; the pill after the logo switches canvases. Cards on other canvases that
 need the owner show as a count at their entry in the switcher and, while it is closed, as the sum on
