@@ -2,13 +2,12 @@
 // confirms them in one sentence, and runs them after a short delay unless the owner takes them back.
 
 import { z } from 'zod';
-import { settingsShape } from '../adapters/schema';
 import { type AgentSetting, agentListens, answering, askable, type Awaited, awaited, type AwaitedState, blocksSaving, type CanvasConfig, finished, handedOver, type Item, type NextStep, type Notice, openQuestions, pausable, plannableAsProject, prototypeWorkstream, snoozable, SNOOZE_LIMIT, type Queue, type SpotInput, type Talk, type TalkAfter, type TalkQuote, type TalkRef } from '../core/types';
 import { inQueue, notStarted } from '../core/queue';
 import { answerTag, fromAnswerTag } from './answers';
 import { BadRequest, type Board, excerpt, replyNote } from './board';
 import type { Place } from '../core/layout';
-import type { Config } from './config';
+import { type Config, configShape } from './config';
 import type { Mark, Moment, TalkWaitRow } from './db';
 import { type AgentRuntime, type AgentSession, failureReason, limitLifts } from './runtime';
 import { type Language, LANGUAGES, ownersLanguage } from '../core/locale';
@@ -765,7 +764,7 @@ export class Commander {
               {
                 name: 'config',
                 description: [
-                  "Read Obeya's configuration: the canvases this Obeya serves (canvases), each with its repositories (path; clones: clones to create, workspaces: existing clones to use, slots: how many of its workers may be busy at once on this machine (as many as there are clones when left out, any number for repositories whose workers use worktrees), hosts: other machines over SSH its workers run on (name, ssh target, root directory there, clones, slots), a new card going to the first machine with a free slot, this one first; all but slots only for repositories whose workers use clones; share: the command line that shares video demos on a page outside Obeya, in place of the demo site of the repository's settings; without either, \"Teilen\" exports a demo as a ZIP or one HTML file; settings: the values the owner set for this machine in front of the repository's .obeya/settings.json: main branch (branch), how approved work lands (land: main or pr; direct; autoMerge: false where the people on the forge merge a ready pull request instead of Obeya), checks, setup, planDocs, softPaths, workspaces, prNoise, app (run: the recipe for running the app that every worker reads, in prose; stop and keep: the commands Obeya runs to stop a waiting card's app), language (of what lands in the repository: code, docs, commit messages; en or de, English when left out), demo's language, demo's site (title, url, deploy command line with {dir}, env, headers, maxFile, publish: approved where each approved card's latest demo goes on the site by itself)), what they amount to (resolved: canvas id, as in ?c=<id>, name, repository ids, whether workers use clones or worktrees, adapterGone where the repository still has an adapter module Obeya no longer reads, trust where commands of its settings or its own Claude Code settings are new or changed on its default branch and wait for the owner to trust them in the Konfiguration dialog (held: which groups; now and before: the commands), and values: each setting as it stands without this machine's, with its source), problems, which canvases run now (running), where it is saved (file; source: whether the running canvases come from that file or from the command line), and the server's settings from its command line (port, data directory, the agents' permission mode, whether it restarts by itself).",
+                  "Read Obeya's configuration: the canvases this Obeya serves (canvases), each with its repositories (path; git: false for a folder without git, whose cards work in it directly, with neither clones nor hosts; clones: clones to create, workspaces: existing clones to use, slots: how many of its workers may be busy at once on this machine (as many as there are clones when left out, any number for repositories whose workers use worktrees), hosts: other machines over SSH its workers run on (name, ssh target, root directory there, clones, slots), a new card going to the first machine with a free slot, this one first; all but slots only for repositories whose workers use clones; settings: the values the owner set for this machine in front of the repository's .obeya/settings.json: main branch (branch), how approved work lands (land: main or pr; direct; autoMerge: false where the people on the forge merge a ready pull request instead of Obeya), checks, setup, planDocs, softPaths, workspaces, prNoise, app (run: the recipe for running the app that every worker reads, in prose; stop and keep: the commands Obeya runs to stop a waiting card's app), language (of what lands in the repository: code, docs, commit messages; en or de, English when left out), demo's language, demo's site (title, url, deploy command line with {dir}, env, headers, maxFile, publish: approved where each approved card's latest demo goes on the site by itself; without one, \"Teilen\" exports a demo as a ZIP or one HTML file)), what they amount to (resolved: canvas id, as in ?c=<id>, name, repository ids, whether workers use clones or worktrees, adapterGone where the repository still has an adapter module Obeya no longer reads, trust where commands of its settings or its own Claude Code settings are new or changed on its default branch and wait for the owner to trust them in the Konfiguration dialog (held: which groups; now and before: the commands), and values: each setting as it stands without this machine's, with its source), problems, which canvases run now (running), where it is saved (file; source: whether the running canvases come from that file or from the command line), and the server's settings from its command line (port, data directory, the agents' permission mode, whether it restarts by itself).",
                   'Call it for any question about the configuration, and before configure.',
                 ].join('\n'),
                 schema: {},
@@ -779,23 +778,7 @@ export class Commander {
                   `confirm: one short sentence in the owner's language saying what changes and, where a repository's agents restart for it, that they do once they paused, e.g. ${say.configure}`,
                 ].join('\n'),
                 schema: {
-                  canvases: z.array(
-                    z.object({
-                      name: z.string().optional(),
-                      id: z.string().optional(),
-                      repos: z.array(
-                        z.object({
-                          path: z.string(),
-                          workspaces: z.array(z.string()).optional(),
-                          clones: z.number().int().optional(),
-                          slots: z.number().int().optional(),
-                          share: z.string().optional(),
-                          hosts: z.array(z.object({ name: z.string(), ssh: z.string(), root: z.string(), clones: z.number().int(), slots: z.number().int().optional() })).optional(),
-                          settings: settingsShape.optional(),
-                        }),
-                      ),
-                    }),
-                  ),
+                  canvases: configShape,
                   confirm: z.string(),
                 },
                 run: async ({ canvases, confirm }: Record<string, unknown>) => {

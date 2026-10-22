@@ -320,7 +320,10 @@ configuration it restarts with once no worker is mid-turn, and the page reloads.
 The server's own settings (port, data directory, the agents' permission mode) come from the command
 line and environment (`OBEYA_PORT`, `OBEYA_HOME`) and show read-only. The Koordinator reads the
 configuration (`config`) and changes it on the owner's word (`configure`, checked like the dialog's,
-see Confirmation and undo); the dialog says so under its title, with „Obeya fragen“, which closes it
+see Confirmation and undo). `configure` takes the whole list in the shape of the file, every field of
+it, so what the owner did not ask to change passes through as it was: a field it left out would
+fail every change while one entry has it (a folder's `git: false` dropped, that folder is checked as
+a git repository). The dialog says so under its title, with „Obeya fragen“, which closes it
 and opens Obeya's conversation (Space for voice does not reach Obeya while the dialog is open).
 The other sections save on their own, restarting nothing: the demo settings into `demo.json` (see
 The demo settings and voices), languages, theme and models into `settings.json` in Obeya's home.

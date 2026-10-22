@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { z } from 'zod';
 import { blocksSaving, type CanvasConfig, type ConfigView, type DemoSettingsView, type LanguageView } from '../core/types';
 import { Board } from './board';
 import { CanvasRuntime, type StartFailure } from './canvas';
@@ -9,7 +10,7 @@ import { clipProblems, Config, demoSettingsProblems, readConfigFile } from './co
 import { Store } from './db';
 import { serve } from './server';
 import { ownerLanguage } from './settings';
-import { asOwner, FakeRuntime, noForge, gitRepo } from './testing';
+import { asOwner, FakeRuntime, noForge, gitRepo, until } from './testing';
 import { git } from './workspaces';
 
 let dir: string;
@@ -739,6 +740,34 @@ describe('the configuration over HTTP', () => {
     await canvas.run({ do: 'configure', canvases: [{ name: 'Neu', repos: [{ path: web }] }] });
     expect(readConfigFile(file)).toEqual([{ name: 'Neu', repos: [{ path: web }] }]);
     expect(restarts).toBe(1);
+  });
+});
+
+describe('a change the Koordinator makes', () => {
+  test('keeps a canvas over a folder without git as it is while it adds a repository to another canvas', async () => {
+    const docs = join(dir, 'Dokumente');
+    mkdirSync(docs);
+    const saved: CanvasConfig[] = [{ repos: [{ path: web }] }, { repos: [{ path: docs, git: false }] }];
+    mkdirSync(join(dir, 'home'));
+    writeFileSync(file, JSON.stringify(saved));
+    const runtime = new FakeRuntime();
+    const canvas = new CanvasRuntime({ repos: [{ path: web }] }, { store, home: dir, runtime, forge: noForge, config: config('file', saved, ['web', 'dokumente']), commandDelayMs: 0 });
+    try {
+      const heard = canvas.commander.hear('Nimm api auf die Leinwand web.', {});
+      await until(() => runtime.sessions.some((s) => s.spec.tools.some((t) => t.name === 'configure')));
+      const k = runtime.sessions.find((s) => s.spec.tools.some((t) => t.name === 'configure'))!;
+      // the configuration as the Koordinator reads it, with api added, through the tool's schema as its SDK hands the arguments on
+      const { canvases } = JSON.parse(await k.call('config', {})) as ConfigView;
+      const tool = k.spec.tools.find((t) => t.name === 'configure')!;
+      const args = z.object(tool.schema).parse({ canvases: [{ repos: [...canvases[0]!.repos, { path: api }] }, canvases[1]], confirm: 'api kommt auf die Leinwand web.' });
+      expect(await tool.run(args)).not.toContain('Nothing recorded');
+      k.emit({ type: 'idle' });
+      canvas.commander.arm((await heard).token!);
+      await until(() => readConfigFile(file).length === 2 && readConfigFile(file)[0]!.repos.length === 2);
+      expect(readConfigFile(file)).toEqual([{ repos: [{ path: web }, { path: api }] }, { repos: [{ path: docs, git: false }] }]);
+    } finally {
+      canvas.shutdown();
+    }
   });
 });
 

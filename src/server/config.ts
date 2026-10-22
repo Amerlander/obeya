@@ -113,7 +113,8 @@ function tidySite(s: DemoSite | undefined): DemoSite | undefined {
   return out.title || out.url || out.deploy || Object.keys(out).length > 3 ? out : undefined;
 }
 
-const shape = z.array(
+/** The canvases as the configuration lists them, from the dialog, the file and the Koordinator alike. */
+export const configShape = z.array(
   z
     .object({
       name: z.string().optional(),
@@ -153,7 +154,7 @@ const shape = z.array(
 );
 
 /** The configuration as it is saved: no empty names, clone lists or counts. */
-function tidy(canvases: z.infer<typeof shape>): CanvasConfig[] {
+function tidy(canvases: z.infer<typeof configShape>): CanvasConfig[] {
   return canvases.map((c) => ({
     ...(c.name?.trim() ? { name: c.name.trim() } : {}),
     ...(c.id?.trim() ? { id: c.id.trim() } : {}),
@@ -178,7 +179,7 @@ function tidy(canvases: z.infer<typeof shape>): CanvasConfig[] {
 
 /** Reads a configuration file; throws when it is no list of canvases. */
 export function readConfigFile(file: string): CanvasConfig[] {
-  return tidy(shape.parse(withoutGone(JSON.parse(readFileSync(file, 'utf8')))));
+  return tidy(configShape.parse(withoutGone(JSON.parse(readFileSync(file, 'utf8')))));
 }
 
 /**
@@ -521,7 +522,7 @@ export class Config {
    */
   async check(input: unknown): Promise<ConfigChecked> {
     // a draft the dialog kept from before may hold a site's language (the dialog never sends a share command)
-    const parsed = shape.safeParse(withoutGone(input, false));
+    const parsed = configShape.safeParse(withoutGone(input, false));
     if (!parsed.success) return { canvases: [], resolved: [], problems: [{ code: 'invalid', detail: z.prettifyError(parsed.error) }] };
     const canvases = tidy(parsed.data);
     const expanded = expandConfig(canvases);
