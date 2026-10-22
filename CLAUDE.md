@@ -92,6 +92,9 @@ into the chapters under `docs/design/` (or the index) and the doc goes.
   (owner, 2026-10-12); `scripts/hero-video/qwen.py` renders the hero narration in Qwen3 to compare.
 - Every release also brings the README's text up to date: like the site, it names what the release
   adds that a newcomer should know (phone remote control, say).
+- A release contains everything on `main` at the moment it is tagged: right before tagging, rebase
+  onto the current `main` (moving the tag if it is already set), so commits that landed while the
+  release was being prepared go into it too.
 - gh calls against this repository's GitHub repository go through `bun scripts/gh.ts <gh args…>`:
   it runs gh on the checkout's origin as the account that owns it (`sadilek` for sadilek/obeya),
   since the machine's active gh account may be another without admin rights.
