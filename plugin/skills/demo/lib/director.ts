@@ -142,7 +142,7 @@ export class Director {
     if (o.quiet) {
       await fn();
       const to = now();
-      this.cuts.push({ from, to });
+      this.#cut({ from, to });
       this.#skippedInScene += to - from;
       return;
     }
@@ -155,12 +155,21 @@ export class Director {
     const cutFrom = now();
     await done;
     const to = now();
-    this.cuts.push({ from, to: fadeFrom }, { from: cutFrom, to });
+    this.#cut({ from, to: fadeFrom }, { from: cutFrom, to });
     this.#skippedInScene += fadeFrom - from + to - cutFrom;
     await this.evaluate((l) => window.__demo.timeJump(l), laterLabel(to - from, LANGUAGE));
     await this.wait(1100);
     await this.evaluate(() => window.__demo.whiteIn());
     await this.wait(450);
+  }
+
+  /**
+   * Keeps `cuts`, also in `cuts.json` of the work directory (wall clock, s), for a scratch Obeya
+   * that plays this take's agents back (`--replay`): what was cut goes by in a moment there.
+   */
+  #cut(...cuts: Cut[]) {
+    this.cuts.push(...cuts);
+    fs.writeFileSync(path.join(this.workDir, 'cuts.json'), JSON.stringify(this.cuts));
   }
 
   async pointAt(target: Locator) {
@@ -692,6 +701,8 @@ export async function runDemo(spec: DemoSpec, demoDir: string) {
   }
 
   const { browser, ctx, page, d } = await openPage(spec, viewport, work, true);
+  // this take's cuts, none so far (`Director.#cut`): after the login, which may stage a playback of the take before
+  fs.writeFileSync(path.join(work, 'cuts.json'), '[]');
   const scale = spec.sharp ? 2 : 1;
   const cast = await startScreencast(ctx, page, framesDir, viewport, scale);
   await d.wait(500);

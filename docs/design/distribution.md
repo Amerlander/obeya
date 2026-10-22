@@ -200,7 +200,9 @@ calculator with its own settings and plan doc. It goes through the main features
 arranging the wall and an idea by voice through a real worker's demo, comments spoken into it and
 the approval to proposals and an idea discussed with its agent. About four minutes, as sharp as the
 app on a Retina screen, narrated in English in the owner's ElevenLabs voice clone after being
-iterated in the Qwen3 clone (see CLAUDE.md).
+iterated in the Qwen3 clone (see CLAUDE.md). A release's render runs real agents and records them;
+corrections after it play that recording back (Demos: Agents played back), so they take minutes and
+change only what was corrected.
 
 The video is not in git: it, its captions, its chapters and the README's loop are assets of the
 GitHub release `site-media`, a pre-release so that it never becomes the latest release. The Pages

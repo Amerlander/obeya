@@ -1,6 +1,6 @@
 // obeya [--config <canvases.json>]
 // obeya <repo>… [--name <canvas>] [--workspace <path>]… [--clones <n>]
-//   [--port <n>] [--dev] [--permission-mode <mode>] [--idle-workers]
+//   [--port <n>] [--dev] [--permission-mode <mode>] [--idle-workers | --record <dir> | --replay <dir>]
 //
 // Serves canvases at http://127.0.0.1:<port>, to the owner alone (owner.ts): it prints a link that
 // signs a browser in, and a second start while it runs prints a new one. Without repositories: the canvases the JSON file
@@ -28,10 +28,12 @@
 // start waits for it.
 //
 // --idle-workers: no agent works on a started card (a scratch Obeya for a demo, scripts/scratch-obeya.ts).
+// --record <dir>: every agent's session is recorded into <dir>; --replay <dir> plays such a recording
+// back instead of running agents (replay.ts; why it refuses goes into $OBEYA_HOME/replay-refused.txt).
 // OBEYA_PARK_GRACE=<seconds>: how long a waiting card's app runs on before Obeya stops it
 // (Parking; 300 by default), shorter for a demo or a live check.
 
-import { chmodSync, existsSync, mkdirSync, statSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -45,6 +47,7 @@ import { forgejoForge, originOf } from './forgejo';
 import { NarrationHost } from './narration';
 import { claudeExecutable, endAgentsHere, sdkRuntime } from './runtime';
 import { claim, release, restarting, running } from './instance';
+import { recordingRuntime, replayRuntime } from './replay';
 import { MachineSetup, welcome } from './machine';
 import { extendPath } from './path';
 import { ShellReports } from './push-key';
@@ -76,6 +79,8 @@ const { values, positionals } = parseArgs({
     clones: { type: 'string' },
     'permission-mode': { type: 'string', default: 'auto' },
     'idle-workers': { type: 'boolean', default: false },
+    record: { type: 'string' },
+    replay: { type: 'string' },
   },
   allowPositionals: true,
 });
@@ -121,7 +126,12 @@ if (!values.dev && !process.env.OBEYA_SUPERVISED) {
     if (stopping) process.exit(code === RESTART || code === RESTART_FROM_FILE ? 0 : code);
     if (code === RESTART_FROM_FILE) {
       // the owner saved the configuration of canvases given on the command line: the file is it now
-      args = ['--config', configFile, '--port', values.port, '--permission-mode', values['permission-mode'], ...(values['idle-workers'] ? ['--idle-workers'] : [])];
+      args = [
+        '--config', configFile, '--port', values.port, '--permission-mode', values['permission-mode'],
+        ...(values['idle-workers'] ? ['--idle-workers'] : []),
+        ...(values.record ? ['--record', values.record] : []),
+        ...(values.replay ? ['--replay', values.replay] : []),
+      ];
       console.log(`Obeya: starting again with ${configFile}`);
     } else if (code === RESTART) console.log('Obeya: starting again with the new code');
     else process.exit(code);
@@ -243,8 +253,8 @@ canvases = new Canvases(
   {
     store,
     home,
-    runtime: sdkRuntime,
-    ...(values['idle-workers'] ? { idleWorkers: true } : {}),
+    runtime: agentRuntime(),
+    ...(values['idle-workers'] && !values.record && !values.replay ? { idleWorkers: true } : {}),
     forge,
     permissionMode: values['permission-mode'] as 'auto',
     watch: true,
@@ -260,6 +270,14 @@ canvases = new Canvases(
   // the canvas the setup assistant created gets a first card that says what to try
   (c) => welcome(home, [c]),
 );
+/** The agents' runtime: the Agent SDK's, recorded (`--record`), or a recording played back (`--replay`). */
+function agentRuntime() {
+  if (values.record) return recordingRuntime(sdkRuntime, resolve(values.record), home);
+  if (!values.replay) return sdkRuntime;
+  const refusedFile = join(home, 'replay-refused.txt');
+  rmSync(refusedFile, { force: true });
+  return replayRuntime(resolve(values.replay), { home, refused: (why) => writeFileSync(refusedFile, `${why}\n`) });
+}
 const ids = canvases.all().map((c) => c.id);
 if (new Set(ids).size !== ids.length) {
   console.error(`two canvases share an id: ${ids.join(', ')}; give them different names`);

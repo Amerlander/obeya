@@ -27,11 +27,23 @@ which the project skill `.claude/skills/release/` goes through).
 node scripts/hero-video/render.ts --narration   # only the narration: costs ElevenLabs credits for changed sentences
 HERO_SHORT=1 node scripts/hero-video/render.ts  # the scenes up to Obeya’s sidebar and its preferences, without agents, in a few minutes
 node scripts/hero-video/render.ts               # the whole video, with real agents: about ten minutes
-node scripts/hero-video/render.ts --qwen        # the same in Qwen3-TTS, into ~/demos/obeya-hero-qwen/: to try a change out first
+node scripts/hero-video/render.ts --record      # the same, with the agents recorded into ~/demos/obeya-hero-recording/ (or the directory after it)
+node scripts/hero-video/render.ts --replay      # the whole video with that recording's agents played back: the same run, in minutes
+node scripts/hero-video/render.ts --qwen        # any of these in Qwen3-TTS, into ~/demos/obeya-hero-qwen/: to try a change out first
 ```
 
 A change is tried out with `--qwen` (with `HERO_SHORT=1` for the first scenes) and rendered in
 ElevenLabs once it stands.
+
+The render that goes out with a release is a real run, recorded (`--record`). Corrections after it
+(a scene, the layout, the narration's timing) play that recording back (`--replay`): every agent,
+the Koordinator's included, does what it did in the recorded run, through the Obeya of the checkout,
+whose cards, layout, held comments and landing are live. The playback takes a few minutes, costs no
+Claude usage and comes out the same each time, so a recorded run can also be chosen for how its
+agents did (one whose first demo leaves the bold line to the comment, say). It refuses, and the
+render stops with why, once the agents' instructions or Obeya's tools have changed since the
+recording; a changed sentence the agents hear (the spoken command, the dictation, the comments) needs
+a recorded run too, since the recorded agents act on the old words. Then record anew.
 
 The output goes to `~/demos/obeya-hero/` (`HERO_OUT` names another): `demo.mp4`, `captions.vtt`,
 `chapters.vtt` (the scenes, which the site lists under the video),
@@ -42,9 +54,9 @@ leaves running for a look.
 
 Before it goes out, look at the stills and at three things that went wrong before: the microphone
 lights with the spoken command, not seconds after it; a ring never dims the card it marks; no card
-the narration names is outside the picture. The agent's run differs each time (how long it takes,
-its status lines, whether it proposes a card of its own), so the narration says nothing that only
-holds for one run.
+the narration names is outside the picture. The agent's run differs each time it is recorded (how
+long it takes, its status lines, whether it proposes a card of its own), so the narration says
+nothing that only holds for one run.
 
 ## The same narration in Qwen3-TTS
 

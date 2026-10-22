@@ -21,6 +21,13 @@ const OUT = process.env.HERO_OUT ?? path.join(os.homedir(), 'demos', 'obeya-hero
 const base = `http://127.0.0.1:${PORT}`;
 /** HERO_SHORT: the scenes up to Obeya’s sidebar and its preferences, without agents, to check them in a few minutes. */
 const SHORT = !!process.env.HERO_SHORT;
+/**
+ * HERO_RECORD: the take's agents are recorded into that directory as they work; HERO_REPLAY: the
+ * agents of such a recording play back instead of real ones (`scratch-obeya.ts`, `--record`, `--replay`).
+ */
+const RECORD = process.env.HERO_RECORD;
+const REPLAY = process.env.HERO_REPLAY;
+if (RECORD && SHORT) throw new Error('HERO_SHORT records no agents: record a whole take');
 /** The screenshot pasted into the message: Tipjar with a comma in the bill. */
 const SHOT = path.join(OUT, 'tipjar-comma.png');
 
@@ -32,7 +39,8 @@ const owner = () => ownerHeaders(path.join(staged.dir, 'home'));
 function stage() {
   const file = path.join(OUT, 'stage.json');
   writeStage(file);
-  const printed = execFileSync('bun', [path.join(ROOT, 'scripts/scratch-obeya.ts'), file, ...(SHORT ? [] : ['--real-workers'])], {
+  const agents = RECORD ? ['--record', RECORD] : REPLAY ? ['--replay', REPLAY] : SHORT ? [] : ['--real-workers'];
+  const printed = execFileSync('bun', [path.join(ROOT, 'scripts/scratch-obeya.ts'), file, ...agents], {
     env: { ...process.env, OBEYA_HOME: undefined },
     encoding: 'utf8',
   });
@@ -113,8 +121,10 @@ const card = (d: Director, title: RegExp | string) => d.page.locator('.card', { 
 const split = (d: Director) => card(d, 'Split the bill');
 const field = (d: Director) => d.page.locator('.composer.tell textarea');
 
-/** The card of the task the video creates, as the API has it. */
+/** The card of the task the video creates, as the API has it; a playback that was refused ends the take. */
 async function created() {
+  const refused = path.join(staged.dir, 'home', 'replay-refused.txt');
+  if (fs.existsSync(refused)) throw new Error(`the recording ${REPLAY} no longer fits: ${fs.readFileSync(refused, 'utf8').trim()}; record anew`);
   const snap = (await (await fetch(`${base}/api/c/tipjar/canvas`, { headers: owner() })).json()) as {
     items: { title: string; state: string; statusLine?: string; answering?: true; held?: number[] }[];
   };
@@ -637,8 +647,10 @@ await runDemo(
     report: {
       summary:
         'The hero video for obeya.si: on a scratch canvas with the example app Tipjar, the owner groups and moves cards, an idea said into the microphone becomes a task, a message typed, pasted and spoken goes to Obeya in its sidebar, a real agent builds the task and records its demo, and the approval lands the change on main.',
-      meta: { Stack: `Scratch Obeya on port ${PORT} from this checkout, real workers, Obeya and Whisper real` },
+      meta: { Stack: `Scratch Obeya on port ${PORT} from this checkout, ${REPLAY ? `the agents played back from ${REPLAY}` : 'real workers'}, Obeya and Whisper real` },
     },
   },
   OUT,
 );
+// what the take cut, for its playback: there it goes by in a moment
+if (RECORD) fs.copyFileSync(path.join(OUT, '.work', 'cuts.json'), path.join(RECORD, 'cuts.json'));

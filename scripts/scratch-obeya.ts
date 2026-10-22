@@ -3,14 +3,14 @@
 // and after), and the cards in the states the demo needs. Running it again stages afresh, so a demo
 // calls it before every take.
 //
-//   bun scripts/scratch-obeya.ts <stage.json> [--port <n>] [--code <commit> | --binary <obeya>] [--real-workers] [--restarts]
+//   bun scripts/scratch-obeya.ts <stage.json> [--port <n>] [--code <commit> | --binary <obeya>] [--real-workers | --record <dir> | --replay <dir>] [--restarts]
 //   bun scripts/scratch-obeya.ts --stop <port>
 //   bun scripts/scratch-obeya.ts --login <port>
 //   bun scripts/scratch-obeya.ts --say <port> <card key> <say|report|talk|question|review> <text>
 //   bun scripts/scratch-obeya.ts --artifact <port> <card key> <file> [<summary>]
 //
 // Prints one JSON line, also kept in <dir>/staged.json:
-//   { "url", "port", "dir", "canvas", "pid", "log", "from", "cards": { "<key>": "<card id>" } }
+//   { "url", "port", "dir", "canvas", "pid", "log", "from", "cards": { "<key>": "<card id>" }, "record"?, "replay"? }
 // The port is --port, else the stage file's `port`; without either the script picks one: the
 // first from 4480 up that nothing listens on and no other scratch Obeya holds (a running one, or
 // one being staged at the same time), so that workers staging at once never collide. --stop,
@@ -31,6 +31,22 @@
 // put a copy of the stage's) and hands it over again, as an agent does after rewriting it, with the
 // summary given or "Updated the artifact."; a card without one starts it with an index.html. Each
 // prints what the agent would have read back, and fails on a refusal ("Not handed over: …").
+//
+// --record <dir> runs real workers, as --real-workers, and records every agent's session (the
+// Koordinator's, the workers', any other) into <dir>, emptied first (it must be empty, new, or a
+// recording). --replay <dir> plays such a recording back instead of running agents: each agent does
+// what it did in the recorded take, through Obeya's own tools of this code, and its handovers bring
+// the recorded commits and demo; card ids, branches and paths of the recording stand for those of
+// this staging. A take played back comes out the same each time, in minutes and without Claude: it
+// goes at the recorded pace, except what the recorded take cut out (`d.skip`), which goes by in a
+// moment. Those cuts are the take's `.work/cuts.json` in <dir>: the demo copies it in after the
+// recorded take, or, for a recording in the demo's directory (<demo dir>/recording), the first
+// playback takes it from <demo dir>/.work while it is still the recorded take's; without them no wait
+// of the recording lasts long. Once the agents' instructions or tools differ from the recording's,
+// or a tool refuses what it took then, the playback refuses: the card shows the error, and the
+// scratch Obeya's home/replay-refused.txt says why (record anew). What the agents hear must stay as
+// recorded too: a changed command or comment needs a recorded take, since the recorded agents act
+// on the old one (the server's log names what differs; src/server/replay.ts).
 //
 // The server runs with --dev (it does not restart when the checkout commits; with --restarts it is
 // supervised like a real Obeya and restarts once the configuration is saved, PUT /api/config, and
@@ -127,13 +143,14 @@
 
 import { Database } from 'bun:sqlite';
 import { spawn, spawnSync } from 'node:child_process';
-import { copyFileSync, cpSync, existsSync, linkSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, linkSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { demoSettingsHere } from '../plugin/skills/demo/lib/settings.ts';
 import { type Language, LANGUAGES } from '../src/core/locale';
 import type { CanvasSnapshot, Item } from '../src/core/types';
 import { loginLink, ownerHeaders } from '../src/server/owner';
 import { findTailscale, type ServeEntry, Tailscale } from '../src/server/tailscale';
+import { mayRecordInto } from '../src/server/replay';
 import { branchName } from '../src/server/workspaces';
 import { opt } from './common';
 import { waitUp } from './wait-up';
@@ -279,8 +296,8 @@ if (artifactPort) {
   process.exit(0);
 }
 
-const file = args.find((a, i) => !a.startsWith('--') && !args[i - 1]?.match(/^--(port|code|dir|binary)$/));
-if (!file) fail('usage: bun scripts/scratch-obeya.ts <stage.json> [--port <n>] [--code <commit> | --binary <obeya>] [--real-workers] [--restarts] | --stop <port> | --login <port> | --say <port> … | --artifact <port> …');
+const file = args.find((a, i) => !a.startsWith('--') && !args[i - 1]?.match(/^--(port|code|dir|binary|record|replay)$/));
+if (!file) fail('usage: bun scripts/scratch-obeya.ts <stage.json> [--port <n>] [--code <commit> | --binary <obeya>] [--real-workers | --record <dir> | --replay <dir>] [--restarts] | --stop <port> | --login <port> | --say <port> … | --artifact <port> …');
 const stage = JSON.parse(readFileSync(file!, 'utf8')) as Stage;
 // what a scratch Obeya was staged from: staging afresh from it replaces that one
 const from = { stage: realpathSync(file!), ...(opt('code') || opt('binary') ? { code: opt('code') ?? opt('binary') } : {}) };
@@ -355,7 +372,19 @@ if (commit) {
 }
 const binary = opt('binary') && resolve(opt('binary')!);
 if (binary && !existsSync(binary)) fail(`${binary} does not exist`);
-const idle = !args.includes('--real-workers');
+const record = opt('record') && resolve(opt('record')!);
+const replay = opt('replay') && resolve(opt('replay')!);
+if (record && replay) fail('--record or --replay, not both');
+if (record && !mayRecordInto(record)) fail(`${record} holds something other than a recording; record into an empty or new directory`);
+if (replay && !existsSync(join(replay, 'meta.json'))) fail(`${replay} holds no recording (record one with --record)`);
+if ((record || replay) && (binary || !readFileSync(join(code, 'src/server/main.ts'), 'utf8').includes('replayRuntime'))) fail(`${binary ?? commit} cannot record or play back its agents`);
+// a fresh take, recorded from its first session
+if (record) rmSync(record, { recursive: true, force: true });
+// a recording in a demo's directory takes the cuts of the take that recorded it, before a take played back writes its own
+const takeCuts = replay && join(dirname(replay), '.work', 'cuts.json');
+if (replay && takeCuts && !existsSync(join(replay, 'cuts.json')) && existsSync(takeCuts) && statSync(takeCuts).mtimeMs >= statSync(join(replay, 'meta.json')).mtimeMs)
+  copyFileSync(takeCuts, join(replay, 'cuts.json'));
+const idle = !args.includes('--real-workers') && !record && !replay;
 const canIdle = !!binary || readFileSync(join(code, 'src/server/main.ts'), 'utf8').includes("'idle-workers'");
 if (idle && !canIdle) console.error(`scratch-obeya: ${commit} has no --idle-workers; a started card gets a real agent`);
 
@@ -393,7 +422,15 @@ if (configured)
     ),
   );
 const canvasArgs = stage.setup ? [] : configured ? ['--config', configFile] : [repo, ...(stage.clones ? ['--clones', String(stage.clones)] : [])];
-const serverArgs = [...canvasArgs, '--port', String(port), ...(supervised ? [] : ['--dev']), ...(idle && canIdle ? ['--idle-workers'] : [])];
+const serverArgs = [
+  ...canvasArgs,
+  '--port',
+  String(port),
+  ...(supervised ? [] : ['--dev']),
+  ...(idle && canIdle ? ['--idle-workers'] : []),
+  ...(record ? ['--record', record] : []),
+  ...(replay ? ['--replay', replay] : []),
+];
 const server = spawn(binary ?? process.execPath, binary ? serverArgs : ['src/server/main.ts', ...serverArgs], {
   cwd: binary ? dir : code,
   env,
@@ -659,7 +696,7 @@ for (const on of allCanvases) {
 for (const g of stage.groups ?? [])
   await api('POST', '/groups', { name: g.name, cards: g.cards.map((k) => ids[k] ?? fail(`group ${g.name}: card ${k} does not exist`)) });
 
-const staged = { url: (await loginLink(base, home, `/?c=${canvas}`)) ?? `${base}/?c=${canvas}`, port, dir, canvas, pid: server.pid, log, from, cards: ids };
+const staged = { url: (await loginLink(base, home, `/?c=${canvas}`)) ?? `${base}/?c=${canvas}`, port, dir, canvas, pid: server.pid, log, from, cards: ids, ...(record ? { record } : {}), ...(replay ? { replay } : {}) };
 writeFileSync(join(dir, 'staged.json'), JSON.stringify(staged, null, 2));
 console.log(JSON.stringify(staged));
 process.exit(0);

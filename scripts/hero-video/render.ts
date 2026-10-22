@@ -3,9 +3,12 @@
 // is Obeya's (for Qwen3-TTS with `--qwen`). The key lies in `.voice/elevenlabs.key` of the main
 // checkout, gitignored. `--qwen` renders in the owner's voice cloned by Qwen3-TTS instead (the
 // reference `.voice/qwen-reference-en.wav` there), which costs no credits: for trying a change out,
-// into `~/demos/obeya-hero-qwen`. Other arguments go on to the demo (`--narration`, `--dry`).
+// into `~/demos/obeya-hero-qwen`. `--record` records the take's agents (real ones) into a directory,
+// `~/demos/obeya-hero-recording` unless named; `--replay` plays such a recording back instead of
+// running agents, the same take in minutes (the README says when which). Other arguments go on to
+// the demo (`--narration`, `--dry`).
 //
-//   node scripts/hero-video/render.ts [--qwen] [--narration | --dry]
+//   node scripts/hero-video/render.ts [--qwen] [--record [<dir>] | --replay [<dir>]] [--narration | --dry]
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -24,6 +27,21 @@ if (!fs.existsSync(needed)) {
   process.exit(1);
 }
 
+/** The directory after `--<flag>`, else the default recording, when the flag is given. */
+const recording = (flag: string) => {
+  const i = process.argv.indexOf(`--${flag}`);
+  if (i < 0) return undefined;
+  const given = process.argv[i + 1];
+  return path.resolve(given && !given.startsWith('--') ? given : path.join(os.homedir(), 'demos', 'obeya-hero-recording'));
+};
+const record = recording('record');
+const replay = recording('replay');
+if (record && replay) {
+  console.error('--record or --replay, not both');
+  process.exit(1);
+}
+const own = new Set(['--qwen', '--record', '--replay', ...[record, replay].filter((d) => d !== undefined)]);
+
 const home = path.join(OUT, 'home');
 fs.mkdirSync(home, { recursive: true });
 const settings = qwen
@@ -33,8 +51,8 @@ fs.writeFileSync(path.join(home, 'demo.json'), JSON.stringify(settings, null, 2)
 const voices = path.join(process.env.OBEYA_HOME ?? path.join(os.homedir(), '.obeya'), 'voices');
 if (fs.existsSync(voices) && !fs.existsSync(path.join(home, 'voices'))) fs.symlinkSync(voices, path.join(home, 'voices'));
 
-const r = spawnSync('node', [path.join(import.meta.dirname, 'demo.ts'), ...process.argv.slice(2).filter((a) => a !== '--qwen')], {
+const r = spawnSync('node', [path.join(import.meta.dirname, 'demo.ts'), ...process.argv.slice(2).filter((a) => !own.has(a) && !own.has(path.resolve(a)))], {
   stdio: 'inherit',
-  env: { ...process.env, OBEYA_HOME: home, HERO_OUT: OUT, DEMO_ELEVENLABS_MODEL: 'eleven_v4' },
+  env: { ...process.env, OBEYA_HOME: home, HERO_OUT: OUT, DEMO_ELEVENLABS_MODEL: 'eleven_v4', ...(record ? { HERO_RECORD: record } : {}), ...(replay ? { HERO_REPLAY: replay } : {}) },
 });
 process.exit(r.status ?? 1);

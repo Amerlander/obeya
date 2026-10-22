@@ -147,7 +147,8 @@ How to run a project's app, for a demo too, is its settings' `app.run` (see Repo
 without Obeya the skill prints it for the repository it runs in. The worker records once the change is committed and checked, and hands over the directory and
 chapter titles with `ready_for_review`. For Obeya itself the app is a scratch instance from the
 worktree, staged by `scripts/scratch-obeya.ts` from a stage file before every take, its workers idle
-unless the change is about agents, on a port the script picks so that parallel workers never
+unless the change is about agents (then their first take is recorded and retakes play it back, see
+Agents played back), on a port the script picks so that parallel workers never
 collide; staging again from the same stage file and code replaces the instance before, on its port.
 A scratch Obeya speaks the stage's `language`, else the demos' language, and the stage's cards and
 conversations are written in it, so the screen matches the narration. What an agent would do meanwhile (a line arriving in an open conversation, an
@@ -171,7 +172,51 @@ comes out of frames, narration, chapters and captions alike; a clip the cut fall
 across it, so a skip belongs after the scene's narration, and the next scene says the jump („Kurz
 darauf“). The first five seconds of a wait are cut without a trace, only the rest falls into the
 white. A wait that is only the app's latency is cut whole without flash or label (`quiet`). The
-review table flags a scene with more than 5 s without narration.
+review table flags a scene with more than 5 s without narration. Each take keeps its cuts (wall
+clock) in its work directory, for a playback of its agents.
+
+#### Agents played back
+
+A take whose agents are real can be recorded and played back, so that a retake (a scene, the
+layout, the narration's timing) needs no new run: `scripts/scratch-obeya.ts --record <dir>` records
+every agent session of the scratch Obeya (the Koordinator's, the workers', any other), and
+`--replay <dir>` plays the recording back instead of running agents. A recording holds for each
+session what the agent got (role, instructions, its tools with descriptions and schemas, the first
+message) and then, in the order they happened and with their times, its events, its calls of
+Obeya's tools with their arguments and results, the messages sent to it, the context updates taken
+after its steps, and its end where it ended by itself. A worker's call also keeps the commits made
+in its workspace since its call before (a git bundle), and a handover a copy of the demo it names,
+without the demo's work files. The take's cuts go in too: the demo copies them in after the take,
+or, for a recording in the demo's directory, the first playback takes them from there while they
+are still the recorded take's.
+
+Played back, a session Obeya starts gets the first recorded one not played yet of its role and
+tools, the one with the same first message where several are left (so that two workers started in
+another order each get their own). Its events go out again, its calls run Obeya's tools of the code
+being run with the recorded arguments, a step recorded after a message waits until that message
+comes, and one that read a context update (the owner's words in the middle of a turn) until there
+is one. Before a worker's call its recorded commits go onto the card's workspace, picked one by one;
+rewritten ones (an amend, a rebase) go as one commit of what they changed, or not at all where the
+workspace holds that already (a rebase the landing of today did too). Before a handover the demo
+goes back where it was. Everything else is Obeya's own code as it stands: card states, layout, held
+comments, the handover, the landing; the page is always live, so a change to the UI never breaks a
+playback. Card ids, branches, commits and paths differ in every staging: where a text the agent got
+then and gets now (its instructions, a message, a tool's result) differ in such tokens alone, they
+are paired, and what the agent says and calls is told in today's. The steps keep the recorded pace,
+except that a gap within the recorded take's cuts lasts a moment; without the cuts no gap lasts
+more than two seconds. Which sessions were played stays in Obeya's home, so a scratch Obeya that
+starts again goes on with the next.
+
+The playback refuses once the recording no longer fits: the instructions of an agent, a tool's
+description or its schema, or its set of tools differ from the recorded ones (after pairing), a
+tool refuses now what it took then, or recorded commits do not apply. The session then fails with
+the reason on its card, `replay-refused.txt` in Obeya's home names it, and the take has to be
+recorded anew. A message that differs from the recorded one is only logged: what the agents hear (a
+spoken command, a comment) must stay as recorded, since the recorded agents act on the old words.
+A session the recording has none for ends each turn at once. Not played back: what an agent leaves
+uncommitted until its next call, files it writes outside its commits and its demo (a looked-up
+answer's files), a folder without git's changes, and the app an agent ran, so the card offers no
+link to it.
 
 #### Pauses in every voice
 
@@ -368,6 +413,26 @@ translate or install, the first-fullscreen hint), which would catch taps meant f
   restarted on the worker's commit, a staged working card a real agent resumed, agents the
   Koordinator started mid-take). The script writes cards straight into the database, so any state is
   a line in the stage file.
+- **Retakes of a demo with real agents play a recording back** (owner, 2026-10-22): a hero render
+  with a new run took about 13 minutes, cost Claude usage, and came out different each time (the
+  form, the status lines, whether the agent proposed a card); a playback takes minutes and comes out
+  the same. The release's render and a demo's first take with real workers stay real runs and record
+  them: the only check in which a real agent goes through a worker's whole flow (start, demo, held
+  comments, second demo, landing) on the build that ships. Every agent of the scratch Obeya is
+  played back, or no render comes out the same twice. Rejected: a stand-in written by hand (idle
+  workers have no turns, so the comments delivered would go nowhere, and the video would show no
+  real run); real runs with only the early scenes shortened (the agents' scenes still vary and cost
+  a run).
+- **The playback checks the agents' instructions in full** (2026-10-22), not a fixed part without
+  what is the card's: in a playback the card, its task and branch come from the same stage and the
+  same recorded calls, so after pairing ids they are as recorded, and what differs is a change to
+  Obeya's prompts or tools that the recording no longer fits.
+- **Ids are paired from what the agent got** (2026-10-22), not kept by the stage's keys: the card
+  the hero video's agents create has no key, and its id, branch and workspace reach the agents only
+  in what Obeya tells them.
+- **A playback keeps the recorded pace except across the take's cuts** (2026-10-22): the scenes then
+  find the agents where the recorded take found them (the worker still at work when the video looks
+  in), and what was cut costs no time.
 - **Every worker gets the plugin** (2026-10-08), not only those of a repository with demo settings,
   which otherwise had no way to the skill that writes them.
 - **Demos do not listen back to their narration** (2026-10-15). Rejected: transcribing each clip and
