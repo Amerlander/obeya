@@ -71,24 +71,27 @@ export function ResultFiles({ item, diff, demo, tab, onTab }: { item: Item; diff
     shown.current = current;
     if (current !== DEMO) demoBox.current?.querySelectorAll('video').forEach((v) => v.pause());
   }, [current]);
-  if (!rows.length) return demo || (item.files && change ? <p className="hint">{t.files.none}</p> : null);
+  if (!rows.length && !demo) return item.files && change ? <p className="hint">{t.files.none}</p> : null;
   const file = files.find((f) => f.path === current);
   // the size of the whole change stands with its files, not up in the card's branch line
   const count = change?.folder ? shownChanges(change.folder.changes).length : (change?.files.length ?? 0);
+  // the demo keeps its place in the page once the change is read: moved, it would start afresh and no longer play on its own
   return (
     <div className="results" ref={box} style={tallest ? { minHeight: tallest } : undefined}>
-      <ChangeList
-        item={item}
-        rows={rows}
-        demo={!!demo}
-        fold={fold}
-        total={count ? { ...diffSize(change!.files), files: count } : undefined}
-        current={current}
-        onPick={(path, changes) => {
-          onTab(path);
-          if (changes !== undefined) setAsChanges({ ...asChanges, [path]: changes });
-        }}
-      />
+      {rows.length > 0 && (
+        <ChangeList
+          item={item}
+          rows={rows}
+          demo={!!demo}
+          fold={fold}
+          total={count ? { ...diffSize(change!.files), files: count } : undefined}
+          current={current}
+          onPick={(path, changes) => {
+            onTab(path);
+            if (changes !== undefined) setAsChanges({ ...asChanges, [path]: changes });
+          }}
+        />
+      )}
       {demo && (
         <div ref={demoBox} hidden={current !== DEMO}>
           {demo}
