@@ -53,8 +53,8 @@ export const replyOn = (draft: string): Reply | null => draftOf(draft).reply ?? 
 /** The same, live. */
 export const useReply = (draft: string): Reply | null => useDraft(draft).reply ?? null;
 
-// Until the owner has replied once, a conversation shows the reply button on the latest message they
-// did not write, not only under the pointer, so they find it (`reply-new` on the conversation).
+// Until the owner has replied once, a conversation shows the reply button on every message, not only
+// under the pointer, so they find it (`reply-new` on the conversation).
 const KNOWN = 'obeya-reply-known';
 let replied = known(KNOWN);
 const knownListeners = new Set<() => void>();

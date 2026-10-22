@@ -85,7 +85,8 @@ starts. Words said between turns start the next turn.
 ### Replying to a message
 
 On a card and in Obeya's sheet the owner can reply to one message, as in chat apps: a button in its
-corner (on hover; on the latest message from someone else always, until the owner has replied once)
+corner (at the desk while the pointer is on the message, and on every message until the owner has
+replied once; on a touch screen always)
 puts it as a quote above the field, removable with × or Escape (before Escape closes the card or the sidebar); typed or spoken words go out with
 it. The quote is part of the field's draft, so it survives closing the card and reloads. The sent
 message shows the quote's first lines; a click scrolls to the original. Only messages can be quoted,

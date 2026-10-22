@@ -671,15 +671,18 @@ textarea.p-body:focus { border-color: var(--muted); }
 .talk .msg .who .t { color: var(--muted); font-weight: 400; margin-left: 4px; }
 .talk .msg.by-owner { align-self: flex-end; background: color-mix(in srgb, var(--working) 9%, var(--card)); }
 .talk .msg.by-owner .who { color: var(--working); }
-/* replying to one message (message.tsx): a button in its corner while the pointer is on it, and the
+/* replying to one message (message.tsx): a button in its corner, and the
    message replied to quoted above the reply and above the field it is written in, as chat apps do */
 .talk .msg { position: relative; }
 .talk .msg:has(> .msg-reply) > .who { padding-right: 24px; }
 .msg-reply { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; display: grid; place-items: center; padding: 0;
-  border: 0; border-radius: 3px; background: var(--chip); color: var(--muted); cursor: pointer; opacity: 0; transition: opacity .12s; }
-.talk .msg:hover > .msg-reply, .msg-reply:focus-visible { opacity: 1; }
-/* until the owner has replied once, the latest message they did not write shows its button (reply.ts) */
-.talk.reply-new > :nth-last-child(1 of .msg.replies:not(.by-owner)) > .msg-reply { opacity: 1; color: var(--ink); }
+  border: 0; border-radius: 3px; background: var(--chip); color: var(--muted); cursor: pointer; }
+/* at the desk the button shows while the pointer is on its message, and on every message until the
+   owner has replied once (`reply-new`, reply.ts); on a touch screen always */
+@media (hover: hover) {
+  .talk:not(.reply-new) .msg > .msg-reply { opacity: 0; transition: opacity .12s; }
+  .talk .msg:hover > .msg-reply, .talk .msg > .msg-reply:focus-visible { opacity: 1; }
+}
 .msg-reply:hover { color: var(--ink); background: var(--line); }
 /* the button at text marked in a conversation, which quotes it in the field (cite.tsx): above the
    end of the marking, or below its last line (on a touch screen clear of the selection handles) */
