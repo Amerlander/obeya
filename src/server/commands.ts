@@ -971,7 +971,7 @@ export class Commander {
       const repo = this.newCardRepo(a);
       const from = a.card ? s.tags.get(a.card) : undefined;
       if (a.card && (!from || !this.o.board.item(from))) return `unknown tag ${a.card}; give the card a follow-up comes from, or none`;
-      const until = a.until?.trim() ? Date.parse(a.until) : undefined;
+      const until = a.until?.trim() ? localTime(a.until) : undefined;
       if (until !== undefined && Number.isNaN(until)) return 'until is no time: the local time as YYYY-MM-DDTHH:MM';
       if (until !== undefined && until <= Date.now()) return 'that time has passed: leave until out to start it now';
       if (until !== undefined && until > Date.now() + SNOOZE_LIMIT) return 'until lies more than a year ahead';
@@ -1073,7 +1073,7 @@ export class Commander {
         break;
       case 'snooze': {
         if (!snoozable(card)) return `the card is neither planned, at work nor waiting for the owner, so there is nothing to snooze (${is})`;
-        const at = a.until ? Date.parse(a.until) : NaN;
+        const at = a.until ? localTime(a.until) : NaN;
         if (Number.isNaN(at)) return 'until is missing: the local time as YYYY-MM-DDTHH:MM';
         if (at <= Date.now()) return 'that time has passed';
         return { do: 'snooze', card: card.id, until: new Date(at).toISOString() };
@@ -1342,6 +1342,12 @@ const became = (a: Pick<TalkAfter, 'title' | 'met' | 'state'>) =>
 
 /** What the Koordinator waits for a card to reach. */
 const until = (state: AwaitedState) => (state === 'done' ? 'is done' : 'waits for the owner');
+
+/**
+ * A time the Koordinator gives (`until`), in ms: local, as it is told to write it; a day without an
+ * hour is 08:00 that day, where `Date.parse` would read it as midnight in UTC.
+ */
+const localTime = (s: string) => Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(s.trim()) ? `${s.trim()}T08:00` : s.trim());
 
 /** A time as the Koordinator reads it: local, to the minute, with the weekday. */
 function when(iso: string): string {

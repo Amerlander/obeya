@@ -254,6 +254,12 @@ describe('the Koordinator remembers', () => {
     k.arm(heard.token!);
     await new Promise((r) => setTimeout(r, 40));
     expect(executed).toEqual([{ do: 'newCard', title: 'Depots einrichten', body: 'Anfang Dezember die Depots einrichten.', start: true, until: new Date(local(40)).toISOString() }]);
+    // a day without an hour is 08:00 that day, local
+    const day = local(40).slice(0, 10);
+    const { heard: dated } = await say(k, 'und eine fürs Trinkgeld, auch Anfang Dezember', 'act', { actions: [{ do: 'new_card', title: 'Trinkgeld', body: 'Trinkgeld.', until: day }], confirm: '…' });
+    k.arm(dated.token!);
+    await new Promise((r) => setTimeout(r, 40));
+    expect(executed[1]).toMatchObject({ do: 'newCard', until: new Date(`${day}T08:00`).toISOString() });
     for (const [until, why] of [
       [local(-1), 'that time has passed'],
       [local(400), 'more than a year ahead'],
