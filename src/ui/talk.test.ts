@@ -135,6 +135,7 @@ test("a worker's closing words after its reply or handover fold under it, also o
       pending: [],
       unread: [],
       asked: [],
+      below: [],
     });
 });
 
@@ -206,6 +207,7 @@ test('a conversation nobody works on ends with its last message or line, the ste
     pending: [],
     unread: [],
     asked: [],
+    below: [],
   });
   // the agent's last words in a turn without a message are its message, before the line that came later
   const read = ev('activity', 'worker', 'Liest docs/design.md');
@@ -475,6 +477,25 @@ test("an idea's open questions stand at its conversation's end, where they are a
   const task = { state: 'waiting', need: 'question', question: format, inTurn: true } as unknown as Item;
   const asked = ev('question', 'worker', formatQuestion(format, 'de'));
   expect(cardTalk(task, [reply, asked])).toMatchObject({ shown: [{ e: reply }], asked: [{ e: asked }] });
+});
+
+test("the owner's words the worker read after asking stay below its open question, and where they were once it is answered", () => {
+  const format = { text: 'Welches Format?', options: ['CSV', 'Excel'] };
+  const comment = ev('hint', 'owner', 'Hier ist es schon fett.');
+  const note = ev('hint', 'owner', 'Mach vorher einen Rebase auf main.');
+  const asked = ev('question', 'worker', formatQuestion(format, 'de'));
+  const events = [comment, { ...note, readAfter: asked.id }, asked];
+  const task = { state: 'waiting', need: 'question', question: format } as unknown as Item;
+  // said while the worker asked, the note reached it after the question: above it, it would read as taken into account
+  expect(cardTalk(task, events)).toMatchObject({ shown: [{ e: comment }], asked: [{ e: asked }], below: [{ e: { id: note.id } }] });
+  // answered, nothing moves: the question stays where it was asked, the note below it
+  const answer = ev('answer', 'owner', 'CSV');
+  const after = cardTalk({ ...task, state: 'working', need: undefined }, [...events, answer]);
+  expect(after.shown.map((x) => x.e.id)).toEqual([comment.id, asked.id, note.id, answer.id]);
+  expect(after.below).toEqual([]);
+  // what the agent said after its question stays above it, and so does the owner's word it answered
+  const reply = ev('talk', 'worker', 'Mache ich nach deiner Antwort.');
+  expect(cardTalk(task, [...events, reply])).toMatchObject({ shown: [{ e: comment }, { e: { id: note.id } }, { e: reply }], asked: [{ e: asked }], below: [] });
 });
 
 test("a proposal's open questions leave where they were asked; settled ones stay there", () => {

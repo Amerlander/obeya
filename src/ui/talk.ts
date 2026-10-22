@@ -46,6 +46,8 @@ export interface Talk {
   unread: CardEvent[];
   /** The questions the card waits on (`openQuestions`), each with the steps that led to it: they stand at the end, to be answered. */
   asked: Turn[];
+  /** What came after the last of them, when none of it is the agents': the owner's words the agent read after asking, which stay below the questions. */
+  below: Turn[];
 }
 
 /** Obeya's lines that mark where the work stands, or why an idea clicked to build was not; its other notes (restarts, sessions, what happens on the pull request) fold away. */
@@ -170,12 +172,13 @@ export function talkTurns(all: CardEvent[], opts: { open?: Question[]; over?: bo
   const asked = askedLast(shown, opts.open ?? []);
   const at = new Map(events.map((e, i) => [e, i]));
   for (const turn of shown) if (turn.e.kind === 'question' && !asked.includes(turn)) Object.assign(turn, ended(turn, events, at, shown, !!opts.working));
-  for (const x of asked) shown.splice(shown.indexOf(x), 1);
+  const below = afterAsking(shown, asked);
+  for (const x of [...asked, ...below]) shown.splice(shown.indexOf(x), 1);
   if (opts.over && !asked.length) {
     settle(shown, steps, events);
     steps = [];
   }
-  return { shown, pending: steps, unread: all.filter((e) => e.unread), asked };
+  return { shown, pending: steps, unread: all.filter((e) => e.unread), asked, below };
 }
 
 /**
@@ -268,6 +271,19 @@ function closed(steps: CardEvent[]): Turn | undefined {
 function askedLast(shown: Turn[], open: Question[]): Turn[] {
   const asked = new Set(open.map((q) => shown.findLast((x) => x.e.kind === 'question' && parseQuestion(x.e.text).text === q.text)));
   return shown.filter((x) => asked.has(x) && x.answer === undefined && !x.picks);
+}
+
+/**
+ * What stands after the last question the card waits on, when it holds the owner's words and nothing
+ * of the agents': words the agent read only after it asked (said while it worked, they reached it
+ * with the result of its step that asked). They go to the end with the question, below it, as they were read;
+ * above it they would read as words the question already took into account.
+ */
+function afterAsking(shown: Turn[], asked: Turn[]): Turn[] {
+  const last = asked.at(-1);
+  if (!last) return [];
+  const tail = shown.slice(shown.indexOf(last) + 1);
+  return tail.some((x) => toAgent(x.e)) && tail.every((x) => x.line || x.e.author === 'owner') ? tail : [];
 }
 
 /**

@@ -40,7 +40,11 @@ Which questions are open is one rule too (`openQuestions` in `src/core/types.ts`
 its agent is not replying, a proposal's while not being reworked, a worker's while the card waits
 for it, a demo report's until answered; a parked or dropped idea has none. Open questions move to
 the conversation's end under „Frage an dich“ („Fragen an dich“), and only then does the field read
-„Eigene Antwort oder Anmerkung – optional“ and „Antworten“. The canvas card, the phone's count and
+„Eigene Antwort oder Anmerkung – optional“ and „Antworten“. The owner's words the agent read only
+after it asked (said while it worked, they reached it after the question) go along and stay below
+the question, as everywhere in reading order: above it they would read as words the question took
+into account, and once it is answered and back in place they would jump below it. Anything of an
+agent's after the question leaves them where they were. The canvas card, the phone's count and
 the Koordinator name the same questions. How agents ask: see Questions go to the owner.
 
 Messages new to the owner (after the last event they had in view and their own last words) have an
@@ -251,6 +255,9 @@ image.
   step, so it knows where they were read and can take them back. Rejected: passing a note straight
   into the session; Obeya learned only at turn end what it took, and the SDK takes one back only by
   a control request.
+- **Words read after an open question stand below it** (2026-10-22), also while it waits at the
+  end. Rejected: holding them back until the owner answers, which keeps from the worker what it
+  could take in at once.
 - **Orange edge only for what is new, never for what arrived in view** (2026-10-17). Rejected: edges
   on answered questions (looked open) and on messages the owner watched arrive.
 - **The conversation stays where the owner scrolled** (2026-10-20). Rejected: every agent step

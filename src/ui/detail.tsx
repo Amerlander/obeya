@@ -1233,9 +1233,10 @@ function Conversation({
         {turns.shown.slice(stillAt).map(line)}
         {working ? (
           <>
-            {/* the questions it waits on, and below them the background work the worker still runs */}
+            {/* the questions it waits on, the owner's words it read after asking, and below them the background work the worker still runs */}
             {askedSteps(turns.asked.flatMap((x) => x.steps))}
             {questions}
+            {turns.below.map(line)}
             {bubble}
           </>
         ) : (
@@ -1258,6 +1259,7 @@ function Conversation({
         )}
         {!working && !past && koordinatorReads(events) && <Reading />}
         {!working && questions}
+        {!working && turns.below.map(line)}
       </div>
       {draft && <CiteButton box={box} draft={draft} />}
     </>
