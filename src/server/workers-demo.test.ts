@@ -582,6 +582,7 @@ describe('handing over with a demo', () => {
     expect(await runtime.last.call('ready_for_review', { summary: 'Gibt es schon.', demo: artifact() })).toContain('End your turn');
     expect(state(c.id)).toBe('waiting:demo');
     // after feedback, a handover without a new demo keeps the one on the card
+    runtime.last.emit({ type: 'idle' });
     workers.message(c.id, 'Wo genau?');
     expect(await runtime.last.call('ready_for_review', { summary: 'In der Kopfzeile.' })).toContain('End your turn');
     expect(state(c.id)).toBe('waiting:demo');

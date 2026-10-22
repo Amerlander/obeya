@@ -67,7 +67,8 @@ stay „Noch nicht gelesen“.
 
 A worker reads them with the result of its next tool step, through the hook that also passes it
 preferences and decisions, screenshots as file paths (a tool result carries no images); a turn that
-ends before another step starts the next with them; a session
+ends before another step starts the next with them; a step that ends the turn (`ask`, say) carries
+them in its result, which leaves the turn to the worker (see A worker's tools); a session
 that ends first gets them with the message it resumes with, after a stop at the next start. An
 idea's agent, a proposal's reviser and a Question card's agent read them when their next turn
 starts. Words said between turns start the next turn.

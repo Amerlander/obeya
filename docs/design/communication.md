@@ -28,6 +28,12 @@ visible on a card.
 - `to_obeya(request)`: what the owner's words ask of Obeya rather than of the worker (see Passing a
   request on to Obeya).
 
+A call that ends the turn (`ask`, `ready_for_review`, `pr_opened`, `snooze`, `after_restart`)
+returns „end your turn now“. When the owner's words waited for that very step (see Reading order in
+Conversation on the card), its result carries them instead, says what stands meanwhile (the question
+waits for the owner, the handover for approval) and leaves the turn to the worker: it answers them
+with `reply`, does what they ask, asks anew if they change its question, then ends the turn.
+
 Obeya's messages to a worker say what happened (feedback, an answer, a note, a failed landing, the
 landing), not what to do next: whether to record a demo again after feedback is the worker's call
 (see The demo on the card).
@@ -215,6 +221,11 @@ as a learned preference does. Older answers agents gave in the owner's name stay
   suggests; the worker's pick gives the owner what a suggestion would.
 - **Workers are told what happened, not what to do next**: they are full agents. Protocol stays where
   Obeya depends on it: `ready_for_review`, `ask`, `pr_opened`.
+- **Words that reach a worker with the result of its turn-ending call leave it the turn**
+  (2026-10-22). „End your turn now without further work“ beside the owner's note had the worker end
+  it in silence; the note looked unheard until the answer to its question came. Rejected: holding
+  the words back until the owner answers (the worker could take them in at once), and a rule to
+  answer every note beside the instruction to stop, which contradicted it.
 - **A status line belongs to the stretch of work it reports on** (2026-10-09), so a line from before
   a handover does not stand over later work.
 - **Background work keeps a turn open** (2026-10-12). Rejected: ending a turn a fixed ten minutes

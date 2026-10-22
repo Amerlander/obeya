@@ -2669,6 +2669,17 @@ export class Workers {
         this.o.board.work(cardId, { snoozed: null });
       }
     };
+    /**
+     * The result of a call that ends the worker's turn (`plain`). The owner's words that waited for
+     * this step come with the result itself, with what to do about them, so that the worker takes
+     * them in before its turn ends rather than ending it in silence: `stands` is what holds of the
+     * call meanwhile, `change` what follows if their words change it.
+     */
+    const ending = (plain: string, stands: string, change?: string): string => {
+      const words = this.unheardNow(cardId, live);
+      if (!words) return plain;
+      return `${stands} The owner wrote to you while you worked, and their words reach you only now, with this result: take them in as at any other step. Answer them with reply where they call for an answer, and do what they ask${change ? `; ${change}` : ''}. Then end your turn.\n\n${words}`;
+    };
     // a session the owner stopped or replaced may still call its tools: those calls change nothing
     const current = (tools: AgentTool[]): AgentTool[] =>
       tools.map((t) => ({ ...t, run: (args) => (this.live.get(cardId) === live || live.standIn ? t.run(args) : 'This session has ended. Stop working and end your turn.') }));
@@ -2712,7 +2723,11 @@ export class Workers {
           const q = withPick(args as unknown as Asked);
           this.o.board.log(cardId, 'question', 'worker', formatQuestion(q, this.o.board.language()));
           this.toOwner(cardId, q);
-          return END_TURN;
+          return ending(
+            END_TURN,
+            'Recorded: your question waits for the owner on the card, and their answer arrives as your next message.',
+            'if they change your question, ask it anew (the card shows the earlier one as asked again further below)',
+          );
         },
       },
       // a prototype makes no cards of its own: what it proposes is building its idea on it
@@ -2802,7 +2817,7 @@ export class Workers {
           this.o.board.work(cardId, { pr: JSON.stringify(pr) });
           this.o.board.log(cardId, 'state', 'worker', this.o.board.t.worker.prOpened(ref.number));
           this.o.onPrOpened?.(cardId);
-          return 'Recorded. End your turn now; Obeya watches the pull request.';
+          return ending('Recorded. End your turn now; Obeya watches the pull request.', 'Recorded: Obeya watches the pull request.', 'a change to the work goes onto the pull request');
         },
       },
       {
@@ -2915,8 +2930,13 @@ export class Workers {
             });
             const card = this.o.board.item(cardId);
             if (card?.prototypeOf) this.o.onPrototype?.(card, report, demoJson);
-            if (approved) return 'Recorded. End your turn now; once it has ended, Obeya lands your work on main.';
-            return END_TURN;
+            if (approved)
+              return ending(
+                'Recorded. End your turn now; once it has ended, Obeya lands your work on main.',
+                'Recorded: once your turn has ended, Obeya lands your work on main.',
+                'a change to the work is to be committed by then',
+              );
+            return ending(END_TURN, "Recorded: your handover waits for the owner's approval.", 'if they change what you handed over, hand it over again');
           };
           // a demo made on another machine is served and shared from its copy here
           const handOverWith = (named?: CardFile[]): string | Promise<string> => {
@@ -2964,7 +2984,7 @@ export class Workers {
           if (!l.restarts) return 'Not recorded: Obeya does not start again for this landing; what runs now is what you get.';
           this.o.board.work(cardId, { landed: JSON.stringify({ ...l, waits: true } satisfies LandedState) });
           this.o.board.log(cardId, 'activity', 'worker', this.o.board.t.worker.waitsForRestart);
-          return 'Recorded. End your turn now.';
+          return ending('Recorded. End your turn now.', 'Recorded: Obeya tells you once it runs your change.');
         },
       },
       {
@@ -2999,7 +3019,11 @@ export class Workers {
           live.nudged = false;
           const s: Snooze = { ...(named ? { until: new Date(at).toISOString() } : {}), ...(on ? { on } : {}), by: 'agent', ...(String(why).trim() ? { why: clip(String(why).trim(), 200) } : {}) };
           this.o.board.snooze(cardId, s);
-          return `Snoozed until ${snoozedUntil(s)}. End your turn now; Obeya resumes this session then.`;
+          return ending(
+            `Snoozed until ${snoozedUntil(s)}. End your turn now; Obeya resumes this session then.`,
+            `Snoozed until ${snoozedUntil(s)}: Obeya resumes this session then.`,
+            'if they change what you wait for, snooze anew',
+          );
         },
       },
       {

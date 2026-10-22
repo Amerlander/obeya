@@ -359,6 +359,45 @@ describe('workers', () => {
     expect(s.toolStep()).toBeUndefined();
   });
 
+  test('a note that waited for a step that asks comes with its result, which leaves the worker to answer it or ask anew', async () => {
+    const c = manual();
+    await workers.start(c.id);
+    const s = runtime.last;
+    s.emit({ type: 'tool', name: 'Read', input: { file_path: 'export.ts' } });
+    workers.message(c.id, 'Bitte vorher auf main rebasen.');
+    const result = s.call('ask', { question: 'Soll das Video Ton haben?', options: ['Ja', 'Nein'] }) as string;
+    expect(result).not.toContain('without further work');
+    expect(result).toContain('your question waits for the owner on the card');
+    expect(result).toContain('Answer them with reply where they call for an answer');
+    expect(result).toContain('ask it anew');
+    expect(result).toContain('Bitte vorher auf main rebasen.');
+    // the note stands below the question, where the worker read it, and the step's context carries it no more
+    const question = board.events(c.id).findLast((e) => e.kind === 'question')!;
+    expect(board.events(c.id).find((e) => e.text === 'Bitte vorher auf main rebasen.')).toMatchObject({ readAfter: question.id });
+    expect(s.toolStep()).toBeUndefined();
+    // it answers, and asks anew: the card waits for the new question
+    s.call('reply', { text: 'Mache ich, bevor ich neu rendere.' });
+    s.call('ask', { question: 'Soll das Video nach dem Rebase Ton haben?', options: ['Ja', 'Nein'] });
+    s.emit({ type: 'idle' });
+    expect(state(c.id)).toBe('waiting:question');
+    expect(board.item(c.id)!.question?.text).toBe('Soll das Video nach dem Rebase Ton haben?');
+    // without words waiting, the result just ends the turn
+    workers.answer(c.id, 'Ja');
+    expect(s.call('ask', { question: 'Mit Untertiteln?' })).toContain('End your turn now without further work');
+  });
+
+  test('a note that waited for a handover comes with its result', async () => {
+    const c = manual();
+    await workers.start(c.id);
+    const s = runtime.last;
+    workers.message(c.id, 'Und die Spaltennamen auf Deutsch.');
+    const result = (await s.call('ready_for_review', { summary: 'Export als CSV.', demo: artifact() })) as string;
+    expect(result).toContain("your handover waits for the owner's approval");
+    expect(result).toContain('hand it over again');
+    expect(result).toContain('Und die Spaltennamen auf Deutsch.');
+    expect(s.toolStep()).toBeUndefined();
+  });
+
   test('a note the turn ended before taking in starts the next turn', async () => {
     const c = manual();
     await workers.start(c.id);
