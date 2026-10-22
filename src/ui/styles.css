@@ -1529,6 +1529,8 @@ button.link:hover { text-decoration: underline; }
 #deps path { fill: none; stroke: var(--waiting); stroke-width: 2.5; }
 #deps marker path { fill: var(--waiting); stroke: none; }
 .card.dep-self, .card.dep-before, .card.dep-after { box-shadow: 0 0 0 2.5px var(--waiting), var(--lift); }
+/* over a snoozed card's own shadow, hovered or not, in any state (the last `:is` weighs as its heaviest selector, and `*` matches all) */
+.card.snoozed:is(.dep-self, .dep-before, .dep-after):is(:hover, .s-waiting, .s-idea.your-turn, *) { box-shadow: 0 0 0 2.5px var(--waiting), var(--lift); }
 .card .dep-tag { position: absolute; left: 14px; top: -10px; padding: 1px 8px; border-radius: 2px; font-size: 11px; font-weight: 600;
   background: var(--waiting); color: var(--on-ink); white-space: nowrap; pointer-events: none; }
 
