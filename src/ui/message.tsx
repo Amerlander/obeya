@@ -9,6 +9,7 @@ import { type Block, blocks, Inline, ListTree, plain, Table } from './markdown';
 import { clock as time, t } from './strings';
 import type { Quoted } from './reply';
 import { clip } from '../core/text';
+import { copyOrSelect } from './copy';
 
 /**
  * A message's frame: `by` places and colours it (the owner's on the right), `who` heads it with its
@@ -138,11 +139,7 @@ export function Body({ md }: { md: string }) {
             </div>
           );
         case 'code':
-          return (
-            <pre key={i} className="p-code">
-              {b.text}
-            </pre>
-          );
+          return <Code key={i} text={b.text} />;
         case 'quote':
           return (
             <blockquote key={i} className="p-quote">
@@ -160,6 +157,48 @@ export function Body({ md }: { md: string }) {
       }
     });
   return <>{nodes(blocks(md, { breaks: true }))}</>;
+}
+
+/**
+ * A code block, with a button in its corner that puts its text on the clipboard as it is (what an
+ * agent drafted for the owner to send on, a command) and says so for a moment; where the page may not
+ * write the clipboard, it selects the text instead.
+ */
+function Code({ text }: { text: string }) {
+  const pre = useRef<HTMLPreElement>(null);
+  const [done, setDone] = useState<'copied' | 'selected' | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const copy = async () => {
+    const how = await copyOrSelect(text, pre.current!);
+    setDone(how);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setDone(null), how === 'copied' ? 2000 : 4000);
+  };
+  const label = done === 'copied' ? t.talk.copied : done === 'selected' ? t.talk.selected : t.talk.copy;
+  return (
+    <div className="p-code-box">
+      <pre ref={pre} className="p-code">
+        {text}
+      </pre>
+      <button
+        className={done ? `p-copy ${done}` : 'p-copy'}
+        title={t.talk.copy}
+        aria-label={label}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => void copy()}
+      >
+        {done ? (
+          <span>{label}</span>
+        ) : (
+          <svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true">
+            <rect x="7" y="7" width="9.5" height="9.5" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+            <path d="M13 4.5V4.2A1.2 1.2 0 0 0 11.8 3H4.2A1.2 1.2 0 0 0 3 4.2v7.6A1.2 1.2 0 0 0 4.2 13h.3" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        )}
+      </button>
+    </div>
+  );
 }
 
 /**

@@ -51,6 +51,14 @@ Messages new to the owner (after the last event they had in view and their own l
 orange edge until the conversation closes; the phone's button counts them. One that arrives while
 the conversation is in view gets none; one that came while the page was hidden keeps it. Seen state is kept per browser, on desktop and phone alike.
 
+A code block in a message (and in any Markdown text a card shows) wraps its lines and has a copy
+button in its corner, always in view: agents put there what the owner is to take elsewhere as it is
+(a drafted comment, a command, a message to send). The button puts the block's exact text on the
+clipboard and reads „Kopiert“ for a moment. Where the page may not write the clipboard (served over
+plain HTTP to another machine, as through a VPN, where browsers offer no clipboard API) it selects
+the block's text and copies the selection; where even that fails, the text stays selected and the
+button reads „Markiert: zum Kopieren lange drücken“.
+
 A conversation scrolled to its end follows it as it grows; scrolled up, it stays put, and only the
 owner's own words or actions take it to the end. Obeya's sheet does the same.
 
@@ -262,6 +270,10 @@ image.
   by its comment. From what the card shows too, artifacts and an idea's brief among it (owner, same
   day): those are what the owner answers most often. Rejected for framed pages: reading the
   selection from Obeya's page, which a sandboxed frame of origin `null` does not allow.
+- **Code blocks copy at a click and wrap** (owner, 2026-10-22): marking a drafted text by hand was
+  fiddly, on the phone above all. The button always shows, since a touch screen has no hover; the
+  block wraps, since what it holds is mostly prose the owner reads before sending it on. Rejected:
+  a button shown only on hover; scrolling a long line sideways.
 - **Order as the agent saw it** (2026-10-14): Obeya holds the words and passes them at the next
   step, so it knows where they were read and can take them back. Rejected: passing a note straight
   into the session; Obeya learned only at turn end what it took, and the SDK takes one back only by

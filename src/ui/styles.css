@@ -471,7 +471,7 @@ button.pill.help:hover, button.pill.help.on { color: var(--ink); }
 textarea.p-title { display: block; width: calc(100% - 40px); border: 0; background: transparent; padding: 0; outline: none; resize: none; overflow: hidden; }
 textarea.p-title::placeholder { color: var(--muted); font-weight: 400; font-style: italic; }
 .p-state { font-size: 13px; font-weight: 600; color: var(--c); }
-.p-lead { font-size: 15.5px; max-width: 76ch; margin: 14px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.p-lead { font-size: 15.5px; max-width: 76ch; margin: 14px 0 0; white-space: pre-wrap; overflow-wrap: break-word; }
 .p-list { max-width: 76ch; margin: 12px 0 0; padding-left: 0; list-style: none; font-size: 14px; }
 .p-list li { margin: 5px 0; padding-left: 24px; position: relative; }
 .p-list li::before { content: "•"; position: absolute; left: 7px; color: var(--muted); }
@@ -486,6 +486,15 @@ ol.p-list > li::before { content: none; }
 .p-table :is(th, td) { text-align: left; vertical-align: top; padding: 4px 12px 4px 0; border-bottom: 1px solid var(--line); }
 .p-table th { font-weight: 600; }
 .p-code { margin: 10px 0 0; padding: 8px 10px; background: var(--chip); border-radius: 2px; overflow: auto; font: 12.5px/1.5 var(--mono); }
+/* a code block's copy button (message.tsx), in its corner and always in view, also on a touch screen */
+.p-code-box { position: relative; margin: 10px 0 0; }
+/* a conversation's code block is often prose to send on (a drafted comment): it wraps, to be read without scrolling sideways */
+.p-code-box > .p-code { margin: 0; padding-right: 36px; white-space: pre-wrap; overflow-wrap: break-word; }
+.p-copy { position: absolute; top: 3px; right: 3px; min-width: 26px; height: 26px; display: grid; place-items: center; padding: 0 6px;
+  border: 0; border-radius: 3px; background: var(--chip); color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
+.p-copy:hover { color: var(--ink); background: var(--line); }
+.p-copy.copied { color: var(--ink); }
+@media (pointer: coarse) { .p-copy { min-width: 34px; height: 34px; } .p-code-box > .p-code { padding-right: 44px; } }
 .p-quote { margin: 10px 0 0; padding: 1px 0 1px 12px; border-left: 3px solid var(--line); color: var(--muted); }
 .p-quote > :first-child { margin-top: 0; }
 .p-hr { border: 0; border-top: 1px solid var(--line); margin: 12px 0; }
@@ -651,7 +660,7 @@ textarea.p-body:focus { border-color: var(--muted); }
 .talk .msg .p-lead { overflow-wrap: anywhere; }
 .talk .msg .p-lead { margin-top: 2px; font-size: 14px; }
 .talk .msg .p-list { margin-top: 4px; font-size: 13.5px; }
-.talk .msg :is(.p-table, .p-code, .p-quote) { margin-top: 6px; }
+.talk .msg :is(.p-table, .p-code-box, .p-quote) { margin-top: 6px; }
 .talk .msg .p-table table { font-size: 13.5px; }
 .talk .msg .who { font-size: 11px; font-weight: 600; color: var(--idea); }
 .talk .msg .who .t { color: var(--muted); font-weight: 400; margin-left: 4px; }
@@ -790,7 +799,7 @@ span.cl-name { color: inherit; cursor: default; }
 .r-ways a.link { color: var(--working); text-decoration: none; }
 .r-doc { max-width: 760px; }
 .doc-img { max-width: 100%; border-radius: 2px; vertical-align: middle; }
-.r-text { margin: 0; padding: 10px 12px; background: var(--chip); border-radius: 2px; font: 12.5px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.r-text { margin: 0; padding: 10px 12px; background: var(--chip); border-radius: 2px; font: 12.5px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: break-word; }
 .r-image { display: block; max-width: 100%; border: 1px solid var(--line); border-radius: 2px; background: #fff; }
 .r-page { width: 100%; min-height: 120px; height: min(560px, 62vh); border: 1px solid var(--line); border-radius: 3px; background: #fff; display: block; }
 .r-pdf { width: 100%; height: max(480px, calc(100vh - 320px)); border: 1px solid var(--line); border-radius: 3px; background: #fff; display: block; }
@@ -1375,7 +1384,7 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 .c-problem { margin: 6px 0 0; font-size: 13px; }
 .c-problem details { margin-top: 4px; }
 .c-problem summary { cursor: pointer; color: var(--muted); }
-.c-problem code { display: block; margin-top: 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.c-problem code { display: block; margin-top: 4px; white-space: pre-wrap; overflow-wrap: break-word; }
 .c-problem .btn { display: block; margin-top: 6px; color: var(--ink); }
 .c-actions { display: flex; gap: 8px; margin-top: 16px; }
 .c-install { display: flex; gap: 10px; align-items: center; margin: 4px 0; font-size: 12.5px; }

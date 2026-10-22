@@ -369,6 +369,11 @@ const de = {
     cite: 'Zitieren',
     citeHint: 'Den markierten Text in Anführungszeichen in deine Nachricht übernehmen',
     cited: (text: string) => `„${text}“ - `,
+    // the button in the corner of a code block, and what it says for a moment after
+    copy: 'Kopieren',
+    copied: 'Kopiert',
+    // where the browser lets the page not write the clipboard (an insecure origin)
+    selected: 'Markiert: zum Kopieren lange drücken',
   },
   lastFailure: (at: string) => `Zuletzt gescheitert (${at})`,
   author: { worker: 'Agent', owner: 'Du', project: 'Projekt-Agent', koordinator: 'Obeya', obeya: 'Obeya', explorer: 'Explorations-Agent' },
@@ -2025,6 +2030,9 @@ const en: Strings = {
     cite: 'Quote',
     citeHint: 'Put the marked text into your message, in quotation marks',
     cited: (text: string) => `“${text}” - `,
+    copy: 'Copy',
+    copied: 'Copied',
+    selected: 'Selected: press and hold to copy',
   },
   lastFailure: (at: string) => `Last failed (${at})`,
   author: { worker: 'Agent', owner: 'You', project: 'Project agent', koordinator: 'Obeya', obeya: 'Obeya', explorer: 'Exploration agent' },
