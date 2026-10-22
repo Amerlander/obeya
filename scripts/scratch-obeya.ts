@@ -126,7 +126,10 @@
 // host at the same path, so that Obeya clones it there as it would a remote; staging afresh
 // removes <dir> there first. A host with `"gone": true` held its clones once and does not answer
 // now (an `ssh` target nobody resolves, say): nothing goes there, and its clones are registered as if
-// Obeya had made them. `name` names the canvas the cards go on; `canvases` adds further ones by
+// Obeya had made them. `name` names the canvas the cards go on; `repoName` names its repository's
+// directory (<dir>/repo by default), and so its id; `repos` adds further repositories to that canvas,
+// `[{ "name": "promo", "files": { … } }]`, each in <dir>/<name> with that id, which a card's `repo`
+// names; `canvases` adds further ones by
 // name, each over a repository of its own (<dir>/repo-2, …); a card goes on one of them by its `canvas` (the name). Preferences are active unless `state` says otherwise; `card` and `replaces` name keys;
 // `target` is the repository whose CLAUDE.md a rule is for (the canvas id names the home one).
 // What a learned rule's occasion is (card, quote, review), `replaces` and `target` need code that has them.
@@ -200,6 +203,10 @@ interface Stage {
   language?: Language;
   /** The owner's conversation language; the interface's without it. */
   conversation?: Language;
+  /** The directory of the canvas's repository under the scratch directory, and so its id (default `repo`). */
+  repoName?: string;
+  /** Further repositories on the canvas the cards go on, each in a directory of its name, which is its id. */
+  repos?: { name: string; files?: Record<string, string> }[];
   /** Further canvases by name, each over a repository of its own, without cards: to switch between canvases. */
   canvases?: string[];
   /** Without it (and without --port) the script picks a free one. */
@@ -313,7 +320,7 @@ rmSync(dir, { recursive: true, force: true });
 const home = join(dir, 'home');
 /** Where a host keeps the repository's clones. */
 const rootOn = (h: { root?: string }) => h.root ?? `${dir}/far`;
-const repo = join(dir, 'repo');
+const repo = join(dir, stage.repoName ?? 'repo');
 const mainBranch = stage.mainBranch ?? 'main';
 mkdirSync(home, { recursive: true });
 for (const k of ['language', 'conversation'] as const) if (stage[k] && !LANGUAGES.includes(stage[k])) fail(`"${k}" is ${LANGUAGES.join(' or ')}, not ${stage[k]}`);
@@ -340,6 +347,18 @@ if (stage.poolCheckout || stage.hosts?.length) {
   run('git', ['fetch', '-q', 'origin'], repo);
   run('git', ['branch', '-q', '-u', `origin/${mainBranch}`], repo);
 }
+// the further repositories of the canvas
+const others = (stage.repos ?? []).map((r) => {
+  const path = join(dir, r.name);
+  mkdirSync(path, { recursive: true });
+  const files = r.files && Object.keys(r.files).length ? r.files : { 'README.md': `# ${r.name}\n` };
+  for (const [file, text] of Object.entries(files)) {
+    mkdirSync(dirname(join(path, file)), { recursive: true });
+    writeFileSync(join(path, file), text);
+  }
+  initRepo(path);
+  return { path, ...(stage.clones ? { clones: stage.clones } : {}) };
+});
 // the repositories of the further canvases
 const further = (stage.canvases ?? []).map((name, i) => {
   const path = join(dir, `repo-${i + 2}`);
@@ -396,7 +415,7 @@ const supervised = args.includes('--restarts');
 const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'OBEYA_SUPERVISED')), OBEYA_HOME: home };
 // a pool's workspaces live in the configuration, which the command line cannot give
 const configFile = join(dir, 'canvases.json');
-const configured = folder || !!stage.poolCheckout || stage.slots !== undefined || !!stage.hosts?.length || !!stage.name || further.length > 0;
+const configured = folder || !!stage.poolCheckout || stage.slots !== undefined || !!stage.hosts?.length || !!stage.name || further.length > 0 || others.length > 0;
 if (configured)
   writeFileSync(
     configFile,
@@ -413,6 +432,7 @@ if (configured)
               ...(stage.slots !== undefined ? { slots: stage.slots } : {}),
               ...(stage.hosts?.length ? { hosts: stage.hosts.map(({ gone: _, ...h }) => ({ ...h, root: rootOn(h) })) } : {}),
             },
+            ...others,
           ],
         },
         ...further,
@@ -547,15 +567,19 @@ for (const [i, c] of stage.cards.entries()) {
       s: JSON.stringify({ held: true, undo: null, changes: c.changes ?? [] }),
     });
   } else if (c.workspace) {
-    const free = db.query('SELECT path FROM workspaces WHERE card_id IS NULL ORDER BY path').get() as { path: string } | null;
+    // a card on a further repository of the canvas (`repos`) works in a workspace of that one
+    const other = c.repo && c.repo !== (stage.repoName ?? 'repo') ? c.repo : null;
+    const checkout = other ? join(dir, other) : repo;
+    const free = db.query('SELECT path FROM workspaces WHERE card_id IS NULL AND repo IS $r ORDER BY path').get({ r: other }) as { path: string } | null;
     // no clones: the repository works in worktrees, one per card under Obeya's home
     const tree = !free && !!branch && !stage.clones;
     if (!free && !tree) fail(`card ${c.key ?? i}: no free clone for it ("clones" in the stage, settings that say clones), nor a branch for a worktree`);
     const path = tree ? join(home, 'workspaces', canvas, id.slice(0, 8)) : free!.path;
     if (tree) {
       mkdirSync(dirname(path), { recursive: true });
-      run('git', ['worktree', 'add', '-q', '-b', branch!, path, mainBranch], repo);
-      db.query('INSERT INTO workspaces (path, canvas_id, card_id) VALUES ($path, $c, $id)').run({ path, c: canvas, id });
+      run('git', ['worktree', 'add', '-q', '-b', branch!, path, mainBranch], checkout);
+      if (other) db.query('INSERT INTO workspaces (path, canvas_id, card_id, repo) VALUES ($path, $c, $id, $r)').run({ path, c: canvas, id, r: other });
+      else db.query('INSERT INTO workspaces (path, canvas_id, card_id) VALUES ($path, $c, $id)').run({ path, c: canvas, id });
     } else {
       db.query('UPDATE workspaces SET card_id = $id WHERE path = $path').run({ id, path });
       if (branch) run('git', ['checkout', '-q', '-b', branch], path);
