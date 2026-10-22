@@ -108,8 +108,8 @@ export function Quote({ q, onClear }: { q: Quoted; onClear?: () => void }) {
 }
 
 /**
- * Text from a plan doc or an agent, as markdown: each line a paragraph, lists (list items as a
- * checklist), tables, code, quotes, and headings as bold lines.
+ * Text from a plan doc or an agent, as markdown: each line a paragraph, a blank line one empty line,
+ * lists (list items as a checklist), tables, code, quotes, and headings as bold lines.
  */
 export function Body({ md }: { md: string }) {
   const nodes = (bs: Block[]): ReactNode[] =>
@@ -151,6 +151,12 @@ export function Body({ md }: { md: string }) {
           );
         case 'hr':
           return <hr key={i} className="p-hr" />;
+        case 'blank':
+          return (
+            <p key={i} className="p-lead p-blank" aria-hidden="true">
+              {'\u00a0'}
+            </p>
+          );
       }
     });
   return <>{nodes(blocks(md, { breaks: true }))}</>;

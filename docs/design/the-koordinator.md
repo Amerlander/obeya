@@ -141,9 +141,9 @@ default); their state is kept per canvas in the browser. What runs is not listed
 it.
 
 Messages look like a card's: the owner's on the right, who and when above, markdown (each line a
-paragraph, lists, tables, code, nested quotes; the plan docs' parser), a taken-back reply struck
-through, bare web addresses as links without `https://` and without the sentence's punctuation after
-them.
+paragraph, each blank line an empty line as typed, lists, tables, code, nested quotes; the plan
+docs' parser), a taken-back reply struck through, bare web addresses as links without `https://`
+and without the sentence's punctuation after them.
 
 ### Arbeitsrückschau
 

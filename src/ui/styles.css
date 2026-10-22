@@ -489,6 +489,8 @@ ol.p-list > li::before { content: none; }
 .p-quote { margin: 10px 0 0; padding: 1px 0 1px 12px; border-left: 3px solid var(--line); color: var(--muted); }
 .p-quote > :first-child { margin-top: 0; }
 .p-hr { border: 0; border-top: 1px solid var(--line); margin: 12px 0; }
+/* a message's blank line: one empty line, whatever space its context keeps above a paragraph */
+.p-blank { margin-top: 0 !important; }
 .p-src { margin-top: 22px; color: var(--muted); font-size: 12.5px; }
 .p-src code { font-size: 12px; }
 textarea.p-body { display: block; width: 100%; max-width: 76ch; min-height: 180px; margin-top: 16px; padding: 12px 14px;

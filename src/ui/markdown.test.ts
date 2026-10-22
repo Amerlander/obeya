@@ -141,6 +141,22 @@ describe('messages', () => {
     ]);
   });
 
+  test('each blank line between blocks stays, none before the first or after the last', () => {
+    const md = '\nPost:\n\nOne\n\n\nTwo\n- item\n\nAfter.\n\n';
+    expect(blocks(md, { breaks: true })).toEqual([
+      { t: 'p', text: 'Post:' },
+      { t: 'blank' },
+      { t: 'p', text: 'One' },
+      { t: 'blank' },
+      { t: 'blank' },
+      { t: 'p', text: 'Two' },
+      { t: 'list', list: { ordered: false, items: [{ text: 'item', mark: '', children: [] }] } },
+      { t: 'blank' },
+      { t: 'p', text: 'After.' },
+    ]);
+    expect(blocks('One\n\nTwo').map((b) => b.t)).toEqual(['p', 'p']);
+  });
+
   test('a line after a list item that is not indented ends the list', () => {
     const md = '- one\n  wrapped\n- two\nAfter.';
     expect(blocks(md, { breaks: true })).toEqual([

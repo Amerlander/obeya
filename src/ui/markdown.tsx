@@ -75,6 +75,7 @@ export type Block =
   | { t: 'code'; text: string }
   | { t: 'quote'; blocks: Block[] }
   | { t: 'hr' }
+  | { t: 'blank' }
   | { t: 'table'; head: string[]; rows: string[][] }
   | { t: 'list'; list: List };
 export type List = { ordered: boolean; items: ListItem[] };
@@ -88,8 +89,9 @@ const RULE = /^\s*([-*_])(\s*\1){2,}\s*$/;
 /**
  * Splits a markdown document into blocks: headings, paragraphs, lists, tables, quotes, code. A quote
  * holds blocks of its own.
- * `breaks`: every line break ends a paragraph, and a line that is not indented ends a list, as in a
- * chat message; a document joins wrapped lines.
+ * `breaks`: every line break ends a paragraph, a line that is not indented ends a list, and each
+ * blank line between blocks stays as one (`blank`), as in a chat message; a document joins wrapped
+ * lines.
  */
 export function blocks(md: string, { breaks = false } = {}): Block[] {
   const lines = md.replace(/\r\n/g, '\n').replace(/<!--[\s\S]*?-->/g, '').split('\n');
@@ -99,6 +101,7 @@ export function blocks(md: string, { breaks = false } = {}): Block[] {
   while (i < lines.length) {
     const line = lines[i]!;
     if (!line.trim()) {
+      if (breaks && out.length && lines.slice(i + 1).some((l) => l.trim())) out.push({ t: 'blank' });
       i++;
     } else if (FENCE.test(line)) {
       const fence = FENCE.exec(line)![1]!;
@@ -273,6 +276,8 @@ export function Doc({ md, mark, markRef }: { md: string; mark?: string; markRef?
           return <blockquote key={i}>{nodes(b.blocks)}</blockquote>;
         case 'hr':
           return <hr key={i} />;
+        case 'blank':
+          return null;
         case 'table':
           return (
             <div key={i} className="table">
