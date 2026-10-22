@@ -522,6 +522,20 @@ describe('a card that starts later', () => {
     expect(item(d.id).queue).toMatchObject({ checking: true });
   });
 
+  test('a new card the owner wants done later is planned and starts at the time, not at once; a time passed in the undo window starts it now', async () => {
+    const until = later(40 * DAY);
+    const id = canvas.run({ do: 'newCard', title: 'Depots einrichten', body: 'Anfang Dezember.', start: true, until, place: { x: 0, y: 0 } }) as string;
+    expect(item(id)).toMatchObject({ state: 'planned', snoozed: { by: 'owner', start: true, until } });
+    expect(item(id).queue).toBeUndefined();
+    canvas.wakeDue(Date.parse(until) + 1);
+    expect(item(id).snoozed).toBeUndefined();
+    expect(item(id).queue).toMatchObject({ checking: true });
+
+    const passed = canvas.run({ do: 'newCard', title: 'Gleich', body: '', start: true, until: later(-1000), place: { x: 0, y: 0 } }) as string;
+    expect(item(passed).snoozed).toBeUndefined();
+    expect(item(passed).queue).toMatchObject({ checking: true });
+  });
+
   test('a snoozed planned card that is no longer planned to start is snoozed no longer, nor one archived and brought back', () => {
     const c = board().create({ title: 'Erst Montag', x: 0, y: 0 });
     canvas.act(c.id, { action: 'snooze', until: later(DAY) });

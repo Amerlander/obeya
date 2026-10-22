@@ -155,7 +155,10 @@ instead.
 #### New cards
 
 A new card, a follow-up too, starts at once like "Agent starten" (conflict check, queue), unless the
-owner says it should wait („nur notieren“, „für später“, „noch nicht starten“). Work on the machine
+owner says it should wait („nur notieren“, „für später“, „noch nicht starten“). One the owner names a
+time for („Anfang Dezember“, „in zwei Wochen“) is planned and snoozed until then, starting by itself
+at the time like a planned card the owner snoozed (see Snoozing a card); a day without an hour means
+08:00 that day. Work on the machine
 that changes no code (creating a repository, installing a tool, converting files) is a card too: its
 agent has the shell and asks the owner's permission.
 
@@ -320,6 +323,10 @@ runs it from a checkout, starting the server there if none runs.
 - **A reply in the open sheet gets no line above the mic** (2026-10-17): the owner reads it there.
 - **A new card starts unless told to wait**: left to judge, the Koordinator kept one in five plainly
   asked-for tasks planned.
+- **A new card for a named later time is snoozed until then** (2026-10-22), in the same action that
+  creates it. Without that, the Koordinator could only start such a card or plan it: it started a
+  follow-up for „Anfang Dezember“, which went into the queue behind other work, and said it was set
+  aside.
 - **The Koordinator knows what a card's agent can do on the machine** (2026-10-18): otherwise it told
   the owner to `git init` themselves rather than make a card for it.
 - **A new card lands where the owner looks** (2026-10-14). Rejected: a column right of everything.

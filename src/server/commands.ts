@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { settingsShape } from '../adapters/schema';
-import { type AgentSetting, agentListens, answering, askable, type Awaited, awaited, type AwaitedState, blocksSaving, type CanvasConfig, finished, handedOver, type Item, type NextStep, type Notice, openQuestions, pausable, plannableAsProject, prototypeWorkstream, snoozable, type Queue, type SpotInput, type Talk, type TalkAfter, type TalkQuote, type TalkRef } from '../core/types';
+import { type AgentSetting, agentListens, answering, askable, type Awaited, awaited, type AwaitedState, blocksSaving, type CanvasConfig, finished, handedOver, type Item, type NextStep, type Notice, openQuestions, pausable, plannableAsProject, prototypeWorkstream, snoozable, SNOOZE_LIMIT, type Queue, type SpotInput, type Talk, type TalkAfter, type TalkQuote, type TalkRef } from '../core/types';
 import { inQueue, notStarted } from '../core/queue';
 import { answerTag, fromAnswerTag } from './answers';
 import { BadRequest, type Board, excerpt, replyNote } from './board';
@@ -17,8 +17,11 @@ import { clip, oneLine, messageOf } from '../core/text';
 import type { Wish } from '../core/wish';
 
 export type Command = (
-  /** `from`: the card it follows up on; `place`: where the owner was on the canvas, for one without. */
-  | { do: 'newCard'; title: string; body: string; start: boolean; repo?: string; from?: string; place?: Place }
+  /**
+   * `from`: the card it follows up on; `place`: where the owner was on the canvas, for one without;
+   * `until` (ISO): it is planned and starts by itself then, as a planned card the owner snoozed.
+   */
+  | { do: 'newCard'; title: string; body: string; start: boolean; until?: string; repo?: string; from?: string; place?: Place }
   | { do: 'newIdea'; title: string; body: string; repo?: string; place?: Place }
   /** `force` starts a card that waits behind others now, despite the likely merge conflict. */
   /** `direct`: onto the default branch without a pull request, where the card's repository allows it. */
@@ -697,7 +700,7 @@ export class Commander {
           description: [
             'Do what the owner asked: one or more actions, in the order the owner said them. They run together after a short undo window, with one confirmation for all.',
             'Actions (card: the tag of the card; new_card and new_idea take none, except a follow-up):',
-            `- new_card: a new card. title short and precise, body what the owner asked for in their words, start false only when the owner says it should wait („nur notieren“, „für später“, „noch nicht starten“), else true: work on it begins right away, as with a click on "Agent starten" (checked for conflicts with work in progress, queued if need be)${repos.length > 1 ? ', repo the repository it belongs to (an id from the list)' : ''}. A follow-up of a card (for one of its findings, or something from its summary): card the tag of that card, and body the finding or passage in full, then what the owner added.`,
+            `- new_card: a new card. title short and precise, body what the owner asked for in their words, start false only when the owner says it should wait („nur notieren“, „für später“, „noch nicht starten“), else true: work on it begins right away, as with a click on "Agent starten" (checked for conflicts with work in progress, queued if need be); until when the owner names a time for the work („Anfang Dezember“, „erst am Montag“, „in zwei Wochen“): it is planned now and starts by itself then, as with snooze on a planned card (the local time as for snooze, 08:00 on a day without an hour, the first of a month for its beginning)${repos.length > 1 ? ', repo the repository it belongs to (an id from the list)' : ''}. A follow-up of a card (for one of its findings, or something from its summary): card the tag of that card, and body the finding or passage in full, then what the owner added.`,
             "- start: start work on a planned card. On a queued card (waiting behind cards in progress or queued ahead of it) it starts it now, despite the likely merge conflict; a card Obeya is still checking starts by itself unless its changes likely conflict with work in progress. On a project: all its planned workstreams go to Obeya together, which decides their order and which of them wait (for a dependency or a likely conflict); use it when the owner wants a project's workstreams started (\"starte das Projekt\", \"alle Workstreams\") rather than starting them one by one.",
             '- dequeue: take a card out of the queue (waiting behind other cards, for a free workspace, or still being checked by Obeya); it goes back to planned and does not start until started again („nimm … aus der Warteschlange“, „lass … doch noch nicht starten“).',
             "- note: text to the agent working on a card (working, in PR, waiting, or live or done while its agent finishes after the landing), or for the agent that will take on a card waiting in the queue, which gets it with the task; it doesn't stop it. Whatever the owner says to the agent: an instruction, a remark on its work, a question to it; never a question the owner asks you about the canvas.",
@@ -968,7 +971,11 @@ export class Commander {
       const repo = this.newCardRepo(a);
       const from = a.card ? s.tags.get(a.card) : undefined;
       if (a.card && (!from || !this.o.board.item(from))) return `unknown tag ${a.card}; give the card a follow-up comes from, or none`;
-      return { do: 'newCard', title: a.title.trim(), body: a.body ?? '', start: a.start !== false, ...(repo ? { repo } : {}), ...(from ? { from } : {}) };
+      const until = a.until?.trim() ? Date.parse(a.until) : undefined;
+      if (until !== undefined && Number.isNaN(until)) return 'until is no time: the local time as YYYY-MM-DDTHH:MM';
+      if (until !== undefined && until <= Date.now()) return 'that time has passed: leave until out to start it now';
+      if (until !== undefined && until > Date.now() + SNOOZE_LIMIT) return 'until lies more than a year ahead';
+      return { do: 'newCard', title: a.title.trim(), body: a.body ?? '', start: a.start !== false, ...(until !== undefined ? { until: new Date(until).toISOString() } : {}), ...(repo ? { repo } : {}), ...(from ? { from } : {}) };
     }
     const id = a.card ? s.tags.get(a.card) : undefined;
     const card = id ? this.o.board.item(id) : undefined;

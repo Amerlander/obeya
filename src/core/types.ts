@@ -413,6 +413,9 @@ export interface Item {
   group?: string;
 }
 
+/** A year: no card is snoozed longer, nor set to start later than that. */
+export const SNOOZE_LIMIT = 366 * 24 * 60 * 60_000;
+
 /**
  * A card set aside until a point in time (`CardRow.snoozed`): by its worker, which has nothing to do
  * until then (a test that runs for days, a check at midnight), or by the owner; or by its worker

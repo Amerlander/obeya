@@ -13,7 +13,7 @@ import { repoName } from '../adapters/generic';
 import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
 import type { Language } from '../core/locale';
-import { AGENT_DEFAULTS, agentListens, type AgentRole, awaited, type Awaited, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, needsYou, snoozable, type PendingRestart, plannableAsProject, plannedToStart, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, type SharedSettings, type SpotInput, type TrustGroup } from '../core/types';
+import { AGENT_DEFAULTS, agentListens, type AgentRole, awaited, type Awaited, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, needsYou, snoozable, SNOOZE_LIMIT, type PendingRestart, plannableAsProject, plannedToStart, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, type SharedSettings, type SpotInput, type TrustGroup } from '../core/types';
 import { inQueue } from '../core/queue';
 import { BadRequest, Board, pathOfRef, replyNote } from './board';
 import { type Command, Commander } from './commands';
@@ -170,8 +170,6 @@ const BOARD_ONLY: CardAction['action'][] = ['name', 'dequeue', 'reorder', 'start
 
 /** The card's repository does not run on the canvas: nothing goes to its agents (`Item.repoDown`). */
 const repoDown = (card: Item) => new BadRequest('repoDown', `the repository ${card.repo} of the card does not run on this canvas`);
-/** No card is snoozed longer than this. */
-const SNOOZE_LIMIT = 366 * 24 * 60 * 60_000;
 
 export class CanvasRuntime {
   readonly board: Board;
@@ -1880,7 +1878,9 @@ export class CanvasRuntime {
           ...at,
         });
         this.board.log(card.id, 'state', 'owner', this.board.t.voice.created);
-        if (c.start) this.koordinator.request(card.id);
+        // one for later waits until then; a time that passed in the undo window starts it now
+        if (c.until && Date.parse(c.until) > Date.now()) this.snooze(card.id, c.until);
+        else if (c.start || c.until) this.koordinator.request(card.id);
         return card.id;
       }
       case 'newIdea': {

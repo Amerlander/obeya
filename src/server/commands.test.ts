@@ -239,6 +239,29 @@ describe('the Koordinator remembers', () => {
     ]);
   });
 
+  test('a new card for a named later time is planned to start then („Folgekarte für Anfang Dezember“); a time passed or no time is refused', async () => {
+    const k = commander();
+    const p = (n: number) => String(n).padStart(2, '0');
+    const local = (days: number) => {
+      const d = new Date(Date.now() + days * 86_400_000);
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T08:00`;
+    };
+    const { heard, session } = await say(k, 'Leg eine Folgekarte an, dass ich mich Anfang Dezember um die Depots kümmere', 'act', {
+      actions: [{ do: 'new_card', title: 'Depots einrichten', body: 'Anfang Dezember die Depots einrichten.', until: local(40) }],
+      confirm: 'Neue Aufgabe „Depots einrichten“, sie startet am 1. Dezember um 8 Uhr.',
+    });
+    expect(session.spec.tools.find((t) => t.name === 'act')!.description).toContain('until when the owner names a time for the work');
+    k.arm(heard.token!);
+    await new Promise((r) => setTimeout(r, 40));
+    expect(executed).toEqual([{ do: 'newCard', title: 'Depots einrichten', body: 'Anfang Dezember die Depots einrichten.', start: true, until: new Date(local(40)).toISOString() }]);
+    for (const [until, why] of [
+      [local(-1), 'that time has passed'],
+      [local(400), 'more than a year ahead'],
+      ['Anfang Dezember', 'until is no time'],
+    ])
+      expect(String(runtime.last.call('act', { actions: [{ do: 'new_card', title: 'X', body: 'Y', until }], confirm: 'x' }))).toContain(why!);
+  });
+
   test('"ohne PR" approves directly where the repository allows it, and is refused with the reason where it does not', async () => {
     board = new Board(
       store,

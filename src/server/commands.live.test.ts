@@ -1,6 +1,6 @@
 // The Koordinator's prompt against the real model: requests the agent of an open card passes on from
 // the owner's words, in each state an agent is on; sentences said or typed with a card open that no
-// agent works on; new tasks that start or wait; questions with no card open (an opinion becomes
+// agent works on; new tasks that start, wait, or start at a time the owner names; questions with no card open (an opinion becomes
 // an idea, a fact stays in the conversation, work on the machine such as a new repository is a task);
 // requests Obeya cannot do, or words for its makers; and a step promised for once a card is done,
 // which it waits for and then takes by itself.
@@ -105,14 +105,16 @@ test.skipIf(!process.env.OBEYA_LIVE)(
   300_000,
 );
 
-/** What the owner says for a new task, in which language, and whether it starts. */
-const NEW_TASKS: [string, 'de' | 'en', boolean][] = [
+/** What the owner says for a new task, in which language, and whether it starts now, later (at a time the owner named) or not. */
+const NEW_TASKS: [string, 'de' | 'en', boolean | 'later'][] = [
   ['Tipjar should split the bill Add a field for how many people there are and show what each person pays', 'en', true],
   ['Tipjar soll die Rechnung aufteilen ein Feld für die Personenzahl und zeig was jede Person zahlt', 'de', true],
   ['Das Trinkgeld soll man auch frei in Prozent eingeben können', 'de', true],
   ['Neue Aufgabe für später: Tipjar soll die Rechnung aufteilen', 'de', false],
   ['Just note it down for later: a field for how many people there are', 'en', false],
   ['Neue Aufgabe Export als PDF aber noch nicht starten', 'de', false],
+  ['Leg eine Aufgabe an, dass ich mich Anfang Dezember um den Export als PDF kümmere, wenn es bis dahin bessere Bibliotheken gibt', 'de', 'later'],
+  ['Make a card to add the tip presets in two weeks, once the new prices are out', 'en', 'later'],
 ];
 
 /** The new card one sentence makes on a canvas like the one in the hero video: whether it starts. */
@@ -128,16 +130,17 @@ async function newTask(text: string, language: 'de' | 'en') {
   if (heard.token) k.arm(heard.token);
   await new Promise((r) => setTimeout(r, 20));
   const card = executed.find((c) => c.do === 'newCard');
-  return { start: card && 'start' in card ? card.start : undefined, confirm: heard.confirm };
+  const until = card?.do === 'newCard' ? card.until : undefined;
+  return { start: card?.do === 'newCard' ? (until ? 'later' : card.start) : undefined, until, confirm: heard.confirm };
 }
 
 test.skipIf(!process.env.OBEYA_LIVE)(
-  'a new task starts at once unless the owner says it should wait',
+  'a new task starts at once unless the owner says it should wait, or later when they name a time',
   async () => {
     const runs = NEW_TASKS.flatMap((c) => [c, c, c]);
     const results = await Promise.all(runs.map(async ([text, language, want]) => ({ text, want, got: await newTask(text, language) })));
     const wrong = results.filter((r) => r.got.start !== r.want);
-    for (const r of results) console.log(`${wrong.includes(r) ? '✗' : '✓'} „${r.text}“ → ${r.got.start === undefined ? 'no new card' : r.got.start ? 'starts' : 'planned'} · ${r.got.confirm}`);
+    for (const r of results) console.log(`${wrong.includes(r) ? '✗' : '✓'} „${r.text}“ → ${r.got.start === undefined ? 'no new card' : r.got.start === 'later' ? `starts ${r.got.until}` : r.got.start ? 'starts' : 'planned'} · ${r.got.confirm}`);
     expect(wrong.map((r) => r.text)).toEqual([]);
   },
   300_000,

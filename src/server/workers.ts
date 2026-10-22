@@ -11,7 +11,7 @@ import { realpathSync } from 'node:fs';
 import { basename, isAbsolute } from 'node:path';
 import { type CardFile, docImages, fileKind, isImage, normalPath, shownFiles } from '../core/files';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
-import { answering, askable, type Awaited, AWAITED_STATES, awaited, type BackgroundTask, pausable, type WorkerTurn, type CardLanding, type DemoKind, type DemoPage, finished, formatQuestion, handedOver, type Item, type TaskAuthor, taskAuthor, type Mock, ownWords, pickedAnswer, type Question, type RepoSettings, type RestartReason, type Snooze, type Spot, type Superseded, type SpotInput, started } from '../core/types';
+import { answering, askable, type Awaited, AWAITED_STATES, awaited, type BackgroundTask, pausable, type WorkerTurn, type CardLanding, type DemoKind, type DemoPage, finished, formatQuestion, handedOver, type Item, type TaskAuthor, taskAuthor, type Mock, ownWords, pickedAnswer, type Question, type RepoSettings, type RestartReason, type Snooze, SNOOZE_LIMIT, type Spot, type Superseded, type SpotInput, started } from '../core/types';
 import { BadRequest, type Board, replyNote, type Retracted, type StoredDemo, titleKey } from './board';
 import { type Asked, decisionLog, toQuestion, withPick } from './advisor';
 import { checkArtifact, DEMO_SKILL, DEMO_SKILL_FILE, demoSkillName, OBEYA_PLUGIN, placeIn, readChapters } from './demo';
@@ -392,9 +392,6 @@ const stillDue = (due: DueRestart) =>
 
 const RESUMED =
   'The owner paused you and has now let you go on. Pausing ended your session at once: whatever you had running was stopped with it, background commands, servers you started, and a command still running in your turn (its result shows exit code 137). Run again what you still need, and go on where you stopped.';
-
-/** A year: no snooze lasts longer. */
-const SNOOZE_LIMIT = 366 * 24 * 60 * 60_000;
 
 /** Until when a worker snoozed, as it hears it: a time, or the card it waits on (and the time at the latest). */
 function snoozedUntil(s: Snooze): string {
