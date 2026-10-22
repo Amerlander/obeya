@@ -310,7 +310,8 @@ as a meta tag, ahead of its own HTML, so nothing in the mock can push it out of 
 
 The artifact's `index.html` reports its height as a shared artifact's page does (see A shared
 artifact), so the frame grows to the page (up to 30,000 px) without a scrollbar of its own and only the
-card's column scrolls.
+card's column scrolls. On the card it also reports what the owner marks in it, to be quoted
+into the field (see Quoting marked text).
 
 The addresses the card loads its demo from carry the handover (`?v=<handover>`), since a worker
 often renders a new demo into the directory of the one before: a card left open loads the new demo

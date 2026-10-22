@@ -90,7 +90,15 @@ Koordinator always gets the quote whole; in the sheet a looked-up answer by its 
 
 To answer a part of a message, the owner marks it in the conversation, in anyone's message, their
 own included; on a card with a field and in Obeya's sheet a small button with a quotation-mark icon
-appears beside the marking (named „Zitieren“ beside the icon until used once). At the desk it
+appears beside the marking (named „Zitieren“ beside the icon until used once). The same holds for
+what such a card shows beside its conversation (an idea's brief and mocks, a task's text, an HTML
+artifact, a file the card shows, formatted or as a page) and for a page an answer in the sheet comes
+with: the quote goes into that card's field, on the phone opening the panel the field is in. A
+framed page is the worker's and cannot be read from Obeya's page, so every page Obeya frames on its
+own page (not a shared copy) tells it what is marked in it, with where its first and last line
+stand. Only the frame the owner is in is heard, the button stays beside that frame whatever the
+page says, and the text reaches the field only on the owner's press. There is one marking at a time: a new one in a frame takes away the
+page's, a press on Obeya's page the frame's, as one page's marking would. At the desk it
 stands at the end where the pointer let go, outside the marking; on a touch screen below the middle
 of the marking's last line, clear of the selection handles and of the system's menu above. A press
 puts the marked text, on one line, in quotation marks of the UI language into the field, followed by
@@ -251,7 +259,9 @@ image.
 - **Quoting marked text into the field** (owner, 2026-10-22): the owner often answers single
   sentences or parts of them and did so by copy, paste, quotation marks and „ - “ by hand. The quote
   is text in the field rather than a reply chip, so several can stand in one message, each followed
-  by its comment.
+  by its comment. From what the card shows too, artifacts and an idea's brief among it (owner, same
+  day): those are what the owner answers most often. Rejected for framed pages: reading the
+  selection from Obeya's page, which a sandboxed frame of origin `null` does not allow.
 - **Order as the agent saw it** (2026-10-14): Obeya holds the words and passes them at the next
   step, so it knows where they were read and can take them back. Rejected: passing a note straight
   into the session; Obeya learned only at turn end what it took, and the SDK takes one back only by

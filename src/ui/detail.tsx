@@ -439,6 +439,7 @@ export function Detail(p: Props) {
             </>
           }
           talk={<TaskTalk item={item} act={act} tell={tell} />}
+          cite={!!ownerField(item) && cardDraft(item.id)}
         />
       ) : worked ? (
         // what came of the work on the left, once there is something, the conversation with the owner's one field on the right;
@@ -510,6 +511,7 @@ export function Detail(p: Props) {
           }
           // what is typed into a card waiting to start waits for its agent, not for Obeya
           talk={<TaskTalk item={item} listener={inQueue(item) ? undefined : listener} act={act} tell={tell} />}
+          cite={!!ownerField(item) && cardDraft(item.id)}
         />
       ) : (
         <>
@@ -689,6 +691,7 @@ function IdeaView({ item, act, run, listener, onDelete, onTell, prototypes }: { 
       </div>
       {/* the brief is what stays; the conversation beside it is how it came about */}
       <Split
+        cite={!item.archivedAt && cardDraft(item.id)}
         main={
           <>
             <div className="question brief">
@@ -885,6 +888,7 @@ function ProposalView({
       {/* the proposal as it stands, and beside it the talk about what should change, as with an idea */}
       <Split
         className="proposal-grid"
+        cite={cardDraft(item.id)}
         main={
           <>
             {children}
@@ -2350,12 +2354,21 @@ function TaskTalk({
 /**
  * The layout every card with a conversation shares, idea, proposal or task: what the card is about
  * on the left (brief, text, demo), the conversation on the right; the decisions go below both.
- * Without anything on the left (a task with no result yet), the conversation stands alone.
+ * Without anything on the left (a task with no result yet), the conversation stands alone. `cite`:
+ * the draft of the card's field, which text marked on the left can be quoted into.
  */
-function Split({ main, talk, className }: { main: ReactNode; talk: ReactNode; className?: string }) {
+function Split({ main, talk, className, cite }: { main: ReactNode; talk: ReactNode; className?: string; cite?: string | false }) {
+  const box = useRef<HTMLDivElement>(null);
+  // on the phone the field is in a panel of its own, which a quote brings up
+  const away = useContext(TalkElsewhere);
   return (
     <div className={['split', className, !main && 'alone'].filter(Boolean).join(' ')}>
-      {main && <div className="split-main">{main}</div>}
+      {main && (
+        <div className="split-main" ref={box}>
+          {main}
+        </div>
+      )}
+      {main && cite && <CiteButton box={box} draft={cite} anywhere onCite={away ? () => away.open(true) : undefined} />}
       <TalkColumn>{talk}</TalkColumn>
     </div>
   );

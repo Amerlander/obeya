@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { citable } from './cite';
+import { citable, spot } from './cite';
 import { citeAt } from './draft';
 
 const q = '„so“ - ';
@@ -26,4 +26,17 @@ test('from the middle of the text, the quote becomes the line after the cursor\'
 
 test('the marked text is quoted on one line, without the spaces around it', () => {
   expect(citable('  erster Satz.\n\n  zweiter   Satz ')).toBe('erster Satz. zweiter Satz');
+});
+
+test('the button stands beside the marking, inside the part of the window it is seen in', () => {
+  const view: [number, number, number, number] = [100, 100, 900, 700];
+  // at the desk below where the mouse let go, ending there; marked backwards above the first line, at its start
+  expect(spot([200, 300, 600, 320], [200, 330, 400, 350], false, view, false)).toEqual({ x: 400, y: 350, below: true, left: true });
+  expect(spot([200, 300, 600, 320], [200, 330, 400, 350], true, view, false)).toEqual({ x: 200, y: 300, below: false, left: false });
+  // on a touch screen below the middle of the last line
+  expect(spot([200, 300, 600, 320], [200, 330, 400, 350], false, view, true)).toEqual({ x: 300, y: 350, below: true, left: false });
+  // a marking out of view has no button, and one a framed page says lies far off gets it at its frame's edge
+  expect(spot([200, 800, 600, 820], [200, 830, 400, 850], false, view, false)).toBeNull();
+  expect(spot([200, 300, 5000, 320], [200, 330, 5000, 350], false, view, false)?.x).toBe(876);
+  expect(spot([200, 100, 300, 120], [200, 850, 300, 870], false, view, false)?.y).toBe(700);
 });

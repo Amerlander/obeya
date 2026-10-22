@@ -71,7 +71,7 @@ describe('serveDemoFile for an HTML artifact', () => {
     expect(proxied.headers.get('content-security-policy')).toContain("default-src 'self' https://mac.tail1.ts.net data: blob:;");
     // an address no policy can name gives no files beside the page
     expect(get('index.html', { 'x-forwarded-proto': 'https; default-src *' }).headers.get('content-security-policy')).toBe(`sandbox allow-scripts; ${pagePolicy()}`);
-    expect(await page.text()).toMatch(/^<img src="img\/a.svg"><script>[\s\S]*obeyaHeight/);
+    expect(await page.text()).toMatch(/^<img src="img\/a.svg"><script>[\s\S]*obeyaHeight[\s\S]*obeyaMarked/);
     expect(await get('img/a.svg').text()).toContain('<svg');
     expect(get('../demo.mp4').status).toBe(404);
     expect(get('img').status).toBe(404);

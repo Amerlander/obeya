@@ -1,6 +1,6 @@
 // Pages Obeya shows in a sandboxed frame (a worker's HTML artifact, an idea's mock): they tell the
-// page around them their height, so the frame grows to it instead of scrolling inside, and they
-// load nothing from the internet.
+// page around them their height, so the frame grows to it instead of scrolling inside, and on
+// Obeya's own page what the owner marks in them, to quote it; they load nothing from the internet.
 
 /**
  * What a worker's page may load (an HTML artifact, an answer's page, an idea's mock): the files beside
@@ -56,6 +56,45 @@ export function withHeightReport(html: string): string {
 }
 
 /**
+ * What the owner marks in the page, sent to Obeya's page around it, where a button beside it quotes
+ * it into the card's field (`CiteButton` in src/ui/cite.tsx): the text, its first and last line in
+ * the frame's window, and whether it was marked backwards; null once nothing is marked. While the
+ * mouse still drags it out, the marking is not said. `{ obeyaUnmark }` from the page around takes the
+ * marking away, as a click elsewhere there would on a page of its own.
+ */
+const MARK_REPORT = `<script>(() => {
+  let last = 'null', down = false;
+  const tell = (m) => {
+    const now = JSON.stringify(m);
+    if (now !== last) { last = now; parent.postMessage({ obeyaMarked: m }, '*'); }
+  };
+  const say = () => {
+    if (down) return;
+    const s = getSelection();
+    if (!s || s.isCollapsed || !s.rangeCount) return tell(null);
+    const r = s.getRangeAt(0);
+    const lines = [...r.getClientRects()].filter((c) => c.width > 0);
+    const text = s.toString();
+    if (!text.trim() || !lines.length) return tell(null);
+    const at = (c) => [c.left, c.top, c.right, c.bottom];
+    tell({ text, first: at(lines[0]), last: at(lines[lines.length - 1]), backwards: s.anchorNode === r.endContainer && s.anchorOffset === r.endOffset });
+  };
+  document.addEventListener('selectionchange', say);
+  addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') { down = true; tell(null); } }, true);
+  addEventListener('pointerup', () => { if (down) { down = false; say(); } }, true);
+  addEventListener('blur', () => { if (down) { down = false; say(); } });
+  addEventListener('scroll', say, true);
+  addEventListener('resize', say);
+  addEventListener('message', (e) => { if (e.source === parent && e.data && e.data.obeyaUnmark) getSelection().removeAllRanges(); });
+})();</script>`;
+
+/** The page with its marking report (`MARK_REPORT`), for a page shown on Obeya's own page: at the end of its body, or of the page without one. */
+export function withMarkReport(html: string): string {
+  const at = html.toLowerCase().lastIndexOf('</body>');
+  return at < 0 ? html + MARK_REPORT : html.slice(0, at) + MARK_REPORT + html.slice(at);
+}
+
+/**
  * The height of a mock's content, not of its frame's window (that one only grows as the frame does):
  * a frame laid out narrow first shrinks back once it is wide.
  */
@@ -71,11 +110,11 @@ const CONTENT_HEIGHT_REPORT = `<script>(() => {
 
 /**
  * A mock's few lines of HTML as a page of their own, in a plain sans-serif on white; a mock that is a
- * whole page itself stays as it is. Either loads nothing from the internet (`sealed`). The frame the
- * page is written into has the same policy already (`/api/mock-frame`); this one holds where the
- * page is shown otherwise.
+ * whole page itself stays as it is. Either says what the owner marks in it (`MARK_REPORT`) and
+ * loads nothing from the internet (`sealed`). The frame the page is written into has the same policy
+ * already (`/api/mock-frame`); this one holds where the page is shown otherwise.
  */
 export function mockPage(html: string): string {
-  if (/<html[\s>]/i.test(html)) return sealed(withHeightReport(html));
-  return sealed(`<style>body{margin:8px;display:flow-root;font:14px/1.4 system-ui,sans-serif;color:#222;background:#fff}</style></head><body>${html}${CONTENT_HEIGHT_REPORT}</body></html>`);
+  if (/<html[\s>]/i.test(html)) return sealed(withMarkReport(withHeightReport(html)));
+  return sealed(`<style>body{margin:8px;display:flow-root;font:14px/1.4 system-ui,sans-serif;color:#222;background:#fff}</style></head><body>${html}${CONTENT_HEIGHT_REPORT}${MARK_REPORT}</body></html>`);
 }

@@ -4,7 +4,7 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
-import { pagePolicy, withHeightReport } from '../core/frame';
+import { pagePolicy, withHeightReport, withMarkReport } from '../core/frame';
 import { chapterAt, type DemoKind } from '../core/types';
 import { filesKey, ownOrigin } from './access';
 import { demoFile, esc } from './demo-page';
@@ -207,7 +207,7 @@ function servedFrom(req: Request): string | undefined {
  * It is the worker's, so it runs sandboxed: scripts yes, but in an origin of its own, without
  * Obeya's API or the canvas's storage, and connecting to nothing but the address of the files beside
  * it (`pagePolicy`, `OWN_CONNECTIONS`). A `page` tells its frame its height, so the frame grows to it
- * instead of scrolling inside. Opened in a window of its own (a link on the card), a file that may run
+ * instead of scrolling inside, and what the owner marks in it, to quote it. Opened in a window of its own (a link on the card), a file that may run
  * scripts (HTML, SVG) comes in a frame of a page around it (`framed`): alone in its window a page
  * could navigate itself to another server, in the frame the page around it keeps it from that.
  */
@@ -228,7 +228,7 @@ function sandboxed(file: FileAt, name: string, req: Request, page: boolean, down
   // without an address to name, the page gets no files beside it rather than a policy that names something else
   const headers = { 'content-type': type, ...sealedHeaders(servedFrom(req)), 'cache-control': 'no-cache', 'access-control-allow-origin': 'null' };
   if (download) return new Response(body, { headers: { ...headers, 'content-disposition': attachment(name) } });
-  if (page) return new Response(withHeightReport('path' in file ? readFileSync(file.path, 'utf8') : new TextDecoder().decode(file.data)), { headers });
+  if (page) return new Response(withMarkReport(withHeightReport('path' in file ? readFileSync(file.path, 'utf8') : new TextDecoder().decode(file.data))), { headers });
   return new Response(body, { headers });
 }
 
