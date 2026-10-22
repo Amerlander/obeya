@@ -486,14 +486,19 @@ ol.p-list > li::before { content: none; }
 .p-table :is(th, td) { text-align: left; vertical-align: top; padding: 4px 12px 4px 0; border-bottom: 1px solid var(--line); }
 .p-table th { font-weight: 600; }
 .p-code { margin: 10px 0 0; padding: 8px 10px; background: var(--chip); border-radius: 2px; overflow: auto; font: 12.5px/1.5 var(--mono); }
-/* a code block's copy button (message.tsx), in its corner and always in view, also on a touch screen */
+/* a code block's copy button (message.tsx), in its corner: at the desk while the pointer is on the
+   block (and until used once), on a touch screen always */
 .p-code-box { position: relative; margin: 10px 0 0; }
-/* a conversation's code block is often prose to send on (a drafted comment): it wraps, to be read without scrolling sideways */
+/* a conversation's code block is often prose to send on (a message): it wraps, to be read without scrolling sideways */
 .p-code-box > .p-code { margin: 0; padding-right: 36px; white-space: pre-wrap; overflow-wrap: break-word; }
 .p-copy { position: absolute; top: 3px; right: 3px; min-width: 26px; height: 26px; display: grid; place-items: center; padding: 0 6px;
   border: 0; border-radius: 3px; background: var(--chip); color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
 .p-copy:hover { color: var(--ink); background: var(--line); }
 .p-copy.copied { color: var(--ink); }
+@media (hover: hover) {
+  .p-copy:not(.fresh, .copied, .selected) { opacity: 0; transition: opacity .12s; }
+  .p-code-box:hover > .p-copy, .p-copy:focus-visible { opacity: 1; }
+}
 @media (pointer: coarse) { .p-copy { min-width: 34px; height: 34px; } .p-code-box > .p-code { padding-right: 44px; } }
 .p-quote { margin: 10px 0 0; padding: 1px 0 1px 12px; border-left: 3px solid var(--line); color: var(--muted); }
 .p-quote > :first-child { margin-top: 0; }
