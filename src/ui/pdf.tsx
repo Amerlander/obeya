@@ -1,0 +1,119 @@
+// A PDF drawn with pdf.js, page under page, where the browser shows none in a frame (a phone's: Chrome
+// on Android shows an empty frame, and Safari on the iPhone is no more reliable). pdf.js comes from the
+// server (src/server/pdfjs.ts) only there, outside the page's bundle. No scripts, links or forms of
+// the PDF run: pages are drawn as images.
+
+import type { PDFDocumentProxy } from 'pdfjs-dist';
+import { useEffect, useRef, useState } from 'react';
+import { PDFJS_BASE as BASE } from '../core/files';
+import { t } from './strings';
+
+// a name the bundler leaves alone, so the import happens in the browser
+const MODULE = `${BASE}pdf.min.mjs`;
+let loaded: Promise<typeof import('pdfjs-dist')> | undefined;
+
+/** pdf.js, fetched at its first use. */
+function pdfjs(): Promise<typeof import('pdfjs-dist')> {
+  loaded ??= (import(MODULE) as Promise<typeof import('pdfjs-dist')>).then((m) => {
+    m.GlobalWorkerOptions.workerSrc = `${BASE}pdf.worker.min.mjs`;
+    return m;
+  });
+  loaded.catch(() => (loaded = undefined));
+  return loaded;
+}
+
+/** The most pixels a page's canvas gets: Safari draws nothing in a larger one. */
+const MAX_PIXELS = 12e6;
+
+export function PdfPages({ url, title }: { url: string; title: string }) {
+  const [doc, setDoc] = useState<PDFDocumentProxy | 'failed' | null>(null);
+  useEffect(() => {
+    setDoc(null);
+    let gone = false;
+    let task: { destroy(): Promise<void> } | undefined;
+    pdfjs()
+      .then((m) => {
+        if (gone) return;
+        const opened = m.getDocument({ url, enableXfa: false, wasmUrl: `${BASE}wasm/`, standardFontDataUrl: `${BASE}standard_fonts/` });
+        task = opened;
+        return opened.promise;
+      })
+      .then((d) => !gone && d && setDoc(d), () => !gone && setDoc('failed'));
+    return () => {
+      gone = true;
+      void task?.destroy();
+    };
+  }, [url]);
+  if (doc === null) return <p className="hint">{t.files.loading}</p>;
+  if (doc === 'failed') return <p className="hint">{t.files.failed}</p>;
+  return (
+    <div className="r-pdf-pages" role="document" aria-label={title}>
+      {Array.from({ length: doc.numPages }, (_, i) => (
+        <PdfPage key={i} doc={doc} n={i + 1} />
+      ))}
+    </div>
+  );
+}
+
+/** Page `n`, as wide as the column; drawn once it comes near the screen, again when the width changes. */
+function PdfPage({ doc, n }: { doc: PDFDocumentProxy; n: number }) {
+  const box = useRef<HTMLDivElement>(null);
+  const canvas = useRef<HTMLCanvasElement>(null);
+  // width over height, known before the page is drawn so the pages below do not move
+  const [ratio, setRatio] = useState<number>();
+  const [near, setNear] = useState(false);
+  const [width, setWidth] = useState(0);
+
+  useEffect(() => {
+    let gone = false;
+    doc.getPage(n).then((p) => {
+      const v = p.getViewport({ scale: 1 });
+      if (!gone) setRatio(v.width / v.height);
+    }, () => {});
+    return () => {
+      gone = true;
+    };
+  }, [doc, n]);
+
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const sees = new IntersectionObserver(([e]) => e?.isIntersecting && setNear(true), { rootMargin: '100% 0px' });
+    const sizes = new ResizeObserver(() => setWidth(el.clientWidth));
+    sees.observe(el);
+    sizes.observe(el);
+    return () => {
+      sees.disconnect();
+      sizes.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    const c = canvas.current;
+    if (!near || !width || !c) return;
+    let gone = false;
+    let render: { cancel(): void } | undefined;
+    doc.getPage(n).then((p) => {
+      if (gone) return;
+      const base = p.getViewport({ scale: 1 });
+      let scale = (width * (window.devicePixelRatio || 1)) / base.width;
+      scale = Math.min(scale, Math.sqrt(MAX_PIXELS / (base.width * base.height)));
+      const viewport = p.getViewport({ scale });
+      c.width = Math.floor(viewport.width);
+      c.height = Math.floor(viewport.height);
+      const task = p.render({ canvas: c, viewport });
+      render = task;
+      task.promise.catch(() => {});
+    }, () => {});
+    return () => {
+      gone = true;
+      render?.cancel();
+    };
+  }, [doc, n, near, width]);
+
+  return (
+    <div ref={box} className="r-pdf-page" style={ratio ? { aspectRatio: String(ratio) } : undefined}>
+      <canvas ref={canvas} />
+    </div>
+  );
+}

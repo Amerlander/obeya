@@ -32,6 +32,7 @@ import { Push, startedWaiting } from './push';
 import { worker } from '../ui/sw';
 import icon180 from '../ui/logo/apple-touch-icon.png' with { type: 'file' };
 import icon512 from '../ui/logo/icon-512.png' with { type: 'file' };
+import { servePdfjs } from './pdfjs';
 import { Tailscale } from './tailscale';
 import { agentsView, languageView, pushKeyChoice, saveAgents, saveLanguage, savePushKey, saveTheme, themeView } from './settings';
 import { nonEmpty } from '../core/text';
@@ -416,6 +417,8 @@ export function serve(
       // Obeya has one for this device); pushes go only to paired devices
       '/icons/180.png': { GET: () => new Response(Bun.file(icon180), { headers: { 'cache-control': 'max-age=86400' } }) },
       '/icons/512.png': { GET: () => new Response(Bun.file(icon512), { headers: { 'cache-control': 'max-age=86400' } }) },
+      // pdf.js's worker, fonts and decoders, where the page draws a PDF itself (src/ui/pdf.tsx)
+      '/pdfjs/*': { GET: (req) => servePdfjs(req) },
       '/sw.js': { GET: () => new Response(`(${worker.toString()})();\n`, { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-cache' } }) },
       '/api/push': {
         GET: (req) => handle(async () => {

@@ -1,6 +1,6 @@
 // The files a card's work made or changed, as its result on the left beside the conversation: the
 // change list above the view, a line each (the demo first), which picks what the view shows;
-// Markdown formatted, a PDF in the browser's viewer, an image, a page in the sandboxed frame of an
+// Markdown formatted, a PDF in the browser's viewer (drawn by pdf.js on a phone), an image, a page in the sandboxed frame of an
 // HTML artifact, text as it is, anything else as a tile; each to open on the computer, show in its
 // folder, or download. Folder and git cards alike.
 
@@ -12,6 +12,8 @@ import { api, cardFile } from './api';
 import { ChangeNote, DiffView, FileDiff, Lines, MARK } from './diff';
 import { Doc, DocImages } from './markdown';
 import { useReportedHeight } from './message';
+import { PdfPages } from './pdf';
+import { phoneView } from './phone';
 import { t } from './strings';
 
 /** How many lines the change list shows before „und N weitere ▾“ where it is not folded to the result; the file picked shows too. */
@@ -396,9 +398,15 @@ function Page({ url, title }: { url: string; title: string }) {
 /**
  * A PDF in the browser's viewer, which shows nothing in a sandboxed frame: the file comes as a PDF
  * and nothing else. As high as the column shows, so that scrolled to it, the viewer's own scrollbar
- * is the only one.
+ * is the only one. On a phone, and where the browser has no viewer, pdf.js draws its pages instead.
  */
 function Pdf({ url, title }: { url: string; title: string }) {
+  if (phoneView() || navigator.pdfViewerEnabled === false)
+    return <PdfPages url={url} title={title} />;
+  return <PdfFrame url={url} title={title} />;
+}
+
+function PdfFrame({ url, title }: { url: string; title: string }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState<number>();
   useLayoutEffect(() => {

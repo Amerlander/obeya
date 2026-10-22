@@ -172,7 +172,8 @@ N weitere ▾“ unfolds the rest. The file picked stays in view when folded. Be
 the size of the whole change („+120 −30“), which shows the whole diff over the page. On a git card the lines are
 the branch's files, on a folder card its change list. The phone shows the same list with lines tall
 enough to tap. Markdown shows formatted (with its images), a PDF in the browser's
-viewer, an image as is, an HTML page as an HTML artifact, text and code as text; anything else as a
+viewer (on a phone, and where the browser has none, its pages drawn by pdf.js one under the other
+as wide as the column), an image as is, an HTML page as an HTML artifact, text and code as text; anything else as a
 tile with „Auf dem Rechner öffnen“. A changed file first shows „Änderungen“, with „Formatiert“ or
 „Ganze Datei“ beside. „Auf dem Rechner öffnen“ and „Im Ordner zeigen“ act on the machine Obeya runs
 on (a non-document only in its folder, since opening would run it), and only for a request from that
@@ -194,7 +195,9 @@ an HTML artifact (see The demo on the card), except a PDF: no browser shows one 
 or under a CSP sandbox, so it comes unsandboxed with `nosniff` and a policy allowing nothing
 (`default-src 'none'`, `form-action 'none'`, `Connection-Allowlist`). Chrome's viewer runs PDF
 scripts; tested on 2026-10-21, a PDF submitting a form, opening a link or calling
-`getURL`/`launchURL` sent nothing.
+`getURL`/`launchURL` sent nothing. pdf.js runs none of a PDF's scripts, links or forms; it comes
+from Obeya itself (its legacy build, which phones' older browsers run), outside the page's bundle,
+under the address of its version, so a browser caches it for good.
 
 #### Trying the app by hand
 
@@ -305,7 +308,12 @@ image.
 - **A card's files are its result, in tabs beside the demo** (owner, 2026-10-21), named files first.
   Rejected: an open button per change-list entry (no place for the result, Markdown unread in the
   browser), Markdown formatted only in the diff overlay (the result hidden behind „Ansehen“), a
-  bundled pdf.js. A file opened from another device downloads; an answer's files do the same.
+  bundled pdf.js everywhere. A file opened from another device downloads; an answer's files do the same.
+- **On a phone, pdf.js draws a PDF** (2026-10-22): Chrome on Android shows an empty frame for a PDF,
+  so the owner saw nothing of a PDF on the phone; Safari on the iPhone is no more reliable in a frame.
+  Rejected: a tile that opens the file in the phone's PDF app (the result to judge would be one tap
+  and an app away, unlike every other kind of file) and drawing pages on the server (no tool that
+  runs on every platform). The desktop keeps the browser's viewer, which searches and selects text.
 - **The change list is the row of tabs** (owner, 2026-10-21): files showed twice before, as a list
   across the card and as tabs below it. Rejected: tabs alone with the list folded away (what stays
   before „Änderungen verwerfen“ would no longer show at a glance, files without a view would be

@@ -2,7 +2,11 @@
 // change list that picks them, in which order, and how each one is shown; the paths and images the
 // server checks what it serves against.
 
+import { version as pdfjsVersion } from 'pdfjs-dist/package.json';
 import { type CardDiff, type FolderChange, shownChanges } from './diff';
+
+/** Where the server serves pdf.js and the files it loads: under its version, so that a browser takes no other version's from its cache. */
+export const PDFJS_BASE = `/pdfjs/${pdfjsVersion}/`;
 
 /** A file a card's worker named as its result at its handover: its path in the repository (or folder), with `/`, and a one-line caption. */
 export interface CardFile {
