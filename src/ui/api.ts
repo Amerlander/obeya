@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { CardDiff } from '../core/diff';
 import type { PushKeyView } from '../core/push-key';
 import { type Place, placeParam } from '../core/layout';
-import type { AccessView, Pairing, RemoteSetting, AgentRole, AgentSetting, CloudPreset, AgentsView, CanvasConfig, CanvasInfo, CanvasSnapshot, ClientMessage, ConfigSaved, ConfigView, CardAction, ConfigChecked, DemoSettings, Group, DemoSettingsView, DemoVoiceCheck, FirstCanvas, GitSetupPreview, MachineItem, MachineSectionId, MachineView, SetupCheck, SetupFolder, VoiceSetupView, CardEvent, CardPatch, Item, Language, LanguageView, NewCard, Notice, OwnerHold, PendingRestart, ProjectHistory, RepoTrust, ServerMessage, SettingsShared, SourceUpdate, SpotInput, TalkRef, AppUpdate, Theme, ThemeView } from '../core/types';
+import type { AccessView, Pairing, RemoteSetting, AgentRole, AgentSetting, CloudPreset, AgentsView, CanvasConfig, CanvasInfo, CanvasSnapshot, ClientMessage, ConfigSaved, ConfigView, CardAction, ConfigChecked, DemoSettings, Group, DemoSettingsView, DemoVoiceCheck, FirstCanvas, GitSetupPreview, MachineItem, MachineSectionId, MachineView, SetupCheck, SetupFolder, VoiceSetupView, CardEvent, CardPatch, Item, Language, LanguageView, NewCard, Notice, OwnerHold, PendingRestart, ProjectHistory, RepoTrust, ServerMessage, SettingsShared, SourceUpdate, SpotInput, TalkRef, AppUpdate, StartPausedView, Theme, ThemeView } from '../core/types';
 import type { Wish } from '../core/wish';
 
 /** A request the server refused; `code` picks the owner's text, the message is the server's detail. */
@@ -153,6 +153,8 @@ export const api = {
   push: () => call<{ key: string; on: boolean }>('GET', '/api/push'),
   subscribe: (subscription: PushSubscriptionJSON) => call<void>('PUT', '/api/push', subscription),
   saveTheme: (theme: Theme | null) => call<ThemeView>('PUT', '/api/theme', { theme }),
+  startPaused: () => call<StartPausedView>('GET', '/api/start-paused'),
+  saveStartPaused: (startPaused: boolean) => call<StartPausedView>('PUT', '/api/start-paused', { startPaused }),
   /** The model and effort of each group of agents. */
   agents: () => call<AgentsView>('GET', '/api/agents'),
   /** Saves the model or the effort of one group. */
@@ -187,6 +189,10 @@ export const api = {
   restartNow: () => call<{ restarting: boolean }>('POST', '/api/restart'),
   /** Has the restart of this canvas's repositories' agents that waits for them go ahead at once. */
   restartReposNow: () => call<{ restarting: boolean }>('POST', at('/restart')),
+  /** Pauses a canvas: its workers stop at a safe point, then nothing runs on it until it plays. */
+  pauseCanvas: (canvas: string) => call<void>('POST', `/api/c/${encodeURIComponent(canvas)}/pause`),
+  /** Lets a paused canvas play: its workers go on, and the cards let start meanwhile start. */
+  playCanvas: (canvas: string) => call<void>('POST', `/api/c/${encodeURIComponent(canvas)}/play`),
   /** Installs the newer version of the app once the workers paused, as a restart waits for them. */
   installUpdate: () => call<{ updating: boolean }>('POST', '/api/app-update/install'),
   /** Fast-forwards the checkout Obeya runs from to its upstream; Obeya then restarts with the new code once the workers paused. */

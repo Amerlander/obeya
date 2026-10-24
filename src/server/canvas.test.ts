@@ -1231,3 +1231,42 @@ describe('plan docs that are not projects, and projects whose work is done', () 
     expect(canvas.board.archived()).toEqual([]);
   });
 });
+
+test('a paused canvas lets its workers stop at a safe point, holds what comes for them and the cards started meanwhile, and goes on when it plays', async () => {
+  const c = new CanvasRuntime({ name: 'Pause', repos: [{ path: repo('solo', 'Solo'), clones: 2 }] }, { store: new Store(':memory:'), home: dir, runtime, forge: noForge, restartIntervalMs: 10 });
+  try {
+    const a = c.board.create({ title: 'A', x: 0, y: 0 });
+    await c.repos[0]!.workers.start(a.id);
+    const worker = runtime.sessions.at(-1)!;
+    worker.emit({ type: 'session', id: 's-a' });
+    worker.emit({ type: 'text', text: 'Arbeite.' });
+    c.pause();
+    // in the middle of a turn: it hears of the pause, and the canvas waits for it
+    expect(c.board.canvas.paused).toEqual({ pausing: [a.id] });
+    expect(worker.inbox.at(-1)).toContain("pause this canvas's agents");
+    worker.emit({ type: 'idle' });
+    await until(() => worker.closed);
+    expect(c.board.canvas.paused).toEqual({});
+    // the owner's words wait, unread, and a card started meanwhile waits in the queue
+    const workers = () => runtime.sessions.filter((s) => s.spec.role === 'worker').length;
+    const before = workers();
+    c.repos[0]!.workers.message(a.id, 'Noch etwas');
+    const b = c.board.create({ title: 'B', x: 0, y: 0 });
+    c.act(b.id, { action: 'start' });
+    // the Koordinator judges it against A as ever, and lets it start
+    await until(() => runtime.sessions.some((s) => s.spec.tools.some((t) => t.name === 'scope')));
+    const estimate = runtime.sessions.find((s) => s.spec.tools.some((t) => t.name === 'scope'))!;
+    estimate.call('scope', { files: ['b.ts'], conflicts_with: [], reason: '' });
+    estimate.emit({ type: 'idle' });
+    await until(() => c.board.item(b.id)!.queue && 'paused' in c.board.item(b.id)!.queue!);
+    expect(workers()).toBe(before);
+    c.play();
+    expect(c.board.canvas.paused).toBeUndefined();
+    const resumed = runtime.sessions.find((s) => s.spec.resume === 's-a')!;
+    expect(resumed.inbox[0]).toContain('The owner paused this canvas');
+    expect(resumed.inbox[0]).toContain('Noch etwas');
+    await until(() => c.board.item(b.id)!.state === 'working');
+  } finally {
+    c.shutdown();
+  }
+}, 30_000);

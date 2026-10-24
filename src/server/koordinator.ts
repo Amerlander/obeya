@@ -68,6 +68,8 @@ export interface KoordinatorOptions {
   repoFor: (card: Item) => RepoHands;
   /** Where the Koordinator reads for what the owner says without a card: the home repository's Lesestand. */
   home: () => string;
+  /** Whether the canvas is paused: a card the Koordinator lets start waits for it to play (`{ paused }` in its queue). */
+  paused?: () => boolean;
   /** How long a project's start waits for the owner to take it back; START_ALL_HOLD_MS by default. */
   holdMs?: number;
   /** After how many of the owner's inputs the Rückschau runs; REVIEW_EVERY by default. */
@@ -674,6 +676,11 @@ export class Koordinator {
   private launch(cardId: string, since?: string) {
     const card = this.o.board.item(cardId);
     if (!card) return;
+    if (this.o.paused?.()) {
+      this.setQueue(cardId, { paused: true }, since);
+      this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.koordinator.canvasPaused);
+      return;
+    }
     const refused = (e: unknown) => {
       const shortage = e instanceof BadRequest ? shortageOf(e.code) : undefined;
       if (!shortage) return this.o.board.log(cardId, 'error', 'obeya', messageOf(e), { code: e instanceof BadRequest ? e.code : undefined });
@@ -708,15 +715,21 @@ export class Koordinator {
     const waiting = queueOrder(items).filter(movable);
     // a repository whose workspaces are taken by a card waiting longer is not asked again
     const full = new Set<string | undefined>();
+    const paused = !!this.o.paused?.();
     // the owner's question to a finished card whose agent needs a full clone goes before queued cards
-    for (const f of items.filter((i) => i.waitsForClone && !i.repoDown)) {
+    for (const f of items.filter((i) => i.waitsForClone && !i.repoDown && !paused)) {
       const hands = this.o.repoFor(f);
       if (full.has(f.repo) || !hands.workspaces.leasable(true) || !hands.workers.takeClone(f.id)) full.add(f.repo);
     }
     for (const w of waiting) {
-      // one whose repository does not run waits on until it is back
+      // one whose repository does not run waits on until it is back, one let start until the canvas plays
       if (w.repoDown) continue;
+      if ('paused' in w.queue!) {
+        if (!paused) this.startNow(w.id, this.o.board.t.koordinator.canvasPlays);
+        continue;
+      }
       if ('workspace' in w.queue!) {
+        if (paused) continue;
         if (full.has(w.repo) || !this.o.repoFor(w).workspaces.leasable()) {
           full.add(w.repo);
           continue;
@@ -953,7 +966,7 @@ export class Koordinator {
             .map((a) => {
               const q = a.queue!;
               const waitsFor =
-                'behind' in q ? q.behind.map((id) => `"${this.o.board.item(id)?.title ?? id}"`).join(', ') : 'workspace' in q ? 'a free workspace (its start is decided)' : '';
+                'behind' in q ? q.behind.map((id) => `"${this.o.board.item(id)?.title ?? id}"`).join(', ') : 'workspace' in q ? 'a free workspace (its start is decided)' : 'paused' in q ? 'the paused canvas to run again (its start is decided)' : '';
               return [
                 `- ${tagOf(tags, a.id)}: "${a.title}"${a.body ? ` — ${a.body.split('\n')[0]!.slice(0, 200)}` : ''}`,
                 `  expected to change: ${(a.scope ?? []).filter(hard).join(', ') || '(no estimate)'}`,

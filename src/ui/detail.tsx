@@ -302,6 +302,16 @@ export function Detail(p: Props) {
     <div className="question queue">
       {'checking' in item.queue ? (
         <div className="q-text">{t.queue.checkingLong}</div>
+      ) : 'paused' in item.queue ? (
+        <>
+          <div className="q-text">{t.queue.pausedLong}</div>
+          <QueuePlace item={item} items={all} />
+          <div className="actions">
+            <button className="btn" onClick={() => act({ action: 'dequeue' }, { close: false })}>
+              {t.queue.dequeue}
+            </button>
+          </div>
+        </>
       ) : 'workspace' in item.queue ? (
         <>
           <div className="q-text">

@@ -258,7 +258,7 @@ The „Konfiguration“ dialog covers the page but for a margin (a press there o
 leaving what was open behind it as it was). An unsaved draft survives per tab, also a reload or
 restart. Its sections, listed on the left and shown one at a time (the last one chosen per tab):
 Leinwände (canvases, repositories, clones, settings), Modelle und Effort, Spracheingabe, Demos, Von anderen Geräten (see Other devices) and Allgemein
-(languages, light or dark, the server); below them „Einrichtung prüfen“ and „Wunsch oder Fehler
+(languages, light or dark, whether canvases start paused, the server); below them „Einrichtung prüfen“ and „Wunsch oder Fehler
 melden“ (see Wishes for Obeya's makers). Leinwände marks an unsaved draft and counts its problems in
 red. Each section names the file it is saved in; settings are rows of label and control, no boxes in
 boxes. What to know about a field sits behind an info icon at its label, shown only while the pointer
@@ -323,7 +323,7 @@ configuration (`config`) and changes it on the owner's word (`configure`, checke
 see Confirmation and undo); the dialog says so under its title, with „Obeya fragen“, which closes it
 and opens Obeya's conversation (Space for voice does not reach Obeya while the dialog is open).
 The other sections save on their own, restarting nothing: the demo settings into `demo.json` (see
-The demo settings and voices), languages, theme and models into `settings.json` in Obeya's home.
+The demo settings and voices), languages, theme, start paused and models into `settings.json` in Obeya's home.
 
 ### Live configuration
 

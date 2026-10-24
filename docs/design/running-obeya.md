@@ -394,6 +394,28 @@ where a detached process opens a console window for every program it starts, the
 ignore Ctrl-C instead, and the agents stay in the console (a stop through the app still waits for
 them).
 
+### Pausing a canvas
+
+Each canvas has a pause button beside its pill in the bar, in the canvas switcher on each canvas's
+row, and on the phone above what runs (a pause icon while it runs, a play icon and „Pausiert“ once
+paused). Pausing goes as a stop does, for that canvas alone: its workers in a turn hear that the
+canvas pauses and stop at a safe point (the card's log says so), and once none is in a turn (at
+most after Obeya's patience for a restart, 15 minutes) every worker session on it ends; meanwhile
+the button blinks and its tooltip counts the agents it waits for. While paused, no worker session
+starts there: a card the Koordinator lets start waits in the queue („Wartet, bis die Leinwand
+läuft“), and whatever comes for a worker (the owner's words, which stay unread, an answer, pull
+request comments, a snooze's end) waits for it. Play takes effect at once: the workers that paused
+for it, and those something waits for, resume their sessions with it; queued cards start. Play
+during the wait cancels the pause, and the workers that paused go on in their sessions. Obeya's
+chat, look-ups, ideas' exploration agents and project agents keep answering the owner on a paused
+canvas; only workers pause.
+
+A canvas stays paused across restarts (`paused` among the canvas's settings in the database). With
+„Beim Start: Leinwände pausiert“ in Konfiguration › Allgemein (`startPaused` in `settings.json`),
+Obeya starts with every canvas paused, for the owner to start the ones to work on; a restart Obeya
+makes itself (new code, a saved configuration) is no start and leaves each canvas as it was, and a
+canvas added while Obeya runs starts running.
+
 ### Decisions
 
 - **Other devices over the owner's private network, paired by a QR code** (2026-10-16, plan „Obeya
@@ -462,5 +484,11 @@ them).
 - **Tests run a file per process** (`bun test --parallel`, Bun 1.4+, 2026-10-15): one after the other
   the suite took 165 s, mostly waiting for git; in parallel 27 s. The longest file sets the run's
   length, so large test files are split by theme around a shared fixture.
+- **A paused canvas ends its workers' sessions, like a stop** (2026-10-24): the owner with several
+  canvases wants only some at work after a start, and pausing one should let its agents finish
+  their step cleanly as Obeya's stop does. Rejected: holding sessions open and only withholding
+  messages (agents woken by background work would go on); pausing each card (no way to keep a whole
+  canvas from starting work); letting the owner's message wake a single card on a paused canvas
+  (the owner chose that everything waits for play).
 - **The first canvas is chosen with two cards and radio buttons**: pills read as buttons in a user
   test, not as a choice.

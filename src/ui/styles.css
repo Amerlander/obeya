@@ -250,8 +250,19 @@ button.pill:hover { box-shadow: var(--lift); }
 .pill.restart .tip ul { margin: 0 0 6px; padding-left: 18px; }
 .pill.restart .tip.risk { border-left: 3px solid var(--waiting); }
 .pill.restart:hover:not(:has(button:hover)) > .tip.why, .pill.restart button:hover > .tip.risk { display: block; }
-.canvas-pill { position: relative; }
+.canvas-pill { position: relative; display: flex; align-items: center; gap: 6px; }
 .canvas-pill .switch { cursor: pointer; }
+/* the canvas's pause: an icon while it runs, the icon to play and what it is once paused (in the switcher too) */
+.pill.pause-canvas { padding-inline: 11px; gap: 6px; color: var(--muted); }
+.pill.pause-canvas:hover { color: var(--ink); }
+.pill.pause-canvas.paused { color: var(--waiting); font-weight: 600; }
+.pill.pause-canvas.pausing svg { animation: pause-blink 1.4s ease-in-out infinite; }
+@keyframes pause-blink { 50% { opacity: .3; } }
+.canvas-menu li { display: flex; align-items: center; gap: 6px; }
+.canvas-menu li > a { flex: 1; }
+.canvas-menu .pill.pause-canvas { height: 30px; box-shadow: none; background: var(--chip); }
+.ph-canvases { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
+.ph-canvases .pill.pause-canvas { min-height: 44px; }
 .canvas-menu { position: absolute; top: calc(100% + 6px); left: 0; min-width: 240px; list-style: none; margin: 0; padding: 6px; background: var(--panel);
   border-radius: 3px; box-shadow: var(--lift); z-index: 30; }
 .canvas-menu a { display: flex; flex-direction: column; padding: 7px 10px; border-radius: 2px; text-decoration: none; font-size: 13px; }

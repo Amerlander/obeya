@@ -7,7 +7,8 @@ import type { Language } from './locale';
 import type { Awaited, AwaitedState, Snooze } from './types';
 
 /** What a worker pauses for: Obeya restarting, Obeya stopping, or only its repository's agents restarting (a change to its configuration). */
-export type Pause = 'restart' | 'stop' | 'repo';
+/** What a worker pauses for: Obeya's restart or stop, its repository's agents restarting, or the owner pausing its canvas. */
+export type Pause = 'restart' | 'stop' | 'repo' | 'canvas';
 
 const de = {
   /** A time in the owner's words: „um 14:40“, or „am 7.10. um 14:40“ on another day. */
@@ -123,17 +124,22 @@ const de = {
     appGone: 'Die App dieser Karte läuft nicht mehr. Soll der Agent sie wieder starten, sag es ihm auf der Karte.',
     stoppedPrOpen: (n: number) => `Gestoppt. Pull Request #${n} bleibt offen.`,
     restartDue: (pause: Pause) =>
-      `${pause === 'stop' ? 'Beenden von Obeya' : pause === 'repo' ? 'Neustart der Agenten dieses Repositorys' : 'Neustart von Obeya'} angekündigt; der Agent pausiert beim nächsten sicheren Punkt.`,
+      `${pause === 'canvas' ? 'Die Leinwand wird pausiert' : `${pause === 'stop' ? 'Beenden von Obeya' : pause === 'repo' ? 'Neustart der Agenten dieses Repositorys' : 'Neustart von Obeya'} angekündigt`}; der Agent pausiert beim nächsten sicheren Punkt.`,
     restartWaits: (pause: Pause): string =>
-      pause === 'stop'
+      pause === 'canvas'
+        ? 'Die Leinwand wird pausiert; der Agent macht weiter, wenn sie wieder läuft.'
+        : pause === 'stop'
         ? 'Obeya wartet auf das Beenden; der Agent macht weiter, wenn Obeya wieder läuft.'
         : pause === 'repo'
           ? 'Obeya wartet, um die Agenten dieses Repositorys neu zu starten; der Agent macht danach weiter.'
           : 'Obeya wartet auf einen Neustart; der Agent macht danach weiter.',
-    restartStillDue: (pause: Pause) => `Der Agent ist vor dem ${pause === 'stop' ? 'Beenden' : 'Neustart'} wieder aufgewacht; Obeya sagt ihm, dass ${pause === 'stop' ? 'das Beenden' : 'der Neustart'} noch auf ihn wartet.`,
+    restartStillDue: (pause: Pause) =>
+      pause === 'canvas'
+        ? 'Der Agent ist vor dem Pausieren der Leinwand wieder aufgewacht; Obeya sagt ihm, dass die Pause noch auf ihn wartet.'
+        : `Der Agent ist vor dem ${pause === 'stop' ? 'Beenden' : 'Neustart'} wieder aufgewacht; Obeya sagt ihm, dass ${pause === 'stop' ? 'das Beenden' : 'der Neustart'} noch auf ihn wartet.`,
     limitResumes: (when: string) => `Der Agent arbeitet ${when} automatisch weiter.`,
     limitRetries: (when: string) => `Obeya versucht es ${when} noch einmal.`,
-    paused: (pause: Pause): string => (pause === 'stop' ? 'Pausiert, bis Obeya wieder läuft.' : pause === 'repo' ? 'Pausiert bis zum Neustart der Agenten dieses Repositorys.' : 'Pausiert bis zum Neustart von Obeya.'),
+    paused: (pause: Pause): string => (pause === 'canvas' ? 'Pausiert, bis die Leinwand wieder läuft.' : pause === 'stop' ? 'Pausiert, bis Obeya wieder läuft.' : pause === 'repo' ? 'Pausiert bis zum Neustart der Agenten dieses Repositorys.' : 'Pausiert bis zum Neustart von Obeya.'),
     hostLost: (host: string) => `Die Verbindung zu ${host} ist weg; der Agent macht weiter, sobald ${host} wieder erreichbar ist.`,
     hostBack: (host: string) => `${host} ist wieder erreichbar; der Agent macht weiter.`,
     stalled: 'Der Agent hat angehalten, ohne fertig zu sein.',
@@ -274,6 +280,8 @@ const de = {
     says: (why: string) => `Obeya: ${why}`,
     workspaceFree: 'Ein Workspace ist frei; es geht los.',
     slotFree: 'Ein Rechner hat wieder einen Slot frei; es geht los.',
+    canvasPaused: 'Die Leinwand ist pausiert: Die Aufgabe startet, sobald sie wieder läuft.',
+    canvasPlays: 'Die Leinwand läuft wieder; es geht los.',
     waitedDone: 'Worauf sie gewartet hat, ist erledigt; es geht los.',
     waitedDoneRecheck: 'Obeya: Worauf sie gewartet hat, ist erledigt; prüft neu gegen die laufende Arbeit.',
     noWorkspace: 'Kein Workspace frei: Alle sind belegt oder es ist keiner eingerichtet. Die Aufgabe startet, sobald einer frei wird.',
@@ -501,17 +509,22 @@ const en: Messages = {
     /** The page the owner's browser gets for a card whose app no longer runs. */
     appGone: 'The app of this card no longer runs. To have the agent start it again, tell it on the card.',
     stoppedPrOpen: (n: number) => `Stopped. Pull request #${n} stays open.`,
-    restartDue: (pause: Pause) => `Obeya is about to ${pause === 'stop' ? 'stop' : pause === 'repo' ? "restart this repository's agents" : 'restart'}; the agent pauses at the next safe point.`,
+    restartDue: (pause: Pause) => `Obeya is about to ${pause === 'canvas' ? 'pause this canvas' : pause === 'stop' ? 'stop' : pause === 'repo' ? "restart this repository's agents" : 'restart'}; the agent pauses at the next safe point.`,
     restartWaits: (pause: Pause) =>
-      pause === 'stop'
+      pause === 'canvas'
+        ? 'The canvas is being paused; the agent goes on once it runs again.'
+        : pause === 'stop'
         ? 'Obeya waits to stop; the agent goes on once Obeya runs again.'
         : pause === 'repo'
           ? "Obeya waits to restart this repository's agents; the agent goes on after that."
           : 'Obeya waits to restart; the agent goes on after the restart.',
-    restartStillDue: (pause: Pause) => `The agent woke before Obeya's ${pause === 'stop' ? 'stop' : 'restart'}; Obeya tells it the ${pause === 'stop' ? 'stop' : 'restart'} still waits for it.`,
+    restartStillDue: (pause: Pause) =>
+      pause === 'canvas'
+        ? 'The agent woke before the canvas paused; Obeya tells it the pause still waits for it.'
+        : `The agent woke before Obeya's ${pause === 'stop' ? 'stop' : 'restart'}; Obeya tells it the ${pause === 'stop' ? 'stop' : 'restart'} still waits for it.`,
     limitResumes: (when: string) => `The agent goes on by itself ${when}.`,
     limitRetries: (when: string) => `Obeya tries again ${when}.`,
-    paused: (pause: Pause) => (pause === 'stop' ? 'Paused until Obeya runs again.' : pause === 'repo' ? "Paused until this repository's agents restart." : 'Paused until Obeya has restarted.'),
+    paused: (pause: Pause) => (pause === 'canvas' ? 'Paused until the canvas runs again.' : pause === 'stop' ? 'Paused until Obeya runs again.' : pause === 'repo' ? "Paused until this repository's agents restart." : 'Paused until Obeya has restarted.'),
     hostLost: (host: string) => `The connection to ${host} is gone; the agent goes on once ${host} can be reached again.`,
     hostBack: (host: string) => `${host} can be reached again; the agent goes on.`,
     stalled: 'The agent stopped without being done.',
@@ -643,6 +656,8 @@ const en: Messages = {
     says: (why: string) => `Obeya: ${why}`,
     workspaceFree: 'A workspace is free; it starts.',
     slotFree: 'A machine has a free slot again; it starts.',
+    canvasPaused: 'The canvas is paused: the task starts once it runs again.',
+    canvasPlays: 'The canvas runs again; it starts.',
     waitedDone: 'What it waited for is done; it starts.',
     waitedDoneRecheck: 'Obeya: what it waited for is done; checks it again against the work in progress.',
     noWorkspace: 'No workspace free: all are taken or none is set up. The task starts as soon as one is free.',

@@ -65,7 +65,7 @@ import { VoiceSetup } from './voice-setup';
 import { useLib } from '../../plugin/skills/demo/lib/here.ts';
 import { expandHome } from '../../plugin/skills/demo/lib/settings.ts';
 import { qwen3Serve } from '../../plugin/skills/demo/lib/voices.ts';
-import { agentSetting, conversationLanguage, ownerLanguage } from './settings';
+import { agentSetting, conversationLanguage, ownerLanguage, startPaused } from './settings';
 import { loginLink } from './owner';
 
 const { values, positionals } = parseArgs({
@@ -115,12 +115,15 @@ if (!values.dev && !process.env.OBEYA_SUPERVISED) {
       child?.kill(sig);
     });
   let args = Bun.argv.slice(2);
+  // a restart of its own is no start: canvases paused or running stay so (`startPaused`)
+  let restarted = false;
   for (;;) {
     child = Bun.spawn([...SELF, ...args], {
-      env: { ...process.env, OBEYA_SUPERVISED: '1' },
+      env: { ...process.env, OBEYA_SUPERVISED: '1', ...(restarted ? { OBEYA_RESTARTED: '1' } : {}) },
       stdio: ['inherit', 'inherit', 'inherit'],
     });
     const code = await child.exited;
+    restarted = true;
     if (stopping || (code !== RESTART && code !== RESTART_FROM_FILE)) release(home, process.pid);
     else restarting(home, process.pid);
     if (stopping) process.exit(code === RESTART || code === RESTART_FROM_FILE ? 0 : code);
@@ -266,6 +269,7 @@ canvases = new Canvases(
     conversation: () => conversationLanguage(home),
     agents: (role) => agentSetting(home, role),
     settings: (path) => config.repoSettings(path),
+    ...(!process.env.OBEYA_RESTARTED && startPaused(home) ? { startPaused: true } : {}),
   },
   // the canvas the setup assistant created gets a first card that says what to try
   (c) => welcome(home, [c]),

@@ -1,6 +1,6 @@
 // Presentational pieces of the canvas. State and camera live in App.tsx.
 
-import { memo, type ReactNode, useEffect, useRef, useState } from 'react';
+import { memo, type MouseEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { type Bounds, dependencyOrder, shapeOf } from '../core/layout';
 import { clip } from '../core/text';
 import { answering, type AppUpdate, type CanvasInfo, type ClonePool, finished, finishedArchivable, finishingUp, type Item, needsYou, openQuestions, type PendingRestart, type PoolHost, type ProjectHistory, type SourceUpdate, stoppedArchivable, titleFrom } from '../core/types';
@@ -137,6 +137,7 @@ export function CardFace({ item, where, underway, since, chip }: { item: Item; w
     openQuestions(item)[0]?.text ??
     (item.queue && 'behind' in item.queue ? item.queue.reason : undefined) ??
     (item.queue && 'workspace' in item.queue ? t.queue.workspaceWhy[item.queue.workspace] : undefined) ??
+    (item.queue && 'paused' in item.queue ? t.queue.pausedWhy : undefined) ??
     status ??
     (item.idea ? firstLine(item.idea.brief) || firstLine(item.body) : firstLine(item.body));
   return (
@@ -260,6 +261,7 @@ export function CanvasPill({ canvas, canvases, waiting }: { canvas: CanvasInfo; 
         {many && <span className="hint">▾</span>}
         {!open && elsewhere > 0 && <span className="waits pulse">{elsewhere}</span>}
       </button>
+      <PauseButton canvas={canvas} />
       {open && (
         <ul className="canvas-menu">
           {canvases.map((c) => {
@@ -271,12 +273,46 @@ export function CanvasPill({ canvas, canvases, waiting }: { canvas: CanvasInfo; 
                   <span className="hint">{c.repos.map((r) => r.name).join(', ')}</span>
                   {n > 0 && <span className="waits">{n}</span>}
                 </a>
+                <PauseButton canvas={c} />
               </li>
             );
           })}
         </ul>
       )}
     </div>
+  );
+}
+
+/**
+ * Pauses the canvas or lets it play (design: Pausing a canvas): a pause icon while it runs; while
+ * it waits for its agents to stop, for how many; once paused, a play icon that says so.
+ */
+export function PauseButton({ canvas, named }: { canvas: CanvasInfo; named?: boolean }) {
+  const [asked, setAsked] = useState(false);
+  const p = canvas.paused;
+  const pausing = p?.pausing?.length ?? 0;
+  const c = t.canvasPause;
+  const click = (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setAsked(true);
+    (p ? api.playCanvas(canvas.id) : api.pauseCanvas(canvas.id)).catch(console.error).finally(() => setAsked(false));
+  };
+  return (
+    <button
+      type="button"
+      className={`pill pause-canvas${p ? ' paused' : ''}${pausing ? ' pausing' : ''}`}
+      title={p ? `${pausing ? `${c.pausing(pausing)}. ` : ''}${c.playHint}` : c.pauseHint}
+      aria-label={`${p ? c.play : c.pause}${named ? `: ${canvas.name}` : ''}`}
+      disabled={asked}
+      onClick={click}
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        {p ? <path d="M7 4.5v15l12.5-7.5z" /> : <path d="M6.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z" />}
+      </svg>
+      {named && <span className="name">{canvas.name}</span>}
+      {p && <span className="lbl">{pausing ? c.pausingShort(pausing) : c.paused}</span>}
+    </button>
   );
 }
 

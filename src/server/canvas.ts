@@ -91,6 +91,8 @@ export interface CanvasDeps {
   settings?: (repoPath: string) => RepoSettings | undefined;
   /** The canvas stopped while it ran: its home repository no longer starts (`Canvases` leaves it out). */
   stopped?: (c: CanvasRuntime, why: string) => void;
+  /** Obeya starts with its canvases paused (`startPaused` of its settings, not on a restart of its own): each waits for the owner to let it play. */
+  startPaused?: boolean;
 }
 
 /**
@@ -160,6 +162,16 @@ interface RepoRestart {
   stop: () => void;
 }
 
+/**
+ * The owner's pause of the canvas while its workers are still to reach a safe point: what they hear,
+ * the cards it waits for as the page was last told, and what stops waiting.
+ */
+interface Pausing {
+  due: DueRestart;
+  waiting: string[];
+  stop: () => void;
+}
+
 /** How long a host that could not be reached at start (or failed to clone) waits before Obeya tries again. */
 const HOST_RETRY_MS = 2 * 60_000;
 /** How often Obeya looks for snoozed cards whose time has come. */
@@ -204,6 +216,10 @@ export class CanvasRuntime {
   private failed = new Map<string, { detail: string; before?: true }>();
   /** The restart of all of Obeya that waits, if one does: it covers the repositories' too. */
   private obeyaDue: DueRestart | null = null;
+  /** The owner paused the canvas (kept across restarts, `paused` of its stored settings): no worker's session starts on it until they let it play. */
+  private paused = false;
+  /** The pause while it waits for the workers to reach a safe point; null once it took effect, or the canvas plays. */
+  private pausing: Pausing | null = null;
   private pendingListeners = new Set<() => void>();
   /** Set while the canvas leaves the configuration: called once its agents paused and it stopped. */
   private retiring: (() => void) | null = null;
@@ -231,6 +247,8 @@ export class CanvasRuntime {
     const resolved = this.resolve(config);
     const { id, name, repos, stored } = resolved;
     this.config = resolved.config;
+    if (deps.startPaused) deps.store.setSetting(id, 'paused', '1');
+    this.paused = deps.store.setting(id, 'paused') === '1';
     const images = (this.images = new Images(join(deps.home, 'images', id)));
     this.board = new Board(
       deps.store,
@@ -242,6 +260,7 @@ export class CanvasRuntime {
       deps.conversation,
     );
     const board = this.board;
+    this.showPaused();
     if (!stored) deps.store.setSetting(id, 'home_repo', repos[0]!.ref.id);
 
     this.workRetro = new WorkRetro({
@@ -270,6 +289,7 @@ export class CanvasRuntime {
     const koordinator = (this.koordinator = new Koordinator({
       board,
       runtime: deps.runtime,
+      paused: () => this.paused,
       home: () => this.repos[0]!.read.path,
       repoFor: (card) => {
         const r = this.repoOf(card);
@@ -645,6 +665,7 @@ export class CanvasRuntime {
     workers = new Workers({
       board,
       runtime: deps.workerRuntime ?? deps.runtime,
+      paused: () => this.paused,
       workspaces,
       adapter,
       machineSettings: this.settingsOf(rc),
@@ -767,7 +788,8 @@ export class CanvasRuntime {
       this.addRepo(r);
       this.ran(r.ref.id);
       console.log(`Obeya: ${info.path} is on the canvas ${this.id} now`);
-      if (this.obeyaDue) r.workers.restartDue(this.obeyaDue);
+      const due = this.obeyaDue ?? this.pausing?.due;
+      if (due) r.workers.restartDue(due);
       r.workers.resumeAll(true);
     });
     this.settingsChanged();
@@ -797,7 +819,7 @@ export class CanvasRuntime {
       p = this.pending = { paths: new Set(paths), reason, deadline: Date.now() + patience, waiting: [], stop: () => {} };
     }
     const due = repoDue(p);
-    for (const r of this.repos) if (paths.includes(r.info.path) && !this.obeyaDue) r.workers.restartDue(due);
+    for (const r of this.repos) if (paths.includes(r.info.path) && !this.obeyaDue && !this.pausing) r.workers.restartDue(due);
     console.log(`Obeya: ${this.retiring ? `the canvas ${this.id} leaves the configuration; it stops` : `restarting the agents of ${paths.join(', ')}`}${this.pendingBusy().length ? ' once they paused' : ''}`);
     p.waiting = this.pendingBusy();
     this.emitPending();
@@ -832,7 +854,7 @@ export class CanvasRuntime {
     if (!p) return;
     this.pending = null;
     p.stop();
-    for (const r of this.repos) if (p.paths.has(r.info.path)) r.workers.restartDue(this.obeyaDue);
+    for (const r of this.repos) if (p.paths.has(r.info.path)) r.workers.restartDue(this.obeyaDue ?? this.pausing?.due ?? null);
     this.emitPending();
   }
 
@@ -859,7 +881,7 @@ export class CanvasRuntime {
       resolved = this.resolve(this.config);
     } catch (e) {
       console.error(`Obeya: the configuration of the canvas ${this.id} does not resolve; its repositories run on as they were: ${messageOf(e)}`);
-      for (const r of this.repos) if (p.paths.has(r.info.path)) r.workers.restartDue(this.obeyaDue);
+      for (const r of this.repos) if (p.paths.has(r.info.path)) r.workers.restartDue(this.obeyaDue ?? this.pausing?.due ?? null);
       this.emitPending();
       return;
     }
@@ -919,7 +941,8 @@ export class CanvasRuntime {
     this.board.canvas.repos.splice(0, this.board.canvas.repos.length, ...this.repos.map((r) => r.ref));
     for (const r of started) {
       this.watch(r);
-      if (this.obeyaDue) r.workers.restartDue(this.obeyaDue);
+      const due = this.obeyaDue ?? this.pausing?.due;
+      if (due) r.workers.restartDue(due);
       r.workers.resumeAll(true);
     }
     this.board.docsChanged();
@@ -952,6 +975,83 @@ export class CanvasRuntime {
     if (!this.pending) return false;
     this.restartRepos();
     return true;
+  }
+
+  /**
+   * The owner pauses the canvas (design: Pausing a canvas): its workers in a turn hear so and pause
+   * at a safe point, as for a stop, and once none is in a turn (at most after Obeya's patience for
+   * a restart) their sessions end. Until the canvas plays, no session starts on it: a card let
+   * start waits in the queue, and whatever comes for a worker waits for it.
+   */
+  pause() {
+    if (this.paused) return;
+    this.paused = true;
+    this.deps.store.setSetting(this.id, 'paused', '1');
+    const patience = this.deps.restartPatienceMs ?? RESTART_PATIENCE_MS;
+    const p: Pausing = { due: { reason: 'stop', deadline: Date.now() + patience, canvas: true }, waiting: this.busy(), stop: () => {} };
+    this.pausing = p;
+    if (!this.obeyaDue) for (const r of this.repos) r.workers.restartDue(p.due);
+    console.log(`Obeya: the canvas ${this.id} pauses${p.waiting.length ? ' once its workers paused' : ''}`);
+    this.pauseShown();
+    p.stop = whenIdle(
+      () => {
+        const now = this.busy();
+        if (this.pausing === p && now.join() !== p.waiting.join()) {
+          p.waiting = now;
+          this.pauseShown();
+        }
+        return now.length > 0;
+      },
+      () => {
+        if (this.pausing === p) this.suspend();
+      },
+      patience,
+      this.deps.restartIntervalMs,
+    );
+  }
+
+  /** The pause takes effect: every worker's session on the canvas ends. */
+  private suspend() {
+    const p = this.pausing;
+    this.pausing = null;
+    p?.stop();
+    const repo = this.pending;
+    for (const r of this.repos) {
+      r.workers.suspend();
+      r.workers.restartDue(this.obeyaDue ?? (repo?.paths.has(r.info.path) ? repoDue(repo) : null));
+    }
+    console.log(`Obeya: the canvas ${this.id} is paused`);
+    this.pauseShown();
+  }
+
+  /** The owner lets the canvas play: the workers that paused for it go on, and the cards let start meanwhile start. */
+  play() {
+    if (!this.paused) return;
+    this.paused = false;
+    this.deps.store.setSetting(this.id, 'paused', '');
+    const p = this.pausing;
+    this.pausing = null;
+    p?.stop();
+    const repo = this.pending;
+    for (const r of this.repos) {
+      r.workers.restartDue(this.obeyaDue ?? (repo?.paths.has(r.info.path) ? repoDue(repo) : null));
+      r.workers.play();
+    }
+    console.log(`Obeya: the canvas ${this.id} runs again`);
+    this.pauseShown();
+  }
+
+  /** The pause as the canvas's info has it, which the bar and the switchers show. */
+  private showPaused() {
+    if (!this.paused) delete this.board.canvas.paused;
+    else this.board.canvas.paused = this.pausing?.waiting.length ? { pausing: this.pausing.waiting } : {};
+  }
+
+  /** The pause changed: the pages hear of it. */
+  private pauseShown() {
+    this.showPaused();
+    this.board.changed();
+    this.emitPending();
   }
 
   /** The restart of repositories' agents that waits, as the page shows it; null when none does. */
@@ -1980,7 +2080,7 @@ export class CanvasRuntime {
   restartDue(due: DueRestart | null) {
     this.obeyaDue = due;
     const p = this.pending;
-    for (const r of this.repos) r.workers.restartDue(due ?? (p?.paths.has(r.info.path) ? repoDue(p) : null));
+    for (const r of this.repos) r.workers.restartDue(due ?? this.pausing?.due ?? (p?.paths.has(r.info.path) ? repoDue(p) : null));
   }
 
   shutdown() {
@@ -1989,6 +2089,8 @@ export class CanvasRuntime {
     this.unwatch();
     this.pending?.stop();
     this.pending = null;
+    this.pausing?.stop();
+    this.pausing = null;
     for (const [, w] of this.writing) clearTimeout(w.timer);
     for (const stop of this.branchSettings.values()) stop();
     for (const r of this.repos) this.stopRepo(r);
@@ -2051,6 +2153,8 @@ export class Canvases {
       },
     };
     this.list = this.start(configs);
+    // a canvas added while Obeya runs starts running: only Obeya's start pauses them
+    this.deps = { ...this.deps, startPaused: false };
   }
 
   /** Starts canvases, keeping why one did not. */

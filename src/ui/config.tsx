@@ -4,7 +4,7 @@
 // own settings come from its command line and show read-only.
 
 import { type CSSProperties, Fragment, type ReactNode, useEffect, useId, useRef, useState } from 'react';
-import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigChecked, type ConfigProblem, type ConfigView, commandLines, type DemoSettings, type DemoSettingsView, type DemoSite, type DemoVoiceCheck, type FilledClones, type Language, type HostConfig, type LanguageView, type NarrationLanguage, restartsAgents, type RepoConfig, type RepoSettings, type RepoTrust, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type SetupCheck, START_FAILED, type Theme, THEMES, type ThemeView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
+import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigChecked, type ConfigProblem, type ConfigView, commandLines, type DemoSettings, type DemoSettingsView, type DemoSite, type DemoVoiceCheck, type FilledClones, type Language, type HostConfig, type LanguageView, type NarrationLanguage, restartsAgents, type RepoConfig, type RepoSettings, type RepoTrust, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type SetupCheck, START_FAILED, type StartPausedView, type Theme, THEMES, type ThemeView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
 import { lineDiff } from '../core/diff';
 import { LANGUAGES } from '../core/locale';
 import { pushKeyFromEvent, type PushKeyView } from '../core/push-key';
@@ -307,6 +307,7 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems, 
             <Head title={c.sections.general} />
             <LanguageBlock on={on} />
             <ThemeBlock on={on} />
+            <StartPausedBlock on={on} />
             {view && <ServerBlock server={view.server} />}
           </section>
         </div>
@@ -636,6 +637,43 @@ function ThemeBlock({ on }: { on: boolean }) {
           {[null, ...THEMES].map((x) => (
             <button key={x ?? 'system'} type="button" role="radio" aria-checked={view.chosen === x} className={view.chosen === x ? 'on' : undefined} onClick={() => choose(x)}>
               {x ? l.names[x] : l.system}
+            </button>
+          ))}
+        </div>
+      </Field>
+      {status && <p className="hint c-status">{status}</p>}
+    </>
+  );
+}
+
+/** Whether Obeya starts with every canvas paused, for the owner to start each with its button in the bar. */
+function StartPausedBlock({ on }: { on: boolean }) {
+  const [view, setView] = useState<StartPausedView | null>(null);
+  const [status, setStatus] = useState('');
+  useEffect(() => {
+    if (on) api.startPaused().then(setView, console.error);
+  }, [on]);
+  if (!view) return null;
+  const l = t.config.startPaused;
+  const choose = async (startPaused: boolean) => {
+    const before = view;
+    setView({ ...view, startPaused });
+    setStatus('');
+    try {
+      setView(await api.saveStartPaused(startPaused));
+    } catch (e) {
+      setView(before);
+      setStatus(failText(e));
+    }
+  };
+  return (
+    <>
+      <Head sub title={l.title} hint={l.hint} file={view.file} />
+      <Field label={l.title}>
+        <div className="seg" role="radiogroup" aria-label={l.title}>
+          {[false, true].map((x) => (
+            <button key={String(x)} type="button" role="radio" aria-checked={view.startPaused === x} className={view.startPaused === x ? 'on' : undefined} onClick={() => choose(x)}>
+              {x ? l.paused : l.run}
             </button>
           ))}
         </div>

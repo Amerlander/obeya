@@ -656,11 +656,12 @@ export const START_ALL_HOLD_MS = 8000;
  * leased or none set up; `dirty`: every free one has uncommitted changes); it starts once one is.
  * `behind`: the cards it waits for; `buildsOn`: those of them it builds on (workstreams of its
  * project), which hold it until they have landed, also while not started or stopped.
+ * `paused`: the Koordinator let it start, but its canvas is paused; it starts once the canvas plays.
  */
 export type Queue = Wait & { since: string };
 
 /** What a card in the queue waits for (`Queue`). */
-export type Wait = { checking: true; together?: string } | { behind: string[]; reason: string; buildsOn?: string[] } | { workspace: WorkspaceShortage };
+export type Wait = { checking: true; together?: string } | { behind: string[]; reason: string; buildsOn?: string[] } | { workspace: WorkspaceShortage } | { paused: true };
 
 /** Why a card waits to start: no clone free (`none`), the free ones dirty, or every machine with a clean free one busy to its slots (`slots`). */
 export type WorkspaceShortage = 'none' | 'dirty' | 'slots';
@@ -814,6 +815,11 @@ export interface CanvasInfo {
   repos: RepoRef[];
   /** How many times which of its repositories do not run as the configuration has them changed: the page reads the configuration's problems again when it changes. */
   configRev?: number;
+  /**
+   * The owner paused the canvas (or Obeya started with its canvases paused): no worker runs on it
+   * until they let it play. `pausing`: the cards whose worker it still waits for to reach a safe point.
+   */
+  paused?: { pausing?: string[] };
 }
 
 export interface RepoRef {
@@ -1871,6 +1877,12 @@ export interface LanguageView {
 /** The look Obeya's pages take (`src/server/settings.ts`): light or dark as chosen in the settings, else as the system's. */
 export const THEMES = ['light', 'dark'] as const;
 export type Theme = (typeof THEMES)[number];
+/** Whether Obeya starts with every canvas paused (`startPaused` in its settings), and the file it is saved in. */
+export interface StartPausedView {
+  file: string;
+  startPaused: boolean;
+}
+
 export interface ThemeView {
   /** The file it is saved in, under Obeya's home. */
   file: string;

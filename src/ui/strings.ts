@@ -221,6 +221,16 @@ const de = {
   noneRuns: 'Keine Leinwand läuft',
   repos: (n: number) => `${n} Repositories`,
   switchCanvas: 'Leinwand wechseln',
+  /** The canvas's pause button in the bar, in the canvas switcher and on the phone. */
+  canvasPause: {
+    pause: 'Leinwand pausieren',
+    pauseHint: 'Leinwand pausieren: Agenten, die gerade arbeiten, halten am nächsten sicheren Punkt an, wie beim Beenden von Obeya. Danach arbeitet hier kein Agent, bis du die Leinwand wieder startest; deine Nachrichten und gestartete Aufgaben warten so lange.',
+    play: 'Leinwand starten',
+    playHint: 'Leinwand starten: Die Agenten machen dort weiter, wo sie angehalten haben, und wartende Aufgaben starten.',
+    paused: 'Pausiert',
+    pausing: (n: number) => (n === 1 ? 'Pausiert, sobald 1 Agent angehalten hat' : `Pausiert, sobald ${n} Agenten angehalten haben`),
+    pausingShort: (n: number) => `Pausiert … ${n}`,
+  },
   waitingThere: (n: number) => (n === 1 ? '1 Aufgabe braucht dich dort' : `${n} Aufgaben brauchen dich dort`),
   waitingElsewhere: (n: number) => (n === 1 ? '1 Aufgabe auf einer anderen Leinwand braucht dich' : `${n} Aufgaben auf anderen Leinwänden brauchen dich`),
   start: 'Agent starten',
@@ -452,6 +462,9 @@ const de = {
     behind: (cards: { title: string; notStarted: boolean }[]) => `Wartet auf ${cards.map((c) => `„${c.title}“${c.notStarted ? ' (noch nicht gestartet)' : ''}`).join(', ')}.`,
     workspace: 'Wartet auf Workspace',
     slot: 'Wartet auf freien Slot',
+    paused: 'Wartet, bis die Leinwand läuft',
+    pausedWhy: 'Die Leinwand ist pausiert.',
+    pausedLong: 'Die Leinwand ist pausiert: Die Aufgabe startet von selbst, sobald du sie wieder startest.',
     /** On the card: why it waits for a workspace. */
     workspaceWhy: { none: 'Alle Workspaces sind belegt.', dirty: 'Die freien Workspaces haben nicht committete Änderungen.', slots: 'Alle Slots sind belegt.' },
     workspaceLong: {
@@ -982,6 +995,12 @@ const de = {
       asInterface: (name: string) => `Wie die Oberfläche (${name})`,
       /** Each language in its own words, as a stranger looks for it. */
       names: { de: 'Deutsch', en: 'English' } satisfies Record<Language, string>,
+    },
+    startPaused: {
+      title: 'Beim Start',
+      hint: 'Ob die Leinwände arbeiten, sobald Obeya startet, oder pausiert sind, bis du jede mit ihrem Button ▶ in der Leiste startest. Ein Neustart, den Obeya selbst macht (neuer Code, neue Konfiguration), lässt jede Leinwand, wie sie war.',
+      run: 'Leinwände laufen',
+      paused: 'Leinwände pausiert',
     },
     theme: {
       title: 'Hell oder dunkel',
@@ -1895,6 +1914,15 @@ const en: Strings = {
   noneRuns: 'No canvas is running',
   repos: (n: number) => `${n} repositories`,
   switchCanvas: 'Switch canvas',
+  canvasPause: {
+    pause: 'Pause canvas',
+    pauseHint: 'Pause the canvas: agents at work stop at the next safe point, as when Obeya stops. After that no agent works here until you start the canvas again; your messages and started tasks wait until then.',
+    play: 'Start canvas',
+    playHint: 'Start the canvas: the agents go on where they stopped, and waiting tasks start.',
+    paused: 'Paused',
+    pausing: (n: number) => (n === 1 ? 'Paused once 1 agent has stopped' : `Paused once ${n} agents have stopped`),
+    pausingShort: (n: number) => `Pausing … ${n}`,
+  },
   waitingThere: (n: number) => (n === 1 ? '1 task needs you there' : `${n} tasks need you there`),
   waitingElsewhere: (n: number) => (n === 1 ? '1 task on another canvas needs you' : `${n} tasks on other canvases need you`),
   start: 'Start agent',
@@ -2106,6 +2134,9 @@ const en: Strings = {
     behind: (cards: { title: string; notStarted: boolean }[]) => `Waits for ${cards.map((c) => `“${c.title}”${c.notStarted ? ' (not started yet)' : ''}`).join(', ')}.`,
     workspace: 'Waiting for a workspace',
     slot: 'Waiting for a free slot',
+    paused: 'Waiting for the canvas to run',
+    pausedWhy: 'The canvas is paused.',
+    pausedLong: 'The canvas is paused: the task starts by itself once you start it again.',
     workspaceWhy: { none: 'All workspaces are taken.', dirty: 'The free workspaces have uncommitted changes.', slots: 'All slots are taken.' },
     workspaceLong: {
       none: 'No workspace free: all are taken or none is set up. The task starts by itself as soon as one is free.',
@@ -2598,6 +2629,12 @@ const en: Strings = {
         'The language agents write to you in until you say or write something to them: then they answer in the language of your latest words. Demos speak it too, unless the demo settings or the repository name another. What lands in a repository is in the language its settings name.',
       asInterface: (name: string) => `As the interface (${name})`,
       names: { de: 'Deutsch', en: 'English' },
+    },
+    startPaused: {
+      title: 'At start',
+      hint: 'Whether the canvases work as soon as Obeya starts, or are paused until you start each with its ▶ button in the bar. A restart Obeya makes itself (new code, a new configuration) leaves each canvas as it was.',
+      run: 'Canvases run',
+      paused: 'Canvases paused',
     },
     theme: {
       title: 'Light or dark',
@@ -3412,6 +3449,8 @@ export const stateLabel = (i: { kind?: string; thread?: { thinking?: boolean }; 
     : i.queue
     ? 'checking' in i.queue
       ? t.queue.checking
+      : 'paused' in i.queue
+        ? t.queue.paused
       : 'workspace' in i.queue
         ? i.queue.workspace === 'slots'
           ? t.queue.slot

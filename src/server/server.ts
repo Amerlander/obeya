@@ -33,7 +33,7 @@ import { worker } from '../ui/sw';
 import icon180 from '../ui/logo/apple-touch-icon.png' with { type: 'file' };
 import icon512 from '../ui/logo/icon-512.png' with { type: 'file' };
 import { Tailscale } from './tailscale';
-import { agentsView, languageView, pushKeyChoice, saveAgents, saveLanguage, savePushKey, saveTheme, themeView } from './settings';
+import { agentsView, languageView, pushKeyChoice, saveAgents, saveLanguage, savePushKey, saveStartPaused, saveTheme, startPausedView, themeView } from './settings';
 import { nonEmpty } from '../core/text';
 import { VERSION } from './resources';
 import { footerOf } from './wish';
@@ -442,6 +442,9 @@ export function serve(
       },
       // the owner has the restart of a repository's agents that waits for them go ahead at once
       '/api/c/:canvas/restart': { POST: on((c) => ({ restarting: c.restartNow() })) },
+      // the owner pauses the canvas (its workers stop at a safe point, then nothing runs on it) or lets it play
+      '/api/c/:canvas/pause': { POST: on((c) => c.pause()) },
+      '/api/c/:canvas/play': { POST: on((c) => c.play()) },
       // the owner has a restart that waits for workers go ahead at once
       '/api/restart': {
         POST: () =>
@@ -471,6 +474,11 @@ export function serve(
       '/api/theme': {
         GET: needs(config, (c) => themeView(c.home)),
         PUT: needs(config, async (c, req) => saveTheme(c.home, await req.json())),
+      },
+      // whether Obeya starts with every canvas paused
+      '/api/start-paused': {
+        GET: needs(config, (c) => startPausedView(c.home)),
+        PUT: needs(config, async (c, req) => saveStartPaused(c.home, await req.json())),
       },
       // the model and effort of each group of agents, read whenever one starts
       '/api/agents': {

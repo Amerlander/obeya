@@ -35,6 +35,8 @@ import { inQueue } from '../core/queue';
 export interface WorkerOptions {
   board: Board;
   runtime: AgentRuntime;
+  /** Whether the canvas is paused: no session starts, and what would start one waits for it to play (`play`). */
+  paused?: () => boolean;
   workspaces: CardWorkspaces;
   adapter: RepoAdapter;
   /**
@@ -293,10 +295,12 @@ export interface DueRestart {
   deadline: number;
   /** Only the agents of these workers' repository restart, for a change to its configuration; Obeya runs on. */
   repo?: boolean;
+  /** The owner pauses the canvas: its workers' sessions end once they paused, until it plays again; Obeya runs on. */
+  canvas?: boolean;
 }
 
 /** What the worker pauses for, as the card's log says it. */
-const pauseOf = (due: DueRestart): Pause => (due.reason === 'stop' ? 'stop' : due.repo ? 'repo' : 'restart');
+const pauseOf = (due: DueRestart): Pause => (due.canvas ? 'canvas' : due.reason === 'stop' ? 'stop' : due.repo ? 'repo' : 'restart');
 
 /** The owner may pause the demo video for a while; a browser gone away leaves no other sign. */
 const HOLD_GRACE = 10 * 60_000;
@@ -353,7 +357,14 @@ const REPO_WHY: Partial<Record<RestartReason, string>> = {
 
 /** What is about to happen, who it stops, and when the worker goes on, for the messages below. */
 const dueText = (due: DueRestart) =>
-  due.repo
+  due.canvas
+    ? {
+        what: "pause this canvas's agents (the owner paused the canvas), you among them,",
+        whom: 'none of them',
+        thing: 'pause of this canvas',
+        back: 'once the owner lets the canvas run again',
+      }
+    : due.repo
     ? {
         what: `restart this repository's agents (${REPO_WHY[due.reason] ?? REPO_WHY.config}), you among them,`,
         whom: 'none of them',
@@ -371,7 +382,7 @@ const minutesLeft = (due: DueRestart) => {
 /** What is about to happen and how long Obeya waits for it, as the messages to a worker in a turn begin. */
 const dueOpening = (due: DueRestart) => {
   const d = dueText(due);
-  return `Obeya is about to ${due.repo ? `${d.what} which stops whatever you run at that moment.` : d.what} It waits until ${d.whom} is in the middle of a turn, ${minutesLeft(due)}`;
+  return `Obeya is about to ${due.repo || due.canvas ? `${d.what} which stops whatever you run at that moment.` : d.what} It waits until ${d.whom} is in the middle of a turn, ${minutesLeft(due)}`;
 };
 
 /** Tells a worker that Obeya is about to restart or stop, so that it pauses at a safe point instead of being cut off. */
@@ -389,6 +400,12 @@ const restartWaits = (due: DueRestart) =>
 /** Tells a worker that paused for the restart, and was woken before it (by its background work, a message), that Obeya still waits for it. */
 const stillDue = (due: DueRestart) =>
   `Obeya still waits for the ${dueText(due).thing} you paused for, ${minutesLeft(due)}, and this turn keeps it waiting. Take in what started it (a background command that finished, a message), leave the work it leads to until Obeya resumes you, and end your turn.`;
+
+const CANVAS_RESUMED =
+  "The owner paused this canvas, which ended your session, and has now let it run again (or Obeya started with its canvases paused). Whatever you had running then was stopped with it: background commands, servers you started, and a command still running in your turn (its result shows exit code 137). Run again what you still need. If you had paused for it, go on from there.";
+
+/** Tells a worker that paused for the canvas's pause that the owner let the canvas run on before it took effect. */
+const CANVAS_GOES_ON = 'The owner let this canvas run on before the pause took effect: your session stays. Go on where you paused.';
 
 const RESUMED =
   'The owner paused you and has now let you go on. Pausing ended your session at once: whatever you had running was stopped with it, background commands, servers you started, and a command still running in your turn (its result shows exit code 137). Run again what you still need, and go on where you stopped.';
@@ -1877,6 +1894,39 @@ export class Workers {
     }
   }
 
+  /**
+   * The canvas's pause takes effect (its workers paused, or its patience ran out): every session
+   * ends, as at a stop. A worker that paused for it resumes once the canvas plays (`play`).
+   */
+  suspend() {
+    for (const [cardId, live] of [...this.live]) {
+      if (live.toldRestart && this.o.board.item(cardId)) this.o.board.work(cardId, { unheard: JSON.stringify([{ said: [], text: CANVAS_RESUMED, images: [] }, ...this.unheard(cardId)] satisfies Unheard[]) });
+      this.end(cardId);
+    }
+    for (const timer of this.reconnecting.values()) clearTimeout(timer);
+    this.reconnecting.clear();
+  }
+
+  /**
+   * The canvas plays again. Before its pause took effect, the workers that paused for it go on in
+   * their sessions; after, each card whose worker has something waiting for it (it paused for the
+   * pause, or a message came meanwhile) resumes its session with that.
+   */
+  play() {
+    for (const [cardId, live] of this.live) {
+      if (!live.toldRestart) continue;
+      live.toldRestart = false;
+      live.restartPaused = false;
+      if (!live.busy && !this.unheard(cardId).length) this.deliver(cardId, CANVAS_GOES_ON);
+    }
+    for (const i of this.o.board.snapshot().items) {
+      if ((this.o.repo && i.repo !== this.o.repo) || this.live.has(i.id) || this.preparing.has(i.id) || inQueue(i) || i.waitsForClone) continue;
+      const row = this.o.board.row(i.id);
+      if (!row.workspace || row.paused || !this.unheard(i.id).length) continue;
+      this.launch(i.id, '', row.session_id ?? undefined);
+    }
+  }
+
   shutdown() {
     // workers of a repository started afresh are its new ones: these settle no lease any more
     this.unwatch();
@@ -1897,9 +1947,14 @@ export class Workers {
     return language ? { ...this.o.env, DEMO_LANGUAGE: language } : this.o.env;
   }
 
-  private launch(cardId: string, message: string, resume?: string, images: string[] = []) {
+  /** Starts or resumes the worker's session. While the canvas is paused, the message waits for it to play (`play`), the owner's words of the log's lines `said` unread meanwhile. */
+  private launch(cardId: string, message: string, resume?: string, images: string[] = [], said: number[] = []) {
     const row = this.o.board.row(cardId);
     if (!row.workspace) throw new Error(`card ${cardId} has no workspace to work in`);
+    if (this.o.paused?.()) {
+      this.o.board.work(cardId, { unheard: JSON.stringify([...this.unheard(cardId), { said, text: message, images }] satisfies Unheard[]) });
+      return;
+    }
     const preferences = this.o.preferences?.() ?? '';
     const live: Live = { session: undefined!, host: hostName(row.workspace), handedOver: false, acted: false, nudged: false, lastText: '', busy: true, background: 0, tasks: new Map(), stalled: false, preferences };
     const project = this.o.board.item(cardId)?.parent;
@@ -1985,13 +2040,15 @@ export class Workers {
       this.o.board.work(cardId, { unheard: JSON.stringify([...this.unheard(cardId), { said, text, images }] satisfies Unheard[]) });
       return;
     }
-    this.o.board.readNow(cardId, said);
+    const live = this.live.get(cardId);
+    // no session starts while the canvas is paused: the words wait for it to play, unread until then
+    const held = !live && !!this.o.paused?.();
+    if (!held) this.o.board.readNow(cardId, said);
     const parked = this.o.board.row(cardId).parked;
     if (parked) {
       this.o.board.work(cardId, { parked: null });
       text = `${text}\n\n${this.parkedNote()}`;
     }
-    const live = this.live.get(cardId);
     if (live) {
       // the turn this starts reports the background work that is still running
       this.stopWaiting(live);
@@ -2005,10 +2062,11 @@ export class Workers {
       return;
     }
     const row = this.o.board.row(cardId);
-    if (row.session_id) return this.launch(cardId, text, row.session_id, images);
+    const unread = held ? said : [];
+    if (row.session_id) return this.launch(cardId, text, row.session_id, images, unread);
     // no session to resume (it never reported one): a new one needs the card first
     const card = this.card(cardId);
-    this.launch(cardId, `${this.briefing(card, row.branch ?? '', true)}\n\n${text}`, undefined, [...this.taskImages(card), ...images]);
+    this.launch(cardId, `${this.briefing(card, row.branch ?? '', true)}\n\n${text}`, undefined, [...this.taskImages(card), ...images], unread);
   }
 
   /** Whether the worker is in the middle of a turn, so that the owner's words wait for its next step. */
