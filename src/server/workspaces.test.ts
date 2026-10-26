@@ -68,6 +68,8 @@ describe('a leased clone', () => {
     expect(spaces.leasedBy(a)).toBeNull();
     expect(spaces.leasable()).toBe(false);
     expect(() => spaces.lease(b, 'obeya/b')).toThrow(expect.objectContaining({ code: 'noWorkspace' }));
+    // the pool says why the free clone goes to no card
+    expect(spaces.pool([])[0]!.blocked).toEqual([{ path: clone!, why: 'failed', error: expect.stringContaining('fetch'), made: true }]);
   });
 });
 
@@ -101,6 +103,35 @@ describe('free clones', () => {
     expect(spaces.leasable()).toBe(false);
     const b = board.create({ title: 'B', x: 0, y: 0 }).id;
     expect(() => spaces.lease(b, 'obeya/b')).toThrow(expect.objectContaining({ code: 'dirtyWorkspaces' }));
+  });
+
+  test('no card gets are named in the pool, with why: the files changed, git failing, the folder gone', async () => {
+    const { spaces, clones, changed } = setup();
+    const [one, two] = clones as [string, string];
+    for (let i = 1; i <= 7; i++) writeFileSync(join(one, `stray ${i}.txt`), 'x');
+    writeFileSync(join(one, 'README.md'), 'changed');
+    rmSync(two, { recursive: true });
+    // not looked at yet: the pool shows them free, and looks at them in the background
+    expect(spaces.pool([])[0]!.blocked).toBeUndefined();
+    await until(() => changed() === 2);
+    expect(spaces.pool([])[0]).toMatchObject({
+      total: 2,
+      cards: [],
+      blocked: [
+        { path: one, why: 'dirty', files: ['README.md', 'stray 1.txt', 'stray 2.txt', 'stray 3.txt', 'stray 4.txt'], more: 3, made: true },
+        { path: two, why: 'missing', made: true },
+      ],
+    });
+    expect(spaces.leasable()).toBe(false);
+  });
+
+  test('a clone git fails in is blocked with its error, and counts as dirty', async () => {
+    const { board, spaces, clones, changed } = setup();
+    for (const c of clones) writeFileSync(join(c, '.git', 'index'), 'garbage');
+    spaces.pool([]);
+    await until(() => changed() === 2);
+    expect(spaces.pool([])[0]!.blocked).toEqual(clones.map((path) => ({ path, why: 'broken', error: expect.stringContaining('index'), made: true })));
+    expect(() => spaces.lease(board.create({ title: 'A', x: 0, y: 0 }).id, 'obeya/a')).toThrow(expect.objectContaining({ code: 'dirtyWorkspaces' }));
   });
 
   test('where the one taken is dirty now and no other is left, the lease fails with that shortage', async () => {

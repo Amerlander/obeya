@@ -3,7 +3,7 @@
 import { memo, type ReactNode, useEffect, useRef, useState } from 'react';
 import { type Bounds, dependencyOrder, shapeOf } from '../core/layout';
 import { clip } from '../core/text';
-import { answering, type AppUpdate, type CanvasInfo, type ClonePool, finished, finishedArchivable, finishingUp, type Item, needsYou, openQuestions, type PendingRestart, type PoolHost, type ProjectHistory, type SourceUpdate, stoppedArchivable, titleFrom } from '../core/types';
+import { answering, type AppUpdate, type CanvasInfo, type BlockedClone, type ClonePool, finished, finishedArchivable, finishingUp, type Item, needsYou, openQuestions, type PendingRestart, type PoolHost, type ProjectHistory, type SourceUpdate, stoppedArchivable, titleFrom } from '../core/types';
 import { ProjectTalk } from './koordinator';
 import { api } from './api';
 import type { Cam } from './camera';
@@ -523,18 +523,21 @@ export function OldBunPill({ version }: { version: string }) {
 
 /**
  * Each repository's pool by machine: a dot per clone (solid while its card's worker is at work,
- * pale while the card holds it otherwise), or per slot of a repository in worktrees, and how many
- * new cards could start now; over it, each machine's slots and the cards that hold its clones.
+ * pale while the card holds it otherwise, orange while free but blocked), or per slot of a
+ * repository in worktrees, and how many new cards could start now; over it, each machine's slots,
+ * the cards that hold its clones, and why a blocked clone goes to no card and what to do about it.
  */
 export function WorkspacesPill({ pools, canvas, items }: { pools: ClonePool[]; canvas: CanvasInfo; items: Item[] }) {
   const several = pools.length > 1;
   const name = (repo: string) => canvas.repos.find((r) => r.id === repo)?.name ?? repo;
   const forWorkspace = items.filter((i) => (i.queue && 'workspace' in i.queue && i.queue.workspace !== 'slots') || i.waitsForClone).length;
   const forSlot = items.filter((i) => i.queue && 'workspace' in i.queue && i.queue.workspace === 'slots').length;
-  // a new card takes a free clone on a machine whose busy workers leave it a slot
-  const room = (h: PoolHost) => Math.max(0, Math.min(h.slots - h.busy.length, h.total - h.cards.length));
+  const blocked = (h: PoolHost) => h.blocked?.length ?? 0;
+  // a new card takes a free clone that is not blocked, on a machine whose busy workers leave it a slot
+  const room = (h: PoolHost) => Math.max(0, Math.min(h.slots - h.busy.length, h.total - h.cards.length - blocked(h)));
   const free = (p: ClonePool) => p.hosts.reduce((n, h) => n + room(h), 0);
   const total = (p: ClonePool) => p.hosts.reduce((n, h) => n + h.total, 0);
+  const blockedIn = (p: ClonePool) => p.hosts.reduce((n, h) => n + blocked(h), 0);
   const full = pools.every((p) => free(p) === 0);
   // the machines a pool names: those with clones or a clone's folder kept, and every other machine than this one
   const named = (p: ClonePool) => p.hosts.filter((h) => h.total > 0 || !h.here || h.kept?.length);
@@ -551,12 +554,13 @@ export function WorkspacesPill({ pools, canvas, items }: { pools: ClonePool[]; c
                 {hosts.length > 1 && <span className="hint">{h.name}</span>}
                 <span className="slots" aria-hidden>
                   {Array.from({ length: h.total }, (_, i) => (
-                    <i key={i} className={i < h.busy.length ? 'on' : i < h.cards.length ? 'held' : undefined} />
+                    <i key={i} className={i < h.busy.length ? 'on' : i < h.cards.length ? 'held' : i < h.cards.length + blocked(h) ? 'blocked' : undefined} />
                   ))}
                 </span>
               </span>
             ))}
-            <b>{t.workspaces.free(free(p), total(p))}</b>
+            <b>{t.workspaces.free(free(p), total(p), blockedIn(p))}</b>
+            {blockedIn(p) > 0 && <b className="warn">{t.workspaces.blockedCount(blockedIn(p))}</b>}
           </span>
         );
       })}
@@ -589,6 +593,7 @@ export function WorkspacesPill({ pools, canvas, items }: { pools: ClonePool[]; c
                     {t.workspaces.kept(path)}
                   </p>
                 ))}
+                <BlockedClones host={h} />
               </div>
             ))}
           </div>
@@ -597,6 +602,38 @@ export function WorkspacesPill({ pools, canvas, items }: { pools: ClonePool[]; c
         {forSlot > 0 && <p>{t.workspaces.waitingSlot(forSlot)}</p>}
       </div>
     </div>
+  );
+}
+
+/** Why each of a machine's blocked clones goes to no card, and what the owner can do: a line per clone, one for all of an unreachable machine's. */
+function BlockedClones({ host }: { host: PoolHost }) {
+  const all = host.blocked ?? [];
+  const away = all.filter((b) => b.why === 'unreachable').map((b) => b.path);
+  const line = (b: BlockedClone) => {
+    const tb = t.workspaces.blocked;
+    switch (b.why) {
+      case 'dirty':
+        return tb.dirty(b.path, b.files ?? [], b.more ?? 0);
+      case 'broken':
+        return tb.broken(b.path, b.error ?? '', !!b.made);
+      case 'missing':
+        return tb.missing(b.path, !!b.made);
+      case 'failed':
+        return tb.failed(b.path, b.error ?? '');
+      case 'unreachable':
+        return tb.unreachable(host.name, away);
+    }
+  };
+  return (
+    <>
+      {all
+        .filter((b, i) => b.why !== 'unreachable' || all.findIndex((x) => x.why === 'unreachable') === i)
+        .map((b) => (
+          <p key={b.path} className="warn">
+            {line(b)}
+          </p>
+        ))}
+    </>
   );
 }
 

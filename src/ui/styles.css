@@ -272,8 +272,10 @@ button.pill:hover { box-shadow: var(--lift); }
 .pill.workspaces .host { display: flex; align-items: center; gap: 5px; }
 .pill.workspaces .slots i.held { background: color-mix(in srgb, var(--working) 35%, transparent); box-shadow: none; }
 .pill.workspaces .slots i.on { background: var(--working); box-shadow: none; }
-.pill.workspaces.full b { color: var(--waiting); }
-.pill.workspaces .tip { display: none; position: absolute; top: calc(100% + 8px); right: 0; width: 340px; padding: 10px 14px; border-radius: 3px;
+.pill.workspaces.full b, .pill.workspaces b.warn { color: var(--waiting); }
+.pill.workspaces .slots i.blocked { background: var(--waiting); box-shadow: none; }
+.pill.workspaces .tip p.warn { color: var(--warn); overflow-wrap: anywhere; }
+.pill.workspaces .tip { display: none; position: absolute; top: calc(100% + 8px); right: 0; width: 380px; padding: 10px 14px; border-radius: 3px;
   background: var(--panel); color: var(--ink); box-shadow: var(--lift); white-space: normal; font-size: 13px; font-weight: 400; line-height: 1.45;
   text-align: left; pointer-events: none; z-index: 30; }
 .pill.workspaces .tip p { margin: 0 0 6px; }

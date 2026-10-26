@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, setSystemTime, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -13,7 +13,7 @@ import { SourceUpdates } from './source-update';
 import type { NarrationHost } from './narration';
 import { serve, serveNarration } from './server';
 import { artifact, asOwner, FakeRuntime, gitRepo, identify, noForge, until } from './testing';
-import { git } from './workspaces';
+import { git, RECHECK_MS } from './workspaces';
 import type { Transcript } from './voice';
 
 let dir: string;
@@ -56,6 +56,7 @@ beforeEach(() => {
 afterEach(() => {
   server.stop(true);
   rmSync(dir, { recursive: true, force: true });
+  setSystemTime();
 });
 
 // what the page, the app's shell and scripts send: the owner's key (owner.ts)
@@ -1258,7 +1259,9 @@ describe('the Lesestand and the free clones', () => {
     await refreshed;
     expect(projects()).toEqual(['Export', 'Import']);
 
-    // whether a card may take the free clone is answered at once, while git looks at it in the background
+    // a minute on (the canvas shown before looked at the free clone for the Workspaces pill), whether a card
+    // may take it is answered at once, while git looks at it again in the background
+    setSystemTime(new Date(Date.now() + RECHECK_MS));
     const before = Date.now();
     expect(shop.repos[0]!.workspaces.leasable()).toBe(true);
     expect(Date.now() - before).toBeLessThan(1000);

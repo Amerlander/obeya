@@ -136,9 +136,21 @@ meanwhile waits for it.
 
 For each repository in clones the top bar shows the pool („Workspaces“): per machine (named once
 there is more than one) a dot per clone, solid while its card's worker is at work, pale while merely
-held, and how many new cards could start („2 frei“, „alle belegt“). Its tooltip lists each machine's
-slots at work and clones taken, the cards holding one, and how many cards wait for a workspace or a
-slot. A repository in worktrees shows a dot per slot, and none without slots (no pill if all are so).
+held, orange while free but blocked, and how many new cards could start („2 frei“, „alle belegt“,
+„keiner frei · 1 blockiert“). Its tooltip lists each machine's slots at work and clones taken, the
+cards holding one, and how many cards wait for a workspace or a slot. A repository in worktrees
+shows a dot per slot, and none without slots (no pill if all are so).
+
+A free clone is blocked when the last look at it (see Workspaces) says no new card gets it: it has
+uncommitted or untracked changes (the tooltip names the first five files), git fails in it, its
+folder is missing, its machine does not answer over SSH (one line per machine), or git failed making
+it ready for a card in the last minute. Blocked clones do not count as free, and the tooltip says in
+orange, per clone, why and what puts it right: commit or discard the changes; repair it, or delete
+a clone Obeya made, which its next start makes again; clone it again or take the path out of the
+configuration; check the network and SSH access. Showing the pool looks again, in the background,
+at free clones whose look is older than a minute or that were never looked at, so the pill tells
+before a card waits what a waiting card would find. A card queued for want of a workspace points to
+the pill for the reason.
 
 ### Folders without git
 
@@ -307,6 +319,10 @@ a container say, reuses pids). A host needs git, Claude Code and what the reposi
   removing a worktree, or a checkout back to the main branch in a discarded prototype's clone, held
   the server on every canvas in a large repository or over SSH. Rejected: freeing the workspace first
   and cleaning it afterwards (another card could take it half cleaned).
+- **The pool shows why a free clone goes to no card** (2026-10-26, GitHub issue #9): a clone with
+  uncommitted changes counted as free in the pill while cards waited for one, with nothing saying
+  why; the card's own line („Die freien Workspaces haben nicht committete Änderungen“) named
+  neither the clone nor the files.
 - **Free clones are chosen by their last look, the one taken looked at again** (2026-10-21): in a
   large repository (GitHub issue #2: 9,188 files, on Windows) or over SSH, `git status` in every free
   clone at each look held the server, on every canvas. Rejected: asking git while choosing; a start

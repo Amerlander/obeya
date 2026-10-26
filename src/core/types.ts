@@ -866,6 +866,25 @@ export interface PoolHost {
   busy: string[];
   /** The folders (paths there) of clones Obeya made that left the pool and stay, since something in them would be lost. */
   kept?: string[];
+  /** Its free clones no new card gets now, by their last look; none when every free clone can be taken. */
+  blocked?: BlockedClone[];
+}
+
+/**
+ * A free clone no new card gets now, and why, for the owner to put right: `dirty`, uncommitted
+ * changes (the first `files`, `more` beyond them); `broken`, git fails in it (`error`); `missing`,
+ * its folder is not there; `unreachable`, its machine does not answer over SSH; `failed`, git
+ * failed making it ready for a card a moment ago (`error`), so it is passed over for a minute.
+ * `made`: a clone Obeya made, which its next start makes again where the folder is missing.
+ */
+export interface BlockedClone {
+  /** Its path on its machine. */
+  path: string;
+  why: 'dirty' | 'broken' | 'missing' | 'unreachable' | 'failed';
+  files?: string[];
+  more?: number;
+  error?: string;
+  made?: true;
 }
 
 export interface CanvasSnapshot {

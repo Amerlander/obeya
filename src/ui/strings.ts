@@ -460,8 +460,8 @@ const de = {
     /** On the card: why it waits for a workspace. */
     workspaceWhy: { none: 'Alle Workspaces sind belegt.', dirty: 'Die freien Workspaces haben nicht committete Änderungen.', slots: 'Alle Slots sind belegt.' },
     workspaceLong: {
-      none: 'Kein Workspace frei: Alle sind belegt oder es ist keiner eingerichtet. Die Aufgabe startet von selbst, sobald einer frei wird.',
-      dirty: 'Kein Workspace frei: Jeder freie hat noch nicht committete Änderungen. Die Aufgabe startet von selbst, sobald einer sauber ist.',
+      none: 'Kein Workspace frei: Alle sind belegt, die freien blockiert, oder es ist keiner eingerichtet. Die Aufgabe startet von selbst, sobald einer frei wird. Was einen Workspace blockiert, zeigt „Workspaces“ oben in der Leiste.',
+      dirty: 'Kein Workspace frei: Jeder freie hat noch nicht committete Änderungen. Die Aufgabe startet von selbst, sobald einer sauber ist. Welche Dateien es sind, zeigt „Workspaces“ oben in der Leiste.',
       slots: 'Kein Slot frei: Auf jedem Rechner mit freiem Workspace arbeiten so viele Agenten, wie er Slots hat. Die Aufgabe startet von selbst, sobald einer fertig ist.',
     },
     /** On the card: opens the configuration at the repository's clone count, or its slots. */
@@ -1556,12 +1556,29 @@ const de = {
   },
   workspaces: {
     label: 'Workspaces',
-    free: (n: number, total: number) => (total === 0 ? 'keine eingerichtet' : n <= 0 ? 'alle belegt' : `${n} frei`),
+    free: (n: number, total: number, blocked = 0) => (total === 0 ? 'keine eingerichtet' : n > 0 ? `${n} frei` : blocked ? 'keiner frei' : 'alle belegt'),
+    /** Beside how many are free: the free clones no new card gets now. */
+    blockedCount: (n: number) => `· ${n} blockiert`,
     host: (name: string, busy: number, slots: number, taken: number, total: number) =>
       `${name}: ${busy} von ${slots} ${slots === 1 ? 'Slot' : 'Slots'} in Arbeit, ${taken} von ${total} ${total === 1 ? 'Klon' : 'Klonen'} belegt${taken ? ':' : '.'}`,
     worktreeSlots: (name: string, busy: number, slots: number) => `${name}: ${busy} von ${slots} ${slots === 1 ? 'Slot' : 'Slots'} in Arbeit${busy ? ':' : '.'}`,
     offCanvas: 'eine Karte, die nicht auf der Leinwand liegt',
     kept: (path: string) => `bleibt: nicht gelandete Arbeit in ${path}`,
+    /** A free clone no new card gets now: why, and what the owner can do about it. */
+    blocked: {
+      dirty: (path: string, files: string[], more: number) =>
+        `${path} hat nicht committete Änderungen: ${files.join(', ')}${more ? ` und ${more} weitere` : ''}. Keine Karte bekommt den Klon, bis du sie dort committest oder verwirfst (neue Dateien löschst).`,
+      broken: (path: string, error: string, made: boolean) =>
+        `In ${path} geht git nicht: ${error}. Keine Karte bekommt den Klon, bis du ihn reparierst${made ? ' oder den Ordner löschst (dann legt Obeya ihn beim nächsten Start neu an)' : ''}.`,
+      missing: (path: string, made: boolean) =>
+        made
+          ? `${path} fehlt. Obeya legt den Klon beim nächsten Start neu an.`
+          : `${path} fehlt. Klone das Repository wieder dorthin oder nimm den Pfad in der Konfiguration heraus.`,
+      unreachable: (host: string, paths: string[]) =>
+        `${host} antwortet nicht über SSH: Keine Karte bekommt ${paths.length === 1 ? `den Klon ${paths[0]}` : `die Klone ${paths.join(', ')}`}, bis der Rechner wieder erreichbar ist. Prüfe Netz und SSH-Zugang.`,
+      failed: (path: string, error: string) =>
+        `git konnte ${path} eben nicht für eine Karte vorbereiten: ${error}. Obeya versucht es in einer Minute wieder; scheitert es weiter, prüfe dort Netz und Zugang zum Remote.`,
+    },
     atWork: 'arbeitet',
     waiting: (n: number) => (n === 1 ? '1 Karte wartet auf einen freien Workspace.' : `${n} Karten warten auf einen freien Workspace.`),
     waitingSlot: (n: number) => (n === 1 ? '1 Karte wartet auf einen freien Slot.' : `${n} Karten warten auf einen freien Slot.`),
@@ -2125,8 +2142,8 @@ const en: Strings = {
     slot: 'Waiting for a free slot',
     workspaceWhy: { none: 'All workspaces are taken.', dirty: 'The free workspaces have uncommitted changes.', slots: 'All slots are taken.' },
     workspaceLong: {
-      none: 'No workspace free: all are taken or none is set up. The task starts by itself as soon as one is free.',
-      dirty: 'No workspace free: every free one has uncommitted changes. The task starts by itself as soon as one is clean.',
+      none: 'No workspace free: all are taken, the free ones blocked, or none is set up. The task starts by itself as soon as one is free. “Workspaces” in the bar at the top shows what blocks one.',
+      dirty: 'No workspace free: every free one has uncommitted changes. The task starts by itself as soon as one is clean. “Workspaces” in the bar at the top shows which files they are.',
       slots: 'No slot free: every machine with a free workspace has as many agents at work as it has slots. The task starts by itself as soon as one is done.',
     },
     workspaceConfig: { none: 'Change the number of clones', dirty: 'Change the number of clones', slots: 'Change the number of slots' },
@@ -3183,12 +3200,25 @@ const en: Strings = {
   },
   workspaces: {
     label: 'Workspaces',
-    free: (n: number, total: number) => (total === 0 ? 'none set up' : n <= 0 ? 'all taken' : `${n} free`),
+    free: (n: number, total: number, blocked = 0) => (total === 0 ? 'none set up' : n > 0 ? `${n} free` : blocked ? 'none free' : 'all taken'),
+    blockedCount: (n: number) => `· ${n} blocked`,
     host: (name: string, busy: number, slots: number, taken: number, total: number) =>
       `${name}: ${busy} of ${slots} ${slots === 1 ? 'slot' : 'slots'} at work, ${taken} of ${total} ${total === 1 ? 'clone' : 'clones'} taken${taken ? ':' : '.'}`,
     worktreeSlots: (name: string, busy: number, slots: number) => `${name}: ${busy} of ${slots} ${slots === 1 ? 'slot' : 'slots'} at work${busy ? ':' : '.'}`,
     offCanvas: 'a card that is not on the canvas',
     kept: (path: string) => `stays: work not landed in ${path}`,
+    blocked: {
+      dirty: (path: string, files: string[], more: number) =>
+        `${path} has uncommitted changes: ${files.join(', ')}${more ? ` and ${more} more` : ''}. No card gets the clone until you commit or discard them there (delete new files).`,
+      broken: (path: string, error: string, made: boolean) =>
+        `git fails in ${path}: ${error}. No card gets the clone until you repair it${made ? ' or delete the folder (Obeya then makes it again at its next start)' : ''}.`,
+      missing: (path: string, made: boolean) =>
+        made ? `${path} is missing. Obeya makes the clone again at its next start.` : `${path} is missing. Clone the repository there again or take the path out of the configuration.`,
+      unreachable: (host: string, paths: string[]) =>
+        `${host} does not answer over SSH: no card gets ${paths.length === 1 ? `the clone ${paths[0]}` : `the clones ${paths.join(', ')}`} until the machine can be reached again. Check the network and SSH access.`,
+      failed: (path: string, error: string) =>
+        `git could not make ${path} ready for a card just now: ${error}. Obeya tries again in a minute; if it keeps failing, check the network and access to the remote there.`,
+    },
     atWork: 'at work',
     waiting: (n: number) => (n === 1 ? '1 card is waiting for a free workspace.' : `${n} cards are waiting for a free workspace.`),
     waitingSlot: (n: number) => (n === 1 ? '1 card is waiting for a free slot.' : `${n} cards are waiting for a free slot.`),

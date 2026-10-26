@@ -11,7 +11,7 @@ import { rm } from 'node:fs/promises';
 import { hostname } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { type CardDiff, cardDiff } from '../core/diff';
-import type { PoolHost, WorkspaceShortage } from '../core/types';
+import type { BlockedClone, PoolHost, WorkspaceShortage } from '../core/types';
 import type { Store } from './db';
 import { HostError, hostName, LOST, onHost, remote, sh as shWord, type SshHost, TOKEN_HELPER, TOKEN_HELPER_ARGS } from './hosts';
 import { runAppCommand } from './app-command';
@@ -384,9 +384,9 @@ export class Workspaces implements CardWorkspaces {
    * uncommitted changes, or is not there (its machine unreachable, say). `place` chooses by it
    * without asking git; the clone chosen is looked at again before a card works in it.
    */
-  private looks = new Map<string, { found: Found; at: number }>();
+  private looks = new Map<string, Seen & { at: number }>();
   /** The looks at free clones under way, by path. */
-  private looking = new Map<string, Promise<Found>>();
+  private looking = new Map<string, Promise<Seen>>();
   /** Clones the configuration no longer names that a card still holds: they leave the pool once it gives them back (`keepOnly`). */
   private leaving = new Set<string>();
   /** The directory Obeya makes its clones in on each host, once it has made sure they are there (`ensureHostClones`). */
@@ -395,8 +395,8 @@ export class Workspaces implements CardWorkspaces {
   private preparing = new Map<string, Promise<string>>();
   /** Cards that gave back their workspace while git was still making it ready: it is free once git is done. */
   private releasing = new Set<string>();
-  /** Free clones git failed to make ready for a card, and when: not taken again before RECHECK_MS (a fetch that fails would fail again at once). */
-  private failed = new Map<string, number>();
+  /** Free clones git failed to make ready for a card, when and why: not taken again before RECHECK_MS (a fetch that fails would fail again at once). */
+  private failed = new Map<string, { at: number; error: string }>();
   /** Follow-ups' temporary worktrees git is adding, by path: removing one waits for it. */
   private trees = new Map<string, Promise<void>>();
   /**
@@ -757,8 +757,8 @@ export class Workspaces implements CardWorkspaces {
         const look = this.looks.get(w.path);
         if (!look || Date.now() - look.at >= RECHECK_MS) void this.look(w.path);
         // an unreachable machine's clones count as missing, not as dirty, and so do those git just failed on
-        if (Date.now() - (this.failed.get(w.path) ?? -Infinity) < RECHECK_MS || look?.found === 'missing') continue;
-        if (look?.found === 'dirty') dirty = true;
+        if (this.justFailed(w.path) || look?.found === 'missing' || look?.found === 'unreachable') continue;
+        if (look?.found === 'dirty' || look?.found === 'broken') dirty = true;
         else if (look?.found === 'clean') {
           found ??= w.path;
           break;
@@ -776,26 +776,50 @@ export class Workspaces implements CardWorkspaces {
    * changes, or is not there. Looks at one clone under way at once are one. A look that finds
    * otherwise than the one before changes the board: a card waiting for a clean clone may take it now.
    */
-  private look(path: string): Promise<Found> {
+  private look(path: string): Promise<Seen> {
     let looking = this.looking.get(path);
     if (looking) return looking;
-    looking = cloneState(path).then((found) => {
+    looking = cloneState(path).then((seen) => {
       this.looking.delete(path);
-      const before = this.looks.get(path)?.found;
+      const before = this.looks.get(path);
       // taken meanwhile: the card it went to looks again before it works in it
-      if (!this.list().some((w) => w.path === path && !w.card_id)) return found;
-      this.looks.set(path, { found, at: Date.now() });
-      if (before !== found) this.o.changed?.();
-      return found;
+      if (!this.list().some((w) => w.path === path && !w.card_id)) return seen;
+      this.looks.set(path, { ...seen, at: Date.now() });
+      // the pill names what it found, the files in a dirty clone too
+      if (!before || !sameSeen(before, seen)) this.o.changed?.();
+      return seen;
     });
     this.looking.set(path, looking);
     return looking;
+  }
+
+  /** Whether git failed making the clone ready for a card less than RECHECK_MS ago. */
+  private justFailed(path: string): boolean {
+    return Date.now() - (this.failed.get(path)?.at ?? -Infinity) < RECHECK_MS;
+  }
+
+  /**
+   * Why no new card gets the free clone at `path` now, by its last look; null when one may. A look
+   * older than RECHECK_MS, or none, is taken again in the background, a look that finds otherwise
+   * changing the board, so that the pill shows what a card waiting for a clone would find.
+   */
+  private blocked(path: string): BlockedClone | null {
+    const look = this.looks.get(path);
+    if (!look || Date.now() - look.at >= RECHECK_MS) void this.look(path);
+    const at = pathThere(path);
+    const made = this.made(path) ? { made: true as const } : {};
+    const failed = this.failed.get(path);
+    if (failed && this.justFailed(path)) return { path: at, why: 'failed', error: failed.error, ...made };
+    if (!look || look.found === 'clean') return null;
+    const { found, files, more, error } = look;
+    return { path: at, why: found, ...(files ? { files } : {}), ...(more ? { more } : {}), ...(error ? { error } : {}), ...made };
   }
 
   /**
    * The pool by machine for the Workspaces pill, `busy` the cards whose worker is in a turn. Worktrees
    * are never short, so their pool is this machine's slots, each taken while a worker is at work.
    * `kept`: the folders of clones Obeya made that left the pool and stay since something in them would be lost.
+   * `blocked`: the free clones no new card gets now, and why.
    */
   pool(busy: string[]): PoolHost[] {
     const all = this.list();
@@ -812,6 +836,7 @@ export class Workspaces implements CardWorkspaces {
       const ws = all.filter((w) => hostName(w.path) === host);
       const cards = ws.flatMap((w) => (w.card_id ? [w.card_id] : []));
       const slots = this.slots(host);
+      const blocked = ws.flatMap((w) => (w.card_id ? [] : (this.blocked(w.path) ?? [])));
       return {
         name: host ?? HERE,
         ...(host === null ? { here: true } : {}),
@@ -820,6 +845,7 @@ export class Workspaces implements CardWorkspaces {
         cards,
         busy: cards.filter((c) => busy.includes(c)),
         ...keptOn(host),
+        ...(blocked.length ? { blocked } : {}),
       };
     });
   }
@@ -1247,10 +1273,10 @@ export class Workspaces implements CardWorkspaces {
       found.path,
       async () => {
         let path = found.path;
-        for (let state = await cloneState(path); state !== 'clean'; state = await cloneState(path)) {
+        for (let seen = await cloneState(path); seen.found !== 'clean'; seen = await cloneState(path)) {
           // given back first: the shortage, where no other is left, counts it as the dirty clone it is
           this.free(path);
-          this.looks.set(path, { found: state, at: Date.now() });
+          this.looks.set(path, { ...seen, at: Date.now() });
           const next = this.place(overSlots);
           if ('short' in next) throw new WorkspaceError(SHORT_TEXT[next.short], SHORT_CODE[next.short]);
           this.take(next.path, cardId);
@@ -1265,7 +1291,7 @@ export class Workspaces implements CardWorkspaces {
       },
       (path, e) => {
         // a clone git failed on is not taken again at once; one found dirty is known as such already
-        if (!shortageOf(e.code)) this.failed.set(path, Date.now());
+        if (!shortageOf(e.code)) this.failed.set(path, { at: Date.now(), error: e.message });
         this.free(path);
       },
     );
@@ -1456,16 +1482,48 @@ export async function unlanded(path: string, o: { origins?: string[]; main?: str
   }
   return lost;
 }
-/** What a look at a clone finds (`Workspaces.look`). */
-type Found = 'clean' | 'dirty' | 'missing';
+/** How many of a dirty clone's files a look keeps, for the pill to name. */
+const SEEN_FILES = 5;
 
-/** Whether a clone is clean, has uncommitted changes (or git fails in it), or is not there; without blocking the server. */
-async function cloneState(path: string): Promise<Found> {
+/**
+ * What a look at a clone finds (`Workspaces.look`): clean; uncommitted changes (`files`, the first
+ * SEEN_FILES of them, `more` beyond); git failing in it (`broken`, its `error`); its folder not there;
+ * or its machine not answering.
+ */
+interface Seen {
+  found: 'clean' | 'dirty' | 'broken' | 'missing' | 'unreachable';
+  files?: string[];
+  more?: number;
+  error?: string;
+}
+
+const sameSeen = (a: Seen, b: Seen) => a.found === b.found && a.more === b.more && a.error === b.error && (a.files ?? []).join('\n') === (b.files ?? []).join('\n');
+
+/** Whether a clone is clean, has uncommitted changes (and which), git fails in it, or is not there; without blocking the server. */
+async function cloneState(path: string): Promise<Seen> {
   try {
-    if (!(await existsAsync(path))) return 'missing';
-    return (await gitAsync(path, 'status', '--porcelain')) === '' ? 'clean' : 'dirty';
-  } catch {
-    return 'dirty';
+    const there = remoteWorkspace(path);
+    if (there) {
+      const r = await there.host.run(['test', '-e', there.path]);
+      if (r.code === LOST) return { found: 'unreachable' };
+      if (r.code !== 0) return { found: 'missing' };
+    } else if (!existsSync(path)) return { found: 'missing' };
+    // not `gitAsync`, which trims the first entry's status letters
+    const r = await gitRun(path, ['status', '--porcelain', '-z']);
+    if (r.code !== 0) return { found: 'broken', error: (r.stderr || r.stdout).trim() || `exit code ${r.code}` };
+    if (r.stdout === '') return { found: 'clean' };
+    // `XY path`, unquoted, each ended by NUL; a rename or copy is followed by the path it came from
+    const files: string[] = [];
+    const entries = r.stdout.split('\0');
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i]!;
+      if (!e) continue;
+      files.push(e.slice(3));
+      if (e[0] === 'R' || e[0] === 'C') i++;
+    }
+    return { found: 'dirty', files: files.slice(0, SEEN_FILES), ...(files.length > SEEN_FILES ? { more: files.length - SEEN_FILES } : {}) };
+  } catch (e) {
+    return { found: 'broken', error: messageOf(e) };
   }
 }
 
