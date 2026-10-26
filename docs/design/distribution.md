@@ -69,8 +69,9 @@ Mac (a bundle, so Spotlight, Launchpad and the Dock know it and the system asks 
 it), in the Start menu on Windows, in the applications menu on Linux, and opens it. Its identifier is
 not the release's, so its permissions and its single instance stay apart from an installed release.
 Started from the desktop it gets no environment, so the checkout, the bun that ran the install and
-the version of `app/` on HEAD are compiled in; the server it starts adds the directory of its bun
-to the PATH, for the workers' `bun`.
+the version of `app/` on HEAD are compiled in, and the commit, which its settings show under „App“;
+the server it starts adds the directory of its bun to the PATH, for the workers' `bun`. A checkout's
+Obeya in a browser shows `bun run app install` in its settings.
 
 Landed code reaches it as it reaches `bun start` (see Self-update); the shell itself offers no
 release updates. Once `app/` on the checkout's HEAD is another than it was built from (looked at

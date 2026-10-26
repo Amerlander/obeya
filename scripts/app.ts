@@ -8,7 +8,7 @@
 //   bun run app install [--no-open]  installs it as an app of its own, "Obeya (checkout)", and opens it
 //
 // install builds the shell with this checkout, the bun that runs it and the version of app/ on HEAD
-// compiled in, and puts it where the system starts apps from: ~/Applications on a Mac (Spotlight,
+// (and the commit, which the settings show) compiled in, and puts it where the system starts apps from: ~/Applications on a Mac (Spotlight,
 // Launchpad, the Dock), the applications menu on Linux (~/.local/share/obeya-checkout and a .desktop
 // file in ~/.local/share/applications), the Start menu on Windows (%LOCALAPPDATA%\Programs\Obeya
 // checkout). Started from there, it runs this checkout's server as `bun run app` does. Once app/ on
@@ -47,14 +47,19 @@ function fail(msg: string): never {
 const config: Record<string, unknown> = { bundle: { externalBin: null, resources: null } };
 const env: Record<string, string | undefined> = { ...process.env, PATH: cargoPath(), CARGO_TARGET_DIR: target, CI: 'true' };
 if (install) {
-  const tree = Bun.spawnSync(['git', 'rev-parse', 'HEAD:app'], { cwd: ROOT, stderr: 'ignore' });
+  const git = (...a: string[]) => {
+    const r = Bun.spawnSync(['git', ...a], { cwd: ROOT, stderr: 'ignore' });
+    return r.exitCode === 0 ? r.stdout.toString().trim() : '';
+  };
   Object.assign(config, { identifier: IDENTIFIER });
   Object.assign(env, {
     // compiled in (option_env! in app/src/main.rs and update.rs): started from the desktop, the shell gets no environment of ours
     OBEYA_BUILT_CHECKOUT: ROOT,
     // the PATH's bun (Homebrew's link, say) rather than the binary it points at, which an upgrade removes
     OBEYA_BUILT_BUN: Bun.which('bun') ?? process.execPath,
-    OBEYA_BUILT_TREE: tree.exitCode === 0 ? tree.stdout.toString().trim() : '',
+    OBEYA_BUILT_TREE: git('rev-parse', 'HEAD:app'),
+    // for the settings, which show it
+    OBEYA_BUILT_COMMIT: git('rev-parse', 'HEAD'),
   });
 }
 // on a Mac an app bundle (Info.plist, icon, the system's permissions for it); elsewhere the program is all there is

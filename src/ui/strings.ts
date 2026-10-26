@@ -1175,6 +1175,8 @@ const de = {
     openInBrowser: 'Im Browser öffnen',
     openInBrowserHint: 'Diese Leinwand im Standardbrowser',
     asApp: 'Als App',
+    app: 'App',
+    appBuiltHint: 'Aus dem Checkout installiert („bun run app install“). Ändert sich die App selbst (app/) auf dem Checkout, baut sie sich neu und startet neu, sobald die Agenten pausieren.',
     asAppHint:
       'Im Checkout ausgeführt, installiert das Obeya als App „Obeya (checkout)“: auf dem Mac in ~/Applications (Spotlight, Launchpad, Dock), unter Windows im Startmenü, unter Linux im Anwendungsmenü. Sie läuft auf dem Code dieses Checkouts und folgt main wie jetzt; ändert sich die App selbst (app/), baut sie sich neu. Dazu kommt die Sprachtaste überall. Braucht Rust (rustup.rs); der erste Bau dauert ein paar Minuten.',
     save: 'Speichern und neu starten',
@@ -2799,6 +2801,8 @@ const en: Strings = {
     openInBrowser: 'Open in browser',
     openInBrowserHint: 'This canvas in the default browser',
     asApp: 'As an app',
+    app: 'App',
+    appBuiltHint: 'Installed from the checkout ("bun run app install"). When the app itself (app/) changes on the checkout, it builds itself anew and restarts once the agents pause.',
     asAppHint:
       'Run in the checkout, this installs Obeya as an app, "Obeya (checkout)": in ~/Applications on a Mac (Spotlight, Launchpad, the Dock), in the Start menu on Windows, in the applications menu on Linux. It runs on this checkout\'s code and follows main as now; when the app itself changes (app/), it builds itself anew. It adds the push-to-talk key anywhere. Needs Rust (rustup.rs); the first build takes a few minutes.',
     save: 'Save and restart',

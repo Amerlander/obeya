@@ -22,7 +22,8 @@ import { WishLink } from './wish';
 declare global {
   interface Window {
     /** Set by the app (app/src/main.rs) in its window; absent in a browser. */
-    obeyaApp?: { version: string; platform: string };
+    /** In the app's window (app/src/main.rs); `built`: installed from a checkout, the commit it was built from. */
+    obeyaApp?: { version: string; platform: string; built?: string | null };
   }
 }
 
@@ -517,6 +518,11 @@ function ServerBlock({ server }: { server: ConfigView['server'] }) {
       {server.commit && !window.obeyaApp && (
         <Field label={c.asApp} hint={c.asAppHint}>
           <code>bun run app install</code>
+        </Field>
+      )}
+      {window.obeyaApp?.built && (
+        <Field label={c.app} hint={c.appBuiltHint}>
+          {c.checkout(window.obeyaApp.built.slice(0, 7))}
         </Field>
       )}
       {/* in the app's window (app/src/main.rs), which opens a new window in the default browser */}

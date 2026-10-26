@@ -449,9 +449,11 @@ fn window(app: &AppHandle, obeya: Arc<Obeya>) -> tauri::Result<WebviewWindow> {
     .inner_size(1440.0, 900.0)
     .min_inner_size(720.0, 480.0)
     .initialization_script(format!(
-      "window.obeyaApp = {{ version: {:?}, platform: {:?} }};",
+      "window.obeyaApp = {{ version: {:?}, platform: {:?}, built: {} }};",
       app.package_info().version.to_string(),
-      std::env::consts::OS
+      std::env::consts::OS,
+      // installed from a checkout: the commit it was built from, which the settings show
+      option_env!("OBEYA_BUILT_COMMIT").filter(|c| !c.is_empty()).map_or("null".to_string(), |c| format!("{c:?}"))
     ))
     .on_permission_request(|_, kind| match kind {
       PermissionKind::Microphone => PermissionResponse::Allow,
