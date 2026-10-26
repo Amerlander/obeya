@@ -36,7 +36,10 @@ export function sealed(html: string, own?: string): string {
 /**
  * The page's height, sent to the page around it whenever it changes, by a pixel too: there the
  * frame grows to it. Rounded up (scrollHeight rounds, and a page a fraction of a pixel higher than
- * its frame scrolls), and a page wider than its frame adds the scrollbar across its foot.
+ * its frame scrolls), and a page wider than its frame adds the scrollbar across its foot. Once its
+ * frame holds its height, the page does not scroll up and down: a page whose images grow with its
+ * width fits beside a scrollbar but not without one, and kept a bar that scrolled by a few pixels.
+ * It still scrolls sideways, where it is wider than its frame (a wide table on a phone).
  */
 const HEIGHT_REPORT = `<script>(() => {
   let last = 0;
@@ -44,8 +47,11 @@ const HEIGHT_REPORT = `<script>(() => {
     const html = document.documentElement;
     const h = Math.max(html.scrollHeight, Math.ceil(html.getBoundingClientRect().height)) + innerHeight - html.clientHeight;
     if (h !== last) { last = h; parent.postMessage({ obeyaHeight: h }, '*'); }
+    if (innerHeight >= h) html.style.setProperty('overflow-y', 'hidden');
+    else html.style.removeProperty('overflow-y');
   };
   addEventListener('load', say);
+  addEventListener('resize', say);
   new ResizeObserver(say).observe(document.documentElement);
 })();</script>`;
 

@@ -1680,17 +1680,9 @@ function DemoView({
         )}
         {demo.kind === 'html' ? (
           // the worker's page: scripts run, but in an origin of its own, away from Obeya's API. Once
-          // the frame has the page's height it does not scroll: a page whose images grow with its
-          // width fits beside a scrollbar but not without one, and kept a bar that scrolled by a few pixels
-          <iframe
-            ref={artifact}
-            className="artifact"
-            sandbox="allow-scripts"
-            src={src('index.html')}
-            title={t.demo.artifact}
-            style={{ height: artifactHeight }}
-            scrolling={artifactHeight !== undefined && artifactHeight < ARTIFACT_CAP ? 'no' : undefined}
-          />
+          // the frame has the page's height, the page stops scrolling up and down by itself
+          // (`withHeightReport`); sideways it still scrolls, where it is wider than the frame
+          <iframe ref={artifact} className="artifact" sandbox="allow-scripts" src={src('index.html')} title={t.demo.artifact} style={{ height: artifactHeight }} />
         ) : (
           <div className="player" ref={zoom.player} style={zoom.box ? { height: zoom.box.from.height } : undefined}>
             {zoom.box && <div className={zoom.box.closing ? 'demo-zoom closing' : 'demo-zoom'} ref={zoom.backdrop} title={t.demo.unzoom} onClick={zoom.toggle} />}
