@@ -1487,7 +1487,7 @@ button.link:hover { text-decoration: underline; }
 #ptt .c-shot { height: 46px; min-width: 46px; box-shadow: var(--shadow); }
 #ptt .c-shot img { max-width: 82px; }
 /* files dropped on the mic with no field for their paths: their names */
-.ptt-files { display: flex; gap: 8px; }
+.ptt-files { display: flex; flex-wrap: wrap; gap: 8px; max-width: calc(50vw - 160px); }
 .c-file { position: relative; height: 46px; display: inline-flex; align-items: center; padding: 0 12px; max-width: 180px; border-radius: 2px; border: 1px solid var(--line);
   background: var(--card); box-shadow: var(--shadow); font-size: 12px; color: var(--ink); white-space: nowrap; }
 .c-file .name { overflow: hidden; text-overflow: ellipsis; }
@@ -1906,6 +1906,8 @@ button.link:hover { text-decoration: underline; }
   /* the screenshot button and the screenshots above the microphone, not beside it */
   .ph-view ~ #ptt .ptt-shots { left: 50%; top: auto; bottom: calc(100% + 12px); transform: translateX(-50%); flex-direction: column-reverse; }
   .ph-view ~ #ptt .c-shots { flex-direction: column-reverse; }
+  .ph-view ~ #ptt .ptt-files { flex-direction: column-reverse; flex-wrap: nowrap; max-width: 104px; }
+  .ph-view ~ #ptt .c-file { max-width: 104px; }
   .ph-view ~ #acks { left: calc((100vw - 112px - env(safe-area-inset-right)) / 2); bottom: calc(14px + env(safe-area-inset-bottom));
     width: calc(100vw - 112px - env(safe-area-inset-right) - 24px); }
   /* the strip holds the rest that stood beside the microphone: the canvas picker at its top, the button for Obeya's

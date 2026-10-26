@@ -7,7 +7,7 @@ import { type ClipboardEvent, type DragEvent, type MouseEvent, type PointerEvent
 import { createPortal } from 'react-dom';
 import { IMAGE_TYPES, MAX_FILE_BYTES, MAX_IMAGE_BYTES } from '../core/types';
 import { api, ApiError, at } from './api';
-import { draftOf, dropDraft, insert, markupOf, setMarkup, updateDraft, useDraft } from './draft';
+import { draftOf, dropDraft, insert, markupOf, pathWord, setMarkup, updateDraft, useDraft } from './draft';
 import { know, known } from './known';
 import { badgeOf, CLICK_PX, drawMarks, EDGE, type Mark, markOf, markSize, type Point, RED, roundedRect } from './marks';
 import { confirmPasteHint, pastedShots, pickedShots, usePasteHint } from './pasteHint';
@@ -122,7 +122,7 @@ export function useShotInput({ draft, initial = [], onChange, off = false, put }
   const attach = async (files: File[]) => {
     if (off) return 0;
     const shots = attachTo(key, files.filter(isImage), () => change.current?.(draftOf(key).images));
-    const others = fileTo(key, files.filter((f) => !isImage(f)), (path) => (putRef.current ?? ((p) => insert(key, p)))(path));
+    const others = fileTo(key, files.filter((f) => !isImage(f)), (path) => (putRef.current ?? ((p) => insert(key, p)))(pathWord(path)));
     return (await shots) + (await others);
   };
   const failed = (e: unknown) => updateDraft(key, { error: failText(e) });

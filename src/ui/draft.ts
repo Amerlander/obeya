@@ -176,6 +176,18 @@ export function dropDraft(key: string) {
   if (drafts.delete(key)) changed();
 }
 
+/** Settles once nothing more is uploading into the draft: a screenshot or a file's path still on its way goes with it. */
+export function uploaded(key: string): Promise<void> {
+  return new Promise((done) => {
+    if (!draftOf(key).uploading) return done();
+    const off = subscribe(() => {
+      if (draftOf(key).uploading) return;
+      off();
+      done();
+    });
+  });
+}
+
 /** The draft, live. */
 export const useDraft = (key: string): Draft => useSyncExternalStore(subscribe, () => draftOf(key));
 
@@ -264,8 +276,17 @@ export function insert(key: string, words: string) {
   if (el && el === document.activeElement) return typeAtCursor(el, words);
   const text = el?.value ?? draftOf(key).text;
   const at = Math.min(left.get(key) ?? text.length, text.length);
-  updateDraft(key, { text: text.slice(0, at) + spaced(text.slice(0, at), words, text.slice(at)) + text.slice(at) });
+  const piece = spaced(text.slice(0, at), words, text.slice(at));
+  // the next ones go after it, as typed ones would
+  if (left.has(key)) left.set(key, at + piece.length);
+  updateDraft(key, { text: text.slice(0, at) + piece + text.slice(at) });
 }
+
+/** A path as one word of the text: in quotes where it has a space (a home folder of `John Doe`, say). */
+export const pathWord = (path: string) => (/\s/.test(path) ? `"${path}"` : path);
+
+/** The words of a text, a path in quotes one of them with its quotes. */
+export const wordsOf = (text: string) => text.match(/"[^"]*"|\S+/g) ?? [];
 
 /** Types `words` into the focused field at its cursor, parted by spaces from the words beside them. */
 export function typeAtCursor(el: HTMLTextAreaElement, words: string) {

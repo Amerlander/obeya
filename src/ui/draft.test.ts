@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { appended, cardDraft, draftOf, dropDraft, giveBack, insert, keepDrafts, MIC_DRAFT, markupOf, moveImages, OBEYA_DRAFT, setMarkup, updateDraft } from './draft';
+import { appended, cardDraft, pathWord, wordsOf, draftOf, dropDraft, giveBack, insert, keepDrafts, MIC_DRAFT, markupOf, moveImages, OBEYA_DRAFT, setMarkup, updateDraft } from './draft';
 
 const store = () => {
   const m = new Map<string, string>();
@@ -83,4 +83,11 @@ test("a dropped file's path goes after the draft's words without a field on the 
   expect(appended('Schau hier: ', '/x.pdf')).toBe('Schau hier: /x.pdf');
   expect(appended('Schau hier:', '/x.pdf')).toBe('Schau hier: /x.pdf');
   expect(appended('', '/x.pdf')).toBe('/x.pdf');
+});
+
+test('a path with a space goes in quotes and stays one word', () => {
+  expect(pathWord('/home/o/.obeya/files/a/x.pdf')).toBe('/home/o/.obeya/files/a/x.pdf');
+  const spaced = pathWord('C:\\Users\\John Doe\\.obeya\\files\\a\\x.pdf');
+  expect(spaced).toBe('"C:\\Users\\John Doe\\.obeya\\files\\a\\x.pdf"');
+  expect(wordsOf(`/o/a.pdf ${spaced}`)).toEqual(['/o/a.pdf', spaced]);
 });

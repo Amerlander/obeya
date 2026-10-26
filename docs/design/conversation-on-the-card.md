@@ -243,11 +243,12 @@ together with screenshots, goes in by its path, as a terminal agent's prompt tak
 from the file manager: Obeya keeps a copy under its home (`files/<canvas>/`, at most 100 MB, in a
 folder of its own under its name made one word) and the path of that copy goes into the field's
 text, at the cursor while the field has it (⌘Z takes it back), else where the cursor last stood or
-at the end, parted by spaces; the focus stays where it was, so the microphone still sends rather
-than dictates. The agent reads the file there with its own tools. Dropped on the microphone with
+at the end, parted by spaces (a path with a space in quotes); the focus stays where it was, so the
+microphone still sends rather than dictates. The agent reads the file there with its own tools. Dropped on the microphone with
 no field to take it, the path waits beside the microphone under the file's name (× removes it) and
 goes with the next recording; it moves into Obeya's field when the sidebar opens. While it uploads
-the field shows „lädt …“ and does not send. The image button's picker stays for screenshots; its
+the field shows „lädt …“ and does not send, and a recording waits for it (and for screenshots still
+uploading) before it goes. The image button's picker stays for screenshots; its
 tooltip names dropping other files.
 
 A recording nothing came of, or that Obeya refused, leaves the screenshots where they were. When the

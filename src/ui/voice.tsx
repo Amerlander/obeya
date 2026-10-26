@@ -11,7 +11,7 @@
 import { createContext, useEffect, useRef, useState } from 'react';
 import type { Place } from '../core/layout';
 import { ApiError, api, confirmShownMs, type Heard, holdRestart, undoShownMs, type Where } from './api';
-import { beginDictation, dictate, draftOf, focusedDraft, insert, MIC_DRAFT, moveImages, takesImages, toObeya, updateDraft, useDraft, useFieldOn, useFocusedDraft } from './draft';
+import { beginDictation, dictate, draftOf, focusedDraft, insert, MIC_DRAFT, moveImages, takesImages, toObeya, updateDraft, useDraft, useFieldOn, uploaded, useFocusedDraft, wordsOf } from './draft';
 import { Aside } from './aside';
 import { type Recording, record } from './recorder';
 import { AttachButton, ShotStrip, useShotInput } from './shots';
@@ -165,6 +165,7 @@ export function usePushToTalk(
       if (length < TAP_MS) return;
       // what stands in the field goes out with the words and leaves it; nothing heard, it comes back
       const key = field(r.target);
+      await uploaded(key);
       const { text, images } = draftOf(key);
       updateDraft(key, (d) => ({ text: '', images: d.images.filter((id) => !images.includes(id)) }));
       // said in reply to the message the field quotes, as typed words are
@@ -426,13 +427,13 @@ export function PushToTalk({ phase, level, flat, target, field, onDown }: { phas
 
 /** The files dropped on the microphone without a field to take their paths, by name, each to remove. */
 function FileChips() {
-  const words = useDraft(MIC_DRAFT).text.split(/\s+/).filter(Boolean);
+  const words = wordsOf(useDraft(MIC_DRAFT).text);
   if (!words.length) return null;
   return (
     <div className="ptt-files">
       {words.map((w, i) => (
         <span key={i} className="c-file" title={w}>
-          <span className="name">{w.split(/[\\/]/).at(-1)}</span>
+          <span className="name">{w.replace(/"/g, '').split(/[\\/]/).at(-1)}</span>
           <button className="remove" title={t.shots.remove} onClick={() => updateDraft(MIC_DRAFT, { text: words.filter((_, j) => j !== i).join(' ') })}>
             ×
           </button>
