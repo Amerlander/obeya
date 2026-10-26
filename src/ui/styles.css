@@ -1299,6 +1299,9 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 .cfg-canvas-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
 .cfg-canvas-head h4 { margin: 0; font-size: 15px; white-space: nowrap; }
 .cfg-canvas-head input { width: 260px; }
+.cfg-canvas-head .qmoves { margin-left: auto; }
+.cfg-canvas-head .qmoves + .c-del { margin-left: 0; }
+.cfg-canvas-head .btn.qmove { margin-top: 0; padding: 2px 8px; }
 .cfg-canvas > .hint { margin: 0 0 8px; }
 .cfg-repos { display: grid; grid-template-columns: minmax(0, 1fr) 24px; gap: 4px 12px; align-items: start; }
 .cfg-repos > .hint { font-size: 11.5px; padding-bottom: 2px; }

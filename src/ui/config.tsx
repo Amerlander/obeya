@@ -89,6 +89,22 @@ function pinned(kept: KeptCanvases, loaded: CanvasConfig[], resolved: Checked['r
   return { draft: out.map((x) => x.c), origin: out.map((x) => x.id) };
 }
 
+/** `list` with its entry at `from` moved to `to`. */
+const moved = <T,>(list: T[], from: number, to: number): T[] => {
+  const out = [...list];
+  out.splice(to, 0, ...out.splice(from, 1));
+  return out;
+};
+
+/** The check of `n` canvases with the one at `from` moved to `to`, as the draft's: its ids and problems stay with it until the draft is checked again. */
+function checkedMoved(c: Checked, n: number, from: number, to: number): Checked {
+  const order = moved([...Array(n).keys()], from, to);
+  return {
+    resolved: order.map((i) => c.resolved[i] ?? null),
+    problems: c.problems.map((p) => (p.canvas === undefined ? p : { ...p, canvas: order.indexOf(p.canvas) })),
+  };
+}
+
 export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems, onConnect, revs }: { on: boolean; onClose: () => void; onSetup: () => void; onAsk: Ask; onTalk: () => void; onProblems: (n: number) => void; onConnect: () => void; revs: string }) {
   const [view, setView] = useState<ConfigView | null>(null);
   const [draft, setDraft] = useState<CanvasConfig[]>([]);
@@ -109,7 +125,10 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems, 
   const filled = useRef<FilledClones>(new Map());
   // the canvases as loaded while their ids are unknown yet: those come with the check of the saved configuration
   const unpinned = useRef<CanvasConfig[] | null>(null);
+  // counts the drafts loaded anew (reset, read again): a canvas of the one before is not one of this one
+  const [loads, setLoads] = useState(0);
   const load = (v: ConfigView, c: Checked | null) => {
+    setLoads((n) => n + 1);
     filled.current.clear();
     setDraft(v.canvases);
     setOrigin(c ? c.resolved.map((r) => r?.id ?? null) : v.canvases.map(() => null));
@@ -156,6 +175,7 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems, 
       setView(v);
       const kept = !changedRef.current && keptConfigDraft<KeptCanvases>(sessionStorage, 'canvases', v.canvases, ofKept);
       if (kept) {
+        setLoads((n) => n + 1);
         setDraft(kept.draft);
         setOrigin(kept.origin);
         unpinned.current = v.canvases;
@@ -248,6 +268,7 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems, 
                 view={view}
                 draft={draft}
                 origin={origin}
+                loads={loads}
                 checked={checked}
                 changed={changed}
                 busy={busy}
@@ -257,6 +278,11 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems, 
                 onDraft={(d, o) => {
                   setDraft(d);
                   setOrigin(o);
+                }}
+                onMove={(from, to) => {
+                  setDraft(moved(draft, from, to));
+                  setOrigin(moved(origin, from, to));
+                  if (checked) setChecked(checkedMoved(checked, draft.length, from, to));
                 }}
                 onSave={async () => {
                   setBusy(true);
@@ -398,6 +424,8 @@ interface CanvasesProps {
   view: ConfigView;
   draft: CanvasConfig[];
   origin: (string | null)[];
+  /** Changes when the draft is loaded anew: its canvases get new keys. */
+  loads: number;
   checked: Checked | null;
   changed: boolean;
   busy: boolean;
@@ -405,6 +433,8 @@ interface CanvasesProps {
   onAsk: Ask;
   onRecheck: () => void;
   onDraft: (draft: CanvasConfig[], origin: (string | null)[]) => void;
+  /** Moves the canvas at `from` to `to`: the order every list of canvases shows (the switcher, the phone). */
+  onMove: (from: number, to: number) => void;
   /** Saves the draft; says whether it was saved and applies without a restart. */
   onSave: () => Promise<boolean>;
   onReset: () => void;
@@ -416,21 +446,35 @@ interface CanvasesProps {
 }
 
 /** The canvases with their repositories, saved together; Obeya then starts again with them. */
-function Canvases({ view, draft, origin, checked, changed, busy, focus, onAsk, onRecheck, onDraft, onSave, onReset, onReload, status, json, onJson }: CanvasesProps) {
+function Canvases({ view, draft, origin, loads, checked, changed, busy, focus, onAsk, onRecheck, onDraft, onMove, onSave, onReset, onReload, status, json, onJson }: CanvasesProps) {
   const c = t.config;
+  // a key per canvas that goes with it when it moves or one above it goes, and what is open in it with it
+  const keys = useRef<number[]>([]);
+  const nextKey = useRef(0);
+  const keyed = useRef(loads);
+  if (keyed.current !== loads || keys.current.length !== draft.length) {
+    keyed.current = loads;
+    keys.current = draft.map(() => nextKey.current++);
+  }
+  const move = (from: number, to: number) => {
+    keys.current = moved(keys.current, from, to);
+    onMove(from, to);
+  };
   const problems = checked?.problems ?? [];
   // „Für alle“ takes over what is saved: with changes in the dialog it saves them first, where that applies without a restart
   const prepare = changed && view.source === 'file' && !view.restarting && !problems.some(blocksSaving) ? onSave : undefined;
-  const setCanvas = (i: number, x: CanvasConfig | null) =>
-    x
-      ? onDraft(
-          draft.map((y, j) => (j === i ? x : y)),
-          origin,
-        )
-      : onDraft(
-          draft.filter((_, j) => j !== i),
-          origin.filter((_, j) => j !== i),
-        );
+  const setCanvas = (i: number, x: CanvasConfig | null) => {
+    if (x)
+      return onDraft(
+        draft.map((y, j) => (j === i ? x : y)),
+        origin,
+      );
+    keys.current = keys.current.filter((_, j) => j !== i);
+    onDraft(
+      draft.filter((_, j) => j !== i),
+      origin.filter((_, j) => j !== i),
+    );
+  };
   // a canvas with a problem has no id yet: which running canvas goes is only known once all resolve
   const resolved = checked?.resolved ?? [];
   const gone = resolved.every(Boolean) ? view.running.filter((id) => !resolved.some((r) => r?.id === id)) : [];
@@ -451,8 +495,9 @@ function Canvases({ view, draft, origin, checked, changed, busy, focus, onAsk, o
       {!checked && <p className="hint">{c.checking}</p>}
       {draft.map((x, i) => (
         <CanvasBlock
-          key={i}
+          key={keys.current[i]}
           n={i}
+          {...(draft.length > 1 ? { onMove: (earlier: boolean) => move(i, earlier ? i - 1 : i + 1), last: i === draft.length - 1 } : {})}
           canvas={x}
           resolved={checked?.resolved[i] ?? null}
           running={view.running}
@@ -467,7 +512,13 @@ function Canvases({ view, draft, origin, checked, changed, busy, focus, onAsk, o
           onChange={(y) => setCanvas(i, y)}
         />
       ))}
-      <button className="btn small" onClick={() => onDraft([...draft, { repos: [{ path: '' }] }], [...origin, null])}>
+      <button
+        className="btn small"
+        onClick={() => {
+          keys.current = [...keys.current, nextKey.current++];
+          onDraft([...draft, { repos: [{ path: '' }] }], [...origin, null]);
+        }}
+      >
         {c.addCanvas}
       </button>
       {problems
@@ -1145,9 +1196,13 @@ interface CanvasProps {
   /** Saves the dialog's changes before settings are taken over for everyone; none where saving restarts Obeya. */
   prepare?: () => Promise<boolean>;
   onChange: (c: CanvasConfig | null) => void;
+  /** Moves it one place up or down; none while it is the only canvas. */
+  onMove?: (earlier: boolean) => void;
+  /** It is the last canvas: it cannot move down. */
+  last?: boolean;
 }
 
-function CanvasBlock({ n, canvas, resolved, running, pin, saved, problems, focus, ask, onRecheck, onReload, prepare, onChange }: CanvasProps) {
+function CanvasBlock({ n, canvas, resolved, running, pin, saved, problems, focus, ask, onRecheck, onReload, prepare, onChange, onMove, last }: CanvasProps) {
   const fresh = resolved && !running.includes(resolved.id);
   // the Koordinator of the canvas with the problem, where it runs: a card for it goes there
   const askHere = ask && ((text: string) => ask(text, resolved && running.includes(resolved.id) ? resolved.id : undefined));
@@ -1170,6 +1225,18 @@ function CanvasBlock({ n, canvas, resolved, running, pin, saved, problems, focus
         {resolved && (
           <span className={fresh ? 'c-id fresh' : 'c-id'}>
             ?c={resolved.id} · {fresh ? t.config.fresh : t.config.runs}
+          </span>
+        )}
+        {onMove && (
+          <span className="qmoves">
+            {[true, false].map((earlier) => {
+              const label = earlier ? t.config.moveUp : t.config.moveDown;
+              return (
+                <button key={label} className="btn qmove" disabled={earlier ? n === 0 : last} title={label} aria-label={label} onClick={() => onMove(earlier)}>
+                  {earlier ? '↑' : '↓'}
+                </button>
+              );
+            })}
           </span>
         )}
         <button className="c-del" title={t.config.removeCanvas} onClick={() => onChange(null)}>

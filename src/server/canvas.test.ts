@@ -924,7 +924,7 @@ describe('the canvases Obeya serves', () => {
     git(forWeb, 'remote', 'set-url', 'origin', web);
     git(forShop, 'remote', 'set-url', 'origin', shop);
     set.apply(configs, ['web', 'api']);
-    expect(set.all().map((c) => c.id)).toEqual(['api', 'web']);
+    expect(set.all().map((c) => c.id)).toEqual(['web', 'api']);
     expect(set.get('api')!.board.canvas.repos.map((r) => r.id)).toEqual(['api', 'shop']);
     expect(set.failures()).toEqual([]);
     // the home repository starts neither as configured now nor as before: the canvas stops, its cards kept
@@ -945,7 +945,7 @@ describe('the canvases Obeya serves', () => {
     canvas = new CanvasRuntime({ repos: [{ path: api, settings: { land: 'pr' } }] }, { store: new Store(':memory:'), home: dir, runtime: new FakeRuntime(), forge: noForge });
   });
 
-  test('a canvas new in the configuration starts at once, one no longer in it stops, its cards kept', async () => {
+  test('a canvas new in the configuration starts at once, one moved in it moves in the list, one no longer in it stops, its cards kept', async () => {
     fresh();
     const web = repo('web', 'Web');
     const api = repo('api', 'API');
@@ -965,6 +965,18 @@ describe('the canvases Obeya serves', () => {
     );
     expect(set.all().map((c) => c.id)).toEqual(['web', 'api']);
     expect(started).toEqual(['api']);
+    // moved in the configuration: listed in its new order, nothing started again
+    const before = changes;
+    set.apply(
+      [
+        { name: 'API', repos: [{ path: api, settings: { land: 'pr' } }] },
+        { name: 'Web', repos: [{ path: web, settings: { land: 'pr' } }] },
+      ],
+      ['api', 'web'],
+    );
+    expect(set.all().map((c) => c.id)).toEqual(['api', 'web']);
+    expect(started).toEqual(['api']);
+    expect(changes).toBeGreaterThan(before);
     set.apply([{ name: 'API', repos: [{ path: api, settings: { land: 'pr' } }] }], ['api']);
     // nobody at work on it: it stops at once
     expect(set.all().map((c) => c.id)).toEqual(['api']);

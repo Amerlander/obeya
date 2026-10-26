@@ -16,7 +16,9 @@ place unless the owner noticed and switched it.
 
 The UI opens `?c=<canvas>`; the pill after the logo switches canvases. Cards on other canvases that
 need the owner show as a count at their entry in the switcher and, while it is closed, as the sum on
-the pill, kept current on every page. A canvas without a name in the configuration is named after
+the pill, kept current on every page. Wherever canvases are listed (the switcher, the phone) they
+stand in the configuration's order, so the owner sets it by moving them in the Konfiguration dialog;
+the first is also where a page of a stopped canvas goes. A canvas without a name in the configuration is named after
 its first repository (the name in its `origin` URL, else its directory's), and its id follows, so all
 clones of a repository share one canvas. Which canvas a repository is on is this machine's alone.
 
@@ -278,8 +280,9 @@ blocking the server.
 
 #### Leinwände
 
-Each canvas is a heading line (number, name, id, whether it runs) over its repositories, one row
-each. Renaming a canvas keeps its id and cards. Under each path stands where its workers work
+Each canvas is a heading line (number, name, id, whether it runs, and with several canvases ↑ and ↓
+that move it one place, as in the queue) over its repositories, one row each. A move is a change of
+the draft like any other, saved with „Speichern“. Renaming a canvas keeps its id and cards. Under each path stands where its workers work
 („Agenten arbeiten in“: Worktrees or Klonen, with its source). Klonen shows the existing clones
 („Vorhandene Klone, einer pro Zeile“), then the ones Obeya makes on top of them („Dazu neue Klone
 anlegen“), the slots, the sum („Zusammen 4 Klone auf diesem Rechner (2 vorhandene, 2 neue)“) and the
@@ -339,7 +342,7 @@ The demo settings and voices), languages, theme and models into `settings.json` 
 
 A saved configuration, and a new version of a repository's `.obeya/settings.json`, apply while Obeya
 runs, without a restart or reload. A new canvas starts at once (the setup assistant's with its welcome
-card), a changed one takes the change, a removed one stops once its agents paused, its cards kept. A
+card), a changed one takes the change, a moved one moves in every list at once, a removed one stops once its agents paused, its cards kept. A
 new name, a new repository and settings that leave the agents where they work apply at once.
 
 What a repository's agents are set up by (its clones, existing workspaces, slots, other machines,

@@ -2101,6 +2101,9 @@ export class Canvases {
       console.log(`Obeya: the canvas ${c.board.canvas.name} (?c=${c.id}) runs now`);
       this.started(c);
     });
+    // the configuration's order is the order canvases are listed in (the switcher, the phone); one leaving goes last
+    const at = (c: CanvasRuntime) => (ids.includes(c.id) ? ids.indexOf(c.id) : ids.length);
+    this.list.sort((a, b) => at(a) - at(b));
     if (!ids.includes(null)) {
       // a canvas that did not start and left the configuration is no longer wrong
       for (const id of [...this.down.keys()]) if (!ids.includes(id)) this.down.delete(id);
