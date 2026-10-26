@@ -45,8 +45,8 @@ function stage() {
     encoding: 'utf8',
   });
   staged = JSON.parse(printed);
-  // the worker's own demo: English, a quick voice (the hero video has no page audio)
-  fs.writeFileSync(path.join(staged.dir, 'home', 'demo.json'), JSON.stringify({ language: 'en', voice: 'say', voiceName: 'Samantha' }));
+  // the worker's own demo: English, a quick voice (the hero video has no page audio), in the owner's demo directory, where site-shots.ts finds it
+  fs.writeFileSync(path.join(staged.dir, 'home', 'demo.json'), JSON.stringify({ language: 'en', voice: 'say', voiceName: 'Samantha', directory: demoDirectory() }));
   const key = `${KEY_HEADER}: ${owner()[KEY_HEADER]}`;
   execFileSync('curl', ['-s', '-H', key, '-X', 'PUT', `${base}/api/language`, '-d', '{"language":"en"}']);
   // Whisper and Obeya loaded before the take, so the spoken command is heard at once

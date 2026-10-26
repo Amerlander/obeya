@@ -28,20 +28,21 @@ machine's active account may lack the admin rights a workflow run or a rerun nee
 2. The narration (`scripts/hero-video/narration.ts`), read against the UI being released: a
    sentence that no longer holds is reworded before the render. Every changed sentence costs
    ElevenLabs credits; the others come from the clip cache in the render's `.work/`, so the render
-   goes to its default directory `~/demos/obeya-hero/`, not a new one.
+   goes to its default directory `obeya-hero/` in the demo directory (`<demos>`: `~/demos` unless
+   the demo settings name another), not a new one.
 3. The video, rendered whole from the release's code, with real agents whose run is recorded
    (`--record`), about ten minutes (`scripts/hero-video/README.md`), and its stills checked for the
    three failures the README names. A correction of the scenes after that renders again with the
    recording played back (`--replay`), in a few minutes; a run that went wrong is recorded anew.
    Then from the same render, in the release's checkout:
    - the site's screenshots, `bun scripts/site-shots.ts`, with the first Tipjar demo the render's
-     agent left (`~/demos/tipjar-split-the-bill*`; the newest is its shorter second demo, on the
+     agent left (`<demos>/tipjar-split-the-bill*`; the newest is its shorter second demo, on the
      comments, which the script passes over), into `site/img/`: the
      desktop ones and the two of the phone view (`phone.png`, `phone-demo.png`), which the README
      shows too (`canvas.png` and the phone's);
    - the video's poster, `node scripts/hero-video/publish.ts --poster-only`
      (it uploads nothing);
-   - a copy of `demo.mp4`, `captions.vtt`, `chapters.vtt` and `review/` in `~/demos/obeya-v<version>/`,
+   - a copy of `demo.mp4`, `captions.vtt`, `chapters.vtt` and `review/` in `<demos>/obeya-v<version>/`,
      so that what goes out in step 8 is the video that was looked at, even if the hero video is
      rendered again meanwhile.
 4. The version in `package.json` (the app, its settings and the release take it from there),
@@ -62,7 +63,7 @@ machine's active account may lack the admin rights a workflow run or a rerun nee
    installer, update and signature, and a `latest.json` of the version that names every platform,
    and prints the notes. A run that fails on the Macs with HTTP 403 needs the owner to accept
    Apple's agreement (Signing the Mac apps).
-8. The video: `HERO_OUT=~/demos/obeya-v<version> node scripts/hero-video/publish.ts` uploads it with
+8. The video: `HERO_OUT=<demos>/obeya-v<version> node scripts/hero-video/publish.ts` uploads it with
    its captions and chapters and runs the Pages workflow, which publishes the poster and the
    screenshots pushed in step 5 along with it.
 9. The owner reads the draft and publishes it as the latest release ("Set as the latest release"

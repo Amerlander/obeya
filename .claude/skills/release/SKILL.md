@@ -48,7 +48,8 @@ new screenshots (`git diff --stat site/img`, then the pictures themselves, the t
 
 **Step 4, the handover.** Commit the version, poster, README picture and screenshots, run the
 checks, and hand over with `ready_for_review`. The demo is the new hero video: the directory
-`~/demos/obeya-v<version>/`, its chapters the titles in `chapters.vtt`, in order. The summary
+`<demos>/obeya-v<version>/` (`<demos>`: the demo directory, `~/demos` unless the demo settings
+name another), its chapters the titles in `chapters.vtt`, in order. The summary
 holds the version, what is in it, the sentences the narration changed, and what follows the
 approval: push, tag, build, draft, video on the site, and the owner publishing.
 
@@ -67,7 +68,7 @@ needs the owner's acceptance of Apple's agreement: `ask`. A fault in the code go
 `propose_card`; the release waits for it. Once the draft check passes, read the notes as a user
 of the app will: a line that makes no sense to them is worth mentioning in step 9.
 
-**Step 8, the video.** Upload the copy in `~/demos/obeya-v<version>/`.
+**Step 8, the video.** Upload the copy in `<demos>/obeya-v<version>/`.
 
 **Step 9, the owner publishes.** `ask` with the link to the draft
 (`https://github.com/sadilek/obeya/releases`), a line on the notes, and the options "Published"
@@ -79,4 +80,4 @@ Then end.
 
 The same steps, with the owner in the chat instead of on a card. The version commit goes onto
 `main` directly. Instead of the handover, give the owner the path of the video
-(`~/demos/obeya-v<version>/demo.mp4`) with the summary, and go on to step 5 when they say so.
+(`<demos>/obeya-v<version>/demo.mp4`) with the summary, and go on to step 5 when they say so.
