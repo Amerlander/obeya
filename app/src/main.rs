@@ -26,7 +26,9 @@
 //   (scripts/check-app.ts checks the microphone and video in the webview that way).
 // - OBEYA_CHECKOUT=<checkout>: started from a checkout (`bun run app`, scripts/app.ts), the shell
 //   starts `bun <checkout>/src/server/main.ts` (OBEYA_BUN names the bun) instead of the sidecar,
-//   which then updates itself from its checkout as `bun start` does.
+//   which then updates itself from its checkout as `bun start` does. Installed from a checkout
+//   (`bun run app install`), the shell has both compiled in (OBEYA_BUILT_CHECKOUT, OBEYA_BUILT_BUN),
+//   and builds itself anew when app/ changes there (update.rs).
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -112,6 +114,21 @@ impl Obeya {
   }
 }
 
+/// The checkout whose server the shell starts, when it runs from one rather than with its sidecar.
+pub(crate) fn checkout() -> Option<PathBuf> {
+  std::env::var_os("OBEYA_CHECKOUT")
+    .map(PathBuf::from)
+    .or_else(|| option_env!("OBEYA_BUILT_CHECKOUT").filter(|c| !c.is_empty()).map(PathBuf::from))
+}
+
+/// The bun that runs the checkout's server: the one named, else the one it was built with while
+/// that is there, else whichever the PATH has.
+pub(crate) fn bun() -> std::ffi::OsString {
+  std::env::var_os("OBEYA_BUN")
+    .or_else(|| option_env!("OBEYA_BUILT_BUN").filter(|b| Path::new(b).exists()).map(Into::into))
+    .unwrap_or_else(|| "bun".into())
+}
+
 /// The owner's language, for what the shell itself says.
 fn german() -> bool {
   sys_locale::get_locale().is_some_and(|l| l.starts_with("de"))
@@ -141,7 +158,7 @@ fn answers(port: u16) -> bool {
   http(port, "GET", "/api/canvases") == Some(200)
 }
 
-fn home(app: &AppHandle) -> PathBuf {
+pub(crate) fn home(app: &AppHandle) -> PathBuf {
   std::env::var_os("OBEYA_HOME")
     .map(PathBuf::from)
     .unwrap_or_else(|| app.path().home_dir().unwrap_or_default().join(".obeya"))
@@ -255,10 +272,11 @@ fn start_server(app: &AppHandle, home: &Path, port: u16, log: &(fs::File, PathBu
     Ok(dir) if !beside.exists() => dir.join(SERVER),
     _ => beside,
   };
-  let mut cmd = match std::env::var_os("OBEYA_CHECKOUT") {
+  let mut cmd = match checkout() {
     Some(checkout) => {
-      let mut cmd = Command::new(std::env::var_os("OBEYA_BUN").unwrap_or_else(|| "bun".into()));
-      cmd.arg(Path::new(&checkout).join("src").join("server").join("main.ts"));
+      let mut cmd = Command::new(bun());
+      // in the checkout, as `bun start` runs there (started from the desktop, the shell's own directory is `/`)
+      cmd.arg(checkout.join("src").join("server").join("main.ts")).current_dir(&checkout);
       cmd
     }
     None => Command::new(server),
@@ -270,17 +288,24 @@ fn start_server(app: &AppHandle, home: &Path, port: u16, log: &(fs::File, PathBu
     .stdin(Stdio::null())
     .stdout(log.0.try_clone()?)
     .stderr(log.0.try_clone()?);
-  if let (Ok(dir), None) = (app.path().resource_dir(), std::env::var_os("OBEYA_CHECKOUT")) {
+  if let (Ok(dir), None) = (app.path().resource_dir(), checkout()) {
     cmd.env("OBEYA_RESOURCES", dir.join("resources"));
   }
+  no_window(&mut cmd);
+  cmd.spawn()
+}
+
+/// For a console program the shell runs (the server, git, bun): on Windows, without this, a
+/// console window would open beside the app.
+pub(crate) fn no_window(cmd: &mut Command) {
   #[cfg(windows)]
   {
     use std::os::windows::process::CommandExt;
-    // the server is a console program: without this, a console window would open beside the app
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     cmd.creation_flags(CREATE_NO_WINDOW);
   }
-  cmd.spawn()
+  #[cfg(not(windows))]
+  let _ = cmd;
 }
 
 /// Brings up the Obeya of this home (the running one, else a new server) and shows its canvas;

@@ -1174,6 +1174,9 @@ const de = {
     checkout: (commit: string) => `Checkout ${commit}`,
     openInBrowser: 'Im Browser öffnen',
     openInBrowserHint: 'Diese Leinwand im Standardbrowser',
+    asApp: 'Als App',
+    asAppHint:
+      'Im Checkout ausgeführt, installiert das Obeya als App „Obeya (checkout)“: auf dem Mac in ~/Applications (Spotlight, Launchpad, Dock), unter Windows im Startmenü, unter Linux im Anwendungsmenü. Sie läuft auf dem Code dieses Checkouts und folgt main wie jetzt; ändert sich die App selbst (app/), baut sie sich neu. Dazu kommt die Sprachtaste überall. Braucht Rust (rustup.rs); der erste Bau dauert ein paar Minuten.',
     save: 'Speichern und neu starten',
     saveOnly: 'Speichern',
     reset: 'Verwerfen',
@@ -1257,7 +1260,7 @@ const de = {
     pushKey: {
       title: 'Sprachtaste überall',
       hint: 'Halte die Taste, während ein anderes Programm vorne ist, sprich, und lass los: Obeya nimmt den Befehl auf, als hieltest du im Fenster die Leertaste, für das, was du zuletzt in Obeya offen hattest. Ein Fenster am unteren Bildschirmrand zeigt, was Obeya hört und was es daraus macht, mit „Rückgängig“. Kurz getippt bleibt die Taste, was sie war. Gilt sofort.',
-      appOnly: 'Nur in der App, oder aus dem Checkout mit „bun run app“: ein Browser hört keine Tasten außerhalb seines Tabs.',
+      appOnly: 'Nur in der App, auch aus dem Checkout („bun run app install“): ein Browser hört keine Tasten außerhalb seines Tabs.',
       key: 'Taste',
       change: 'Ändern',
       press: 'Taste drücken …',
@@ -2795,6 +2798,9 @@ const en: Strings = {
     checkout: (commit: string) => `checkout ${commit}`,
     openInBrowser: 'Open in browser',
     openInBrowserHint: 'This canvas in the default browser',
+    asApp: 'As an app',
+    asAppHint:
+      'Run in the checkout, this installs Obeya as an app, "Obeya (checkout)": in ~/Applications on a Mac (Spotlight, Launchpad, the Dock), in the Start menu on Windows, in the applications menu on Linux. It runs on this checkout\'s code and follows main as now; when the app itself changes (app/), it builds itself anew. It adds the push-to-talk key anywhere. Needs Rust (rustup.rs); the first build takes a few minutes.',
     save: 'Save and restart',
     saveOnly: 'Save',
     reset: 'Discard',
@@ -2878,7 +2884,7 @@ const en: Strings = {
     pushKey: {
       title: 'Push-to-talk anywhere',
       hint: 'Hold the key while another app is in front, speak, and let go: Obeya takes the command as if you held Space in its window, for what you last had open in Obeya. A panel at the bottom of the screen shows what Obeya heard and what it does, with “Undo”. A short tap leaves the key as it was. Applies at once.',
-      appOnly: 'Only in the app, or from the checkout with “bun run app”: a browser hears no keys outside its tab.',
+      appOnly: 'Only in the app, also from the checkout (“bun run app install”): a browser hears no keys outside its tab.',
       key: 'Key',
       change: 'Change',
       press: 'Press a key …',

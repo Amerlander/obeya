@@ -280,7 +280,8 @@ takes the keyboard: it shows that Obeya listens and to whom (with the level and 
 warning), the command being read, then what was heard with the confirmation and „Rückgängig“, or „An
 den Agenten gegangen.“; it hides when empty. A restart is not held off for the shell's recording; a
 command cut off by one shows „Das hat nicht geklappt“ in the panel. `bun run app` builds the shell and
-runs it from a checkout, starting the server there if none runs.
+runs it from a checkout, starting the server there if none runs; `bun run app install` installs it
+as an app (see Distribution: The app from a checkout).
 
 ### Decisions
 

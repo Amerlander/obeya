@@ -11,10 +11,19 @@
 //   installs the update and starts the app again, whose server resumes the workers.
 // - A .deb is not replaced by the app (dpkg needs root): the bar offers the release to download.
 // - Only for an Obeya the app started in this run, whose end it sees. An Obeya from a checkout
-//   (OBEYA_CHECKOUT) updates itself from its checkout.
+//   updates itself from its checkout, and so does a shell installed from one (`bun run app install`,
+//   which compiles in the version of app/ it was built from, OBEYA_BUILT_TREE): every minute it
+//   looks at app/ on the checkout's HEAD, and once that is another, the checkout's scripts/app.ts
+//   builds the shell and installs it in this one's place. The shell then tells the server of it as
+//   of an update, which the server installs without asking, as it restarts for new code; nothing is
+//   left to install then but starting again. A build that failed (its output is in app-build.log in
+//   the home) is tried again for the next change of app/.
 // - OBEYA_UPDATE_EVERY=<seconds> asks that often instead (scripts/check-update.ts).
 
 use std::{
+  fs,
+  path::Path,
+  process::{Command, Stdio},
   sync::{atomic::Ordering, Arc, Mutex},
   thread,
   time::Duration,
@@ -25,7 +34,7 @@ use tauri::{utils::config::BundleType, AppHandle, Url};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
-use crate::{main_window, ptt, say, Obeya};
+use crate::{main_window, no_window, ptt, say, Obeya};
 
 /// The exit code with which the server asks the shell to install the update (src/server/self-update.ts).
 pub const EXIT: i32 = 77;
@@ -43,6 +52,8 @@ struct Ready {
 #[derive(Default)]
 pub struct Updates {
   ready: Mutex<Option<Ready>>,
+  /// Installed from a checkout: a new build of the shell is in this one's place.
+  rebuilt: Mutex<bool>,
 }
 
 fn deb() -> bool {
@@ -51,9 +62,25 @@ fn deb() -> bool {
 
 pub fn start(app: &AppHandle, obeya: Arc<Obeya>) -> Arc<Updates> {
   let updates = Arc::new(Updates::default());
-  if std::env::var_os("OBEYA_CHECKOUT").is_some() {
-    return updates;
+  if let Some(checkout) = crate::checkout() {
+    let Some(built) = option_env!("OBEYA_BUILT_TREE").filter(|t| !t.is_empty()) else {
+      return updates;
+    };
+    let (home, u) = (crate::home(app), updates.clone());
+    thread::spawn(move || rebuild(&checkout, built, &home, &u));
+  } else {
+    check_releases(app, &updates);
   }
+  let u = updates.clone();
+  thread::spawn(move || loop {
+    report(&obeya, &u);
+    thread::sleep(Duration::from_secs(3));
+  });
+  updates
+}
+
+/// At start and every six hours: a newer release, downloaded.
+fn check_releases(app: &AppHandle, updates: &Arc<Updates>) {
   let every = std::env::var("OBEYA_UPDATE_EVERY").ok().and_then(|s| s.parse().ok()).map(Duration::from_secs);
   let (a, u) = (app.clone(), updates.clone());
   thread::spawn(move || loop {
@@ -66,12 +93,45 @@ pub fn start(app: &AppHandle, obeya: Arc<Obeya>) -> Arc<Updates> {
     };
     thread::sleep(wait);
   });
-  let u = updates.clone();
-  thread::spawn(move || loop {
-    report(&obeya, &u);
-    thread::sleep(Duration::from_secs(3));
-  });
-  updates
+}
+
+/// Installed from a checkout: builds and installs the shell anew whenever app/ on the checkout's
+/// HEAD is another than the one it was last built from.
+fn rebuild(checkout: &Path, built: &str, home: &Path, updates: &Updates) {
+  let mut last = built.to_string();
+  loop {
+    if let Some(tree) = tree(checkout).filter(|t| *t != last) {
+      last = tree;
+      let log = home.join("app-build.log");
+      let mut cmd = Command::new(crate::bun());
+      cmd
+        .arg(checkout.join("scripts").join("app.ts"))
+        .args(["install", "--no-open"])
+        .current_dir(checkout)
+        .stdin(Stdio::null());
+      no_window(&mut cmd);
+      let built = fs::File::create(&log)
+        .and_then(|f| Ok((f.try_clone()?, f)))
+        .and_then(|(out, err)| cmd.stdout(out).stderr(err).status())
+        .is_ok_and(|s| s.success());
+      if built {
+        *updates.rebuilt.lock().unwrap() = true;
+      } else {
+        eprintln!("obeya: the shell did not build anew, see {}", log.display());
+      }
+    }
+    thread::sleep(Duration::from_secs(60));
+  }
+}
+
+/// The version of app/ on the checkout's HEAD.
+fn tree(checkout: &Path) -> Option<String> {
+  let mut cmd = Command::new("git");
+  cmd.arg("-C").arg(checkout).args(["rev-parse", "HEAD:app"]).stdin(Stdio::null()).stderr(Stdio::null());
+  no_window(&mut cmd);
+  let out = cmd.output().ok()?;
+  let tree = String::from_utf8_lossy(&out.stdout).trim().to_string();
+  (out.status.success() && !tree.is_empty()).then_some(tree)
 }
 
 /// Asks for a newer version and downloads it; one downloaded already is not fetched again.
@@ -99,6 +159,7 @@ fn report(obeya: &Obeya, updates: &Updates) {
     return;
   }
   let body = match updates.ready.lock().unwrap().as_ref() {
+    None if *updates.rebuilt.lock().unwrap() => json!({ "rebuilt": true }),
     None => return,
     Some(Ready { update, bytes }) => json!({
       "version": update.version,
@@ -111,7 +172,7 @@ fn report(obeya: &Obeya, updates: &Updates) {
 }
 
 /// The server ended to be updated: installs the update and starts the app again, the new version
-/// if it went in, else this one, after saying why.
+/// if it went in, else this one, after saying why. A new build of the shell is in place already.
 pub fn install(app: &AppHandle, updates: &Updates) {
   if let Some(w) = main_window(app) {
     let page = if cfg!(windows) { "http://tauri.localhost/index.html?updating" } else { "tauri://localhost/index.html?updating" };

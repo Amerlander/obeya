@@ -513,6 +513,12 @@ function ServerBlock({ server }: { server: ConfigView['server'] }) {
         <code>{server.permissionMode}</code>
       </Field>
       <Field label={c.restarts}>{!server.restarts ? c.no : server.commit ? c.yes : c.noCheckout}</Field>
+      {/* from a checkout, in a browser: how to have the app instead (scripts/app.ts) */}
+      {server.commit && !window.obeyaApp && (
+        <Field label={c.asApp} hint={c.asAppHint}>
+          <code>bun run app install</code>
+        </Field>
+      )}
       {/* in the app's window (app/src/main.rs), which opens a new window in the default browser */}
       {window.obeyaApp && (
         <button className="btn small" title={c.openInBrowserHint} onClick={() => window.open(location.href, '_blank')}>

@@ -60,6 +60,27 @@ WebKitGTK's MediaRecorder records nothing (2.50 and 2.52, 2026-10-08), so the Li
 Web Audio samples and sends a WAV (tried only headless; a Linux desktop with a real microphone is
 untried).
 
+#### The app from a checkout
+
+`bun run app` builds the shell alone and runs it from the terminal on the checkout's server (`bun
+src/server/main.ts`, run in the checkout), which follows the checkout as `bun start` does. `bun run
+app install` installs that shell as an app of its own, „Obeya (checkout)“: in `~/Applications` on a
+Mac (a bundle, so Spotlight, Launchpad and the Dock know it and the system asks its permissions for
+it), in the Start menu on Windows, in the applications menu on Linux, and opens it. Its identifier is
+not the release's, so its permissions and its single instance stay apart from an installed release.
+Started from the desktop it gets no environment, so the checkout, the bun that ran the install and
+the version of `app/` on HEAD are compiled in; the server it starts adds the directory of its bun
+to the PATH, for the workers' `bun`.
+
+Landed code reaches it as it reaches `bun start` (see Self-update); the shell itself offers no
+release updates. Once `app/` on the checkout's HEAD is another than it was built from (looked at
+every minute), the shell runs `bun run app install` itself in the background, which puts the new
+build in its place, and reports it to the server, which installs it without asking, as it restarts
+for landed code: once the workers paused, the server ends for the update, and the shell starts again,
+now the new build, whose server resumes the workers. A build that fails is logged to `app-build.log`
+in the home and tried again with the next change of `app/`. On a Mac a new build has a new ad-hoc
+signature, so macOS asks for Input Monitoring again.
+
 linuxdeploy rewrites the library path of every program in an AppDir, which breaks Bun's binary (its
 code sits after the ELF's end), so the server goes into the AppImage after linuxdeploy and the image
 is packed again. `bun scripts/check-app.ts <program>` checks an installed app in its webview
@@ -235,6 +256,14 @@ which Chrome leaves stale after a seek. Without JavaScript or the chapters file 
   brings installers, updater and global keys, and its window is the system's webview, so the shell
   adds a few MB and the UI stays what the browser shows. The browser stays a way in; the checkout
   (`bun start`, updating itself) stays how Obeya is developed.
+- **From a checkout, Obeya can be an installed app that follows the checkout** (2026-10-26): whoever
+  develops Obeya on its checkout gets what only the app does (push-to-talk anywhere) without
+  installing again after each landing. The server already follows the checkout; the shell changes
+  rarely and rebuilds itself when `app/` does. It installs a rebuilt shell without asking, unlike a
+  release (see App updates), since what lands on the checkout's `main` is already installed that way
+  for the server. Rejected: an app of a release build from the checkout, whose compiled server never
+  follows the checkout; a launcher that rebuilds the shell at every start, which would make every
+  start wait for cargo.
 - **DMG, NSIS installer, AppImage and .deb** (2026-10-06). Rejected: Flatpak and Snap, whose
   sandboxes get in the way of git, agents and the repositories. Windows on ARM once there is a
   machine to try it on.

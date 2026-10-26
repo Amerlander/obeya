@@ -35,7 +35,7 @@
 
 import { chmodSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import type { RestartReason } from '../core/types';
 import { type CanvasConfig, Canvases } from './canvas';
@@ -49,7 +49,7 @@ import { claudeExecutable, endAgentsHere, sdkRuntime } from './runtime';
 import { claim, release, restarting, running } from './instance';
 import { recordingRuntime, replayRuntime } from './replay';
 import { MachineSetup, welcome } from './machine';
-import { extendPath } from './path';
+import { addToPath, extendPath } from './path';
 import { ShellReports } from './push-key';
 import { headOf, installDependencies, ownCheckout, RESTART, RESTART_FROM_FILE, RESTART_PATIENCE_MS, Restarter, UPDATE, watchOwnCode } from './self-update';
 import { AppUpdates } from './app-update';
@@ -91,6 +91,8 @@ mkdirSync(home, { recursive: true, mode: 0o700 });
 if (process.platform !== 'win32' && (statSync(home).mode & 0o077) !== 0 && statSync(home).uid === process.getuid?.()) chmodSync(home, 0o700);
 // what the official installers and Homebrew install is found from a process the desktop started too
 extendPath();
+// and from a checkout the bun this runs on, for the workers' and scripts' `bun` (the app's shell names it by its path)
+if (!COMPILED) addToPath(process.env, [dirname(process.execPath)]);
 // the demo skill's modules this server carries inside the binary find their files among the resources
 if (COMPILED) useLib(resource('plugin', 'skills', 'demo', 'lib'));
 const configFile = values.config ? resolve(expandHome(values.config)) : join(home, CONFIG_FILE);

@@ -164,8 +164,12 @@ package (`OBEYA_WHISPER_PYTHON=/path/to/python`). `OBEYA_WHISPER_BACKEND` choose
 `plugin/`, which Obeya gives its workers; what a machine needs for them (Node, a browser, ffmpeg,
 uv, a voice) is in [`docs/demo-setup.md`](docs/demo-setup.md).
 
-`bun run app` starts Obeya in its app window from the checkout (it needs Rust, on Linux also
-WebKitGTK's development files; the first build takes a few minutes). The app adds push-to-talk
+`bun run app install` installs Obeya from the checkout as an app, "Obeya (checkout)", that you
+start like any other (`~/Applications` on a Mac, the Start menu on Windows, the applications menu on
+Linux); `bun run app` runs it from the terminal instead. It needs Rust, on Linux also WebKitGTK's
+development files; the first build takes a few minutes. The app runs the checkout's code and follows
+it as `bun start` does, and builds itself anew when its own part (`app/`) changes, so it is
+installed once. The app adds push-to-talk
 from anywhere: hold the right Option key on a Mac, the right Ctrl key elsewhere, while another app
 is in front (another key in the settings). On a Mac this needs the "Input Monitoring" permission,
 which macOS asks for.

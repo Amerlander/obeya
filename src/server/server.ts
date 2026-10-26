@@ -724,7 +724,13 @@ export function serve(
       // the app's shell, every few seconds while it has a newer version of the app ready
       '/api/app-update': {
         GET: () => Response.json(updates.current()),
-        POST: async (req) => handle(async () => updates.report(await req.json())),
+        POST: async (req) =>
+          handle(async () => {
+            const body = await req.json();
+            // a shell installed from a checkout has built itself anew there: in place as landed code is, so installed the same way, without asking
+            if (body?.rebuilt === true) return (restarter?.request('update'), { updating: !!restarter });
+            return updates.report(body);
+          }),
       },
       // the owner installs it: once the workers paused, Obeya ends for the shell to install it and start again
       '/api/app-update/install': {

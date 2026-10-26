@@ -16,7 +16,7 @@ export const localBin = () => join(homedir(), '.local', 'bin');
 export const which = (program: string, env: Env = process.env) => Bun.which(program, { PATH: env.PATH ?? '' });
 
 /** Adds the directories to the PATH of `env` that it lacks, after those it has. */
-function addToPath(env: Env, dirs: string[]) {
+export function addToPath(env: Env, dirs: string[]) {
   const parts = (env.PATH ?? '').split(delimiter).filter(Boolean);
   for (const d of dirs) if (d && !parts.includes(d)) parts.push(d);
   env.PATH = parts.join(delimiter);

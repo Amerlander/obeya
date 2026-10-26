@@ -891,6 +891,24 @@ describe('a newer version of the app', () => {
     await post('/api/app-update', JSON.stringify({ version: '9.9.9', download: 'https://example.com/obeya.deb' }));
     expect(updates.current()).toEqual({ version: '9.9.9' });
   });
+
+  test('a shell installed from a checkout that built itself anew is installed without asking, as landed code is', async () => {
+    const gone: string[] = [];
+    let busy = [{ canvas: 'main', card: 'k1' }];
+    const restarter = new Restarter({ busy: () => busy, go: (reason) => gone.push(reason), patienceMs: 60_000, intervalMs: 10 });
+    const updates = new AppUpdates();
+    server.stop(true);
+    server = serve([canvas], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, restarter, undefined, undefined, undefined, undefined, updates);
+    expect(await (await post('/api/app-update', JSON.stringify({ rebuilt: true }))).json()).toEqual({ updating: true });
+    // no button in the bar: the restart shows what it waits for
+    expect(updates.current()).toBeNull();
+    expect(restarter.due()?.reason).toBe('update');
+    // the shell says it again every few seconds while it waits
+    await post('/api/app-update', JSON.stringify({ rebuilt: true }));
+    busy = [];
+    await until(() => gone.length === 1);
+    expect(gone).toEqual(['update']);
+  });
 });
 
 describe('new commits on the upstream of the checkout Obeya runs from', () => {
