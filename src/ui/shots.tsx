@@ -1,12 +1,13 @@
 // Screenshots in what the owner writes: pasted, dropped or picked, scaled down so the agent can
 // read them, uploaded at once; shown as thumbnails that grow large over the page on a click, where
-// those not sent yet take marks (marks.ts). Other files dropped or picked are uploaded as they are,
-// and their path there goes into the text, for the agent to read them.
+// those not sent yet take marks (marks.ts). Other files dropped go into the text by their path, for
+// the agent to read them (`fileTo`).
 
 import { type ClipboardEvent, type DragEvent, type MouseEvent, type PointerEvent, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { IMAGE_TYPES, MAX_FILE_BYTES, MAX_IMAGE_BYTES } from '../core/types';
 import { api, ApiError, at } from './api';
+import { droppedPath } from './appDrop';
 import { draftOf, dropDraft, insert, markupOf, pathWord, setMarkup, updateDraft, useDraft } from './draft';
 import { know, known } from './known';
 import { badgeOf, CLICK_PX, drawMarks, EDGE, type Mark, markOf, markSize, type Point, RED, roundedRect } from './marks';
@@ -73,8 +74,10 @@ export async function attachTo(key: string, files: File[], added?: () => void) {
 }
 
 /**
- * Files for a draft that are no screenshots, uploaded one after the other; the path of each goes into
- * its text by `put` as it arrives. How many did.
+ * Files for a draft that are no screenshots, one after the other; the path of each goes into its
+ * text by `put` as it is known. That is the file's own path: the app's drop names it, and for a
+ * browser's Obeya looks for the file on its machine. Where it finds none, the file is uploaded and
+ * its copy's path goes in. How many did.
  */
 export async function fileTo(key: string, files: File[], put: (path: string) => void) {
   let arrived = 0;
@@ -82,8 +85,9 @@ export async function fileTo(key: string, files: File[], put: (path: string) => 
   updateDraft(key, (d) => ({ error: '', uploading: d.uploading + files.length }));
   for (const f of files) {
     try {
-      if (f.size > MAX_FILE_BYTES) throw new ApiError('fileTooLarge', '');
-      put(await api.uploadFile(f));
+      const own = droppedPath(f) ?? (await api.findFile(f).catch(() => null));
+      if (!own && f.size > MAX_FILE_BYTES) throw new ApiError('fileTooLarge', '');
+      put(own ?? (await api.uploadFile(f)));
       arrived++;
     } catch (e) {
       updateDraft(key, { error: failText(e) });

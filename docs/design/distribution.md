@@ -48,6 +48,14 @@ leaving the canvas and new windows open in the default browser, as does „Im Br
 settings (and the Mac's File menu). Downloads go to the Downloads folder.
 
 The page gets the microphone without a webview prompt (the system asks once for the app).
+
+Tauri's webview hands files dropped from the desktop to the shell instead of the page (on Windows
+the page's own drop would need Tauri's handler off, and with it the paths), so the page never hears
+a file drop. The shell passes on where a drag is and, at the drop, the files' paths; the page plays
+them to the element under the pointer as the browser's drag events: an image with its bytes (read
+through the server, which hands out only images by path) to attach as a screenshot, any other file
+or folder by its path (see Other files). Tried by playing the shell's calls in a browser; a real drag
+from the Finder into a built app is untried (2026-10-26).
 WebKitGTK's MediaRecorder records nothing (2.50 and 2.52, 2026-10-08), so the Linux window records
 Web Audio samples and sends a WAV (tried only headless; a Linux desktop with a real microphone is
 untried).

@@ -53,7 +53,8 @@ use std::{
 use tauri::{
   menu::{Menu, MenuItem, MenuItemKind},
   webview::{DownloadEvent, NewWindowResponse, PageLoadEvent, PermissionKind, PermissionResponse},
-  AppHandle, Manager, RunEvent, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
+  AppHandle, DragDropEvent, Manager, PhysicalPosition, RunEvent, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+  WindowEvent,
 };
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
@@ -163,6 +164,31 @@ fn pick_port() -> u16 {
     .and_then(|l| l.local_addr())
     .map(|a| a.port())
     .unwrap_or(want)
+}
+
+/// Files dragged over the window: the webview hands them to the app rather than the page (so the app
+/// learns their paths, which a page never does), and the app passes on to the page where the drag is
+/// and, at the drop, the paths (src/ui/appDrop.ts).
+fn dragged(w: &WebviewWindow, drag: &DragDropEvent) {
+  // where, in the page's CSS pixels: Windows gives the window's own pixels, macOS and Linux points already
+  let at = |p: &PhysicalPosition<f64>| {
+    let scale = if cfg!(windows) { w.scale_factor().unwrap_or(1.0) } else { 1.0 };
+    (p.x / scale, p.y / scale)
+  };
+  let js = match drag {
+    DragDropEvent::Enter { position, .. } | DragDropEvent::Over { position } => {
+      let (x, y) = at(position);
+      format!("window.obeyaDrag?.('over', {x}, {y})")
+    }
+    DragDropEvent::Drop { paths, position } => {
+      let (x, y) = at(position);
+      let paths: Vec<String> = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+      format!("window.obeyaDrag?.('drop', {x}, {y}, {})", serde_json::to_string(&paths).unwrap_or_else(|_| "[]".into()))
+    }
+    DragDropEvent::Leave => "window.obeyaDrag?.('leave', 0, 0)".into(),
+    _ => return,
+  };
+  let _ = w.eval(js);
 }
 
 fn main_window(app: &AppHandle) -> Option<WebviewWindow> {
@@ -544,6 +570,15 @@ fn main() {
         }
       } else if !quit(app, &obeya) {
         app.exit(0);
+      }
+    }
+    RunEvent::WindowEvent {
+      label,
+      event: WindowEvent::DragDrop(drag),
+      ..
+    } if label == "main" => {
+      if let Some(w) = main_window(app) {
+        dragged(&w, &drag);
       }
     }
     #[cfg(target_os = "macos")]

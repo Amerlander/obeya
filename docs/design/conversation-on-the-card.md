@@ -238,18 +238,25 @@ the card's agent.
 
 ### Other files
 
-A file of another kind (a PDF, a log, a spreadsheet) dropped on a field or on the microphone, or
-together with screenshots, goes in by its path, as a terminal agent's prompt takes a file dragged
-from the file manager: Obeya keeps a copy under its home (`files/<canvas>/`, at most 100 MB, in a
-folder of its own under its name made one word) and the path of that copy goes into the field's
-text, at the cursor while the field has it (⌘Z takes it back), else where the cursor last stood or
-at the end, parted by spaces (a path with a space in quotes); the focus stays where it was, so the
-microphone still sends rather than dictates. The agent reads the file there with its own tools. Dropped on the microphone with
-no field to take it, the path waits beside the microphone under the file's name (× removes it) and
-goes with the next recording; it moves into Obeya's field when the sidebar opens. While it uploads
-the field shows „lädt …“ and does not send, and a recording waits for it (and for screenshots still
-uploading) before it goes. The image button's picker stays for screenshots; its
-tooltip names dropping other files.
+A file of another kind (a PDF, a log, a spreadsheet, a folder in the app) dropped on a field or on
+the microphone, or together with screenshots, goes in by its path, as a terminal agent's prompt
+takes a file dragged from the file manager, so the owner can have the agent read it, move it or
+change it where it lies. The app knows the path from the system (see App). A browser does not tell
+a page where a dropped file lies, so Obeya looks for it on its own machine: Spotlight on a Mac, else
+(or when that finds none) Downloads, Desktop, Documents (also under OneDrive) a few levels deep and
+the home itself, hidden folders left out; a file counts only with the same name, size and time
+(within two seconds), and only if exactly one fits. Otherwise (a browser on another device, two
+copies, a file elsewhere) Obeya keeps a copy under its home (`files/<canvas>/`, at most 100 MB, in a
+folder of its own under its name made one word) and the copy's path goes in.
+
+The path goes into the field's text at the cursor while the field has it (⌘Z takes it back), else
+where the cursor last stood or at the end, parted by spaces, in quotes where it has a space; the
+focus stays where it was, so the microphone still sends rather than dictates. Dropped on the
+microphone with no field to take it, the path waits beside the microphone under the file's name (×
+removes it) and goes with the next recording; it moves into Obeya's field when the sidebar opens.
+While a file is looked for or uploads the field shows „lädt …“ and does not send, and a recording
+waits for it (and for screenshots still uploading) before it goes. The image button's picker stays
+for screenshots; its tooltip names dropping other files.
 
 A recording nothing came of, or that Obeya refused, leaves the screenshots where they were. When the
 connection breaks before the answer, the page asks Obeya by the recording's id whether it arrived,
@@ -310,13 +317,14 @@ image.
   logic, which disagreed between field, phone, canvas and Koordinator.
 - **Screenshots as images in the message**, so the agent sees them without a step. Rejected: files
   to read (only where tool results carry no images).
-- **Other files go in by the path of a copy** (owner, 2026-10-26): a PDF dropped on the microphone
-  opened in a new tab instead. The owner asked for the file's own path, as a terminal agent gets
-  it; a browser does not tell a page where a dropped file lies, so Obeya keeps a copy and names
-  that, which works from the phone and for workers on other machines too. The path is text in the
-  field, so it reaches every agent through what already carries the owner's words and stays
-  editable. Rejected: a chip per file beside the screenshots, which every way a message travels
-  would have had to carry. The picker stays for images: on a phone it opens the photos.
+- **Other files go in by their own path** (owner, 2026-10-26), so the agent can also move or change
+  them; a PDF dropped on the microphone opened in a new tab instead. A browser never tells a page a
+  dropped file's path, so for a browser Obeya looks for the file by name, size and time, and the app
+  takes the path from the system (owner's choice of both). Rejected: always a copy (the agent could
+  not touch the original); the File System Access API, whose handles carry no path. The path is
+  text in the field, so it reaches every agent through what already carries the owner's words and
+  stays editable. Rejected: a chip per file beside the screenshots, which every way a message
+  travels would have had to carry. The picker stays for images: on a phone it opens the photos.
 - **A spoken command takes the screenshots of its field** (2026-10-12). Rejected: a separate
   microphone store, which left pasted screenshots behind. **Obeya says whether a cut-off command
   arrived** (2026-10-16). Rejected: treating it as failed, or detecting a leaving page by

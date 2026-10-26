@@ -240,7 +240,16 @@ export const api = {
     await refused(res);
     return ((await res.json()) as { path: string }).path;
   },
-  events:(id: string) => call<CardEvent[]>('GET', cardAt(id, '/events')),
+  /** Where a file dropped in the browser lies on Obeya's machine, if Obeya finds exactly one that fits its name, size and time. */
+  findFile: async (file: File) => (await call<{ path: string | null }>('POST', at('/files/find'), { name: file.name, size: file.size, modified: file.lastModified })).path,
+  /** An image the app's drop names by its path on this machine, as a file the page attaches. */
+  localImage: async (path: string) => {
+    const res = await fetch(at(`/files/local?path=${encodeURIComponent(path)}`));
+    await refused(res);
+    const blob = await res.blob();
+    return new File([blob], path.split(/[\\/]/).at(-1)!, { type: blob.type });
+  },
+  events: (id: string) => call<CardEvent[]>('GET', cardAt(id, '/events')),
   /** Whether the app in the card's workspace answers now. */
   appUp: async (id: string) => (await call<{ up: boolean }>('GET', cardAt(id, '/app'))).up,
   /** Where the owner's browser opens the card's app: through Obeya, which keeps it running a while after. */

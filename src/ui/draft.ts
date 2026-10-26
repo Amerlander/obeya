@@ -274,7 +274,8 @@ export function dictate(key: string, words: string) {
 export function insert(key: string, words: string) {
   const el = fields.get(key);
   if (el && el === document.activeElement) return typeAtCursor(el, words);
-  const text = el?.value ?? draftOf(key).text;
+  // the draft, not the field, which shows a path put in just before only once React has drawn it
+  const { text } = draftOf(key);
   const at = Math.min(left.get(key) ?? text.length, text.length);
   const piece = spaced(text.slice(0, at), words, text.slice(at));
   // the next ones go after it, as typed ones would

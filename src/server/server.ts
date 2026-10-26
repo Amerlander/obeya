@@ -9,6 +9,7 @@ import index from '../ui/index.html';
 import panel from '../ui/panel.html';
 import { guarded, LOCAL_HOSTS, refusal } from './access';
 import { BadRequest } from './board';
+import { type Dropped, findDropped, localImage } from './files';
 import type { CanvasRuntime } from './canvas';
 import { defaultPushKey, type PageFocus, type PushKeyView } from '../core/push-key';
 import { parsePlace } from '../core/layout';
@@ -596,6 +597,18 @@ export function serve(
         POST: on(async (c, req) => {
           if (Number(req.headers.get('content-length')) > MAX_FILE_BYTES) throw new BadRequest('fileTooLarge', `a file may have at most ${MAX_FILE_BYTES} bytes`);
           return { path: c.files.save(new Uint8Array(await req.arrayBuffer()), new URL(req.url).searchParams.get('name') ?? '') };
+        }),
+      },
+      // a file of another kind dropped in a browser: where it lies on this machine, if Obeya finds exactly one that fits
+      '/api/c/:canvas/files/find': {
+        POST: on(async (_c, req) => ({ path: await findDropped((await req.json()) as Dropped) })),
+      },
+      // an image dropped in the app, which names it by its path: its bytes, for the page to attach it as a screenshot
+      '/api/c/:canvas/files/local': {
+        GET: on((_c, req) => {
+          const image = localImage(new URL(req.url).searchParams.get('path') ?? '');
+          if (!image) throw new BadRequest('imageType', 'no image on this machine');
+          return new Response(Bun.file(image.file), { headers: { 'content-type': image.type } });
         }),
       },
       '/api/c/:canvas/images/:file': {

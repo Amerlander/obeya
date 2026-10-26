@@ -2270,10 +2270,13 @@ function ManualFields({ item, repos, onEdit, grow }: { item: Item; repos: RepoRe
   useFitHeight(ref, body, grow);
   const [repo, setRepo] = useState(item.repo);
   // a dropped file's path goes in as typed while the field has the cursor, else after the text
+  // (the latest, which a path put in just before is part of before React has drawn it)
+  const latest = useRef(body);
+  latest.current = body;
   const put = (path: string) => {
     const el = ref.current;
     if (el && el === document.activeElement) return typeAtCursor(el, path);
-    const next = appended(el?.value ?? body, path);
+    const next = (latest.current = appended(latest.current, path));
     setBody(next);
     onEdit({ body: next });
   };

@@ -242,7 +242,8 @@ owner's demo settings without a key file (no API key goes to a host), and that i
 there get the owner's voice, which only this machine runs.
 
 Screenshots in the owner's message are copied to `~/.obeya/remote/images` there and named by those
-paths, as are the dropped files whose paths the message holds (to `~/.obeya/remote/files`); a demo named in a handover is copied here (`<home>/hosts/<host>/<path>`) afresh at each
+paths, as are the copies of dropped files whose paths the message holds (to `~/.obeya/remote/files`;
+a file named by its own path stays on this machine, out of the worker's reach); a demo named in a handover is copied here (`<home>/hosts/<host>/<path>`) afresh at each
 handover and served and shared from that copy (a path with `.` or `..` is refused, since the copy
 replaces what lies at its place); the Arbeitsrückschau reads
 transcripts from there; gh runs here, on the pull request's URL.
