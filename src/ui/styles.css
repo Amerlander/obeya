@@ -958,6 +958,16 @@ button.q-end:hover { color: var(--ink); text-decoration: underline; }
 .queue-menu li .btn.qmove.stuck { border-style: dashed; }
 .queue-menu li .x { flex: none; padding: 0 4px; font-size: 17px; line-height: 22px; color: var(--muted); background: none; border: 0; cursor: pointer; }
 .queue-menu li .x:hover { color: var(--ink); }
+.queue-menu li { position: relative; }
+/* a row's grip: dragged to put the row elsewhere; a finger on it does not scroll the list */
+.queue-menu li .grip { flex: none; display: flex; justify-content: center; width: 12px; margin: 2px -4px 0 -2px; color: var(--muted); cursor: grab; touch-action: none; opacity: .7; }
+.queue-menu li .grip.none { cursor: inherit; }
+.queue-menu li:hover .grip { opacity: 1; }
+@media (pointer: coarse) { .queue-menu li .grip { width: 28px; margin: -4px -8px -4px -8px; padding-top: 6px; } }
+.queue-menu li[data-sorting=other] { transition: transform .15s ease; }
+.queue-menu li[data-sorting=dragged] { background: var(--card); box-shadow: var(--lift); cursor: grabbing; }
+.queue-menu li .q-held { position: absolute; left: 30px; right: 8px; top: calc(100% + 4px); padding: 6px 9px; background: var(--panel); border: 1px solid var(--line); border-radius: 3px; box-shadow: var(--shadow); font-size: 12.5px; color: var(--ink); }
+.sorting, .sorting * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
 .p-files { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; }
 .card.queued .state { font-style: italic; }
 .card.queued::before { background: repeating-linear-gradient(90deg, var(--c) 0 8px, transparent 8px 13px); }

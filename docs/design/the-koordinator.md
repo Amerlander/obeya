@@ -60,10 +60,14 @@ starts.
 
 Cards whose turn comes together go longest-waiting first. The owner sets the order where the waits
 leave it open: „Früher“ and „Später“ on a waiting card (which says its place) and on its row in the
-queue's list swap it with its neighbour. It does not pass a card it waits for, one waiting for it,
-or one being judged, and a card being judged does not move; such a button stays grey and says why
-when clicked. The order decides who goes first once free, who gets a free workspace, and which cards
-count as ahead when one is judged again.
+queue's list swap it with its neighbour. In the list a row can also be dragged to any place: by the
+grip at its left, with a mouse or a finger (a finger elsewhere on the list scrolls it), or with a
+mouse by the row itself; the rows it passes make room, and the list scrolls at its edges. A card does
+not pass a card it waits for, one waiting for it, or one being judged, and a card being judged does
+not move; such a button stays grey and says why when clicked, and a dragged row stops at the last
+place it may take and, pulled farther, says why. A drop moves it there in one step: it passes each
+card between, which each move up one place. The order decides who goes first once free, who gets a
+free workspace, and which cards count as ahead when one is judged again.
 
 While the pointer is on a card, its waits show both ways over every step: the cards it waits for
 („kommt zuerst“) and those waiting for it („wartet darauf“), each with a ring and an arrow from the
@@ -366,9 +370,12 @@ passed the words on through `to_obeya` hears that the owner finds the link under
   card on Windows), and every canvas lost its server connection for minutes.
 - **A start that finds no workspace is a wait, not a failure** (2026-10-05), so a card the owner
   started starts by itself once a workspace frees up.
-- **The queue is reordered with one-place buttons, not by dragging** (2026-10-08): the waits fix
-  part of the order, and a button can say why it is blocked where a drag would just fail. Nothing
-  passes a card being judged, which could otherwise end up waiting for a card that waits for it.
+- **The queue is reordered by dragging as well as by one-place buttons** (2026-10-26): with more
+  than a few cards waiting, a card going from last to first took a click per place. The drag knows
+  the waits: the row stops where they stop it and says why when pulled farther, as a blocked button
+  does, so the drag never just fails. The buttons stay for the keyboard and for the card's own view.
+  Touch drags by a grip so that the list still scrolls under a finger. Nothing passes a card being
+  judged, which could otherwise end up waiting for a card that waits for it.
 - **A project's workstreams started together are scheduled in one turn** (2026-10-02): they often
   build on each other, which a conflict check does not see; only a turn seeing all of them and the
   plan doc can choose the order.

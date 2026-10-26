@@ -1159,8 +1159,8 @@ export type CardAction =
    * from the plan doc unless it has for the doc as it stands. Answers once they stand there.
    */
   | { action: 'arrange' }
-  /** A waiting card one place earlier or later in the queue, past a card it has no wait with. */
-  | { action: 'reorder'; earlier: boolean }
+  /** A waiting card `places` places (1 if left out) earlier or later in the queue, past cards it has no wait with. */
+  | { action: 'reorder'; earlier: boolean; places?: number }
   /**
    * A proposal becomes the owner's card and starts (a proposed idea: its discussion opens); with
    * `start: false` it is only planned. `idea`: a proposed task becomes an idea to discuss first.

@@ -4,7 +4,7 @@
 
 import { z } from 'zod';
 import type { RepoAdapter } from '../adapters/types';
-import { inQueue, move, movable, notStarted, queueOrder, waitsOn } from '../core/queue';
+import { inQueue, movable, notStarted, queueOrder, reach, waitsOn } from '../core/queue';
 import { type AgentRole, type CardEvent, finished, type Item, nameless, type Preference, START_ALL_HOLD_MS, titleFrom, type Wait } from '../core/types';
 import { ACTIVE, BadRequest, type Board } from './board';
 import type { Utterance } from './db';
@@ -257,20 +257,30 @@ export class Koordinator {
   }
 
   /**
-   * The owner moves a waiting card one place earlier or later in the queue, past a card it has no
-   * wait with: the two swap their places (`since`).
+   * The owner moves a waiting card `places` places earlier or later in the queue, past cards it has
+   * no wait with: it takes the place (`since`) of the farthest card it passes, and each card passed
+   * moves up by one.
    */
-  reorder(cardId: string, earlier: boolean) {
+  reorder(cardId: string, earlier: boolean, places = 1) {
     const card = this.card(cardId);
     if (!movable(card)) throw new BadRequest('notQueued', 'the card is not waiting');
-    const { past, why } = move(cardId, earlier, this.o.board.snapshot().items);
-    if (!past || why) throw new BadRequest('notMovable', past ? `${why}: ${past.id}` : 'nothing to pass');
-    const mine = card.queue!.since;
-    let theirs = past.queue!.since;
-    // two cards that came in the same millisecond: the order between them is the id's, so the one moved gets a time of its own
-    if (theirs === mine) theirs = new Date(Date.parse(mine) + (earlier ? -1 : 1)).toISOString();
-    this.setQueue(cardId, card.queue!, theirs);
-    this.setQueue(past.id, past.queue!, mine);
+    if (!Number.isInteger(places) || places < 1) throw new BadRequest('invalid', 'places must be a positive whole number');
+    const items = this.o.board.snapshot().items;
+    const can = reach(cardId, earlier, items);
+    if (can.places < places) throw new BadRequest('notMovable', can.why ? `${can.why}: ${can.stop!.id}` : 'not that far to go');
+    const order = queueOrder(items);
+    const times = order.map((i) => i.queue!.since);
+    const n = order.findIndex((i) => i.id === cardId);
+    const to = earlier ? n - places : n + places;
+    const past = order[to]!;
+    order.splice(n, 1);
+    order.splice(to, 0, card);
+    // the times stay where they were, each card in the new order taking the next; cards that came in
+    // the same millisecond go by id, so one that would tie with the card before it gets a time of its own
+    order.forEach((i, k) => {
+      if (k && Date.parse(times[k]!) <= Date.parse(times[k - 1]!)) times[k] = new Date(Date.parse(times[k - 1]!) + 1).toISOString();
+      if (times[k] !== i.queue!.since) this.setQueue(i.id, i.queue!, times[k]);
+    });
     const t = this.o.board.t;
     this.o.board.log(cardId, 'state', 'owner', (earlier ? t.koordinator.movedBefore : t.koordinator.movedAfter)(past.title));
   }

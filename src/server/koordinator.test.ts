@@ -7,7 +7,7 @@ import type { PlanDoc } from '../core/plan-doc';
 import { Board } from './board';
 import { Store } from './db';
 import { Koordinator, overlaps } from './koordinator';
-import { move, queueOrder } from '../core/queue';
+import { move, queueOrder, reach } from '../core/queue';
 import { artifact, FakeRuntime, type FakeSession, gitRepo } from './testing';
 import { Workers } from './workers';
 import { git, HERE, parseChanges, Workspaces } from './workspaces';
@@ -362,6 +362,45 @@ describe('Koordinator', () => {
     expect(item(c.id).state).toBe('working');
     expect(item(b.id).queue).toMatchObject({ checking: true });
     expect(item(d.id).queue).toMatchObject({ behind: [c.id] });
+  });
+
+  test('the owner moves a waiting card several places at once, as far as its waits let it', () => {
+    const t0 = Date.parse('2026-10-01T10:00:00.000Z');
+    const wait = (title: string, ms: number, behind?: string) => {
+      const c = card(title);
+      const since = new Date(t0 + ms).toISOString();
+      board.work(c.id, { queue: JSON.stringify(behind ? { behind: [behind], reason: 'Grund.', since } : { workspace: 'none', since }) });
+      return c;
+    };
+    // B and C came in the same millisecond; E waits for B
+    const a = wait('A', 0);
+    const b = wait('B', 10);
+    const c = wait('C', 10);
+    const d = wait('D', 20);
+    const e = wait('E', 30, b.id);
+    const order = () => queueOrder(board.snapshot().items).map((i) => i.title);
+    expect(order()).toEqual(b.id < c.id ? ['A', 'B', 'C', 'D', 'E'] : ['A', 'C', 'B', 'D', 'E']);
+    const [first, second] = b.id < c.id ? ['B', 'C'] : ['C', 'B'];
+
+    k.reorder(d.id, true, 3);
+    expect(order()).toEqual(['D', 'A', first, second, 'E']);
+    expect(board.events(d.id).at(-1)).toMatchObject({ author: 'owner', text: 'In der Warteschlange vor „A“ gezogen.' });
+    k.reorder(a.id, false, 3);
+    expect(order()).toEqual(['D', first, second, 'E', 'A']);
+    expect(board.events(a.id).at(-1)).toMatchObject({ text: 'In der Warteschlange hinter „E“ gestellt.' });
+
+    // E goes no farther up than right behind B, the card it waits for
+    const items = () => board.snapshot().items;
+    expect(reach(e.id, true, items())).toMatchObject({ places: first === 'B' ? 1 : 0, stop: { id: b.id }, why: 'waitsFor' });
+    expect(reach(b.id, false, items())).toMatchObject({ places: first === 'B' ? 1 : 0, stop: { id: e.id }, why: 'waitedOn' });
+    expect(reach(a.id, false, items())).toEqual({ places: 0 });
+    expect(reach(d.id, false, items())).toEqual({ places: 4 });
+    expect(() => k.reorder(e.id, true, 3)).toThrow(expect.objectContaining({ code: 'notMovable' }));
+    expect(() => k.reorder(e.id, true, 0)).toThrow(expect.objectContaining({ code: 'invalid' }));
+    expect(order()).toEqual(['D', first, second, 'E', 'A']);
+    // every card keeps a time of its own, so the order no longer hangs on the ids
+    const times = queueOrder(items()).map((i) => i.queue!.since);
+    expect(new Set(times).size).toBe(times.length);
   });
 
   test('an estimate the usage limit stops waits on the card, and the card is judged once the limit lifts', async () => {

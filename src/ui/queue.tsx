@@ -1,12 +1,14 @@
 // The queue: the bar's button with its count and the list under it, and moving a waiting card earlier
 // or later, with the same two buttons on the card and in that list; a row's × takes its card out. A button whose way is blocked by a
-// wait says why when clicked (and on hover); at the head or the end of the queue it is greyed out.
+// wait says why when clicked (and on hover); at the head or the end of the queue it is greyed out. In the list a row is also dragged
+// to its place by its grip (or, with a mouse, by itself), as far as its waits let it; pulled farther, it says why it stops.
 
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from 'react';
-import { move, movable, notStarted, queueOrder } from '../core/queue';
+import { move, movable, notStarted, queueOrder, reach } from '../core/queue';
 import type { Item } from '../core/types';
 import { api } from './api';
 import { plain } from './markdown';
+import { type Drag, useSortable } from './sortable';
 import { failText, stateLabel, t } from './strings';
 
 /** A list under a bar's button: while it is `on`, a click anywhere beside `box` closes it, and Esc does with `esc`. */
@@ -30,7 +32,24 @@ export function useMenuClose(on: boolean, box: RefObject<HTMLElement | null>, cl
 export function QueuePill({ items, onOpen }: { items: Item[]; onOpen: (i: Item) => void }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  // why a row's last move or × did not go
+  const [failed, setFailed] = useState<{ id: string; text: string }>();
   const queued = queueOrder(items);
+  const sort = useSortable(
+    queued.map((i) => i.id),
+    {
+      reach: (id) => ({ earlier: reach(id, true, items).places, later: reach(id, false, items).places }),
+      drop: (id, places) => {
+        setFailed(undefined);
+        return api.act(id, { action: 'reorder', earlier: places < 0, places: Math.abs(places) }).catch((err) => {
+          setFailed({ id, text: failText(err) });
+          throw err;
+        });
+      },
+      scroller: list,
+    },
+  );
   useMenuClose(open, box, () => setOpen(false), true);
   return (
     <div className="menu-pill queue" ref={box}>
@@ -42,20 +61,28 @@ export function QueuePill({ items, onOpen }: { items: Item[]; onOpen: (i: Item) 
         {queued.length > 0 && <span className="n">{queued.length}</span>}
       </button>
       {open && (
-        <div className="bar-menu queue-menu">
+        <div className="bar-menu queue-menu" ref={list}>
           {queued.length ? (
             <ol>
-              {queued.map((i) => (
-                <QueueRow
-                  key={i.id}
-                  item={i}
-                  items={items}
-                  onOpen={(i) => {
-                    setOpen(false);
-                    onOpen(i);
-                  }}
-                />
-              ))}
+              {sort.order.map((id) => {
+                const i = queued.find((q) => q.id === id)!;
+                return (
+                  <QueueRow
+                    key={id}
+                    item={i}
+                    items={items}
+                    row={sort.row(id)}
+                    grip={movable(i) ? sort.grip(id) : undefined}
+                    drag={sort.drag?.key === id ? sort.drag : undefined}
+                    failed={failed?.id === id ? failed.text : ''}
+                    onFail={(text) => setFailed(text ? { id, text } : undefined)}
+                    onOpen={(i) => {
+                      setOpen(false);
+                      onOpen(i);
+                    }}
+                  />
+                );
+              })}
             </ol>
           ) : (
             <p className="hint">{t.queue.empty}</p>
@@ -74,18 +101,37 @@ export function waitedOn(ids: string[], items: Item[], name: (id: string) => str
   });
 }
 
-/** A card in the queue, with what it waits for, the buttons that move it and the × that takes it out of the queue. */
-function QueueRow({ item, items, onOpen }: { item: Item; items: Item[]; onOpen: (i: Item) => void }) {
+type Sort = ReturnType<typeof useSortable>;
+
+/** A card in the queue, with its grip, what it waits for, the buttons that move it and the × that takes it out of the queue. */
+function QueueRow(p: { item: Item; items: Item[]; row: ReturnType<Sort['row']>; grip?: ReturnType<Sort['grip']>; drag?: Drag; failed: string; onFail: (text: string) => void; onOpen: (i: Item) => void }) {
+  const { item, items } = p;
   const m = useQueueMove(item, items);
-  const [failed, setFailed] = useState('');
+  // pulled beyond where its waits let it go: the card that stops it, and why
+  const stop = p.drag?.held && reach(item.id, p.drag.held === 'earlier', items);
+  const held = stop && stop.stop && stop.why ? t.queue.stuck[stop.why](plain(stop.stop.title)) : '';
   return (
-    <li className="s-planned" onClick={() => onOpen(item)}>
+    <li className="s-planned" {...p.row} onClick={() => p.onOpen(item)}>
+      {p.grip ? (
+        <span className="grip" title={t.queue.drag} aria-hidden {...p.grip}>
+          <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor">
+            <circle cx="2.5" cy="3" r="1.5" />
+            <circle cx="7.5" cy="3" r="1.5" />
+            <circle cx="2.5" cy="8" r="1.5" />
+            <circle cx="7.5" cy="8" r="1.5" />
+            <circle cx="2.5" cy="13" r="1.5" />
+            <circle cx="7.5" cy="13" r="1.5" />
+          </svg>
+        </span>
+      ) : (
+        <span className="grip none" />
+      )}
       <span className="dot" />
       <span className="q-what">
         {plain(item.title)}
         <br />
         <span className="hint">{item.queue && 'behind' in item.queue ? t.queue.behind(waitedOn(item.queue.behind, items)) : stateLabel(item)}</span>
-        {(failed || m?.why) && <span className="hint why">{failed || m?.why}</span>}
+        {(p.failed || m?.why) && <span className="hint why">{p.failed || m?.why}</span>}
       </span>
       {m?.buttons}
       <button
@@ -94,12 +140,13 @@ function QueueRow({ item, items, onOpen }: { item: Item; items: Item[]; onOpen: 
         aria-label={t.queue.dequeue}
         onClick={(e) => {
           e.stopPropagation();
-          setFailed('');
-          api.act(item.id, { action: 'dequeue' }).catch((err) => setFailed(failText(err)));
+          p.onFail('');
+          api.act(item.id, { action: 'dequeue' }).catch((err) => p.onFail(failText(err)));
         }}
       >
         ×
       </button>
+      {held && <span className="q-held">{held}</span>}
     </li>
   );
 }

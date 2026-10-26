@@ -1319,7 +1319,7 @@ export class CanvasRuntime {
       case 'arrange':
         return this.koordinator.arrange(cardId);
       case 'reorder':
-        return this.koordinator.reorder(cardId, !!a.earlier);
+        return this.koordinator.reorder(cardId, !!a.earlier, a.places ?? 1);
       case 'stop':
         return this.repoOf(cardId).workers.stop(cardId);
       case 'pause':
