@@ -137,6 +137,16 @@ describe('through Tailscale', () => {
     expect(joined.address).toBe(`https://${NAME}`);
   });
 
+  test('a Tailscale slow to answer under load keeps the state it had; one that never answered is stopped', async () => {
+    const tailscale = new Tailscale(join(ts, 'tailscale'), process.platform, 500);
+    writeFileSync(join(ts, 'slow'), '');
+    expect(await tailscale.state()).toEqual({ state: 'stopped' });
+    rmSync(join(ts, 'slow'));
+    expect(await tailscale.state()).toMatchObject({ state: 'ready', name: 'mac.tail1234.ts.net' });
+    writeFileSync(join(ts, 'slow'), '');
+    expect(await tailscale.state()).toMatchObject({ state: 'ready', name: 'mac.tail1234.ts.net' });
+  });
+
   test('on Linux without the operator right, the section says so', async () => {
     writeFileSync(join(ts, 'fail'), 'sending serve config: Access denied: serve config denied');
     const linux = new Access({ store, tailscale: new Tailscale(join(ts, 'tailscale'), 'linux') });

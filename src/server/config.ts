@@ -401,14 +401,18 @@ export class Config {
     const at = locate(canvases, (r) => isAt(r, path));
     if (!at) throw new BadRequest('invalid', `no repository ${path} in the configuration`);
     const patch = settingPatch(field, value);
-    const onMachine = () =>
-      this.save(canvases.map((c, i) => (i !== at.canvas ? c : { ...c, repos: c.repos.map((r, j) => (j !== at.repo ? r : { ...r, settings: layerSettings(r.settings, patch) })) })));
+    // on the configuration as it is then: a pull request opened meanwhile may have taken a while
+    const onMachine = () => {
+      const now = this.current();
+      const here = locate(now, (r) => isAt(r, path)) ?? at;
+      return this.save(now.map((c, i) => (i !== here.canvas ? c : { ...c, repos: c.repos.map((r, j) => (j !== here.repo ? r : { ...r, settings: layerSettings(r.settings, patch) })) })));
+    };
     if (where === 'machine') {
       await onMachine();
       return null;
     }
     const to = (await this.check(canvases)).resolved[at.canvas]?.repos[at.repo]?.shareTo ?? 'main';
-    const done = this.share(path, patch, to, field);
+    const done = await this.share(path, patch, to, field);
     if (to === 'pr') {
       await onMachine();
       return done;
@@ -442,13 +446,13 @@ export class Config {
     const to = resolved?.repos[at.repo]?.shareTo ?? 'main';
     if (to === 'pr' && parsed.data.direct) {
       if (!resolved?.repos[at.repo]?.shareDirect) throw new BadRequest('noDirect', `${repoPath}: work goes to main only through pull requests`);
-      const { after, ...done } = pushShared(repoPath, mine);
+      const { after, ...done } = await pushShared(repoPath, mine);
       console.log(`Obeya: settings of ${repoPath} for everyone, pushed onto origin's ${'branch' in done ? done.branch : ''}`);
       this.takenOver(repoPath, undefined, after);
       this.o.onSettings?.();
       return done;
     }
-    const done = this.share(repoPath, mine, to, 'settings');
+    const done = await this.share(repoPath, mine, to, 'settings');
     if (to === 'main') this.o.onSettings?.();
     return done;
   }
@@ -458,14 +462,14 @@ export class Config {
    * request, or committed on the main branch, after which all of it comes from the repository, here
    * too. The caller follows.
    */
-  private share(path: string, patch: SharedSettings, to: 'main' | 'pr', what: string): SettingsShared {
+  private async share(path: string, patch: SharedSettings, to: 'main' | 'pr', what: string): Promise<SettingsShared> {
     if (to === 'pr') {
       if (!this.o.forge) throw new BadRequest('settingsShare', 'no forge to open a pull request with');
-      const done = proposeShared(path, patch, this.o.forge);
+      const done = await proposeShared(path, patch, this.o.forge);
       console.log(`Obeya: ${what} of ${path} for everyone, as a pull request: ${'pr' in done ? done.pr : ''}`);
       return done;
     }
-    const { before: _, after, ...done } = commitShared(path, patch);
+    const { before: _, after, ...done } = await commitShared(path, patch);
     console.log(`Obeya: ${what} of ${path} for everyone, committed on ${'branch' in done ? done.branch : ''}`);
     // all of it is in the file now, also what it held already
     this.takenOver(path, undefined, after);

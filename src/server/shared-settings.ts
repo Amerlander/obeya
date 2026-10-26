@@ -13,6 +13,7 @@ import { BadRequest } from './board';
 import type { Forge } from './forge';
 import { defaultBranch, GIT } from './workspaces';
 import { messageOf } from '../core/text';
+import { spawnOutput } from './spawn';
 
 interface Run {
   code: number;
@@ -20,18 +21,17 @@ interface Run {
   err: string;
 }
 
-function gitRun(repoPath: string, args: string[], o: { env?: Record<string, string>; stdin?: string } = {}): Run {
-  const r = Bun.spawnSync([GIT, '-C', repoPath, ...args], {
+/** git, without blocking the server: a fetch or push waits for the remote. */
+async function gitRun(repoPath: string, args: string[], o: { env?: Record<string, string>; stdin?: string } = {}): Promise<Run> {
+  const r = await spawnOutput([GIT, '-C', repoPath, ...args], {
     stdin: o.stdin !== undefined ? new Blob([o.stdin]) : 'ignore',
-    stdout: 'pipe',
-    stderr: 'pipe',
     env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...o.env },
   });
-  return { code: r.exitCode, out: r.stdout.toString().trim(), err: r.stderr.toString().trim() };
+  return { code: r.code, out: r.stdout.trim(), err: r.stderr.trim() };
 }
 
-function must(repoPath: string, args: string[], o?: Parameters<typeof gitRun>[2]): string {
-  const r = gitRun(repoPath, args, o);
+async function must(repoPath: string, args: string[], o?: Parameters<typeof gitRun>[2]): Promise<string> {
+  const r = await gitRun(repoPath, args, o);
   if (r.code !== 0) throw new BadRequest('settingsShare', `git ${args[0]}: ${r.err || r.out || `exit code ${r.code}`}`);
   return r.out;
 }
@@ -40,8 +40,8 @@ function must(repoPath: string, args: string[], o?: Parameters<typeof gitRun>[2]
  * The text of `.obeya/settings.json` with `mine` in front of what the file at `commit` holds: its
  * fields in the dialog's order, what else it holds after them, as it was.
  */
-export function sharedText(repoPath: string, commit: string, mine: SharedSettings): { text: string; before?: SharedSettings; after: SharedSettings } {
-  const r = gitRun(repoPath, ['cat-file', 'blob', `${commit}:${REPO_SETTINGS_FILE}`]);
+export async function sharedText(repoPath: string, commit: string, mine: SharedSettings): Promise<{ text: string; before?: SharedSettings; after: SharedSettings }> {
+  const r = await gitRun(repoPath, ['cat-file', 'blob', `${commit}:${REPO_SETTINGS_FILE}`]);
   const read = r.code === 0 ? parseShared(r.out) : { problems: [] };
   const raw = read.raw ?? {};
   const merged = layerSettings<Record<string, unknown>>(raw, mine as Record<string, unknown>)!;
@@ -53,15 +53,15 @@ export function sharedText(repoPath: string, commit: string, mine: SharedSetting
 }
 
 /** A commit with `text` as `.obeya/settings.json` on top of `parent`, made beside the checkout (its index and files stay as they are). */
-function commitBeside(repoPath: string, parent: string, text: string, message: string): string {
+async function commitBeside(repoPath: string, parent: string, text: string, message: string): Promise<string> {
   const dir = mkdtempSync(join(tmpdir(), 'obeya-settings-'));
   try {
     const env = { GIT_INDEX_FILE: join(dir, 'index') };
-    const blob = must(repoPath, ['hash-object', '-w', '--stdin'], { stdin: text });
-    must(repoPath, ['read-tree', parent], { env });
-    must(repoPath, ['update-index', '--add', '--cacheinfo', `100644,${blob},${REPO_SETTINGS_FILE}`], { env });
-    const tree = must(repoPath, ['write-tree'], { env });
-    const commit = gitRun(repoPath, ['commit-tree', tree, '-p', parent, '-m', message]);
+    const blob = await must(repoPath, ['hash-object', '-w', '--stdin'], { stdin: text });
+    await must(repoPath, ['read-tree', parent], { env });
+    await must(repoPath, ['update-index', '--add', '--cacheinfo', `100644,${blob},${REPO_SETTINGS_FILE}`], { env });
+    const tree = await must(repoPath, ['write-tree'], { env });
+    const commit = await gitRun(repoPath, ['commit-tree', tree, '-p', parent, '-m', message]);
     if (commit.code !== 0) {
       if (/user\.email|user\.name|identity/i.test(commit.err)) throw new BadRequest('noIdentity', "git has no name and e-mail for commits (user.name, user.email)");
       throw new BadRequest('settingsShare', `git commit-tree: ${commit.err}`);
@@ -80,28 +80,28 @@ const subjectOf = (mine: SharedSettings) => `Obeya settings for everyone: ${Obje
  * where work lands): beside the checkout, which, where it is on that branch, then has the file as
  * committed. Refused where the checkout has changes of its own in the file.
  */
-export function commitShared(repoPath: string, mine: SharedSettings): SettingsShared & { before?: SharedSettings; after: SharedSettings } {
+export async function commitShared(repoPath: string, mine: SharedSettings): Promise<SettingsShared & { before?: SharedSettings; after: SharedSettings }> {
   const branch = defaultBranch(repoPath);
-  const parent = gitRun(repoPath, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}^{commit}`]).out;
+  const parent = (await gitRun(repoPath, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}^{commit}`])).out;
   if (!parent) throw new BadRequest('settingsShare', `the repository has no local branch ${branch}`);
-  const onIt = gitRun(repoPath, ['symbolic-ref', '--quiet', '--short', 'HEAD']).out === branch;
-  if (onIt && gitRun(repoPath, ['status', '--porcelain', '--', REPO_SETTINGS_FILE]).out)
+  const onIt = (await gitRun(repoPath, ['symbolic-ref', '--quiet', '--short', 'HEAD'])).out === branch;
+  if (onIt && (await gitRun(repoPath, ['status', '--porcelain', '--', REPO_SETTINGS_FILE])).out)
     throw new BadRequest('settingsDirty', `${REPO_SETTINGS_FILE} has changes of its own in ${repoPath}; commit or discard them first`);
-  const { text, before, after } = sharedText(repoPath, parent, mine);
-  const commit = commitBeside(repoPath, parent, text, subjectOf(mine));
-  must(repoPath, ['update-ref', '-m', 'obeya: settings for everyone', `refs/heads/${branch}`, commit, parent]);
+  const { text, before, after } = await sharedText(repoPath, parent, mine);
+  const commit = await commitBeside(repoPath, parent, text, subjectOf(mine));
+  await must(repoPath, ['update-ref', '-m', 'obeya: settings for everyone', `refs/heads/${branch}`, commit, parent]);
   // the checkout on the branch gets the file as committed, in its index and among its files
-  if (onIt) must(repoPath, ['checkout', commit, '--', REPO_SETTINGS_FILE]);
+  if (onIt) await must(repoPath, ['checkout', commit, '--', REPO_SETTINGS_FILE]);
   return { committed: commit, branch, ...(before ? { before } : {}), after };
 }
 
 /** A commit with `mine` in `.obeya/settings.json` on top of `origin`'s main branch, as just fetched. */
-function onOrigin(repoPath: string, mine: SharedSettings) {
+async function onOrigin(repoPath: string, mine: SharedSettings) {
   const branch = defaultBranch(repoPath);
-  must(repoPath, ['fetch', '--quiet', '--no-write-fetch-head', 'origin', `+refs/heads/${branch}:refs/remotes/origin/${branch}`]);
-  const parent = must(repoPath, ['rev-parse', '--verify', `refs/remotes/origin/${branch}^{commit}`]);
-  const { text, after } = sharedText(repoPath, parent, mine);
-  return { branch, text, after, commit: commitBeside(repoPath, parent, text, subjectOf(mine)) };
+  await must(repoPath, ['fetch', '--quiet', '--no-write-fetch-head', 'origin', `+refs/heads/${branch}:refs/remotes/origin/${branch}`]);
+  const parent = await must(repoPath, ['rev-parse', '--verify', `refs/remotes/origin/${branch}^{commit}`]);
+  const { text, after } = await sharedText(repoPath, parent, mine);
+  return { branch, text, after, commit: await commitBeside(repoPath, parent, text, subjectOf(mine)) };
 }
 
 /**
@@ -109,10 +109,10 @@ function onOrigin(repoPath: string, mine: SharedSettings) {
  * whose work goes out as pull requests but may go straight to main (`direct`): a commit on top of
  * it, pushed without force, so a protected branch, or one that moved meanwhile, refuses it.
  */
-export function pushShared(repoPath: string, mine: SharedSettings): SettingsShared & { after: SharedSettings } {
-  const { branch, commit, after } = onOrigin(repoPath, mine);
-  must(repoPath, ['push', '--quiet', 'origin', `${commit}:refs/heads/${branch}`]);
-  must(repoPath, ['update-ref', `refs/remotes/origin/${branch}`, commit]);
+export async function pushShared(repoPath: string, mine: SharedSettings): Promise<SettingsShared & { after: SharedSettings }> {
+  const { branch, commit, after } = await onOrigin(repoPath, mine);
+  await must(repoPath, ['push', '--quiet', 'origin', `${commit}:refs/heads/${branch}`]);
+  await must(repoPath, ['update-ref', `refs/remotes/origin/${branch}`, commit]);
   return { committed: commit, branch, after };
 }
 
@@ -120,12 +120,12 @@ export function pushShared(repoPath: string, mine: SharedSettings): SettingsShar
  * Puts `mine` into the repository's `.obeya/settings.json` as a pull request against `origin`'s
  * main branch: a commit on top of it, pushed to a branch of its own, and the pull request opened.
  */
-export function proposeShared(repoPath: string, mine: SharedSettings, forge: Forge, now = new Date()): SettingsShared {
-  const { branch, text, commit } = onOrigin(repoPath, mine);
+export async function proposeShared(repoPath: string, mine: SharedSettings, forge: Forge, now = new Date()): Promise<SettingsShared> {
+  const { branch, text, commit } = await onOrigin(repoPath, mine);
   const head = `obeya-settings-${now.toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-')}`;
-  must(repoPath, ['push', '--quiet', 'origin', `${commit}:refs/heads/${head}`]);
+  await must(repoPath, ['push', '--quiet', 'origin', `${commit}:refs/heads/${head}`]);
   try {
-    const pr = forge.open(repoPath, {
+    const pr = await forge.open(repoPath, {
       base: branch,
       head,
       title: subjectOf(mine),

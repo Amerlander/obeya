@@ -102,18 +102,18 @@ function make(repo = dir) {
 }
 
 const forge: Forge = {
-  open: () => '',
-  status: () => ({}) as never,
-  body: (_cwd, url) => {
+  open: async () => '',
+  status: async () => ({}) as never,
+  body: async (_cwd, url) => {
     const b = bodies.get(url);
     if (b === undefined) throw new Error(`gh pr view: no pull request ${url}`);
     return b;
   },
-  setBody: (_cwd, url, body) => {
+  setBody: async (_cwd, url, body) => {
     bodies.set(url, body);
     edits.push(url);
   },
-  merge: () => {},
+  merge: async () => {},
 };
 
 const PR = 'https://github.com/acme/app/pull/42';

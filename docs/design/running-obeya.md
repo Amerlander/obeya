@@ -91,7 +91,9 @@ running, logged out, HTTPS off in the tailnet (a link to the admin console's DNS
 operator right `tailscale serve` needs (`sudo tailscale set --operator=$USER`), all three ports
 taken. Ready, they name the Tailscale account for the phone to log in with, and while the tailnet has
 no other device they say the phone is not in it yet and cannot resolve the address. While open they
-check every few seconds, so each fixed step shows, and Obeya serves through Tailscale, without a click. They also say that other devices
+check every few seconds, so each fixed step shows, and Obeya serves through Tailscale, without a click.
+A `tailscale status` that takes longer than its 10 s (a machine under load) keeps the state found
+before instead of calling Tailscale stopped. They also say that other devices
 reach Obeya only while it runs here.
 
 A request is *local* when it comes from loopback under one of this machine's names, unforwarded (no

@@ -7,7 +7,7 @@ const URL_ = 'https://codeberg.org/acme/app/pulls/12';
 /** Canned answers by method and path (the query cut off, except the page); `calls` records each. */
 function server(answers: Record<string, unknown>, origin: string | null = null) {
   const calls: { base: string; method: string; path: string; body?: unknown }[] = [];
-  const api: Api = (_cwd, base, method, path, body) => {
+  const api: Api = async (_cwd, base, method, path, body) => {
     calls.push({ base, method, path, ...(body === undefined ? {} : { body }) });
     const page = /[?&]page=(\d+)/.exec(path)?.[1];
     const key = `${method} ${path.split('?')[0]}`;
@@ -17,7 +17,7 @@ function server(answers: Record<string, unknown>, origin: string | null = null) 
     if (page) return page === '1' ? a : [];
     return a;
   };
-  return { forge: makeForgejoForge(api, () => origin), calls };
+  return { forge: makeForgejoForge(api, async () => origin), calls };
 }
 
 const pr = {
@@ -30,7 +30,7 @@ const pr = {
   user: { login: 'owner' },
 };
 
-test('Forgejo’s answers become a PR status: checks, conversation, reviews and threads by line', () => {
+test('Forgejo’s answers become a PR status: checks, conversation, reviews and threads by line', async () => {
   const { forge, calls } = server({
     'GET repos/acme/app/pulls/12': pr,
     'GET repos/acme/app/pulls/12/reviews': [
@@ -61,7 +61,7 @@ test('Forgejo’s answers become a PR status: checks, conversation, reviews and 
       ],
     },
   });
-  const s = forge.status('/repo', URL_);
+  const s = await forge.status('/repo', URL_);
   // times in UTC, whatever zone the server or the committer wrote them in
   expect(calls[0]).toEqual({ base: 'https://codeberg.org', method: 'GET', path: 'repos/acme/app/pulls/12' });
   // the pending review's comments are a draft nobody else sees
@@ -97,8 +97,8 @@ test('Forgejo’s answers become a PR status: checks, conversation, reviews and 
   ]);
 });
 
-test('merged, closed, conflicting and draft PRs on Forgejo', () => {
-  const status = (p: object) =>
+test('merged, closed, conflicting and draft PRs on Forgejo', async () => {
+  const status = async (p: object) =>
     server({
       'GET repos/acme/app/pulls/12': { ...pr, ...p },
       'GET repos/acme/app/pulls/12/reviews': [],
@@ -106,23 +106,23 @@ test('merged, closed, conflicting and draft PRs on Forgejo', () => {
       'GET repos/acme/app/pulls/12/commits': [],
       'GET repos/acme/app/commits/abc/status': { statuses: [] },
     }).forge.status('/repo', URL_);
-  const merged = status({ state: 'closed', merged: true, mergeable: false, merge_commit_sha: 'e5d1a09' });
+  const merged = await status({ state: 'closed', merged: true, mergeable: false, merge_commit_sha: 'e5d1a09' });
   expect([merged.state, merged.mergeCommit]).toEqual(['MERGED', 'e5d1a09']);
-  expect(status({ state: 'closed' }).state).toBe('CLOSED');
-  const draft = status({ mergeable: false, draft: true });
+  expect((await status({ state: 'closed' })).state).toBe('CLOSED');
+  const draft = await status({ mergeable: false, draft: true });
   expect([draft.mergeable, draft.mergeState]).toEqual(['UNKNOWN', 'DRAFT']);
-  expect(readyToMerge(status({}))).toBe(true);
+  expect(readyToMerge(await status({}))).toBe(true);
   expect(readyToMerge(draft)).toBe(false);
 });
 
-test('the description on Forgejo is read and replaced', () => {
+test('the description on Forgejo is read and replaced', async () => {
   const { forge, calls } = server({ 'GET repos/acme/app/pulls/12': pr });
-  expect(forge.body('/repo', URL_)).toBe('Text');
-  forge.setBody('/repo', URL_, 'Text\n\nDemo-Video: https://d/a/');
+  expect(await forge.body('/repo', URL_)).toBe('Text');
+  await forge.setBody('/repo', URL_, 'Text\n\nDemo-Video: https://d/a/');
   expect(calls[1]).toEqual({ base: 'https://codeberg.org', method: 'PATCH', path: 'repos/acme/app/pulls/12', body: { body: 'Text\n\nDemo-Video: https://d/a/' } });
 });
 
-test('a merge on Forgejo uses the style the repository allows, only for the commit found ready; a refusal says the server’s reason', () => {
+test('a merge on Forgejo uses the style the repository allows, only for the commit found ready; a refusal says the server’s reason', async () => {
   let allows: Record<string, boolean> = { allow_squash_merge: true, allow_merge_commits: true };
   const answers: Record<string, unknown> = {
     'GET repos/acme/app': allows,
@@ -130,23 +130,23 @@ test('a merge on Forgejo uses the style the repository allows, only for the comm
     'GET repos/acme/app/pulls/12': { ...pr, merged: true, merge_commit_sha: 'f00d' },
   };
   const { forge, calls } = server(answers);
-  expect(forge.merge('/repo', URL_, 'abc')).toBe('f00d');
+  expect(await forge.merge('/repo', URL_, 'abc')).toBe('f00d');
   expect(calls[1]).toEqual({ base: 'https://codeberg.org', method: 'POST', path: 'repos/acme/app/pulls/12/merge', body: { Do: 'squash', head_commit_id: 'abc' } });
   allows = { allow_squash_merge: false, allow_merge_commits: false, allow_rebase: true };
   answers['GET repos/acme/app'] = allows;
-  forge.merge('/repo', URL_, 'abc');
+  await forge.merge('/repo', URL_, 'abc');
   expect(calls[4]!.body).toEqual({ Do: 'rebase', head_commit_id: 'abc' });
   answers['POST repos/acme/app/pulls/12/merge'] = new ForgeError('Please try again later', 'POST repos/acme/app/pulls/12/merge');
-  expect(() => forge.merge('/repo', URL_, 'abc')).toThrow(/^Please try again later$/);
+  await expect(forge.merge('/repo', URL_, 'abc')).rejects.toThrow(/^Please try again later$/);
 });
 
-test('a pull request is opened on the Forgejo repository of origin', () => {
+test('a pull request is opened on the Forgejo repository of origin', async () => {
   const { forge, calls } = server({ 'POST repos/acme/app/pulls': { html_url: 'https://codeberg.org/acme/app/pulls/13' } }, 'https://codeberg.org/acme/app.git');
-  expect(forge.open('/repo', { base: 'main', head: 'obeya-settings', title: 'T', body: 'B' })).toBe('https://codeberg.org/acme/app/pulls/13');
+  expect(await forge.open('/repo', { base: 'main', head: 'obeya-settings', title: 'T', body: 'B' })).toBe('https://codeberg.org/acme/app/pulls/13');
   expect(calls[0]).toEqual({ base: 'https://codeberg.org', method: 'POST', path: 'repos/acme/app/pulls', body: { base: 'main', head: 'obeya-settings', title: 'T', body: 'B' } });
 });
 
-test('the server and repository of a remote on Forgejo', () => {
+test('the server and repository of a remote on Forgejo', async () => {
   expect(remoteRepo('https://codeberg.org/acme/app.git')).toEqual({ base: 'https://codeberg.org', repo: 'repos/acme/app' });
   expect(remoteRepo('git@codeberg.org:acme/app.git')).toEqual({ base: 'https://codeberg.org', repo: 'repos/acme/app' });
   expect(remoteRepo('ssh://git@git.example.org:2222/team/app.git')).toEqual({ base: 'https://git.example.org', repo: 'repos/team/app' });
@@ -154,7 +154,7 @@ test('the server and repository of a remote on Forgejo', () => {
   expect(remoteRepo('/local/path')).toBeNull();
 });
 
-test('a head Forgejo cannot merge is a conflict only once it still cannot at the next look: before, Forgejo may still check it', () => {
+test('a head Forgejo cannot merge is a conflict only once it still cannot at the next look: before, Forgejo may still check it', async () => {
   const answers: Record<string, unknown> = {
     'GET repos/acme/app/pulls/12': { ...pr, mergeable: false },
     'GET repos/acme/app/pulls/12/reviews': [],
@@ -164,28 +164,28 @@ test('a head Forgejo cannot merge is a conflict only once it still cannot at the
     'GET repos/acme/app/commits/def/status': { statuses: [] },
   };
   const { forge } = server(answers);
-  const look = () => {
-    const s = forge.status('/repo', URL_);
+  const look = async () => {
+    const s = await forge.status('/repo', URL_);
     return [s.mergeable, s.mergeState];
   };
-  expect(look()).toEqual(['UNKNOWN', 'UNKNOWN']);
-  expect(look()).toEqual(['CONFLICTING', 'DIRTY']);
+  expect(await look()).toEqual(['UNKNOWN', 'UNKNOWN']);
+  expect(await look()).toEqual(['CONFLICTING', 'DIRTY']);
   // a new push is checked afresh
   answers['GET repos/acme/app/pulls/12'] = { ...pr, mergeable: false, head: { sha: 'def' } };
-  expect(look()).toEqual(['UNKNOWN', 'UNKNOWN']);
+  expect(await look()).toEqual(['UNKNOWN', 'UNKNOWN']);
   answers['GET repos/acme/app/pulls/12'] = { ...pr, mergeable: true, head: { sha: 'def' } };
-  expect(look()).toEqual(['MERGEABLE', 'CLEAN']);
+  expect(await look()).toEqual(['MERGEABLE', 'CLEAN']);
 });
 
-test('a failed check on a later page of the head’s statuses keeps the PR from ready', () => {
+test('a failed check on a later page of the head’s statuses keeps the PR from ready', async () => {
   const page = (n: number) => (n === 1 ? { statuses: Array.from({ length: 50 }, (_, i) => ({ context: `lint ${i}`, status: 'success' })) } : n === 2 ? { statuses: [{ context: 'e2e', status: 'failure' }] } : { statuses: [] });
-  const forge = makeForgejoForge((_cwd, _base, _method, path) => {
+  const forge = makeForgejoForge(async (_cwd, _base, _method, path) => {
     const p = path.split('?')[0]!;
     if (p === 'repos/acme/app/pulls/12') return pr;
     if (p.endsWith('/status')) return page(Number(/page=(\d+)/.exec(path)![1]));
     return [];
-  }, () => null);
-  const s = forge.status('/repo', URL_);
+  }, async () => null);
+  const s = await forge.status('/repo', URL_);
   expect(s.checks.length).toBe(51);
   expect(s.checks.at(-1)).toEqual({ name: 'e2e', state: 'failure' });
   expect(readyToMerge(s)).toBe(false);

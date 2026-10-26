@@ -443,7 +443,7 @@ describe("Obeya's configuration", async () => {
       store,
       running: () => [],
       server: { port: 4417, home: dir, permissionMode: 'auto' },
-      forge: { ...noForge, open: (_cwd, pr) => (opened.push(pr), 'https://github.com/acme/web/pull/7') },
+      forge: { ...noForge, open: async (_cwd, pr) => (opened.push(pr), 'https://github.com/acme/web/pull/7') },
       onSettings: () => void applied++,
     });
     const before = git(web, 'rev-parse', 'main').trim();
@@ -525,7 +525,7 @@ describe("Obeya's configuration", async () => {
       store,
       running: () => [],
       server: { port: 4417, home: dir, permissionMode: 'auto' },
-      forge: { ...noForge, open: (_cwd, pr) => (opened.push(pr), 'https://github.com/acme/web/pull/8') },
+      forge: { ...noForge, open: async (_cwd, pr) => (opened.push(pr), 'https://github.com/acme/web/pull/8') },
       apply: () => {},
     });
     expect((await c.takeSetting(web, 'setup', 'bun install', 'repository'))).toEqual({ pr: 'https://github.com/acme/web/pull/8' });

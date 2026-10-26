@@ -5,6 +5,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { PrReviewEntry, PrThread } from '../core/types';
+import { spawnOutput } from './spawn';
 
 export interface PrStatus {
   state: 'OPEN' | 'MERGED' | 'CLOSED';
@@ -49,20 +50,23 @@ export interface PrStatus {
   mergeCommit?: string;
 }
 
+/**
+ * A forge's calls go over the network and take seconds when it is slow: each runs in the background,
+ * so the server answers meanwhile.
+ */
 export interface Forge {
-  /** A promise where the forge's calls run in the background (gh), so a round does not block the server. */
-  status(cwd: string, url: string): PrStatus | Promise<PrStatus>;
+  status(cwd: string, url: string): Promise<PrStatus>;
   /** The PR's description. */
-  body(cwd: string, url: string): string;
+  body(cwd: string, url: string): Promise<string>;
   /** Replaces the PR's description. */
-  setBody(cwd: string, url: string, body: string): void;
+  setBody(cwd: string, url: string, body: string): Promise<void>;
   /**
    * Merges the PR, if its head is still `head`, the way the repository allows; throws with GitHub's
    * reason when it cannot. Returns the commit the merge put on the base branch, where GitHub says.
    */
-  merge(cwd: string, url: string, head: string): string | void;
+  merge(cwd: string, url: string, head: string): Promise<string | void>;
   /** Opens a pull request from the pushed branch `head` onto `base`; returns its URL. */
-  open(cwd: string, pr: { base: string; head: string; title: string; body: string }): string;
+  open(cwd: string, pr: { base: string; head: string; title: string; body: string }): Promise<string>;
 }
 
 /**
@@ -81,15 +85,15 @@ export function parsePrUrl(url: string): { forge: 'github' | 'forgejo'; base: st
  * The forge a pull request is on, by its URL; one is opened on the forge of the repository's
  * `origin` (GitHub where `onGitHub` says so, else Forgejo).
  */
-export const routedForge = (github: Forge, forgejo: Forge, origin: (cwd: string) => string | null, onGitHub: (remote: string) => boolean): Forge => {
+export const routedForge = (github: Forge, forgejo: Forge, origin: (cwd: string) => Promise<string | null>, onGitHub: (remote: string) => boolean): Forge => {
   const of = (url: string) => (parsePrUrl(url)?.forge === 'forgejo' ? forgejo : github);
   return {
     status: (cwd, url) => of(url).status(cwd, url),
     body: (cwd, url) => of(url).body(cwd, url),
     setBody: (cwd, url, body) => of(url).setBody(cwd, url, body),
     merge: (cwd, url, head) => of(url).merge(cwd, url, head),
-    open: (cwd, pr) => {
-      const remote = origin(cwd);
+    open: async (cwd, pr) => {
+      const remote = await origin(cwd);
       return (remote && !onGitHub(remote) ? forgejo : github).open(cwd, pr);
     },
   };
@@ -108,7 +112,14 @@ export function githubOwner(remote: string): string | undefined {
 
 /** How long a token gh keeps for an account is taken as it stands. */
 const TOKEN_TTL = 10 * 60_000;
-const tokens = new Map<string, { token: string | null; at: number }>();
+/** By gh program and account: its token as gh hands it out (asked once for calls side by side), and when it was asked. */
+const tokens = new Map<string, { token: Promise<string | null>; at: number }>();
+
+/**
+ * How long one gh call may take before it counts as failed: GitHub slow to answer holds up only the
+ * card it reads for, and only that long.
+ */
+const GH_TIMEOUT = 60_000;
 
 /**
  * gh's environment for a repository of `owner`: the token of gh's login for that account where it
@@ -116,63 +127,45 @@ const tokens = new Map<string, { token: string | null; at: number }>();
  * this machine (another one finds no such repository); else gh as it runs anyway (an
  * organisation's repository, say).
  */
-function ghEnv(owner: string | undefined): NodeJS.ProcessEnv | undefined {
+async function ghEnv(program: string, owner: string | undefined, timeout: number): Promise<NodeJS.ProcessEnv | undefined> {
   if (!owner) return undefined;
-  let known = tokens.get(owner);
+  const key = `${program}\n${owner}`;
+  let known = tokens.get(key);
   if (!known || Date.now() - known.at > TOKEN_TTL) {
     // without GH_TOKEN, which gh would hand back instead of the account's own token
     const { GH_TOKEN: _, GITHUB_TOKEN: __, ...plain } = process.env;
-    const r = Bun.spawnSync(['gh', 'auth', 'token', '--user', owner], { env: plain, stderr: 'pipe' });
-    known = { token: (r.exitCode === 0 && r.stdout.toString().trim()) || null, at: Date.now() };
-    tokens.set(owner, known);
+    const token = spawnOutput([program, 'auth', 'token', '--user', owner], { env: plain, stdin: 'ignore', timeout }).then(
+      (r) => (r.code === 0 && r.stdout.trim()) || null,
+      () => null,
+    );
+    known = { token, at: Date.now() };
+    tokens.set(key, known);
   }
-  if (!known.token) return undefined;
+  const token = await known.token;
+  if (!token) return undefined;
   const { GITHUB_TOKEN: _, ...env } = process.env;
-  return { ...env, GH_TOKEN: known.token };
+  return { ...env, GH_TOKEN: token };
 }
-
-function gh({ cwd, owner }: GhAt, ...args: string[]): string {
-  const env = ghEnv(owner);
-  const r = Bun.spawnSync(['gh', ...args], { cwd, stderr: 'pipe', ...(env ? { env } : {}) });
-  if (r.exitCode !== 0) throw new Error(`gh ${args.slice(0, 3).join(' ')}: ${r.stderr.toString().trim()}`);
-  return r.stdout.toString();
-}
-
-/** `ghEnv` without blocking the server while gh hands out the token. */
-async function ghEnvAsync(owner: string | undefined): Promise<NodeJS.ProcessEnv | undefined> {
-  if (!owner) return undefined;
-  let known = tokens.get(owner);
-  if (!known || Date.now() - known.at > TOKEN_TTL) {
-    const { GH_TOKEN: _, GITHUB_TOKEN: __, ...plain } = process.env;
-    const p = Bun.spawn(['gh', 'auth', 'token', '--user', owner], { env: plain, stdin: 'ignore', stdout: 'pipe', stderr: 'ignore', timeout: GH_TIMEOUT });
-    const out = await new Response(p.stdout).text();
-    known = { token: ((await p.exited) === 0 && out.trim()) || null, at: Date.now() };
-    tokens.set(owner, known);
-  }
-  if (!known.token) return undefined;
-  const { GITHUB_TOKEN: _, ...env } = process.env;
-  return { ...env, GH_TOKEN: known.token };
-}
-
-/** How long one gh call may take before it counts as failed, so one slow request does not hold up a round. */
-const GH_TIMEOUT = 60_000;
 
 /**
- * `gh` without blocking the server while it runs: each call is a round trip to GitHub, seconds in
- * which the server would answer nothing else (the PR watcher makes several per open PR).
+ * A runner for `makeGhForge` that runs gh (`program`; a stand-in in tests) without blocking the
+ * server: each call is a round trip to GitHub, a second when all is well and many when GitHub or
+ * the machine is slow, in which the server would answer nothing else.
  */
-async function ghAsync({ cwd, owner }: GhAt, ...args: string[]): Promise<string> {
-  const env = await ghEnvAsync(owner);
-  const p = Bun.spawn(['gh', ...args], { cwd, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', timeout: GH_TIMEOUT, ...(env ? { env } : {}) });
-  const [out, err] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
-  if ((await p.exited) !== 0) throw new Error(`gh ${args.slice(0, 3).join(' ')}: ${err.trim() || 'timed out'}`);
-  return out;
-}
+export const ghCli =
+  (program = 'gh', timeout = GH_TIMEOUT) =>
+  async ({ cwd, owner }: GhAt, ...args: string[]): Promise<string> => {
+    const env = await ghEnv(program, owner, timeout);
+    const r = await spawnOutput([program, ...args], { cwd, stdin: 'ignore', timeout, ...(env ? { env } : {}) });
+    if (r.signal) throw new Error(`gh ${args.slice(0, 3).join(' ')}: no answer within ${timeout / 1000} s`);
+    if (r.code !== 0) throw new Error(`gh ${args.slice(0, 3).join(' ')}: ${r.stderr.trim()}`);
+    return r.stdout;
+  };
 
 /** The owner of the GitHub repository a checkout's `origin` is, where it is one. */
-function originOwner(cwd: string): string | undefined {
-  const r = Bun.spawnSync(['git', '-C', cwd, 'remote', 'get-url', 'origin'], { stderr: 'ignore' });
-  return r.exitCode === 0 ? githubOwner(r.stdout.toString()) : undefined;
+async function originOwner(cwd: string): Promise<string | undefined> {
+  const r = await spawnOutput(['git', '-C', cwd, 'remote', 'get-url', 'origin'], { stdin: 'ignore' });
+  return r.code === 0 ? githubOwner(r.stdout) : undefined;
 }
 
 /** Where gh runs for the pull request at `url`. */
@@ -189,12 +182,12 @@ function prRef(url: string) {
 }
 
 /** Runs `f` with `body` in a file: a long description as an argument would pass Windows' limit on a command line. */
-export function withBodyFile<T>(body: string, f: (file: string) => T): T {
+export async function withBodyFile<T>(body: string, f: (file: string) => T | Promise<T>): Promise<T> {
   const dir = mkdtempSync(join(tmpdir(), 'obeya-pr-body-'));
   try {
     const file = join(dir, 'body.md');
     writeFileSync(file, body);
-    return f(file);
+    return await f(file);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -212,22 +205,19 @@ interface GhPr {
   reviews: { id: string; author: { login: string }; body: string; submittedAt?: string }[];
 }
 
-/**
- * GitHub through a `gh` runner (the real CLI, or canned output in tests). `runStatus` makes the
- * status's calls: where it returns promises, the three run side by side and `status` gives a promise.
- */
+/** GitHub through a `gh` runner (the real CLI, or canned output in tests). */
 export const makeGhForge = (
-  run: (at: GhAt, ...args: string[]) => string,
-  ownerOf: (cwd: string) => string | undefined = originOwner,
-  runStatus: (at: GhAt, ...args: string[]) => string | Promise<string> = run,
+  run: (at: GhAt, ...args: string[]) => string | Promise<string>,
+  ownerOf: (cwd: string) => Promise<string | undefined> = originOwner,
 ): Forge => ({
-  status(cwd, url) {
+  async status(cwd, url) {
     const ref = prRef(url);
     const at: GhAt = { cwd, owner: ref.owner };
-    const outs = [
-      runStatus(at, 'pr', 'view', url, '--json', 'state,mergeable,mergeStateStatus,headRefOid,mergeCommit,author,statusCheckRollup,comments,reviews'),
-      runStatus(at, 'api', `repos/${ref.owner}/${ref.repo}/pulls/${ref.number}/comments`, '--paginate'),
-      runStatus(
+    // side by side: each is a round trip to GitHub
+    const [pr, inline, threads] = await Promise.all([
+      run(at, 'pr', 'view', url, '--json', 'state,mergeable,mergeStateStatus,headRefOid,mergeCommit,author,statusCheckRollup,comments,reviews'),
+      run(at, 'api', `repos/${ref.owner}/${ref.repo}/pulls/${ref.number}/comments`, '--paginate'),
+      run(
         at,
         'api',
         'graphql',
@@ -240,29 +230,31 @@ export const makeGhForge = (
         '-f',
         'query=query($owner: String!, $repo: String!, $number: Int!) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) { reviewThreads(first: 100) { nodes { isResolved comments(first: 1) { nodes { databaseId } } } } comments(last: 100) { nodes { id updatedAt } } commits(last: 30) { nodes { commit { committedDate parents { totalCount } } } } } } }',
       ),
-    ];
-    return outs.some((o) => o instanceof Promise) ? Promise.all(outs).then((o) => ghStatus(o[0]!, o[1]!, o[2]!)) : ghStatus(...(outs as [string, string, string]));
+    ]);
+    return ghStatus(pr, inline, threads);
   },
-  body(cwd, url) {
-    return (JSON.parse(run(atPr(cwd, url), 'pr', 'view', url, '--json', 'body')) as { body: string }).body;
+  async body(cwd, url) {
+    return (JSON.parse(await run(atPr(cwd, url), 'pr', 'view', url, '--json', 'body')) as { body: string }).body;
   },
-  setBody(cwd, url, body) {
-    withBodyFile(body, (file) => run(atPr(cwd, url), 'pr', 'edit', url, '--body-file', file));
+  async setBody(cwd, url, body) {
+    await withBodyFile(body, (file) => run(atPr(cwd, url), 'pr', 'edit', url, '--body-file', file));
   },
-  open(cwd, pr) {
+  async open(cwd, pr) {
+    const at: GhAt = { cwd, owner: await ownerOf(cwd) };
     // gh prints the new pull request's URL last
-    return withBodyFile(pr.body, (file) => run({ cwd, owner: ownerOf(cwd) }, 'pr', 'create', '--base', pr.base, '--head', pr.head, '--title', pr.title, '--body-file', file)).trim().split('\n').at(-1)!.trim();
+    const out = await withBodyFile(pr.body, (file) => run(at, 'pr', 'create', '--base', pr.base, '--head', pr.head, '--title', pr.title, '--body-file', file));
+    return out.trim().split('\n').at(-1)!.trim();
   },
-  merge(cwd, url, head) {
+  async merge(cwd, url, head) {
     const ref = prRef(url);
     const at: GhAt = { cwd, owner: ref.owner };
     // the repository's own merge methods (some allow squash only); squash first where it allows several
-    const allows = JSON.parse(run(at, 'api', `repos/${ref.owner}/${ref.repo}`, '--jq', '{squash: .allow_squash_merge, merge: .allow_merge_commit, rebase: .allow_rebase_merge}')) as Record<string, boolean>;
+    const allows = JSON.parse(await run(at, 'api', `repos/${ref.owner}/${ref.repo}`, '--jq', '{squash: .allow_squash_merge, merge: .allow_merge_commit, rebase: .allow_rebase_merge}')) as Record<string, boolean>;
     const method = (['squash', 'merge', 'rebase'] as const).find((m) => allows[m] !== false) ?? 'squash';
     // no --delete-branch: that also switches branches in the workspace; the repository deletes merged branches or not
-    run(at, 'pr', 'merge', url, `--${method}`, '--match-head-commit', head);
+    await run(at, 'pr', 'merge', url, `--${method}`, '--match-head-commit', head);
     try {
-      return run(at, 'pr', 'view', url, '--json', 'mergeCommit', '--jq', '.mergeCommit.oid').trim() || undefined;
+      return (await run(at, 'pr', 'view', url, '--json', 'mergeCommit', '--jq', '.mergeCommit.oid')).trim() || undefined;
     } catch {
       // merged all the same: the first fetch after it stands in for the commit (Workers.merged)
       return undefined;
@@ -355,7 +347,7 @@ function ghStatus(prOut: string, inlineOut: string, threadsOut: string): PrStatu
   };
 }
 
-export const ghForge = makeGhForge(gh, originOwner, ghAsync);
+export const ghForge = makeGhForge(ghCli());
 
 /**
  * What the card shows of a pull request's review, oldest first: each round a reviewer left comments

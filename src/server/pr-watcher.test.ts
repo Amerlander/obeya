@@ -7,13 +7,15 @@ import type { RepoAdapter } from '../adapters/types';
 import { needsYou } from '../core/types';
 import { Board } from './board';
 import { Store } from './db';
-import type { Forge, PrStatus } from './forge';
+import { ghCli, makeGhForge, type Forge, type PrStatus } from './forge';
 import { PrWatcher } from './pr-watcher';
-import { artifact, FakeRuntime, gitRepo } from './testing';
+import { artifact, FakeRuntime, fakeGh, gitRepo, until } from './testing';
 import { Workers } from './workers';
 import { git, Workspaces } from './workspaces';
 
 let dir: string;
+let main: string;
+let workspaces: Workspaces;
 let board: Board;
 let runtime: FakeRuntime;
 let workers: Workers;
@@ -32,11 +34,11 @@ const URL_ = 'https://github.com/acme/app/pull/42';
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'obeya-pr-'));
-  const main = join(dir, 'main');
+  main = join(dir, 'main');
   gitRepo(main);
   const store = new Store(':memory:');
   board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: main, branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
-  const workspaces = new Workspaces(store, 'c', { mode: 'clones', repoPath: main, dir: join(dir, 'ws') });
+  workspaces = new Workspaces(store, 'c', { mode: 'clones', repoPath: main, dir: join(dir, 'ws') });
   workspaces.ensureClones(main, 1);
   runtime = new FakeRuntime();
   opened = [];
@@ -47,14 +49,14 @@ beforeEach(() => {
   refuse = undefined;
   unreadable = undefined;
   const forge: Forge = {
-    open: () => '',
-    status: () => {
+    open: async () => '',
+    status: async () => {
       if (unreadable) throw new Error(unreadable);
       return status;
     },
-    body: () => '',
-    setBody: () => {},
-    merge: (_cwd, url, head) => {
+    body: async () => '',
+    setBody: async () => {},
+    merge: async (_cwd, url, head) => {
       if (refuse) throw new Error(`gh pr merge ${url}: ${refuse}`);
       merges.push(head);
       status.state = 'MERGED';
@@ -147,7 +149,7 @@ describe('watching', () => {
     status.checks = [{ name: 'build', state: 'failure', url: 'https://ci/1' }, { name: 'lint', state: 'success' }];
     status.mergeable = 'CONFLICTING';
     const before = runtime.last.inbox.length;
-    watcher.poll();
+    await watcher.poll();
     const sent = runtime.last.inbox.slice(before);
     expect(sent).toHaveLength(3);
     expect(sent[0]).toContain('greptile on src/a.ts:3');
@@ -162,11 +164,11 @@ describe('watching', () => {
       { author: 'owner', mine: true, body: 'Fixed in the latest push.', at: '' },
     ]);
 
-    watcher.poll();
+    await watcher.poll();
     expect(runtime.last.inbox.length).toBe(before + 3);
     // a new commit fails again: reported again
     status.head = 'bbb';
-    watcher.poll();
+    await watcher.poll();
     expect(runtime.last.inbox.at(-2)).toContain('Checks failed');
     expect(runtime.last.inbox.at(-1)).toContain('conflicts');
   });
@@ -182,15 +184,15 @@ describe('watching', () => {
       { id: 'cSUM', author: 'greptile', body: 'Confidence Score: 4/5', at: '2026-10-02T08:34:00Z' },
       { id: 'cPING', author: 'owner', body: '@greptile re-review', at: '2026-10-02T08:46:00Z' },
     ];
-    watcher.poll();
+    await watcher.poll();
     expect(merges).toEqual([]);
     // the worker answers the summary
     runtime.last.emit({ type: 'idle' });
-    watcher.poll();
+    await watcher.poll();
     expect(merges).toEqual([]);
     // the reviewer rewrites its summary, with no new comment
     status.comments[0] = { ...status.comments[0]!, body: 'Confidence Score: 5/5', edited: '2026-10-02T08:49:00Z' };
-    watcher.poll();
+    await watcher.poll();
     expect(merges).toEqual(['aaa']);
     expect(state(id)).toBe('live');
     expect(board.events(id).map((e) => e.text).slice(-2)).toEqual(['Bereit zum Mergen: Checks grün, alle Anmerkungen erledigt, das Review ist durch. Obeya mergt.', 'Pull Request gemergt. Live.']);
@@ -212,21 +214,21 @@ describe('watching', () => {
     ];
     // what the worker was told already
     board.work(id, { pr: JSON.stringify({ ...JSON.parse(board.row(id).pr!), seen: ['cSUM', 'i1'] }) });
-    watcher.poll();
+    await watcher.poll();
     expect(merges).toEqual([]);
     expect(runtime.last.inbox.at(-1)).toContain('nobody asked for another look');
     expect(board.events(id).at(-1)!.text).toBe('Neuer Stand seit dem letzten Review, um ein neues hat niemand gebeten. Der Agent fragt danach.');
     // said once for this commit
     runtime.last.emit({ type: 'idle' });
     const inbox = runtime.last.inbox.length;
-    watcher.poll();
+    await watcher.poll();
     expect(runtime.last.inbox.length).toBe(inbox);
     // the worker asks; the reviewer answers by rewriting its summary
     status.comments.push({ id: 'cPING', author: 'owner', body: '@greptile re-review', at: '2026-10-02T12:53:00Z' });
-    watcher.poll();
+    await watcher.poll();
     expect(merges).toEqual([]);
     status.comments[0] = { ...status.comments[0]!, body: 'Confidence Score: 5/5', edited: '2026-10-02T12:57:00Z' };
-    watcher.poll();
+    await watcher.poll();
     expect(merges).toEqual(['bbb']);
     expect(state(id)).toBe('live');
   });
@@ -238,7 +240,7 @@ describe('watching', () => {
     runtime.last.emit({ type: 'idle' });
     status.comments = [{ id: 'cSUM', author: 'greptile', body: 'Confidence Score: 3/5', at: '2026-10-02T08:34:00Z' }];
     board.work(id, { pr: JSON.stringify({ ...JSON.parse(board.row(id).pr!), seen: ['cSUM'] }) });
-    watcher.poll();
+    await watcher.poll();
     expect(merges).toEqual([]);
     expect(state(id)).toBe('inPr');
     expect(board.item(id)!.pr).toMatchObject({ ready: true, held: { score: '3/5', by: 'greptile' } });
@@ -246,11 +248,11 @@ describe('watching', () => {
     expect(board.events(id).at(-1)!.text).toBe('Bereit zum Mergen, aber greptile gibt nur 3/5: Unter 4/5 mergt Obeya nicht selbst. Du entscheidest.');
     // said once
     const events = board.events(id).length;
-    watcher.poll();
+    await watcher.poll();
     expect(board.events(id).length).toBe(events);
     // a new review rates it 4/5
     status.comments[0] = { ...status.comments[0]!, body: 'Confidence Score: 4/5', edited: '2026-10-02T08:49:00Z' };
-    watcher.poll();
+    await watcher.poll();
     expect(merges).toEqual(['aaa']);
     expect(state(id)).toBe('live');
   });
@@ -261,7 +263,7 @@ describe('watching', () => {
     runtime.last.call('pr_opened', { url: URL_ });
     runtime.last.emit({ type: 'idle' });
     runtime.last.emit({ type: 'idle' });
-    watcher.poll();
+    await watcher.poll();
     expect(merges).toEqual([]);
     expect(state(id)).toBe('inPr');
     expect(board.item(id)!.pr).toMatchObject({ ready: true, manual: true });
@@ -269,15 +271,15 @@ describe('watching', () => {
     expect(board.events(id).at(-1)!.text).toBe('Bereit zum Mergen: Checks grün, alle Anmerkungen erledigt, das Review ist durch. In diesem Repository mergt Obeya nicht selbst: bitte selbst mergen.');
     // said once
     const events = board.events(id).length;
-    watcher.poll();
+    await watcher.poll();
     expect(board.events(id).length).toBe(events);
     // new work for the worker takes the readiness back
     status.comments.push({ id: 'i3', author: 'lead', body: 'One more thing.', at: '2026-10-02T09:00:00Z' });
-    watcher.poll();
+    await watcher.poll();
     expect(board.item(id)!.pr?.ready).toBeUndefined();
     // the owner merges on the forge: the card is live
     status.state = 'MERGED';
-    watcher.poll();
+    await watcher.poll();
     expect(merges).toEqual([]);
     expect(state(id)).toBe('live');
   });
@@ -294,25 +296,25 @@ describe('watching', () => {
     runtime.last.emit({ type: 'idle' });
     runtime.last.emit({ type: 'idle' });
     refuse = 'At least 1 approving review is required by reviewers with write access.';
-    watcher.poll();
+    await watcher.poll();
     expect(state(id)).toBe('inPr');
     expect(board.item(id)!.pr).toMatchObject({ ready: true, mergeError: refuse });
     expect(needsYou(board.item(id)!)).toBe(true);
     expect(board.events(id).at(-1)!.text).toBe(`Obeya konnte nicht mergen: ${refuse}`);
     // said once
     const events = board.events(id).length;
-    watcher.poll();
+    await watcher.poll();
     expect(board.events(id).length).toBe(events);
     // a new comment is work for the worker again
     status.comments.push({ id: 'i3', author: 'lead', body: 'One more thing.', at: '2026-10-02T09:00:00Z' });
-    watcher.poll();
+    await watcher.poll();
     expect(board.item(id)!.pr!.ready).toBeUndefined();
     expect(needsYou(board.item(id)!)).toBe(false);
     // the worker resolves it; now GitHub lets the merge through
     status.comments[0]!.resolved = true;
     runtime.last.emit({ type: 'idle' });
     refuse = undefined;
-    watcher.poll();
+    await watcher.poll();
     expect(state(id)).toBe('live');
   });
 
@@ -323,11 +325,11 @@ describe('watching', () => {
     expect(state(id)).toBe('waiting:question');
     status.comments = [{ id: 'i9', author: 'reviewer', body: 'Rename this.' }];
     const n = runtime.last.inbox.length;
-    watcher.poll();
+    await watcher.poll();
     expect(runtime.last.inbox.length).toBe(n);
     workers.answer(id, 'Ja, mit Begründung.');
     expect(state(id)).toBe('inPr');
-    watcher.poll();
+    await watcher.poll();
     expect(runtime.last.inbox.at(-1)).toContain('Rename this.');
   });
 
@@ -343,7 +345,7 @@ describe('watching', () => {
     workers.answer(id, 'Ja.');
     expect(state(id)).toBe('working');
     status.state = 'MERGED';
-    watcher.poll();
+    await watcher.poll();
     expect(state(id)).toBe('working');
   });
 
@@ -354,7 +356,7 @@ describe('watching', () => {
     // not yet ready, so Obeya does not merge it itself
     status.checks = [{ name: 'build', state: 'pending' }];
     let asked = 0;
-    const counting = new PrWatcher(board, workers, { status: () => (asked++, status), body: () => '', setBody: () => {}, merge: () => {}, open: () => '' }, () => dir);
+    const counting = new PrWatcher(board, workers, { status: async () => (asked++, status), body: async () => '', setBody: async () => {}, merge: async () => {}, open: async () => '' }, () => dir);
     counting.soon();
     counting.soon();
     await Bun.sleep(5);
@@ -375,16 +377,16 @@ describe('watching', () => {
     runtime.last.emit({ type: 'idle' });
     const events = board.events(id).length;
     unreadable = 'git has no login for codeberg.org';
-    watcher.poll();
+    await watcher.poll();
     // the network gone for a moment is not worth a line
     expect(board.events(id).length).toBe(events);
     const pr = JSON.parse(board.row(id).pr!);
     board.work(id, { pr: JSON.stringify({ ...pr, readError: { since: pr.readError.since - 10 * 60_000 } }) });
-    watcher.poll();
-    watcher.poll();
+    await watcher.poll();
+    await watcher.poll();
     expect(board.events(id).map((e) => e.text).slice(events)).toEqual(['Obeya kann den Pull Request nicht lesen: git has no login for codeberg.org']);
     unreadable = undefined;
-    watcher.poll();
+    await watcher.poll();
     expect(JSON.parse(board.row(id).pr!).readError).toBeUndefined();
   });
 
@@ -393,7 +395,7 @@ describe('watching', () => {
     runtime.last.call('pr_opened', { url: URL_ });
     runtime.last.emit({ type: 'idle' });
     status.state = 'MERGED';
-    watcher.poll();
+    await watcher.poll();
     expect(state(id)).toBe('live');
     // the worker hears it and may finish what remains; the clone is free once its turn has ended
     expect(runtime.last.inbox.at(-1)).toContain('pull request was merged');
@@ -408,8 +410,114 @@ describe('watching', () => {
     const other = await inPr();
     runtime.last.call('pr_opened', { url: URL_ });
     status.state = 'CLOSED';
-    watcher.poll();
+    await watcher.poll();
     expect(state(other)).toBe('waiting:question');
     expect(board.item(other)!.question!.options).toEqual(['Neu eröffnen', 'Die Arbeit verwerfen']);
+  });
+});
+
+describe('a merge that takes a while', () => {
+  test('a watcher stopped meanwhile leaves the card alone, merged or refused; a card on another PR meanwhile too', async () => {
+    const id = await inPr();
+    runtime.last.call('pr_opened', { url: URL_ });
+    runtime.last.emit({ type: 'idle' });
+    let answer: ((refused?: string) => void) | undefined;
+    let asked = 0;
+    const slow: Forge = {
+      open: async () => '',
+      status: async () => (asked++, status),
+      body: async () => '',
+      setBody: async () => {},
+      merge: () =>
+        new Promise((resolve, reject) => {
+          answer = (refused) => (refused ? reject(new Error(refused)) : resolve('f00d'));
+        }),
+    };
+    const merging = () => {
+      answer = undefined;
+      const w = new PrWatcher(board, workers, slow, () => main, () => settings);
+      const round = w.poll();
+      return { w, round };
+    };
+    const pr = () => JSON.parse(board.row(id).pr!);
+
+    let { w, round } = merging();
+    await until(() => answer);
+    w.stop();
+    answer!('Base branch was modified');
+    await round;
+    expect(pr().mergeError).toBeUndefined();
+    expect(state(id)).toBe('inPr');
+
+    ({ w, round } = merging());
+    await until(() => answer);
+    w.stop();
+    answer!();
+    await round;
+    expect(state(id)).toBe('inPr');
+
+    // the worker opened another pull request in its place meanwhile
+    ({ w, round } = merging());
+    await until(() => answer);
+    runtime.last.call('pr_opened', { url: 'https://github.com/acme/app/pull/43' });
+    answer!();
+    await round;
+    expect(state(id)).toBe('inPr');
+    expect(pr().url).toBe('https://github.com/acme/app/pull/43');
+    // and a watcher stopped does not start another round
+    w.stop();
+    const before = asked;
+    await w.poll();
+    expect(asked).toBe(before);
+  });
+});
+
+describe('gh slow to answer', () => {
+  /** A watcher that asks the stand-in `gh` for the PRs, which may take up to `timeout` per call. */
+  const throughGh = (delays: Record<number, number>, timeout?: number) =>
+    new PrWatcher(board, workers, makeGhForge(ghCli(fakeGh(join(dir, 'gh'), delays), timeout), async () => undefined), () => main, () => settings);
+
+  test('while a round waits for gh, the server answers at once; the card hears of the comment once gh has answered', async () => {
+    await inPr();
+    runtime.last.call('pr_opened', { url: URL_ });
+    runtime.last.emit({ type: 'idle' });
+    const before = runtime.last.inbox.length;
+    const server = Bun.serve({ port: 0, fetch: () => new Response('ok') });
+    try {
+      const round = throughGh({ 42: 1500 }).poll();
+      const waits: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        const t = performance.now();
+        expect(await (await fetch(server.url)).text()).toBe('ok');
+        waits.push(performance.now() - t);
+        await Bun.sleep(100);
+      }
+      // gh blocking the server, each request would wait for it
+      expect(Math.max(...waits)).toBeLessThan(250);
+      expect(runtime.last.inbox.length).toBe(before);
+      await round;
+      expect(runtime.last.inbox.at(-1)).toContain('- lead (https://gh/c42):\nRename it.');
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  test('a PR gh does not answer for holds up neither the other cards nor the round past its timeout', async () => {
+    workspaces.ensureClones(main, 2);
+    const slow = await inPr();
+    runtime.last.call('pr_opened', { url: URL_ });
+    runtime.last.emit({ type: 'idle' });
+    await inPr();
+    const fast = runtime.last;
+    fast.call('pr_opened', { url: 'https://github.com/acme/app/pull/43' });
+    fast.emit({ type: 'idle' });
+    const t = performance.now();
+    const round = throughGh({ 42: 30_000 }, 1000).poll();
+    await until(() => fast.inbox.at(-1)?.includes('Rename it.'));
+    expect(performance.now() - t).toBeLessThan(1000);
+    await round;
+    expect(performance.now() - t).toBeLessThan(5000);
+    // reading it failed: the card says so if it goes on failing
+    expect(JSON.parse(board.row(slow).pr!).readError).toBeDefined();
   });
 });

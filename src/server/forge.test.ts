@@ -11,22 +11,22 @@ test('parsePrUrl: GitHub, and Forgejo or Gitea on any server', () => {
   expect(parsePrUrl('https://codeberg.org/a/b/pulls')).toBeNull();
 });
 
-test('a pull request goes to the forge its URL is on; one is opened on the forge of origin', () => {
+test('a pull request goes to the forge its URL is on; one is opened on the forge of origin', async () => {
   const seen: string[] = [];
   const fake = (name: string): Forge => ({
-    status: () => (seen.push(`${name} status`), {}) as never,
-    body: () => (seen.push(`${name} body`), ''),
-    setBody: () => void seen.push(`${name} setBody`),
-    merge: () => void seen.push(`${name} merge`),
-    open: () => (seen.push(`${name} open`), ''),
+    status: async () => (seen.push(`${name} status`), {}) as never,
+    body: async () => (seen.push(`${name} body`), ''),
+    setBody: async () => void seen.push(`${name} setBody`),
+    merge: async () => void seen.push(`${name} merge`),
+    open: async () => (seen.push(`${name} open`), ''),
   });
   const origins: Record<string, string> = { '/gh': 'git@github.com:a/b.git', '/cb': 'https://codeberg.org/a/b.git' };
-  const forge = routedForge(fake('github'), fake('forgejo'), (cwd) => origins[cwd] ?? null, (r) => r.includes('github.com'));
-  forge.status('/x', 'https://codeberg.org/a/b/pulls/1');
-  forge.merge('/x', 'https://github.com/a/b/pull/1', 'h');
-  forge.setBody('/x', 'https://codeberg.org/a/b/pulls/1', '');
-  forge.open('/gh', { base: 'main', head: 'x', title: 't', body: '' });
-  forge.open('/cb', { base: 'main', head: 'x', title: 't', body: '' });
+  const forge = routedForge(fake('github'), fake('forgejo'), async (cwd) => origins[cwd] ?? null, (r) => r.includes('github.com'));
+  await forge.status('/x', 'https://codeberg.org/a/b/pulls/1');
+  await forge.merge('/x', 'https://github.com/a/b/pull/1', 'h');
+  await forge.setBody('/x', 'https://codeberg.org/a/b/pulls/1', '');
+  await forge.open('/gh', { base: 'main', head: 'x', title: 't', body: '' });
+  await forge.open('/cb', { base: 'main', head: 'x', title: 't', body: '' });
   expect(seen).toEqual(['forgejo status', 'github merge', 'forgejo setBody', 'github open', 'forgejo open']);
 });
 
@@ -38,22 +38,22 @@ test('githubOwner', () => {
   expect(githubOwner('git@gitlab.com:acme/app.git')).toBeUndefined();
 });
 
-test('gh runs as the account that owns the repository: of the pull request, or of the origin a new one goes to', () => {
+test('gh runs as the account that owns the repository: of the pull request, or of the origin a new one goes to', async () => {
   const owners: (string | undefined)[] = [];
   const forge = makeGhForge(
     (at, ...args) => {
       owners.push(at.owner);
       return args[1] === 'view' ? JSON.stringify({ body: 'Text' }) : 'https://github.com/acme/app/pull/1\n';
     },
-    (cwd) => (cwd === '/repo' ? 'acme' : undefined),
+    async (cwd) => (cwd === '/repo' ? 'acme' : undefined),
   );
-  forge.body('/elsewhere', 'https://github.com/someone/private/pull/42');
-  expect(forge.open('/repo', { base: 'main', head: 'x', title: 'T', body: 'B' })).toBe('https://github.com/acme/app/pull/1');
-  forge.open('/local', { base: 'main', head: 'x', title: 'T', body: 'B' });
+  await forge.body('/elsewhere', 'https://github.com/someone/private/pull/42');
+  expect(await forge.open('/repo', { base: 'main', head: 'x', title: 'T', body: 'B' })).toBe('https://github.com/acme/app/pull/1');
+  await forge.open('/local', { base: 'main', head: 'x', title: 'T', body: 'B' });
   expect(owners).toEqual(['someone', 'acme', undefined]);
 });
 
-test('gh output becomes a PR status', () => {
+test('gh output becomes a PR status', async () => {
   const calls: string[][] = [];
   const forge = makeGhForge((_cwd, ...args) => {
     calls.push(args);
@@ -99,7 +99,7 @@ test('gh output becomes a PR status', () => {
       { id: 8, user: { login: 'owner' }, body: 'Added.', path: 'src/a.ts', line: 3, html_url: 'https://gh/i8', created_at: '2026-10-02T08:03:00Z', pull_request_review_id: 91, in_reply_to_id: 7 },
     ]);
   });
-  const s = forge.status('/repo', 'https://github.com/acme/app/pull/42');
+  const s = await forge.status('/repo', 'https://github.com/acme/app/pull/42');
   expect(calls[1]).toEqual(['api', 'repos/acme/app/pulls/42/comments', '--paginate']);
   expect(calls[2]!.slice(0, 8)).toEqual(['api', 'graphql', '-F', 'owner=acme', '-F', 'repo=app', '-F', 'number=42']);
   expect(s).toEqual({
@@ -260,7 +260,7 @@ test('the confidence a reviewer gave last', () => {
   expect(confidence(s)).toEqual({ score: 4, of: 5, by: 'greptile-apps' });
 });
 
-test('the description is read with gh pr view and replaced through a file', () => {
+test('the description is read with gh pr view and replaced through a file', async () => {
   const calls: string[][] = [];
   let written = '';
   const forge = makeGhForge((_cwd, ...args) => {
@@ -269,14 +269,14 @@ test('the description is read with gh pr view and replaced through a file', () =
     return args[1] === 'view' ? JSON.stringify({ body: 'Text' }) : '';
   });
   const url = 'https://github.com/acme/app/pull/42';
-  expect(forge.body('/repo', url)).toBe('Text');
+  expect(await forge.body('/repo', url)).toBe('Text');
   expect(calls[0]).toEqual(['pr', 'view', url, '--json', 'body']);
-  forge.setBody('/repo', url, 'Text\n\nDemo-Video: https://d/a/');
+  await forge.setBody('/repo', url, 'Text\n\nDemo-Video: https://d/a/');
   expect(calls[1]!.slice(0, 4)).toEqual(['pr', 'edit', url, '--body-file']);
   expect(written).toBe('Text\n\nDemo-Video: https://d/a/');
 });
 
-test('a merge uses the method the repository allows, and only the commit that was found ready; it returns the merge commit', () => {
+test('a merge uses the method the repository allows, and only the commit that was found ready; it returns the merge commit', async () => {
   const calls: string[][] = [];
   let allows = { squash: true, merge: false, rebase: false };
   const forge = makeGhForge((_cwd, ...args) => {
@@ -284,11 +284,11 @@ test('a merge uses the method the repository allows, and only the commit that wa
     return args[0] === 'api' ? JSON.stringify(allows) : args[1] === 'view' ? 'f00d\n' : '';
   });
   const url = 'https://github.com/acme/app/pull/42';
-  expect(forge.merge('/repo', url, 'abc')).toBe('f00d');
+  expect(await forge.merge('/repo', url, 'abc')).toBe('f00d');
   expect(calls[0]!.slice(0, 2)).toEqual(['api', 'repos/acme/app']);
   expect(calls[1]).toEqual(['pr', 'merge', url, '--squash', '--match-head-commit', 'abc']);
   expect(calls[2]).toEqual(['pr', 'view', url, '--json', 'mergeCommit', '--jq', '.mergeCommit.oid']);
   allows = { squash: false, merge: true, rebase: true };
-  forge.merge('/repo', url, 'abc');
+  await forge.merge('/repo', url, 'abc');
   expect(calls[4]).toEqual(['pr', 'merge', url, '--merge', '--match-head-commit', 'abc']);
 });

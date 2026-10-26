@@ -46,6 +46,12 @@ A watcher polls each open PR every two minutes (state, mergeability, checks, all
 once when the owner comes back to an Obeya page (at most every 15 s), since the owner merges on the
 forge and returns.
 
+Every call to the forge (reading, merging, opening a PR, editing its description) runs without
+blocking the server. A round asks for all open PRs side by side and handles each card as its answer
+comes in, as the card is by then (one approved, stopped or closed meanwhile is left alone). A gh
+call gets a minute: a PR GitHub does not answer for counts as unreadable for that round and holds up
+no other card.
+
 - GitHub through `gh`, as the account that owns the repository where gh has a login for it (its
   token as `GH_TOKEN`): the active account may not see the owner's private repository. Thread
   resolution and comment edit times only GraphQL gives.
@@ -152,6 +158,11 @@ A card no agent worked on, a prototype or an archived card has no field.
 - **An approval holds through fixes to land it**; a stop or a problem for the owner takes it back.
 - **Landing does not block the server** (2026-10-10). Rejected: landing inside the request, which
   froze the server and kept the card needing the owner.
+- **The forge is asked without blocking the server, each call with a time limit** (2026-10-26,
+  GitHub issue #6, from a contributor's pull request). Rejected: gh run synchronously, one call after
+  the other: each is a round trip to GitHub (a second idle, several under load, ten and more when
+  GitHub is slow), so with two open PRs the server answered nothing for up to 40 s every two minutes
+  (canvas switches, conversations and demo videos hung).
 - **Forgejo and Gitea through curl and git's login** (2026-10-17). Rejected: `tea`/`fj`, which
   hardly any machine has.
 - **The watcher polls when the owner comes back**: otherwise a merged card stood „in PR“ for up to

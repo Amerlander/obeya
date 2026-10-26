@@ -38,18 +38,23 @@ interface ServeConfig {
 }
 
 export class Tailscale {
+  /** What `state` found last, once Tailscale answered. */
+  private last: TailscaleState | undefined;
+
   constructor(
     /** Its CLI; `null` where it is not installed. */
     private readonly bin: string | null = findTailscale(),
     private readonly platform = process.platform,
+    /** How long `tailscale status` may take. */
+    private readonly statusTimeout = 10_000,
   ) {}
 
-  private async run(args: string[], timeout = 10_000): Promise<{ ok: boolean; out: string }> {
+  private async run(args: string[], timeout = 10_000): Promise<{ ok: boolean; out: string; late?: true }> {
     const p = Bun.spawn([this.bin!, ...args], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', timeout });
     const [out, err] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
     const code = await p.exited;
     // a CLI newer than its service warns about it on stderr: only the output counts
-    return { ok: code === 0, out: code === 0 ? out : `${out}\n${err}`.trim() };
+    return { ok: code === 0, out: code === 0 ? out : `${out}\n${err}`.trim(), ...(p.signalCode ? { late: true as const } : {}) };
   }
 
   /** What Tailscale allows here now. */
@@ -57,11 +62,17 @@ export class Tailscale {
     if (!this.bin) return { state: 'missing' };
     let status: Status;
     try {
-      const r = await this.run(['status', '--json']);
+      const r = await this.run(['status', '--json'], this.statusTimeout);
+      // on a machine under load the answer can take longer than it may: that says nothing new
+      if (r.late && this.last) return this.last;
       status = JSON.parse(r.out.slice(r.out.indexOf('{'))) as Status;
     } catch {
-      return { state: 'stopped' };
+      return (this.last = { state: 'stopped' });
     }
+    return (this.last = this.stateOf(status));
+  }
+
+  private stateOf(status: Status): TailscaleState {
     const name = status.Self?.DNSName?.replace(/\.$/, '').toLowerCase();
     if (status.BackendState === 'NeedsLogin' || status.BackendState === 'NeedsMachineAuth' || status.BackendState === 'NoState') return { state: 'loggedOut' };
     if (status.BackendState !== 'Running' || !name) return { state: 'stopped' };

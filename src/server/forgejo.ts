@@ -3,13 +3,14 @@
 
 import { messageOf } from '../core/text';
 import { type Forge, type PrStatus, parsePrUrl, withBodyFile } from './forge';
+import { spawnOutput } from './spawn';
 import { GIT } from './workspaces';
 
 /**
  * One call of the API below `<base>/api/v1/`; returns the parsed answer (undefined for an empty one)
  * and throws a `ForgeError` with the server's reason.
  */
-export type Api = (cwd: string, base: string, method: 'GET' | 'POST' | 'PATCH', path: string, body?: unknown) => unknown;
+export type Api = (cwd: string, base: string, method: 'GET' | 'POST' | 'PATCH', path: string, body?: unknown) => Promise<unknown>;
 
 export class ForgeError extends Error {
   constructor(
@@ -97,31 +98,37 @@ export function remoteRepo(remote: string): { base: string; repo: string } | nul
 }
 
 /** Forgejo or Gitea through an API runner (the real server, or canned answers in tests). */
-export const makeForgejoForge = (api: Api, origin: (cwd: string) => string | null): Omit<Forge, 'status'> & { status(cwd: string, url: string): PrStatus } => {
+export const makeForgejoForge = (api: Api, origin: (cwd: string) => Promise<string | null>): Forge => {
   /** By PR: the head Forgejo could not merge at the last look. */
   const unmergeable = new Map<string, string>();
   /** Every page of a list (the server's page size may be smaller than asked). */
-  const all = <T>(cwd: string, base: string, path: string): T[] => {
+  const all = async <T>(cwd: string, base: string, path: string): Promise<T[]> => {
     const out: T[] = [];
     for (let page = 1; page <= 20; page++) {
-      const got = api(cwd, base, 'GET', `${path}${path.includes('?') ? '&' : '?'}limit=50&page=${page}`) as T[] | undefined;
+      const got = (await api(cwd, base, 'GET', `${path}${path.includes('?') ? '&' : '?'}limit=50&page=${page}`)) as T[] | undefined;
       if (!got?.length) break;
       out.push(...got);
     }
     return out;
   };
   return {
-    status(cwd, url) {
+    async status(cwd, url) {
       const { base, repo, pull, number } = where(url);
-      const pr = api(cwd, base, 'GET', pull) as FjPr;
-      const reviews = all<FjReview>(cwd, base, `${pull}/reviews`).filter((r) => r.state !== 'PENDING');
-      const inline = reviews.filter((r) => r.comments_count > 0).flatMap((r) => api(cwd, base, 'GET', `${pull}/reviews/${r.id}/comments`) as FjInline[]);
-      const conversation = (api(cwd, base, 'GET', `${repo}/issues/${number}/comments`) as FjComment[] | undefined) ?? [];
-      const commits = all<{ commit: { committer: { date: string } }; parents?: unknown[] }>(cwd, base, `${pull}/commits?verification=false&files=false`);
+      // side by side where one call does not need another's answer: each is a round trip to the server
+      const [pr, allReviews, conversation, commits] = await Promise.all([
+        api(cwd, base, 'GET', pull) as Promise<FjPr>,
+        all<FjReview>(cwd, base, `${pull}/reviews`),
+        api(cwd, base, 'GET', `${repo}/issues/${number}/comments`).then((c) => (c as FjComment[] | undefined) ?? []),
+        all<{ commit: { committer: { date: string } }; parents?: unknown[] }>(cwd, base, `${pull}/commits?verification=false&files=false`),
+      ]);
+      const reviews = allReviews.filter((r) => r.state !== 'PENDING');
+      const inline = (
+        await Promise.all(reviews.filter((r) => r.comments_count > 0).map((r) => api(cwd, base, 'GET', `${pull}/reviews/${r.id}/comments`) as Promise<FjInline[]>))
+      ).flat();
       // every page: a check on a later one that failed must not let the PR pass for ready
       const statuses: { context: string; status: string; target_url?: string }[] = [];
       for (let page = 1; page <= 20; page++) {
-        const got = (api(cwd, base, 'GET', `${repo}/commits/${pr.head.sha}/status?limit=50&page=${page}`) as { statuses?: typeof statuses } | undefined)?.statuses;
+        const got = ((await api(cwd, base, 'GET', `${repo}/commits/${pr.head.sha}/status?limit=50&page=${page}`)) as { statuses?: typeof statuses } | undefined)?.statuses;
         if (!got?.length) break;
         statuses.push(...got);
       }
@@ -184,18 +191,18 @@ export const makeForgejoForge = (api: Api, origin: (cwd: string) => string | nul
         ],
       } satisfies PrStatus;
     },
-    body(cwd, url) {
+    async body(cwd, url) {
       const { base, pull } = where(url);
-      return (api(cwd, base, 'GET', pull) as FjPr).body ?? '';
+      return ((await api(cwd, base, 'GET', pull)) as FjPr).body ?? '';
     },
-    setBody(cwd, url, body) {
+    async setBody(cwd, url, body) {
       const { base, pull } = where(url);
-      api(cwd, base, 'PATCH', pull, { body });
+      await api(cwd, base, 'PATCH', pull, { body });
     },
-    merge(cwd, url, head) {
+    async merge(cwd, url, head) {
       const { base, repo, pull } = where(url);
       // the repository's own merge styles; squash first where it allows several
-      const allows = api(cwd, base, 'GET', repo) as Record<string, boolean | undefined>;
+      const allows = (await api(cwd, base, 'GET', repo)) as Record<string, boolean | undefined>;
       const styles = [
         ['squash', 'allow_squash_merge'],
         ['merge', 'allow_merge_commits'],
@@ -205,37 +212,40 @@ export const makeForgejoForge = (api: Api, origin: (cwd: string) => string | nul
       ] as const;
       const style = styles.find(([, allowed]) => allows[allowed])?.[0] ?? 'squash';
       try {
-        api(cwd, base, 'POST', `${pull}/merge`, { Do: style, head_commit_id: head });
+        await api(cwd, base, 'POST', `${pull}/merge`, { Do: style, head_commit_id: head });
       } catch (e) {
         throw new Error(e instanceof ForgeError ? e.reason : messageOf(e));
       }
       try {
-        return (api(cwd, base, 'GET', pull) as FjPr).merge_commit_sha || undefined;
+        return ((await api(cwd, base, 'GET', pull)) as FjPr).merge_commit_sha || undefined;
       } catch {
         // merged all the same: the first fetch after it stands in for the commit (Workers.merged)
         return undefined;
       }
     },
-    open(cwd, pr) {
-      const remote = origin(cwd);
+    async open(cwd, pr) {
+      const remote = await origin(cwd);
       const at = remote ? remoteRepo(remote) : null;
       if (!at) throw new Error(`no Forgejo repository at origin: ${remote ?? 'none'}`);
-      return (api(cwd, at.base, 'POST', `${at.repo}/pulls`, pr) as { html_url: string }).html_url;
+      return ((await api(cwd, at.base, 'POST', `${at.repo}/pulls`, pr)) as { html_url: string }).html_url;
     },
   };
 };
 
-/** Logins by workspace and repository, read from git for a while: each round of the watcher makes several calls. */
-const logins = new Map<string, { auth: string; at: number }>();
+/**
+ * Logins by workspace and repository, read from git for a while: each round of the watcher makes
+ * several calls, some side by side, which wait for the one reading.
+ */
+const logins = new Map<string, { auth: Promise<string>; at: number }>();
 
 /**
  * The repository's URL as git knows it for its login: `origin` where it is that repository over
  * http(s) (a helper keyed by the repository's path, `credential.useHttpPath`, finds what a push used),
  * else the repository's https URL on the server.
  */
-function repoUrl(cwd: string, base: string, path: string): string {
+async function repoUrl(cwd: string, base: string, path: string): Promise<string> {
   const repo = /^repos\/[^/]+\/[^/?]+/.exec(path)?.[0];
-  const remote = originOf(cwd);
+  const remote = await originOf(cwd);
   const at = remote && /^https?:/.test(remote) ? remoteRepo(remote) : null;
   if (remote && at && at.base === base && at.repo.toLowerCase() === repo?.toLowerCase()) return remote;
   return repo ? `${base}/${repo.slice('repos/'.length)}.git` : base;
@@ -243,19 +253,28 @@ function repoUrl(cwd: string, base: string, path: string): string {
 
 /**
  * The login git has for the repository (`git credential fill`: the keychain, the credential manager,
- * whatever the machine set up, a repository's own helper too), as an Authorization header, and the
- * key it is kept by. Never asks: where git has none, it fails.
+ * whatever the machine set up, a repository's own helper too), as an Authorization header, and how
+ * to forget it once the server refuses it. Never asks: where git has none, it fails.
  */
-function loginFor(cwd: string, base: string, path: string): { auth: string; key: string } {
-  const url = repoUrl(cwd, base, path);
+async function loginFor(cwd: string, base: string, path: string): Promise<{ auth: string; forget: () => void }> {
+  const url = await repoUrl(cwd, base, path);
   const key = `${cwd}\n${url}`;
-  const known = logins.get(key);
-  if (known && Date.now() - known.at < 10 * 60_000) return { auth: known.auth, key };
+  let known = logins.get(key);
+  const fresh = !known || Date.now() - known.at >= 10 * 60_000;
+  if (fresh) logins.set(key, (known = { auth: credential(cwd, base, url), at: Date.now() }));
+  const entry = known!;
+  // only this login goes: one read since in its place stays
+  const forget = () => void (logins.get(key) === entry && logins.delete(key));
+  // a failure is not kept: the next call asks git again
+  if (fresh) entry.auth.catch(forget);
+  return { auth: await entry.auth, forget };
+}
+
+async function credential(cwd: string, base: string, url: string): Promise<string> {
   const { host } = new URL(base);
-  const r = Bun.spawnSync([GIT, 'credential', 'fill'], {
+  const r = await spawnOutput([GIT, 'credential', 'fill'], {
     cwd,
     stdin: Buffer.from(`url=${url}\n\n`),
-    stderr: 'pipe',
     // asks nobody: no terminal, no askpass program (an empty one ends git's search for one), no dialog
     // of Git Credential Manager; a keyring that opens one anyway is cut off
     env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: '', GCM_INTERACTIVE: 'never' },
@@ -263,23 +282,20 @@ function loginFor(cwd: string, base: string, path: string): { auth: string; key:
   });
   const fields = new Map(
     r.stdout
-      .toString()
       .split('\n')
       .filter((l) => l.includes('='))
       .map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]),
   );
-  if (r.exitCode !== 0 || !fields.get('password'))
+  if (r.code !== 0 || !fields.get('password'))
     throw new Error(`git has no login for ${host}: store an access token of yours there as git's password for ${host} (a push over https with it does)`);
-  const auth = `Basic ${Buffer.from(`${fields.get('username') ?? ''}:${fields.get('password')}`).toString('base64')}`;
-  logins.set(key, { auth, at: Date.now() });
-  return { auth, key };
+  return `Basic ${Buffer.from(`${fields.get('username') ?? ''}:${fields.get('password')}`).toString('base64')}`;
 }
 
 /** The API over curl (on every system Obeya runs on), the login in its config on stdin, never on the command line. */
-const curlApi: Api = (cwd, base, method, path, body) => {
-  const { auth, key } = loginFor(cwd, base, path);
+const curlApi: Api = async (cwd, base, method, path, body) => {
+  const { auth, forget } = await loginFor(cwd, base, path);
   const call = (file?: string) =>
-    Bun.spawnSync(
+    spawnOutput(
       [
         'curl',
         '--silent',
@@ -296,15 +312,15 @@ const curlApi: Api = (cwd, base, method, path, body) => {
         ...(file ? ['--header', 'Content-Type: application/json', '--data-binary', `@${file}`] : []),
         `${base}/api/v1/${path}`,
       ],
-      { cwd, stdin: Buffer.from(`header = "Authorization: ${auth}"\nheader = "Accept: application/json"\n`), stderr: 'pipe' },
+      { cwd, stdin: Buffer.from(`header = "Authorization: ${auth}"\nheader = "Accept: application/json"\n`) },
     );
-  const r = body === undefined ? call() : withBodyFile(JSON.stringify(body), call);
-  if (r.exitCode !== 0) throw new ForgeError(r.stderr.toString().trim() || `curl failed (${r.exitCode})`, `${method} ${path}`);
-  const out = r.stdout.toString();
+  const r = body === undefined ? await call() : await withBodyFile(JSON.stringify(body), call);
+  if (r.code !== 0) throw new ForgeError(r.stderr.trim() || `curl failed (${r.code})`, `${method} ${path}`);
+  const out = r.stdout;
   const cut = out.lastIndexOf('\n');
   const code = Number(out.slice(cut + 1));
   const text = out.slice(0, cut).trim();
-  if (code === 401) logins.delete(key);
+  if (code === 401) forget();
   if (code >= 300) {
     let reason = '';
     try {
@@ -316,9 +332,9 @@ const curlApi: Api = (cwd, base, method, path, body) => {
 };
 
 /** The URL of a repository's `origin`; null without one. */
-export function originOf(cwd: string): string | null {
-  const r = Bun.spawnSync([GIT, '-C', cwd, 'remote', 'get-url', 'origin'], { stderr: 'ignore' });
-  return r.exitCode === 0 ? r.stdout.toString().trim() : null;
+export async function originOf(cwd: string): Promise<string | null> {
+  const r = await spawnOutput([GIT, '-C', cwd, 'remote', 'get-url', 'origin'], { stdin: 'ignore' });
+  return r.code === 0 ? r.stdout.trim() : null;
 }
 
 export const forgejoForge = makeForgejoForge(curlApi, originOf);

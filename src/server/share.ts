@@ -523,7 +523,7 @@ export class Sharing {
     this.set(cardId, { slug: s.slug, url, demos, ...(pr ? { pr } : {}), version: pagesVersion(), ...kept(s) });
     if (r.said) this.o.board.log(cardId, 'activity', 'obeya', r.said);
     this.o.board.log(cardId, 'state', 'obeya', s.again ? t.sharedAgain(url) : s.refresh ? t.linksPr(url) : t.shared(url));
-    if (pr) this.linkPr(cardId, pr, url, target.repo, first.shown.kind);
+    if (pr) await this.linkPr(cardId, pr, url, target.repo, first.shown.kind);
     // the pull request was opened while the page went out: once more, with its link
     const now = this.prOf(cardId);
     if (now && now !== pr) this.refresh(cardId);
@@ -534,12 +534,12 @@ export class Sharing {
    * Puts the page's link into the pull request's description, unless it is there already (the
    * worker put it there, or Obeya did before). A line of Obeya's own is found again by its marker.
    */
-  private linkPr(cardId: string, pr: string, url: string, cwd: string, kind: DemoKind) {
+  private async linkPr(cardId: string, pr: string, url: string, cwd: string, kind: DemoKind) {
     const n = parsePrUrl(pr)?.number;
     try {
-      const body = withDemoLink(this.o.forge.body(cwd, pr), url, kind, this.o.board.t);
+      const body = withDemoLink(await this.o.forge.body(cwd, pr), url, kind, this.o.board.t);
       if (body === null) return;
-      this.o.forge.setBody(cwd, pr, body);
+      await this.o.forge.setBody(cwd, pr, body);
       this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.share.prLinked(n));
     } catch (e) {
       this.o.board.log(cardId, 'error', 'obeya', this.o.board.t.share.prNotLinked(n, messageOf(e)));

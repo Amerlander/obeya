@@ -17,6 +17,8 @@ import { messageOf } from '../core/text';
 export class PrWatcher {
   private timer: ReturnType<typeof setInterval> | undefined;
   private polling = false;
+  /** Stopped (its canvas closed): a round still waiting for the forge leaves the cards alone. */
+  private stopped = false;
   /** When the last round began. */
   private polled = 0;
 
@@ -38,10 +40,12 @@ export class PrWatcher {
   ) {}
 
   start(everyMs = 120_000) {
+    this.stopped = false;
     this.timer = setInterval(() => this.round(), everyMs);
   }
 
   stop() {
+    this.stopped = true;
     clearInterval(this.timer);
   }
 
@@ -55,63 +59,82 @@ export class PrWatcher {
     setTimeout(() => this.round());
   }
 
-  /** A round from a timer: what goes wrong in it is logged, as an exception from the timer was before. */
+  /** A round from a timer: what goes wrong in it is logged. */
   private round() {
     this.poll().catch((e) => console.error('PR watcher:', messageOf(e)));
   }
 
   /**
-   * One round over every card with an open pull request. Where the forge answers in the background
-   * (gh), the round waits for it without blocking the server; with a forge that answers at once (tests)
-   * it runs through before it returns.
+   * One round over every card with an open pull request. The forge is asked for all of them side by
+   * side, in the background: the server answers meanwhile, and a PR slow to read holds up only its
+   * own card. Each card is handled as its answer comes in.
    */
   async poll() {
-    if (this.polling) return;
+    if (this.polling || this.stopped) return;
     this.polling = true;
     this.polled = Date.now();
     try {
-      for (let item of this.board.snapshot().items) {
-        if (item.state !== 'inPr' && item.state !== 'waiting') continue;
-        if (this.repo && item.repo !== this.repo) continue;
-        const row = this.board.row(item.id);
-        let pr = row.pr ? (JSON.parse(row.pr) as PrState) : null;
-        if (!pr?.url) continue;
-        let status: PrStatus;
-        try {
-          const got = this.forge.status(this.cwd(item.id), pr.url);
-          if (got instanceof Promise) {
-            status = await got;
-            // the card may have moved on while gh ran: react to it as it is now
-            const now = this.board.snapshot().items.find((i) => i.id === item.id);
-            const nowRow = now && this.board.row(item.id);
-            const nowPr = nowRow?.pr ? (JSON.parse(nowRow.pr) as PrState) : null;
-            if (!now || (now.state !== 'inPr' && now.state !== 'waiting') || nowPr?.url !== pr.url) continue;
-            item = now;
-            pr = nowPr!;
-          } else status = got;
-        } catch (e) {
-          // failing for a while (a login missing, say, not the network gone for a moment), the card
-          // says why once: otherwise it would wait for a merge it never sees
-          const reason = messageOf(e);
-          console.error(`PR ${pr.url}:`, reason);
-          const failing = pr.readError ?? { since: Date.now() };
-          if (!failing.shown && Date.now() - failing.since >= READ_ERROR_AFTER_MS) {
-            this.board.log(item.id, 'error', 'obeya', this.board.t.pr.unreadable(reason));
-            failing.shown = true;
-          }
-          this.save(item.id, { ...pr, readError: failing });
-          continue;
-        }
-        if (pr.readError) delete pr.readError;
-        this.react(item.id, item.state, pr, status);
-      }
+      const open = this.board
+        .snapshot()
+        .items.filter((i) => (i.state === 'inPr' || i.state === 'waiting') && (!this.repo || i.repo === this.repo))
+        .flatMap((i) => {
+          const url = this.prOf(i.id)?.url;
+          return url ? [{ id: i.id, url }] : [];
+        });
+      await Promise.all(open.map(({ id, url }) => this.check(id, url).catch((e) => console.error(`PR ${url}:`, messageOf(e)))));
     } finally {
       this.polling = false;
     }
-    this.onRound?.();
+    if (!this.stopped) this.onRound?.();
   }
 
-  private react(cardId: string, state: string, pr: PrState, s: PrStatus) {
+  /** Reads the card's pull request and reacts to what it says, on the card as it is by then. */
+  private async check(cardId: string, url: string) {
+    let status: PrStatus | undefined;
+    let error: unknown;
+    try {
+      status = await this.forge.status(this.cwd(cardId), url);
+    } catch (e) {
+      error = e;
+    }
+    const now = this.current(cardId, url);
+    if (!now) return;
+    const { state, pr } = now;
+    if (!status) {
+      // failing for a while (a login missing, say, not the network gone for a moment), the card
+      // says why once: otherwise it would wait for a merge it never sees
+      const reason = messageOf(error);
+      console.error(`PR ${url}:`, reason);
+      const failing = pr.readError ?? { since: Date.now() };
+      if (!failing.shown && Date.now() - failing.since >= READ_ERROR_AFTER_MS) {
+        this.board.log(cardId, 'error', 'obeya', this.board.t.pr.unreadable(reason));
+        failing.shown = true;
+      }
+      this.save(cardId, { ...pr, readError: failing });
+      return;
+    }
+    if (pr.readError) delete pr.readError;
+    await this.react(cardId, state, pr, status);
+  }
+
+  /**
+   * The card with its pull request at `url`, as it is after a wait for the forge; none where it
+   * moved on meanwhile (approved, stopped, deleted, another PR) or the watcher stopped (its canvas
+   * closed).
+   */
+  private current(cardId: string, url: string): { state: string; pr: PrState } | null {
+    const item = this.board.item(cardId);
+    if (this.stopped || !item || (item.state !== 'inPr' && item.state !== 'waiting')) return null;
+    const pr = this.prOf(cardId);
+    return pr?.url === url ? { state: item.state, pr } : null;
+  }
+
+  private prOf(cardId: string): PrState | null {
+    const row = this.board.row(cardId);
+    return row.pr ? (JSON.parse(row.pr) as PrState) : null;
+  }
+
+  private async react(cardId: string, state: string, pr: PrState, s: PrStatus) {
     if (s.state === 'MERGED') return this.workers.merged(cardId, s.mergeCommit);
     const settings = this.settings();
     const noise = settings.prNoise ?? [];
@@ -186,16 +209,21 @@ export class PrWatcher {
         delete next.held;
         delete next.manual;
         // the owner's approval covered the merge: Obeya merges, and tries again each round while the forge refuses
+        let commit: string | void;
         try {
-          const commit = this.forge.merge(this.cwd(cardId), pr.url!, s.head);
-          delete next.mergeError;
-          this.save(cardId, next);
-          return this.workers.merged(cardId, commit || undefined);
+          commit = await this.forge.merge(this.cwd(cardId), pr.url!, s.head);
         } catch (e) {
+          if (!this.current(cardId, pr.url!)) return;
           const reason = (messageOf(e)).replace(/^gh pr merge \S+: /, '');
           if (pr.mergeError !== reason || pr.readyHead !== s.head) this.board.log(cardId, 'state', 'obeya', this.board.t.pr.mergeFailed(reason));
           next.mergeError = reason;
+          return this.save(cardId, next);
         }
+        // merged on the forge: a card that moved on meanwhile, or one on a canvas closed since, sees it at its next round
+        if (!this.current(cardId, pr.url!)) return;
+        delete next.mergeError;
+        this.save(cardId, next);
+        return this.workers.merged(cardId, commit || undefined);
       } else {
         delete next.readyHead;
         delete next.mergeError;

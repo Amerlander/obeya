@@ -9,7 +9,7 @@ import { git } from './workspaces';
 import { KEY_HEADER, keyOf } from './owner';
 
 /** A forge for tests that never reach a pull request. */
-export const noForge: Forge = { status: () => ({}) as never, body: () => '', setBody: () => {}, merge: () => {}, open: () => '' };
+export const noForge: Forge = { status: async () => ({}) as never, body: async () => '', setBody: async () => {}, merge: async () => {}, open: async () => '' };
 
 /** A session whose tools and events the test drives. */
 export class FakeSession implements AgentSession {
@@ -208,10 +208,37 @@ export function artifact(): { kind: 'html'; dir: string } {
 }
 
 /**
+ * A stand-in for GitHub's CLI, in `dir`, slow as GitHub can be: it answers a call on pull request
+ * number `n` after `delays[n]` milliseconds (none for others), with an open PR whose one comment
+ * is by `lead`; `auth token` answers at once. Each call is appended to `<dir>/calls`.
+ */
+export function fakeGh(dir: string, delays: Record<number, number>): string {
+  mkdirSync(dir, { recursive: true });
+  const program = join(dir, 'gh');
+  const script = join(dir, 'gh.ts');
+  writeFileSync(
+    script,
+    `import { appendFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+appendFileSync(${JSON.stringify(join(dir, 'calls'))}, args.join(' ') + '\\n');
+if (args[0] === 'auth') { console.log('token'); process.exit(0); }
+const n = Number(/pulls?\\/(\\d+)|number=(\\d+)/.exec(args.join(' '))?.slice(1).find(Boolean));
+await Bun.sleep((${JSON.stringify(delays)} as Record<number, number>)[n] ?? 0);
+if (args[0] === 'pr') console.log(JSON.stringify({ state: 'OPEN', mergeable: 'MERGEABLE', mergeStateStatus: 'BLOCKED', headRefOid: 'aaa', author: { login: 'owner' }, statusCheckRollup: [], comments: [{ id: 'IC_' + n, author: { login: 'lead' }, body: 'Rename it.', url: 'https://gh/c' + n }], reviews: [] }));
+else if (args[1] === 'graphql') console.log('{}');
+else console.log('[]');
+`,
+  );
+  writeFileSync(program, `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(script)} "$@"\n`, { mode: 0o755 });
+  return program;
+}
+
+/**
  * A stand-in for Tailscale's CLI, in `dir`: `status --json` answers `<dir>/status.json` (as
  * `tailscaleStatus` writes it), `serve status --json` and `serve --bg --https=<port> <target>` /
  * `serve --https=<port> off` read and change `<dir>/serve.json`. While `<dir>/fail` exists, `serve`
- * fails with its text on stderr. Each call is appended to `<dir>/calls`.
+ * fails with its text on stderr; while `<dir>/slow` exists, `status` answers after 5 s. Each call is
+ * appended to `<dir>/calls`.
  */
 export function fakeTailscale(dir: string, status: TailscaleStatus = { state: 'Running', name: 'mac.tail1234.ts.net', https: true }): string {
   mkdirSync(dir, { recursive: true });
@@ -225,7 +252,10 @@ const args = process.argv.slice(2);
 appendFileSync(dir + '/calls', args.join(' ') + '\\n');
 const status = JSON.parse(readFileSync(dir + '/status.json', 'utf8'));
 const config = existsSync(dir + '/serve.json') ? JSON.parse(readFileSync(dir + '/serve.json', 'utf8')) : {};
-if (args[0] === 'status') console.log(JSON.stringify(status));
+if (args[0] === 'status') {
+  if (existsSync(dir + '/slow')) await Bun.sleep(5000);
+  console.log(JSON.stringify(status));
+}
 else if (args[0] === 'serve' && args[1] === 'status') console.log(JSON.stringify(config));
 else if (args[0] === 'serve') {
   if (existsSync(dir + '/fail')) { console.error(readFileSync(dir + '/fail', 'utf8')); process.exit(1); }
