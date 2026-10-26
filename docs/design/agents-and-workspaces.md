@@ -62,8 +62,9 @@ failing does not take it again and again.
 Choosing a clone does not block the server either: `git status` in each free clone takes a while in
 a large repository, and over SSH on a host. Obeya chooses by its last look at each free clone (clean,
 uncommitted changes, or not there, its host unreachable), which git takes in the background: when a
-clone is given back, and again when a look is older than a minute as Obeya looks for a free clone
-(at every change of the board while cards wait for one). A clean clone goes first, then one not
+clone is given back, and again when a look is older than a minute (half a minute where it found the
+clone not clean, so a waiting card takes a clone within a minute of it being put right) as Obeya
+looks for a free clone (at every change of the board while cards wait for one, and every minute). A clean clone goes first, then one not
 looked at yet; a look that changes the answer changes the board, so a waiting card takes a clone
 turned clean. The clone a card takes is looked at again before it works there: one no longer clean
 is given back and the next one taken, and where none is left the card goes back to planned and waits
@@ -148,7 +149,7 @@ it ready for a card in the last minute. Blocked clones do not count as free, and
 orange, per clone, why and what puts it right: commit or discard the changes; repair it, or delete
 a clone Obeya made, which its next start makes again; clone it again or take the path out of the
 configuration; check the network and SSH access. Showing the pool looks again, in the background,
-at free clones whose look is older than a minute or that were never looked at, so the pill tells
+at free clones whose look is old by the same measure or that were never looked at, so the pill tells
 before a card waits what a waiting card would find. A card queued for want of a workspace points to
 the pill for the reason.
 

@@ -755,7 +755,7 @@ export class Workspaces implements CardWorkspaces {
       let unknown: string | null = null;
       for (const w of here) {
         const look = this.looks.get(w.path);
-        if (!look || Date.now() - look.at >= RECHECK_MS) void this.look(w.path);
+        if (stale(look)) void this.look(w.path);
         // an unreachable machine's clones count as missing, not as dirty, and so do those git just failed on
         if (this.justFailed(w.path) || look?.found === 'missing' || look?.found === 'unreachable') continue;
         if (look?.found === 'dirty' || look?.found === 'broken') dirty = true;
@@ -805,7 +805,7 @@ export class Workspaces implements CardWorkspaces {
    */
   private blocked(path: string): BlockedClone | null {
     const look = this.looks.get(path);
-    if (!look || Date.now() - look.at >= RECHECK_MS) void this.look(path);
+    if (stale(look)) void this.look(path);
     const at = pathThere(path);
     const made = this.made(path) ? { made: true as const } : {};
     const failed = this.failed.get(path);
@@ -1496,6 +1496,13 @@ interface Seen {
   more?: number;
   error?: string;
 }
+
+/**
+ * Whether a look at a free clone is to be taken again: none yet, or older than RECHECK_MS; half that
+ * for one that found the clone blocked, so that the look again at cards waiting for a clone, every
+ * RECHECK_MS, finds it old and the cards start within a minute of the clone put right.
+ */
+const stale = (look: (Seen & { at: number }) | undefined) => !look || Date.now() - look.at >= (look.found === 'clean' ? RECHECK_MS : RECHECK_MS / 2);
 
 const sameSeen = (a: Seen, b: Seen) => a.found === b.found && a.more === b.more && a.error === b.error && (a.files ?? []).join('\n') === (b.files ?? []).join('\n');
 
