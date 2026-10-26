@@ -4,7 +4,7 @@ import type { ServerWebSocket } from 'bun';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { agentListens, type CanvasInfo, type CardAction, type ClientMessage, type CardPatch, type Item, type NewCard, type PendingRestart, type ServerMessage, type SpotInput, type TalkRef, isTalkRef, needsYou, waitingOn } from '../core/types';
+import { agentListens, type CanvasInfo, type CardAction, type ClientMessage, type CardPatch, type Item, type NewCard, type PendingRestart, type ServerMessage, type SpotInput, type TalkRef, isTalkRef, MAX_FILE_BYTES, needsYou, waitingOn } from '../core/types';
 import index from '../ui/index.html';
 import panel from '../ui/panel.html';
 import { guarded, LOCAL_HOSTS, refusal } from './access';
@@ -590,6 +590,13 @@ export function serve(
       // a screenshot for a message: uploaded first, the message then names it by id
       '/api/c/:canvas/images': {
         POST: on(async (c, req) => ({ id: c.images.save(new Uint8Array(await req.arrayBuffer()), req.headers.get('content-type') ?? '') })),
+      },
+      // a file of another kind for a message: Obeya keeps it, and the field gets its path (`?name`: what it was called)
+      '/api/c/:canvas/files': {
+        POST: on(async (c, req) => {
+          if (Number(req.headers.get('content-length')) > MAX_FILE_BYTES) throw new BadRequest('fileTooLarge', `a file may have at most ${MAX_FILE_BYTES} bytes`);
+          return { path: c.files.save(new Uint8Array(await req.arrayBuffer()), new URL(req.url).searchParams.get('name') ?? '') };
+        }),
       },
       '/api/c/:canvas/images/:file': {
         GET: (req) => {

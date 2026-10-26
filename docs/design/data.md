@@ -29,7 +29,8 @@ Persistent (SQLite):
   the Arbeitsrückschau proposed from it.
 
 Files under `~/.obeya/` (the same for the app and a checkout): the database (`obeya.db`), the
-owner's screenshots (`images/<canvas>/`), the configuration (`canvases.json`), the settings
+owner's screenshots (`images/<canvas>/`), other files the owner dropped into a field
+(`files/<canvas>/<uuid>/<name>`), the configuration (`canvases.json`), the settings
 (`settings.json`, `demo.json`, `voice.json`), where the running Obeya answers (`server.json`), the
 `tailscale serve` entry Obeya made (`tailscale-serve.json`), the key it signs pushes with
 (`vapid.json`), the app's server log (`app.log`), voices and models (`voices/`), the workers'

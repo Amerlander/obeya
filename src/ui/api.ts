@@ -234,7 +234,13 @@ export const api = {
     await refused(res);
     return ((await res.json()) as { id: string }).id;
   },
-  events: (id: string) => call<CardEvent[]>('GET', cardAt(id, '/events')),
+  /** Stores another kind of file for a message; returns the path the agent reads it at. */
+  uploadFile: async (file: File) => {
+    const res = await fetch(at(`/files?name=${encodeURIComponent(file.name)}`), { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: file });
+    await refused(res);
+    return ((await res.json()) as { path: string }).path;
+  },
+  events:(id: string) => call<CardEvent[]>('GET', cardAt(id, '/events')),
   /** Whether the app in the card's workspace answers now. */
   appUp: async (id: string) => (await call<{ up: boolean }>('GET', cardAt(id, '/app'))).up,
   /** Where the owner's browser opens the card's app: through Obeya, which keeps it running a while after. */

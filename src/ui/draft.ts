@@ -234,6 +234,9 @@ export function beginDictation(key: string) {
   updateDraft(key, { dictation: 'listening', note: '' });
 }
 
+/** `words` with a space before and after where the text beside them has none. */
+const spaced = (before: string, words: string, after: string) => `${before && !/\s$/.test(before) ? ' ' : ''}${words}${after && !/^\s/.test(after) ? ' ' : ''}`;
+
 /**
  * Words dictated into the draft, at the cursor: typed into the field as if by hand while it has the
  * focus (⌘Z takes them back), else where the cursor stood. A space parts them from the words beside them.
@@ -246,10 +249,31 @@ export function dictate(key: string, words: string) {
   carets.delete(key);
   const before = text.slice(0, start);
   const after = text.slice(end);
-  const piece = `${before && !/\s$/.test(before) ? ' ' : ''}${words}${after && !/^\s/.test(after) ? ' ' : ''}`;
+  const piece = spaced(before, words, after);
   if (focused) typeInto(el, piece);
   else updateDraft(key, { text: before + piece + after });
 }
+
+/**
+ * Words put into the draft, a dropped file's path, say: at the cursor while the field has it, typed
+ * in as by hand (⌘Z takes them back), else where the cursor stood when the field lost it, or at the
+ * end. The focus stays where it is: the microphone sends what it was dropped on rather than dictating into the field.
+ */
+export function insert(key: string, words: string) {
+  const el = fields.get(key);
+  if (el && el === document.activeElement) return typeAtCursor(el, words);
+  const text = el?.value ?? draftOf(key).text;
+  const at = Math.min(left.get(key) ?? text.length, text.length);
+  updateDraft(key, { text: text.slice(0, at) + spaced(text.slice(0, at), words, text.slice(at)) + text.slice(at) });
+}
+
+/** Types `words` into the focused field at its cursor, parted by spaces from the words beside them. */
+export function typeAtCursor(el: HTMLTextAreaElement, words: string) {
+  typeInto(el, spaced(el.value.slice(0, el.selectionStart), words, el.value.slice(el.selectionEnd)));
+}
+
+/** `text` with `words` after it, parted by a space. */
+export const appended = (text: string, words: string) => text + spaced(text, words, '');
 
 /**
  * Where a quote goes into `text` with the cursor at `caret`, and what goes in: at the end, on a line

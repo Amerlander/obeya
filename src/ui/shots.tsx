@@ -1,12 +1,13 @@
 // Screenshots in what the owner writes: pasted, dropped or picked, scaled down so the agent can
 // read them, uploaded at once; shown as thumbnails that grow large over the page on a click, where
-// those not sent yet take marks (marks.ts).
+// those not sent yet take marks (marks.ts). Other files dropped or picked are uploaded as they are,
+// and their path there goes into the text, for the agent to read them.
 
 import { type ClipboardEvent, type DragEvent, type MouseEvent, type PointerEvent, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { IMAGE_TYPES, MAX_IMAGE_BYTES } from '../core/types';
-import { api, at } from './api';
-import { draftOf, dropDraft, markupOf, setMarkup, updateDraft, useDraft } from './draft';
+import { IMAGE_TYPES, MAX_FILE_BYTES, MAX_IMAGE_BYTES } from '../core/types';
+import { api, ApiError, at } from './api';
+import { draftOf, dropDraft, insert, markupOf, setMarkup, updateDraft, useDraft } from './draft';
 import { know, known } from './known';
 import { badgeOf, CLICK_PX, drawMarks, EDGE, type Mark, markOf, markSize, type Point, RED, roundedRect } from './marks';
 import { confirmPasteHint, pastedShots, pickedShots, usePasteHint } from './pasteHint';
@@ -17,7 +18,8 @@ import { behindThumb, type Box, onto, ZOOM_EASE, ZOOM_MS } from './zoomBox';
 export const MAX_SIDE = 2000;
 
 /** The images among pasted or dropped files. */
-export const imageFiles = (files: FileList | null | undefined) => [...(files ?? [])].filter((f) => f.type.startsWith('image/'));
+export const imageFiles = (files: FileList | null | undefined) => [...(files ?? [])].filter(isImage);
+const isImage = (f: File) => f.type.startsWith('image/');
 
 /** A screenshot as the agent reads it: at most MAX_SIDE on its long side, PNG, or JPEG when that is too large. */
 export async function prepareImage(file: Blob): Promise<Blob> {
@@ -71,11 +73,34 @@ export async function attachTo(key: string, files: File[], added?: () => void) {
 }
 
 /**
+ * Files for a draft that are no screenshots, uploaded one after the other; the path of each goes into
+ * its text by `put` as it arrives. How many did.
+ */
+export async function fileTo(key: string, files: File[], put: (path: string) => void) {
+  let arrived = 0;
+  if (!files.length) return arrived;
+  updateDraft(key, (d) => ({ error: '', uploading: d.uploading + files.length }));
+  for (const f of files) {
+    try {
+      if (f.size > MAX_FILE_BYTES) throw new ApiError('fileTooLarge', '');
+      put(await api.uploadFile(f));
+      arrived++;
+    } catch (e) {
+      updateDraft(key, { error: failText(e) });
+    } finally {
+      updateDraft(key, (d) => ({ uploading: d.uploading - 1 }));
+    }
+  }
+  return arrived;
+}
+
+/**
  * Screenshots going into a text field: pasted, dropped or picked, uploaded at once. They belong to
  * the field's `draft` (`draft.ts`), or without one to this field alone. `onChange` hears every
- * change the owner makes, so a card can keep them as they are added.
+ * change the owner makes, so a card can keep them as they are added. Other files dropped or picked
+ * go in by their path (`fileTo`): into the draft's text, or by `put` for a field that keeps its text itself.
  */
-export function useShotInput({ draft, initial = [], onChange, off = false }: { draft?: string; initial?: string[]; onChange?: (ids: string[]) => void; off?: boolean } = {}) {
+export function useShotInput({ draft, initial = [], onChange, off = false, put }: { draft?: string; initial?: string[]; onChange?: (ids: string[]) => void; off?: boolean; put?: (path: string) => void } = {}) {
   const own = useId();
   const key = draft ?? `shots:${own}`;
   // a field of its own starts with its screenshots, and they go with it
@@ -91,7 +116,15 @@ export function useShotInput({ draft, initial = [], onChange, off = false }: { d
     change.current?.(draftOf(key).images);
   };
   const pasteHint = usePasteHint(key, !off);
-  const attach = (files: File[]) => (off ? Promise.resolve(0) : attachTo(key, files, () => change.current?.(draftOf(key).images)));
+  const putRef = useRef(put);
+  putRef.current = put;
+  /** The screenshots among `files` as screenshots, the others by their paths. How many arrived. */
+  const attach = async (files: File[]) => {
+    if (off) return 0;
+    const shots = attachTo(key, files.filter(isImage), () => change.current?.(draftOf(key).images));
+    const others = fileTo(key, files.filter((f) => !isImage(f)), (path) => (putRef.current ?? ((p) => insert(key, p)))(path));
+    return (await shots) + (await others);
+  };
   const failed = (e: unknown) => updateDraft(key, { error: failText(e) });
   return {
     key,
@@ -144,7 +177,7 @@ export function useShotInput({ draft, initial = [], onChange, off = false }: { d
       onDragLeave: () => setDropping(false),
       onDrop: (e: DragEvent) => {
         setDropping(false);
-        const files = imageFiles(e.dataTransfer.files);
+        const files = [...e.dataTransfer.files];
         if (off || !files.length) return;
         e.preventDefault();
         attach(files);

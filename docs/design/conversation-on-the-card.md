@@ -236,6 +236,20 @@ sidebar's field when it opens and back when it closes (its words stay in the sid
 open card leaves them beside the microphone, out of sight until it closes; they are for Obeya, not
 the card's agent.
 
+### Other files
+
+A file of another kind (a PDF, a log, a spreadsheet) dropped on a field or on the microphone, or
+together with screenshots, goes in by its path, as a terminal agent's prompt takes a file dragged
+from the file manager: Obeya keeps a copy under its home (`files/<canvas>/`, at most 100 MB, in a
+folder of its own under its name made one word) and the path of that copy goes into the field's
+text, at the cursor while the field has it (⌘Z takes it back), else where the cursor last stood or
+at the end, parted by spaces; the focus stays where it was, so the microphone still sends rather
+than dictates. The agent reads the file there with its own tools. Dropped on the microphone with
+no field to take it, the path waits beside the microphone under the file's name (× removes it) and
+goes with the next recording; it moves into Obeya's field when the sidebar opens. While it uploads
+the field shows „lädt …“ and does not send. The image button's picker stays for screenshots; its
+tooltip names dropping other files.
+
 A recording nothing came of, or that Obeya refused, leaves the screenshots where they were. When the
 connection breaks before the answer, the page asks Obeya by the recording's id whether it arrived,
 and returns words and screenshots to the field only if not; the command's line then says „Obeya hat
@@ -295,6 +309,13 @@ image.
   logic, which disagreed between field, phone, canvas and Koordinator.
 - **Screenshots as images in the message**, so the agent sees them without a step. Rejected: files
   to read (only where tool results carry no images).
+- **Other files go in by the path of a copy** (owner, 2026-10-26): a PDF dropped on the microphone
+  opened in a new tab instead. The owner asked for the file's own path, as a terminal agent gets
+  it; a browser does not tell a page where a dropped file lies, so Obeya keeps a copy and names
+  that, which works from the phone and for workers on other machines too. The path is text in the
+  field, so it reaches every agent through what already carries the owner's words and stays
+  editable. Rejected: a chip per file beside the screenshots, which every way a message travels
+  would have had to carry. The picker stays for images: on a phone it opens the photos.
 - **A spoken command takes the screenshots of its field** (2026-10-12). Rejected: a separate
   microphone store, which left pasted screenshots behind. **Obeya says whether a cut-off command
   arrived** (2026-10-16). Rejected: treating it as failed, or detecting a leaving page by

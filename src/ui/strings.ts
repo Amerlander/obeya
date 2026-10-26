@@ -525,6 +525,7 @@ const de = {
     unknownSetting: 'Über diesen Vorschlag ist schon entschieden.',
     imageType: 'Das ist kein Bild, das der Agent lesen kann (PNG, JPEG, GIF oder WebP).',
     imageTooLarge: 'Das Bild ist zu groß, auch verkleinert.',
+    fileTooLarge: 'Die Datei ist zu groß (höchstens 100 MB).',
     notDone: 'Archivieren lässt sich nur eine eigene Aufgabe, die live, erledigt oder gestoppt ist, oder eine geparkte oder verworfene Idee.',
     holdsWork: 'Auf dem Branch liegt Arbeit, die noch nicht gelandet ist. Starte die Aufgabe neu oder lösche sie.',
     notArchived: 'Das liegt nicht mehr im Archiv.',
@@ -607,7 +608,7 @@ const de = {
     toAgent: 'An den Agenten gegangen.',
     /** A confirmation about a card other than the open one starts with it. */
     about: (title: string) => `„${title}“: `,
-    attach: 'Screenshot für die nächste Sprachnachricht – oder mit ⌘V einfügen oder auf das Mikrofon ziehen',
+    attach: 'Screenshot für die nächste Sprachnachricht – oder mit ⌘V einfügen oder auf das Mikrofon ziehen. Eine andere Datei aufs Mikrofon gezogen hängt ihren Pfad an.',
     /** The microphone in a text field: what is said is written into it. */
     dictate: 'Halten zum Diktieren ins Feld (oder Leertaste im Feld halten)',
     /** Under the microphone and the field while the cursor is in it: what is said goes into the field. */
@@ -1689,7 +1690,7 @@ const de = {
     builtOn: (title: string) => `Gebaut auf dem Prototyp „${title}“; sein Branch ist der dieser Aufgabe.`,
   },
   shots: {
-    attach: 'Screenshot anhängen – oder mit ⌘V einfügen oder hineinziehen',
+    attach: 'Screenshot anhängen – oder mit ⌘V einfügen oder hineinziehen. Eine andere Datei hineingezogen fügt ihren Pfad ein.',
     remove: 'Entfernen',
     enlarge: 'Vergrößern',
     markUp: 'Vergrößern und markieren',
@@ -2176,6 +2177,7 @@ const en: Strings = {
     unknownSetting: 'This proposal has been decided already.',
     imageType: 'This is not an image the agent can read (PNG, JPEG, GIF or WebP).',
     imageTooLarge: 'The image is too large, even scaled down.',
+    fileTooLarge: 'The file is too large (100 MB at most).',
     notDone: 'Only your own task that is live, done or stopped, or a parked or dropped idea, can be archived.',
     holdsWork: 'Its branch holds work that has not landed. Start the task again or delete it.',
     notArchived: 'This is no longer in the archive.',
@@ -2252,7 +2254,7 @@ const en: Strings = {
     transcribing: (what: string) => `${what} · being written down …`,
     toAgent: 'Sent to the agent.',
     about: (title: string) => `“${title}”: `,
-    attach: 'Screenshot for the next voice message – or paste it with ⌘V or drop it on the microphone',
+    attach: 'Screenshot for the next voice message – or paste it with ⌘V or drop it on the microphone. Any other file dropped on it adds its path.',
     dictate: 'Hold to dictate into the field (or hold Space in the field)',
     intoField: 'into the field',
     sendWithEnter: 'send with Enter',
@@ -3291,7 +3293,7 @@ const en: Strings = {
     builtOn: (title: string) => `Built on the prototype “${title}”; its branch is this task’s.`,
   },
   shots: {
-    attach: 'Attach a screenshot – or paste it with ⌘V or drop it here',
+    attach: 'Attach a screenshot – or paste it with ⌘V or drop it here. Any other file dropped here goes in by its path.',
     remove: 'Remove',
     enlarge: 'Enlarge',
     markUp: 'Enlarge and mark up',

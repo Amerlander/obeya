@@ -18,7 +18,7 @@ import { inQueue } from '../core/queue';
 import { useQueueMove, waitedOn } from './queue';
 import { Inline, plain } from './markdown';
 import { Body, goToMessage, Msg, Quote, Reading, useAnswer, useReportedHeight } from './message';
-import { cardDraft, giveBack, questionsKey, updateDraft, useDraft } from './draft';
+import { appended, cardDraft, giveBack, questionsKey, typeAtCursor, updateDraft, useDraft } from './draft';
 import { eventQuote, type Reply, setReply, useReplyKnown } from './reply';
 import { CiteButton } from './cite';
 import { Composer } from './composer';
@@ -2269,7 +2269,15 @@ function ManualFields({ item, repos, onEdit, grow }: { item: Item; repos: RepoRe
   const ref = useRef<HTMLTextAreaElement>(null);
   useFitHeight(ref, body, grow);
   const [repo, setRepo] = useState(item.repo);
-  const shots = useShotInput({ initial: item.images, onChange: (images) => onEdit({ images }) });
+  // a dropped file's path goes in as typed while the field has the cursor, else after the text
+  const put = (path: string) => {
+    const el = ref.current;
+    if (el && el === document.activeElement) return typeAtCursor(el, path);
+    const next = appended(el?.value ?? body, path);
+    setBody(next);
+    onEdit({ body: next });
+  };
+  const shots = useShotInput({ initial: item.images, onChange: (images) => onEdit({ images }), put });
   return (
     <>
       <div className="segs">

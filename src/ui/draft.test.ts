@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { cardDraft, draftOf, dropDraft, giveBack, keepDrafts, MIC_DRAFT, markupOf, moveImages, OBEYA_DRAFT, setMarkup, updateDraft } from './draft';
+import { appended, cardDraft, draftOf, dropDraft, giveBack, insert, keepDrafts, MIC_DRAFT, markupOf, moveImages, OBEYA_DRAFT, setMarkup, updateDraft } from './draft';
 
 const store = () => {
   const m = new Map<string, string>();
@@ -72,4 +72,15 @@ test("the screenshots beside the microphone go into Obeya's field after those it
   expect(draftOf(MIC_DRAFT).images).toEqual([]);
   dropDraft(MIC_DRAFT);
   dropDraft(OBEYA_DRAFT);
+});
+
+test("a dropped file's path goes after the draft's words without a field on the page, parted by a space", () => {
+  insert(MIC_DRAFT, '/o/files/a/Rechnung.pdf');
+  expect(draftOf(MIC_DRAFT).text).toBe('/o/files/a/Rechnung.pdf');
+  insert(MIC_DRAFT, '/o/files/b/log.txt');
+  expect(draftOf(MIC_DRAFT).text).toBe('/o/files/a/Rechnung.pdf /o/files/b/log.txt');
+  updateDraft(MIC_DRAFT, { text: '' });
+  expect(appended('Schau hier: ', '/x.pdf')).toBe('Schau hier: /x.pdf');
+  expect(appended('Schau hier:', '/x.pdf')).toBe('Schau hier: /x.pdf');
+  expect(appended('', '/x.pdf')).toBe('/x.pdf');
 });

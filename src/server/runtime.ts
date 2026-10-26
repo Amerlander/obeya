@@ -20,6 +20,7 @@ import { basename, join } from 'node:path';
 import { LOST, remote, sessionFiles, type SshHost } from './hosts';
 import { localBin, which } from './path';
 import type { z } from 'zod';
+import { filesIn } from './files';
 import { mediaType } from './images';
 import { COMPILED } from './resources';
 import { OWN_GROUP } from './spawn';
@@ -271,7 +272,7 @@ export const sdkRuntime: AgentRuntime = {
     const files = there ? sessionFiles(there.host.o.home, spec.plugins ?? []) : undefined;
     if (there && files) {
       const dir = there.host.prepare(files);
-      inbox.carry = (text, images) => carryImages(there.host, dir, text, images);
+      inbox.carry = (text, images) => carryImages(there.host, dir, text, images, join(there.host.o.home, 'files'));
     }
     if (firstMessage !== undefined) inbox.push(firstMessage, images);
     const abort = new AbortController();
@@ -890,14 +891,20 @@ export function cleanEnv(env: Record<string, string | undefined> = process.env):
 
 /**
  * Copies the owner's screenshots to the session's machine, into `images` in Obeya's directory
- * there, and names them by their paths there in the message; the message goes as it was if that
- * fails (the session sees the images in it all the same).
+ * there, and the files the message names by path under `files` (Obeya's, here) into `files` there,
+ * and names them by their paths there in the message; the message goes as it was if that fails
+ * (the session sees the images in it all the same).
  */
-async function carryImages(host: SshHost, dir: Promise<string>, text: string, images: string[]): Promise<string> {
+async function carryImages(host: SshHost, dir: Promise<string>, text: string, images: string[], files: string): Promise<string> {
+  const dropped = filesIn(text, files);
+  if (!images.length && !dropped.length) return text;
   try {
     const to = `${await dir}/images`;
-    await host.copyFiles(images, to);
-    return images.reduce((t, f) => t.split(f).join(`${to}/${basename(f)}`), text);
+    if (images.length) await host.copyFiles(images, to);
+    const there = `${await dir}/files`;
+    if (dropped.length) await host.copyFiles(dropped, there);
+    const carried = images.reduce((t, f) => t.split(f).join(`${to}/${basename(f)}`), text);
+    return dropped.reduce((t, d) => t.split(d).join(`${there}/${basename(d)}`), carried);
   } catch (e) {
     console.error(e instanceof Error ? e.message : e);
     return text;
@@ -911,13 +918,13 @@ export class Inbox implements AsyncIterable<SDKUserMessage> {
   private untaken = new Set<string>();
   private wake: (() => void) | null = null;
   private ended = false;
-  /** For a session on another machine: copies the images there and returns the text with their paths there. */
+  /** For a session on another machine: copies the images and the files the text names there and returns the text with their paths there. */
   carry?: (text: string, images: string[]) => Promise<string>;
 
   push(text: string, images: string[] = []) {
     // read now: the files may be gone by the time the session takes the message
     const blocks = images.map((f) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: mediaType(f), data: readFileSync(f).toString('base64') } }));
-    const carried = this.carry && images.length ? this.carry(text, images) : Promise.resolve(text);
+    const carried = this.carry ? this.carry(text, images) : Promise.resolve(text);
     const uuid = randomUUID();
     this.untaken.add(uuid);
     this.queue.push({ uuid, content: carried.then((t) => (blocks.length ? [{ type: 'text' as const, text: t }, ...blocks] : t)) });

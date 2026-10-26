@@ -1486,6 +1486,13 @@ button.link:hover { text-decoration: underline; }
 #ptt .c-shots { flex-wrap: nowrap; flex-basis: auto; }
 #ptt .c-shot { height: 46px; min-width: 46px; box-shadow: var(--shadow); }
 #ptt .c-shot img { max-width: 82px; }
+/* files dropped on the mic with no field for their paths: their names */
+.ptt-files { display: flex; gap: 8px; }
+.c-file { position: relative; height: 46px; display: inline-flex; align-items: center; padding: 0 12px; max-width: 180px; border-radius: 2px; border: 1px solid var(--line);
+  background: var(--card); box-shadow: var(--shadow); font-size: 12px; color: var(--ink); white-space: nowrap; }
+.c-file .name { overflow: hidden; text-overflow: ellipsis; }
+.c-file .remove { position: absolute; top: -7px; right: -7px; width: 20px; height: 20px; border-radius: 3px; border: 1px solid var(--line);
+  background: var(--card); color: var(--ink); font-size: 13px; line-height: 1; cursor: pointer; padding: 0; }
 #ptt.dropping #mic { outline: 2px dashed var(--working); outline-offset: 5px; }
 .ptt-error { font-size: 12px; color: var(--error); background: var(--card); box-shadow: var(--shadow); border-radius: 2px; padding: 4px 10px; max-width: calc((100vw - var(--side, 0px)) * .6); }
 .tell { margin: 4px 0 6px; }

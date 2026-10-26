@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { CardAction, ClientMessage, ServerMessage } from '../core/types';
 import type { Board } from './board';
 import { Canvases, CanvasRuntime } from './canvas';
@@ -781,6 +781,26 @@ describe('screenshots', () => {
     expect(await codeOf(upload(new Uint8Array(4_000_000)))).toBe('imageTooLarge');
     expect((await fetch(new URL(api('/images/..%2Fobeya.db'), server.url))).status).toBe(404);
   });
+});
+
+describe('other files', () => {
+  const upload = (body: Uint8Array<ArrayBuffer>, name: string) =>
+    fetch(new URL(api(`/files?name=${encodeURIComponent(name)}`), server.url), { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body });
+
+  test('are kept under their name, which goes into a path, and their path comes back', async () => {
+    const pdf = new Uint8Array([0x25, 0x50, 0x44, 0x46, 1, 2, 3]);
+    const { path } = (await (await upload(pdf, 'Rechnung März 2026.pdf')).json()) as { path: string };
+    expect(path.startsWith(join(canvas.files.dir, ''))).toBe(true);
+    expect(path).toMatch(/[0-9a-f-]{36}\/Rechnung-März-2026\.pdf$/);
+    expect(new Uint8Array(readFileSync(path))).toEqual(pdf);
+    // the same name twice: two files
+    const again = (await (await upload(pdf, 'Rechnung März 2026.pdf')).json()) as { path: string };
+    expect(again.path).not.toBe(path);
+    // a name cannot lead out of its directory
+    const out = (await (await upload(pdf, '../../obeya.db')).json()) as { path: string };
+    expect(dirname(dirname(out.path))).toBe(canvas.files.dir);
+  });
+
 });
 
 describe('„Merk dir“', () => {

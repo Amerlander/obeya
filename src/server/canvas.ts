@@ -20,6 +20,7 @@ import { type Command, Commander } from './commands';
 import type { Config } from './config';
 import type { Store } from './db';
 import { Explorers } from './explorers';
+import { Files } from './files';
 import { Images, MAX_IMAGES } from './images';
 import type { Forge } from './forge';
 import { Koordinator } from './koordinator';
@@ -180,6 +181,8 @@ export class CanvasRuntime {
   readonly explorers: Explorers;
   /** Screenshots the owner attaches to what they write. */
   readonly images: Images;
+  /** The other files the owner dropped into what they write, whose paths the agents get. */
+  readonly files: Files;
   readonly answers: Answers;
   readonly revisions: Revisions;
   /** Demos shared with colleagues, on the demo site of the card's repository. */
@@ -232,6 +235,7 @@ export class CanvasRuntime {
     const { id, name, repos, stored } = resolved;
     this.config = resolved.config;
     const images = (this.images = new Images(join(deps.home, 'images', id)));
+    this.files = new Files(join(deps.home, 'files', id));
     this.board = new Board(
       deps.store,
       { id, name, repos: [] },

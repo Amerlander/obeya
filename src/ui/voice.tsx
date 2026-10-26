@@ -3,14 +3,15 @@
 // Obeya with what stands in the field of the card or sidebar in view (its words first, its
 // screenshots, the message it quotes): with an agent on the open card straight to that agent, else
 // to the Koordinator, which answers with a confirmation to show. Where no field is in view,
-// screenshots picked or pasted beside the microphone go with the next recording. The microphone is
+// screenshots picked or pasted beside the microphone, and the paths of other files dropped on it,
+// go with the next recording. The microphone is
 // free again at once: each spoken command has its own line above it while it is read, which becomes
 // its confirmation; a typed one gets its line with the confirmation.
 
 import { createContext, useEffect, useRef, useState } from 'react';
 import type { Place } from '../core/layout';
 import { ApiError, api, confirmShownMs, type Heard, holdRestart, undoShownMs, type Where } from './api';
-import { beginDictation, dictate, draftOf, focusedDraft, MIC_DRAFT, moveImages, takesImages, toObeya, updateDraft, useDraft, useFieldOn, useFocusedDraft } from './draft';
+import { beginDictation, dictate, draftOf, focusedDraft, insert, MIC_DRAFT, moveImages, takesImages, toObeya, updateDraft, useDraft, useFieldOn, useFocusedDraft } from './draft';
 import { Aside } from './aside';
 import { type Recording, record } from './recorder';
 import { AttachButton, ShotStrip, useShotInput } from './shots';
@@ -344,8 +345,9 @@ export function useHeldByTouch<T extends HTMLElement>() {
  * view, while that has its field on the page). With no `target` (the phone, where what is in view
  * fills the screen) that line is left out. Without such a field, screenshots for the next
  * recording are picked beside the microphone; dropped on it or pasted (App), they go to the field
- * when there is one. Those for Obeya stay in view: they go into Obeya's field when it opens, and
- * back beside the microphone when it closes.
+ * when there is one. So do the paths of other files dropped on it, which show beside it by their
+ * names while they wait there. Those for Obeya stay in view: they go into Obeya's field when it
+ * opens, and the screenshots back beside the microphone when it closes.
  */
 export function PushToTalk({ phase, level, flat, target, field, onDown }: { phase: Phase; level: number; flat: boolean; target: string | null; field: string | null; onDown: () => void }) {
   const on = useFieldOn(field);
@@ -353,22 +355,26 @@ export function PushToTalk({ phase, level, flat, target, field, onDown }: { phas
   const shots = useShotInput({ draft: key, off: !takesImages(key) });
   // the screenshots for Obeya show where Obeya is spoken to: in its field while that is in view, else beside the microphone
   const obeya = useRef<string | null>(null);
-  const waiting = useDraft(MIC_DRAFT).images;
+  const { images: waiting, text: paths } = useDraft(MIC_DRAFT);
   useEffect(() => {
     if (toObeya(key) && takesImages(key)) {
       obeya.current = key;
       moveImages(MIC_DRAFT, key);
+      if (paths.trim()) {
+        insert(key, paths.trim());
+        updateDraft(MIC_DRAFT, { text: '' });
+      }
     } else if (key === MIC_DRAFT && obeya.current) {
       moveImages(obeya.current, MIC_DRAFT);
       obeya.current = null;
     }
-  }, [key, waiting]);
+  }, [key, waiting, paths]);
   const { text } = useDraft(key);
   const quote = useReply(key);
   const into = useFocusedDraft();
   const n = shots.images.length;
   const mic = useHeldByTouch<HTMLButtonElement>();
-  const parts = [...(on && text.trim() ? [t.voice.withText] : []), ...(n ? [t.voice.withShots(n)] : []), ...(on && quote ? [t.voice.withQuote] : [])];
+  const parts = [...(text.trim() ? [t.voice.withText] : []), ...(n ? [t.voice.withShots(n)] : []), ...(on && quote ? [t.voice.withQuote] : [])];
   return (
     <div id="ptt" className={`${phase}${shots.dropping ? ' dropping' : ''}`} {...shots.drop}>
       <div className="ptt-row">
@@ -392,6 +398,7 @@ export function PushToTalk({ phase, level, flat, target, field, onDown }: { phas
           <div className="ptt-shots">
             <AttachButton shots={shots} title={t.voice.attach} />
             <ShotStrip shots={shots} />
+            <FileChips />
           </div>
         )}
       </div>
@@ -413,6 +420,24 @@ export function PushToTalk({ phase, level, flat, target, field, onDown }: { phas
           </div>
         )
       )}
+    </div>
+  );
+}
+
+/** The files dropped on the microphone without a field to take their paths, by name, each to remove. */
+function FileChips() {
+  const words = useDraft(MIC_DRAFT).text.split(/\s+/).filter(Boolean);
+  if (!words.length) return null;
+  return (
+    <div className="ptt-files">
+      {words.map((w, i) => (
+        <span key={i} className="c-file" title={w}>
+          <span className="name">{w.split(/[\\/]/).at(-1)}</span>
+          <button className="remove" title={t.shots.remove} onClick={() => updateDraft(MIC_DRAFT, { text: words.filter((_, j) => j !== i).join(' ') })}>
+            ×
+          </button>
+        </span>
+      ))}
     </div>
   );
 }
