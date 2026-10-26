@@ -1832,6 +1832,10 @@ export interface DemoVoiceCheck {
   clips: Partial<Record<NarrationLanguage, ClipProblem>>;
   /** What the voice needs installed by Obeya and is missing (Piper, Qwen3-TTS), and about how much that is. */
   install: { installed: boolean; missing: string[]; mb: number };
+  /** The directory demos go into, as these settings name it (`~` expanded), else the default. */
+  directory: string;
+  /** The settings name a relative directory, which counts as none: it would land wherever the agent works. */
+  directoryRelative?: true;
 }
 
 /** An installation Obeya runs for a voice, one at a time. */

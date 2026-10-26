@@ -1285,7 +1285,10 @@ const de = {
     },
     demo: {
       title: 'Demos',
-      hint: 'Wie Agenten ihre Demos vertonen. Gilt ab der nächsten Aufnahme, ohne Neustart.',
+      hint: 'Wo Agenten ihre Demos ablegen und wie sie sie vertonen. Gilt ab der nächsten Aufnahme, ohne Neustart.',
+      directory: 'Verzeichnis',
+      directoryHint: (dir: string) => `Jede Demo bekommt darin ein eigenes Verzeichnis. Jetzt: ${dir}`,
+      directoryRelative: 'Ein relativer Pfad landete dort, wo der Agent gerade arbeitet. Bitte einen absoluten Pfad angeben oder einen, der mit ~ beginnt.',
       language: 'Sprache der Erzählung',
       languageHint: 'Ein Repository kann für seine Demos eine andere nennen: „Sprache der Demos“ in seinen Einstellungen.',
       languages: { de: 'Deutsch', en: 'Englisch' } satisfies Record<NarrationLanguage, string>,
@@ -2911,7 +2914,10 @@ const en: Strings = {
     },
     demo: {
       title: 'Demos',
-      hint: 'How agents narrate their demos. Applies from the next recording, without a restart.',
+      hint: 'Where agents put their demos and how they narrate them. Applies from the next recording, without a restart.',
+      directory: 'Directory',
+      directoryHint: (dir: string) => `Each demo gets a directory of its own in it. Now: ${dir}`,
+      directoryRelative: 'A relative path would land wherever the agent happens to work. Give an absolute path, or one starting with ~.',
       language: 'Narration language',
       languageHint: 'A repository can name another for its demos: “Demo language” in its settings.',
       languages: { de: 'German', en: 'English' },

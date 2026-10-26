@@ -555,6 +555,8 @@ const VOICE_FIELDS: Record<VoiceKind, ('voiceName' | 'command' | 'url' | 'keyFil
 };
 /** A stock voice of a model or service is nobody's own. */
 const STOCK_ONLY: VoiceKind[] = ['piper', 'say'];
+/** Where demos go when the settings name no directory (`DEFAULT_DEMO_DIRECTORY` of the demo skill, which the page cannot import). */
+const DEFAULT_DEMO_DIRECTORY = '~/demos';
 
 /**
  * The interface language, saved on its own, the page loading again in it; and the conversation
@@ -916,6 +918,17 @@ function DemoBlock({ on }: { on: boolean }) {
       <Head title={d.title} hint={d.hint} file={view.file} />
       <div className="cfg-cols">
         <div>
+          <Field label={d.directory} hint={d.directoryHint(shown.directory)}>
+            <input
+              className="c-path"
+              aria-label={d.directory}
+              spellCheck={false}
+              placeholder={DEFAULT_DEMO_DIRECTORY}
+              value={draft.directory ?? ''}
+              onChange={(e) => set('directory', e.target.value || undefined)}
+            />
+            {shown.directoryRelative && <p className="p-error">{d.directoryRelative}</p>}
+          </Field>
           <Field label={d.language} hint={d.languageHint}>
             <select aria-label={d.language} value={draft.language} onChange={(e) => set('language', e.target.value as NarrationLanguage)}>
               {(Object.keys(d.languages) as NarrationLanguage[]).map((l) => (
@@ -929,8 +942,8 @@ function DemoBlock({ on }: { on: boolean }) {
             <select
               aria-label={d.voice}
               value={draft.voice}
-              // another voice starts with its own fields, and is nobody's own until ticked
-              onChange={(e) => setDraft({ language: draft.language, voice: e.target.value as VoiceKind })}
+              // another voice starts with its own fields, and is nobody's own until ticked; the directory stays
+              onChange={(e) => setDraft({ language: draft.language, voice: e.target.value as VoiceKind, ...(draft.directory ? { directory: draft.directory } : {}) })}
             >
               {VOICE_GROUPS.map(({ group, voices }) => (
                 <optgroup key={group} label={d.groups[group]}>

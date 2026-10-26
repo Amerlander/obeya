@@ -240,7 +240,8 @@ rules would not apply.
 The session runs through the SDK's `spawnClaudeCodeProcess`: Claude Code started over `ssh`, with
 Obeya's tools and hooks over its stdin and stdout. Before a host's first session, the plugin and the
 `playwright-core` its demo skill needs go to `~/.obeya/remote` there (again when changed), with the
-owner's demo settings without a key file (no API key goes to a host), and that is the session's
+owner's demo settings without a key file (no API key goes to a host) and without the demo directory
+(a path of this machine: demos there go into the host's `~/demos`, which the brief names), and that is the session's
 `OBEYA_HOME`. Its `OBEYA_URL` is a port forwarded
 (`-R`) to a server of Obeya's that answers only narration clips, inline as base64, so demos rendered
 there get the owner's voice, which only this machine runs.

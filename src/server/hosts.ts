@@ -557,7 +557,8 @@ function deferred<T>(ready: Promise<T>, start: (value: T) => ChildProcess): Spaw
  * What a worker's session needs on a host: the plugins it loads, the `playwright-core` the demo
  * skill imports (found from the plugin's directory there, as in Obeya's checkout), and the owner's
  * demo settings, with the voice references as paths here: Obeya holds that voice and reads them.
- * The key file of a hosted voice stays here.
+ * The key file of a hosted voice stays here, and so does the demo directory, a path of this
+ * machine: on the host, demos go into its default.
  */
 export function sessionFiles(home: string, plugins: string[]): HostFiles {
   return {
@@ -566,7 +567,7 @@ export function sessionFiles(home: string, plugins: string[]): HostFiles {
       'demo.json': () => {
         const file = join(home, 'demo.json');
         if (!existsSync(file)) return undefined;
-        const { keyFile: _, references, ...settings } = readDemoSettings(home);
+        const { keyFile: _, directory: __, references, ...settings } = readDemoSettings(home);
         return JSON.stringify({ ...settings, ...(references ? { references: Object.fromEntries(Object.entries(references).map(([l, clip]) => [l, expandHome(clip)])) } : {}) }, null, 2);
       },
     },

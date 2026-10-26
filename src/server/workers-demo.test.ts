@@ -257,6 +257,16 @@ describe('handing over with a demo', () => {
     expect(runtime.last.spec.system).toContain("A demo (its narration, report, or an HTML artifact's words) is in English, whatever language the owner talks in.");
   });
 
+  test('the brief names the demo directory of the demo settings, else ~/demos', async () => {
+    await workers.start(manual().id);
+    expect(runtime.last.inbox[0]).toContain('an index.html in a new directory under ~/demos (never in git)');
+    rmSync(dir, { recursive: true, force: true });
+    setup({ ...generic, land: 'main', workspaces: 'clones' });
+    setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, demoDirectory: () => '/opt/work/demos' }));
+    await workers.start(manual().id);
+    expect(runtime.last.inbox[0]).toContain('an index.html in a new directory under /opt/work/demos (never in git)');
+  });
+
   test('the card waits with the demo; its files are found; words under it answer its question and leave the demo', async () => {
     const c = manual();
     await workers.start(c.id);

@@ -7,8 +7,8 @@
 // speaks the words, so what the viewer hears is what Obeya hears.
 import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { demoDirectory } from '../../plugin/skills/demo/lib/settings.ts';
 import type { Locator, Page } from 'playwright-core';
 import { runDemo, type Director, type Scene } from '../../plugin/skills/demo/lib/director.ts';
 import { narration } from './narration.ts';
@@ -17,7 +17,7 @@ import { KEY_HEADER, ownerHeaders } from '../../src/server/owner.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 /** Where the video, its stills and the work files go: outside the repository. */
-const OUT = process.env.HERO_OUT ?? path.join(os.homedir(), 'demos', 'obeya-hero');
+const OUT = process.env.HERO_OUT ?? path.join(demoDirectory(), 'obeya-hero');
 const base = `http://127.0.0.1:${PORT}`;
 /** HERO_SHORT: the scenes up to Obeya’s sidebar and its preferences, without agents, to check them in a few minutes. */
 const SHORT = !!process.env.HERO_SHORT;

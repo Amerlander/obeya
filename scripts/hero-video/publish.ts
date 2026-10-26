@@ -17,7 +17,8 @@ import path from 'node:path';
 import { ghEnv } from '../gh.ts';
 
 const RELEASE = 'site-media';
-const OUT = process.env.HERO_OUT ?? path.join(os.homedir(), 'demos', 'obeya-hero');
+// the demo settings only without HERO_OUT: its test runs this script alone, outside a checkout
+const OUT = process.env.HERO_OUT ?? path.join((await import('../../plugin/skills/demo/lib/settings.ts')).demoDirectory(), 'obeya-hero');
 const posterOnly = process.argv.includes('--poster-only');
 const poster = posterOnly || process.argv.includes('--poster');
 

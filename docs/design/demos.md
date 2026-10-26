@@ -84,6 +84,18 @@ first person only in the owner's own voice, otherwise the narration presents the
 `.wav` that Qwen3-TTS clones). A clone of the owner's voice never leaves the machine. Each clip is
 synthesised once and kept as it comes (see Decisions).
 
+#### The demo directory
+
+Demos go into the demo directory, each into a directory of its own: `~/demos` unless the demo
+settings name another (`directory` in `demo.json`, „Verzeichnis“ at the top of the dialog's Demos
+section, which shows the path that applies). It is an absolute path or one from `~` (`~` is the
+user's home on every platform, so `~/demos` holds on Windows too); a relative one would land
+wherever the agent works, so it counts as none and the dialog says so. The skill reads it from the
+settings (`node lib/settings.ts` prints it), so a session without Obeya follows it as well; Obeya's
+brief names it for an HTML artifact. The demo directory is where demos are made, not where Obeya
+looks for them: a handover names its demo by its absolute path, and the card serves it from there
+wherever that is. A worker on a host puts its demos into the host's `~/demos` (see Hosts).
+
 #### Installing voices
 
 Obeya installs Piper and Qwen3-TTS on request from the configuration dialog, which first shows what
@@ -321,7 +333,7 @@ A handover without a demo is refused, unless the card has one from an earlier ha
 stands: whether to record a demo again after feedback is the worker's call. While the worker works
 again or waits on a question, the card shows the last demo without autoplay, with a hint that it is
 the last handover's and the agent is on the task again; sharing stays beside it. Demos stay in
-`~/demos/`, never in git; a pull request links a demo only once it is shared (see Sharing a demo).
+the demo directory, never in git; a pull request links a demo only once it is shared (see Sharing a demo).
 
 #### Watching the demo
 
@@ -434,6 +446,12 @@ translate or install, the first-fullscreen hint), which would catch taps meant f
 - **A playback keeps the recorded pace except across the take's cuts** (2026-10-22): the scenes then
   find the agents where the recorded take found them (the worker still at work when the video looks
   in), and what was cut costs no time.
+- **The demo directory is a demo setting of the machine** (2026-10-26), in `demo.json` beside the
+  voice: it is a local path of one computer (`/opt/work/demos` on one, nothing on another), and the
+  skill already reads those settings without Obeya. Rejected: a repository setting (a path of the
+  owner's machine in a file every colleague checks out); an environment variable (the skill run by
+  hand would not see it, and the dialog could not show it); a symlink at `~/demos` (what users
+  asked to be spared, and not without admin rights on Windows).
 - **Every worker gets the plugin** (2026-10-08), not only those of a repository with demo settings,
   which otherwise had no way to the skill that writes them.
 - **Demos do not listen back to their narration** (2026-10-15). Rejected: transcribing each clip and

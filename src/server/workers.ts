@@ -10,6 +10,7 @@ import { MESSAGES, type Messages, type Pause } from '../core/messages';
 import { realpathSync } from 'node:fs';
 import { basename, isAbsolute } from 'node:path';
 import { type CardFile, docImages, fileKind, isImage, normalPath, shownFiles } from '../core/files';
+import { DEFAULT_DEMO_DIRECTORY } from '../../plugin/skills/demo/lib/settings.ts';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
 import { answering, askable, type Awaited, AWAITED_STATES, awaited, type BackgroundTask, pausable, type WorkerTurn, type CardLanding, type DemoKind, type DemoPage, finished, formatQuestion, handedOver, type Item, type TaskAuthor, taskAuthor, type Mock, ownWords, pickedAnswer, type Question, type RepoSettings, type RestartReason, type Snooze, SNOOZE_LIMIT, type Spot, type Superseded, type SpotInput, started } from '../core/types';
 import { BadRequest, type Board, replyNote, type Retracted, type StoredDemo, titleKey } from './board';
@@ -94,6 +95,8 @@ export interface WorkerOptions {
   env?: Record<string, string>;
   /** The narration language of the demo settings, for a repository that names none for its demos; the conversation language when left out. */
   demoLanguage?: () => Language;
+  /** The directory demos go into on this machine (the demo settings'); `~/demos` when left out. */
+  demoDirectory?: () => string;
   /** A card's work ended (landed, closed without a change, a prototype discarded or built): its runs can be read now. */
   onWorkEnded?: (cardId: string, workspace: string | null) => void;
   /** Passes on to the Koordinator what the owner's words to a card's worker ask of Obeya (`to_obeya`); without it the worker has no such tool. */
@@ -3223,6 +3226,11 @@ ${folder ? '- Others work in the same folder at the same time: leave what your c
     return this.o.imageFiles?.(card.images) ?? [];
   }
 
+  /** Where the card's worker puts its demos: the demo settings' directory, on another machine that machine's default (the settings stay here). */
+  private demosDir(cardId: string): string {
+    return remote(this.o.board.row(cardId).workspace) ? DEFAULT_DEMO_DIRECTORY : (this.o.demoDirectory?.() ?? DEFAULT_DEMO_DIRECTORY);
+  }
+
   /**
    * The demo skill as a worker hears of it: by its name in the session and, for a session that
    * does not know it, by its file, on the machine the card's workspace is on.
@@ -3295,7 +3303,7 @@ ${idea.idea.brief}` : '',
       [
         `Then show the owner the result with a demo, so they can judge at a glance whether the work is done, and hand it over with ready_for_review.`,
         `Usually that is a video of the change, recorded with ${this.demoSkill(card.id)} as its instructions say (directory, chapter titles). Its length follows the size of the change, never padded: 30–60 s for a small one (a fix: the broken behaviour, then the fixed one), 1½–3 min for a larger one. Skip the skill's last steps (opening the page, the notification, the chat reply): Obeya shows the demo on the card.${this.shares ? ' The owner may share the demo, a video or an HTML artifact, with colleagues of the team on a page of its own: hand it over with that page (title, text), written for them.' : ''} ${run?.trim() ? 'Run the app for it as the recipe above says.' : "The repository's settings say nothing yet about how to run the app: find it out from the repository (README, scripts, configuration) and say in your summary how you ran it."}`,
-        "When the result is something to look at rather than something that happens (drafts of a logo or a layout side by side, a comparison of variants, an analysis, an answer), make an HTML artifact instead: an index.html in a new directory under ~/demos/ (never in git), self-contained or with the files it loads beside it, made for the owner to decide on, and hand it over with kind 'html'. It shows in a sandboxed frame on the card, about 800 px wide, without Obeya's API.",
+        `When the result is something to look at rather than something that happens (drafts of a logo or a layout side by side, a comparison of variants, an analysis, an answer), make an HTML artifact instead: an index.html in a new directory under ${this.demosDir(card.id)} (never in git), self-contained or with the files it loads beside it, made for the owner to decide on, and hand it over with kind 'html'. It shows in a sandboxed frame on the card, about 800 px wide, without Obeya's API.`,
         'Where either would do, record the video: watching the work happen is what the owner enjoys most.',
         "Where the work itself is a file for the owner (a document, a report, a spreadsheet in the repository), name it in ready_for_review's files: the card shows it beside the demo.",
       ].join(' '),
@@ -3316,7 +3324,7 @@ ${idea.idea.brief}` : '',
     parts.push(
       [
         'Then hand it over with ready_for_review: your summary says what you did and what the owner needs to know, and its files name the files that are the result for the owner (a document, a report, a spreadsheet), which the card shows first. The card shows the owner what you changed in the folder, file by file (added, changed, moved, deleted, with the changed lines of text files), and they may discard those changes before approving.',
-        `A demo is needed only where something can be seen: a draft or an overview to look at as an HTML artifact (an index.html in a new directory under ~/demos/, outside the folder, self-contained or with the files it loads beside it, made for the owner to decide on), handed over with kind 'html'; something that happens on screen as a video, recorded with ${this.demoSkill(cardId)}.`,
+        `A demo is needed only where something can be seen: a draft or an overview to look at as an HTML artifact (an index.html in a new directory under ${this.demosDir(cardId)}, outside the folder, self-contained or with the files it loads beside it, made for the owner to decide on), handed over with kind 'html'; something that happens on screen as a video, recorded with ${this.demoSkill(cardId)}.`,
       ].join(' '),
     );
     return parts.join('\n\n');

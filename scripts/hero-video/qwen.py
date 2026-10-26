@@ -10,7 +10,7 @@ Obeya installs for Qwen3-TTS (the settings sheet does that):
     ~/.obeya/voices/qwen3/env/bin/python scripts/hero-video/qwen.py
 
 Writes `narration-qwen.wav` and `hero-qwen.mp4` into `qwen-vergleich/` beside the video
-(`HERO_OUT`, else `~/demos/obeya-hero`), with `hero-elevenlabs.mp4` as the original to compare.
+(`HERO_OUT`, else `obeya-hero` in the demo directory), with `hero-elevenlabs.mp4` as the original to compare.
 """
 
 from __future__ import annotations
@@ -34,6 +34,17 @@ import qwen3  # noqa: E402
 MODEL = "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16"
 RATE = 24000
 LOUDNESS = "loudnorm=I=-16:TP=-1.5"  # as the demo's mix in `director.ts`
+
+
+def demo_directory() -> Path:
+    """Where demos go: `directory` of the demo settings (`demo.json` in Obeya's home), else `~/demos`."""
+    try:
+        home = Path(os.environ.get("OBEYA_HOME") or Path.home() / ".obeya")
+        given = json.loads((home / "demo.json").read_text()).get("directory", "")
+    except (OSError, ValueError):
+        given = ""
+    path = Path(given.strip()).expanduser() if isinstance(given, str) and given.strip() else Path()
+    return path if path.is_absolute() else Path.home() / "demos"
 
 
 def main_checkout() -> Path:
@@ -66,7 +77,7 @@ def starts(track: np.ndarray, clips: list[np.ndarray]) -> list[int]:
 
 
 def main() -> None:
-    hero = Path(os.environ.get("HERO_OUT", Path.home() / "demos" / "obeya-hero"))
+    hero = Path(os.environ.get("HERO_OUT") or demo_directory() / "obeya-hero")
     reference = main_checkout() / ".voice" / "qwen-reference-en.wav"
     if not reference.exists():
         sys.exit(f"no reference at {reference}")

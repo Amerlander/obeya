@@ -177,12 +177,14 @@ describe('a session on a host', () => {
     expect(copies()).toBe(before);
   });
 
-  test("the owner's demo settings go there with the voice references as paths here, without a key file", () => {
+  test("the owner's demo settings go there with the voice references as paths here, without a key file or the demo directory", () => {
     mkdirSync(join(dir, 'home'), { recursive: true });
-    writeFileSync(join(dir, 'home', 'demo.json'), JSON.stringify({ language: 'de', voice: 'qwen3', references: { de: '~/voice/me.wav', en: '/voice/me-en.wav' }, keyFile: '~/.voice/key' }));
+    writeFileSync(join(dir, 'home', 'demo.json'), JSON.stringify({ language: 'de', voice: 'qwen3', references: { de: '~/voice/me.wav', en: '/voice/me-en.wav' }, keyFile: '~/.voice/key', directory: '/opt/work/demos' }));
     const settings = JSON.parse(sessionFiles(join(dir, 'home'), []).files!['demo.json']!()!);
     expect(settings.references).toEqual({ de: join(homedir(), 'voice', 'me.wav'), en: '/voice/me-en.wav' });
     expect(settings.keyFile).toBeUndefined();
+    // a path of this machine: demos on the host go into its own ~/demos
+    expect(settings.directory).toBeUndefined();
   });
 });
 

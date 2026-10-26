@@ -61,8 +61,9 @@ into the lexicon and listen to a clip of it in Piper first.
 
 The skill also runs in a plain Claude Code session: link it as a user skill
 (`~/.claude/skills/demo` pointing to `plugin/skills/demo` in an Obeya checkout, after `bun install`
-there). Its settings are `demo.json` in `~/.obeya` (or `OBEYA_HOME`); `node
-plugin/skills/demo/lib/settings.ts` prints what applies.
+there). Its settings are `demo.json` in `~/.obeya` (or `OBEYA_HOME`), the directory demos go into
+among them (`directory`, else `~/demos`); `node plugin/skills/demo/lib/settings.ts` prints what
+applies.
 
 ## Not tried yet
 

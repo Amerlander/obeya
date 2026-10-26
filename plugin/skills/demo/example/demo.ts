@@ -1,6 +1,6 @@
-// A model demo script. A real one lives in its own directory under ~/demos/ and imports the
-// director by its absolute path in the skill directory; this one sits inside the skill, so it
-// imports it relatively. Typecheck only: it is not run.
+// A model demo script. A real one lives in its own directory in the demo directory (`~/demos` unless the
+// demo settings name another) and imports the director by its absolute path in the skill directory; this
+// one sits inside the skill, so it imports it relatively. Typecheck only: it is not run.
 import { runDemo, type Director } from '../lib/director.ts';
 
 const URL = 'http://127.0.0.1:3000/';

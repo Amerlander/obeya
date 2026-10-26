@@ -46,7 +46,8 @@ render stops with why, once the agents' instructions or Obeya's tools have chang
 recording; a changed sentence the agents hear (the spoken command, the dictation, the comments) needs
 a recorded run too, since the recorded agents act on the old words. Then record anew.
 
-The output goes to `~/demos/obeya-hero/` (`HERO_OUT` names another): `demo.mp4`, `captions.vtt`,
+The output goes to `obeya-hero/` in the demo directory (`~/demos` unless the demo settings name
+another; `HERO_OUT` names another output): `demo.mp4`, `captions.vtt`,
 `chapters.vtt` (the scenes, which the site lists under the video),
 `review/` with a still from the middle and the end of each scene, and `index.html`. Clips are
 cached by voice and text, so a re-render after a visual change costs no credits. The scratch

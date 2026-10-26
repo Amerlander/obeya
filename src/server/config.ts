@@ -15,7 +15,9 @@ import { settingsShape, withoutGone as goneSettings } from '../adapters/schema';
 import { LANGUAGES } from '../core/locale';
 import { blocksSaving, type CanvasConfig, type DemoSite, type ConfigChecked, type ConfigProblem, type ConfigSaved, type ConfigView, type RepoSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type SettingsShared, type SharedSettings, type DemoSettingsProblem, type DemoSettingsView, type DemoVoiceCheck, type ResolvedCanvas, type VoiceInstallJob, layerSettings, type ProposedSetting, type RepoTrust, type RepoValues, settingPatch, commandLines } from '../core/types';
 import {
+  absoluteDirectory,
   DEMO_SETTINGS_FILE,
+  demoDirectory,
   type DemoSettings,
   expandHome,
   narrationPerson,
@@ -249,6 +251,7 @@ const demoShape = z
     // the one clip of a draft kept in the dialog from before `references`: `tidyDemoSettings` takes it as its language's
     reference: z.string().optional(),
     keyFile: z.string().optional(),
+    directory: z.string().optional(),
   })
   .strict();
 
@@ -681,7 +684,14 @@ export class Config {
   }
 
   private voiceCheck(s: DemoSettings): DemoVoiceCheck {
-    return { person: narrationPerson(s), problems: demoSettingsProblems(s), clips: clipProblems(s), install: installState(s, this.o.server.home) };
+    return {
+      person: narrationPerson(s),
+      problems: demoSettingsProblems(s),
+      clips: clipProblems(s),
+      install: installState(s, this.o.server.home),
+      directory: demoDirectory(s),
+      ...(s.directory && !absoluteDirectory(s.directory) ? { directoryRelative: true } : {}),
+    };
   }
 
   /** A voice as the owner is choosing it, before it is saved. */

@@ -112,8 +112,10 @@ supplement beside the earlier demo on the same page, and a demo recorded afresh 
 
 ## 4. Write the demo script
 
-Create `~/demos/<repo-dir>-<slug>/demo.ts` (model: the newest demo of the same repository under
-`~/demos/`, else `${CLAUDE_SKILL_DIR}/example/demo.ts`). It imports `runDemo` from
+Demos go into the demo directory of the demo settings (`~/demos` unless they name another):
+`node ${CLAUDE_SKILL_DIR}/lib/settings.ts` prints it as `directory`; `<demos>` below stands for it.
+Create `<demos>/<repo-dir>-<slug>/demo.ts` (model: the newest demo of the same repository in
+`<demos>`, else `${CLAUDE_SKILL_DIR}/example/demo.ts`). It imports `runDemo` from
 `${CLAUDE_SKILL_DIR}/lib/director.ts` and defines:
 
 - `login` (unrecorded) and `open` (the opening shot, unrecorded),
@@ -177,10 +179,10 @@ goes on screen with `showImage`, since a `goto` to another origin and back broke
 ## 5. Render
 
 ```bash
-cd ~/demos/<repo-dir>-<slug> && node demo.ts --narration       # only the narration, cached
-cd ~/demos/<repo-dir>-<slug> && node demo.ts --dry              # only the scenes, no video
-cd ~/demos/<repo-dir>-<slug> && node demo.ts                    # the voice of the settings
-cd ~/demos/<repo-dir>-<slug> && DEMO_VOICE=say node demo.ts     # another voice, into say/
+cd <demos>/<repo-dir>-<slug> && node demo.ts --narration       # only the narration, cached
+cd <demos>/<repo-dir>-<slug> && node demo.ts --dry              # only the scenes, no video
+cd <demos>/<repo-dir>-<slug> && node demo.ts                    # the voice of the settings
+cd <demos>/<repo-dir>-<slug> && DEMO_VOICE=say node demo.ts     # another voice, into say/
 ```
 
 Start the narration as soon as the `say` texts are written, while you still script the scenes

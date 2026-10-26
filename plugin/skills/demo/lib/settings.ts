@@ -1,5 +1,5 @@
 // The demo settings: in which language a demo is narrated and by which voice, so the person it
-// speaks in follows. Obeya's settings sheet edits them; they live in `demo.json` under Obeya's home
+// speaks in follows, and the directory demos go into. Obeya's settings sheet edits them; they live in `demo.json` under Obeya's home
 // (`OBEYA_HOME`, else `~/.obeya`), where a session without Obeya finds them as well. Missing
 // entries take the defaults; the language without one is the owner's conversation language. A
 // repository may name the language of its own demos (`demo.language` of its `.obeya/settings.json`):
@@ -53,10 +53,13 @@ export interface DemoSettings {
   references?: Partial<Record<NarrationLanguage, string>>;
   /** A service's API key, in a file; the service's environment variable takes precedence. */
   keyFile?: string;
+  /** Where demos go, each into a directory of its own: an absolute path or one from `~`; `DEFAULT_DEMO_DIRECTORY` when left out. */
+  directory?: string;
 }
 
 export const DEFAULT_DEMO_SETTINGS: DemoSettings = { language: 'de', voice: 'piper' };
 export const DEMO_SETTINGS_FILE = 'demo.json';
+export const DEFAULT_DEMO_DIRECTORY = '~/demos';
 
 /** Obeya's home, where its settings live. */
 export function obeyaHome(): string {
@@ -65,7 +68,15 @@ export function obeyaHome(): string {
 
 export const expandHome = (p: string) => p.replace(/^~(?=$|[\\/])/, os.homedir());
 
-const TEXT_FIELDS = ['command', 'url', 'voiceName', 'keyFile'] as const;
+/** Whether a demo directory names a place of its own: absolute, or from `~`; a relative one would land wherever the agent works. */
+export const absoluteDirectory = (dir: string) => path.isAbsolute(expandHome(dir));
+
+/** The directory demos go into on this machine: the settings', else `~/demos`; one that is not absolute counts as not set. */
+export function demoDirectory(s: Pick<DemoSettings, 'directory'> = readDemoSettings()): string {
+  return path.resolve(expandHome(s.directory && absoluteDirectory(s.directory) ? s.directory : DEFAULT_DEMO_DIRECTORY));
+}
+
+const TEXT_FIELDS = ['command', 'url', 'voiceName', 'keyFile', 'directory'] as const;
 
 /**
  * Keeps what is a valid setting, drops the rest; trims texts and leaves out empty ones. The one clip
@@ -182,6 +193,7 @@ export function describeDemoSettings(saved: DemoSettings, override: string | und
       : `person: third — the voice is not the owner's, so the narration presents the work without "I" or "we" ("The card now shows …")`,
     `voice: ${s.voice}${s.voiceName ? ` (${s.voiceName})` : ''}${clip ? ` (clone of ${clip})` : ''}`,
     `from: ${path.join(obeyaHome(), DEMO_SETTINGS_FILE)}${override ? ' (voice from DEMO_VOICE)' : ''}`,
+    `directory: ${demoDirectory(saved)} — every demo goes into a directory of its own in it`,
   ].join('\n');
 }
 

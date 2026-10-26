@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describeDemoSettings, inLanguage, narrationPerson, readDemoSettings, referenceOf, repositoryLanguage, tidyDemoSettings, withVoice, writeDemoSettings } from './settings.ts';
+import { demoDirectory, describeDemoSettings, inLanguage, narrationPerson, readDemoSettings, referenceOf, repositoryLanguage, tidyDemoSettings, withVoice, writeDemoSettings } from './settings.ts';
 
 let home: string;
 beforeEach(() => (home = mkdtempSync(join(tmpdir(), 'obeya-demo-settings-'))));
@@ -32,6 +32,18 @@ describe('demo settings', () => {
   test('are written to and read from the home', () => {
     writeDemoSettings({ language: 'en', voice: 'command', command: 'speak', ownVoice: true }, home);
     expect(readDemoSettings(home)).toEqual({ language: 'en', voice: 'command', command: 'speak', ownVoice: true });
+  });
+
+  test('name the directory demos go into: absolute or from ~, else ~/demos', () => {
+    const demos = join(home, 'work', 'demos');
+    writeDemoSettings({ language: 'en', voice: 'piper', directory: ` ${demos} ` }, home);
+    expect(readDemoSettings(home).directory).toBe(demos);
+    expect(demoDirectory(readDemoSettings(home))).toBe(demos);
+    expect(demoDirectory({})).toBe(join(homedir(), 'demos'));
+    expect(demoDirectory({ directory: '~/work/demos' })).toBe(join(homedir(), 'work', 'demos'));
+    // a relative path would land wherever the agent works
+    expect(demoDirectory({ directory: 'demos' })).toBe(join(homedir(), 'demos'));
+    expect(describeDemoSettings({ language: 'en', voice: 'piper', directory: demos }, undefined)).toContain(`directory: ${demos}`);
   });
 
   test('hold a clip to clone per language; a file with one clip has it for its language', () => {

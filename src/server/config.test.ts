@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { blocksSaving, type CanvasConfig, type ConfigView, type DemoSettingsView, type LanguageView } from '../core/types';
@@ -649,6 +649,12 @@ describe('the configuration over HTTP', () => {
     // a draft the dialog kept from before names one clip: that of its language
     const old = await call('POST', '/api/demo-settings/check', { language: 'en', voice: 'qwen3', reference: join(dir, 'me.wav') });
     expect(old.body).toMatchObject({ clips: { en: 'referenceMissing' } });
+    // the directory demos go into: the one that applies, and a relative one, which would land wherever the agent works
+    expect(before.check).toMatchObject({ directory: join(homedir(), 'demos') });
+    const demos = join(dir, 'demos');
+    expect((await call('PUT', '/api/demo-settings', { language: 'en', voice: 'piper', directory: demos })).body).toMatchObject({ settings: { directory: demos }, check: { directory: demos } });
+    const relative = (await call('POST', '/api/demo-settings/check', { language: 'en', voice: 'piper', directory: 'demos' })).body as unknown as DemoSettingsView['check'];
+    expect(relative).toMatchObject({ directory: join(homedir(), 'demos'), directoryRelative: true });
     expect(restarts).toBe(0);
   });
 
