@@ -49,6 +49,7 @@ export function moved(keys: string[], key: string, places: number): string[] {
 export function landing(mids: number[], from: number, top: number, bottom: number, reach: Reach): number {
   let to = from;
   while (to < mids.length - 1 && to - from < reach.later && bottom > mids[to + 1]!) to++;
+  if (to > from) return to;
   while (to > 0 && from - to < reach.earlier && top < mids[to - 1]!) to--;
   return to;
 }
@@ -67,8 +68,12 @@ export function useSortable(keys: string[], o: Options) {
   const dragged = useRef(false);
   const stop = useRef<() => void>(undefined);
 
-  // the list changed under a drag (a card came or went): the places measured no longer hold
-  useEffect(() => () => stop.current?.(), [joined]);
+  // the list changed under a drag (a card came or went): the places measured no longer hold; a drop
+  // the keys now hold, or one overtaken by another change, is no longer to be shown
+  useEffect(() => {
+    if (pending && pending.of !== joined) setPending(undefined);
+    return () => stop.current?.();
+  }, [joined]);
 
   const begin = (key: string, e: ReactPointerEvent, now: boolean) => {
     // a drop not yet in the keys given: the reach is of the order before it
@@ -127,16 +132,20 @@ export function useSortable(keys: string[], o: Options) {
       update();
       if (!frame) frame = requestAnimationFrame(tick);
     };
-    const end = (drop: boolean) => {
+    const end = (drop: boolean, released = true) => {
       removeEventListener('pointermove', onMove);
       removeEventListener('pointerup', onUp);
       removeEventListener('pointercancel', onCancel);
+      scroller?.removeEventListener('scroll', onScroll);
       cancelAnimationFrame(frame);
       document.documentElement.classList.remove('sorting');
       stop.current = undefined;
-      // the click that follows the pointer's release, if any, comes before this
+      // the click that follows the pointer's release, if any, comes before this; a drag broken off
+      // while the pointer is still down waits for its release
       dragged.current = started;
-      setTimeout(() => (dragged.current = false));
+      const done = () => setTimeout(() => (dragged.current = false));
+      if (released) done();
+      else addEventListener('pointerup', done, { once: true });
       const places = at.current?.places;
       at.current = undefined;
       setDrag(undefined);
@@ -146,10 +155,13 @@ export function useSortable(keys: string[], o: Options) {
     };
     const onUp = (ev: PointerEvent) => ev.pointerId === e.pointerId && end(started);
     const onCancel = (ev: PointerEvent) => ev.pointerId === e.pointerId && end(false);
+    // scrolled by a wheel while the pointer stands: other rows are under it now
+    const onScroll = () => started && update();
     addEventListener('pointermove', onMove, { passive: false });
     addEventListener('pointerup', onUp);
     addEventListener('pointercancel', onCancel);
-    stop.current = () => end(false);
+    scroller?.addEventListener('scroll', onScroll);
+    stop.current = () => end(false, false);
     if (now) {
       document.documentElement.classList.add('sorting');
       update();
@@ -171,6 +183,8 @@ export function useSortable(keys: string[], o: Options) {
   return {
     /** The keys in the order to show. */
     order,
+    /** Breaks a drag off, as when the list closes under it. */
+    cancel: () => stop.current?.(),
     drag: drag && { key: drag.key, places: drag.places, held: drag.held },
     /** Spread on each row. */
     row: (key: string) => ({

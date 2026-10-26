@@ -51,6 +51,10 @@ export function QueuePill({ items, onOpen }: { items: Item[]; onOpen: (i: Item) 
     },
   );
   useMenuClose(open, box, () => setOpen(false), true);
+  // the list closed under a drag: the row is not dropped anywhere
+  useEffect(() => {
+    if (!open) sort.cancel();
+  }, [open]);
   return (
     <div className="menu-pill queue" ref={box}>
       <button className={open ? 'pill kpill on' : 'pill kpill'} title={t.queue.count(queued.length)} aria-expanded={open} onClick={() => setOpen(!open)}>

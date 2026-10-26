@@ -21,5 +21,7 @@ describe('sortable', () => {
     expect(at(2, -40)).toBe(0);
     expect(at(1, 40, { earlier: 1, later: 1 })).toBe(2);
     expect(at(3, -60, { earlier: 0, later: 0 })).toBe(3);
+    // a tall row moved down past a short one, its top still above the short one's middle
+    expect(landing([50, 110], 0, 20, 120, { earlier: 0, later: 1 })).toBe(1);
   });
 });
