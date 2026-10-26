@@ -622,7 +622,9 @@ describe('Koordinator waits for a free workspace', () => {
     await scope(['src/b.ts']);
     expect(item(b.id)).toMatchObject({ state: 'planned', queue: { workspace: 'slots' } });
     expect(board.events(b.id).at(-1)!.text).toContain('Kein Slot frei');
-    expect(workspaces.pool(workers.inTurn())).toEqual([{ name: HERE, here: true, worktrees: true, slots: 1, total: 1, cards: [a.id], busy: [a.id] }]);
+    expect(workspaces.pool(workers.inTurn())).toEqual([
+      { name: HERE, here: true, worktrees: true, slots: 1, total: 1, cards: [a.id], busy: [a.id], workspaces: [{ path: expect.any(String), card: a.id }] },
+    ]);
 
     // A asks the owner: its worktree stays its own, its slot is free
     await workerOf(a.id).call('ask', { question: 'Welche Farbe?' });

@@ -524,10 +524,36 @@ export function OldBunPill({ version }: { version: string }) {
 /**
  * Each repository's pool by machine: a dot per clone (solid while its card's worker is at work,
  * pale while the card holds it otherwise, orange while free but blocked), or per slot of a
- * repository in worktrees, and how many new cards could start now; over it, each machine's slots,
- * the cards that hold its clones, and why a blocked clone goes to no card and what to do about it.
+ * repository in worktrees, and how many new cards could start now. Hovering or clicking it drops
+ * down each machine's slots and each of its workspaces by path with the card in it, which opens
+ * the card (`onOpen`; `onElsewhere` one on another canvas), and why a blocked clone goes to no card
+ * and what to do about it. `inline`
+ * (the phone): the list unfolds below the pill on a tap instead of over the canvas on hover.
  */
-export function WorkspacesPill({ pools, canvas, items }: { pools: ClonePool[]; canvas: CanvasInfo; items: Item[] }) {
+export function WorkspacesPill({ pools, canvas, canvases, items, onOpen, onElsewhere, inline }: {
+  pools: ClonePool[];
+  canvas: CanvasInfo;
+  canvases: CanvasInfo[];
+  items: Item[];
+  onOpen: (i: Item) => void;
+  onElsewhere: (canvas: string, card: string) => void;
+  inline?: boolean;
+}) {
+  // open by a click (a tap) until one elsewhere or Escape; shut after a card is opened from it, until the pointer leaves
+  const [open, setOpen] = useState(false);
+  const [shut, setShut] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open || inline) return;
+    const away = (e: PointerEvent) => ref.current?.contains(e.target as Node) || setOpen(false);
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    addEventListener('pointerdown', away, true);
+    addEventListener('keydown', esc);
+    return () => {
+      removeEventListener('pointerdown', away, true);
+      removeEventListener('keydown', esc);
+    };
+  }, [open, inline]);
   const several = pools.length > 1;
   const name = (repo: string) => canvas.repos.find((r) => r.id === repo)?.name ?? repo;
   const forWorkspace = items.filter((i) => (i.queue && 'workspace' in i.queue && i.queue.workspace !== 'slots') || i.waitsForClone).length;
@@ -541,30 +567,43 @@ export function WorkspacesPill({ pools, canvas, items }: { pools: ClonePool[]; c
   const full = pools.every((p) => free(p) === 0);
   // the machines a pool names: those with clones or a clone's folder kept, and every other machine than this one
   const named = (p: ClonePool) => p.hosts.filter((h) => h.total > 0 || !h.here || h.kept?.length);
+  const opened = (go: () => void) => {
+    setOpen(false);
+    setShut(true);
+    go();
+  };
   return (
-    <div className={full ? 'pill workspaces full' : 'pill workspaces'} id="workspaces">
-      <span className="lbl">{t.workspaces.label}</span>
-      {pools.map((p) => {
-        const hosts = named(p);
-        return (
-          <span key={p.repo} className="pool">
-            {several && <span className="hint">{name(p.repo)}</span>}
-            {hosts.map((h) => (
-              <span key={h.name} className="host">
-                {hosts.length > 1 && <span className="hint">{h.name}</span>}
-                <span className="slots" aria-hidden>
-                  {Array.from({ length: h.total }, (_, i) => (
-                    <i key={i} className={i < h.busy.length ? 'on' : i < h.cards.length ? 'held' : i < h.cards.length + blocked(h) ? 'blocked' : undefined} />
-                  ))}
+    <div
+      ref={ref}
+      className={['pill workspaces', full && 'full', open && 'open', shut && 'shut', inline && 'inline'].filter(Boolean).join(' ')}
+      id={inline ? undefined : 'workspaces'}
+      onPointerLeave={() => setShut(false)}
+    >
+      <button className="face" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <span className="lbl">{t.workspaces.label}</span>
+        {pools.map((p) => {
+          const hosts = named(p);
+          return (
+            <span key={p.repo} className="pool">
+              {several && <span className="hint">{name(p.repo)}</span>}
+              {hosts.map((h) => (
+                <span key={h.name} className="host">
+                  {hosts.length > 1 && <span className="hint">{h.name}</span>}
+                  <span className="slots" aria-hidden>
+                    {Array.from({ length: h.total }, (_, i) => (
+                      <i key={i} className={i < h.busy.length ? 'on' : i < h.cards.length ? 'held' : i < h.cards.length + blocked(h) ? 'blocked' : undefined} />
+                    ))}
+                  </span>
                 </span>
-              </span>
-            ))}
-            <b>{t.workspaces.free(free(p), total(p), blockedIn(p))}</b>
-            {blockedIn(p) > 0 && <b className="warn">{t.workspaces.blockedCount(blockedIn(p))}</b>}
-          </span>
-        );
-      })}
-      <div className="tip" role="tooltip">
+              ))}
+              <b>{t.workspaces.free(free(p), total(p), blockedIn(p))}</b>
+              {blockedIn(p) > 0 && <b className="warn">{t.workspaces.blockedCount(blockedIn(p))}</b>}
+            </span>
+          );
+        })}
+        <span className="hint drop">▾</span>
+      </button>
+      <div className="tip" role="dialog" aria-label={t.workspaces.label}>
         {pools.map((p) => (
           <div key={p.repo}>
             {several && (
@@ -574,20 +613,12 @@ export function WorkspacesPill({ pools, canvas, items }: { pools: ClonePool[]; c
             )}
             {named(p).map((h) => (
               <div key={h.name}>
-                <p>{h.worktrees ? t.workspaces.worktreeSlots(h.name, h.busy.length, h.slots) : t.workspaces.host(h.name, h.busy.length, h.slots, h.cards.length, h.total)}</p>
-                {h.cards.length > 0 && (
-                  <ul>
-                    {[...h.busy, ...h.cards.filter((c) => !h.busy.includes(c))].map((id) => {
-                      const item = items.find((i) => i.id === id);
-                      return (
-                        <li key={id}>
-                          {item ? plain(item.title) : <span className="hint">{t.workspaces.offCanvas}</span>}
-                          {h.busy.includes(id) && <span className="hint"> · {t.workspaces.atWork}</span>}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
+                <p>
+                  {h.worktrees
+                    ? t.workspaces.worktreeSlots(h.name, h.busy.length, h.slots, h.workspaces.length > 0)
+                    : t.workspaces.host(h.name, h.busy.length, h.slots, h.cards.length, h.total)}
+                </p>
+                {h.workspaces.length > 0 && <WorkspaceRows host={h} items={items} canvases={canvases} onOpen={(i) => opened(() => onOpen(i))} onElsewhere={(c, card) => opened(() => onElsewhere(c, card))} />}
                 {h.kept?.map((path) => (
                   <p key={path} className="hint">
                     {t.workspaces.kept(path)}
@@ -602,6 +633,59 @@ export function WorkspacesPill({ pools, canvas, items }: { pools: ClonePool[]; c
         {forSlot > 0 && <p>{t.workspaces.waitingSlot(forSlot)}</p>}
       </div>
     </div>
+  );
+}
+
+/**
+ * A machine's workspaces, one per line: the dot the pill shows for it, its path (cut at the front
+ * where it is too long, so its end stays), and the card in it, which opens on a click; or that it
+ * is free, or blocked.
+ */
+function WorkspaceRows({ host, items, canvases, onOpen, onElsewhere }: {
+  host: PoolHost;
+  items: Item[];
+  canvases: CanvasInfo[];
+  onOpen: (i: Item) => void;
+  onElsewhere: (canvas: string, card: string) => void;
+}) {
+  const blocked = new Set(host.blocked?.map((b) => b.path));
+  return (
+    <ul className="ws-list">
+      {host.workspaces.map((w) => {
+        const item = w.card && !w.canvas ? items.find((i) => i.id === w.card) : undefined;
+        const busy = !!w.card && host.busy.includes(w.card);
+        const state = busy ? 'on' : w.card ? 'held' : blocked.has(w.path) ? 'blocked' : 'free';
+        const there = w.canvas && canvases.find((c) => c.id === w.canvas);
+        return (
+          <li key={w.path} className={state}>
+            <i aria-hidden />
+            <span className="ws-path" title={w.path}>
+              {/* the mark keeps the path's leading slash at its start in the right-to-left box that cuts it at the front */}
+              {'\u200e' + w.path}
+            </span>
+            <span className="ws-card">
+              {item ? (
+                <a className="from" onClick={() => onOpen(item)}>
+                  {plain(item.title)}
+                </a>
+              ) : w.card && there ? (
+                <>
+                  <a className="from" onClick={() => onElsewhere(there.id, w.card!)}>
+                    {plain(w.title ?? '')}
+                  </a>
+                  <span className="hint"> · {t.workspaces.onCanvas(there.name)}</span>
+                </>
+              ) : w.card ? (
+                <span className="hint">{w.title ? t.workspaces.notOnCanvas(plain(w.title)) : t.workspaces.offCanvas}</span>
+              ) : (
+                <span className={state === 'blocked' ? 'warn' : 'hint'}>{state === 'blocked' ? t.workspaces.blockedRow : t.workspaces.freeRow}</span>
+              )}
+              {busy && <span className="hint"> · {t.workspaces.atWork}</span>}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

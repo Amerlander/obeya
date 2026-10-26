@@ -819,10 +819,12 @@ export class Workspaces implements CardWorkspaces {
    * The pool by machine for the Workspaces pill, `busy` the cards whose worker is in a turn. Worktrees
    * are never short, so their pool is this machine's slots, each taken while a worker is at work.
    * `kept`: the folders of clones Obeya made that left the pool and stay since something in them would be lost.
-   * `blocked`: the free clones no new card gets now, and why.
+   * `blocked`: the free clones no new card gets now, and why. `workspaces`: each clone or worktree
+   * by its path there, with the card that holds it.
    */
   pool(busy: string[]): PoolHost[] {
     const all = this.list();
+    const held = (ws: { path: string; card_id: string | null }[]) => ws.map((w) => ({ path: pathThere(w.path), ...(w.card_id ? { card: w.card_id } : {}) }));
     const keptOn = (host: string | null) => {
       const paths = [...kept.keys()].filter((p) => hostName(p) === host && this.made(p)).map(pathThere);
       return paths.length ? { kept: paths } : {};
@@ -830,7 +832,7 @@ export class Workspaces implements CardWorkspaces {
     if (this.o.mode === 'worktrees') {
       const slots = this.slots(null);
       const cards = all.flatMap((w) => (w.card_id && busy.includes(w.card_id) ? [w.card_id] : []));
-      return [{ name: HERE, here: true, worktrees: true, slots, total: slots, cards, busy: cards, ...keptOn(null) }];
+      return [{ name: HERE, here: true, worktrees: true, slots, total: slots, cards, busy: cards, workspaces: held(all), ...keptOn(null) }];
     }
     return this.machines().map((host) => {
       const ws = all.filter((w) => hostName(w.path) === host);
@@ -844,6 +846,7 @@ export class Workspaces implements CardWorkspaces {
         total: ws.length,
         cards,
         busy: cards.filter((c) => busy.includes(c)),
+        workspaces: held(ws),
         ...keptOn(host),
         ...(blocked.length ? { blocked } : {}),
       };

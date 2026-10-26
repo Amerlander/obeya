@@ -1509,8 +1509,19 @@ export class Board {
     this.changed();
   }
 
+  /** The pools, each workspace a card holds with the card's title, also of a card not on the canvas, and the canvas of one on another. */
   private clonePools(): ClonePool[] {
-    return this.pools?.() ?? [];
+    return (this.pools?.() ?? []).map((p) => ({
+      ...p,
+      hosts: p.hosts.map((h) => ({
+        ...h,
+        workspaces: h.workspaces.map((w) => {
+          const row = w.card ? this.store.card(w.card) : null;
+          if (!row) return w;
+          return { ...w, ...(row.title ? { title: row.title } : {}), ...(row.canvas_id !== this.canvas.id ? { canvas: row.canvas_id } : {}) };
+        }),
+      })),
+    }));
   }
 
   /** The outdated pages, archived cards' included, and the run sharing them again. */

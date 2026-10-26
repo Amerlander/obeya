@@ -258,8 +258,8 @@ describe('clones on a host', () => {
     expect(() => workers.start(c)).toThrow(expect.objectContaining({ code: 'noSlot' }));
     expect(spaces.leasable()).toBe(false);
     expect(spaces.pool(workers.inTurn())).toEqual([
-      { name: HERE, here: true, slots: 1, total: 2, cards: [a], busy: [a] },
-      { name, slots: 1, total: 2, cards: [b], busy: [b] },
+      { name: HERE, here: true, slots: 1, total: 2, cards: [a], busy: [a], workspaces: [{ path: join(dir, 'ws', '1'), card: a }, { path: join(dir, 'ws', '2') }] },
+      { name, slots: 1, total: 2, cards: [b], busy: [b], workspaces: [{ path: join(dir, 'far', '1'), card: b }, { path: join(dir, 'far', '2') }] },
     ]);
     // A asks the owner and holds its clone, but no slot
     const sa = runtime.sessions.find((s) => s.spec.cwd === board.row(a).workspace)!;

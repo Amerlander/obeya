@@ -265,24 +265,47 @@ button.pill:hover { box-shadow: var(--lift); }
 @keyframes pulse-in { 0% { box-shadow: 0 0 0 0 rgba(var(--waiting-rgb),.55); } 70%, 100% { box-shadow: 0 0 0 10px rgba(var(--waiting-rgb),0); } }
 .canvas-menu a { position: relative; padding-right: 40px; }
 .canvas-menu a .waits { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); }
-.pill.workspaces { position: relative; cursor: default; }
+.pill.workspaces { position: relative; padding: 0; }
+#bar .pill.workspaces { padding: 0; }
+.pill.workspaces .face { display: flex; align-items: center; gap: 8px; height: 100%; padding: 7px 14px; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; border-radius: inherit; }
+.pill.workspaces:hover, .pill.workspaces.open { box-shadow: var(--lift); }
 .pill.workspaces .pool { display: flex; align-items: center; gap: 6px; }
 .pill.workspaces .slots { display: flex; gap: 3px; }
-.pill.workspaces .slots i { width: 8px; height: 8px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--planned); }
+.pill.workspaces :is(.slots i, .ws-list i) { width: 8px; height: 8px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--planned); }
 .pill.workspaces .host { display: flex; align-items: center; gap: 5px; }
-.pill.workspaces .slots i.held { background: color-mix(in srgb, var(--working) 35%, transparent); box-shadow: none; }
-.pill.workspaces .slots i.on { background: var(--working); box-shadow: none; }
-.pill.workspaces.full b, .pill.workspaces b.warn { color: var(--waiting); }
-.pill.workspaces .slots i.blocked { background: var(--waiting); box-shadow: none; }
-.pill.workspaces .tip p.warn { color: var(--warn); overflow-wrap: anywhere; }
-.pill.workspaces .tip { display: none; position: absolute; top: calc(100% + 8px); right: 0; width: 380px; padding: 10px 14px; border-radius: 3px;
+.pill.workspaces :is(.slots i.held, .ws-list .held i) { background: color-mix(in srgb, var(--working) 35%, transparent); box-shadow: none; }
+.pill.workspaces :is(.slots i.on, .ws-list .on i) { background: var(--working); box-shadow: none; }
+.pill.workspaces.full .face b, .pill.workspaces b.warn { color: var(--waiting); }
+.pill.workspaces :is(.slots i.blocked, .ws-list .blocked i) { background: var(--waiting); box-shadow: none; }
+.pill.workspaces .tip :is(p.warn, span.warn) { color: var(--warn); overflow-wrap: anywhere; }
+.pill.workspaces .tip { display: none; position: absolute; top: calc(100% + 8px); right: 0; width: 440px; max-height: calc(100vh - 90px); overflow-y: auto;
+  padding: 10px 14px; border-radius: 3px; box-sizing: border-box;
   background: var(--panel); color: var(--ink); box-shadow: var(--lift); white-space: normal; font-size: 13px; font-weight: 400; line-height: 1.45;
-  text-align: left; pointer-events: none; z-index: 30; }
+  text-align: left; z-index: 30; cursor: default; }
+/* the gap between the pill and the list holds the hover, so the pointer gets from one to the other */
+.pill.workspaces:not(.inline)::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 10px; }
+.ph-pools { display: grid; gap: 10px; }
+.ph-pools .ph-where { margin: 4px 0 -4px; color: var(--muted); font-size: 13px; }
 .pill.workspaces .tip p { margin: 0 0 6px; }
-.pill.workspaces .tip ul { margin: 0 0 6px; padding-left: 18px; }
 .pill.workspaces .tip > :last-child, .pill.workspaces .tip > div:last-child > :last-child,
   .pill.workspaces .tip > div:last-child > div:last-child > :last-child { margin-bottom: 0; }
-.pill.workspaces:hover .tip { display: block; }
+.pill.workspaces:not(.inline):not(.shut):hover .tip, .pill.workspaces.open .tip { display: block; }
+/* a workspace per line: its dot, its path cut at the front where too long (its end matters most), and the card in it below */
+.pill.workspaces .ws-list { list-style: none; margin: 0 0 8px; padding: 0; }
+.pill.workspaces .ws-list li { display: grid; grid-template-columns: 8px minmax(0, 1fr); column-gap: 8px; align-items: center; padding: 3px 0; }
+.pill.workspaces .ws-list li > i { grid-row: 1; }
+.pill.workspaces .ws-path { grid-column: 2; font: 12px/1.4 var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  direction: rtl; text-align: left; }
+.pill.workspaces .ws-card { grid-column: 2; overflow-wrap: anywhere; }
+.pill.workspaces .ws-card .from { color: var(--ink); cursor: pointer; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 2px; }
+.pill.workspaces .ws-card .from:hover { text-decoration-color: currentColor; }
+/* on the phone the list unfolds below the pill, the screen's width */
+.pill.workspaces.inline { display: block; width: 100%; box-sizing: border-box; white-space: normal; }
+.pill.workspaces.inline .face { width: 100%; height: auto; flex-wrap: wrap; padding: 10px 14px; text-align: left; }
+/* the section's heading names it */
+.pill.workspaces.inline .lbl { display: none; }
+.pill.workspaces.inline .drop { margin-left: auto; }
+.pill.workspaces.inline .tip { position: static; width: auto; max-height: none; box-shadow: none; background: none; padding: 0 14px 12px; font-size: 14px; }
 #bar > svg { flex: none; margin-right: 4px; }
 #bar .right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
 /* the traffic lights of the app's window on a Mac sit at the bar's left */

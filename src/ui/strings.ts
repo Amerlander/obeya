@@ -1566,9 +1566,17 @@ const de = {
     /** Beside how many are free: the free clones no new card gets now. */
     blockedCount: (n: number) => `· ${n} blockiert`,
     host: (name: string, busy: number, slots: number, taken: number, total: number) =>
-      `${name}: ${busy} von ${slots} ${slots === 1 ? 'Slot' : 'Slots'} in Arbeit, ${taken} von ${total} ${total === 1 ? 'Klon' : 'Klonen'} belegt${taken ? ':' : '.'}`,
-    worktreeSlots: (name: string, busy: number, slots: number) => `${name}: ${busy} von ${slots} ${slots === 1 ? 'Slot' : 'Slots'} in Arbeit${busy ? ':' : '.'}`,
+      `${name}: ${busy} von ${slots} ${slots === 1 ? 'Slot' : 'Slots'} in Arbeit, ${taken} von ${total} ${total === 1 ? 'Klon' : 'Klonen'} belegt${total ? ':' : '.'}`,
+    /** `listed`: the cards' worktrees follow. */
+    worktreeSlots: (name: string, busy: number, slots: number, listed: boolean) => `${name}: ${busy} von ${slots} ${slots === 1 ? 'Slot' : 'Slots'} in Arbeit${listed ? ':' : '.'}`,
     offCanvas: 'eine Karte, die nicht auf der Leinwand liegt',
+    /** A card holding a workspace that is not on the canvas (in the archive, say). */
+    notOnCanvas: (title: string) => `${title} (nicht auf der Leinwand)`,
+    /** Beside a card holding a workspace that lies on another canvas. */
+    onCanvas: (canvas: string) => `auf ${canvas}`,
+    /** In the list of workspaces, for one no card holds. */
+    freeRow: 'frei',
+    blockedRow: 'blockiert',
     kept: (path: string) => `bleibt: nicht gelandete Arbeit in ${path}`,
     /** A free clone no new card gets now: why, and what the owner can do about it. */
     blocked: {
@@ -3215,9 +3223,13 @@ const en: Strings = {
     free: (n: number, total: number, blocked = 0) => (total === 0 ? 'none set up' : n > 0 ? `${n} free` : blocked ? 'none free' : 'all taken'),
     blockedCount: (n: number) => `· ${n} blocked`,
     host: (name: string, busy: number, slots: number, taken: number, total: number) =>
-      `${name}: ${busy} of ${slots} ${slots === 1 ? 'slot' : 'slots'} at work, ${taken} of ${total} ${total === 1 ? 'clone' : 'clones'} taken${taken ? ':' : '.'}`,
-    worktreeSlots: (name: string, busy: number, slots: number) => `${name}: ${busy} of ${slots} ${slots === 1 ? 'slot' : 'slots'} at work${busy ? ':' : '.'}`,
+      `${name}: ${busy} of ${slots} ${slots === 1 ? 'slot' : 'slots'} at work, ${taken} of ${total} ${total === 1 ? 'clone' : 'clones'} taken${total ? ':' : '.'}`,
+    worktreeSlots: (name: string, busy: number, slots: number, listed: boolean) => `${name}: ${busy} of ${slots} ${slots === 1 ? 'slot' : 'slots'} at work${listed ? ':' : '.'}`,
     offCanvas: 'a card that is not on the canvas',
+    notOnCanvas: (title: string) => `${title} (not on the canvas)`,
+    onCanvas: (canvas: string) => `on ${canvas}`,
+    freeRow: 'free',
+    blockedRow: 'blocked',
     kept: (path: string) => `stays: work not landed in ${path}`,
     blocked: {
       dirty: (path: string, files: string[], more: number) =>

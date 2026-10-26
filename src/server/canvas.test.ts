@@ -111,8 +111,10 @@ describe('a canvas with several repositories', () => {
     expect(await canvas.diff(c.id, false)).toMatchObject({ source: 'landed', files: [{ file: 'export.ts', status: 'added', added: 1, removed: 0 }] });
   });
 
-  test("the snapshot counts each repository's clones by machine, the cards that hold one and those at work", async () => {
-    const here = (cards: string[], busy: string[]) => ({ hosts: [{ name: HERE, here: true, slots: 1, total: 1, cards, busy }] });
+  test("the snapshot counts each repository's clones by machine, the cards that hold one and those at work, and lists each clone with its card", async () => {
+    const here = (cards: string[], busy: string[]) => ({
+      hosts: [{ name: HERE, here: true, slots: 1, total: 1, cards, busy, workspaces: [{ path: expect.any(String), ...(cards[0] ? { card: cards[0], title: 'Andere' } : {}) }] }],
+    });
     expect(canvas.board.snapshot().workspaces).toEqual([
       { repo: 'web', ...here([], []) },
       { repo: 'api', ...here([], []) },

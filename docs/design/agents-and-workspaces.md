@@ -84,7 +84,7 @@ detached HEAD with commits on no branch of `origin` (fetched with pruning) unles
 change is as on `origin`'s main branch, so a branch squashed or rebased in its pull request counts as
 landed (where work lands on the local main, `origin` is the Obeya checkout). The folder is moved
 aside first, so a clone named again meanwhile (here or by another canvas) is never removed under a
-card. Otherwise it stays: the log says once what lies in it, the pool's tooltip shows „bleibt: nicht
+card. Otherwise it stays: the log says once what lies in it, the pool's list shows „bleibt: nicht
 gelandete Arbeit in <Pfad>“, and a later start looks again; raising the number takes it back as it
 is. Clones the owner listed, and folders on a host no longer configured, are never touched. A
 workspace on this machine whose folder is gone (moved or deleted by hand) and that the configuration
@@ -138,14 +138,23 @@ meanwhile waits for it.
 For each repository in clones the top bar shows the pool („Workspaces“): per machine (named once
 there is more than one) a dot per clone, solid while its card's worker is at work, pale while merely
 held, orange while free but blocked, and how many new cards could start („2 frei“, „alle belegt“,
-„keiner frei · 1 blockiert“). Its tooltip lists each machine's slots at work and clones taken, the
-cards holding one, and how many cards wait for a workspace or a slot. A repository in worktrees
-shows a dot per slot, and none without slots (no pill if all are so).
+„keiner frei · 1 blockiert“). Hovering or clicking it drops down a list: per machine its slots at
+work and clones taken, then each workspace on a line of its own, free ones included, with its path
+(cut at the front where too long, so its end stays readable), the dot the pill shows for it, and
+the card in it, „frei“ or „blockiert“; then how many cards wait for a workspace or a slot. The card
+is a link: a click closes the list, flies to the card and opens it; for a card on another canvas
+the page switches to that canvas (`?c=<canvas>&card=<id>`, which opens the named card once the
+canvas has loaded). A card not on any canvas (archived, say) shows by its title without a link. A
+repository in worktrees shows a dot per slot, and none without slots (no pill if all are so); its
+list names the cards' worktrees.
+
+The phone view has the same pill per canvas in a section „Workspaces“ below „Läuft“; a tap unfolds
+the same list below it, the screen's width, and a card in it opens as from any list there.
 
 A free clone is blocked when the last look at it (see Workspaces) says no new card gets it: it has
-uncommitted or untracked changes (the tooltip names the first five files), git fails in it, its
+uncommitted or untracked changes (the list names the first five files), git fails in it, its
 folder is missing, its machine does not answer over SSH (one line per machine), or git failed making
-it ready for a card in the last minute. Blocked clones do not count as free, and the tooltip says in
+it ready for a card in the last minute. Blocked clones do not count as free, and the list says in
 orange, per clone, why and what puts it right: commit or discard the changes; repair it, or delete
 a clone Obeya made, which its next start makes again; clone it again or take the path out of the
 configuration; check the network and SSH access. Showing the pool looks again, in the background,
@@ -324,6 +333,11 @@ a container say, reuses pids). A host needs git, Claude Code and what the reposi
   uncommitted changes counted as free in the pill while cards waited for one, with nothing saying
   why; the card's own line („Die freien Workspaces haben nicht committete Änderungen“) named
   neither the clone nor the files.
+- **The pool lists each workspace with its path and card** (2026-10-26, GitHub issue #10): a summary
+  of counts and titles did not say which folder a card works in, nor which clone is free, and gave
+  no way to the card. A click opens the list as well as hovering, so its links can be reached and it
+  works by touch. Rejected: a path cut at its end (the clone's number and the repository are at the
+  end).
 - **Free clones are chosen by their last look, the one taken looked at again** (2026-10-21): in a
   large repository (GitHub issue #2: 9,188 files, on Windows) or over SSH, `git status` in every free
   clone at each look held the server, on every canvas. Rejected: asking git while choosing; a start

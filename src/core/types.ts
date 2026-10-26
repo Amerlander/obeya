@@ -868,6 +868,18 @@ export interface PoolHost {
   kept?: string[];
   /** Its free clones no new card gets now, by their last look; none when every free clone can be taken. */
   blocked?: BlockedClone[];
+  /** Each of its clones (free ones too), or worktrees, by path there and with the card that holds it. */
+  workspaces: PoolWorkspace[];
+}
+
+/** A clone or worktree in the pool: its path on its machine, the card holding it (`card`, `title`). */
+export interface PoolWorkspace {
+  path: string;
+  card?: string;
+  /** The holding card's title, also for a card not on the canvas (in the archive, say). */
+  title?: string;
+  /** The canvas of a holding card that lies on another canvas than the pool's. */
+  canvas?: string;
 }
 
 /**
