@@ -137,6 +137,8 @@ function splitItem(text: string): { label?: string; note?: string; title: string
     const m = LABEL.exec(bold);
     const label = m?.[1];
     const inBold = trimPunct(m ? m[3]! : bold);
+    // a pull request's number alone is no title: the text after it goes with it
+    if (inBold && isReference(inBold)) return { label, note: m?.[2], ...cutTitle(`${(m ? m[3]! : bold).trim()} ${after}`) };
     if (inBold) return { label, note: m?.[2], title: inBold, rest: stripLead(after) };
     return { label, note: m?.[2], ...cutTitle(after) };
   }
@@ -155,6 +157,7 @@ export function cutTitle(text: string): { title: string; rest: string } {
       from = at + 1;
       if (at < 3 || inCode(text, at)) continue;
       if (sep === '. ' && isAbbreviation(text.slice(0, at))) continue;
+      if (isReference(text.slice(0, at))) continue;
       if (best < 0 || at < best) {
         best = at;
         sepLen = sep.length;
@@ -176,6 +179,10 @@ function isAbbreviation(before: string): boolean {
   const word = before.slice(before.lastIndexOf(' ') + 1);
   return word.length <= 2 || /^(bzw|ca|vs|e\.g|i\.e|inkl|ggf|usw|etc|Nr|Abs|Art)$/i.test(word);
 }
+
+/** A pull request or issue by its number (`#12`, `PR #12`, `(#12)`, `!12`, a link on one), as an agent puts it before what it did. */
+const isReference = (text: string): boolean =>
+  /^\(?(?:(?:PR|MR|pull request|issue)\s+)?(?:[#!]\d+|\[(?:(?:PR|MR)\s+)?[#!]\d+\]\([^)\s]+\))\)?$/i.test(text.trim());
 
 const trimPunct = (s: string) => s.trim().replace(/[\s:.;,—–-]+$/, '').trim();
 const stripLead = (s: string) => s.replace(/^[\s:.;,—–-]+/, '').trim();

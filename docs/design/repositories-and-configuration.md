@@ -66,7 +66,10 @@ thing to read meanwhile, may be on a card's branch.
 ### Plan docs
 
 A doc in the repository's plan directory (`planDocs`) is a project when its `## Workstreams` section
-has a checklist; each top-level item is a workstream (`**W3:** Title. Details`). Checked means
+has a checklist; each top-level item is a workstream (`**W3:** Title. Details`). A pull request's
+number before the text (`**W3:** #27. Title. Details`, as a worker may tick it off) stays part of the
+title instead of becoming all of it, so the tile and the sheet still say what the workstream is
+(issue #12, 2026-10-26). Checked means
 `live`, `(in review)` after the label `in PR`, anything else `planned`. The goal is the first
 paragraph under `## Goal` / `## Ziel`. Obeya reads plan docs and never writes them; workers tick off
 their workstream in the doc as part of their change. A plan card is stored when first seen, so the

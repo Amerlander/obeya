@@ -60,6 +60,28 @@ describe('parsePlanDoc', () => {
   });
 
 
+  test('a workstream whose text starts with its pull request keeps its text in the title', () => {
+    const items = [
+      '**W2:** #3. Description of the workstream as before. More details.',
+      '**W2:** #12. Description of the workstream as before. More details.',
+      '**W2:** #128 — Description of the workstream as before. More details.',
+      '**W2:** PR #12: Description of the workstream as before. More details.',
+      '**W2:** (#12) Description of the workstream as before. More details.',
+      '**W2:** [#12](https://example.com/pull/12). Description of the workstream as before. More details.',
+      '**W2: #12.** Description of the workstream as before. More details.',
+    ];
+    const titles = items.map((i) => (parsePlanDoc('a.md', `# A\n\n## Workstreams\n\n- [x] ${i}\n`) as PlanDoc).workstreams[0]!);
+    expect(titles.map((w) => [w.title, w.body])).toEqual([
+      ['#3. Description of the workstream as before', 'More details.'],
+      ['#12. Description of the workstream as before', 'More details.'],
+      ['#128 — Description of the workstream as before', 'More details.'],
+      ['PR #12: Description of the workstream as before', 'More details.'],
+      ['(#12) Description of the workstream as before', 'More details.'],
+      ['[#12](https://example.com/pull/12). Description of the workstream as before', 'More details.'],
+      ['#12. Description of the workstream as before', 'More details.'],
+    ]);
+  });
+
   test('German section names', () => {
     const d = parsePlanDoc('b.md', '# Kadenz\n\n## Ziel\n\nRegeln statt Fallarbeit.\n\n## Workstreams\n\n- [x] **W9:** Prüflauf. Täglich um 05:00.\n') as PlanDoc;
     expect(d.goal).toBe('Regeln statt Fallarbeit.');
