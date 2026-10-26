@@ -55,8 +55,9 @@ if (install) {
   Object.assign(env, {
     // compiled in (option_env! in app/src/main.rs and update.rs): started from the desktop, the shell gets no environment of ours
     OBEYA_BUILT_CHECKOUT: ROOT,
-    // the PATH's bun (Homebrew's link, say) rather than the binary it points at, which an upgrade removes
-    OBEYA_BUILT_BUN: Bun.which('bun') ?? process.execPath,
+    // the one the installed shell names when it builds itself anew (started from the desktop, its PATH
+    // has none), else the PATH's (Homebrew's link, say) rather than the binary it points at, which an upgrade removes
+    OBEYA_BUILT_BUN: process.env.OBEYA_BUN || Bun.which('bun') || process.execPath,
     OBEYA_BUILT_TREE: git('rev-parse', 'HEAD:app'),
     // for the settings, which show it
     OBEYA_BUILT_COMMIT: git('rev-parse', 'HEAD'),

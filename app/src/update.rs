@@ -103,9 +103,12 @@ fn rebuild(checkout: &Path, built: &str, home: &Path, updates: &Updates) {
     if let Some(tree) = tree(checkout).filter(|t| *t != last) {
       last = tree;
       let log = home.join("app-build.log");
-      let mut cmd = Command::new(crate::bun());
+      let bun = crate::bun();
+      let mut cmd = Command::new(&bun);
       cmd
         .arg(checkout.join("scripts").join("app.ts"))
+        // compiled into the new build in turn
+        .env("OBEYA_BUN", &bun)
         .args(["install", "--no-open"])
         .current_dir(checkout)
         .stdin(Stdio::null());
