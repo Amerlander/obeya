@@ -21,6 +21,8 @@ let sharing: Sharing;
 /** The descriptions of the fake forge's pull requests, and each edit Obeya made. */
 let bodies: Map<string, string>;
 let edits: string[];
+/** What the workers heard of each page that went out, or did not. */
+let settled: [string, { url: string } | { why: string }][];
 
 /** A page in the site's manifest, as far as the tests look at it. */
 interface Entry {
@@ -83,6 +85,7 @@ beforeEach(() => {
   runtime = new FakeRuntime();
   bodies = new Map();
   edits = [];
+  settled = [];
   sharing = make();
 });
 afterEach(() => {
@@ -98,6 +101,7 @@ function make(repo = dir) {
     sourceFor: (card) => (card.title.startsWith('Ohne') ? null : { site: site(), repo }),
     // the repository names English for its demos (`demo.language`) on cards so titled
     languageFor: (card) => (card.title.startsWith('In English') ? 'en' : undefined),
+    onPage: (id, r) => void settled.push([id, r]),
   });
 }
 
@@ -747,6 +751,23 @@ describe('publishing on approval', () => {
     await until(() => share(c.id)?.state === 'shared' && on(c.id)[0] === 2);
     expect(on(c.id)).toEqual([2]);
     expect(calls()).toHaveLength(2);
+  });
+
+  test('the workers hear where the page is once it is online, or why it is not', async () => {
+    const c = card();
+    writeFileSync(join(dir, 'hold'), '');
+    sharing.approved(c.id);
+    await Bun.sleep(50);
+    expect(settled).toEqual([]);
+    rmSync(join(dir, 'hold'));
+    await until(() => share(c.id)?.state === 'shared');
+    expect(settled).toEqual([[c.id, { url: `${SITE_URL}${slug(c.id)}/` }]]);
+    const d = card('Filter bleiben');
+    writeFileSync(join(dir, 'fail'), '');
+    sharing.approved(d.id);
+    await until(() => settled.length === 2);
+    expect(settled[1]![0]).toBe(d.id);
+    expect((settled[1]![1] as { why: string }).why).toBeTruthy();
   });
 
   test('a failed deploy goes into the log; the trailer still names the page', async () => {

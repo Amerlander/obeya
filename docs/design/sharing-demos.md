@@ -113,6 +113,19 @@ for an artifact; „Demo video:“/„Demo page:“ in English), replacing its o
 marker. A page shared before the PR existed is republished with the PR's link, as it showed then; a PR
 reported while the page is going out gets a second round after it. A failure goes into the card's log; the page stays shared. Withdrawing leaves the line.
 
+#### The page and the landing
+
+The message telling a worker its work landed, its PR merged, or its work closed without a change
+names the demo's page: its URL once it is online, or that the page shows an earlier demo. A page
+still going out says Obeya will send the address: the session stays past the end of the turn, and
+once the deploy finishes Obeya sends the URL, or the failure's reason with "ask the owner for a
+link". If the deploy finished while Obeya was down, the worker hears where the page stands at the
+end of its next turn. Without a demo site, or with the demo not shared, the message says so and
+tells the worker to ask the owner before pointing anyone to the demo, so an issue is not closed
+without a link (CLAUDE.md asks workers to link the demo when they close one). The URL is known
+before the deploy (the trailer uses it), but a link given then would point to a page that is not
+there yet, or never will be if the deploy fails (decided 2026-10-26).
+
 #### Publishing on approval
 
 A site may publish every approved demo by itself (`demo.site.publish: "approved"`, a choice in

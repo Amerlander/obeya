@@ -347,6 +347,125 @@ describe('the landed commit names the demo’s page', () => {
   });
 });
 
+describe('the landing message names the demo’s page', () => {
+  const URL_ = 'https://demos.example.dev/zahlerstande-exportieren-1/';
+  /** Whether the repository has a demo site; on approval, the page goes out (`publishing`) unless `share` says otherwise. */
+  let site: boolean;
+  let onApproval: (id: string) => void;
+  function withSite(adapter: Parameters<typeof setup>[0] = { ...generic, land: 'main', workspaces: 'clones' }) {
+    rmSync(dir, { recursive: true, force: true });
+    setup(adapter);
+    site = true;
+    onApproval = (id) => board.work(id, { share: JSON.stringify({ slug: 's', state: 'publishing', next: [{ dir: demoDir(id) }] }) });
+    setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter, shares: () => site, onApproval: (id) => (onApproval(id), null) }));
+  }
+  async function handedOver(commit = true) {
+    const c = manual();
+    await workers.start(c.id);
+    const clone = board.row(c.id).workspace!;
+    if (commit) {
+      writeFileSync(join(clone, 'x.ts'), 'x');
+      git(clone, 'add', '.');
+      git(clone, 'commit', '--quiet', '-m', 'X');
+    }
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: { ...artifact(), page: { title: 'CSV export', text: 'Meter readings download as CSV.' } } });
+    runtime.last.emit({ type: 'idle' });
+    return c;
+  }
+  const demoDir = (id: string) => (JSON.parse(board.row(id).demo!) as { dir: string }).dir;
+  /** The page went out, as the demo site tells it. */
+  function published(id: string) {
+    const dir = demoDir(id);
+    board.work(id, { share: JSON.stringify({ slug: 's', url: URL_, demos: [{ dir, shown: { title: 'T', text: 'T', chapters: [], kind: 'html' } }] }) });
+    workers.pageSettled(id, { url: URL_ });
+  }
+
+  test('a page still going out when the work lands: the worker waits, and hears its address once it is online', async () => {
+    withSite();
+    const c = await handedOver();
+    const session = runtime.last;
+    await workers.approve(c.id);
+    expect(state(c.id)).toBe('live');
+    expect(session.inbox.at(-1)).toContain('is on main now');
+    expect(session.inbox.at(-1)).toContain('Obeya tells you its address once it is online');
+    // the turn ends before the page is online: the session stays for it
+    session.emit({ type: 'idle' });
+    expect(session.closed).toBe(false);
+    expect(board.row(c.id).workspace).toBeTruthy();
+    published(c.id);
+    expect(session.inbox.at(-1)).toBe(`Your demo is online on a page of its own for the team: ${URL_}. Link it wherever you point people at this work (an issue you close, say).`);
+    // having heard it, its next turn's end finishes it
+    session.emit({ type: 'idle' });
+    expect(session.closed).toBe(true);
+    expect(board.row(c.id).landed).toBeNull();
+  });
+
+  test('a page that does not go out: the worker hears why, and asks the owner for a link', async () => {
+    withSite();
+    const c = await handedOver();
+    const session = runtime.last;
+    await workers.approve(c.id);
+    board.work(c.id, { share: JSON.stringify({ slug: 's' }) });
+    workers.pageSettled(c.id, { why: 'upload refused: token expired' });
+    expect(session.inbox.at(-1)).toContain('did not go out (upload refused: token expired)');
+    expect(session.inbox.at(-1)).toContain('ask the owner for a link');
+  });
+
+  test('a page that went out while the worker did not hear of it: its turn’s end tells it', async () => {
+    withSite();
+    const c = await handedOver();
+    const session = runtime.last;
+    await workers.approve(c.id);
+    // the page went out while nobody told the workers (a restart in between, say)
+    board.work(c.id, { share: JSON.stringify({ slug: 's', url: URL_, demos: [{ dir: demoDir(c.id), shown: { title: 'T', text: 'T', chapters: [], kind: 'html' } }] }) });
+    session.emit({ type: 'idle' });
+    expect(session.inbox.at(-1)).toContain(`shared with the team on a page of its own: ${URL_}`);
+    expect(session.closed).toBe(false);
+  });
+
+  test('a page online already: the landing message names it, and the worker finishes with its turn', async () => {
+    withSite();
+    onApproval = (id) => published(id);
+    const c = await handedOver();
+    const session = runtime.last;
+    await workers.approve(c.id);
+    expect(session.inbox.at(-1)).toContain(`Your demo is shared with the team on a page of its own: ${URL_}. Link it`);
+    session.emit({ type: 'idle' });
+    expect(session.closed).toBe(true);
+  });
+
+  test('without a shared page, or without a demo site, the message says so: the worker asks before it links nothing', async () => {
+    withSite();
+    onApproval = () => {};
+    const c = await handedOver();
+    await workers.approve(c.id);
+    expect(runtime.last.inbox.at(-1)).toContain('Your demo is not shared on a page the team can open. Before you point anyone to your demo (an issue you close, say), ask the owner for a link.');
+    withSite();
+    site = false;
+    const d = await handedOver();
+    await workers.approve(d.id);
+    expect(runtime.last.inbox.at(-1)).toContain('This repository has no demo site');
+  });
+
+  test('work that changed nothing, and a pull request merged, name the page the same way', async () => {
+    withSite();
+    const c = await handedOver(false);
+    const session = runtime.last;
+    await workers.approve(c.id);
+    expect(state(c.id)).toBe('done');
+    expect(session.inbox.at(-1)).toContain('Obeya tells you its address once it is online');
+    published(c.id);
+    expect(session.inbox.at(-1)).toContain(URL_);
+
+    withSite({ ...generic, land: 'pr', workspaces: 'clones' });
+    onApproval = (id) => published(id);
+    const d = await handedOver();
+    await workers.approve(d.id);
+    workers.merged(d.id);
+    expect(runtime.last.inbox.at(-1)).toContain(`Your pull request was merged; the card is live.\n\nYour demo is shared with the team on a page of its own: ${URL_}.`);
+  });
+});
+
 describe('a prototype built on in a clone', () => {
   test('the idea takes over the clone and the branch, renamed; the clone is busy until it is done', async () => {
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' } }));

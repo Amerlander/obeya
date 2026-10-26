@@ -126,6 +126,8 @@ interface LandedState {
   restarts?: boolean;
   /** The worker waits for that restart. */
   waits?: boolean;
+  /** The card's demo is going out on its page: the worker waits to hear the page's address (`pageSettled`). */
+  page?: boolean;
   /** Not a landing: the owner asked about the finished card, and its worker was resumed to answer. */
   followUp?: boolean;
   /** The follow-up runs in a temporary worktree (`followUpTree`), no clone being free: it goes once the follow-up ends. */
@@ -1229,13 +1231,14 @@ export class Workers {
     this.bump(cardId);
     const restartFor = this.o.restartsFor?.(result, direct ? (row.workspace ?? undefined) : undefined) ?? false;
     const restarts = !!restartFor;
+    const page = this.pageNote(cardId);
     this.o.board.work(cardId, {
       state: 'live',
       need: null,
       detail: null,
       status_line: null,
       approved_at: null,
-      landed: JSON.stringify({ commit: result.to, ...(restarts ? { restarts } : {}) } satisfies LandedState),
+      landed: JSON.stringify({ commit: result.to, ...(restarts ? { restarts } : {}), ...(page.waits ? { page: true } : {}) } satisfies LandedState),
       shipped: JSON.stringify({ commit: result.to, base: result.from } satisfies Shipped),
     });
     const t = this.o.board.t.worker;
@@ -1253,6 +1256,7 @@ export class Workers {
           : restartFor === 'repo'
             ? `Your change moves where this repository's agents work: Obeya restarts them with it as soon as none of them is in the middle of a turn, you among them, which stops whatever you run then. ${AFTER_RESTART}`
             : '',
+        page.text,
         comments?.text ?? '',
         AFTER_LANDING,
       ]
@@ -1271,7 +1275,8 @@ export class Workers {
     // a demo, an analysis: what the approval was for goes public as any approved demo
     if (by === 'owner') this.o.onApproval?.(cardId);
     this.bump(cardId);
-    this.o.board.work(cardId, { state: 'done', need: null, detail: null, status_line: null, approved_at: null, pr: null, landed: JSON.stringify({ unchanged: true } satisfies LandedState) });
+    const page = by === 'owner' ? this.pageNote(cardId) : { text: '' };
+    this.o.board.work(cardId, { state: 'done', need: null, detail: null, status_line: null, approved_at: null, pr: null, landed: JSON.stringify({ unchanged: true, ...(page.waits ? { page: true } : {}) } satisfies LandedState) });
     const t = this.o.board.t.worker;
     const folder = !!this.folder?.changed(cardId).length;
     // what it changed in the folder stays: nothing of it is undone any more
@@ -1281,10 +1286,60 @@ export class Workers {
     if (by === 'owner')
       this.afterLanding(
         cardId,
-        `${folder ? 'The owner approved your work. Your changes stay in the folder as they are, and the card is done: they can no longer be undone from the card.' : 'The owner approved your work. It changed nothing in the repository, so nothing lands and there is no pull request: the card is done.'}${comments ? `\n\n${comments.text}` : ''}\n\n${this.folder ? AFTER_DONE : AFTER_LANDING}`,
+        [
+          folder ? 'The owner approved your work. Your changes stay in the folder as they are, and the card is done: they can no longer be undone from the card.' : 'The owner approved your work. It changed nothing in the repository, so nothing lands and there is no pull request: the card is done.',
+          page.text,
+          comments?.text ?? '',
+          this.folder ? AFTER_DONE : AFTER_LANDING,
+        ]
+          .filter(Boolean)
+          .join('\n\n'),
         comments?.images,
         true,
       );
+  }
+
+  /**
+   * What the worker of work that landed (or closed) hears about its demo's page, which it links
+   * wherever it points people at the work (an issue it closes, say), and whether it waits for that
+   * page to go out: Obeya tells it the address once the page is online (`pageSettled`). Without a
+   * page, it hears so, and asks the owner rather than leave the link out.
+   */
+  private pageNote(cardId: string): { text: string; waits?: boolean } {
+    const card = this.card(cardId);
+    if (!card.demo || card.prototypeOf) return { text: '' };
+    const ask = 'Before you point anyone to your demo (an issue you close, say), ask the owner for a link.';
+    if (!this.shares) return { text: `This repository has no demo site, so your demo is on no page the team can open. ${ask}` };
+    const s = card.share;
+    if (s?.state === 'publishing')
+      return { text: 'Your demo is going out on a page of its own for the team right now. Obeya tells you its address once it is online: wait for that before you link the demo anywhere (an issue you close, say).', waits: true };
+    if (s?.state === 'shared' && s.url)
+      return {
+        text: s.stale
+          ? `Your demo's page for the team shows an earlier demo of yours, not the latest: ${s.url}. Link it wherever you point people at this work (an issue you close, say), or ask the owner to share the latest first.`
+          : `Your demo is shared with the team on a page of its own: ${s.url}. Link it wherever you point people at this work (an issue you close, say).`,
+      };
+    return { text: `Your demo is not shared on a page the team can open. ${ask}` };
+  }
+
+  /**
+   * The card's demo page went out (`url`), or did not (`why`): landed work's worker that waits for
+   * it hears so, and its session ends once it has done what that leads to.
+   */
+  pageSettled(cardId: string, r?: { url: string } | { why: string }) {
+    if (!this.o.board.card(cardId)) return;
+    const l = landedOf(this.o.board.row(cardId));
+    if (!l?.page) return;
+    const { page: _, ...rest } = l;
+    this.o.board.work(cardId, { landed: JSON.stringify(rest satisfies LandedState) });
+    this.deliver(
+      cardId,
+      !r
+        ? this.pageNote(cardId).text
+        : 'url' in r
+          ? `Your demo is online on a page of its own for the team: ${r.url}. Link it wherever you point people at this work (an issue you close, say).`
+          : `Your demo's page did not go out (${r.why}); the owner sees why on the card. Before you point anyone to your demo (an issue you close, say), ask the owner for a link.`,
+    );
   }
 
   /**
@@ -1455,17 +1510,18 @@ export class Workers {
     const pr = this.o.board.row(cardId).pr;
     const { url, number } = pr ? (JSON.parse(pr) as PrState) : { url: null, number: undefined };
     const shipped: Shipped = { ...(commit ? { commit, base: `${commit}^` } : { fetch: true }), ...(url && number ? { pr: { url, number } } : {}) };
+    const page = this.pageNote(cardId);
     this.o.board.work(cardId, {
       state: 'live',
       need: null,
       detail: null,
       status_line: null,
-      landed: JSON.stringify((commit ? { commit } : {}) satisfies LandedState),
+      landed: JSON.stringify({ ...(commit ? { commit } : {}), ...(page.waits ? { page: true } : {}) } satisfies LandedState),
       shipped: JSON.stringify(shipped),
     });
     this.o.board.log(cardId, 'state', 'obeya', note);
     this.o.onMerged?.(cardId);
-    this.afterLanding(cardId, `Your pull request was merged; the card is live.\n\n${AFTER_LANDING}`);
+    this.afterLanding(cardId, ['Your pull request was merged; the card is live.', page.text, AFTER_LANDING].filter(Boolean).join('\n\n'));
   }
 
   /** Passes what happened on the pull request to the worker; the owner's log gets `note`. */
@@ -2290,8 +2346,13 @@ export class Workers {
     if (card.state === 'inPr' && card.pr) return;
     if (card.state !== 'working' && card.state !== 'inPr' && !landed) return;
     if (landed) {
-      // what remained after the landing is done, unless the worker waits for its question, the restart or the usage limit
+      // what remained after the landing is done, unless the worker waits for its question, the restart, its demo's page or the usage limit
       if (card.state === 'waiting' || landed.waits) return;
+      if (landed.page) {
+        // the page went out (or did not) without the worker hearing it (Obeya was not running, say): it hears now
+        if (card.share?.state !== 'publishing') this.pageSettled(cardId);
+        return;
+      }
       if (landed.needsClone) return this.awaitClone(cardId);
       // it paused for the restart, which resumes it with its workspace
       if (this.restart && live.toldRestart && !live.failed) return this.pausedForRestart(cardId, live);

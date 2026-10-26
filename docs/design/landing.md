@@ -109,7 +109,9 @@ conversation between the rounds. Bots' HTML is stripped except badge names (Grep
 
 The worker is told its work is on main (or its PR merged) and may finish what remains in its
 workspace (the card is `live`, „Live · Agent arbeitet“; notes, pause and „Stoppen“ work as usual).
-Ending a turn with nothing to wait for ends its session and frees the workspace. Work approved while
+Ending a turn with nothing to wait for ends its session and frees the workspace. That message (and
+the one for work closed without a change) also names the demo's page, which the worker links where it
+points people at the work, such as an issue it closes (see The page and the landing). Work approved while
 a reply's turn ends lands, and the landing notice starts a turn of its own: each message Obeya sends
 carries a uuid, checked against those the turn's result names as taken (the CLI also lists those
 taken mid-turn), and the session stays until the turn that took the last one ends.

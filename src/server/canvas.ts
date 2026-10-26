@@ -356,6 +356,10 @@ export class CanvasRuntime {
         return r?.site ? { site: r.site, repo: r.info.path } : null;
       },
       languageFor: (card) => (this.runs(card) ? this.repoOf(card).adapter.demo?.language : undefined),
+      onPage: (cardId, r) => {
+        const card = board.item(cardId);
+        if (card && this.runs(card)) this.repoOf(card).workers.pageSettled(cardId, r);
+      },
     });
     this.sharing.resume();
     // snoozed cards wake at their time: one that passed while Obeya was not running, or the machine slept, at once
