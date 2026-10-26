@@ -22,7 +22,7 @@ let sharing: Sharing;
 let bodies: Map<string, string>;
 let edits: string[];
 /** What the workers heard of each page that went out, or did not. */
-let settled: [string, { url: string } | { why: string }][];
+let settled: [string, ({ url: string } | { why: string })?][];
 
 /** A page in the site's manifest, as far as the tests look at it. */
 interface Entry {
@@ -768,6 +768,19 @@ describe('publishing on approval', () => {
     await until(() => settled.length === 2);
     expect(settled[1]![0]).toBe(d.id);
     expect((settled[1]![1] as { why: string }).why).toBeTruthy();
+  });
+
+  test('with a share under way, the workers hear of the page once the latest demo is on it, not before', async () => {
+    publish = undefined;
+    const c = card('Filter bleiben', { handover: 1 });
+    later(c.id, 2);
+    writeFileSync(join(dir, 'hold'), '');
+    sharing.share(c.id, { demo: 1 });
+    publish = 'approved';
+    sharing.approved(c.id);
+    rmSync(join(dir, 'hold'));
+    await until(() => share(c.id)?.state === 'shared' && on(c.id)[0] === 2);
+    expect(settled).toEqual([[c.id, { url: `${SITE_URL}${slug(c.id)}/` }]]);
   });
 
   test('a failed deploy goes into the log; the trailer still names the page', async () => {

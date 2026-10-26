@@ -447,6 +447,22 @@ describe('the landing message names the demo’s page', () => {
     expect(runtime.last.inbox.at(-1)).toContain('This repository has no demo site');
   });
 
+  test('work its worker closes as needing no pull request names the page in the tool’s result, and waits for it the same way', async () => {
+    withSite({ ...generic, land: 'pr', workspaces: 'clones' });
+    const c = await handedOver(false);
+    const session = runtime.last;
+    // the approval sees work (the commit is made after the handover), so it goes into a pull request
+    writeFileSync(join(board.row(c.id).workspace!, 'x.ts'), 'x');
+    await workers.approve(c.id);
+    expect(state(c.id)).toBe('inPr');
+    rmSync(join(board.row(c.id).workspace!, 'x.ts'));
+    expect(await session.call('close_unchanged', {})).toContain('Obeya tells you its address once it is online');
+    session.emit({ type: 'idle' });
+    expect(session.closed).toBe(false);
+    published(c.id);
+    expect(session.inbox.at(-1)).toContain(URL_);
+  });
+
   test('work that changed nothing, and a pull request merged, name the page the same way', async () => {
     withSite();
     const c = await handedOver(false);

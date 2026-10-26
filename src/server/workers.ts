@@ -1069,7 +1069,7 @@ export class Workers {
       return this.endPrototype(cardId, 'discarded');
     }
     // in a folder without git, what it changed is in the folder already
-    if (this.folder) return this.close(cardId, 'owner', this.approvalComments(cardId));
+    if (this.folder) return void this.close(cardId, 'owner', this.approvalComments(cardId));
     // git tells where the work lands and whether there is any, without blocking the server; the click ends the owner's turn meanwhile,
     // and the comments held back wait for the approval
     clearTimeout(this.holding.get(cardId));
@@ -1095,7 +1095,7 @@ export class Workers {
     }
     const comments = this.approvalComments(cardId);
     // work that changed nothing (a demo, an analysis) has nothing to land and no pull request to open
-    if (!work) return this.close(cardId, 'owner', comments);
+    if (!work) return void this.close(cardId, 'owner', comments);
     if (lands.land === 'main' || direct) return this.land(cardId, 'owner', comments);
     // the worker opens the PR the way the repository does it, then Obeya watches it
     const pr: PrState = { url: null, seen: [], reported: [] };
@@ -1269,20 +1269,21 @@ export class Workers {
 
   /**
    * Approved work that changed nothing in the repository: nothing lands, and the card is `done`.
-   * Its worker hears so and may finish what remains, as after a landing.
+   * Its worker hears so and may finish what remains, as after a landing. Returns what it hears of
+   * its demo's page.
    */
-  private close(cardId: string, by: 'owner' | 'worker', comments?: Comments) {
+  private close(cardId: string, by: 'owner' | 'worker', comments?: Comments): string {
     // a demo, an analysis: what the approval was for goes public as any approved demo
     if (by === 'owner') this.o.onApproval?.(cardId);
     this.bump(cardId);
-    const page = by === 'owner' ? this.pageNote(cardId) : { text: '' };
+    const page = this.pageNote(cardId);
     this.o.board.work(cardId, { state: 'done', need: null, detail: null, status_line: null, approved_at: null, pr: null, landed: JSON.stringify({ unchanged: true, ...(page.waits ? { page: true } : {}) } satisfies LandedState) });
     const t = this.o.board.t.worker;
     const folder = !!this.folder?.changed(cardId).length;
     // what it changed in the folder stays: nothing of it is undone any more
     this.folder?.done(cardId);
     this.o.board.log(cardId, 'state', by, by === 'owner' ? (folder ? t.approvedFolder : t.approvedUnchanged) : t.doneUnchanged);
-    // the worker that closed it is told by the tool's result, and its turn's end finishes it
+    // the worker that closed it is told by the tool's result, and its turn's end finishes it (unless it waits for its demo's page)
     if (by === 'owner')
       this.afterLanding(
         cardId,
@@ -1297,6 +1298,7 @@ export class Workers {
         comments?.images,
         true,
       );
+    return page.text;
   }
 
   /**
@@ -3045,8 +3047,8 @@ export class Workers {
           if (!row.approved_at && !(pr && !pr.url)) return 'Not recorded: only work the owner approved can be closed, and only before its pull request is open. Hand it over with ready_for_review first.';
           if (work)
             return 'Not recorded: your branch holds commits or uncommitted changes. Work that changes the repository lands (or goes out as a pull request); throw away what is not meant to land first, if nothing is.';
-          this.close(cardId, 'worker');
-          return `Recorded: the card is done. ${AFTER_LANDING}`;
+          const page = this.close(cardId, 'worker');
+          return [`Recorded: the card is done.`, page, AFTER_LANDING].filter(Boolean).join(' ');
         },
       },
       {

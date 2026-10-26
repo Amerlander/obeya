@@ -115,8 +115,11 @@ export interface SharingOptions {
   home: string;
   /** Where the card's pull request is, for the page's link in its description. */
   forge: Forge;
-  /** A page went out (`url`: where it is) or did not (`why`): landed work's worker may wait for its address. */
-  onPage?: (cardId: string, r: { url: string } | { why: string }) => void;
+  /**
+   * A page went out (`url`: where it is) or did not (`why`); without either, the page is at rest as
+   * the card's share says. Landed work's worker may wait for its address.
+   */
+  onPage?: (cardId: string, r?: { url: string } | { why: string }) => void;
 }
 
 /** A site's deploy that has not finished by then is stopped (an upload of a few files takes seconds). */
@@ -135,6 +138,8 @@ export class Sharing {
   private checked = 0;
   /** A page of the run sharing many again is waiting for its turn, or going out. */
   private resharing = false;
+  /** Cards whose latest demo goes on their page after the share under way: what that share settles is not the end. */
+  private after = new Set<string>();
 
   constructor(private o: SharingOptions) {}
 
@@ -187,7 +192,15 @@ export class Sharing {
       const s = this.stored(cardId);
       if (s?.notOnApproval) this.notOnPage(cardId);
       // a share under way (one the owner chose) goes out first; the latest demo after it
-      else if (s?.state === 'publishing') void serial(async () => this.onPage(cardId));
+      else if (s?.state === 'publishing') {
+        this.after.add(cardId);
+        void serial(async () => {
+          this.after.delete(cardId);
+          this.onPage(cardId);
+          // on the page already after all: the page is where it is
+          if (this.stored(cardId)?.state !== 'publishing') this.settled(cardId);
+        });
+      }
       else this.onPage(cardId);
     }
     // the page as it is about to be, or as it is
@@ -476,7 +489,7 @@ export class Sharing {
     const back = (why: string, out = '') => {
       this.set(cardId, atRest(s));
       this.o.board.log(cardId, 'error', 'obeya', [`${failed}: ${why}`, out].filter(Boolean).join('\n\n'));
-      this.o.onPage?.(cardId, { why });
+      this.settled(cardId, { why });
       return false;
     };
     const target = this.target(card);
@@ -488,7 +501,7 @@ export class Sharing {
         if (s.again) return back(t.demoGone);
         this.set(cardId, atRest(s));
         this.o.board.log(cardId, 'activity', 'obeya', t.linkLater);
-        this.o.onPage?.(cardId, s.url ? { url: s.url } : { why: t.noDemo });
+        this.settled(cardId, s.url ? { url: s.url } : { why: t.noDemo });
         return null;
       }
     } else {
@@ -527,7 +540,7 @@ export class Sharing {
     this.set(cardId, { slug: s.slug, url, demos, ...(pr ? { pr } : {}), version: pagesVersion(), ...kept(s) });
     if (r.said) this.o.board.log(cardId, 'activity', 'obeya', r.said);
     this.o.board.log(cardId, 'state', 'obeya', s.again ? t.sharedAgain(url) : s.refresh ? t.linksPr(url) : t.shared(url));
-    this.o.onPage?.(cardId, { url });
+    this.settled(cardId, { url });
     if (pr) await this.linkPr(cardId, pr, url, target.repo, first.shown.kind);
     // the pull request was opened while the page went out: once more, with its link
     const now = this.prOf(cardId);
@@ -780,6 +793,11 @@ export class Sharing {
     if (!this.find(cardId)) return null;
     const s = this.o.board.row(cardId).share;
     return s ? (JSON.parse(s) as StoredShare) : null;
+  }
+
+  /** The card's page is at rest: those waiting for it hear so, unless its latest demo goes out after it. */
+  private settled(cardId: string, r?: { url: string } | { why: string }) {
+    if (!this.after.has(cardId)) this.o.onPage?.(cardId, r);
   }
 
   private set(cardId: string, s: StoredShare) {

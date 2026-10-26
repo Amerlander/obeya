@@ -118,8 +118,9 @@ reported while the page is going out gets a second round after it. A failure goe
 The message telling a worker its work landed, its PR merged, or its work closed without a change
 names the demo's page: its URL once it is online, or that the page shows an earlier demo. A page
 still going out says Obeya will send the address: the session stays past the end of the turn, and
-once the deploy finishes Obeya sends the URL, or the failure's reason with "ask the owner for a
-link". If the deploy finished while Obeya was down, the worker hears where the page stands at the
+once the deploy that puts the latest demo on the page finishes (not one still under way before it)
+Obeya sends the URL, or the failure's reason with "ask the owner for a link". A worker that closes
+its card as needing no PR hears the same in the tool's result. If the deploy finished while Obeya was down, the worker hears where the page stands at the
 end of its next turn. Without a demo site, or with the demo not shared, the message says so and
 tells the worker to ask the owner before pointing anyone to the demo, so an issue is not closed
 without a link (CLAUDE.md asks workers to link the demo when they close one). The URL is known
