@@ -473,6 +473,9 @@ const de = {
     earlier: 'Früher',
     later: 'Später',
     place: (n: number, of: number) => `Platz ${n} von ${of} in der Warteschlange.`,
+    show: 'Warteschlange zeigen',
+    hide: 'Warteschlange ausblenden',
+    dragOwn: 'Diese Aufgabe am Griff an einen anderen Platz ziehen.',
     /** Why a waiting card cannot pass the next one in the queue. */
     stuck: {
       waitsFor: (title: string) => `Nicht vor „${title}“: Diese Aufgabe wartet darauf.`,
@@ -2157,6 +2160,9 @@ const en: Strings = {
     earlier: 'Earlier',
     later: 'Later',
     place: (n: number, of: number) => `Place ${n} of ${of} in the queue.`,
+    show: 'Show the queue',
+    hide: 'Hide the queue',
+    dragOwn: 'Drag this task by its grip to another place.',
     stuck: {
       waitsFor: (title: string) => `Not ahead of “${title}”: this task waits for it.`,
       waitedOn: (title: string) => `Not behind “${title}”: it waits for this task.`,

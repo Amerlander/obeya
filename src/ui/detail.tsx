@@ -15,7 +15,7 @@ import { ResultFiles } from './files';
 import { DiscardChanges, FolderBox, FolderLine, useFolderDiff } from './folder';
 import { landedRef, shownTitle } from './parts';
 import { inQueue } from '../core/queue';
-import { useQueueMove, waitedOn } from './queue';
+import { QueueList, scrollerOf, useQueueMove, useQueueSort, waitedOn } from './queue';
 import { Inline, plain } from './markdown';
 import { Body, goToMessage, Msg, Quote, Reading, useAnswer, useReportedHeight } from './message';
 import { appended, cardDraft, giveBack, questionsKey, typeAtCursor, updateDraft, useDraft } from './draft';
@@ -68,15 +68,31 @@ interface Props {
   onTell: Tell;
 }
 
-/** Where a waiting card stands in the queue, with the buttons that move it. */
+/** Where a waiting card stands in the queue, with the buttons that move it; unfolded, the queue around it, where it is dragged instead. */
 function QueuePlace({ item, items }: { item: Item; items: Item[] }) {
   const m = useQueueMove(item, items);
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const q = useQueueSort(items, scrollerOf(box), item.id);
+  // folded under a drag: the card is not dropped anywhere
+  useEffect(() => {
+    if (!open) q.sort.cancel();
+  }, [open]);
   if (!m) return null;
   return (
-    <div className="q-place">
+    <div className="q-place" ref={box}>
       <span className="hint">{m.place}</span>
-      {m.buttons}
-      {m.why && <div className="hint why">{m.why}</div>}
+      {!open && m.buttons}
+      <button className="link" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {open ? t.queue.hide : t.queue.show}
+      </button>
+      {!open && m.why && <div className="hint why">{m.why}</div>}
+      {open && (
+        <div className="q-around">
+          <QueueList items={items} q={q} />
+          <p className="hint">{t.queue.dragOwn}</p>
+        </div>
+      )}
     </div>
   );
 }

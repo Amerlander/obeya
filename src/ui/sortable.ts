@@ -1,5 +1,6 @@
-// Dragging a row of a list to another place in it, by mouse or touch: the queue's list uses it, and
-// any list whose rows the owner puts in order. A row's grip starts a drag for any pointer (it takes
+// Dragging a row of a list to another place in it, by mouse or touch: the queue's lists use it, and
+// any list whose rows the owner puts in order. Rows it is told are fixed are not dragged, but make
+// room for the one that is. A row's grip starts a drag for any pointer (it takes
 // no part in scrolling, so a finger elsewhere on the list still scrolls it); a mouse may also drag
 // the row itself, once it has moved a few pixels, and the click that ends such a drag opens nothing.
 // While dragged, the row follows the pointer as far as its reach lets it, the rows it passes make
@@ -28,6 +29,8 @@ interface Options {
   drop: (key: string, places: number) => Promise<unknown>;
   /** The element that scrolls the list, if it does. */
   scroller?: RefObject<HTMLElement | null>;
+  /** A row no drag starts on: it gets no grip, and the row itself does not take the mouse. */
+  fixed?: (key: string) => boolean;
 }
 
 /** A mouse drag on the row starts once the pointer has moved this far. */
@@ -77,7 +80,7 @@ export function useSortable(keys: string[], o: Options) {
 
   const begin = (key: string, e: ReactPointerEvent, now: boolean) => {
     // a drop not yet in the keys given: the reach is of the order before it
-    if (e.button !== 0 || stop.current || order !== keys) return;
+    if (e.button !== 0 || stop.current || order !== keys || latest.current.fixed?.(key)) return;
     const from = order.indexOf(key);
     const reach = latest.current.reach(key);
     if (from < 0) return;
@@ -196,7 +199,7 @@ export function useSortable(keys: string[], o: Options) {
       'data-sorting': drag ? (key === drag.key ? 'dragged' : 'other') : undefined,
       onPointerDown: (e: ReactPointerEvent) => {
         // the row's own buttons stay buttons; a finger on the row scrolls the list
-        if (e.pointerType !== 'mouse' || (e.target as Element).closest('button, a, input, textarea, .grip')) return;
+        if (e.pointerType !== 'mouse' || latest.current.fixed?.(key) || (e.target as Element).closest('button, a, input, textarea, .grip')) return;
         e.preventDefault();
         begin(key, e, false);
       },

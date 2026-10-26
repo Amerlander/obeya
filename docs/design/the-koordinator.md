@@ -62,7 +62,10 @@ Cards whose turn comes together go longest-waiting first. The owner sets the ord
 leave it open: in the queue's list a row is dragged to any place, by the grip at its left with a
 mouse or a finger (a finger elsewhere on the list scrolls it), or with a mouse by the row itself;
 the rows it passes make room, and the list scrolls at its edges. On a waiting card (which says its
-place), „Früher“ and „Später“ swap it with its neighbour. A card does not pass a card it waits for,
+place), „Früher“ and „Später“ swap it with its neighbour, and „Warteschlange zeigen“ unfolds the
+queue there with the card marked in it: there the card alone is dragged, the same way, while the
+other rows only show where it stands (they neither move, open their card nor take it out), and the
+two buttons give way to the drag until the queue is folded again. A card does not pass a card it waits for,
 one waiting for it, or one being judged, and a card being judged does not move; a dragged row stops
 at the last place it may take and, pulled farther, says why, and such a button stays grey and says
 why when clicked. A drop moves it there in one step: it passes each
@@ -374,7 +377,9 @@ passed the words on through `to_obeya` hears that the owner finds the link under
   than a few cards waiting, a card going from last to first took a click per place, and buttons
   beside the drag were redundant (owner). The drag knows the waits: the row stops where they stop it
   and says why when pulled farther, so the drag never just fails. The card's own view keeps the
-  buttons, as it has no list to drag in. Touch drags by a grip so that the list still scrolls under
+  buttons while its queue is folded, as moving one place is the common case there; unfolded, the
+  card is dragged by the same means as in the queue's list (GitHub issue #14), and only the card
+  itself, since the owner opened it to place that card, not to rearrange others. Touch drags by a grip so that the list still scrolls under
   a finger. Nothing passes a card being
   judged, which could otherwise end up waiting for a card that waits for it.
 - **A project's workstreams started together are scheduled in one turn** (2026-10-02): they often

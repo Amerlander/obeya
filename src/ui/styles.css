@@ -947,24 +947,32 @@ button.q-end:hover { color: var(--ink); text-decoration: underline; }
 .bar-menu { position: absolute; top: calc(100% + 6px); left: 0; width: min(420px, calc(100vw - 28px)); max-height: calc(100vh - 80px); overflow: auto;
   padding: 6px; background: var(--panel); border-radius: 3px; box-shadow: var(--lift); z-index: 30; white-space: normal; }
 .bar-menu > .hint { margin: 6px 8px; font-size: 13px; line-height: 1.45; }
-/* the queue: the waiting cards in turn */
-.queue-menu ol { list-style: none; padding: 0; margin: 0; }
-.queue-menu li { display: flex; gap: 10px; align-items: flex-start; padding: 7px 8px; border-radius: 2px; cursor: pointer; font-size: 13px; }
-.queue-menu li:hover { background: var(--chip); }
-.queue-menu li .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); margin-top: 5px; flex: none; }
-.queue-menu li .q-what { flex: 1; min-width: 0; }
-.queue-menu li .why { display: block; margin-top: 2px; }
-.queue-menu li .x { flex: none; padding: 0 4px; font-size: 17px; line-height: 22px; color: var(--muted); background: none; border: 0; cursor: pointer; }
-.queue-menu li .x:hover { color: var(--ink); }
-.queue-menu li { position: relative; }
+/* the queue: the waiting cards in turn, in the bar's list and unfolded on a waiting card */
+.qlist { list-style: none; padding: 0; margin: 0; }
+.qlist li { display: flex; gap: 10px; align-items: flex-start; padding: 7px 8px; border-radius: 2px; cursor: pointer; font-size: 13px; }
+.qlist li:hover { background: var(--chip); }
+.qlist li .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); margin-top: 5px; flex: none; }
+.qlist li .q-what { flex: 1; min-width: 0; }
+.qlist li .why { display: block; margin-top: 2px; }
+.qlist li .x { flex: none; padding: 0 4px; font-size: 17px; line-height: 22px; color: var(--muted); background: none; border: 0; cursor: pointer; }
+.qlist li .x:hover { color: var(--ink); }
+.qlist li { position: relative; }
 /* a row's grip: dragged to put the row elsewhere; a finger on it does not scroll the list */
-.queue-menu li .grip { flex: none; display: flex; justify-content: center; width: 12px; margin: 2px -4px 0 -2px; color: var(--muted); cursor: grab; touch-action: none; opacity: .7; }
-.queue-menu li .grip.none { cursor: inherit; }
-.queue-menu li:hover .grip { opacity: 1; }
-@media (pointer: coarse) { .queue-menu li .grip { width: 28px; margin: -4px -8px -4px -8px; padding-top: 6px; } }
-.queue-menu li[data-sorting=other] { transition: transform .15s ease; }
-.queue-menu li[data-sorting=dragged] { background: var(--card); box-shadow: var(--lift); cursor: grabbing; }
-.queue-menu li .q-held { position: absolute; left: 30px; right: 8px; top: calc(100% + 4px); padding: 6px 9px; background: var(--panel); border: 1px solid var(--line); border-radius: 3px; box-shadow: var(--shadow); font-size: 12.5px; color: var(--ink); }
+.qlist li .grip { flex: none; display: flex; justify-content: center; width: 12px; margin: 2px -4px 0 -2px; color: var(--muted); cursor: grab; touch-action: none; opacity: .7; }
+.qlist li .grip.none { cursor: inherit; }
+.qlist li:hover .grip { opacity: 1; }
+@media (pointer: coarse) { .qlist li .grip { width: 28px; margin: -4px -8px -4px -8px; padding-top: 6px; } }
+.qlist li[data-sorting=other] { transition: transform .15s ease; }
+.qlist li[data-sorting=dragged] { background: var(--card); box-shadow: var(--lift); cursor: grabbing; }
+.qlist li .q-held { position: absolute; left: 30px; right: 8px; top: calc(100% + 4px); padding: 6px 9px; background: var(--panel); border: 1px solid var(--line); border-radius: 3px; box-shadow: var(--shadow); font-size: 12.5px; color: var(--ink); }
+/* on a waiting card: the others only show where it stands */
+.q-around { flex-basis: 100%; }
+.q-around > .hint { margin: 6px 0 0; }
+.qlist.on-card li { cursor: default; }
+.qlist.on-card li:hover { background: none; }
+.qlist.on-card li.own { background: var(--card); box-shadow: inset 0 0 0 1px var(--line); font-weight: 600; cursor: grab; }
+.qlist.on-card li.own .hint { font-weight: 400; }
+.qlist.on-card li.own[data-sorting=dragged] { box-shadow: var(--lift); }
 .sorting, .sorting * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
 .p-files { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; }
 .card.queued .state { font-style: italic; }
