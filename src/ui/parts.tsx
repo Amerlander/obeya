@@ -546,7 +546,12 @@ export function WorkspacesPill({ pools, canvas, canvases, items, onOpen, onElsew
   useEffect(() => {
     if (!open || inline) return;
     const away = (e: PointerEvent) => ref.current?.contains(e.target as Node) || setOpen(false);
-    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      // the pointer may still be over it: shut, not just unpinned
+      setOpen(false);
+      setShut(true);
+    };
     addEventListener('pointerdown', away, true);
     addEventListener('keydown', esc);
     return () => {
