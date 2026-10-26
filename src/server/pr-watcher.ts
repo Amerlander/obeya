@@ -150,7 +150,7 @@ export class PrWatcher {
         next.seen = [...pr.seen, ...comments.map((c) => c.id)];
         this.workers.prEvent(
           cardId,
-          comments.length === 1 ? `Neuer Review-Kommentar von ${comments[0]!.author}, an den Agenten weitergegeben.` : `${comments.length} neue Review-Kommentare, an den Agenten weitergegeben.`,
+          this.board.t.pr.comments(comments.length, comments[0]!.author),
           [
             'New review comments on your pull request. Address them the way the repository does it (its own skill for review comments, if it has one; otherwise fix each, or leave it where a change is not right, and push). Each comment gets a reply in its own thread, not one comment for all: what you changed, or why not. Then resolve each thread, unless you still want the reviewer’s answer. Once you pushed, ask the reviewers for a new review the way the repository does it: Obeya merges only on a review of the latest commit. End your turn. Use ask if one questions a decision only the owner can make.',
             ...comments.map((c) => `- ${c.author}${c.path ? ` on ${c.path}${c.line ? `:${c.line}` : ''}` : ''}${c.url ? ` (${c.url})` : ''}:\n${c.body}`),

@@ -179,6 +179,8 @@ const de = {
     workspaceFailed: (detail: string) => `Der Workspace ließ sich nicht vorbereiten: ${detail}`,
   },
   pr: {
+    comments: (n: number, author: string) =>
+      n === 1 ? `Neuer Review-Kommentar von ${author}, an den Agenten weitergegeben.` : `${n} neue Review-Kommentare, an den Agenten weitergegeben.`,
     checkFailed: (names: string) => `Check fehlgeschlagen: ${names}. Der Agent sieht nach.`,
     conflict: 'Konflikt mit dem Zielbranch. Der Agent bringt den Branch auf Stand.',
     stale: 'Neuer Stand seit dem letzten Review, um ein neues hat niemand gebeten. Der Agent fragt danach.',
@@ -555,6 +557,8 @@ const en: Messages = {
     workspaceFailed: (detail: string) => `The workspace could not be prepared: ${detail}`,
   },
   pr: {
+    comments: (n: number, author: string) =>
+      n === 1 ? `New review comment from ${author}, passed on to the agent.` : `${n} new review comments, passed on to the agent.`,
     checkFailed: (names: string) => `Check failed: ${names}. The agent looks into it.`,
     conflict: 'Conflict with the base branch. The agent brings the branch up to date.',
     stale: 'New commits since the last review, and nobody asked for another one. The agent asks for it.',

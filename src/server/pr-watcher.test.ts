@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { generic } from '../adapters/generic';
 import type { RepoAdapter } from '../adapters/types';
+import type { Language } from '../core/locale';
 import { needsYou } from '../core/types';
 import { Board } from './board';
 import { Store } from './db';
@@ -30,6 +31,8 @@ let unreadable: string | undefined;
 let settings: RepoAdapter;
 /** Cards whose PR the worker reported, as the canvas passes them to sharing. */
 let opened: string[];
+/** The language of Obeya's interface, which the lines the watcher logs on a card speak. */
+let language: Language;
 const URL_ = 'https://github.com/acme/app/pull/42';
 
 beforeEach(() => {
@@ -37,7 +40,8 @@ beforeEach(() => {
   main = join(dir, 'main');
   gitRepo(main);
   const store = new Store(':memory:');
-  board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: main, branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
+  language = 'de';
+  board = new Board(store, { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: main, branch: 'main' }] }, () => ({ docs: [], dirs: [] }), undefined, undefined, () => language);
   workspaces = new Workspaces(store, 'c', { mode: 'clones', repoPath: main, dir: join(dir, 'ws') });
   workspaces.ensureClones(main, 1);
   runtime = new FakeRuntime();
@@ -171,6 +175,26 @@ describe('watching', () => {
     await watcher.poll();
     expect(runtime.last.inbox.at(-2)).toContain('Checks failed');
     expect(runtime.last.inbox.at(-1)).toContain('conflicts');
+  });
+
+  test('the line on the card about review comments passed on speaks the interface language', async () => {
+    const id = await inPr();
+    runtime.last.call('pr_opened', { url: URL_ });
+    const lines = () => board.events(id).map((e) => e.text);
+    status.comments = [{ id: 'i1', author: 'greptile', body: 'Null check missing.' }];
+    await watcher.poll();
+    expect(lines().at(-1)).toBe('Neuer Review-Kommentar von greptile, an den Agenten weitergegeben.');
+    status.comments.push({ id: 'i2', author: 'lead', body: 'Rename it.' }, { id: 'i3', author: 'lead', body: 'And test it.' });
+    await watcher.poll();
+    expect(lines().at(-1)).toBe('2 neue Review-Kommentare, an den Agenten weitergegeben.');
+
+    language = 'en';
+    status.comments.push({ id: 'i4', author: 'greptile', body: 'Still missing.' });
+    await watcher.poll();
+    expect(lines().at(-1)).toBe('New review comment from greptile, passed on to the agent.');
+    status.comments.push({ id: 'i5', author: 'lead', body: 'Typo.' }, { id: 'i6', author: 'lead', body: 'Docs.' });
+    await watcher.poll();
+    expect(lines().at(-1)).toBe('2 new review comments, passed on to the agent.');
   });
 
   test('a PR with nothing left for the worker is merged by Obeya, which makes the card live', async () => {
