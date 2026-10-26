@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { appended, cardDraft, pathWord, wordsOf, draftOf, dropDraft, giveBack, insert, keepDrafts, MIC_DRAFT, markupOf, moveImages, OBEYA_DRAFT, setMarkup, updateDraft } from './draft';
+import { appended, cardDraft, pathWord, wordsOf, draftOf, dropDraft, giveBack, insert, insertFiles, keepDrafts, MIC_DRAFT, markupOf, moveFiles, moveImages, OBEYA_DRAFT, setMarkup, updateDraft, withoutWords } from './draft';
 
 const store = () => {
   const m = new Map<string, string>();
@@ -90,4 +90,32 @@ test('a path with a space goes in quotes and stays one word', () => {
   const spaced = pathWord('C:\\Users\\John Doe\\.obeya\\files\\a\\x.pdf');
   expect(spaced).toBe('"C:\\Users\\John Doe\\.obeya\\files\\a\\x.pdf"');
   expect(wordsOf(`/o/a.pdf ${spaced}`)).toEqual(['/o/a.pdf', spaced]);
+});
+
+test("the paths of dropped files go back beside the microphone when Obeya's field closes, the words around them stay", () => {
+  const spaced = pathWord('/o/John Doe/Plan.pdf');
+  // dropped on the microphone, then the sidebar opened
+  updateDraft(MIC_DRAFT, { text: `/o/a/Rechnung.pdf ${spaced}` });
+  updateDraft(OBEYA_DRAFT, { text: 'Schau mal' });
+  insertFiles(OBEYA_DRAFT, wordsOf(draftOf(MIC_DRAFT).text));
+  updateDraft(MIC_DRAFT, { text: '' });
+  expect(draftOf(OBEYA_DRAFT).text).toBe(`Schau mal /o/a/Rechnung.pdf ${spaced}`);
+  // the owner writes on and takes one path out by hand: it stays gone
+  updateDraft(OBEYA_DRAFT, (d) => ({ text: `${d.text.replace('/o/a/Rechnung.pdf ', '')} und sag was dazu` }));
+  // the written-down draft keeps only the path still in it, so it goes back after a reload too
+  expect(JSON.parse(s.getItem('obeya-drafts-shop')!)[OBEYA_DRAFT].files).toEqual([spaced]);
+  moveFiles(OBEYA_DRAFT, MIC_DRAFT);
+  expect(draftOf(OBEYA_DRAFT)).toMatchObject({ text: 'Schau mal und sag was dazu', files: [] });
+  expect(draftOf(MIC_DRAFT).text).toBe(spaced);
+  dropDraft(MIC_DRAFT);
+  dropDraft(OBEYA_DRAFT);
+});
+
+test('a word taken out of a text takes the space after it, or at the end of a line the one before', () => {
+  expect(withoutWords('/a.pdf', ['/a.pdf'])).toBe('');
+  expect(withoutWords('Schau /a.pdf an', ['/a.pdf'])).toBe('Schau an');
+  expect(withoutWords('Schau an /a.pdf', ['/a.pdf'])).toBe('Schau an');
+  expect(withoutWords('Schau /a.pdf\nund das', ['/a.pdf'])).toBe('Schau\nund das');
+  // only as a word of its own
+  expect(withoutWords('/a.pdfx /a.pdf', ['/a.pdf'])).toBe('/a.pdfx');
 });

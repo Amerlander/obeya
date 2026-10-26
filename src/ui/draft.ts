@@ -26,6 +26,8 @@ export interface Draft {
   picks?: Picks;
   /** The message the words reply to (`reply.ts`). */
   reply?: Reply;
+  /** The paths of dropped files among the words (`insertFiles`), which go back beside the microphone with the screenshots (`moveFiles`). */
+  files?: string[];
 }
 
 export interface Picks {
@@ -36,10 +38,13 @@ export interface Picks {
 /** Which questions picks belong to: they count only while the same questions stand. */
 export const questionsKey = (questions: unknown[]) => JSON.stringify(questions);
 
-type Kept = Pick<Draft, 'text' | 'images' | 'picks' | 'reply'>;
-const keptOf = ({ text, images, picks, reply }: Draft): Kept | null => {
+type Kept = Pick<Draft, 'text' | 'images' | 'picks' | 'reply' | 'files'>;
+const keptOf = ({ text, images, picks, reply, files }: Draft): Kept | null => {
   const picked = picks?.picks.some((p) => p.length) ? picks : undefined;
-  return text.trim() || images.length || picked || reply ? { text, images, ...(picked ? { picks: picked } : {}), ...(reply ? { reply } : {}) } : null;
+  const standing = filesIn(text, files);
+  return text.trim() || images.length || picked || reply
+    ? { text, images, ...(picked ? { picks: picked } : {}), ...(reply ? { reply } : {}), ...(standing.length ? { files: standing } : {}) }
+    : null;
 };
 
 const EMPTY: Draft = { text: '', images: [], uploading: 0, error: '', dictation: '', note: '', marking: [] };
@@ -119,8 +124,8 @@ export function keepDrafts(store: Store, canvas: string) {
   kept = { store, canvas };
   try {
     const saved = JSON.parse(store.getItem(storeKey(canvas)) ?? '{}') as Record<string, Kept>;
-    for (const [key, { text, images, picks, reply }] of Object.entries(saved))
-      if (!drafts.has(key)) drafts.set(key, { ...EMPTY, text, images, ...(picks ? { picks } : {}), ...(reply ? { reply } : {}) });
+    for (const [key, { text, images, picks, reply, files }] of Object.entries(saved))
+      if (!drafts.has(key)) drafts.set(key, { ...EMPTY, text, images, ...(picks ? { picks } : {}), ...(reply ? { reply } : {}), ...(files ? { files } : {}) });
   } catch {}
   try {
     const saved = JSON.parse(store.getItem(markupsKey(canvas)) ?? '{}') as Record<string, Markup>;
@@ -169,6 +174,18 @@ export function moveImages(from: string, to: string) {
   if (!images.length || from === to) return;
   updateDraft(to, (d) => ({ images: [...d.images, ...images.filter((id) => !d.images.includes(id))] }));
   updateDraft(from, { images: [] });
+}
+
+/**
+ * The paths of dropped files that still stand in draft `from`'s text leave it and go after the words
+ * of draft `to`, beside the microphone; the words the owner wrote around them stay.
+ */
+export function moveFiles(from: string, to: string) {
+  const { text, files } = draftOf(from);
+  if (!files || from === to) return;
+  const moving = filesIn(text, files);
+  updateDraft(from, { text: withoutWords(text, moving), files: [] });
+  if (moving.length) updateDraft(to, (d) => ({ text: appended(d.text, moving.join(' ')) }));
 }
 
 /** Forgets a draft whose field is gone for good. */
@@ -281,6 +298,36 @@ export function insert(key: string, words: string) {
   // the next ones go after it, as typed ones would
   if (left.has(key)) left.set(key, at + piece.length);
   updateDraft(key, { text: text.slice(0, at) + piece + text.slice(at) });
+}
+
+/** The paths of dropped files (`words`, as put in by `pathWord`) put into the draft as `insert` puts words in, and known there as files' (`moveFiles`). */
+export function insertFiles(key: string, words: string[]) {
+  if (!words.length) return;
+  insert(key, words.join(' '));
+  updateDraft(key, (d) => ({ files: [...(d.files ?? []), ...words] }));
+}
+
+/** Where `word` stands in `text` as a word of its own, between spaces or at an end: -1 where it does not. */
+const wordAt = (text: string, word: string) => {
+  for (let i = text.indexOf(word); i >= 0; i = text.indexOf(word, i + 1)) if ((i === 0 || /\s/.test(text[i - 1]!)) && (i + word.length === text.length || /\s/.test(text[i + word.length]!))) return i;
+  return -1;
+};
+
+/** Those of the `files` that still stand in `text`, each once. */
+const filesIn = (text: string, files: string[] = []) => [...new Set(files)].filter((w) => wordAt(text, w) >= 0);
+
+/** `text` without the `words`, each where it first stands, and without the space that parted it from the next. */
+export function withoutWords(text: string, words: string[]) {
+  for (const w of words) {
+    const i = wordAt(text, w);
+    if (i < 0) continue;
+    let [start, end] = [i, i + w.length];
+    while (end < text.length && /[ \t]/.test(text[end]!)) end++;
+    // at the end of a line, the space before it
+    if (end === text.length || text[end] === '\n') while (start > 0 && /[ \t]/.test(text[start - 1]!)) start--;
+    text = text.slice(0, start) + text.slice(end);
+  }
+  return text;
 }
 
 /** A path as one word of the text: in quotes where it has a space (a home folder of `John Doe`, say). */

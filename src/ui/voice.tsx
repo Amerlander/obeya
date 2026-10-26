@@ -11,7 +11,7 @@
 import { createContext, useEffect, useRef, useState } from 'react';
 import type { Place } from '../core/layout';
 import { ApiError, api, confirmShownMs, type Heard, holdRestart, undoShownMs, type Where } from './api';
-import { beginDictation, dictate, draftOf, focusedDraft, insert, MIC_DRAFT, moveImages, takesImages, toObeya, updateDraft, useDraft, useFieldOn, uploaded, useFocusedDraft, wordsOf } from './draft';
+import { beginDictation, dictate, draftOf, focusedDraft, insertFiles, MIC_DRAFT, moveFiles, moveImages, takesImages, toObeya, updateDraft, useDraft, useFieldOn, uploaded, useFocusedDraft, wordsOf } from './draft';
 import { Aside } from './aside';
 import { type Recording, record } from './recorder';
 import { AttachButton, ShotStrip, useShotInput } from './shots';
@@ -348,13 +348,13 @@ export function useHeldByTouch<T extends HTMLElement>() {
  * recording are picked beside the microphone; dropped on it or pasted (App), they go to the field
  * when there is one. So do the paths of other files dropped on it, which show beside it by their
  * names while they wait there. Those for Obeya stay in view: they go into Obeya's field when it
- * opens, and the screenshots back beside the microphone when it closes.
+ * opens, and back beside the microphone when it closes, the paths that still stand in its words too.
  */
 export function PushToTalk({ phase, level, flat, target, field, onDown }: { phase: Phase; level: number; flat: boolean; target: string | null; field: string | null; onDown: () => void }) {
   const on = useFieldOn(field);
   const key = on ? field! : MIC_DRAFT;
   const shots = useShotInput({ draft: key, off: !takesImages(key) });
-  // the screenshots for Obeya show where Obeya is spoken to: in its field while that is in view, else beside the microphone
+  // the screenshots and files for Obeya show where Obeya is spoken to: in its field while that is in view, else beside the microphone
   const obeya = useRef<string | null>(null);
   const { images: waiting, text: paths } = useDraft(MIC_DRAFT);
   useEffect(() => {
@@ -362,11 +362,12 @@ export function PushToTalk({ phase, level, flat, target, field, onDown }: { phas
       obeya.current = key;
       moveImages(MIC_DRAFT, key);
       if (paths.trim()) {
-        insert(key, paths.trim());
+        insertFiles(key, wordsOf(paths));
         updateDraft(MIC_DRAFT, { text: '' });
       }
     } else if (key === MIC_DRAFT && obeya.current) {
       moveImages(obeya.current, MIC_DRAFT);
+      moveFiles(obeya.current, MIC_DRAFT);
       obeya.current = null;
     }
   }, [key, waiting, paths]);
