@@ -954,8 +954,6 @@ button.q-end:hover { color: var(--ink); text-decoration: underline; }
 .queue-menu li .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); margin-top: 5px; flex: none; }
 .queue-menu li .q-what { flex: 1; min-width: 0; }
 .queue-menu li .why { display: block; margin-top: 2px; }
-.queue-menu li .btn.qmove { padding: 2px 8px; background: var(--card); border: 1px solid var(--line); }
-.queue-menu li .btn.qmove.stuck { border-style: dashed; }
 .queue-menu li .x { flex: none; padding: 0 4px; font-size: 17px; line-height: 22px; color: var(--muted); background: none; border: 0; cursor: pointer; }
 .queue-menu li .x:hover { color: var(--ink); }
 .queue-menu li { position: relative; }

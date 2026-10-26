@@ -1,7 +1,8 @@
-// The queue: the bar's button with its count and the list under it, and moving a waiting card earlier
-// or later, with the same two buttons on the card and in that list; a row's × takes its card out. A button whose way is blocked by a
-// wait says why when clicked (and on hover); at the head or the end of the queue it is greyed out. In the list a row is also dragged
-// to its place by its grip (or, with a mouse, by itself), as far as its waits let it; pulled farther, it says why it stops.
+// The queue: the bar's button with its count and the list under it, where a row is dragged to its
+// place by its grip (or, with a mouse, by itself), as far as its waits let it; pulled farther, it says
+// why it stops. A row's × takes its card out. On the card, two buttons move it one place earlier or
+// later; one whose way is blocked by a wait says why when clicked (and on hover), and at the head or
+// the end of the queue it is greyed out.
 
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from 'react';
 import { move, movable, notStarted, queueOrder, reach } from '../core/queue';
@@ -107,10 +108,9 @@ export function waitedOn(ids: string[], items: Item[], name: (id: string) => str
 
 type Sort = ReturnType<typeof useSortable>;
 
-/** A card in the queue, with its grip, what it waits for, the buttons that move it and the × that takes it out of the queue. */
+/** A card in the queue, with its grip, what it waits for and the × that takes it out of the queue. */
 function QueueRow(p: { item: Item; items: Item[]; row: ReturnType<Sort['row']>; grip?: ReturnType<Sort['grip']>; drag?: Drag; failed: string; onFail: (text: string) => void; onOpen: (i: Item) => void }) {
   const { item, items } = p;
-  const m = useQueueMove(item, items);
   // pulled beyond where its waits let it go: the card that stops it, and why
   const stop = p.drag?.held && reach(item.id, p.drag.held === 'earlier', items);
   const held = stop && stop.stop && stop.why ? t.queue.stuck[stop.why](plain(stop.stop.title)) : '';
@@ -135,9 +135,8 @@ function QueueRow(p: { item: Item; items: Item[]; row: ReturnType<Sort['row']>; 
         {plain(item.title)}
         <br />
         <span className="hint">{item.queue && 'behind' in item.queue ? t.queue.behind(waitedOn(item.queue.behind, items)) : stateLabel(item)}</span>
-        {(p.failed || m?.why) && <span className="hint why">{p.failed || m?.why}</span>}
+        {p.failed && <span className="hint why">{p.failed}</span>}
       </span>
-      {m?.buttons}
       <button
         className="x"
         title={t.queue.dequeue}
@@ -156,7 +155,7 @@ function QueueRow(p: { item: Item; items: Item[]; row: ReturnType<Sort['row']>; 
 }
 
 /** The buttons, the card's place, and why the last move did not go; none for a card that cannot move. */
-export function useQueueMove(item: Item, items: Item[], labelled = false): { buttons: ReactNode; place: string; why: string } | undefined {
+export function useQueueMove(item: Item, items: Item[]): { buttons: ReactNode; place: string; why: string } | undefined {
   // a refusal shows until the next click; a blocked way while it is still blocked
   const [why, setWhy] = useState<{ id: string; text: string; error?: true }>();
   if (!movable(item)) return undefined;
@@ -182,7 +181,7 @@ export function useQueueMove(item: Item, items: Item[], labelled = false): { but
         }}
       >
         {earlier ? '↑' : '↓'}
-        {labelled && ` ${label}`}
+        {` ${label}`}
       </button>
     );
   };

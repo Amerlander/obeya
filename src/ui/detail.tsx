@@ -70,7 +70,7 @@ interface Props {
 
 /** Where a waiting card stands in the queue, with the buttons that move it. */
 function QueuePlace({ item, items }: { item: Item; items: Item[] }) {
-  const m = useQueueMove(item, items, true);
+  const m = useQueueMove(item, items);
   if (!m) return null;
   return (
     <div className="q-place">
