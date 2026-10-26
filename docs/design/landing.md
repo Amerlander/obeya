@@ -7,8 +7,9 @@ A chapter of the [design doc](../design.md), whose header says how it is written
 In a folder without git nothing lands (see Folders without git). Elsewhere the setting `land`
 decides (see Repository settings), read at each approval: `pr` sends the worker into the PR loop;
 `main` rebases the branch onto `main` and fast-forwards the local checkout, and the card is `live`.
-Unset, it is `pr` where `origin` is on GitHub (github.com, a subdomain, or a host in gh's `hosts.yml`;
-not `gh auth status`, which checks each login over the network), else `main`: on another forge the
+Unset, it is `pr` where `origin` is on GitHub (github.com, a subdomain, or a host gh is logged into:
+one in gh's `hosts.yml`, or `GH_HOST` with a token for it in the environment; not `gh auth
+status`, which checks each login over the network), else `main`: on another forge the
 agents can open a PR only with the repository's own tooling. A card whose own branch changes `land`
 or `direct` (the settings card, say) lands as its branch says unless the machine's settings
 override it; the handover records how, so the approve button says so before the click. Where such
@@ -36,8 +37,9 @@ click ends the owner's turn at once (see Approval and landing).
 ### PR loop
 
 On approval the worker opens the pull request the repository's way (its skills and conventions, a
-description for readers who have not seen Obeya) and reports it with `pr_opened(url)`: GitHub
-(`…/pull/<n>`) or Forgejo and Gitea (`…/pulls/<n>`, also below a path). From then on it may push its
+description for readers who have not seen Obeya) and reports it with `pr_opened(url)`: GitHub on
+github.com or an Enterprise server (`https://<host>/<owner>/<repo>/pull/<n>`), or Forgejo and Gitea
+(`…/pulls/<n>`, also below a path). From then on it may push its
 branch, never merges, and ends its turn after each round instead of handing over.
 
 #### Watching the PR
@@ -52,8 +54,10 @@ comes in, as the card is by then (one approved, stopped or closed meanwhile is l
 call gets a minute: a PR GitHub does not answer for counts as unreadable for that round and holds up
 no other card.
 
-- GitHub through `gh`, as the account that owns the repository where gh has a login for it (its
-  token as `GH_TOKEN`): the active account may not see the owner's private repository. Thread
+- GitHub through `gh`, on the PR's host (`GH_HOST`; for a PR being opened, the host of `origin`) and
+  as the account that owns the repository where gh has a login for it there (its token as
+  `GH_TOKEN`, on an Enterprise server `GH_ENTERPRISE_TOKEN`, the variable gh reads for such a host):
+  the active account may not see the owner's private repository. Thread
   resolution and comment edit times only GraphQL gives.
 - Forgejo and Gitea through `<server>/api/v1` with curl and git's login for `origin`'s URL (`git
   credential fill`, never prompting; else an access token stored as git's password for the host,
@@ -163,6 +167,16 @@ A card no agent worked on, a prototype or an archived card has no field.
   the other: each is a round trip to GitHub (a second idle, several under load, ten and more when
   GitHub is slow), so with two open PRs the server answered nothing for up to 40 s every two minutes
   (canvas switches, conversations and demo videos hung).
+- **A PR's forge is told by its URL's path; GitHub Enterprise is GitHub on another host**
+  (2026-10-26, GitHub issue #16). `/pull/<n>` is GitHub's path on github.com and every Enterprise
+  server, Forgejo and Gitea use `/pulls/<n>`, so the URL alone tells them apart, with no project
+  setting and nothing asked over the network. A PR on a host gh is not logged into is watched all
+  the same and fails with gh's reason on the card, which says what to do (`gh auth login
+  --hostname`). Where no URL exists yet (the landing default, opening a PR), the host of `origin`
+  counts as GitHub where gh is logged into it, read from gh's own files. Rejected: a list of
+  Enterprise hosts in the settings (one more setting for what gh already knows); asking `gh auth
+  status` (checks each login over the network) or probing the host's API (a round trip, and a
+  server behind a VPN that is down would turn a PR into an unknown one).
 - **Forgejo and Gitea through curl and git's login** (2026-10-17). Rejected: `tea`/`fj`, which
   hardly any machine has.
 - **The watcher polls when the owner comes back**: otherwise a merged card stood „in PR“ for up to

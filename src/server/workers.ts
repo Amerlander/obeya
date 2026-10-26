@@ -2825,7 +2825,7 @@ export class Workers {
           const row = this.o.board.row(cardId);
           if (!row.pr) return 'Not recorded: the owner has not approved this card yet. Do not open a pull request before that.';
           const ref = parsePrUrl(String(url));
-          if (!ref) return 'Not recorded: that is not the URL of a pull request (on GitHub https://github.com/<owner>/<repo>/pull/<number>, on Forgejo or Gitea such as Codeberg https://<host>/<owner>/<repo>/pulls/<number>).';
+          if (!ref) return 'Not recorded: that is not the URL of a pull request (on GitHub or GitHub Enterprise https://<host>/<owner>/<repo>/pull/<number>, on Forgejo or Gitea such as Codeberg https://<host>/<owner>/<repo>/pulls/<number>).';
           handOver();
           const pr = { ...(JSON.parse(row.pr) as PrState), url: String(url).trim(), number: ref.number };
           this.o.board.work(cardId, { pr: JSON.stringify(pr) });

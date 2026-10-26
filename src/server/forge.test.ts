@@ -1,12 +1,17 @@
 import { expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { confidence, type Forge, githubOwner, lastAsked, makeGhForge, parsePrUrl, readable, readyToMerge, reviewOf, reviewStale, routedForge, type PrStatus } from './forge';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { confidence, type Forge, ghCli, githubRepo, lastAsked, makeGhForge, parsePrUrl, readable, readyToMerge, reviewOf, reviewStale, routedForge, type PrStatus } from './forge';
+import { fakeGh } from './testing';
 
-test('parsePrUrl: GitHub, and Forgejo or Gitea on any server', () => {
-  expect(parsePrUrl('https://github.com/example-org/app/pull/813')).toEqual({ forge: 'github', base: 'https://github.com', owner: 'example-org', repo: 'app', number: 813 });
+test('parsePrUrl: GitHub and GitHub Enterprise, and Forgejo or Gitea on any server', () => {
+  expect(parsePrUrl('https://github.com/example-org/app/pull/813')).toEqual({ forge: 'github', base: 'https://github.com', host: 'github.com', owner: 'example-org', repo: 'app', number: 813 });
+  expect(parsePrUrl('https://GitHub.Example.com/team/app/pull/7/')).toEqual({ forge: 'github', base: 'https://github.example.com', host: 'github.example.com', owner: 'team', repo: 'app', number: 7 });
   expect(parsePrUrl('https://github.com/a/b/issues/1')).toBeNull();
-  expect(parsePrUrl('https://codeberg.org/acme/app/pulls/12')).toEqual({ forge: 'forgejo', base: 'https://codeberg.org', owner: 'acme', repo: 'app', number: 12 });
-  expect(parsePrUrl('https://git.example.org/forge/team/app/pulls/3/')).toEqual({ forge: 'forgejo', base: 'https://git.example.org/forge', owner: 'team', repo: 'app', number: 3 });
+  expect(parsePrUrl('https://github.example.com/a/b/pull/x')).toBeNull();
+  expect(parsePrUrl('https://codeberg.org/acme/app/pulls/12')).toEqual({ forge: 'forgejo', base: 'https://codeberg.org', host: 'codeberg.org', owner: 'acme', repo: 'app', number: 12 });
+  expect(parsePrUrl('https://git.example.org/forge/team/app/pulls/3/')).toEqual({ forge: 'forgejo', base: 'https://git.example.org/forge', host: 'git.example.org', owner: 'team', repo: 'app', number: 3 });
   expect(parsePrUrl('https://github.com/a/b/pulls/1')).toBeNull();
   expect(parsePrUrl('https://codeberg.org/a/b/pulls')).toBeNull();
 });
@@ -24,33 +29,68 @@ test('a pull request goes to the forge its URL is on; one is opened on the forge
   const forge = routedForge(fake('github'), fake('forgejo'), async (cwd) => origins[cwd] ?? null, (r) => r.includes('github.com'));
   await forge.status('/x', 'https://codeberg.org/a/b/pulls/1');
   await forge.merge('/x', 'https://github.com/a/b/pull/1', 'h');
+  await forge.body('/x', 'https://github.example.com/a/b/pull/1');
   await forge.setBody('/x', 'https://codeberg.org/a/b/pulls/1', '');
   await forge.open('/gh', { base: 'main', head: 'x', title: 't', body: '' });
   await forge.open('/cb', { base: 'main', head: 'x', title: 't', body: '' });
-  expect(seen).toEqual(['forgejo status', 'github merge', 'forgejo setBody', 'github open', 'forgejo open']);
+  expect(seen).toEqual(['forgejo status', 'github merge', 'github body', 'forgejo setBody', 'github open', 'forgejo open']);
 });
 
-test('githubOwner', () => {
-  expect(githubOwner('git@github.com:acme/app.git\n')).toBe('acme');
-  expect(githubOwner('https://github.com/acme/app')).toBe('acme');
-  expect(githubOwner('ssh://git@github.com/acme/app.git')).toBe('acme');
-  expect(githubOwner('/home/me/app')).toBeUndefined();
-  expect(githubOwner('git@gitlab.com:acme/app.git')).toBeUndefined();
+test('githubRepo: host and owner on github.com or an Enterprise server gh is logged into', () => {
+  const hosts = () => ['github.com', 'github.example.com'];
+  expect(githubRepo('git@github.com:acme/app.git\n', hosts)).toEqual({ host: 'github.com', owner: 'acme' });
+  expect(githubRepo('https://github.com/acme/app', hosts)).toEqual({ host: 'github.com', owner: 'acme' });
+  expect(githubRepo('ssh://git@github.com/acme/app.git', hosts)).toEqual({ host: 'github.com', owner: 'acme' });
+  expect(githubRepo('ssh://git@ssh.github.com:443/acme/app.git', hosts)).toEqual({ host: 'github.com', owner: 'acme' });
+  expect(githubRepo('https://github.example.com/team/app.git', hosts)).toEqual({ host: 'github.example.com', owner: 'team' });
+  expect(githubRepo('git@github.example.com:team/app.git', hosts)).toEqual({ host: 'github.example.com', owner: 'team' });
+  expect(githubRepo('https://github.example.com/team/app.git', () => [])).toBeUndefined();
+  expect(githubRepo('/home/me/app', hosts)).toBeUndefined();
+  expect(githubRepo('git@gitlab.com:acme/app.git', hosts)).toBeUndefined();
 });
 
-test('gh runs as the account that owns the repository: of the pull request, or of the origin a new one goes to', async () => {
-  const owners: (string | undefined)[] = [];
+test('gh runs on the host and as the account that own the repository: of the pull request, or of the origin a new one goes to', async () => {
+  const ats: string[] = [];
   const forge = makeGhForge(
     (at, ...args) => {
-      owners.push(at.owner);
+      ats.push(`${at.host}/${at.owner}`);
       return args[1] === 'view' ? JSON.stringify({ body: 'Text' }) : 'https://github.com/acme/app/pull/1\n';
     },
-    async (cwd) => (cwd === '/repo' ? 'acme' : undefined),
+    async (cwd) => (cwd === '/repo' ? { host: 'github.com', owner: 'acme' } : cwd === '/work' ? { host: 'github.example.com', owner: 'team' } : undefined),
   );
   await forge.body('/elsewhere', 'https://github.com/someone/private/pull/42');
+  await forge.body('/elsewhere', 'https://github.example.com/team/app/pull/42');
   expect(await forge.open('/repo', { base: 'main', head: 'x', title: 'T', body: 'B' })).toBe('https://github.com/acme/app/pull/1');
+  await forge.open('/work', { base: 'main', head: 'x', title: 'T', body: 'B' });
   await forge.open('/local', { base: 'main', head: 'x', title: 'T', body: 'B' });
-  expect(owners).toEqual(['someone', 'acme', undefined]);
+  expect(ats).toEqual(['github.com/someone', 'github.example.com/team', 'github.com/acme', 'github.example.com/team', 'undefined/undefined']);
+});
+
+test('gh is sent to the pull request\'s host, with the token of the owner\'s login there in the variable gh reads for that host', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'obeya-gh-host-'));
+  // as on a machine where gh's login is its own, not the environment's
+  const names = ['GH_HOST', 'GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN'];
+  const saved = names.map((n) => [n, process.env[n]] as const);
+  for (const n of names) delete process.env[n];
+  try {
+    const gh = ghCli(fakeGh(dir, {}));
+    await gh({ cwd: dir, host: 'github.com', owner: 'acme' }, 'api', 'repos/acme/app');
+    await gh({ cwd: dir, host: 'github.example.com', owner: 'team' }, 'api', 'repos/team/app');
+    await gh({ cwd: dir, host: 'example.ghe.com', owner: 'team' }, 'api', 'repos/team/app');
+    await gh({ cwd: dir }, 'pr', 'create');
+    expect(readFileSync(join(dir, 'calls'), 'utf8').trim().split('\n')).toEqual([
+      'auth token --hostname github.com --user acme | GH_HOST=',
+      'api repos/acme/app | GH_HOST=github.com GH_TOKEN=token:github.com:acme',
+      'auth token --hostname github.example.com --user team | GH_HOST=',
+      'api repos/team/app | GH_HOST=github.example.com GH_ENTERPRISE_TOKEN=token:github.example.com:team',
+      'auth token --hostname example.ghe.com --user team | GH_HOST=',
+      'api repos/team/app | GH_HOST=example.ghe.com GH_TOKEN=token:example.ghe.com:team',
+      'pr create | GH_HOST=',
+    ]);
+  } finally {
+    for (const [n, v] of saved) if (v !== undefined) process.env[n] = v;
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('gh output becomes a PR status', async () => {

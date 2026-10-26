@@ -5,6 +5,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { PrReviewEntry, PrThread } from '../core/types';
+import { enterpriseServer, ghHosts, onGitHub, remoteHost } from './repo';
 import { spawnOutput } from './spawn';
 
 export interface PrStatus {
@@ -70,15 +71,21 @@ export interface Forge {
 }
 
 /**
- * A pull request URL: on GitHub `https://github.com/<owner>/<repo>/pull/<n>`, on Forgejo or Gitea
- * (Codeberg, a server of one's own, perhaps below a path) `https://<host>/<owner>/<repo>/pulls/<n>`.
- * `base`: the server's address.
+ * A pull request URL: on GitHub `https://<host>/<owner>/<repo>/pull/<n>` (github.com, or a GitHub
+ * Enterprise server, whose PRs have the same path), on Forgejo or Gitea (Codeberg, a server of one's
+ * own, perhaps below a path) `https://<host>/<owner>/<repo>/pulls/<n>`. `base`: the server's
+ * address; `host`: GitHub's host as gh names it.
  */
-export function parsePrUrl(url: string): { forge: 'github' | 'forgejo'; base: string; owner: string; repo: string; number: number } | null {
-  const gh = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/pull\/(\d+)\/?$/.exec(url.trim());
-  if (gh) return { forge: 'github', base: 'https://github.com', owner: gh[1]!, repo: gh[2]!, number: Number(gh[3]) };
+export function parsePrUrl(url: string): { forge: 'github' | 'forgejo'; base: string; host: string; owner: string; repo: string; number: number } | null {
+  const gh = /^(https?:\/\/([^/\s]+))\/([\w.-]+)\/([\w.-]+)\/pull\/(\d+)\/?$/.exec(url.trim());
+  if (gh) {
+    const host = gh[2]!.toLowerCase();
+    return { forge: 'github', base: `https://${host}`, host, owner: gh[3]!, repo: gh[4]!, number: Number(gh[5]) };
+  }
   const fj = /^(https?:\/\/[^/\s]+(?:\/[^/\s]+)*?)\/([\w.-]+)\/([\w.-]+)\/pulls\/(\d+)\/?$/.exec(url.trim());
-  return fj && new URL(fj[1]!).host !== 'github.com' ? { forge: 'forgejo', base: fj[1]!, owner: fj[2]!, repo: fj[3]!, number: Number(fj[4]) } : null;
+  if (!fj) return null;
+  const host = new URL(fj[1]!).host.toLowerCase();
+  return host !== 'github.com' ? { forge: 'forgejo', base: fj[1]!, host, owner: fj[2]!, repo: fj[3]!, number: Number(fj[4]) } : null;
 }
 
 /**
@@ -99,20 +106,34 @@ export const routedForge = (github: Forge, forgejo: Forge, origin: (cwd: string)
   };
 };
 
-/** Where gh runs: the directory, and the owner of the repository it works on, where known. */
+/**
+ * Where gh runs: the directory, and the GitHub host (github.com or an Enterprise server) and owner
+ * of the repository it works on, where known.
+ */
 export interface GhAt {
   cwd: string;
+  host?: string;
   owner?: string;
 }
 
-/** The owner of a GitHub repository by its remote URL (https, ssh or scp-like), or none for any other. */
-export function githubOwner(remote: string): string | undefined {
-  return /^(?:https?:\/\/|ssh:\/\/)?(?:[^@/]+@)?github\.com[:/]([^/]+)\/[^/]+?\/?$/.exec(remote.trim())?.[1];
+/**
+ * The host and owner of a GitHub repository by its remote URL (https, ssh or scp-like) on
+ * github.com or a GitHub Enterprise server gh is logged into (`onGitHub`), or none for any other.
+ */
+export function githubRepo(remote: string, hosts: () => string[] = ghHosts): { host: string; owner: string } | undefined {
+  const url = remote.trim();
+  const host = remoteHost(url);
+  if (!host || !onGitHub(url, hosts)) return undefined;
+  const path = url.includes('://') ? url.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]*\//i, '') : url.replace(/^[^:]*:\/?/, '');
+  const owner = /^([^/]+)\/[^/]+?\/?$/.exec(path)?.[1];
+  // ssh.github.com, GitHub's SSH over port 443, is github.com to gh
+  return owner ? { host: host.endsWith('.github.com') ? 'github.com' : host, owner } : undefined;
 }
+
 
 /** How long a token gh keeps for an account is taken as it stands. */
 const TOKEN_TTL = 10 * 60_000;
-/** By gh program and account: its token as gh hands it out (asked once for calls side by side), and when it was asked. */
+/** By gh program, host and account: its token as gh hands it out (asked once for calls side by side), and when it was asked. */
 const tokens = new Map<string, { token: Promise<string | null>; at: number }>();
 
 /**
@@ -122,29 +143,38 @@ const tokens = new Map<string, { token: Promise<string | null>; at: number }>();
 const GH_TIMEOUT = 60_000;
 
 /**
- * gh's environment for a repository of `owner`: the token of gh's login for that account where it
+ * gh's environment for a repository of `owner` on `host`: gh sent to that host (`GH_HOST`; else
+ * `gh api` would ask github.com), and the token of gh's login there for that account where it
  * has one, so that a private repository of the owner is seen whichever account gh has active on
  * this machine (another one finds no such repository); else gh as it runs anyway (an
  * organisation's repository, say).
  */
-async function ghEnv(program: string, owner: string | undefined, timeout: number): Promise<NodeJS.ProcessEnv | undefined> {
-  if (!owner) return undefined;
-  const key = `${program}\n${owner}`;
-  let known = tokens.get(key);
-  if (!known || Date.now() - known.at > TOKEN_TTL) {
-    // without GH_TOKEN, which gh would hand back instead of the account's own token
-    const { GH_TOKEN: _, GITHUB_TOKEN: __, ...plain } = process.env;
-    const token = spawnOutput([program, 'auth', 'token', '--user', owner], { env: plain, stdin: 'ignore', timeout }).then(
-      (r) => (r.code === 0 && r.stdout.trim()) || null,
-      () => null,
-    );
-    known = { token, at: Date.now() };
-    tokens.set(key, known);
+async function ghEnv(program: string, { host, owner }: Omit<GhAt, 'cwd'>, timeout: number): Promise<NodeJS.ProcessEnv | undefined> {
+  if (!host) return undefined;
+  let token: string | null = null;
+  if (owner) {
+    const key = `${program}\n${host}\n${owner}`;
+    let known = tokens.get(key);
+    if (!known || Date.now() - known.at > TOKEN_TTL) {
+      // without the tokens in the environment, which gh would hand back instead of the account's own
+      const { GH_TOKEN: _, GITHUB_TOKEN: __, GH_ENTERPRISE_TOKEN: ___, GITHUB_ENTERPRISE_TOKEN: ____, ...plain } = process.env;
+      const asked = spawnOutput([program, 'auth', 'token', '--hostname', host, '--user', owner], { env: plain, stdin: 'ignore', timeout }).then(
+        (r) => (r.code === 0 && r.stdout.trim()) || null,
+        () => null,
+      );
+      known = { token: asked, at: Date.now() };
+      tokens.set(key, known);
+    }
+    token = await known.token;
   }
-  const token = await known.token;
-  if (!token) return undefined;
-  const { GITHUB_TOKEN: _, ...env } = process.env;
-  return { ...env, GH_TOKEN: token };
+  const env: NodeJS.ProcessEnv = { ...process.env, GH_HOST: host };
+  if (token) {
+    // the account's token in place of any the environment has for the host
+    const [name, other] = enterpriseServer(host) ? ['GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN'] : ['GH_TOKEN', 'GITHUB_TOKEN'];
+    delete env[other];
+    env[name] = token;
+  }
+  return env;
 }
 
 /**
@@ -154,24 +184,24 @@ async function ghEnv(program: string, owner: string | undefined, timeout: number
  */
 export const ghCli =
   (program = 'gh', timeout = GH_TIMEOUT) =>
-  async ({ cwd, owner }: GhAt, ...args: string[]): Promise<string> => {
-    const env = await ghEnv(program, owner, timeout);
+  async ({ cwd, ...at }: GhAt, ...args: string[]): Promise<string> => {
+    const env = await ghEnv(program, at, timeout);
     const r = await spawnOutput([program, ...args], { cwd, stdin: 'ignore', timeout, ...(env ? { env } : {}) });
     if (r.signal) throw new Error(`gh ${args.slice(0, 3).join(' ')}: no answer within ${timeout / 1000} s`);
     if (r.code !== 0) throw new Error(`gh ${args.slice(0, 3).join(' ')}: ${r.stderr.trim()}`);
     return r.stdout;
   };
 
-/** The owner of the GitHub repository a checkout's `origin` is, where it is one. */
-async function originOwner(cwd: string): Promise<string | undefined> {
+/** The host and owner of the GitHub repository a checkout's `origin` is, where it is one. */
+async function originRepo(cwd: string): Promise<{ host: string; owner: string } | undefined> {
   const r = await spawnOutput(['git', '-C', cwd, 'remote', 'get-url', 'origin'], { stdin: 'ignore' });
-  return r.code === 0 ? githubOwner(r.stdout) : undefined;
+  return r.code === 0 ? githubRepo(r.stdout) : undefined;
 }
 
 /** Where gh runs for the pull request at `url`. */
 const atPr = (cwd: string, url: string): GhAt => {
-  const owner = parsePrUrl(url)?.owner;
-  return owner ? { cwd, owner } : { cwd };
+  const ref = parsePrUrl(url);
+  return ref?.forge === 'github' ? { cwd, host: ref.host, owner: ref.owner } : { cwd };
 };
 
 /** The pull request at `url`; throws for a URL that is no GitHub pull request's. */
@@ -208,11 +238,11 @@ interface GhPr {
 /** GitHub through a `gh` runner (the real CLI, or canned output in tests). */
 export const makeGhForge = (
   run: (at: GhAt, ...args: string[]) => string | Promise<string>,
-  ownerOf: (cwd: string) => Promise<string | undefined> = originOwner,
+  repoOf: (cwd: string) => Promise<{ host: string; owner: string } | undefined> = originRepo,
 ): Forge => ({
   async status(cwd, url) {
     const ref = prRef(url);
-    const at: GhAt = { cwd, owner: ref.owner };
+    const at = atPr(cwd, url);
     // side by side: each is a round trip to GitHub
     const [pr, inline, threads] = await Promise.all([
       run(at, 'pr', 'view', url, '--json', 'state,mergeable,mergeStateStatus,headRefOid,mergeCommit,author,statusCheckRollup,comments,reviews'),
@@ -240,14 +270,14 @@ export const makeGhForge = (
     await withBodyFile(body, (file) => run(atPr(cwd, url), 'pr', 'edit', url, '--body-file', file));
   },
   async open(cwd, pr) {
-    const at: GhAt = { cwd, owner: await ownerOf(cwd) };
+    const at: GhAt = { cwd, ...(await repoOf(cwd)) };
     // gh prints the new pull request's URL last
     const out = await withBodyFile(pr.body, (file) => run(at, 'pr', 'create', '--base', pr.base, '--head', pr.head, '--title', pr.title, '--body-file', file));
     return out.trim().split('\n').at(-1)!.trim();
   },
   async merge(cwd, url, head) {
     const ref = prRef(url);
-    const at: GhAt = { cwd, owner: ref.owner };
+    const at = atPr(cwd, url);
     // the repository's own merge methods (some allow squash only); squash first where it allows several
     const allows = JSON.parse(await run(at, 'api', `repos/${ref.owner}/${ref.repo}`, '--jq', '{squash: .allow_squash_merge, merge: .allow_merge_commit, rebase: .allow_rebase_merge}')) as Record<string, boolean>;
     const method = (['squash', 'merge', 'rebase'] as const).find((m) => allows[m] !== false) ?? 'squash';

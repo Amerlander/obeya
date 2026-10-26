@@ -210,7 +210,8 @@ export function artifact(): { kind: 'html'; dir: string } {
 /**
  * A stand-in for GitHub's CLI, in `dir`, slow as GitHub can be: it answers a call on pull request
  * number `n` after `delays[n]` milliseconds (none for others), with an open PR whose one comment
- * is by `lead`; `auth token` answers at once. Each call is appended to `<dir>/calls`.
+ * is by `lead`; `auth token` answers at once with `token:<host>:<user>`. Each call is appended to
+ * `<dir>/calls`, with the host and tokens gh would use from its environment.
  */
 export function fakeGh(dir: string, delays: Record<number, number>): string {
   mkdirSync(dir, { recursive: true });
@@ -220,8 +221,10 @@ export function fakeGh(dir: string, delays: Record<number, number>): string {
     script,
     `import { appendFileSync } from 'node:fs';
 const args = process.argv.slice(2);
-appendFileSync(${JSON.stringify(join(dir, 'calls'))}, args.join(' ') + '\\n');
-if (args[0] === 'auth') { console.log('token'); process.exit(0); }
+const env = ['GH_HOST', 'GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN'].map((k, i) => (process.env[k] || !i ? k + '=' + (process.env[k] ?? '') : '')).filter(Boolean);
+appendFileSync(${JSON.stringify(join(dir, 'calls'))}, args.join(' ') + ' | ' + env.join(' ') + '\\n');
+const opt = (name: string) => args[args.indexOf(name) + 1];
+if (args[0] === 'auth') { console.log('token:' + opt('--hostname') + ':' + opt('--user')); process.exit(0); }
 const n = Number(/pulls?\\/(\\d+)|number=(\\d+)/.exec(args.join(' '))?.slice(1).find(Boolean));
 await Bun.sleep((${JSON.stringify(delays)} as Record<number, number>)[n] ?? 0);
 if (args[0] === 'pr') console.log(JSON.stringify({ state: 'OPEN', mergeable: 'MERGEABLE', mergeStateStatus: 'BLOCKED', headRefOid: 'aaa', author: { login: 'owner' }, statusCheckRollup: [], comments: [{ id: 'IC_' + n, author: { login: 'lead' }, body: 'Rename it.', url: 'https://gh/c' + n }], reviews: [] }));

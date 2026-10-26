@@ -35,16 +35,26 @@ export function sameRemote(a: string, b: string): boolean {
 }
 
 /**
+ * Whether gh takes a host's token from `GH_ENTERPRISE_TOKEN` rather than `GH_TOKEN`: a GitHub
+ * Enterprise server, unlike github.com and Enterprise Cloud's `*.ghe.com`.
+ */
+export const enterpriseServer = (host: string) => host !== 'github.com' && !host.endsWith('.ghe.com') && host !== 'github.localhost';
+
+/**
  * The hosts the GitHub CLI is logged into, from its `hosts.yml` (its config directory as gh finds
- * it: `GH_CONFIG_DIR`, `XDG_CONFIG_HOME/gh`, on Windows `%AppData%\GitHub CLI`, else `~/.config/gh`).
- * Read from the file rather than asked of `gh auth status`, which checks each login over the network.
+ * it: `GH_CONFIG_DIR`, `XDG_CONFIG_HOME/gh`, on Windows `%AppData%\GitHub CLI`, else `~/.config/gh`),
+ * and the host `GH_HOST` names where the environment holds a token gh reads for it. Read from
+ * the file rather than asked of `gh auth status`, which checks each login over the network.
  */
 export function ghHosts(env: NodeJS.ProcessEnv = process.env, platform: string = process.platform): string[] {
   const dir = env.GH_CONFIG_DIR || (env.XDG_CONFIG_HOME ? join(env.XDG_CONFIG_HOME, 'gh') : platform === 'win32' && env.AppData ? join(env.AppData, 'GitHub CLI') : join(homedir(), '.config', 'gh'));
+  const host = env.GH_HOST?.trim().toLowerCase();
+  const token = host && (enterpriseServer(host) ? env.GH_ENTERPRISE_TOKEN || env.GITHUB_ENTERPRISE_TOKEN : env.GH_TOKEN || env.GITHUB_TOKEN);
+  const fromEnv = host && token ? [host] : [];
   try {
-    return [...readFileSync(join(dir, 'hosts.yml'), 'utf8').matchAll(/^([^\s#:][^:]*):\s*$/gm)].map((m) => m[1]!.trim().toLowerCase());
+    return [...readFileSync(join(dir, 'hosts.yml'), 'utf8').matchAll(/^([^\s#:][^:]*):\s*$/gm)].map((m) => m[1]!.trim().toLowerCase()).concat(fromEnv);
   } catch {
-    return [];
+    return fromEnv;
   }
 }
 

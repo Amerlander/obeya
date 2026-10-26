@@ -267,6 +267,10 @@ describe('a remote on GitHub', () => {
       expect(ghHosts({ XDG_CONFIG_HOME: join(dir, 'xdg') })).toEqual(['github.com', 'git.acme.com']);
       expect(ghHosts({ AppData: join(dir, 'AppData') }, 'win32')).toEqual(['github.com', 'git.acme.com']);
       expect(ghHosts({ GH_CONFIG_DIR: join(dir, 'none') })).toEqual([]);
+      // logged in through the environment only
+      expect(ghHosts({ GH_CONFIG_DIR: join(dir, 'none'), GH_HOST: 'github.example.com', GH_ENTERPRISE_TOKEN: 't' })).toEqual(['github.example.com']);
+      expect(ghHosts({ GH_CONFIG_DIR: join(dir, 'none'), GH_HOST: 'github.example.com', GH_TOKEN: 't' })).toEqual([]);
+      expect(ghHosts({ GH_CONFIG_DIR: join(dir, 'none'), GH_HOST: 'example.ghe.com', GH_TOKEN: 't' })).toEqual(['example.ghe.com']);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
