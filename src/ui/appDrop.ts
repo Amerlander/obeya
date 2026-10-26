@@ -1,9 +1,9 @@
 // Files dropped in the app. Its webview hands a drop from the desktop to the app instead of the page,
 // with the files' paths (app/src/main.rs), and the page would hear nothing of it. The app passes on
 // where the drag is and, at the drop, the paths; the page plays them to the element under the
-// pointer as the browser's own drag events, with Files: an image with its bytes, read through
-// Obeya on the same machine, to attach as a screenshot; any other file (or folder) empty, known by
-// its path (`droppedPath`), which goes into the text as it is.
+// pointer as the browser's own drag events, with Files, each empty and known by its path
+// (`droppedPath`): an image the field reads through Obeya on the same machine as it attaches it as a
+// screenshot (`withBytes`); any other file (or folder) goes into the text by that path.
 
 import { api } from './api';
 
@@ -31,17 +31,19 @@ function play(type: 'dragover' | 'dragleave' | 'drop', el: Element, x: number, y
 /** What a drag carries before the drop: a file, so the places that take files light up. */
 const some = () => [new File([], '')];
 
-/** The file the page hands on for `path`: an image with its bytes, anything else by its path. */
-async function fileOf(path: string): Promise<File> {
+/** The file the page hands on for `path`: empty, an image by its type. */
+function fileOf(path: string): File {
   const name = path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
-  if (IMAGE.test(path)) {
-    const image = await api.localImage(path).catch(() => null);
-    if (image) return image;
-  }
-  const f = new File([], name);
+  const f = new File([], name, { type: IMAGE.test(path) ? 'image/*' : '' });
   paths.set(f, path);
   return f;
 }
+
+/** The screenshot `f` with its bytes: read from where it lies for one the app's drop brought. */
+export const withBytes = (f: File): Promise<File> => {
+  const path = paths.get(f);
+  return path ? api.localImage(path) : Promise.resolve(f);
+};
 
 /** In the app: the page hears what is dragged over its window and dropped there. */
 export function takeAppDrops() {
@@ -53,6 +55,6 @@ export function takeAppDrops() {
     over = kind === 'over' ? el : null;
     if (!el) return;
     if (kind === 'over') play('dragover', el, x, y, some());
-    else void Promise.all(dropped.map(fileOf)).then((files) => play('drop', el, x, y, files));
+    else play('drop', el, x, y, dropped.map(fileOf));
   };
 }

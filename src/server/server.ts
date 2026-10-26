@@ -608,7 +608,7 @@ export function serve(
         GET: on((_c, req) => {
           const image = localImage(new URL(req.url).searchParams.get('path') ?? '');
           if (!image) throw new BadRequest('imageType', 'no image on this machine');
-          return new Response(Bun.file(image.file), { headers: { 'content-type': image.type } });
+          return new Response(Bun.file(image.file), { headers: { 'content-type': image.type, 'x-content-type-options': 'nosniff', 'content-security-policy': 'sandbox' } });
         }),
       },
       '/api/c/:canvas/images/:file': {

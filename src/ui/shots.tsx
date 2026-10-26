@@ -7,7 +7,7 @@ import { type ClipboardEvent, type DragEvent, type MouseEvent, type PointerEvent
 import { createPortal } from 'react-dom';
 import { IMAGE_TYPES, MAX_FILE_BYTES, MAX_IMAGE_BYTES } from '../core/types';
 import { api, ApiError, at } from './api';
-import { droppedPath } from './appDrop';
+import { droppedPath, withBytes } from './appDrop';
 import { draftOf, dropDraft, insert, markupOf, pathWord, setMarkup, updateDraft, useDraft } from './draft';
 import { know, known } from './known';
 import { badgeOf, CLICK_PX, drawMarks, EDGE, type Mark, markOf, markSize, type Point, RED, roundedRect } from './marks';
@@ -60,7 +60,7 @@ export async function attachTo(key: string, files: File[], added?: () => void) {
   updateDraft(key, (d) => ({ error: '', uploading: d.uploading + files.length }));
   for (const f of files) {
     try {
-      const id = await api.uploadImage(await prepareImage(f));
+      const id = await api.uploadImage(await prepareImage(await withBytes(f)));
       updateDraft(key, (d) => ({ images: [...d.images, id] }));
       arrived++;
       added?.();

@@ -47,7 +47,12 @@ export async function findDropped(f: Dropped, home = homedir()): Promise<string 
     if (basename(p) === f.name && fits(p)) found.add(realpathSync(p));
   };
   for (const p of await spotlight(f.name, home)) add(p);
-  if (!found.size) for (const p of await walk(f.name, home)) add(p);
+  if (!found.size) {
+    const walked = await walk(f.name, home);
+    // a search cut short may have missed another that fits
+    if (!walked.whole) return null;
+    for (const p of walked.found) add(p);
+  }
   return found.size === 1 ? [...found][0]! : null;
 }
 
@@ -63,22 +68,25 @@ async function spotlight(name: string, home: string): Promise<string[]> {
   }
 }
 
-/** The files named `name` in the folders files are dragged from, a few levels deep, hidden ones and dependencies left out. */
-async function walk(name: string, home: string): Promise<string[]> {
+/**
+ * The files named `name` in the folders files are dragged from, a few levels deep, hidden ones and
+ * dependencies left out; `whole` unless the search stopped at its most entries.
+ */
+async function walk(name: string, home: string): Promise<{ found: string[]; whole: boolean }> {
   const found: string[] = [];
   let seen = 0;
   const roots = ['Downloads', 'Desktop', 'Documents', join('OneDrive', 'Desktop'), join('OneDrive', 'Documents')].map((d) => ({ dir: join(home, d), depth: WALK_DEPTH }));
   const queue = [...roots, { dir: home, depth: 0 }];
-  while (queue.length && seen < WALK_MAX) {
+  while (queue.length) {
     const { dir, depth } = queue.shift()!;
     const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
     for (const e of entries) {
-      if (++seen > WALK_MAX) break;
+      if (++seen > WALK_MAX) return { found, whole: false };
       if (e.name === name && e.isFile()) found.push(join(dir, e.name));
       else if (depth > 0 && e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules') queue.push({ dir: join(dir, e.name), depth: depth - 1 });
     }
   }
-  return found;
+  return { found, whole: true };
 }
 
 /** The file's name as it goes into a path: one word an agent reads as a path, its letters and extension kept. */
@@ -109,7 +117,8 @@ const LOCAL_IMAGES: Record<string, string> = { png: 'image/png', jpg: 'image/jpe
 
 /** An image on this machine dropped in the app, by its absolute path: its file and media type, or null for anything else. */
 export function localImage(path: string): { file: string; type: string } | null {
-  const type = LOCAL_IMAGES[path.split('.').at(-1)?.toLowerCase() ?? ''];
+  const ext = path.split('.').at(-1)?.toLowerCase() ?? '';
+  const type = Object.hasOwn(LOCAL_IMAGES, ext) ? LOCAL_IMAGES[ext] : undefined;
   if (!type || !isAbsolute(path)) return null;
   try {
     return statSync(path).isFile() ? { file: path, type } : null;

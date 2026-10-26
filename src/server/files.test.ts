@@ -70,5 +70,7 @@ test('the app hands on images by their path, and nothing else', () => {
   expect(localImage(join(dir, 'secret.txt'))).toBeNull();
   expect(localImage(join(dir, 'missing.png'))).toBeNull();
   expect(localImage('shot.PNG')).toBeNull();
+  writeFileSync(join(dir, 'page.__proto__'), '<script>');
+  expect(localImage(join(dir, 'page.__proto__'))).toBeNull();
   rmSync(dir, { recursive: true, force: true });
 });
