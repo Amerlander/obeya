@@ -527,24 +527,22 @@ export function OldBunPill({ version }: { version: string }) {
  * repository in worktrees, and how many new cards could start now. Hovering or clicking it drops
  * down each machine's slots and each of its workspaces by path with the card in it, which opens
  * the card (`onOpen`; `onElsewhere` one on another canvas), and why a blocked clone goes to no card
- * and what to do about it. `inline`
- * (the phone): the list unfolds below the pill on a tap instead of over the canvas on hover.
+ * and what to do about it.
  */
-export function WorkspacesPill({ pools, canvas, canvases, items, onOpen, onElsewhere, inline }: {
+export function WorkspacesPill({ pools, canvas, canvases, items, onOpen, onElsewhere }: {
   pools: ClonePool[];
   canvas: CanvasInfo;
   canvases: CanvasInfo[];
   items: Item[];
   onOpen: (i: Item) => void;
   onElsewhere: (canvas: string, card: string) => void;
-  inline?: boolean;
 }) {
   // open by a click (a tap) until one elsewhere or Escape; shut after a card is opened from it, until the pointer leaves
   const [open, setOpen] = useState(false);
   const [shut, setShut] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!open || inline) return;
+    if (!open) return;
     const away = (e: PointerEvent) => ref.current?.contains(e.target as Node) || setOpen(false);
     const esc = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
@@ -558,7 +556,7 @@ export function WorkspacesPill({ pools, canvas, canvases, items, onOpen, onElsew
       removeEventListener('pointerdown', away, true);
       removeEventListener('keydown', esc);
     };
-  }, [open, inline]);
+  }, [open]);
   const several = pools.length > 1;
   const name = (repo: string) => canvas.repos.find((r) => r.id === repo)?.name ?? repo;
   const forWorkspace = items.filter((i) => (i.queue && 'workspace' in i.queue && i.queue.workspace !== 'slots') || i.waitsForClone).length;
@@ -580,8 +578,8 @@ export function WorkspacesPill({ pools, canvas, canvases, items, onOpen, onElsew
   return (
     <div
       ref={ref}
-      className={['pill workspaces', full && 'full', open && 'open', shut && 'shut', inline && 'inline'].filter(Boolean).join(' ')}
-      id={inline ? undefined : 'workspaces'}
+      className={['pill workspaces', full && 'full', open && 'open', shut && 'shut'].filter(Boolean).join(' ')}
+      id="workspaces"
       onPointerLeave={() => setShut(false)}
     >
       <button className="face" aria-expanded={open} onClick={() => setOpen(!open)}>

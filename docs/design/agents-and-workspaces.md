@@ -148,9 +148,6 @@ canvas has loaded). A card not on any canvas (archived, say) shows by its title 
 repository in worktrees shows a dot per slot, and none without slots (no pill if all are so); its
 list names the cards' worktrees.
 
-The phone view has the same pill per canvas in a section „Workspaces“ below „Läuft“; a tap unfolds
-the same list below it, the screen's width, and a card in it opens as from any list there.
-
 A free clone is blocked when the last look at it (see Workspaces) says no new card gets it: it has
 uncommitted or untracked changes (the list names the first five files), git fails in it, its
 folder is missing, its machine does not answer over SSH (one line per machine), or git failed making
@@ -337,7 +334,7 @@ a container say, reuses pids). A host needs git, Claude Code and what the reposi
   of counts and titles did not say which folder a card works in, nor which clone is free, and gave
   no way to the card. A click opens the list as well as hovering, so its links can be reached and it
   works by touch. Rejected: a path cut at its end (the clone's number and the repository are at the
-  end).
+  end); the list on the phone (owner, 2026-10-27: the phone view stays simple).
 - **Free clones are chosen by their last look, the one taken looked at again** (2026-10-21): in a
   large repository (GitHub issue #2: 9,188 files, on Windows) or over SSH, `git status` in every free
   clone at each look held the server, on every canvas. Rejected: asking git while choosing; a start

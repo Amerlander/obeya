@@ -4,7 +4,7 @@
 // demo, approve buttons), its conversation in the same panel, and Back returns to the list. The microphone is held by touch; Enter breaks the line, only Send sends;
 // what was typed but not sent survives a reload. It holds one WebSocket per canvas.
 
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { type CanvasInfo, type CanvasSnapshot, type CardPatch, type Item, needsYou, openQuestions, unreadAnswers } from '../core/types';
 import { api, beforeReload, cardsOn, onNotice, phoneInUse, setCanvas, useCanvas, type Where } from './api';
 import { enterBreaksLines } from './composer';
@@ -16,7 +16,7 @@ import { Notify, registerWorker } from './notify';
 import { plain } from './markdown';
 import { Cards } from './message';
 import { glide, type Mark, settle, speed, THROWN, thrown } from './panelHeight';
-import { CardFace, cardClass, shownState, TalkIcon, WorkspacesPill } from './parts';
+import { CardFace, cardClass, shownState, TalkIcon } from './parts';
 import { videoOf } from './spot';
 import { clock, failText, forTouch, shortDay, t } from './strings';
 import { agentWorks, cardTalk, koordinatorReads, obeyaWorks, opensWithTalk, runs, unseen } from './talk';
@@ -578,7 +578,6 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
     openTalk();
   };
   const shown = talk && !closing;
-  const pooled = ordered.filter((c) => snaps[c.id]?.workspaces?.length);
   return (
     <HoldToTalk.Provider value={press}>
       {feeds}
@@ -609,20 +608,6 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
           {/* a snoozed card at the end, after those at work now */}
           {ordered.length > 0 && <Running entries={all.filter(({ item }) => runs(item) || isUnderway(item.id)).sort((a, b) => Number(!!a.item.snoozed) - Number(!!b.item.snoozed))} several={several} onOpen={openCard} />}
         </section>
-        {/* each canvas's pools as the bar of the canvas shows them, the list of workspaces unfolding on a tap */}
-        {pooled.length > 0 && (
-          <section className="ph-section">
-            <h2>{t.workspaces.label}</h2>
-            <div className="ph-pools">
-              {pooled.map((c) => (
-                <Fragment key={c.id}>
-                  {several && <p className="ph-where">{c.name}</p>}
-                  <WorkspacesPill inline pools={snaps[c.id]!.workspaces!} canvas={snaps[c.id]!.canvas} canvases={canvases} items={snaps[c.id]!.items} onOpen={openCard} onElsewhere={(_, card) => openId(card)} />
-                </Fragment>
-              ))}
-            </div>
-          </section>
-        )}
       </div>
       {talk && (
         <TalkPanel title={t.koordinator.title} label={t.phone.talkTitle} banner={banner} onClose={closeTalk} leave={leaveTalk} onLeave={() => setClosing(true)}>
