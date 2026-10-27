@@ -96,6 +96,8 @@ export class Koordinator {
 
   /** Cards whose workspace the owner takes from them, while the undo window runs (`evict`). */
   private evictions = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Cards giving up their workspace now, the undo window through: queued already, they start once that is done. */
+  private giving = new Set<string>();
 
   constructor(private o: KoordinatorOptions) {
     o.board.onChange(() => {
@@ -143,17 +145,20 @@ export class Koordinator {
       } catch {
         return this.o.board.changed();
       }
-      workers.evict(cardId).then(
-        (active) => {
-          const after = this.o.board.item(cardId);
-          if (active && after?.state === 'planned' && !after.queue) {
-            this.setQueue(cardId, { workspace: 'none' });
-            this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.koordinator.requeued);
-          }
+      // queued at once, so that a card waiting behind it for a likely conflict keeps waiting
+      const active = now.state !== 'planned';
+      if (active && !now.queue) {
+        this.setQueue(cardId, { workspace: 'none' });
+        this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.koordinator.requeued);
+      }
+      this.giving.add(cardId);
+      workers
+        .evict(cardId)
+        .catch((e: unknown) => void (this.o.board.item(cardId) && this.o.board.log(cardId, 'error', 'obeya', messageOf(e))))
+        .finally(() => {
+          this.giving.delete(cardId);
           this.scheduleDrain();
-        },
-        (e: unknown) => this.o.board.item(cardId) && this.o.board.log(cardId, 'error', 'obeya', messageOf(e)),
-      );
+        });
     };
     this.evictions.set(cardId, setTimeout(go, this.o.holdMs ?? EVICT_HOLD_MS));
     this.o.board.changed();
@@ -773,19 +778,22 @@ export class Koordinator {
     const waiting = queueOrder(items).filter(movable);
     // a repository whose workspaces are taken by a card waiting longer is not asked again
     const full = new Set<string | undefined>();
+    // cards waiting for a clone on one machine (`near`) that has none: asked again after a while, as for a full repository
+    let again = false;
     // the owner's question to a finished card whose agent needs a full clone goes before queued cards
     for (const f of items.filter((i) => i.waitsForClone && !i.repoDown)) {
       const hands = this.o.repoFor(f);
       if (full.has(f.repo) || !hands.workspaces.leasable(true) || !hands.workers.takeClone(f.id)) full.add(f.repo);
     }
     for (const w of waiting) {
-      // one whose repository does not run waits on until it is back
-      if (w.repoDown) continue;
+      // one whose repository does not run waits on until it is back; one giving up its workspace, until it has
+      if (w.repoDown || this.giving.has(w.id)) continue;
       if ('workspace' in w.queue!) {
         // a card whose branch a clone keeps takes one on that clone's machine: none there leaves the others to the cards behind it
         const near = this.o.board.row(w.id).kept_in;
         if (full.has(w.repo) || !this.o.repoFor(w).workspaces.leasable(false, near)) {
-          if (!near) full.add(w.repo);
+          if (near) again = true;
+          else full.add(w.repo);
           continue;
         }
         this.startNow(w.id, w.queue!.workspace === 'slots' ? this.o.board.t.koordinator.slotFree : this.o.board.t.koordinator.workspaceFree);
@@ -812,7 +820,7 @@ export class Koordinator {
         this.serial(() => this.decide(w.id));
       }
     }
-    if (full.size && !this.recheck) {
+    if ((full.size || again) && !this.recheck) {
       this.recheck = setTimeout(() => {
         this.recheck = undefined;
         this.scheduleDrain();

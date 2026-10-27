@@ -916,7 +916,8 @@ export class Workspaces implements CardWorkspaces {
         await gitAsync(path, 'add', '--all');
         await gitAsync(path, '-c', 'user.name=Obeya', '-c', 'user.email=obeya@localhost', '-c', 'core.hooksPath=/dev/null', 'commit', '--quiet', '--no-verify', '-m', `Uncommitted work, kept by Obeya as the card's workspace went to another card\n\n${SAVED}`);
       }
-      this.free(path);
+      // given back meanwhile (a stop that had asked git before) and perhaps taken by another card, which waits for this
+      if (this.leasedBy(cardId) === path) this.free(path);
       return path;
     });
   }
@@ -1353,9 +1354,10 @@ export class Workspaces implements CardWorkspaces {
         // a branch that already exists holds work: check it out, never reset it
         if (await gitAsync(path, 'branch', '--list', branch)) await gitAsync(path, 'checkout', '--quiet', branch);
         else await gitAsync(path, 'checkout', '--quiet', '-b', branch, `origin/${base}`);
-        // the work it had not committed when its workspace was taken is uncommitted again
-        if (from && (await gitAsync(path, 'log', '-1', '--format=%B')).includes(SAVED)) await gitAsync(path, 'reset', '--quiet', 'HEAD~1');
-        if (from && from !== path) void this.dropCopy(from, branch, base);
+        // the work it had not committed when its workspace was taken is uncommitted again, unless the
+        // card was stopped meanwhile: then the clone goes back clean and the one that kept the branch keeps it
+        if (from && !this.releasing.has(cardId) && (await gitAsync(path, 'log', '-1', '--format=%B')).includes(SAVED)) await gitAsync(path, 'reset', '--quiet', 'HEAD~1');
+        if (from && from !== path && !this.releasing.has(cardId)) void this.dropCopy(from, branch, base);
         return path;
       },
       (path, e) => {

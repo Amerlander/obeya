@@ -463,6 +463,9 @@ const FOLLOW_UP =
 const IN_WORKTREE =
   "No clone of the repository was free, so this is a temporary worktree, where the repository's app and tooling may not run. If answering needs a full clone, call need_clone and end your turn: Obeya resumes you in the next free clone.";
 
+/** How long taking a card's workspace waits for its ended session to finish its step before git keeps its work. */
+const EVICT_SESSION_WAIT = 30_000;
+
 export class Workers {
   private live = new Map<string, Live>();
   /** Cards whose approved work is landing: the server answers meanwhile, but approving again is refused, and a restart waits. */
@@ -1611,14 +1614,19 @@ export class Workers {
     const path = this.o.board.row(cardId).workspace!;
     this.evicting.add(cardId);
     try {
+      // its session ends before git keeps its work, and a stop still asking git (`stop`) gives nothing back afterwards
+      const session = this.live.get(cardId)?.session;
       if (active) {
         // comments held back for the worker stay in the conversation
         this.takeHeld(cardId);
         this.end(cardId);
-        this.bump(cardId);
         this.o.board.work(cardId, { state: 'planned', need: null, detail: null, pr: null, approved_at: null, paused: null, snoozed: null, app: null });
       }
+      this.bump(cardId);
       this.o.board.work(cardId, { status_line: this.o.board.t.worker.evicting });
+      await Promise.race([session?.done.catch(() => {}), Bun.sleep(EVICT_SESSION_WAIT)]);
+      // parking the app may be under way already: it is through before the clone changes hands
+      await this.stopping.get(cardId)?.catch(() => {});
       const stop = this.o.adapter.app?.stop;
       if (stop) {
         const result = await runAppCommand(path, stop);
@@ -1984,10 +1992,10 @@ export class Workers {
 
   /**
    * The cards whose worker is in the middle of a turn (or whose ended turn waits for its background
-   * work), and those whose workspace is being made ready or freed or whose work is landing: a restart would cut off git midway.
+   * work), and those whose workspace is being made ready, freed or taken from them (`evict`) or whose work is landing: a restart would cut off git midway.
    */
   busyCards(): string[] {
-    return [...new Set([...this.inTurn(), ...this.landing, ...[...this.freeing.values()].map((f) => f.card)])];
+    return [...new Set([...this.inTurn(), ...this.landing, ...[...this.freeing.values()].map((f) => f.card), ...this.evicting])];
   }
 
   /**

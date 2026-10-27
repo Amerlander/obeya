@@ -73,6 +73,30 @@ describe("taking a card's workspace", () => {
     expect(git(first!, 'branch', '--list', branch!)).toBe('');
   });
 
+  test('a card stopped while git takes its branch to another clone leaves that clone clean, and the one that kept the branch keeps it', async () => {
+    spaces.ensureClones(main, 2);
+    for (const w of spaces.list()) identify(w.path);
+    const c = manual();
+    await workers.start(c.id);
+    const { workspace: first, branch } = board.row(c.id);
+    writeFileSync(join(first!, 'new.ts'), 'new');
+    const e = manual();
+    await workers.start(e.id);
+    await workers.evict(c.id);
+    const d = manual();
+    await workers.start(d.id);
+    await workers.stop(e.id);
+
+    void workers.start(c.id);
+    const second = board.row(c.id).workspace!;
+    await workers.stop(c.id);
+    await until(() => !spaces.list().some((w) => w.card_id === c.id));
+    expect(second).not.toBe(first);
+    expect(git(second, 'status', '--porcelain')).toBe('');
+    expect(board.row(c.id).kept_in).toBe(first);
+    expect(git(first!, 'branch', '--list', branch!)).toContain(branch!);
+  });
+
   test('a card that waits for the owner, or was stopped with work, gives its clone up too; one whose work landed does not', async () => {
     const c = manual();
     await workers.start(c.id);
