@@ -184,8 +184,9 @@ contributor's pull request and starts it; a number is the PR of the card's repos
 a canvas with several, unless the owner names one). What the owner adds („schau besonders auf
 Security“) becomes its task. A PR with a card already opens that card, unless the owner has another
 one open, and the words go to its worker; one Obeya cannot read, or closed, gets none, and the owner
-reads why. Until a review card was there once, a line under Obeya's field names the command (see
-Review cards).
+reads why. On a canvas with a repository whose origin is on a server, one muted line under Obeya's
+field names the command until a review card was there once or the owner closes it with × (see
+Review cards); it stays quiet since the feature is a special one (the owner, 2026-10-27).
 
 "Merk dir: …" is remember, with the open card as occasion, after the undo window (see Learning the owner's
 rules).
