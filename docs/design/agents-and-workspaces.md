@@ -101,10 +101,11 @@ brought back with the undo takes its clone back if still free, else another at i
 
 #### Taking a card's workspace
 
-While cards wait for a workspace of a repository in clones (or a finished card's question for a
-clone), the pool's list has „Entziehen“ beside each card that holds a clone and is at work, waits
-for the owner, or was stopped with work in it (not a card whose work landed, nor a prototype). A
-click gives that clone to the card waiting longest: after eight seconds in which „Rückgängig“ (in
+While every clone of a repository is taken (or blocked) and a card waits for one (or a finished
+card's question for a clone), the pool's list has a faint „⋯“ beside each card that holds a clone
+and is at work, waits for the owner, or was stopped with work in it (not a card whose work landed,
+nor a prototype). It opens „An wartende Karte abgeben“ with a sentence on what that does. A click
+there gives that clone to the card waiting longest: after eight seconds in which „Rückgängig“ (in
 the confirmation, and in the row, which says „gibt ihn ab“) takes it back, the card's worker stops
 as with „Stoppen“, the app in the clone stops (`app.stop`, whatever `app.keep` says, since another
 card works there next), and what is uncommitted there (untracked files too, ignored ones aside)
@@ -163,9 +164,9 @@ held, orange while free but blocked, and how many new cards could start („2 fr
 „keiner frei · 1 blockiert“). Hovering or clicking it drops down a list: per machine its slots at
 work and clones taken, then each workspace on a line of its own, free ones included, with its path
 (cut at the front where too long, so its end stays readable), the dot the pill shows for it, and
-the card in it, „frei“ or „blockiert“; then how many cards wait for a workspace or a slot, and
-while any do, „Entziehen“ beside the cards whose clone may go to them (see Taking a card's
-workspace), with a line saying what it does. The card
+the card in it, „frei“ or „blockiert“; then how many cards wait for a workspace or a slot. While
+none is free and a card waits, „⋯“ beside the cards whose clone may go to it (see Taking a card's
+workspace). The card
 is a link: a click closes the list, flies to the card and opens it; for a card on another canvas
 the page switches to that canvas (`?c=<canvas>&card=<id>`, which opens the named card once the
 canvas has loaded). A card not on any canvas (archived, say) shows by its title without a link. A
@@ -364,8 +365,10 @@ a container say, reuses pids). A host needs git, Claude Code and what the reposi
   Its uncommitted work goes into a commit on its branch, taken apart again when the card goes on,
   so the override loses nothing and needs no question first. Rejected: asking what to do with
   uncommitted work at each click; refusing while the clone holds uncommitted work (a worker at work
-  nearly always has some). The button shows only while a card waits, since the card it was taken
-  from queues again and would otherwise take the clone straight back.
+  nearly always has some). It shows only while no clone is free and a card waits (the card it was
+  taken from queues again and would otherwise take the clone straight back), and behind a faint
+  „⋯“ rather than a button per row (owner, 2026-10-27: a rare action whose label alone did not
+  say what it is for, and buttons in every row crowded the list).
 - **Free clones are chosen by their last look, the one taken looked at again** (2026-10-21): in a
   large repository (GitHub issue #2: 9,188 files, on Windows) or over SSH, `git status` in every free
   clone at each look held the server, on every canvas. Rejected: asking git while choosing; a start

@@ -1598,11 +1598,12 @@ const de = {
     atWork: 'arbeitet',
     waiting: (n: number) => (n === 1 ? '1 Karte wartet auf einen freien Workspace.' : `${n} Karten warten auf einen freien Workspace.`),
     waitingSlot: (n: number) => (n === 1 ? '1 Karte wartet auf einen freien Slot.' : `${n} Karten warten auf einen freien Slot.`),
-    /** The button beside a card in the list while cards wait: its workspace goes to the one waiting longest. */
-    take: 'Entziehen',
-    takeTitle:
-      'Gibt diesen Workspace der Karte, die am längsten wartet. Der Agent dieser Karte stoppt; was er nicht committet hat, bleibt als Commit auf ihrem Branch. Sie wartet dann selbst und macht dort weiter, sobald wieder ein Workspace frei ist.',
-    takeHint: 'Mit „Entziehen“ bekommt die Karte, die am längsten wartet, einen belegten Workspace.',
+    /** Beside a card in the list while every clone is taken and a card waits: opens what gives its clone away. */
+    more: 'Mehr',
+    /** Behind „⋯“: its workspace goes to the card waiting longest. */
+    take: 'An wartende Karte abgeben',
+    takeWhat:
+      'Die Karte, die am längsten wartet, bekommt diesen Workspace. Der Agent dieser Karte stoppt; was er nicht committet hat, bleibt als Commit auf ihrem Branch. Sie wartet dann selbst und macht dort weiter, sobald wieder einer frei ist.',
     /** Beside a card whose workspace goes once the undo window is through. */
     leaving: 'gibt ihn ab',
     taken: (title: string) => `„${title}“ gibt ihren Workspace ab.`,
@@ -3259,10 +3260,10 @@ const en: Strings = {
     atWork: 'at work',
     waiting: (n: number) => (n === 1 ? '1 card is waiting for a free workspace.' : `${n} cards are waiting for a free workspace.`),
     waitingSlot: (n: number) => (n === 1 ? '1 card is waiting for a free slot.' : `${n} cards are waiting for a free slot.`),
-    take: 'Take away',
-    takeTitle:
-      "Gives this workspace to the card waiting longest. This card's agent stops; what it has not committed is kept in a commit on its branch. The card then waits itself and goes on there once a workspace is free again.",
-    takeHint: '“Take away” gives a taken workspace to the card waiting longest.',
+    more: 'More',
+    take: 'Give to the waiting card',
+    takeWhat:
+      "The card waiting longest gets this workspace. This card's agent stops; what it has not committed is kept in a commit on its branch. The card then waits itself and goes on there once one is free again.",
     leaving: 'giving it up',
     taken: (title: string) => `“${title}” gives up its workspace.`,
     keptBack: (title: string) => `“${title}” keeps its workspace.`,

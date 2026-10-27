@@ -527,8 +527,9 @@ export function OldBunPill({ version }: { version: string }) {
  * repository in worktrees, and how many new cards could start now. Hovering or clicking it drops
  * down each machine's slots and each of its workspaces by path with the card in it, which opens
  * the card (`onOpen`; `onElsewhere` one on another canvas), and why a blocked clone goes to no card
- * and what to do about it. While cards wait for a workspace, „Entziehen“ beside a card gives its
- * clone to the one waiting longest (`onTake`); during the undo window the row offers „Rückgängig“ (`onKeep`).
+ * and what to do about it. While every clone is taken and a card waits for one, a faint „⋯“ beside
+ * a card opens what gives its clone to the one waiting longest (`onTake`); during the undo window
+ * the row offers „Rückgängig“ (`onKeep`).
  */
 export function WorkspacesPill({ pools, canvas, canvases, items, onOpen, onElsewhere, onTake, onKeep }: {
   pools: ClonePool[];
@@ -564,9 +565,9 @@ export function WorkspacesPill({ pools, canvas, canvases, items, onOpen, onElsew
   const name = (repo: string) => canvas.repos.find((r) => r.id === repo)?.name ?? repo;
   const forWorkspace = items.filter((i) => (i.queue && 'workspace' in i.queue && i.queue.workspace !== 'slots') || i.waitsForClone).length;
   const forSlot = items.filter((i) => i.queue && 'workspace' in i.queue && i.queue.workspace === 'slots').length;
-  // a clone is taken from its card only for a card of its repository that waits for one
-  const wanted = (p: ClonePool) => items.some((i) => i.repo === p.repo && ((i.queue && 'workspace' in i.queue) || i.waitsForClone));
-  const takeable = pools.some((p) => wanted(p) && p.hosts.some((h) => h.workspaces.some((w) => w.takeable)));
+  // a clone is taken from its card only while none is free and a card of its repository waits for one
+  const wanted = (p: ClonePool) =>
+    p.hosts.every((h) => h.cards.length + blocked(h) >= h.total) && items.some((i) => i.repo === p.repo && ((i.queue && 'workspace' in i.queue) || i.waitsForClone));
   const blocked = (h: PoolHost) => h.blocked?.length ?? 0;
   // a new card takes a free clone that is not blocked, on a machine whose busy workers leave it a slot
   const room = (h: PoolHost) => Math.max(0, Math.min(h.slots - h.busy.length, h.total - h.cards.length - blocked(h)));
@@ -650,7 +651,6 @@ export function WorkspacesPill({ pools, canvas, canvases, items, onOpen, onElsew
         ))}
         {forWorkspace > 0 && <p>{t.workspaces.waiting(forWorkspace)}</p>}
         {forSlot > 0 && <p>{t.workspaces.waitingSlot(forSlot)}</p>}
-        {takeable && <p className="hint">{t.workspaces.takeHint}</p>}
       </div>
     </div>
   );
@@ -659,8 +659,9 @@ export function WorkspacesPill({ pools, canvas, canvases, items, onOpen, onElsew
 /**
  * A machine's workspaces, one per line: the dot the pill shows for it, its path (cut at the front
  * where it is too long, so its end stays), and the card in it, which opens on a click; or that it
- * is free, or blocked. With `onTake` (cards wait for a workspace), „Entziehen“ beside each card
- * that may give its clone up; a card giving it up has „Rückgängig“ (`onKeep`) instead.
+ * is free, or blocked. With `onTake` (a card waits, none is free), a faint „⋯“ beside each card
+ * that may give its clone up, which opens the one action and what it does; a card giving it up has
+ * „Rückgängig“ (`onKeep`) instead.
  */
 function WorkspaceRows({ host, items, canvases, onOpen, onElsewhere, onTake, onKeep }: {
   host: PoolHost;
@@ -672,6 +673,8 @@ function WorkspaceRows({ host, items, canvases, onOpen, onElsewhere, onTake, onK
   onKeep: (i: Item) => void;
 }) {
   const blocked = new Set(host.blocked?.map((b) => b.path));
+  // the row whose „⋯“ is open
+  const [more, setMore] = useState<string | null>(null);
   return (
     <ul className="ws-list">
       {host.workspaces.map((w) => {
@@ -713,11 +716,25 @@ function WorkspaceRows({ host, items, canvases, onOpen, onElsewhere, onTake, onK
                 </>
               )}
               {item && w.takeable && onTake && (
-                <button className="btn ws-take" title={t.workspaces.takeTitle} onClick={() => onTake(item)}>
-                  {t.workspaces.take}
+                <button className="ws-more" title={t.workspaces.more} aria-label={t.workspaces.more} aria-expanded={more === w.path} onClick={() => setMore(more === w.path ? null : w.path)}>
+                  ⋯
                 </button>
               )}
             </span>
+            {item && w.takeable && onTake && more === w.path && (
+              <div className="ws-menu">
+                <button
+                  className="btn ws-take"
+                  onClick={() => {
+                    setMore(null);
+                    onTake(item);
+                  }}
+                >
+                  {t.workspaces.take}
+                </button>
+                <span className="hint">{t.workspaces.takeWhat}</span>
+              </div>
+            )}
           </li>
         );
       })}

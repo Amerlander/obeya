@@ -298,6 +298,12 @@ button.pill:hover { box-shadow: var(--lift); }
 .pill.workspaces .ws-card .from { color: var(--ink); cursor: pointer; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 2px; }
 .pill.workspaces .ws-card .from:hover { text-decoration-color: currentColor; }
 .pill.workspaces .btn.ws-take { margin-left: 8px; padding: 2px 9px; font-size: 12px; font-weight: 500; vertical-align: 1px; }
+/* the rare action of giving a card's clone away sits behind a faint „⋯“ */
+.pill.workspaces .ws-more { margin-left: 6px; padding: 0 5px; border: 0; border-radius: 3px; background: none; color: var(--muted); opacity: .55; cursor: pointer; font-size: 13px; line-height: 1.2; }
+.pill.workspaces .ws-more:hover, .pill.workspaces .ws-more[aria-expanded="true"] { opacity: 1; background: var(--chip); }
+.pill.workspaces .ws-menu { grid-column: 2; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin: 4px 0 2px; padding: 8px 10px; border-radius: 3px; background: var(--chip); }
+.pill.workspaces .ws-menu .btn.ws-take { margin-left: 0; background: var(--panel); }
+.pill.workspaces .ws-menu .hint { font-size: 12px; line-height: 1.4; }
 #bar > svg { flex: none; margin-right: 4px; }
 #bar .right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
 /* the traffic lights of the app's window on a Mac sit at the bar's left */
