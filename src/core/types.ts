@@ -38,8 +38,8 @@ export const stopped = (i: Pick<Item, 'state' | 'branch'>) => i.state === 'plann
  * holds no work (a branch with commits or changes keeps it, and archiving would leave that work
  * unseen in a clone).
  */
-export const stoppedArchivable = (i: Pick<Item, 'state' | 'branch' | 'source' | 'queue' | 'workspace' | 'prototypeOf' | 'kind'>) =>
-  stopped(i) && i.source === 'manual' && i.kind === 'task' && !i.prototypeOf && !i.queue && !i.workspace;
+export const stoppedArchivable = (i: Pick<Item, 'state' | 'branch' | 'source' | 'queue' | 'workspace' | 'keptIn' | 'prototypeOf' | 'kind'>) =>
+  stopped(i) && i.source === 'manual' && i.kind === 'task' && !i.prototypeOf && !i.queue && !i.workspace && !i.keptIn;
 /** A finished card of the owner's whose agent is done: the archive may take it. */
 export const finishedArchivable = (i: Pick<Item, 'state' | 'source' | 'finishing'>) => finished(i.state) && i.source === 'manual' && !i.finishing;
 /** A finished card whose agent still works: after the landing, or answering a follow-up question. */
@@ -321,6 +321,8 @@ export interface Item {
   branch?: string;
   /** Where the branch is checked out, while the card has a workspace: a directory, `host:/dir` on another machine. */
   workspace?: string;
+  /** The clone that keeps its branch since its workspace was taken from it, until it works again (the same form as `workspace`). */
+  keptIn?: string;
   /** Files the Koordinator expects the card to change. */
   scope?: string[];
   /** A planned card the Koordinator is deciding on, or that waits for cards in progress. */
@@ -649,6 +651,9 @@ export type PrReviewEntry = { author: string; mine?: boolean; at: string; thread
  */
 export const START_ALL_HOLD_MS = 8000;
 
+/** How long taking a card's workspace from it (the Workspaces list) waits for the owner's „Rückgängig“. */
+export const EVICT_HOLD_MS = 8000;
+
 /**
  * `since`: when the card came to the Koordinator; of the cards whose turn comes, the one waiting
  * longest goes first. `together`: the project whose workstreams the Koordinator judges all at once.
@@ -880,6 +885,10 @@ export interface PoolWorkspace {
   title?: string;
   /** The canvas of a holding card that lies on another canvas than the pool's. */
   canvas?: string;
+  /** Its card may give it up for a card waiting for one („Entziehen“: its worker stops, its work is kept on its branch). */
+  takeable?: true;
+  /** Its card gives it up once the undo window of „Entziehen“ is through. */
+  leaving?: true;
 }
 
 /**
@@ -1164,6 +1173,13 @@ export type CardAction =
   | { action: 'undo' }
   /** Start a queued card although it may collide. */
   | { action: 'force' }
+  /**
+   * The Workspaces list: the card's clone goes to the cards waiting for one, after the undo window
+   * (EVICT_HOLD_MS); its worker stops, its uncommitted work is kept on its branch, and it goes on
+   * there once it has a workspace again. `keepWorkspace` takes it back within the window.
+   */
+  | { action: 'takeWorkspace' }
+  | { action: 'keepWorkspace' }
   /** On a project: takes back a start of all its workstreams while the Koordinator has not planned them yet. */
   | { action: 'dequeue' }
   /**
@@ -1287,6 +1303,10 @@ export type ErrorCode =
   | 'planCard'
   | 'noWorkspace'
   | 'dirtyWorkspaces'
+  /** Taking a card's workspace from it: it holds no clone that may be taken (worktrees, its work landed, a prototype's), or one is being taken already. */
+  | 'notEvictable'
+  /** Starting a card while its workspace is being given to another. */
+  | 'evicting'
   /** Every machine with a clean free clone has as many workers busy as it has slots. */
   | 'noSlot'
   | 'workspace'

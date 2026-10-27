@@ -105,6 +105,12 @@ export interface CardRow {
   deps: string | null;
   /** 1 while the owner has a project folded to its head: its workstreams are not shown on the canvas. */
   collapsed: number;
+  /**
+   * The clone (`ssh://<host>/…` on a host) that holds the newest state of the card's branch since
+   * the owner took its workspace from it, its uncommitted work in a commit of Obeya's on top; gone
+   * once the card works in a clone again, which takes the branch from there.
+   */
+  kept_in: string | null;
 }
 
 /** Words the usage limit keeps the Koordinator from reading (`talk.held`): until when, and how it reads them then (`Commander`'s). */
@@ -415,6 +421,8 @@ export const MIGRATIONS = [
   'ALTER TABLE talk ADD COLUMN asked_in TEXT;',
   // Obeya's reply on a card that answers the owner's words without acting on them: it stands in the conversation
   'ALTER TABLE events ADD COLUMN reply INTEGER;',
+  // the clone holding a card's branch since the owner took its workspace from it
+  'ALTER TABLE cards ADD COLUMN kept_in TEXT;',
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter, wish, reply';

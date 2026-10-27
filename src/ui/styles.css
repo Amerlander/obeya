@@ -297,6 +297,7 @@ button.pill:hover { box-shadow: var(--lift); }
 .pill.workspaces .ws-card { grid-column: 2; overflow-wrap: anywhere; }
 .pill.workspaces .ws-card .from { color: var(--ink); cursor: pointer; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 2px; }
 .pill.workspaces .ws-card .from:hover { text-decoration-color: currentColor; }
+.pill.workspaces .btn.ws-take { margin-left: 8px; padding: 2px 9px; font-size: 12px; font-weight: 500; vertical-align: 1px; }
 #bar > svg { flex: none; margin-right: 4px; }
 #bar .right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
 /* the traffic lights of the app's window on a Mac sit at the bar's left */

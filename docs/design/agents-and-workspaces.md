@@ -99,6 +99,28 @@ card names another workspace). A clone keeps the card's branch and the rest and 
 once clean; a worktree goes once nothing in it is uncommitted, its branch kept. A deleted card
 brought back with the undo takes its clone back if still free, else another at its next start.
 
+#### Taking a card's workspace
+
+While cards wait for a workspace of a repository in clones (or a finished card's question for a
+clone), the pool's list has „Entziehen“ beside each card that holds a clone and is at work, waits
+for the owner, or was stopped with work in it (not a card whose work landed, nor a prototype). A
+click gives that clone to the card waiting longest: after eight seconds in which „Rückgängig“ (in
+the confirmation, and in the row, which says „gibt ihn ab“) takes it back, the card's worker stops
+as with „Stoppen“, the app in the clone stops (`app.stop`, whatever `app.keep` says, since another
+card works there next), and what is uncommitted there (untracked files too, ignored ones aside)
+goes into a commit of Obeya's on the branch, marked by the trailer `Obeya-Kept: uncommitted work`.
+The clone is then free and clean; the card is planned without a workspace and remembers the clone
+that keeps its branch. A card whose worker was on it waits in the queue for a workspace, behind the
+cards that waited already, and starts again once one is free; a card stopped before stays planned.
+Its next start takes that clone if it is free, else another on the same machine (git takes the
+branch from one clone to another only there, so the card waits for one of that machine's): the
+clone fetches the branch from the one that kept it, which then drops its copy, and the commit of
+Obeya's is taken apart again, its work uncommitted as before. The worker is a new session, as with
+„Neu starten“, told that the branch holds earlier work, perhaps uncommitted. The undo window is not
+kept across a restart of Obeya: the card then keeps its workspace. Repositories in worktrees have
+no such button: a worktree is the card's own, and a card waiting for a slot gets one when a busy
+worker is paused or stopped.
+
 Giving a workspace back does not block the server either: in a large repository (a checkout of
 thousands of files) or over SSH, git takes a while to look into a worktree and remove it, to remove
 a landed card's worktree and branch, to put a discarded prototype's clone back on the main branch
@@ -141,7 +163,9 @@ held, orange while free but blocked, and how many new cards could start („2 fr
 „keiner frei · 1 blockiert“). Hovering or clicking it drops down a list: per machine its slots at
 work and clones taken, then each workspace on a line of its own, free ones included, with its path
 (cut at the front where too long, so its end stays readable), the dot the pill shows for it, and
-the card in it, „frei“ or „blockiert“; then how many cards wait for a workspace or a slot. The card
+the card in it, „frei“ or „blockiert“; then how many cards wait for a workspace or a slot, and
+while any do, „Entziehen“ beside the cards whose clone may go to them (see Taking a card's
+workspace), with a line saying what it does. The card
 is a link: a click closes the list, flies to the card and opens it; for a card on another canvas
 the page switches to that canvas (`?c=<canvas>&card=<id>`, which opens the named card once the
 canvas has loaded). A card not on any canvas (archived, say) shows by its title without a link. A
@@ -335,6 +359,13 @@ a container say, reuses pids). A host needs git, Claude Code and what the reposi
   no way to the card. A click opens the list as well as hovering, so its links can be reached and it
   works by touch. Rejected: a path cut at its end (the clone's number and the repository are at the
   end); the list on the phone (owner, 2026-10-27: the phone view stays simple).
+- **The owner can take a card's clone for a card waiting for one** (2026-10-27, GitHub issue #11):
+  a card in review, or stopped with work, held its clone for days while a more urgent card waited.
+  Its uncommitted work goes into a commit on its branch, taken apart again when the card goes on,
+  so the override loses nothing and needs no question first. Rejected: asking what to do with
+  uncommitted work at each click; refusing while the clone holds uncommitted work (a worker at work
+  nearly always has some). The button shows only while a card waits, since the card it was taken
+  from queues again and would otherwise take the clone straight back.
 - **Free clones are chosen by their last look, the one taken looked at again** (2026-10-21): in a
   large repository (GitHub issue #2: 9,188 files, on Windows) or over SSH, `git status` in every free
   clone at each look held the server, on every canvas. Rejected: asking git while choosing; a start

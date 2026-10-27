@@ -527,15 +527,18 @@ export function OldBunPill({ version }: { version: string }) {
  * repository in worktrees, and how many new cards could start now. Hovering or clicking it drops
  * down each machine's slots and each of its workspaces by path with the card in it, which opens
  * the card (`onOpen`; `onElsewhere` one on another canvas), and why a blocked clone goes to no card
- * and what to do about it.
+ * and what to do about it. While cards wait for a workspace, „Entziehen“ beside a card gives its
+ * clone to the one waiting longest (`onTake`); during the undo window the row offers „Rückgängig“ (`onKeep`).
  */
-export function WorkspacesPill({ pools, canvas, canvases, items, onOpen, onElsewhere }: {
+export function WorkspacesPill({ pools, canvas, canvases, items, onOpen, onElsewhere, onTake, onKeep }: {
   pools: ClonePool[];
   canvas: CanvasInfo;
   canvases: CanvasInfo[];
   items: Item[];
   onOpen: (i: Item) => void;
   onElsewhere: (canvas: string, card: string) => void;
+  onTake: (i: Item) => void;
+  onKeep: (i: Item) => void;
 }) {
   // open by a click (a tap) until one elsewhere or Escape; shut after a card is opened from it, until the pointer leaves
   const [open, setOpen] = useState(false);
@@ -561,6 +564,9 @@ export function WorkspacesPill({ pools, canvas, canvases, items, onOpen, onElsew
   const name = (repo: string) => canvas.repos.find((r) => r.id === repo)?.name ?? repo;
   const forWorkspace = items.filter((i) => (i.queue && 'workspace' in i.queue && i.queue.workspace !== 'slots') || i.waitsForClone).length;
   const forSlot = items.filter((i) => i.queue && 'workspace' in i.queue && i.queue.workspace === 'slots').length;
+  // a clone is taken from its card only for a card of its repository that waits for one
+  const wanted = (p: ClonePool) => items.some((i) => i.repo === p.repo && ((i.queue && 'workspace' in i.queue) || i.waitsForClone));
+  const takeable = pools.some((p) => wanted(p) && p.hosts.some((h) => h.workspaces.some((w) => w.takeable)));
   const blocked = (h: PoolHost) => h.blocked?.length ?? 0;
   // a new card takes a free clone that is not blocked, on a machine whose busy workers leave it a slot
   const room = (h: PoolHost) => Math.max(0, Math.min(h.slots - h.busy.length, h.total - h.cards.length - blocked(h)));
@@ -621,7 +627,17 @@ export function WorkspacesPill({ pools, canvas, canvases, items, onOpen, onElsew
                     ? t.workspaces.worktreeSlots(h.name, h.busy.length, h.slots, h.workspaces.length > 0)
                     : t.workspaces.host(h.name, h.busy.length, h.slots, h.cards.length, h.total)}
                 </p>
-                {h.workspaces.length > 0 && <WorkspaceRows host={h} items={items} canvases={canvases} onOpen={(i) => opened(() => onOpen(i))} onElsewhere={(c, card) => opened(() => onElsewhere(c, card))} />}
+                {h.workspaces.length > 0 && (
+                  <WorkspaceRows
+                    host={h}
+                    items={items}
+                    canvases={canvases}
+                    onOpen={(i) => opened(() => onOpen(i))}
+                    onElsewhere={(c, card) => opened(() => onElsewhere(c, card))}
+                    onTake={wanted(p) ? onTake : undefined}
+                    onKeep={onKeep}
+                  />
+                )}
                 {h.kept?.map((path) => (
                   <p key={path} className="hint">
                     {t.workspaces.kept(path)}
@@ -634,6 +650,7 @@ export function WorkspacesPill({ pools, canvas, canvases, items, onOpen, onElsew
         ))}
         {forWorkspace > 0 && <p>{t.workspaces.waiting(forWorkspace)}</p>}
         {forSlot > 0 && <p>{t.workspaces.waitingSlot(forSlot)}</p>}
+        {takeable && <p className="hint">{t.workspaces.takeHint}</p>}
       </div>
     </div>
   );
@@ -642,14 +659,17 @@ export function WorkspacesPill({ pools, canvas, canvases, items, onOpen, onElsew
 /**
  * A machine's workspaces, one per line: the dot the pill shows for it, its path (cut at the front
  * where it is too long, so its end stays), and the card in it, which opens on a click; or that it
- * is free, or blocked.
+ * is free, or blocked. With `onTake` (cards wait for a workspace), „Entziehen“ beside each card
+ * that may give its clone up; a card giving it up has „Rückgängig“ (`onKeep`) instead.
  */
-function WorkspaceRows({ host, items, canvases, onOpen, onElsewhere }: {
+function WorkspaceRows({ host, items, canvases, onOpen, onElsewhere, onTake, onKeep }: {
   host: PoolHost;
   items: Item[];
   canvases: CanvasInfo[];
   onOpen: (i: Item) => void;
   onElsewhere: (canvas: string, card: string) => void;
+  onTake?: (i: Item) => void;
+  onKeep: (i: Item) => void;
 }) {
   const blocked = new Set(host.blocked?.map((b) => b.path));
   return (
@@ -683,7 +703,20 @@ function WorkspaceRows({ host, items, canvases, onOpen, onElsewhere }: {
               ) : (
                 <span className={state === 'blocked' ? 'warn' : 'hint'}>{state === 'blocked' ? t.workspaces.blockedRow : t.workspaces.freeRow}</span>
               )}
-              {busy && <span className="hint"> · {t.workspaces.atWork}</span>}
+              {busy && !w.leaving && <span className="hint"> · {t.workspaces.atWork}</span>}
+              {item && w.leaving && (
+                <>
+                  <span className="hint"> · {t.workspaces.leaving}</span>
+                  <button className="btn ws-take" onClick={() => onKeep(item)}>
+                    {t.undo}
+                  </button>
+                </>
+              )}
+              {item && w.takeable && onTake && (
+                <button className="btn ws-take" title={t.workspaces.takeTitle} onClick={() => onTake(item)}>
+                  {t.workspaces.take}
+                </button>
+              )}
             </span>
           </li>
         );

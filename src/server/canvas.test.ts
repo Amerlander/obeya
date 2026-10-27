@@ -113,7 +113,7 @@ describe('a canvas with several repositories', () => {
 
   test("the snapshot counts each repository's clones by machine, the cards that hold one and those at work, and lists each clone with its card", async () => {
     const here = (cards: string[], busy: string[]) => ({
-      hosts: [{ name: HERE, here: true, slots: 1, total: 1, cards, busy, workspaces: [{ path: expect.any(String), ...(cards[0] ? { card: cards[0], title: 'Andere' } : {}) }] }],
+      hosts: [{ name: HERE, here: true, slots: 1, total: 1, cards, busy, workspaces: [{ path: expect.any(String), ...(cards[0] ? { card: cards[0], title: 'Andere', takeable: true as const } : {}) }] }],
     });
     expect(canvas.board.snapshot().workspaces).toEqual([
       { repo: 'web', ...here([], []) },

@@ -14,7 +14,8 @@ Persistent (SQLite):
   card they came from; the agent session, workspace, branch and status line; the open question or
   handover (with the reason when there is no demo); queue, scope, snooze (until when, by whom,
   why); the pull request and what of it was already passed on to the worker; an approval held until
-  the work can land; landed work whose worker still finishes; a waiting card's stopped app;
+  the work can land; landed work whose worker still finishes; a waiting card's stopped app; the
+  clone that keeps a card's branch since its workspace was taken from it;
   proposals waiting for the owner; an idea's brief, open questions and picks; a prototype's idea
   and outcome; a project's plan doc as last read and the plan docs its landed work added;
 - card events (the conversation log, with the owner's screenshots and agents' mocks), workspaces

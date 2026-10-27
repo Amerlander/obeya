@@ -1119,7 +1119,7 @@ export class Board {
       // a stopped task goes with its conversation, for the owner to come back to; work its workspace holds would be left unseen
       if (row.state === 'planned' && row.branch && row.kind === 'task' && !row.prototype_of) {
         if (row.queue) throw new BadRequest('notDone', 'the card waits to be started');
-        if (row.workspace) throw new BadRequest('holdsWork', 'its workspace holds work that has not landed');
+        if (row.workspace || row.kept_in) throw new BadRequest('holdsWork', 'its workspace holds work that has not landed');
         continue;
       }
       if (!row.state || !finished(row.state)) throw new BadRequest('notDone', 'only a finished or stopped card can be archived');
@@ -2216,6 +2216,7 @@ function work(r: CardRow): Partial<Item> {
     ...(r.branch ? { branch: r.branch } : {}),
     // a workspace on another machine as ssh and scp write it
     ...(r.workspace ? { workspace: r.workspace.replace(/^ssh:\/\/([^/]+)/, '$1:') } : {}),
+    ...(r.kept_in ? { keptIn: r.kept_in.replace(/^ssh:\/\/([^/]+)/, '$1:') } : {}),
     ...(landed && (r.workspace || landed.needsClone) ? { finishing: true, ...(landed.followUp ? { followUp: true } : {}), ...(landed.needsClone && !r.workspace ? { waitsForClone: true } : {}) } : {}),
     ...(detail.noChange && handed ? { noChange: true } : {}),
     ...(detail.lands && handed ? { lands: detail.lands } : {}),

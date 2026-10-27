@@ -503,6 +503,8 @@ export class Workers {
    * with), by path, with the card that held them: the server answers meanwhile, and a restart waits.
    */
   private freeing = new Map<string, { card: string; done: Promise<void> }>();
+  /** Cards whose clone the owner is taking from them (`evict`) while git keeps their work there: they do not start meanwhile. */
+  private evicting = new Set<string>();
   /** Cards with comments on places in the demo video held back: when they go to the worker without the owner's sign. */
   private holding = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -544,12 +546,13 @@ export class Workers {
     const card = this.card(cardId);
     if (card.kind === 'project') throw new BadRequest('project', 'a project is worked on through its workstreams');
     if (card.state !== 'planned') throw new BadRequest('notPlanned', 'only a planned card can be started');
+    if (this.evicting.has(card.id)) throw new BadRequest('evicting', 'its workspace is being given to another card');
     // once work has begun the branch stays the card's, whatever the title says now
     const row = this.o.board.row(card.id);
     // a workstream planned again after a part landed: the branch of that part may still be in a clone
     const shipped = row.shipped ? (JSON.parse(row.shipped) as Shipped) : null;
     const branch = row.branch ?? `${branchName(card.title, card.id)}${shipped ? `-${shipped.commit?.slice(0, 7) ?? 'rest'}` : ''}`;
-    const { path, ready } = asBadRequest(() => this.o.workspaces.lease(card.id, branch));
+    const { path, ready } = asBadRequest(() => this.o.workspaces.lease(card.id, branch, { from: row.kept_in }));
     this.bump(card.id);
     // the run before is not resumed, but the Arbeitsrückschau still reads it
     if (row.session_id) this.o.board.log(card.id, 'state', 'obeya', this.o.board.t.worker.restarted(this.o.board.t.worker.earlierRun(row.session_id)));
@@ -559,7 +562,11 @@ export class Workers {
     return this.whenReady(
       card.id,
       ready,
-      () => this.launch(card.id, this.briefing(card, branch, !!row.branch), undefined, this.taskImages(card)),
+      () => {
+        // the branch is in this workspace now
+        if (row.kept_in) this.o.board.work(card.id, { kept_in: null });
+        this.launch(card.id, this.briefing(card, branch, !!row.branch), undefined, this.taskImages(card));
+      },
       // planned again, as before the start
       () => this.o.board.work(card.id, { state: 'planned', workspace: null, branch: row.branch, paused: null, snoozed: null }),
       true,
@@ -1568,6 +1575,70 @@ export class Workers {
       this.o.workspaces.release(cardId);
       this.o.board.work(cardId, { workspace: null });
     });
+  }
+
+  /**
+   * Whether the owner may take the card's workspace from it for another card (`evict`): a clone it
+   * holds while at work, waiting for the owner, or stopped with work in it; not once its work has
+   * landed, nor a prototype's.
+   */
+  evictable(cardId: string): boolean {
+    if (this.o.workspaces.mode !== 'clones' || this.evicting.has(cardId)) return false;
+    // from the row: the pools the board's snapshot shows ask for each card
+    let row: CardRow;
+    try {
+      row = this.o.board.row(cardId);
+    } catch {
+      return false;
+    }
+    const state = row.state ?? 'planned';
+    return !!row.workspace && !row.landed && !row.prototype_of && (state === 'working' || state === 'waiting' || state === 'planned');
+  }
+
+  /**
+   * The owner takes the card's clone from it for a card waiting for one: its worker stops as with
+   * `stop` (the card planned), the app there stops (`app.stop`, whatever `app.keep` says: another
+   * card works there next), and its uncommitted work goes into a commit on its branch, which stays in
+   * that clone (`kept_in`) until the card's next start takes it to the clone it gets then, the work
+   * uncommitted again (`Workspaces.evict`). Settles once the clone is free, with whether the card's
+   * worker was on it (the Koordinator queues it again then); where git fails, the card keeps the
+   * clone, as a stopped card with work does.
+   */
+  async evict(cardId: string): Promise<boolean> {
+    if (!this.evictable(cardId)) throw new BadRequest('notEvictable', 'the card holds no clone that can be taken from it');
+    const card = this.card(cardId);
+    const active = card.state !== 'planned';
+    const path = this.o.board.row(cardId).workspace!;
+    this.evicting.add(cardId);
+    try {
+      if (active) {
+        // comments held back for the worker stay in the conversation
+        this.takeHeld(cardId);
+        this.end(cardId);
+        this.bump(cardId);
+        this.o.board.work(cardId, { state: 'planned', need: null, detail: null, pr: null, approved_at: null, paused: null, snoozed: null, app: null });
+      }
+      this.o.board.work(cardId, { status_line: this.o.board.t.worker.evicting });
+      const stop = this.o.adapter.app?.stop;
+      if (stop) {
+        const result = await runAppCommand(path, stop);
+        if (!result.ok) this.o.board.log(cardId, 'error', 'obeya', this.o.board.t.worker.parkFailed(clip(result.output, 600)));
+      }
+      let kept: string | null;
+      try {
+        kept = await this.o.workspaces.evict(cardId);
+      } catch (e) {
+        this.o.board.log(cardId, 'error', 'obeya', this.o.board.t.worker.evictFailed(messageOf(e)));
+        return false;
+      }
+      // deleted meanwhile: its row stays, to be restored without the clone
+      this.o.board.work(cardId, { workspace: null, parked: null, app: null, ...(kept ? { kept_in: kept } : {}) });
+      this.o.board.log(cardId, 'state', 'owner', this.o.board.t.worker.evicted(path));
+      return active;
+    } finally {
+      this.evicting.delete(cardId);
+      if (this.o.board.row(cardId).status_line === this.o.board.t.worker.evicting) this.o.board.work(cardId, { status_line: null });
+    }
   }
 
   /**
@@ -3351,7 +3422,7 @@ ${idea.idea.brief}` : '',
       card.builtOn
         ? `You are on branch ${branch}, which holds the prototype's commits (and any earlier work on this card): look at its log and diff first.`
         : resumed
-          ? `You are on branch ${branch}, which already holds earlier work on this card: look at its log and diff first and go on from there.`
+          ? `You are on branch ${branch}, which already holds earlier work on this card, perhaps uncommitted: look at its log, \`git status\` and diff first and go on from there.`
           : `You are on branch ${branch}, fresh from the default branch.`,
     );
     if (this.o.adapter.setup) parts.push(`First run \`${this.o.adapter.setup}\` in the clone.`);

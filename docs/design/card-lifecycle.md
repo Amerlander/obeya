@@ -153,7 +153,8 @@ The owner archives a finished card ("Archivieren" on it, its archive button on t
 finished ones at once in the archive); a prototype goes there when it ends (see Prototypes). A
 stopped task („Gestoppt“) can be archived one at a time, for the owner to come back to, beside „Neu
 starten“ and „Löschen“; not while it waits to start, nor while its workspace holds work that has not
-landed (the button is greyed and says why), which would lie unseen in a clone. A stopped card opens
+landed, or a clone keeps its branch since its workspace was taken (the button is greyed and says
+why), which would lie unseen in a clone. A stopped card opens
 like a card an agent worked on, the task as its conversation's first message.
 
 The archive (its button in the bar, or `A`) drops down like the queue: archived cards on a timeline

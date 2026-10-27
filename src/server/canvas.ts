@@ -268,7 +268,18 @@ export class CanvasRuntime {
       }
     });
     board.showPools(() =>
-      this.repos.filter((r) => r.workspaces.pooled).map((r) => ({ repo: r.ref.id, hosts: r.workspaces.pool(r.workers.inTurn()) })),
+      this.repos
+        .filter((r) => r.workspaces.pooled)
+        .map((r) => ({
+          repo: r.ref.id,
+          hosts: r.workspaces.pool(r.workers.inTurn()).map((h) => ({
+            ...h,
+            // what the owner may take from its card for a card waiting for one, and what goes once the undo window is through
+            workspaces: h.workspaces.map((w) =>
+              !w.card ? w : this.koordinator?.evicting(w.card) ? { ...w, leaving: true as const } : r.workers.evictable(w.card) ? { ...w, takeable: true as const } : w,
+            ),
+          })),
+        })),
     );
     for (const r of this.repos) r.workers.resumeAll();
     const koordinator = (this.koordinator = new Koordinator({
@@ -1320,6 +1331,10 @@ export class CanvasRuntime {
         return this.koordinator.force(cardId);
       case 'dequeue':
         return this.koordinator.dequeue(cardId);
+      case 'takeWorkspace':
+        return this.koordinator.evict(cardId);
+      case 'keepWorkspace':
+        return this.koordinator.keep(cardId);
       case 'arrange':
         return this.koordinator.arrange(cardId);
       case 'reorder':

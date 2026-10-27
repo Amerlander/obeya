@@ -501,6 +501,11 @@ export class FolderWorkspaces implements CardWorkspaces {
     this.dropUndo(cardId);
   }
 
+  /** The folder is no pool: no card's workspace goes to another. */
+  async evict(): Promise<string | null> {
+    return null;
+  }
+
   /** The folder is no pool: nothing to give back. */
   async abandon(): Promise<boolean> {
     return false;

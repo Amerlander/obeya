@@ -5,7 +5,7 @@
 import { z } from 'zod';
 import type { RepoAdapter } from '../adapters/types';
 import { inQueue, movable, notStarted, queueOrder, reach, waitsOn } from '../core/queue';
-import { type AgentRole, type CardEvent, finished, type Item, nameless, type Preference, START_ALL_HOLD_MS, titleFrom, type Wait } from '../core/types';
+import { type AgentRole, type CardEvent, EVICT_HOLD_MS, finished, type Item, nameless, type Preference, START_ALL_HOLD_MS, titleFrom, type Wait } from '../core/types';
 import { ACTIVE, BadRequest, type Board } from './board';
 import type { Utterance } from './db';
 import { type AgentRuntime, type AgentTool, waitQuietly } from './runtime';
@@ -68,7 +68,7 @@ export interface KoordinatorOptions {
   repoFor: (card: Item) => RepoHands;
   /** Where the Koordinator reads for what the owner says without a card: the home repository's Lesestand. */
   home: () => string;
-  /** How long a project's start waits for the owner to take it back; START_ALL_HOLD_MS by default. */
+  /** How long a project's start, or taking a card's workspace, waits for the owner to take it back; START_ALL_HOLD_MS and EVICT_HOLD_MS by default. */
   holdMs?: number;
   /** After how many of the owner's inputs the Rückschau runs; REVIEW_EVERY by default. */
   reviewEvery?: number;
@@ -94,6 +94,9 @@ export class Koordinator {
   /** The projects whose plan doc it reads now for which workstream builds on which. */
   private readingDeps = new Map<string, Promise<void>>();
 
+  /** Cards whose workspace the owner takes from them, while the undo window runs (`evict`). */
+  private evictions = new Map<string, ReturnType<typeof setTimeout>>();
+
   constructor(private o: KoordinatorOptions) {
     o.board.onChange(() => {
       this.scheduleDrain();
@@ -116,6 +119,58 @@ export class Koordinator {
 
   shutdown() {
     clearTimeout(this.recheck);
+    for (const t of this.evictions.values()) clearTimeout(t);
+  }
+
+  /**
+   * The owner takes the card's clone from it for the cards waiting for one (the Workspaces list):
+   * after a few seconds in which `keep` takes that back, its worker stops and the clone is free
+   * (`Workers.evict`), for the card that waits longest. A card whose worker was on it waits in the
+   * queue behind those waiting already, and goes on on its branch once a workspace is free again; a
+   * card stopped before stays planned.
+   */
+  evict(cardId: string) {
+    const card = this.card(cardId);
+    if (this.evictions.has(cardId) || !this.o.repoFor(card).workers.evictable(cardId)) throw new BadRequest('notEvictable', 'the card holds no clone that can be taken from it');
+    const go = () => {
+      this.evictions.delete(cardId);
+      const now = this.o.board.item(cardId);
+      if (!now) return this.o.board.changed();
+      let workers: Workers;
+      try {
+        workers = this.o.repoFor(now).workers;
+        if (!workers.evictable(cardId)) return this.o.board.changed();
+      } catch {
+        return this.o.board.changed();
+      }
+      workers.evict(cardId).then(
+        (active) => {
+          const after = this.o.board.item(cardId);
+          if (active && after?.state === 'planned' && !after.queue) {
+            this.setQueue(cardId, { workspace: 'none' });
+            this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.koordinator.requeued);
+          }
+          this.scheduleDrain();
+        },
+        (e: unknown) => this.o.board.item(cardId) && this.o.board.log(cardId, 'error', 'obeya', messageOf(e)),
+      );
+    };
+    this.evictions.set(cardId, setTimeout(go, this.o.holdMs ?? EVICT_HOLD_MS));
+    this.o.board.changed();
+  }
+
+  /** The owner takes back taking the card's workspace while the undo window runs: it keeps it, nothing happened. */
+  keep(cardId: string) {
+    const t = this.evictions.get(cardId);
+    if (!t) throw new BadRequest('notEvictable', 'the card is not giving up its workspace');
+    clearTimeout(t);
+    this.evictions.delete(cardId);
+    this.o.board.changed();
+  }
+
+  /** Whether the card's workspace goes to another card once the undo window is through (`evict`). */
+  evicting(cardId: string): boolean {
+    return this.evictions.has(cardId);
   }
 
   /** The owner wants the card worked on; a project, all its planned workstreams. */
@@ -727,8 +782,10 @@ export class Koordinator {
       // one whose repository does not run waits on until it is back
       if (w.repoDown) continue;
       if ('workspace' in w.queue!) {
-        if (full.has(w.repo) || !this.o.repoFor(w).workspaces.leasable()) {
-          full.add(w.repo);
+        // a card whose branch a clone keeps takes one on that clone's machine: none there leaves the others to the cards behind it
+        const near = this.o.board.row(w.id).kept_in;
+        if (full.has(w.repo) || !this.o.repoFor(w).workspaces.leasable(false, near)) {
+          if (!near) full.add(w.repo);
           continue;
         }
         this.startNow(w.id, w.queue!.workspace === 'slots' ? this.o.board.t.koordinator.slotFree : this.o.board.t.koordinator.workspaceFree);

@@ -502,6 +502,8 @@ const de = {
     notPlanned: 'Nur eine geplante Aufgabe kann gestartet werden.',
     queued: 'Die Aufgabe liegt schon bei Obeya.',
     notQueued: 'Die Aufgabe wartet nicht in der Warteschlange.',
+    notEvictable: 'Diesen Workspace kann die Karte nicht abgeben.',
+    evicting: 'Die Aufgabe gibt gerade ihren Workspace ab; starte sie gleich noch einmal.',
     notMovable: 'Die Aufgabe kann in der Warteschlange nicht weiter.',
     notPlannable: 'Als Projekt planen lässt sich nur eine Idee oder eine eigene, geplante Aufgabe, an der noch niemand gearbeitet hat.',
     noAgent: 'An dieser Aufgabe arbeitet gerade kein Agent.',
@@ -1596,6 +1598,15 @@ const de = {
     atWork: 'arbeitet',
     waiting: (n: number) => (n === 1 ? '1 Karte wartet auf einen freien Workspace.' : `${n} Karten warten auf einen freien Workspace.`),
     waitingSlot: (n: number) => (n === 1 ? '1 Karte wartet auf einen freien Slot.' : `${n} Karten warten auf einen freien Slot.`),
+    /** The button beside a card in the list while cards wait: its workspace goes to the one waiting longest. */
+    take: 'Entziehen',
+    takeTitle:
+      'Gibt diesen Workspace der Karte, die am längsten wartet. Der Agent dieser Karte stoppt; was er nicht committet hat, bleibt als Commit auf ihrem Branch. Sie wartet dann selbst und macht dort weiter, sobald wieder ein Workspace frei ist.',
+    takeHint: 'Mit „Entziehen“ bekommt die Karte, die am längsten wartet, einen belegten Workspace.',
+    /** Beside a card whose workspace goes once the undo window is through. */
+    leaving: 'gibt ihn ab',
+    taken: (title: string) => `„${title}“ gibt ihren Workspace ab.`,
+    keptBack: (title: string) => `„${title}“ behält ihren Workspace.`,
   },
   archive: {
     button: 'Archiv',
@@ -2193,6 +2204,8 @@ const en: Strings = {
     notPlanned: 'Only a planned task can be started.',
     queued: 'The task is already with Obeya.',
     notQueued: 'The task is not waiting in the queue.',
+    notEvictable: 'This card cannot give up this workspace.',
+    evicting: 'The task is giving up its workspace right now; start it again in a moment.',
     notMovable: 'The task cannot move further in the queue.',
     notPlannable: 'Only an idea, or a planned task of your own nobody has worked on yet, can be planned as a project.',
     noAgent: 'No agent is working on this task right now.',
@@ -3246,6 +3259,13 @@ const en: Strings = {
     atWork: 'at work',
     waiting: (n: number) => (n === 1 ? '1 card is waiting for a free workspace.' : `${n} cards are waiting for a free workspace.`),
     waitingSlot: (n: number) => (n === 1 ? '1 card is waiting for a free slot.' : `${n} cards are waiting for a free slot.`),
+    take: 'Take away',
+    takeTitle:
+      "Gives this workspace to the card waiting longest. This card's agent stops; what it has not committed is kept in a commit on its branch. The card then waits itself and goes on there once a workspace is free again.",
+    takeHint: '“Take away” gives a taken workspace to the card waiting longest.',
+    leaving: 'giving it up',
+    taken: (title: string) => `“${title}” gives up its workspace.`,
+    keptBack: (title: string) => `“${title}” keeps its workspace.`,
   },
   archive: {
     button: 'Archive',

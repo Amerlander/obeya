@@ -100,6 +100,11 @@ const de = {
     reopen: 'Neu eröffnen',
     discardWork: 'Die Arbeit verwerfen',
     stopped: 'Gestoppt.',
+    /** The owner took the card's clone from it for a card waiting for one (the Workspaces list). */
+    evicting: 'Gibt den Workspace ab …',
+    evicted: (path: string) =>
+      `Workspace entzogen: ${path} geht an eine wartende Aufgabe. Nicht committete Arbeit liegt als Commit auf dem Branch; beim nächsten Start ist sie wieder da, als nicht committete Änderungen.`,
+    evictFailed: (why: string) => `Der Workspace ließ sich nicht abgeben (${why}); die Aufgabe ist gestoppt und behält ihn.`,
     /** The owner paused the worker, and let it go on again. */
     pausedByOwner: 'Pausiert.',
     resumedByOwner: 'Weiter.',
@@ -278,6 +283,8 @@ const de = {
     planned: (started: number, of: number) => `Eingeplant: ${started} von ${of} Workstreams starten jetzt, die anderen warten.`,
     says: (why: string) => `Obeya: ${why}`,
     workspaceFree: 'Ein Workspace ist frei; es geht los.',
+    /** A card whose workspace the owner gave to another waits in the queue for the next one. */
+    requeued: 'Wartet auf den nächsten freien Workspace und macht dann auf ihrem Branch weiter.',
     slotFree: 'Ein Rechner hat wieder einen Slot frei; es geht los.',
     waitedDone: 'Worauf sie gewartet hat, ist erledigt; es geht los.',
     waitedDoneRecheck: 'Obeya: Worauf sie gewartet hat, ist erledigt; prüft neu gegen die laufende Arbeit.',
@@ -489,6 +496,10 @@ const en: Messages = {
     reopen: 'Reopen it',
     discardWork: 'Discard the work',
     stopped: 'Stopped.',
+    evicting: 'Giving up the workspace …',
+    evicted: (path: string) =>
+      `Workspace taken away: ${path} goes to a waiting task. Uncommitted work is kept in a commit on the branch; at the next start it is back, as uncommitted changes.`,
+    evictFailed: (why: string) => `The workspace could not be given up (${why}); the task is stopped and keeps it.`,
     pausedByOwner: 'Paused.',
     resumedByOwner: 'Resumed.',
     snoozed: (at: string, why?: string) => `Snoozed until ${at}${why ? ` · ${why}` : ''}`,
@@ -651,6 +662,7 @@ const en: Messages = {
     planned: (started: number, of: number) => `Planned: ${started} of ${of} workstreams start now, the others wait.`,
     says: (why: string) => `Obeya: ${why}`,
     workspaceFree: 'A workspace is free; it starts.',
+    requeued: 'Waits for the next free workspace and then goes on on its branch.',
     slotFree: 'A machine has a free slot again; it starts.',
     waitedDone: 'What it waited for is done; it starts.',
     waitedDoneRecheck: 'Obeya: what it waited for is done; checks it again against the work in progress.',

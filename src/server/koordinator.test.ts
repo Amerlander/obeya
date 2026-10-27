@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { generic } from '../adapters/generic';
 import type { PlanDoc } from '../core/plan-doc';
-import { Board } from './board';
+import { BadRequest, Board } from './board';
 import { Store } from './db';
 import { Koordinator, overlaps } from './koordinator';
 import { move, queueOrder, reach } from '../core/queue';
@@ -704,6 +704,57 @@ describe('Koordinator waits for a free workspace', () => {
     await workers.stop(a.id);
     await settle();
     expect(item(b.id).state).toBe('planned');
+  });
+  /** Waits until `done` holds: git keeps a card's work and frees its clone in the background. */
+  async function until(done: () => boolean) {
+    for (const end = Date.now() + 5000; !done() && Date.now() < end; ) await Bun.sleep(5);
+    await settle();
+  }
+
+  test("taking a card's clone gives it to the card waiting; the card it was taken from waits behind and goes on with its work, uncommitted again", async () => {
+    pool(1);
+    const a = card('A');
+    k.request(a.id);
+    await scope(['src/a.ts']);
+    const at = board.row(a.id).workspace!;
+    writeFileSync(join(at, 'a.ts'), 'halb fertig\n');
+    const b = card('B');
+    k.request(b.id);
+    await scope(['src/b.ts']);
+    expect(item(b.id)).toMatchObject({ queue: { workspace: 'none' } });
+    expect(workers.evictable(a.id)).toBe(true);
+
+    k.evict(a.id);
+    await until(() => item(b.id).state === 'working');
+    expect(board.row(b.id).workspace).toBe(clones[0]!);
+    expect(item(a.id)).toMatchObject({ state: 'planned', queue: { workspace: 'none' } });
+    expect(board.row(a.id)).toMatchObject({ workspace: null, kept_in: clones[0]! });
+    expect(runtime.sessions.find((s) => s.spec.cwd === at && s.closed)).toBeDefined();
+    // the work A had not committed is in a commit on its branch
+    expect(git(at, 'show', '--stat', '--format=%B', board.row(a.id).branch!)).toContain('a.ts');
+    expect(board.events(a.id).some((e) => e.text.startsWith('Workspace entzogen'))).toBe(true);
+
+    await workers.stop(b.id);
+    await until(() => item(a.id).state === 'working');
+    expect(board.row(a.id)).toMatchObject({ workspace: clones[0]!, kept_in: null });
+    expect(git(at, 'status', '--porcelain')).toBe('?? a.ts');
+    expect(git(at, 'log', '-1', '--format=%B')).not.toContain('Obeya-Kept');
+  });
+
+  test("taking a card's clone waits a few seconds, in which the owner takes it back", async () => {
+    pool(1);
+    k = new Koordinator({ board, runtime, home: () => join(dir, 'main'), repoFor: () => ({ workers, workspaces, adapter: generic, path: join(dir, 'main') }), holdMs: 40 });
+    const a = card('A');
+    await workers.start(a.id);
+    await workers.prepared();
+    k.evict(a.id);
+    expect(k.evicting(a.id)).toBe(true);
+    expect(() => k.evict(a.id)).toThrow(BadRequest);
+    k.keep(a.id);
+    await Bun.sleep(80);
+    expect(item(a.id).state).toBe('working');
+    expect(board.row(a.id).workspace).toBe(clones[0]!);
+    expect(() => k.keep(a.id)).toThrow(BadRequest);
   });
 });
 

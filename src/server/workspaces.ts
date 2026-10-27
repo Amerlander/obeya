@@ -296,6 +296,12 @@ function onPath<T>(path: string, fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
+/**
+ * The trailer of the commit in which Obeya keeps the work a card had not committed when its
+ * workspace was taken from it (`evict`); the card's next lease takes that commit apart again.
+ */
+const SAVED = 'Obeya-Kept: uncommitted work';
+
 /** The name of a clone Obeya makes, its number (`ensureClones`); a card's worktree is named by the card's id, 8 characters. */
 const CLONE_NAME = /^\d{1,4}$/;
 /** The name of a clone's folder moved aside to be removed (`clearAway`). */
@@ -327,11 +333,12 @@ export interface CardWorkspaces {
   readonly pooled: boolean;
   list(): { path: string; card_id: string | null }[];
   leasedBy(cardId: string): string | null;
-  lease(cardId: string, branch: string, o?: { overSlots?: boolean }): Lease;
-  leasable(overSlots?: boolean): boolean;
+  lease(cardId: string, branch: string, o?: { overSlots?: boolean; from?: string | null }): Lease;
+  leasable(overSlots?: boolean, near?: string | null): boolean;
   pool(busy: string[]): PoolHost[];
   hasWork(cardId: string): Promise<boolean>;
   release(cardId: string): void;
+  evict(cardId: string): Promise<string | null>;
   abandon(path: string): Promise<boolean>;
   retake(cardId: string, path: string): boolean;
   forkPoint(cardId: string): Promise<{ ws: string; base: string } | null>;
@@ -651,8 +658,10 @@ export class Workspaces implements CardWorkspaces {
    * Gives the card a workspace on `branch` and returns its path. A clone comes from the first
    * machine with a free slot, a worktree only while this machine has one; `overSlots` takes one on
    * a busy machine when none has a slot (an owner's question to a finished card, which should not wait).
+   * `from`: the clone that holds the card's branch since its workspace was taken from it (`evict`):
+   * that one, or another on its machine, which takes the branch from it.
    */
-  lease(cardId: string, branch: string, o: { overSlots?: boolean } = {}): Lease {
+  lease(cardId: string, branch: string, o: { overSlots?: boolean; from?: string | null } = {}): Lease {
     const own = this.leasedBy(cardId);
     // a worktree git is removing (its card deleted and brought back meanwhile) is added again once git is done
     if (own && !this.cloned(own) && this.clears.has(own)) return this.leaseWorktree(cardId, branch);
@@ -661,7 +670,7 @@ export class Workspaces implements CardWorkspaces {
       this.releasing.delete(cardId);
       return { path: own, ready: this.preparing.get(cardId) ?? null };
     }
-    if (this.o.mode === 'clones') return this.leaseClone(cardId, branch, !!o.overSlots);
+    if (this.o.mode === 'clones') return this.leaseClone(cardId, branch, !!o.overSlots, o.from ?? null);
     if (!o.overSlots && !this.room(null)) throw new WorkspaceError(SHORT_TEXT.slots, SHORT_CODE.slots);
     return this.leaseWorktree(cardId, branch);
   }
@@ -701,11 +710,11 @@ export class Workspaces implements CardWorkspaces {
    * there is a slot for its worker; a clone must be free and clean, on a machine with a free slot.
    * Cards waiting for one ask on every change of the board: it answers from the last looks at the
    * free clones (`place`), and a look that finds one clean now changes the board.
-   * `overSlots`: whether `lease` with it would.
+   * `overSlots`: whether `lease` with it would; `near`: for a card whose branch that clone holds (`lease` with `from`).
    */
-  leasable(overSlots = false): boolean {
+  leasable(overSlots = false, near: string | null = null): boolean {
     if (this.o.mode === 'worktrees') return overSlots || this.room(null);
-    return 'path' in this.place(overSlots);
+    return 'path' in this.place(overSlots, near);
   }
 
   /** The machines in the order a new card looks for room; a machine whose clones are registered but no longer configured comes last. */
@@ -736,11 +745,15 @@ export class Workspaces implements CardWorkspaces {
    * over SSH takes a while: it goes by the last looks at the free clones (`looks`), one found clean
    * before one not looked at yet, and looks again in the background at those whose look is older
    * than RECHECK_MS or that were never looked at, a look that changes the answer changing the board.
+   * `near`: the clone that holds the card's branch, which goes first; only its machine's clones count,
+   * since git takes the branch from it only on the same machine.
    */
-  private place(overSlots: boolean): { path: string } | { short: WorkspaceShortage } {
-    const free = this.list().filter((w) => !w.card_id);
+  private place(overSlots: boolean, near: string | null = null): { path: string } | { short: WorkspaceShortage } {
+    const free = this.list()
+      .filter((w) => !w.card_id && (near === null || hostName(w.path) === hostName(near)))
+      .sort((a, b) => Number(b.path === near) - Number(a.path === near));
     if (!free.length) return { short: 'none' };
-    const machines = this.machines();
+    const machines = near === null ? this.machines() : [hostName(near)];
     const roomy = machines.filter((m) => this.room(m));
     let full = false;
     let dirty = false;
@@ -879,6 +892,49 @@ export class Workspaces implements CardWorkspaces {
       return;
     }
     this.free(path);
+  }
+
+  /**
+   * Takes the card's clone from it for other cards (the owner gave it to one waiting), losing
+   * nothing: what is uncommitted there goes into a commit of Obeya's on the branch checked out
+   * (`SAVED`), and the clone is free once git is done, holding the card's branch until the card
+   * takes it from there (`lease` with `from`), which makes that work uncommitted again. Settles with
+   * the clone; null where the card holds none, or git was still making it ready (it is freed once git
+   * is, holding nothing of the card's yet). Where git fails, the clone stays the card's.
+   */
+  evict(cardId: string): Promise<string | null> {
+    const path = this.leasedBy(cardId);
+    if (!path || !this.cloned(path)) return Promise.resolve(null);
+    if (this.preparing.has(cardId)) {
+      this.release(cardId);
+      return Promise.resolve(null);
+    }
+    return this.clearing(path, async () => {
+      // given back while git was busy with it before
+      if (this.leasedBy(cardId) !== path) return null;
+      if (await gitAsync(path, 'status', '--porcelain')) {
+        await gitAsync(path, 'add', '--all');
+        await gitAsync(path, '-c', 'user.name=Obeya', '-c', 'user.email=obeya@localhost', '-c', 'core.hooksPath=/dev/null', 'commit', '--quiet', '--no-verify', '-m', `Uncommitted work, kept by Obeya as the card's workspace went to another card\n\n${SAVED}`);
+      }
+      this.free(path);
+      return path;
+    });
+  }
+
+  /**
+   * Removes the copy of a card's branch from the clone it was kept in (`evict`), once the card has
+   * taken it to another clone: a stale copy would hold the clone's folder on disk as unlanded work.
+   * Where that clone is free and still on the branch, it goes to the main branch first. Best effort.
+   */
+  private dropCopy(from: string, branch: string, base: string): Promise<unknown> {
+    return this.clearing(from, async () => {
+      if ((await gitAsync(from, 'branch', '--show-current')) === branch) {
+        // only a free clone leaves the branch; one a card took meanwhile is on that card's own
+        if (!this.list().some((w) => w.path === from && !w.card_id)) return;
+        await gitAsync(from, 'checkout', '--quiet', '--detach', `origin/${base}`);
+      }
+      await gitAsync(from, 'branch', '--quiet', '-D', branch);
+    }).catch(() => {});
   }
 
   /** Frees a clone or worktree for other cards; a clone the configuration no longer names leaves the pool, and its folder goes where nothing would be lost. */
@@ -1267,8 +1323,8 @@ export class Workspaces implements CardWorkspaces {
    * card's branch. One that is not clean now gives way to the next `place` finds, the lease moving
    * there; where none is left, `ready` fails with the shortage.
    */
-  private leaseClone(cardId: string, branch: string, overSlots: boolean): Lease {
-    const found = this.place(overSlots);
+  private leaseClone(cardId: string, branch: string, overSlots: boolean, from: string | null): Lease {
+    const found = this.place(overSlots, from);
     if ('short' in found) throw new WorkspaceError(SHORT_TEXT[found.short], SHORT_CODE[found.short]);
     this.take(found.path, cardId);
     return this.prepare(
@@ -1276,20 +1332,30 @@ export class Workspaces implements CardWorkspaces {
       found.path,
       async () => {
         let path = found.path;
+        // what git still does there for the card that held it before (its work kept, `evict`) is through first
+        await this.clears.get(path)?.catch(() => {});
         for (let seen = await cloneState(path); seen.found !== 'clean'; seen = await cloneState(path)) {
           // given back first: the shortage, where no other is left, counts it as the dirty clone it is
           this.free(path);
           this.looks.set(path, { ...seen, at: Date.now() });
-          const next = this.place(overSlots);
+          const next = this.place(overSlots, from);
           if ('short' in next) throw new WorkspaceError(SHORT_TEXT[next.short], SHORT_CODE[next.short]);
           this.take(next.path, cardId);
           path = next.path;
         }
         const base = await this.mainAsync(path);
         await gitAsync(path, 'fetch', '--quiet', 'origin');
+        // the branch as the clone it was kept in holds it, which may be newer than a copy here
+        if (from && from !== path) {
+          await gitAsync(path, 'checkout', '--quiet', '--detach');
+          await gitAsync(path, 'fetch', '--quiet', pathThere(from), `+refs/heads/${branch}:refs/heads/${branch}`);
+        }
         // a branch that already exists holds work: check it out, never reset it
         if (await gitAsync(path, 'branch', '--list', branch)) await gitAsync(path, 'checkout', '--quiet', branch);
         else await gitAsync(path, 'checkout', '--quiet', '-b', branch, `origin/${base}`);
+        // the work it had not committed when its workspace was taken is uncommitted again
+        if (from && (await gitAsync(path, 'log', '-1', '--format=%B')).includes(SAVED)) await gitAsync(path, 'reset', '--quiet', 'HEAD~1');
+        if (from && from !== path) void this.dropCopy(from, branch, base);
         return path;
       },
       (path, e) => {
