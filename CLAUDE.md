@@ -77,15 +77,16 @@ into the chapters under `docs/design/` (or the index) and the doc goes.
   every dictated text it shows is transcribed completely and correctly (no missing words or
   numbers, no misrecognitions), and what the agents in it say points out no fault (a comment cut
   off, input missing).
-- Public videos (the site's hero video, anything for obeya.si) are narrated in the owner's ElevenLabs
-  voice clone (voice ID `IErGHDQU4vPqicCi8dwR`), not the voice of the demo settings. Its API key is in
-  `.voice/elevenlabs.key` of the main checkout (`/Users/sadilek/dev/obeya`, gitignored); render with
-  an `OBEYA_HOME` whose `demo.json` names both (`voice: elevenlabs`, `voiceName`, `keyFile`), as
-  `scripts/hero-video/render.ts` sets up for the hero video (its README says how to change and
-  re-render it). Credits are limited: only for public videos, never as Obeya's own demo voice, and
-  even there only once: a public video is iterated in local renders in the owner's Qwen3 voice, and
-  the ElevenLabs render happens after the owner has approved the video. Qwen3-TTS references of the
-  owner's voice lie beside the key, each with its transcript (`.txt`):
+- Videos on the site (the hero video, anything for obeya.si) are narrated in the owner's ElevenLabs
+  voice clone (voice ID `IErGHDQU4vPqicCi8dwR`), not the voice of the demo settings; demo videos
+  published elsewhere (in a PR or issue comment, say) keep the voice of the demo settings. Its API
+  key is in `.voice/elevenlabs.key` of the main checkout (`/Users/sadilek/dev/obeya`, gitignored);
+  render with an `OBEYA_HOME` whose `demo.json` names both (`voice: elevenlabs`, `voiceName`,
+  `keyFile`), as `scripts/hero-video/render.ts` sets up for the hero video (its README says how to
+  change and re-render it). Credits are limited: only for the site's videos, never as Obeya's own
+  demo voice, and even there only once: a video for the site is iterated in local renders in the
+  owner's Qwen3 voice, and the ElevenLabs render happens after the owner has approved the video.
+  Qwen3-TTS references of the owner's voice lie beside the key, each with its transcript (`.txt`):
   `.voice/qwen-reference-de.wav` (a recording) and `qwen-reference-en.wav` (cut from the ElevenLabs
   voice); the demo settings' `reference` names the one of the narration language. Qwen3 is good
   enough for demos, ElevenLabs marginally better for the site, so the site stays with ElevenLabs
@@ -104,3 +105,5 @@ into the chapters under `docs/design/` (or the index) and the doc goes.
   is the exception: it commits on its card's branch, and Obeya lands that branch on `main`.
 - When a task handles a GitHub issue, its worker closes the issue once the work has landed, with a
   comment linking the demo video and the commit on `main`.
+- Once the owner approves the demo of an external contributor's pull request: comment on the PR
+  with the demo link, squash-merge it, then `git pull` on `main` so the local checkout is current.
