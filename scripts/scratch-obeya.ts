@@ -233,7 +233,8 @@ interface Stage {
    * Pull requests someone outside opened on the canvas's repository, played by a forge in a file
    * (src/server/file-forge.ts): each a commit of `files` on the main branch, its head as
    * `refs/pull/<number>/head` in the repository. Their URLs are GitHub's for `forgeRepo` (default
-   * `acme/<repoName>`); the account Obeya acts as is `forgeViewer` (default `owner`); the watcher
+   * `acme/<repoName>`), the repository's origin too, which git of the scratch Obeya reads as the
+   * repository itself; the account Obeya acts as is `forgeViewer` (default `owner`); the watcher
    * looks at them every `prPoll` seconds (default 10). The file is <dir>/forge.json, which a demo
    * edits to play the contributor (a comment, a push).
    */
@@ -379,6 +380,8 @@ if (stage.pulls?.length) {
     return { url: `https://github.com/${slug}/pull/${p.number}`, number: p.number, title: p.title, author: p.author, head, canModify: p.canModify ?? true, headRepo: `https://github.com/${p.author}/${basename(slug)}.git`, headRef: `pr-${p.number}`, checks: p.checks ?? [], comments: [], ...(p.body ? { body: p.body } : {}) };
   });
   writeFileSync(join(dir, 'forge.json'), `${JSON.stringify({ repo, viewer: stage.forgeViewer ?? 'owner', prs }, null, 2)}\n`);
+  // its origin is the forge's repository, which git of the scratch Obeya finds in the repository itself
+  if (!stage.poolCheckout && !stage.hosts?.length) run('git', ['remote', 'add', 'origin', `git@github.com:${slug}.git`], repo);
 }
 // the further repositories of the canvas
 const others = (stage.repos ?? []).map((r) => {
@@ -448,7 +451,15 @@ const supervised = args.includes('--restarts');
 const env = {
   ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'OBEYA_SUPERVISED')),
   OBEYA_HOME: home,
-  ...(stage.pulls?.length ? { OBEYA_FORGE_FILE: join(dir, 'forge.json'), OBEYA_PR_POLL: String(stage.prPoll ?? 10) } : {}),
+  ...(stage.pulls?.length
+    ? {
+        OBEYA_FORGE_FILE: join(dir, 'forge.json'),
+        OBEYA_PR_POLL: String(stage.prPoll ?? 10),
+        GIT_CONFIG_COUNT: '1',
+        GIT_CONFIG_KEY_0: `url.${repo}.insteadOf`,
+        GIT_CONFIG_VALUE_0: `git@github.com:${stage.forgeRepo ?? `acme/${basename(repo)}`}.git`,
+      }
+    : {}),
 };
 // a pool's workspaces live in the configuration, which the command line cannot give
 const configFile = join(dir, 'canvases.json');

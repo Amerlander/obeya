@@ -52,7 +52,7 @@ export function KoordinatorSheet({ on, canvas, items, preferences, settings, rep
   return (
     <aside id="ksheet" className={on ? 'sheet on' : 'sheet'}>
       <h2>{t.koordinator.title}</h2>
-      <KoordinatorTalk on={on} talk={talk} items={items} onOpen={onOpen} onTell={onTell} />
+      <KoordinatorTalk on={on} talk={talk} items={items} repos={repos} onOpen={onOpen} onTell={onTell} />
 
       <div className="k-rest">
         {ids.length > 0 && (
@@ -107,14 +107,14 @@ export function KoordinatorSheet({ on, canvas, items, preferences, settings, rep
  * field's (the sidebar's, or the phone view's for this canvas). `on`: the conversation is in view,
  * so the answers waiting in it are read.
  */
-export function KoordinatorTalk({ on, talk, items, onOpen, onTell, draft = OBEYA_DRAFT }: Pick<Props, 'on' | 'talk' | 'items' | 'onOpen' | 'onTell'> & { draft?: string }) {
+export function KoordinatorTalk({ on, talk, items, repos, onOpen, onTell, draft = OBEYA_DRAFT }: Pick<Props, 'on' | 'talk' | 'items' | 'repos' | 'onOpen' | 'onTell'> & { draft?: string }) {
   const fresh = useRead(on, talk, () => api.readTalk());
   return (
     <>
       <Conversation talk={talk} fresh={fresh} items={items} onOpen={onOpen} draft={draft} />
       {/* a command in writing, for when speaking is not possible; its screenshots go to the cards it creates or concerns */}
       <Composer className="tell" draft={draft} placeholder={t.voice.typePlaceholder} obeya onSend={onTell} />
-      <ReviewHint items={items} />
+      <ReviewHint items={items} repos={repos} />
     </>
   );
 }
@@ -122,14 +122,33 @@ export function KoordinatorTalk({ on, talk, items, onOpen, onTell, draft = OBEYA
 /** Where the canvas has seen a review card: the hint on „Review PR #5“ is no longer shown. */
 const REVIEW_KNOWN = 'obeya-review-pr-known';
 
-/** Under Obeya's field until the owner has had a review card once: how to have a pull request of someone else's reviewed. */
-function ReviewHint({ items }: { items: Item[] }) {
+/**
+ * Under Obeya's field, where a repository of the canvas is on a forge and until the owner has had a
+ * review card once or closed it: one quiet line on how to have someone else's pull request reviewed.
+ */
+function ReviewHint({ items, repos }: { items: Item[]; repos: RepoRef[] }) {
   const used = items.some((i) => i.contribution);
+  const [closed, setClosed] = useState(() => known(REVIEW_KNOWN));
   useEffect(() => {
     if (used) know(REVIEW_KNOWN);
   }, [used]);
-  if (used || known(REVIEW_KNOWN)) return null;
-  return <p className="hint tell-hint">{t.review.hint}</p>;
+  if (used || closed || !repos.some((r) => r.forge)) return null;
+  return (
+    <p className="tell-hint">
+      <span>{t.review.hint}</span>
+      <button
+        className="tell-hint-x"
+        title={t.review.hideHint}
+        aria-label={t.review.hideHint}
+        onClick={() => {
+          know(REVIEW_KNOWN);
+          setClosed(true);
+        }}
+      >
+        ×
+      </button>
+    </p>
+  );
 }
 
 /**

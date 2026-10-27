@@ -698,7 +698,7 @@ export class CanvasRuntime {
       toObeya: this.toObeya,
       forge: deps.forge,
       repoPath: info.path,
-      remote: info.remote,
+      remote: originUrl(info),
       ...(workspaces instanceof Workspaces ? { pullMain: () => (workspaces as Workspaces).pullMain() } : {}),
       ...(deps.permissionMode ? { permissionMode: deps.permissionMode } : {}),
       ...(deps.workerEnv ? { env: deps.workerEnv } : {}),
@@ -1093,7 +1093,7 @@ export class CanvasRuntime {
   private follow() {
     for (const r of this.repos) {
       r.info.branch = defaultBranch(r.info.path);
-      for (const k of ['pullRequests', 'direct'] as const) delete r.ref[k];
+      for (const k of ['pullRequests', 'direct', 'forge'] as const) delete r.ref[k];
       Object.assign(r.ref, settled(r.info, r.adapter));
       // where work lands on the local main, the checkout is the Lesestand; otherwise a worktree on the default branch
       r.read.retarget(r.info.folder || r.adapter.land === 'main' ? null : join(this.deps.home, 'read', this.id, r.ref.id));
@@ -2012,7 +2012,8 @@ export class CanvasRuntime {
     const ref = parsePrUrl(url);
     if (!ref) return fail(url);
     // a pull request of another repository would be merged there, from a workspace of this one
-    if (repo.info.remote && !sameRepo(repo.info.remote, ref.owner, ref.repo)) return fail(t.review.otherRepo(repo.ref.id));
+    const origin = originUrl(repo.info);
+    if (origin && !sameRepo(origin, ref.owner, ref.repo)) return fail(t.review.otherRepo(repo.ref.id));
     // a card of the PR's own (one of Obeya's workers opened it) is the card for it too
     const had = this.board.snapshot().items.find((i) => (i.contribution?.url === url || i.pr?.url === url) && !i.archivedAt);
     if (had) {
@@ -2364,11 +2365,22 @@ function uniqueRefs(infos: RepoInfo[], adapters: RepoAdapter[]): RepoRef[] {
   });
 }
 
+/** The URL of the repository's `origin` as it is configured, before git's `insteadOf` rewrites it; null without one. */
+const originUrl = (info: RepoInfo): string | null => (info.remote ? (gitOrNull(info.path, 'config', '--get', 'remote.origin.url') ?? info.remote) : null);
+
+/** Whether the repository's `origin` is on a server, as it is configured (git's `insteadOf` aside), rather than a directory on this machine. */
+function onServer(info: RepoInfo): boolean {
+  const url = originUrl(info);
+  return !!url && (/^(https?|ssh|git):\/\//i.test(url) || /^[^/\\\s:]{2,}:/.test(url));
+}
+
 /** What a repository's ref says of its settings, which may change while the canvas runs: its main branch, how work lands. */
-function settled(info: RepoInfo, adapter: RepoAdapter): Pick<RepoRef, 'branch' | 'pullRequests' | 'direct' | 'folder'> {
+function settled(info: RepoInfo, adapter: RepoAdapter): Pick<RepoRef, 'branch' | 'pullRequests' | 'direct' | 'folder' | 'forge'> {
   if (info.folder) return { branch: '', folder: true };
   return {
     branch: info.branch,
+    // an origin on a server (not a directory on this machine) may get pull requests of others
+    ...(onServer(info) ? { forge: true } : {}),
     ...(adapter.land === 'pr' ? { pullRequests: true, ...(adapter.direct ? { direct: true } : {}) } : {}),
   };
 }

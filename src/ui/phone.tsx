@@ -617,6 +617,7 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
                 on
                 talk={obeyaSnap.talk}
                 items={obeyaSnap.items}
+                repos={obeyaSnap.canvas.repos}
                 onOpen={openCard}
                 onTell={(text, images, replyTo) => void tellTyped(text, images, null, undefined, replyTo)}
                 draft={obeyaDraft(obeyaId)}

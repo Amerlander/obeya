@@ -893,6 +893,8 @@ export interface RepoRef {
   shareOnApproval?: true;
   /** Its approved work goes out as a pull request (else it lands on the default branch of the Obeya checkout). */
   pullRequests?: boolean;
+  /** Its `origin` is on a server, where others may open pull requests („Review PR #5“). */
+  forge?: true;
   /** With `pullRequests`: the owner may have approved work pushed directly onto the default branch instead (`direct` of its settings). */
   direct?: boolean;
   /**

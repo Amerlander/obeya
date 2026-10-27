@@ -2115,9 +2115,13 @@ function DecidedChip({ item, decided }: { item: Item; decided: Record<string, Ch
   if (!named.length) return null;
   return (
     <div className="quote decided">
-      {named.map(([id, route]) => (
-        <div key={id}>{t.review.decidedLine(Number(id), route === 'self' ? t.review.self : t.review.toContributor)}</div>
-      ))}
+      <div className="decided-lines">
+        {named.map(([id, route]) => (
+          <span key={id} className="quote-text">
+            {t.review.decidedLine(Number(id), route === 'self' ? t.review.self : t.review.toContributor)}
+          </span>
+        ))}
+      </div>
       <button className="quote-clear" title={t.review.undecide} aria-label={t.review.undecide} onMouseDown={(m) => m.preventDefault()} onClick={() => updateDraft(cardDraft(item.id), { findings: undefined })}>
         ×
       </button>

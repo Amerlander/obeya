@@ -673,7 +673,8 @@ const de = {
     self: 'Selbst ändern',
     selfOff: (author: string) => `${author} erlaubt keine Änderungen durch Maintainer: Befunde gehen an ${author}.`,
     waits: 'Wartet auf Beitragenden',
-    hint: 'Neu: „Review PR #5“ legt eine Karte an, die den Pull Request eines anderen prüft, mit Demo vorher und nachher und Befunden zum Entscheiden; die Freigabe mergt ihn.',
+    hint: 'Tipp: „Review PR #5“ prüft einen fremden Pull Request auf einer Karte.',
+    hideHint: 'Tipp ausblenden',
   },
   pr: {
     title: (n: number) => `Pull Request #${n}`,
@@ -2407,7 +2408,8 @@ const en: Strings = {
     self: 'Change it myself',
     selfOff: (author: string) => `${author} does not allow edits by maintainers: findings go to ${author}.`,
     waits: 'Waiting for the contributor',
-    hint: 'New: “Review PR #5” starts a card that reviews someone else’s pull request, with a demo before and after and findings to decide on; approving merges it.',
+    hint: 'Tip: “Review PR #5” reviews someone else’s pull request on a card.',
+    hideHint: 'Hide the tip',
   },
   pr: {
     title: (n: number) => `Pull request #${n}`,
