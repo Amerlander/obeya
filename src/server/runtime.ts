@@ -192,7 +192,8 @@ export function claudeExecutable(env: Record<string, string | undefined> = proce
 export function withRepoTrust(runtime: AgentRuntime, untrusted: (cwd: string) => boolean): AgentRuntime {
   return {
     start(spec, firstMessage, images) {
-      if (!untrusted(spec.cwd)) return runtime.start(spec, firstMessage, images);
+      // one already started without them (a review card's) brings its notes from elsewhere
+      if (spec.untrusted || !untrusted(spec.cwd)) return runtime.start(spec, firstMessage, images);
       const file = join(spec.cwd, 'CLAUDE.md');
       const notes = !remote(spec.cwd) && existsSync(file) ? readFileSync(file, 'utf8').trim() : '';
       const system = notes ? `${spec.system}\n\nThe repository's CLAUDE.md:\n\n${notes}` : spec.system;

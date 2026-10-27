@@ -3,7 +3,7 @@
 import { memo, type ReactNode, useEffect, useRef, useState } from 'react';
 import { type Bounds, dependencyOrder, shapeOf } from '../core/layout';
 import { clip } from '../core/text';
-import { answering, type AppUpdate, type CanvasInfo, type BlockedClone, type ClonePool, finished, finishedArchivable, finishingUp, type Item, needsYou, openQuestions, type PendingRestart, type PoolHost, type ProjectHistory, type SourceUpdate, stoppedArchivable, titleFrom } from '../core/types';
+import { answering, type AppUpdate, type CanvasInfo, type BlockedClone, type ClonePool, finished, finishedArchivable, finishingUp, handedOver, type Item, needsYou, openQuestions, type PendingRestart, type PoolHost, type ProjectHistory, type SourceUpdate, stoppedArchivable, titleFrom } from '../core/types';
 import { ProjectTalk } from './koordinator';
 import { api } from './api';
 import type { Cam } from './camera';
@@ -118,12 +118,17 @@ export const cardClass = (item: Item, underway?: string) =>
 export function CardFace({ item, where, underway, since, chip }: { item: Item; where?: string; underway?: string; since?: string; chip?: boolean }) {
   const kind =
     item.label ??
-    (item.parent ? t.kind.workstream : item.kind === 'question' ? t.kind.question : item.idea || item.proposal?.idea ? t.kind.idea : item.becomesProject ? becomesLabel(item) : item.prototypeOf ? t.kind.prototype : item.kind === 'project' ? t.kind.project : '');
+    (item.contribution ? t.review.kind(item.contribution.number, item.contribution.author) : item.parent ? t.kind.workstream : item.kind === 'question' ? t.kind.question : item.idea || item.proposal?.idea ? t.kind.idea : item.becomesProject ? becomesLabel(item) : item.prototypeOf ? t.kind.prototype : item.kind === 'project' ? t.kind.project : '');
   // a plain task says nothing of its kind: that it is one shows
   const label = [item.state === 'proposal' && t.proposalMark, where, kind].filter(Boolean).join(' · ');
   // a card whose agent finishes after the landing, opens its PR or takes in the owner's words on its handover shows its line like one at work: the usage limit it waits on, its reports
-  const status =
-    item.state === 'working' || item.finishing || answering(item) || (item.state === 'inPr' && !item.pr)
+  // a review card waiting for the contributor says so in its state; what its review found shows while it waits for the owner
+  const results = item.contribution?.results && handedOver(item) && !answering(item) ? item.contribution.results : undefined;
+  const findings = item.contribution?.findings ?? [];
+  const open = findings.filter((f) => f.status === 'open');
+  const status = results
+    ? `${t.review.checks(results)} · ${t.review.findings(findings.length, open.length, open.filter((f) => f.security).length)}`
+    : item.state === 'working' || item.finishing || answering(item) || (item.state === 'inPr' && (!item.pr || item.contribution))
       ? item.statusLine && excerpt(item.statusLine)
       : item.state === 'inPr' && item.pr
         ? t.pr.short(item.pr.number, item.pr.checks.filter((c) => c.state === 'failure').length, item.pr.conflict, item.pr.ready, item.pr.held?.score)

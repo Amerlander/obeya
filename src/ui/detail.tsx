@@ -2,7 +2,7 @@
 
 import { createContext, type CSSProperties, Fragment, type ReactNode, type RefObject, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { agentListens, answering, askable, type BackgroundTask, buildableOn, type CardAction, chapterAt, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, type EarlierDemo, EXPORT_HTML_MAX, finished, finishedArchivable, finishingUp, handedOver, type Item, type Mock, type NextStep, openQuestions, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type RepoRef, snoozable, type Spot, started, stopped, stoppedArchivable, taskAuthor } from '../core/types';
+import { agentListens, answering, askable, type BackgroundTask, buildableOn, type CardAction, type ChangeRoute, chapterAt, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, type EarlierDemo, EXPORT_HTML_MAX, finished, finishedArchivable, finishingUp, handedOver, type Item, type Mock, type NextStep, openQuestions, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type Finding, type RepoRef, snoozable, type Spot, started, stopped, stoppedArchivable, taskAuthor } from '../core/types';
 import { mockPage } from '../core/frame';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
 import { answerText, toggle } from './answer';
@@ -264,7 +264,15 @@ export function Detail(p: Props) {
   const repoRef = p.repos.find((r) => r.id === item.repo);
   const pr = !inFolder && !item.noChange && (item.lands?.land ?? (repoRef?.pullRequests ? 'pr' : 'main')) === 'pr';
   const direct = pr && (item.lands?.direct ?? !!repoRef?.direct);
-  const approveButton = inFolder ? (
+  const approveButton = item.contribution ? (
+    <button
+      className="btn primary"
+      title={t.review.mergeHint}
+      onClick={() => act({ action: 'approve' }, { close: true, ack: t.review.merged(item.contribution!.number), pending: t.review.merging })}
+    >
+      {t.review.merge(item.contribution.number)}
+    </button>
+  ) : inFolder ? (
     <>
       <button className="btn primary" title={item.noChange ? undefined : t.folder.approveHint} onClick={() => act({ action: 'approve' }, item.noChange ? { close: true, ack: t.approvedNoChange } : { close: true, ack: t.folder.approved })}>
         {item.noChange ? t.approveNoChange : t.approve}
@@ -297,8 +305,16 @@ export function Detail(p: Props) {
   // an archived project's doc is gone
   const readPlan = parent && !parent.archivedAt && p.onReadPlan;
   // a workstream names its plan doc at the top in every state, an agent's work its branch beside it
-  const where = (worked || parent?.plan) && (
+  const where = (worked || parent?.plan || item.contribution) && (
     <p className="p-src">
+      {item.contribution && (
+        <>
+          <a href={item.contribution.url} target="_blank" rel="noreferrer">
+            {t.review.kind(item.contribution.number, item.contribution.author)} ↗
+          </a>
+          {worked && ' · '}
+        </>
+      )}
       {worked && (inFolder ? <FolderLine item={item} diff={changes.diff} sizeBelow={!talkAlone(item)} /> : item.branch && <Branch item={item} sizeBelow={!talkAlone(item)} />)}
       {parent?.plan && (
         <>
@@ -492,6 +508,8 @@ export function Detail(p: Props) {
                     )}
                   </p>
                 )}
+                {/* what a review card's agent found comes first, at a glance above its demo */}
+                {item.contribution && (item.contribution.results || item.contribution.findings) && <Findings item={item} decides={!!ownerField(item) && !finished(item.state)} />}
                 {/* the last handover's demo stays while the agent works on the card again; a new handover replaces it. Beside it, the files the work made or changed */}
                 <ResultFiles
                   item={item}
@@ -2016,6 +2034,97 @@ function useZoom(video: RefObject<HTMLVideoElement | null>) {
   return { player, screen, backdrop, box, toggle, keyKnown };
 }
 
+/**
+ * What a review card's agent found, beside its demo: the checks on the PR's head and the merge probe
+ * on one line, then each finding of the review, which its agent keeps as the conversation goes on.
+ * On an open finding the owner decides („An Beitragenden“, „Selbst ändern“, a second click takes it
+ * back) while their words reach its agent (`decides`); the decisions stand in the card's draft and
+ * go out with the field's one Send. „Selbst ändern“ is greyed with its reason where the contributor
+ * allows no edits by maintainers. A finding something came of says what.
+ */
+function Findings({ item, decides }: { item: Item; decides: boolean }) {
+  const c = item.contribution!;
+  const draft = cardDraft(item.id);
+  const picks = useDraft(draft).findings ?? {};
+  const findings = c.findings ?? [];
+  const open = findings.filter((f) => f.status === 'open');
+  const pick = (f: Finding, route: ChangeRoute) =>
+    updateDraft(draft, (d) => {
+      const { [f.id]: was, ...rest } = d.findings ?? {};
+      return { findings: was === route ? rest : { ...rest, [f.id]: route } };
+    });
+  const ok = !!c.results && c.results.mergeable && c.results.checks.every((x) => x.passed);
+  return (
+    <section className="findings">
+      {c.results && <div className={ok ? 'rr-checks ok' : 'rr-checks bad'}>{t.review.checks(c.results)}</div>}
+      {c.findings && (
+        <h4 className="p-h">{t.review.findings(findings.length, open.length, open.filter((f) => f.security).length)}</h4>
+      )}
+      {findings.map((f) => (
+        <div key={f.id} className={['finding', f.security && 'security', f.status !== 'open' && 'settled'].filter(Boolean).join(' ')}>
+          <div className="f-head">
+            <span className="f-no">{f.id}</span>
+            <b>{f.title}</b>
+            {f.security && <span className="f-tag">{t.review.security}</span>}
+          </div>
+          <div className="f-text">
+            <Inline md={f.text} />
+          </div>
+          {f.status !== 'open' ? (
+            <div className="f-status">
+              {f.url ? (
+                <a href={f.url} target="_blank" rel="noreferrer">
+                  {t.review.status[f.status](c.author)} ↗
+                </a>
+              ) : (
+                t.review.status[f.status](c.author)
+              )}
+            </div>
+          ) : f.decided ? (
+            <div className="f-status pending">{f.decided === 'self' ? t.review.goingSelf : t.review.goingTo(c.author)}</div>
+          ) : (
+            decides && (
+              <div className="choices single f-choices" role="group">
+                <button className={`choice${picks[f.id] === 'contributor' ? ' on' : ''}`} aria-pressed={picks[f.id] === 'contributor'} onMouseDown={(e) => e.preventDefault()} onClick={() => pick(f, 'contributor')}>
+                  {t.review.toContributor}
+                </button>
+                <button
+                  className={`choice${picks[f.id] === 'self' ? ' on' : ''}`}
+                  aria-pressed={picks[f.id] === 'self'}
+                  disabled={!c.canModify}
+                  title={c.canModify ? t.review.selfHint : t.review.selfOff(c.author)}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => pick(f, 'self')}
+                >
+                  {t.review.self}
+                </button>
+              </div>
+            )
+          )}
+        </div>
+      ))}
+      {decides && open.some((f) => !f.decided) && <p className="hint">{t.review.decideHint}</p>}
+    </section>
+  );
+}
+
+/** Above the field of a review card: what the owner decided for its findings, which goes out with the words. */
+function DecidedChip({ item, decided }: { item: Item; decided: Record<string, ChangeRoute> }) {
+  const c = item.contribution!;
+  const named = Object.entries(decided).filter(([id]) => c.findings?.some((f) => f.id === Number(id) && f.status === 'open' && !f.decided));
+  if (!named.length) return null;
+  return (
+    <div className="quote decided">
+      {named.map(([id, route]) => (
+        <div key={id}>{t.review.decidedLine(Number(id), route === 'self' ? t.review.self : t.review.toContributor)}</div>
+      ))}
+      <button className="quote-clear" title={t.review.undecide} aria-label={t.review.undecide} onMouseDown={(m) => m.preventDefault()} onClick={() => updateDraft(cardDraft(item.id), { findings: undefined })}>
+        ×
+      </button>
+    </div>
+  );
+}
+
 /** A card's pull request: its checks, whether it is ready, and its review. */
 function PrBox({ pr }: { pr: PullRequest }) {
   return (
@@ -2076,7 +2185,7 @@ function ShareBox({ item, demo, act, onApproval }: { item: Item; demo: Demo; act
   const approval = later && (
     <label className="share-check" title={t.share.onApprovalHint}>
       <input type="checkbox" checked={!item.notOnApproval} onChange={(e) => go({ action: 'shareOnApproval', on: e.target.checked })} />
-      {t.share.onApproval}
+      {item.contribution ? t.review.onApproval : t.share.onApproval}
     </label>
   );
   const replace = (first: boolean) => (
@@ -2363,6 +2472,7 @@ function TaskTalk({
               listener,
               onWords: tell(field),
               onPicked: (text, [picks = []], images, replyTo) => act({ action: 'answer', text, picks, images, ...(replyTo ? { replyTo } : {}) }, { close: false }),
+              onDecided: (text, findings, images, replyTo) => act({ action: 'message', text, findings, ...(images ? { images } : {}), ...(replyTo ? { replyTo } : {}) }, { close: false }),
             }
           : undefined
       }
@@ -2425,6 +2535,8 @@ interface TalkField {
   onWords: (text: string, images?: string[], replyTo?: number) => Promise<void>;
   /** Picked options go to the agent with the words: `picks` holds them for each question, and with `quote` the text names them too. */
   onPicked: (text: string, picks: string[][], images?: string[], replyTo?: number) => Promise<void>;
+  /** On a review card: the owner's decisions on its findings go to the agent with the words. */
+  onDecided?: (text: string, findings: Record<string, ChangeRoute>, images?: string[], replyTo?: number) => Promise<void>;
 }
 
 /**
@@ -2441,8 +2553,18 @@ function Talk({ item, past, field }: { item: Item; past?: boolean; field?: TalkF
   // the demo video stands at a place: the words are about it, where the card's agent hears them
   const place = usePlace(item.id);
   const at = field && !field.listener && !options ? place : null;
+  // a review card's field, where its agent hears the words: the owner's decisions on its findings go with them
+  const review = !!item.contribution && !!field && !field.listener && !finished(item.state);
+  const allDecided = useDraft(draft).findings;
+  const decided = review && allDecided ? Object.fromEntries(Object.entries(allDecided).filter(([id]) => item.contribution!.findings?.some((f) => f.id === Number(id) && f.status === 'open' && !f.decided))) : {};
+  const deciding = Object.keys(decided).length > 0;
   const send = async (words: string, images?: string[], to?: Reply['to']) => {
     const replyTo = typeof to === 'number' ? to : undefined;
+    if (deciding && field!.onDecided) {
+      await field!.onDecided(words.trim(), decided, images, replyTo);
+      updateDraft(draft, { findings: undefined });
+      return;
+    }
     await (picked ? field!.onPicked(field!.quote ? answerText(questions, picks.picks, words) : words.trim(), picks.picks, images, replyTo) : field!.onWords(words, images, replyTo));
     picks.clear();
   };
@@ -2461,10 +2583,17 @@ function Talk({ item, past, field }: { item: Item; past?: boolean; field?: TalkF
           draft={draft}
           placeholder={options ? t.ask.words : at ? t.demo.commentAt(mmss(at.at)) : field.placeholder}
           label={options ? t.ask.send : t.send}
-          allowEmpty={picked}
+          allowEmpty={picked || deciding}
           obeya={field.listener}
           noImages={field.noImages}
-          chip={at && <PlaceChip cardId={item.id} place={at} />}
+          chip={
+            (at || deciding) && (
+              <>
+                {at && <PlaceChip cardId={item.id} place={at} />}
+                {deciding && <DecidedChip item={item} decided={decided} />}
+              </>
+            )
+          }
           onSend={send}
         />
       )}

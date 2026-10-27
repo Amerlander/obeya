@@ -832,6 +832,19 @@ function Canvas({
         (!!h.project && sheetOnRef.current && !readingRef.current && focusRef.current?.type === 'project' && focusRef.current.id === h.project)),
   );
   const { tellAbout, tellTyped } = tellers(byId, told, fail, placeNow);
+  // a card Obeya asked to open before it was on the canvas
+  const openSoon = useRef<{ id: string; until: number } | null>(null);
+  useEffect(() => {
+    const o = openSoon.current;
+    if (!o) return;
+    const i = snapshot.items.find((x) => x.id === o.id);
+    if (!i && Date.now() < o.until) return;
+    openSoon.current = null;
+    if (!i || focusRef.current) return;
+    newCardWatch.current = null;
+    setKOn(false);
+    void open(i);
+  }, [snapshot]);
   useEffect(() => {
     const w = newCardWatch.current;
     if (!w) return;
@@ -853,6 +866,13 @@ function Canvas({
       onNotice((n) => {
         const i = itemsRef.current.find((x) => x.id === n.cardId);
         if (n.wish) openWish(n.wish);
+        // the card a review of its PR asked for, unless the owner has another one open; one just made, once it is on the canvas
+        if (n.open && n.cardId && !focusRef.current) {
+          if (i) {
+            setKOn(false);
+            void open(i);
+          } else openSoon.current = { id: n.cardId, until: Date.now() + 10_000 };
+        }
         told.show(i ? { id: i.id, title: plain(i.title) } : undefined, { confirm: n.text, ...(n.token ? { token: n.token } : {}), ...(n.undoMs ? { undoMs: n.undoMs } : {}), ...(n.talk ? { talk: n.talk } : {}), ...(n.project ? { project: n.project } : {}) });
       }),
     [],

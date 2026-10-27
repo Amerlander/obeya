@@ -36,8 +36,10 @@ export interface CardRow {
   scope: string | null;
   /** JSON: set while the Koordinator decides (`{ checking: true }`) or the card waits (`{ behind, reason }`), with `since`. */
   queue: string | null;
-  /** JSON: the card's pull request once approval opened the PR phase (`PrState`). */
+  /** JSON: the card's pull request once approval opened the PR phase (`PrState`); on a review card, the one it reviews from the start. */
   pr: string | null;
+  /** JSON, review cards only: the contributor's pull request the card reviews (`StoredContribution` in board.ts). */
+  contribution: string | null;
   /** The owner's card's repository on a canvas with several; null is the home repository. */
   repo: string | null;
   /** JSON: the card's latest demo (`{ kind, dir, chapters, question? }`; no `kind` is a video). */
@@ -423,6 +425,8 @@ export const MIGRATIONS = [
   'ALTER TABLE events ADD COLUMN reply INTEGER;',
   // the clone holding a card's branch since the owner took its workspace from it
   'ALTER TABLE cards ADD COLUMN kept_in TEXT;',
+  // a review card: the pull request of someone outside it reviews (JSON `StoredContribution`)
+  'ALTER TABLE cards ADD COLUMN contribution TEXT;',
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter, wish, reply';

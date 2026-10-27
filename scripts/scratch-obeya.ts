@@ -6,7 +6,7 @@
 //   bun scripts/scratch-obeya.ts <stage.json> [--port <n>] [--code <commit> | --binary <obeya>] [--real-workers | --record <dir> | --replay <dir>] [--restarts]
 //   bun scripts/scratch-obeya.ts --stop <port>
 //   bun scripts/scratch-obeya.ts --login <port>
-//   bun scripts/scratch-obeya.ts --say <port> <card key> <say|report|talk|question|review> <text>
+//   bun scripts/scratch-obeya.ts --say <port> <card key> <say|report|talk|question|review|end> <text>
 //   bun scripts/scratch-obeya.ts --artifact <port> <card key> <file> [<summary>]
 //
 // Prints one JSON line, also kept in <dir>/staged.json:
@@ -26,7 +26,7 @@
 // tools (`Workers.standIn`), so an open page gets the line at once, unread marker and notification
 // as from a real agent. --say adds a line of the kind a stage file's `events` give: `say` (the
 // agent's words between its steps), `report` (its status line), `talk` (a reply), `question` (it
-// asks, and the card waits for the owner), `review` (a handover that keeps the card's demo).
+// asks, and the card waits for the owner), `review` (a handover that keeps the card's demo), `end` (the agent's turn ends, which an idle worker's never does by itself).
 // --artifact copies the file into the card's HTML artifact (<dir>/artifacts/<key>, where staging
 // put a copy of the stage's) and hands it over again, as an agent does after rewriting it, with the
 // summary given or "Updated the artifact."; a card without one starts it with an index.html. Each
@@ -67,6 +67,7 @@
 //     "poolCheckout": true, "slots": 3,
 //     "hosts": [{ "name": "Workhorse", "ssh": "me@workhorse.local", "clones": 2, "slots": 2 }],
 //     "files": { "src/cli.ts": "…" },
+//     "pulls": [{ "number": 5, "title": "…", "author": "…", "files": { "src/x.ts": "…" }, "canModify": true }],
 //     "plans": { "docs/plan/werkzeug.md": "# Werkzeug\n\n## Workstreams\n\n- [ ] **W1:** Konfiguration.\n" },
 //     "cards": [
 //       { "key": "A", "title": "…", "body": "…", "x": 40, "y": 300,
@@ -228,6 +229,18 @@ interface Stage {
   git?: false;
   /** A directory whose contents go into the repository first (a small folder of documents, binaries included). */
   copy?: string;
+  /**
+   * Pull requests someone outside opened on the canvas's repository, played by a forge in a file
+   * (src/server/file-forge.ts): each a commit of `files` on the main branch, its head as
+   * `refs/pull/<number>/head` in the repository. Their URLs are GitHub's for `forgeRepo` (default
+   * `acme/<repoName>`); the account Obeya acts as is `forgeViewer` (default `owner`); the watcher
+   * looks at them every `prPoll` seconds (default 10). The file is <dir>/forge.json, which a demo
+   * edits to play the contributor (a comment, a push).
+   */
+  pulls?: { number: number; title: string; author: string; files: Record<string, string>; canModify?: boolean; checks?: { name: string; state: 'pending' | 'success' | 'failure' }[]; body?: string }[];
+  forgeRepo?: string;
+  forgeViewer?: string;
+  prPoll?: number;
   cards: StageCard[];
   preferences?: { key?: string; text: string; state?: string; card?: string; quote?: string; review?: boolean; replaces?: string; target?: string }[];
   groups?: { name: string; cards: string[] }[];
@@ -262,6 +275,7 @@ const SAYS = {
   talk: (text: string) => ({ tool: 'reply', args: { text } }),
   question: (question: string) => ({ tool: 'ask', args: { question } }),
   review: (summary: string) => ({ tool: 'ready_for_review', args: { summary } }),
+  end: () => ({ end: true as const }),
 };
 
 const stopPort = opt('stop');
@@ -284,7 +298,7 @@ if (sayPort) {
   const [key, kind, ...words] = args.slice(args.indexOf('--say') + 2).filter((a, i, all) => !a.startsWith('--') && all[i - 1] !== '--dir');
   const text = words.join(' ');
   const act = SAYS[kind as keyof typeof SAYS];
-  if (!key || !act || !text.trim()) fail(`usage: bun scripts/scratch-obeya.ts --say <port> <card key> <${Object.keys(SAYS).join('|')}> <text>`);
+  if (!key || !act || (!text.trim() && kind !== 'end')) fail(`usage: bun scripts/scratch-obeya.ts --say <port> <card key> <${Object.keys(SAYS).join('|')}> <text>`);
   console.log(await standIn(Number(sayPort), key!, act!(text)));
   process.exit(0);
 }
@@ -346,6 +360,25 @@ if (stage.poolCheckout || stage.hosts?.length) {
   run('git', ['remote', 'add', 'origin', join(dir, 'scratch.git')], repo);
   run('git', ['fetch', '-q', 'origin'], repo);
   run('git', ['branch', '-q', '-u', `origin/${mainBranch}`], repo);
+}
+// pull requests of people outside, for the forge the file plays
+if (stage.pulls?.length) {
+  const slug = stage.forgeRepo ?? `acme/${basename(repo)}`;
+  const prs = stage.pulls.map((p) => {
+    run('git', ['checkout', '-q', '-b', `pr-${p.number}`], repo);
+    for (const [path, text] of Object.entries(p.files)) {
+      mkdirSync(dirname(join(repo, path)), { recursive: true });
+      writeFileSync(join(repo, path), text);
+    }
+    run('git', ['add', '-A'], repo);
+    run('git', ['-c', `user.name=${p.author}`, '-c', `user.email=${p.author}@users.noreply`, 'commit', '-qm', p.title], repo);
+    const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).stdout.trim();
+    run('git', ['update-ref', `refs/pull/${p.number}/head`, head], repo);
+    run('git', ['checkout', '-q', mainBranch], repo);
+    run('git', ['branch', '-q', '-D', `pr-${p.number}`], repo);
+    return { url: `https://github.com/${slug}/pull/${p.number}`, number: p.number, title: p.title, author: p.author, head, canModify: p.canModify ?? true, headRepo: `https://github.com/${p.author}/${basename(slug)}.git`, headRef: `pr-${p.number}`, checks: p.checks ?? [], comments: [], ...(p.body ? { body: p.body } : {}) };
+  });
+  writeFileSync(join(dir, 'forge.json'), `${JSON.stringify({ repo, viewer: stage.forgeViewer ?? 'owner', prs }, null, 2)}\n`);
 }
 // the further repositories of the canvas
 const others = (stage.repos ?? []).map((r) => {
@@ -412,7 +445,11 @@ const log = join(dir, 'server.log');
 const out = openSync(log, 'a');
 // not supervised: a scratch Obeya restarts itself only when asked to
 const supervised = args.includes('--restarts');
-const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'OBEYA_SUPERVISED')), OBEYA_HOME: home };
+const env = {
+  ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'OBEYA_SUPERVISED')),
+  OBEYA_HOME: home,
+  ...(stage.pulls?.length ? { OBEYA_FORGE_FILE: join(dir, 'forge.json'), OBEYA_PR_POLL: String(stage.prPoll ?? 10) } : {}),
+};
 // a pool's workspaces live in the configuration, which the command line cannot give
 const configFile = join(dir, 'canvases.json');
 const configured = folder || !!stage.poolCheckout || stage.slots !== undefined || !!stage.hosts?.length || !!stage.name || further.length > 0 || others.length > 0;
@@ -912,7 +949,7 @@ async function stagedCard(port: number, key: string): Promise<Item> {
 }
 
 /** The card's agent says or does `act`, through the server (`Workers.standIn`); returns what the agent would have read back. */
-async function standIn(port: number, key: string, act: { say: string } | { tool: string; args: Record<string, unknown> }): Promise<string> {
+async function standIn(port: number, key: string, act: { say: string } | { tool: string; args: Record<string, unknown> } | { end: true }): Promise<string> {
   const { base, headers, id } = cardOf(port, key);
   const r = await fetch(`${base}/cards/${id}/stand-in`, { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(act) }).catch(() =>
     fail(`no scratch Obeya answers on port ${port}`),

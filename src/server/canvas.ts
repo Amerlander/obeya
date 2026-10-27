@@ -15,14 +15,15 @@ import type { CardDiff } from '../core/diff';
 import type { Language } from '../core/locale';
 import { AGENT_DEFAULTS, agentListens, type AgentRole, awaited, type Awaited, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, needsYou, snoozable, SNOOZE_LIMIT, type PendingRestart, plannableAsProject, plannedToStart, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, type SharedSettings, type SpotInput, type TrustGroup } from '../core/types';
 import { inQueue } from '../core/queue';
-import { BadRequest, Board, pathOfRef, replyNote } from './board';
+import { BadRequest, Board, pathOfRef, replyNote, type StoredContribution } from './board';
+import type { ChangeRoute } from '../core/types';
 import { type Command, Commander } from './commands';
 import type { Config } from './config';
 import type { Store } from './db';
 import { Explorers } from './explorers';
 import { Files } from './files';
 import { Images, MAX_IMAGES } from './images';
-import type { Forge } from './forge';
+import { type ContributionInfo, type Forge, parsePrUrl, sameRepo } from './forge';
 import { Koordinator } from './koordinator';
 import { WorkRetro } from './work-retro';
 import { PrWatcher } from './pr-watcher';
@@ -73,6 +74,8 @@ export interface CanvasDeps {
   workerEnv?: Record<string, string>;
   /** How long a waiting card's app runs on before it is stopped (Parking); five minutes when left out. */
   parkGrace?: number;
+  /** How often the watcher looks at open pull requests; two minutes when left out. */
+  prPollMs?: number;
   /** The language of Obeya's interface now (`ownerLanguage`): its own words; German when left out (the tests). */
   language?: () => Language;
   /** The owner's conversation language now (`conversationLanguage`): the agents', until the owner's words say otherwise; the interface's when left out. */
@@ -693,6 +696,10 @@ export class CanvasRuntime {
       imageFiles: this.imageFiles,
       onWorkEnded: (cardId, workspace) => this.workRetro.ended(cardId, workspace),
       toObeya: this.toObeya,
+      forge: deps.forge,
+      repoPath: info.path,
+      remote: info.remote,
+      ...(workspaces instanceof Workspaces ? { pullMain: () => (workspaces as Workspaces).pullMain() } : {}),
       ...(deps.permissionMode ? { permissionMode: deps.permissionMode } : {}),
       ...(deps.workerEnv ? { env: deps.workerEnv } : {}),
       demoLanguage: () => readDemoSettings(deps.home).language,
@@ -726,7 +733,8 @@ export class CanvasRuntime {
     if (!this.deps.watch) return;
     r.docs?.();
     r.docs = watchPlanDocs(r.read.path, r.adapter, () => this.board.docsChanged());
-    if (r.adapter.land === 'pr' || this.board.snapshot().items.some((i) => i.state === 'inPr' && i.repo === r.ref.id)) this.watchPrs(r);
+    // a review card's pull request is watched in any repository, also one that lands on main
+    if (r.adapter.land === 'pr' || this.board.snapshot().items.some((i) => (i.state === 'inPr' || (i.contribution && !finished(i.state))) && i.repo === r.ref.id)) this.watchPrs(r);
   }
 
   /** Watches the repository's pull requests, unless it does already. */
@@ -734,7 +742,7 @@ export class CanvasRuntime {
     if (!this.deps.watch || r.prs) return;
     const board = this.board;
     r.prs = new PrWatcher(board, r.workers, this.deps.forge, (cardId) => localDir(board.row(cardId).workspace) ?? r.info.path, () => r.adapter, r.ref.id, () => void r.read.refresh());
-    r.prs.start();
+    r.prs.start(this.deps.prPollMs);
   }
 
   /**
@@ -1295,6 +1303,18 @@ export class CanvasRuntime {
     return r;
   }
 
+  /** What the owner decided for a review card's findings, as the browser sent it: by finding number, to the contributor or the worker's own change. */
+  private decisions(findings: unknown): Record<number, ChangeRoute> | undefined {
+    if (findings === undefined || findings === null) return undefined;
+    if (typeof findings !== 'object') throw new BadRequest('invalid', 'findings must map finding numbers to contributor or self');
+    const out: Record<number, ChangeRoute> = {};
+    for (const [id, route] of Object.entries(findings as Record<string, unknown>)) {
+      if (!/^\d+$/.test(id) || (route !== 'contributor' && route !== 'self')) throw new BadRequest('invalid', 'findings must map finding numbers to contributor or self');
+      out[Number(id)] = route;
+    }
+    return Object.keys(out).length ? out : undefined;
+  }
+
   /** A place in the demo video as the browser sent it: a frame Obeya does not have is left out; `demo` names the demo it is in. */
   private spot(spot: unknown): SpotInput | undefined {
     if (!spot || typeof spot !== 'object') return;
@@ -1318,7 +1338,8 @@ export class CanvasRuntime {
     const replyTo = 'replyTo' in a ? this.board.quoted(cardId, a.replyTo)?.id : undefined;
     // a prototype may leave it to the idea's brief what it shows; a screenshot or an option picked may speak for itself
     const picks = a.action === 'answer' && Array.isArray(a.picks) ? a.picks.filter((o): o is string => typeof o === 'string') : [];
-    if ('text' in a && (typeof text !== 'string' || (!text.trim() && a.action !== 'prototype' && !images.length && !picks.length) || text.length > 20000))
+    const decided = a.action === 'message' && !!a.findings && typeof a.findings === 'object' && Object.keys(a.findings).length > 0;
+    if ('text' in a && (typeof text !== 'string' || (!text.trim() && a.action !== 'prototype' && !images.length && !picks.length && !decided) || text.length > 20000))
       throw new BadRequest('emptyText', 'text must be a non-empty string');
     switch (a.action) {
       case 'start':
@@ -1357,7 +1378,7 @@ export class CanvasRuntime {
       case 'message':
         // a note to a Question card is a question to its agent
         if (this.board.item(cardId)?.kind === 'question') return this.answers.ask(cardId, text.trim(), images, !!a.spoken, replyTo);
-        return this.repoOf(cardId).workers.message(cardId, text.trim(), images, !!a.spoken, replyTo, this.spot(a.spot));
+        return this.repoOf(cardId).workers.message(cardId, text.trim(), images, !!a.spoken, replyTo, this.spot(a.spot), this.decisions(a.findings));
       case 'release':
         return this.repoOf(cardId).workers.released(cardId, !!a.now);
       case 'unsay': {
@@ -1908,6 +1929,8 @@ export class CanvasRuntime {
         else if (c.start || c.until) this.koordinator.request(card.id);
         return card.id;
       }
+      case 'reviewPr':
+        return this.reviewPr(c);
       case 'newIdea': {
         const card = this.board.create({ idea: true, title: c.title, body: c.body, ...(c.repo ? { repo: c.repo } : {}), ...this.board.freeSpot(c.place ?? this.inView) });
         this.board.log(card.id, 'state', 'owner', this.board.t.voice.created);
@@ -1968,6 +1991,59 @@ export class CanvasRuntime {
       case 'renameGroup':
         return this.board.renameGroup(c.group, c.name);
     }
+  }
+
+  /**
+   * „Review PR #5“: a review card for the pull request someone outside opened, started at once, the
+   * owner's words with it as its task. A PR that has a card on the canvas already opens that one, and
+   * the words go to its worker. What goes wrong (no such PR, one closed) the owner hears.
+   */
+  async reviewPr(c: Extract<Command, { do: 'reviewPr' }>): Promise<string | undefined> {
+    const repo = c.repo ? this.repos.find((r) => r.ref.id === c.repo) : this.repos[0];
+    const t = this.board.t;
+    const fail = (why: string) => void this.board.notify({ text: t.review.failed(c.pr, why) });
+    if (!repo) return fail('no repository');
+    let url: string;
+    try {
+      url = /^\d+$/.test(c.pr) ? await this.deps.forge.urlOf(repo.info.path, Number(c.pr)) : c.pr.trim();
+    } catch (e) {
+      return fail(messageOf(e));
+    }
+    const ref = parsePrUrl(url);
+    if (!ref) return fail(url);
+    // a pull request of another repository would be merged there, from a workspace of this one
+    if (repo.info.remote && !sameRepo(repo.info.remote, ref.owner, ref.repo)) return fail(t.review.otherRepo(repo.ref.id));
+    // a card of the PR's own (one of Obeya's workers opened it) is the card for it too
+    const had = this.board.snapshot().items.find((i) => (i.contribution?.url === url || i.pr?.url === url) && !i.archivedAt);
+    if (had) {
+      if (c.text) this.act(had.id, { action: 'message', text: c.text, spoken: !!c.spoken });
+      this.board.notify({ text: t.review.opened(ref.number), cardId: had.id, open: true });
+      return had.id;
+    }
+    let info: ContributionInfo;
+    try {
+      info = await this.deps.forge.contribution(repo.info.path, url);
+    } catch (e) {
+      return fail(messageOf(e));
+    }
+    if (info.state !== 'OPEN') return fail(t.review.notOpen(info.state === 'MERGED'));
+    const card = this.board.create({ title: `PR #${ref.number}: ${info.title}`.slice(0, 200), body: c.text, repo: repo.ref.id, ...this.board.freeSpot(c.place ?? this.inView) });
+    const stored: StoredContribution = {
+      url,
+      number: ref.number,
+      author: info.author,
+      title: info.title,
+      canModify: info.canModify,
+      ...(info.headRepo ? { headRepo: info.headRepo } : {}),
+      ...(info.headRef ? { headRef: info.headRef } : {}),
+    };
+    this.board.work(card.id, { contribution: JSON.stringify(stored) });
+    this.board.log(card.id, 'state', 'owner', t.voice.created);
+    this.watchPrs(repo);
+    this.koordinator.request(card.id);
+    // the card opens, so the owner sees its review begin
+    this.board.notify({ text: t.review.started(ref.number, info.author), cardId: card.id, open: true });
+    return card.id;
   }
 
   /** Adds screenshots to a card's task, keeping the latest when there are more than a message takes. */

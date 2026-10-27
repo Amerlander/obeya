@@ -8,8 +8,11 @@ import type { AgentEvent, AgentRuntime, AgentSession, AgentSpec, PermissionAnswe
 import { git } from './workspaces';
 import { KEY_HEADER, keyOf } from './owner';
 
+/** The calls of a forge that only review cards make, for a fake forge of a test that has none. */
+export const noContributions: Pick<Forge, 'urlOf' | 'contribution' | 'comment' | 'requestChanges'> = { urlOf: async () => '', contribution: async () => ({}) as never, comment: async () => {}, requestChanges: async () => {} };
+
 /** A forge for tests that never reach a pull request. */
-export const noForge: Forge = { status: async () => ({}) as never, body: async () => '', setBody: async () => {}, merge: async () => {}, open: async () => '' };
+export const noForge: Forge = { status: async () => ({}) as never, body: async () => '', setBody: async () => {}, merge: async () => {}, open: async () => '', ...noContributions };
 
 /** A session whose tools and events the test drives. */
 export class FakeSession implements AgentSession {

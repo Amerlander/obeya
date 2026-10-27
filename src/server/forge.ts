@@ -45,8 +45,10 @@ export interface PrStatus {
     replyTo?: string;
     resolved?: boolean;
   }[];
-  /** Who opened the PR (the owner's account; the worker's own replies carry it too). */
+  /** Who opened the PR (the owner's account; the worker's own replies carry it too; on a review card, the contributor's). */
   author: string;
+  /** The account Obeya acts as on the forge (the owner's), where the forge says: on a review card, comments of its own. */
+  viewer?: string;
   /** Once merged: the commit the merge put on the base branch. */
   mergeCommit?: string;
 }
@@ -68,6 +70,28 @@ export interface Forge {
   merge(cwd: string, url: string, head: string): Promise<string | void>;
   /** Opens a pull request from the pushed branch `head` onto `base`; returns its URL. */
   open(cwd: string, pr: { base: string; head: string; title: string; body: string }): Promise<string>;
+  /** The URL of pull request `n` of the repository whose checkout `cwd` is (its `origin`). */
+  urlOf(cwd: string, n: number): Promise<string>;
+  /** A pull request someone outside opened, as a review card takes it on. */
+  contribution(cwd: string, url: string): Promise<ContributionInfo>;
+  /** Writes `body` as a comment in the PR's conversation; returns the comment's URL where the forge says. */
+  comment(cwd: string, url: string, body: string): Promise<string | void>;
+  /** A review of the PR that asks for changes (on GitHub „Request changes“), with `body`; returns its URL where the forge says. */
+  requestChanges(cwd: string, url: string, body: string): Promise<string | void>;
+}
+
+/** A pull request a review card takes on (`Forge.contribution`). */
+export interface ContributionInfo {
+  title: string;
+  author: string;
+  state: PrStatus['state'];
+  /** Its head commit. */
+  head: string;
+  /** Maintainers may push to its branch (GitHub's `maintainerCanModify`, Forgejo's `allow_maintainer_edit`). */
+  canModify: boolean;
+  /** Its branch's repository (a fork's, usually) and the branch, for pushing onto it. */
+  headRepo?: string;
+  headRef?: string;
 }
 
 /**
@@ -88,6 +112,17 @@ export function parsePrUrl(url: string): { forge: 'github' | 'forgejo'; base: st
   return host !== 'github.com' ? { forge: 'forgejo', base: fj[1]!, host, owner: fj[2]!, repo: fj[3]!, number: Number(fj[4]) } : null;
 }
 
+/** Whether a git remote (https, ssh, scp-like, or a path) is the repository `owner/repo`. */
+export const sameRepo = (remote: string, owner: string, repo: string) =>
+  remote
+    .trim()
+    .toLowerCase()
+    .replace(/\/+$/, '')
+    .replace(/\.git$/, '')
+    .split(/[/:]/)
+    .slice(-2)
+    .join('/') === `${owner}/${repo}`.toLowerCase();
+
 /**
  * The forge a pull request is on, by its URL; one is opened on the forge of the repository's
  * `origin` (GitHub where `onGitHub` says so, else Forgejo).
@@ -99,6 +134,13 @@ export const routedForge = (github: Forge, forgejo: Forge, origin: (cwd: string)
     body: (cwd, url) => of(url).body(cwd, url),
     setBody: (cwd, url, body) => of(url).setBody(cwd, url, body),
     merge: (cwd, url, head) => of(url).merge(cwd, url, head),
+    contribution: (cwd, url) => of(url).contribution(cwd, url),
+    urlOf: async (cwd, n) => {
+      const remote = await origin(cwd);
+      return (remote && !onGitHub(remote) ? forgejo : github).urlOf(cwd, n);
+    },
+    comment: (cwd, url, body) => of(url).comment(cwd, url, body),
+    requestChanges: (cwd, url, body) => of(url).requestChanges(cwd, url, body),
     open: async (cwd, pr) => {
       const remote = await origin(cwd);
       return (remote && !onGitHub(remote) ? forgejo : github).open(cwd, pr);
@@ -258,7 +300,7 @@ export const makeGhForge = (
         '-F',
         `number=${ref.number}`,
         '-f',
-        'query=query($owner: String!, $repo: String!, $number: Int!) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) { reviewThreads(first: 100) { nodes { isResolved comments(first: 1) { nodes { databaseId } } } } comments(last: 100) { nodes { id updatedAt } } commits(last: 30) { nodes { commit { committedDate parents { totalCount } } } } } } }',
+        'query=query($owner: String!, $repo: String!, $number: Int!) { viewer { login } repository(owner: $owner, name: $repo) { pullRequest(number: $number) { reviewThreads(first: 100) { nodes { isResolved comments(first: 1) { nodes { databaseId } } } } comments(last: 100) { nodes { id updatedAt } } commits(last: 30) { nodes { commit { committedDate parents { totalCount } } } } } } }',
       ),
     ]);
     return ghStatus(pr, inline, threads);
@@ -274,6 +316,40 @@ export const makeGhForge = (
     // gh prints the new pull request's URL last
     const out = await withBodyFile(pr.body, (file) => run(at, 'pr', 'create', '--base', pr.base, '--head', pr.head, '--title', pr.title, '--body-file', file));
     return out.trim().split('\n').at(-1)!.trim();
+  },
+  async urlOf(cwd, n) {
+    const at: GhAt = { cwd, ...(await repoOf(cwd)) };
+    return (await run(at, 'pr', 'view', String(n), '--json', 'url', '--jq', '.url')).trim();
+  },
+  async contribution(cwd, url) {
+    const ref = prRef(url);
+    const pr = JSON.parse(
+      await run(atPr(cwd, url), 'pr', 'view', url, '--json', 'title,author,state,headRefOid,headRefName,headRepository,headRepositoryOwner,maintainerCanModify'),
+    ) as { title: string; author: { login: string }; state: PrStatus['state']; headRefOid: string; headRefName?: string; headRepository?: { name: string } | null; headRepositoryOwner?: { login: string } | null; maintainerCanModify?: boolean };
+    const owner = pr.headRepositoryOwner?.login;
+    const repo = pr.headRepository?.name;
+    return {
+      title: pr.title,
+      author: pr.author.login,
+      state: pr.state,
+      head: pr.headRefOid,
+      canModify: !!pr.maintainerCanModify,
+      ...(owner && repo ? { headRepo: `https://${ref.host}/${owner}/${repo}.git` } : {}),
+      ...(pr.headRefName ? { headRef: pr.headRefName } : {}),
+    };
+  },
+  async comment(cwd, url, body) {
+    // gh prints the new comment's URL
+    const out = await withBodyFile(body, (file) => run(atPr(cwd, url), 'pr', 'comment', url, '--body-file', file));
+    return out.trim().split('\n').at(-1)?.trim() || undefined;
+  },
+  async requestChanges(cwd, url, body) {
+    const ref = prRef(url);
+    // through the API, which names the review's URL; `gh pr review` does not
+    const out = await withBodyFile(body, (file) =>
+      run(atPr(cwd, url), 'api', '-X', 'POST', `repos/${ref.owner}/${ref.repo}/pulls/${ref.number}/reviews`, '-f', 'event=REQUEST_CHANGES', '-F', `body=@${file}`, '--jq', '.html_url'),
+    );
+    return out.trim() || undefined;
   },
   async merge(cwd, url, head) {
     const ref = prRef(url);
@@ -310,6 +386,7 @@ function ghStatus(prOut: string, inlineOut: string, threadsOut: string): PrStatu
   // is known by its first comment
   const threads = JSON.parse(threadsOut) as {
     data?: {
+      viewer?: { login: string };
       repository?: {
         pullRequest?: {
           reviewThreads?: { nodes: { isResolved: boolean; comments: { nodes: { databaseId: number }[] } }[] };
@@ -347,6 +424,7 @@ function ghStatus(prOut: string, inlineOut: string, threadsOut: string): PrStatu
     head: pr.headRefOid,
     ...(changedAt ? { changedAt } : {}),
     author: pr.author.login,
+    ...(threads.data?.viewer?.login ? { viewer: threads.data.viewer.login } : {}),
     ...(pr.state === 'MERGED' && pr.mergeCommit?.oid ? { mergeCommit: pr.mergeCommit.oid } : {}),
     checks,
     comments: [
@@ -382,12 +460,12 @@ export const ghForge = makeGhForge(ghCli());
 /**
  * What the card shows of a pull request's review, oldest first: each round a reviewer left comments
  * on the code in, with the replies in each thread, and the conversation between the rounds.
- * Comments by `skip` (bots that are not reviewers) are left out; `mine` marks the PR's author,
- * which is the worker writing in the owner's name.
+ * Comments by `skip` (bots that are not reviewers) are left out; `mine` marks `self`: the PR's
+ * author, which is the worker writing in the owner's name, or on a review card the owner's account.
  */
-export function reviewOf(s: PrStatus, skip: string[] = []): PrReviewEntry[] {
+export function reviewOf(s: PrStatus, skip: string[] = [], self = s.author): PrReviewEntry[] {
   const shown = s.comments.filter((c) => !skip.includes(c.author));
-  const mine = (author: string) => (author === s.author ? { mine: true } : {});
+  const mine = (author: string) => (author === self ? { mine: true } : {});
   const threads = new Map<string, PrThread>();
   const rounds = new Map<string, Extract<PrReviewEntry, { threads: PrThread[] }>>();
   const entries: PrReviewEntry[] = [];

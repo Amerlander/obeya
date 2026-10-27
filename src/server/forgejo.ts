@@ -26,13 +26,15 @@ interface FjUser {
   login: string;
 }
 interface FjPr {
+  title?: string;
+  allow_maintainer_edit?: boolean;
   state: 'open' | 'closed';
   merged: boolean;
   merge_commit_sha?: string | null;
   mergeable: boolean;
   draft?: boolean;
   body?: string | null;
-  head: { sha: string };
+  head: { sha: string; ref?: string; repo?: { clone_url?: string } | null };
   user: FjUser;
 }
 interface FjReview {
@@ -115,11 +117,13 @@ export const makeForgejoForge = (api: Api, origin: (cwd: string) => Promise<stri
     async status(cwd, url) {
       const { base, repo, pull, number } = where(url);
       // side by side where one call does not need another's answer: each is a round trip to the server
-      const [pr, allReviews, conversation, commits] = await Promise.all([
+      const [pr, allReviews, conversation, commits, viewer] = await Promise.all([
         api(cwd, base, 'GET', pull) as Promise<FjPr>,
         all<FjReview>(cwd, base, `${pull}/reviews`),
         api(cwd, base, 'GET', `${repo}/issues/${number}/comments`).then((c) => (c as FjComment[] | undefined) ?? []),
         all<{ commit: { committer: { date: string } }; parents?: unknown[] }>(cwd, base, `${pull}/commits?verification=false&files=false`),
+        // the account the login is for: on a review card, its comments are the owner's own
+        (api(cwd, base, 'GET', 'user') as Promise<FjUser | undefined>).then((u) => u?.login, () => undefined),
       ]);
       const reviews = allReviews.filter((r) => r.state !== 'PENDING');
       const inline = (
@@ -156,6 +160,7 @@ export const makeForgejoForge = (api: Api, origin: (cwd: string) => Promise<stri
         head: pr.head.sha,
         ...(changedAt ? { changedAt } : {}),
         author: login(pr.user),
+        ...(viewer ? { viewer } : {}),
         ...(pr.merged && pr.merge_commit_sha ? { mergeCommit: pr.merge_commit_sha } : {}),
         checks: statuses.map((s) => ({
           name: s.context,
@@ -222,6 +227,33 @@ export const makeForgejoForge = (api: Api, origin: (cwd: string) => Promise<stri
         // merged all the same: the first fetch after it stands in for the commit (Workers.merged)
         return undefined;
       }
+    },
+    async urlOf(cwd, n) {
+      const remote = await origin(cwd);
+      const at = remote ? remoteRepo(remote) : null;
+      if (!at) throw new Error(`no Forgejo repository at origin: ${remote ?? 'none'}`);
+      return `${at.base}/${at.repo.slice('repos/'.length)}/pulls/${n}`;
+    },
+    async contribution(cwd, url) {
+      const { base, pull } = where(url);
+      const pr = (await api(cwd, base, 'GET', pull)) as FjPr;
+      return {
+        title: pr.title ?? '',
+        author: pr.user?.login ?? 'ghost',
+        state: pr.merged ? 'MERGED' : pr.state === 'closed' ? 'CLOSED' : 'OPEN',
+        head: pr.head.sha,
+        canModify: !!pr.allow_maintainer_edit,
+        ...(pr.head.repo?.clone_url ? { headRepo: pr.head.repo.clone_url } : {}),
+        ...(pr.head.ref ? { headRef: pr.head.ref } : {}),
+      };
+    },
+    async comment(cwd, url, body) {
+      const { base, repo, number } = where(url);
+      return ((await api(cwd, base, 'POST', `${repo}/issues/${number}/comments`, { body })) as { html_url?: string } | undefined)?.html_url || undefined;
+    },
+    async requestChanges(cwd, url, body) {
+      const { base, pull } = where(url);
+      return ((await api(cwd, base, 'POST', `${pull}/reviews`, { body, event: 'REQUEST_CHANGES' })) as { html_url?: string } | undefined)?.html_url || undefined;
     },
     async open(cwd, pr) {
       const remote = await origin(cwd);

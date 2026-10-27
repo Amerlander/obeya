@@ -148,6 +148,9 @@ placeholder shows in full, on two lines where needed, since it often says what t
 message (the owner, 2026-10-17). Send is an arrow in a dark circle, as in chat apps; a button that
 starts something rather than sends keeps its words („Prototyp starten“).
 
+A review card's findings (see Review cards) stand above its demo, each with its choice; what the
+owner chose stands above the field like a quote and goes out with its one Send, the words beside it.
+
 Under a task's title stand its branch (and plan doc) and the size of its change („+120 −30 in 5
 Dateien“; where the card shows its change list, the size stands below the list instead): before landing the workspace against where its base branch was, uncommitted and new files
 included; after, what the landing put on the default branch (an archived card keeps it). A click

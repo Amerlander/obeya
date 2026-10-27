@@ -1058,6 +1058,35 @@ export class Workspaces implements CardWorkspaces {
   }
 
   /**
+   * After a pull request was merged on the forge where work lands on the local main (a review
+   * card's): the checkout gets the merge from `origin` as `git pull` does, the owner's own way of
+   * pulling (rebase or merge) kept, one landing at a time. A pull that fails is undone and says why.
+   */
+  pullMain(): Promise<Landed | { problem: string }> {
+    return oneAtATime(landings, this.o.repoPath, async () => {
+      const repo = this.o.repoPath;
+      try {
+        const base = branchSetting(repo) || (await gitSteps(repo, detectingBranch()));
+        if ((await gitAsync(repo, 'branch', '--show-current')) !== base) return { problem: `the checkout is not on ${base}` };
+        const from = await gitAsync(repo, 'rev-parse', 'HEAD');
+        // a merge or rebase of the owner's under way is theirs: nothing is pulled into it, nor undone
+        const busy = await Promise.all(['MERGE_HEAD', 'REBASE_HEAD', 'CHERRY_PICK_HEAD'].map((r) => gitAsync(repo, 'rev-parse', '-q', '--verify', r).then(() => r, () => null)));
+        if (busy.some(Boolean)) return { problem: `the checkout is in the middle of a ${busy.find(Boolean)!.split('_')[0]!.toLowerCase().replace('cherry', 'cherry-pick')}` };
+        try {
+          await gitAsync(repo, '-c', 'core.editor=true', 'pull', '--quiet', '--no-edit', 'origin', base);
+        } catch (e) {
+          // a rebase or merge that stopped on a conflict is taken back: the checkout stays as it was
+          await gitAsync(repo, 'rebase', '--abort').catch(() => gitAsync(repo, 'merge', '--abort')).catch(() => {});
+          return { problem: messageOf(e) };
+        }
+        return { from, to: await gitAsync(repo, 'rev-parse', 'HEAD') };
+      } catch (e) {
+        return { problem: messageOf(e) };
+      }
+    });
+  }
+
+  /**
    * Lands the card's committed branch on the default branch of `origin` without a pull request:
    * rebased (or squashed) onto it as in `landOnMain`, then pushed there, never forced. When the
    * push is turned away because the default branch moved meanwhile, it fetches, rebases and pushes

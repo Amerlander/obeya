@@ -105,6 +105,77 @@ a reviewer commented in („Runde 2 · greptile-apps · 3 Anmerkungen, 1 offen�
 its first line with its thread's state and reply count, unfolded with file, comment and replies; the
 conversation between the rounds. Bots' HTML is stripped except badge names (Greptile's „P1“).
 
+### Review cards
+
+A pull request someone outside opened (a contributor's) gets a card on the owner's word only:
+„Review PR #5“ to Obeya, typed or said, or the PR's link (see Other commands). What the owner says
+with it („schau besonders auf Security“, „die Demo nur auf dem Handy“) becomes the card's task, on
+top of the fixed review below. A PR that has a card already opens that card, and the words go to its
+worker; one closed or merged gets none. Obeya never makes such a card by itself and does not list
+open PRs. The card starts as any (see Scheduling) and names the PR's number, author and link above
+its title, on the canvas and opened.
+
+Its workspace stands on the PR's head (`refs/pull/<n>/head`, which GitHub and Forgejo both keep),
+fetched from `origin` where that is the PR's repository, else from the repository on its forge. Its
+Claude Code settings and CLAUDE.md there are the contributor's: the worker's session reads none of
+them (hooks and MCP servers would run before anyone looked), and gets the default branch's CLAUDE.md
+in its instructions instead.
+The worker's instructions for the review are Obeya's own for this kind of card, in a fixed order,
+since the code is a stranger's and whatever of it runs, runs on the owner's machine:
+
+1. Read the diff before anything of it runs, for network access, install and postinstall scripts,
+   new dependencies, changed test and build scripts and access to files outside the repository;
+   where something looks suspicious, run nothing and ask the owner.
+2. Review the code the repository's way (its CLAUDE.md and docs, a second reviewer where they name
+   one): correctness, security, quality, whether it fits the design docs.
+3. A demo before (the merge base) and after (the head), the app run as `app.run` says.
+4. The checks on the head, and a merge probe against the current `main`.
+
+The findings are an element of the card of their own, beside the demo, above it in the left column:
+each with its number, a short title, a sentence or two and whether it is about security. The worker
+keeps them as it keeps nothing else, like an idea's agent its brief: the whole list after its review,
+and again whenever the owner's words or a push change one („Befund 2 ist egal“), each by its number,
+with what came of it: open, sent to the contributor (linking the review it went in), fixed by the
+worker, settled (a push fixed it, or it no longer applies), not pursued. Above them stand the
+checks on the head and the merge probe („✓ bun test · ✓ konfliktfrei“); on the canvas the card
+shows both on one line („Review: 2 Befunde offen (1 Sicherheit)“). The handover brings the checks'
+results and the merge probe; a handover without findings recorded (an empty list where there are
+none) is refused. The findings are for the owner: nothing of them reaches the contributor unless the
+owner sends it. Obeya records the head the worker handed over.
+
+On each open finding the owner decides „An Beitragenden“ or „Selbst ändern“ (a second click takes it
+back), as they pick a question's options: the decisions stand in the card's draft, show above the
+field („Befund 1: An Beitragenden“) and go to the worker with the one Send of every card, with words
+of the owner's or alone. The finding then reads what is under way („Geht an amerlander …“) until
+the worker records what came of it. Words alone that ask the same („schick ihm Befund 1“) count the
+same; anything else the owner says (a question, more to look at) stays on the card.
+
+- To the contributor: the worker writes the findings sent as one review asking for changes (GitHub's
+  „Request changes“, Forgejo's counterpart) in the PR's language, posted by Obeya with the owner's
+  account; the findings it names are sent, linking it, and the card waits for the contributor (`in
+  PR`, „Wartet auf Beitragenden“), its log linking the review. Their comments since then and a new
+  head (once per commit) go to the worker, which reviews again, updates the findings and hands over
+  anew.
+- Itself: only where the PR allows edits by maintainers (GitHub's „Allow edits by maintainers“;
+  otherwise the choice is greyed with the reason). The worker makes the change, pushes it onto the
+  PR's branch in the contributor's fork, writes a short comment on the PR saying what and why, marks
+  the finding fixed and hands over with a new demo. The squash merge keeps the contributor as author.
+
+„Mergen (PR #5)“ approves: Obeya reads the PR, and at a head other than the one handed over (the
+contributor pushed since) it merges nothing and the worker reviews the PR as it is. Otherwise the
+demo goes on its page as with any approval („Demo teilen und am PR verlinken“, see Publishing on
+approval), its link goes into a comment on the PR once the page is online (the description stays the
+contributor's), and Obeya merges with the repository's allowed method, squash first, pinned to the
+reviewed head. A merge the forge refuses leaves the card waiting for the owner, with the reason.
+Merged, the card is `live`, and where work lands on `main` the checkout pulls the merge as `git pull`
+does it there; a pull that stops on a conflict is undone, and the card says so. A PR closed without
+a merge asks the owner whether the card can go; „Ja“ closes it as done.
+
+The watcher follows review cards in every repository, also one that lands on `main`. For them the
+PR's author is the contributor: their comments count, and only the owner's (the account Obeya acts
+as, which the worker writes with too) and `prNoise` are skipped. It never merges such a PR by itself,
+and checks and conflicts only show on the card.
+
 ### After landing
 
 The worker is told its work is on main (or its PR merged) and may finish what remains in its
@@ -191,6 +262,24 @@ A card no agent worked on, a prototype or an archived card has no field.
 - **A repository may leave the merge to its team** (`autoMerge`, 2026-10-21): a ready PR then waits
   for the owner; review comments and failed checks still go to the worker. Rejected: Obeya stopping
   to watch such PRs.
+- **A contributor's pull request is reviewed on a card of its own, an Obeya feature** (2026-10-27).
+  The flow holds for any repository on a forge; what a repository has of its own comes from its
+  settings (`app.run`, its demo site), its conventions and the forge's merge methods, with no new
+  setting. Rejected: a skill `review-pr` (Obeya would know nothing of the review: the card said
+  „Beenden, kein PR folgt“, comment and merge ran outside it, a push after the review went
+  unnoticed); a repository setting; a card for every open PR (a stranger's code runs on the owner's
+  machine only on their word).
+- **One card per PR, the demo linked in a comment on it** (2026-10-27): each demo gets a page of its
+  own, and the description is the contributor's.
+- **Obeya merges only the head the worker reviewed** (2026-10-27).
+- **The findings are an element of the card, decided on one by one, the decisions going with the
+  one Send** (2026-10-27, the owner after the first demo). Rejected: a switch below the field for
+  where a change request goes (it read as if what is typed into the field went to the contributor or
+  the agent); choosing in the conversation alone (a misunderstanding is a public comment or a push
+  into a stranger's fork); a click on a choice acting at once, or a button of its own under the list
+  (two Sends where every card has one).
+- **The review reads the diff before anything of it runs; its findings go to the owner** (2026-10-27),
+  to the contributor only when the owner sends them.
 - **The worker keeps workspace and session until done**, so the agent that knows the change does
   what it needs once on main, at the cost of one short worker turn per landing.
 - **The landing notice is a turn of its own** (2026-10-13). Rejected: counting the reply's turn,

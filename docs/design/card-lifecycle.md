@@ -126,6 +126,10 @@ Where the settings allow it (`direct`), "Direkt auf main" beside it (by voice "g
 pushes the work onto the default branch without a pull request, review or the PR's CI (see How work
 lands). Where work lands on `main`, approval lands it at once.
 
+A review card, a contributor's pull request (see Review cards), reads „Mergen (PR #5)“: Obeya merges
+the head its worker reviewed, and the card is `live`; while a change request waits for the
+contributor it is `in PR`, „Wartet auf Beitragenden“.
+
 An approve click folds the card at once without waiting for the server: the canvas card says what is
 under way („wird freigegeben …“, „wird direkt auf main gepusht …“), no longer counts as needing the
 owner and is skipped by Tab, which goes on from the place of the card it opened last. A message with

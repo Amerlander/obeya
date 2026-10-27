@@ -6,6 +6,7 @@
 // These drafts (text, screenshots, picks, the message replied to) are written down per tab and canvas (`keepDrafts`), so they outlive a page load too:
 // switching to another canvas and back, or a restart. So are the marks on screenshots (`Markup`).
 
+import type { ChangeRoute } from '../core/types';
 import { useEffect, useSyncExternalStore } from 'react';
 import type { Mark } from './marks';
 import type { Reply } from './reply';
@@ -26,6 +27,8 @@ export interface Draft {
   picks?: Picks;
   /** The message the words reply to (`reply.ts`). */
   reply?: Reply;
+  /** On a review card: what the owner decided for its findings, by number, which goes with the words. */
+  findings?: Record<string, ChangeRoute>;
   /** The paths of dropped files among the words (`insertFiles`), which go back beside the microphone with the screenshots (`moveFiles`). */
   files?: string[];
 }
@@ -38,12 +41,13 @@ export interface Picks {
 /** Which questions picks belong to: they count only while the same questions stand. */
 export const questionsKey = (questions: unknown[]) => JSON.stringify(questions);
 
-type Kept = Pick<Draft, 'text' | 'images' | 'picks' | 'reply' | 'files'>;
-const keptOf = ({ text, images, picks, reply, files }: Draft): Kept | null => {
+type Kept = Pick<Draft, 'text' | 'images' | 'picks' | 'reply' | 'files' | 'findings'>;
+const keptOf = ({ text, images, picks, reply, files, findings }: Draft): Kept | null => {
   const picked = picks?.picks.some((p) => p.length) ? picks : undefined;
+  const decided = findings && Object.keys(findings).length ? findings : undefined;
   const standing = filesIn(text, files);
-  return text.trim() || images.length || picked || reply
-    ? { text, images, ...(picked ? { picks: picked } : {}), ...(reply ? { reply } : {}), ...(standing.length ? { files: standing } : {}) }
+  return text.trim() || images.length || picked || reply || decided
+    ? { text, images, ...(picked ? { picks: picked } : {}), ...(reply ? { reply } : {}), ...(standing.length ? { files: standing } : {}), ...(decided ? { findings: decided } : {}) }
     : null;
 };
 
@@ -124,8 +128,8 @@ export function keepDrafts(store: Store, canvas: string) {
   kept = { store, canvas };
   try {
     const saved = JSON.parse(store.getItem(storeKey(canvas)) ?? '{}') as Record<string, Kept>;
-    for (const [key, { text, images, picks, reply, files }] of Object.entries(saved))
-      if (!drafts.has(key)) drafts.set(key, { ...EMPTY, text, images, ...(picks ? { picks } : {}), ...(reply ? { reply } : {}), ...(files ? { files } : {}) });
+    for (const [key, { text, images, picks, reply, files, findings }] of Object.entries(saved))
+      if (!drafts.has(key)) drafts.set(key, { ...EMPTY, text, images, ...(picks ? { picks } : {}), ...(reply ? { reply } : {}), ...(files ? { files } : {}), ...(findings ? { findings } : {}) });
   } catch {}
   try {
     const saved = JSON.parse(store.getItem(markupsKey(canvas)) ?? '{}') as Record<string, Markup>;

@@ -10,7 +10,7 @@ import { Board } from './board';
 import { Store } from './db';
 import { ghCli, makeGhForge, type Forge, type PrStatus } from './forge';
 import { PrWatcher } from './pr-watcher';
-import { artifact, FakeRuntime, fakeGh, gitRepo, until } from './testing';
+import { artifact, FakeRuntime, fakeGh, gitRepo, noContributions, until } from './testing';
 import { Workers } from './workers';
 import { git, Workspaces } from './workspaces';
 
@@ -53,6 +53,7 @@ beforeEach(() => {
   refuse = undefined;
   unreadable = undefined;
   const forge: Forge = {
+    ...noContributions,
     open: async () => '',
     status: async () => {
       if (unreadable) throw new Error(unreadable);
@@ -380,7 +381,7 @@ describe('watching', () => {
     // not yet ready, so Obeya does not merge it itself
     status.checks = [{ name: 'build', state: 'pending' }];
     let asked = 0;
-    const counting = new PrWatcher(board, workers, { status: async () => (asked++, status), body: async () => '', setBody: async () => {}, merge: async () => {}, open: async () => '' }, () => dir);
+    const counting = new PrWatcher(board, workers, { status: async () => (asked++, status), body: async () => '', setBody: async () => {}, merge: async () => {}, open: async () => '', ...noContributions }, () => dir);
     counting.soon();
     counting.soon();
     await Bun.sleep(5);
@@ -448,6 +449,7 @@ describe('a merge that takes a while', () => {
     let answer: ((refused?: string) => void) | undefined;
     let asked = 0;
     const slow: Forge = {
+      ...noContributions,
       open: async () => '',
       status: async () => (asked++, status),
       body: async () => '',

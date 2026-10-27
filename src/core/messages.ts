@@ -66,6 +66,29 @@ const de = {
     newSession: (earlier: string) => `Neue Sitzung. ${earlier}`,
     earlierRun: (session: string) => `Der frühere Lauf (Sitzung ${session}) bleibt für die Arbeitsrückschau erhalten.`,
     started: (branch: string) => `Agent gestartet auf ${branch}.`,
+    /** A review card started: its worker reviews the contributor's pull request. */
+    reviewStarted: (n: number, author: string) => `Agent gestartet: Er prüft PR #${n} von ${author}.`,
+    /** The worker sent the owner's change request to the contributor as a review on the PR. */
+    changesRequested: (n: number, author: string) => `Änderungswunsch als Review-Kommentar an PR #${n}. Wartet auf ${author}.`,
+    /** The worker wrote a comment on the contributor's PR (what it changed itself, say). */
+    commented: (n: number) => `Kommentar an PR #${n} geschrieben.`,
+    /** Approving a review card: Obeya merges the PR. */
+    approvedMerge: (n: number) => `Freigegeben. Obeya mergt PR #${n}.`,
+    mergedContribution: (n: number) => `PR #${n} gemergt. Live.`,
+    /** The contributor pushed after the handover: the approval does not merge a head the worker has not reviewed. */
+    unreviewedHead: (head: string) => `Nicht gemergt: Der PR steht seit der Übergabe auf einem anderen Stand (${head}). Der Agent prüft ihn.`,
+    /** The forge refused the merge of a review card's PR. */
+    mergeRefused: (reason: string) => `Nicht gemergt: ${reason}`,
+    /** Where work lands on the local main: the merge on the forge was pulled into it. */
+    pulledMain: (commit: string) => `main aus dem Remote geholt (${commit}).`,
+    pullFailed: (reason: string) => `main ließ sich nach dem Merge nicht holen: ${reason}. Bitte selbst holen (git pull).`,
+    contributionClosedQuestion: 'Der Pull Request wurde ohne Merge geschlossen. Kann die Karte weg?',
+    closeCard: 'Ja, Karte schließen',
+    /** What the owner decided for a finding of a review card, as their message shows it. */
+    findingDecided: (id: number, title: string, what: string) => `Befund ${id} „${title}“: ${what}`,
+    findingTo: (author: string) => `an ${author}`,
+    findingSelf: 'selbst ändern',
+    keepCard: 'Nein, behalten',
     laterInConversation: 'Danach im Gespräch:',
     approvedPr: 'Freigegeben. Der Agent öffnet den Pull Request.',
     approvedDirect: 'Freigegeben und direkt auf main gepusht.',
@@ -183,11 +206,20 @@ const de = {
     preparingWorkspace: 'Bereitet den Workspace vor …',
     workspaceFailed: (detail: string) => `Der Workspace ließ sich nicht vorbereiten: ${detail}`,
   },
+  /** „Review PR #5“ to Obeya: a review card for someone outside's pull request. */
+  review: {
+    failed: (pr: string, why: string) => `Keine Review-Karte für PR ${/^\d+$/.test(pr) ? `#${pr}` : pr}: ${why}`,
+    opened: (n: number) => `PR #${n} hat schon eine Karte: Hier ist sie.`,
+    started: (n: number, author: string) => `Ein Agent prüft PR #${n} von ${author}.`,
+    notOpen: (merged: boolean): string => (merged ? 'Er ist schon gemergt.' : 'Er ist geschlossen.'),
+    otherRepo: (repo: string) => `Er gehört nicht zum Repository ${repo}.`,
+  },
   pr: {
     comments: (n: number, author: string) =>
       n === 1 ? `Neuer Review-Kommentar von ${author}, an den Agenten weitergegeben.` : `${n} neue Review-Kommentare, an den Agenten weitergegeben.`,
     checkFailed: (names: string) => `Check fehlgeschlagen: ${names}. Der Agent sieht nach.`,
     conflict: 'Konflikt mit dem Zielbranch. Der Agent bringt den Branch auf Stand.',
+    contributorPushed: (author: string) => `${author} hat neu gepusht, an den Agenten weitergegeben.`,
     stale: 'Neuer Stand seit dem letzten Review, um ein neues hat niemand gebeten. Der Agent fragt danach.',
     held: (by: string, score: string) => `Bereit zum Mergen, aber ${by} gibt nur ${score}: Unter 4/5 mergt Obeya nicht selbst. Du entscheidest.`,
     ready: 'Bereit zum Mergen: Checks grün, alle Anmerkungen erledigt, das Review ist durch. Obeya mergt.',
@@ -338,6 +370,11 @@ const de = {
     shared: (url: string) => `Geteilt: ${url}`,
     prLinked: (n: number | undefined) => `Den Link zur Demo in die Beschreibung von Pull Request #${n} eingetragen.`,
     prNotLinked: (n: number | undefined, why: string) => `Den Link zur Demo nicht in Pull Request #${n} eingetragen: ${why}`,
+    /** A review card's PR gets the demo's link as a comment, its description being the contributor's. */
+    prCommented: (n: number | undefined) => `Den Link zur Demo als Kommentar an PR #${n} geschrieben.`,
+    prNotCommented: (n: number | undefined, why: string) => `Den Link zur Demo nicht an PR #${n} geschrieben: ${why}`,
+    /** The comment on a review card's PR that links the demo's page. */
+    prComment: (artifact: boolean, url: string) => `${artifact ? 'Demo-Seite' : 'Demo-Video'}: ${url}`,
     notWithdrawnNoShare: 'Nicht zurückgezogen: Das Repository der Aufgabe teilt keine Demos mehr.',
     withdrawn: 'Die Seite ist zurückgezogen.',
     // a site Obeya keeps (`demo.site`): why a page did not go out, or did not come down
@@ -467,6 +504,21 @@ const en: Messages = {
     newSession: (earlier: string) => `New session. ${earlier}`,
     earlierRun: (session: string) => `The earlier run (session ${session}) is kept for the work retrospective.`,
     started: (branch: string) => `Agent started on ${branch}.`,
+    reviewStarted: (n: number, author: string) => `Agent started: it reviews PR #${n} by ${author}.`,
+    changesRequested: (n: number, author: string) => `Change request sent as a review comment on PR #${n}. Waiting for ${author}.`,
+    commented: (n: number) => `Commented on PR #${n}.`,
+    approvedMerge: (n: number) => `Approved. Obeya merges PR #${n}.`,
+    mergedContribution: (n: number) => `PR #${n} merged. Live.`,
+    unreviewedHead: (head: string) => `Not merged: the PR is at another commit than at the handover (${head}). The agent reviews it.`,
+    mergeRefused: (reason: string) => `Not merged: ${reason}`,
+    pulledMain: (commit: string) => `Pulled main from the remote (${commit}).`,
+    pullFailed: (reason: string) => `Could not pull main after the merge: ${reason}. Please pull it yourself (git pull).`,
+    contributionClosedQuestion: 'The pull request was closed without a merge. Can the card go?',
+    closeCard: 'Yes, close the card',
+    findingDecided: (id: number, title: string, what: string) => `Finding ${id} “${title}”: ${what}`,
+    findingTo: (author: string) => `to ${author}`,
+    findingSelf: 'change it myself',
+    keepCard: 'No, keep it',
     laterInConversation: 'Later in the conversation:',
     approvedPr: 'Approved. The agent opens the pull request.',
     approvedDirect: 'Approved and pushed straight to main.',
@@ -567,11 +619,19 @@ const en: Messages = {
     preparingWorkspace: 'Preparing the workspace …',
     workspaceFailed: (detail: string) => `The workspace could not be prepared: ${detail}`,
   },
+  review: {
+    failed: (pr: string, why: string) => `No review card for PR ${/^\d+$/.test(pr) ? `#${pr}` : pr}: ${why}`,
+    opened: (n: number) => `PR #${n} has a card already: here it is.`,
+    started: (n: number, author: string) => `An agent reviews PR #${n} by ${author}.`,
+    notOpen: (merged: boolean) => (merged ? 'It is merged already.' : 'It is closed.'),
+    otherRepo: (repo: string) => `It does not belong to the repository ${repo}.`,
+  },
   pr: {
     comments: (n: number, author: string) =>
       n === 1 ? `New review comment from ${author}, passed on to the agent.` : `${n} new review comments, passed on to the agent.`,
     checkFailed: (names: string) => `Check failed: ${names}. The agent looks into it.`,
     conflict: 'Conflict with the base branch. The agent brings the branch up to date.',
+    contributorPushed: (author: string) => `${author} pushed new commits, passed to the agent.`,
     stale: 'New commits since the last review, and nobody asked for another one. The agent asks for it.',
     held: (by: string, score: string) => `Ready to merge, but ${by} gives only ${score}: below 4/5 Obeya does not merge by itself. Your call.`,
     ready: 'Ready to merge: checks green, all comments resolved, the review is through. Obeya merges.',
@@ -716,6 +776,9 @@ const en: Messages = {
     shared: (url: string) => `Shared: ${url}`,
     prLinked: (n: number | undefined) => `Added the demo’s link to the description of pull request #${n}.`,
     prNotLinked: (n: number | undefined, why: string) => `Did not add the demo’s link to pull request #${n}: ${why}`,
+    prCommented: (n: number | undefined) => `Commented the demo’s link on PR #${n}.`,
+    prNotCommented: (n: number | undefined, why: string) => `Did not comment the demo’s link on PR #${n}: ${why}`,
+    prComment: (artifact: boolean, url: string) => `${artifact ? 'Demo page' : 'Demo video'}: ${url}`,
     notWithdrawnNoShare: 'Not withdrawn: the task’s repository no longer shares demos.',
     withdrawn: 'The page is withdrawn.',
     pageIncomplete: 'The page lacks a title, a text or the demo’s directory.',

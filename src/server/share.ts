@@ -14,7 +14,7 @@ import { z } from 'zod';
 import { LANGUAGE_NAMES } from '../core/locale';
 import { MESSAGES, type Messages } from '../core/messages';
 import { type Demo, type DemoKind, type DemoPage, EXPORT_HTML_MAX, type Item } from '../core/types';
-import { BadRequest, type Board, cardDemos, type DemoRef, type PrState, reshareable, sameDemo, type SharedDemo, sharedDemos, type StoredDemo, type StoredReshare, type StoredShare } from './board';
+import { BadRequest, type Board, cardDemos, contributionOf, type DemoRef, type PrState, reshareable, sameDemo, type SharedDemo, sharedDemos, type StoredDemo, type StoredReshare, type StoredShare } from './board';
 import { PAGE_CHANGES, pagesVersion } from '../core/page-changes';
 import type { DemoSite } from '../adapters/types';
 import { expandHome, readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
@@ -134,6 +134,8 @@ const serial = <T>(fn: () => Promise<T>): Promise<T> => {
 };
 
 export class Sharing {
+  /** Comments linking a review card's page under way, by card and page: one at a time. */
+  private commenting = new Set<string>();
   /** When the versions were last asked for because the owner came back. */
   private checked = 0;
   /** A page of the run sharing many again is waiting for its turn, or going out. */
@@ -176,7 +178,17 @@ export class Sharing {
    */
   approved(cardId: string): string | null {
     try {
-      return this.publishApproved(cardId);
+      const trailer = this.publishApproved(cardId);
+      // a review card's page, online already with its latest demo: its link goes onto the PR now
+      const s = this.stored(cardId);
+      const pr = this.prOf(cardId);
+      const card = this.find(cardId);
+      if (pr && s?.url && !s.state && card?.contribution) {
+        const target = this.target(card);
+        const first = sharedDemos(s)[0];
+        if (target && first) void this.linkPr(cardId, pr, s.url, target.repo, first.shown.kind);
+      }
+      return trailer;
     } catch (e) {
       // the work lands all the same
       this.o.board.log(cardId, 'error', 'obeya', `${this.o.board.t.share.notShared}: ${messageOf(e)}`);
@@ -554,6 +566,27 @@ export class Sharing {
    */
   private async linkPr(cardId: string, pr: string, url: string, cwd: string, kind: DemoKind) {
     const n = parsePrUrl(pr)?.number;
+    const row = this.o.board.row(cardId);
+    const review = contributionOf(row);
+    if (review) {
+      // a review card's PR is the contributor's: its description stays theirs, and the link comes as a comment, once the owner approved
+      const key = `${cardId}\n${url}`;
+      if (!review.approved || review.linked === url || this.commenting.has(key)) return;
+      // marked once the comment is there: a restart before then comments at the next approval
+      this.commenting.add(key);
+      const t = MESSAGES[this.languageOf(this.demo(cardId)?.dir ?? '', this.card(cardId))].share;
+      try {
+        await this.o.forge.comment(cwd, pr, t.prComment(kind === 'html', url));
+        const now = contributionOf(this.o.board.row(cardId));
+        if (now) this.o.board.work(cardId, { contribution: JSON.stringify({ ...now, linked: url }) });
+        this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.share.prCommented(n));
+      } catch (e) {
+        this.o.board.log(cardId, 'error', 'obeya', this.o.board.t.share.prNotCommented(n, messageOf(e)));
+      } finally {
+        this.commenting.delete(key);
+      }
+      return;
+    }
     try {
       const body = withDemoLink(await this.o.forge.body(cwd, pr), url, kind, this.o.board.t);
       if (body === null) return;

@@ -8,6 +8,7 @@ import { answerTag, fromAnswerTag } from './answers';
 import { BadRequest, type Board, excerpt, replyNote } from './board';
 import type { Place } from '../core/layout';
 import { type Config, configShape } from './config';
+import { parsePrUrl } from './forge';
 import type { Mark, Moment, TalkWaitRow } from './db';
 import { type AgentRuntime, type AgentSession, failureReason, limitLifts } from './runtime';
 import { type Language, LANGUAGES, ownersLanguage } from '../core/locale';
@@ -22,6 +23,12 @@ export type Command = (
    */
   | { do: 'newCard'; title: string; body: string; start: boolean; until?: string; repo?: string; from?: string; place?: Place }
   | { do: 'newIdea'; title: string; body: string; repo?: string; place?: Place }
+  /**
+   * A review card for someone outside's pull request (`pr`: its number in the repository, or its
+   * URL), started; `text`: what the owner added for the review. Where the PR has a card, that one
+   * opens instead and its worker gets the text.
+   */
+  | { do: 'reviewPr'; pr: string; text: string; repo?: string; spoken?: boolean; place?: Place }
   /** `force` starts a card that waits behind others now, despite the likely merge conflict. */
   /** `direct`: onto the default branch without a pull request, where the card's repository allows it. */
   | { do: 'approve'; card: string; direct?: boolean }
@@ -215,7 +222,7 @@ type More = { wish?: string; cannot?: boolean };
 type Decision = { commands: Command[]; confirm: string; lookUp?: LookUp } & More;
 
 /** The actions `act` takes, as the Koordinator names them. */
-const ACTIONS = ['new_card', 'new_idea', 'start', 'dequeue', 'note', 'answer', 'feedback', 'approve', 'accept', 'dismiss', 'keep', 'revise', 'stop', 'pause', 'resume', 'snooze', 'wake', 'discuss', 'build', 'split_off', 'plan_doc', 'prototype', 'park', 'drop', 'remember', 'work_retro', 'group', 'ungroup', 'rename_group', 'wait_for', 'stop_waiting', 'wish'] as const;
+const ACTIONS = ['new_card', 'new_idea', 'review_pr', 'start', 'dequeue', 'note', 'answer', 'feedback', 'approve', 'accept', 'dismiss', 'keep', 'revise', 'stop', 'pause', 'resume', 'snooze', 'wake', 'discuss', 'build', 'split_off', 'plan_doc', 'prototype', 'park', 'drop', 'remember', 'work_retro', 'group', 'ungroup', 'rename_group', 'wait_for', 'stop_waiting', 'wish'] as const;
 
 /** What `act` gets for one action. */
 const ACTION = z.object({
@@ -235,6 +242,7 @@ const ACTION = z.object({
   until: z.string().optional(),
   state: z.enum(['done', 'waits_for_owner']).optional(),
   on: z.string().optional(),
+  pr: z.string().optional(),
 });
 type ActionArgs = z.infer<typeof ACTION>;
 
@@ -363,7 +371,8 @@ export class Commander {
       // a rule said with a card open has that card as its occasion
       if (c.do === 'remember') return card ? { ...c, card } : c;
       // a new card lands where the owner was on the canvas; a follow-up goes beside the card it follows
-      if (focus.place && ((c.do === 'newCard' && !c.from) || c.do === 'newIdea')) c = { ...c, place: focus.place };
+      if (focus.place && ((c.do === 'newCard' && !c.from) || c.do === 'newIdea' || c.do === 'reviewPr')) c = { ...c, place: focus.place };
+      if (c.do === 'reviewPr') return { ...c, spoken: !input.typed };
       const told =
         TO_AGENT.includes(c.do) && 'text' in c
           ? { ...c, spoken: !input.typed, ...(verbatim && c.card === card ? { text: `${replyNote(replyTo ? this.o.board.quoted(card!, replyTo) : undefined, 'koordinator')}${transcript}` } : {}) }
@@ -709,6 +718,7 @@ export class Commander {
             '- pause: pause the agent on a card at once, only while it is working on something (the card list says so): a worker at work, or in any other state while the list says its agent is working on something; an idea\'s agent working on its reply; a Question card\'s agent reading. Nothing of it runs, its session stays, and it goes on where it stopped with resume, or with what the owner says to it, which it goes on with („halt mal an“, „pausier …“, „warte mal kurz“). resume: let a paused agent go on („mach weiter“, „lass ihn weitermachen“). stop: end the agent on a card for good, which plans the card again („stopp“, „brich ab“).',
             "- wait_for: a step you take later, once a card gets somewhere (add a canvas once the task that creates its repository is done; start a card once another has landed; pass the owner's words on once a card waits for them). on: the card to wait on, its tag, or the title of a new_card in this same act (in „starte Login, sobald Export fertig ist“: Export). state: done (the default: its work is on main, or it was closed without a change) or waits_for_owner (it asks the owner or hands its work over). text: the step, standing on its own, with what the owner asked for (names, paths, values) and cards by their titles (tags may change by then). Obeya wakes you once that card gets there, or no longer can (stopped, removed), and you take the step then; confirm says that you will. Nothing else wakes you for a later step. A new card you wait on gets in its body only its agent's part, without your step: its agent would try that step itself, and Obeya would refuse it. stop_waiting: you no longer wait on the card (on), when the owner no longer wants that step.",
             '- snooze: set a card aside until a point in time („stell das bis morgen früh zurück“, „erinner mich Montag daran“, „das später“), on a card at work (its agent stops until then, as on a pause, and goes on at the time), one waiting for the owner (it leaves their list until then; nothing goes to its agent), or a planned one not yet with Obeya (it starts at the time instead of now: „erst am Montag starten“); on a snoozed card it changes the time. until: the local time as YYYY-MM-DDTHH:MM, from Now above („heute Abend“ 18:00, „morgen früh“ 08:00, „Montag“ 08:00 next Monday). wake: a snoozed card now („hol … zurück“, „weck … auf“); a planned one starts then, as start does.',
+            `- review_pr (no card): review a pull request someone outside opened („Review PR #5“, „schau dir den PR an“ with its link). pr: its number or URL; text: what the owner adds for this review in their words („schau besonders auf Security“, „die Demo nur auf dem Handy“), else empty${repos.length > 1 ? ', repo the repository whose pull request it is (an id from the list)' : ''}. A review card starts on it: its agent reviews the code, records a demo before and after, runs the checks, and the owner merges it from the card. A PR that has a card already opens that one, and the text goes to its agent. confirm e.g. ${say.reviewPr}`,
             `- new_idea: a new idea to think through with an exploration agent before anything is planned ("Ich will über … nachdenken", "Idee: …"). title short and precise, body what the owner said about it, in their words${repos.length > 1 ? ', repo as for new_card' : ''}.`,
             `- remember (no card): a rule the owner wants kept for all future work („Merk dir: …“, „ab jetzt immer …“). text: the rule, short and general, in the owner's language; replaces: the number of a rule of the owner it changes or contradicts, also when it moves that rule into a CLAUDE.md. It goes to one of two places. The owner's rules, for how the agents work with the owner through Obeya whatever the repository (what to ask and what to decide alone, how to report, hand over and demo): leave repos out; it applies at once. A repository's CLAUDE.md, for anything about a repository (its conventions, product, tools, how its code is written, tested and landed, its UI and wording, taste in code even when it holds in every repository): repos the ids of the repositories it concerns (usually the open card's; every one when it holds in all of them); it goes into the repository's card ${t.quote(t.claudeMd.title)}, whose worker writes it into the CLAUDE.md. confirm says where it goes (${say.remember}).`,
             `- work_retro (no card): the Arbeitsrückschau of a repository, now („Mach eine Arbeitsrückschau für den Shop“): it reads the friction noted on the workers' runs of its finished cards since the last one and proposes cards (a script, a skill), CLAUDE.md lines or values for the repository's settings (checks, setup, soft paths, how to run the app for a demo) for what recurs on several cards; they come as proposals for the owner, and the owner hears when it is done. It also runs by itself: in a new repository after its first finished card, then after 2 more and 4 more, then every 10. repo: the repository's id (the one the owner names, else the open card's, else the first). confirm e.g. ${say.retro}`,
@@ -943,6 +953,13 @@ export class Commander {
       if (name.length > 60) return "a group's name has at most 60 characters";
       if (groups.some((x) => x.id !== g.id && x.name.toLowerCase() === name.toLowerCase())) return `there is a group "${name}" already`;
       return { do: 'renameGroup', group: g.id, name };
+    }
+    if (a.do === 'review_pr') {
+      const pr = a.pr?.trim().replace(/^#/, '') ?? '';
+      if (!pr) return 'the pull request is missing (pr: its number, or its URL)';
+      if (!/^\d+$/.test(pr) && !parsePrUrl(pr)) return `${pr} is neither the number of a pull request nor its URL`;
+      const repo = this.newCardRepo(a);
+      return { do: 'reviewPr', pr, text: (a.text || a.body || '').trim(), ...(repo ? { repo } : {}) };
     }
     if (a.do === 'new_idea') {
       if (!a.title?.trim()) return 'a new idea needs a title';
@@ -1340,12 +1357,13 @@ function when(iso: string): string {
 }
 
 /** Examples of the confirmations the Koordinator speaks, and the owner's words for its cards, per language. */
-const CONFIRM: Record<Language, { act: string; words: string; remember: string; retro: string; group: string; configure: string; lookUp: string; idea: string; wish: string }> = {
+const CONFIRM: Record<Language, { act: string; words: string; remember: string; retro: string; reviewPr: string; group: string; configure: string; lookUp: string; idea: string; wish: string }> = {
   de: {
     act: '"Neue Aufgabe „Zählerstände als CSV“, der Agent fängt an." / "„Rabatt“ freigegeben, und die Folgeaufgabe „Archiv“ ist angelegt." / "An den Agenten von „Export“ weitergegeben."',
     words: 'In German, a card is an „Aufgabe“ (a follow-up: „Folgeaufgabe“), an idea „Idee“, a project „Projekt“; never say „Karte“. The owner may still say „Karte“ and means the same.',
     remember: '„Gemerkt, gilt ab sofort für alle Agenten.“ / „Kommt in die CLAUDE.md von <repository name>, über die Aufgabe „CLAUDE.md ergänzen“.“',
     retro: '„Ich mache die Arbeitsrückschau für den Shop; Vorschläge erscheinen als Karten.“',
+    reviewPr: '„Ich lege eine Review-Karte für PR #5 an, mit Blick auf Security.“',
     group: '„„Export“ und „Rabatt“ gehören jetzt zur Gruppe Abrechnung.“',
     configure: '„Das Repository shop-web kommt auf die Leinwand Shop.“ / „shop-web bekommt einen dritten Klon; seine Agenten starten neu, sobald sie pausieren.“',
     lookUp: '„Ich schaue im Plan nach.“ / „Moment, ich lese nach, was der Agent bei „…“ tun würde.“',
@@ -1357,6 +1375,7 @@ const CONFIRM: Record<Language, { act: string; words: string; remember: string; 
     words: 'In English, a card is a “task” (a follow-up: “follow-up”), an idea “idea”, a project “project”; never say “card”. The owner may still say “card” and means the same.',
     remember: '“Noted, it applies to all agents from now on.” / “It goes into the CLAUDE.md of <repository name>, through the task “Add to CLAUDE.md”.”',
     retro: '“I am running the work retrospective for the shop; proposals appear as cards.”',
+    reviewPr: '“I am starting a review card for PR #5, with an eye on security.”',
     group: '““Export” and “Discount” now belong to the group Billing.”',
     configure: '“The repository shop-web joins the canvas Shop.” / “shop-web gets a third clone; its agents restart once they paused.”',
     lookUp: '“Let me look at the plan.” / “One moment, I am reading what the agent would do on “…”.”',

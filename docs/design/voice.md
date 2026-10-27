@@ -144,7 +144,7 @@ several seconds where the button „Freigeben“ is immediate.
 
 A Koordinator turn reads the transcript as speech that may be misheard (typed words as written, and
 it knows which, and in which field) and either acts or replies. One sentence may give up to 20
-actions: new card, new idea, start, out of the queue, note, answer, feedback, approve, accept,
+actions: new card, new idea, a review card for a pull request, start, out of the queue, note, answer, feedback, approve, accept,
 dismiss, revise, stop, remember, Arbeitsrückschau, grouping and ungrouping cards, renaming a group,
 `configure` (see The Konfiguration dialog), `wish` (see Wishes for Obeya's makers), `wait_for` (see A
 step once a card gets somewhere); on ideas discuss, build, plan doc (also for a planned task nobody
@@ -178,6 +178,14 @@ Start on a queued card starts it now despite the conflict, like "Trotzdem starte
 sees what queued cards wait for ("starte alle wartenden Aufgaben"); "nimm sie aus der Warteschlange"
 takes a card back to planned. Replies answer questions ("Was ist seit gestern passiert?") as far as
 the cards and their history do.
+
+„Review PR #5“ (or a pull request's link, „schau dir den PR an“) makes a review card for a
+contributor's pull request and starts it; a number is the PR of the card's repository (the first on
+a canvas with several, unless the owner names one). What the owner adds („schau besonders auf
+Security“) becomes its task. A PR with a card already opens that card, unless the owner has another
+one open, and the words go to its worker; one Obeya cannot read, or closed, gets none, and the owner
+reads why. Until a review card was there once, a line under Obeya's field names the command (see
+Review cards).
 
 "Merk dir: …" is remember, with the open card as occasion, after the undo window (see Learning the owner's
 rules).

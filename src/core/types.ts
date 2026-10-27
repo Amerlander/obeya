@@ -327,8 +327,10 @@ export interface Item {
   scope?: string[];
   /** A planned card the Koordinator is deciding on, or that waits for cards in progress. */
   queue?: Queue;
-  /** The pull request, once the worker opened it after approval. */
+  /** The pull request, once the worker opened it after approval; on a review card, the one it reviews. */
   pr?: PullRequest;
+  /** A review card: the pull request of someone outside that the card reviews and, once approved, merges. */
+  contribution?: Contribution;
   /**
    * A workstream planned again: a part of it landed (this commit, this pull request), but its plan
    * doc keeps it open. A new run does the rest.
@@ -621,6 +623,59 @@ export interface PullRequest {
   manual?: boolean;
   /** The review as last seen, oldest first (`reviewOf` in the server's forge). */
   review?: PrReviewEntry[];
+}
+
+/**
+ * The pull request a review card reviews: opened by someone outside (the contributor), reviewed by
+ * the card's worker and merged by Obeya once the owner approves its demo.
+ */
+export interface Contribution {
+  url: string;
+  number: number;
+  /** The contributor's account on the forge. */
+  author: string;
+  title: string;
+  /** The contributor allows maintainers to push to the PR's branch (GitHub's „Allow edits by maintainers“). */
+  canModify: boolean;
+  /** What the worker found at its latest handover: the checks on the PR's head, whether it merges into the current main without conflicts. */
+  results?: ReviewResults;
+  /** The review's findings as the worker keeps them, for the owner to decide on one by one; none until it recorded them. */
+  findings?: Finding[];
+  /** The worker's change request on the PR, while the card waits for the contributor. */
+  requested?: { url?: string; at: string };
+}
+
+/**
+ * What the owner decides for a finding of a review card: it goes to the contributor as a change
+ * request, or (`self`) the worker makes the change and pushes it onto the PR's branch.
+ */
+export type ChangeRoute = 'contributor' | 'self';
+
+/** One finding of a review card's review, as its worker keeps it. */
+export interface Finding {
+  /** Its number on the card, kept while the worker rewrites the list. */
+  id: number;
+  title: string;
+  text: string;
+  security?: boolean;
+  /**
+   * `open` until something came of it: `sent` to the contributor (`url`, the review it went in),
+   * `fixed` by the worker on the PR's branch, `resolved` (the contributor's push fixed it, or it no
+   * longer applies), `dropped` (the owner does not pursue it).
+   */
+  status: FindingStatus;
+  url?: string;
+  /** What the owner decided for it, while the worker carries it out. */
+  decided?: ChangeRoute;
+}
+
+export type FindingStatus = 'open' | 'sent' | 'fixed' | 'resolved' | 'dropped';
+
+/** What the worker of a review card reports with its handover. */
+export interface ReviewResults {
+  checks: { name: string; passed: boolean }[];
+  /** It merges into the current main without conflicts. */
+  mergeable: boolean;
 }
 
 /** A comment on a pull request; `mine` when the PR's author wrote it (the worker, in the owner's name). */
@@ -1157,7 +1212,8 @@ export type CardAction =
   /** `spoken`: the words came through speech recognition, which the agent is told. */
   /** `replyTo`: the message of the card's conversation the words reply to (`CardEvent.replyTo`). */
   /** `spot`: the place in the card's demo video the words are about. */
-  | { action: 'message'; text: string; spoken?: boolean; images?: string[]; replyTo?: number; spot?: SpotInput }
+  /** `findings`: on a review card, what the owner decided for its findings, by their numbers; with them the text may be empty. */
+  | { action: 'message'; text: string; spoken?: boolean; images?: string[]; replyTo?: number; spot?: SpotInput; findings?: Record<string, ChangeRoute> }
   /** `picks`: the options of the question the owner picked; with them the text, their own words, may be empty. */
   | { action: 'answer'; text: string; spoken?: boolean; images?: string[]; replyTo?: number; picks?: string[] }
   /**
@@ -1290,6 +1346,17 @@ export type ErrorCode =
   | 'snoozeTime'
   | 'noQuestion'
   | 'notReady'
+  /** A review card's action on a card that reviews no pull request. */
+  | 'notReview'
+  /** „Selbst ändern“ on a review card whose contributor does not allow maintainers' edits, or a decision on a finding it does not have open. */
+  | 'noEdits'
+  | 'noFinding'
+  /** Approving a review card: its PR moved since the handover, was closed, or the forge refused the merge (the detail says why). */
+  | 'prMoved'
+  | 'prClosed'
+  | 'mergeRefused'
+  /** „Review PR #5“: no such pull request, or none Obeya can read. */
+  | 'noPr'
   /** Deleting a comment on the demo video: it is no longer held back, the worker has it. */
   | 'notHeld'
   /** Approving directly onto main: the card's repository lands approved work only through a pull request. */
@@ -2311,4 +2378,6 @@ export interface Notice {
   talk?: number;
   /** The project whose sheet shows that exchange in full too: a page with that sheet open needs no line either. */
   project?: string;
+  /** The page opens the card (`cardId`), unless the owner has another one open: the one a review of its PR asked for. */
+  open?: true;
 }

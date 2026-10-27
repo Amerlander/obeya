@@ -22,6 +22,7 @@ import {
   type CardEvent,
   type CardPatch,
   type ClonePool,
+  type Contribution,
   type Decision,
   type Demo,
   type DemoKind,
@@ -80,6 +81,9 @@ export interface PrState {
   conflictHead?: string;
   /** The commit the worker was last told its reviewers have not seen. */
   staleHead?: string;
+  /** A review card waiting for the contributor: the PR's head when it began to wait, and the one the worker was last told was pushed. */
+  headSeen?: string;
+  pushedHead?: string;
   /** The commit the PR was found ready to merge at; gone once something is left to do again. */
   readyHead?: string;
   /** Why the forge refused Obeya's merge of the ready PR: then the owner merges. */
@@ -94,6 +98,24 @@ export interface PrState {
   /** The review as last seen, for the card. */
   review?: PrReviewEntry[];
 }
+
+/** What is stored of a review card's pull request (`CardRow.contribution`): what the card shows, and what only the server needs. */
+export interface StoredContribution extends Contribution {
+  /** The PR's head commit the worker reviewed at its latest handover: only that one is merged. */
+  reviewed?: string;
+  /** Where the PR's branch is, for a worker that pushes onto it: its repository's URL and branch. */
+  headRepo?: string;
+  headRef?: string;
+  /** The owner approved: the demo's page is linked in a comment on the PR once it is online. */
+  approved?: true;
+  /** The page's address Obeya linked in a comment on the PR. */
+  linked?: string;
+  /** The PR was closed without a merge, and the owner was asked whether the card can go. */
+  closed?: true;
+}
+
+/** A review card's pull request as the card shows it. */
+export const contributionOf = (r: Pick<CardRow, 'contribution'>): StoredContribution | null => (r.contribution ? (JSON.parse(r.contribution) as StoredContribution) : null);
 
 /** What a card's work landed with (`CardRow.shipped`); it stays after the worker is done. */
 export interface Shipped {
@@ -2190,6 +2212,7 @@ function work(r: CardRow): Partial<Item> {
   const answering = detail.answering && handed;
   const scope = r.scope ? (JSON.parse(r.scope) as { files: string[] }).files : undefined;
   const pr = r.pr ? (JSON.parse(r.pr) as PrState) : undefined;
+  const contribution = contributionOf(r);
   const share = shareOf(r);
   const notOnApproval = r.share ? (JSON.parse(r.share) as StoredShare).notOnApproval : undefined;
   const landed = r.landed ? (JSON.parse(r.landed) as { followUp?: boolean; needsClone?: boolean }) : null;
@@ -2197,6 +2220,7 @@ function work(r: CardRow): Partial<Item> {
     ...(scope?.length ? { scope } : {}),
     ...(r.queue && (r.state ?? 'planned') === 'planned' ? { queue: JSON.parse(r.queue) as Item['queue'] } : {}),
     ...(pr?.url ? { pr: { url: pr.url, number: pr.number!, checks: pr.checks ?? [], conflict: !!pr.conflictHead, ...(pr.readyHead && (pr.mergeError || pr.held || pr.manual) ? { ready: true, ...(pr.mergeError ? { mergeError: pr.mergeError } : {}), ...(pr.held ? { held: pr.held } : {}), ...(pr.manual ? { manual: true } : {}) } : {}), ...(pr.review?.length ? { review: pr.review } : {}) } } : {}),
+    ...(contribution ? { contribution: { url: contribution.url, number: contribution.number, author: contribution.author, title: contribution.title, canModify: contribution.canModify, ...(contribution.results ? { results: contribution.results } : {}), ...(contribution.findings ? { findings: contribution.findings } : {}), ...(contribution.requested ? { requested: contribution.requested } : {}) } } : {}),
     ...(r.status_line ? { statusLine: r.status_line } : {}),
     ...(detail.question && r.need === 'question' ? { question: detail.question } : {}),
     // a demo's question is as open as a worker's: the owner answers it on the card or by voice

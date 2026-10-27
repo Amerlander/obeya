@@ -111,7 +111,9 @@ description". Once a PR exists and the page is out, in either order, Obeya adds 
 (unless it already contains the URL) a line `Demo-Video: <url> <!-- obeya:demo -->` (`Demo-Seite:`
 for an artifact; „Demo video:“/„Demo page:“ in English), replacing its own earlier line by the
 marker. A page shared before the PR existed is republished with the PR's link, as it showed then; a PR
-reported while the page is going out gets a second round after it. A failure goes into the card's log; the page stays shared. Withdrawing leaves the line.
+reported while the page is going out gets a second round after it. A failure goes into the card's log; the page stays shared. Withdrawing leaves the line. A review card's pull request is the contributor's: its
+description stays as it is, and once the owner approved, the page's link goes into a comment on it
+instead (`Demo-Video: <url>` in the demo's language), once per page.
 
 #### The page and the landing
 

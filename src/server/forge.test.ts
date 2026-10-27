@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { confidence, type Forge, ghCli, githubRepo, lastAsked, makeGhForge, parsePrUrl, readable, readyToMerge, reviewOf, reviewStale, routedForge, type PrStatus } from './forge';
-import { fakeGh } from './testing';
+import { fakeGh, noContributions } from './testing';
 
 test('parsePrUrl: GitHub and GitHub Enterprise, and Forgejo or Gitea on any server', () => {
   expect(parsePrUrl('https://github.com/example-org/app/pull/813')).toEqual({ forge: 'github', base: 'https://github.com', host: 'github.com', owner: 'example-org', repo: 'app', number: 813 });
@@ -19,6 +19,7 @@ test('parsePrUrl: GitHub and GitHub Enterprise, and Forgejo or Gitea on any serv
 test('a pull request goes to the forge its URL is on; one is opened on the forge of origin', async () => {
   const seen: string[] = [];
   const fake = (name: string): Forge => ({
+    ...noContributions,
     status: async () => (seen.push(`${name} status`), {}) as never,
     body: async () => (seen.push(`${name} body`), ''),
     setBody: async () => void seen.push(`${name} setBody`),

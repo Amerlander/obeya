@@ -515,6 +515,13 @@ const de = {
     notReady: 'Das ist nicht bereit zur Abnahme.',
     notHeld: 'Der Kommentar ist schon beim Agenten.',
     noDirect: 'In diesem Repository geht freigegebene Arbeit nur per Pull Request auf main.',
+    notReview: 'Diese Karte prüft keinen Pull Request.',
+    noEdits: 'Der Beitragende erlaubt keine Änderungen durch Maintainer: Befunde gehen an ihn.',
+    noFinding: 'Über diesen Befund ist schon entschieden.',
+    prMoved: 'Nicht gemergt: Der PR steht nicht mehr auf dem übergebenen Stand. Der Agent prüft ihn neu.',
+    prClosed: 'Der Pull Request ist geschlossen.',
+    mergeRefused: 'Nicht gemergt:',
+    noPr: 'Diesen Pull Request kann Obeya nicht lesen:',
     notFolder: 'Das geht nur in einem Ordner ohne git.',
     inFolder: 'Das gibt es in einem Ordner ohne git nicht.',
     repoDown: 'Das Repository dieser Karte läuft gerade nicht auf dieser Leinwand.',
@@ -631,6 +638,42 @@ const de = {
   app: {
     open: 'App öffnen',
     hint: (where: string) => `Die App dieser Karte läuft gerade im Workspace (${where}): zum Ausprobieren von Hand. Obeya lässt sie danach noch mindestens 30 Minuten laufen.`,
+  },
+  /** A review card: someone outside's pull request, which its agent reviews and the owner merges. */
+  review: {
+    /** Above the title, on the canvas and on the open card. */
+    kind: (n: number, author: string) => `PR #${n} · ${author}`,
+    checks: (r: { checks: { name: string; passed: boolean }[]; mergeable: boolean }) =>
+      [...r.checks.map((c) => `${c.passed ? '✓' : '✗'} ${c.name}`), r.mergeable ? '✓ konfliktfrei' : '✗ Konflikt mit main'].join(' · '),
+    findings: (n: number, open: number, security: number) =>
+      n === 0
+        ? 'Review: keine Befunde'
+        : open === 0
+          ? `Review: ${n === 1 ? '1 Befund' : `${n} Befunde`}, erledigt`
+          : `Review: ${open === n ? (n === 1 ? '1 Befund' : `${n} Befunde`) : `${open} von ${n} Befunden`} offen${security ? ` (${security} Sicherheit)` : ''}`,
+    security: 'Sicherheit',
+    status: {
+      sent: (author: string) => `An ${author} geschickt`,
+      fixed: () => 'Vom Agenten geändert und gepusht',
+      resolved: () => 'Erledigt',
+      dropped: () => 'Nicht weiter verfolgt',
+    } as Record<'sent' | 'fixed' | 'resolved' | 'dropped', (author: string) => string>,
+    goingTo: (author: string) => `Geht an ${author} …`,
+    goingSelf: 'Der Agent ändert es …',
+    selfHint: 'Der Agent ändert es selbst und pusht auf den Branch des PRs',
+    decideHint: 'Pro Befund wählen; die Wahl geht mit „Senden“ an den Agenten, gern mit ein paar Worten dazu.',
+    decidedLine: (id: number, what: string) => `Befund ${id}: ${what}`,
+    undecide: 'Wahl verwerfen',
+    merge: (n: number) => `Mergen (PR #${n})`,
+    mergeHint: 'Veröffentlicht die Demo, verlinkt sie in einem Kommentar am PR, mergt genau den geprüften Stand und holt main nach.',
+    merged: (n: number) => `PR #${n} gemergt.`,
+    merging: 'wird gemergt …',
+    onApproval: 'Demo teilen und am PR verlinken',
+    toContributor: 'An Beitragenden',
+    self: 'Selbst ändern',
+    selfOff: (author: string) => `${author} erlaubt keine Änderungen durch Maintainer: Befunde gehen an ${author}.`,
+    waits: 'Wartet auf Beitragenden',
+    hint: 'Neu: „Review PR #5“ legt eine Karte an, die den Pull Request eines anderen prüft, mit Demo vorher und nachher und Befunden zum Entscheiden; die Freigabe mergt ihn.',
   },
   pr: {
     title: (n: number) => `Pull Request #${n}`,
@@ -2218,6 +2261,13 @@ const en: Strings = {
     notReady: 'This is not ready for review.',
     notHeld: 'The comment is with the agent already.',
     noDirect: 'In this repository, approved work reaches main only through a pull request.',
+    notReview: 'This card reviews no pull request.',
+    noEdits: 'The contributor does not allow edits by maintainers: findings go to them.',
+    noFinding: 'This finding has been decided on already.',
+    prMoved: 'Not merged: the PR is no longer at the state handed over. The agent reviews it again.',
+    prClosed: 'The pull request is closed.',
+    mergeRefused: 'Not merged:',
+    noPr: 'Obeya cannot read this pull request:',
     notFolder: 'That is only possible in a folder without git.',
     inFolder: 'A folder without git has no such thing.',
     repoDown: 'This card’s repository does not run on this canvas right now.',
@@ -2324,6 +2374,40 @@ const en: Strings = {
   app: {
     open: 'Open app',
     hint: (where: string) => `This card's app is running in its workspace (${where}): to try it by hand. Obeya keeps it running for at least 30 minutes after.`,
+  },
+  review: {
+    kind: (n: number, author: string) => `PR #${n} · ${author}`,
+    checks: (r: { checks: { name: string; passed: boolean }[]; mergeable: boolean }) =>
+      [...r.checks.map((c) => `${c.passed ? '✓' : '✗'} ${c.name}`), r.mergeable ? '✓ no conflicts' : '✗ conflicts with main'].join(' · '),
+    findings: (n: number, open: number, security: number) =>
+      n === 0
+        ? 'Review: no findings'
+        : open === 0
+          ? `Review: ${n === 1 ? '1 finding' : `${n} findings`}, all settled`
+          : `Review: ${open === n ? `${n === 1 ? '1 finding' : `${n} findings`}` : `${open} of ${n} findings`} open${security ? ` (${security} security)` : ''}`,
+    security: 'Security',
+    status: {
+      sent: (author: string) => `Sent to ${author}`,
+      fixed: () => 'Changed and pushed by the agent',
+      resolved: () => 'Settled',
+      dropped: () => 'Not pursued',
+    } as Record<'sent' | 'fixed' | 'resolved' | 'dropped', (author: string) => string>,
+    goingTo: (author: string) => `Going to ${author} …`,
+    goingSelf: 'The agent changes it …',
+    selfHint: 'The agent changes it itself and pushes onto the PR’s branch',
+    decideHint: 'Choose per finding; the choice goes to the agent with Send, with a few words of yours if you like.',
+    decidedLine: (id: number, what: string) => `Finding ${id}: ${what}`,
+    undecide: 'Drop the choice',
+    merge: (n: number) => `Merge (PR #${n})`,
+    mergeHint: 'Publishes the demo, links it in a comment on the PR, merges exactly the reviewed state and pulls main.',
+    merged: (n: number) => `PR #${n} merged.`,
+    merging: 'merging …',
+    onApproval: 'Share the demo and link it on the PR',
+    toContributor: 'To contributor',
+    self: 'Change it myself',
+    selfOff: (author: string) => `${author} does not allow edits by maintainers: findings go to ${author}.`,
+    waits: 'Waiting for the contributor',
+    hint: 'New: “Review PR #5” starts a card that reviews someone else’s pull request, with a demo before and after and findings to decide on; approving merges it.',
   },
   pr: {
     title: (n: number) => `Pull request #${n}`,
@@ -3481,7 +3565,7 @@ const longDay = (d: Date, today: Date) =>
 /** A number, with `digits` decimals at most. */
 const number = (n: number, digits = 0) => n.toLocaleString(locale, { maximumFractionDigits: digits, minimumFractionDigits: digits });
 
-export const stateLabel = (i: { kind?: string; thread?: { thinking?: boolean }; state: CardState; need?: Need; pr?: unknown; queue?: Queue; idea?: Idea; question?: unknown; answering?: true; answered?: true; finishing?: boolean; followUp?: boolean; paused?: true; snoozed?: Snooze; prototypeEnd?: 'discarded' | 'built'; retro?: string; branch?: string }) =>
+export const stateLabel = (i: { kind?: string; thread?: { thinking?: boolean }; state: CardState; need?: Need; pr?: unknown; contribution?: unknown; queue?: Queue; idea?: Idea; question?: unknown; answering?: true; answered?: true; finishing?: boolean; followUp?: boolean; paused?: true; snoozed?: Snooze; prototypeEnd?: 'discarded' | 'built'; retro?: string; branch?: string }) =>
   i.snoozed
     ? i.snoozed.on
       ? t.snooze.on(i.snoozed.on.title, i.snoozed.on.state, i.snoozed.until && snoozeWhen(i.snoozed.until))
@@ -3526,6 +3610,8 @@ export const stateLabel = (i: { kind?: string; thread?: { thinking?: boolean }; 
           : i.answered
             ? t.agentAnswered
             : t.need[i.need]
+      : i.state === 'inPr' && i.contribution
+        ? t.review.waits
       : i.state === 'inPr' && !i.pr
         ? t.openingPr
         : i.state === 'proposal' && i.retro

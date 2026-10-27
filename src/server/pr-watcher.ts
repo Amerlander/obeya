@@ -4,7 +4,7 @@
 // to the people on the forge (`autoMerge` off); a merge makes the card live.
 
 import type { RepoAdapter } from '../adapters/types';
-import type { Board, PrState } from './board';
+import { type Board, contributionOf, type PrState, type StoredContribution } from './board';
 import { confidence, lastAsked, readyToMerge, reviewOf, reviewStale, type Forge, type PrStatus } from './forge';
 
 /** Below this share of a reviewer's confidence (4 of 5), Obeya leaves the merge to the owner. */
@@ -138,6 +138,8 @@ export class PrWatcher {
     if (s.state === 'MERGED') return this.workers.merged(cardId, s.mergeCommit);
     const settings = this.settings();
     const noise = settings.prNoise ?? [];
+    const contribution = contributionOf(this.board.row(cardId));
+    if (contribution) return this.reactToContributor(cardId, state, pr, s, contribution, noise);
     const next: PrState = { ...pr, checks: s.checks, review: reviewOf(s, noise) };
     // while the owner is being asked, news waits: it is passed on once the card is back in the PR
     if (state === 'inPr') {
@@ -229,6 +231,52 @@ export class PrWatcher {
         delete next.mergeError;
         delete next.held;
         delete next.manual;
+      }
+    }
+    this.save(cardId, next);
+  }
+
+  /**
+   * A review card's pull request, which someone outside opened: Obeya never merges it here (only the
+   * owner's approval of a reviewed head does), and what the contributor does reaches the worker only
+   * while the card waits for them. Their comments count, not the PR author's being skipped as on the
+   * worker's own PRs: skipped are the owner's (the account Obeya acts as, the worker's too) and
+   * `prNoise`. A new head counts once, whatever the worker reviewed before.
+   */
+  private reactToContributor(cardId: string, state: string, pr: PrState, s: PrStatus, c: StoredContribution, noise: string[]) {
+    const self = s.viewer ?? '';
+    const next: PrState = { ...pr, checks: s.checks, review: reviewOf(s, noise, self) };
+    if (s.mergeable === 'CONFLICTING') next.conflictHead = s.head;
+    else if (s.mergeable === 'MERGEABLE') delete next.conflictHead;
+    if (s.state === 'CLOSED') {
+      this.save(cardId, next);
+      if (!c.closed) this.workers.contributionClosed(cardId);
+      return;
+    }
+    if (state === 'inPr') {
+      const since = c.requested?.at ?? '';
+      const comments = s.comments.filter((x) => !pr.seen.includes(x.id) && x.author !== self && !noise.includes(x.author) && (x.edited ?? x.at ?? '') > since);
+      const reviewed = c.reviewed ?? pr.headSeen ?? s.head;
+      next.headSeen ??= s.head;
+      const pushed = s.head !== reviewed && pr.pushedHead !== s.head;
+      if (comments.length || pushed) {
+        next.seen = [...pr.seen, ...comments.map((x) => x.id)];
+        if (pushed) next.pushedHead = s.head;
+        this.save(cardId, next);
+        const t = this.board.t.pr;
+        return this.workers.contributorAnswered(
+          cardId,
+          pushed ? t.contributorPushed(c.author) : t.comments(comments.length, comments[0]!.author),
+          [
+            pushed
+              ? `${c.author} pushed to the pull request since your review: its head is ${s.head.slice(0, 7)} now.`
+              : `${c.author} answered on the pull request without pushing.`,
+            pushed
+              ? `Review the new head as you did the first: fetch it (refs/pull/${c.number}/head) into your branch, look at what changed before you run any of it, then the code review, a new demo before and after, the checks and the merge probe against the current main. Hand over again.`
+              : 'Tell the owner what they said and what it means for the review: hand over again (the demo on the card stands), or ask where the owner has to decide.',
+            ...comments.map((x) => `- ${x.author}${x.path ? ` on ${x.path}${x.line ? `:${x.line}` : ''}` : ''}${x.url ? ` (${x.url})` : ''}:\n${x.body}`),
+          ].join('\n\n'),
+        );
       }
     }
     this.save(cardId, next);

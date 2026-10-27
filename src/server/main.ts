@@ -32,6 +32,9 @@
 // back instead of running agents (replay.ts; why it refuses goes into $OBEYA_HOME/replay-refused.txt).
 // OBEYA_PARK_GRACE=<seconds>: how long a waiting card's app runs on before Obeya stops it
 // (Parking; 300 by default), shorter for a demo or a live check.
+// OBEYA_FORGE_FILE=<file.json>: pull requests come from that file instead of GitHub or Forgejo
+// (file-forge.ts), for a scratch Obeya whose demo plays a forge; OBEYA_PR_POLL=<seconds>: how often
+// the watcher looks at open pull requests (120 by default).
 
 import { chmodSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -44,6 +47,7 @@ import { checkPlugin } from './demo';
 import { Store, UnusableDatabase } from './db';
 import { ghForge, routedForge } from './forge';
 import { forgejoForge, originOf } from './forgejo';
+import { fileForge } from './file-forge';
 import { NarrationHost } from './narration';
 import { claudeExecutable, endAgentsHere, sdkRuntime } from './runtime';
 import { claim, release, restarting, running } from './instance';
@@ -219,7 +223,7 @@ const commitOf = () => {
   const checkout = own ?? ownCheckout();
   return ranFrom ?? (checkout && headOf(checkout));
 };
-const forge = routedForge(ghForge, forgejoForge, originOf, (remote) => onGitHub(remote));
+const forge = process.env.OBEYA_FORGE_FILE ? fileForge(process.env.OBEYA_FORGE_FILE) : routedForge(ghForge, forgejoForge, originOf, (remote) => onGitHub(remote));
 const narration = new NarrationHost({ argv: (voice, language) => qwen3Serve(voice, language, home), log: (line) => console.log(line) });
 // what a demo's narration reaches of Obeya, for the voice it holds loaded (narration.ts): the
 // narration and nothing else, from a worker here as from one on another machine (design: Hosts)
@@ -264,6 +268,7 @@ canvases = new Canvases(
     config,
     workerEnv: { OBEYA_URL: narrationUrl, OBEYA_NARRATION_URL: narrationUrl },
     ...(process.env.OBEYA_PARK_GRACE ? { parkGrace: Number(process.env.OBEYA_PARK_GRACE) * 1000 } : {}),
+    ...(process.env.OBEYA_PR_POLL ? { prPollMs: Number(process.env.OBEYA_PR_POLL) * 1000 } : {}),
     language: () => ownerLanguage(home),
     conversation: () => conversationLanguage(home),
     agents: (role) => agentSetting(home, role),

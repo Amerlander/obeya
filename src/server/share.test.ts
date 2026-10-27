@@ -11,7 +11,7 @@ import { demoPageHtml } from './demo-page';
 import { DEMO_MARKER, SHARE_CWD, Sharing, withDemoLink } from './share';
 import { siteKey } from './site';
 import { missedChanges, PAGE_CHANGES, pagesVersion } from '../core/page-changes';
-import { FakeRuntime, gitRepo } from './testing';
+import { FakeRuntime, gitRepo, noContributions } from './testing';
 import { git } from './workspaces';
 
 let dir: string;
@@ -85,6 +85,7 @@ beforeEach(() => {
   runtime = new FakeRuntime();
   bodies = new Map();
   edits = [];
+  comments = [];
   settled = [];
   sharing = make();
 });
@@ -105,7 +106,12 @@ function make(repo = dir) {
   });
 }
 
+/** Comments Obeya wrote on pull requests: the URL, then the comment. */
+let comments: string[] = [];
+
 const forge: Forge = {
+  ...noContributions,
+  comment: async (_cwd, url, body) => void comments.push(`${url} ${body}`),
   open: async () => '',
   status: async () => ({}) as never,
   body: async (_cwd, url) => {
@@ -751,6 +757,28 @@ describe('publishing on approval', () => {
     await until(() => share(c.id)?.state === 'shared' && on(c.id)[0] === 2);
     expect(on(c.id)).toEqual([2]);
     expect(calls()).toHaveLength(2);
+  });
+
+  test('a review card’s page is linked in a comment on the PR once approved, its description left to the contributor', async () => {
+    const c = card('PR #5: Watcher im Hintergrund');
+    const url = 'https://github.com/acme/app/pull/5';
+    bodies.set(url, 'Contributor’s description.');
+    const review = { url, number: 5, author: 'amerlander', title: 'Watcher', canModify: true, route: 'contributor' };
+    board.work(c.id, { state: 'waiting', need: 'demo', pr: JSON.stringify({ url, number: 5, seen: [], reported: [] }), contribution: JSON.stringify(review) });
+    // shared before the approval: nothing goes to the PR yet
+    sharing.share(c.id);
+    await until(() => share(c.id)?.state === 'shared');
+    expect(comments).toEqual([]);
+    board.work(c.id, { contribution: JSON.stringify({ ...review, approved: true }) });
+    sharing.approved(c.id);
+    await until(() => comments.length === 1);
+    expect(comments[0]).toBe(`${url} Demo-Video: ${SITE_URL}${slug(c.id)}/`);
+    expect(edits).toEqual([]);
+    expect(log(c.id)).toContain('Den Link zur Demo als Kommentar an PR #5 geschrieben.');
+    // approved again: the same page is not linked twice
+    sharing.approved(c.id);
+    await Bun.sleep(50);
+    expect(comments).toHaveLength(1);
   });
 
   test('the workers hear where the page is once it is online, or why it is not', async () => {

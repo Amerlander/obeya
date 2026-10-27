@@ -1966,3 +1966,22 @@ button.link:hover { text-decoration: underline; }
   .ph-kb .ph-panel { padding-right: max(14px, env(safe-area-inset-right)); }
   .ph-panel ~ #acks { bottom: calc(var(--ph-field, 0px) + 34px + env(safe-area-inset-bottom)); }
 }
+
+/* a review card: the checks and merge probe, and its findings, each to decide on */
+.findings { margin: 10px 0 12px; font-size: 13px; }
+.findings .rr-checks { font-size: 12.5px; margin-bottom: 6px; }
+.findings .ok { color: var(--approved); }
+.findings .bad { color: var(--error); }
+.findings .p-h { margin: 8px 0 6px; }
+.finding { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; background: var(--card); }
+.finding.security { border-left: 3px solid var(--error); }
+.finding.settled { opacity: .7; }
+.finding .f-head { display: flex; align-items: baseline; gap: 6px; }
+.finding .f-no { color: var(--muted); font-variant-numeric: tabular-nums; }
+.finding .f-tag { font-size: 11px; color: var(--error); border: 1px solid currentColor; border-radius: 8px; padding: 0 6px; }
+.finding .f-text { margin: 3px 0 0; color: var(--ink); line-height: 1.4; }
+.finding .f-status { margin-top: 5px; font-size: 12px; color: var(--muted); }
+.finding .f-status.pending { color: var(--working); }
+.finding .f-choices { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+.quote.decided { display: flex; flex-direction: column; gap: 2px; position: relative; padding-right: 22px; }
+.tell-hint { margin: 0 0 8px; font-size: 11.5px; }

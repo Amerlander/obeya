@@ -21,6 +21,7 @@ import { PageChangeList } from './page-changes';
 import { useStoredState } from './stored';
 import { WishReplyLink } from './wish';
 import { ClockMark } from './snooze';
+import { know, known } from './known';
 
 interface Props {
   on: boolean;
@@ -113,8 +114,22 @@ export function KoordinatorTalk({ on, talk, items, onOpen, onTell, draft = OBEYA
       <Conversation talk={talk} fresh={fresh} items={items} onOpen={onOpen} draft={draft} />
       {/* a command in writing, for when speaking is not possible; its screenshots go to the cards it creates or concerns */}
       <Composer className="tell" draft={draft} placeholder={t.voice.typePlaceholder} obeya onSend={onTell} />
+      <ReviewHint items={items} />
     </>
   );
+}
+
+/** Where the canvas has seen a review card: the hint on „Review PR #5“ is no longer shown. */
+const REVIEW_KNOWN = 'obeya-review-pr-known';
+
+/** Under Obeya's field until the owner has had a review card once: how to have a pull request of someone else's reviewed. */
+function ReviewHint({ items }: { items: Item[] }) {
+  const used = items.some((i) => i.contribution);
+  useEffect(() => {
+    if (used) know(REVIEW_KNOWN);
+  }, [used]);
+  if (used || known(REVIEW_KNOWN)) return null;
+  return <p className="hint tell-hint">{t.review.hint}</p>;
 }
 
 /**
