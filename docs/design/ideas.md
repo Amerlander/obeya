@@ -102,7 +102,8 @@ repositories), with „Neues Repository …“: an idea to be built in a reposit
 yet. Its agent picks that target from the conversation („bau es in ~/dev/super59, eigene Leinwand“)
 with `plan_repo` (a folder and whether it gets a canvas of its own; the whole value each time, an
 empty folder for none); the picker shows it, and what the owner picks there instead stands, the
-agent does not change it. The button then names the target („So bauen in super59 (neu)“), with a
+agent does not change it. On a canvas with one repository the picker shows only once a new
+repository is picked, so a card without one looks as before. The button then names the target („So bauen in super59 (neu)“), with a
 line under it on what the click does, and the click builds the idea there (see Building in a new
 repository).
 

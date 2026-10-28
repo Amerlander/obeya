@@ -10,10 +10,13 @@ first repository is the canvas's home; the others' plan docs are referenced as `
 owner's cards carry their repository, chosen in the panel before work begins (home by default); on a
 canvas with several repositories every card names its own. The picker (on a planned task, and on an
 idea beside „So bauen“; built once for both) lists the canvas's repositories and „Neues Repository
-…“, visible with one repository too: a folder (it starts beside the home repository) and „eigene
-Leinwand“ (on by default; off, the repository joins this canvas). Picked, it reads „super59 (neu)“,
-and starting or building the card creates that repository first (see Building in a new
-repository); it is saved as it is picked, like anything entered on a card. A proposal's picker
+…“: a folder (it starts beside the home repository) and „eigene Leinwand“ (on by default; off, the
+repository joins this canvas). Picked, it reads „super59 (neu)“, and starting or building the card
+creates that repository first (see Building in a new repository); it is saved as it is picked,
+like anything entered on a card. It shows on a canvas with several repositories, and on a card
+whose new repository is picked already (by the idea's agent from the conversation, or by the
+Koordinator from the owner's words); on a canvas with one repository a card without one shows no
+picker. A proposal's picker
 offers only the canvas's repositories. A card leaves its canvas only that way, built in a new
 repository with a canvas of its own; it then refers across canvases to the cards it came from or
 that come from it. A proposal goes to the repository its agent
@@ -486,9 +489,11 @@ Prompts only agents read stay English, with German examples of what the owner ma
   (2026-10-01); saving a command-line configuration switches Obeya to the file. Building a card in a
   new repository adds to it as well (2026-10-28), with the repository's canvas named after its
   folder.
-- **„Neues Repository …“ is an entry of the card's repository picker** (2026-10-28), shown with one
-  repository too, so the way to a new repository is seen where the repository is chosen. Rejected:
-  a button of its own, and only the Koordinator (neither shows before the owner asks).
+- **„Neues Repository …“ is an entry of the card's repository picker, which shows only where there
+  is a choice or a new repository is picked** (2026-10-28, the owner): a picker on every card of a
+  canvas with one repository made each card harder to use for a rare step. The owner says it (to the
+  idea's agent or to Obeya), and the picker then shows the target. Rejected: the picker always
+  visible; a button of its own.
 - **A broken canvas or repository leaves the rest running** (2026-10-09).
 - **The configuration shows before its check, whose git calls run in parallel off the server's
   thread** (2026-10-15): run one after another (109 calls for three canvases), they froze the server,
