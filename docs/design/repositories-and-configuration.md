@@ -278,13 +278,14 @@ The „Konfiguration“ dialog covers the page but for a margin (a press there o
 leaving what was open behind it as it was). Its close button stays at the top right however far
 the section scrolls, so a click meant to close never lands on what scrolled under it. What removes
 an entry (a canvas, a repository, a machine) is a waste bin, not a cross that passes for a close
-button, and shows only while the pointer or the focus is on its entry (a canvas: its heading line),
+button, and shows only while the pointer or the focus is on its entry (a canvas: its title line; a repository: its path),
 always where nothing hovers (touch). An unsaved draft survives per tab, also a reload or
 restart. Its sections, listed on the left and shown one at a time (the last one chosen per tab):
-Leinwände (canvases, repositories, clones, settings), Modelle und Effort, Spracheingabe, Demos, Von anderen Geräten (see Other devices) and Allgemein
+Leinwände, a heading with each canvas indented under it as a section of its own and „+ Leinwand“
+last (see Leinwände), Modelle und Effort, Spracheingabe, Demos, Von anderen Geräten (see Other devices) and Allgemein
 (languages, light or dark, the usage limits in the bar, the server); below them „Einrichtung prüfen“ and „Wunsch oder Fehler
-melden“ (see Wishes for Obeya's makers). Leinwände marks an unsaved draft and counts its problems in
-red. Each section names the file it is saved in; settings are rows of label and control, no boxes in
+melden“ (see Wishes for Obeya's makers). Each canvas in the list marks its unsaved changes and
+counts its problems in red; the heading counts the problems of no one canvas (none at all, say). Each section names the file it is saved in; settings are rows of label and control, no boxes in
 boxes. What to know about a field sits behind an info icon at its label, shown only while the pointer
 or focus is on the field, its text appearing at once.
 
@@ -295,11 +296,26 @@ blocking the server.
 
 #### Leinwände
 
-Each canvas is a heading line (number, name, id, whether it runs, and with several canvases ↑ and ↓
-that move it one place, as in the queue) over its repositories, one row each. A move is a change of
-the draft like any other, saved with „Speichern“. Renaming a canvas keeps its id and cards. Under each path stands where its workers work
-(„Agenten arbeiten in“: Worktrees or Klonen, with its source). Klonen shows the existing clones
-(„Vorhandene Klone, einer pro Zeile“), then the ones Obeya makes on top of them („Dazu neue Klone
+A canvas chosen in the list fills the right side; first the one the page shows, then the last one
+chosen per tab, or the one a jump into the dialog names (a card waiting for a free clone, a proposal
+for a setting), scrolled to the field. Its page has a title line (name, id, whether it runs, and with
+several canvases ↑ and ↓ that move it one place, as in the queue), its name, and its repositories
+as tabs (the home repository first, each counting its problems), with „+ Repository“ beside them;
+one repository shows at a time. A move is a change of the draft like any other. All canvases are
+saved together with „Speichern“ at the bottom of every canvas's page, which says so while several
+have changes. Renaming a canvas keeps its id and cards.
+
+A repository's page is its path, its problems, then its settings in groups under a small heading
+each, always shown: where its agents work („Agenten arbeiten in“: Worktrees or Klonen, with its
+source, the clones, slots and other machines), branch and landing (main branch, landing, direct,
+auto-merge, accounts without review, soft paths), app and checks (setup, checks, „So läuft die
+App“ in a large text field, „Stoppen, solange eine Karte wartet“, the keep condition once there is
+one), plans and language (plan docs, „Sprache des Repositorys“), demos („Sprache der Demos“,
+„Demo-Site“ with title, URL, deploy command, env file, headers, largest file, tags and when a demo
+goes on it), then „Für alle ins Repository übernehmen“. A folder without git has no workspace or
+branch group.
+
+Klonen shows the existing clones („Vorhandene Klone, einer pro Zeile“), then the ones Obeya makes on top of them („Dazu neue Klone
 anlegen“), the slots, the sum („Zusammen 4 Klone auf diesem Rechner (2 vorhandene, 2 neue)“) and the
 other machines; Worktrees only the slots. With no clone the line warns that no card would start. For
 a running canvas it says which registered clones saving drops, which only once their card is done,
@@ -311,13 +327,6 @@ aside); a clone of another repository blocks saving. Switching to worktrees take
 of the entry; switching back while the dialog is open restores them. A repository added in clones
 gets two new clones, a number that goes when an existing clone is listed and returns when the list is
 emptied, unless the owner touched it.
-
-The command that shares the repository's demos is a row of its own, for this machine only, as it
-often needs credentials (empty: the demo site, shown as „Site: <url>“, or an export; see Where a demo
-goes). The settings fold under „Einstellungen“, with main branch and landing in the folded line: among
-them „So läuft die App“ (a large text field), „Stoppen, solange eine Karte wartet“, the keep
-condition once there is one, „Sprache des Repositorys“, „Sprache der Demos“ and „Demo-Site“ (title,
-URL, deploy command, env file, headers, largest file), then „Für alle ins Repository übernehmen“.
 
 Problems (no git repository, a repository twice, two canvases with one id, a canvas's home repository
 left out, an empty path) show at the field and block saving (an empty path is never resolved, which
@@ -510,6 +519,11 @@ Prompts only agents read stay English, with German examples of what the owner ma
   every page load included, for seconds; now 41 calls take about 60 ms.
 - **The configuration is a dialog nearly the window's size, sections on the left** (2026-10-09, the
   owner): visited now and then, not worked beside. Rejected: a narrow sidebar of nested frames.
+- **One canvas at a time, listed under Leinwände on the left; one repository at a time, as tabs;
+  settings always shown, in groups** (2026-10-28, the owner): all canvases one below the other, each
+  repository's settings folded behind a line, made a long page in which the owner lost track of which
+  canvas a field belonged to, and a fold hid what was set. Saving stays one for all canvases, as the
+  file is one. Rejected: repositories as a third level of the list (the list stays the canvases).
 - **Existing clones first, new ones on top, with the sum** (2026-10-21): with „Klone anlegen“ first, a
   colleague typed 2 beside 2 existing ones and got 4. Clone origins match across URL forms (https and
   ssh clones of one repository otherwise kept a canvas from starting).

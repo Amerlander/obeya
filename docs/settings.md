@@ -4,7 +4,7 @@ Obeya runs on any git repository as it is. What it cannot know by itself is how 
 works: how its app starts and stops, which checks a change must pass, how approved work lands, how
 a worker records a demo and where demos are shared. A repository says that in its settings,
 `.obeya/settings.json`, versioned with the code it describes (like `.vscode/settings.json`).
-"Konfiguration" shows them under a repository's „Einstellungen“ and changes them without a line of
+"Konfiguration" shows them with the repository on its canvas's page and changes them without a line of
 code, for one machine or, with „Für alle ins Repository übernehmen“, for everyone.
 
 The quickest way to get them: in "Konfiguration", a repository without settings of its own has
@@ -233,7 +233,7 @@ canvas is named after its first repository (the name in its `origin` URL, else i
 Every machine that runs Obeya on the repository reads `.obeya/settings.json`, a fresh clone
 included. Which value applies, highest first:
 
-1. The one set for this machine in "Konfiguration" (a repository's „Einstellungen“; kept in
+1. The one set for this machine in "Konfiguration" (a repository's settings on its canvas's page; kept in
    `canvases.json` in Obeya's home, never in the repository).
 2. `.obeya/settings.json` **as the default branch has it**.
 3. What Obeya detects (`land`, the main branch).
@@ -251,7 +251,7 @@ restarts that repository's agents once they paused; Obeya and the other reposito
 The main branch is not in the file, since it says where the file is read from: a fresh clone has
 it from `origin`'s HEAD, and a machine that needs another sets it in "Konfiguration".
 
-**From "Konfiguration".** Below a repository's „Einstellungen“, „Für alle ins Repository
+**From "Konfiguration".** Below a repository's settings, „Für alle ins Repository
 übernehmen“ takes the values set for this machine (all but the main branch) into the file. It
 shows the file as it will be and where it goes; where work lands on the main branch, Obeya commits
 it there (beside the checkout, which keeps everything else as it is; a change of its own to the

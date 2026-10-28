@@ -39,8 +39,20 @@ const SECTIONS: Section[] = ['canvases', 'agents', 'voice', 'demos', 'devices', 
 // the section shown, per tab: a new language reloads the page (as a save that restarts Obeya does), and the dialog comes back at it
 const SECTION_KEY = 'obeya-config-section';
 
-/** Opens the dialog at the canvases and their repositories next time, as from the note on a plan directory. */
-export const showCanvasesSection = () => sessionStorage.setItem(SECTION_KEY, 'canvases');
+// the canvas shown in Leinwände, per tab, by its place in the list
+const CANVAS_KEY = 'obeya-config-canvas';
+
+/** Opens the dialog at the canvases next time, at the one the page shows, as from the note on a plan directory. */
+export const showCanvasesSection = () => {
+  sessionStorage.setItem(SECTION_KEY, 'canvases');
+  sessionStorage.removeItem(CANVAS_KEY);
+};
+
+/** The canvas this tab showed last in the dialog, if any. */
+const keptCanvas = () => {
+  const n = Number(sessionStorage.getItem(CANVAS_KEY) ?? NaN);
+  return Number.isInteger(n) && n >= 0 ? n : null;
+};
 
 /** Opens the dialog at „Von anderen Geräten“ next time, as from „Telefon verbinden“. */
 export const showDevicesSection = () => sessionStorage.setItem(SECTION_KEY, 'devices');
@@ -106,7 +118,7 @@ function checkedMoved(c: Checked, n: number, from: number, to: number): Checked 
   };
 }
 
-export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems, onConnect, revs }: { on: boolean; onClose: () => void; onSetup: () => void; onAsk: Ask; onTalk: () => void; onProblems: (n: number) => void; onConnect: () => void; revs: string }) {
+export function ConfigDialog({ on, page, onClose, onSetup, onAsk, onTalk, onProblems, onConnect, revs }: { on: boolean; /** The canvas the page shows: the one Leinwände shows first. */ page?: string; onClose: () => void; onSetup: () => void; onAsk: Ask; onTalk: () => void; onProblems: (n: number) => void; onConnect: () => void; revs: string }) {
   const [view, setView] = useState<ConfigView | null>(null);
   const [draft, setDraft] = useState<CanvasConfig[]>([]);
   const [checked, setChecked] = useState<Checked | null>(null);
@@ -156,6 +168,34 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems, 
   // the field to show once the canvases are there; a new object each time, so a second jump to the same one still scrolls
   const [focus, setFocus] = useState<ConfigFocus | null>(null);
 
+  // the canvas Leinwände shows, by its place in the draft; until one is chosen, the field to show's or the page's, once their ids are known
+  const [pick, setPickState] = useState<number | null>(keptCanvas);
+  const setPick = (i: number | null) => {
+    if (i === null) sessionStorage.removeItem(CANVAS_KEY);
+    else sessionStorage.setItem(CANVAS_KEY, String(i));
+    setPickState(i);
+  };
+  const idAt = (i: number) => origin[i] ?? checked?.resolved[i]?.id ?? null;
+  const wanted = useRef<string | null>(null);
+  useEffect(() => {
+    const id = wanted.current;
+    if (!id) return;
+    const i = draft.findIndex((_, j) => idAt(j) === id);
+    if (i < 0) return;
+    wanted.current = null;
+    setPick(i);
+  }, [origin, checked, view]);
+  const shown = Math.min(pick ?? 0, Math.max(0, draft.length - 1));
+
+  // a key per canvas that goes with it when it moves or one above it goes, and what is open in it with it
+  const keys = useRef<number[]>([]);
+  const nextKey = useRef(0);
+  const keyed = useRef(loads);
+  if (keyed.current !== loads || keys.current.length !== draft.length) {
+    keyed.current = loads;
+    keys.current = draft.map(() => nextKey.current++);
+  }
+
   const changed = !!view && JSON.stringify(draft) !== JSON.stringify(view.canvases);
   const changedRef = useRef(changed);
   changedRef.current = changed;
@@ -170,7 +210,12 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems, 
     if (s) setSectionState(s);
     const f = sessionStorage.getItem(FOCUS_KEY);
     sessionStorage.removeItem(FOCUS_KEY);
-    setFocus(f ? (JSON.parse(f) as ConfigFocus) : null);
+    const fo = f ? (JSON.parse(f) as ConfigFocus) : null;
+    setFocus(fo);
+    // the canvas with the field to show, else the one this tab showed last, else the page's
+    const kept = keptCanvas();
+    wanted.current = fo?.canvas ?? (kept === null ? (page ?? null) : null);
+    setPickState(fo ? null : kept);
     setSaved(null);
     api.config().then((v) => {
       setView(v);
@@ -219,6 +264,43 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems, 
     const n = ++seq.current;
     api.checkConfig(draft).then((v) => n === seq.current && take(v, draft), console.error);
   };
+  // problems of no one canvas (none at all, the file broken): counted at the heading over them
+  const overall = problems.filter((p) => p.canvas === undefined);
+  // a canvas differs from the saved one with its id, or from the one at its place while ids are unknown; one added always
+  const canvasChanged = (i: number) => {
+    if (!view || !changed) return false;
+    const id = origin[i];
+    const j = id && saved ? saved.resolved.findIndex((r) => r?.id === id) : i;
+    return j !== i || JSON.stringify(draft[i]) !== JSON.stringify(view.canvases[j]);
+  };
+  const canvasName = (x: CanvasConfig, i: number) => x.name?.trim() || checked?.resolved[i]?.name || c.canvas(i + 1);
+  const showCanvas = (i: number) => {
+    wanted.current = null;
+    setFocus(null);
+    setSection('canvases');
+    setPick(i);
+  };
+  const addCanvas = () => {
+    keys.current = [...keys.current, nextKey.current++];
+    setDraft([...draft, { repos: [{ path: '' }] }]);
+    setOrigin([...origin, null]);
+    showCanvas(draft.length);
+  };
+  const setCanvas = (i: number, x: CanvasConfig | null) => {
+    if (x) return setDraft(draft.map((y, j) => (j === i ? x : y)));
+    keys.current = keys.current.filter((_, j) => j !== i);
+    setDraft(draft.filter((_, j) => j !== i));
+    setOrigin(origin.filter((_, j) => j !== i));
+    // the next one takes its place; after the last, the one before it
+    setPick(Math.max(0, Math.min(i, draft.length - 2)));
+  };
+  const moveCanvas = (from: number, to: number) => {
+    keys.current = moved(keys.current, from, to);
+    setDraft(moved(draft, from, to));
+    setOrigin(moved(origin, from, to));
+    if (checked) setChecked(checkedMoved(checked, draft.length, from, to));
+    if (shown === from) setPick(to);
+  };
   return (
     // a press on the dim around the dialog closes it; a press that starts inside does not
     <div id="config" className={on ? 'on' : undefined} onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -233,19 +315,54 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems, 
             </button>
           </div>
           <ul>
-            {SECTIONS.map((s) => (
-              <li key={s}>
-                <button className={s === section ? 'on' : undefined} aria-current={s === section || undefined} onClick={() => setSection(s)}>
-                  {c.sections[s]}
-                  {s === 'canvases' && changed && <span className="cfg-dot" title={c.unsaved} />}
-                  {s === 'canvases' && problems.length > 0 && (
-                    <span className="n err" title={c.problemCount(problems.length)}>
-                      {problems.length}
-                    </span>
-                  )}
-                </button>
-              </li>
-            ))}
+            {SECTIONS.map((s) =>
+              s === 'canvases' ? (
+                <li key={s} className="cfg-nav-group">
+                  {/* a heading over the canvases, each of them a section of its own */}
+                  <span className="cfg-nav-title">
+                    {c.sections.canvases}
+                    {changed && !draft.some((_, i) => canvasChanged(i)) && <span className="cfg-dot" title={c.unsaved} />}
+                    {overall.length > 0 && (
+                      <span className="n err" title={c.problemCount(overall.length)}>
+                        {overall.length}
+                      </span>
+                    )}
+                  </span>
+                  <ul>
+                    {draft.map((x, i) => {
+                      const on = section === 'canvases' && i === shown;
+                      const n = problems.filter((p) => p.canvas === i).length;
+                      return (
+                        <li key={keys.current[i]}>
+                          <button className={on ? 'on' : undefined} aria-current={on || undefined} onClick={() => showCanvas(i)}>
+                            <span className="cfg-nav-name">{canvasName(x, i)}</span>
+                            {canvasChanged(i) && <span className="cfg-dot" title={c.unsaved} />}
+                            {n > 0 && (
+                              <span className="n err" title={c.problemCount(n)}>
+                                {n}
+                              </span>
+                            )}
+                          </button>
+                        </li>
+                      );
+                    })}
+                    {view && (
+                      <li>
+                        <button className="cfg-nav-add" onClick={addCanvas}>
+                          {c.addCanvas}
+                        </button>
+                      </li>
+                    )}
+                  </ul>
+                </li>
+              ) : (
+                <li key={s}>
+                  <button className={s === section ? 'on' : undefined} aria-current={s === section || undefined} onClick={() => setSection(s)}>
+                    {c.sections[s]}
+                  </button>
+                </li>
+              ),
+            )}
           </ul>
           <div className="cfg-nav-foot">
             <button className="btn small" onClick={onSetup}>
@@ -270,22 +387,16 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems, 
                 view={view}
                 draft={draft}
                 origin={origin}
-                loads={loads}
+                n={shown}
+                canvasKey={keys.current[shown]}
                 checked={checked}
                 changed={changed}
                 busy={busy}
                 focus={focus}
                 onAsk={onAsk}
                 onRecheck={recheck}
-                onDraft={(d, o) => {
-                  setDraft(d);
-                  setOrigin(o);
-                }}
-                onMove={(from, to) => {
-                  setDraft(moved(draft, from, to));
-                  setOrigin(moved(origin, from, to));
-                  if (checked) setChecked(checkedMoved(checked, draft.length, from, to));
-                }}
+                onCanvas={setCanvas}
+                onMove={moveCanvas}
                 onSave={async () => {
                   setBusy(true);
                   let applies = false;
@@ -360,10 +471,10 @@ export function Head({ title, hint, file, sub }: { title: string; hint?: ReactNo
   );
 }
 
-/** One setting: what it is on the left, the control with what to know about it on the right. */
-export function Field({ label, hint, children }: { label: ReactNode; hint?: ReactNode; children: ReactNode }) {
+/** One setting: what it is on the left (an info icon there shows while the pointer is on the row), the control with what to know about it on the right. */
+export function Field({ label, hint, className, children }: { label: ReactNode; hint?: ReactNode; className?: string; children: ReactNode }) {
   return (
-    <div className="cfg-field">
+    <div className={className ? `cfg-field cfg-has-info ${className}` : 'cfg-field cfg-has-info'}>
       <div className="cfg-label">{label}</div>
       <div className="cfg-control">
         {children}
@@ -427,15 +538,18 @@ interface CanvasesProps {
   view: ConfigView;
   draft: CanvasConfig[];
   origin: (string | null)[];
-  /** Changes when the draft is loaded anew: its canvases get new keys. */
-  loads: number;
+  /** The canvas shown, by its place in the draft. */
+  n: number;
+  /** Its key, which goes with it when it moves: what is open in it stays with it. */
+  canvasKey: number | undefined;
   checked: Checked | null;
   changed: boolean;
   busy: boolean;
   focus: ConfigFocus | null;
   onAsk: Ask;
   onRecheck: () => void;
-  onDraft: (draft: CanvasConfig[], origin: (string | null)[]) => void;
+  /** Changes the canvas at `i`, or removes it (`null`). */
+  onCanvas: (i: number, c: CanvasConfig | null) => void;
   /** Moves the canvas at `from` to `to`: the order every list of canvases shows (the switcher, the phone). */
   onMove: (from: number, to: number) => void;
   /** Saves the draft; says whether it was saved and applies without a restart. */
@@ -448,82 +562,49 @@ interface CanvasesProps {
   onJson: () => void;
 }
 
-/** The canvases with their repositories, saved together; Obeya then starts again with them. */
-function Canvases({ view, draft, origin, loads, checked, changed, busy, focus, onAsk, onRecheck, onDraft, onMove, onSave, onReset, onReload, status, json, onJson }: CanvasesProps) {
+/** One canvas of the configuration with its repositories; all canvases are saved together, with the bar at the bottom. */
+function Canvases({ view, draft, origin, n, canvasKey, checked, changed, busy, focus, onAsk, onRecheck, onCanvas, onMove, onSave, onReset, onReload, status, json, onJson }: CanvasesProps) {
   const c = t.config;
-  // a key per canvas that goes with it when it moves or one above it goes, and what is open in it with it
-  const keys = useRef<number[]>([]);
-  const nextKey = useRef(0);
-  const keyed = useRef(loads);
-  if (keyed.current !== loads || keys.current.length !== draft.length) {
-    keyed.current = loads;
-    keys.current = draft.map(() => nextKey.current++);
-  }
-  const move = (from: number, to: number) => {
-    keys.current = moved(keys.current, from, to);
-    onMove(from, to);
-  };
   const problems = checked?.problems ?? [];
   // „Für alle“ takes over what is saved: with changes in the dialog it saves them first, where that applies without a restart
   const prepare = changed && view.source === 'file' && !view.restarting && !problems.some(blocksSaving) ? onSave : undefined;
-  const setCanvas = (i: number, x: CanvasConfig | null) => {
-    if (x)
-      return onDraft(
-        draft.map((y, j) => (j === i ? x : y)),
-        origin,
-      );
-    keys.current = keys.current.filter((_, j) => j !== i);
-    onDraft(
-      draft.filter((_, j) => j !== i),
-      origin.filter((_, j) => j !== i),
-    );
-  };
   // a canvas with a problem has no id yet: which running canvas goes is only known once all resolve
   const resolved = checked?.resolved ?? [];
   const gone = resolved.every(Boolean) ? view.running.filter((id) => !resolved.some((r) => r?.id === id)) : [];
+  const file =
+    view.source === 'file' ? (
+      <>
+        {c.fromFile} <code>{view.file}</code>
+      </>
+    ) : (
+      c.fromArgs(view.file)
+    );
+  const x = draft[n];
   return (
     <>
-      <Head
-        title={c.sections.canvases}
-        hint={
-          view.source === 'file' ? (
-            <>
-              {c.fromFile} <code>{view.file}</code>
-            </>
-          ) : (
-            c.fromArgs(view.file)
-          )
-        }
-      />
-      {!checked && <p className="hint">{c.checking}</p>}
-      {draft.map((x, i) => (
+      {x ? (
         <CanvasBlock
-          key={keys.current[i]}
-          n={i}
-          {...(draft.length > 1 ? { onMove: (earlier: boolean) => move(i, earlier ? i - 1 : i + 1), last: i === draft.length - 1 } : {})}
+          key={canvasKey}
+          n={n}
+          {...(draft.length > 1 ? { onMove: (earlier: boolean) => onMove(n, earlier ? n - 1 : n + 1), last: n === draft.length - 1 } : {})}
           canvas={x}
-          resolved={checked?.resolved[i] ?? null}
+          file={file}
+          checking={!checked}
+          resolved={checked?.resolved[n] ?? null}
           running={view.running}
-          pin={origin[i] && view.running.includes(origin[i]) ? origin[i] : undefined}
+          pin={origin[n] && view.running.includes(origin[n]) ? origin[n] : undefined}
           saved={!changed}
-          problems={problems.filter((p) => p.canvas === i)}
+          problems={problems.filter((p) => p.canvas === n)}
           focus={focus}
           ask={changed ? undefined : onAsk}
           onRecheck={onRecheck}
           onReload={onReload}
           {...(prepare ? { prepare } : {})}
-          onChange={(y) => setCanvas(i, y)}
+          onChange={(y) => onCanvas(n, y)}
         />
-      ))}
-      <button
-        className="btn small"
-        onClick={() => {
-          keys.current = [...keys.current, nextKey.current++];
-          onDraft([...draft, { repos: [{ path: '' }] }], [...origin, null]);
-        }}
-      >
-        {c.addCanvas}
-      </button>
+      ) : (
+        <Head title={c.sections.canvases} hint={file} />
+      )}
       {problems
         .filter((p) => p.canvas === undefined)
         .map((p, k) => (
@@ -541,7 +622,7 @@ function Canvases({ view, draft, origin, loads, checked, changed, busy, focus, o
             {c.reset}
           </button>
         )}
-        {status && <span className="hint c-status">{status}</span>}
+        {status ? <span className="hint c-status">{status}</span> : changed && draft.length > 1 && <span className="hint c-status">{c.savesAll}</span>}
         <button className={json ? 'btn small cfg-json on' : 'btn small cfg-json'} onClick={onJson}>
           {c.json}
         </button>
@@ -1215,6 +1296,10 @@ function VoiceBlock({ on }: { on: boolean }) {
 interface CanvasProps {
   n: number;
   canvas: CanvasConfig;
+  /** Where the canvases are saved, under its title. */
+  file: ReactNode;
+  /** The repositories are being checked: their ids and settings are still to come. */
+  checking: boolean;
   resolved: ConfigChecked['resolved'][number];
   running: string[];
   /** The id of the running canvas this one is: a new name keeps it. */
@@ -1236,17 +1321,52 @@ interface CanvasProps {
   last?: boolean;
 }
 
-function CanvasBlock({ n, canvas, resolved, running, pin, saved, problems, focus, ask, onRecheck, onReload, prepare, onChange, onMove, last }: CanvasProps) {
+/** A canvas as its own page: its title with id, order and removal, its name, then each repository with its settings. */
+function CanvasBlock({ n, canvas, file, checking, resolved, running, pin, saved, problems, focus, ask, onRecheck, onReload, prepare, onChange, onMove, last }: CanvasProps) {
   const fresh = resolved && !running.includes(resolved.id);
   // the Koordinator of the canvas with the problem, where it runs: a card for it goes there
   const askHere = ask && ((text: string) => ask(text, resolved && running.includes(resolved.id) ? resolved.id : undefined));
   const here = t.config.canvas(n + 1);
   const setRepo = (i: number, r: RepoConfig | null) => onChange({ ...canvas, repos: r ? canvas.repos.map((x, j) => (j === i ? r : x)) : canvas.repos.filter((_, j) => j !== i) });
+  // the repository shown: the home one, or the one with the field to show
+  const [tab, setAt] = useState(0);
+  useEffect(() => {
+    const i = focus && resolved?.id === focus.canvas ? resolved.repos.findIndex((r) => r?.id === focus.repo) : -1;
+    if (i >= 0) setAt(i);
+  }, [focus, resolved?.id]);
+  const at = Math.min(tab, canvas.repos.length - 1);
+  const repo = canvas.repos[at];
   return (
     <div className="cfg-canvas">
-      <div className="cfg-canvas-head">
-        <h4>{here}</h4>
+      <header className="cfg-head">
+        <div className="cfg-canvas-head">
+          <h3>{canvas.name?.trim() || resolved?.name || here}</h3>
+          {resolved && (
+            <span className={fresh ? 'c-id fresh' : 'c-id'}>
+              ?c={resolved.id} · {fresh ? t.config.fresh : t.config.runs}
+            </span>
+          )}
+          {onMove && (
+            <span className="qmoves">
+              {[true, false].map((earlier) => {
+                const label = earlier ? t.config.moveUp : t.config.moveDown;
+                return (
+                  <button key={label} className="btn qmove" disabled={earlier ? n === 0 : last} title={label} aria-label={label} onClick={() => onMove(earlier)}>
+                    {earlier ? '↑' : '↓'}
+                  </button>
+                );
+              })}
+            </span>
+          )}
+          <RemoveButton label={t.config.removeCanvas} onClick={() => onChange(null)} />
+        </div>
+        <p className="hint cfg-file">{file}</p>
+        <p className="hint">{t.config.settings.hint}</p>
+      </header>
+      {checking && <p className="hint">{t.config.checking}</p>}
+      <Field label={t.config.name} hint={fresh ? t.config.freshHint : undefined}>
         <input
+          className="cfg-name"
           aria-label={t.config.name}
           value={canvas.name ?? ''}
           placeholder={resolved && !canvas.name ? t.config.nameAuto(resolved.name) : t.config.name}
@@ -1256,54 +1376,56 @@ function CanvasBlock({ n, canvas, resolved, running, pin, saved, problems, focus
             onChange(e.target.value ? { ...kept, name: e.target.value } : kept);
           }}
         />
-        {resolved && (
-          <span className={fresh ? 'c-id fresh' : 'c-id'}>
-            ?c={resolved.id} · {fresh ? t.config.fresh : t.config.runs}
-          </span>
-        )}
-        {onMove && (
-          <span className="qmoves">
-            {[true, false].map((earlier) => {
-              const label = earlier ? t.config.moveUp : t.config.moveDown;
-              return (
-                <button key={label} className="btn qmove" disabled={earlier ? n === 0 : last} title={label} aria-label={label} onClick={() => onMove(earlier)}>
-                  {earlier ? '↑' : '↓'}
-                </button>
-              );
-            })}
-          </span>
-        )}
-        <RemoveButton label={t.config.removeCanvas} onClick={() => onChange(null)} />
-      </div>
-      {fresh && <p className="hint warn">{t.config.freshHint}</p>}
-      <div className="cfg-repos">
-        <span className="hint">{t.config.path}</span>
-        <span />
-        {canvas.repos.map((r, i) => (
-          <RepoRow
-            key={i}
-            repo={r}
-            home={i === 0}
-            resolved={resolved?.repos[i]}
-            {...(resolved ? { canvasId: resolved.id } : {})}
-            problems={problems.filter((p) => p.repo === i)}
-            {...(focus && resolved?.id === focus.canvas && resolved.repos[i]?.id === focus.repo ? { focus } : {})}
-            where={`${here}, ${t.config.repoAt(r.path)}`}
-            ask={askHere}
-            onRecheck={onRecheck}
-            takeover={{ saved, onReload, ...(prepare ? { prepare } : {}) }}
-            onChange={(x) => setRepo(i, x)}
-          />
-        ))}
-      </div>
+      </Field>
       {problems
         .filter((p) => p.repo === undefined)
         .map((p, k) => (
           <Problem key={k} problem={p} where={here} ask={askHere} retried={askHere && onRecheck} />
         ))}
-      <button className="btn small" onClick={() => onChange({ ...canvas, repos: [...canvas.repos, { path: '' }] })}>
-        {t.config.addRepo}
-      </button>
+      {/* its repositories as tabs, one shown at a time, with the problems of each counted on it */}
+      <Field label={t.config.repos}>
+        <div className="cfg-repo-tabs">
+          <div className="seg" role="tablist" aria-label={t.config.repos}>
+            {canvas.repos.map((r, i) => {
+              const k = problems.filter((p) => p.repo === i).length;
+              return (
+                <button key={i} type="button" role="tab" aria-selected={i === at} className={i === at ? 'on' : undefined} onClick={() => setAt(i)}>
+                  {repoName(r, resolved?.repos[i])}
+                  {k > 0 && <span className="n err">{k}</span>}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            className="btn small"
+            onClick={() => {
+              onChange({ ...canvas, repos: [...canvas.repos, { path: '' }] });
+              setAt(canvas.repos.length);
+            }}
+          >
+            {t.config.addRepo}
+          </button>
+        </div>
+      </Field>
+      {repo && (
+        <RepoRow
+          key={at}
+          repo={repo}
+          home={at === 0}
+          resolved={resolved?.repos[at]}
+          {...(resolved ? { canvasId: resolved.id } : {})}
+          problems={problems.filter((p) => p.repo === at)}
+          {...(focus && resolved?.id === focus.canvas && resolved.repos[at]?.id === focus.repo ? { focus } : {})}
+          where={`${here}, ${t.config.repoAt(repo.path)}`}
+          ask={askHere}
+          onRecheck={onRecheck}
+          takeover={{ saved, onReload, ...(prepare ? { prepare } : {}) }}
+          onChange={(x) => {
+            setRepo(at, x);
+            if (!x) setAt(Math.max(0, at - 1));
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1325,6 +1447,9 @@ interface RepoProps {
   takeover: Takeover;
   onChange: (r: RepoConfig | null) => void;
 }
+
+/** A repository's name on its tab: its id once checked, else its folder's name. */
+const repoName = (repo: RepoConfig, resolved: ResolvedCanvas['repos'][number] | undefined) => resolved?.id ?? (repo.path.trim().split(/[\\/]/).filter(Boolean).pop() || t.config.newRepo);
 
 /** What „Für alle“ needs of the dialog: whether the canvases are as saved (what is taken over), how to read them again, how to save them first. */
 interface Takeover {
@@ -1385,80 +1510,85 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
   const source = named ? t.config.settings.source.clones : own !== undefined ? t.config.settings.source.machine : base ? t.config.settings.source[base.source] : undefined;
   const listed = (repo.workspaces ?? []).filter((w) => w.trim()).length;
   // what saving does to the clones registered now: those it no longer names leave the pool, a card's once it is done
-  const leaving = resolved?.leaving?.length ? <span className="hint cfg-clone-leaving">{t.config.cloneLeaving(resolved.leaving.map((c) => (c.card ? { ...c, card: plain(c.card) } : c)))}</span> : null;
-  // one row of the canvas's table of repositories; what only some have (clones, problems) spans the row below it
+  const leaving = resolved?.leaving?.length ? <p className="hint cfg-clone-leaving">{t.config.cloneLeaving(resolved.leaving.map((c) => (c.card ? { ...c, card: plain(c.card) } : c)))}</p> : null;
+  const slots = (hint: string, placeholder: string) => (
+    <Field className="cfg-slots" label={<>{t.config.slots} <Info text={hint} /></>}>
+      <input type="number" min={0} max={20} aria-label={t.config.slots} placeholder={placeholder} value={repo.slots ?? ''} onChange={(e) => onChange(without('slots', slotsOf(e.target.value)))} />
+      {leaving}
+    </Field>
+  );
+  // a repository of the canvas: its path, what is wrong with it, then where its agents work and its settings, each group under a heading
   return (
-    <div className="cfg-repo">
-      <div className="cfg-cell">
-        <input className="c-path" aria-label={t.config.path} value={repo.path} placeholder={t.config.path} spellCheck={false} onChange={(e) => {
-            // another folder: whether it goes without git is chosen for it anew
-            const { git: _, ...rest } = repo;
-            onChange({ ...rest, path: e.target.value });
-          }} />
-        {resolved && <span className="hint">{`${resolved.id}${home ? ` · ${t.config.home}` : ''}${folder ? ` · ${t.config.folderMode}` : ''}`}</span>}
-      </div>
-      <RemoveButton label={t.config.removeRepo} onClick={() => onChange(null)} />
+    <section className="cfg-repo">
+      <Field label={t.config.path} hint={home || folder ? [...(home ? [t.config.home] : []), ...(folder ? [t.config.folderMode] : [])].join(' · ') : undefined}>
+        <div className="cfg-repo-path">
+          <input className="c-path" aria-label={t.config.path} value={repo.path} placeholder={t.config.path} spellCheck={false} onChange={(e) => {
+              // another folder: whether it goes without git is chosen for it anew
+              const { git: _, ...rest } = repo;
+              onChange({ ...rest, path: e.target.value });
+            }} />
+          <RemoveButton label={t.config.removeRepo} onClick={() => onChange(null)} />
+        </div>
+      </Field>
+      {problems.map((p, k) => (
+        <div key={k} className="cfg-repo-problem">
+          <Problem problem={p} where={where} ask={ask} retried={ask && onRecheck} />
+          {p.code === 'notRepo' && noGit && <GitSetup key={noGit} path={noGit} confirm={t.setup.git.confirm} onDone={onRecheck} onFolder={() => onChange({ path: repo.path, git: false, ...(repo.settings ? { settings: repo.settings } : {}) })} />}
+          {p.code === 'untrusted' && resolved?.trust && <TrustCommands path={repo.path} trust={resolved.trust} onDone={onRecheck} />}
+        </div>
+      ))}
+      {/* a repository without settings of its own, or with an adapter module that said them: a card on its canvas writes them, also before the canvas is saved */}
+      {canvasId && resolved && !folder && (resolved.adapterGone || !fromRepository(resolved.values)) && <AdapterSetup canvas={canvasId} repo={resolved.id} takeover={takeover} />}
       {!folder && (resolved || clones) && (
-        <div ref={clonesBox} className={flash ? 'cfg-span cfg-clones flash' : 'cfg-span cfg-clones'}>
-          <div className="cfg-work-in cfg-has-info">
-            <span className="hint">
+        <div ref={clonesBox} className={flash ? 'cfg-group flash' : 'cfg-group'}>
+          <h5 className="cfg-group-head">{t.config.groups.workspaces}</h5>
+          <div className="cfg-field cfg-setting cfg-has-info">
+            <div className="cfg-label">
               {t.config.settings.workspaces}
               {source && <span className={source === t.config.settings.source.machine ? 'cfg-source here' : 'cfg-source'}>{source}</span>}
               <Info text={t.config.settings.workspacesHint} />
-            </span>
-            <div className="seg" role="radiogroup" aria-label={t.config.settings.workspaces}>
-              {(['worktrees', 'clones'] as const).map((x) => (
-                <button key={x} type="button" role="radio" aria-checked={workIn === x} className={workIn === x ? 'on' : undefined} onClick={() => setWorkIn(x)}>
-                  {t.config.settings.workIn[x]}
-                </button>
-              ))}
+            </div>
+            <div className="cfg-control">
+              <div className="seg" role="radiogroup" aria-label={t.config.settings.workspaces}>
+                {(['worktrees', 'clones'] as const).map((x) => (
+                  <button key={x} type="button" role="radio" aria-checked={workIn === x} className={workIn === x ? 'on' : undefined} onClick={() => setWorkIn(x)}>
+                    {t.config.settings.workIn[x]}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           {clones ? (
             <>
-              <label className="cfg-existing">
-                <span className="hint">{t.config.workspaces}</span>
+              <Field label={t.config.workspaces}>
                 <textarea
                   ref={existing}
+                  className="cfg-existing"
                   rows={2}
                   spellCheck={false}
+                  aria-label={t.config.workspaces}
                   value={existingText}
                   onChange={(e) => {
                     const list = e.target.value.split('\n');
                     onChange(without('workspaces', list.some((w) => w.trim()) ? list : undefined));
                   }}
                 />
-              </label>
-              <label className="cfg-clone-count cfg-has-info">
-                <span className="hint">
-                  {t.config.clones} <Info text={t.config.clonesHint} />
-                </span>
+              </Field>
+              <Field className="cfg-clone-count" label={<>{t.config.clones} <Info text={t.config.clonesHint} /></>}>
                 <input type="number" min={0} max={20} aria-label={t.config.clones} placeholder="0" value={repo.clones ?? ''} onChange={(e) => onChange(without('clones', Number(e.target.value) || undefined))} />
-              </label>
-              <label className="cfg-slots cfg-has-info">
-                <span className="hint">
-                  {t.config.slots} <Info text={t.config.slotsHint} />
-                </span>
-                <input type="number" min={0} max={20} aria-label={t.config.slots} placeholder={t.config.slotsAll} value={repo.slots ?? ''} onChange={(e) => onChange(without('slots', slotsOf(e.target.value)))} />
-              </label>
-              {listed + (repo.clones ?? 0) + (repo.hosts ?? []).reduce((n, h) => n + h.clones, 0) === 0 ? (
-                <span className="hint warn cfg-clone-total">{t.config.noClones}</span>
-              ) : (
-                <span className="hint cfg-clone-total">{t.config.cloneTotal(listed, repo.clones ?? 0)}</span>
-              )}
-              {leaving}
-              <Hosts hosts={repo.hosts ?? []} onChange={(hosts) => onChange(without('hosts', hosts.length ? hosts : undefined))} />
+                {listed + (repo.clones ?? 0) + (repo.hosts ?? []).reduce((n, h) => n + h.clones, 0) === 0 ? (
+                  <p className="hint warn">{t.config.noClones}</p>
+                ) : (
+                  <p className="hint">{t.config.cloneTotal(listed, repo.clones ?? 0)}</p>
+                )}
+              </Field>
+              {slots(t.config.slotsHint, t.config.slotsAll)}
+              <Field className="cfg-wide" label={<>{t.config.hosts} <Info text={t.config.hostsHint} /></>}>
+                <Hosts hosts={repo.hosts ?? []} onChange={(hosts) => onChange(without('hosts', hosts.length ? hosts : undefined))} />
+              </Field>
             </>
           ) : (
-            <>
-              <label className="cfg-slots cfg-has-info">
-                <span className="hint">
-                  {t.config.slots} <Info text={t.config.slotsWorktreesHint} />
-                </span>
-                <input type="number" min={0} max={20} aria-label={t.config.slots} placeholder={t.config.slotsAny} value={repo.slots ?? ''} onChange={(e) => onChange(without('slots', slotsOf(e.target.value)))} />
-              </label>
-              {leaving}
-            </>
+            slots(t.config.slotsWorktreesHint, t.config.slotsAny)
           )}
         </div>
       )}
@@ -1474,20 +1604,7 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
           onChange={(settings) => onChange(without('settings', settings))}
         />
       )}
-      {problems.map((p, k) => (
-        <div key={k} className="cfg-span">
-          <Problem problem={p} where={where} ask={ask} retried={ask && onRecheck} />
-          {p.code === 'notRepo' && noGit && <GitSetup key={noGit} path={noGit} confirm={t.setup.git.confirm} onDone={onRecheck} onFolder={() => onChange({ path: repo.path, git: false, ...(repo.settings ? { settings: repo.settings } : {}) })} />}
-          {p.code === 'untrusted' && resolved?.trust && <TrustCommands path={repo.path} trust={resolved.trust} onDone={onRecheck} />}
-        </div>
-      ))}
-      {/* a repository without settings of its own, or with an adapter module that said them: a card on its canvas writes them, also before the canvas is saved */}
-      {canvasId && resolved && !folder && (resolved.adapterGone || !fromRepository(resolved.values)) && (
-        <div className="cfg-span">
-          <AdapterSetup canvas={canvasId} repo={resolved.id} takeover={takeover} />
-        </div>
-      )}
-    </div>
+    </section>
   );
 }
 
@@ -1506,8 +1623,9 @@ function nestedOf(k: SettingKey): [NestedSetting, string] | undefined {
 }
 
 /**
- * A repository's settings for this machine, folded under „Einstellungen“ below its row: each shows
- * the value that applies and where it comes from; changing one sets it on this machine, „Zurücksetzen“
+ * A repository's settings for this machine, below where its agents work, in groups under a heading
+ * each (branch and landing, app and checks, plans and language, demos): each shows the value that
+ * applies and where it comes from; changing one sets it on this machine, „Zurücksetzen“
  * takes it back to its source. Saved with the configuration; they apply at once.
  */
 function RepoSettingsBlock({
@@ -1520,7 +1638,7 @@ function RepoSettingsBlock({
   takeover,
   onChange,
 }: {
-  /** The setting to fold open, scroll to and mark: the dialog was opened from a proposal for it. */
+  /** The setting to scroll to and mark: the dialog was opened from a proposal for it. */
   show: ConfigFocus | undefined;
   /** A folder without git: what is about branches, landing and workspaces does not apply. */
   folder: boolean;
@@ -1531,19 +1649,17 @@ function RepoSettingsBlock({
   takeover: Takeover;
   onChange: (s: RepoSettings | undefined) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState<string | null>(null);
   useEffect(() => {
     if (!show) return;
-    setOpen(true);
     setShown(show.setting ?? null);
     const h = setTimeout(() => setShown(null), 2400);
     return () => clearTimeout(h);
   }, [show]);
   useEffect(() => {
     if (shown) box.current?.querySelector(`[data-setting="${shown}"]`)?.scrollIntoView({ block: 'center' });
-  }, [shown, open]);
+  }, [shown]);
   const c = t.config.settings;
   const s = repo.settings ?? {};
   const { app: _, demo: __, ...flat } = values;
@@ -1566,9 +1682,6 @@ function RepoSettingsBlock({
     }
     onChange(Object.keys(next).length ? (next as RepoSettings) : undefined);
   };
-  const keys: SettingKey[] = ['branch', 'land', 'direct', 'autoMerge', 'checks', 'setup', 'planDocs', 'softPaths', 'prNoise', 'language', 'run', 'stop', 'keep', 'demoLanguage', 'site'];
-  const setHere = keys.filter((k) => own(k) !== undefined).length;
-  const fromRepo = keys.filter((k) => own(k) === undefined && base[k].source === 'repository').length;
   const lines = (k: SettingKey) => value<string[]>(k).join('\n');
   // a setting: its label with where its value comes from (and „Zurücksetzen“ where it is set here), its control and what to know about it
   const field = (key: string, label: string, here: boolean, from: string, reset: () => void, control: ReactNode, hint?: string) => (
@@ -1606,19 +1719,12 @@ function RepoSettingsBlock({
     </label>
   );
   return (
-    <div className="cfg-span cfg-settings" ref={box}>
-      <button type="button" className={open ? 'cfg-settings-toggle on' : 'cfg-settings-toggle'} aria-expanded={open} onClick={() => setOpen(!open)}>
-        <span className="cfg-caret" aria-hidden="true" />
-        {c.open}
-        <span className="hint">
-          {[...(folder ? [] : [value<string>('branch'), c.lands[land]]), ...(setHere ? [c.setHere(setHere)] : []), ...(fromRepo ? [c.fromRepo(fromRepo)] : [])].join(' · ')}
-        </span>
-      </button>
-      {open && (
-        <div className="cfg-settings-body">
-          <p className="hint">{c.hint}</p>
-          {!folder && row('branch', c.branch, <input className="c-path" aria-label={c.branch} spellCheck={false} value={value<string>('branch')} onChange={(e) => set('branch', e.target.value)} />, c.branchHint)}
-          {!folder && row(
+    <div className="cfg-settings" ref={box}>
+      {!folder && (
+        <div className="cfg-group">
+          <h5 className="cfg-group-head">{t.config.groups.landing}</h5>
+          {row('branch', c.branch, <input className="c-path" aria-label={c.branch} spellCheck={false} value={value<string>('branch')} onChange={(e) => set('branch', e.target.value)} />, c.branchHint)}
+          {row(
             'land',
             c.land,
             <div className="seg" role="radiogroup" aria-label={c.land}>
@@ -1630,7 +1736,7 @@ function RepoSettingsBlock({
             </div>,
             c.landHint,
           )}
-          {!folder && land === 'pr' &&
+          {land === 'pr' &&
             row(
               'direct',
               c.direct,
@@ -1639,7 +1745,7 @@ function RepoSettingsBlock({
                 {c.directLabel}
               </label>,
             )}
-          {!folder && land === 'pr' &&
+          {land === 'pr' &&
             row(
               'autoMerge',
               c.autoMerge,
@@ -1649,103 +1755,112 @@ function RepoSettingsBlock({
               </label>,
               c.autoMergeHint,
             )}
-          {row('checks', c.checks, <textarea rows={Math.max(2, value<string[]>('checks').length + 1)} spellCheck={false} aria-label={c.checks} value={lines('checks')} onChange={(e) => set('checks', e.target.value.split('\n'))} />, c.checksHint)}
-          {row('setup', c.setup, <input className="c-path" aria-label={c.setup} spellCheck={false} value={value<string>('setup')} onChange={(e) => set('setup', e.target.value)} />, c.setupHint)}
-          {row(
-            'planDocs',
-            c.planDocs,
-            <div className="cfg-plan">
-              <input className="c-path" aria-label={c.planDir} placeholder={c.planDir} spellCheck={false} value={planDocs.dir} onChange={(e) => set('planDocs', { ...planDocs, dir: e.target.value })} />
-              <input className="c-path" aria-label={c.planExclude} placeholder={c.planExclude} spellCheck={false} value={planDocs.exclude.join(', ')} onChange={(e) => set('planDocs', { ...planDocs, exclude: e.target.value.split(/,\s*/) })} />
-            </div>,
-            c.planDocsHint,
-          )}
-          {!folder && row('softPaths', c.softPaths, <textarea rows={Math.max(2, value<string[]>('softPaths').length + 1)} spellCheck={false} aria-label={c.softPaths} value={lines('softPaths')} onChange={(e) => set('softPaths', e.target.value.split('\n'))} />, c.softPathsHint)}
-          {!folder && land === 'pr' && row('prNoise', c.prNoise, <textarea rows={2} spellCheck={false} aria-label={c.prNoise} value={lines('prNoise')} onChange={(e) => set('prNoise', e.target.value.split('\n'))} />, c.prNoiseHint)}
-          {row(
-            'language',
-            c.language,
-            <div className="seg" role="radiogroup" aria-label={c.language}>
-              {LANGUAGES.map((x) => (
-                <button key={x} type="button" role="radio" aria-checked={language === x} className={language === x ? 'on' : undefined} onClick={() => set('language', x)}>
-                  {c.languages[x]}
-                </button>
-              ))}
-            </div>,
-            c.languageHint,
-          )}
-          {row('run', c.run, <textarea rows={Math.max(6, Math.ceil(value<string>('run').length / 70) + 1)} aria-label={c.run} placeholder={c.runPlaceholder} value={value<string>('run')} onChange={(e) => set('run', e.target.value)} />, c.runHint)}
-          {row('stop', c.stop, <input className="c-path" aria-label={c.stop} placeholder="docker compose down" spellCheck={false} value={value<string>('stop')} onChange={(e) => set('stop', e.target.value)} />, c.stopHint)}
-          {!!value<string>('stop').trim() &&
-            row('keep', c.keep, <input className="c-path" aria-label={c.keep} placeholder="grep -q PERSIST=1 .env" spellCheck={false} value={value<string>('keep')} onChange={(e) => set('keep', e.target.value)} />, c.keepHint)}
-          {row(
-            'demoLanguage',
-            c.demoLanguage,
-            <div className="seg" role="radiogroup" aria-label={c.demoLanguage}>
-              {LANGUAGES.map((x) => (
-                <button key={x} type="button" role="radio" aria-checked={demoLanguage === x} className={demoLanguage === x ? 'on' : undefined} onClick={() => set('demoLanguage', x)}>
-                  {c.languages[x]}
-                </button>
-              ))}
-            </div>,
-            c.demoLanguageHint,
-          )}
-          {row(
-            'site',
-            c.site,
-            <div className="cfg-sub">
-              {sub(c.siteTitle, <input className="c-path" aria-label={c.siteTitle} spellCheck={false} value={site.title} onChange={(e) => setSite({ title: e.target.value })} />)}
-              {sub(c.siteUrl, <input className="c-path" aria-label={c.siteUrl} placeholder="https://demos.example.com" spellCheck={false} value={site.url} onChange={(e) => setSite({ url: e.target.value })} />)}
-              {sub(c.siteDeploy, <input className="c-path" aria-label={c.siteDeploy} placeholder="bunx wrangler@4 pages deploy {dir} --project-name demos" spellCheck={false} value={site.deploy} onChange={(e) => setSite({ deploy: e.target.value })} />, true)}
-              {sub(c.siteEnv, <input className="c-path" aria-label={c.siteEnv} placeholder="sites/demos/deploy.env" spellCheck={false} value={site.env ?? ''} onChange={(e) => setSite({ env: e.target.value })} />, true)}
-              {sub(
-                c.siteHeaders,
-                <textarea
-                  rows={Math.max(2, Object.keys(site.headers ?? {}).length + 1)}
-                  spellCheck={false}
-                  aria-label={c.siteHeaders}
-                  placeholder={'CF-Access-Client-Id: ${CF_ID}'}
-                  value={Object.entries(site.headers ?? {})
-                    .map(([k, v]) => `${k}: ${v}`)
-                    .join('\n')}
-                  onChange={(e) => setSite({ headers: headerLines(e.target.value) })}
-                />,
-                true,
-              )}
-              {sub(
-                c.siteMaxFile,
-                <input
-                  className="c-path"
-                  type="number"
-                  min={1}
-                  aria-label={c.siteMaxFile}
-                  placeholder="25"
-                  value={site.maxFile ? Math.round(site.maxFile / MIB) : ''}
-                  onChange={(e) => setSite({ maxFile: Number(e.target.value) > 0 ? Math.round(Number(e.target.value) * MIB) : undefined })}
-                />,
-              )}
-              {sub(c.siteTags, <TagLines tags={site.tags} placeholder={c.siteTagsPlaceholder} label={c.siteTags} onChange={(tags) => setSite({ tags })} />, true)}
-              {/* not a label: a click on its words would press the first button */}
-              <div className="wide">
-                <span className="hint">{c.sitePublish}</span>
-                <div className="seg" role="radiogroup" aria-label={c.sitePublish}>
-                  {(['click', 'approved'] as const).map((x) => {
-                    const on = (site.publish ?? 'click') === x;
-                    return (
-                      <button key={x} type="button" role="radio" aria-checked={on} className={on ? 'on' : undefined} onClick={() => setSite({ publish: x === 'approved' ? x : undefined })}>
-                        {c.sitePublishes[x]}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>,
-            c.siteHint,
-          )}
-          {/* the folder's settings file is written there like any other file; there is no commit or pull request to make */}
-          {!folder && <ShareSettings repo={repo} values={values} branch={value<string>('branch')} shareTo={shareTo} shareDirect={shareDirect} takeover={takeover} />}
+          {land === 'pr' && row('prNoise', c.prNoise, <textarea rows={2} spellCheck={false} aria-label={c.prNoise} value={lines('prNoise')} onChange={(e) => set('prNoise', e.target.value.split('\n'))} />, c.prNoiseHint)}
+          {row('softPaths', c.softPaths, <textarea rows={Math.max(2, value<string[]>('softPaths').length + 1)} spellCheck={false} aria-label={c.softPaths} value={lines('softPaths')} onChange={(e) => set('softPaths', e.target.value.split('\n'))} />, c.softPathsHint)}
         </div>
       )}
+      <div className="cfg-group">
+        <h5 className="cfg-group-head">{t.config.groups.app}</h5>
+        {row('setup', c.setup, <input className="c-path" aria-label={c.setup} spellCheck={false} value={value<string>('setup')} onChange={(e) => set('setup', e.target.value)} />, c.setupHint)}
+        {row('checks', c.checks, <textarea rows={Math.max(2, value<string[]>('checks').length + 1)} spellCheck={false} aria-label={c.checks} value={lines('checks')} onChange={(e) => set('checks', e.target.value.split('\n'))} />, c.checksHint)}
+        {row('run', c.run, <textarea rows={Math.max(6, Math.ceil(value<string>('run').length / 70) + 1)} aria-label={c.run} placeholder={c.runPlaceholder} value={value<string>('run')} onChange={(e) => set('run', e.target.value)} />, c.runHint)}
+        {row('stop', c.stop, <input className="c-path" aria-label={c.stop} placeholder="docker compose down" spellCheck={false} value={value<string>('stop')} onChange={(e) => set('stop', e.target.value)} />, c.stopHint)}
+        {!!value<string>('stop').trim() &&
+          row('keep', c.keep, <input className="c-path" aria-label={c.keep} placeholder="grep -q PERSIST=1 .env" spellCheck={false} value={value<string>('keep')} onChange={(e) => set('keep', e.target.value)} />, c.keepHint)}
+      </div>
+      <div className="cfg-group">
+        <h5 className="cfg-group-head">{t.config.groups.plans}</h5>
+        {row(
+          'planDocs',
+          c.planDocs,
+          <div className="cfg-plan">
+            <input className="c-path" aria-label={c.planDir} placeholder={c.planDir} spellCheck={false} value={planDocs.dir} onChange={(e) => set('planDocs', { ...planDocs, dir: e.target.value })} />
+            <input className="c-path" aria-label={c.planExclude} placeholder={c.planExclude} spellCheck={false} value={planDocs.exclude.join(', ')} onChange={(e) => set('planDocs', { ...planDocs, exclude: e.target.value.split(/,\s*/) })} />
+          </div>,
+          c.planDocsHint,
+        )}
+        {row(
+          'language',
+          c.language,
+          <div className="seg" role="radiogroup" aria-label={c.language}>
+            {LANGUAGES.map((x) => (
+              <button key={x} type="button" role="radio" aria-checked={language === x} className={language === x ? 'on' : undefined} onClick={() => set('language', x)}>
+                {c.languages[x]}
+              </button>
+            ))}
+          </div>,
+          c.languageHint,
+        )}
+      </div>
+      <div className="cfg-group">
+        <h5 className="cfg-group-head">{t.config.groups.demos}</h5>
+        {row(
+          'demoLanguage',
+          c.demoLanguage,
+          <div className="seg" role="radiogroup" aria-label={c.demoLanguage}>
+            {LANGUAGES.map((x) => (
+              <button key={x} type="button" role="radio" aria-checked={demoLanguage === x} className={demoLanguage === x ? 'on' : undefined} onClick={() => set('demoLanguage', x)}>
+                {c.languages[x]}
+              </button>
+            ))}
+          </div>,
+          c.demoLanguageHint,
+        )}
+        {row(
+          'site',
+          c.site,
+          <div className="cfg-sub">
+            {sub(c.siteTitle, <input className="c-path" aria-label={c.siteTitle} spellCheck={false} value={site.title} onChange={(e) => setSite({ title: e.target.value })} />)}
+            {sub(c.siteUrl, <input className="c-path" aria-label={c.siteUrl} placeholder="https://demos.example.com" spellCheck={false} value={site.url} onChange={(e) => setSite({ url: e.target.value })} />)}
+            {sub(c.siteDeploy, <input className="c-path" aria-label={c.siteDeploy} placeholder="bunx wrangler@4 pages deploy {dir} --project-name demos" spellCheck={false} value={site.deploy} onChange={(e) => setSite({ deploy: e.target.value })} />, true)}
+            {sub(c.siteEnv, <input className="c-path" aria-label={c.siteEnv} placeholder="sites/demos/deploy.env" spellCheck={false} value={site.env ?? ''} onChange={(e) => setSite({ env: e.target.value })} />, true)}
+            {sub(
+              c.siteHeaders,
+              <textarea
+                rows={Math.max(2, Object.keys(site.headers ?? {}).length + 1)}
+                spellCheck={false}
+                aria-label={c.siteHeaders}
+                placeholder={'CF-Access-Client-Id: ${CF_ID}'}
+                value={Object.entries(site.headers ?? {})
+                  .map(([k, v]) => `${k}: ${v}`)
+                  .join('\n')}
+                onChange={(e) => setSite({ headers: headerLines(e.target.value) })}
+              />,
+              true,
+            )}
+            {sub(
+              c.siteMaxFile,
+              <input
+                className="c-path"
+                type="number"
+                min={1}
+                aria-label={c.siteMaxFile}
+                placeholder="25"
+                value={site.maxFile ? Math.round(site.maxFile / MIB) : ''}
+                onChange={(e) => setSite({ maxFile: Number(e.target.value) > 0 ? Math.round(Number(e.target.value) * MIB) : undefined })}
+              />,
+            )}
+            {sub(c.siteTags, <TagLines tags={site.tags} placeholder={c.siteTagsPlaceholder} label={c.siteTags} onChange={(tags) => setSite({ tags })} />, true)}
+            {/* not a label: a click on its words would press the first button */}
+            <div className="wide">
+              <span className="hint">{c.sitePublish}</span>
+              <div className="seg" role="radiogroup" aria-label={c.sitePublish}>
+                {(['click', 'approved'] as const).map((x) => {
+                  const on = (site.publish ?? 'click') === x;
+                  return (
+                    <button key={x} type="button" role="radio" aria-checked={on} className={on ? 'on' : undefined} onClick={() => setSite({ publish: x === 'approved' ? x : undefined })}>
+                      {c.sitePublishes[x]}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>,
+          c.siteHint,
+        )}
+      </div>
+      {/* the folder's settings file is written there like any other file; there is no commit or pull request to make */}
+      {!folder && <ShareSettings repo={repo} values={values} branch={value<string>('branch')} shareTo={shareTo} shareDirect={shareDirect} takeover={takeover} />}
     </div>
   );
 }
@@ -1910,10 +2025,7 @@ function RemoveButton({ label, onClick }: { label: string; onClick: () => void }
 function Hosts({ hosts, onChange }: { hosts: HostConfig[]; onChange: (hosts: HostConfig[]) => void }) {
   const set = (i: number, h: HostConfig | null) => onChange(h ? hosts.map((x, k) => (k === i ? h : x)) : hosts.filter((_, k) => k !== i));
   return (
-    <div className="cfg-hosts cfg-has-info">
-      <span className="hint">
-        {t.config.hosts} <Info text={t.config.hostsHint} />
-      </span>
+    <div className="cfg-hosts">
       {hosts.length > 0 && (
         <div className="cfg-host-rows">
           {hosts.map((h, i) => (

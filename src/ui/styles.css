@@ -1289,7 +1289,14 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 .cfg-nav li button.on { background: var(--panel); font-weight: 600; box-shadow: var(--shadow); }
 .cfg-nav .n { margin-left: auto; border-radius: 3px; padding: 0 7px; font-weight: 700; font-size: 12px; color: var(--on-ink); background: var(--planned); }
 .cfg-nav .n.err { background: var(--error); }
-.cfg-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--waiting); }
+.cfg-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--waiting); }
+/* Leinwände: a heading over the canvases, each indented under it, and „+ Leinwand“ last */
+.cfg-nav-title { display: flex; align-items: center; gap: 8px; padding: 8px 10px 4px; font-size: 14px; color: var(--muted); }
+.cfg-nav-group > ul { margin-bottom: 6px; }
+.cfg-nav-group > ul > li > button { padding-left: 24px; }
+.cfg-nav-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cfg-nav li button.cfg-nav-add { padding-top: 5px; padding-bottom: 5px; font-size: 13px; color: var(--muted); }
+.cfg-nav li button.cfg-nav-add:hover { color: var(--ink); }
 .cfg-ask { margin: -6px 0 22px; padding: 0 10px; }
 .cfg-ask .hint { margin: 0 0 8px; line-height: 1.45; }
 .cfg-nav-foot { margin-top: auto; padding: 18px 10px 0; }
@@ -1366,49 +1373,44 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
   box-shadow: var(--lift); font-size: 13px; font-weight: 400; line-height: 1.45; white-space: normal; pointer-events: none; }
 .cfg-tip[hidden] { display: none; }
 /* a canvas: its name as a heading line, its repositories as a table below it */
-.cfg-canvas { padding: 6px 0 18px; }
-.cfg-canvas + .cfg-canvas { border-top: 1px solid var(--line); padding-top: 18px; }
-.cfg-canvas-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-.cfg-canvas-head h4 { margin: 0; font-size: 15px; white-space: nowrap; }
-.cfg-canvas-head input { width: 260px; }
-.cfg-canvas-head .qmoves { margin-left: auto; }
+/* a canvas as its own page: its title line, then each repository under a heading of its own, its
+   settings in groups under small headings */
+.cfg-canvas { padding: 0 0 8px; }
+.cfg-canvas-head { display: flex; align-items: baseline; gap: 12px; margin-right: 48px; }
+.cfg-canvas-head h3 { margin: 0 0 6px; min-width: 0; overflow-wrap: anywhere; }
+.cfg-canvas-head .qmoves { margin-left: auto; align-self: center; }
 .cfg-canvas-head .qmoves + .c-del { margin-left: 0; }
+.cfg-canvas-head > .c-del { align-self: center; }
 .cfg-canvas-head .btn.qmove { margin-top: 0; padding: 2px 8px; }
-.cfg-canvas > .hint { margin: 0 0 8px; }
-.cfg-repos { display: grid; grid-template-columns: minmax(0, 1fr) 24px; gap: 4px 12px; align-items: start; }
-.cfg-repos > .hint { font-size: 11.5px; padding-bottom: 2px; }
-.cfg-cell { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 3px 0; }
-.cfg-cell > .c-path, .cfg-cell > select { width: 100%; }
-.cfg-cell > .hint { font-size: 11.5px; }
-.cfg-repo, .cfg-host { display: contents; }
-.cfg-repo > .c-del { padding-top: 9px; }
-.cfg-span { grid-column: 1 / -1; }
-.cfg-clones { display: grid; grid-template-columns: 180px 100px minmax(0, 1fr); gap: 12px; padding: 0 0 6px 16px; border-left: 2px solid var(--line); }
-.cfg-clones label > .hint { display: block; font-size: 11.5px; margin-bottom: 3px; }
-.cfg-clones input { width: 80px; }
-.cfg-clones > .cfg-work-in { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; }
-.cfg-clones > .cfg-existing, .cfg-clones > .cfg-clone-total, .cfg-clones > .cfg-clone-leaving { grid-column: 1 / -1; }
-/* as tall as its clones (two lines at least): it grows with them instead of scrolling */
-#config .cfg-existing textarea { resize: none; overflow-y: hidden; }
-.cfg-clones > .cfg-clone-count { grid-column: 1; }
-.cfg-clone-total, .cfg-clone-leaving { font-size: 11.5px; }
-.cfg-work-in > .hint { display: inline-flex; align-items: baseline; gap: 8px; font-size: 11.5px; }
-.cfg-work-in > .seg { margin-top: 0; }
-/* opened from a card waiting for a free clone: the clone settings it means light up */
-.cfg-clones.flash { animation: cfg-flash 2.4s ease-out; }
+.cfg-canvas .cfg-name { width: 100%; max-width: 420px; }
+.cfg-host { display: contents; }
+/* labels line up with the top of their controls, which are often several lines high */
+.cfg-canvas .cfg-field { align-items: start; }
+.cfg-canvas .cfg-field > .cfg-label { padding-top: 7px; }
+.cfg-repo-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.cfg-repo-tabs > .seg { margin-top: 0; }
+.cfg-repo-tabs > .btn.small { margin-top: 0; }
+.cfg-repo-tabs .n { margin-left: 6px; border-radius: 3px; padding: 0 6px; font-weight: 700; font-size: 11.5px; color: var(--on-ink); background: var(--error); }
+.cfg-repo { margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.cfg-repo-path { display: flex; align-items: center; gap: 12px; max-width: 664px; }
+.cfg-repo-path > .c-path { flex: 1; }
+.cfg-repo-path > .c-del { margin-left: 0; }
+.cfg-repo-problem { margin: 2px 0 8px; }
+.cfg-repo > .c-row { margin: 6px 0 4px; max-width: 900px; }
+.cfg-group { margin-top: 18px; border-radius: 2px; }
+.cfg-group-head { margin: 0 0 2px; font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.cfg-group input[type=number] { width: 80px; }
+.cfg-existing { width: 100%; max-width: 640px; }
+#config .cfg-existing { resize: none; overflow-y: hidden; }
+.cfg-wide .cfg-control { max-width: 900px; }
+.cfg-add-repo { margin-top: 22px !important; }
+.cfg-clone-leaving { margin: 5px 0 0; font-size: 12.5px; line-height: 1.45; }
+
+.cfg-group.flash { animation: cfg-flash 2.4s ease-out; }
 .cfg-setting.flash { animation: cfg-setting-flash 2.4s ease-out; }
 @keyframes cfg-setting-flash { 0%, 45% { background: color-mix(in srgb, var(--proposal) 14%, transparent); } }
-@keyframes cfg-flash { 0%, 45% { border-left-color: var(--working); background: color-mix(in srgb, var(--working) 12%, transparent); } }
-/* a repository's settings for this machine, folded under its row */
-.cfg-settings { padding: 0 0 6px 16px; border-left: 2px solid var(--line); }
-.cfg-settings-toggle { display: inline-flex; align-items: baseline; gap: 8px; padding: 3px 0; border: 0; background: none; color: var(--ink); font-size: 13px; cursor: pointer; }
-.cfg-settings-toggle > .hint { font-size: 12px; }
-.cfg-settings-toggle:hover > .hint { color: var(--ink); }
-.cfg-caret { display: inline-block; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg) translate(-1px, -1px); transition: transform .12s; }
-.cfg-settings-toggle.on .cfg-caret { transform: rotate(45deg) translate(-2px, -1px); }
-.cfg-settings-body { padding: 4px 0 8px; }
-.cfg-settings-body > .hint { max-width: 76ch; margin: 2px 0 6px; font-size: 12.5px; line-height: 1.45; }
-/* a setting's label starts at the top of what it labels, level with the first line in its field, however tall the field and its hint */
+@keyframes cfg-flash { 0%, 45% { background: color-mix(in srgb, var(--working) 12%, transparent); } }
+
 .cfg-setting { align-items: start; }
 .cfg-setting .cfg-label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding-top: 7px; }
 .cfg-source { font-size: 11.5px; color: color-mix(in srgb, var(--muted) 80%, var(--panel)); }
@@ -1432,14 +1434,13 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 .cfg-sub > label > .hint, .cfg-sub > div > .hint { font-size: 11.5px; }
 .cfg-sub > div > .seg { align-self: flex-start; margin-top: 0; }
 .cfg-sub input, .cfg-sub textarea { width: 100%; }
-.cfg-hosts { grid-column: 1 / -1; }
-.cfg-hosts > .hint { display: block; font-size: 11.5px; margin-bottom: 3px; }
 .cfg-host-rows { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.3fr) minmax(0, 1.5fr) auto auto 24px; gap: 6px 10px; align-items: center; }
 .cfg-host-rows input { min-width: 0; width: 100%; }
 #config .cfg-host-clones { display: flex; align-items: center; gap: 6px; }
 .cfg-host-clones > .hint { font-size: 11.5px; }
 #config .cfg-host-clones input { width: 64px; }
-.cfg-hosts > .btn.small { margin-top: 6px; }
+.cfg-hosts > .btn.small { margin-top: 0; }
+.cfg-host-rows + .btn.small { margin-top: 6px !important; }
 .cfg-agents { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(170px, 1fr) minmax(130px, .7fr); gap: 0 14px; align-items: center; max-width: 900px; }
 .cfg-agents > .hint { font-size: 11.5px; padding-bottom: 4px; }
 .cfg-agents > select { min-width: 0; }
@@ -1456,10 +1457,10 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
   .cfg-nav li button { width: auto; padding: 6px 10px; font-size: 13px; }
   .cfg-main { padding: 18px 18px 0; }
   .cfg-field { grid-template-columns: 1fr; row-gap: 4px; }
-  .cfg-repos { grid-template-columns: minmax(0, 1fr) 24px; }
-  .cfg-repos > .hint { display: none; }
-  .cfg-repo > .cfg-cell:nth-of-type(n) { grid-column: 1; }
-  .cfg-repo > .c-del { grid-column: 2; grid-row: span 1; }
+  .cfg-nav-group { display: contents; }
+  .cfg-nav-group > ul { display: contents; }
+  .cfg-nav-title { padding: 6px 4px 6px 10px; font-size: 13px; }
+  .cfg-nav-group > ul > li > button { padding-left: 10px; }
   .cfg-cols { grid-template-columns: 1fr; }
   .cfg-agents { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .cfg-agent { grid-column: 1 / -1; padding-bottom: 2px; }
@@ -1478,7 +1479,7 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 /* a waste bin shows while the pointer or focus is on its entry; without a pointer that hovers, always */
 @media (hover: hover) {
   .c-remove { opacity: 0; transition: opacity .12s; }
-  .cfg-canvas-head:hover > .c-remove, .cfg-canvas-head:focus-within > .c-remove, .cfg-repo:hover > .c-remove, .cfg-repo:focus-within > .c-remove,
+  .cfg-canvas-head:hover > .c-remove, .cfg-canvas-head:focus-within > .c-remove, .cfg-repo-path:hover > .c-remove, .cfg-repo-path:focus-within > .c-remove,
   .cfg-host:hover > .c-remove, .cfg-host:focus-within > .c-remove { opacity: 1; }
 }
 .c-row { display: flex; gap: 8px; align-items: center; margin: 4px 0; }

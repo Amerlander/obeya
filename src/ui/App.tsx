@@ -1646,6 +1646,7 @@ function Canvas({
         </div>
         <ConfigDialog
           on={cOn}
+          page={snapshot.canvas.id}
           onClose={() => setCOn(false)}
           onSetup={() => setSetupOn(true)}
           onTalk={talkFromConfig}
