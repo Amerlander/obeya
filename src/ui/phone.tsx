@@ -1,11 +1,12 @@
 // The phone view: on a phone the page shows, instead of the canvas, what waits for the owner across
-// every canvas („Für dich“) and what runs („Läuft“); Obeya's conversation is a panel of its own that
+// every canvas („Für dich“), what runs („Läuft“) and, folded away until opened, what is done but not
+// archived yet („Erledigt“); Obeya's conversation is a panel of its own that
 // comes up from below. A card opens full screen with the canvas's own detail view (answer options,
 // demo, approve buttons), its conversation in the same panel, and Back returns to the list. The microphone is held by touch; Enter breaks the line, only Send sends;
 // what was typed but not sent survives a reload. It holds one WebSocket per canvas.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { type CanvasInfo, type CanvasSnapshot, type CardPatch, type Item, needsYou, openQuestions, unreadAnswers, type Usage } from '../core/types';
+import { type CanvasInfo, type CanvasSnapshot, type CardPatch, finishedArchivable, type Item, needsYou, openQuestions, unreadAnswers, type Usage } from '../core/types';
 import { api, beforeReload, cardsOn, onNotice, phoneInUse, setCanvas, useCanvas, type Where } from './api';
 import { enterBreaksLines } from './composer';
 import { type ActDone, Detail, type Pending, TalkElsewhere, useEvents } from './detail';
@@ -40,6 +41,8 @@ export function phoneView(): boolean {
 const DRAFTS = '@phone';
 /** The canvas whose Obeya the conversation at the bottom is with, as the owner last picked it. */
 const OBEYA_CANVAS = 'obeya-phone-canvas';
+/** Whether the owner opened „Erledigt“ in this tab; it starts closed. */
+const DONE_OPEN = 'obeya-phone-done';
 /** How long the server may not answer before the view says so: a phone back from its lock screen reconnects within this. */
 const QUIET_MS = 3000;
 
@@ -284,6 +287,16 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
     addEventListener('popstate', pop);
     return () => removeEventListener('popstate', pop);
   }, []);
+  // „Erledigt“ starts closed, and stays as the owner left it while a card is open and over a reload
+  const [doneOpen, setDoneOpen] = useState(() => sessionStorage.getItem(DONE_OPEN) === '1');
+  const toggleDone = () =>
+    setDoneOpen((o) => {
+      try {
+        if (o) sessionStorage.removeItem(DONE_OPEN);
+        else sessionStorage.setItem(DONE_OPEN, '1');
+      } catch {}
+      return !o;
+    });
   // the list keeps where it was scrolled to while a card is open
   const homeRef = useRef<HTMLDivElement>(null);
   const homeScroll = useRef(0);
@@ -582,6 +595,8 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
     openTalk();
   };
   const shown = talk && !closing;
+  // what the canvas's „Erledigte archivieren“ would take, but nothing the lists above show already
+  const done = all.filter(({ item }) => finishedArchivable(item) && !needsYou(item) && !item.snoozed?.waiting && !runs(item) && !isUnderway(item.id));
   return (
     <HoldToTalk.Provider value={press}>
       {feeds}
@@ -613,6 +628,7 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
           {/* a snoozed card at the end, after those at work now */}
           {ordered.length > 0 && <Running entries={all.filter(({ item }) => runs(item) || isUnderway(item.id)).sort((a, b) => Number(!!a.item.snoozed) - Number(!!b.item.snoozed))} several={several} onOpen={openCard} />}
         </section>
+        {done.length > 0 && <Done entries={done} several={several} open={doneOpen} onToggle={toggleDone} onOpen={openCard} />}
       </div>
       {talk && (
         <TalkPanel title={t.koordinator.title} label={t.phone.talkTitle} banner={banner} onClose={closeTalk} leave={leaveTalk} onLeave={() => setClosing(true)}>
@@ -728,6 +744,47 @@ function Running({ entries, several, onOpen }: { entries: { item: Item; canvas: 
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * The cards that are done but not archived, below the others: a head with their count that opens
+ * and closes the list. Opened, the head moves to the top of the screen so the cards below it show.
+ */
+function Done({ entries, several, open, onToggle, onOpen }: { entries: { item: Item; canvas: CanvasInfo }[]; several: boolean; open: boolean; onToggle: () => void; onOpen: (i: Item) => void }) {
+  const head = useRef<HTMLElement>(null);
+  const opened = useRef(false);
+  useEffect(() => {
+    if (open && opened.current) head.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    opened.current = false;
+  }, [open]);
+  return (
+    <section className={['ph-section ph-done', open && 'open'].filter(Boolean).join(' ')} ref={head}>
+      <h2>
+        <button
+          aria-expanded={open}
+          onClick={() => {
+            opened.current = !open;
+            onToggle();
+          }}
+        >
+          <span className="arrow" aria-hidden="true" />
+          {t.phone.done}
+          <span className="n">{entries.length}</span>
+        </button>
+      </h2>
+      {open && (
+        <ul className="ph-list">
+          {entries.map(({ item: i, canvas: c }) => (
+            <li key={i.id}>
+              <button className={`${cardClass(i)} ph-card`} onClick={() => onOpen(i)}>
+                <CardFace item={i} where={several ? c.name : undefined} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

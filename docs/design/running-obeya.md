@@ -132,7 +132,7 @@ On a phone the page shows the phone view instead of the canvas, at the same addr
 same bundle. A phone is a device with a coarse pointer whose screen's shorter side is under 600 px;
 a tablet and a narrow window at the desk keep the canvas. `?view=phone` or `?view=canvas` decides
 instead. The view is settled at load; turning the phone does not switch it. It uses each canvas's
-own WebSocket. It shows two lists:
+own WebSocket. It shows three lists:
 
 - **„Für dich“**: what waits for the owner across every canvas, canvas by canvas and within one in
   Tab's order, then „Obeya hat geantwortet“ where an answer waits unread. Each card says what it waits
@@ -141,6 +141,10 @@ own WebSocket. It shows two lists:
 - **„Läuft“**: the cards an agent or Obeya is at that wait for nobody (working, taking in the owner's
   words, landing, queued, in a PR, an idea's agent thinking …), with their status line, snoozed ones
   at the end. Every card that leaves „Für dich“ without being done stands here.
+- **„Erledigt“**, closed until its head (with the count) is tapped: the finished cards that are not
+  archived yet, those the archive's „… erledigte Aufgaben archivieren“ would take, and none the lists above
+  hold. Opened, its head moves up to the bar so its cards show; it stays open while a card is open
+  and over a reload, and is closed again in a new tab. Without such cards it is not there.
 
 The cards look as on the canvas, as wide as the screen and without the pin, their kind line led by
 the canvas's name where there are several; where two of at least
@@ -421,6 +425,9 @@ them).
   It reuses the canvas's detail view, conversation, drafts and confirmations rather than copies. One
   WebSocket per canvas rather than one stream for all: the server's messages stay as they are, and an owner has a
   handful of canvases.
+- **Done cards on the phone in a list of their own, closed by default** (2026-10-28, the owner):
+  the owner wants to see what is done but not archived from the phone, without it pushing what
+  waits and what runs further down.
 - **Phone conversations are a panel from below, sized with a grip** (2026-10-17). Rejected: the
   conversation as a box in the scrolling page (a scroll area inside another, and the page scrolled
   past the field to make room for the microphone); a grip that only closes or springs back. Cards

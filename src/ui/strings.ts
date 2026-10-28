@@ -986,6 +986,8 @@ const de = {
     running: 'Läuft',
     nothingWaits: 'Nichts wartet auf dich.',
     nothingRuns: 'Gerade arbeitet kein Agent.',
+    /** Below „Läuft“, closed until tapped: the cards done but not archived yet. */
+    done: 'Erledigt',
     obeyaAnswered: 'Obeya hat geantwortet',
     since: (when: string) => `seit ${when}`,
     back: 'Zurück',
@@ -2725,6 +2727,7 @@ const en: Strings = {
     running: 'Running',
     nothingWaits: 'Nothing waits for you.',
     nothingRuns: 'No agent is at work right now.',
+    done: 'Done',
     obeyaAnswered: 'Obeya answered',
     since: (when: string) => `since ${when}`,
     back: 'Back',
