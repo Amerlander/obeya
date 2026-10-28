@@ -302,7 +302,11 @@ its own.
 ### Koordinator memory
 
 The owner's commands go to one ongoing session per canvas, so it understands „die andere auch“. It
-sees a card's open question, also one in a demo report, so „ja“ is an answer, not an approval. Card
+sees a card's open question, also one in a demo report, so „ja“ is an answer, not an approval. An
+approval by word („deploy it“, „raus damit“) lands the way the repository sets; words that ask to
+bypass the pull request („ohne PR“, „direkt auf main“) approve nothing in a repository whose work
+goes out as one, and the Koordinator replies that only the card's button „Direkt auf main“ does that,
+where the settings allow it. Card
 tags (`K1`, …) stay fixed for the session. Each command brings the cards as they are and what
 happened since the previous one (state changes, questions, answers, hand-overs, notes, errors, new
 cards; not the workers' steps), including a command the owner took back. Every exchange is stored.

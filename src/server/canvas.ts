@@ -1964,10 +1964,9 @@ export class CanvasRuntime {
         return this.act(c.card, { action: 'answer', text: c.text, spoken: c.spoken ?? true, ...(c.images ? { images: c.images } : {}) });
       case 'revise':
         return this.act(c.card, { action: 'revise', text: c.text, spoken: c.spoken ?? true, ...(c.images ? { images: c.images } : {}) });
-      case 'approve':
-        return this.act(c.card, { action: 'approve', ...(c.direct ? { direct: true } : {}) });
       case 'accept':
         return this.act(c.card, { action: 'accept', ...(c.idea ? { idea: true } : {}) });
+      case 'approve':
       case 'dismiss':
       case 'keep':
       case 'dequeue':

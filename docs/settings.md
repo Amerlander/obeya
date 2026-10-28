@@ -88,7 +88,8 @@ else `main`, since a pull request needs somewhere to go.
 
 ### `direct` — boolean
 
-With `land: "pr"`: the owner may approve a card "Direkt auf main" instead, without a pull request.
+With `land: "pr"`: the owner may approve a card with its button "Direkt auf main" instead, without a
+pull request (never by word to the Koordinator).
 Obeya rebases onto `origin`'s default branch and pushes there (never forced); a protected branch
 refuses it and the card stays in review. Default: `false`.
 

@@ -122,9 +122,9 @@ Where work lands through pull requests, the approve button reads "Freigeben (PR)
 it through to the merge, which it does itself unless the settings leave the merge to people on the
 forge (see PR loop).
 
-Where the settings allow it (`direct`), "Direkt auf main" beside it (by voice "gib frei ohne PR")
-pushes the work onto the default branch without a pull request, review or the PR's CI (see How work
-lands). Where work lands on `main`, approval lands it at once.
+Where the settings allow it (`direct`), "Direkt auf main" beside it pushes the work onto the
+default branch without a pull request, review or the PR's CI (see How work lands); only the button
+does, never words to the Koordinator. Where work lands on `main`, approval lands it at once.
 
 A review card, a contributor's pull request (see Review cards), reads „Mergen (PR #5)“: Obeya merges
 the head its worker reviewed, and the card is `live`; while a change request waits for the

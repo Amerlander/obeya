@@ -268,7 +268,7 @@ describe('the Koordinator remembers', () => {
       expect(String(runtime.last.call('act', { actions: [{ do: 'new_card', title: 'X', body: 'Y', until }], confirm: 'x' }))).toContain(why!);
   });
 
-  test('"ohne PR" approves directly where the repository allows it, and is refused with the reason where it does not', async () => {
+  test('approval by word goes the way the repository sets: "ohne PR" gets a reply, never a push past the pull request', async () => {
     board = new Board(
       store,
       {
@@ -290,23 +290,27 @@ describe('the Koordinator remembers', () => {
     const heard = k.hear('gib Export frei, direkt auf main ohne PR', {});
     await settle();
     const s = runtime.last;
-    expect(s.inbox[0]).toContain('shop (Shop; approved work goes out as a pull request, or directly onto main where the owner says so)');
+    expect(s.inbox[0]).toContain("shop (Shop; approved work goes out as a pull request, or directly onto main by the card's button)");
     expect(s.inbox[0]).toContain('app (App; approved work goes out as a pull request)');
-    const refused = await s.call('act', { actions: [{ do: 'approve', card: 'K2', direct: true }], confirm: '…' });
-    expect(refused).toContain('the repository app lands approved work only through a pull request');
-    // where work lands on main anyway, "direkt" is a plain approval
+    // where the repository allows a direct push, the words still approve nothing: the button does it
+    const refused = await s.call('act', { actions: [{ do: 'approve', card: 'K1', direct: true }], confirm: '…' });
+    expect(refused).toContain('nothing was approved');
+    expect(refused).toContain('„Direkt auf main“');
+    const notAllowed = await s.call('act', { actions: [{ do: 'approve', card: 'K2', direct: true }], confirm: '…' });
+    expect(notAllowed).toContain('the repository app lands approved work only through a pull request');
+    // a plain approval goes out as the repository sets; where work lands on main anyway, "direkt" is a plain approval
     s.call('act', {
       actions: [
-        { do: 'approve', card: 'K1', direct: true },
+        { do: 'approve', card: 'K1' },
         { do: 'approve', card: 'K3', direct: true },
       ],
-      confirm: '„Export“ geht direkt auf main, „Logo“ ist freigegeben.',
+      confirm: '„Export“ geht als Pull Request raus, „Logo“ ist freigegeben.',
     });
     s.emit({ type: 'idle' });
     k.arm((await heard).token!);
     await new Promise((r) => setTimeout(r, 40));
     expect(executed).toEqual([
-      { do: 'approve', card: a.id, direct: true },
+      { do: 'approve', card: a.id },
       { do: 'approve', card: c.id },
     ]);
   });

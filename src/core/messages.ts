@@ -327,6 +327,8 @@ const de = {
     revised: 'Vorschlag überarbeitet.',
     reviseFailed: (why: string) => `Überarbeiten ging nicht: ${why}`,
   },
+  /** The card's button that approves work past the pull request, straight onto the main branch (the UI's own label). */
+  approveDirect: 'Direkt auf main',
   claudeMd: {
     title: 'CLAUDE.md ergänzen',
     task: 'Der Owner hat diese Regeln für dieses Repo festgelegt. Arbeite sie in die CLAUDE.md ein, passend zu dem, was dort steht (Abschnitt, Ton, Länge) und ohne Dopplungen; steht eine schon sinngemäß drin, schärfe nur die Stelle. Sonst nichts ändern. Statt einer Demo genügt in der Zusammenfassung der neue Wortlaut.',
@@ -733,6 +735,7 @@ const en: Messages = {
     revised: 'Proposal revised.',
     reviseFailed: (why: string) => `Revising did not work: ${why}`,
   },
+  approveDirect: 'Straight to main',
   claudeMd: {
     title: 'Add to CLAUDE.md',
     task: 'The owner set these rules for this repository. Work them into the CLAUDE.md, fitting what is there (section, tone, length) and without repeating anything; where one is in it already in other words, only sharpen that place. Change nothing else. Instead of a demo, the new wording in the summary is enough.',

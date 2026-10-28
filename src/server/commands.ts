@@ -30,9 +30,7 @@ export type Command = (
    */
   | { do: 'reviewPr'; pr: string; text: string; repo?: string; spoken?: boolean; place?: Place }
   /** `force` starts a card that waits behind others now, despite the likely merge conflict. */
-  /** `direct`: onto the default branch without a pull request, where the card's repository allows it. */
-  | { do: 'approve'; card: string; direct?: boolean }
-  | { do: 'start' | 'force' | 'dequeue' | 'dismiss' | 'keep' | 'stop' | 'pause' | 'resume' | 'wake' | 'build' | 'splitOff' | 'planDoc' | 'park' | 'drop'; card: string }
+  | { do: 'start' | 'force' | 'approve' | 'dequeue' | 'dismiss' | 'keep' | 'stop' | 'pause' | 'resume' | 'wake' | 'build' | 'splitOff' | 'planDoc' | 'park' | 'drop'; card: string }
   /** Set aside until `until` (ISO), or a snoozed card's time changed. */
   | { do: 'snooze'; card: string; until: string }
   /** `idea`: a proposed task is taken as an idea to discuss first. */
@@ -714,7 +712,7 @@ export class Commander {
             "- note: text to the agent working on a card (working, in PR, waiting, or live or done while its agent finishes after the landing), or for the agent that will take on a card waiting in the queue, which gets it with the task; it doesn't stop it. Whatever the owner says to the agent: an instruction, a remark on its work, a question to it; never a question the owner asks you about the canvas.",
             "- answer: text as the answer to the card's open question: the agent's, or the one in its demo report (the demo then still waits for approval). A bare „ja“ or „nein“ to a card with an open question is an answer, not an approval.",
             '- feedback: text as feedback on work waiting for review (demo or summary), a question about that work included; its agent takes it in while the work still waits for approval, and hands over anew when it changes something.',
-            '- approve: approve work waiting for review; direct: true when the owner wants it straight onto main without a pull request („ohne PR“, „direkt auf main“), which a repository whose work goes out as a pull request allows only where the list of repositories says so. accept: take a proposed card and start it (a proposed idea: its discussion opens; the open questions on it go along); idea: true when the owner wants a proposed task discussed as an idea first rather than built („als Idee“, „erst besprechen“). dismiss: discard a proposed card, or one its agent withdrew or replaced since (the list says so; it goes, its worker stopped). keep: keep such a withdrawn or replaced card as it is. revise: text what the owner wants changed in a proposed card, or their thoughts on it (added, dropped, decided, put differently); an agent rewrites its text and questions by it in a minute or so, and accepting it waits for that (by a click once it is there).',
+            '- approve: approve work waiting for review; it lands the way its repository sets (on main, or as a pull request), also where the words of the owner release it („deploy it“, „ship it“, „raus damit“, „freigeben“). direct: true where the words ask to bypass the pull request itself („ohne PR“, „direkt auf main“, „am PR vorbei“). accept: take a proposed card and start it (a proposed idea: its discussion opens; the open questions on it go along); idea: true when the owner wants a proposed task discussed as an idea first rather than built („als Idee“, „erst besprechen“). dismiss: discard a proposed card, or one its agent withdrew or replaced since (the list says so; it goes, its worker stopped). keep: keep such a withdrawn or replaced card as it is. revise: text what the owner wants changed in a proposed card, or their thoughts on it (added, dropped, decided, put differently); an agent rewrites its text and questions by it in a minute or so, and accepting it waits for that (by a click once it is there).',
             '- pause: pause the agent on a card at once, only while it is working on something (the card list says so): a worker at work, or in any other state while the list says its agent is working on something; an idea\'s agent working on its reply; a Question card\'s agent reading. Nothing of it runs, its session stays, and it goes on where it stopped with resume, or with what the owner says to it, which it goes on with („halt mal an“, „pausier …“, „warte mal kurz“). resume: let a paused agent go on („mach weiter“, „lass ihn weitermachen“). stop: end the agent on a card for good, which plans the card again („stopp“, „brich ab“).',
             "- wait_for: a step you take later, once a card gets somewhere (add a canvas once the task that creates its repository is done; start a card once another has landed; pass the owner's words on once a card waits for them). on: the card to wait on, its tag, or the title of a new_card in this same act (in „starte Login, sobald Export fertig ist“: Export). state: done (the default: its work is on main, or it was closed without a change) or waits_for_owner (it asks the owner or hands its work over). text: the step, standing on its own, with what the owner asked for (names, paths, values) and cards by their titles (tags may change by then). Obeya wakes you once that card gets there, or no longer can (stopped, removed), and you take the step then; confirm says that you will. Nothing else wakes you for a later step. A new card you wait on gets in its body only its agent's part, without your step: its agent would try that step itself, and Obeya would refuse it. stop_waiting: you no longer wait on the card (on), when the owner no longer wants that step.",
             '- snooze: set a card aside until a point in time („stell das bis morgen früh zurück“, „erinner mich Montag daran“, „das später“), on a card at work (its agent stops until then, as on a pause, and goes on at the time), one waiting for the owner (it leaves their list until then; nothing goes to its agent), or a planned one not yet with Obeya (it starts at the time instead of now: „erst am Montag starten“); on a snoozed card it changes the time. until: the local time as YYYY-MM-DDTHH:MM, from Now above („heute Abend“ 18:00, „morgen früh“ 08:00, „Montag“ 08:00 next Monday). wake: a snoozed card now („hol … zurück“, „weck … auf“); a planned one starts then, as start does.',
@@ -1043,10 +1041,12 @@ export class Commander {
         const repo = this.o.board.canvas.repos.find((r) => r.id === card.repo);
         // where work lands on main anyway, approving it directly is approving it
         if (!a.direct || !repo?.pullRequests) break;
+        if (card.prototypeOf) return 'a prototype never lands; approving it throws it away';
         // the owner hears why rather than getting a pull request they did not want
         if (!repo.direct) return `the repository ${card.repo} lands approved work only through a pull request; it does not allow pushing it directly onto main. Tell the owner so with reply, and approve without direct only once they want the pull request`;
-        if (card.prototypeOf) return 'a prototype never lands; approving it throws it away';
-        return { do: 'approve', card: card.id, direct: true };
+        // past the pull request goes only by the card's button, never by word
+        const button = MESSAGES[this.o.board.language()].quote(MESSAGES[this.o.board.language()].approveDirect);
+        return `nothing was approved: approval by word never pushes past the pull request. Tell the owner so with reply: straight onto main goes by the button ${button} on the card; approved without direct, the work goes out as a pull request`;
       }
       case 'accept':
       case 'dismiss':
@@ -1292,7 +1292,7 @@ export class Commander {
       rules.length
         ? `The owner's rules, which every agent follows (follow them yourself too):\n${rules.map((r, n) => `${n + 1}. ${r.text}`).join('\n')}`
         : 'The owner has recorded no rules yet.',
-      `Repositories on this canvas (the first is the default for a new card): ${this.o.board.canvas.repos.map((r) => `${r.id} (${r.name}${r.pullRequests ? `; approved work goes out as a pull request${r.direct ? ', or directly onto main where the owner says so' : ''}` : ''})`).join(', ')}`,
+      `Repositories on this canvas (the first is the default for a new card): ${this.o.board.canvas.repos.map((r) => `${r.id} (${r.name}${r.pullRequests ? `; approved work goes out as a pull request${r.direct ? ", or directly onto main by the card's button" : ''}` : ''})`).join(', ')}`,
     ].join('\n\n');
   }
 }

@@ -230,6 +230,12 @@ A card no agent worked on, a prototype or an archived card has no field.
   PRs where no remote existed.
 - **Direct push is chosen per card at approval** (2026-10-06), allowed by `direct`, off by default;
   Obeya pushes, fast-forward only. Rejected: rules by path.
+  Only by the card's button, never by word (2026-10-28): the Koordinator read „deploy it“ as „straight
+  to main“ and pushed past a repository's pull requests. An approval by word goes the way the
+  repository sets; words that explicitly ask to bypass the pull request get a reply pointing at the
+  button instead of a pull request someone would have to close again. Rejected: direct by word after
+  a question back (a misheard yes still pushes); approving by word as a pull request, then pointing at
+  the button (leaves a pull request to close).
 - **Landing problems are classified**: uncommitted work, conflicts and emptied branches go to the
   worker; a blocked checkout or refused push to the owner.
 - **An approval holds through fixes to land it**; a stop or a problem for the owner takes it back.

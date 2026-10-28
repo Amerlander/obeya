@@ -5,6 +5,7 @@
 import { ApiError } from './api';
 import type { DiffFile } from '../core/diff';
 import { type Language, languageOf } from '../core/locale';
+import { MESSAGES } from '../core/messages';
 import type { PageChangeId } from '../core/page-changes';
 import type { NotAProject } from '../core/plan-doc';
 import { type AgentEffort, type AgentModel, type AgentRole, type CardState, type ConfigProblemCode, type DemoKind, type ClipProblem, type DemoSettingsProblem, type ErrorCode, EXPORT_HTML_MAX, type NarrationLanguage, type Theme, type VoiceKind, type Idea, type Need, type NextStep, type Queue, type OwnerHold, type RestartReason, type SetupId, type VoiceSetupId, type CloudPreset, type MachineSectionId, type NeededId, type PrId, type Snooze, type Awaited, type AwaitedState, type LeavingClone, stopped } from '../core/types';
@@ -276,7 +277,7 @@ const de = {
   },
   approve: 'Freigeben',
   approvePr: 'Freigeben (PR)',
-  approveDirect: 'Direkt auf main',
+  approveDirect: MESSAGES.de.approveDirect,
   directHint: 'Direkt auf main: ohne Review, Push auf origin/main',
   approveNoChange: 'Beenden',
   noChangeHint: 'Keine Änderung am Code: Beenden schließt die Karte ab, ohne Pull Request.',
@@ -2067,7 +2068,7 @@ const en: Strings = {
   },
   approve: 'Approve',
   approvePr: 'Approve (PR)',
-  approveDirect: 'Straight to main',
+  approveDirect: MESSAGES.en.approveDirect,
   directHint: 'Straight to main: no review, push to origin/main',
   approveNoChange: 'Close',
   noChangeHint: 'No change to the code: Close finishes the card without a pull request.',
