@@ -242,6 +242,14 @@ A demo is recorded at one pixel per point and compressed to CRF 30 (about 2.5 MB
 enough to share, though flat colours go grainy on a large screen. A public video sets `sharp`: twice
 the pixels, frames at JPEG quality 100 and CRF 18, so it looks as the app does live (2026-10-15).
 
+#### The graphics card
+
+On a laptop with two graphics chips the recording browser paints on the stronger one (on a Windows
+laptop with an NVIDIA card it would otherwise take the integrated Intel chip): the screencast hands
+over more frames while the machine is busy (28–44 instead of 22–27 a second). Encoding stays with
+libx264 on the processor: NVIDIA's encoder was no faster, since reading the JPEG frames takes most of
+the time, and at the same quality its files were twice the size (2026-10-28).
+
 #### Re-voicing
 
 A demo that kept its frames (`.work/`) can be narrated anew in another language without recording it
