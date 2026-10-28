@@ -52,9 +52,11 @@ into the chapters under `docs/design/` (or the index) and the doc goes.
   button, the conversation history, starting („So bauen“, „Übernehmen und starten“) while the agent
   is still working) is built once in shared code and works the same on each of them; no card kind
   gets its own variant.
-- The phone view follows the desktop version: same controls, icons, button states and card layout,
-  departing from it only where the small screen requires. A tap on a button while the keyboard is
-  open does what the button does on the first tap; it never just closes the keyboard first.
+- The phone view stays as simple as possible: not every desktop view belongs on it (the workspaces
+  list, say, stays desktop-only). What it does show follows the desktop version: same controls,
+  icons, button states and card layout, departing from it only where the small screen requires.
+  A tap on a button while the keyboard is open does what the button does on the first tap; it
+  never just closes the keyboard first.
 - Whatever the owner has entered on a card but not sent yet (text, pasted screenshots, picked answer
   options, comments) survives closing the card, switching canvases and a page reload, for every
   input on the card, not only the text field.
@@ -68,11 +70,17 @@ into the chapters under `docs/design/` (or the index) and the doc goes.
 - Every new feature and every shortcut gets a way for first-time users to discover it: a visible
   icon, say, or a hint that shows until it has been used once. A tooltip or a key that is only
   documented is not enough.
+- Rarely used actions stay out of the way: shown only where they apply, behind hover or an overflow
+  menu, so everyday use isn't cluttered with buttons. A button's label makes clear what it does to
+  someone who doesn't yet know the use case.
 - Prompts and skills for agents: fix unwanted behaviour by removing the instruction that causes
   it, not by adding a prohibition. Forbid nothing an agent would not do without being told to.
 - The colleagues use Windows or Linux: features must work there; macOS-only tools (e.g. `say`)
   only as an additional option.
 - Demo videos and voice recordings never go into git.
+- Before UI work goes to the owner, look closely at screenshots of it for visual polish and fix
+  what is off: text vertically centred with neighbouring buttons, enough padding to the edges of
+  its block, controls (a remove ×, say) where the eye expects them.
 - Before a demo video goes to the owner, watch it for faults of the demo itself and fix them first:
   every dictated text it shows is transcribed completely and correctly (no missing words or
   numbers, no misrecognitions), and what the agents in it say points out no fault (a comment cut
