@@ -97,8 +97,11 @@ geantwortet, wartet auf dich“ instead of „Demo bereit“; a new demo reads �
 words for the owner count as an answer (a reply, what the worker says, Obeya's result of
 `to_obeya`), from this turn; an answer to earlier words does not count. A turn that ends without any
 (an error, the session ended) leaves the card at „Demo bereit“, and the conversation says the agent
-stopped without answering. A worker that a background command wakes later (a test run it said a new
-handover waits for) is at work again until its turn ends.
+stopped without answering. A turn that ends with words for the owner while background work it left
+running goes on (the app served for them to try) also gives the card back: only that work shows as
+running. A turn that ends without such words while its background work runs is still at the owner's
+words. A worker that a background command wakes later (a test run it said a new handover waits for)
+is at work again until its turn ends.
 
 A question in the demo report is an open question like a worker's (see Questions go to the owner).
 The card's one field (see The conversation) takes the answer and feedback together; the worker hears
@@ -209,6 +212,9 @@ sheet), lists its decisions and links the idea or task its plan doc came from (s
   which took the approval away and held the feedback for „Rückgängig“ like a command.
 - **Only words for the owner count as an answer** (2026-10-19). Rejected: counting any end of a
   turn, which left „Agent hat geantwortet“ under a question no agent had seen.
+- **An answer given while the app it started runs on gives the card back** (2026-10-28). Rejected:
+  keeping the card at work as long as any background work of that turn ran, which showed an agent
+  at work on the owner's words for hours while only the test server it had restarted for them ran.
 - **A demo a worker reworks after an answer is at work, not the owner's** (2026-10-07). Rejected:
   keeping the badge, where a worker paused for a restart was never resumed.
 - **A later handover says only what is new; a reply that changes nothing ends the turn**

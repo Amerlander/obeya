@@ -2740,7 +2740,12 @@ export class Workers {
       // the background work still belongs to the turn, whatever the card's state (a worker may ask
       // while its render runs): a restart now would cut it off
       this.waitForWorker(cardId, live);
-      if (!handedOver) return;
+      if (!handedOver) {
+        // words for the owner on its handover answer theirs though work it left running goes on (the
+        // app served for them to try): the card is theirs again, and is at work once that work wakes it
+        if (spoke && answering(card)) this.answerTaken(cardId, true);
+        return;
+      }
     }
     if (more && !handedOver) return this.waitForWorker(cardId, live);
     if (answering(card)) {

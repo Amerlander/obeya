@@ -446,6 +446,30 @@ describe('handing over with a demo', () => {
     expect(needsYou(board.item(c.id)!)).toBe(true);
   });
 
+  test('a worker that answers while the app it started runs on leaves the card to the owner, with only that app in the background', async () => {
+    const c = manual();
+    await workers.start(c.id);
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: { dir: demoDir(), chapters: ['Vorher', 'Nachher'] } });
+    runtime.last.emit({ type: 'idle' });
+    workers.message(c.id, 'Starte den Testserver nochmal.');
+    runtime.last.emit({ type: 'tool', name: 'Bash', input: { command: 'bun run dev', run_in_background: true } });
+    runtime.last.emit({ type: 'background', tasks: [{ id: 'b1', description: 'Start dev server' }] });
+    runtime.last.call('reply', { text: 'Läuft wieder.' });
+    runtime.last.emit({ type: 'idle', background: 1 });
+    const item = board.item(c.id)!;
+    expect(item).toMatchObject({ state: 'waiting', need: 'demo', answered: true });
+    expect(item.answering).toBeUndefined();
+    expect(item.inTurn).toBeUndefined();
+    expect(item.background).toMatchObject([{ description: 'Start dev server' }]);
+    expect(needsYou(item)).toBe(true);
+    // a turn that ends without a word for the owner while its work runs is still at their words
+    workers.message(c.id, 'Und die Tests?');
+    runtime.last.emit({ type: 'tool', name: 'Bash', input: { command: 'bun test', run_in_background: true } });
+    runtime.last.emit({ type: 'idle', background: 2 });
+    expect(board.item(c.id)).toMatchObject({ answering: true, inTurn: true });
+    expect(needsYou(board.item(c.id)!)).toBe(false);
+  });
+
   test('a worker taking in an answer resumes after a restart; a session that ends gives the demo back to the owner', async () => {
     const c = manual();
     await workers.start(c.id);
